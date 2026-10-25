@@ -4,7 +4,7 @@ Every panel and shortcut in bigbud exists to keep you from switching windows. In
 
 ## Getting started
 
-Install bigbud on your machine, set up your AI providers, launch the app, and start your first session. No terminal needed — everything works from the app.
+Install bigbud on your machine, connect an AI provider, and start your first session. You can use the workspace from the app; some providers require a separate CLI installation or sign-in first.
 
 ### 1. Download and install
 
@@ -16,18 +16,15 @@ bigbud runs on macOS, Windows, and Linux.
 
 bigbud works with the AI providers you already use. If you don't have an account yet, download and sign up for one or more of these providers:
 
-- **[Claude](https://claude.ai/download)** — Download the desktop app, sign in, and subscribe if needed
+- **[Claude Code](https://code.claude.com/docs/en/quickstart)** — Install the CLI and complete its sign-in; the Claude desktop app alone is not the CLI integration
 - **[Codex](https://chatgpt.com/codex/)** — Install the CLI and sign in with your account
-- **[GitHub Copilot](https://github.com/features/copilot)** — Install the extension and sign in with your GitHub account
-- **[OpenCode](https://opencode.ai)** — Install the CLI and authenticate
+- **[GitHub Copilot](https://github.com/features/copilot)** — Follow Copilot's authentication setup in bigbud; installing an editor extension alone is not the setup for this integration
+- **[OpenCode](https://opencode.ai)** — Configure and authenticate the appropriate CLI or native service
+- **Pi** — Included with bigbud; configure the model provider and credentials you want to use
 
-Once you have your provider accounts ready:
+In bigbud, open **Settings → Providers**, enable the provider you want, and follow its setup and status guidance. Other integrations, including Cursor, are available where configured and supported.
 
-1. **Open bigbud** — it will automatically detect installed providers on your machine
-2. bigbud performs a **handshake** with each provider, verifying your subscription
-3. Your available **models** from each provider appear in the provider picker
-
-You can connect multiple providers and switch between them as needed. bigbud shows you which models are available from each subscription, so you always know what you have access to.
+The provider picker shows discovered models. Discovery or a successful connection check does not guarantee a subscription entitlement, available quota, or that every listed model is ready to generate. bigbud reports setup or access issues when they are known.
 
 ### 3. Launch the app
 
@@ -78,9 +75,14 @@ Press `Cmd + W` / `Ctrl + W` to close the active right-panel tab.
 | `Cmd + Shift + G`                     | `Ctrl + Shift + G`                      | toggle diff bar                |
 | `Cmd + Shift + B`                     | `Ctrl + Shift + B`                      | toggle browser panel           |
 | `Cmd + Shift + E`                     | `Ctrl + Shift + E`                      | toggle files panel             |
-| `Cmd + Shift + N`                     | `Ctrl + Shift + N`                      | new local thread               |
+| `Cmd + Alt + N`                       | `Ctrl + Alt + N`                        | new local thread               |
+| `Cmd + Shift + N`                     | `Ctrl + Shift + N`                      | toggle notes                   |
+| `Cmd + O`                             | `Ctrl + O`                              | open project picker            |
+| `Cmd + Shift + O`                     | `Ctrl + Shift + O`                      | open in favorite editor        |
 | `Cmd + W`                             | `Ctrl + W`                              | close active right panel tab   |
 | `Cmd + Shift + [` / `Cmd + Shift + ]` | `Ctrl + Shift + [` / `Ctrl + Shift + ]` | previous / next thread         |
+
+Defaults depend on focus: inside a terminal, `Cmd/Ctrl + N` creates a terminal tab, `Cmd/Ctrl + F` searches terminal output, and `Cmd/Ctrl + W` closes the terminal. Existing custom keybindings may differ. See the [full keybinding configuration reference](https://github.com/youpele52/bigbud/blob/main/docs/KEYBINDINGS.md).
 
 ### 7. Next steps
 

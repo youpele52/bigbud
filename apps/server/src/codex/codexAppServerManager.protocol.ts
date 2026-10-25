@@ -152,18 +152,49 @@ export function rememberCollabReceiverTurns(
   }
   const payload = readObject(params);
   const item = readObject(payload, "item") ?? payload;
-  const itemType = readString(item, "type") ?? readString(item, "kind");
-  if (itemType !== "collabAgentToolCall") {
-    return;
+  const itemType = readString(item, "type");
+  // Codex 0.163 announces a spawned child only as `subAgentActivity` (`agentThreadId`); older
+  // servers listed it in the spawn call's `receiverThreadIds`.
+  const childThreadIds =
+    itemType === "subAgentActivity"
+      ? [readString(item, "agentThreadId")].filter((value): value is string => Boolean(value))
+      : (readString(item, "type") ?? readString(item, "kind")) === "collabAgentToolCall"
+        ? (readArray(item, "receiverThreadIds")
+            ?.map((value) => (typeof value === "string" ? value : null))
+            .filter((value): value is string => value !== null) ?? [])
+        : [];
+  for (const childThreadId of childThreadIds) {
+    context.collabReceiverTurns.set(childThreadId, parentTurnId);
+    if (!context.collabChildTurns.has(childThreadId)) {
+      context.collabChildTurns.set(childThreadId, null);
+      if (context.collabChildTurns.size > MAX_TRACKED_CHILD_THREADS) {
+        context.collabChildTurns.delete(context.collabChildTurns.keys().next().value!);
+      }
+    }
   }
+}
 
-  const receiverThreadIds =
-    readArray(item, "receiverThreadIds")
-      ?.map((value) => (typeof value === "string" ? value : null))
-      .filter((value): value is string => value !== null) ?? [];
-  for (const receiverThreadId of receiverThreadIds) {
-    context.collabReceiverTurns.set(receiverThreadId, parentTurnId);
+/** Bound on remembered child threads per session; the oldest are forgotten first. */
+const MAX_TRACKED_CHILD_THREADS = 200;
+
+/**
+ * Records a known child thread's running turn from its own lifecycle notifications, which are
+ * kept out of the parent session. Returns whether the notification belongs to a known child.
+ */
+export function trackCollabChildTurn(
+  context: CodexSessionContext,
+  method: string,
+  providerThreadId: string | undefined,
+  params: unknown,
+): boolean {
+  if (!providerThreadId || !context.collabChildTurns.has(providerThreadId)) return false;
+  if (method === "turn/started") {
+    const turnId = toTurnId(readString(readObject(params, "turn"), "id"));
+    if (turnId) context.collabChildTurns.set(providerThreadId, turnId);
+  } else if (method === "turn/completed") {
+    context.collabChildTurns.set(providerThreadId, null);
   }
+  return true;
 }
 
 export function shouldSuppressChildConversationNotification(method: string): boolean {

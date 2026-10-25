@@ -26,6 +26,7 @@ import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog
 import { BIGBUD_ORCHESTRATION_NAMESPACE } from "./codexThreadDynamicTools.specs.ts";
 import { normalizeListThreadsStatus } from "./ThreadOrchestrationTools.listThreads.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES, type AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
+import { RenameThreadArguments } from "./threadRenameTool.shared.ts";
 
 export { createCodexThreadOrchestrationDynamicTools } from "./codexThreadDynamicTools.specs.ts";
 
@@ -137,13 +138,22 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
         };
       }
       case "rename_thread": {
-        const argRecord =
-          args && typeof args === "object" ? (args as Record<string, unknown>) : null;
-        const title = typeof argRecord?.title === "string" ? argRecord.title.trim() : "";
+        const renameArgs = Schema.decodeUnknownSync(RenameThreadArguments)(args);
+        const title = renameArgs.title.trim();
         if (title.length === 0) {
           throw new Error("Thread title cannot be empty.");
         }
-        const result = await Effect.runPromise(dispatcher.rename({ threadId, title }));
+        const result = await Effect.runPromise(
+          dispatcher.rename({
+            threadId,
+            title,
+            ...(renameArgs.targetThreadId !== undefined
+              ? { targetThreadId: ThreadId.makeUnsafe(renameArgs.targetThreadId.trim()) }
+              : {}),
+            invocationId: String(requestId),
+            sourceMessageId: MessageId.makeUnsafe(requestSource ?? sourceMessageId),
+          }),
+        );
         return {
           contentItems: [inputText(`Renamed thread to "${result.title}".`)],
           success: true,
@@ -179,6 +189,10 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
                 task,
                 ...(projectId ? { projectId: ProjectId.makeUnsafe(projectId) } : {}),
                 watchForCompletion: argRecord?.watchForCompletion === true,
+                // Raw: the server validates it and falls back rather than failing (Goal 11).
+                ...(argRecord?.modelSelection !== undefined
+                  ? { modelSelection: argRecord.modelSelection }
+                  : {}),
               })
             : Effect.fail(new Error("Thread creation is not ready.")),
         );
@@ -186,6 +200,19 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
           contentItems: [inputText(JSON.stringify(result, null, 2))],
           success: true,
         };
+      }
+      case "list_available_models": {
+        const argRecord =
+          args && typeof args === "object" ? (args as Record<string, unknown>) : null;
+        const result = await Effect.runPromise(
+          dispatcher.listAvailableModels
+            ? dispatcher.listAvailableModels({
+                callerThreadId: threadId,
+                ...(typeof argRecord?.limit === "number" ? { limit: argRecord.limit } : {}),
+              })
+            : Effect.fail(new Error("Model listing is not ready.")),
+        );
+        return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
       }
       case "get_thread_status": {
         const argRecord =

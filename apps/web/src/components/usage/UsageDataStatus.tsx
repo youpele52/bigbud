@@ -1,15 +1,10 @@
 import { PROVIDER_DISPLAY_NAMES, type ServerUsageSummaryResult } from "@bigbud/contracts";
-import { InfoIcon, TriangleAlertIcon } from "lucide-react";
-import { useState } from "react";
+import { TriangleAlertIcon } from "lucide-react";
 
 import { StatusBanner } from "../common/StatusBanner";
-
-let unavailableUsageWarningDismissed = false;
+import { CenteredStatus } from "../common/CenteredStatus";
 
 export function UsageDataStatus({ summary }: { readonly summary: ServerUsageSummaryResult }) {
-  const [isUnavailableWarningDismissed, setIsUnavailableWarningDismissed] = useState(
-    () => unavailableUsageWarningDismissed,
-  );
   const unavailableProviders = summary.providerCoverage.filter(
     (coverage) => coverage.status === "unavailable",
   );
@@ -22,23 +17,31 @@ export function UsageDataStatus({ summary }: { readonly summary: ServerUsageSumm
     <div className="space-y-2">
       {summary.historyStatus === "building" ? (
         <StatusBanner
+          dismissalKey={["usage", "history-indexing"]}
+          dismissLabel="Dismiss historical usage indexing status"
+          centered
+          role="presentation"
           variant="info"
-          icon={<InfoIcon />}
-          title="Indexing historical usage"
-          description="Recent usage is available now. Older usage will appear as background indexing completes."
+          description={
+            <CenteredStatus loading>
+              <p className="font-medium text-foreground">Indexing historical usage</p>
+              <p className="mt-1">
+                Recent usage is available now. Older usage will appear as background indexing
+                completes.
+              </p>
+            </CenteredStatus>
+          }
         />
       ) : null}
-      {unavailableProviders.length > 0 && !isUnavailableWarningDismissed ? (
+      {unavailableProviders.length > 0 ? (
         <StatusBanner
+          dismissalKey={["usage", "unavailable-providers"]}
+          centered
           variant="warning"
           icon={<TriangleAlertIcon />}
           title="Usage unavailable for some providers"
-          description={`${unavailableProviders.map((coverage) => PROVIDER_DISPLAY_NAMES[coverage.provider]).join(", ")} do not expose reliable token usage, so their totals are not estimated.`}
+          description={`${unavailableProviders.map((coverage) => PROVIDER_DISPLAY_NAMES[coverage.provider]).join(", ")} do not expose reliable official token usage. Disclosed observable-content estimates may be used.`}
           dismissLabel="Dismiss usage availability warning"
-          onDismiss={() => {
-            unavailableUsageWarningDismissed = true;
-            setIsUnavailableWarningDismissed(true);
-          }}
         />
       ) : null}
     </div>

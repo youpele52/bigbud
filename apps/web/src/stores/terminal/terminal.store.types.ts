@@ -11,8 +11,12 @@ import {
   type ThreadTerminalState,
 } from "./helpers.store";
 import type { TerminalAgentVersion } from "./terminal.store.identity";
+import type { TerminalLayoutMode, TerminalLayoutState } from "./terminal.store.layout";
 
-export interface TerminalStateStoreState {
+export interface TerminalStateStoreState extends TerminalLayoutState {
+  setTerminalLayout: (threadId: string, mode: TerminalLayoutMode) => void;
+  terminalWslDistributionByThreadId: Record<string, string>;
+  setTerminalWslDistribution: (threadId: ThreadId, distribution: string | null) => void;
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   panelTerminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   terminalLabelOverridesByThreadId: Record<ThreadId, Record<string, string>>;
@@ -53,6 +57,7 @@ export interface TerminalStateStoreState {
     terminalId: string,
     hasRunningSubprocess: boolean,
   ) => void;
+  markTerminalAgentActive: (threadId: string, terminalId: string) => void;
   recordTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvents: (events: ReadonlyArray<TerminalEvent>) => void;

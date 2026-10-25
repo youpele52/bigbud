@@ -1,10 +1,4 @@
-import {
-  CheckCircle2Icon,
-  ChevronDownIcon,
-  Clock3Icon,
-  Loader2Icon,
-  XCircleIcon,
-} from "lucide-react";
+import { CheckCircle2Icon, Clock3Icon, Loader2Icon, XCircleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BUILT_IN_CHATS_PROJECT_ID,
@@ -24,6 +18,7 @@ import { readNativeApi } from "~/rpc/nativeApi";
 import { useDefaultChatCwd, useServerProviders } from "~/rpc/serverState";
 import { useStore } from "~/stores/main";
 import { Button } from "../../ui/button";
+import { ActivityAccordion } from "../common/ActivityAccordion";
 
 const AUTOMATION_REQUEST_AUTO_CREATE_LOADED_AT_MS = Date.now();
 const autoCreateAttemptedMessageIds = new Set<string>();
@@ -152,15 +147,16 @@ export function MessagesTimelineAutomationRequest(props: {
       </table>
 
       {requestPayload ? (
-        <details className="mt-3 group/automation-request">
-          <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground/60 hover:text-muted-foreground/80">
-            <ChevronDownIcon className="size-3 shrink-0 -rotate-90 transition-transform duration-150 group-open/automation-request:rotate-0" />
-            Automation request data
-          </summary>
-          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/50 bg-background/45 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/80">
+        <ActivityAccordion
+          variant="compact"
+          title="Automation request data"
+          className="mt-3"
+          panelClassName="pt-2"
+        >
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/50 bg-background/45 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/80">
             {requestPayload}
           </pre>
-        </details>
+        </ActivityAccordion>
       ) : null}
     </div>
   );

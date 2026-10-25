@@ -46,6 +46,14 @@ export const ServerProviderExtraUsage = Schema.Struct({
 });
 export type ServerProviderExtraUsage = typeof ServerProviderExtraUsage.Type;
 
+/** Display-only banked resets; absent expiry details never imply no expiry. */
+export const ServerProviderManualResets = Schema.Struct({
+  availableCount: Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  availableExpiries: Schema.Array(Schema.NullOr(IsoDateTime)),
+  detailsComplete: Schema.Boolean,
+});
+export type ServerProviderManualResets = typeof ServerProviderManualResets.Type;
+
 export const ServerProviderUsageLimits = Schema.Struct({
   status: ServerProviderUsageLimitStatus,
   source: Schema.Literals([
@@ -60,5 +68,6 @@ export const ServerProviderUsageLimits = Schema.Struct({
   message: Schema.optional(TrimmedNonEmptyString),
   windows: Schema.Array(ServerProviderUsageLimitWindow),
   extraUsage: Schema.optional(ServerProviderExtraUsage),
+  manualResets: Schema.optional(ServerProviderManualResets),
 });
 export type ServerProviderUsageLimits = typeof ServerProviderUsageLimits.Type;

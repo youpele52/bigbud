@@ -91,7 +91,9 @@ async function readGitPointer(filePath: string, prefix?: string): Promise<string
   return target;
 }
 
-async function inspectDeclaredCommonDir(worktreeRoot: string): Promise<CheckpointPathIdentity> {
+export async function inspectDeclaredCommonDir(
+  worktreeRoot: string,
+): Promise<CheckpointPathIdentity> {
   const dotGit = path.join(worktreeRoot, ".git");
   const dotGitStats = await nodeFs.lstat(dotGit);
   let gitDir: string;

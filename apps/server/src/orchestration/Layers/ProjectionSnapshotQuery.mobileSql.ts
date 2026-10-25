@@ -65,6 +65,8 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
           pending_turn_control_operation_json AS "pendingTurnControlOperation",
           queue_hold AS "queueHold",
+          pending_turn_start_json AS "pendingTurnStart",
+          recovery_json AS "recovery",
           CASE
             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
             ELSE json_object(
@@ -111,6 +113,8 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
           pending_turn_control_operation_json AS "pendingTurnControlOperation",
           queue_hold AS "queueHold",
+          pending_turn_start_json AS "pendingTurnStart",
+          recovery_json AS "recovery",
           CASE
             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
             ELSE json_object(
@@ -194,6 +198,7 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           runtime_mode AS "runtimeMode",
           active_turn_id AS "activeTurnId",
           session_epoch AS "sessionEpoch",
+          retained_family AS "retainedFamily",
           reason,
           last_error AS "lastError",
           updated_at AS "updatedAt"

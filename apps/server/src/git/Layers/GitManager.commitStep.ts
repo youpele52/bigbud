@@ -48,7 +48,8 @@ export function makeCommitStep(
       filePaths?: readonly string[];
       executionTargetId?: string;
       operationId?: string;
-      modelSelection: ModelSelection;
+      modelSelection: ModelSelection | null;
+      successfulModelSelection?: ModelSelection | null | undefined;
     }) {
       const context = yield* gitCore.prepareCommitContext(
         input.cwd,
@@ -77,6 +78,12 @@ export function makeCommitStep(
         fileSystem,
       });
 
+      if (!input.modelSelection) {
+        return yield* gitManagerError(
+          "generateCommitMessage",
+          "Choose a text-generation model in settings to generate Git text without a thread.",
+        );
+      }
       const generated = yield* textGeneration
         .generateCommitMessage({
           cwd: isLocalExecutionTarget(input.executionTargetId) ? input.cwd : serverCwd,
@@ -86,6 +93,7 @@ export function makeCommitStep(
           ...(input.includeBranch ? { includeBranch: true } : {}),
           ...(gitCommitSkillContent ? { skillContent: gitCommitSkillContent } : {}),
           modelSelection: input.modelSelection,
+          successfulModelSelection: input.successfulModelSelection ?? null,
         })
         .pipe(Effect.map((result) => sanitizeCommitMessage(result)));
 
@@ -99,7 +107,7 @@ export function makeCommitStep(
   );
 
   const runCommitStep = Effect.fn("runCommitStep")(function* (
-    modelSelection: ModelSelection,
+    modelSelection: ModelSelection | null,
     cwd: string,
     action: "commit" | "commit_push" | "commit_push_pr",
     branch: string | null,
@@ -109,6 +117,7 @@ export function makeCommitStep(
     progressReporter?: GitActionProgressReporter,
     actionId?: string,
     executionTargetId?: string,
+    successfulModelSelection?: ModelSelection | null,
   ) {
     const commitOperationId = gitMutationOperationId(actionId, "commit");
     const emit = (event: GitActionProgressPayload) =>
@@ -139,6 +148,7 @@ export function makeCommitStep(
         ...(executionTargetId ? { executionTargetId } : {}),
         ...(commitOperationId ? { operationId: commitOperationId } : {}),
         modelSelection,
+        successfulModelSelection,
       });
     }
     if (!suggestion) {
@@ -218,13 +228,14 @@ export function makeCommitStep(
   });
 
   const runFeatureBranchStep = Effect.fn("runFeatureBranchStep")(function* (
-    modelSelection: ModelSelection,
+    modelSelection: ModelSelection | null,
     cwd: string,
     branch: string | null,
     commitMessage?: string,
     filePaths?: readonly string[],
     executionTargetId?: string,
     actionId?: string,
+    successfulModelSelection?: ModelSelection | null,
   ) {
     const commitOperationId = gitMutationOperationId(actionId, "commit");
     const suggestion = yield* resolveCommitAndBranchSuggestion({
@@ -236,6 +247,7 @@ export function makeCommitStep(
       ...(executionTargetId ? { executionTargetId } : {}),
       ...(commitOperationId ? { operationId: commitOperationId } : {}),
       modelSelection,
+      successfulModelSelection,
     });
     if (!suggestion) {
       return yield* gitManagerError(

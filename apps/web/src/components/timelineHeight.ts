@@ -33,7 +33,7 @@ interface TimelineHeightEstimateLayout {
   timelineWidthPx: number | null;
 }
 
-function estimateWrappedLineCount(text: string, charsPerLine: number): number {
+export function estimateWrappedLineCount(text: string, charsPerLine: number): number {
   if (text.length === 0) return 1;
 
   // Avoid allocating via split for long logs; iterate once and count wrapped lines.

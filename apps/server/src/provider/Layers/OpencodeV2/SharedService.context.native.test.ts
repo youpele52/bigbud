@@ -1,16 +1,20 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer } from "effect";
 import { expect, it, vi } from "vitest";
 import { DEFAULT_SERVER_SETTINGS, MessageId, ThreadId } from "@bigbud/contracts";
 import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindingsLive } from "../../../persistence/Layers/OpencodeV2SharedBindings.ts";
+import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ServerConfig } from "../../../startup/config.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
 import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
 import { discoverV2SharedService } from "./SharedService.discovery.ts";
 import { makeOwnedClient } from "./Client.ts";
+import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
+import { V2_THREAD_ACTIONS } from "./Orchestration.protocol.ts";
 
 vi.mock("./Catalog.public.ts", async (original) => ({
   ...(await original<typeof import("./Catalog.public.ts")>()),
@@ -35,10 +39,18 @@ function tools(request: Record<string, unknown>) {
 }
 
 /** Compare native request construction without touching live accounts or depending on vendor eligibility heuristics. */
-it.skipIf(!binary || !version || process.platform !== "darwin")(
+it.skipIf(!binary || !version)(
   "keeps native Build base instructions, skills and tools while app context is additive and subagent ownership remains denied",
   async () => {
-    const fixture = await sharedServiceNativeFixture(binary!);
+    const appFixture = await makeV2ThreadPluginFixture();
+    const fixture = await sharedServiceNativeFixture(binary!, async (file) => {
+      const config = JSON.parse(await readFile(file, "utf8"));
+      config.plugins = [appFixture.artifact.pluginUri];
+      await writeFile(file, JSON.stringify(config), { mode: 0o600 });
+    }).catch(async (error) => {
+      await appFixture.close();
+      throw error;
+    });
     try {
       const configBefore = await readFile(fixture.configFile);
       const serviceBefore = await readFile(fixture.file);
@@ -67,8 +79,8 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
           request.tools.length > 0,
       )!;
       expect(baseline).toBeDefined();
-      const settings = {
-        getSettings: Effect.succeed({
+      const settings = await Effect.runPromise(
+        makeTestSettings({
           ...DEFAULT_SERVER_SETTINGS,
           providers: {
             ...DEFAULT_SERVER_SETTINGS.providers,
@@ -77,11 +89,12 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
               binaryPath: "",
               profileRoot: "",
               serviceFile: fixture.file,
+              nativeServiceTrust: "managed-thread-tools-v2",
+              nativePluginConfigRoot: path.dirname(fixture.configFile),
             },
           },
         }),
-        streamChanges: Stream.never,
-      } as unknown as typeof ServerSettingsService.Service;
+      );
       const threadId = ThreadId.makeUnsafe("shared-native-context");
       await Effect.runPromise(
         Effect.scoped(
@@ -135,7 +148,12 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
             expect(JSON.stringify(base)).not.toContain("Selected bigbud access mode");
             expect(tools(baseline)).toContain("subagent");
             expect(tools(actual)).not.toContain("subagent");
-            expect(tools(actual)).toEqual(tools(baseline).filter((name) => name !== "subagent"));
+            expect(tools(actual)).toEqual(
+              [
+                ...tools(baseline).filter((name) => name !== "subagent"),
+                ...V2_THREAD_ACTIONS.map((action) => `bigbud_thread_v1_${action}`),
+              ].toSorted(),
+            );
             const native = yield* Effect.promise(() => client.session.get({ sessionID: nativeId }));
             expect(native.agent).toBeUndefined();
             expect(native.permissions).toContainEqual({
@@ -152,11 +170,15 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
             yield* adapter.stopSession(threadId);
           }),
         ).pipe(
-          Effect.provide(ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory))),
+          Effect.provide(
+            Layer.merge(ProviderTurnAdmissionsLive, OpencodeV2SharedBindingsLive).pipe(
+              Layer.provide(SqlitePersistenceMemory),
+            ),
+          ),
           Effect.provideService(ServerSettingsService, settings),
           Effect.provideService(ServerConfig, {
             cwd: fixture.workspace,
-            stateDir: path.join(fixture.profile, "bigbud-state"),
+            stateDir: appFixture.root,
             port: 0,
           } as typeof ServerConfig.Service),
         ),
@@ -167,6 +189,7 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
       expect(await readFile(fixture.file)).toEqual(serviceBefore);
     } finally {
       await fixture.close();
+      await appFixture.close();
     }
   },
   60000,

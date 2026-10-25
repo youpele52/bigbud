@@ -12,6 +12,8 @@ import { cn } from "~/lib/utils";
 import { ProjectSearchResultGroup, type ProjectSearchResult } from "./SearchPalette.projectResults";
 import { SearchPaletteCurrentFileResults } from "./SearchPalette.currentFileResults";
 import { SearchPaletteMessageResults } from "./SearchPalette.messageResults";
+import { TerminalSearchResultGroup } from "./SearchPalette.terminalResults";
+import type { TerminalSearchResult } from "./SearchPalette.terminalResults.logic";
 import type { FileSearchMatch } from "./SearchPalette.logic";
 
 export interface ThreadSearchResult {
@@ -103,6 +105,11 @@ interface SearchPaletteResultsProps {
   onSelectFile: (result: FileSearchResult) => void;
   onSelectCurrentFileMatch: (line: number) => void;
   initialVisibleResultCount: number;
+  terminalResults?: TerminalSearchResult[];
+  visibleTerminalResults?: TerminalSearchResult[];
+  isTerminalSearchPending?: boolean;
+  onShowMoreTerminals?: () => void;
+  onSelectTerminal?: (result: TerminalSearchResult) => void;
 }
 
 export function SearchPaletteResults({
@@ -142,8 +149,19 @@ export function SearchPaletteResults({
   onSelectFile,
   onSelectCurrentFileMatch,
   initialVisibleResultCount,
+  terminalResults = [],
+  visibleTerminalResults = [],
+  isTerminalSearchPending = false,
+  onShowMoreTerminals = () => undefined,
+  onSelectTerminal = () => undefined,
 }: SearchPaletteResultsProps) {
-  const hasResults = hasMessageResults || hasProjectResults || hasThreadResults || hasFileResults;
+  const hasTerminalResults = terminalResults.length > 0;
+  const hasResults =
+    hasMessageResults ||
+    hasProjectResults ||
+    hasThreadResults ||
+    hasFileResults ||
+    hasTerminalResults;
   const messageQueryLength = countUnicodeCodePoints(query.trim());
 
   return (
@@ -164,7 +182,8 @@ export function SearchPaletteResults({
       {(isSearchPending ||
         isFileSearchPending ||
         isProjectSearchPending ||
-        isMessageSearchPending) &&
+        isMessageSearchPending ||
+        isTerminalSearchPending) &&
         normalizedQuery && (
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">Searching...</div>
         )}
@@ -194,6 +213,7 @@ export function SearchPaletteResults({
         !isFileSearchPending &&
         !isProjectSearchPending &&
         !isMessageSearchPending &&
+        !isTerminalSearchPending &&
         messageSearchStatus !== "unavailable" &&
         !hasResults &&
         !currentFilePath &&
@@ -273,10 +293,22 @@ export function SearchPaletteResults({
         </CommandGroup>
       )}
 
+      {!isSearchPending && !isTerminalSearchPending ? (
+        <TerminalSearchResultGroup
+          query={query}
+          results={terminalResults}
+          visibleResults={visibleTerminalResults}
+          onSelect={onSelectTerminal}
+          onShowMore={onShowMoreTerminals}
+        />
+      ) : null}
+
       {!isFileSearchPending && hasFileResults && (
         <CommandGroup
           className={cn(
-            hasMessageResults || hasProjectResults || hasThreadResults ? "mt-2" : undefined,
+            hasMessageResults || hasProjectResults || hasThreadResults || hasTerminalResults
+              ? "mt-2"
+              : undefined,
           )}
         >
           <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">

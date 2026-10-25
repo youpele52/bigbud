@@ -182,6 +182,7 @@ fn refuses_compaction_that_would_exceed_the_byte_bound() {
     let bounded = OperationJournal {
         path: path.clone(),
         maximum_bytes: original_length as usize,
+        running: Default::default(),
     };
 
     assert!(matches!(
@@ -200,6 +201,15 @@ fn compaction_discards_expired_operations() {
         .append(&JournalRecord::Accepted {
             operation_id: "operation-1".to_owned(),
             request_digest: vec![1],
+        })
+        .unwrap();
+    // Only a finished operation's retention expires; a running one never does.
+    journal
+        .append(&JournalRecord::Completed {
+            operation_id: "operation-1".to_owned(),
+            state: OperationState::Completed,
+            exit_code: Some(0),
+            error_code: None,
         })
         .unwrap();
     journal

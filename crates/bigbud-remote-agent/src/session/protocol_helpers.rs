@@ -159,6 +159,7 @@ pub(super) fn process_completed_frame(
             output_truncated,
             error_code: terminal.error_code.clone().unwrap_or_default(),
             error_message: String::new(),
+            replay_gap: false,
         })),
     }
 }
@@ -166,6 +167,7 @@ pub(super) fn process_completed_frame(
 pub(super) fn process_attach_response_frame(
     request_id: &str,
     snapshot: &operations::OperationSnapshot,
+    replay_gap: bool,
 ) -> v1::Frame {
     v1::Frame {
         payload: Some(v1::frame::Payload::ProcessAttachResponse(
@@ -175,6 +177,7 @@ pub(super) fn process_attach_response_frame(
                 state: operation_state_name(snapshot.state).to_owned(),
                 next_sequence: snapshot.next_sequence,
                 first_retained_sequence: snapshot.first_retained_sequence,
+                replay_gap,
             },
         )),
     }

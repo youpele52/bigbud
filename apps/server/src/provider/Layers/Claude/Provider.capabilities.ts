@@ -358,7 +358,10 @@ export const probeClaudeCapabilities = (binaryPath: string) =>
     });
     const usageLimits = await Effect.runPromise(
       readClaudeUsageLimits(
-        () => queryRuntime.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(),
+        () =>
+          queryRuntime.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({
+            skipBehaviors: true,
+          }),
         Math.max(1, CAPABILITIES_PROBE_TIMEOUT_MS - (Date.now() - discoveryStartedAt) - 100),
       ),
     );

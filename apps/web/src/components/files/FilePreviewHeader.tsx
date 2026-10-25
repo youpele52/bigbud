@@ -29,12 +29,15 @@ export function FilePreviewHeader({
   actions,
 }: FilePreviewHeaderProps) {
   const shortBreadcrumb = breadcrumb.length > 1 ? breadcrumb.slice(-2) : breadcrumb;
+  // Side tracks never shrink below their controls and split leftover space equally,
+  // so the path stays centered and truncates only when the header gets tight.
   return (
     <div
-      className="grid grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)] items-center gap-2 border-b border-border px-2 py-2"
+      className="grid min-w-0 grid-cols-[minmax(max-content,1fr)_minmax(0,max-content)_minmax(max-content,1fr)] items-center gap-1 border-b border-border px-2 py-2"
+      data-file-preview-header
       onContextMenu={onContextMenu}
     >
-      <div className="flex shrink-0 items-center gap-1 justify-self-start">
+      <div className="flex items-center gap-1 justify-self-start">
         <Button
           type="button"
           variant="ghost"
@@ -58,7 +61,7 @@ export function FilePreviewHeader({
           <ArrowRightIcon />
         </Button>
       </div>
-      <div className="min-w-0 max-w-full justify-self-center" aria-label={absolutePath}>
+      <div className="min-w-0" aria-label={absolutePath} data-file-preview-identity>
         <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs">
           {shortBreadcrumb.map((part, index) => (
             <span key={part.id} className="flex min-w-0 items-center gap-1">
@@ -92,7 +95,7 @@ export function FilePreviewHeader({
           ))}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2 justify-self-end">
+      <div className="flex items-center gap-2 justify-self-end">
         {actions}
         {onClose ? (
           <Button
@@ -100,8 +103,9 @@ export function FilePreviewHeader({
             variant="ghost"
             size="icon-xs"
             onClick={onClose}
-            aria-label="Close"
-            title="Close"
+            className="size-6 sm:size-6"
+            aria-label="Close file"
+            title="Close file"
           >
             <XIcon />
           </Button>

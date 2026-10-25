@@ -196,8 +196,11 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       const reopenedSecond = yield* manager.open(openInput({ threadId: "thread-2" }));
       const reopenedFirst = yield* manager.open(openInput({ threadId: "thread-1" }));
 
-      assert.equal(reopenedFirst.history, "first-history\n");
+      // Evicted and retained exited sessions both start a fresh process generation.
+      assert.equal(reopenedFirst.history, "");
       assert.equal(reopenedSecond.history, "");
+      expect(reopenedFirst.pid).not.toBe(first.pid);
+      expect(reopenedSecond.pid).not.toBe(second.pid);
     }),
   );
 

@@ -2,6 +2,7 @@ import { IsoDateTime } from "@bigbud/contracts";
 import { Effect, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
+import { EFFECTIVE_USAGE_CTE } from "./ProjectionSnapshotQuery.usage.effective.ts";
 
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../../persistence/Errors.ts";
 import type {
@@ -14,6 +15,8 @@ const ProjectionUsageQueryInput = Schema.Struct({
 });
 
 const ProjectionUsageEntryRow = Schema.Struct({
+  accountingJson: Schema.NullOr(Schema.String),
+  source: Schema.Literals(["provider-reported", "estimated"]),
   contributionId: Schema.String,
   threadId: Schema.String,
   turnId: Schema.NullOr(Schema.String),
@@ -43,7 +46,9 @@ export function makeGetUsageEntries(
     Request: Schema.Void,
     Result: ProjectionUsageEntryRow,
     execute: () => sql`
+      ${sql.literal(EFFECTIVE_USAGE_CTE)}
       SELECT
+        contribution.accounting_json AS "accountingJson", contribution.source,
         contribution.contribution_id AS "contributionId",
         contribution.thread_id AS "threadId",
         contribution.turn_id AS "turnId",
@@ -56,7 +61,7 @@ export function makeGetUsageEntries(
         contribution.cached_input_tokens AS "cachedInputTokens",
         contribution.output_tokens AS "outputTokens",
         contribution.reasoning_output_tokens AS "reasoningOutputTokens"
-      FROM projection_usage_contributions AS contribution
+      FROM effective AS contribution
       ORDER BY contribution.occurred_at ASC, contribution.contribution_id ASC
     `,
   });
@@ -65,7 +70,9 @@ export function makeGetUsageEntries(
     Request: ProjectionUsageQueryInput,
     Result: ProjectionUsageEntryRow,
     execute: ({ rangeStart }) => sql`
+      ${sql.literal(EFFECTIVE_USAGE_CTE)}
       SELECT
+        contribution.accounting_json AS "accountingJson", contribution.source,
         contribution.contribution_id AS "contributionId",
         contribution.thread_id AS "threadId",
         contribution.turn_id AS "turnId",
@@ -78,7 +85,7 @@ export function makeGetUsageEntries(
         contribution.cached_input_tokens AS "cachedInputTokens",
         contribution.output_tokens AS "outputTokens",
         contribution.reasoning_output_tokens AS "reasoningOutputTokens"
-      FROM projection_usage_contributions AS contribution
+      FROM effective AS contribution
       WHERE contribution.occurred_at >= ${rangeStart}
       ORDER BY contribution.occurred_at ASC, contribution.contribution_id ASC
     `,
@@ -98,7 +105,7 @@ export function makeGetUsageHistoryStatus(
     Request: Schema.Void,
     Result: ProjectionUsageBackfillStateRow,
     execute: () => sql`
-      SELECT completed
+      SELECT completed * (SELECT completed FROM projection_usage_estimate_backfill_state WHERE id = 1) AS completed
       FROM projection_usage_backfill_state
       WHERE id = 1
     `,
@@ -108,5 +115,29 @@ export function makeGetUsageHistoryStatus(
     getState(undefined).pipe(
       Effect.map((row) => (row.completed === 1 ? "ready" : "building")),
       Effect.mapError(toUsageQueryError),
+    );
+}
+
+export function makeGetUsageActiveDays(
+  sql: SqlClient.SqlClient,
+): ProjectionSnapshotQueryShape["getUsageActiveDays"] {
+  const listDays = SqlSchema.findAll({
+    Request: Schema.Struct({ before: IsoDateTime }),
+    Result: Schema.Struct({ day: Schema.String }),
+    execute: ({ before }) => sql`
+      ${sql.literal(EFFECTIVE_USAGE_CTE)}
+      SELECT DISTINCT date(occurred_at) AS day
+      FROM effective
+      WHERE used_tokens > 0 AND occurred_at < ${before} AND date(occurred_at) IS NOT NULL
+    `,
+  });
+  return (before) =>
+    listDays({ before }).pipe(
+      Effect.map((rows) => rows.map((row) => row.day)),
+      Effect.mapError((cause) =>
+        Schema.isSchemaError(cause)
+          ? toPersistenceDecodeError("ProjectionSnapshotQuery.getUsageActiveDays:decodeRows")(cause)
+          : toPersistenceSqlError("ProjectionSnapshotQuery.getUsageActiveDays:query")(cause),
+      ),
     );
 }

@@ -60,7 +60,7 @@ impl AppTracker {
             let _updated = system.refresh_processes_specifics(
                 ProcessesToUpdate::All,
                 true,
-                ProcessRefreshKind::nothing(),
+                ProcessRefreshKind::nothing().without_tasks(),
             );
         }
         let inventory: HashMap<_, _> = system
@@ -98,6 +98,7 @@ impl AppTracker {
                 ProcessesToUpdate::Some(&ids),
                 true,
                 ProcessRefreshKind::nothing()
+                    .without_tasks()
                     .with_cpu()
                     .with_memory()
                     .with_disk_usage(),

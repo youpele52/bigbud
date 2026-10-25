@@ -1,5 +1,6 @@
+import type { ComponentType } from "react";
+import { AiIcon } from "../../AiIcon";
 import {
-  BotIcon,
   CheckIcon,
   CircleAlertIcon,
   EyeIcon,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { normalizeCompactToolLabel } from "./MessagesTimeline.logic";
+import { formatBigbudToolName } from "~/lib/toolPresentation";
 
 export type TimelineWorkEntry = Extract<
   MessagesTimelineRow,
@@ -20,7 +22,7 @@ export type TimelineWorkEntry = Extract<
 >["groupedEntries"][number];
 
 export function workToneIcon(tone: TimelineWorkEntry["tone"]): {
-  icon: LucideIcon;
+  icon: LucideIcon | typeof AiIcon;
   className: string;
 } {
   if (tone === "error") {
@@ -31,7 +33,7 @@ export function workToneIcon(tone: TimelineWorkEntry["tone"]): {
   }
   if (tone === "thinking") {
     return {
-      icon: BotIcon,
+      icon: AiIcon,
       className: "text-foreground/92",
     };
   }
@@ -77,7 +79,34 @@ export function workEntryRawCommand(
   return rawCommand === workEntry.command.trim() ? null : rawCommand;
 }
 
-export function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
+/** Characters of command or detail text that comfortably fit the truncated inline preview. */
+export const WORK_ENTRY_INLINE_PREVIEW_MAX_CHARS = 80;
+
+/**
+ * Full text blocks for the collapsed "Details" disclosure under a work entry: the complete
+ * (raw) command and any detail it hides. Empty when the inline preview already shows it all.
+ */
+export function workEntryDetailBlocks(
+  workEntry: Pick<TimelineWorkEntry, "command" | "rawCommand" | "detail">,
+): string[] {
+  const command = workEntry.command?.trim() || undefined;
+  const fullCommand = workEntryRawCommand(workEntry) ?? command;
+  const detail = workEntry.detail?.trim() || undefined;
+  const hiddenDetail = detail && detail !== command && detail !== fullCommand ? detail : undefined;
+  const blocks = [fullCommand, hiddenDetail].filter((block): block is string => Boolean(block));
+  const inlinePreview = command ?? detail;
+  const exceedsPreview = blocks.some(
+    (block) =>
+      block !== inlinePreview ||
+      block.includes("\n") ||
+      block.length > WORK_ENTRY_INLINE_PREVIEW_MAX_CHARS,
+  );
+  return exceedsPreview ? blocks : [];
+}
+
+export function workEntryIcon(
+  workEntry: TimelineWorkEntry,
+): LucideIcon | ComponentType<{ className?: string }> {
   if (workEntry.requestKind === "browser") return GlobeIcon;
   if (workEntry.requestKind === "command") return TerminalIcon;
   if (workEntry.requestKind === "file-read") return EyeIcon;
@@ -118,9 +147,8 @@ function capitalizePhrase(value: string): string {
 
 function browserToolHeading(toolTitle: string, action: string | undefined): string | null {
   if (
-    toolTitle !== "browser" &&
-    !/^bigbud_orchestration(?:_[\w-]+)?_browser$/.test(toolTitle) &&
-    toolTitle !== "mcp__bigbud_orchestration__browser"
+    toolTitle.toLowerCase() !== "browser" &&
+    formatBigbudToolName(toolTitle) !== "bigbud browser"
   ) {
     return null;
   }
@@ -162,17 +190,22 @@ function browserToolHeading(toolTitle: string, action: string | undefined): stri
 }
 
 export function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
-  const browserHeading = workEntry.toolTitle
-    ? browserToolHeading(workEntry.toolTitle, workEntry.toolAction)
+  const label = normalizeCompactToolLabel(
+    workEntry.toolPresentation?.qualifiedName ?? (workEntry.toolTitle || workEntry.label),
+  );
+  const friendlyName = formatBigbudToolName(label);
+  const browserTitle = workEntry.toolPresentation?.qualifiedName ?? workEntry.toolTitle;
+  const browserHeading = browserTitle
+    ? browserToolHeading(browserTitle, workEntry.toolAction)
     : null;
   if (browserHeading) {
-    return browserHeading;
+    return friendlyName
+      ? browserHeading === "Browser"
+        ? friendlyName
+        : `bigbud · ${browserHeading.toLowerCase()}`
+      : browserHeading;
   }
-  const heading = capitalizePhrase(
-    normalizeCompactToolLabel(workEntry.toolTitle || workEntry.label),
-  );
-  // Only normalize the namespace prefix of a structured tool label, not its suffix or prose.
-  return heading.replace(/^(mcp__)?bigbud_orchestration(?=$|:|_)/i, "$1bigbud_orchestration");
+  return friendlyName ?? capitalizePhrase(label);
 }
 
 export function workEntryCopyText(workEntry: TimelineWorkEntry): string {
@@ -188,7 +221,13 @@ export function workEntryCopyText(workEntry: TimelineWorkEntry): string {
     lines.push(trimmed);
   };
 
-  appendLine(toolWorkEntryHeading(workEntry));
+  const rawTitle = workEntry.toolPresentation?.rawName ?? (workEntry.toolTitle || workEntry.label);
+  // Clipboard inspection keeps the provider identifier, not the friendly presentation name.
+  appendLine(
+    workEntry.toolPresentation || formatBigbudToolName(normalizeCompactToolLabel(rawTitle))
+      ? rawTitle
+      : toolWorkEntryHeading(workEntry),
+  );
   appendLine(workEntryRawCommand(workEntry) ?? workEntry.command ?? workEntry.detail);
   if ((workEntry.changedFiles?.length ?? 0) > 0) {
     appendLine(`Changed files:\n${workEntry.changedFiles!.join("\n")}`);

@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
+import { PROVIDER_SUBAGENT_LIMITS } from "@bigbud/shared/providerSubagents";
 
 import type { ActivePiSession, PiSyntheticEventFn } from "./Adapter.types.ts";
 import { mapPiAsyncSubagentWidget } from "./Adapter.stream.asyncSubagents.ts";
@@ -205,6 +206,6 @@ describe("Pi async subagent status widget", () => {
     expect(JSON.stringify(events)).not.toContain("child transcript");
     expect(
       (events[0] as Extract<ProviderRuntimeEvent, { type: "task.updated" }>).payload.lastToolName,
-    ).toHaveLength(120);
+    ).toHaveLength(PROVIDER_SUBAGENT_LIMITS.toolName);
   });
 });

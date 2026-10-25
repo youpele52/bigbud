@@ -66,7 +66,9 @@ export function makeRemoteAgentShellRunnerResolver(input: {
           const id = operationId();
           let terminalVerified = false;
           return Effect.tryPromise({
-            try: async () => {
+            // Interrupting the run (a stopped turn) aborts `signal`, which ends a reattach that
+            // still waits for the link; the remote command itself is stopped by `closeThread`.
+            try: async (signal) => {
               if (input.runOwned) {
                 const result = await input.runOwned({
                   ownerKey: `shell:${runInput.threadId}`,
@@ -86,6 +88,7 @@ export function makeRemoteAgentShellRunnerResolver(input: {
                     command: "/bin/sh",
                     args: ["-lc", runInput.command],
                     timeoutMs: runInput.timeoutMs ?? 30_000,
+                    signal,
                   },
                 });
                 const output = `${new TextDecoder().decode(result.stdout)}${new TextDecoder().decode(result.stderr)}`;
@@ -115,6 +118,7 @@ export function makeRemoteAgentShellRunnerResolver(input: {
                 command: "/bin/sh",
                 args: ["-lc", runInput.command],
                 timeoutMs: runInput.timeoutMs ?? 30_000,
+                signal,
               });
               const output = `${new TextDecoder().decode(result.stdout)}${new TextDecoder().decode(result.stderr)}`;
               terminalVerified = true;

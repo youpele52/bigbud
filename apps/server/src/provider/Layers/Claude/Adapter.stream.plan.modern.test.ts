@@ -164,11 +164,8 @@ describe("ClaudeAdapterLive modern task plans", () => {
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       const runtimeEventsFiber = yield* adapter.streamEvents.pipe(
-        Stream.takeUntil(
-          (event) =>
-            event.type === "turn.plan.updated" &&
-            event.payload.plan.some((step) => step.status === "completed"),
-        ),
+        // The task snapshot (and its plan update) precedes the lifecycle copy.
+        Stream.takeUntil((event) => event.type === "task.completed"),
         Stream.runCollect,
         Effect.forkChild,
       );
@@ -188,7 +185,8 @@ describe("ClaudeAdapterLive modern task plans", () => {
         subtype: "background_tasks_changed",
         uuid: "background-snapshot-1",
         session_id: "sdk-session-native-task",
-        tasks: [{ task_id: "task-1", task_type: "agent", description: "Background task" }],
+        // A shell task stays a plan step; agent tasks are subagents and leave the plan (D8).
+        tasks: [{ task_id: "task-1", task_type: "local_bash", description: "Background task" }],
       } as unknown as SDKMessage);
       harness.query.emit({
         type: "system",

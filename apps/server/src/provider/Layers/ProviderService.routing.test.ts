@@ -121,7 +121,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         sendAfterStop,
         new ProviderValidationError({
           operation: "ProviderService.sendTurn",
-          issue: `Cannot route thread '${session.threadId}' because no persisted provider binding exists.`,
+          issue: `Provider session for thread '${session.threadId}' was explicitly stopped. Start it before sending more work; retained resume evidence is unchanged.`,
         }),
       );
     }),

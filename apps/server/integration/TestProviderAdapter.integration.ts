@@ -28,6 +28,7 @@ import {
   type LegacyProviderRuntimeEvent,
 } from "./TestProviderAdapter.integration.fixtureEvents.ts";
 import {
+  markDeferredTurnRunning,
   missingSessionEffect,
   nowIso,
   sessionNotFound,
@@ -79,6 +80,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
           });
         }
 
+        yield* controls.awaitStartSessionHold();
         sessionCount += 1;
         const threadId = input.threadId;
         const createdAt = nowIso();
@@ -204,6 +206,7 @@ export const makeTestProviderAdapterHarness = (options?: MakeTestProviderAdapter
             },
           });
         } else {
+          if (response.deferCompletion) markDeferredTurnRunning(state, turnId);
           for (const completedEvent of deferredTurnCompletedEvents) {
             yield* emit(completedEvent);
           }

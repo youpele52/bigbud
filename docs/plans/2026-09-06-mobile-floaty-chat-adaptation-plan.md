@@ -43,7 +43,7 @@ This document preserves the substantive plan originally returned in chat and reo
 - Visual references: `apps/web/src/components/floating-assistant/FloatingAssistantShell.tsx`, `FloatingPendingApprovalCard.tsx`, and `apps/web/src/components/chat/side-chat/FloatingSideChat.tsx`.
 - Mobile deployment background: `apps/mobile-web/README.md` describes hosted mobile UI separately from the desktop backend over Tailscale Serve.
 - Repository plan conventions: `docs/plans/_plan-authoring-guide--do-not-delete.md`.
-- Product terminology: `docs/CONTEXT.md`. Mobile remains **Direct Unmanaged Delivery**; this plan does not move mobile under the **Desktop Delivery Supervisor** or change the TypeScript/SQLite **Canonical Domain Authority**.
+- Product terminology: `docs/development/encyclopedia.md#desktop-orchestration-delivery`. Mobile remains **Direct Unmanaged Delivery**; this plan does not move mobile under the **Desktop Delivery Supervisor** or change the TypeScript/SQLite **Canonical Domain Authority**.
 
 ## Problem
 
@@ -298,7 +298,7 @@ Relevant constraints:
 - Oxc formatter/linter.
 - No mobile browser-test configuration at inspection time.
 - Root `AGENTS.md` and supplied global instructions apply; no additional nested `AGENTS.md` was found in the affected TypeScript areas during source research.
-- The plan-authoring guide and supplied `docs/CONTEXT.md` apply to this saved document.
+- The plan-authoring guide and terminology now consolidated in `docs/development/encyclopedia.md` apply to this saved document.
 
 Revalidate the plan if:
 

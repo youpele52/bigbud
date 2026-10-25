@@ -6,6 +6,7 @@ import type { ServerProviderModel } from "@bigbud/contracts/server/server.provid
 import { describe, expect, it, vi } from "vitest";
 
 import { CODEX_SPARK_MODEL } from "../provider/codexAccount";
+import { CodexPendingStarts } from "./codexAppServerManager.pendingStarts";
 import { startSession, type StartSessionOps } from "./codexAppServerManager.startSession";
 import type {
   CodexAppServerStartSessionInput,
@@ -13,9 +14,13 @@ import type {
 } from "./codexAppServerManager.types";
 import { asThreadId } from "./codexAppServerManager.test.helpers";
 
-const processMocks = vi.hoisted(() => ({
-  startCodexAppServerProcess: vi.fn(),
-}));
+const processMocks = vi.hoisted(() => {
+  const startCodexAppServerProcess = vi.fn();
+  return {
+    startCodexAppServerProcess,
+    startCodexAppServerProcessAsync: vi.fn(async () => startCodexAppServerProcess()),
+  };
+});
 const readlineMocks = vi.hoisted(() => ({
   createInterface: vi.fn(() => ({ close: vi.fn() })),
 }));
@@ -147,6 +152,7 @@ function createHarness(options?: {
   const ops: StartSessionOps = {
     runPromise: vi.fn(async () => undefined),
     sessions,
+    pendingStarts: new CodexPendingStarts(),
     sendRequest: sendRequest as StartSessionOps["sendRequest"],
     writeMessage: vi.fn(),
     attachProcessListeners: vi.fn(),

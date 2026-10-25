@@ -1,8 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-
+import {
+  ensureSshAgentEnv,
+  isPassphraseProtectedKeyLoaded,
+  isPassphraseProtectedKeyLoadedAsync,
+} from "./sshAgent.ts";
 import { buildSshCommandInvocation } from "./sshCommand.ts";
 import {
   expandSshKeyPath,
@@ -11,143 +14,113 @@ import {
 } from "./sshExecutionTarget.ts";
 import {
   assertSshPasswordExecutionTargetReady,
+  assertSshPasswordExecutionTargetReadyAsync,
   formatSshPasswordRequiredMessage,
   unlockSshExecutionTargetPassword,
 } from "./sshSession.ts";
+import {
+  createSshDeadline,
+  describeSshLocalCommandFailure,
+  runSshLocalCommand,
+  runSshLocalCommandSync,
+  type SshDeadline,
+  type SshLocalCommandResult,
+  SSH_LOCAL_PROBE_TIMEOUT_MS,
+  SSH_READINESS_DEADLINE_MS,
+  SSH_UNLOCK_DEADLINE_MS,
+} from "./sshLocalCommand.ts";
 import { runProcess } from "../utils/processRunner.ts";
+import { inspectSshHostTrustOnFailure } from "./sshHostTrust.ts";
 
 const SSH_VERIFY_TIMEOUT_MS = 8_000;
 const SSH_UNLOCK_ASKPASS_DIR_PREFIX = "bigbud-ssh-askpass-";
-const SSH_AGENT_ENV_PATTERN = /^(SSH_AUTH_SOCK|SSH_AGENT_PID)=([^;]+);/gm;
 
 export function formatSshKeyLoadMessage(keyPath: string): string {
   return `SSH key '${keyPath}' requires a passphrase. Load it into ssh-agent with 'ssh-add ${keyPath}' before using this target.`;
 }
 
-function runLocalCommand(command: string, args: ReadonlyArray<string>, env?: NodeJS.ProcessEnv) {
-  return spawnSync(command, [...args], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    ...(env ? { env } : {}),
-    shell: process.platform === "win32",
-  });
-}
+type KeyTarget = { readonly keyPath: string; readonly expandedKeyPath: string };
 
-function createSshAgentEnvFromOutput(stdout: string): NodeJS.ProcessEnv {
-  const nextEnv: NodeJS.ProcessEnv = {};
-  for (const match of stdout.matchAll(SSH_AGENT_ENV_PATTERN)) {
-    const [, key, value] = match;
-    if (key && value) {
-      nextEnv[key] = value;
-    }
-  }
-  return nextEnv;
-}
-
-function ensureSshAgentEnv(): NodeJS.ProcessEnv {
-  const existingSocket = process.env.SSH_AUTH_SOCK?.trim();
-  if (existingSocket) {
-    const existingAgentProbe = runLocalCommand("ssh-add", ["-l"], process.env);
-    const existingAgentDetail = `${existingAgentProbe.stderr ?? ""}`.trim();
-    if (
-      existingAgentProbe.status === 0 ||
-      /the agent has no identities/i.test(existingAgentDetail) ||
-      /error fetching identities for protocol 1/i.test(existingAgentDetail)
-    ) {
-      return process.env;
-    }
-  }
-
-  const result = runLocalCommand("ssh-agent", ["-s"]);
-  if (result.error) {
-    const detail = result.error instanceof Error ? result.error.message : String(result.error);
-    throw new Error(`Failed to start ssh-agent. ${detail}`);
-  }
-
-  if (result.status !== 0) {
-    const detail =
-      `${result.stderr ?? ""}`.trim() ||
-      `${result.stdout ?? ""}`.trim() ||
-      `Command exited with code ${result.status}.`;
-    throw new Error(`Failed to start ssh-agent. ${detail}`);
-  }
-
-  const nextEnv = createSshAgentEnvFromOutput(result.stdout);
-  const nextSocket = nextEnv.SSH_AUTH_SOCK?.trim();
-  if (!nextSocket) {
-    throw new Error("Failed to start ssh-agent. Missing SSH_AUTH_SOCK.");
-  }
-
-  process.env.SSH_AUTH_SOCK = nextSocket;
-  if (nextEnv.SSH_AGENT_PID) {
-    process.env.SSH_AGENT_PID = nextEnv.SSH_AGENT_PID;
-  }
-
-  return process.env;
-}
-
-function isPassphraseProtectedKeyLoaded(expandedKeyPath: string): boolean {
-  const publicKeyPath = `${expandedKeyPath}.pub`;
-  if (!fs.existsSync(publicKeyPath)) {
-    return false;
-  }
-
-  const directProbe = runLocalCommand("ssh-add", ["-T", publicKeyPath], process.env);
-  if (directProbe.status === 0) {
-    return true;
-  }
-
-  const listedKeys = runLocalCommand("ssh-add", ["-L"], process.env);
-  if (listedKeys.status !== 0) {
-    return false;
-  }
-
-  const publicKey = fs.readFileSync(publicKeyPath, "utf8").trim();
-  return publicKey.length > 0 && listedKeys.stdout.includes(publicKey);
-}
-
-export function assertSshExecutionTargetReady(executionTargetId: string | null | undefined): void {
+/** Parses the target; returns the key to probe, or `undefined` when no local probe is needed. */
+function resolveKeyTarget(executionTargetId: string | null | undefined): KeyTarget | undefined {
   const target = parseSshExecutionTarget(executionTargetId);
   if (!target) {
     throw new Error(`Invalid SSH execution target '${executionTargetId ?? "local"}'.`);
   }
-
-  if (target.authMode === "password") {
-    assertSshPasswordExecutionTargetReady(target.executionTargetId);
-    return;
+  if (target.authMode === "password" || !target.keyPath) {
+    return undefined;
   }
-
-  if (!target.keyPath) {
-    return;
-  }
-
   const expandedKeyPath = expandSshKeyPath(target.keyPath);
   if (!fs.existsSync(expandedKeyPath)) {
     throw new Error(`SSH key not found at '${target.keyPath}'.`);
   }
+  return { keyPath: target.keyPath, expandedKeyPath };
+}
 
-  const keyProbe = runLocalCommand("ssh-keygen", ["-y", "-P", "", "-f", expandedKeyPath]);
+function keyProbeArgs(key: KeyTarget): string[] {
+  return ["-y", "-P", "", "-f", key.expandedKeyPath];
+}
+
+/**
+ * Interprets `ssh-keygen -y`: `false` when the key is usable as is, `true`
+ * when it is passphrase protected and must be loaded in ssh-agent; throws otherwise.
+ */
+function keyNeedsAgent(key: KeyTarget, keyProbe: SshLocalCommandResult): boolean {
+  if (keyProbe.timedOut) {
+    throw new Error(`Timed out inspecting SSH key '${key.keyPath}'.`);
+  }
   if (keyProbe.error) {
-    const detail =
-      keyProbe.error instanceof Error ? keyProbe.error.message : String(keyProbe.error);
-    throw new Error(`Failed to inspect SSH key '${target.keyPath}'. ${detail}`);
+    throw new Error(`Failed to inspect SSH key '${key.keyPath}'. ${keyProbe.error.message}`);
   }
-
   if (keyProbe.status === 0) {
-    return;
+    return false;
   }
-
-  const stderr = `${keyProbe.stderr ?? ""}`.trim();
+  const stderr = keyProbe.stderr.trim();
   if (/incorrect passphrase/i.test(stderr)) {
-    if (isPassphraseProtectedKeyLoaded(expandedKeyPath)) {
-      return;
-    }
-    throw new Error(formatSshKeyLoadMessage(target.keyPath));
+    return true;
   }
+  const detail = stderr || keyProbe.stdout.trim() || `Command exited with code ${keyProbe.status}.`;
+  throw new Error(`Failed to read SSH key '${key.keyPath}'. ${detail}`);
+}
 
-  const detail =
-    stderr || `${keyProbe.stdout ?? ""}`.trim() || `Command exited with code ${keyProbe.status}.`;
-  throw new Error(`Failed to read SSH key '${target.keyPath}'. ${detail}`);
+/**
+ * Synchronous readiness check, kept only for callers that cannot await. Each
+ * local probe is bounded, but the chain can still block the event loop for
+ * several seconds; prefer `assertSshExecutionTargetReadyAsync`.
+ */
+export function assertSshExecutionTargetReady(executionTargetId: string | null | undefined): void {
+  assertSshPasswordExecutionTargetReady(executionTargetId);
+  const key = resolveKeyTarget(executionTargetId);
+  if (!key) return;
+  const keyProbe = runSshLocalCommandSync("ssh-keygen", keyProbeArgs(key), {
+    timeoutMs: SSH_LOCAL_PROBE_TIMEOUT_MS,
+  });
+  if (keyNeedsAgent(key, keyProbe) && !isPassphraseProtectedKeyLoaded(key.expandedKeyPath)) {
+    throw new Error(formatSshKeyLoadMessage(key.keyPath));
+  }
+}
+
+/** Bounded async local readiness probes; missing credentials first trigger host-identity discovery. */
+export async function assertSshExecutionTargetReadyAsync(
+  executionTargetId: string | null | undefined,
+  deadline: SshDeadline = createSshDeadline(SSH_READINESS_DEADLINE_MS),
+): Promise<void> {
+  try {
+    await assertSshPasswordExecutionTargetReadyAsync(executionTargetId, deadline);
+    const key = resolveKeyTarget(executionTargetId);
+    if (!key) return;
+    const keyProbe = await runSshLocalCommand("ssh-keygen", keyProbeArgs(key), {
+      timeoutMs: deadline.remainingMs(SSH_LOCAL_PROBE_TIMEOUT_MS),
+    });
+    if (
+      keyNeedsAgent(key, keyProbe) &&
+      !(await isPassphraseProtectedKeyLoadedAsync(key.expandedKeyPath, deadline))
+    ) {
+      throw new Error(formatSshKeyLoadMessage(key.keyPath));
+    }
+  } catch (error) {
+    return inspectSshHostTrustOnFailure(executionTargetId ?? "local", error);
+  }
 }
 
 function writeAskpassScript(directoryPath: string): string {
@@ -177,33 +150,43 @@ export async function unlockSshExecutionTargetKey(input: {
     throw new Error(`SSH key not found at '${target.keyPath}'.`);
   }
 
-  const sshAgentEnv = ensureSshAgentEnv();
+  const deadline = createSshDeadline();
+  const sshAgentEnv = await ensureSshAgentEnv(deadline);
   const askpassDirectory = fs.mkdtempSync(path.join(os.tmpdir(), SSH_UNLOCK_ASKPASS_DIR_PREFIX));
   try {
     const askpassScriptPath = writeAskpassScript(askpassDirectory);
-    const result = runLocalCommand("ssh-add", [expandedKeyPath], {
-      ...sshAgentEnv,
-      BIGBUD_SSH_KEY_PASSPHRASE: input.passphrase,
-      SSH_ASKPASS: askpassScriptPath,
-      SSH_ASKPASS_REQUIRE: "force",
-      DISPLAY: process.env.DISPLAY || "bigbud:0",
+    const result = await runSshLocalCommand("ssh-add", [expandedKeyPath], {
+      env: {
+        ...sshAgentEnv,
+        BIGBUD_SSH_KEY_PASSPHRASE: input.passphrase,
+        SSH_ASKPASS: askpassScriptPath,
+        SSH_ASKPASS_REQUIRE: "force",
+        DISPLAY: process.env.DISPLAY || "bigbud:0",
+      },
+      timeoutMs: deadline.remainingMs(),
     });
 
+    if (result.timedOut) {
+      throw new Error(
+        `Timed out after ${SSH_UNLOCK_DEADLINE_MS / 1000} s unlocking SSH key '${target.keyPath}'.`,
+      );
+    }
+
     if (result.error) {
-      const detail = result.error instanceof Error ? result.error.message : String(result.error);
-      throw new Error(`Failed to unlock SSH key '${target.keyPath}'. ${detail}`);
+      throw new Error(
+        `Failed to unlock SSH key '${target.keyPath}'. ${describeSshLocalCommandFailure(result)}`,
+      );
     }
 
     if (result.status !== 0) {
-      const detail =
-        `${result.stderr ?? ""}`.trim() || `${result.stdout ?? ""}`.trim() || "Unknown error.";
+      const detail = result.stderr.trim() || result.stdout.trim() || "Unknown error.";
       if (/bad passphrase|incorrect passphrase/i.test(detail)) {
         throw new Error(`Incorrect passphrase for SSH key '${target.keyPath}'.`);
       }
       throw new Error(`Failed to unlock SSH key '${target.keyPath}'. ${detail}`);
     }
 
-    if (!isPassphraseProtectedKeyLoaded(expandedKeyPath)) {
+    if (!(await isPassphraseProtectedKeyLoadedAsync(expandedKeyPath, deadline))) {
       throw new Error(
         `Failed to unlock SSH key '${target.keyPath}'. ssh-agent did not retain the key.`,
       );
@@ -225,7 +208,7 @@ export async function verifySshExecutionTarget(input: {
   readonly message: string;
   readonly cwd?: string;
 }> {
-  assertSshExecutionTargetReady(input.executionTargetId);
+  await assertSshExecutionTargetReadyAsync(input.executionTargetId);
 
   const target = parseSshExecutionTarget(input.executionTargetId);
   if (!target) {
@@ -241,7 +224,7 @@ export async function verifySshExecutionTarget(input: {
     timeoutMs: SSH_VERIFY_TIMEOUT_MS,
     maxBufferBytes: 64 * 1024,
     outputMode: "truncate",
-  });
+  }).catch((error: unknown) => inspectSshHostTrustOnFailure(input.executionTargetId, error));
 
   const verifiedCwd = result.stdout
     .split(/\r?\n/)

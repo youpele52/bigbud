@@ -1,0 +1,11 @@
+syntax = "proto3";
+package bigbud.process_identity.v1;
+
+// One-shot read-only inspection. Absence/failure is a nonzero helper exit, never guessed identity.
+message Identity {
+  uint32 version = 1;
+  uint32 pid = 2;
+  string executable = 3;
+  repeated string arguments = 4;
+  bool same_user = 5;
+}

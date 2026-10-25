@@ -1,18 +1,22 @@
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
-import { CircleAlertIcon, ClockIcon, TriangleAlertIcon } from "lucide-react";
-import { formatHumanReadableDate } from "~/utils/timestamp";
+import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react";
 import { StatusBanner } from "../common/StatusBanner";
+import { CenteredStatus } from "../common/CenteredStatus";
 import {
   extraUsageUtilization,
   formatExtraUsageRemaining,
   SUBSCRIPTION_PROVIDER_LABELS,
 } from "./UsageSubscriptionLimits.logic";
 import { UsageSubscriptionLimitProgress } from "./UsageSubscriptionLimits.progress";
+import { UsageSubscriptionManualResets } from "./UsageSubscriptionLimits.resets";
+import { formatSubscriptionTimestamp } from "./UsageSubscriptionLimits.timestamp";
 
 export function UsageSubscriptionProviderLimits({
   limits,
+  compact = false,
 }: {
   readonly limits: ServerProviderUsageLimits;
+  readonly compact?: boolean;
 }) {
   const hasRetainedLimits = limits.status === "available" || limits.status === "stale";
   const title = `${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} subscription limits`;
@@ -35,6 +39,9 @@ export function UsageSubscriptionProviderLimits({
       ) : null}
       {limits.status === "stale" ? (
         <StatusBanner
+          dismissalKey={["subscription-limits", limits.source, "stale"]}
+          dismissLabel={`Dismiss ${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} stale subscription limits warning`}
+          centered
           variant="warning"
           icon={<TriangleAlertIcon />}
           title="Subscription limits may be out of date"
@@ -42,7 +49,7 @@ export function UsageSubscriptionProviderLimits({
             <>
               Showing the last successful values
               {limits.lastSuccessfulAt
-                ? ` from ${formatHumanReadableDate(limits.lastSuccessfulAt, "date-time")}`
+                ? ` from ${formatSubscriptionTimestamp(limits.lastSuccessfulAt)}`
                 : ""}
               .
             </>
@@ -51,6 +58,9 @@ export function UsageSubscriptionProviderLimits({
       ) : null}
       {limits.status === "error" ? (
         <StatusBanner
+          dismissalKey={["subscription-limits", limits.source, "error"]}
+          dismissLabel={`Dismiss ${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} subscription limits error`}
+          centered
           variant="error"
           icon={<CircleAlertIcon />}
           title={`Couldn't load ${title}`}
@@ -58,17 +68,20 @@ export function UsageSubscriptionProviderLimits({
         />
       ) : null}
       {limits.status === "pending" ? (
-        <StatusBanner icon={<ClockIcon />} description={`Checking ${title}...`} />
+        <CenteredStatus loading className="rounded-xl border px-3.5 py-3">
+          Checking {title}
+        </CenteredStatus>
       ) : null}
       {hasRetainedLimits ? (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div
+          className={compact ? "grid gap-4 @min-[640px]:grid-cols-2" : "grid gap-4 sm:grid-cols-2"}
+        >
           {limits.windows.map((window) => (
             <UsageSubscriptionLimitProgress
               key={window.id}
               label={window.label}
               utilization={window.utilization}
               resetAt={window.resetAt}
-              status={limits.status}
             />
           ))}
           {limits.extraUsage ? (
@@ -76,7 +89,6 @@ export function UsageSubscriptionProviderLimits({
               <UsageSubscriptionLimitProgress
                 label="Extra usage"
                 utilization={extraUtilization}
-                status={limits.status}
                 description={formatExtraUsageRemaining(limits.extraUsage)}
               />
             ) : (
@@ -89,6 +101,9 @@ export function UsageSubscriptionProviderLimits({
             )
           ) : null}
         </div>
+      ) : null}
+      {hasRetainedLimits && limits.manualResets ? (
+        <UsageSubscriptionManualResets resets={limits.manualResets} />
       ) : null}
     </section>
   );

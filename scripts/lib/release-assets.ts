@@ -131,6 +131,7 @@ export function verifyAssembledDesktopReleaseAssets(
     "server-workspace-agent-darwin-x64",
     "server-workspace-agent-linux-x64",
     "server-workspace-agent-win32-x64.exe",
+    "server-workspace-agent-win32-arm64.exe",
   ]) {
     if (!names.includes(name)) throw new Error(`Missing packaged workspace agent: ${name}`);
   }

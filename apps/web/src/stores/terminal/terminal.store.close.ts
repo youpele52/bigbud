@@ -4,6 +4,7 @@ import { closeThreadTerminal, updateTerminalStateByThreadId } from "./helpers.st
 import { removeTerminalTransientState } from "./terminal.store.cleanup";
 import { closeTerminalAgentIdentity } from "./terminal.store.identity";
 import type { TerminalStateStoreState } from "./terminal.store.types";
+import { resetClosedTerminalLayout } from "./terminal.store.layout";
 
 export function closeTerminalPaneInState(
   state: TerminalStateStoreState,
@@ -18,5 +19,17 @@ export function closeTerminalPaneInState(
   const nextTerminalState = updateTerminalStateByThreadId(state[field], threadId, (current) =>
     closeThreadTerminal(current, terminalId),
   );
-  return { ...state, [field]: nextTerminalState, ...transient.state, ...tombstone };
+  return {
+    ...state,
+    ...(!panel &&
+      resetClosedTerminalLayout(
+        state,
+        threadId,
+        state[field][threadId],
+        nextTerminalState[threadId],
+      )),
+    [field]: nextTerminalState,
+    ...transient.state,
+    ...tombstone,
+  };
 }

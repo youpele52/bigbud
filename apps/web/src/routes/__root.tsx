@@ -12,10 +12,8 @@ import { AppSidebarLayout } from "../components/layout/AppSidebarLayout";
 import { StartupSplash } from "../components/layout/StartupSplash";
 import { Button } from "../components/ui/button";
 import { AnchoredToastProvider, ToastProvider } from "../components/ui/toast";
-import {
-  WebSocketConnectionCoordinator,
-  WebSocketConnectionSurface,
-} from "../components/WebSocketConnectionSurface";
+import { WebSocketConnectionSurface } from "../components/WebSocketConnectionSurface";
+import { WebSocketConnectionCoordinator } from "../components/WebSocketConnectionSurface.coordinator";
 import { SlowRpcAckToastCoordinator } from "../components/SlowRpcAckToastCoordinator";
 import { DesktopBackendStartupCoordinator } from "../components/DesktopBackendStartupCoordinator";
 import { readNativeApi } from "../rpc/nativeApi";

@@ -100,6 +100,8 @@ export function CompactThreadConversation({
         >
           <div ref={setTimelineContent} className="h-full">
             <MessagesTimeline
+              emptyChatGreeting={context.timeline.emptyChatGreeting}
+              shimmerEmptyChat={context.timeline.shimmerEmptyChat}
               isWorking={context.thread.isWorking}
               activeTurnInProgress={context.interactions.activeTurnInProgress}
               activeTurnStartedAt={context.thread.activeWorkStartedAt}
@@ -113,6 +115,8 @@ export function CompactThreadConversation({
               nowIso={context.thread.nowIso}
               expandedWorkGroups={context.base.expandedWorkGroups}
               onToggleWorkGroup={context.interactions.onToggleWorkGroup}
+              activityAccordionOpenById={context.base.activityAccordionOpenById}
+              onSetActivityAccordionOpen={context.interactions.onSetActivityAccordionOpen}
               changedFilesExpandedByTurnId={context.base.threadChangedFilesExpandedByTurnId}
               onSetChangedFilesExpanded={(turnId, expanded) => {
                 if (!context.base.activeThread) return;

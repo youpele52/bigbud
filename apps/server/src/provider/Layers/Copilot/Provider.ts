@@ -147,6 +147,24 @@ function mapCopilotModel(model: ModelInfo): ServerProviderModel {
   };
 }
 
+/** Copilot Free can use Auto even when no explicit models are selectable. */
+export function resolveCopilotModels(
+  models: ReadonlyArray<ModelInfo>,
+  isAuthenticated: boolean,
+  customModels: ReadonlyArray<string>,
+): ReadonlyArray<ServerProviderModel> {
+  const discovered = models.map(mapCopilotModel);
+  if (isAuthenticated && discovered.length === 0) {
+    discovered.push({
+      slug: "auto",
+      name: "Auto",
+      isCustom: false,
+      capabilities: EMPTY_MODEL_CAPABILITIES,
+    });
+  }
+  return providerModelsFromSettings(discovered, PROVIDER, customModels, EMPTY_MODEL_CAPABILITIES);
+}
+
 function formatCopilotAuthLabel(authType: string | undefined): string | undefined {
   switch (authType) {
     case "user":
@@ -227,15 +245,11 @@ export const checkCopilotProviderStatus = Effect.fn("checkCopilotProviderStatus"
       client.listModels(),
     ]);
 
-    const resolvedModels = [
-      ...models.map(mapCopilotModel),
-      ...providerModelsFromSettings(
-        [],
-        PROVIDER,
-        copilotSettings.customModels,
-        EMPTY_MODEL_CAPABILITIES,
-      ),
-    ];
+    const resolvedModels = resolveCopilotModels(
+      models,
+      auth.isAuthenticated,
+      copilotSettings.customModels,
+    );
 
     const probe: ProviderProbeResult = {
       installed: true,

@@ -29,15 +29,17 @@ import {
   UnifiedSettings,
 } from "@bigbud/contracts/settings";
 import { ensureNativeApi } from "../rpc/nativeApi";
-import { useLocalStorage } from "./useLocalStorage";
+import { getLocalStorageItem, setLocalStorageItem, useLocalStorage } from "./useLocalStorage";
+import {
+  CLIENT_SETTINGS_STORAGE_KEY,
+  CLIENT_SETTINGS_STORAGE_OPTIONS,
+} from "./useSettings.storage";
 import { normalizeCustomModelSlugs } from "../models/provider";
 import { Predicate, Schema, Struct } from "effect";
 import { DeepMutable } from "effect/Types";
 import { deepMerge } from "@bigbud/shared/Struct";
 import { applySettingsUpdated, getServerConfig, useServerSettings } from "~/rpc/serverState";
 
-const CLIENT_SETTINGS_STORAGE_KEY = "bigbud:client-settings:v1";
-const CLIENT_SETTINGS_LEGACY_KEYS = ["t3code:client-settings:v1"] as const;
 const OLD_SETTINGS_KEY = "t3code:app-settings:v1";
 const TERMINAL_FONT_FAMILY_SET = new Set<string>(TERMINAL_FONT_FAMILIES);
 const TERMINAL_FONT_SIZE_SET = new Set<number>(TERMINAL_FONT_SIZES);
@@ -73,6 +75,21 @@ function splitPatch(patch: GenericSettingsPatch): {
   };
 }
 
+/** Optimistically patches atom-backed server settings, then persists via RPC. */
+export function updateServerSettings(serverPatch: ServerSettingsPatch): void {
+  const currentServerConfig = getServerConfig();
+  if (currentServerConfig) {
+    applySettingsUpdated(deepMerge(currentServerConfig.settings, serverPatch));
+  }
+  // Fire-and-forget RPC — push will reconcile on success
+  void ensureNativeApi().server.updateSettings(serverPatch);
+}
+
+/** Persists via RPC and resolves only once the server accepted the patch. */
+export async function persistServerSettings(serverPatch: ServerSettingsPatch): Promise<void> {
+  applySettingsUpdated(await ensureNativeApi().server.updateSettings(serverPatch));
+}
+
 // ── Hooks ────────────────────────────────────────────────────────────
 
 /**
@@ -88,7 +105,7 @@ export function useSettings<T>(selector?: (s: UnifiedSettings) => T): T | Unifie
     CLIENT_SETTINGS_STORAGE_KEY,
     DEFAULT_CLIENT_SETTINGS,
     ClientSettingsSchema,
-    { legacyKeys: CLIENT_SETTINGS_LEGACY_KEYS },
+    CLIENT_SETTINGS_STORAGE_OPTIONS,
   );
 
   const merged = useMemo<UnifiedSettings>(
@@ -113,7 +130,7 @@ export function useUpdateSettings() {
     CLIENT_SETTINGS_STORAGE_KEY,
     DEFAULT_CLIENT_SETTINGS,
     ClientSettingsSchema,
-    { legacyKeys: CLIENT_SETTINGS_LEGACY_KEYS },
+    CLIENT_SETTINGS_STORAGE_OPTIONS,
   );
 
   const updateSettings = useCallback(
@@ -121,12 +138,7 @@ export function useUpdateSettings() {
       const { serverPatch, clientPatch } = splitPatch(patch);
 
       if (Object.keys(serverPatch).length > 0) {
-        const currentServerConfig = getServerConfig();
-        if (currentServerConfig) {
-          applySettingsUpdated(deepMerge(currentServerConfig.settings, serverPatch));
-        }
-        // Fire-and-forget RPC — push will reconcile on success
-        void ensureNativeApi().server.updateSettings(serverPatch);
+        updateServerSettings(serverPatch);
       }
 
       if (Object.keys(clientPatch).length > 0) {
@@ -238,7 +250,10 @@ export function buildLegacyClientSettingsMigrationPatch(
   }
 
   if (isTerminalFontFamily(legacySettings.terminalFontFamily)) {
-    patch.terminalFontFamily = legacySettings.terminalFontFamily;
+    patch.terminalFontFamily =
+      legacySettings.terminalFontFamily === "meslo-nerd-font-mono"
+        ? DEFAULT_CLIENT_SETTINGS.terminalFontFamily
+        : legacySettings.terminalFontFamily;
   }
 
   if (
@@ -277,15 +292,18 @@ export function migrateLocalSettingsToServer(): void {
     // Migrate client-only keys to the new localStorage key
     const clientPatch = buildLegacyClientSettingsMigrationPatch(old);
     if (Object.keys(clientPatch).length > 0) {
-      const existing =
-        localStorage.getItem(CLIENT_SETTINGS_STORAGE_KEY) ??
-        localStorage.getItem(CLIENT_SETTINGS_LEGACY_KEYS[0]);
-      const current = existing ? (JSON.parse(existing) as Record<string, unknown>) : {};
-      localStorage.setItem(
+      const current =
+        getLocalStorageItem(
+          CLIENT_SETTINGS_STORAGE_KEY,
+          ClientSettingsSchema,
+          CLIENT_SETTINGS_STORAGE_OPTIONS,
+        ) ?? DEFAULT_CLIENT_SETTINGS;
+      setLocalStorageItem(
         CLIENT_SETTINGS_STORAGE_KEY,
-        JSON.stringify({ ...current, ...clientPatch }),
+        { ...current, ...clientPatch },
+        ClientSettingsSchema,
+        CLIENT_SETTINGS_STORAGE_OPTIONS,
       );
-      localStorage.removeItem(CLIENT_SETTINGS_LEGACY_KEYS[0]);
     }
   } catch (error) {
     console.error("[MIGRATION] Error migrating local settings:", error);

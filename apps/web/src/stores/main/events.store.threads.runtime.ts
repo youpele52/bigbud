@@ -1,4 +1,5 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
+import { retainUserInputHistoryActivities } from "./userInputHistory.store";
 
 import { mapMessage, mapProposedPlan, mapSession, mapTurnDiffSummary } from "./mappers.store";
 import { type AppState } from "./main.store";
@@ -19,13 +20,22 @@ import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.const
 import { PROVIDER_CHECKING_SESSION_REASON } from "@bigbud/contracts/constants/providerRuntime.constant";
 import { applyDelegationLinkedActivity } from "./events.store.delegations";
 import { applyDelegatedChildRuntimeEvent } from "./events.store.delegatedRuntime";
-import { demoteProviderAgentsForSession } from "./events.store.providerAgents";
+import {
+  demoteProviderAgentsForSession,
+  removeProviderAgent,
+  upsertProviderAgent,
+} from "./events.store.providerAgents";
 import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
 import {
   buildThreadMessageLatestTurn,
   getProviderTurnStartFailureDetail,
   upsertThreadMessage,
 } from "./events.store.threads.runtime.messages";
+import {
+  clearPendingTurnStartRequest,
+  recordTurnStartRecoveryStep,
+  settleTurnStartRequest,
+} from "./events.store.threads.turnStartRequest";
 
 export function applyThreadRuntimeEvent(
   state: AppState,
@@ -37,17 +47,12 @@ export function applyThreadRuntimeEvent(
       if (event.payload.task.kind !== "providerSubagent") return state;
       return updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
-        providerAgents: [
-          ...(thread.providerAgents ?? []).filter((agent) => agent.id !== event.payload.task.id),
-          event.payload.task,
-        ],
+        providerAgents: upsertProviderAgent(thread.providerAgents, event.payload.task),
       }));
     case "thread.task-removed":
       return updateThreadState(state, event.payload.threadId, (thread) => ({
         ...thread,
-        providerAgents: (thread.providerAgents ?? []).filter(
-          (agent) => agent.id !== event.payload.taskId,
-        ),
+        providerAgents: removeProviderAgent(thread.providerAgents, event.payload.taskId),
       }));
     case "thread.message-sent": {
       const nextState = updateThreadState(state, event.payload.threadId, (thread) => {
@@ -152,10 +157,20 @@ export function applyThreadRuntimeEvent(
           normalizedSession,
         );
 
+        const turnStarted = normalizedSession.status === "running" && incomingActiveTurnId !== null;
         return {
           ...thread,
           session,
           ...(providerAgents !== undefined ? { providerAgents } : {}),
+          ...(turnStarted
+            ? {
+                turnStartRequest: settleTurnStartRequest(
+                  thread.turnStartRequest,
+                  "started",
+                  event.occurredAt,
+                ),
+              }
+            : {}),
           error: sanitizeThreadErrorMessage(incomingSession.lastError),
           latestTurn:
             normalizedSession.status === "running" && incomingActiveTurnId !== null
@@ -197,6 +212,7 @@ export function applyThreadRuntimeEvent(
           ? thread
           : {
               ...thread,
+              turnStartRequest: clearPendingTurnStartRequest(thread.turnStartRequest),
               session: {
                 ...thread.session,
                 status: "closed",
@@ -238,6 +254,11 @@ export function applyThreadRuntimeEvent(
                 assistantMessageId: thread.latestTurn.assistantMessageId,
                 sourceProposedPlan: thread.latestTurn.sourceProposedPlan,
               }),
+        turnStartRequest: settleTurnStartRequest(
+          thread.turnStartRequest,
+          "failed",
+          event.occurredAt,
+        ),
         error: sanitizeThreadErrorMessage(event.payload.detail) ?? event.payload.detail,
         updatedAt: event.occurredAt,
       }));
@@ -327,17 +348,24 @@ export function applyThreadRuntimeEvent(
 
     case "thread.activity-appended": {
       return updateThreadState(state, event.payload.threadId, (thread) => {
-        const activities = [
-          ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
-          { ...event.payload.activity },
-        ]
-          .toSorted(compareActivities)
-          .slice(-MAX_THREAD_ACTIVITIES);
+        const activities = retainUserInputHistoryActivities(
+          [
+            ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
+            { ...event.payload.activity },
+          ].toSorted(compareActivities),
+          MAX_THREAD_ACTIVITIES,
+        );
         const providerTurnStartError = getProviderTurnStartFailureDetail(event.payload.activity);
         return applyDelegationLinkedActivity(
           {
             ...thread,
             activities,
+            // A redelivered activity (same id) is not a new step.
+            turnStartRequest: thread.activities.some(
+              (activity) => activity.id === event.payload.activity.id,
+            )
+              ? thread.turnStartRequest
+              : recordTurnStartRecoveryStep(thread.turnStartRequest, event.payload.activity),
             error: providerTurnStartError ?? thread.error,
             updatedAt: event.occurredAt,
           },

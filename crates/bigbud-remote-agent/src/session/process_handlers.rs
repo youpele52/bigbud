@@ -289,82 +289,10 @@ impl AgentSession {
         Ok(responses)
     }
 
-    pub fn handle_process_attach(
-        &mut self,
-        request: v1::ProcessAttachRequest,
-    ) -> Result<Vec<v1::Frame>, SessionError> {
-        if !self.ready {
-            return Err(SessionError::HelloRequired);
-        }
-        let chunks = self
-            .process_operations
-            .replay_from(
-                &request.operation_id,
-                request.after_sequence,
-                Instant::now(),
-            )
-            .map_err(|error| SessionError::ProcessReplay(error.to_string()))?;
-        let snapshot = self
-            .process_operations
-            .snapshot(&request.operation_id, Instant::now())
-            .map_err(operation_error)?;
-        let mut responses = vec![process_attach_response_frame(
-            &request.request_id,
-            &snapshot,
-        )];
-        responses.extend(
-            chunks
-                .into_iter()
-                .map(|chunk| {
-                    process_output_frame(
-                        &request.operation_id,
-                        chunk.sequence,
-                        chunk.stream,
-                        chunk.bytes,
-                    )
-                })
-                .collect::<Vec<_>>(),
-        );
-        if let Some(terminal) = snapshot.terminal {
-            responses.push(process_completed_frame(
-                &request.request_id,
-                &request.operation_id,
-                &terminal,
-                false,
-            ));
-        }
-        Ok(responses)
-    }
-
-    pub(super) fn handle_process_output_ack(&mut self, request: v1::ProcessOutputAck) -> v1::Frame {
-        let (accepted, error_code, error_message) = match self.process_operations.acknowledge(
-            &request.operation_id,
-            request.acknowledged_sequence,
-            Instant::now(),
-        ) {
-            Ok(()) => match self.append_process_journal(&JournalRecord::Acknowledged {
-                operation_id: request.operation_id.clone(),
-                acknowledged_sequence: request.acknowledged_sequence,
-            }) {
-                Ok(()) => (true, String::new(), String::new()),
-                Err(error) => (false, "PROCESS_ACK_ERROR".to_owned(), error.to_string()),
-            },
-            Err(error) => (false, "PROCESS_ACK_ERROR".to_owned(), error.to_string()),
-        };
-        v1::Frame {
-            payload: Some(v1::frame::Payload::ProcessAckResponse(
-                v1::ProcessAckResponse {
-                    request_id: request.request_id,
-                    operation_id: request.operation_id,
-                    accepted,
-                    error_code,
-                    error_message,
-                },
-            )),
-        }
-    }
-
-    fn append_process_journal(&self, record: &JournalRecord) -> Result<(), SessionError> {
+    pub(super) fn append_process_journal(
+        &self,
+        record: &JournalRecord,
+    ) -> Result<(), SessionError> {
         let Some(journal) = &self.process_journal else {
             return Ok(());
         };

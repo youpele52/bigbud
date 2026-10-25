@@ -89,6 +89,7 @@ mod tests {
         let frame = v1::Frame {
             payload: Some(v1::frame::Payload::Heartbeat(v1::Heartbeat {
                 monotonic_millis: 42,
+                suspended_millis: 900_000,
             })),
         };
         let mut encoded = Vec::new();

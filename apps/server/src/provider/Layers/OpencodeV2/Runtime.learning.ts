@@ -8,6 +8,8 @@ import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
 import { createHash } from "node:crypto";
 import { resolveV2RuntimeBinding } from "./Runtime.binding.ts";
 import { V2StartAttempt } from "./Runtime.start.ts";
+import { verifyV2SharedLearningHistory } from "./Runtime.learning.shared.ts";
+import { v2TryPromise } from "./Client.guard.async.ts";
 
 /** Durable job identity reuses terminal results, never retries uncertain execution or applies memory. */
 export function makeV2LearningReview(runtime: OpencodeV2Runtime) {
@@ -41,7 +43,7 @@ export function makeV2LearningReview(runtime: OpencodeV2Runtime) {
       .pipe(Effect.mapError(() => fail("runBackgroundReview")));
     const result = yield* read().pipe(Effect.mapError(() => fail("runBackgroundReview")));
     if (result?.state === "terminal") {
-      const binding = yield* Effect.tryPromise({
+      const binding = yield* v2TryPromise({
         try: async (signal) => {
           const prepared = await runtime.options.prepareSession?.(startInput, signal, true);
           try {
@@ -87,15 +89,26 @@ export function makeV2LearningReview(runtime: OpencodeV2Runtime) {
         result.finalText.length > 24000
       )
         return yield* fail("runBackgroundReview");
+      yield* v2TryPromise({
+        try: () =>
+          runtime.authorized(() =>
+            verifyV2SharedLearningHistory(runtime.options, startInput, binding, {
+              providerID: selection.subProviderID!,
+              id: selection.model,
+              ...(selection.options?.variant ? { variant: selection.options.variant } : {}),
+            }),
+          ),
+        catch: () => fail("runBackgroundReview"),
+      });
       return result.finalText; // Existing LearningReview parser/validation remains authoritative.
     }
     const attempt = new V2StartAttempt();
     const run = Effect.gen(function* () {
-      yield* Effect.tryPromise({
+      yield* v2TryPromise({
         try: () => runtime.start(startInput, attempt, true),
         catch: () => fail("runBackgroundReview"),
       });
-      yield* Effect.tryPromise({
+      yield* v2TryPromise({
         try: () =>
           runtime.send({
             threadId: owned.threadId,
@@ -123,7 +136,7 @@ export function makeV2LearningReview(runtime: OpencodeV2Runtime) {
     );
     return yield* run.pipe(
       Effect.onExit(() =>
-        Effect.tryPromise({
+        v2TryPromise({
           try: () => runtime.cancelStart(attempt),
           catch: () => fail("ProviderService.runBackgroundReview.cleanup"),
         }),

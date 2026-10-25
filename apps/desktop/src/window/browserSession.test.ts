@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const fromPartitionMock = vi.hoisted(() => vi.fn());
 
 vi.mock("electron", () => ({
+  dialog: { showMessageBox: vi.fn() },
+  shell: { openExternal: vi.fn() },
   session: {
     fromPartition: fromPartitionMock,
   },

@@ -38,6 +38,7 @@ export class OpencodeV2DevelopmentSessions {
       this.sessions.has(input.threadId) ||
       this.starting.has(input.threadId) ||
       input.config.runtimeTargetId !== "local" ||
+      input.config.sharedService !== undefined ||
       !Number.isInteger(input.epoch) ||
       input.epoch < 0 ||
       !input.model.providerID ||

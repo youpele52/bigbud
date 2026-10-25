@@ -1,6 +1,8 @@
 import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas";
+import { GreetingName } from "./settings.greeting";
+import { OpencodeV2NativeServiceTrust, OpencodeV2PluginConfigRoot } from "./settings.opencodeV2";
 import {
   ClaudeModelOptions,
   CodexModelOptions,
@@ -13,10 +15,13 @@ import {
 } from "./model";
 import {
   AgentBrowserPreference,
+  ClaudeSubagentCap,
   ComputerUseActionTimeoutMs,
   ComputerUseCheckInIntervalMs,
+  DelegatedThreadModelChoice,
   ThreadEnvMode,
 } from "./settings.serverShared";
+import { ProviderKind } from "../orchestration/orchestration.provider";
 
 const CodexModelOptionsPatch = Schema.Struct({
   reasoningEffort: Schema.optionalKey(CodexModelOptions.fields.reasoningEffort),
@@ -119,11 +124,14 @@ const ProviderSettingsPatch = Schema.Struct({
 });
 
 export const ServerSettingsPatch = Schema.Struct({
+  greetingName: Schema.optionalKey(GreetingName),
   enableAssistantStreaming: Schema.optionalKey(Schema.Boolean),
   enableThinkingStreaming: Schema.optionalKey(Schema.Boolean),
+  promptSuggestions: Schema.optionalKey(Schema.Boolean),
+  generatedPromptSuggestions: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   defaultChatCwd: Schema.optionalKey(Schema.String),
-  textGenerationModelSelection: Schema.optionalKey(ModelSelectionPatch),
+  textGenerationModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelectionPatch)),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(Schema.String),
@@ -138,6 +146,8 @@ export const ServerSettingsPatch = Schema.Struct({
   hasSeenComputerUsePrompt: Schema.optionalKey(Schema.Boolean),
   computerUseCheckInIntervalMs: Schema.optionalKey(ComputerUseCheckInIntervalMs),
   computerUseActionTimeoutMs: Schema.optionalKey(ComputerUseActionTimeoutMs),
+  hiddenComposerProviders: Schema.optionalKey(Schema.Array(ProviderKind)),
+  delegatedThreadModelChoice: Schema.optionalKey(DelegatedThreadModelChoice),
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(
@@ -159,6 +169,8 @@ export const ServerSettingsPatch = Schema.Struct({
               nativeFork: Schema.optionalKey(Schema.Boolean),
             }),
           ),
+          maxSubagentSpawnDepth: Schema.optionalKey(ClaudeSubagentCap),
+          maxConcurrentSubagents: Schema.optionalKey(ClaudeSubagentCap),
         }),
       ),
       cliProxy: Schema.optionalKey(
@@ -177,6 +189,8 @@ export const ServerSettingsPatch = Schema.Struct({
           profileRoot: Schema.optionalKey(Schema.String),
           connectionMode: Schema.optionalKey(Schema.Literals(["shared", "isolated"])),
           serviceFile: Schema.optionalKey(Schema.String),
+          nativeServiceTrust: Schema.optionalKey(OpencodeV2NativeServiceTrust),
+          nativePluginConfigRoot: Schema.optionalKey(OpencodeV2PluginConfigRoot),
         }),
       ),
       pi: Schema.optionalKey(ProviderSettingsPatch),

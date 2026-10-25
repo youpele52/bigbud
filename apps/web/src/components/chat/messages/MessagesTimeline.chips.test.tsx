@@ -90,6 +90,8 @@ describe("MessagesTimeline inline chips", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -136,6 +138,8 @@ describe("MessagesTimeline inline chips", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -183,6 +187,8 @@ describe("MessagesTimeline inline chips", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -235,6 +241,8 @@ describe("MessagesTimeline inline chips", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -291,6 +299,8 @@ describe("MessagesTimeline inline chips", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -336,6 +346,8 @@ describe("MessagesTimeline inline chips", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}

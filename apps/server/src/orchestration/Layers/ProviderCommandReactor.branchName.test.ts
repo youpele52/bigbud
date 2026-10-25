@@ -20,7 +20,12 @@ describe("ProviderCommandReactor branch names", () => {
   registerProviderCommandReactorTestCleanup();
   it("generates a worktree branch name for the first turn", async () => {
     const baseDir = makeTrackedTempDir("bigbud-title-branch-");
-    const harness = await createHarness({ baseDir });
+    const harness = await createHarness({
+      baseDir,
+      serverSettingsOverrides: {
+        textGenerationModelSelection: { provider: "codex", model: "fixture-model" },
+      },
+    });
     const now = new Date().toISOString();
     const threadId = ThreadId.makeUnsafe("thread-branch-generation");
     const worktreePath = path.join(baseDir, "worktree");

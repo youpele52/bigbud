@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 
-import { capHistory, sanitizeTerminalHistoryChunk } from "./Manager.history";
+import { retainTerminalHistory } from "./Manager.history.retention";
 import { cleanupProcessHandles, type ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import type { PtyProcess } from "../Services/PTY";
 import type { TerminalSessionState } from "./Manager.types";
@@ -51,24 +51,14 @@ export function drainProcessEventsWith(
             session.pendingProcessEventIndex = 0;
           }
 
-          const sanitized = sanitizeTerminalHistoryChunk(
-            session.pendingHistoryControlSequence,
-            combinedData,
-          );
-          session.pendingHistoryControlSequence = sanitized.pendingControlSequence;
-          if (sanitized.visibleText.length > 0) {
-            session.history = capHistory(
-              `${session.history}${sanitized.visibleText}`,
-              ctx.historyLineLimit,
-            );
-          }
+          const historyChanged = retainTerminalHistory(session, combinedData, ctx.historyLineLimit);
           session.updatedAt = nextTerminalTimestamp(session.updatedAt);
 
           return {
             type: "output",
             threadId: session.threadId,
             terminalId: session.terminalId,
-            history: sanitized.visibleText.length > 0 ? session.history : null,
+            history: historyChanged ? session.history : null,
             data: combinedData,
             createdAt: session.updatedAt,
           } as const;
@@ -80,6 +70,7 @@ export function drainProcessEventsWith(
         session.pid = null;
         session.hasRunningSubprocess = false;
         session.activeAgentProvider = null;
+        session.activeAgent = null;
         session.agentIdentityMisses = 0;
         session.status = "exited";
         session.pendingHistoryControlSequence = "";

@@ -30,6 +30,7 @@ export function createSendTurnHarness(options?: {
       sparkEnabled: false,
     },
     collabReceiverTurns: new Map(),
+    collabChildTurns: new Map(),
     activeModelCatalog: options?.activeModelCatalog,
     effectiveModelSelection: options?.effectiveModelSelection,
   };
@@ -71,6 +72,7 @@ export function createThreadControlHarness() {
       updatedAt: "2026-02-10T00:00:00.000Z",
     },
     collabReceiverTurns: new Map(),
+    collabChildTurns: new Map(),
     activeModelCatalog: undefined,
     effectiveModelSelection: undefined,
   };
@@ -116,6 +118,7 @@ export function createPendingUserInputHarness() {
       ],
     ]),
     collabReceiverTurns: new Map(),
+    collabChildTurns: new Map(),
     activeModelCatalog: undefined,
     effectiveModelSelection: undefined,
   };
@@ -159,6 +162,7 @@ export function createCollabNotificationHarness() {
     pendingApprovals: new Map(),
     pendingUserInputs: new Map(),
     collabReceiverTurns: new Map<string, string>(),
+    collabChildTurns: new Map(),
     activeModelCatalog: undefined,
     effectiveModelSelection: undefined,
     nextRequestId: 1,

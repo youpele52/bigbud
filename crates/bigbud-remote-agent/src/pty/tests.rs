@@ -24,7 +24,7 @@ fn spawns_a_shell_and_replays_bounded_output() {
         &[("TERM".to_owned(), "xterm-256color".to_owned())],
     )
     .unwrap();
-    let events = read_events(job.reader, job.handle.pid);
+    let events = read_events(job.reader, &job.handle);
     let output = events
         .iter()
         .filter_map(|event| match event {
@@ -179,7 +179,7 @@ fn pty_wrapper_child_uses_selected_shell_and_workspace_cwd() {
         &[],
     )
     .unwrap();
-    let output = read_events(job.reader, job.handle.pid)
+    let output = read_events(job.reader, &job.handle)
         .into_iter()
         .filter_map(|event| match event {
             PtyEvent::Output(bytes) => Some(bytes),

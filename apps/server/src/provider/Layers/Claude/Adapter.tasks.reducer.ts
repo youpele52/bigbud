@@ -6,11 +6,16 @@ import {
   fieldString,
   normalizeStatus,
   stringValue,
-  stringValues,
   taskId,
   taskRecords,
   taskSubject,
 } from "./Adapter.tasks.reducer.parse.ts";
+import {
+  legacyTaskFields,
+  runTransition,
+  subagentTaskFields,
+  withoutRunResult,
+} from "./Adapter.tasks.reducer.fields.ts";
 import type { ClaudeTask, ClaudeTaskReduction, ClaudeTaskState } from "./Adapter.tasks.types.ts";
 
 const TASK_DEDUP_LIMIT = 1_000;
@@ -98,7 +103,12 @@ function updateRecord(input: {
   });
   if (existing && !isTaskFreshnessNewer(nextFreshness, existing.freshness)) return undefined;
 
-  const status = normalizeStatus(record.status);
+  const transition = runTransition(record, existing);
+  if (transition === "late") return undefined;
+  const reopened = transition === "newer" && existing !== undefined && isTerminal(existing);
+  const status =
+    normalizeStatus(record.status) ??
+    (reopened ? { status: "inProgress" as const, nativeStatus: "running" } : undefined);
   const subject = taskSubject(record);
   // Status-only records can update a task we already know, but they do not
   // carry enough information to create a distinct visible task. CLIProxy can
@@ -106,6 +116,7 @@ function updateRecord(input: {
   // retain the default label for blank content.
   if (!existing && !subject && !input.memberships?.legacyMember) return undefined;
   const preserveTerminal =
+    !reopened &&
     existing &&
     isTerminal(existing) &&
     status !== undefined &&
@@ -113,93 +124,23 @@ function updateRecord(input: {
   const nativeStatus = preserveTerminal
     ? existing.nativeStatus
     : (status?.nativeStatus ?? existing?.nativeStatus);
+  // A newer run starts clean: the previous run's end, result and failure are stale.
+  const base = reopened ? withoutRunResult(existing) : existing;
+  const nextStatus = preserveTerminal
+    ? existing.status
+    : (status?.status ?? existing?.status ?? "pending");
+  const fields = { ...legacyTaskFields(record, base), ...subagentTaskFields(record, base) };
+  const terminal =
+    nextStatus === "completed" || nextStatus === "failed" || nextStatus === "stopped";
+  const { endedAt, ...rest } = fields;
   const next: ClaudeTask = {
     id: durableId ?? existing?.id ?? provisionalId,
     sourceToolUseId: existing?.sourceToolUseId ?? context.toolUseId,
     subject: subject ?? existing?.subject ?? "Task",
-    ...((stringValue(record.description) ?? existing?.description)
-      ? { description: stringValue(record.description) ?? existing?.description }
-      : {}),
-    status: preserveTerminal ? existing.status : (status?.status ?? existing?.status ?? "pending"),
+    ...rest,
+    ...(terminal ? { endedAt: endedAt ?? context.updatedAt } : {}),
+    status: nextStatus,
     ...(nativeStatus ? { nativeStatus } : {}),
-    ...((fieldString(record, "active_form", "activeForm", "activeLabel") ?? existing?.activeLabel)
-      ? {
-          activeLabel:
-            fieldString(record, "active_form", "activeForm", "activeLabel") ??
-            existing?.activeLabel,
-        }
-      : {}),
-    ...((fieldString(record, "request_id", "requestId") ?? existing?.requestId)
-      ? { requestId: fieldString(record, "request_id", "requestId") ?? existing?.requestId }
-      : {}),
-    ...((fieldString(record, "agent_id", "agentId") ?? existing?.agentId)
-      ? { agentId: fieldString(record, "agent_id", "agentId") ?? existing?.agentId }
-      : {}),
-    ...((fieldString(record, "parent_agent_id", "parentAgentId") ?? existing?.parentAgentId)
-      ? {
-          parentAgentId:
-            fieldString(record, "parent_agent_id", "parentAgentId") ?? existing?.parentAgentId,
-        }
-      : {}),
-    ...((fieldString(record, "parent_tool_use_id", "parentToolUseId") ?? existing?.parentToolUseId)
-      ? {
-          parentToolUseId:
-            fieldString(record, "parent_tool_use_id", "parentToolUseId") ??
-            existing?.parentToolUseId,
-        }
-      : {}),
-    ...((fieldString(record, "parent_task_id", "parentTaskId") ?? existing?.parentTaskId)
-      ? {
-          parentTaskId:
-            fieldString(record, "parent_task_id", "parentTaskId") ?? existing?.parentTaskId,
-        }
-      : {}),
-    ...((fieldString(record, "subagent_type", "subagentType", "task_type") ??
-    existing?.subagentType)
-      ? {
-          subagentType:
-            fieldString(record, "subagent_type", "subagentType", "task_type") ??
-            existing?.subagentType,
-        }
-      : {}),
-    ...((stringValues(record.blocks) ?? existing?.blocks)
-      ? { blocks: stringValues(record.blocks) ?? existing?.blocks }
-      : {}),
-    ...((stringValues(record.blockedBy) ?? stringValues(record.blocked_by) ?? existing?.blockedBy)
-      ? {
-          blockedBy:
-            stringValues(record.blockedBy) ??
-            stringValues(record.blocked_by) ??
-            existing?.blockedBy,
-        }
-      : {}),
-    ...((fieldString(record, "progress_summary", "progressSummary", "summary") ??
-    existing?.progressSummary)
-      ? {
-          progressSummary:
-            fieldString(record, "progress_summary", "progressSummary", "summary") ??
-            existing?.progressSummary,
-        }
-      : {}),
-    ...((fieldString(record, "last_tool_name", "lastToolName") ?? existing?.lastToolName)
-      ? {
-          lastToolName:
-            fieldString(record, "last_tool_name", "lastToolName") ?? existing?.lastToolName,
-        }
-      : {}),
-    ...(record.usage !== undefined
-      ? { usage: record.usage }
-      : existing?.usage !== undefined
-        ? { usage: existing.usage }
-        : {}),
-    ...((fieldString(record, "terminal_reason", "terminalReason", "error") ??
-    existing?.terminalReason)
-      ? {
-          terminalReason:
-            fieldString(record, "terminal_reason", "terminalReason", "error") ??
-            existing?.terminalReason,
-        }
-      : {}),
     ...(context.turnId
       ? { turnId: context.turnId }
       : existing?.turnId

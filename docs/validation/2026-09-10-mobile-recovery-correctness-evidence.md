@@ -227,6 +227,14 @@ not additional acceptance gates. This scoped measurement does not require an all
 private userdata, physical-device run, or cross-platform certification. The current serialized
 event/page/capture limits remain enforced and tested as safety bounds.
 
+## Retired recovery specification — 22 October, 2026
+
+The 9 September recovery plan is retired as an implemented specification, not as proof that every later mobile issue or physical-device gate is closed. Current ownership is in `wsMobileRecovery`, targeted mobile projection queries and the mobile recovery controller; later interaction/visual defects remain in the [mobile review gap-closure plan](../plans/2026-09-11-mobile-review-gap-closure-plan.md).
+
+Preserve its contract: one consistent targeted baseline/projector cursor without unrelated full-history hydration; capture before paged canonical replay; attempt/generation fencing, overlap identity and canonical sparse-gap verification; explicit zero-event `caught-up` accepted only after UI application through its watermark; bounded failure/rebaseline on discontinuity/overflow/deadline; and capture/fiber cleanup without blocking dispatch. Keep cached drafts/content, typed older-server conservative fallback, state-dependent action gating and separately targeted Stop. Neither open transport nor catch-up proves command delivery/provider health; do not automatically resend or widen the authenticated mobile command allowlist. Mobile remains direct/unmanaged, not desktop delivery supervision.
+
+Selected-thread full history and required approval evidence are not silently truncated; selected-history pagination remains separately designed work if measurement warrants it. The synthetic SQL/memory measurements above do not certify physical iOS/Android resume behavior, arbitrary userdata size or every platform's cold-disk performance.
+
 ## Server gate status
 
 Focused server/contracts coverage verifies bounded identities and frames, zero-event

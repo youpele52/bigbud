@@ -45,6 +45,7 @@ vi.mock("@tanstack/react-query", () => ({
 }));
 
 import { ComputerUseAccessSettingsSection } from "./ComputerUseAccessSettingsSection";
+import { SettingsAiIcon } from "./SettingsAiIcon";
 import { normalizeComputerUsePermissionMessage } from "../computer-use/computerUsePermissionMessage";
 
 describe("ComputerUseAccessSettingsSection", () => {
@@ -65,6 +66,13 @@ describe("ComputerUseAccessSettingsSection", () => {
     mockNativeApi.present = false;
 
     expect(renderToStaticMarkup(<ComputerUseAccessSettingsSection />)).toBe("");
+  });
+
+  it("uses the shared AI artwork for the Computer Use heading", () => {
+    const markup = renderToStaticMarkup(<ComputerUseAccessSettingsSection />);
+
+    expect(markup).toContain(renderToStaticMarkup(<SettingsAiIcon className="size-3" />));
+    expect(markup).not.toContain("lucide-bot");
   });
 
   it("shows limited capability guidance when desktop automation is disabled", () => {

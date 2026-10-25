@@ -22,6 +22,8 @@ export interface ComposerPromptEditorProps {
   discoveredSkills?: ReadonlyArray<ServerDiscoveredSkill> | undefined;
   disabled: boolean;
   placeholder: string;
+  /** Ghost-text prompt suggestion for an empty composer; never sent unless accepted. */
+  promptSuggestion?: string | null | undefined;
   className?: string;
   compact?: boolean;
   onRemoveTerminalContext: (contextId: string) => void;

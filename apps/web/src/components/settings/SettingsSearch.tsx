@@ -1,5 +1,6 @@
 import { SearchIcon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
+import { useRef, useState } from "react";
 
 import { Input } from "../ui/input";
 import { getSettingsSearchResults, normalizeSettingsSearchQuery } from "./SettingsSearch.logic";
@@ -15,25 +16,39 @@ export function SettingsSearch({
   onQueryChange: (query: string) => void;
 }) {
   const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
   const normalizedQuery = normalizeSettingsSearchQuery(query);
+  const showResults = isOpen && Boolean(normalizedQuery);
   const results = getSettingsSearchResults(query).slice(0, MAX_RESULTS);
 
   const selectResult = (result: (typeof SETTINGS_SEARCH_ITEMS)[number]) => {
+    setIsOpen(false);
+    inputRef.current?.blur();
     void navigate({ to: result.to, replace: true });
   };
 
   return (
-    <div className="relative ms-2 w-52 shrink-0 [-webkit-app-region:no-drag] sm:w-64">
+    <div
+      className="relative ms-2 w-52 shrink-0 [-webkit-app-region:no-drag] sm:w-64"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setIsOpen(false);
+        }
+      }}
+    >
       <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2 text-muted-foreground" />
       <Input
+        ref={inputRef}
         type="search"
         size="sm"
         value={query}
         placeholder="Search settings"
         aria-label="Search settings"
-        aria-controls={normalizedQuery ? "settings-search-results" : undefined}
-        aria-expanded={Boolean(normalizedQuery)}
+        aria-controls={showResults ? "settings-search-results" : undefined}
+        aria-expanded={showResults}
         className="bg-background/60 ps-7"
+        onFocus={() => setIsOpen(true)}
         onChange={(event) => onQueryChange(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Enter" && results[0]) {
@@ -47,7 +62,7 @@ export function SettingsSearch({
           }
         }}
       />
-      {normalizedQuery ? (
+      {showResults ? (
         <div
           id="settings-search-results"
           className="absolute top-[calc(100%+0.25rem)] left-0 z-50 w-full overflow-hidden rounded-lg border bg-popover py-1 shadow-lg/5"

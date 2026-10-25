@@ -118,6 +118,8 @@ export function SidebarProjectsSection({
       {scope === "local" && showArm64IntelBuildWarning && arm64IntelBuildWarningDescription ? (
         <SidebarGroup className="px-2 pt-2 pb-0">
           <StatusBanner
+            dismissalKey={["desktop", "arm64-intel-build"]}
+            dismissLabel="Dismiss Intel build warning"
             variant="warning"
             icon={<TriangleAlertIcon />}
             className="rounded-2xl border-warning/40 bg-warning/8"

@@ -6,7 +6,6 @@ import {
 } from "@bigbud/contracts";
 import { fromLenientJson } from "@bigbud/shared/schemaJson";
 import { Equal, Schema } from "effect";
-import { resolveProviderWorkload } from "../provider/providerWorkloadSupport.ts";
 import {
   EXISTING_SERVER_SETTINGS_FALLBACK,
   normalizeExistingOpencodeSettings,
@@ -15,22 +14,8 @@ import {
 const UnknownJson = fromLenientJson(Schema.Unknown);
 
 export function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
-  const selection = settings.textGenerationModelSelection;
-  if (!PROVIDER_KINDS.includes(selection.provider as (typeof PROVIDER_KINDS)[number])) {
-    return settings;
-  }
-  const providerSettings =
-    settings.providers[selection.provider as keyof ServerSettings["providers"]];
-  if (providerSettings?.enabled && selection.provider !== "opencode") return settings;
-  const resolution = resolveProviderWorkload({
-    requested: selection,
-    workload: "unattendedTextGeneration",
-    availableProviderKinds: PROVIDER_KINDS.filter(
-      (provider) => settings.providers[provider].enabled,
-    ),
-  });
-  if (!resolution.actual || resolution.actual.provider === selection.provider) return settings;
-  return { ...settings, textGenerationModelSelection: resolution.actual };
+  // Availability must never rewrite an explicit preference into a different model.
+  return settings;
 }
 
 export function resolveDefaultChatCwd(settings: ServerSettings): string {

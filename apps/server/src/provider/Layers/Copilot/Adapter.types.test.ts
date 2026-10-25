@@ -9,6 +9,20 @@ import {
 } from "./Adapter.types.ts";
 
 describe("CopilotAdapter.types", () => {
+  it.each(["shell", "read", "write", "memory", "mcp", "custom-tool"])(
+    "restricts managed %s approvals to one shot",
+    (kind) => {
+      const request = {
+        kind,
+        managedApprovalRequired: true,
+        canOfferSessionApproval: true,
+      } as PermissionRequest;
+      expect(getCopilotSessionApprovalMetadata(request)).toEqual({ available: false });
+      expect(approvalDecisionToPermissionResult("acceptForSession", request)).toEqual({
+        kind: "approve-once",
+      });
+    },
+  );
   it("maps acceptForSession shell approvals to approve-for-session command rules", () => {
     const request = {
       kind: "shell",

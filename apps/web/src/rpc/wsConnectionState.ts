@@ -2,15 +2,15 @@ import { useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/unstable/reactivity";
 
 import { appAtomRegistry } from "./atomRegistry";
+import { socketDiagnosticUrl } from "./wsConnectionDiagnostics";
+import { WS_RECONNECT_LABEL_MAX_ATTEMPTS } from "./wsReconnectPolicy";
 
 export type WsConnectionUiState = "connected" | "connecting" | "error" | "offline" | "reconnecting";
+/**
+ * The transport never gives up, so it never reports `exhausted`. The member stays for
+ * compatibility with persisted UI fixtures; presentation derives "past the label cap" instead.
+ */
 export type WsReconnectPhase = "attempting" | "exhausted" | "idle" | "waiting";
-
-export const WS_RECONNECT_INITIAL_DELAY_MS = 1_000;
-export const WS_RECONNECT_BACKOFF_FACTOR = 2;
-export const WS_RECONNECT_MAX_DELAY_MS = 64_000;
-export const WS_RECONNECT_MAX_RETRIES = 7;
-export const WS_RECONNECT_MAX_ATTEMPTS = WS_RECONNECT_MAX_RETRIES + 1;
 
 export interface WsConnectionStatus {
   readonly attemptCount: number;
@@ -43,7 +43,7 @@ const INITIAL_WS_CONNECTION_STATUS = Object.freeze<WsConnectionStatus>({
   online: typeof navigator === "undefined" ? true : navigator.onLine !== false,
   phase: "idle",
   reconnectAttemptCount: 0,
-  reconnectMaxAttempts: WS_RECONNECT_MAX_ATTEMPTS,
+  reconnectMaxAttempts: WS_RECONNECT_LABEL_MAX_ATTEMPTS,
   reconnectPhase: "idle",
   socketUrl: null,
 });
@@ -85,9 +85,16 @@ export function getWsConnectionUiState(status: WsConnectionStatus): WsConnection
   return "reconnecting";
 }
 
+/** Past the label cap retries continue, so the label drops the denominator. */
+export function isWsReconnectPastLabelCap(status: WsConnectionStatus): boolean {
+  return status.reconnectAttemptCount > status.reconnectMaxAttempts;
+}
+
 export function formatWsReconnectAttempt(status: WsConnectionStatus): string {
-  const attempt = Math.max(1, Math.min(status.reconnectAttemptCount, status.reconnectMaxAttempts));
-  return `${attempt}/${status.reconnectMaxAttempts}`;
+  const attempt = Math.max(1, status.reconnectAttemptCount);
+  return isWsReconnectPastLabelCap(status)
+    ? `${attempt}`
+    : `${attempt}/${status.reconnectMaxAttempts}`;
 }
 
 export function isWsReconnecting(status: WsConnectionStatus): boolean {
@@ -106,7 +113,7 @@ export function recordWsConnectionAttempt(socketUrl: string): WsConnectionStatus
     phase: "connecting",
     reconnectAttemptCount: current.phase === "connected" ? 1 : current.reconnectAttemptCount + 1,
     reconnectPhase: "attempting",
-    socketUrl,
+    socketUrl: socketDiagnosticUrl(socketUrl),
   }));
 }
 
@@ -162,6 +169,32 @@ export function resetWsReconnectBackoff(): WsConnectionStatus {
   }));
 }
 
+/** Publishes the jittered delay the socket schedule actually chose, for the toast countdown. */
+export function recordWsReconnectScheduled(delayMs: number): WsConnectionStatus {
+  return updateWsConnectionStatus((current) =>
+    current.phase === "connected"
+      ? current
+      : {
+          ...current,
+          nextRetryAt: new Date(Date.now() + Math.max(0, delayMs)).toISOString(),
+          reconnectPhase: "waiting",
+        },
+  );
+}
+
+/** Protocol retirement owns its recovery schedule, rather than the stalled-socket watchdog. */
+export function recordWsProtocolRecovery(): WsConnectionStatus {
+  return updateWsConnectionStatus((current) => ({
+    ...current,
+    phase: "disconnected",
+    disconnectedAt: current.disconnectedAt ?? isoNow(),
+    lastError: "WebSocket RPC session failed.",
+    lastErrorAt: isoNow(),
+    nextRetryAt: null,
+    reconnectPhase: "attempting",
+  }));
+}
+
 export function resetWsConnectionStateForTests(): void {
   appAtomRegistry.set(wsConnectionStatusAtom, INITIAL_WS_CONNECTION_STATUS);
 }
@@ -170,43 +203,18 @@ export function useWsConnectionStatus(): WsConnectionStatus {
   return useAtomValue(wsConnectionStatusAtom);
 }
 
-export function getWsReconnectDelayMsForRetry(retryIndex: number): number | null {
-  if (!Number.isInteger(retryIndex) || retryIndex < 0 || retryIndex >= WS_RECONNECT_MAX_RETRIES) {
-    return null;
-  }
-
-  return Math.min(
-    Math.round(WS_RECONNECT_INITIAL_DELAY_MS * WS_RECONNECT_BACKOFF_FACTOR ** retryIndex),
-    WS_RECONNECT_MAX_DELAY_MS,
-  );
-}
-
 function applyDisconnectState(
   current: WsConnectionStatus,
   updates: Partial<
     Pick<WsConnectionStatus, "closeCode" | "closeReason" | "lastError" | "lastErrorAt">
   >,
 ): WsConnectionStatus {
-  const disconnectedAt = current.disconnectedAt ?? isoNow();
-  const nextRetryDelayMs =
-    current.nextRetryAt !== null || current.reconnectPhase === "exhausted"
-      ? null
-      : getWsReconnectDelayMsForRetry(Math.max(0, current.reconnectAttemptCount - 1));
-
+  // The socket schedule records the real jittered delay once it picks one.
   return {
     ...current,
     ...updates,
-    disconnectedAt,
-    nextRetryAt:
-      nextRetryDelayMs === null
-        ? current.nextRetryAt
-        : new Date(Date.now() + nextRetryDelayMs).toISOString(),
+    disconnectedAt: current.disconnectedAt ?? isoNow(),
     phase: "disconnected",
-    reconnectPhase:
-      current.reconnectPhase === "waiting" || current.reconnectPhase === "exhausted"
-        ? current.reconnectPhase
-        : nextRetryDelayMs === null
-          ? "exhausted"
-          : "waiting",
+    reconnectPhase: "waiting",
   };
 }

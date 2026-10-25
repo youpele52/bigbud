@@ -98,6 +98,8 @@ describe("MessagesTimelineDelegatedProvenance", () => {
         nowIso="2026-07-29T12:00:01.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}

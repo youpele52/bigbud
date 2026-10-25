@@ -1,5 +1,6 @@
 import { DEFAULT_TERMINAL_ID, resolveExecutionTargetId } from "@bigbud/contracts";
-import { Effect, Equal, Option } from "effect";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 
 import { increment, terminalRestartsTotal } from "../../observability/Metrics";
 import { makeTerminalSessionControls } from "./Manager.session.controls.ts";
@@ -10,7 +11,12 @@ import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import { subscribeToTerminalEvents } from "./Manager.session.subscription.ts";
 import { type SessionApiContext, type TerminalManagerShape } from "./Manager.session.types.ts";
 import { type TerminalSessionState } from "./Manager.types";
-import { makeAssertExecutionTargetReady } from "./Manager.session.execution.ts";
+import { makeResolveTerminalFolder } from "./Manager.cwd";
+import { TerminalNotRunningError } from "../Services/Manager";
+import { makeTerminalClose } from "./Manager.session.close";
+import { prepareTerminalRestart } from "./Manager.session.restart";
+import { makeTerminalOutputHold } from "./Manager.session.outputHold";
+import { TerminalSearchIndex } from "./Manager.search";
 
 export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
   const {
@@ -24,9 +30,6 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     flushPtyOutput,
     persistHistory,
     flushPersist,
-    readHistory,
-    deleteHistory,
-    deleteAllHistoryForThread,
     evictInactiveSessionsIfNeeded,
     assertValidCwd,
     publishEvent,
@@ -37,27 +40,51 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     terminalEventListeners,
   } = ctx;
 
-  const assertExecutionTargetReady = makeAssertExecutionTargetReady(assertValidCwd);
+  const resolveFolder = makeResolveTerminalFolder(
+    assertValidCwd,
+    undefined,
+    undefined,
+    ctx.resolveRuntimePathIdentity,
+  );
 
-  const open: TerminalManagerShape["open"] = (input) =>
+  const open: TerminalManagerShape["open"] = (request) =>
     withThreadLock(
-      input.threadId,
+      request.threadId,
       Effect.gen(function* () {
-        const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
-        const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
-        yield* assertExecutionTargetReady({
-          threadId: input.threadId,
+        const terminalId = request.terminalId ?? DEFAULT_TERMINAL_ID;
+        const existing = yield* getSession(request.threadId, terminalId);
+        // Open means reattach, never reinterpret mutable chat launch settings as a restart.
+        if (Option.isSome(existing) && existing.value.process) {
+          const session = existing.value;
+          const cols = request.cols ?? session.cols;
+          const rows = request.rows ?? session.rows;
+          if (session.cols !== cols || session.rows !== rows) {
+            session.cols = cols;
+            session.rows = rows;
+            session.updatedAt = nextTerminalTimestamp(session.updatedAt);
+            session.process!.resize(cols, rows);
+          }
+          return snapshot(session);
+        }
+        const executionTargetId = resolveExecutionTargetId(request.executionTargetId);
+        const folder = yield* resolveFolder({
+          threadId: request.threadId,
           terminalId,
           executionTargetId,
-          cwd: input.cwd,
+          cwd: request.cwd,
+          worktreePath: request.worktreePath,
+          env: request.env,
         });
-
+        const input = {
+          ...request,
+          cwd: folder.cwd,
+          ...(folder.wslIdentity ? { worktreePath: folder.worktreePath, env: folder.env } : {}),
+          ...(folder.directoryFallback ? { worktreePath: null, env: undefined } : {}),
+        };
         const sessionKey = toSessionKey(input.threadId, terminalId);
-        const existing = yield* getSession(input.threadId, terminalId);
         if (Option.isNone(existing)) {
           yield* flushPtyOutput(input.threadId, terminalId);
           yield* flushPersist(input.threadId, terminalId);
-          const history = yield* readHistory(input.threadId, terminalId);
           const cols = input.cols ?? DEFAULT_OPEN_COLS;
           const rows = input.rows ?? DEFAULT_OPEN_ROWS;
           const session = createTerminalSessionState({
@@ -67,11 +94,14 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             dropPathMode: defaultTerminalDropPathMode(executionTargetId),
             cwd: input.cwd,
             worktreePath: input.worktreePath ?? null,
-            history,
+            // A new process starts fresh; disk logs are not emulator checkpoints.
+            history: "",
             cols,
             rows,
             runtimeEnv: normalizedRuntimeEnv(input.env),
           });
+          session.directoryFallback = folder.directoryFallback;
+          session.wslIdentity = folder.wslIdentity;
 
           const createdSession = session;
           session.remoteOwnerRecoveryRequired = yield* ctx.historyExists(
@@ -86,6 +116,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
 
           yield* evictInactiveSessionsIfNeeded();
           yield* acquireWorktreeLease({
+            runtimePathIdentity: folder.runtimePathIdentity,
             threadId: input.threadId,
             terminalId,
             executionTargetId,
@@ -120,34 +151,26 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
 
         const liveSession = existing.value;
         const nextRuntimeEnv = normalizedRuntimeEnv(input.env);
-        const currentRuntimeEnv = liveSession.runtimeEnv;
         const targetCols = input.cols ?? liveSession.cols;
         const targetRows = input.rows ?? liveSession.rows;
-        const runtimeEnvChanged = !Equal.equals(currentRuntimeEnv, nextRuntimeEnv);
-        const executionTargetChanged = liveSession.executionTargetId !== executionTargetId;
-
-        if (liveSession.cwd !== input.cwd || runtimeEnvChanged || executionTargetChanged) {
+        if (!liveSession.process) {
           yield* flushPtyOutput(liveSession.threadId, liveSession.terminalId);
+          if (liveSession.restartPreparation) yield* prepareTerminalRestart(liveSession);
           yield* stopProcess(liveSession);
           liveSession.executionTargetId = executionTargetId;
           liveSession.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
           liveSession.cwd = input.cwd;
           liveSession.worktreePath = input.worktreePath ?? null;
           liveSession.runtimeEnv = nextRuntimeEnv;
-          resetSessionRuntimeState(liveSession);
-          yield* persistHistory(liveSession.threadId, liveSession.terminalId, liveSession.history);
-        } else if (liveSession.status === "exited" || liveSession.status === "error") {
-          yield* flushPtyOutput(liveSession.threadId, liveSession.terminalId);
-          liveSession.executionTargetId = executionTargetId;
-          liveSession.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
-          liveSession.runtimeEnv = nextRuntimeEnv;
-          liveSession.worktreePath = input.worktreePath ?? null;
+          liveSession.directoryFallback = folder.directoryFallback;
+          liveSession.wslIdentity = folder.wslIdentity;
           resetSessionRuntimeState(liveSession);
           yield* persistHistory(liveSession.threadId, liveSession.terminalId, liveSession.history);
         }
 
         if (!liveSession.process) {
           yield* acquireWorktreeLease({
+            runtimePathIdentity: folder.runtimePathIdentity,
             threadId: input.threadId,
             terminalId,
             executionTargetId,
@@ -212,20 +235,27 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
       }),
     );
 
-  const restart: TerminalManagerShape["restart"] = (input) =>
+  const restart: TerminalManagerShape["restart"] = (request) =>
     withThreadLock(
-      input.threadId,
+      request.threadId,
       Effect.gen(function* () {
         yield* increment(terminalRestartsTotal, { scope: "thread" });
-        const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
-        const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
-        yield* assertExecutionTargetReady({
-          threadId: input.threadId,
+        const terminalId = request.terminalId ?? DEFAULT_TERMINAL_ID;
+        const executionTargetId = resolveExecutionTargetId(request.executionTargetId);
+        const folder = yield* resolveFolder({
+          threadId: request.threadId,
           terminalId,
           executionTargetId,
-          cwd: input.cwd,
+          cwd: request.cwd,
+          worktreePath: request.worktreePath,
+          env: request.env,
         });
-
+        const input = {
+          ...request,
+          cwd: folder.cwd,
+          ...(folder.wslIdentity ? { worktreePath: folder.worktreePath, env: folder.env } : {}),
+          ...(folder.directoryFallback ? { worktreePath: null, env: undefined } : {}),
+        };
         const sessionKey = toSessionKey(input.threadId, terminalId);
         const existingSession = yield* getSession(input.threadId, terminalId);
         let session: TerminalSessionState;
@@ -258,6 +288,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         } else {
           session = existingSession.value;
           yield* flushPtyOutput(session.threadId, session.terminalId);
+          yield* prepareTerminalRestart(session);
           yield* stopProcess(session);
           session.executionTargetId = executionTargetId;
           session.dropPathMode = defaultTerminalDropPathMode(executionTargetId);
@@ -268,10 +299,12 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
 
         const cols = input.cols ?? session.cols;
         const rows = input.rows ?? session.rows;
-
+        session.directoryFallback = folder.directoryFallback;
+        session.wslIdentity = folder.wslIdentity;
         resetSessionRuntimeState(session);
         yield* persistHistory(input.threadId, terminalId, session.history);
         yield* acquireWorktreeLease({
+          runtimePathIdentity: folder.runtimePathIdentity,
           threadId: input.threadId,
           terminalId,
           executionTargetId,
@@ -305,58 +338,8 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
       }),
     );
 
-  const closeSession = Effect.fn("terminal.closeSession")(function* (
-    threadId: string,
-    terminalId: string,
-    deleteHistoryOnClose: boolean,
-  ) {
-    const key = toSessionKey(threadId, terminalId);
-    const session = yield* getSession(threadId, terminalId);
-
-    if (Option.isSome(session)) {
-      yield* flushPtyOutput(threadId, terminalId);
-      yield* stopProcess(session.value);
-      yield* persistHistory(threadId, terminalId, session.value.history);
-    }
-
-    yield* releaseWorktreeLease({ threadId, terminalId });
-    yield* flushPersist(threadId, terminalId);
-
-    yield* modifyManagerState((state) => {
-      if (!state.sessions.has(key)) {
-        return [undefined, state] as const;
-      }
-      const sessions = new Map(state.sessions);
-      sessions.delete(key);
-      return [undefined, { ...state, sessions }] as const;
-    });
-
-    if (deleteHistoryOnClose) {
-      yield* deleteHistory(threadId, terminalId);
-    }
-  });
-
-  const close: TerminalManagerShape["close"] = (input) =>
-    withThreadLock(
-      input.threadId,
-      Effect.gen(function* () {
-        if (input.terminalId) {
-          yield* closeSession(input.threadId, input.terminalId, input.deleteHistory === true);
-          return;
-        }
-
-        const threadSessions = yield* sessionsForThread(input.threadId);
-        yield* Effect.forEach(
-          threadSessions,
-          (session) => closeSession(input.threadId, session.terminalId, false),
-          { discard: true },
-        );
-
-        if (input.deleteHistory) {
-          yield* deleteAllHistoryForThread(input.threadId);
-        }
-      }),
-    );
+  const close = makeTerminalClose(ctx);
+  const searchIndex = new TerminalSearchIndex();
 
   return {
     hasActiveThread: (threadId) =>
@@ -366,12 +349,30 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         ),
       ),
     open,
+    snapshot: (input) =>
+      Effect.gen(function* () {
+        const terminalId = input.terminalId ?? DEFAULT_TERMINAL_ID;
+        const session = yield* requireSession(input.threadId, terminalId);
+        if (session.status !== "running" || !session.process) {
+          return yield* new TerminalNotRunningError({ threadId: input.threadId, terminalId });
+        }
+        return snapshot(session);
+      }),
     write,
     resize,
     clear,
     restart,
     close,
-    subscribe: (listener) =>
-      subscribeToTerminalEvents({ modifyManagerState, terminalEventListeners }, listener),
+    subscribe: (listener, options) =>
+      subscribeToTerminalEvents(
+        { modifyManagerState, terminalEventListeners, getSession },
+        listener,
+        options,
+      ),
+    setOutputHold: makeTerminalOutputHold(getSession),
+    search: (input) =>
+      modifyManagerState((state) => [Array.from(state.sessions.values()), state] as const).pipe(
+        Effect.map((sessions) => searchIndex.search(sessions, input)),
+      ),
   };
 }

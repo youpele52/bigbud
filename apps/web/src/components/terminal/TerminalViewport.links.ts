@@ -14,13 +14,21 @@ interface TerminalLinkProviderOptions {
   workspaceRoot: string;
   executionTargetId?: ExecutionTargetId | undefined;
   api: NativeApi;
+  writeNotice?: (terminal: Terminal, message: string) => void;
 }
 
 /**
  * Creates a link provider for the xterm.js terminal that handles path and URL links.
  */
 export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
-  const { terminalRef, cwd, workspaceRoot, executionTargetId, api } = options;
+  const {
+    terminalRef,
+    cwd,
+    workspaceRoot,
+    executionTargetId,
+    api,
+    writeNotice = writeSystemMessage,
+  } = options;
 
   return {
     provideLinks: (bufferLineNumber: number, callback: (links: ILink[] | undefined) => void) => {
@@ -94,7 +102,7 @@ export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
             if (!isTerminalLinkActivation(event)) return;
 
             const latestTerminal = terminalRef.current;
-            if (!latestTerminal) return;
+            if (!latestTerminal || latestTerminal !== activeTerminal) return;
 
             if (match.kind === "url") {
               openTerminalWebLink(match.text);
@@ -109,8 +117,8 @@ export function makeTerminalLinkProvider(options: TerminalLinkProviderOptions) {
               executionTargetId,
             }).catch((error) => {
               const activeTerminal = terminalRef.current;
-              if (!activeTerminal) return;
-              writeSystemMessage(
+              if (!activeTerminal || activeTerminal !== latestTerminal) return;
+              writeNotice(
                 activeTerminal,
                 error instanceof Error ? error.message : "Unable to open path",
               );

@@ -37,7 +37,7 @@ function requestKindFromRequestType(requestType: unknown): PendingApproval["requ
   }
 }
 
-function parseUserInputQuestions(
+export function parseUserInputQuestions(
   payload: Record<string, unknown> | null,
 ): ReadonlyArray<UserInputQuestion> | null {
   const questions = payload?.questions;

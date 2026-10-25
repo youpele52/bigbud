@@ -210,7 +210,10 @@ export async function prepareRemoteAgentCandidate(input: {
     readonly source: RemoteAgentInstallSource;
     readonly signal?: AbortSignal;
   }) => Promise<{ readonly artifact: RemoteAgentArtifact }>;
-  readonly connect?: (target: string, runtime: RemoteAgentRuntime) => RemoteAgentConnection;
+  readonly connect?: (
+    target: string,
+    runtime: RemoteAgentRuntime,
+  ) => RemoteAgentConnection | Promise<RemoteAgentConnection>;
   readonly signal?: AbortSignal;
 }): Promise<RemoteAgentPreparationResult> {
   let state = await input.control.registry.read();
@@ -274,7 +277,10 @@ export async function prepareStagedRemoteAgentCandidate(input: {
   readonly requestId: string;
   readonly buildId: string;
   readonly control: RemoteAgentControl;
-  readonly connect?: (target: string, runtime: RemoteAgentRuntime) => RemoteAgentConnection;
+  readonly connect?: (
+    target: string,
+    runtime: RemoteAgentRuntime,
+  ) => RemoteAgentConnection | Promise<RemoteAgentConnection>;
 }): Promise<string> {
   const runtime = candidateRuntime(await input.control.registry.read(), input.buildId);
   const buildId = input.buildId;

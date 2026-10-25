@@ -5,11 +5,14 @@ import type { DesktopBackendStartupState } from "@bigbud/contracts/server/ipc.de
 import type { WsConnectionStatus } from "../rpc/wsConnectionState";
 import { WebSocketBlockingState } from "./WebSocketConnectionSurface.blocking";
 import {
-  shouldContinueDesktopStartupReconnect,
+  resolveDesktopStartupReconnect,
   shouldReconnectAfterDesktopStartupTransition,
   shouldShowDesktopStartupBlockingState,
 } from "./WebSocketConnectionSurface.logic";
-import { getInitialDesktopBackendStartupState } from "./DesktopBackendStartupCoordinator";
+import {
+  describeDesktopStartupProgress,
+  getInitialDesktopBackendStartupState,
+} from "./DesktopBackendStartupCoordinator";
 
 function startup(
   status: DesktopBackendStartupState["status"],
@@ -70,37 +73,37 @@ describe("desktop backend startup UX", () => {
     ).toContain(description);
   });
 
-  it("continues retrying before the deadline and reconnects only after same-generation late ready", () => {
+  it("reconnects on every arrival at ready and rebuilds sessions only after failures", () => {
     expect(shouldShowDesktopStartupBlockingState(null)).toBe(false);
     expect(shouldShowDesktopStartupBlockingState(startup("starting"))).toBe(false);
-    expect(shouldContinueDesktopStartupReconnect(startup("starting"))).toBe(true);
     expect(shouldShowDesktopStartupBlockingState(startup("timedOut"))).toBe(true);
-    expect(shouldContinueDesktopStartupReconnect(startup("timedOut"))).toBe(false);
     expect(shouldShowDesktopStartupBlockingState(startup("ready"))).toBe(false);
     expect(shouldReconnectAfterDesktopStartupTransition(true, null, startup("ready"))).toBe(false);
-    expect(
-      shouldReconnectAfterDesktopStartupTransition(true, startup("starting"), startup("ready")),
-    ).toBe(false);
-    expect(
-      shouldReconnectAfterDesktopStartupTransition(true, startup("timedOut"), startup("ready")),
-    ).toBe(true);
-    expect(
-      shouldReconnectAfterDesktopStartupTransition(
-        true,
-        startup("timedOut", 1),
-        startup("ready", 2),
-      ),
-    ).toBe(false);
+    expect(resolveDesktopStartupReconnect(true, startup("starting"), startup("ready"))).toBe(
+      "skip-backoff",
+    );
+    expect(resolveDesktopStartupReconnect(true, startup("upgrading"), startup("ready"))).toBe(
+      "skip-backoff",
+    );
+    // A republished ready after the machine wakes is a definite signal too.
+    expect(resolveDesktopStartupReconnect(true, startup("ready"), startup("ready"))).toBe(
+      "skip-backoff",
+    );
+    expect(resolveDesktopStartupReconnect(true, startup("timedOut"), startup("ready"))).toBe(
+      "replace-session",
+    );
+    expect(resolveDesktopStartupReconnect(true, startup("timedOut", 1), startup("ready", 2))).toBe(
+      "skip-backoff",
+    );
     expect(
       shouldReconnectAfterDesktopStartupTransition(false, startup("timedOut"), startup("ready")),
     ).toBe(false);
-    expect(
-      shouldReconnectAfterDesktopStartupTransition(
-        true,
-        startup("failed", 1),
-        startup("starting", 2),
-      ),
-    ).toBe(true);
+    expect(resolveDesktopStartupReconnect(true, startup("failed", 1), startup("starting", 2))).toBe(
+      "replace-session",
+    );
+    expect(resolveDesktopStartupReconnect(true, startup("ready"), startup("starting", 2))).toBe(
+      null,
+    );
   });
 
   it("recovers when the desktop startup IPC fetch rejects", async () => {
@@ -174,5 +177,19 @@ describe("desktop backend startup UX", () => {
         />,
       ),
     ).not.toContain("development stderr");
+  });
+});
+
+describe("describeDesktopStartupProgress", () => {
+  it("shows the migration percent only while upgrading with known progress", () => {
+    expect(describeDesktopStartupProgress({ ...startup("upgrading"), progressPercent: 42 })).toBe(
+      "Updating local data, 42%. Please wait.",
+    );
+    expect(describeDesktopStartupProgress(startup("upgrading"))).toBe(
+      "Updating local data. Please wait.",
+    );
+    expect(describeDesktopStartupProgress(startup("starting"))).toBe(
+      "bigbud is still starting. Please wait.",
+    );
   });
 });

@@ -1,5 +1,6 @@
 import type { ProcessRunResult } from "../utils/processRunner.ts";
 import { RemoteAgentProcessClient } from "./remoteAgentProcessClient.ts";
+import { describeRemoteAgentProcessReplayGap } from "./remoteAgentProcessClient.replayGap.ts";
 import {
   remoteAgentProcessRequestDigest,
   remoteAgentWorkspaceHandle,
@@ -99,6 +100,12 @@ export function makeRemoteAgentToolRunner(input: {
     const stderr = new TextDecoder().decode(result.stderr);
     const code = result.completed.hasExitCode ? result.completed.exitCode : null;
     const truncated = result.completed.outputTruncated;
+    if (result.replayGap && runInput.outputMode !== "truncate") {
+      // The verified exit code survived a long disconnect; only some output did not.
+      throw new Error(
+        `${commandLabel(runInput)} ${describeRemoteAgentProcessReplayGap(result.completed)}.`,
+      );
+    }
     if (truncated && runInput.outputMode !== "truncate") {
       throw new Error(
         `${commandLabel(runInput)} exceeded the remote agent output limit (${runInput.maxBufferBytes ?? 8 * 1024 * 1024} bytes).`,

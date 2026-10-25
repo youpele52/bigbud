@@ -8,7 +8,7 @@ import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.t
 import {
   PROVIDER_TURN_SILENCE_THRESHOLD_MS,
   superviseProviderTurns,
-} from "./ProviderTurnSupervisor.ts";
+} from "./ProviderTurnSupervisor.health.ts";
 
 const now = new Date("2026-08-13T12:00:00.000Z");
 const threadId = ThreadId.makeUnsafe("supervised-thread");

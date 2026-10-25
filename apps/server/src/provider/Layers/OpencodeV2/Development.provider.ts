@@ -15,9 +15,18 @@ import type { V2ProcessLease } from "./ServerManager.ts";
 import { assertDevelopmentVersion, OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 import {
   assertV2SharedQualifiedVersion,
+  isV2SharedUpdateRecommended,
   V2_RECOMMENDED_RUNTIME_VERSION,
 } from "./SharedService.compatibility.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
+import { currentV2RequestContext } from "./Client.guard.ts";
+import { v2CallerContextEntry, v2Promise } from "./Client.guard.async.ts";
+import { opencodeUpdateAdvice } from "@bigbud/shared/opencodeAdvisory";
+import { opencodeAgentSystemHash } from "../../opencodeAgentSource.ts";
+import {
+  v2SharedDiscoveryFailure,
+  type V2DiscoveryPhase,
+} from "./Development.provider.diagnostics.ts";
 
 /** Discovery and execution share one manager/client/hub; lease auth is not model credential proof. */
 export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(function* (
@@ -34,6 +43,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
   const probe = async (enabled: boolean): Promise<ServerProvider> => {
     const started = performance.now();
     let version: string | undefined;
+    let phase: V2DiscoveryPhase = "connection";
     try {
       if (closed) throw new Error("V2 discovery is closed.");
       if (lease && !lease.process.isRunning()) {
@@ -46,23 +56,30 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
         lease = undefined;
         throw new Error("V2 late discovery disposed.");
       }
+      phase = "server.info";
       const info = await v2Request("server.info", (signal) =>
         lease!.process.client.server.info({ signal }),
       );
       version = info.version;
       if (config.process.sharedService) assertV2SharedQualifiedVersion(info.version);
       else assertDevelopmentVersion(info.version);
+      phase = "model.list";
       const catalog = await readV2NativeCatalog(lease.process.client, config.workspace, {
         isClosed: () => closed,
       });
+      phase = "provider.list";
       const providers = await v2Request("provider.list", (signal) =>
         lease!.process.client.provider.list(
           { location: { directory: config.workspace } },
           { signal },
         ),
       );
+      phase = "catalog normalization";
       const nativeModels = normalizeV2Catalog(catalog, config.workspace, providers);
       const shared = Boolean(config.process.sharedService);
+      // Release qualification evidence is not a readiness gate; only an outdated service warns.
+      const outdated = shared && isV2SharedUpdateRecommended(info.version);
+      phase = "integration.list";
       const integrations = shared
         ? await v2Request("integration.list", (signal) =>
             lease!.process.client.integration.list(
@@ -74,6 +91,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
       const connected = integrations?.data.filter((integration) =>
         integration.connections.some((connection) => connection.status?.status !== "needs_auth"),
       );
+      phase = "agent.list";
       const agents = shared
         ? await v2Request("agent.list", (signal) =>
             lease!.process.client.agent.list(
@@ -82,6 +100,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
             ),
           )
         : undefined;
+      phase = "skill.list";
       const skills = shared
         ? await v2Request("skill.list", (signal) =>
             lease!.process.client.skill.list(
@@ -90,18 +109,21 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
             ),
           )
         : undefined;
+      phase = "inventory bounds";
       if (
         (agents?.data.length ?? 0) > 1000 ||
         (skills?.data.length ?? 0) > 2000 ||
         (integrations?.data.length ?? 0) > 1000
       )
         throw new Error("V2 native inventory bound exceeded.");
+      phase = "public catalog";
       const publicCatalog = await loadPublicCatalog();
       const models = mergeV2Catalogs(
         publicCatalog.models,
         nativeModels,
         new Map(providers.data.map(({ id, name }) => [id, name])),
       );
+      currentV2RequestContext()?.permit.assertCurrent();
       lastModels = models;
       const catalogMessage = publicCatalog.stale
         ? "Full catalog refresh failed; showing the last good catalog and current native models. Retry after 30 seconds. "
@@ -115,7 +137,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
           probe: {
             installed: true,
             version: info.version,
-            status: shared && nativeModels.length ? "ready" : "warning",
+            status: shared && nativeModels.length && !outdated ? "ready" : "warning",
             auth: connected?.length
               ? {
                   status: "authenticated",
@@ -126,30 +148,38 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
                 }
               : { status: "unknown" },
             message: shared
-              ? nativeModels.length
-                ? "Connected to your native OpenCode service."
-                : "No native models are available. Connect a provider in OpenCode; bigbud detects account changes automatically."
+              ? [
+                  nativeModels.length
+                    ? "Connected to your native OpenCode service."
+                    : "No native models are available. Connect a provider in OpenCode; bigbud detects account changes automatically.",
+                  outdated
+                    ? opencodeUpdateAdvice(info.version, V2_RECOMMENDED_RUNTIME_VERSION)
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")
               : `${catalogMessage}Configure a provider in the isolated profile; accounts are not verified by browsing. ${V2_LOCAL_TOOL_LIMITATION}`,
           },
         }),
         ...(!application ? { developmentOnly: true } : {}),
         ...(shared ? { supportsLocalRuntimeRemoteWorkspace: false } : {}),
-        ...(shared && info.version === "2.0.24"
-          ? { runtimeUpdateRecommended: V2_RECOMMENDED_RUNTIME_VERSION }
-          : {}),
+        ...(outdated ? { runtimeUpdateRecommended: V2_RECOMMENDED_RUNTIME_VERSION } : {}),
         ...(agents
           ? {
               nativeAgents: agents.data
                 .filter(({ hidden }) => !hidden)
-                .map(({ id, name, description }) => ({
+                // oxlint-disable-next-line no-map-spread -- copy-on-write required; inputs are native/cached snapshots
+                .map(({ id, name, description, system }) => ({
                   id,
                   name,
                   ...(description ? { description } : {}),
+                  ...(system?.trim() ? { systemPromptHash: opencodeAgentSystemHash(system) } : {}),
                 })),
             }
           : {}),
         ...(skills
           ? {
+              // oxlint-disable-next-line no-map-spread -- copy-on-write required; inputs are native/cached snapshots
               skills: skills.data.map(({ name, path, description }) => ({
                 name,
                 path,
@@ -178,6 +208,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
           provider: "opencodeV2",
           enabled,
           checkedAt: new Date().toISOString(),
+          // oxlint-disable-next-line no-map-spread -- copy-on-write required; inputs are native/cached snapshots
           models: lastModels.map((model) => ({
             ...model,
             availability: "requires-setup" as const,
@@ -189,7 +220,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
             status: "warning",
             auth: { status: "unknown" },
             message: config.process.sharedService
-              ? "Shared OpenCode v2 connection is unavailable. Check the native TUI service; no history was rebound or resent."
+              ? v2SharedDiscoveryFailure(phase, config.workspace, error)
               : `V2 readiness failed. Check the executable, qualified private runtime ${OPENCODE_V2_CLIENT_VERSION}, and isolated profile. No fallback was attempted.`,
           },
         }),
@@ -231,16 +262,22 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
   );
   const refresh = Effect.gen(function* () {
     const enabled = yield* isEnabled;
+    const enterCaller = yield* v2CallerContextEntry;
     let snapshot: ServerProvider = enabled
-      ? yield* Effect.promise(() => {
-          pending ??= probe(enabled).finally(() => {
-            pending = undefined;
-          });
+      ? yield* v2Promise(() => {
+          pending ??= runtime
+            .authorized(() => probe(enabled))
+            .finally(() => {
+              pending = undefined;
+            });
           return pending;
         })
       : disabledSnapshot();
     if (!(yield* isEnabled)) snapshot = disabledSnapshot();
-    yield* snapshots.publish(snapshot);
+    yield* snapshots.publish(
+      snapshot,
+      enterCaller(() => currentV2RequestContext()?.permit.assertCurrent),
+    );
     return snapshot;
   });
   yield* Effect.addFinalizer(() =>

@@ -16,6 +16,7 @@ import type { ProviderCapabilitiesResolver } from "../providerCapabilities.ts";
 import { toValidationError } from "./ProviderServiceHelpers.ts";
 import { prepareProviderSession } from "./ProviderService.prepareSession.ts";
 import { restoreV2StartSelection } from "./ProviderService.modelSelection.v2.ts";
+import { assertProviderWorktreeIdentity } from "./ProviderService.worktreeIdentity.ts";
 
 const PROVIDER_SESSION_START_TIMEOUT = Duration.seconds(45);
 
@@ -55,6 +56,7 @@ export function makeStartSessionInternal(input: {
     ProviderServiceError
   > {
     const persistedBinding = Option.getOrUndefined(yield* input.directory.getBinding(threadId));
+    yield* assertProviderWorktreeIdentity(threadId);
     const prepared = yield* prepareProviderSession(input, threadId, rawInput, persistedBinding);
     const startInput =
       prepared.provider === "opencodeV2"
@@ -136,6 +138,7 @@ export function makeStartSessionInternal(input: {
             ...(startInput.cwd ? { cwd: startInput.cwd } : {}),
             ...(startInput.modelSelection ? { modelSelection: startInput.modelSelection } : {}),
             lastRuntimeEvent: "provider.startSession.admitted",
+            explicitlyStopped: false,
             lastRuntimeEventAt: new Date().toISOString(),
           },
         });

@@ -31,6 +31,7 @@ import {
 import { emitSessionRuntimeEvents, startSessionRuntimeStream } from "./Adapter.session.runtime.ts";
 import { readClaudeResumeState, toMessage, validateClaudeResumeBoundary } from "./Adapter.utils.ts";
 import { buildClaudeQueryOptions } from "./Adapter.session.options.ts";
+import { buildClaudeSessionRolloutOptions } from "./Adapter.session.rollout.ts";
 import { makeClaudeTaskState } from "./Adapter.tasks.ts";
 import type { ClaudeRequestLedger } from "./Adapter.requestLedger.ts";
 import { makeLogNativeSdkMessage } from "./Adapter.session.log.ts";
@@ -132,7 +133,10 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     });
 
     const claudeSettings = yield* serverSettingsService.getSettings.pipe(
-      Effect.map((settings) => settings.providers.claudeAgent),
+      Effect.map((settings) => ({
+        ...settings.providers.claudeAgent,
+        promptSuggestions: settings.promptSuggestions === true,
+      })),
       Effect.mapError(
         (error) =>
           new ProviderAdapterProcessError({
@@ -203,6 +207,8 @@ export const makeStartSession = (deps: SessionStartDeps) => {
     const modelSelection =
       input.modelSelection?.provider === "claudeAgent" ? input.modelSelection : undefined;
     const runtimeCwd = remoteWorkspaceBridge?.cwd ?? input.cwd;
+    const rolloutOptions = buildClaudeSessionRolloutOptions(harness, claudeSettings);
+    const { forwardSubagentText } = rolloutOptions;
     const {
       apiModelId,
       effectiveEffort,
@@ -223,14 +229,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       newSessionId,
       canUseTool,
       onElicitation,
-      boundedHookProgress:
-        harness?.boundedHookProgress ??
-        (harness ? false : claudeSettings.rollout.boundedHookProgress),
-      forwardSubagentText:
-        harness?.forwardSubagentText ??
-        (harness ? false : claudeSettings.rollout.forwardedSubagentText),
-      ...(harness?.settingSources ? { settingSources: harness.settingSources } : {}),
-      ...(harness?.environment ? { environment: harness.environment } : {}),
+      ...rolloutOptions,
     });
     const queryRuntime = yield* Effect.try({
       try: () =>
@@ -328,6 +327,9 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       ]),
       modernTaskExposure: claudeSettings.rollout.modernTaskExposure,
       providerSubagentsSupported: deps.resolveHarness === undefined,
+      forwardSubagentText,
+      agentModels: undefined,
+      agentToolInputs: new Map(),
       mcpControlsEnabled: claudeSettings.rollout.mcpControls,
       refreshMcpStatuses: undefined,
       stopped: false,

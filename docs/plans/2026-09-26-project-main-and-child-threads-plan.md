@@ -18,7 +18,7 @@ The user's phrase “every thread gets one trunk” is interpreted as “every p
 
 ## Related Work
 
-- [Right-panel thread tabs plan](2026-09-11-right-panel-thread-tabs-plan.md) is historical related work. Its right-panel thread layout is excluded from this feature by the latest user clarification.
+- [Retired right-panel thread proposal](README.md#retired-records) is historical related work. Its right-panel thread layout is excluded from this feature by the latest user clarification.
 - No issue, pull request, bigbud note, or Kanban card was supplied for this request.
 
 ## Problem

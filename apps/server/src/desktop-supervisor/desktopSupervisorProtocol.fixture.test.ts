@@ -92,6 +92,21 @@ describe("desktop supervisor cross-language fixtures", () => {
     );
   });
 
+  it("decodes the heartbeat echo with and without suspended time (protocol 1.4)", () => {
+    expect(decodeDesktopSupervisorDelimitedFrame(hex("heartbeat"))).toEqual({
+      type: "heartbeat",
+      value: { monotonicMillis: 42 },
+    });
+    const suspended = {
+      type: "heartbeat",
+      value: { monotonicMillis: 42, suspendedMillis: 1_800_000 },
+    } as const;
+    expect(decodeDesktopSupervisorDelimitedFrame(hex("heartbeat_suspended"))).toEqual(suspended);
+    expect(Buffer.from(encodeDesktopSupervisorDelimitedFrame(suspended))).toEqual(
+      hex("heartbeat_suspended"),
+    );
+  });
+
   it("rejects a truncated fixture", () => {
     expect(() => decodeDesktopSupervisorDelimitedFrame(hex("truncated"))).toThrow(
       "frame length does not match prefix",

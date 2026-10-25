@@ -38,6 +38,109 @@ const request = (id: string): V2AdmissionRequest => ({
 });
 
 it.layer(layer)("OpenCode v2 admission write-before-dispatch", (it) => {
+  it.effect("preparation failure retains only a reservation and exact retry dispatches once", () =>
+    Effect.gen(function* () {
+      const journal = yield* ProviderTurnAdmissions;
+      let prepares = 0,
+        sends = 0;
+      const input: V2AdmissionRequest = {
+        ...request("prepare-retry"),
+        prepare: (row) =>
+          Effect.gen(function* () {
+            assert.strictEqual(row.state, "reserved");
+            prepares++;
+            if (prepares === 1)
+              return yield* new V2AdmissionUnconfirmed({ detail: "preparation failed" });
+          }),
+        dispatch: () => Effect.sync(() => (++sends, true)),
+      };
+      assert.isTrue(Exit.isFailure(yield* Effect.exit(admitV2Turn(input))));
+      assert.strictEqual((yield* journal.find(input.identity))?.state, "reserved");
+      assert.strictEqual(sends, 0);
+      assert.isTrue(
+        Exit.isFailure(
+          yield* Effect.exit(admitV2Turn({ ...input, fingerprint: "changed material" })),
+        ),
+      );
+      assert.strictEqual(prepares, 1);
+      assert.strictEqual((yield* admitV2Turn(input)).state, "accepted");
+      yield* admitV2Turn(input);
+      assert.strictEqual(prepares, 2);
+      assert.strictEqual(sends, 1);
+    }),
+  );
+  it.effect("ownership loss during preparation never promotes the reservation to intent", () =>
+    Effect.gen(function* () {
+      const journal = yield* ProviderTurnAdmissions;
+      let current = true;
+      const input: V2AdmissionRequest = {
+        ...request("prepare-owner-loss"),
+        isCurrent: () => current,
+        prepare: () =>
+          Effect.sync(() => {
+            current = false;
+          }),
+        dispatch: () => Effect.die("must not dispatch"),
+      };
+      assert.isTrue(Exit.isFailure(yield* Effect.exit(admitV2Turn(input))));
+      assert.strictEqual((yield* journal.find(input.identity))?.state, "reserved");
+    }),
+  );
+  it.effect(
+    "rejects a stale caller before reserve but retains a reserve physically issued before loss",
+    () =>
+      Effect.gen(function* () {
+        const journal = yield* ProviderTurnAdmissions;
+        const previous = yield* admitV2Turn(request("preserved-prior"));
+        let current = false,
+          reserves = 0,
+          sends = 0;
+        const input = {
+          ...request("pre-reserve-cancel"),
+          isCurrent: () => current,
+          dispatch: () =>
+            Effect.sync(() => {
+              sends++;
+              return true;
+            }),
+        };
+        const observed = {
+          ...journal,
+          reserve: (value: Parameters<typeof journal.reserve>[0]) => {
+            reserves++;
+            return journal.reserve(value).pipe(
+              Effect.tap(() =>
+                Effect.sync(() => {
+                  current = false;
+                }),
+              ),
+            );
+          },
+        };
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(
+              admitV2Turn(input).pipe(Effect.provideService(ProviderTurnAdmissions, observed)),
+            ),
+          ),
+        );
+        assert.strictEqual(reserves, 0);
+        assert.strictEqual(sends, 0);
+        assert.isUndefined(yield* journal.find(input.identity));
+        current = true;
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(
+              admitV2Turn(input).pipe(Effect.provideService(ProviderTurnAdmissions, observed)),
+            ),
+          ),
+        );
+        assert.strictEqual(reserves, 1);
+        assert.strictEqual(sends, 0);
+        assert.strictEqual((yield* journal.find(input.identity))?.state, "reserved");
+        assert.deepEqual(yield* journal.find(previous), previous);
+      }),
+  );
   it.effect(
     "failed durable intent writes prevent RPC, while failed accepted writes retain uncertainty",
     () =>

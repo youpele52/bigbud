@@ -23,7 +23,7 @@ export type {
   RemoteAgentSupervisorShutdownResponse,
 } from "./remoteAgentProtocol.control.ts";
 export const REMOTE_AGENT_PROTOCOL_MAJOR = 1;
-export const REMOTE_AGENT_PROTOCOL_MINOR = 2;
+export const REMOTE_AGENT_PROTOCOL_MINOR = 3;
 export const REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES = 1024 * 1024;
 export interface RemoteAgentClientHello {
   readonly protocolMajor: number;

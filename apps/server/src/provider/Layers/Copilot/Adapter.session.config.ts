@@ -76,6 +76,7 @@ export function buildSessionConfig(input: {
       ? { createSessionFsProvider: input.sessionConfigOverrides.createSessionFsProvider }
       : {}),
     onPermissionRequest: (request) => {
+      const autoApprove = input.runtimeMode === "full-access" && !request.managedApprovalRequired;
       return new Promise((resolve) => {
         const requestId = crypto.randomUUID();
         const currentTurnId = input.activeTurnId();
@@ -99,9 +100,7 @@ export function buildSessionConfig(input: {
               args: request,
               sessionApprovalAvailable: sessionApproval.available,
               ...(sessionApproval.label ? { sessionApprovalLabel: sessionApproval.label } : {}),
-              ...(input.runtimeMode === "full-access"
-                ? { autoApproveAfterMs: FULL_ACCESS_AUTO_APPROVE_AFTER_MS }
-                : {}),
+              ...(autoApprove ? { autoApproveAfterMs: FULL_ACCESS_AUTO_APPROVE_AFTER_MS } : {}),
             },
             {
               ...(currentTurnId ? { turnId: currentTurnId } : {}),
@@ -114,7 +113,7 @@ export function buildSessionConfig(input: {
           )
           .catch(() => undefined);
 
-        if (input.runtimeMode === "full-access") {
+        if (autoApprove) {
           void Effect.gen(function* () {
             yield* Effect.sleep(FULL_ACCESS_AUTO_APPROVE_AFTER_MS);
             if (input.stoppedRef.stopped) {

@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./RpcProcess.capabilities.ts", () => ({
+  detectPiSettlementSupport: vi.fn(async () => ({
+    supportsAgentSettled: false,
+    supportsPromptDisposition: false,
+  })),
+}));
+
 const { spawnMock, createPiRemoteWorkspaceBridgeMock, assertSshExecutionTargetReadyMock } =
   vi.hoisted(() => ({
     spawnMock: vi.fn(),
@@ -20,10 +27,11 @@ vi.mock("./PiRemoteWorkspaceBridge.ts", () => ({
 }));
 
 vi.mock("../../../ssh/sshVerification.ts", () => ({
-  assertSshExecutionTargetReady: assertSshExecutionTargetReadyMock,
+  assertSshExecutionTargetReadyAsync: assertSshExecutionTargetReadyMock,
 }));
 
 import { createPiRpcProcess } from "./RpcProcess.ts";
+import { detectPiSettlementSupport } from "./RpcProcess.capabilities.ts";
 import { createFakeChildProcess } from "./RpcProcess.testHelpers.ts";
 
 async function withMockedPlatform<T>(platform: NodeJS.Platform, run: () => Promise<T>): Promise<T> {
@@ -47,7 +55,33 @@ describe("createPiRpcProcess", () => {
     spawnMock.mockReset();
     createPiRemoteWorkspaceBridgeMock.mockReset();
     assertSshExecutionTargetReadyMock.mockReset();
+    vi.mocked(detectPiSettlementSupport).mockResolvedValue({
+      supportsAgentSettled: false,
+      supportsPromptDisposition: false,
+    });
   });
+
+  it.each(["local", "remote"] as const)(
+    "uses detected modern lifecycle support for a %s runtime",
+    async (location) => {
+      const child = createFakeChildProcess();
+      spawnMock.mockReturnValueOnce(child);
+      vi.mocked(detectPiSettlementSupport).mockResolvedValue({
+        supportsAgentSettled: true,
+        supportsPromptDisposition: true,
+      });
+      const rpc = await createPiRpcProcess({
+        binaryPath: "/custom/pi",
+        providerRuntimeTarget:
+          location === "local"
+            ? { location, executionTargetId: "local" }
+            : { location, executionTargetId: "ssh:host=devbox&user=root&port=22" },
+        workspaceTarget: { location: "local", executionTargetId: "local", cwd: undefined },
+      });
+      expect(rpc.supportsAgentSettled).toBe(true);
+      child.emit("exit", 0, null);
+    },
+  );
 
   it("spawns pi with local cwd for local-runtime local Pi sessions", async () => {
     const child = createFakeChildProcess();
@@ -80,6 +114,7 @@ describe("createPiRpcProcess", () => {
       },
     );
     expect(rpcProcess.cwd).toBe("/tmp/local-project");
+    expect(rpcProcess.supportsAgentSettled).toBe(false);
     expect(rpcProcess.command).toBe("/custom/pi");
 
     child.emit("exit", 0, null);

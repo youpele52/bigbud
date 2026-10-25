@@ -22,6 +22,7 @@ import { openRemoteAgentControl } from "./remoteAgentControl.ts";
 import { pinRemoteAgentBuild } from "./remoteAgentInstall.registry.transitions.ts";
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import { currentRemoteAgentController } from "./remoteAgentController.ts";
+import { makeRemotePtyRestartBarrier } from "./remoteAgentOwnedPty.restart.ts";
 
 /** Application terminal identity is resolved durably BEFORE generating a PTY ID or opening a workspace. */
 export function makeOwnedRemoteAgentPty(
@@ -189,28 +190,39 @@ export function makeOwnedRemoteAgentPty(
           outputSequence: Math.max(sequence, current.outputSequence),
         })).then(() => undefined),
     });
+    const restartBarrier = makeRemotePtyRestartBarrier(() => process.close(true));
     process.onExit(() => {
-      void update((current) => ({
+      const persisted = update((current) => ({
         ...current,
         state: process.interruptionReason ? "outcome-unknown" : "terminal",
         ...(process.interruptionReason ? { interruptionReason: "restart" as const } : {}),
-      }))
-        .then(() =>
-          control.registry.update((state) => ({
-            ...state,
-            revision: state.revision + 1,
-            pins: state.pins.filter((pin) => pin.owner !== pinOwner),
-          })),
-        )
-        .catch(() => {
-          /* Failure retains the remote pin; never discard recovery evidence. */
-        });
+      })).then((owner) => {
+        if (
+          owner.resourceId !== resourceId ||
+          (!process.interruptionReason && owner.state !== "terminal")
+        ) {
+          throw new Error(
+            "Remote terminal owner changed before durable termination; replacement is unsafe.",
+          );
+        }
+        return control.registry.update((state) => ({
+          ...state,
+          revision: state.revision + 1,
+          pins: state.pins.filter((pin) => pin.owner !== pinOwner),
+        }));
+      });
+      restartBarrier.recordExit(!process.interruptionReason, persisted);
+      void persisted.catch(() => {
+        /* Failure retains the remote pin; never discard recovery evidence. */
+      });
     });
     const removeRestartListener = pool.onRuntimeRestart(binding, () =>
       process.interrupt("remote-service-restarted"),
     );
     process.onExit(removeRestartListener);
     return {
+      recovered: !created,
+      prepareRestart: () => restartBarrier.prepareRestart(),
       detach: () => process.detach(),
       get pid() {
         return process.pid;

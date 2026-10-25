@@ -2,13 +2,13 @@ import type { ComponentType } from "react";
 import {
   ArchiveIcon,
   BellIcon,
-  BotIcon,
   CpuIcon,
   InfoIcon,
   KeyboardIcon,
   Settings2Icon,
   SmartphoneIcon,
 } from "lucide-react";
+import { SettingsAiIcon } from "./SettingsAiIcon";
 
 export type SettingsSectionPath =
   | "/settings/general"
@@ -28,7 +28,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   { label: "General", to: "/settings/general", icon: Settings2Icon },
   { label: "Notifications", to: "/settings/notifications", icon: BellIcon },
   { label: "Providers", to: "/settings/providers", icon: CpuIcon },
-  { label: "AI", to: "/settings/ai", icon: BotIcon },
+  { label: "AI", to: "/settings/ai", icon: SettingsAiIcon },
   { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
   { label: "Remote", to: "/settings/remote", icon: SmartphoneIcon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
@@ -43,8 +43,6 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Theme", section: "General", to: "/settings/general" },
   { label: "Window material", section: "General", to: "/settings/general" },
   { label: "Time format", section: "General", to: "/settings/general" },
-  { label: "Terminal font", section: "General", to: "/settings/general" },
-  { label: "Terminal font size", section: "General", to: "/settings/general" },
   { label: "Diff line wrapping", section: "General", to: "/settings/general" },
   { label: "New threads", section: "Threads", to: "/settings/general" },
   { label: "Archive confirmation", section: "Threads", to: "/settings/general" },
@@ -52,6 +50,9 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Automatic thread cleanup", section: "Threads", to: "/settings/general" },
   { label: "Automatically delete old threads", section: "Threads", to: "/settings/general" },
   { label: "Delete eligible threads now", section: "Threads", to: "/settings/general" },
+  { label: "Terminal font", section: "Terminal", to: "/settings/general" },
+  { label: "Terminal font size", section: "Terminal", to: "/settings/general" },
+  { label: "Terminal GPU rendering", section: "Terminal", to: "/settings/general" },
   { label: "Learning projects", section: "General", to: "/settings/general" },
   { label: "Learning folder", section: "General", to: "/settings/general" },
   { label: "Saved projects", section: "General", to: "/settings/general" },
@@ -63,6 +64,8 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Text generation", section: "AI", to: "/settings/ai" },
   { label: "Stream replies", section: "AI", to: "/settings/ai" },
   { label: "Stream thinking", section: "AI", to: "/settings/ai" },
+  { label: "Prompt suggestions", section: "AI", to: "/settings/ai" },
+  { label: "Generate suggestions", section: "AI", to: "/settings/ai" },
   { label: "Text generation model", section: "AI", to: "/settings/ai" },
   { label: "Browser", section: "AI", to: "/settings/ai" },
   { label: "Default agent browser", section: "AI", to: "/settings/ai" },
@@ -72,6 +75,8 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Enable desktop automation", section: "AI", to: "/settings/ai" },
   { label: "Check-in interval", section: "AI", to: "/settings/ai" },
   { label: "Action timeout", section: "AI", to: "/settings/ai" },
+  { label: "Delegated threads", section: "AI", to: "/settings/ai" },
+  { label: "Let agents choose models for delegated threads", section: "AI", to: "/settings/ai" },
   { label: "File access", section: "AI", to: "/settings/ai" },
   { label: "Default chat folder", section: "AI", to: "/settings/ai" },
   { label: "Permission level", section: "AI", to: "/settings/ai" },

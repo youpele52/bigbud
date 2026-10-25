@@ -61,3 +61,10 @@ it("accepts only bounded, structured startup diagnostics", () => {
     ),
   ).toBe(false);
 });
+
+it.each(["state_directory_in_use", "state_directory_owner_unverified"])(
+  "accepts ownership failure %s across the preload boundary",
+  (failureReason) => {
+    expect(isBackendStartupState({ ...safeState, failureReason })).toBe(true);
+  },
+);

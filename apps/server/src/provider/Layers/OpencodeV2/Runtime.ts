@@ -1,6 +1,10 @@
 import { Effect } from "effect";
-import type { OpenCodeEvent } from "@opencode/client";
-import { RuntimeItemId } from "@bigbud/contracts/core/baseSchemas";
+import { settleV2RuntimeReservation } from "./Runtime.activation.ts";
+import {
+  shouldPollV2Runtime,
+  hasV2RetainedReservation,
+  repairV2RetainedReservation,
+} from "./Runtime.settlement.ts";
 import type {
   ProviderSendTurnInput,
   ProviderSessionStartInput,
@@ -9,8 +13,7 @@ import type {
   TurnId,
 } from "@bigbud/contracts";
 import { prepareV2RuntimeSession, releaseV2PreparedSession } from "./Runtime.preparation.ts";
-import { correlatedProjection, readV2Messages, runtimeEventBase } from "./Runtime.projection.ts";
-import { pendingV2Interactions, replyV2Permission, replyV2Form } from "./Runtime.interactions.ts";
+import { replyV2Permission, replyV2Form } from "./Runtime.interactions.ts";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession } from "./Runtime.types.ts";
 import { v2Request } from "./Client.ts";
 import { observeV2ProcessLifecycle } from "./Runtime.lifecycle.ts";
@@ -24,24 +27,34 @@ import {
   interruptV2Execution,
   installV2UnsafePermissionRejector,
 } from "./Runtime.replies.ts";
-import { v2RuntimeStatus } from "./Runtime.status.ts";
-import { emitV2RuntimeEvent } from "./Runtime.events.ts";
+import { emitV2RuntimeEvent, isV2FinalLifecycleEvent } from "./Runtime.events.ts";
 import { needsV2FinalRepair } from "./Runtime.finalization.ts";
 import { V2RuntimeTeardown } from "./Runtime.teardown.ts";
 import { V2RuntimeMutations } from "./Runtime.mutations.ts";
 import { sendV2Turn } from "./Runtime.send.ts";
 import { installV2UnsupportedFormCanceller } from "./Runtime.forms.unsupported.ts";
+import { runAuthorizedV2, runV2Cleanup, currentV2RequestContext } from "./Client.guard.ts";
+import { inspectV2Turn } from "./Runtime.inspect.ts";
+import { registerV2RuntimeOwner } from "./Runtime.registration.owner.ts";
+import type { V2ProcessConfig } from "./ServerManager.child.ts";
+import { watchV2OutputPublication } from "./Runtime.publication.failure.ts";
+import { attachV2OwnedFamily } from "./Runtime.family.ts";
+import { retireV2FailedStart } from "./Runtime.start.failure.ts";
 
 /** Owned preview execution engine shared by application routing and disposable conformance harnesses. */
-export class OpencodeV2Runtime {
+export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
   readonly sessions = new Map<ThreadId, V2RuntimeSession>();
   private readonly starting = new Map<ThreadId, V2StartAttempt>();
+  /** Retiring an owner cannot discard an in-progress native session creation. */
+  hasPendingStart(threadId: ThreadId) {
+    return this.starting.has(threadId);
+  }
   readonly teardown: V2RuntimeTeardown;
   readonly mutations = new V2RuntimeMutations();
   private readonly timer: ReturnType<typeof setInterval>;
   private closed = false;
 
-  constructor(readonly options: V2IsolatedRuntimeOptions) {
+  constructor(readonly options: V2IsolatedRuntimeOptions<C>) {
     this.teardown = new V2RuntimeTeardown({
       sessions: this.sessions,
       serialize: (owner, run) => this.exclusive(owner, run),
@@ -58,15 +71,8 @@ export class OpencodeV2Runtime {
       throw new Error("V2 runtime bounds rejected.");
     this.timer = setInterval(() => {
       for (const session of this.sessions.values()) {
-        if (
-          session.stopped
-            ? needsV2FinalRepair(session)
-            : session.row &&
-              (session.row.state !== "terminal" ||
-                !session.terminalDelivered ||
-                session.lease.hub.isDirty(session.native.id))
-        ) {
-          this.scheduleRepair(session);
+        if (shouldPollV2Runtime(session)) {
+          this.scheduleRepair(session, false);
         }
       }
     }, interval);
@@ -87,23 +93,74 @@ export class OpencodeV2Runtime {
 
   withSession<T>(threadId: ThreadId, operation: () => Promise<T>): Promise<T> {
     const session = this.get(threadId);
-    return this.exclusive(session, async () => {
-      if (this.get(threadId) !== session) throw new Error("V2 stale session operation owner.");
-      return operation();
-    });
+    return this.authorized(() =>
+      this.exclusive(session, async () => {
+        if (this.get(threadId) !== session) throw new Error("V2 stale session operation owner.");
+        session.consentPermit?.assertCurrent();
+        return operation();
+      }),
+    );
   }
 
-  async emit(session: V2RuntimeSession, event: ProviderRuntimeEvent) {
-    return emitV2RuntimeEvent(session, event, this.options.emit);
+  authorized<T>(run: () => Promise<T>) {
+    return runAuthorizedV2(
+      this.options.consent,
+      this.options.config.sharedService?.registrationFile,
+      run,
+    );
+  }
+  withCleanupSession<T>(threadId: ThreadId, operation: () => Promise<T>): Promise<T> {
+    const session = this.get(threadId);
+    return runV2Cleanup(session.sharedTransport, session.native.id, () =>
+      this.exclusive(session, async () => {
+        if (this.get(threadId) !== session) throw new Error("V2 stale cleanup owner.");
+        return operation();
+      }),
+    );
   }
 
-  async start(
+  async emit(session: V2RuntimeSession, event: ProviderRuntimeEvent, validate?: () => void) {
+    const lifecycle = session.stopped && isV2FinalLifecycleEvent(event);
+    const epoch = session.epoch;
+    const hubGeneration = session.lease.hub.generation(session.native.id);
+    const dirtyGeneration = session.dirtyGeneration;
+    const fence = () => {
+      validate?.();
+      const current = this.sessions.get(session.threadId);
+      // Owned isolated shutdown already drains its admitted final output in this queue.
+      // Shared host-user execution instead rejects output arriving after owner disposal.
+      const settlingIsolated = session.stopped && !session.sharedTransport;
+      if (
+        (current && current !== session) ||
+        (!lifecycle &&
+          !settlingIsolated &&
+          (current !== session ||
+            session.stopped ||
+            session.epoch !== epoch ||
+            session.dirtyGeneration !== dirtyGeneration ||
+            session.lease.hub.generation(session.native.id) !== hubGeneration))
+      )
+        throw new Error("V2 stale event owner/generation rejected.");
+    };
+    const publish = () => emitV2RuntimeEvent(session, event, this.options.emit, fence);
+    if (!lifecycle) watchV2OutputPublication(this, session, event, epoch);
+    return lifecycle
+      ? runV2Cleanup(session.sharedTransport, session.native.id, publish)
+      : publish();
+  }
+
+  start(input: ProviderSessionStartInput, attempt = new V2StartAttempt(), disableTools = false) {
+    return this.authorized(() => this.startAuthorized(input, attempt, disableTools));
+  }
+
+  private async startAuthorized(
     input: ProviderSessionStartInput,
     attempt = new V2StartAttempt(),
     disableTools = false,
   ) {
     this.mutations.assertSafe();
     await Effect.runPromise(this.options.journal.assertOwnerAvailable(input.threadId));
+    currentV2RequestContext()?.permit.assertCurrent();
     if (
       this.closed ||
       attempt.controller.signal.aborted ||
@@ -123,24 +180,26 @@ export class OpencodeV2Runtime {
         attempt.controller.signal,
         disableTools,
       );
-      session = { ...created, unregister: () => {}, unsubscribeDeath: () => {} };
+      if (created.activation?.token) attempt.phase = "reserved";
+      session = {
+        ...created,
+        ...(this.options.config.sharedService
+          ? {
+              sharedTransport: this.options.config.sharedService.registrationFile,
+              consentPermit: this.options.consent?.capture(),
+            }
+          : {}),
+        unregister: () => {},
+        unsubscribeDeath: () => {},
+      };
+      currentV2RequestContext()?.permit.assertCurrent();
       this.mutations.assertSafe();
       const owner = session;
       if (this.closed || attempt.controller.signal.aborted) {
         await releaseV2PreparedSession(owner);
         throw new Error("V2 late session start disposed.");
       }
-      const unregister = owner.lease.hub.register({
-        nativeSessionId: owner.native.id,
-        location: owner.native.location.directory,
-        onEvent: (event, signal) =>
-          this.exclusive(owner, async () => {
-            if (!signal.aborted) await this.onEvent(owner, event);
-          }),
-        onDirty: () => {
-          this.scheduleRepair(owner);
-        },
-      });
+      const unregister = registerV2RuntimeOwner(this, owner, (run) => this.exclusive(owner, run));
       const unsubscribeDeath = observeV2ProcessLifecycle(owner.lease.process, () => {
         owner.stopped = true;
         owner.coding?.revoke();
@@ -152,22 +211,34 @@ export class OpencodeV2Runtime {
       Object.assign(owner, { unregister, unsubscribeDeath });
       session = owner;
       this.sessions.set(input.threadId, owner);
+      await attachV2OwnedFamily(this, owner);
       installV2UnsafePermissionRejector(this, owner);
       installV2UnsupportedFormCanceller(this, owner);
       await this.options.codingBridge?.attach(owner, this);
       attempt.owner = owner;
       // Startup repair participates in the same queue as hub/poll/user operations.
       await this.exclusive(owner, () => recoverV2Session(this, owner));
+      await this.options.threadBridge?.attach(owner, this);
+      if (
+        owner.activation?.token &&
+        (owner.row?.state === "dispatch-intent" || owner.row?.state === "accepted")
+      ) {
+        owner.activation.gate.nativeRunning(owner.activation.token);
+        attempt.phase = "native-running";
+      }
+      await settleV2RuntimeReservation(this, owner);
+      if (!owner.activation?.token) attempt.phase = "settled";
       attempt.controller.signal.throwIfAborted();
+      currentV2RequestContext()?.permit.assertCurrent();
+      owner.consentPermit?.assertCurrent();
       return owner.session;
     } catch (error) {
+      if (session?.activation?.token) {
+        session.activation.phase = "uncertain";
+        attempt.phase = "uncertain";
+      }
       if (session) {
-        session.stopped = true;
-        session.coding?.revoke();
-        session.unregister();
-        session.unsubscribeDeath();
-        if (this.sessions.get(input.threadId) === session) this.sessions.delete(input.threadId);
-        await releaseV2PreparedSession(session);
+        await retireV2FailedStart(this, session);
       }
       throw error;
     } finally {
@@ -180,68 +251,56 @@ export class OpencodeV2Runtime {
     if (attempt.owner) await this.stop(attempt.owner.threadId, attempt.owner);
   }
 
-  scheduleRepair(session: V2RuntimeSession) {
-    session.dirtyGeneration++;
+  scheduleRepair(session: V2RuntimeSession, invalidate = true) {
+    try {
+      session.consentPermit?.assertCurrent();
+    } catch {
+      return;
+    }
+    if (invalidate) session.dirtyGeneration++;
     if (session.repairQueued || (session.stopped && !needsV2FinalRepair(session)) || this.closed)
       return;
     session.repairQueued = true;
-    void this.exclusive(session, async () => {
-      const generation = session.dirtyGeneration;
-      const hubGeneration = session.lease.hub.generation(session.native.id);
-      try {
-        await this.reconcile(session);
-      } finally {
-        session.repairQueued = false;
-        if (
-          session.dirtyGeneration !== generation ||
-          session.lease.hub.generation(session.native.id) !== hubGeneration
-        )
-          this.scheduleRepair(session);
-      }
-    }).catch(() => {});
+    void this.authorized(() =>
+      this.exclusive(session, async () => {
+        session.consentPermit?.assertCurrent();
+        const generation = session.dirtyGeneration;
+        const hubGeneration = session.lease.hub.generation(session.native.id);
+        try {
+          await this.reconcile(session);
+        } finally {
+          session.repairQueued = false;
+          if (
+            session.dirtyGeneration !== generation ||
+            session.lease.hub.generation(session.native.id) !== hubGeneration
+          )
+            this.scheduleRepair(session, false);
+        }
+      }),
+    ).catch(() => {
+      session.repairQueued = false;
+    });
   }
 
   async send(input: ProviderSendTurnInput) {
-    return sendV2Turn(this, input);
-  }
-
-  private async onEvent(session: V2RuntimeSession, event: OpenCodeEvent) {
-    if (session.stopped || !session.row || session.row.state !== "accepted") return;
-    if (event.type === "session.text.delta" || event.type === "session.reasoning.delta") {
-      if (!session.messages.has(event.data.assistantMessageID)) {
-        const projection = correlatedProjection(session, await readV2Messages(session));
-        if (!projection) {
-          return;
-        }
-        for (const message of projection.assistants) session.messages.set(message.id, message);
-      }
-      const message = session.messages.get(event.data.assistantMessageID);
-      if (
-        !message ||
-        message.type !== "assistant" ||
-        message.time.completed !== undefined ||
-        session.stopped
-      )
-        return;
-      await this.emit(session, {
-        ...runtimeEventBase(session, event.id, event.created),
-        itemId: RuntimeItemId.makeUnsafe(
-          event.type === "session.text.delta"
-            ? event.data.assistantMessageID
-            : `${event.data.assistantMessageID}:reasoning`,
-        ),
-        type: "content.delta",
-        payload: {
-          streamKind: event.type === "session.text.delta" ? "assistant_text" : "reasoning_text",
-          delta: event.data.delta,
-          contentIndex: event.data.ordinal,
-        },
-      });
-    } else await this.reconcile(session);
+    return this.authorized(() => sendV2Turn(this, input));
   }
 
   async reconcile(session: V2RuntimeSession) {
-    return reconcileV2Runtime(this, session);
+    session.consentPermit?.assertCurrent();
+    return this.authorized(async () => {
+      if (
+        hasV2RetainedReservation(session) &&
+        !session.family?.live &&
+        !needsV2FinalRepair(session) &&
+        !session.publicationUnconfirmed &&
+        !session.lease.hub.isDirty(session.native.id)
+      )
+        return repairV2RetainedReservation(this, session);
+      const result = await reconcileV2Runtime(this, session);
+      await settleV2RuntimeReservation(this, session);
+      return result;
+    });
   }
 
   private async processLost(session: V2RuntimeSession) {
@@ -249,37 +308,7 @@ export class OpencodeV2Runtime {
   }
 
   async inspect(threadId: ThreadId, turnId: TurnId) {
-    const session = this.get(threadId);
-    return this.exclusive(session, async () => {
-      await this.reconcile(session);
-      const observedAt = new Date().toISOString();
-      if (!session.row || session.row.turnId !== turnId)
-        return { status: "missing" as const, observedAt };
-      const projection = correlatedProjection(session, await readV2Messages(session));
-      if (projection?.idle && session.row.state === "terminal")
-        return {
-          status:
-            projection.idle.outcome === "succeeded"
-              ? ("completed" as const)
-              : projection.idle.outcome === "failed"
-                ? ("failed" as const)
-                : ("unavailable" as const),
-          observedAt,
-          ...(projection.idle.outcome === "succeeded"
-            ? { completionEvidence: { source: "v2.correlated-idle" } }
-            : { errorEvidence: { source: "v2.correlated-idle" } }),
-        };
-      if ((await pendingV2Interactions(session)).length)
-        return { status: "waiting-for-user" as const, observedAt };
-      const active = await v2Request("session.active", (signal) =>
-        session.lease.process.client.session.active({ signal }),
-      );
-      return {
-        status:
-          active[session.native.id] && projection ? ("running" as const) : ("unavailable" as const),
-        observedAt,
-      };
-    });
+    return inspectV2Turn(this, threadId, turnId);
   }
 
   async interrupt(threadId: ThreadId, turnId?: TurnId) {
@@ -300,23 +329,38 @@ export class OpencodeV2Runtime {
 
   async read(threadId: ThreadId) {
     const session = this.get(threadId);
-    return this.exclusive(session, () => readV2Thread(session, this.options.journal));
+    return this.withSession(threadId, () => readV2Thread(session, this.options.journal));
   }
 
   async catalog(threadId: ThreadId) {
     const session = this.get(threadId);
-    const catalog = await v2Request("model.list", (signal) =>
-      session.lease.process.client.model.list(
-        { location: { directory: session.native.location.directory } },
-        { signal },
-      ),
-    );
-    return normalizeV2Catalog(catalog, session.native.location.directory);
+    return this.withSession(threadId, async () => {
+      const catalog = await v2Request("model.list", (signal) =>
+        session.lease.process.client.model.list(
+          { location: { directory: session.native.location.directory } },
+          { signal },
+        ),
+      );
+      return normalizeV2Catalog(catalog, session.native.location.directory);
+    });
   }
 
   async stop(threadId: ThreadId, expected?: V2RuntimeSession) {
     if (!expected) this.starting.get(threadId)?.controller.abort();
-    await this.teardown.stop(threadId, expected);
+    const owner = expected ?? this.sessions.get(threadId);
+    const familyFence =
+      owner && (!expected || this.sessions.get(threadId) === expected)
+        ? owner.family?.fence()
+        : undefined;
+    await runV2Cleanup(owner?.sharedTransport, owner?.native.id ?? "", async () => {
+      const settled = await Promise.allSettled([
+        familyFence,
+        owner?.familyControl?.fence(),
+        this.teardown.stop(threadId, expected),
+      ]);
+      const failed = settled.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+    });
   }
 
   async close() {

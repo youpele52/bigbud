@@ -30,7 +30,7 @@ The work is complete when:
 
 ### Confirmed Current Behavior
 
-- `docs/RUST_SYSTEMS_CORE.md:43-56` and `:110-129` assign product semantics and canonical SQLite state to TypeScript and systems execution to Rust.
+- The Product Decisions and Ownership Boundary sections of `docs/plans/2026-08-25-rust-systems-core-plan.md` assign product semantics and canonical SQLite state to TypeScript and systems execution to Rust.
 - `ThreadDeletion.files.ts:53-140` discovers resources and captures identity before canonical finalization. `ProviderCommandReactorHandlers.delete.ts:220-275` finalizes SQLite-backed canonical state before calling filesystem cleanup.
 - `ProjectDeletion.files.ts:48-92` follows the same discover, finalize, cleanup order for project memory, notes, and kanban resources.
 - `EntityPurge.resources.ts:254-344` currently validates root, parent, target, quarantine, and identity around an atomic rename. `EntityPurge.resources.remove.ts:6-59` then recursively deletes by pathname.
@@ -136,7 +136,7 @@ Rust never decides whether a retry occurs or whether deletion succeeded as a pro
 ### 1. Record The Boundary
 
 1. Add a focused ADR under `docs/decisions/` documenting the direct-replacement decision, explicit cleanup-mode authority profile, TypeScript operation ledger, no-fallback behavior, bounded same-user threat model, support matrix, and exclusions.
-2. Update `docs/RUST_SYSTEMS_CORE.md` only where necessary to list direct resource cleanup as an implemented/approved systems slice; retain the rule that Rust is not a canonical authority.
+2. Update `docs/plans/2026-08-25-rust-systems-core-plan.md` only where necessary to list direct resource cleanup as an implemented/approved systems slice; retain the rule that Rust is not a canonical authority.
 3. Define explicit invariants: deterministic deletion-intent identity, plan-before-finalize, receipt-payload-and-event proof before execute, stable digest, one active TypeScript lease plus one executor-side OS lock, no blind replay after ambiguity, and no deliberate traversal through links/detected mounts/reparse points.
 
 ### 2. Add The Durable Direct-Cleanup Ledger

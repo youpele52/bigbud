@@ -1,6 +1,6 @@
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { UsageSubscriptionLimits } from "./UsageSubscriptionLimits";
 
 const available: ServerProviderUsageLimits = {
@@ -9,6 +9,9 @@ const available: ServerProviderUsageLimits = {
   checkedAt: "2026-10-08T12:00:00Z",
   windows: [{ id: "quota", label: "Monthly limit", kind: "monthly", utilization: 25 }],
 };
+
+const NativeDateTimeFormat = Intl.DateTimeFormat;
+afterEach(() => vi.restoreAllMocks());
 
 describe("grouped subscription limits", () => {
   it.each([
@@ -27,13 +30,61 @@ describe("grouped subscription limits", () => {
     expect(html).toContain("75% remaining");
     if (source === "cursor-dashboard") expect(html).toContain("signed in to Cursor desktop");
   });
-  it("hides unsupported and missing limits", () => {
-    expect(renderToStaticMarkup(<UsageSubscriptionLimits limits={[]} />)).toBe("");
-    expect(
-      renderToStaticMarkup(
-        <UsageSubscriptionLimits limits={[undefined, { ...available, status: "unavailable" }]} />,
-      ),
-    ).toBe("");
+  it("keeps refresh available while unsupported and missing limits remain hidden", () => {
+    for (const limits of [[], [undefined, { ...available, status: "unavailable" as const }]]) {
+      const html = renderToStaticMarkup(<UsageSubscriptionLimits limits={limits} />);
+      expect(html).toContain('aria-label="Refresh subscription limits"');
+      expect(html).not.toContain('data-slot="card"');
+      expect(html).toContain("Subscription limits unavailable for enabled providers.");
+    }
+  });
+
+  it("shows display-only reset count and distinct expiry information directly after limits", () => {
+    const html = renderToStaticMarkup(
+      <UsageSubscriptionLimits
+        limits={[
+          {
+            ...available,
+            source: "codex-app-server",
+            manualResets: {
+              availableCount: 3,
+              availableExpiries: ["2026-11-01T12:00:00Z", null],
+              detailsComplete: false,
+            },
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Limit resets");
+    expect(html).toContain("Available (3)");
+    expect(html).toContain("Available reset expiries");
+    expect(html).toContain("No expiry");
+    expect(html).toContain("Expiry unavailable for 1 reset");
+    expect(html.indexOf("Limit resets")).toBeGreaterThan(html.indexOf("Monthly limit"));
+    expect(html).not.toMatch(/Use reset|Redeem|redeem/);
+  });
+
+  it("does not invent manual resets for providers without grant data", () => {
+    expect(renderToStaticMarkup(<UsageSubscriptionLimits limits={[available]} />)).not.toContain(
+      "Limit resets",
+    );
+  });
+
+  it("distinguishes zero available resets from missing expiry details", () => {
+    const html = renderToStaticMarkup(
+      <UsageSubscriptionLimits
+        limits={[
+          {
+            ...available,
+            source: "codex-app-server",
+            manualResets: { availableCount: 0, availableExpiries: [], detailsComplete: true },
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("Available (0)");
+    expect(html).toContain("No available resets");
+    expect(html).not.toContain("Expiry unavailable");
   });
   it("keeps retained quota visible with a stale-data warning", () => {
     const html = renderToStaticMarkup(
@@ -44,6 +95,38 @@ describe("grouped subscription limits", () => {
     expect(html).toContain("Subscription limits may be out of date");
     expect(html).toContain("75% remaining");
   });
+
+  it.each(["claude-agent-sdk", "codex-app-server", "cursor-dashboard", "opencode-go-api"] as const)(
+    "uses consistent reset, expiry, and stale dates for %s",
+    (source) => {
+      vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (locales, options) {
+        return new NativeDateTimeFormat(locales, { ...options, timeZone: "Europe/Paris" });
+      });
+      const timestamp = "2026-10-21T17:00:00Z";
+      const html = renderToStaticMarkup(
+        <UsageSubscriptionLimits
+          limits={[
+            {
+              ...available,
+              source,
+              status: "stale",
+              lastSuccessfulAt: timestamp,
+              windows: [{ ...available.windows[0]!, resetAt: timestamp }],
+              manualResets: {
+                availableCount: 1,
+                availableExpiries: [timestamp],
+                detailsComplete: true,
+              },
+            },
+          ]}
+        />,
+      ).replace(/<[^>]*>/g, "");
+      const expected = "October 21, 2026 at 7:00 PM CEST";
+      expect(html).toContain(`Resets ${expected}`);
+      expect(html).toContain(`Expires ${expected}`);
+      expect(html).toContain(`Showing the last successful values from ${expected}.`);
+    },
+  );
 
   it("groups all providers in one card with provider subsections", () => {
     const html = renderToStaticMarkup(

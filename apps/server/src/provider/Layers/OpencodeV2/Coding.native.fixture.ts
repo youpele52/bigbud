@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 /** Disposable pinned-client native fixture, not vendor conformance or credential discovery. */
-export async function makeV2CodingNativeFixture(contextTokens = 32000) {
+export async function makeV2CodingNativeFixture(contextTokens = 32000, ownedParent = os.tmpdir()) {
   const state = {
     tool: "bigbud_write",
     input: { path: "main.py", content: "value = 1\n" } as Record<string, unknown>,
@@ -63,7 +63,7 @@ export async function makeV2CodingNativeFixture(contextTokens = 32000) {
   await new Promise<void>((resolve) => model.listen(0, "127.0.0.1", resolve));
   const address = model.address();
   if (!address || typeof address === "string") throw new Error("fixture missing port");
-  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "v2-coding-native-")));
+  const root = await realpath(await mkdtemp(path.join(ownedParent, "v2-coding-native-")));
   const profile = path.join(root, "profile"),
     workspace = path.join(root, "workspace");
   for (const directory of [profile, workspace]) await mkdir(directory, { mode: 0o700 });

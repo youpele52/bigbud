@@ -2,6 +2,9 @@ import type { MonitorMetric, MonitorSnapshot } from "@bigbud/contracts/system-mo
 
 import type { ResourceWidget } from "~/stores/resource-monitor/resourceMonitorPreferences.store";
 import type { DisplayMetric } from "./ResourceMetricCard";
+import { capacityValue, formatCapacityGiB } from "./ResourceCapacityUsage.logic";
+import { diskCapacityUsage } from "./resourceMonitor.display.disk";
+import { cpuUsageValue } from "./resourceMonitor.display.cpu";
 import {
   formatBytes,
   formatPercent,
@@ -29,13 +32,33 @@ export function displayWidget(
   snapshot: MonitorSnapshot | null,
   widget: ResourceWidget,
 ): DisplayMetric {
-  if (!snapshot) return { label: WIDGET_LABELS[widget], value: "—", status: "warming" };
+  if (!snapshot) {
+    return {
+      label: WIDGET_LABELS[widget],
+      value: "—",
+      status: "warming",
+      ...(widget === "cpu" ? { gaugeValue: null } : {}),
+      ...(widget === "memory" || widget === "disk"
+        ? {
+            capacityUsage: {
+              usedBytes: null,
+              totalBytes: null,
+              footer: [],
+            },
+          }
+        : {}),
+      ...(widget === "network"
+        ? { networkRates: { download: "—", upload: "—" }, historyStyle: "network" as const }
+        : {}),
+    };
+  }
   switch (widget) {
     case "cpu":
       return {
         label: "CPU",
         value: show(snapshot.cpuPercent, formatPercent),
         status: status(snapshot.cpuPercent),
+        gaugeValue: cpuUsageValue(snapshot.cpuPercent),
         historyValueFormatter: formatPercent,
         ...(snapshot.perCorePercent.length
           ? { detail: `${snapshot.perCorePercent.length} logical cores` }
@@ -48,6 +71,14 @@ export function displayWidget(
         status: status(snapshot.memoryUsedBytes),
         historyValueFormatter: formatBytes,
         detail: `${show(snapshot.memoryTotalBytes, formatBytes)} total · ${show(snapshot.swapUsedBytes, formatBytes)} swap used`,
+        capacityUsage: {
+          usedBytes: capacityValue(snapshot.memoryUsedBytes),
+          totalBytes: capacityValue(snapshot.memoryTotalBytes),
+          footer: [
+            `Available: ${formatCapacityGiB(capacityValue(snapshot.memoryAvailableBytes))}`,
+            `Swap: ${formatCapacityGiB(capacityValue(snapshot.swapUsedBytes))} used / ${formatCapacityGiB(capacityValue(snapshot.swapTotalBytes))} total`,
+          ],
+        },
       };
     case "disk": {
       // Show one named volume: mounted volumes may share backing storage, so
@@ -65,34 +96,31 @@ export function displayWidget(
           value: "— free",
           status: "unavailable",
           detail: `${show(snapshot.diskCapacityBytes, formatBytes)} total · Free space unavailable`,
+          capacityUsage: {
+            usedBytes: null,
+            totalBytes: null,
+            footer: ["Free space and volume unavailable"],
+          },
         };
       }
       const volume = snapshot.disks.length > 1 ? `${disk.name} (${disk.mount})` : disk.name;
-      const total = disk.totalBytes;
-      const free = disk.freeBytes;
-      const diskUsage =
-        total?.status === "ready" &&
-        free?.status === "ready" &&
-        Number.isFinite(total.value) &&
-        Number.isFinite(free.value) &&
-        total.value > 0 &&
-        free.value >= 0 &&
-        free.value <= total.value
-          ? { totalBytes: total.value, freeBytes: free.value }
-          : undefined;
       return {
         label: "Disk",
         value: `${show(disk.freeBytes, formatBytes)} free`,
         status:
           disk.freeBytes?.status === "ready" ? status(disk.totalBytes) : status(disk.freeBytes),
         detail: `${show(disk.totalBytes, formatBytes)} total · ${volume}`,
-        ...(diskUsage ? { diskUsage } : {}),
+        capacityUsage: diskCapacityUsage(disk),
       };
     }
     case "network":
       return {
         label: "Network",
         value: `↓ ${show(snapshot.networkReceivedBytesPerSecond, formatRate)} · ↑ ${show(snapshot.networkTransmittedBytesPerSecond, formatRate)}`,
+        networkRates: {
+          download: show(snapshot.networkReceivedBytesPerSecond, formatRate),
+          upload: show(snapshot.networkTransmittedBytesPerSecond, formatRate),
+        },
         historyValueFormatter: formatRate,
         historyStyle: "network",
         status:

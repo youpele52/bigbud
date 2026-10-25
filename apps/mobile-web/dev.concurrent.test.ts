@@ -61,7 +61,10 @@ it("binds concurrent companions independently and lets a later web server discov
     const webAddress = web.httpServer?.address();
     if (!webAddress || typeof webAddress === "string") throw new Error("Missing web address");
     const endpoint = `http://127.0.0.1:${webAddress.port}/__bigbud/mobile-dev`;
-    expect(await fetch(endpoint).then((response) => response.json())).toEqual({ url: expectedUrl });
+    // Discovery fails closed on transient probe failures; Local clients poll for a verified URL.
+    await expect
+      .poll(() => fetch(endpoint).then((response) => response.json()), { timeout: 5_000 })
+      .toEqual({ url: expectedUrl });
 
     for (const server of servers) {
       const bound = server.httpServer?.address();

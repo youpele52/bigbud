@@ -2,11 +2,28 @@ import { PassThrough } from "node:stream";
 import { beforeEach, expect, it, vi } from "vitest";
 
 const recordStatus = vi.hoisted(() => vi.fn());
-vi.mock("./backendStartupState", () => ({ recordBackendStartupStatus: recordStatus }));
+const recordProgress = vi.hoisted(() => vi.fn());
+vi.mock("./backendStartupState", () => ({
+  recordBackendStartupProgress: recordProgress,
+  recordBackendStartupStatus: recordStatus,
+}));
 
 import { listenForBackendStartupStatus } from "./backendStartupStatusPipe";
 
-beforeEach(() => recordStatus.mockReset());
+beforeEach(() => {
+  recordStatus.mockReset();
+  recordProgress.mockReset();
+});
+
+it("forwards upgrading progress, including records without a percent", () => {
+  const stream = new PassThrough();
+  listenForBackendStartupStatus(stream, 6);
+  stream.write('{"status":"upgrading","progress":42}\n{"status":"upgrading"}\n');
+  expect(recordProgress).toHaveBeenNthCalledWith(1, 6, 42);
+  expect(recordProgress).toHaveBeenNthCalledWith(2, 6, undefined);
+  stream.write('{"status":"ready","progress":99}\n');
+  expect(recordProgress).toHaveBeenCalledTimes(2);
+});
 
 it("parses split and multiple NDJSON status records", () => {
   const stream = new PassThrough();
@@ -70,3 +87,15 @@ it("does not report a ready rejected after an accepted error", () => {
   expect(recordStatus).toHaveBeenNthCalledWith(2, 9, "ready");
   expect(onReady).not.toHaveBeenCalled();
 });
+
+it.each(["state_directory_in_use", "state_directory_owner_unverified"])(
+  "reports ownership failure %s without trusting arbitrary pipe text",
+  (reason) => {
+    const stream = new PassThrough();
+    listenForBackendStartupStatus(stream, 10);
+    stream.write(`${JSON.stringify({ status: "error", reason, message: "untrusted" })}\n`);
+    stream.write(`${JSON.stringify({ status: "error", reason })}\n`);
+    expect(recordStatus).toHaveBeenNthCalledWith(1, 10, "error", reason);
+    expect(recordStatus).toHaveBeenNthCalledWith(2, 10, "error", reason);
+  },
+);

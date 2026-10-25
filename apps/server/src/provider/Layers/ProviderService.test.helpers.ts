@@ -30,6 +30,7 @@ import type {
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
 import { makeProviderServiceLive } from "./ProviderService.ts";
 import { unavailableActiveTurnInspection } from "../providerActiveTurnInspection.ts";
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../providerSubagents.capabilities.ts";
 import { ProviderSessionDirectoryLive } from "./ProviderSessionDirectory.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { ProviderSessionRuntimeRepositoryLive } from "../../persistence/Layers/ProviderSessionRuntime.ts";
@@ -189,6 +190,11 @@ export function makeFakeCodexAdapter(
       Effect.succeed({ threadId, turns: [] }),
   );
 
+  const stopSubagent = vi.fn(
+    (_threadId: ThreadId, _nativeTaskId: string): Effect.Effect<void, ProviderAdapterError> =>
+      Effect.void,
+  );
+
   const stopAll = vi.fn(
     (): Effect.Effect<void, ProviderAdapterError> =>
       Effect.sync(() => {
@@ -213,6 +219,7 @@ export function makeFakeCodexAdapter(
     hasSession,
     readThread,
     rollbackThread,
+    stopSubagent,
     stopAll,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
@@ -248,6 +255,7 @@ export function makeFakeCodexAdapter(
     hasSession,
     readThread,
     rollbackThread,
+    stopSubagent,
     stopAll,
   };
 }
@@ -274,7 +282,9 @@ export function makeProviderServiceLayer(options?: {
   readonly settings?: Parameters<typeof ServerSettingsService.layerTest>[0];
 }) {
   const codex = makeFakeCodexAdapter();
-  const claude = makeFakeCodexAdapter("claudeAgent");
+  const claude = makeFakeCodexAdapter("claudeAgent", {
+    subagents: PROVIDER_SUBAGENT_CAPABILITIES.claudeAgent,
+  });
   const cliProxy = makeFakeCodexAdapter("cliProxy", {
     sessionRecovery: options?.cliProxySessionRecovery ?? "unsupported",
   });

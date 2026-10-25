@@ -2,8 +2,14 @@ import { type ProviderKind } from "@bigbud/contracts/orchestration/orchestration
 import { Data, Effect } from "effect";
 
 import { runProcess } from "../../utils/processRunner";
+import {
+  TERMINAL_AGENTS,
+  terminalAgentForProvider,
+  type TerminalAgentDescriptor,
+} from "../terminalAgents.ts";
+import type { TerminalAgentIdentity } from "@bigbud/contracts/workspace/terminal.agentIdentity.ts";
 
-interface AgentProcess {
+export interface AgentProcess {
   pid: number;
   parentPid: number;
   groupId: number | null;
@@ -11,20 +17,10 @@ interface AgentProcess {
   command: string;
 }
 
-const AGENT_EXECUTABLES: Readonly<Record<string, ProviderKind>> = {
-  pi: "pi",
-  opencode: "opencode",
-  opencode2: "opencode",
-  codex: "codex",
-  claude: "claudeAgent",
-  copilot: "copilot",
-  "cursor-agent": "cursor",
-  agent: "cursor",
-  devin: "devin",
-  "devin-cli": "devin",
-  kilo: "kilocode",
-  kilocode: "kilocode",
-} as const;
+export interface TerminalAgentDetection {
+  readonly agent: TerminalAgentIdentity;
+  readonly provider: ProviderKind | null;
+}
 
 function commandExecutable(command: string): string {
   const first = command
@@ -39,19 +35,40 @@ function commandExecutable(command: string): string {
     .replace(/\.(?:exe|cmd|bat|ps1)$/i, "");
 }
 
-export function agentFromProcessCommand(command: string): ProviderKind | null {
-  const executable = commandExecutable(command);
-  const direct = AGENT_EXECUTABLES[executable];
-  if (direct) return direct;
+/** Compile reviewed executable/script metadata without requiring a native provider mapping. */
+export function createTerminalAgentProcessMatcher(
+  agents: ReadonlyArray<TerminalAgentDescriptor> = TERMINAL_AGENTS,
+) {
+  const executables = new Map<string, TerminalAgentDetection>();
+  const scripts: Array<{ path: string; detection: TerminalAgentDetection }> = [];
+  for (const descriptor of agents) {
+    if (!descriptor.id.trim() || !descriptor.names.some((name) => name.trim())) continue;
+    const detection = {
+      agent: { id: descriptor.id, names: descriptor.names },
+      provider: descriptor.provider ?? null,
+    };
+    for (const executable of descriptor.executables ?? []) {
+      if (executable.trim()) executables.set(executable.toLowerCase(), detection);
+    }
+    for (const path of descriptor.scriptPaths ?? []) {
+      if (path.trim()) scripts.push({ path: path.toLowerCase(), detection });
+    }
+  }
+  return (command: string): TerminalAgentDetection | null => {
+    const executable = commandExecutable(command);
+    const direct = executables.get(executable);
+    if (direct) return direct;
+    if (!/^(?:node|bun|deno|python\d*(?:\.\d+)?)$/.test(executable)) return null;
+    const normalized = command.replaceAll("\\", "/").toLowerCase();
+    return scripts.find((script) => normalized.includes(script.path))?.detection ?? null;
+  };
+}
 
-  if (!/^(?:node|bun|deno|python\d*(?:\.\d+)?)$/.test(executable)) return null;
-  const normalized = command.replaceAll("\\", "/").toLowerCase();
-  if (normalized.includes("/pi-coding-agent/")) return "pi";
-  if (normalized.includes("/cursor-agent/")) return "cursor";
-  if (normalized.includes("/@anthropic-ai/claude-code/")) return "claudeAgent";
-  if (normalized.includes("/@opencode-ai/opencode/")) return "opencode";
-  if (normalized.includes("/@openai/codex/")) return "codex";
-  return null;
+const matchDefaultAgent = createTerminalAgentProcessMatcher();
+
+/** Compatibility projection for consumers that still need only native provider identity. */
+export function agentFromProcessCommand(command: string): ProviderKind | null {
+  return matchDefaultAgent(command)?.provider ?? null;
 }
 
 export function parsePosixAgentProcesses(output: string): ReadonlyArray<AgentProcess> {
@@ -113,20 +130,21 @@ function descendantChain(
   return null;
 }
 
-function uniqueAgent(candidates: Iterable<ProviderKind>): ProviderKind | null {
-  const kinds = new Set(candidates);
-  return kinds.size === 1 ? (kinds.values().next().value ?? null) : null;
+function uniqueAgent(candidates: Iterable<TerminalAgentDetection>): TerminalAgentDetection | null {
+  const agents = new Map(Array.from(candidates, (candidate) => [candidate.agent.id, candidate]));
+  return agents.size === 1 ? (agents.values().next().value ?? null) : null;
 }
 
-export function detectAgentForShell(
+export function detectTerminalAgentForShell(
   shellPid: number,
   processes: ReadonlyArray<AgentProcess>,
   platform: "windows" | "posix",
-): ProviderKind | null {
+  matchAgent = matchDefaultAgent,
+): TerminalAgentDetection | null {
   const byPid = new Map(processes.map((process) => [process.pid, process]));
   const shell = byPid.get(shellPid);
   if (!shell) return null;
-  const shellAgent = agentFromProcessCommand(shell.command);
+  const shellAgent = matchAgent(shell.command);
   if (shellAgent) return shellAgent;
 
   if (platform === "posix") {
@@ -134,12 +152,12 @@ export function detectAgentForShell(
     if (!foregroundGroupId || foregroundGroupId <= 0 || foregroundGroupId === shell.groupId) {
       return null;
     }
-    const agents: ProviderKind[] = [];
+    const agents: TerminalAgentDetection[] = [];
     for (const process of processes) {
       if (process.groupId !== foregroundGroupId) continue;
       const chain = descendantChain(process, shellPid, byPid);
       if (!chain) continue;
-      const agent = chain.map((item) => agentFromProcessCommand(item.command)).find(Boolean);
+      const agent = chain.map((item) => matchAgent(item.command)).find(Boolean);
       if (agent) agents.push(agent);
     }
     return uniqueAgent(agents);
@@ -147,28 +165,56 @@ export function detectAgentForShell(
 
   // Windows exposes the ConPTY process tree but no portable foreground process group.
   // An ambiguous tree stays unlabeled rather than choosing an arbitrary agent.
-  const agents: ProviderKind[] = [];
+  const agents: TerminalAgentDetection[] = [];
   for (const process of processes) {
     if (!descendantChain(process, shellPid, byPid)) continue;
-    const agent = agentFromProcessCommand(process.command);
+    const agent = matchAgent(process.command);
     if (agent) agents.push(agent);
   }
   return uniqueAgent(agents);
 }
 
+/** Keep native-provider consumers compatible while the scan itself uses generic identities. */
+export function detectAgentForShell(
+  shellPid: number,
+  processes: ReadonlyArray<AgentProcess>,
+  platform: "windows" | "posix",
+): ProviderKind | null {
+  return detectTerminalAgentForShell(shellPid, processes, platform)?.provider ?? null;
+}
+
 export type TerminalAgentDetector = (
   shellPids: ReadonlyArray<number>,
-) => Effect.Effect<ReadonlyMap<number, ProviderKind | null>, TerminalAgentInspectionError>;
+) => Effect.Effect<
+  ReadonlyMap<number, TerminalAgentDetection | ProviderKind | null>,
+  TerminalAgentInspectionError
+>;
+
+/** Compatibility for existing injected provider-only detectors; never inspect processes again. */
+export function normalizeTerminalAgentDetection(
+  value: TerminalAgentDetection | ProviderKind | null,
+): TerminalAgentDetection | null {
+  return typeof value === "string"
+    ? { agent: terminalAgentForProvider(value), provider: value }
+    : value;
+}
 
 export class TerminalAgentInspectionError extends Data.TaggedError("TerminalAgentInspectionError")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-export const defaultTerminalAgentDetector: TerminalAgentDetector = (shellPids) =>
+export interface TerminalAgentProcessSnapshot {
+  readonly processes: ReadonlyArray<AgentProcess>;
+  readonly platform: "windows" | "posix";
+}
+
+const inspectTerminalAgentProcesses = (): Effect.Effect<
+  TerminalAgentProcessSnapshot,
+  TerminalAgentInspectionError
+> =>
   Effect.tryPromise({
     try: async () => {
-      if (shellPids.length === 0) return new Map<number, ProviderKind | null>();
       const windows = process.platform === "win32";
       const result = windows
         ? await runProcess(
@@ -188,7 +234,7 @@ export const defaultTerminalAgentDetector: TerminalAgentDetector = (shellPids) =
         ? parseWindowsAgentProcesses(result.stdout)
         : parsePosixAgentProcesses(result.stdout);
       const platform = windows ? "windows" : "posix";
-      return new Map(shellPids.map((pid) => [pid, detectAgentForShell(pid, processes, platform)]));
+      return { processes, platform };
     },
     catch: (cause) =>
       new TerminalAgentInspectionError({
@@ -196,3 +242,37 @@ export const defaultTerminalAgentDetector: TerminalAgentDetector = (shellPids) =
         cause,
       }),
   });
+
+/** One shared process inspection per poll, regardless of pane count or output volume. */
+export function createTerminalAgentDetector(
+  options: {
+    readonly agents?: ReadonlyArray<TerminalAgentDescriptor>;
+    readonly inspect?: () => Effect.Effect<
+      TerminalAgentProcessSnapshot,
+      TerminalAgentInspectionError
+    >;
+  } = {},
+) {
+  const matchAgent = options.agents
+    ? createTerminalAgentProcessMatcher(options.agents)
+    : matchDefaultAgent;
+  const inspect = options.inspect ?? inspectTerminalAgentProcesses;
+  return (
+    shellPids: ReadonlyArray<number>,
+  ): Effect.Effect<
+    ReadonlyMap<number, TerminalAgentDetection | null>,
+    TerminalAgentInspectionError
+  > =>
+    Effect.gen(function* () {
+      if (shellPids.length === 0) return new Map<number, TerminalAgentDetection | null>();
+      const snapshot = yield* inspect();
+      return new Map(
+        shellPids.map((pid) => [
+          pid,
+          detectTerminalAgentForShell(pid, snapshot.processes, snapshot.platform, matchAgent),
+        ]),
+      );
+    });
+}
+
+export const defaultTerminalAgentDetector: TerminalAgentDetector = createTerminalAgentDetector();

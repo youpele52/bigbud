@@ -17,6 +17,9 @@ import {
   TurnId,
 } from "@bigbud/contracts";
 import { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
+import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
+import { OrchestrationPendingTurnStart } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
+import { ThreadRecovery } from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
 import { Schema, Struct } from "effect";
 
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
@@ -51,6 +54,8 @@ export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
+    // Optional: only the snapshot and operational thread queries select fork lineage.
+    forkOrigin: Schema.optional(Schema.NullOr(Schema.fromJsonString(ThreadForkOrigin))),
     queuedPrompts: Schema.fromJsonString(Schema.Array(OrchestrationQueuedPrompt)),
     pendingInterruptFlushIntent: Schema.NullOr(
       Schema.fromJsonString(OrchestrationPendingInterruptFlushIntent),
@@ -59,6 +64,9 @@ export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
       Schema.fromJsonString(OrchestrationTurnControlOperation),
     ),
     queueHold: Schema.Number,
+    pendingTurnStart: Schema.NullOr(Schema.fromJsonString(OrchestrationPendingTurnStart)),
+    // Migration 138; optional so a query that does not select it still decodes.
+    recovery: Schema.optional(Schema.NullOr(Schema.fromJsonString(ThreadRecovery))),
   }),
 );
 
@@ -77,7 +85,9 @@ export const ProjectionThreadTaskDbRowSchema = ProjectionThreadTask.mapFields(
   }),
 );
 
-export const ProjectionThreadSessionDbRowSchema = ProjectionThreadSession;
+export const ProjectionThreadSessionDbRowSchema = ProjectionThreadSession.mapFields(
+  Struct.assign({ retainedFamily: Schema.Number }),
+);
 
 export const ProjectionCheckpointDbRowSchema = ProjectionCheckpoint.mapFields(
   Struct.assign({

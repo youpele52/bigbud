@@ -95,6 +95,11 @@ validationLayer("CodexAdapterLive validation", (it) => {
         true,
       );
       expect(Array.isArray(startInput?.dynamicTools)).toBe(true);
+      // L9: the Codex session must opt in to the delegated model-choice tool surface (D-9).
+      const toolNames = (startInput?.dynamicTools ?? []).map((tool) => tool.name);
+      expect(toolNames).toContain("list_available_models");
+      const createThread = startInput?.dynamicTools?.find((tool) => tool.name === "create_thread");
+      expect(JSON.stringify(createThread?.inputSchema)).toContain("modelSelection");
       expect(typeof startInput?.dynamicToolCallHandler).toBe("function");
       expect(typeof startInput?.cleanupRemoteWorkspaceBridge).toBe("function");
     }),

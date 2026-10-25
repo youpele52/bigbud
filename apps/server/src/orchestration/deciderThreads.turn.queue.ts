@@ -9,7 +9,7 @@ import { requireThreadAttachmentsSupported } from "./ThreadAttachmentAdmission.t
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
-import { withEventBase } from "./deciderHelpers.ts";
+import { nowIso, withEventBase } from "./deciderHelpers.ts";
 import {
   decideThreadTurnStartCommand,
   requireThreadReadyForMutation,
@@ -18,10 +18,13 @@ import {
   canAutoDispatchQueuedPrompts,
   compatibleQueuedPrefix,
   consumableQueuedPrefix,
+  countedQueuedPrompts,
   hasActiveQueueReservation,
-  hasNonCombinableQueuedPromptMetadata,
+  redeliveryQueuePosition,
+  userReleasesStalePendingTurnStart,
 } from "./QueuedPromptPolicy.logic.ts";
 import {
+  isSentMessageRedelivery,
   MAX_QUEUED_PROMPTS,
   makeQueuedPromptEvent,
   PROMPT_QUEUE_FULL_DETAIL,
@@ -82,10 +85,7 @@ function makeTurnStartCommand(
 type QueuedPrompt = NonNullable<OrchestrationReadModel["threads"][number]["queuedPrompts"]>[number];
 type ThreadTurnStartCommand = Extract<OrchestrationCommand, { type: "thread.turn.start" }>;
 
-function requiresIndividualFlush(prompt: QueuedPrompt) {
-  return hasNonCombinableQueuedPromptMetadata(prompt);
-}
-
+/** One flushed prompt keeps its own ID and text; several become one follow-up message. */
 function buildQueuedFlushTurnStart(input: {
   readonly prompt: QueuedPrompt;
   readonly thread: OrchestrationReadModel["threads"][number];
@@ -99,7 +99,7 @@ function buildQueuedFlushTurnStart(input: {
     thread: input.thread,
     commandId: input.commandId,
     createdAt: input.createdAt,
-    ...(requiresIndividualFlush(input.prompt)
+    ...(input.prompts.length <= 1
       ? {}
       : {
           messageId: input.messageId ?? input.prompt.id,
@@ -176,6 +176,16 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       }
       return [];
     }
+    const sentMessage = thread.messages.find((message) => message.id === command.message.messageId);
+    const redelivery = isSentMessageRedelivery(command);
+    // A message already in the transcript is only re-queued by the server's busy recovery.
+    if (sentMessage && !redelivery) return [];
+    if (redelivery && sentMessage?.role !== "user") {
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail: "Only a user message already in the thread can be redelivered.",
+      });
+    }
     if (command.delivery === "auto" && canAutoDispatch && queuedPrompts.length === 0) {
       return yield* decideThreadTurnStartCommand({
         readModel,
@@ -197,9 +207,9 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       command,
       readModel,
       targetThread: thread,
-      queuePosition: queuedPrompts.length + 1,
+      queuePosition: redelivery ? redeliveryQueuePosition(thread) : queuedPrompts.length + 1,
     });
-    if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) {
+    if (!redelivery && countedQueuedPrompts(queuedPrompts) >= MAX_QUEUED_PROMPTS) {
       return yield* new OrchestrationCommandInvariantError({
         commandType: command.type,
         detail: PROMPT_QUEUE_FULL_DETAIL,
@@ -232,7 +242,9 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
     return [queuedEvent, flushedEvent, ...startEvents];
   }
 
-  const prefix = consumableQueuedPrefix({ thread, ...command });
+  // The pending start's `requestedAt` is server time, so the user's release is judged by it too.
+  const releasedAt = nowIso();
+  const prefix = consumableQueuedPrefix({ thread, ...command, releasedAt });
   if (prefix.length === 0) return [];
   const flushedEvent: Omit<OrchestrationEvent, "sequence"> = {
     ...withEventBase({
@@ -246,7 +258,15 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
   };
   if (command.consumeOnly) return flushedEvent;
   const startEvents = yield* decideThreadTurnStartCommand({
-    readModel,
+    // "Send now" past a stale pending start replaces that start with this one.
+    readModel: userReleasesStalePendingTurnStart({ thread, ...command, releasedAt })
+      ? {
+          ...readModel,
+          threads: readModel.threads.map((entry) =>
+            entry.id === thread.id ? { ...entry, pendingTurnStart: null } : entry,
+          ),
+        }
+      : readModel,
     command: buildQueuedFlushTurnStart({
       prompt: prefix[0]!,
       thread,

@@ -16,11 +16,17 @@ import { Effect, Layer } from "effect";
 import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 import { ProviderTurnAdmissions } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindings } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
+import { OpencodeV2SharedBindingsLive } from "../../../persistence/Layers/OpencodeV2SharedBindings.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { makeOwnedClient } from "./Client.ts";
 import { OpencodeV2ServerManager } from "./ServerManager.ts";
 import { OpencodeV2Runtime } from "./Runtime.ts";
 import { FixtureEvents } from "./Test.fixtures.ts";
+import type { V2IsolatedProcessConfig } from "./ServerManager.child.ts";
+
+const response = (data: unknown) =>
+  new Response(JSON.stringify(data), { headers: { "content-type": "application/json" } });
 
 /** Real pinned Promise client against deterministic synthetic HTTP, backed by real SQLite. */
 export class V2RuntimeHttpFixture {
@@ -58,12 +64,14 @@ export class V2RuntimeHttpFixture {
   readonly deaths = new Set<() => void>();
   running = true;
   loseAck = false;
+  loseCreateAck = false;
   autoComplete = true;
   fail = false;
   hideAdmission = false;
   modelUnavailable = false;
   readonly modelHttpFailures = new Map<string, number>();
   failInterrupt = false;
+  failSessionVerification = false;
   readonly client = makeOwnedClient({
     endpoint: "http://127.0.0.1:45991",
     password: "synthetic-only",
@@ -79,7 +87,7 @@ export class V2RuntimeHttpFixture {
       this.source.subscribe(options?.signal ?? new AbortController().signal);
   }
 
-  private async fetch(url: string, init?: RequestInit) {
+  async fetch(url: string, init?: RequestInit) {
     const pathname = new URL(url).pathname;
     const method = init?.method ?? "GET";
     const body: Record<string, unknown> =
@@ -88,8 +96,16 @@ export class V2RuntimeHttpFixture {
     if (pathname.includes("experimental/mcp")) return new Response(null, { status: 204 });
     const parts = pathname.split("/");
     const sessionId = parts[parts.indexOf("session") + 1] ?? "";
-    const response = (data: unknown) =>
-      new Response(JSON.stringify(data), { headers: { "content-type": "application/json" } });
+    // Match the observed native router limit, independently of body-ID validation.
+    if (parts.includes("session") && sessionId.length > 100)
+      return new Response(null, { status: 404 });
+    if (
+      this.failSessionVerification &&
+      method === "GET" &&
+      /^\/api\/session\/[^/]+$/.test(pathname) &&
+      this.sessions.has(sessionId)
+    )
+      return new Response(null, { status: 404 });
     if (pathname === "/api/permission/saved") return response({ data: [] });
     if (pathname === "/api/model") {
       const location = { directory: new URL(url).searchParams.get("location[directory]")! };
@@ -127,6 +143,7 @@ export class V2RuntimeHttpFixture {
       if (this.sessions.has(native.id)) throw new Error("Duplicate fixture creation.");
       this.sessions.set(native.id, native);
       this.messages.set(native.id, []);
+      if (this.loseCreateAck) throw new Error("Synthetic lost creation acknowledgement.");
       return response({ data: native });
     }
     if (pathname === "/api/session/active") return response({ data: {} });
@@ -236,6 +253,8 @@ export class V2RuntimeHttpFixture {
     if (pathname.endsWith("/reply") || pathname.includes("/inbox/") || method === "PATCH")
       return new Response(null, { status: 204 });
     if (this.sessions.has(sessionId)) return response({ data: this.sessions.get(sessionId) });
+    if (method === "GET" && pathname === `/api/session/${sessionId}`)
+      return new Response(null, { status: 404 });
     throw new Error(`Unexpected synthetic request ${method} ${pathname}`);
   }
 
@@ -270,14 +289,36 @@ export class V2RuntimeHttpFixture {
   }
 }
 
+/** Fail-closed tests declare the retained cleanup failure that shutdown must still surface. */
+async function closeV2RuntimeFixture(
+  runtime: OpencodeV2Runtime<V2IsolatedProcessConfig>,
+  retained: string | undefined,
+) {
+  if (retained === undefined) return runtime.close();
+  const failure = await runtime.close().then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  if (!(failure instanceof Error) || !failure.message.includes(retained))
+    throw new Error(`Expected runtime close to surface retained cleanup: ${retained}`, {
+      cause: failure,
+    });
+}
+
 export async function withV2RuntimeFixture(
   run: (fixture: {
-    runtime: OpencodeV2Runtime;
+    runtime: OpencodeV2Runtime<V2IsolatedProcessConfig>;
     http: V2RuntimeHttpFixture;
     directory: string;
     events: ProviderRuntimeEvent[];
+    /** Shutdown must report this still-unconfirmed cleanup instead of releasing it. */
+    expectRetainedClose: (message: string) => void;
   }) => Promise<void>,
 ) {
+  let retainedClose: string | undefined;
+  const expectRetainedClose = (message: string) => {
+    retainedClose = message;
+  };
   const root = await mkdtemp(path.join(os.tmpdir(), "bigbud-v2-executing-fixture-"));
   const directory = path.join(root, "workspace");
   await mkdir(directory);
@@ -304,30 +345,37 @@ export async function withV2RuntimeFixture(
       },
     }),
   });
-  const layer = ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory));
+  const layer = Layer.merge(ProviderTurnAdmissionsLive, OpencodeV2SharedBindingsLive).pipe(
+    Layer.provide(SqlitePersistenceMemory),
+  );
   try {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           const journal = yield* ProviderTurnAdmissions;
+          const sharedBindings = yield* OpencodeV2SharedBindings;
           const runtime = new OpencodeV2Runtime({
             manager,
             journal,
+            sharedBindings,
             config: {
               binaryPath: "/synthetic/opencode",
               profileRoot: profile,
               runtimeTargetId: "local",
             },
-            emit: async (event) => {
+            emit: async (event, validate) => {
+              validate?.();
               events.push(event);
             },
             pollIntervalMs: 100,
             allowLocalWorkspace: true,
           });
           try {
-            yield* Effect.promise(() => run({ runtime, http, directory, events }));
+            yield* Effect.promise(() =>
+              run({ runtime, http, directory, events, expectRetainedClose }),
+            );
           } finally {
-            yield* Effect.promise(() => runtime.close());
+            yield* Effect.promise(() => closeV2RuntimeFixture(runtime, retainedClose));
           }
         }).pipe(Effect.provide(layer)),
       ),

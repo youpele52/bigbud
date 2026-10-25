@@ -115,6 +115,7 @@ export async function createThreadOrchestrationBridge(
       await deleteThreadOrchestrationToolAuth({
         stateDir: input.stateDir,
         threadId: input.threadId,
+        token,
       });
       await rm(bridgeDir, { recursive: true, force: true });
     },
@@ -161,6 +162,7 @@ export function buildClaudeOrchestrationBridgeConfig(
       `mcp__${bridge.serverName}__get_thread_status`,
       `mcp__${bridge.serverName}__get_system_resources`,
       `mcp__${bridge.serverName}__list_threads`,
+      `mcp__${bridge.serverName}__list_available_models`,
       `mcp__${bridge.serverName}__list_pinned_threads`,
       `mcp__${bridge.serverName}__pin_thread`,
       `mcp__${bridge.serverName}__unpin_thread`,

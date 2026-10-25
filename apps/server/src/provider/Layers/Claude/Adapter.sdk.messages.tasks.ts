@@ -11,6 +11,35 @@ import {
   type ClaudeSdkTaskNotification,
   type ClaudeSdkTaskUpdate,
 } from "./Adapter.sdk.messages.ts";
+import { boundSubagentText } from "@bigbud/shared/providerSubagents";
+
+/** Bounded identity-like string (task types, run IDs, agent names). */
+function label(value: unknown): string | undefined {
+  return boundSubagentText(value, "subject");
+}
+
+function bool(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function depth(value: unknown): number | undefined {
+  const number = finiteNumber(value);
+  return number !== undefined && Number.isInteger(number) && number >= 0 ? number : undefined;
+}
+
+/** SDK 0.3.301 fields shared by task frames; every one is optional on the wire. */
+function optionalTaskFields(record: Record<string, unknown> | undefined) {
+  const runId = label(record?.run_id);
+  const subagentType = label(record?.subagent_type);
+  const parentTaskId = label(record?.parent_task_id);
+  const ambient = bool(record?.ambient);
+  return {
+    ...(runId ? { runId } : {}),
+    ...(subagentType ? { subagentType } : {}),
+    ...(parentTaskId ? { parentTaskId } : {}),
+    ...(ambient !== undefined ? { ambient } : {}),
+  };
+}
 
 export function decodeClaudeTaskStartedMessage(value: unknown): ClaudeSdkTaskMessage | undefined {
   const base = identity(value, "system", "task_started");
@@ -19,7 +48,23 @@ export function decodeClaudeTaskStartedMessage(value: unknown): ClaudeSdkTaskMes
   const description = string(record?.description);
   if (!base || !taskId || !description) return undefined;
   const toolUseId = string(record?.tool_use_id);
-  return { ...base, taskId, description, ...(toolUseId ? { toolUseId } : {}) };
+  const taskType = label(record?.task_type);
+  const prompt = boundSubagentText(record?.prompt, "prompt");
+  const isBackgrounded = bool(record?.is_backgrounded);
+  const spawnDepth = depth(record?.spawn_depth);
+  const workflowName = label(record?.workflow_name);
+  return {
+    ...base,
+    taskId,
+    description,
+    ...(toolUseId ? { toolUseId } : {}),
+    ...optionalTaskFields(record),
+    ...(taskType ? { taskType } : {}),
+    ...(prompt ? { prompt } : {}),
+    ...(isBackgrounded !== undefined ? { isBackgrounded } : {}),
+    ...(spawnDepth !== undefined ? { spawnDepth } : {}),
+    ...(workflowName ? { workflowName } : {}),
+  };
 }
 
 export function decodeClaudeTaskProgressMessage(value: unknown): ClaudeSdkTaskMessage | undefined {
@@ -32,7 +77,7 @@ export function decodeClaudeTaskProgressMessage(value: unknown): ClaudeSdkTaskMe
   const toolUseId = string(record?.tool_use_id);
   const summary = string(record?.summary);
   const lastToolName = string(record?.last_tool_name);
-  const subagentType = string(record?.subagent_type);
+  const { runId, subagentType } = optionalTaskFields(record);
   return {
     ...base,
     taskId,
@@ -42,6 +87,7 @@ export function decodeClaudeTaskProgressMessage(value: unknown): ClaudeSdkTaskMe
     ...(summary ? { summary } : {}),
     ...(lastToolName ? { lastToolName } : {}),
     ...(subagentType ? { subagentType } : {}),
+    ...(runId ? { runId } : {}),
   };
 }
 
@@ -62,6 +108,8 @@ export function decodeClaudeTaskNotificationMessage(
     return undefined;
   const toolUseId = string(record?.tool_use_id);
   const taskUsage = usage(record?.usage);
+  const { runId, ambient } = optionalTaskFields(record);
+  const reason = label(record?.reason);
   return {
     ...base,
     taskId,
@@ -69,6 +117,9 @@ export function decodeClaudeTaskNotificationMessage(
     status,
     ...(taskUsage ? { usage: taskUsage } : {}),
     ...(toolUseId ? { toolUseId } : {}),
+    ...(runId ? { runId } : {}),
+    ...(reason ? { reason } : {}),
+    ...(ambient !== undefined ? { ambient } : {}),
   };
 }
 
@@ -86,16 +137,16 @@ export function decodeClaudeBackgroundTasksChangedMessage(
   const base = identity(value, "system", "background_tasks_changed");
   const tasks = asRecord(value)?.tasks;
   if (!base || !Array.isArray(tasks)) return undefined;
-  const normalized = tasks.map((task) => {
+  const normalized: Array<ClaudeSdkBackgroundTasks["tasks"][number]> = [];
+  for (const task of tasks) {
     const record = asRecord(task);
     const taskId = string(record?.task_id);
     const taskType = string(record?.task_type);
     const description = string(record?.description);
-    return taskId && taskType && description ? { taskId, taskType, description } : undefined;
-  });
-  return normalized.every((task) => task !== undefined)
-    ? { ...base, tasks: normalized }
-    : undefined;
+    if (!taskId || !taskType || !description) return undefined;
+    normalized.push({ taskId, taskType, description, ...optionalTaskFields(record) });
+  }
+  return { ...base, tasks: normalized };
 }
 
 export function decodeClaudeHookMessage(value: unknown): ClaudeSdkHookMessage | undefined {

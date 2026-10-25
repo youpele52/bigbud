@@ -2,7 +2,6 @@ import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { isRemoteExecutionTargetId } from "../components/sidebar/Sidebar.projects.logic";
-import { readNativeApi } from "../rpc/nativeApi";
 import { toastManager } from "../components/ui/toast";
 import {
   type RemoteExecutionAuthMode,
@@ -10,8 +9,6 @@ import {
 } from "../stores/remoteAccess/remoteAccess.store";
 import {
   REMOTE_EXECUTION_FOREGROUND_TIMEOUT_MS,
-  getRemoteAgentAccessError,
-  resolveRemoteExecutionCheckingStatus,
   resolveRemoteExecutionFailureStatus,
 } from "./useRemoteExecutionAccessGate.shared";
 import {
@@ -20,6 +17,8 @@ import {
   showRemoteExecutionFailureToast,
   startRemoteExecutionCheck,
 } from "./useRemoteExecutionAccessGate.checks";
+import { verifyRemoteExecutionTarget } from "./useRemoteExecutionAccessGate.verification";
+import { submitRemoteExecutionAuth as submitAuth } from "./useRemoteExecutionAccessGate.auth";
 
 interface EnsureRemoteExecutionTargetAccessInput {
   readonly executionTargetId: string | null | undefined;
@@ -44,22 +43,6 @@ export interface RemoteExecutionAccessGate {
   readonly closeRemoteExecutionAuthDialog: () => void;
   readonly setRemoteExecutionAuthSecret: (secret: string) => void;
   readonly submitRemoteExecutionAuth: () => Promise<void>;
-}
-async function verifyRemoteExecutionTarget(input: {
-  readonly executionTargetId: string;
-  readonly cwd?: string;
-}): Promise<void> {
-  const api = readNativeApi();
-  if (!api) {
-    throw new Error("Native API not found.");
-  }
-
-  const result = await api.server.verifyExecutionTarget({
-    executionTargetId: input.executionTargetId,
-    ...(input.cwd ? { cwd: input.cwd } : {}),
-  });
-  const remoteAgentError = getRemoteAgentAccessError(result.remoteAgent);
-  if (remoteAgentError) throw new Error(remoteAgentError);
 }
 
 function sleep(ms: number): Promise<void> {
@@ -95,38 +78,26 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
   const {
     verifiedExecutionTargetIds,
     executionTargetChecks,
-    pendingAction,
     isRemoteExecutionAuthDialogOpen,
     remoteExecutionAuthMode,
     remoteExecutionAuthPromptLabel,
     remoteExecutionAuthSecret,
     remoteExecutionAuthError,
     isAuthenticatingRemoteExecution,
-    markExecutionTargetVerified,
-    setExecutionTargetCheck,
     closeAuthDialog,
-    clearAuthDialog,
     setRemoteExecutionAuthSecret,
-    setRemoteExecutionAuthError,
-    setIsAuthenticatingRemoteExecution,
   } = useRemoteAccessStore(
     useShallow((state) => ({
       verifiedExecutionTargetIds: state.verifiedExecutionTargetIds,
       executionTargetChecks: state.executionTargetChecks,
-      pendingAction: state.pendingAction,
       isRemoteExecutionAuthDialogOpen: state.isAuthDialogOpen,
       remoteExecutionAuthMode: state.authMode,
       remoteExecutionAuthPromptLabel: state.authPromptLabel,
       remoteExecutionAuthSecret: state.authSecret,
       remoteExecutionAuthError: state.authError,
       isAuthenticatingRemoteExecution: state.isAuthenticating,
-      markExecutionTargetVerified: state.markExecutionTargetVerified,
-      setExecutionTargetCheck: state.setExecutionTargetCheck,
       closeAuthDialog: state.closeAuthDialog,
-      clearAuthDialog: state.clearAuthDialog,
       setRemoteExecutionAuthSecret: state.setAuthSecret,
-      setRemoteExecutionAuthError: state.setAuthError,
-      setIsAuthenticatingRemoteExecution: state.setIsAuthenticating,
     })),
   );
 
@@ -283,99 +254,12 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
   );
 
   const submitRemoteExecutionAuth = useCallback(async () => {
-    const secret = remoteExecutionAuthSecret.trim();
-    if (secret.length === 0) {
-      setRemoteExecutionAuthError(
-        remoteExecutionAuthMode === "password"
-          ? "Enter the SSH password."
-          : "Enter the SSH key passphrase.",
-      );
-      return;
-    }
-
-    if (!pendingAction || !remoteExecutionAuthMode) {
-      setRemoteExecutionAuthError(
-        "Remote access context was lost. Try opening the remote project again.",
-      );
-      return;
-    }
-
-    const api = readNativeApi();
-    if (!api) {
-      setRemoteExecutionAuthError("Native API not found.");
-      return;
-    }
-
-    setIsAuthenticatingRemoteExecution(true);
-    setRemoteExecutionAuthError(null);
-    try {
-      if (remoteExecutionAuthMode === "password") {
-        await api.server.unlockSshPassword({
-          executionTargetId: pendingAction.executionTargetId,
-          password: secret,
-        });
-      } else {
-        await api.server.unlockSshKey({
-          executionTargetId: pendingAction.executionTargetId,
-          passphrase: secret,
-        });
-      }
-      if (!pendingAction.skipAgentVerification) {
-        setExecutionTargetCheck(
-          pendingAction.executionTargetId,
-          resolveRemoteExecutionCheckingStatus(),
-        );
-        await verifyRemoteExecutionTarget({
-          executionTargetId: pendingAction.executionTargetId,
-          ...(pendingAction.cwd ? { cwd: pendingAction.cwd } : {}),
-        });
-        markExecutionTargetVerified(pendingAction.executionTargetId);
-      }
-      clearAuthDialog();
-      await pendingAction.onVerified();
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : remoteExecutionAuthMode === "password"
-            ? "Failed to unlock the SSH password session."
-            : "Failed to unlock the SSH key.";
-      const failureStatus = resolveRemoteExecutionFailureStatus(errorMessage);
-      setExecutionTargetCheck(pendingAction.executionTargetId, failureStatus);
-      if (failureStatus.status === "auth_required") {
-        setRemoteExecutionAuthError(errorMessage);
-        return;
-      }
-
-      closeAuthDialog();
-      showRemoteExecutionFailureToast({
-        executionTargetId: pendingAction.executionTargetId,
-        ...(pendingAction.unavailableTitle
-          ? { unavailableTitle: pendingAction.unavailableTitle }
-          : {}),
-        check: failureStatus,
-        retry: () => {
-          void beginRemoteExecutionTargetAccessCheck({
-            ...pendingAction,
-            resumeOnUnlockOnly: false,
-          });
-        },
-      });
-    } finally {
-      setIsAuthenticatingRemoteExecution(false);
-    }
-  }, [
-    beginRemoteExecutionTargetAccessCheck,
-    closeAuthDialog,
-    clearAuthDialog,
-    markExecutionTargetVerified,
-    pendingAction,
-    remoteExecutionAuthMode,
-    remoteExecutionAuthSecret,
-    setExecutionTargetCheck,
-    setIsAuthenticatingRemoteExecution,
-    setRemoteExecutionAuthError,
-  ]);
+    const pending = useRemoteAccessStore.getState().pendingAction;
+    await submitAuth(() => {
+      if (pending)
+        void beginRemoteExecutionTargetAccessCheck({ ...pending, resumeOnUnlockOnly: false });
+    });
+  }, [beginRemoteExecutionTargetAccessCheck]);
 
   const closeRemoteExecutionAuthDialog = useCallback(() => {
     if (isAuthenticatingRemoteExecution) {

@@ -6,6 +6,7 @@ import { makeRemoteAgentToolRunner } from "./remoteAgentToolRunner.ts";
 function makeProcessClient(input: {
   readonly exitCode?: number;
   readonly outputTruncated?: boolean;
+  readonly replayGap?: boolean;
   readonly received: Array<Record<string, unknown>>;
 }): RemoteAgentProcessClient {
   return {
@@ -38,6 +39,7 @@ function makeProcessClient(input: {
           errorCode: input.exitCode ? "NONZERO_EXIT" : "",
           errorMessage: input.exitCode ? "failure" : "",
         },
+        ...(input.replayGap ? { replayGap: true } : {}),
       };
     },
   } as unknown as RemoteAgentProcessClient;
@@ -85,5 +87,19 @@ describe("remote agent tool runner", () => {
 
     await expect(runner(input)).rejects.toThrow("failed (code=7)");
     await expect(runner({ ...input, allowNonZeroExit: true })).resolves.toMatchObject({ code: 7 });
+  });
+
+  it("names a replay gap as lost output with a verified exit, not an output overflow", async () => {
+    const runner = makeRemoteAgentToolRunner({
+      resolve: async () =>
+        makeProcessClient({ received: [], outputTruncated: true, replayGap: true }),
+    });
+    const input = { executionTargetId: "ssh:example", cwd: "/srv/project", command: "make" };
+
+    await expect(runner(input)).rejects.toThrow("finished with exit 0, output partly lost");
+    await expect(runner({ ...input, outputMode: "truncate" })).resolves.toMatchObject({
+      code: 0,
+      stdoutTruncated: true,
+    });
   });
 });

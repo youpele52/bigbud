@@ -36,12 +36,14 @@ export function applyUsageDisplayLabels(
   };
 }
 
-function resolveUsageProviderLabel(providerId: string): string {
+export function resolveUsageProviderLabel(providerId: string): string {
+  if (providerId === "unknown") return "Unattributed usage";
   const displayName = PROVIDER_DISPLAY_NAMES[providerId as keyof typeof PROVIDER_DISPLAY_NAMES];
   return displayName ?? providerId;
 }
 
 function resolveUsageModelLabel(modelId: string, providers: ReadonlyArray<ServerProvider>): string {
+  if (modelId === "unknown") return "Unattributed usage";
   for (const provider of providers) {
     const directMatch = findUsageModelMatch(provider, modelId);
     if (directMatch) {

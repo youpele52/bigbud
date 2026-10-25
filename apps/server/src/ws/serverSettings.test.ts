@@ -17,6 +17,26 @@ const makeServerSettingsLayer = () =>
   );
 
 it.layer(NodeServices.layer)("server settings", (it) => {
+  it.effect(
+    "has no implicit text model and preserves explicitly stored legacy-default choices",
+    () =>
+      Effect.gen(function* () {
+        const settings = yield* ServerSettingsService;
+        assert.isNull((yield* settings.getSettings).textGenerationModelSelection);
+        const selection = { provider: "codex" as const, model: "gpt-5.4-mini" };
+        const updated = yield* settings.updateSettings({
+          textGenerationModelSelection: selection,
+          providers: { codex: { enabled: false } },
+        });
+        assert.deepEqual(updated.textGenerationModelSelection, selection);
+        const config = yield* ServerConfig;
+        const fileSystem = yield* FileSystem.FileSystem;
+        const persisted = JSON.parse(yield* fileSystem.readFileString(config.settingsPath));
+        assert.deepEqual(persisted.textGenerationModelSelection, selection);
+        yield* settings.updateSettings({ textGenerationModelSelection: null });
+        assert.isNull((yield* settings.getSettings).textGenerationModelSelection);
+      }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
   it.effect("decodes nested settings patches", () =>
     Effect.sync(() => {
       const decodePatch = Schema.decodeUnknownSync(ServerSettingsPatch);
@@ -61,7 +81,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         },
         textGenerationModelSelection: {
           provider: "codex",
-          model: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
+          model: "explicit-model",
           options: {
             reasoningEffort: "high",
             fastMode: true,
@@ -93,10 +113,12 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         binaryPath: "/usr/local/bin/claude",
         customModels: ["claude-custom"],
         rollout: DEFAULT_SERVER_SETTINGS.providers.claudeAgent.rollout,
+        maxSubagentSpawnDepth: null,
+        maxConcurrentSubagents: null,
       });
       assert.deepEqual(next.textGenerationModelSelection, {
         provider: "codex",
-        model: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection.model,
+        model: "explicit-model",
         options: {
           reasoningEffort: "high",
           fastMode: false,
@@ -169,6 +191,8 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         binaryPath: "/opt/homebrew/bin/claude",
         customModels: [],
         rollout: DEFAULT_SERVER_SETTINGS.providers.claudeAgent.rollout,
+        maxSubagentSpawnDepth: null,
+        maxConcurrentSubagents: null,
       });
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );

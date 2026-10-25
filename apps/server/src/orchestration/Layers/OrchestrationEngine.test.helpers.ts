@@ -17,6 +17,7 @@ import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
 import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
+import { ProjectionCatalogQueryLive } from "./ProjectionCatalogQuery.ts";
 
 export const asProjectId = (value: string): ProjectId => ProjectId.makeUnsafe(value);
 export const asMessageId = (value: string): MessageId => MessageId.makeUnsafe(value);
@@ -45,11 +46,13 @@ export const hasMetricSnapshot = (
 
 export async function createOrchestrationSystem(input?: {
   readonly receipts?: OrchestrationCommandReceiptRepositoryShape;
+  readonly catalog?: boolean;
 }) {
   const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
     prefix: "t3-orchestration-engine-test-",
   });
   const orchestrationLayer = OrchestrationEngineLive.pipe(
+    Layer.provide(input?.catalog ? ProjectionCatalogQueryLive : Layer.empty),
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
     Layer.provide(ProjectionOperationalStateQueryLive),
     Layer.provide(OrchestrationProjectionPipelineLive),

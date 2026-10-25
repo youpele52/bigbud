@@ -3,23 +3,33 @@ use std::io::{self, Read, Write};
 use crate::{FrameError, v1};
 use prost::Message;
 
-/// Encodes a protobuf message with a four-byte big-endian length prefix.
-pub fn encode_frame(frame: &v1::Frame, maximum: usize) -> Result<Vec<u8>, FrameError> {
-    let payload = frame.encode_to_vec();
-    if payload.len() > maximum {
+/// Computes allocation/queue credit before encoding, including the length prefix.
+pub fn encoded_frame_length(frame: &v1::Frame, maximum: usize) -> Result<usize, FrameError> {
+    let payload_length = frame.encoded_len();
+    if payload_length > maximum {
         return Err(FrameError::Oversized {
-            actual: payload.len(),
+            actual: payload_length,
             maximum,
         });
     }
-
-    let length = u32::try_from(payload.len()).map_err(|_| FrameError::Oversized {
-        actual: payload.len(),
+    u32::try_from(payload_length).map_err(|_| FrameError::Oversized {
+        actual: payload_length,
         maximum,
     })?;
-    let mut encoded = Vec::with_capacity(payload.len() + 4);
-    encoded.extend_from_slice(&length.to_be_bytes());
-    encoded.extend_from_slice(&payload);
+    Ok(payload_length + 4)
+}
+
+/// Encodes into one reserved buffer, without a second unaccounted payload copy.
+pub fn encode_frame(frame: &v1::Frame, maximum: usize) -> Result<Vec<u8>, FrameError> {
+    let size = encoded_frame_length(frame, maximum)?;
+    let mut encoded = Vec::with_capacity(size);
+    encoded.extend_from_slice(&((size - 4) as u32).to_be_bytes());
+    // Vec has exactly the checked capacity; prost cannot grow it for this frame.
+    if frame.encode(&mut encoded).is_err() {
+        return Err(FrameError::Write(io::Error::other(
+            "reserved frame encoding failed",
+        )));
+    }
     Ok(encoded)
 }
 

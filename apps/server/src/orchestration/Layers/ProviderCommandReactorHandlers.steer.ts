@@ -15,6 +15,9 @@ import {
   serverCommandId,
 } from "./ProviderCommandReactorHelpers.ts";
 
+export const STEER_NEEDS_NATIVE_DETAIL =
+  "Steer needs native provider support; use Send now or Stop.";
+
 const followUpText = (texts: ReadonlyArray<string>) =>
   ["Additional instructions:", ...texts.map((text) => `- ${text}`)].join("\n");
 
@@ -125,7 +128,27 @@ export function makeProcessTurnSteerRequested(input: {
       capabilities.turnControl?.nativeSteer === true &&
       steerTurn !== undefined &&
       canNativelySteerQueuedPrefix(prefix);
-    const strategy = native ? "native-steer" : "interrupt-continue";
+    if (!native) {
+      // Steer never interrupts; Send now and Stop are the explicit interrupting actions.
+      yield* input.appendProviderFailureActivity({
+        threadId: thread.id,
+        kind: "provider.turn.steer.failed",
+        summary: "Steer is unavailable for this turn",
+        detail: STEER_NEEDS_NATIVE_DETAIL,
+        turnId: operation.expectedTurnId,
+        createdAt: event.payload.createdAt,
+      });
+      yield* setTurnControlOperation({
+        ...input,
+        threadId: thread.id,
+        operation,
+        state: "failed",
+        error: STEER_NEEDS_NATIVE_DETAIL,
+        createdAt: event.payload.createdAt,
+      });
+      return;
+    }
+    const strategy = "native-steer" as const;
     yield* setTurnControlOperation({
       ...input,
       threadId: thread.id,
@@ -135,27 +158,20 @@ export function makeProcessTurnSteerRequested(input: {
       createdAt: event.payload.createdAt,
     });
 
-    const delivery = native
-      ? steerTurn!({
-          threadId: thread.id,
-          input: followUpText(prefix.map((prompt) => prompt.text)),
-          ...(operation.expectedTurnId !== null ? { turnId: operation.expectedTurnId } : {}),
-          sessionEpoch: operation.sessionEpoch,
-        })
-      : input.providerService.interruptTurn({
-          threadId: thread.id,
-          ...(operation.expectedTurnId !== null ? { turnId: operation.expectedTurnId } : {}),
-          sessionEpoch: operation.sessionEpoch,
-        });
-    const delivered = yield* Effect.exit(delivery);
+    const delivered = yield* Effect.exit(
+      steerTurn({
+        threadId: thread.id,
+        input: followUpText(prefix.map((prompt) => prompt.text)),
+        ...(operation.expectedTurnId !== null ? { turnId: operation.expectedTurnId } : {}),
+        sessionEpoch: operation.sessionEpoch,
+      }),
+    );
     if (Exit.isFailure(delivered)) {
       const detail = formatProviderServiceCauseDetail(delivered.cause);
       yield* input.appendProviderFailureActivity({
         threadId: thread.id,
         kind: "provider.turn.steer.failed",
-        summary: native
-          ? "Provider turn steer delivery is uncertain"
-          : "Provider turn interrupt failed",
+        summary: "Provider turn steer delivery is uncertain",
         detail,
         turnId: operation.expectedTurnId,
         createdAt: event.payload.createdAt,
@@ -164,9 +180,9 @@ export function makeProcessTurnSteerRequested(input: {
         ...input,
         threadId: thread.id,
         operation: { ...operation, strategy },
-        state: native ? "ambiguous" : "failed",
+        state: "ambiguous",
         error: detail,
-        deliveryAmbiguous: native,
+        deliveryAmbiguous: true,
         createdAt: event.payload.createdAt,
       });
       return;
@@ -175,10 +191,9 @@ export function makeProcessTurnSteerRequested(input: {
       ...input,
       threadId: thread.id,
       operation: { ...operation, strategy },
-      state: native ? "provider-acknowledged" : "waiting-for-settlement",
+      state: "provider-acknowledged",
       createdAt: event.payload.createdAt,
     });
-    if (!native) return;
     yield* input.orchestrationEngine.dispatch({
       type: "thread.queued-prompt.flush",
       commandId: serverCommandId(`steer-flush-${event.eventId}`),

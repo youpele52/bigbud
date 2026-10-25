@@ -11,7 +11,13 @@ export interface ReleaseMetadata {
 }
 
 export function resolveReleaseMetadata(input: string): ReleaseMetadata {
-  const release = resolveReleaseVersion(input);
+  const sourceVersion = input.trim().replace(/^v/, "");
+  // Legacy tags may pad the patch number; package/updater versions must remain SemVer.
+  const canonicalVersion = sourceVersion.replace(
+    /^((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.)0+(\d+)(?=-|$)/,
+    (_match, core: string, patch: string) => `${core}${patch.replace(/^0+(?=\d)/, "")}`,
+  );
+  const release = resolveReleaseVersion(canonicalVersion);
   if (!release) {
     throw new Error(`Invalid or unsupported release version: ${input}`);
   }
@@ -20,7 +26,7 @@ export function resolveReleaseMetadata(input: string): ReleaseMetadata {
     channel: release.channel,
     isPrerelease: release.isPrerelease,
     makeLatest: !release.isPrerelease,
-    tag: `v${release.version}`,
+    tag: `v${sourceVersion}`,
     updateChannel: identity.updaterChannel,
     version: release.version,
   };

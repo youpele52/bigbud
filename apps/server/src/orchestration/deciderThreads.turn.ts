@@ -43,7 +43,13 @@ export type ThreadTurnCommand = Exclude<
       | "thread.runtime-mode.set"
       | "thread.interaction-mode.set"
       | "thread.task.upsert"
-      | "thread.task.remove";
+      | "thread.task.remove"
+      | "thread.fork"
+      | "thread.delegation.model-choice.hold"
+      | "thread.delegation.model-choice.expire"
+      | "thread.delegation.model-choice.pick"
+      | "thread.recovery.set"
+      | "thread.recovery.resolve";
   }
 >;
 

@@ -5,6 +5,7 @@ import { FileAccessSettingsSection } from "./FileAccessSettingsSection";
 import { SttSettingsSection } from "./SttSettingsSection";
 import { AgentBrowserSettingsSection } from "./AgentBrowserSettingsSection";
 import { FloatingAssistantSettingsSection } from "./FloatingAssistantSettingsSection";
+import { DelegatedThreadsSettingsSection } from "./DelegatedThreadsSettingsSection";
 
 export function AiSettingsPanel() {
   return (
@@ -13,6 +14,7 @@ export function AiSettingsPanel() {
       <AgentBrowserSettingsSection />
       <FloatingAssistantSettingsSection />
       <ComputerUseAccessSettingsSection />
+      <DelegatedThreadsSettingsSection />
       <AiSettingsSection />
       <SttSettingsSection />
     </SettingsPageContainer>

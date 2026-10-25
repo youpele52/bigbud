@@ -38,6 +38,7 @@ export function renderFilesPanelTree(props: FilesPanelTreeProps): ReactNode {
       <div key={entry.path}>
         <button
           type="button"
+          aria-current={!isDirectory && props.previewPath === entry.path ? "page" : undefined}
           draggable
           onDragStart={(event) => {
             if (!props.workspaceRoot) return;

@@ -19,6 +19,9 @@ import { useCallback, useRef } from "react";
 
 import type { WsRpcClient } from "./wsRpcClient";
 import { appAtomRegistry, resetAppAtomRegistryForTests } from "./atomRegistry";
+import { startServerConfigSync } from "./serverState.configSync";
+import { recordServerStall } from "./serverStallState";
+import { useBannerDismissalStore } from "../stores/ui/bannerDismissal.store";
 
 export type ServerConfigUpdateSource = ServerConfigStreamEvent["type"];
 
@@ -178,6 +181,8 @@ export function applyDiscoveryUpdated(discovery: ServerDiscoveryCatalog): void {
 }
 
 export function emitWelcome(payload: ServerLifecycleWelcomePayload): void {
+  // Reconnects retain the same run; only a new backend/app process resets UI dismissal.
+  useBannerDismissalStore.getState().observeRun(payload.serverRunId);
   appAtomRegistry.set(welcomeAtom, payload);
 }
 
@@ -200,36 +205,13 @@ export function onProvidersUpdated(
 }
 
 export function startServerStateSync(client: ServerStateClient): () => void {
-  let disposed = false;
-  const cleanups = [
-    client.subscribeLifecycle((event) => {
-      if (event.type === "welcome") {
-        emitWelcome(event.payload);
-      }
-    }),
-    client.subscribeConfig((event) => {
-      applyServerConfigEvent(event);
-    }),
-  ];
-
-  if (getServerConfig() === null) {
-    void client
-      .getConfig()
-      .then((config) => {
-        if (disposed || getServerConfig() !== null) {
-          return;
-        }
-        setServerConfigSnapshot(config);
-      })
-      .catch(() => undefined);
-  }
-
-  return () => {
-    disposed = true;
-    for (const cleanup of cleanups) {
-      cleanup();
-    }
-  };
+  return startServerConfigSync(client, {
+    getConfig: getServerConfig,
+    setSnapshot: setServerConfigSnapshot,
+    applyEvent: applyServerConfigEvent,
+    emitWelcome,
+    emitStalled: recordServerStall,
+  });
 }
 
 export function resetServerStateForTests() {

@@ -25,7 +25,7 @@ This plan governs the remaining work across all three earlier plans. It does not
 ## Related Work
 
 - [Original mobile adaptation plan](2026-09-06-mobile-floaty-chat-adaptation-plan.md): complete functional requirements, especially Phases 0–5 and the device matrix.
-- [Recovery correctness sidequest](2026-09-09-mobile-recovery-correctness-plan.md): targeted baseline, bounded replay and verified completion.
+- [Implemented recovery specification and evidence](../validation/2026-09-10-mobile-recovery-correctness-evidence.md#retired-recovery-specification--22-october-2026): targeted baseline, bounded replay and verified completion.
 - [Recovery evidence](../validation/2026-09-10-mobile-recovery-correctness-evidence.md): publication tests, operating limits and passing named synthetic memory fixture.
 - [Floating visual-parity plan](2026-09-10-mobile-floating-chat-visual-parity-plan.md): current appearance, drawer and matched-screenshot requirements.
 - Review R artifacts: `/tmp/bigbud-mobile-plan-review-probe.mjs` and `/tmp/bigbud-mobile-plan-review-probe-results.json`. These are temporary reproduction aids, not durable regression tests. The cases are specified below so implementation does not depend on these files surviving.

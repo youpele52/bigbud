@@ -5,6 +5,8 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it, vi } from "vitest";
 import { DEFAULT_SERVER_SETTINGS, MessageId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { ProviderTurnAdmissionsLive } from "../../../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindingsLive } from "../../../persistence/Layers/OpencodeV2SharedBindings.ts";
+import { makeTestSettings } from "../../../ws/serverSettings.testing.ts";
 import { ProviderSessionRuntimeRepositoryLive } from "../../../persistence/Layers/ProviderSessionRuntime.ts";
 import { SqlitePersistenceMemory } from "../../../persistence/Layers/Sqlite.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
@@ -24,11 +26,12 @@ import {
   makeSettingsHarness,
   threadId,
 } from "../../../orchestration/Layers/ProviderCommandReactorSessionOps.settings.test.helpers.ts";
-import { makeV2ApplicationRegistration } from "./Application.composition.ts";
+import { makeV2ActivatedFixtureRegistration as makeV2ApplicationRegistration } from "./Application.activation.fixture.ts";
 import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
 import { makeV2Client } from "./Client.ts";
 import { readV2SharedRegistration } from "./SharedService.registration.ts";
 import { Service } from "@opencode/client/service";
+import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 
 vi.mock("./Catalog.public.ts", async (original) => ({
   ...(await original<typeof import("./Catalog.public.ts")>()),
@@ -47,11 +50,13 @@ vi.mock(
 const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 const version = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_VERSION;
 
-it.skipIf(!binary || !version || process.platform !== "darwin")(
+it.skipIf(!binary || !version)(
   "routes captured cross-subprovider model/variant switching through application, ProviderService and orchestration without replacing history",
   async () => {
+    const appFixture = await makeV2ThreadPluginFixture();
     const fixture = await sharedServiceNativeFixture(binary!, async (file) => {
       const config = JSON.parse(await readFile(file, "utf8"));
+      config.plugins = [appFixture.artifact.pluginUri];
       config.providers["bigbud-v2-fixture-next"] = {
         ...config.providers["bigbud-v2-fixture"],
         models: {
@@ -63,14 +68,17 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
         },
       };
       await writeFile(file, JSON.stringify(config), { mode: 0o600 });
+    }).catch(async (error) => {
+      await appFixture.close();
+      throw error;
     });
     try {
       const configBefore = await readFile(fixture.configFile);
       const registrationBefore = await readFile(fixture.file);
       const endpoint = (await readV2SharedRegistration(fixture.file)).endpoint;
       const client = makeV2Client({ endpoint: endpoint.url, headers: Service.headers(endpoint) });
-      const settings = {
-        getSettings: Effect.succeed({
+      const settings = await Effect.runPromise(
+        makeTestSettings({
           ...DEFAULT_SERVER_SETTINGS,
           providers: {
             ...DEFAULT_SERVER_SETTINGS.providers,
@@ -79,11 +87,12 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
               binaryPath: "",
               profileRoot: "",
               serviceFile: fixture.file,
+              nativeServiceTrust: "managed-thread-tools-v2",
+              nativePluginConfigRoot: path.dirname(fixture.configFile),
             },
           },
         }),
-        streamChanges: Stream.never,
-      } as unknown as typeof ServerSettingsService.Service;
+      );
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* () {
@@ -241,11 +250,15 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
             }).pipe(Effect.provide(serviceLayer));
           }),
         ).pipe(
-          Effect.provide(ProviderTurnAdmissionsLive.pipe(Layer.provide(SqlitePersistenceMemory))),
+          Effect.provide(
+            Layer.merge(ProviderTurnAdmissionsLive, OpencodeV2SharedBindingsLive).pipe(
+              Layer.provide(SqlitePersistenceMemory),
+            ),
+          ),
           Effect.provideService(ServerSettingsService, settings),
           Effect.provideService(ServerConfig, {
             cwd: fixture.workspace,
-            stateDir: path.join(fixture.profile, "bigbud-state"),
+            stateDir: appFixture.root,
             port: 0,
           } as typeof ServerConfig.Service),
           Effect.provide(NodeServices.layer),
@@ -257,6 +270,7 @@ it.skipIf(!binary || !version || process.platform !== "darwin")(
       expect(await readFile(fixture.file)).toEqual(registrationBefore);
     } finally {
       await fixture.close();
+      await appFixture.close();
     }
   },
   60000,

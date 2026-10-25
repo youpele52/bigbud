@@ -2,16 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { DesktopBackendStartupState } from "@bigbud/contracts/server/ipc.desktop.ts";
 
 import { isElectron } from "../config/env";
-import { getWsConnectionStatus } from "../rpc/wsConnectionState";
 import { getWsRpcClient } from "../rpc/wsRpcClient";
-import {
-  shouldContinueDesktopStartupReconnect,
-  shouldReconnectAfterDesktopStartupTransition,
-} from "./WebSocketConnectionSurface.logic";
+import { resolveDesktopStartupReconnect } from "./WebSocketConnectionSurface.logic";
 import { toastManager } from "./ui/toast";
 
 const NOTICE_DELAY_MS = 30_000;
-const RECONNECT_INTERVAL_MS = 1_000;
 
 export async function getInitialDesktopBackendStartupState(
   getState: () => Promise<DesktopBackendStartupState>,
@@ -47,6 +42,13 @@ export function useDesktopBackendStartupState(): DesktopBackendStartupState | nu
   return state;
 }
 
+/** Toast text while the backend starts; shows migration progress when the backend reports it. */
+export function describeDesktopStartupProgress(state: DesktopBackendStartupState): string {
+  if (state.status !== "upgrading") return "bigbud is still starting. Please wait.";
+  const percent = state.progressPercent === undefined ? "" : `, ${state.progressPercent}%`;
+  return `Updating local data${percent}. Please wait.`;
+}
+
 export function DesktopBackendStartupCoordinator() {
   const state = useDesktopBackendStartupState();
   const toastRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
@@ -61,10 +63,7 @@ export function DesktopBackendStartupCoordinator() {
     }
     toastGenerationRef.current = state.generation;
     const toast = {
-      description:
-        state.status === "upgrading"
-          ? "Updating local data. Please wait."
-          : "bigbud is still starting. Please wait.",
+      description: describeDesktopStartupProgress(state),
       timeout: 0,
       title: "Starting bigbud",
       type: "info" as const,
@@ -94,17 +93,10 @@ export function DesktopBackendStartupCoordinator() {
   useEffect(() => {
     const previousState = previousStateRef.current;
     previousStateRef.current = state;
-    if (shouldReconnectAfterDesktopStartupTransition(isElectron, previousState, state)) {
-      void getWsRpcClient().reconnect();
-    }
-  }, [state]);
-
-  useEffect(() => {
-    if (!shouldContinueDesktopStartupReconnect(state)) return;
-    const interval = window.setInterval(() => {
-      if (getWsConnectionStatus().reconnectPhase === "exhausted") void getWsRpcClient().reconnect();
-    }, RECONNECT_INTERVAL_MS);
-    return () => window.clearInterval(interval);
+    const reconnect = resolveDesktopStartupReconnect(isElectron, previousState, state);
+    if (reconnect === "replace-session") void getWsRpcClient().reconnect();
+    // A backend that just became (or is confirmed) ready: skip the current backoff wait.
+    else if (reconnect === "skip-backoff") getWsRpcClient().reconnectNow();
   }, [state]);
 
   useEffect(

@@ -20,6 +20,7 @@ import type {
 } from "../../models/types";
 import type { LatestProposedPlanState, TimelineEntry } from "./session.logic";
 import { deriveWorkLogEntries, type WorkLogEntry } from "./worklog.logic";
+import type { AnsweredUserInput } from "./session.userInputHistory.logic";
 
 // ── Internal helpers ──────────────────────────────────────────────────
 
@@ -134,6 +135,7 @@ export function deriveTimelineEntries(
   proposedPlans: ProposedPlan[],
   workEntries: import("./worklog.logic").WorkLogEntry[],
   pendingUserInputs?: import("./session.logic").PendingUserInput[],
+  answeredUserInputs: AnsweredUserInput[] = [],
 ): TimelineEntry[] {
   const messageRows: TimelineEntry[] = messages.map((message) => ({
     id: message.id,
@@ -169,12 +171,22 @@ export function deriveTimelineEntries(
     createdAt: pendingUserInput.createdAt,
     pendingUserInput,
   }));
+  const answeredInputRows: TimelineEntry[] = answeredUserInputs.map((input) => ({
+    id: `user-input-question:${input.requestId}`,
+    kind: "user-input-question",
+    createdAt: input.createdAt,
+    pendingUserInput: input,
+    answers: input.answers,
+    answeredAt: input.answeredAt,
+  }));
+  const answeredInputIds = new Set(answeredInputRows.map((row) => row.id));
   return [
     ...messageRows,
     ...proposedPlanRows,
     ...thinkingRows,
     ...workRows,
-    ...userInputRows,
+    ...userInputRows.filter((row) => !answeredInputIds.has(row.id)),
+    ...answeredInputRows,
   ].toSorted((a, b) => {
     const createdAtOrder = a.createdAt.localeCompare(b.createdAt);
     if (createdAtOrder !== 0) {

@@ -32,6 +32,14 @@ export function v2NativeFailureMessage(message: SessionMessageAssistant | undefi
     error.message === "Upstream request failed: Model is unavailable."
   )
     return `${prefix} is unavailable at the upstream service despite catalog availability. No automatic resend or fallback.`;
+  if (
+    message.model.providerID === "opencode" &&
+    error.type === "provider.auth" &&
+    error.status === 401 &&
+    error.message ===
+      "This API key has expired. Create a new API key in OpenCode Console and replace it in your client or secret store. Signing in again will not renew this key."
+  )
+    return `${prefix} was rejected because the OpenCode Console API key has expired. Create a new API key in OpenCode Console and replace it in your client or secret store. Signing in again will not renew this key. No automatic resend or fallback.`;
   if (error.type === "provider.auth")
     return `${prefix} was rejected by native provider authentication or access policy. Inspect that provider's native connection; no automatic resend or fallback.`;
   return `${prefix} execution failed. No automatic resend or fallback.`;

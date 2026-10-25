@@ -23,6 +23,13 @@ export const DEFAULT_TRACE_POLICY: TracePolicy = {
   slowSqlSpanMs: 100,
 };
 
+/**
+ * Span attribute that keeps a span in production traces regardless of its
+ * duration. Use only for low-volume diagnostic spans such as connection
+ * health, ping and event-loop windows.
+ */
+export const TRACE_RETAIN_ATTRIBUTE = "trace.retain";
+
 const clampSampleRate = (value: number): number => Math.min(1, Math.max(0, value));
 
 const hasErrorEvent = (record: {
@@ -84,7 +91,7 @@ export const shouldPersistTraceRecord = (
   ) {
     return true;
   }
-  if (hasErrorStatus(record)) {
+  if (hasErrorStatus(record) || record.attributes[TRACE_RETAIN_ATTRIBUTE] === true) {
     return true;
   }
 

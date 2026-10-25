@@ -24,6 +24,7 @@ import {
 } from "./Adapter.types.ts";
 import { eventBase } from "./Adapter.utils.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 export type { PiAdapterLiveOptions } from "./Adapter.types.ts";
 
 export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiAdapterLiveOptions) {
@@ -134,6 +135,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiA
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.pi,
       supportsSteer: true,
       turnControl: {
         nativeSteer: true,

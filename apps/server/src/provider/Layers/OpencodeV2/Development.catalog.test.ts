@@ -5,6 +5,7 @@ import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
 import { makeV2DevelopmentProvider } from "./Development.provider.ts";
 import { normalizeV2PublicCatalog } from "./Catalog.public.ts";
+import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 
 it("publishes the full catalog with no native model/account, then retains browsing with truthful refresh failure", async () => {
   await withV2RuntimeFixture(async ({ runtime, http, directory }) => {
@@ -19,7 +20,7 @@ it("publishes the full catalog with no native model/account, then retains browsi
     });
     const info = vi
       .spyOn(http.client.server, "info")
-      .mockResolvedValue({ version: "2.0.26" } as Awaited<
+      .mockResolvedValue({ version: OPENCODE_V2_CLIENT_VERSION } as Awaited<
         ReturnType<typeof http.client.server.info>
       >);
     vi.spyOn(http.client.provider, "list").mockResolvedValue({ location: { directory }, data: [] });

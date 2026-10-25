@@ -1,28 +1,26 @@
 import { useCallback, useRef, useState } from "react";
 
 import type { ProjectId } from "@bigbud/contracts";
-import { toastManager } from "../ui/toast";
 import { readNativeApi } from "../../rpc/nativeApi";
 import {
-  getPassphraseProtectedSshKeyPath,
-  getPasswordProtectedSshTargetLabel,
-  getSshAuthFailureToastTitle,
-} from "../../lib/ssh";
-import {
+  applyRemoteProjectDraftChange,
   createDefaultRemoteProjectDraft,
   createRemoteProjectDraft,
   createRemoteProjectExecutionTargetId,
   getRemoteProjectConnectionLabel,
+  type RemoteProjectConnectionSource,
   type RemoteProjectDraft,
-  type RemoteProjectTransport,
+  type RemoteProjectDraftField,
 } from "./Sidebar.projects.logic";
+import { readLastRemoteProjectConnectionSource } from "./Sidebar.projects.connectionSourcePreference";
 import type { Project } from "../../models/types";
 import { useRemoteProjectSubmit } from "./Sidebar.projectAddActions.remote.submit";
+import { useRemoteProjectUnlock } from "./Sidebar.projectAddActions.remote.unlock";
 import {
   createRemoteProjectFieldErrors,
   hasRemoteProjectFieldErrors,
-  type RemoteProjectField,
   type RemoteProjectFieldErrors,
+  withoutRemoteProjectFieldError,
 } from "./Sidebar.projectAddActions.helpers";
 import type {
   SidebarRemoteAgentInstallRequest,
@@ -46,20 +44,17 @@ export function useSidebarRemoteProjectAddActions({
   >(null);
   const [isVerifyingRemoteProject, setIsVerifyingRemoteProject] = useState(false);
   const [isSavingRemoteProject, setIsSavingRemoteProject] = useState(false);
-  const [isRemoteProjectUnlockDialogOpen, setIsRemoteProjectUnlockDialogOpen] = useState(false);
-  const [remoteProjectUnlockMode, setRemoteProjectUnlockMode] = useState<
-    "ssh-key-passphrase" | "password" | null
-  >(null);
-  const [remoteProjectUnlockKeyPath, setRemoteProjectUnlockKeyPath] = useState("");
-  const [remoteProjectUnlockPassphrase, setRemoteProjectUnlockPassphrase] = useState("");
-  const [remoteProjectUnlockError, setRemoteProjectUnlockError] = useState<string | null>(null);
-  const [isUnlockingRemoteProjectKey, setIsUnlockingRemoteProjectKey] = useState(false);
   const [remoteProjectDialogMode, setRemoteProjectDialogMode] = useState<"add" | "edit">("add");
   const [editingProjectId, setEditingProjectId] = useState<ProjectId | null>(null);
   const [editingProjectUpdatedAt, setEditingProjectUpdatedAt] = useState<string | null>(null);
   const [remoteAgentInstallRequest, setRemoteAgentInstallRequest] =
     useState<SidebarRemoteAgentInstallRequest | null>(null);
   const verificationRequestIdRef = useRef(0);
+  const unlock = useRemoteProjectUnlock({
+    draft: remoteProjectDraft,
+    setDialogError: setRemoteProjectError,
+  });
+  const { dismiss: dismissUnlock, reset: resetUnlock, request: requestUnlock } = unlock;
 
   const resetRemoteProjectDialog = useCallback(() => {
     setIsRemoteProjectDialogOpen(false);
@@ -69,24 +64,19 @@ export function useSidebarRemoteProjectAddActions({
     setRemoteProjectVerificationMessage(null);
     setIsVerifyingRemoteProject(false);
     setIsSavingRemoteProject(false);
-    setIsRemoteProjectUnlockDialogOpen(false);
-    setRemoteProjectUnlockMode(null);
-    setRemoteProjectUnlockKeyPath("");
-    setRemoteProjectUnlockPassphrase("");
-    setRemoteProjectUnlockError(null);
-    setIsUnlockingRemoteProjectKey(false);
+    resetUnlock();
     setRemoteProjectDialogMode("add");
     setEditingProjectId(null);
     setEditingProjectUpdatedAt(null);
     setRemoteAgentInstallRequest(null);
     verificationRequestIdRef.current += 1;
-  }, []);
+  }, [resetUnlock]);
 
   const openRemoteProjectDialog = useCallback(() => {
     setRemoteProjectDialogMode("add");
     setEditingProjectId(null);
     setEditingProjectUpdatedAt(null);
-    setRemoteProjectDraft(createDefaultRemoteProjectDraft());
+    setRemoteProjectDraft(createDefaultRemoteProjectDraft(readLastRemoteProjectConnectionSource()));
     setIsRemoteProjectDialogOpen(true);
     setRemoteProjectFieldErrors({});
     setRemoteProjectError(null);
@@ -109,45 +99,30 @@ export function useSidebarRemoteProjectAddActions({
   }, []);
 
   const closeRemoteProjectDialog = useCallback(() => {
-    if (isAddingProject || isSavingRemoteProject || isUnlockingRemoteProjectKey) {
+    if (isAddingProject || isSavingRemoteProject || unlock.isUnlocking) {
       return;
     }
     resetRemoteProjectDialog();
-  }, [
-    isAddingProject,
-    isSavingRemoteProject,
-    isUnlockingRemoteProjectKey,
-    resetRemoteProjectDialog,
-  ]);
+  }, [isAddingProject, isSavingRemoteProject, unlock.isUnlocking, resetRemoteProjectDialog]);
 
   const updateRemoteProjectDraft = useCallback(
-    <K extends RemoteProjectField | "authMode" | "remoteTransport" | "providerRuntimeLocation">(
-      field: K,
-      value: K extends "authMode"
-        ? RemoteProjectDraft["authMode"]
-        : K extends "remoteTransport"
-          ? RemoteProjectTransport
-          : K extends "providerRuntimeLocation"
-            ? RemoteProjectDraft["providerRuntimeLocation"]
-            : string,
-    ) => {
+    <K extends RemoteProjectDraftField>(field: K, value: RemoteProjectDraft[K]) => {
       verificationRequestIdRef.current += 1;
-      setRemoteProjectDraft((current) => ({ ...current, [field]: value }));
+      setRemoteProjectDraft((current) => applyRemoteProjectDraftChange(current, field, value));
       setRemoteProjectError(null);
       setRemoteProjectVerificationMessage(null);
-      setIsRemoteProjectUnlockDialogOpen(false);
-      setRemoteProjectUnlockMode(null);
-      setRemoteProjectUnlockKeyPath("");
-      setRemoteProjectUnlockPassphrase("");
-      setRemoteProjectUnlockError(null);
-      setRemoteProjectFieldErrors((current) => {
-        if (!(field in current)) {
-          return current;
-        }
-        const next = { ...current };
-        delete next[field as RemoteProjectField];
-        return next;
-      });
+      dismissUnlock();
+      setRemoteProjectFieldErrors((current) => withoutRemoteProjectFieldError(current, field));
+    },
+    [dismissUnlock],
+  );
+
+  /** Edit-mode inference only: same target, so in-flight verification stays valid. */
+  const adoptRemoteProjectConnectionSource = useCallback(
+    (source: RemoteProjectConnectionSource) => {
+      setRemoteProjectDraft((current) =>
+        applyRemoteProjectDraftChange(current, "connectionSource", source),
+      );
     },
     [],
   );
@@ -210,25 +185,8 @@ export function useSidebarRemoteProjectAddActions({
         error instanceof Error
           ? error.message
           : "Failed to verify the SSH connection for this remote project.";
-      const lockedKeyPath = getPassphraseProtectedSshKeyPath(errorMessage);
-      const passwordTargetLabel = getPasswordProtectedSshTargetLabel(errorMessage);
       setRemoteProjectVerificationMessage(null);
-      if (lockedKeyPath) {
-        setRemoteProjectError(null);
-        setRemoteProjectUnlockMode("ssh-key-passphrase");
-        setRemoteProjectUnlockKeyPath(lockedKeyPath);
-        setRemoteProjectUnlockPassphrase("");
-        setRemoteProjectUnlockError(null);
-        setIsRemoteProjectUnlockDialogOpen(true);
-        return "unlock-required" as const;
-      }
-      if (passwordTargetLabel) {
-        setRemoteProjectError(null);
-        setRemoteProjectUnlockMode("password");
-        setRemoteProjectUnlockKeyPath(passwordTargetLabel);
-        setRemoteProjectUnlockPassphrase("");
-        setRemoteProjectUnlockError(null);
-        setIsRemoteProjectUnlockDialogOpen(true);
+      if (requestUnlock(errorMessage)) {
         return "unlock-required" as const;
       }
       setRemoteProjectError(errorMessage);
@@ -238,7 +196,7 @@ export function useSidebarRemoteProjectAddActions({
         setIsVerifyingRemoteProject(false);
       }
     }
-  }, [remoteProjectDraft]);
+  }, [remoteProjectDraft, requestUnlock]);
 
   const submitRemoteProject = useRemoteProjectSubmit({
     createProject,
@@ -286,85 +244,15 @@ export function useSidebarRemoteProjectAddActions({
     verifyRemoteProjectDialog,
   ]);
 
-  const closeRemoteProjectUnlockDialog = useCallback(() => {
-    if (isUnlockingRemoteProjectKey) {
-      return;
-    }
-    setIsRemoteProjectUnlockDialogOpen(false);
-    setRemoteProjectUnlockMode(null);
-    setRemoteProjectUnlockKeyPath("");
-    setRemoteProjectUnlockPassphrase("");
-    setRemoteProjectUnlockError(null);
-  }, [isUnlockingRemoteProjectKey]);
-
-  const submitRemoteProjectUnlock = useCallback(async () => {
-    const secret = remoteProjectUnlockPassphrase.trim();
-    if (secret.length === 0) {
-      setRemoteProjectUnlockError(
-        remoteProjectUnlockMode === "password"
-          ? "Enter the SSH password."
-          : "Enter the SSH key passphrase.",
-      );
-      return;
-    }
-
-    const api = readNativeApi();
-    if (!api) {
-      setRemoteProjectUnlockError("Native API not found.");
-      return;
-    }
-
-    setIsUnlockingRemoteProjectKey(true);
-    setRemoteProjectUnlockError(null);
-    try {
-      const executionTargetId = createRemoteProjectExecutionTargetId(remoteProjectDraft);
-      if (remoteProjectUnlockMode === "password") {
-        await api.server.unlockSshPassword({
-          executionTargetId,
-          password: secret,
-        });
-      } else {
-        await api.server.unlockSshKey({
-          executionTargetId,
-          passphrase: secret,
-        });
-      }
-      setIsRemoteProjectUnlockDialogOpen(false);
-      setRemoteProjectUnlockMode(null);
-      setRemoteProjectUnlockPassphrase("");
-      setRemoteProjectUnlockKeyPath("");
-
-      const verificationState = await verifyRemoteProjectDialog();
-      if (verificationState !== "verified") {
-        return;
-      }
-
-      await submitRemoteProject(remoteProjectDraft);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : remoteProjectUnlockMode === "password"
-            ? "Failed to unlock the SSH password session."
-            : "Failed to unlock the SSH key.";
-      setRemoteProjectUnlockError(errorMessage);
-      if (remoteProjectUnlockMode) {
-        toastManager.add({
-          type: "error",
-          title: getSshAuthFailureToastTitle(remoteProjectUnlockMode),
-          description: errorMessage,
-        });
-      }
-    } finally {
-      setIsUnlockingRemoteProjectKey(false);
-    }
-  }, [
-    remoteProjectDraft,
-    remoteProjectUnlockMode,
-    remoteProjectUnlockPassphrase,
-    submitRemoteProject,
-    verifyRemoteProjectDialog,
-  ]);
+  const submitRemoteProjectUnlock = useCallback(
+    () =>
+      unlock.submit(async () => {
+        if ((await verifyRemoteProjectDialog()) === "verified") {
+          await submitRemoteProject(remoteProjectDraft);
+        }
+      }),
+    [remoteProjectDraft, submitRemoteProject, unlock, verifyRemoteProjectDialog],
+  );
 
   return {
     remoteProjectDialogMode,
@@ -379,18 +267,20 @@ export function useSidebarRemoteProjectAddActions({
     openRemoteProjectEditDialog,
     closeRemoteProjectDialog,
     updateRemoteProjectDraft,
+    adoptRemoteProjectConnectionSource,
+    requestRemoteProjectUnlock: requestUnlock,
     submitRemoteProjectDialog,
     remoteAgentInstallRequest,
     declineRemoteAgentInstall,
     completeRemoteAgentInstall,
-    isRemoteProjectUnlockDialogOpen,
-    remoteProjectUnlockMode,
-    remoteProjectUnlockKeyPath,
-    remoteProjectUnlockPassphrase,
-    remoteProjectUnlockError,
-    isUnlockingRemoteProjectKey,
-    closeRemoteProjectUnlockDialog,
-    setRemoteProjectUnlockPassphrase,
+    isRemoteProjectUnlockDialogOpen: unlock.isOpen,
+    remoteProjectUnlockMode: unlock.mode,
+    remoteProjectUnlockKeyPath: unlock.keyPath,
+    remoteProjectUnlockPassphrase: unlock.passphrase,
+    remoteProjectUnlockError: unlock.error,
+    isUnlockingRemoteProjectKey: unlock.isUnlocking,
+    closeRemoteProjectUnlockDialog: unlock.close,
+    setRemoteProjectUnlockPassphrase: unlock.setPassphrase,
     submitRemoteProjectUnlock,
   };
 }

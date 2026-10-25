@@ -1,5 +1,5 @@
 import { isElectron } from "../../../config/env";
-import { BigbudLogo } from "../../sidebar/SidebarProjectItem";
+import { ChatGreeting } from "./ChatGreeting";
 import { SidebarTrigger } from "../../ui/sidebar";
 
 export function ChatViewEmptyState() {
@@ -16,10 +16,8 @@ export function ChatViewEmptyState() {
       {isElectron && (
         <div className="drag-region flex h-[52px] shrink-0 items-center border-b border-border px-5" />
       )}
-      <div className="flex flex-1 items-center justify-center">
-        <div className="flex flex-col items-center justify-center gap-3 opacity-70">
-          <BigbudLogo className="h-8" />
-        </div>
+      <div className="min-h-0 flex-1">
+        <ChatGreeting />
       </div>
     </div>
   );

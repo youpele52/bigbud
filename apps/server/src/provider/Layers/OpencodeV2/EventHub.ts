@@ -1,6 +1,14 @@
 import type { OpenCodeEvent } from "@opencode/client";
 
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
+import { checkedV2EventConnection } from "./EventHub.connection.ts";
+import { isV2LocationlessExecutionStart } from "./EventHub.hints.ts";
+import {
+  V2ChildIndex,
+  V2_MAX_CHILDREN_PER_OWNER,
+  isV2ChildHintEvent,
+  v2CreatedChild,
+} from "./EventHub.children.ts";
 
 export interface V2EventOwner {
   readonly nativeSessionId: string;
@@ -8,6 +16,10 @@ export interface V2EventOwner {
   readonly onEvent: (event: OpenCodeEvent, signal: AbortSignal) => Promise<void>;
   /** Dirty is sticky until authoritative reconciliation, never a terminal claim. */
   readonly onDirty: (reason: "gap" | "overflow" | "ambiguous" | "consumer-failed") => void;
+  /** Request a fresh caller-owned read after an aborted delivery has finished unwinding. */
+  readonly onDrained?: () => void;
+  /** A known native child changed; the owner may refresh its read-only observer. */
+  readonly onChildHint?: () => void;
 }
 
 type Owner = V2EventOwner & {
@@ -16,7 +28,9 @@ type Owner = V2EventOwner & {
   active: boolean;
   dirty: boolean;
   dirtyGeneration: number;
+  arrivalGeneration: number;
   delivery: AbortController;
+  reconcileAfterDrain: boolean;
 };
 
 export function validateV2EventHubBounds(input: {
@@ -42,13 +56,20 @@ export function validateV2EventHubBounds(input: {
 /** Single process stream, bounded per-owner buffers, no guessed Location routing. */
 export class OpencodeV2EventHub {
   private readonly owners = new Map<string, Owner>();
+  private readonly children = new V2ChildIndex();
+  private readonly ownedChildren = new V2ChildIndex();
   private controller: AbortController | undefined;
   private task: Promise<void> | undefined;
   private closed = false;
+  private connected = false;
 
   constructor(
     private readonly input: {
-      readonly subscribe: (signal: AbortSignal) => AsyncIterable<OpenCodeEvent>;
+      readonly subscribe: (
+        signal: AbortSignal,
+        activity?: () => void,
+      ) => AsyncIterable<OpenCodeEvent>;
+      readonly requireMarker?: boolean;
       readonly maxOwners: number;
       readonly maxQueuedEvents: number;
       readonly maxEventBytes: number;
@@ -73,15 +94,20 @@ export class OpencodeV2EventHub {
       active: true,
       dirty: false,
       dirtyGeneration: 0,
+      arrivalGeneration: 0,
       delivery: new AbortController(),
+      reconcileAfterDrain: false,
     };
     this.owners.set(owner.nativeSessionId, record);
     return () => {
       record.active = false;
       record.delivery.abort();
       record.queue.length = 0;
-      if (this.owners.get(owner.nativeSessionId) === record)
+      if (this.owners.get(owner.nativeSessionId) === record) {
         this.owners.delete(owner.nativeSessionId);
+        this.children.forget(owner.nativeSessionId);
+        this.ownedChildren.forget(owner.nativeSessionId);
+      }
     };
   }
 
@@ -91,8 +117,10 @@ export class OpencodeV2EventHub {
     if (this.task) return;
     const controller = new AbortController();
     this.controller = controller;
+    this.connected = !this.input.requireMarker;
     this.task = this.consume(controller).finally(() => {
       if (this.controller === controller) {
+        this.connected = false;
         this.controller = undefined;
         this.task = undefined;
       }
@@ -108,14 +136,68 @@ export class OpencodeV2EventHub {
     return this.owners.get(nativeSessionId)?.dirtyGeneration;
   }
 
+  /** Local arrival fence, not a native atomic snapshot or protection against events still in transit. */
+  captureArrivalFence(nativeSessionId: string): (() => void) | undefined {
+    const owner = this.owners.get(nativeSessionId),
+      controller = this.controller;
+    if (
+      !owner?.active ||
+      !controller ||
+      controller.signal.aborted ||
+      !this.connected ||
+      this.closed
+    )
+      return undefined;
+    const arrival = owner.arrivalGeneration,
+      dirty = owner.dirtyGeneration;
+    return () => {
+      if (
+        this.closed ||
+        !this.connected ||
+        this.controller !== controller ||
+        controller.signal.aborted ||
+        this.owners.get(nativeSessionId) !== owner ||
+        !owner.active ||
+        owner.arrivalGeneration !== arrival ||
+        owner.dirtyGeneration !== dirty
+      )
+        throw new Error(
+          "V2 native event arrival/connection changed; closure evidence retained, not settled.",
+        );
+    };
+  }
+
+  /** Children returned by an owner's own observer read; bounded per owner. */
+  noteChildren(ownerSessionId: string, childIds: ReadonlyArray<string>): void {
+    if (this.closed || !this.owners.has(ownerSessionId)) return;
+    for (const childId of childIds) this.children.learn(ownerSessionId, childId);
+  }
+
+  /** Executable membership comes only from durable before-prompt enrollment, not discovery. */
+  noteOwnedChildren(ownerSessionId: string, childIds: readonly string[]): void {
+    if (this.closed || !this.owners.has(ownerSessionId)) return;
+    if (new Set(childIds).size !== childIds.length || childIds.length > V2_MAX_CHILDREN_PER_OWNER)
+      throw new Error("V2 owned child hint capacity rejected.");
+    this.ownedChildren.forget(ownerSessionId);
+    for (const id of childIds)
+      if (!this.ownedChildren.learn(ownerSessionId, id))
+        throw new Error("V2 owned child hint ownership conflict.");
+  }
+
   isDirty(nativeSessionId: string): boolean {
     return this.owners.get(nativeSessionId)?.dirty ?? false;
   }
 
   reconciled(nativeSessionId: string, generation = this.generation(nativeSessionId)): boolean {
     const owner = this.owners.get(nativeSessionId);
-    if (!owner || owner.draining || this.closed || generation !== owner.dirtyGeneration)
+    if (!owner || this.closed || generation !== owner.dirtyGeneration) return false;
+    // Healthy callback reconciliation is already in the current generation. Replacing
+    // its delivery signal or treating its own drain as a gap would invalidate its output.
+    if (!owner.dirty) return true;
+    if (owner.draining) {
+      owner.reconcileAfterDrain = true;
       return false;
+    }
     owner.delivery = new AbortController();
     owner.dirty = false;
     return true;
@@ -135,10 +217,36 @@ export class OpencodeV2EventHub {
     }
   }
 
-  private async consume(controller: AbortController): Promise<void> {
+  /** Unknown IDs stay dropped; a known child only nudges its owner, never delivers content. */
+  private hintChild(event: OpenCodeEvent, sessionID: string): void {
+    const created = v2CreatedChild(event);
+    if (created?.childId === sessionID && this.owners.has(created.parentId))
+      this.children.learn(created.parentId, created.childId);
+    const enrolledOwner = this.ownedChildren.ownerOf(sessionID);
+    const ownerId = enrolledOwner ?? this.children.ownerOf(sessionID);
+    const owner = ownerId === undefined ? undefined : this.owners.get(ownerId);
+    if (!owner?.active || !owner.onChildHint || (!enrolledOwner && !isV2ChildHintEvent(event)))
+      return;
     try {
-      for await (const event of this.input.subscribe(controller.signal)) {
+      owner.onChildHint();
+    } catch {
+      /* A hint is advisory; the parent's own reconcile still observes children. */
+    }
+  }
+
+  private async consume(controller: AbortController): Promise<void> {
+    let sawMarker = false;
+    try {
+      const source = this.input.requireMarker
+        ? checkedV2EventConnection({ subscribe: this.input.subscribe, signal: controller.signal })
+        : this.input.subscribe(controller.signal);
+      for await (const event of source) {
         if (this.closed || controller.signal.aborted) return;
+        if (event.type === "server.connected") {
+          if (sawMarker) this.markGap(); // A transport may reconnect inside its iterator.
+          sawMarker = true;
+          this.connected = true;
+        }
         const envelope = event as {
           data?: { sessionID?: unknown; form?: { sessionID?: unknown } };
           location?: { directory?: unknown };
@@ -146,7 +254,16 @@ export class OpencodeV2EventHub {
         const sessionID = envelope.data?.sessionID ?? envelope.data?.form?.sessionID;
         if (typeof sessionID !== "string") continue;
         const owner = this.owners.get(sessionID);
-        if (!owner) continue;
+        if (!owner) {
+          this.hintChild(event, sessionID);
+          continue;
+        }
+        // Invalidate observations BEFORE delivery queues, Location filtering, or an exclusive
+        // consumer can delay processing. A locationless execution start is still activity.
+        owner.arrivalGeneration++;
+        // The pinned native start notification is allowed to omit Location. Never route it
+        // as owned content or infer a source gap from this explicitly optional hint.
+        if (isV2LocationlessExecutionStart(event, sessionID)) continue;
         if (envelope.location?.directory !== owner.location) {
           this.dirty(owner, "ambiguous");
           continue;
@@ -168,7 +285,8 @@ export class OpencodeV2EventHub {
     } catch {
       /* A failed stream proves a gap, not completion or no admission. */
     } finally {
-      if (!this.closed) this.markGap();
+      controller.abort();
+      if (!this.closed && this.controller === controller) this.markGap();
     }
   }
 
@@ -189,6 +307,14 @@ export class OpencodeV2EventHub {
       if (owner.active && !this.closed) this.dirty(owner, "consumer-failed");
     } finally {
       owner.draining = false;
+      if (owner.reconcileAfterDrain && owner.active && !this.closed) {
+        owner.reconcileAfterDrain = false;
+        try {
+          owner.onDrained?.();
+        } catch {
+          /* Dirty remains sticky until another owned read. */
+        }
+      }
     }
   }
 
@@ -202,6 +328,8 @@ export class OpencodeV2EventHub {
       owner.queue.length = 0;
     }
     this.owners.clear();
+    this.children.clear();
+    this.ownedChildren.clear();
     await runWithAbortableDeadline({
       operation: "OpenCode v2 stream cleanup",
       timeoutMs: 1000,

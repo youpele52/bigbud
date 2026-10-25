@@ -1,7 +1,11 @@
 /** Local HTTP metadata only; never retain a native response body or SDK request/cause. */
 export class V2HttpStatusError extends Error {
-  constructor(readonly status: number) {
-    super(`OpenCode v2 request returned HTTP ${status}; admission may be unconfirmed.`);
+  constructor(
+    readonly status: number,
+    operation = "request",
+  ) {
+    const label = /^[A-Za-z][A-Za-z0-9 ._-]{0,95}$/.test(operation) ? operation : "request";
+    super(`OpenCode v2 ${label} returned HTTP ${status}; admission may be unconfirmed.`);
     this.name = "V2HttpStatusError";
   }
 }
@@ -13,7 +17,7 @@ export function v2HttpFailureStatus(error: unknown): number | undefined {
     if (
       current instanceof V2HttpStatusError &&
       Number.isInteger(current.status) &&
-      current.status >= 500 &&
+      current.status >= 400 &&
       current.status <= 599
     )
       return current.status;

@@ -7,14 +7,10 @@ import type { OwnedV2Process } from "./ServerManager.child.ts";
 
 const config = {
   runtimeTargetId: "local",
-  binaryPath: "/native/opencode",
-  profileRoot: "/native/opencode.db",
   sharedService: {
     registrationFile: "/native/service.json",
-    databasePath: "/native/opencode.db",
     storageIdentity: "same-db",
     generation: "registered",
-    binaryPath: "/native/opencode",
   },
 };
 const bounds = {
@@ -50,10 +46,7 @@ it("shares one borrowed hub across different workspace roots and logically retir
     second = borrowed();
   const start = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
   const manager = new OpencodeV2ServerManager({ ...bounds, start });
-  const leases = await Promise.all([
-    manager.acquire({ ...config, workspaceRoot: "/a" }),
-    manager.acquire({ ...config, workspaceRoot: "/b" }),
-  ]);
+  const leases = await Promise.all([manager.acquire(config), manager.acquire(config)]);
   expect(start).toHaveBeenCalledTimes(1);
   expect(leases[0]!.hub).toBe(leases[1]!.hub);
   expect(() => leases[0]!.claimExclusive()).toThrow("cannot be exclusively owned");

@@ -249,6 +249,9 @@ export function makeDispatchBootstrapThreadCommand(
               interactionMode: bootstrap.createThread.interactionMode,
               branch: bootstrap.createThread.branch,
               worktreePath: bootstrap.createThread.worktreePath,
+              ...(bootstrap.createThread.worktreeBinding
+                ? { worktreeBinding: bootstrap.createThread.worktreeBinding }
+                : {}),
               createdAt: bootstrap.createThread.createdAt,
             });
           }

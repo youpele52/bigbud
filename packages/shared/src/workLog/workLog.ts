@@ -11,7 +11,22 @@ import {
   type TurnId,
 } from "@bigbud/contracts";
 
+import {
+  DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
+  DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
+} from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
+import { PROMPT_SUGGESTION_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.promptSuggestion";
+
 import { extractWorkLogPayloadDetails } from "./workLog.payload";
+import { PROVIDER_TURN_FAILURE_NOTICE_KIND } from "../providerTurnFailure";
+
+/** Rendered by the model choice notice or the composer's prompt suggestion, not the work log. */
+const NOTICE_ACTIVITY_KINDS: ReadonlySet<string> = new Set([
+  PROVIDER_TURN_FAILURE_NOTICE_KIND,
+  DELEGATION_MODEL_CHOICE_REQUESTED_ACTIVITY_KIND,
+  DELEGATION_MODEL_CHOICE_RESOLVED_ACTIVITY_KIND,
+  PROMPT_SUGGESTION_ACTIVITY_KIND,
+]);
 
 export interface WorkLogEntry {
   id: string;
@@ -207,6 +222,8 @@ export function deriveWorkLogEntries(
     .filter((activity) => activity.kind !== "tool.started")
     .filter((activity) => activity.kind !== "task.started" && activity.kind !== "task.completed")
     .filter((activity) => activity.kind !== "context-window.updated")
+    .filter((activity) => !activity.kind.startsWith("text-generation."))
+    .filter((activity) => !NOTICE_ACTIVITY_KINDS.has(activity.kind))
     .filter((activity) => activity.summary !== "Checkpoint captured")
     .filter((activity) => !isPlanBoundaryToolActivity(activity))
     .map(toDerivedWorkLogEntry);

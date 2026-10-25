@@ -83,7 +83,7 @@ describe("WsTransport disconnect logging", () => {
       expect(warnSpy).toHaveBeenCalledTimes(1);
     });
     expect(warnSpy).toHaveBeenCalledWith("WebSocket RPC subscription disconnected", {
-      error: "SocketCloseError: 1006",
+      category: "subscription_failure",
     });
 
     unsubscribeA();
@@ -115,10 +115,13 @@ describe("WsTransport dispose ordering", () => {
     });
     const transport = {
       disposed: false,
+      disposalController: new AbortController(),
+      subscriptionControllers: new Set<AbortController>(),
       session: {
         clientScope: {} as never,
         closeScope,
         runtime,
+        readinessController: new AbortController(),
       },
       closeSession,
     } as unknown as WsTransport;

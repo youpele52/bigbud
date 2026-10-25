@@ -24,6 +24,7 @@ export function withClaudeProbeRuntime<A>(
         options: {
           pathToClaudeCodeExecutable: binaryPath,
           abortController,
+          permissionMode: "default",
           settingSources: ["user", "project", "local"],
           allowedTools: [],
           stderr: () => {},

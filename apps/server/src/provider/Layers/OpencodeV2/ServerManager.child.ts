@@ -4,33 +4,35 @@ import { mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
-import { makeOwnedClient, v2Request, type OpencodeV2Client } from "./Client.ts";
+import { makeOwnedClient, v2Request } from "./Client.ts";
 import { assertDevelopmentVersion, validateOwnedEndpoint } from "./Compatibility.ts";
 import { inspectPrivateV2Profile } from "./ProfileIsolation.mjs";
+import {
+  requireV2NativeIsolation,
+  verifyV2NativeFixtureImage,
+  v2NativeFixtureEnvironment,
+} from "./SharedService.native.isolation.fixture.ts";
+import {
+  verifyV2SyntheticNodeFixture,
+  type V2SyntheticLauncherGrant,
+} from "./ServerManager.synthetic.authorization.ts";
 
-export interface V2ProcessConfig {
-  readonly sharedService?: import("./SharedService.storage.ts").V2SharedStorage;
-  readonly binaryPath: string;
-  readonly profileRoot: string;
-  readonly runtimeTargetId: string;
-  readonly workspaceRoot?: string;
-  readonly codingEndpoint?: { readonly url: string; readonly token: string };
-}
-
-export interface OwnedV2Process {
-  readonly ownership?: "borrowed";
-  readonly client: OpencodeV2Client;
-  readonly isRunning: () => boolean;
-  /** Physical generation-exit proof, not a logical stopping/transport-health flag. */
-  readonly hasExited?: () => boolean;
-  readonly onDeath: (listener: () => void) => () => void;
-  /** Transport loss without native physical-exit proof. Ownership remains live/unknown. */
-  readonly onUnavailable?: (listener: () => void) => () => void;
-  readonly close: () => Promise<void>;
-}
+import type {
+  V2IsolatedProcessConfig,
+  V2ProcessConfig,
+  OwnedV2Process,
+} from "./ServerManager.types.ts";
+export type {
+  V2IsolatedProcessConfig,
+  V2SharedProcessConfig,
+  V2ProcessConfig,
+  OwnedV2Process,
+} from "./ServerManager.types.ts";
 
 /** Only explicitly isolated roots and a small environment allowlist reach the child. */
-export async function isolatedEnvironment(config: V2ProcessConfig): Promise<NodeJS.ProcessEnv> {
+export async function isolatedEnvironment(
+  config: V2IsolatedProcessConfig,
+): Promise<NodeJS.ProcessEnv> {
   if (config.runtimeTargetId !== "local") {
     throw new Error("OpenCode v2 SSH bootstrap is not yet verified; runtime unavailable.");
   }
@@ -49,7 +51,7 @@ export async function isolatedEnvironment(config: V2ProcessConfig): Promise<Node
   }
   await runWithAbortableDeadline({
     operation: "V2 launcher profile isolation",
-    timeoutMs: 5000,
+    timeoutMs: process.platform === "win32" ? 30000 : 5000,
     run: (signal) => inspectPrivateV2Profile(config.profileRoot, { signal, marker: false }),
   });
   const env: NodeJS.ProcessEnv = {};
@@ -107,8 +109,13 @@ export async function closeOwnedChild(child: ChildProcess): Promise<void> {
   });
 }
 
-async function executableVersion(config: V2ProcessConfig, env: NodeJS.ProcessEnv): Promise<string> {
-  const child = spawn(config.binaryPath, ["--version"], {
+async function executableVersion(
+  config: V2IsolatedProcessConfig,
+  env: NodeJS.ProcessEnv,
+  executable: string,
+  prefix: readonly string[],
+): Promise<string> {
+  const child = spawn(executable, [...prefix, "--version"], {
     env,
     cwd: config.profileRoot,
     shell: false,
@@ -188,16 +195,47 @@ async function readiness(child: ChildProcess): Promise<string> {
   });
 }
 
-export async function startOwnedV2Process(config: V2ProcessConfig): Promise<OwnedV2Process> {
-  const env = await isolatedEnvironment(config);
-  assertDevelopmentVersion(await executableVersion(config, env));
+export async function startOwnedV2Process(
+  config: V2ProcessConfig,
+  synthetic?: V2SyntheticLauncherGrant,
+): Promise<OwnedV2Process> {
+  if (config.sharedService) throw new Error("V2 owned launcher refuses a borrowed shared service.");
+  const approval = synthetic ? undefined : await requireV2NativeIsolation(config.binaryPath);
+  const launch = synthetic
+    ? await verifyV2SyntheticNodeFixture(synthetic, config)
+    : { executable: config.binaryPath, prefix: [] };
+  const isolated = await isolatedEnvironment(config);
+  const env = approval
+    ? v2NativeFixtureEnvironment(
+        approval,
+        config.profileRoot,
+        config.workspaceRoot ?? config.profileRoot,
+        isolated,
+      )
+    : {
+        ...isolated,
+        PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
+        TMPDIR: config.profileRoot,
+        TMP: config.profileRoot,
+        TEMP: config.profileRoot,
+      };
+  const version = await executableVersion(config, env, launch.executable, launch.prefix);
+  assertDevelopmentVersion(version);
+  if (approval && version !== approval.nativeVersion)
+    throw new Error("V2 retail image/version mismatch.");
+  if (approval) await verifyV2NativeFixtureImage(approval);
+  if (synthetic) await verifyV2SyntheticNodeFixture(synthetic, config);
   let password = randomBytes(32).toString("base64url");
-  const child = spawn(config.binaryPath, ["serve", "--stdio", "--hostname=127.0.0.1", "--port=0"], {
-    cwd: config.profileRoot,
-    env: { ...env, OPENCODE_PASSWORD: password },
-    stdio: ["pipe", "pipe", "pipe"],
-    shell: false,
-  });
+  const child = spawn(
+    launch.executable,
+    [...launch.prefix, "serve", "--stdio", "--hostname=127.0.0.1", "--port=0"],
+    {
+      cwd: config.profileRoot,
+      env: { ...env, OPENCODE_PASSWORD: password },
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: false,
+    },
+  );
   child.stdin.on("error", () => {});
   child.stderr.resume();
   let dead = false;
@@ -223,6 +261,8 @@ export async function startOwnedV2Process(config: V2ProcessConfig): Promise<Owne
     const client = makeOwnedClient({ endpoint, password });
     const info = await v2Request("server.info", (signal) => client.server.info({ signal }));
     assertDevelopmentVersion(info.version);
+    if (info.version !== version) throw new Error("V2 owned image/health version mismatch.");
+    if (approval) await verifyV2NativeFixtureImage(approval);
     if (info.pid !== child.pid || dead) throw new Error("OpenCode v2 endpoint ownership rejected.");
     return {
       client,
@@ -241,6 +281,7 @@ export async function startOwnedV2Process(config: V2ProcessConfig): Promise<Owne
         password = "";
         closing ??= closeOwnedChild(child);
         await closing;
+        if (approval) await verifyV2NativeFixtureImage(approval);
       },
     };
   } catch {

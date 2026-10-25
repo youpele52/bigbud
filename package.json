@@ -85,6 +85,9 @@
       "apps/web/public"
     ]
   },
+  "patchedDependencies": {
+    "effect@4.0.0-beta.43": "patches/effect@4.0.0-beta.43.patch"
+  },
   "trustedDependencies": [
     "electron",
     "node-pty"

@@ -1,7 +1,7 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { assert, describe, it } from "@effect/vitest";
 import { claimNativeMessageId } from "./Adapter.session.runtime.ts";
-import { FakeClaudeQuery } from "./Adapter.test.helpers.ts";
+import { FakeClaudeQuery } from "./Adapter.test.helpers.query.ts";
 
 describe("Claude query epoch message deduplication", () => {
   it("claims UUID/type/subtype once within a live query, not across new sessions", () => {

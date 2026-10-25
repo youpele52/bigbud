@@ -1,4 +1,8 @@
 import type { App } from "electron";
+import {
+  registerTerminalRenderingPolicy,
+  resolveLinuxDisplayServer,
+} from "./main.terminalRendering";
 
 import {
   armLinuxGpuFallbackMarker,
@@ -14,6 +18,7 @@ import {
 export function installDesktopSingleInstanceLock(
   appInstance: Pick<App, "on" | "quit" | "requestSingleInstanceLock">,
   openMainWindow: () => void,
+  quitDuplicateInstance: () => void = () => appInstance.quit(),
 ): void {
   if (appInstance.requestSingleInstanceLock()) {
     appInstance.on("second-instance", () => {
@@ -22,7 +27,7 @@ export function installDesktopSingleInstanceLock(
     return;
   }
 
-  appInstance.quit();
+  quitDuplicateInstance();
 }
 
 export function applyLinuxRuntimeSwitches(
@@ -49,6 +54,14 @@ export function registerDesktopRuntimeMonitoring(options: {
   readonly linuxGpuFallbackMarkerPath: string;
   readonly log: (message: string) => void;
 }): void {
+  registerTerminalRenderingPolicy(
+    options.appInstance,
+    options.runtimeConfig.disableHardwareAcceleration,
+    process.platform,
+    process.platform === "linux"
+      ? resolveLinuxDisplayServer(options.runtimeConfig.ozonePlatform)
+      : null,
+  );
   options.log(
     `linux runtime config conservativeMode=${options.runtimeConfig.conservativeMode} disableHardwareAcceleration=${options.runtimeConfig.disableHardwareAcceleration} spellcheckEnabled=${options.runtimeConfig.spellcheckEnabled} backendMaxOldSpaceMb=${options.runtimeConfig.backendMaxOldSpaceMb ?? "default"} ozonePlatform=${options.runtimeConfig.ozonePlatform ?? "auto"} gpuFallbackMarkerArmed=${options.runtimeConfig.gpuFallbackMarkerArmed}`,
   );

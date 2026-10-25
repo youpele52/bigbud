@@ -11,6 +11,7 @@ import {
   RESUME_THREAD_ID,
 } from "./Adapter.test.helpers.ts";
 import { resolveClaudeModelDiscovery } from "./Provider.capabilities.ts";
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 
 describe("ClaudeAdapterLive", () => {
   it.effect("reports explicit recovery and rewind capabilities", () => {
@@ -23,6 +24,8 @@ describe("ClaudeAdapterLive", () => {
         sessionRecovery: "resume-restart",
         conversationRewind: "unsupported",
         conversationFork: "unsupported",
+        subagents: PROVIDER_SUBAGENT_CAPABILITIES.claudeAgent,
+        nativePromptSuggestions: true,
       });
     }).pipe(
       Effect.provideService(Random.Random, makeDeterministicRandomService()),

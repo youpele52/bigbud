@@ -1,14 +1,10 @@
-import {
-  type EventId,
-  type ProviderRuntimeEvent,
-  type ThreadTokenUsageSnapshot,
-  type TurnId,
-} from "@bigbud/contracts";
+import { type EventId, type ProviderRuntimeEvent, type TurnId } from "@bigbud/contracts";
 import { type Event as OpencodeEvent } from "@opencode-ai/sdk/v2";
 
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { eventBase, normalizeString } from "./Adapter.stream.utils.ts";
 import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
+import { normalizeOpencodeUsage } from "./Adapter.usage.ts";
 import { makeOpencodeTextStream } from "./Adapter.stream.text.ts";
 
 type MapEventContext = {
@@ -197,27 +193,14 @@ export function mapMessageUpdated(
   }
 
   if (assistantMsg.tokens) {
-    const tokens = assistantMsg.tokens;
-    const inputTokens = tokens.input ?? 0;
-    const outputTokens = tokens.output ?? 0;
-    const cachedInputTokens = tokens.cache?.read ?? 0;
-    const usedTokens = inputTokens + outputTokens + cachedInputTokens;
-
-    if (usedTokens > 0) {
-      const usage: ThreadTokenUsageSnapshot = {
-        usedTokens,
-        totalProcessedTokens: usedTokens,
-        ...(inputTokens > 0 ? { inputTokens, lastInputTokens: inputTokens } : {}),
-        ...(cachedInputTokens > 0
-          ? { cachedInputTokens, lastCachedInputTokens: cachedInputTokens }
-          : {}),
-        ...(outputTokens > 0 ? { outputTokens, lastOutputTokens: outputTokens } : {}),
-        ...(usedTokens > 0 ? { lastUsedTokens: usedTokens } : {}),
-      };
+    const normalized = normalizeOpencodeUsage(assistantMsg.tokens);
+    if (normalized) {
+      const { usage, canonical } = normalized;
       const accounting = makeTokenUsageAccounting({
         scope: "item",
         scopeId: assistantMsg.id,
         usage,
+        canonical,
       });
       session.lastUsage = usage;
 

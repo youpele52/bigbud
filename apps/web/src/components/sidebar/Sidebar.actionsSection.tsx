@@ -1,5 +1,4 @@
 import {
-  BarChart3Icon,
   ClockIcon,
   Gamepad2,
   PlugIcon,
@@ -21,12 +20,13 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import type { ReactNode } from "react";
-import { openBrowserPanel } from "../../stores/browser/browserPanel.actions";
+import { openLinkFromClick } from "../../lib/openLink";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useSearchStore } from "../../stores/ui/search.store";
 import { useUiStateStore } from "../../stores/ui/ui.store";
+import { UsageIcon } from "../usage/UsageIcon";
 import { Kbd } from "../ui/kbd";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -61,7 +61,7 @@ const ICONS = {
   plugins: PlugIcon,
   scheduled: ClockIcon,
   games: Gamepad2,
-  usage: BarChart3Icon,
+  usage: UsageIcon,
   "resource-monitor": ActivityIcon,
 };
 const ROW_CLASS =
@@ -204,7 +204,7 @@ export function SidebarActionsSection({
         "Plugins need Git on this computer. Install Git, then try showing Plugins again.",
       actionProps: {
         children: "Install Git",
-        onClick: () => openBrowserPanel({ url: "https://git-scm.com/install/" }),
+        onClick: () => openLinkFromClick("https://git-scm.com/install/"),
       },
     });
   };

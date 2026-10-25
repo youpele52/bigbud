@@ -8,12 +8,16 @@ import {
   needsV2FinalRepair,
   queueV2FinalEvents,
 } from "./Runtime.finalization.ts";
+import { v2ShutdownSignal } from "./Runtime.shutdown.ts";
+import { hasV2UnconfirmedFamily } from "./Runtime.family.loss.ts";
 
 interface Teardown {
   readonly owner: V2RuntimeSession;
   completion: Promise<void>;
   pending: number;
   unconfirmed: boolean;
+  /** Exact-owner cleanup resolved: drained observations retired the family before any later host exit. */
+  confirmed?: boolean;
   finished: boolean;
   unsubscribeDeath: () => void;
   repairQueued?: boolean;
@@ -24,6 +28,8 @@ interface Teardown {
 export class V2RuntimeTeardown {
   private readonly owners = new Map<ThreadId, Teardown>();
   private shuttingDown = false;
+  /** One shared bound for every owner's thread-tools retirement during shutdown. */
+  private shutdownSignal: AbortSignal | undefined;
 
   constructor(
     private readonly runtime: {
@@ -48,6 +54,9 @@ export class V2RuntimeTeardown {
   private release(record: Teardown): void {
     if (
       !record.finished ||
+      // Confirmed cleanup already retired the family; a later host exit (such as this
+      // owner's own last-lease release) is not family loss.
+      (!record.confirmed && hasV2UnconfirmedFamily(record.owner)) ||
       needsV2FinalRepair(record.owner) ||
       ((record.pending || record.unconfirmed) && !record.owner.lease.process.hasExited?.())
     )
@@ -57,6 +66,7 @@ export class V2RuntimeTeardown {
     if (this.runtime.sessions.get(record.owner.threadId) === record.owner)
       this.runtime.sessions.delete(record.owner.threadId);
     record.unsubscribeDeath();
+    record.owner.consentPermit?.release();
     clearTimeout(record.repairTimer);
   }
 
@@ -66,6 +76,7 @@ export class V2RuntimeTeardown {
 
   beginShutdown(): void {
     this.shuttingDown = true;
+    this.shutdownSignal ??= v2ShutdownSignal();
     for (const record of this.owners.values()) this.settle(record);
   }
 
@@ -137,33 +148,41 @@ export class V2RuntimeTeardown {
       unsubscribeDeath: () => {},
     };
     this.owners.set(threadId, record);
-    record.completion = this.runtime
-      .serialize(owner, async () => {
-        await owner.coding?.cancelActive();
-        let cleanupError: unknown;
-        try {
-          await releaseV2Session(owner, (request) => this.observe(record, request));
-        } catch (error) {
-          // Without a still-observed operation that can settle, cleanup uncertainty
-          // needs generation death rather than a speculative successful rebind.
-          if (!record.pending) record.unconfirmed = true;
-          cleanupError = error;
-        }
-        if (!cleanupError && owner.lossPending === undefined)
-          queueV2FinalEvents(owner, [
-            {
-              ...runtimeEventBase(owner, `stopped:${owner.lease.generation}:${owner.epoch}`),
-              type: "session.exited",
-              payload: { reason: "Session stopped; native history retained" },
-            },
-          ]);
-        try {
-          await flushV2FinalEvents(owner, this.runtime.emit);
-        } catch (error) {
-          throw cleanupError ?? error;
-        }
-        if (cleanupError) throw cleanupError;
-      })
+    // Canonical HTTP work can still be settling while native/session queues are occupied.
+    // Abort/join physical executions before reserving the owner's cleanup queue.
+    record.completion = (owner.coding?.cancelActive() ?? Promise.resolve())
+      .then(() =>
+        this.runtime.serialize(owner, async () => {
+          let cleanupError: unknown;
+          try {
+            await releaseV2Session(
+              owner,
+              (request) => this.observe(record, request),
+              this.shutdownSignal,
+            );
+            record.confirmed = true;
+          } catch (error) {
+            // Without a still-observed operation that can settle, cleanup uncertainty
+            // needs generation death rather than a speculative successful rebind.
+            if (!record.pending) record.unconfirmed = true;
+            cleanupError = error;
+          }
+          if (!cleanupError && owner.lossPending === undefined)
+            queueV2FinalEvents(owner, [
+              {
+                ...runtimeEventBase(owner, `stopped:${owner.lease.generation}:${owner.epoch}`),
+                type: "session.exited",
+                payload: { reason: "Session stopped; native history retained" },
+              },
+            ]);
+          try {
+            await flushV2FinalEvents(owner, this.runtime.emit);
+          } catch (error) {
+            throw cleanupError ?? error;
+          }
+          if (cleanupError) throw cleanupError;
+        }),
+      )
       .finally(() => {
         record.finished = true;
         this.release(record);

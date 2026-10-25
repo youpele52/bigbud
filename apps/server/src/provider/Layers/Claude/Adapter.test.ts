@@ -90,6 +90,7 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_orchestration__get_thread_status",
         "mcp__bigbud_orchestration__get_system_resources",
         "mcp__bigbud_orchestration__list_threads",
+        "mcp__bigbud_orchestration__list_available_models",
         "mcp__bigbud_orchestration__list_pinned_threads",
         "mcp__bigbud_orchestration__pin_thread",
         "mcp__bigbud_orchestration__unpin_thread",

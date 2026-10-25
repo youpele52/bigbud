@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalPassThroughEnv": ["TMPDIR", "TMP", "TEMP"],
+  "agentGuidance": false,
+  "globalPassThroughEnv": ["TMPDIR", "TMP", "TEMP", "BIGBUD_DEV_RUNNER_PID"],
   "globalEnv": [
     "PORT",
     "VITE_WS_URL",

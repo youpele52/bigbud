@@ -15,7 +15,7 @@ import {
   registerProviderRuntimeIngestionTestCleanup,
   waitForThread,
 } from "../../../orchestration/Layers/ProviderRuntimeIngestion.test.helpers.ts";
-import { superviseProviderTurns } from "../../../orchestration/Layers/ProviderTurnSupervisor.ts";
+import { superviseProviderTurns } from "../../../orchestration/Layers/ProviderTurnSupervisor.health.ts";
 import { makeProcessProviderRuntimeEvent } from "../ProviderService.runtimeEvents.ts";
 import { observeProviderRuntimeEvent } from "../ProviderService.turnLiveness.ts";
 import type { ProviderServiceShape } from "../../Services/ProviderService.ts";

@@ -27,6 +27,39 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Codex optional discovery enrichment", () => {
+  it("quota-only probes skip catalog and skill discovery, allow detailed grants latency and clean up", async () => {
+    vi.useFakeTimers();
+    const { child, send } = childProcess();
+    const result = probeCodexDiscovery({
+      binaryPath: "custom-codex",
+      homePath: "/account-a",
+      cwd: "/workspace",
+      includeUsageLimits: true,
+      usageOnly: true,
+    });
+    send(1, {});
+    send(4, { account: { type: "chatgpt", planType: "plus" } });
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(child.kill).not.toHaveBeenCalled();
+    send(5, {
+      rateLimits: { primary: { usedPercent: 30 } },
+      rateLimitResetCredits: { availableCount: 2, credits: null },
+    });
+    expect((await result).usageLimits?.manualResets).toMatchObject({
+      availableCount: 2,
+      detailsComplete: false,
+    });
+    const requests = child.stdin.read()?.toString();
+    expect(requests).toContain("account/rateLimits/read");
+    expect(requests).not.toMatch(/model\/list|skills\/list|turn\/start|reset.*redeem/);
+    expect(processMock.spawn).toHaveBeenCalledWith(
+      "custom-codex",
+      ["app-server"],
+      expect.objectContaining({ env: expect.objectContaining({ CODEX_HOME: "/account-a" }) }),
+    );
+    expect(child.kill).toHaveBeenCalledOnce();
+  });
+
   it("reads ChatGPT quota from the same app-server process without starting a turn", async () => {
     const { child, send } = childProcess();
     const result = probeCodexDiscovery({
@@ -76,7 +109,7 @@ describe("Codex optional discovery enrichment", () => {
     send(4, { account: { type: "chatgpt" } });
     send(3, { data: [] });
     send(2, { data: [{ id: "gpt-6-astra", model: "gpt-6-astra", displayName: "GPT-6 Astra" }] });
-    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(5_000);
     const snapshot = await result;
     expect(snapshot.usageLimits?.status).toBe("error");
     expect(snapshot.models).toHaveLength(1);

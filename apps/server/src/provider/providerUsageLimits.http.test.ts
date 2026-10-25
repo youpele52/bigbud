@@ -74,6 +74,22 @@ describe("bounded optional usage reads", () => {
     expect(JSON.stringify(failed)).not.toContain("secret token");
   });
 
+  it("manual reads bypass both successful and failed caches without losing account isolation", async () => {
+    const { request, read, setCredential } = fixture();
+    await read(signal());
+    request.mockResolvedValueOnce(
+      new Response(JSON.stringify({ usage: { rolling: { percent: 70 } } })),
+    );
+    expect((await read(signal(), true)).windows[0]?.utilization).toBe(70);
+    request.mockRejectedValue(new Error("private"));
+    expect((await read(signal(), true)).status).toBe("stale");
+    setCredential({ secret: "other", headers: { Authorization: "Bearer other" } });
+    expect((await read(signal(), true)).status).toBe("error");
+    request.mockResolvedValueOnce(new Response(JSON.stringify(quota)));
+    expect((await read(signal(), true)).status).toBe("available");
+    expect(request).toHaveBeenCalledTimes(5);
+  });
+
   it("forgets last-good quota after credential removal", async () => {
     const { request, read, setCredential } = fixture();
     await read(signal());

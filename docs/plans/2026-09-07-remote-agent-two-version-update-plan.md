@@ -27,14 +27,14 @@ The user answered the five clarification questions and confirmed the predecessor
 5. **Switch only on deliberate reconnect.** Automatic transport recovery never consumes the pending candidate.
 6. **Retain the current build and its stable predecessor.** After reconnecting to healthy207, keep205 as fallback. When208 arrives, remove205 only once safe, then install208 while keeping207 as fallback. Merely installing207 is not permission to delete205.
 
-Terminology in this plan is domain-specific: **serving stable agent** means the verified agent selected for user work, not the release-channel term “Stable Release” in `docs/CONTEXT.md`; **predecessor fallback** is the retained previous serving stable agent; **healthy pending agent** has passed readiness but is not yet selected; **deliberate reconnect** creates a new logical admission without migrating old operations. These definitions and the decision record stay in this one plan under the planner's write boundary.
+Terminology in this plan is domain-specific: **serving stable agent** means the verified agent selected for user work, not the distribution term “Stable Release” in `docs/development/release.md#distribution-terminology`; **predecessor fallback** is the retained previous serving stable agent; **healthy pending agent** has passed readiness but is not yet selected; **deliberate reconnect** creates a new logical admission without migrating old operations. These definitions and the decision record stay in this one plan under the planner's write boundary.
 
 ## Related Work
 
 - User's clarification in this conversation: maximum two saved agents; install/check candidate; use healthy candidate on next reconnection; otherwise use most recent stable predecessor; preserve existing work.
 - [Isolated-update plan](2026-09-07-remote-agent-isolated-update-plan.md): reusable runtime and ownership architecture; superseded retention and preparation timing.
 - [Corrective plan](2026-09-07-remote-agent-corrective-plan.md): earlier integration and provider-boundary evidence.
-- [Implementation status](2026-09-07-remote-agent-implementation-status.md): historical handoff, not independent completion evidence.
+- [Consolidated historical handoff](2026-09-08-remote-agent-final-conformance-plan.md#consolidated-historical-handoff--22-october-2026): historical handoff, not independent completion evidence.
 - [Legacy investigation](remote-agent-0.2.205-upgrade.md): shared-state and duplicate-execution hazards remain applicable; preserve this protected document.
 - [Reconnect/service restart plan](2026-09-07-remote-project-reconnect-plan.md): separate disruptive operation; do not silently repurpose it to select updates.
 - [Native boundary](../decisions/2026-08-22-rust-remote-workspace-agent-boundary.md): keep product selection and durable ownership in TypeScript/SQLite.

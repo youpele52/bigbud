@@ -67,4 +67,26 @@ describe("durable remote terminal input ordering", () => {
     expect(f.request).not.toHaveBeenCalled();
     expect(f.errors[0]).toMatchObject({ code: "PTY_INPUT_OUTCOME_UNKNOWN" });
   });
+
+  it("keeps allocating and acknowledging healthy legacy input past 4096 completions", async () => {
+    const f = fixture();
+    const acknowledged = vi.fn(async () => undefined);
+    f.process.setDurability({
+      allocated: async () => undefined,
+      acknowledged,
+      output: async () => undefined,
+    });
+    // Exercise the actual TS client's serialized chain. Rust's companion
+    // regression proves its compacted ledger acknowledges these inputs.
+    for (let offset = 0; offset < 4200; offset += 100) {
+      for (let index = 0; index < 100; index++) f.process.write("x");
+      await vi.waitFor(() => expect(acknowledged).toHaveBeenCalledTimes(offset + 100));
+    }
+    expect(f.request).toHaveBeenCalledTimes(4200);
+    expect(f.request.mock.calls.at(-1)?.[0]).toMatchObject({
+      type: "ptyInput",
+      value: { sequence: 4200 },
+    });
+    expect(f.errors).toEqual([]);
+  });
 });

@@ -19,8 +19,14 @@ const selection = {
 } as const;
 /** Actual authenticated HTTP route + installed canonical dispatcher/engine/SQLite delegation, with a minimal committed-turn provider consumer. */
 export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFixture")(
-  function* (input: { profile: string; workspace: string; parent: ThreadId }) {
-    const system = yield* Effect.promise(() => createOrchestrationSystem());
+  function* (input: {
+    profile: string;
+    workspace: string;
+    parent: ThreadId;
+    runtimeMode?: "full-access" | "approval-required" | "auto-accept-edits";
+    consumeChildren?: boolean;
+  }) {
+    const system = yield* Effect.promise(() => createOrchestrationSystem({ catalog: true }));
     yield* Effect.addFinalizer(() => Effect.promise(() => system.dispose()));
     const projectId = ProjectId.makeUnsafe("native-delegation-project"),
       createdAt = new Date().toISOString();
@@ -46,7 +52,7 @@ export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFi
           projectId,
           title: "Parent",
           modelSelection: selection,
-          runtimeMode: "approval-required",
+          runtimeMode: input.runtimeMode ?? "approval-required",
           interactionMode: "default",
           providerRuntimeExecutionTargetId: "local",
           workspaceExecutionTargetId: "local",
@@ -67,7 +73,7 @@ export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFi
         Effect.gen(function* () {
           dispatched.push(request);
           const result = yield* Effect.promise(() => system.run(installed.createThread!(request)));
-          if (!result.replayed) {
+          if (!result.replayed && input.consumeChildren !== false) {
             if (!adapter) throw new Error("provider consumer missing");
             const readModel = yield* Effect.promise(() => system.run(system.engine.getReadModel()));
             const child = readModel.threads.find((thread) => thread.id === result.childThreadId)!;

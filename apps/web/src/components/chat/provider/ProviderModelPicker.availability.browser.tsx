@@ -39,6 +39,29 @@ function provider(): ServerProvider {
 }
 
 describe("ProviderModelPicker unavailable provider accessibility", () => {
+  it("can show an unset preference without presenting a configured default model", async () => {
+    const snapshot = provider();
+    const onChange = vi.fn();
+    const screen = await render(
+      <ProviderModelPicker
+        provider="cursor"
+        model="cursor-default"
+        lockedProvider={null}
+        providers={[snapshot]}
+        modelOptionsByProvider={getCustomModelOptionsByProvider(
+          DEFAULT_UNIFIED_SETTINGS,
+          [snapshot],
+          "cursor",
+          "cursor-default",
+        )}
+        triggerLabel="No override"
+        onProviderModelChange={onChange}
+      />,
+    );
+    await expect.element(page.getByRole("button", { name: "No override" })).toBeVisible();
+    expect(onChange).not.toHaveBeenCalled();
+    await screen.unmount();
+  });
   it("renders the computed remote-workspace message on the disabled option", async () => {
     const snapshot = provider();
     const modelOptionsByProvider = getCustomModelOptionsByProvider(

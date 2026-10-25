@@ -47,6 +47,7 @@ export function gitInitMutationOptions(input: {
 
 export function gitRunStackedActionMutationOptions(input: {
   cwd: string | null;
+  threadId?: import("@bigbud/contracts").ThreadId | undefined;
   executionTargetId?: ExecutionTargetId | null | undefined;
   queryClient: QueryClient;
 }) {
@@ -72,6 +73,7 @@ export function gitRunStackedActionMutationOptions(input: {
         {
           actionId,
           cwd: input.cwd,
+          ...(input.threadId ? { threadId: input.threadId } : {}),
           ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
           action,
           ...(commitMessage ? { commitMessage } : {}),

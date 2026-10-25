@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { resolveNodeExecutable } from "../../../utils/nodeExecutable.ts";
 
 export const DEFAULT_PI_BINARY_PATH = "pi";
@@ -14,6 +15,14 @@ export interface PiInvocation {
 const WINDOWS_COMMAND_SCRIPT_PATTERN = /\.(?:bat|cmd)$/i;
 
 export function resolveBundledPiCliPath(): string | undefined {
+  // Pi 1.x exports only ESM entry points, not package.json or CommonJS resolution.
+  try {
+    const entry = fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent/rpc-entry"));
+    const cli = join(dirname(entry), "cli.js");
+    if (existsSync(cli)) return cli;
+  } catch {
+    // Keep compatibility with older packages that do not export rpc-entry.
+  }
   const req = createRequire(import.meta.url);
 
   const tryResolve = (packageName: string): string | undefined => {

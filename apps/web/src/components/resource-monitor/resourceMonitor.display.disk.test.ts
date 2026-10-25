@@ -76,26 +76,28 @@ describe("Disk resource widget", () => {
     });
   });
 
-  it.each([0, 310, 500])("charts valid free space of %i GiB", (free) => {
+  it.each([0, 310, 500])("uses capacity bars for valid free space of %i GiB", (free) => {
     expect(
-      display([{ ...disk("Disk", "/"), freeBytes: metric(free * 1024 ** 3) }]).diskUsage,
-    ).toEqual({ totalBytes: 500 * 1024 ** 3, freeBytes: free * 1024 ** 3 });
+      display([{ ...disk("Disk", "/"), freeBytes: metric(free * 1024 ** 3) }]).capacityUsage,
+    ).toMatchObject({ totalBytes: 500 * 1024 ** 3, usedBytes: (500 - free) * 1024 ** 3 });
   });
 
   it.each([-1, 501 * 1024 ** 3, NaN, Infinity])(
-    "omits the chart for invalid free space %s",
+    "keeps used capacity unknown for invalid free space %s",
     (free) => {
       expect(
-        display([{ ...disk("Disk", "/"), freeBytes: metric(free) }]).diskUsage,
-      ).toBeUndefined();
+        display([{ ...disk("Disk", "/"), freeBytes: metric(free) }]).capacityUsage?.usedBytes,
+      ).toBeNull();
     },
   );
 
-  it("omits the chart for stale samples and zero capacity", () => {
+  it("keeps stale samples unknown and preserves honest zero total capacity", () => {
     expect(
-      display([{ ...disk("Disk", "/"), freeBytes: metric(10, "stale") }]).diskUsage,
-    ).toBeUndefined();
-    expect(display([{ ...disk("Disk", "/"), totalBytes: metric(0) }]).diskUsage).toBeUndefined();
+      display([{ ...disk("Disk", "/"), freeBytes: metric(10, "stale") }]).capacityUsage?.usedBytes,
+    ).toBeNull();
+    expect(
+      display([{ ...disk("Disk", "/"), totalBytes: metric(0) }]).capacityUsage?.totalBytes,
+    ).toBe(0);
   });
 
   it("keeps missing free space unavailable even when total capacity is known", () => {

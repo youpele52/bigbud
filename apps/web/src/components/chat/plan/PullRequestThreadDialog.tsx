@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { WorktreeIcon } from "../../git/WorktreeIcon";
 import {
   createGitMutationOperationId,
   gitPreparePullRequestThreadMutationOptions,
@@ -284,6 +285,7 @@ export function PullRequestThreadDialog({
               preparePullRequestThreadMutation.isPending
             }
           >
+            <WorktreeIcon />
             {preparingMode === "worktree" ? "Preparing worktree..." : "Worktree"}
           </Button>
         </DialogFooter>

@@ -22,6 +22,7 @@ import { PROVIDER } from "./Adapter.types.ts";
 import type { ActiveOpencodeSession } from "../Opencode/Adapter.types.ts";
 import { makeNextEventId, makeEventStampFactory } from "../Opencode/Adapter.stream.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 export type { KilocodeAdapterLiveOptions } from "./Adapter.types.ts";
 
 const makeKilocodeAdapter = Effect.fn("makeKilocodeAdapter")(function* (
@@ -69,6 +70,7 @@ const makeKilocodeAdapter = Effect.fn("makeKilocodeAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.kilocode,
     },
     ...sessionMethods,
     inspectActiveTurn: unavailableActiveTurnInspection(PROVIDER),

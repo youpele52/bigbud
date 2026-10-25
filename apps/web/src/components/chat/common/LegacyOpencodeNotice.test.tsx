@@ -11,8 +11,12 @@ describe("legacy OpenCode history presentation", () => {
     const markup = renderToStaticMarkup(<LegacyOpencodeNotice />);
     expect(markup).toContain(LEGACY_OPENCODE_READ_ONLY_MESSAGE);
     expect(markup).toContain('role="status"');
+    expect(markup).toContain('data-slot="alert"');
+    expect(markup).toContain("border-warning/32");
+    expect(markup).toContain("bg-warning/4");
     expect(markup).not.toContain("<form");
-    expect(markup).not.toContain("<button");
+    expect(markup.match(/<button/g)).toHaveLength(1);
+    expect(markup).toContain('aria-label="Dismiss legacy OpenCode notice"');
   });
   it("recognizes web and orchestration session IDs without conflating V2", () => {
     expect(isLegacyOpencodeThread({ session: { provider: "opencode" } })).toBe(true);

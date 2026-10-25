@@ -1,5 +1,6 @@
-import { ipcMain, type App } from "electron";
+import { ipcMain } from "electron";
 
+import type { AppQuitActions } from "./main.appQuitActions";
 import { createCompactLinkHandoffCoordinator } from "./main.compactLinkHandoff";
 import { desktopIpcChannels } from "./main.channels";
 import { registerCompactScreenshotIpc } from "./window/ipcHandlers.compactScreenshot";
@@ -12,23 +13,21 @@ import {
 } from "./window/menuAction.validation";
 
 interface RegisterFloatingAssistantIpcOptions {
-  readonly appInstance: Pick<App, "quit" | "relaunch">;
+  readonly appQuitActions: AppQuitActions;
   readonly channels: typeof desktopIpcChannels;
   readonly desktopPreferences: DesktopPreferencesStore;
   readonly floatingAssistantWindows: FloatingAssistantWindows;
   readonly openMainWindow: (threadId?: string) => void;
-  readonly prepareForAppQuit: (reason: string) => void;
   readonly windowRegistry: DesktopWindowRegistry;
 }
 
 export function registerFloatingAssistantIpc(options: RegisterFloatingAssistantIpcOptions): void {
   const {
-    appInstance,
+    appQuitActions,
     channels,
     desktopPreferences,
     floatingAssistantWindows,
     openMainWindow,
-    prepareForAppQuit,
     windowRegistry,
   } = options;
   registerCompactScreenshotIpc(windowRegistry, floatingAssistantWindows.screenshots.handoff);
@@ -96,14 +95,11 @@ export function registerFloatingAssistantIpc(options: RegisterFloatingAssistantI
     return true;
   });
   register(channels.quitApplication, () => {
-    prepareForAppQuit("floating-assistant-quit");
-    appInstance.quit();
+    appQuitActions.quit("floating-assistant-quit");
     return true;
   });
   register(channels.restartApplication, () => {
-    appInstance.relaunch();
-    prepareForAppQuit("settings-restart");
-    appInstance.quit();
+    appQuitActions.restart("settings-restart");
     return true;
   });
   register(

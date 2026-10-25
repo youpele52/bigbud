@@ -2,7 +2,7 @@ import type { CompactChatLinkHandoff, DesktopMenuAction } from "@bigbud/contract
 import { useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
-import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { openLinkFromClick } from "~/lib/openLink";
 import { useStore } from "~/stores/main";
 import { openChatFileTarget } from "./chat/common/chatFileTargets";
 import {
@@ -43,7 +43,7 @@ export function CompactLinkHandoffCoordinator() {
           resolveCompactLinkWorkspaceRoot(action, resolveFallbackWorkspaceRoot(action)),
         isCurrent: () => latestRequestRef.current === requestId,
         openFile: (targetPath, workspaceRoot) => openChatFileTarget(targetPath, workspaceRoot),
-        openBrowser: (url) => openBrowserPanel({ url }),
+        openBrowser: openLinkFromClick,
       }).catch((error) => {
         if (latestRequestRef.current === requestId) {
           console.error("Failed to open compact chat markdown link:", error);

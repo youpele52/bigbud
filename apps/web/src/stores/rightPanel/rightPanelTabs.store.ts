@@ -10,6 +10,7 @@ export type RightPanelTabKind =
   | "kanban"
   | "notes"
   | "system"
+  | "usage"
   | "terminal";
 export type RightPanelTabId = RightPanelTabKind | `browser:${string}`;
 

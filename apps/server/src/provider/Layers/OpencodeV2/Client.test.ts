@@ -17,8 +17,8 @@ describe("pinned OpenCode v2 Promise boundary", () => {
     expect(() => validateOwnedEndpoint(url)).toThrow(),
   );
   it("rejects unknown CLI versions", () => {
-    expect(() => assertDevelopmentVersion("2.0.26")).not.toThrow();
-    for (const version of ["1.17.13", "2.0.19", "2.0.27", "2.0.26-preview", "opencode v2.0.26"])
+    expect(() => assertDevelopmentVersion("2.1.4")).not.toThrow();
+    for (const version of ["1.17.13", "2.0.26", "2.1.3", "2.1.4-preview", "opencode v2.1.4"])
       expect(() => assertDevelopmentVersion(version)).toThrow();
   });
   it("authenticates only the owned endpoint and disables redirects", async () => {
@@ -115,6 +115,7 @@ describe("pinned OpenCode v2 Promise boundary", () => {
       ).catch((error: unknown) => error);
       expect(error).toBeInstanceOf(V2HttpStatusError);
       expect(error).toMatchObject({ status: 500 });
+      expect(String(error)).toContain("model.list returned HTTP 500");
       expect(error).not.toHaveProperty("cause");
       expect(error).not.toHaveProperty("request");
       expect(error).not.toHaveProperty("response");

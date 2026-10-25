@@ -39,6 +39,13 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.enableThinkingStreaming !== DEFAULT_UNIFIED_SETTINGS.enableThinkingStreaming
         ? ["Stream thinking"]
         : []),
+      ...(settings.promptSuggestions !== DEFAULT_UNIFIED_SETTINGS.promptSuggestions
+        ? ["Prompt suggestions"]
+        : []),
+      ...(settings.generatedPromptSuggestions !==
+      DEFAULT_UNIFIED_SETTINGS.generatedPromptSuggestions
+        ? ["Generate suggestions"]
+        : []),
       ...(settings.defaultThreadEnvMode !== DEFAULT_UNIFIED_SETTINGS.defaultThreadEnvMode
         ? ["New thread mode"]
         : []),
@@ -72,6 +79,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.diffWordWrap,
       settings.enableAssistantStreaming,
       settings.enableThinkingStreaming,
+      settings.promptSuggestions,
+      settings.generatedPromptSuggestions,
       settings.contextWindowWarningThresholdTokens,
       settings.enableTaskCompletionToasts,
       settings.enableSystemTaskCompletionNotifications,

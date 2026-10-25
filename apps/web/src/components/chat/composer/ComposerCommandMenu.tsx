@@ -6,7 +6,8 @@ import {
 } from "@bigbud/contracts";
 import { memo, useLayoutEffect, useRef } from "react";
 import { type ComposerTriggerKind } from "../../../logic/composer";
-import { BookOpenIcon, BotIcon, FolderOpenIcon, PlugIcon } from "lucide-react";
+import { BookOpenIcon, FolderOpenIcon, PlugIcon } from "lucide-react";
+import { AiIcon } from "../../AiIcon";
 import { useIncrementalList } from "~/hooks/useIncrementalList";
 import { cn } from "~/lib/utils";
 import { Button } from "../../ui/button";
@@ -274,7 +275,7 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
         props.item.command === "read" ? (
           <BookOpenIcon className="size-4 text-muted-foreground/80" />
         ) : (
-          <BotIcon className="size-4 text-muted-foreground/80" />
+          <AiIcon className="size-4 text-muted-foreground/80" />
         )
       ) : null}
       {props.item.type === "model" ? (

@@ -9,6 +9,8 @@ export const MessageOriginKind = Schema.Literals([
   "orchestraAssignment",
   "completionWatch",
   "ordinaryUser",
+  /** Server-originated continuation of a turn cut by system sleep. */
+  "sleepRecovery",
 ]);
 export type MessageOriginKind = typeof MessageOriginKind.Type;
 

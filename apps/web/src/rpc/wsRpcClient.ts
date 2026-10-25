@@ -1,18 +1,20 @@
-import {
-  type GitRunStackedActionResult,
-  ORCHESTRATION_WS_METHODS,
-  WS_METHODS,
-} from "@bigbud/contracts";
+import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@bigbud/contracts";
 
 import { randomUUID } from "~/lib/utils";
 
 import { resetWsReconnectBackoff } from "./wsConnectionState";
 import { WsTransport } from "./wsTransport";
 import {
-  type GitRunStackedActionOptions,
-  type StreamSubscriptionOptions,
-  type WsRpcClient,
-} from "./wsRpcClient.types";
+  attachWsConnectionDiagnosticsTransport,
+  resetWsConnectionDiagnosticsReporterForTests,
+  wsConnectionDiagnosticsLifecycle,
+} from "./wsConnectionDiagnosticsReporter";
+import { requestServerConfig } from "./wsRpcClient.config";
+import { requestWsConnectionDiagnostics } from "./wsRpcClient.diagnostics";
+import { requestRemoteFolders, requestSshConfigHosts } from "./wsRpcClient.remoteSetup";
+import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
+import { createTerminalRpcClient } from "./wsRpcClient.terminal";
+import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
 
 let sharedWsRpcClient: WsRpcClient | null = null;
 
@@ -20,13 +22,17 @@ export function getWsRpcClient(): WsRpcClient {
   if (sharedWsRpcClient) {
     return sharedWsRpcClient;
   }
-  sharedWsRpcClient = createWsRpcClient();
+  // Only the shared transport reports connection transitions to the server.
+  const transport = new WsTransport(undefined, wsConnectionDiagnosticsLifecycle);
+  sharedWsRpcClient = createWsRpcClient(transport);
+  attachWsConnectionDiagnosticsTransport(transport);
   return sharedWsRpcClient;
 }
 
 export async function __resetWsRpcClientForTests() {
   await sharedWsRpcClient?.dispose();
   sharedWsRpcClient = null;
+  resetWsConnectionDiagnosticsReporterForTests();
 }
 
 function subscribeEmptyInput<TEvent>(
@@ -38,35 +44,6 @@ function subscribeEmptyInput<TEvent>(
   return transport.subscribe((client) => method(client)({}), listener, options);
 }
 
-function runGitStackedAction(
-  transport: WsTransport,
-  input: Parameters<WsRpcClient["git"]["runStackedAction"]>[0],
-  options?: GitRunStackedActionOptions,
-) {
-  let result: GitRunStackedActionResult | null = null;
-
-  return transport
-    .requestStream(
-      (client) => client[WS_METHODS.gitRunStackedAction](input),
-      (event) => {
-        options?.onProgress?.(event);
-        if (event.kind === "action_finished") {
-          result = event.result;
-        }
-      },
-    )
-    .then(() => {
-      if (result) {
-        return result;
-      }
-      throw new Error("Git action stream completed without a final result.");
-    });
-}
-
-function withGitMutationOperationId<T extends { operationId?: string | undefined }>(input: T): T {
-  return input.operationId ? input : { ...input, operationId: `git-rpc-${randomUUID()}` };
-}
-
 export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
   return {
     dispose: () => transport.dispose(),
@@ -74,21 +51,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       resetWsReconnectBackoff();
       await transport.reconnect();
     },
-    terminal: {
-      open: (input) => transport.request((client) => client[WS_METHODS.terminalOpen](input)),
-      write: (input) => transport.request((client) => client[WS_METHODS.terminalWrite](input)),
-      resize: (input) => transport.request((client) => client[WS_METHODS.terminalResize](input)),
-      clear: (input) => transport.request((client) => client[WS_METHODS.terminalClear](input)),
-      restart: (input) => transport.request((client) => client[WS_METHODS.terminalRestart](input)),
-      close: (input) => transport.request((client) => client[WS_METHODS.terminalClose](input)),
-      onEvent: (listener, options) =>
-        subscribeEmptyInput(
-          transport,
-          (client) => client[WS_METHODS.subscribeTerminalEvents],
-          listener,
-          options,
-        ),
-    },
+    reconnectNow: () => transport.reconnectNow(),
+    terminal: createTerminalRpcClient(transport),
     browser: {
       completeCommand: (input) =>
         transport.request((client) => client[WS_METHODS.completeVisibleBrowserCommand](input)),
@@ -151,6 +115,14 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       openInTerminal: (input) =>
         transport.request((client) => client[WS_METHODS.shellOpenInTerminal](input)),
       openPath: (input) => transport.request((client) => client[WS_METHODS.shellOpenPath](input)),
+    },
+    worktrees: {
+      operations: (input) => transport.request((client) => client["worktrees.operations"](input)),
+      recover: (input) => transport.request((client) => client["worktrees.recover"](input)),
+      list: (input) => transport.request((client) => client["worktrees.list"](input)),
+      create: (input) => transport.request((client) => client["worktrees.create"](input)),
+      delete: (input) => transport.request((client) => client["worktrees.delete"](input)),
+      select: (input) => transport.request((client) => client["worktrees.select"](input)),
     },
     git: {
       pull: (input) => {
@@ -217,13 +189,17 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     },
     server: {
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
-      getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),
+      getConfig: () => requestServerConfig(transport),
       refreshProviders: () =>
         transport.request((client) => client[WS_METHODS.serverRefreshProviders]({})),
+      refreshUsageLimits: () =>
+        transport.request((client) => client[WS_METHODS.serverRefreshUsageLimits]({})),
       activateCliProxy: () =>
         transport.request((client) => client[WS_METHODS.serverActivateCliProxy]({})),
       verifyExecutionTarget: (input) =>
         transport.request((client) => client[WS_METHODS.serverVerifyExecutionTarget](input)),
+      listSshConfigHosts: (input) => requestSshConfigHosts(transport, input),
+      listRemoteFolders: (input) => requestRemoteFolders(transport, input),
       installRemoteAgent: (input) =>
         transport.request((client) => client[WS_METHODS.serverInstallRemoteAgent](input)),
       connectRemoteAgent: (input) =>
@@ -238,6 +214,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverUnlockSshKey](input)),
       unlockSshPassword: (input) =>
         transport.request((client) => client[WS_METHODS.serverUnlockSshPassword](input)),
+      trustSshHost: (input) =>
+        transport.request((client) => client[WS_METHODS.serverTrustSshHost](input)),
       upsertKeybinding: (input) =>
         transport.request((client) => client[WS_METHODS.serverUpsertKeybinding](input)),
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),
@@ -259,10 +237,16 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverReadDocumentUrl](input)),
       writeHandoffDocument: (input) =>
         transport.request((client) => client[WS_METHODS.serverWriteHandoffDocument](input)),
+      retryTextGeneration: (input) =>
+        transport.request((client) => client[WS_METHODS.serverRetryTextGeneration](input)),
       startHandoffJob: (input) =>
         transport.request((client) => client[WS_METHODS.serverStartHandoffJob](input)),
       getHandoffJob: (input) =>
         transport.request((client) => client[WS_METHODS.serverGetHandoffJob](input)),
+      getOpencodeV2ThreadToolsSetup: (input) =>
+        transport.request((client) =>
+          client[WS_METHODS.serverGetOpencodeV2ThreadToolsSetup](input),
+        ),
       createMobileRemotePairing: (input) =>
         transport.request((client) => client[WS_METHODS.serverCreateMobileRemotePairing](input)),
       listMobileRemoteSessions: () =>
@@ -295,6 +279,9 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverListAutomationRuns](input)),
       getUsageSummary: (input) =>
         transport.request((client) => client[WS_METHODS.serverGetUsageSummary](input)),
+      getWsConnectionDiagnostics: (input) => requestWsConnectionDiagnostics(transport, input),
+      stopSubagent: (input) =>
+        transport.request((client) => client[WS_METHODS.providerStopSubagent](input)),
       subscribeConfig: (listener, options) =>
         subscribeEmptyInput(
           transport,

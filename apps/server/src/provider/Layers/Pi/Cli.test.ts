@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { quoteWindowsPiShellCommand, shouldUseWindowsPiShell } from "./Cli.ts";
+import { quoteWindowsPiShellCommand, shouldUseWindowsPiShell, resolvePiInvocation } from "./Cli.ts";
 
 async function withMockedPlatform<T>(platform: NodeJS.Platform, run: () => T): Promise<T> {
   const originalPlatform = process.platform;
@@ -19,6 +19,11 @@ async function withMockedPlatform<T>(platform: NodeJS.Platform, run: () => T): P
 }
 
 describe("Pi CLI Windows invocation helpers", () => {
+  it("resolves the installed ESM-only bundled CLI without falling back to PATH", () => {
+    const invocation = resolvePiInvocation("pi");
+    expect(invocation.bundledCliPath?.replaceAll("\\", "/")).toMatch(/\/dist\/bundle\/cli\.js$/);
+    expect(resolvePiInvocation("/custom/pi")).toEqual({ command: "/custom/pi", args: [] });
+  });
   it("uses a shell for Windows npm command shims", async () => {
     await withMockedPlatform("win32", () => {
       expect(shouldUseWindowsPiShell("pi")).toBe(true);

@@ -2,8 +2,17 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
-
+import { inspectSshHostTrust } from "./sshHostTrust.ts";
+import {
+  createSshDeadline,
+  describeSshLocalCommandFailure,
+  runSshLocalCommand,
+  runSshLocalCommandSync,
+  SSH_CONNECT_TIMEOUT_SECONDS,
+  SSH_LOCAL_PROBE_TIMEOUT_MS,
+  type SshDeadline,
+  SSH_UNLOCK_DEADLINE_MS,
+} from "./sshLocalCommand.ts";
 import {
   formatSshDestination,
   parseSshExecutionTarget,
@@ -28,18 +37,13 @@ const passwordSessionByExecutionTargetId = new Map<
   }
 >();
 
-function runLocalCommand(command: string, args: ReadonlyArray<string>, env?: NodeJS.ProcessEnv) {
-  return spawnSync(command, [...args], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    ...(env ? { env } : {}),
-    shell: process.platform === "win32",
-  });
-}
-
 function writePasswordAskpassScript(directoryPath: string): string {
   const scriptPath = path.join(directoryPath, "askpass.sh");
-  fs.writeFileSync(scriptPath, '#!/bin/sh\nprintf "%s\\n" "$BIGBUD_SSH_PASSWORD"\n', "utf8");
+  fs.writeFileSync(
+    scriptPath,
+    '#!/bin/sh\ncase "$1" in\n  *authenticity*|*fingerprint*) exit 1 ;;\n  *[Pp]assword*|*[Pp]asscode*) printf "%s\\n" "$BIGBUD_SSH_PASSWORD" ;;\n  *) exit 1 ;;\nesac\n',
+    "utf8",
+  );
   fs.chmodSync(scriptPath, 0o700);
   return scriptPath;
 }
@@ -90,27 +94,81 @@ function buildPasswordTransportArgs(input: {
   ];
 }
 
-function isPasswordSessionActive(target: SshExecutionTarget): boolean {
-  const session = passwordSessionByExecutionTargetId.get(target.executionTargetId);
-  if (!session || !fs.existsSync(session.controlPath)) {
-    return false;
-  }
-
-  const result = runLocalCommand("ssh", [
+function buildControlCheckArgs(
+  target: SshExecutionTarget,
+  session: { readonly controlPath: string; readonly destination: string },
+): string[] {
+  return [
     "-O",
     "check",
     "-o",
     `ControlPath=${session.controlPath}`,
     ...(target.port ? ["-p", target.port] : []),
     session.destination,
-  ]);
+  ];
+}
 
-  if (result.status === 0) {
-    return true;
-  }
+/**
+ * A control-master check that passed this recently is not repeated, so an
+ * async readiness check followed by building the command's transport args does
+ * not fall back to a synchronous probe.
+ */
+const PASSWORD_SESSION_CHECK_FRESH_MS = 10_000;
+const passwordSessionCheckedAt = new Map<string, number>();
 
-  fs.rmSync(session.controlPath, { force: true });
+function isPasswordSessionCheckFresh(target: SshExecutionTarget): boolean {
+  const checkedAt = passwordSessionCheckedAt.get(target.executionTargetId);
+  const session = passwordSessionByExecutionTargetId.get(target.executionTargetId);
+  return (
+    checkedAt !== undefined &&
+    performance.now() - checkedAt < PASSWORD_SESSION_CHECK_FRESH_MS &&
+    session !== undefined &&
+    fs.existsSync(session.controlPath)
+  );
+}
+
+function recordPasswordSessionCheck(target: SshExecutionTarget, active: boolean): boolean {
+  if (active) passwordSessionCheckedAt.set(target.executionTargetId, performance.now());
+  return active;
+}
+
+function forgetPasswordSession(target: SshExecutionTarget, controlPath: string): void {
+  fs.rmSync(controlPath, { force: true });
   passwordSessionByExecutionTargetId.delete(target.executionTargetId);
+  passwordSessionCheckedAt.delete(target.executionTargetId);
+}
+
+/** Synchronous control-master check for synchronous readiness callers; bounded by a short timeout. */
+function isPasswordSessionActive(target: SshExecutionTarget): boolean {
+  const session = passwordSessionByExecutionTargetId.get(target.executionTargetId);
+  if (!session || !fs.existsSync(session.controlPath)) {
+    return false;
+  }
+  const result = runSshLocalCommandSync("ssh", buildControlCheckArgs(target, session), {
+    timeoutMs: SSH_LOCAL_PROBE_TIMEOUT_MS,
+  });
+  if (result.status === 0) {
+    return recordPasswordSessionCheck(target, true);
+  }
+  forgetPasswordSession(target, session.controlPath);
+  return false;
+}
+
+async function isPasswordSessionActiveAsync(
+  target: SshExecutionTarget,
+  timeoutMs: number,
+): Promise<boolean> {
+  const session = passwordSessionByExecutionTargetId.get(target.executionTargetId);
+  if (!session || !fs.existsSync(session.controlPath)) {
+    return false;
+  }
+  const result = await runSshLocalCommand("ssh", buildControlCheckArgs(target, session), {
+    timeoutMs,
+  });
+  if (result.status === 0) {
+    return recordPasswordSessionCheck(target, true);
+  }
+  forgetPasswordSession(target, session.controlPath);
   return false;
 }
 
@@ -130,10 +188,29 @@ export function assertSshPasswordExecutionTargetReady(
   if (!target) {
     throw new Error(`Invalid SSH execution target '${executionTargetId ?? "local"}'.`);
   }
-  if (target.authMode !== "password") {
+  if (target.authMode !== "password" || isPasswordSessionCheckFresh(target)) {
     return;
   }
   if (!isPasswordSessionActive(target)) {
+    throw new Error(formatSshPasswordRequiredMessage(target.executionTargetId));
+  }
+}
+
+/** Async readiness for password targets: the control-master check never blocks the event loop. */
+export async function assertSshPasswordExecutionTargetReadyAsync(
+  executionTargetId: string | null | undefined,
+  deadline: SshDeadline,
+): Promise<void> {
+  const target = parseSshExecutionTarget(executionTargetId);
+  if (!target) {
+    throw new Error(`Invalid SSH execution target '${executionTargetId ?? "local"}'.`);
+  }
+  if (target.authMode !== "password" || isPasswordSessionCheckFresh(target)) {
+    return;
+  }
+  if (
+    !(await isPasswordSessionActiveAsync(target, deadline.remainingMs(SSH_LOCAL_PROBE_TIMEOUT_MS)))
+  ) {
     throw new Error(formatSshPasswordRequiredMessage(target.executionTargetId));
   }
 }
@@ -171,24 +248,32 @@ export async function unlockSshExecutionTargetPassword(input: {
     throw new Error("This SSH target is not configured for password authentication.");
   }
 
-  if (isPasswordSessionActive(target)) {
+  const deadline = createSshDeadline();
+  if (
+    await isPasswordSessionActiveAsync(target, deadline.remainingMs(SSH_LOCAL_PROBE_TIMEOUT_MS))
+  ) {
     return {
       message: `SSH password session for ${buildPasswordSessionDestination(target)} is ready to use.`,
     };
   }
 
+  await inspectSshHostTrust(target.executionTargetId);
   const session = getPasswordSessionRecord(target);
   fs.rmSync(session.controlPath, { force: true });
   const askpassDirectory = fs.mkdtempSync(path.join(os.tmpdir(), SSH_PASSWORD_ASKPASS_DIR_PREFIX));
   try {
     const askpassScriptPath = writePasswordAskpassScript(askpassDirectory);
-    const result = runLocalCommand(
+    const result = await runSshLocalCommand(
       "ssh",
       [
         "-f",
         "-N",
         "-o",
         "BatchMode=no",
+        "-o",
+        "StrictHostKeyChecking=yes",
+        "-o",
+        `ConnectTimeout=${SSH_CONNECT_TIMEOUT_SECONDS}`,
         "-o",
         "ControlMaster=yes",
         "-o",
@@ -205,29 +290,44 @@ export async function unlockSshExecutionTargetPassword(input: {
         session.destination,
       ],
       {
-        ...process.env,
-        BIGBUD_SSH_PASSWORD: input.password,
-        SSH_ASKPASS: askpassScriptPath,
-        SSH_ASKPASS_REQUIRE: "force",
-        DISPLAY: process.env.DISPLAY || "bigbud:0",
+        env: {
+          ...process.env,
+          BIGBUD_SSH_PASSWORD: input.password,
+          SSH_ASKPASS: askpassScriptPath,
+          SSH_ASKPASS_REQUIRE: "force",
+          DISPLAY: process.env.DISPLAY || "bigbud:0",
+        },
+        timeoutMs: deadline.remainingMs(),
       },
     );
 
+    if (result.timedOut) {
+      fs.rmSync(session.controlPath, { force: true });
+      throw new Error(
+        `Timed out after ${SSH_UNLOCK_DEADLINE_MS / 1000} s connecting to ${buildPasswordSessionDestination(target)}.`,
+      );
+    }
+
     if (result.error) {
-      const detail = result.error instanceof Error ? result.error.message : String(result.error);
-      throw new Error(`Failed to unlock SSH password session. ${detail}`);
+      throw new Error(
+        `Failed to unlock SSH password session. ${describeSshLocalCommandFailure(result)}`,
+      );
     }
 
     if (result.status !== 0) {
-      const detail =
-        `${result.stderr ?? ""}`.trim() || `${result.stdout ?? ""}`.trim() || "Unknown error.";
+      const detail = result.stderr.trim() || result.stdout.trim() || "Unknown error.";
       if (/permission denied/i.test(detail)) {
         throw new Error(`Incorrect password for ${buildPasswordSessionDestination(target)}.`);
       }
       throw new Error(`Failed to unlock SSH password session. ${detail}`);
     }
 
-    if (!isPasswordSessionActive(target)) {
+    if (
+      !(await isPasswordSessionActiveAsync(
+        target,
+        Math.max(1, deadline.remainingMs(SSH_LOCAL_PROBE_TIMEOUT_MS)),
+      ))
+    ) {
       throw new Error("Failed to unlock SSH password session. SSH did not retain the connection.");
     }
 
@@ -243,14 +343,19 @@ function closeAllPasswordSessions(): void {
   for (const [executionTargetId, session] of passwordSessionByExecutionTargetId.entries()) {
     const target = parseSshExecutionTarget(executionTargetId);
     if (target) {
-      runLocalCommand("ssh", [
-        "-O",
-        "exit",
-        "-o",
-        `ControlPath=${session.controlPath}`,
-        ...(target.port ? ["-p", target.port] : []),
-        session.destination,
-      ]);
+      // Runs from the process `exit` handler, so it must stay synchronous; bounded per session.
+      runSshLocalCommandSync(
+        "ssh",
+        [
+          "-O",
+          "exit",
+          "-o",
+          `ControlPath=${session.controlPath}`,
+          ...(target.port ? ["-p", target.port] : []),
+          session.destination,
+        ],
+        { timeoutMs: SSH_LOCAL_PROBE_TIMEOUT_MS },
+      );
     }
     fs.rmSync(session.controlPath, { force: true });
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import serverPackage from "../../../../package.json";
 
-import { FakeClaudeQuery } from "./Adapter.test.helpers.ts";
+import { FakeClaudeQuery } from "./Adapter.test.helpers.query.ts";
 import {
   CLAUDE_AGENT_SDK_VERSION,
   claudeSdkMessageDiscriminator,

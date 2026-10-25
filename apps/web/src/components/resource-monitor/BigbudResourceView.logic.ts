@@ -5,7 +5,8 @@ import type {
 } from "@bigbud/contracts/system-monitor/types";
 import type { DisplayMetric } from "./ResourceMetricCard";
 import type { CapacityUsage } from "./ResourceCapacityDonut.logic";
-import { formatBytes, formatPercent } from "./resourceMonitor.format";
+import { formatPercent } from "./resourceMonitor.format";
+import { formatCapacityGiB } from "./ResourceCapacityUsage.logic";
 
 export const APP_GROUP_LABELS = {
   desktop: "Desktop",
@@ -27,7 +28,7 @@ export function appCard(
   memoryTotal?: MonitorMetric,
 ): DisplayMetric & { capacity: CapacityUsage | undefined } {
   const metric = kind === "cpu" ? group?.cpuPercent : group?.residentBytes;
-  const format = kind === "cpu" ? formatPercent : formatBytes;
+  const format = kind === "cpu" ? formatPercent : formatCapacityGiB;
   const total =
     kind === "cpu" ? 100 : memoryTotal?.status === "ready" ? memoryTotal.value : undefined;
   const capacity =

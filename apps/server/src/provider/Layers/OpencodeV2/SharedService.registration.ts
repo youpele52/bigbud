@@ -1,11 +1,11 @@
-import { constants } from "node:fs";
-import { open } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { Schema } from "effect";
 import type { Endpoint } from "@opencode/client/service";
 import { validateOwnedEndpoint } from "./Compatibility.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
+import { readV2WindowsRegistration } from "./SharedService.windows.ts";
+import { readV2UnixRegistration } from "./SharedService.registration.unix.ts";
 
 const Registration = Schema.Struct({
   id: Schema.String,
@@ -35,7 +35,12 @@ export function v2SharedGeneration(registration: V2SharedRegistration): string {
 /** Match the native Promise Service registration convention; never create a profile. */
 export function v2SharedRegistrationFile(env: NodeJS.ProcessEnv = process.env): string {
   return path.join(
-    env.XDG_STATE_HOME ?? path.join(env.HOME ?? homedir(), ".local", "state"),
+    env.XDG_STATE_HOME ??
+      path.join(
+        process.platform === "win32" ? homedir() : (env.HOME ?? homedir()),
+        ".local",
+        "state",
+      ),
     "opencode",
     "service.json",
   );
@@ -48,23 +53,11 @@ export async function readV2SharedRegistration(file: string): Promise<V2SharedRe
       "registration",
       "OpenCode v2 service registration must use an absolute path.",
     );
-  let handle;
   try {
-    handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-    const stat = await handle.stat();
-    if (
-      !stat.isFile() ||
-      stat.size > 16_384 ||
-      (process.platform !== "win32" &&
-        ((stat.mode & 0o077) !== 0 || stat.uid !== process.getuid?.()))
-    )
-      throw new Error("Invalid registration file.");
-    const buffer = Buffer.alloc(16_385);
-    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-    if (bytesRead > 16_384) throw new Error("Registration exceeds bound.");
-    const decoded = Schema.decodeUnknownSync(Registration)(
-      JSON.parse(buffer.subarray(0, bytesRead).toString("utf8")),
-    );
+    const buffer = await (process.platform === "win32"
+      ? readV2WindowsRegistration(file)
+      : readV2UnixRegistration(file));
+    const decoded = Schema.decodeUnknownSync(Registration)(JSON.parse(buffer.toString("utf8")));
     if (
       !decoded.id ||
       decoded.id.length > 256 ||
@@ -99,8 +92,6 @@ export async function readV2SharedRegistration(file: string): Promise<V2SharedRe
       "registration",
       "OpenCode v2 service registration is invalid or not private to this user. Check the native service; bigbud did not modify it.",
     );
-  } finally {
-    await handle?.close();
   }
 }
 

@@ -93,6 +93,7 @@ function getCopilotSessionApproval(
       | { kind: "user-not-available" }
     >
   | undefined {
+  if (request.managedApprovalRequired) return undefined;
   const props = request as unknown as Record<string, unknown>;
 
   switch (request.kind) {
@@ -181,6 +182,7 @@ function getCopilotSessionApproval(
 export function getCopilotSessionApprovalMetadata(
   request: PermissionRequest,
 ): CopilotSessionApprovalMetadata {
+  if (request.managedApprovalRequired) return { available: false };
   switch (request.kind) {
     case "shell": {
       const approval = getCopilotSessionApproval(request);

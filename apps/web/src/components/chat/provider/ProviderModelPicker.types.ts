@@ -9,6 +9,7 @@ export interface ProviderModelPickerProps {
   model: string;
   lockedProvider: ProviderKind | null;
   providers?: ReadonlyArray<ServerProvider>;
+  allowedProviders?: ReadonlyArray<ProviderKind>;
   workspaceExecutionTargetId?: ExecutionTargetId | null | undefined;
   modelOptionsByProvider: Record<ProviderKind, ReadonlyArray<ModelOption>>;
   activeProviderIconClassName?: string;
@@ -17,6 +18,7 @@ export interface ProviderModelPickerProps {
   enableRecentlyUsed?: boolean;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
+  triggerLabel?: string | undefined;
   menuItemClassName?: string;
   popupClassName?: string;
   subPopupClassName?: string;

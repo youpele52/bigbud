@@ -38,6 +38,7 @@ import {
 } from "./window/menuManager";
 import { createWindow } from "./window/windowManager";
 import { configureAppIdentity, resolveUserDataPath } from "./main.appIdentity";
+import { createAppQuitActions } from "./main.appQuitActions";
 import { registerDesktopProtocol, registerDesktopSchemeAsPrivileged } from "./main.protocol";
 import {
   applyLinuxRuntimeSwitches,
@@ -52,6 +53,7 @@ import { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
 import { bootstrapDesktop } from "./main.bootstrap";
 import { registerFloatingAssistantIpc } from "./main.floatingAssistant";
 import { registerDesktopShutdownSignals } from "./main.shutdownSignals";
+import { stopDesktopConnectivitySignals } from "./connectivity/connectivitySignals.main";
 
 const channels = desktopIpcChannels;
 
@@ -112,21 +114,15 @@ app.setPath(
   }),
 );
 desktopPreferences = new DesktopPreferencesStore(app.getPath("userData"), logHeader);
+const appQuitActions = createAppQuitActions({ appInstance: app, isDevelopment, prepareForAppQuit });
 floatingAssistantWindows = new FloatingAssistantWindows({
   desktopDir: __dirname,
   desktopScheme: DESKTOP_SCHEME,
   getSafeExternalUrl,
   isDevelopment,
   onOpenMain: () => openMainWindow(),
-  onQuit: () => {
-    prepareForAppQuit("floating-assistant-menu-quit");
-    app.quit();
-  },
-  onRestart: () => {
-    app.relaunch();
-    prepareForAppQuit("floating-assistant-menu-restart");
-    app.quit();
-  },
+  onQuit: () => appQuitActions.quit("floating-assistant-menu-quit"),
+  onRestart: () => appQuitActions.restart("floating-assistant-menu-restart"),
   preferences: desktopPreferences,
   registry: windowRegistry,
   resolveIconPath,
@@ -163,9 +159,7 @@ function recordMainProcessCrash(error: unknown): void {
   }
 }
 
-installDesktopSingleInstanceLock(app, () => {
-  openMainWindow();
-});
+installDesktopSingleInstanceLock(app, openMainWindow, appQuitActions.quitDuplicateInstance);
 
 registerDesktopSchemeAsPrivileged(DESKTOP_SCHEME);
 
@@ -184,7 +178,7 @@ function handleFatalStartupError(stage: string, error: unknown): void {
   stopCuaDriverDaemon();
   restoreStdIoCapture?.();
   flushDiagnosticLogs();
-  app.quit();
+  appQuitActions.quitAfterFatalError();
 }
 
 // Packaged logging initialisation (runs synchronously at module load)
@@ -219,7 +213,7 @@ process.on("uncaughtException", (error) => {
     stopCuaDriverDaemon();
     restoreStdIoCapture?.();
     flushDiagnosticLogs();
-    app.quit();
+    appQuitActions.quitAfterFatalError();
   }
 });
 
@@ -273,14 +267,14 @@ function openMainWindow(threadId?: string): BrowserWindow {
 
 /**
  * Shared teardown path called from both `before-quit` and `before-quit-for-update`.
- * Stops the backend process, clears update poll timers, and restores stdio capture.
- * Idempotent — safe to call multiple times.
+ * Stops the backend process, clears update poll timers, and restores stdio capture. Idempotent.
  */
 function prepareForAppQuit(reason: string): void {
   if (quitTeardownComplete) return;
   quitTeardownComplete = true;
   isQuitting = true;
   systemMonitor.stop();
+  stopDesktopConnectivitySignals();
   stopSystemMonitorAgentBridge();
   floatingAssistantWindows.destroyForQuit();
   logHeader(`${reason} received`);
@@ -358,12 +352,11 @@ app
       systemMonitor,
       registerFloatingAssistantIpc: () =>
         registerFloatingAssistantIpc({
-          appInstance: app,
+          appQuitActions,
           channels,
           desktopPreferences,
           floatingAssistantWindows,
           openMainWindow,
-          prepareForAppQuit,
           windowRegistry,
         }),
       resolveIconPath,

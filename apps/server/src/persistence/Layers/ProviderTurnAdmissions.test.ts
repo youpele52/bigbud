@@ -29,6 +29,69 @@ export const admissionFixture = (request = "request-1") => ({
 const layer = ProviderTurnAdmissionsLive.pipe(Layer.provideMerge(SqlitePersistenceMemory));
 
 it.layer(layer)("durable provider turn admissions", (it) => {
+  it.effect(
+    "cancels only revision-zero foreground reservations and preserves immutable evidence",
+    () =>
+      Effect.gen(function* () {
+        const journal = yield* ProviderTurnAdmissions;
+        const input = admissionFixture("cancel-before-dispatch");
+        const row = yield* journal.reserve(input);
+        const cancelled = yield* journal.transition(
+          row,
+          "terminal",
+          row.createdAt,
+          undefined,
+          "interrupted",
+        );
+        assert.strictEqual(cancelled.revision, 1);
+        assert.strictEqual(cancelled.finalText, null);
+        assert.strictEqual(cancelled.nativeAdmissionId, row.nativeAdmissionId);
+        assert.strictEqual(cancelled.fingerprint, row.fingerprint);
+        assert.deepEqual(yield* journal.reserve(input), cancelled);
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(journal.transition(row, "dispatch-intent", row.createdAt)),
+          ),
+        );
+        const pending = yield* journal.reserve(admissionFixture("cancel-raced-intent"));
+        const intent = yield* journal.transition(pending, "dispatch-intent", pending.createdAt);
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(
+              journal.transition(pending, "terminal", pending.createdAt, undefined, "interrupted"),
+            ),
+          ),
+        );
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(
+              journal.transition(intent, "terminal", pending.createdAt, undefined, "interrupted"),
+            ),
+          ),
+        );
+        const invalid = yield* journal.reserve(admissionFixture("cancel-invalid-result"));
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(
+              journal.transition(invalid, "terminal", invalid.createdAt, undefined, "completed"),
+            ),
+          ),
+        );
+        assert.isTrue(
+          Exit.isFailure(
+            yield* Effect.exit(
+              journal.transition(
+                invalid,
+                "terminal",
+                invalid.createdAt,
+                "fabricated output",
+                "interrupted",
+              ),
+            ),
+          ),
+        );
+      }),
+  );
   it.effect("reserves once concurrently and rejects conflicting material/provider rebinding", () =>
     Effect.gen(function* () {
       const journal = yield* ProviderTurnAdmissions;

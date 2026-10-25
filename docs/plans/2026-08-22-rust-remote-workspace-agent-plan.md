@@ -14,7 +14,7 @@ The first implementation prioritizes faster reconnect and resumability, remote F
 
 ## Related Work
 
-- [Remote Access Setup](../REMOTE.md) documents remote access to the bigbud UI and server. That is separate from this plan's SSH-backed remote workspace execution.
+- [Remote Access Setup](../REMOTE_ACCESS.md) documents remote access to the bigbud UI and server. That is separate from this plan's SSH-backed remote workspace execution.
 - [README remote projects](../../README.md#remote-projects) describes the current user-facing SSH project behavior.
 - [Changelog remote SSH history](../CHANGELOG.md) records the existing SSH project, reconnect, editing, password, provider-runtime, and terminal behavior that this plan must preserve during migration.
 - [Zed Remote Development](https://zed.dev/docs/remote-development) is the primary architectural reference for automatic installation, SSH ControlMaster multiplexing, a version-matched remote binary, a proxy/daemon split, and reconnecting to a short-lived remote workspace process.

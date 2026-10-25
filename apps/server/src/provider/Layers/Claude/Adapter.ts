@@ -27,6 +27,7 @@ import {
   type ClaudeSessionContext,
   type ClaudeTurnState,
 } from "./Adapter.types.ts";
+import { isLiveClaudeSession } from "./Adapter.sessionLookup.ts";
 import { makeStreamHandlers } from "./Adapter.stream.ts";
 import { makeBuildUserMessageEffect } from "./Adapter.session.message.ts";
 import { canReadManagedProviderPaths } from "../../../attachments/providerAttachments.managed.ts";
@@ -37,6 +38,7 @@ import { rememberBoundedIdentity } from "./Adapter.dedup.ts";
 import { makeClaudeControlOperations } from "./Adapter.controls.ts";
 import { makeClaudeEventRuntime } from "./Adapter.events.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 export type { ClaudeAdapterLiveOptions };
 
 export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
@@ -100,14 +102,17 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         new ProviderAdapterSessionNotFoundError({
           provider: PROVIDER,
           threadId,
+          failureClass: "session-dead",
         }),
       );
     }
-    if (context.stopped || context.session.status === "closed") {
+    // Checked before anything is written, so the turn never started (plan D12).
+    if (!isLiveClaudeSession(context)) {
       return Effect.fail(
         new ProviderAdapterSessionClosedError({
           provider: PROVIDER,
           threadId,
+          failureClass: "session-dead",
         }),
       );
     }
@@ -232,9 +237,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     };
   });
 
-  const { interruptTurn, mcp, readThread, rollbackThread } = makeClaudeControlOperations({
-    requireSession,
-  });
+  const { interruptTurn, mcp, readThread, rollbackThread, stopSubagent } =
+    makeClaudeControlOperations({ requireSession });
 
   const respondToRequest: ClaudeAdapterShape["respondToRequest"] = Effect.fn("respondToRequest")(
     function* (threadId, requestId, decision) {
@@ -328,7 +332,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
   const hasSession: ClaudeAdapterShape["hasSession"] = (threadId) =>
     Effect.sync(() => {
       const context = sessions.get(threadId);
-      return context !== undefined && !context.stopped;
+      return context !== undefined && isLiveClaudeSession(context);
     });
 
   const stopAll: ClaudeAdapterShape["stopAll"] = () =>
@@ -356,6 +360,8 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.claudeAgent,
+      nativePromptSuggestions: true,
       sessionRecovery: "resume-restart",
       conversationRewind: "unsupported",
       conversationFork: "unsupported",
@@ -364,6 +370,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     startSession,
     sendTurn,
     interruptTurn,
+    stopSubagent,
     inspectActiveTurn: unavailableActiveTurnInspection("claudeAgent"),
     readThread,
     rollbackThread,

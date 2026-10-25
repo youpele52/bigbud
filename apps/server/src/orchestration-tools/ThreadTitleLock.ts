@@ -1,6 +1,7 @@
 import type { OrchestrationEvent } from "@bigbud/contracts";
 
 import { canReplaceThreadTitle } from "../orchestration/Layers/ProviderCommandReactorHelpers.ts";
+import type { ThreadTitleOwner } from "./TerminalThreadTitle.ts";
 
 const lockedThreadIds = new Set<string>();
 const titleVersions = new Map<string, number>();
@@ -37,8 +38,13 @@ export function shouldAllowAutoTitleReplace(input: {
   readonly threadId: string;
   readonly currentTitle: string;
   readonly titleSeed?: string;
+  readonly titleOwner?: ThreadTitleOwner | null;
 }): boolean {
-  if (isThreadTitleLocked(input.threadId)) {
+  if (
+    isThreadTitleLocked(input.threadId) ||
+    input.titleOwner === "terminal" ||
+    input.titleOwner === "manual"
+  ) {
     return false;
   }
   return canReplaceThreadTitle(input.currentTitle, input.titleSeed);

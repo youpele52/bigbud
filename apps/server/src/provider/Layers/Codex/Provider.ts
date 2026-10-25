@@ -32,6 +32,7 @@ import { ServerSettingsError } from "@bigbud/contracts";
 import { getCodexFallbackModels } from "./Provider.models";
 import { hasCustomModelProvider, parseAuthStatusFromOutput } from "./Provider.auth";
 import { makeCodexInitialSnapshot } from "./Provider.initialSnapshot";
+import { readCodexSubscriptionUsage } from "./Provider.usageLimits.read.ts";
 
 export { getCodexModelCapabilities } from "./Provider.models";
 export {
@@ -365,6 +366,7 @@ export const CodexProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      readUsageLimits: readCodexSubscriptionUsage,
       recoverModelDiscovery: true,
       decorateSnapshot,
       initialSnapshot: makeCodexInitialSnapshot,

@@ -52,6 +52,8 @@ sessionErrorLayer("CodexAdapterLive session errors", (it) => {
       assert.equal(result.failure.provider, "codex");
       assert.equal(result.failure.threadId, "sess-missing");
       assert.equal(result.failure.cause instanceof Error, true);
+      // The manager refused before writing anything: the turn never started.
+      assert.equal(result.failure.failureClass, "session-dead");
     }),
   );
 

@@ -266,6 +266,7 @@ describe("PiAdapter methods", () => {
     );
 
     expect(request).toHaveBeenCalledWith({
+      id: result.turnId,
       type: "prompt",
       message: "follow up while busy",
       streamingBehavior: "steer",

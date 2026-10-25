@@ -20,6 +20,7 @@ import {
 import { Effect, Queue, ServiceMap } from "effect";
 
 import { ProviderAdapterSessionNotFoundError } from "../../Errors.ts";
+import { requireLiveAdapterSession } from "../../providerSessionLookup.ts";
 import type { OpencodeServerManagerShape } from "../../Services/Opencode/ServerManager.ts";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
@@ -105,10 +106,7 @@ export function makeSessionMethods(deps: SessionMethodDeps) {
   const requireSession = (
     threadId: ThreadId,
   ): Effect.Effect<ActiveOpencodeSession, ProviderAdapterSessionNotFoundError> => {
-    const session = sessions.get(threadId);
-    return session
-      ? Effect.succeed(session)
-      : Effect.fail(new ProviderAdapterSessionNotFoundError({ provider, threadId }));
+    return requireLiveAdapterSession({ provider, threadId, session: sessions.get(threadId) });
   };
 
   const queryDeps = {

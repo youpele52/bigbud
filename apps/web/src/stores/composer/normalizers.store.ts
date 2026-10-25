@@ -1,4 +1,6 @@
 import type { MessageId, ThreadId } from "@bigbud/contracts";
+import * as Schema from "effect/Schema";
+import { WorktreeBinding } from "@bigbud/contracts/workspace/worktreeBinding.ts";
 import {
   type ModelSelection,
   PROVIDER_KINDS,
@@ -95,6 +97,9 @@ export function normalizePersistedDraftThreads(
         continue;
       }
       draftThreadsByThreadId[threadId as ThreadId] = {
+        ...(Schema.is(WorktreeBinding)(candidateDraftThread.worktreeBinding)
+          ? { worktreeBinding: candidateDraftThread.worktreeBinding }
+          : {}),
         projectId: projectId as import("@bigbud/contracts").ProjectId,
         createdAt:
           typeof createdAt === "string" && createdAt.length > 0
@@ -283,6 +288,8 @@ export function normalizePersistedDraftsByThreadId(
       !hasModelData &&
       !runtimeMode &&
       !interactionMode &&
+      draftCandidate.pendingEnvMode !== "local" &&
+      draftCandidate.pendingEnvMode !== "worktree" &&
       bootstrapSourceThreadId === null &&
       replyTarget === null
     ) {
@@ -297,6 +304,9 @@ export function normalizePersistedDraftsByThreadId(
       ...(hasModelData ? { modelSelectionByProvider, activeProvider } : {}),
       ...(runtimeMode ? { runtimeMode } : {}),
       ...(interactionMode ? { interactionMode } : {}),
+      ...(draftCandidate.pendingEnvMode === "local" || draftCandidate.pendingEnvMode === "worktree"
+        ? { pendingEnvMode: draftCandidate.pendingEnvMode }
+        : {}),
       ...(bootstrapSourceThreadId !== null ? { bootstrapSourceThreadId } : {}),
       ...(replyTarget !== null ? { replyTarget } : {}),
     };

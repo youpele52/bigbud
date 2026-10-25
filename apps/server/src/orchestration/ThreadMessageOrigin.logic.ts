@@ -86,3 +86,13 @@ export function verifiedSeedOriginSegments(input: {
     };
   });
 }
+
+/**
+ * A server-originated sleep recovery continuation. It is sent only to an idle thread and
+ * never waits in the prompt queue, so it can never run after a message the user sent later.
+ */
+export function hasSleepRecoveryOrigin(message: {
+  readonly originSegments?: ReadonlyArray<{ readonly kind: string }> | undefined;
+}): boolean {
+  return message.originSegments?.some((segment) => segment.kind === "sleepRecovery") === true;
+}

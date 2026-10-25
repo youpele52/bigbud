@@ -63,6 +63,6 @@ fn duplicate_pty_create_reuses_the_existing_process() {
         Err(SessionError::OperationIdConflict)
     ));
 
-    let _ = pty::read_events(job.reader, job.handle.pid);
+    let _ = pty::read_events(job.reader, &job.handle);
     let _ = fs::remove_dir_all(root);
 }

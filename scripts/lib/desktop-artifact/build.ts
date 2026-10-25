@@ -29,6 +29,10 @@ import {
 } from "./build.runtime.ts";
 import { stageBundledSkills } from "./bundledSkills.ts";
 import {
+  SERVER_RUNTIME_NPM_OVERRIDES,
+  installStagedServerDependencies,
+} from "./serverRuntimeDependencies.ts";
+import {
   assertPlatformBuildResources,
   createBuildConfig,
   resolveDesktopRuntimeDependencies,
@@ -47,6 +51,7 @@ import { resolveCatalogDependencies } from "../resolve-catalog.ts";
 import { sanitizeUnsignedSigningEnvironment } from "../windows-signing-mode.ts";
 import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
 import { stageDesktopNativeSidecars } from "./nativeSidecars.ts";
+import { copyDesktopArtifacts } from "./build.copy.ts";
 
 export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   options: ResolvedBuildOptions,
@@ -217,11 +222,15 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   const stageServerPackageJson = {
     name: serverPackageJson.name,
     version: appVersion,
+    ...("bigbudReleaseTag" in serverPackageJson && appVersion === serverPackageJson.version
+      ? { bigbudReleaseTag: serverPackageJson.bigbudReleaseTag }
+      : {}),
     private: true,
     type: serverPackageJson.type,
     bin: serverPackageJson.bin,
     files: serverPackageJson.files,
     dependencies: serverExternalDependencies,
+    overrides: SERVER_RUNTIME_NPM_OVERRIDES,
   };
   const stageServerPackageJsonString = yield* encodeJsonString(stageServerPackageJson);
   yield* fs.writeFileString(
@@ -238,20 +247,11 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     })`bun install --production`,
   );
   yield* pruneSourceMaps(path.join(stageAppDir, "node_modules"), "desktop runtime dependencies");
-  // Use npm (not bun) for the server directory so node_modules follows the
-  // standard flat layout that Node.js expects. Bun's symlink-based hoisting
-  // does not survive electron-builder's file copy to extraResources.
-  // Do NOT use --no-optional: @github/copilot declares platform-specific
-  // CLI binaries (@github/copilot-darwin-arm64, etc.) as optionalDependencies.
-  // Without them the Copilot SDK has no CLI to spawn and listModels() returns
-  // incomplete model shapes that crash at runtime.
-  yield* runCommand(
-    ChildProcess.make({
-      cwd: stageServerDir,
-      ...commandOutputOptions(options.verbose),
-      shell: shellOptionForPlatform(options.platform),
-    })`npm install --production`,
-  );
+  yield* installStagedServerDependencies({
+    stageServerDir,
+    platform: options.platform,
+    verbose: options.verbose,
+  });
 
   if (options.platform === "mac") {
     yield* Effect.log("[desktop-artifact] Pruning non-mac native runtime artifacts...");
@@ -279,14 +279,13 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     }
   }
 
-  // The afterSign hook lives in the monorepo and requires @electron/notarize,
-  // which is only present in apps/desktop/node_modules (the staged directory
-  // installs --production). Point NODE_PATH back so the hook can resolve it.
+  // Hooks live in the monorepo rather than the staged production install.
   const monorepoNodeModules = path.join(repoRoot, "node_modules");
   const desktopNodeModules = path.join(repoRoot, "apps/desktop/node_modules");
   buildEnv.NODE_PATH = [buildEnv.NODE_PATH, monorepoNodeModules, desktopNodeModules]
     .filter(Boolean)
     .join(delimiter);
+  buildEnv.BIGBUD_NOTARIZATION_RECOVERY_DIR = path.join(repoRoot, "notarization-recovery");
 
   const preferExistingCodesignIdentity =
     options.platform === "mac" &&
@@ -329,7 +328,10 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
         ...commandOutputOptions(options.verbose),
         shell: shellOptionForPlatform(options.platform),
       })`${electronBuilderResult.binary} ${platformConfig.cliFlag} --${options.arch} --publish never`;
-  const maxAttempts = options.platform === "mac" && options.target === "dmg" ? 3 : 1;
+  // Never rebuild/resubmit a signed app after an accepted or ambiguous submission.
+  // The hook retries transient ticket operations against the same signed artifact.
+  const maxAttempts =
+    options.platform === "mac" && options.target === "dmg" && !options.signed ? 3 : 1;
   const runElectronBuilderAttempt = (attempt: number): ReturnType<typeof runCommand> =>
     runCommand(electronBuilderCommand).pipe(
       Effect.catchTag("BuildScriptError", (error) => {
@@ -353,30 +355,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     });
   }
 
-  const stageEntries = yield* fs.readDirectory(stageDistDir);
-  yield* fs.makeDirectory(options.outputDir, { recursive: true });
-
-  const copiedArtifacts: string[] = [];
-  for (const entry of stageEntries) {
-    const from = path.join(stageDistDir, entry);
-    const stat = yield* fs.stat(from).pipe(Effect.catch(() => Effect.succeed(null)));
-    if (!stat) continue;
-
-    const to = path.join(options.outputDir, entry);
-    if (stat.type === "File") {
-      yield* fs.copyFile(from, to);
-      copiedArtifacts.push(to);
-    } else if (stat.type === "Directory") {
-      yield* fs.copy(from, to);
-      copiedArtifacts.push(to);
-    }
-  }
-
-  if (copiedArtifacts.length === 0) {
-    return yield* new BuildScriptError({
-      message: `Build completed but no files were produced in ${stageDistDir}`,
-    });
-  }
+  const copiedArtifacts = yield* copyDesktopArtifacts(stageDistDir, options.outputDir);
 
   if (options.platform === "linux") {
     if (options.target === "dir") {

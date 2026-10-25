@@ -1,17 +1,20 @@
 import { BigbudLogo } from "../sidebar/SidebarProjectItem";
 import { Button } from "../ui/button";
 import type { BrowserNavigationErrorContent } from "./BrowserPanel.navigationError";
+import { BrowserExternalLink } from "./BrowserPanel.externalLink";
 
 export function BrowserPanelErrorPage({
   content,
   onReload,
   onGoBack,
   onVisitAnyway,
+  externalUrl,
 }: {
   content: BrowserNavigationErrorContent;
   onReload: () => void;
   onGoBack?: (() => void) | undefined;
   onVisitAnyway?: (() => void) | undefined;
+  externalUrl?: string | undefined;
 }) {
   return (
     <div
@@ -33,6 +36,7 @@ export function BrowserPanelErrorPage({
             ))}
           </ul>
         </div>
+        {externalUrl && <BrowserExternalLink url={externalUrl} />}
         <p className="text-xs text-muted-foreground">{content.technicalCode}</p>
         <div className="flex flex-wrap gap-2 pt-2">
           <Button onClick={onReload}>Reload</Button>

@@ -16,6 +16,7 @@ describe("BrowserWebviewViewport setup", () => {
       }
 
       expect(webview.getAttribute("useragent")).toBeNull();
+      expect(webview.hasAttribute("allowpopups")).toBe(true);
     } finally {
       await screen.unmount();
       host.remove();

@@ -1,0 +1,15 @@
+{
+  "type": "ClientProof",
+  "input": {
+    "handshakeId": {
+      "$bytes": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"
+    },
+    "transcript": {
+      "$bytes": "839efae1eb6e90d6339d7aef2f102430754614031de2c2ae9319b514ae815c6b"
+    },
+    "clientProof": {
+      "$bytes": "acf2f83abc601420cfc997817a7286b4501b5d60b1576879776817381af25c49"
+    }
+  },
+  "canonical": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b839efae1eb6e90d6339d7aef2f102430754614031de2c2ae9319b514ae815c6bacf2f83abc601420cfc997817a7286b4501b5d60b1576879776817381af25c49"
+}

@@ -2,7 +2,7 @@
 
 ## Scope and identity
 
-Authoritative attachment scope: [ready implementation plan](../plans/2026-10-09-shared-path-first-attachments.md), **All providers**. Subsequent [shared-service direction](../plans/2026-10-09-opencode-v2-shared-service-plan.md) supersedes exact-runtime/private-default policy, not security/replay boundaries. Branch `dev`, base `258d99eb4ee822744f6e14d822a306e8532f36f5`; inherited dirty worktree preserved. No commit or push.
+Authoritative attachment scope: **All providers**. The implemented path-first plan was retired on 22 October, 2026; shared preparation/adapters and the limitations below remain authoritative implementation evidence. Subsequent [consolidated shared-service direction](../reports/providers-opencode-v2.md#consolidated-adoption-and-setup-decisions) supersedes exact-runtime/private-default policy, not security/replay boundaries. Branch `dev`, base `258d99eb4ee822744f6e14d822a306e8532f36f5`; inherited dirty worktree preserved. No commit or push.
 
 Shared preparation reads only verified immutable snapshots, prefers target-reachable paths, and adds bounded supplemental text once. Codex/Claude/CLIProxy/Copilot/Pi/Cursor/Devin/OpenCode/Kilo reuse this layer and retain supported native visual protocols. V2 persists immutable preparation before mutation/admission, retaining text-only fingerprint compatibility and no automatic resend. Remote workspace references cannot hydrate from host paths; explicit desktop uploads remain separate host-file ingress. Non-V2 remote references retain existing reading-tool delivery, not automatic remote OCR/extraction.
 

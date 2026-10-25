@@ -4,6 +4,7 @@ import { Effect, Option, Tracer } from "effect";
 import { spanToTraceRecord, type TraceRecord } from "./TraceRecord.ts";
 import { makeTraceSink, type TraceSink } from "./TraceSink.ts";
 import { makeTraceRecordRecorder, type TracePolicy } from "./TracePolicy.ts";
+import type { SpanActivityShape } from "./SpanActivity.ts";
 
 export interface LocalFileTracerOptions {
   readonly filePath: string;
@@ -15,7 +16,11 @@ export interface LocalFileTracerOptions {
   /** Omit to retain the historical all-spans behavior for embedded callers/tests. */
   readonly tracePolicy?: TracePolicy;
   readonly onTraceDecision?: (decision: "retained" | "dropped", record: TraceRecord) => void;
+  /** Receives span start and end so event-loop stalls can be attributed. */
+  readonly spanActivity?: SpanActivityShape;
 }
+
+const nanosToMillis = (nanos: bigint): number => Number(nanos / 1_000_000n);
 
 class LocalFileSpan implements Tracer.Span {
   readonly _tag = "Span";
@@ -36,6 +41,7 @@ class LocalFileSpan implements Tracer.Span {
     options: Parameters<Tracer.Tracer["span"]>[0],
     private readonly delegate: Tracer.Span,
     private readonly record: (record: TraceRecord) => void,
+    private readonly spanActivity?: SpanActivityShape,
   ) {
     this.name = delegate.name;
     this.spanId = delegate.spanId;
@@ -51,6 +57,7 @@ class LocalFileSpan implements Tracer.Span {
     };
     this.attributes = new Map();
     this.events = [];
+    spanActivity?.started(this.spanId, this.name, nanosToMillis(options.startTime));
   }
 
   end(endTime: bigint, exit: Exit.Exit<unknown, unknown>): void {
@@ -61,6 +68,7 @@ class LocalFileSpan implements Tracer.Span {
       exit,
     };
     this.delegate.end(endTime, exit);
+    this.spanActivity?.ended(this.spanId, nanosToMillis(endTime));
 
     if (this.sampled) {
       this.record(spanToTraceRecord(this));
@@ -108,7 +116,12 @@ export const makeLocalFileTracer = Effect.fn("makeLocalFileTracer")(function* (
 
   return Tracer.make({
     span(spanOptions) {
-      return new LocalFileSpan(spanOptions, delegate.span(spanOptions), record);
+      return new LocalFileSpan(
+        spanOptions,
+        delegate.span(spanOptions),
+        record,
+        options.spanActivity,
+      );
     },
     ...(delegate.context ? { context: delegate.context } : {}),
   });

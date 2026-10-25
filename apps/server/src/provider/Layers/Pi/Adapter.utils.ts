@@ -9,9 +9,15 @@ import {
 
 import type { ActivePiSession, PiAdapterModelSelection, PiResumeCursor } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
+import { usageCounter, sumUsageCounters } from "../ProviderUsageAccounting.canonical.ts";
 
 export function toMessage(cause: unknown, fallback: string): string {
   return cause instanceof Error && cause.message.length > 0 ? cause.message : fallback;
+}
+
+/** False once the Pi RPC child process has exited or was killed by a signal. */
+export function isPiProcessAlive(process: Pick<ActivePiSession["process"], "child">): boolean {
+  return (process.child.exitCode ?? null) === null && (process.child.signalCode ?? null) === null;
 }
 
 export function normalizeString(value: unknown): string | undefined {
@@ -166,25 +172,26 @@ export function normalizeUsage(value: unknown): ThreadTokenUsageSnapshot | undef
     return undefined;
   }
 
-  const inputTokens = typeof value.input === "number" ? Math.max(0, Math.trunc(value.input)) : 0;
-  const outputTokens = typeof value.output === "number" ? Math.max(0, Math.trunc(value.output)) : 0;
-  const cachedInputTokens =
-    typeof value.cacheRead === "number" ? Math.max(0, Math.trunc(value.cacheRead)) : 0;
-  const usedTokens = inputTokens + outputTokens + cachedInputTokens;
-  const totalProcessedTokens =
-    typeof value.totalTokens === "number" ? Math.max(0, Math.trunc(value.totalTokens)) : usedTokens;
-  if (usedTokens <= 0 && totalProcessedTokens <= 0) {
-    return undefined;
-  }
+  const inputTokens = usageCounter(value.input);
+  const outputTokens = usageCounter(value.output);
+  const cachedInputTokens = usageCounter(value.cacheRead);
+  const cacheWriteTokens = usageCounter(value.cacheWrite);
+  const counters = [inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens];
+  const reported = usageCounter(value.totalTokens);
+  if (counters.every((counter) => counter === null) && reported === null) return undefined;
+  const usedTokens = sumUsageCounters(...counters.map((counter) => counter ?? 0));
+  if (usedTokens === null) return undefined;
+  const totalProcessedTokens = reported ?? usedTokens;
 
   return {
     usedTokens,
     totalProcessedTokens,
-    ...(inputTokens > 0 ? { inputTokens, lastInputTokens: inputTokens } : {}),
-    ...(cachedInputTokens > 0
+    ...(cacheWriteTokens !== null ? { cacheWriteTokens } : {}),
+    ...(inputTokens !== null ? { inputTokens, lastInputTokens: inputTokens } : {}),
+    ...(cachedInputTokens !== null
       ? { cachedInputTokens, lastCachedInputTokens: cachedInputTokens }
       : {}),
-    ...(outputTokens > 0 ? { outputTokens, lastOutputTokens: outputTokens } : {}),
+    ...(outputTokens !== null ? { outputTokens, lastOutputTokens: outputTokens } : {}),
     ...(usedTokens > 0 ? { lastUsedTokens: usedTokens } : {}),
   };
 }

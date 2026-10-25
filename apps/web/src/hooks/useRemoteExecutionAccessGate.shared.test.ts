@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getRemoteAgentAccessError } from "./useRemoteExecutionAccessGate.shared";
+import {
+  getRemoteAgentAccessError,
+  resolveRemoteExecutionFailureStatus,
+} from "./useRemoteExecutionAccessGate.shared";
 
 describe("getRemoteAgentAccessError", () => {
   it("directs users to approve a required installation", () => {
@@ -24,5 +27,15 @@ describe("getRemoteAgentAccessError", () => {
   it("allows ready and disabled agent states", () => {
     expect(getRemoteAgentAccessError({ status: "ready", version: "0.2.0" })).toBeNull();
     expect(getRemoteAgentAccessError({ status: "disabled" })).toBeNull();
+  });
+
+  it("keeps host trust actionable without showing the encoded challenge in status text", () => {
+    const message = `SSH host trust is required: ${JSON.stringify({ challengeId: "a", host: "box", keyType: "ED25519", fingerprint: "SHA256:abc" })}`;
+    expect(resolveRemoteExecutionFailureStatus(message)).toMatchObject({
+      status: "auth_required",
+      authMode: "host-trust",
+      promptLabel: message,
+      message: "SSH server identity confirmation is required.",
+    });
   });
 });

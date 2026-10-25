@@ -1,5 +1,3 @@
-import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
-import { formatHumanReadableDate } from "~/utils/timestamp";
 import {
   Progress,
   ProgressIndicator,
@@ -11,21 +9,20 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   formatAllowanceUsage,
   formatRemainingAllowance,
-  remainingAllowanceClassName,
+  remainingAllowanceColor,
   remainingAllowancePercent,
 } from "./UsageSubscriptionLimits.logic";
+import { formatSubscriptionTimestamp } from "./UsageSubscriptionLimits.timestamp";
 
 /** Displays the same remaining-allowance semantics for quota windows and extra spending caps. */
 export function UsageSubscriptionLimitProgress({
   label,
   utilization,
-  status,
   resetAt,
   description,
 }: {
   readonly label: string;
   readonly utilization: number;
-  readonly status: ServerProviderUsageLimits["status"];
   readonly resetAt?: string | undefined;
   readonly description?: string | undefined;
 }) {
@@ -51,11 +48,11 @@ export function UsageSubscriptionLimitProgress({
           <ProgressValue className="ml-auto text-foreground">{() => valueText}</ProgressValue>
         </div>
         <ProgressTrack>
-          <ProgressIndicator className={remainingAllowanceClassName(remaining, status)} />
+          <ProgressIndicator style={{ backgroundColor: remainingAllowanceColor(remaining) }} />
         </ProgressTrack>
         {resetAt ? (
           <div className="text-xs text-muted-foreground">
-            Resets {formatHumanReadableDate(resetAt, "date-time")}
+            Resets {formatSubscriptionTimestamp(resetAt)}
           </div>
         ) : null}
         {description ? <div className="text-xs text-muted-foreground">{description}</div> : null}

@@ -7,9 +7,13 @@ import { V2ResponseSizeError } from "./Client.response.ts";
 import { authoritativeAssistantRepair, isV2AssistantSettled } from "./Projection.ts";
 import { createHash } from "node:crypto";
 import { V2_MEDIA_RESPONSE_BYTES } from "./Media.limits.ts";
+import { projectV2TurnInterval } from "./Runtime.background.projection.ts";
 
 /** Sequence order comes from native message projection, never wall-clock sorting. */
-export async function readV2Messages(session: V2RuntimeSession): Promise<SessionMessageInfo[]> {
+export async function readV2Messages(
+  session: V2RuntimeSession,
+  cancellation?: AbortSignal,
+): Promise<SessionMessageInfo[]> {
   const messages: SessionMessageInfo[] = [];
   const cursors = new Set<string>();
   let cursor: string | undefined;
@@ -17,16 +21,19 @@ export async function readV2Messages(session: V2RuntimeSession): Promise<Session
   let limit = 100;
   for (let page = 0; page < 10000; page++) {
     const read = () =>
-      v2Request("message.list", (signal) =>
-        session.lease.process.client.message.list(
-          {
-            sessionID: session.native.id,
-            order: "asc",
-            limit,
-            ...(cursor ? { cursor } : {}),
-          },
-          { signal },
-        ),
+      v2Request(
+        "message.list",
+        (signal) =>
+          session.lease.process.client.message.list(
+            {
+              sessionID: session.native.id,
+              order: "asc",
+              limit,
+              ...(cursor ? { cursor } : {}),
+            },
+            { signal },
+          ),
+        cancellation ? { signal: cancellation } : {},
       );
     // Retained media can overflow a multi-message page after restart. Reads may narrow their page, never re-admit or retry a mutation.
     const result = await read().catch((error) => {
@@ -66,8 +73,8 @@ export function runtimeEventBase(session: V2RuntimeSession, id: string, created 
   };
 }
 
-/** Require exact admitted input, a single input interval, and a projected idle marker. */
-export function correlatedProjection(
+/** Explain ambiguous input ownership without exposing native message contents. */
+export function v2ProjectionConflict(
   session: V2RuntimeSession,
   messages: readonly SessionMessageInfo[],
 ) {
@@ -80,13 +87,30 @@ export function correlatedProjection(
       message.metadata?.bigbud_fingerprint === row.fingerprint,
   );
   if (index < 0) return undefined;
-  const assistants: SessionMessageAssistant[] = [];
   for (const message of messages.slice(index + 1)) {
-    if (["user", "synthetic", "shell", "skill"].includes(message.type)) return undefined;
-    if (message.type === "assistant") assistants.push(message);
-    if (message.type === "idle") return { assistants, idle: message };
+    if (message.type === "idle") return undefined;
+    if (["user", "synthetic", "shell", "skill"].includes(message.type))
+      return `Native ${message.type} input intervened before the admitted turn's idle marker; output ownership is ambiguous. Existing history and admission retained; no automatic resend. Inspect the existing native session before recovery.`;
   }
-  return { assistants, idle: undefined };
+  return undefined;
+}
+
+/** Require exact admitted input and bounded, attributable native continuations. */
+export function correlatedProjection(
+  session: V2RuntimeSession,
+  messages: readonly SessionMessageInfo[],
+  nativeCompletions?: ReadonlySet<string>,
+) {
+  const row = session.row;
+  if (!row) return undefined;
+  const index = messages.findIndex(
+    (message) =>
+      message.id === row.nativeAdmissionId &&
+      message.type === "user" &&
+      message.metadata?.bigbud_fingerprint === row.fingerprint,
+  );
+  if (index < 0) return undefined;
+  return projectV2TurnInterval(messages.slice(index + 1), nativeCompletions);
 }
 
 export function usageEvent(
@@ -116,6 +140,7 @@ export function usageEvent(
         inputTokens: tokens.input,
         outputTokens: tokens.output,
         cachedInputTokens: tokens.cache.read,
+        cacheWriteTokens: tokens.cache.write,
         reasoningOutputTokens: tokens.reasoning,
       },
       accounting: {
@@ -127,6 +152,27 @@ export function usageEvent(
         outputTokens: tokens.output,
         reasoningOutputTokens: tokens.reasoning,
         finalized,
+        canonical: {
+          version: 2,
+          source: "provider-reported",
+          basis: "opencode-v2-message-reasoning-inclusion-unverified",
+          model: message.model.id,
+          completeness: "partial",
+          inputTokens: tokens.input + tokens.cache.read + tokens.cache.write,
+          cacheReadTokens: tokens.cache.read,
+          cacheWriteTokens: tokens.cache.write,
+          outputTokens: null,
+          reasoningTokens: null,
+          reportedTotal: null,
+          subtotal: processed,
+          raw: {
+            input: tokens.input,
+            output: tokens.output,
+            cacheRead: tokens.cache.read,
+            cacheWrite: tokens.cache.write,
+            reasoning: tokens.reasoning,
+          },
+        },
       },
     },
   };

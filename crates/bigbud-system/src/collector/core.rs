@@ -177,6 +177,7 @@ impl Collector {
                 ProcessesToUpdate::All,
                 true,
                 ProcessRefreshKind::nothing()
+                    .without_tasks()
                     .with_cpu()
                     .with_memory()
                     .with_disk_usage(),

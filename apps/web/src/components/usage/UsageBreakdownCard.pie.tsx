@@ -4,14 +4,7 @@ import { type ServerUsageSummaryResult } from "@bigbud/contracts";
 
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "../ui/chart";
 import { formatCompactNumber } from "./UsagePage.format";
-
-const BREAKDOWN_CHART_COLORS = [
-  "var(--chart-1)",
-  "var(--chart-2)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-  "var(--chart-5)",
-] as const;
+import { buildBreakdownPieData } from "./UsageBreakdownCard.pie.logic";
 
 const breakdownChartConfig = {
   usedTokens: { color: "var(--chart-2)", label: "Tokens" },
@@ -76,31 +69,4 @@ export function UsageBreakdownPie({
       </div>
     </div>
   );
-}
-
-function buildBreakdownPieData(entries: ServerUsageSummaryResult["providers"]) {
-  const visibleEntries = entries.slice(0, 4);
-  const remainingTokens = entries.slice(4).reduce((total, entry) => total + entry.usedTokens, 0);
-
-  const chartData = visibleEntries.map((entry, index) => ({
-    id: entry.id,
-    label: entry.label,
-    usedTokens: entry.usedTokens,
-    fill: getBreakdownColor(index),
-  }));
-
-  if (remainingTokens > 0) {
-    chartData.push({
-      id: "other",
-      label: "Other",
-      usedTokens: remainingTokens,
-      fill: getBreakdownColor(4),
-    });
-  }
-
-  return chartData;
-}
-
-function getBreakdownColor(index: number) {
-  return BREAKDOWN_CHART_COLORS[index % BREAKDOWN_CHART_COLORS.length] ?? "var(--chart-1)";
 }

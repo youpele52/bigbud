@@ -1,6 +1,7 @@
+// Starting values approved in decision D5; Phase 0 diagnostics decide the final numbers.
 export const WS_HEARTBEAT_INTERVAL_MS = 5_000;
-export const WS_HEARTBEAT_TIMEOUT_MS = 15_000;
-export const WS_HEARTBEAT_FAILURE_THRESHOLD = 3;
+export const WS_HEARTBEAT_TIMEOUT_MS = 10_000;
+export const WS_HEARTBEAT_FAILURE_THRESHOLD = 2;
 
 export function shouldReconnectAfterHeartbeatFailure(consecutiveFailures: number): boolean {
   return consecutiveFailures >= WS_HEARTBEAT_FAILURE_THRESHOLD;

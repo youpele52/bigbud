@@ -8,18 +8,25 @@ import {
 } from "./providerWorkloadSupport.ts";
 
 describe("providerWorkloadSupport", () => {
-  it("declares restricted V2 interactive/accounting support without claiming unattended coding or migrating accounting", () => {
+  it("declares V2 auxiliary text support without claiming learning or migrating accounting", () => {
     expect(providerWorkloadSupport("opencodeV2")).toEqual({
       interactive: true,
       usageAccounting: true,
       learning: false,
-      unattendedTextGeneration: false,
+      unattendedTextGeneration: true,
     });
     const requested = {
       provider: "opencodeV2",
       subProviderID: "synthetic",
       model: "synthetic",
     } as const;
+    expect(
+      resolveProviderWorkload({
+        requested,
+        workload: "unattendedTextGeneration",
+        availableProviderKinds: ["opencodeV2"],
+      }),
+    ).toEqual({ requested, actual: requested, action: "use-requested", reason: null });
     expect(
       resolveProviderWorkload({
         requested,
@@ -48,7 +55,7 @@ describe("providerWorkloadSupport", () => {
     expect(supportsScheduledLearning("cliProxy", true)).toBe(false);
     expect(supportsScheduledLearning("codex")).toBe(true);
     expect(supportsProviderWorkload("opencodeV2", "learning")).toBe(false);
-    expect(supportsProviderWorkload("opencodeV2", "unattendedTextGeneration")).toBe(false);
+    expect(supportsProviderWorkload("opencodeV2", "unattendedTextGeneration")).toBe(true);
   });
   it.each([
     ["codex", true, true, true, true],

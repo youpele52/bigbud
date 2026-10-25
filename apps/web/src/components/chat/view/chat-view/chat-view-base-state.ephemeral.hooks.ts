@@ -61,6 +61,10 @@ export function useChatViewBaseEphemeralState(input: {
   const [pendingUserInputQuestionIndexByRequestId, setPendingUserInputQuestionIndexByRequestId] =
     useState<Record<string, number>>({});
   const [expandedWorkGroups, setExpandedWorkGroups] = useState<Record<string, boolean>>({});
+  // Timeline accordion open state lives above the virtualized rows so remounts keep it.
+  const [activityAccordionOpenById, setActivityAccordionOpenById] = useState<
+    Record<string, boolean>
+  >({});
   const [planCardOpen, setPlanCardOpen] = useState(false);
   const [providerUnlocked, setProviderUnlocked] = useState(false);
   const planCardDismissedForTurnRef = useRef<string | null>(null);
@@ -152,6 +156,8 @@ export function useChatViewBaseEphemeralState(input: {
     setPendingUserInputQuestionIndexByRequestId,
     expandedWorkGroups,
     setExpandedWorkGroups,
+    activityAccordionOpenById,
+    setActivityAccordionOpenById,
     planCardOpen,
     setPlanCardOpen,
     providerUnlocked,

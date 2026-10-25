@@ -1,11 +1,11 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback } from "react";
+
+import { useTerminalStateStore } from "~/stores/terminal/terminal.store";
 
 import {
-  cycleTerminalLayoutMode,
   resolveEffectiveTerminalLayoutMode,
   resolveTerminalLayoutVisibility,
-  terminalLayoutNextActionLabel,
-  type TerminalLayoutSelection,
+  type TerminalLayoutMode,
 } from "./terminalLayout.logic";
 
 interface UseTerminalLayoutInput {
@@ -17,39 +17,18 @@ interface UseTerminalLayoutInput {
 
 export function useTerminalLayout(input: UseTerminalLayoutInput) {
   const { activeThreadId, setTerminalOpen, terminalOpen, toggleTerminalVisibility } = input;
-  const identityRef = useRef({
-    threadId: activeThreadId,
-    terminalOpen,
-    epoch: 0,
-  });
-  const identity = identityRef.current;
-  if (identity.threadId !== activeThreadId) {
-    identity.threadId = activeThreadId;
-    identity.epoch += 1;
-  } else if (identity.terminalOpen && !terminalOpen) {
-    identity.epoch += 1;
-  }
-  identity.terminalOpen = terminalOpen;
-
-  const [selection, setSelection] = useState<TerminalLayoutSelection>(() => ({
-    threadId: activeThreadId,
-    epoch: identity.epoch,
-    mode: "split",
-  }));
+  const selection = useTerminalStateStore(
+    (state) => state.terminalLayoutByThreadId[activeThreadId],
+  );
+  const setLayout = useTerminalStateStore((state) => state.setTerminalLayout);
   const mode = resolveEffectiveTerminalLayoutMode({
     terminalOpen,
-    activeThreadId,
-    activeEpoch: identity.epoch,
     selection,
   });
 
   const resetToSplit = useCallback(() => {
-    setSelection({
-      threadId: identityRef.current.threadId,
-      epoch: identityRef.current.epoch,
-      mode: "split",
-    });
-  }, []);
+    setLayout(activeThreadId, "split");
+  }, [activeThreadId, setLayout]);
 
   const openTerminal = useCallback(() => {
     resetToSplit();
@@ -63,19 +42,26 @@ export function useTerminalLayout(input: UseTerminalLayoutInput) {
     toggleTerminalVisibility();
   }, [resetToSplit, toggleTerminalVisibility]);
 
-  const cycleLayout = useCallback(() => {
-    setSelection({
-      threadId: identityRef.current.threadId,
-      epoch: identityRef.current.epoch,
-      mode: cycleTerminalLayoutMode(mode),
-    });
-  }, [mode]);
+  const selectLayout = useCallback(
+    (nextMode: TerminalLayoutMode) => {
+      setLayout(activeThreadId, nextMode);
+      // Chat-only is presentation-only: keep the mounted session and its output alive.
+      if (nextMode !== "chat-only" && !terminalOpen) {
+        setTerminalOpen(true);
+      }
+    },
+    [activeThreadId, setLayout, setTerminalOpen, terminalOpen],
+  );
+  const toggleExpanded = useCallback(() => {
+    selectLayout(mode === "terminal-only" ? "split" : "terminal-only");
+  }, [mode, selectLayout]);
 
   return {
     mode,
-    ...resolveTerminalLayoutVisibility(mode),
-    nextActionLabel: terminalLayoutNextActionLabel(mode),
-    cycleLayout,
+    // Keep the existing close animation/unmount path; only the menu reports chat-only while closed.
+    ...resolveTerminalLayoutVisibility(terminalOpen ? mode : "split"),
+    selectLayout,
+    toggleExpanded,
     openTerminal,
     toggleTerminal,
   };

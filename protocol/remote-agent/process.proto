@@ -45,6 +45,10 @@ message ProcessCompleted {
   bool output_truncated = 6;
   string error_code = 7;
   string error_message = 8;
+  // Added in protocol 1.3. Set on an attach whose cursor fell behind the
+  // retained output window: the state and exit code are authoritative, but
+  // some output between the cursor and the retained window was lost.
+  bool replay_gap = 9;
 }
 
 message ProcessAttachRequest {
@@ -73,4 +77,7 @@ message ProcessAttachResponse {
   string state = 3;
   uint64 next_sequence = 4;
   uint64 first_retained_sequence = 5;
+  // Added in protocol 1.3. The requested cursor fell behind the retained
+  // window; replay starts at first_retained_sequence instead of failing.
+  bool replay_gap = 6;
 }

@@ -20,6 +20,7 @@ import {
   type SessionEvent,
 } from "@github/copilot-sdk";
 
+import { ProviderAdapterRequestError } from "../../Errors.ts";
 import { type EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 import type { RemoteWorkspaceReadinessProbe } from "../../../remote-workspace-bridge/remoteWorkspaceReadiness.ts";
 import type {
@@ -117,6 +118,31 @@ export function toMessage(cause: unknown, fallback: string): string {
 /** Returns true when the Copilot CLI reports the session ID no longer exists (e.g. after a server restart). */
 export function isSessionNotFoundError(cause: unknown): boolean {
   return cause instanceof Error && cause.message.toLowerCase().includes("session not found");
+}
+
+/** Sends on the live Copilot session, renewing it once when the CLI no longer knows it. */
+export async function sendOnCopilotSession(
+  record: ActiveCopilotSession,
+  payload: Parameters<ActiveCopilotSession["session"]["send"]>[0],
+): Promise<void> {
+  try {
+    await record.session.send(payload);
+  } catch (firstError) {
+    if (!isSessionNotFoundError(firstError)) throw firstError;
+    record.session = await record.renewSession();
+    await record.session.send(payload);
+  }
+}
+
+/** A `session.send` failure; a session still not found after renewal is session-dead. */
+export function toSendTurnError(cause: unknown): ProviderAdapterRequestError {
+  return new ProviderAdapterRequestError({
+    provider: PROVIDER,
+    method: "session.send",
+    detail: toMessage(cause, "Failed to send GitHub Copilot turn."),
+    ...(isSessionNotFoundError(cause) ? { failureClass: "session-dead" as const } : {}),
+    cause,
+  });
 }
 
 export function normalizeString(value: unknown): string | undefined {

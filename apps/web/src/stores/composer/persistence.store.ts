@@ -106,6 +106,7 @@ export function partializeComposerDraftStoreState(
       !hasModelData &&
       draft.runtimeMode === null &&
       draft.interactionMode === null &&
+      !draft.pendingEnvMode &&
       (draft.bootstrapSourceThreadId ?? null) === null &&
       draft.replyTarget === null
     ) {
@@ -140,6 +141,7 @@ export function partializeComposerDraftStoreState(
         : {}),
       ...(draft.runtimeMode ? { runtimeMode: draft.runtimeMode } : {}),
       ...(draft.interactionMode ? { interactionMode: draft.interactionMode } : {}),
+      ...(draft.pendingEnvMode ? { pendingEnvMode: draft.pendingEnvMode } : {}),
       ...(draft.bootstrapSourceThreadId !== null
         ? { bootstrapSourceThreadId: draft.bootstrapSourceThreadId }
         : {}),
@@ -240,6 +242,7 @@ export function toHydratedThreadDraft(
     modelSelectionByProvider,
     activeProvider,
     runtimeMode: persistedDraft.runtimeMode ?? null,
+    ...(persistedDraft.pendingEnvMode ? { pendingEnvMode: persistedDraft.pendingEnvMode } : {}),
     interactionMode: persistedDraft.interactionMode ?? null,
     bootstrapSourceThreadId: persistedDraft.bootstrapSourceThreadId ?? null,
     replyTarget: persistedDraft.replyTarget ?? null,

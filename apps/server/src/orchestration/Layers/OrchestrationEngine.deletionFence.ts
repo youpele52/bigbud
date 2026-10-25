@@ -10,9 +10,11 @@ import { OrchestrationCommandInvariantError } from "../Errors.ts";
 const commandThreadId = (command: OrchestrationCommand): ThreadId | undefined =>
   command.type === "thread.create"
     ? command.parentThread?.threadId
-    : "threadId" in command
-      ? command.threadId
-      : undefined;
+    : command.type === "thread.fork"
+      ? command.sourceThreadId
+      : "threadId" in command
+        ? command.threadId
+        : undefined;
 
 export function makeDeletionFence(input: {
   readonly threadDeletion: ThreadDeletionShape;

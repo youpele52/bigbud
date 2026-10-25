@@ -80,6 +80,8 @@ describe("MessagesTimeline work and thinking entries", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -125,6 +127,8 @@ describe("MessagesTimeline work and thinking entries", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -147,13 +151,16 @@ describe("MessagesTimeline work and thinking entries", () => {
     expect(markup).not.toContain("Work log");
   });
 
-  it("collapses long thinking entries by default", async () => {
+  it.each([
+    { name: "collapses finished", isWorking: false, open: false },
+    { name: "collapses streaming", isWorking: true, open: false },
+  ])("$name thinking in a disclosure without a preview fade", ({ isWorking, open }) => {
     const detail = `${"Checking the current thread state. ".repeat(24)}Final sentence.`;
     const markup = renderToStaticMarkup(
       <MessagesTimeline
-        isWorking={false}
-        activeTurnInProgress={false}
-        activeTurnStartedAt={null}
+        isWorking={isWorking}
+        activeTurnInProgress={isWorking}
+        activeTurnStartedAt={isWorking ? "2026-03-17T19:12:00.000Z" : null}
         scrollContainer={null}
         timelineEntries={[
           {
@@ -175,6 +182,8 @@ describe("MessagesTimeline work and thinking entries", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -189,7 +198,12 @@ describe("MessagesTimeline work and thinking entries", () => {
       />,
     );
 
-    expect(markup).toContain("Expand thinking");
-    expect(markup).not.toContain("Final sentence.");
+    expect(markup).toContain('data-slot="activity-accordion"');
+    expect(/<details[^>]*\sopen=""/.test(markup)).toBe(open);
+    expect(markup).toContain('<time dateTime="2026-03-17T19:12:28.000Z"');
+    // The full text is always in the panel; the accordion replaces the 320-char preview.
+    expect(markup).toContain("Final sentence.");
+    expect(markup).not.toContain("Expand thinking");
+    expect(markup).not.toContain("bg-linear-to-t");
   });
 });

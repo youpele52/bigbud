@@ -69,6 +69,10 @@ export interface ActivePiSession {
   agentRunning: boolean;
   activeTurnId: TurnId | undefined;
   queuedTurnIds: Array<TurnId>;
+  pendingPromptTurnIds?: Set<TurnId>;
+  pendingPromptQueueStarts?: Map<TurnId, number>;
+  promptQueue?: import("./Adapter.stream.promptQueue.ts").PiPromptQueueState;
+  settlingTurnIds?: Set<TurnId>;
   pendingTurnEnd:
     | {
         readonly stamp: PiEventStamp;

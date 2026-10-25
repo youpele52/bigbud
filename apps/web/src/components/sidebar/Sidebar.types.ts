@@ -7,10 +7,14 @@ import type { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
 import type { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import type { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import type { resolveThreadStatusPill } from "./Sidebar.logic";
-import type { RemoteProjectDraft, RemoteProjectTransport } from "./Sidebar.projects.logic";
+import type {
+  RemoteProjectConnectionSource,
+  RemoteProjectDraft,
+  RequestRemoteProjectUnlock,
+  UpdateRemoteProjectDraft,
+} from "./Sidebar.projects.logic";
 import type { ThreadPr } from "./SidebarThreadRow";
 import type { Project } from "../../models/types";
-import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
 import type { SidebarThreadCountState } from "./SidebarRenderedProjectItem.types";
 import type { SidebarRemoteProjectAddActionsOutput } from "./Sidebar.projectAddActions.remote.types";
 
@@ -181,25 +185,15 @@ export interface SidebarState {
   openRemoteProjectDialog: () => void;
   openRemoteProjectEditDialog: (project: Project) => void;
   closeRemoteProjectDialog: () => void;
-  updateRemoteProjectDraft: (
-    field:
-      | "displayName"
-      | "host"
-      | "username"
-      | "port"
-      | "workspaceRoot"
-      | "sshKeyPath"
-      | "authMode"
-      | "remoteTransport"
-      | "providerRuntimeLocation",
-    value: string | ProviderRuntimeLocation | RemoteProjectTransport,
-  ) => void;
+  updateRemoteProjectDraft: UpdateRemoteProjectDraft;
+  adoptRemoteProjectConnectionSource: (source: RemoteProjectConnectionSource) => void;
+  requestRemoteProjectUnlock: RequestRemoteProjectUnlock;
   submitRemoteProjectDialog: () => Promise<void>;
   remoteAgentInstallRequest: SidebarRemoteProjectAddActionsOutput["remoteAgentInstallRequest"];
   declineRemoteAgentInstall: () => void;
   completeRemoteAgentInstall: (message: string) => Promise<void>;
   isRemoteProjectUnlockDialogOpen: boolean;
-  remoteProjectUnlockMode: "ssh-key-passphrase" | "password" | null;
+  remoteProjectUnlockMode: import("../../lib/ssh").SshAuthMode | null;
   remoteProjectUnlockKeyPath: string;
   remoteProjectUnlockPassphrase: string;
   remoteProjectUnlockError: string | null;

@@ -90,7 +90,12 @@ export function useGitActionRunner({
   const activeGitActionProgressRef = useRef<ActiveGitActionProgress | null>(null);
 
   const runImmediateGitActionMutation = useMutation(
-    gitRunStackedActionMutationOptions({ cwd: gitCwd, executionTargetId, queryClient }),
+    gitRunStackedActionMutationOptions({
+      cwd: gitCwd,
+      executionTargetId,
+      queryClient,
+      threadId: activeServerThread?.id,
+    }),
   );
 
   const isRunning = runImmediateGitActionMutation.isPending;

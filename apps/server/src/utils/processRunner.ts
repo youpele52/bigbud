@@ -1,6 +1,14 @@
-import { type ChildProcess as ChildProcessHandle, spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
+
+import { killProcessTree } from "./killProcessTree.ts";
 
 export interface ProcessRunOptions {
+  shell?: boolean | undefined;
+  signal?: AbortSignal | undefined;
+  encoding?: BufferEncoding | undefined;
+  /** Settle at the deadline even if the child's inherited pipes never close. */
+  settleOnTimeout?: boolean | undefined;
   cwd?: string | undefined;
   timeoutMs?: number | undefined;
   env?: NodeJS.ProcessEnv | undefined;
@@ -8,6 +16,7 @@ export interface ProcessRunOptions {
   allowNonZeroExit?: boolean | undefined;
   maxBufferBytes?: number | undefined;
   outputMode?: "error" | "truncate" | undefined;
+  onStdoutChunk?: ((chunk: string) => void) | undefined;
 }
 
 export interface ProcessRunResult {
@@ -80,23 +89,6 @@ function normalizeBufferError(
 
 const DEFAULT_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 
-/**
- * On Windows with `shell: true`, `child.kill()` only terminates the `cmd.exe`
- * wrapper, leaving the actual command running. Use `taskkill /T` to kill the
- * entire process tree instead.
- */
-function killChild(child: ChildProcessHandle, signal: NodeJS.Signals = "SIGTERM"): void {
-  if (process.platform === "win32" && child.pid !== undefined) {
-    try {
-      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-      return;
-    } catch {
-      // fallback to direct kill
-    }
-  }
-  child.kill(signal);
-}
-
 function appendChunkWithinLimit(
   target: string,
   currentBytes: number,
@@ -135,12 +127,23 @@ export async function runProcess(
   const outputMode = options.outputMode ?? "error";
 
   return new Promise<ProcessRunResult>((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(new Error("Process execution was cancelled."));
+      return;
+    }
+    const startedAt = performance.now();
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env,
       stdio: "pipe",
-      shell: process.platform === "win32",
+      shell: options.shell ?? process.platform === "win32",
     });
+    const kill = (signal: NodeJS.Signals = "SIGTERM") => {
+      if (options.shell === false) child.kill(signal);
+      else killProcessTree(child, signal);
+    };
+    const stdoutDecoder = new StringDecoder(options.encoding ?? "utf8");
+    const stderrDecoder = new StringDecoder(options.encoding ?? "utf8");
 
     let stdout = "";
     let stderr = "";
@@ -152,17 +155,25 @@ export async function runProcess(
     let settled = false;
     let forceKillTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const timeoutTimer = setTimeout(() => {
-      timedOut = true;
-      killChild(child, "SIGTERM");
-      forceKillTimer = setTimeout(() => {
-        killChild(child, "SIGKILL");
-      }, 1_000);
-    }, timeoutMs);
+    const timeoutTimer = setTimeout(
+      () => {
+        timedOut = true;
+        if (options.settleOnTimeout) {
+          fail(new Error("Process execution timed out."));
+          return;
+        }
+        kill("SIGTERM");
+        forceKillTimer = setTimeout(() => {
+          kill("SIGKILL");
+        }, 1_000);
+      },
+      Math.max(0, timeoutMs - (performance.now() - startedAt)),
+    );
 
     const finalize = (callback: () => void): void => {
       if (settled) return;
       settled = true;
+      options.signal?.removeEventListener("abort", abort);
       clearTimeout(timeoutTimer);
       if (forceKillTimer) {
         clearTimeout(forceKillTimer);
@@ -171,15 +182,24 @@ export async function runProcess(
     };
 
     const fail = (error: Error): void => {
-      killChild(child, "SIGTERM");
+      if (settled) return;
       finalize(() => {
         reject(error);
       });
+      kill("SIGTERM");
+      if (options.settleOnTimeout || options.signal?.aborted) {
+        child.stdin.destroy();
+        child.stdout.destroy();
+        child.stderr.destroy();
+      }
     };
+    const abort = () => fail(new Error("Process execution was cancelled."));
+    options.signal?.addEventListener("abort", abort, { once: true });
+    if (options.signal?.aborted) abort();
 
     const appendOutput = (stream: "stdout" | "stderr", chunk: Buffer | string): Error | null => {
       const chunkBuffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-      const text = chunkBuffer.toString();
+      const text = (stream === "stdout" ? stdoutDecoder : stderrDecoder).write(chunkBuffer);
       const byteLength = chunkBuffer.length;
       if (stream === "stdout") {
         if (outputMode === "truncate") {
@@ -212,13 +232,21 @@ export async function runProcess(
     };
 
     child.stdout.on("data", (chunk: Buffer | string) => {
+      if (settled) return;
       const error = appendOutput("stdout", chunk);
       if (error) {
         fail(error);
+        return;
+      }
+      try {
+        options.onStdoutChunk?.(typeof chunk === "string" ? chunk : chunk.toString());
+      } catch (cause) {
+        fail(cause instanceof Error ? cause : new Error("Process output observer failed."));
       }
     });
 
     child.stderr.on("data", (chunk: Buffer | string) => {
+      if (settled) return;
       const error = appendOutput("stderr", chunk);
       if (error) {
         fail(error);
@@ -232,6 +260,15 @@ export async function runProcess(
     });
 
     child.once("close", (code, signal) => {
+      if (settled) return;
+      if (options.settleOnTimeout && performance.now() - startedAt >= timeoutMs) {
+        fail(new Error("Process execution timed out."));
+        return;
+      }
+      if (outputMode !== "truncate") {
+        stdout += stdoutDecoder.end();
+        stderr += stderrDecoder.end();
+      }
       const result: ProcessRunResult = {
         stdout,
         stderr,

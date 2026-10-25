@@ -1,18 +1,32 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { HttpClient } from "effect/unstable/http";
+import { HttpClient, HttpServer } from "effect/unstable/http";
 
-import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "./server.test.helpers.ts";
+import {
+  buildAppUnderTest,
+  getHttpServerUrl,
+  serverHttpTestLayer,
+  serverTestLayer,
+} from "./server.test.helpers.ts";
 
 it.layer(serverTestLayer)("server router seam > mobile pairing http", (it) => {
+  it.effect("binds the test server to the client's IPv4 loopback address", () =>
+    Effect.gen(function* () {
+      const server = yield* HttpServer.HttpServer;
+      assert.equal(server.address._tag, "TcpAddress");
+      if (server.address._tag === "TcpAddress") {
+        assert.equal(server.address.hostname, "127.0.0.1");
+      }
+    }).pipe(Effect.provide(serverHttpTestLayer)),
+  );
+
   it.effect("returns 404 for an unknown mobile pairing id", () =>
     Effect.gen(function* () {
       yield* buildAppUnderTest();
 
       const response = yield* HttpClient.get("/api/mobile/pairing/pairing-missing");
       assert.equal(response.status, 404);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("returns pairing status from the mobile remote control service", () =>
@@ -41,7 +55,7 @@ it.layer(serverTestLayer)("server router seam > mobile pairing http", (it) => {
         enabled: true,
         available: true,
       });
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("rejects invalid pairing exchanges", () =>
@@ -68,7 +82,7 @@ it.layer(serverTestLayer)("server router seam > mobile pairing http", (it) => {
         }),
       );
       assert.equal(response.status, 401);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("exchanges a pairing into a mobile session payload", () =>
@@ -126,7 +140,7 @@ it.layer(serverTestLayer)("server router seam > mobile pairing http", (it) => {
         },
       );
       assert.include((body as { websocketUrl: string }).websocketUrl, "/mobile-ws?token=token-1");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("returns CORS headers for mobile pairing preflight requests", () =>
@@ -161,6 +175,6 @@ it.layer(serverTestLayer)("server router seam > mobile pairing http", (it) => {
       assert.include(response.headers.get("access-control-allow-methods") ?? "", "POST");
       assert.include(response.headers.get("access-control-allow-methods") ?? "", "GET");
       assert.equal(response.headers.get("access-control-allow-private-network"), "true");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

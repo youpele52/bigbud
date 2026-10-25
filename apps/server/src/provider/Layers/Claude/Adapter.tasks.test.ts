@@ -166,7 +166,7 @@ describe("Claude task reducer", () => {
       value: {
         uuid: "background-message-1",
         tasks: [
-          { task_id: "task-1", task_type: "agent", description: "Tracked task" },
+          { task_id: "task-1", task_type: "local_agent", description: "Tracked task" },
           { task_id: "task-2", task_type: "bash", description: "Background only" },
         ],
       },
@@ -198,7 +198,7 @@ describe("Claude task reducer", () => {
       toolName: "background_tasks_changed",
       value: {
         uuid: "background-message",
-        tasks: [{ task_id: "task-1", task_type: "agent", description: "Background task" }],
+        tasks: [{ task_id: "task-1", task_type: "local_agent", description: "Background task" }],
       },
       updatedAt: "2026-07-24T00:00:00.000Z",
     } as const;

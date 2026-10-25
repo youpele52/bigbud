@@ -96,6 +96,13 @@ function scalarString(
   throw invalidShape(configPath, field, "expected a string or number.");
 }
 
+/** Validates relevant nested sections before selecting individual v8 fields. */
+function mapping(value: unknown, field: string, configPath: string): Record<string, unknown> {
+  if (value === undefined) return {};
+  if (!isRecord(value)) throw invalidShape(configPath, field, "expected a YAML mapping.");
+  return value;
+}
+
 function parseYaml(content: string, configPath: string): Record<string, unknown> {
   let document;
   try {
@@ -127,11 +134,26 @@ export function parseCliProxyConfig(
   configPath = "<memory>",
 ): ParsedCliProxyConfig {
   const documentValue = parseYaml(content, configPath);
-  const host = scalarString(documentValue, "host", configPath);
-  const port = scalarString(documentValue, "port", configPath);
+  const server = mapping(documentValue.server, "server", configPath);
+  const access = mapping(documentValue.access, "access", configPath);
+  const host = scalarString(
+    Object.hasOwn(server, "host") ? server : documentValue,
+    "host",
+    configPath,
+  );
+  const port = scalarString(
+    Object.hasOwn(server, "port") ? server : documentValue,
+    "port",
+    configPath,
+  );
   const protocol = scalarString(documentValue, "protocol", configPath);
 
-  const rawApiKeysValue = documentValue["api-keys"];
+  // Root mappings hold upstream credentials, never client authentication keys.
+  const rawApiKeysValue = Object.hasOwn(access, "api-keys")
+    ? access["api-keys"]
+    : isRecord(documentValue["api-keys"])
+      ? undefined
+      : documentValue["api-keys"];
   const apiKeysValue = rawApiKeysValue === null ? undefined : rawApiKeysValue;
   let apiKeys: ReadonlyArray<string> = [];
   if (apiKeysValue !== undefined) {
@@ -146,7 +168,10 @@ export function parseCliProxyConfig(
     });
   }
 
-  const tlsValue = fieldValue(documentValue, "tls", configPath);
+  const serverTls = mapping(server.tls, "server.tls", configPath);
+  const tlsValue = Object.hasOwn(serverTls, "enable")
+    ? serverTls
+    : fieldValue(documentValue, "tls", configPath);
   let tlsEnabled = false;
   if (tlsValue !== undefined) {
     if (!isRecord(tlsValue)) {

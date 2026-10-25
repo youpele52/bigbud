@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveThreadStatusPill } from "./Sidebar.logic.status";
 
 import {
   isProviderIconWorking,
@@ -11,6 +12,22 @@ import {
 } from "./SidebarThreadRow.status";
 
 describe("SidebarThreadRow.status", () => {
+  it("uses a steady amber provider icon while awaiting an answer", () => {
+    const status = resolveThreadStatusPill({
+      thread: {
+        hasPendingUserInput: true,
+        hasPendingApprovals: false,
+        hasActionableProposedPlan: false,
+        interactionMode: "default",
+        latestTurn: null,
+        providerAgents: [],
+        session: null,
+      },
+    });
+    expect(status?.label).toBe("Awaiting Input");
+    expect(providerIconPresentationClass(status, false)).toBe("text-warning");
+    expect(isProviderIconWorking(status)).toBe(false);
+  });
   it("deduplicates running terminal ids across drawer and panel terminals", () => {
     expect(
       mergeRunningTerminalIds(["default", "panel-terminal-1"], ["panel-terminal-1", ""]),

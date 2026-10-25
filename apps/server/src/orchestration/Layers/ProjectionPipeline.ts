@@ -49,6 +49,7 @@ import {
 } from "./ProjectionPipeline.helpers.ts";
 import { makeProjectors, type ProjectorDefinition } from "./ProjectionPipeline.projectors.ts";
 import { runUsageContributionBackfill } from "./ProjectionPipeline.usageBackfill.ts";
+import { runUsageEstimateBackfill } from "./ProjectionPipeline.usageEstimateBackfill.ts";
 import { makeProjectionBaselineOperations } from "./ProjectionPipeline.baseline.ts";
 import { increment, threadRetentionCompactionRows } from "../../observability/Metrics.ts";
 import {
@@ -56,6 +57,7 @@ import {
   PROJECTION_BASELINE_FAILURE_COOLDOWN_MS,
 } from "./ProjectionPipeline.baseline.coordination.ts";
 import { verifyCandidateInWorkspace } from "./ProjectionPipeline.baseline.workspace.ts";
+import { keepAttachmentsSharedWithOtherThreads } from "./ProjectionPipeline.attachments.shared.ts";
 import { writeStartupStatus } from "../../startup/startupStatus.ts";
 
 export { ORCHESTRATION_PROJECTOR_NAMES };
@@ -119,16 +121,18 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       );
 
       if (!runSideEffects) return;
-      yield* runAttachmentSideEffects(attachmentSideEffects).pipe(
-        Effect.catch((cause) =>
-          Effect.logWarning("failed to apply projected attachment side-effects", {
-            projector: projector.name,
-            sequence: event.sequence,
-            eventType: event.type,
-            cause,
-          }),
-        ),
-      );
+      yield* keepAttachmentsSharedWithOtherThreads(sql, attachmentSideEffects)
+        .pipe(Effect.andThen(runAttachmentSideEffects(attachmentSideEffects)))
+        .pipe(
+          Effect.catch((cause) =>
+            Effect.logWarning("failed to apply projected attachment side-effects", {
+              projector: projector.name,
+              sequence: event.sequence,
+              eventType: event.type,
+              cause,
+            }),
+          ),
+        );
     });
 
     const projectorNames = Object.values(ORCHESTRATION_PROJECTOR_NAMES);
@@ -282,7 +286,12 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const backfillUsageContributions: OrchestrationProjectionPipelineShape["backfillUsageContributions"] =
       runUsageContributionBackfill({
         repository: projectionThreadActivityRepository,
-      });
+      }).pipe(
+        Effect.andThen(runUsageEstimateBackfill(sql)),
+        Effect.catchTag("SqlError", (error) =>
+          Effect.fail(toPersistenceSqlError("ProjectionPipeline.usageEstimateBackfill")(error)),
+        ),
+      );
 
     const compactVerifiedPrefix = (batchSize?: number) =>
       eventStore.compactVerifiedPrefix

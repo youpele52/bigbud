@@ -342,6 +342,7 @@ export const OpencodeProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      readUsageLimits: () => Effect.promise((signal) => readOpencodeGoUsageLimits(signal, true)),
       recoverModelDiscovery: true,
       checkProviderAtStartup: checkProvider,
       discoverSnapshot: ({ snapshot, generation, publishSnapshot }) =>

@@ -1,5 +1,11 @@
 use super::*;
 
+pub(super) struct PtySession {
+    pub(super) handle: Arc<pty::PtyHandle>,
+    pub(super) request_digest: Vec<u8>,
+    pub(super) expires_at: Option<Instant>,
+}
+
 impl AgentSession {
     pub fn prepare_pty_create(
         &mut self,
@@ -123,6 +129,16 @@ impl AgentSession {
         Ok(pty_exited_frame(pty_id, exit_code, signal))
     }
 
+    pub fn pty_operation_handle(
+        &mut self,
+        pty_id: &str,
+    ) -> Result<Arc<pty::PtyHandle>, SessionError> {
+        if !self.ready {
+            return Err(SessionError::HelloRequired);
+        }
+        self.pty(pty_id)
+    }
+
     fn pty(&mut self, pty_id: &str) -> Result<Arc<pty::PtyHandle>, SessionError> {
         self.prune_pty_sessions();
         self.pty_sessions
@@ -133,8 +149,10 @@ impl AgentSession {
 
     fn prune_pty_sessions(&mut self) {
         let now = Instant::now();
-        self.pty_sessions
-            .retain(|_, session| session.expires_at.is_none_or(|expires_at| expires_at > now));
+        self.pty_sessions.retain(|_, session| {
+            !session.handle.child_reaped()
+                || session.expires_at.is_none_or(|expires_at| expires_at > now)
+        });
     }
 
     pub(super) fn handle_pty_input(&mut self, request: v1::PtyInput) -> v1::Frame {

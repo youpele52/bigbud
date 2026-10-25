@@ -70,7 +70,7 @@ for (const cancellation of ["interrupt", "stop", "loss", "disable"] as const) {
           expect(events.slice(rejectedOffset).some((e) => e.type === "request.opened")).toBe(false);
           await writeFile(
             path.join(root, "hold.py"),
-            "import signal,time,pathlib,os\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\npathlib.Path('ready').write_text(str(os.getpid()))\ntime.sleep(10)\npathlib.Path('late').write_text('unsafe')\n",
+            "import signal,time,pathlib,os\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\npathlib.Path('ready').write_text(str(os.getpid()))\ntime.sleep(35)\npathlib.Path('late').write_text('unsafe')\n",
           );
           const call = {
             action: "shell",
@@ -80,6 +80,17 @@ for (const cancellation of ["interrupt", "stop", "loss", "disable"] as const) {
             input: { path: ".", command: `exec ${python} -I -S hold.py` },
           };
           const operation = coding.invoke(call);
+          let settled = false;
+          let earlyFailure: unknown;
+          void operation.then(
+            () => {
+              settled = true;
+            },
+            (error: unknown) => {
+              settled = true;
+              earlyFailure = error;
+            },
+          );
           await expect
             .poll(() => events.find((e) => e.type === "request.opened" && e.threadId === a))
             .toBeDefined();
@@ -93,7 +104,15 @@ for (const cancellation of ["interrupt", "stop", "loss", "disable"] as const) {
           });
           await runtime.respondPermission(a, approval.requestId!, "accept");
           await expect
-            .poll(() => readFile(path.join(root, "ready"), "utf8").catch(() => ""))
+            .poll(
+              async () => {
+                if (earlyFailure) throw earlyFailure;
+                const ready = await readFile(path.join(root, "ready"), "utf8").catch(() => "");
+                if (settled && !ready) throw new Error("Fixture shell settled before readiness.");
+                return ready;
+              },
+              { timeout: 5000 },
+            )
             .not.toBe("");
           const pid = Number(await readFile(path.join(root, "ready"), "utf8"));
           // These native mutations and coding actions used to queue behind the entire A command.

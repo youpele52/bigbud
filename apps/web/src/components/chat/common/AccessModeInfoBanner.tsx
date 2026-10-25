@@ -6,7 +6,8 @@ import type { OpencodeV2DevelopmentSettings } from "@bigbud/contracts/core/setti
 import { InfoIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 
-import { StatusBanner } from "../../common/StatusBanner";
+import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
+import { ChatBanner } from "./ChatBanner";
 
 const ACCESS_LABELS: Record<RuntimeMode, string> = {
   "approval-required": "Supervised",
@@ -53,6 +54,11 @@ export const AccessModeInfoBanner = memo(function AccessModeInfoBanner({
   accessModeChangeId: number;
   connectionMode?: OpencodeV2DevelopmentSettings["connectionMode"];
 }) {
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "access-mode", [
+    provider,
+    runtimeMode,
+    connectionMode,
+  ]);
   const [notice, setNotice] = useState<AccessModeInfoNotice | null>(null);
   const lastChangeId = useRef(accessModeChangeId);
 
@@ -74,29 +80,25 @@ export const AccessModeInfoBanner = memo(function AccessModeInfoBanner({
     notice.runtimeMode === runtimeMode &&
     notice.accessModeChangeId === accessModeChangeId &&
     notice.connectionMode === connectionMode;
-  if (!isVisible) return null;
+  if (!isVisible || dismissed) return null;
 
   const shared = connectionMode === "shared";
   const description = getAccessModeInfoDescription(runtimeMode, connectionMode);
 
   return (
-    <div className="pt-3 mx-auto max-w-3xl">
-      <StatusBanner
-        variant="default"
-        role="status"
-        icon={<InfoIcon />}
-        title={`Access: ${ACCESS_LABELS[runtimeMode]}`}
-        description={
-          <span className="text-foreground">
-            {description} External-directory requests still ask.
-            {!shared
-              ? " Synthetic remote workspaces never gain native file or shell access."
-              : null}
-          </span>
-        }
-        dismissLabel="Dismiss access information"
-        onDismiss={() => setNotice(null)}
-      />
-    </div>
+    <ChatBanner
+      variant="default"
+      role="status"
+      icon={<InfoIcon />}
+      title={`Access: ${ACCESS_LABELS[runtimeMode]}`}
+      description={
+        <span className="text-foreground">
+          {description} External-directory requests still ask.
+          {!shared ? " Synthetic remote workspaces never gain native file or shell access." : null}
+        </span>
+      }
+      dismissLabel="Dismiss access information"
+      onDismiss={dismiss}
+    />
   );
 });

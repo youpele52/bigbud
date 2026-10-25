@@ -4,7 +4,7 @@ import {
   formatAllowanceUsage,
   formatExtraUsageRemaining,
   formatRemainingAllowance,
-  remainingAllowanceClassName,
+  remainingAllowanceColor,
   remainingAllowancePercent,
 } from "./UsageSubscriptionLimits.logic";
 
@@ -39,13 +39,15 @@ describe("remaining subscription allowance", () => {
   });
 
   it.each([
-    [100, "available", "bg-info"],
-    [20, "available", "bg-warning"],
-    [5, "available", "bg-destructive"],
-    [100, "stale", "bg-warning"],
-    [0, "stale", "bg-destructive"],
-  ] as const)("keeps severity correct for %s%% remaining in %s state", (remaining, status, color) =>
-    expect(remainingAllowanceClassName(remaining, status)).toBe(color),
+    [100, "var(--chart-1)"],
+    [50.001, "var(--chart-1)"],
+    [50, "var(--chart-3)"],
+    [20.001, "var(--chart-3)"],
+    [20, "var(--chart-4)"],
+    [0, "var(--chart-4)"],
+    [NaN, "var(--muted-foreground)"],
+  ] as const)("colors %s%% remaining by used capacity", (remaining, color) =>
+    expect(remainingAllowanceColor(remaining)).toBe(color),
   );
 
   it("computes extra allowance from credits when no percentage is reported", () => {

@@ -324,6 +324,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           queuedPrompts: [],
           pendingInterruptFlushIntent: null,
           pendingTurnControlOperation: null,
+          pendingTurnStart: null,
+          recovery: null,
           queueHold: false,
           tasks: [
             {
@@ -369,6 +371,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
             providerName: "codex",
             runtimeMode: "approval-required",
             activeTurnId: asTurnId("turn-1"),
+            retainedFamily: false,
             reason: null,
             lastError: null,
             updatedAt: "2026-02-24T00:00:07.000Z",

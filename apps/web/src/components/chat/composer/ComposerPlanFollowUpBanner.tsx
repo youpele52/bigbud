@@ -1,21 +1,24 @@
 import { memo } from "react";
+import { ThreadNoticeBanner } from "../common/ThreadNoticeBanner";
 
 export const ComposerPlanFollowUpBanner = memo(function ComposerPlanFollowUpBanner({
   planTitle,
+  planId,
+  threadId,
 }: {
   planTitle: string | null;
+  planId: string;
+  threadId: string;
 }) {
   return (
-    <div className="px-4 py-3.5 sm:px-5 sm:py-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="uppercase text-sm tracking-[0.2em]">Plan ready</span>
-        {planTitle ? (
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">{planTitle}</span>
-        ) : null}
-      </div>
-      {/* <div className="mt-2 text-xs text-muted-foreground">
-        Review the plan
-      </div> */}
-    </div>
+    <ThreadNoticeBanner
+      threadId={threadId}
+      kind="plan-follow-up"
+      scope={[planId]}
+      role="status"
+      title="Plan ready"
+      description={planTitle}
+      dismissLabel="Dismiss plan ready notice"
+    />
   );
 });

@@ -36,8 +36,17 @@ export class FakePtyProcess implements PtyProcess {
   private readonly dataListeners = new Set<(data: string) => void>();
   private readonly exitListeners = new Set<(event: PtyExitEvent) => void>();
   killed = false;
+  paused = false;
 
   constructor(readonly pid: number) {}
+
+  pause = (): void => {
+    this.paused = true;
+  };
+
+  resume = (): void => {
+    this.paused = false;
+  };
 
   write(data: string): void {
     this.writes.push(data);

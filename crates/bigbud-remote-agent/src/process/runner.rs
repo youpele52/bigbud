@@ -115,7 +115,10 @@ fn run_bounded_process_internal(
         }
     }
     configure_process_group(&mut process);
-    let mut child = process.spawn().map_err(ProcessError::Spawn)?;
+    let mut child = {
+        let _spawn = crate::spawn_gate::lock().map_err(ProcessError::Spawn)?;
+        process.spawn().map_err(ProcessError::Spawn)?
+    };
     let stdin_writer = if options.stdin_bytes.is_empty() {
         None
     } else {

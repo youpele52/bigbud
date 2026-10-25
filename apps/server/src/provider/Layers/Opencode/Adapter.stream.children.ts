@@ -1,23 +1,34 @@
 import { randomUUID } from "node:crypto";
 
-import { EventId, RuntimeTaskId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import {
+  EventId,
+  type ProviderKind,
+  type ProviderRuntimeEvent,
+  type TurnId,
+} from "@bigbud/contracts";
 import type { Event, Message, Part, Session } from "@opencode-ai/sdk/v2";
 
+import { providerSubagentEvent, providerSubagentTaskId } from "../../providerSubagents.ts";
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { eventBase } from "./Adapter.stream.utils.ts";
+import { opencodeEventSessionId } from "./Adapter.stream.identity.ts";
+import {
+  childMetrics,
+  recordChildAssistant,
+  recordChildToolPart,
+  type ChildActivity,
+} from "./Adapter.stream.children.activity.ts";
 
 const MAX_CHILDREN = 32;
 const MAX_PROGRESS_LENGTH = 500;
 const PROGRESS_EMIT_INTERVAL_MS = 250;
 type ChildStatus = "pending" | "inProgress" | "completed" | "failed" | "stopped";
-type ChildActivity = {
-  assistantMessageId?: string;
-  progressPartId?: string;
-  progressSummary?: string;
-  progressEmittedAt?: number;
-  lastToolName?: string;
-  terminalReason?: string;
-};
+
+/** Child sessions are tracked only for providers that declare native subagent support. */
+export function tracksChildSessions(provider: ProviderKind): boolean {
+  return PROVIDER_SUBAGENT_CAPABILITIES[provider].support === "native";
+}
 
 function taskCreatedAt(child: Session, observedAt: string) {
   const timestamp = child.time?.created;
@@ -26,45 +37,56 @@ function taskCreatedAt(child: Session, observedAt: string) {
   return Number.isNaN(date.getTime()) ? observedAt : date.toISOString();
 }
 
-export function makeChildSessionTracker(session: ActiveOpencodeSession) {
+export function makeChildSessionTracker(
+  session: ActiveOpencodeSession,
+  provider: "opencode" | "kilocode" = "opencode",
+) {
   const children = new Map<string, Session>();
   const statuses = new Map<string, ChildStatus>();
   const activity = new Map<string, ChildActivity>();
+  const turns = new Map<string, TurnId | undefined>();
+  const ended = new Map<string, string>();
   let observedOrdinal = 0;
 
   function update(child: Session, status: ChildStatus): ProviderRuntimeEvent {
     const observedAt = new Date().toISOString();
     const childActivity = activity.get(child.id);
     const progressSummary = childActivity?.progressSummary?.trim();
-    return {
-      ...eventBase({
+    const metrics = childActivity ? childMetrics(childActivity) : undefined;
+    const terminal = status === "completed" || status === "failed" || status === "stopped";
+    const turnId = turns.get(child.id);
+    if (terminal && !ended.has(child.id)) ended.set(child.id, observedAt);
+    if (!terminal) ended.delete(child.id);
+    return providerSubagentEvent(
+      eventBase({
         eventId: EventId.makeUnsafe(randomUUID()),
         createdAt: observedAt,
         threadId: session.threadId,
         sessionEpoch: session.sessionEpoch,
-        provider: "opencode",
-        ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+        provider,
+        ...(turnId ? { turnId } : {}),
         raw: {
           source: "opencode.sdk.session-event",
           method: "child-session",
           payload: { sessionID: child.id },
         },
       }),
-      type: "task.updated",
-      payload: {
-        taskId: RuntimeTaskId.makeUnsafe(
-          `opencode:${session.threadId}:${session.sessionEpoch}:${child.id}`,
-        ),
-        kind: "providerSubagent",
+      {
+        taskId: providerSubagentTaskId(provider, session.threadId, session.sessionEpoch, child.id),
         nativeId: child.id,
-        activityFresh: status === "inProgress",
         status,
-        subject: (child.agent || child.title || "Subagent").slice(0, 120),
-        ...(child.title ? { description: child.title.slice(0, 500) } : {}),
-        ...(child.parentID ? { parentAgentId: child.parentID } : {}),
-        ...(progressSummary ? { progressSummary } : {}),
-        ...(childActivity?.lastToolName ? { lastToolName: childActivity.lastToolName } : {}),
-        ...(childActivity?.terminalReason ? { terminalReason: childActivity.terminalReason } : {}),
+        subject: child.agent || child.title,
+        subagentType: child.agent,
+        agentId: child.id,
+        description: child.title,
+        parentAgentId: child.parentID,
+        progressSummary,
+        lastToolName: childActivity?.lastToolName,
+        terminalReason: childActivity?.terminalReason,
+        model: childActivity?.model,
+        ...(metrics ? { metrics } : {}),
+        ...(childActivity?.steps ? { recentSteps: childActivity.steps } : {}),
+        ...(terminal ? { endedAt: ended.get(child.id) } : {}),
         source: "lifecycle",
         freshness: {
           sessionEpoch: String(session.sessionEpoch),
@@ -73,16 +95,27 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
           observedOrdinal: ++observedOrdinal,
         },
         createdAt: taskCreatedAt(child, observedAt),
-        ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+        ...(turnId ? { turnId } : {}),
       },
-    };
+    );
+  }
+
+  /** Model, usage or step changes keep the current status; only pending becomes active. */
+  function activityUpdate(id: string): ReadonlyArray<ProviderRuntimeEvent> {
+    const current = statuses.get(id) ?? "pending";
+    const status = current === "pending" ? "inProgress" : current;
+    statuses.set(id, status);
+    return [update(children.get(id)!, status)];
   }
 
   async function refresh(): Promise<ReadonlyArray<ProviderRuntimeEvent>> {
     const output: ProviderRuntimeEvent[] = [];
-    const queue = [session.opencodeSessionId];
+    const queue = [session.opencodeSessionId, ...children.keys()];
+    const visited = new Set<string>();
     while (queue.length && children.size < MAX_CHILDREN) {
       const parent = queue.shift()!;
+      if (visited.has(parent)) continue;
+      visited.add(parent);
       const response = await session.client.session
         .children({ sessionID: parent })
         .catch(() => ({ data: undefined }));
@@ -91,6 +124,7 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
         if (children.size >= MAX_CHILDREN) break;
         if (child.parentID !== parent || children.has(child.id)) continue;
         children.set(child.id, child);
+        turns.set(child.id, session.activeTurnId);
         statuses.set(child.id, "pending");
         activity.set(child.id, {});
         output.push(update(child, "pending"));
@@ -102,6 +136,11 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
       const live = response.data?.[id];
       if (!live) continue;
       const status = live.type === "idle" ? "completed" : "inProgress";
+      if (
+        status === "completed" &&
+        (statuses.get(id) === "failed" || statuses.get(id) === "stopped")
+      )
+        continue;
       if (statuses.get(id) === status) continue;
       statuses.set(id, status);
       output.push(update(child, status));
@@ -121,7 +160,7 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
       delta?: string;
       error?: unknown;
     };
-    const id = properties.sessionID;
+    const id = opencodeEventSessionId(event);
     if (!id || id === session.opencodeSessionId) return [];
     if (!children.has(id)) {
       const info = properties.info as Session | undefined;
@@ -135,18 +174,37 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
       )
         return [];
       children.set(id, info);
+      turns.set(id, session.activeTurnId);
       statuses.set(id, "pending");
       activity.set(id, {});
       return [update(info, "pending")];
     }
+    if (event.type === "session.updated") {
+      const info = properties.info as Session | undefined;
+      if (!info || info.id !== id) return [];
+      children.set(id, info);
+      return [update(info, statuses.get(id) ?? "pending")];
+    }
+    const current = statuses.get(id);
+    // Content arriving after idle/error must not resurrect a finished child. A native
+    // busy/retry status is the only evidence that the child has actually resumed.
+    if (
+      (current === "completed" || current === "failed" || current === "stopped") &&
+      (event.type === "message.updated" ||
+        event.type === "message.part.updated" ||
+        event.type === "message.part.delta")
+    )
+      return [];
     if (event.type === "message.updated") {
       const message = properties.info as Message | undefined;
       const childActivity = activity.get(id);
-      if (childActivity) {
-        if (message?.role === "assistant") childActivity.assistantMessageId = message.id;
-        else delete childActivity.assistantMessageId;
+      if (!childActivity) return [];
+      if (message?.role !== "assistant") {
+        delete childActivity.assistantMessageId;
+        return [];
       }
-      return [];
+      childActivity.assistantMessageId = message.id;
+      return recordChildAssistant(childActivity, message) ? activityUpdate(id) : [];
     }
     if (event.type === "message.part.delta") {
       const childActivity = activity.get(id);
@@ -193,6 +251,7 @@ export function makeChildSessionTracker(session: ActiveOpencodeSession) {
           childActivity.lastToolName = lastToolName;
           changed = true;
         }
+        if (recordChildToolPart(childActivity, part, new Date().toISOString())) changed = true;
       }
       if (!changed) return [];
       statuses.set(id, "inProgress");

@@ -1,6 +1,14 @@
 import type { ThreadId, TurnId } from "@bigbud/contracts";
 import { v2Request } from "./Client.ts";
 import { assertV2SharedSessionOwner } from "./Runtime.ownership.ts";
+import { currentV2RequestContext } from "./Client.guard.ts";
+import { nextV2SettlementSequence } from "./Execution.owners.ts";
+import { stopV2OwnedDescendants } from "./Runtime.family.stop.ts";
+import {
+  replyV2FamilyInteraction,
+  closeV2FamilyInteractions,
+} from "./Runtime.family.interactions.ts";
+import { cancelV2FamilyRootInputs } from "./Runtime.family.inputs.ts";
 
 /** Interrupt cancellation must enter before the session queue held by the executing command. */
 export async function interruptV2Execution(
@@ -11,18 +19,38 @@ export async function interruptV2Execution(
   const session = runtime.get(threadId);
   if (turnId && turnId !== session.row?.turnId)
     throw new Error("V2 interrupt turn fence rejected.");
-  await session.coding?.cancelActive();
-  return runtime.withSession(threadId, async () => {
+  const familyFence = session.family?.fence();
+  const codingCancellation = session.coding?.cancelActive();
+  return runtime.withCleanupSession(threadId, async () => {
     if (runtime.get(threadId) !== session || (turnId && turnId !== session.row?.turnId))
       throw new Error("V2 interrupt owner fence rejected.");
     await assertV2SharedSessionOwner(session, false);
-    await v2Request("session.interrupt", (signal) =>
-      session.lease.process.client.session.interrupt(
-        { sessionID: session.native.id, resume: false },
-        { signal },
-      ),
-    );
-    await runtime.reconcile(session);
+    const results = await Promise.allSettled([
+      familyFence,
+      codingCancellation,
+      session.familyControl?.fence(),
+      closeV2FamilyInteractions(runtime, session),
+      cancelV2FamilyRootInputs(session),
+      v2Request("session.interrupt", (signal) =>
+        session.lease.process.client.session.interrupt(
+          { sessionID: session.native.id, resume: false },
+          { signal },
+        ),
+      ).then(() => {
+        session.interruptAcknowledgedSequence = nextV2SettlementSequence();
+      }),
+      stopV2OwnedDescendants(session),
+    ]);
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
+    await cancelV2FamilyRootInputs(session);
+    try {
+      session.consentPermit?.assertCurrent();
+    } catch {
+      return;
+    }
+    // Repair uses a new execution permit, never the cleanup-only request context.
+    runtime.scheduleRepair(session);
   });
 }
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession } from "./Runtime.types.ts";
@@ -53,6 +81,15 @@ export async function respondV2Permission(
   decision: Parameters<typeof replyV2Permission>[2],
 ) {
   const owner = runtime.get(threadId);
+  if (id.startsWith("bbv2-child:"))
+    return runtime.withSession(threadId, () =>
+      replyV2FamilyInteraction(runtime, owner, id, decision, "permission"),
+    );
+  if (id.startsWith("bbv2-thread:"))
+    return runtime.withSession(threadId, () => {
+      if (!runtime.options.threadBridge) throw new Error("V2 canonical thread bridge unavailable.");
+      return runtime.options.threadBridge.reply(runtime, owner, id, decision);
+    });
   if (id.startsWith("bbv2-code:"))
     return runtime.withSession(threadId, () => {
       if (!runtime.options.codingBridge) throw new Error("V2 coding bridge unavailable.");
@@ -75,6 +112,10 @@ export async function respondV2Form(
   answers: Parameters<typeof replyV2Form>[2],
 ) {
   const owner = runtime.get(threadId);
+  if (id.startsWith("bbv2-child:"))
+    return runtime.withSession(threadId, () =>
+      replyV2FamilyInteraction(runtime, owner, id, answers, "form"),
+    );
   const guard = v2ReplyGuard(runtime.options, runtime.sessions, owner);
   return runtime.withSession(threadId, async () => {
     await runtime.emit(owner, await replyV2Form(owner, id, answers, runtime.mutations, guard));
@@ -87,11 +128,15 @@ export function v2ReplyGuard(
   options: V2IsolatedRuntimeOptions,
   sessions: Map<ThreadId, V2RuntimeSession>,
   owner: V2RuntimeSession,
+  cancellation?: AbortSignal,
 ) {
   const generation = owner.lease.generation;
   const epoch = owner.epoch;
   const nativeId = owner.native.id;
+  const permit = currentV2RequestContext()?.permit;
   const validate = () => {
+    permit?.assertCurrent();
+    owner.consentPermit?.assertCurrent();
     if (
       sessions.get(owner.threadId) !== owner ||
       owner.stopped ||
@@ -105,7 +150,7 @@ export function v2ReplyGuard(
   };
   return async () => {
     await options.authorizeExecution?.();
-    await assertV2SharedSessionOwner(owner);
+    await assertV2SharedSessionOwner(owner, true, cancellation);
     validate();
     return validate;
   };

@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import { IsoDateTime, NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 import { ProviderKind } from "../orchestration/orchestration.provider";
@@ -11,7 +11,36 @@ export const ServerGetUsageSummaryInput = Schema.Struct({
 });
 export type ServerGetUsageSummaryInput = typeof ServerGetUsageSummaryInput.Type;
 
+export const UsageSourceMetadata = Schema.Struct({
+  source: Schema.Literals(["provider-reported", "estimated", "mixed", "none"]),
+  partial: Schema.Boolean,
+  legacy: Schema.Boolean,
+  reportedTokens: NonNegativeInt,
+  estimatedTokens: NonNegativeInt,
+  inputTokens: Schema.NullOr(NonNegativeInt),
+  outputTokens: Schema.NullOr(NonNegativeInt),
+  cacheReadTokens: Schema.NullOr(NonNegativeInt),
+  cacheWriteTokens: Schema.NullOr(NonNegativeInt),
+  reasoningTokens: Schema.NullOr(NonNegativeInt),
+});
+export type UsageSourceMetadata = typeof UsageSourceMetadata.Type;
+
+/** Derived disjoint display buckets, not authoritative provider counters. */
+export const UsageTokenMix = Schema.Struct({
+  inputTokens: NonNegativeInt,
+  cacheReadTokens: NonNegativeInt,
+  cacheWriteTokens: NonNegativeInt,
+  outputTokens: NonNegativeInt,
+  unclassifiedTokens: NonNegativeInt,
+});
+export type UsageTokenMix = typeof UsageTokenMix.Type;
+
 export const ServerUsageTotals = Schema.Struct({
+  accounting: Schema.optional(UsageSourceMetadata),
+  // Additive display detail must not make authoritative usage unavailable on decode.
+  tokenMix: Schema.optional(UsageTokenMix).pipe(
+    Schema.catchDecoding(() => Effect.succeed(Option.none())),
+  ),
   usedTokens: NonNegativeInt,
   inputTokens: NonNegativeInt,
   cachedInputTokens: NonNegativeInt,
@@ -22,6 +51,7 @@ export const ServerUsageTotals = Schema.Struct({
 export type ServerUsageTotals = typeof ServerUsageTotals.Type;
 
 export const ServerUsageBucket = Schema.Struct({
+  accounting: Schema.optional(UsageSourceMetadata),
   bucketStart: IsoDateTime,
   usedTokens: NonNegativeInt,
   inputTokens: NonNegativeInt,
@@ -33,6 +63,7 @@ export const ServerUsageBucket = Schema.Struct({
 export type ServerUsageBucket = typeof ServerUsageBucket.Type;
 
 export const ServerUsageBreakdownEntry = Schema.Struct({
+  accounting: Schema.optional(UsageSourceMetadata),
   id: TrimmedNonEmptyString,
   label: TrimmedNonEmptyString,
   usedTokens: NonNegativeInt,

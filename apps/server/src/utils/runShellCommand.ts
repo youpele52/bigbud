@@ -1,5 +1,7 @@
-import { type ChildProcess as ChildProcessHandle, spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
+
+import { killProcessTree } from "./killProcessTree.ts";
 
 export interface ShellCommandRunOptions {
   cwd?: string | undefined;
@@ -154,18 +156,6 @@ function buildShellArgs(candidate: ShellCandidate, command: string): string[] {
   return [...(candidate.args ?? []), "-lc", command];
 }
 
-function killChild(child: ChildProcessHandle, signal: NodeJS.Signals = "SIGTERM"): void {
-  if (process.platform === "win32" && child.pid !== undefined) {
-    try {
-      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-      return;
-    } catch {
-      // fallback to direct kill
-    }
-  }
-  child.kill(signal);
-}
-
 async function runShellCommandWithCandidate(
   candidate: ShellCandidate,
   command: string,
@@ -190,9 +180,9 @@ async function runShellCommandWithCandidate(
 
     const timeoutTimer = setTimeout(() => {
       timedOut = true;
-      killChild(child, "SIGTERM");
+      killProcessTree(child, "SIGTERM");
       forceKillTimer = setTimeout(() => {
-        killChild(child, "SIGKILL");
+        killProcessTree(child, "SIGKILL");
       }, 1_000);
     }, timeoutMs);
 
@@ -210,7 +200,7 @@ async function runShellCommandWithCandidate(
       const buffer = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
       outputBytes += buffer.length;
       if (outputBytes > maxBufferBytes) {
-        killChild(child, "SIGTERM");
+        killProcessTree(child, "SIGTERM");
         finalize(() => {
           reject(
             new Error(

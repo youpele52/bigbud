@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import { CenteredStatus } from "../common/CenteredStatus";
+import { isLoadingStatus } from "../common/CenteredStatus.logic";
 
 export interface DisplayProcess {
   pid: number;
@@ -93,7 +95,9 @@ export function ProcessTable({
           </Button>
         </div>
         {status !== "ready" ? (
-          <p className="text-xs capitalize text-muted-foreground">{status.replaceAll("_", " ")}</p>
+          <CenteredStatus loading={isLoadingStatus(status)} className="capitalize">
+            {status.replaceAll("_", " ")}
+          </CenteredStatus>
         ) : null}
         {truncated ? (
           <p className="text-xs text-amber-600">

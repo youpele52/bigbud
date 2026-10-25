@@ -1,12 +1,6 @@
 import { RuntimeTaskId, type OrchestrationTask } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import {
-  hasSubagentDetails,
-  subagentStatusLabel,
-  subagentTimeLabel,
-  visibleSubagents,
-} from "./SubagentsCard";
 import { hierarchicalSubagents } from "./SubagentsCard.hierarchy";
 
 const agent = (id: string, activityFresh = true): OrchestrationTask => ({
@@ -22,18 +16,7 @@ const agent = (id: string, activityFresh = true): OrchestrationTask => ({
   updatedAt: "2026-09-28T12:00:01.000Z",
 });
 
-describe("SubagentsCard logic", () => {
-  it("shows one row until expanded", () => {
-    const agents = [agent("one"), agent("two")];
-    expect(visibleSubagents(agents, false).map((entry) => entry.id)).toEqual(["one"]);
-    expect(visibleSubagents(agents, true).map((entry) => entry.id)).toEqual(["one", "two"]);
-  });
-
-  it("labels persisted running state as last seen rather than working", () => {
-    expect(subagentStatusLabel(agent("stale", false))).toBe("Last seen");
-    expect(subagentStatusLabel(agent("live"))).toBe("Working");
-  });
-
+describe("SubagentsCard hierarchy", () => {
   it("groups nested agents under readable parent labels", () => {
     const parent = { ...agent("parent"), nativeId: "parent-native", subject: "Planner" };
     const child = { ...agent("child"), parentAgentId: "parent-native", subject: "Researcher" };
@@ -49,21 +32,30 @@ describe("SubagentsCard logic", () => {
     ]);
   });
 
-  it("freezes terminal duration and reports stale age from the last update", () => {
-    const completed = { ...agent("done"), status: "completed" as const, activityFresh: false };
-    expect(subagentTimeLabel(completed, Date.parse("2026-09-28T13:00:00.000Z"))).toBe("1s");
-    const stale = { ...agent("stale", false), updatedAt: "2026-09-28T12:59:00.000Z" };
-    expect(subagentTimeLabel(stale, Date.parse("2026-09-28T13:00:00.000Z"))).toBe("1m ago");
+  it("nests by native parent task ID and caps the visual depth input", () => {
+    const root = { ...agent("root"), subject: "Root" };
+    const child = {
+      ...agent("child"),
+      parentTaskId: RuntimeTaskId.makeUnsafe("root"),
+      subject: "Child",
+    };
+    const grandchild = { ...agent("grandchild"), parentAgentId: "child", subject: "Grandchild" };
+    expect(
+      hierarchicalSubagents([grandchild, child, root]).map((row) => [row.agent.id, row.depth]),
+    ).toEqual([
+      ["root", 0],
+      ["child", 1],
+      ["grandchild", 2],
+    ]);
   });
 
-  it("offers disclosure only when bounded hidden detail exists", () => {
-    expect(hasSubagentDetails(agent("summary"))).toBe(false);
-    expect(hasSubagentDetails({ ...agent("inline"), progressSummary: "Visible inline" })).toBe(
-      false,
-    );
-    expect(hasSubagentDetails({ ...agent("detail"), description: "Inspect persistence" })).toBe(
-      true,
-    );
-    expect(hasSubagentDetails({ ...agent("tool"), lastToolName: "read" })).toBe(true);
+  it("treats a parent cycle as roots instead of looping", () => {
+    const a = { ...agent("a"), parentAgentId: "b" };
+    const b = { ...agent("b"), parentAgentId: "a" };
+    expect(
+      hierarchicalSubagents([a, b])
+        .map((row) => row.agent.id)
+        .toSorted(),
+    ).toEqual(["a", "b"]);
   });
 });

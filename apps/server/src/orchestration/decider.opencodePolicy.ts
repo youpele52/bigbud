@@ -23,6 +23,9 @@ const RUNTIME_COMMANDS = new Set<string>([
   "thread.checkpoint.revert",
   "thread.path-checkpoint.capture",
   "thread.path-checkpoint.restore",
+  "thread.delegation.model-choice.hold",
+  "thread.delegation.model-choice.expire",
+  "thread.delegation.model-choice.pick",
 ]);
 
 /** Admission only: historical event replay never invokes this policy or rewrites IDs. */

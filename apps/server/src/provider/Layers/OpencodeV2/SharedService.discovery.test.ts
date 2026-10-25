@@ -8,7 +8,7 @@ import {
 } from "./SharedService.test.fixture.ts";
 import {
   assertV2SharedQualifiedVersion,
-  makeV2SharedUpdateNotice,
+  isV2SharedUpdateRecommended,
 } from "./SharedService.compatibility.ts";
 
 it("borrows a qualified older service with two bounded authenticated GETs only", async () => {
@@ -35,36 +35,65 @@ it("borrows a qualified older service with two bounded authenticated GETs only",
   }
 });
 
-it.each(["2.0.20", "2.0.25", "2.0.27", "2.1.0", "3.0.0"])(
-  "never trusts unqualified %s by semver alone",
+it.each(["1.0.0", "3.0.0", "2.00.24", "2.0.24-beta", "2.0.9007199254740992"])(
+  "rejects unsupported %s",
   (version) => {
-    expect(() => assertV2SharedQualifiedVersion(version)).toThrow("not qualified");
+    expect(() => assertV2SharedQualifiedVersion(version)).toThrow("unsupported");
   },
 );
 
-it("reports verified unsupported runtime without contacting mutation or credential endpoints", async () => {
-  const fixture = await sharedServiceTestRegistration({ version: "2.0.27" });
-  const request = vi.fn(async () => Response.json({ version: "2.0.27", pid: 42 }));
+it("rejects an older stable V2 with missing APIs, not its patch number, without mutation or credential reads", async () => {
+  const fixture = await sharedServiceTestRegistration({ version: "2.0.23" });
+  const request = vi.fn(async (url: URL) =>
+    Response.json(url.pathname === "/api/info" ? { version: "2.0.23", pid: 42 } : {}),
+  );
   try {
     await expect(
       discoverV2SharedService({ file: fixture.file, fetch: request as unknown as typeof fetch }),
-    ).rejects.toThrow("2.0.27 is not qualified");
-    expect(request).toHaveBeenCalledTimes(1);
+    ).rejects.toThrow("invalid or incomplete API contract");
+    expect(request.mock.calls.map(([url]) => url.pathname)).toEqual(["/api/info", "/openapi.json"]);
   } finally {
     await fixture.close();
   }
 });
 
-it("emits one advisory warning per app session, not a permanent ready-status warning", () => {
-  const notice = makeV2SharedUpdateNotice();
-  expect(notice("2.0.26")).toBeUndefined();
-  expect(notice("2.0.24")).toMatchObject({
-    severity: "warning",
-    message: expect.stringContaining("remains usable"),
-  });
-  expect(notice("2.0.24")).toBeUndefined();
-  expect(notice("2.0.26")).toBeUndefined();
-  expect(() => notice("2.0.27")).toThrow("not qualified");
+it("recommends an update only below the supported client version", () => {
+  for (const older of ["2.0.24", "2.0.29", "2.0.99", "2.1.3"])
+    expect(isV2SharedUpdateRecommended(older)).toBe(true);
+  for (const current of ["2.1.4", "2.1.5", "2.1.10", "2.2.0", "2.999.0"])
+    expect(isV2SharedUpdateRecommended(current)).toBe(false);
+});
+
+it.each([
+  "2.0.0",
+  "2.0.20",
+  "2.0.24",
+  "2.0.25",
+  "2.0.26",
+  "2.0.27",
+  "2.0.28",
+  "2.1.0",
+  "2.999.999",
+])("accepts %s only after the required API contract passes", async (version) => {
+  const fixture = await sharedServiceTestRegistration({ version });
+  const request = vi.fn(async (url: URL) =>
+    Response.json(
+      url.pathname === "/api/info" ? { version, pid: 42 } : sharedServiceTestContract(),
+    ),
+  );
+  try {
+    expect(
+      (
+        await discoverV2SharedService({
+          file: fixture.file,
+          fetch: request as unknown as typeof fetch,
+        })
+      ).version,
+    ).toBe(version);
+    expect(request).toHaveBeenCalledTimes(2);
+  } finally {
+    await fixture.close();
+  }
 });
 
 it.each([

@@ -3,6 +3,7 @@ import type { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecu
 
 import { getWorktreeValidationError, resolveSendContext } from "./ChatView.sendTurn.helpers";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
+import { admitThreadCreationForSend } from "../../../lib/threadMaterialization.admission";
 
 export function isCurrentComposerDraftEmpty(input: {
   promptRef: UseOnSendInput["promptRef"];
@@ -73,6 +74,17 @@ export async function prepareSendContext(input: {
   if (!remoteReady) {
     return null;
   }
-
-  return sendContext;
+  try {
+    const creationAdmission = await admitThreadCreationForSend(
+      thread.id,
+      input.input.isLocalDraftThread,
+    );
+    return { ...sendContext, creationAdmission };
+  } catch (error) {
+    input.input.setThreadError(
+      thread.id,
+      error instanceof Error ? error.message : "Could not confirm this chat's creation.",
+    );
+    return null;
+  }
 }

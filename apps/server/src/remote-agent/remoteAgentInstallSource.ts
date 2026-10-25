@@ -1,6 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 
-import { version as serverVersion } from "../../package.json" with { type: "json" };
+import serverPackageJson from "../../package.json" with { type: "json" };
 import {
   parseRemoteAgentInstallSource,
   RemoteAgentInstallManagerError,
@@ -36,7 +36,13 @@ export interface RemoteAgentInstallSourceLoader {
   readonly refresh: (signal?: AbortSignal) => Promise<RemoteAgentInstallSource>;
 }
 
-function resolveInstallSourceUrl(environment: NodeJS.ProcessEnv): string {
+export function resolveInstallSourceUrl(
+  environment: NodeJS.ProcessEnv,
+  packageMetadata: {
+    readonly version: string;
+    readonly bigbudReleaseTag?: unknown;
+  } = serverPackageJson,
+): string {
   const configured = environment.BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL?.trim();
   if (configured) return configured;
   const repository =
@@ -56,7 +62,15 @@ function resolveInstallSourceUrl(environment: NodeJS.ProcessEnv): string {
   if (environment.BIGBUD_DESKTOP_PACKAGED !== "1") {
     return `https://github.com/${repository}/releases/latest/download/remote-agent-install-source.json`;
   }
-  return `https://github.com/${repository}/releases/download/v${serverVersion}/remote-agent-install-source.json`;
+  const tag = packageMetadata.bigbudReleaseTag ?? `v${packageMetadata.version}`;
+  if (
+    typeof tag !== "string" ||
+    tag !== tag.trim() ||
+    !/^v[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(tag)
+  ) {
+    throw new RemoteAgentInstallManagerError("The packaged remote agent release tag is invalid.");
+  }
+  return `https://github.com/${repository}/releases/download/${tag}/remote-agent-install-source.json`;
 }
 
 function parseInstallSourceJson(bytes: Uint8Array, label: string): RemoteAgentInstallSource {

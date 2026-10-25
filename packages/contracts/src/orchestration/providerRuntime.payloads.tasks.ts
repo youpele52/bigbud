@@ -2,10 +2,11 @@ import { Schema } from "effect";
 
 import { NonNegativeInt, RuntimeTaskId, TurnId } from "../core/baseSchemas";
 import {
+  OrchestrationSubagentFields,
   OrchestrationTaskFreshness,
   OrchestrationTaskKind,
   OrchestrationTaskSource,
-} from "./orchestration.thread";
+} from "./orchestration.thread.tasks";
 import { TrimmedNonEmptyStringSchema } from "./providerRuntime.primitives";
 
 export const TaskStartedPayload = Schema.Struct({
@@ -54,6 +55,7 @@ export const TaskUpdatedPayload = Schema.Struct({
   lastToolName: Schema.optional(TrimmedNonEmptyStringSchema),
   usage: Schema.optional(Schema.Unknown),
   terminalReason: Schema.optional(TrimmedNonEmptyStringSchema),
+  ...OrchestrationSubagentFields,
   source: OrchestrationTaskSource.pipe(Schema.withDecodingDefault(() => "lifecycle")),
   freshness: OrchestrationTaskFreshness.pipe(
     Schema.withDecodingDefault(() => ({

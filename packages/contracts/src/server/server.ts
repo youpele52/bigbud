@@ -9,6 +9,7 @@ import {
   ServerLifecycleReadyPayload,
   ServerLifecycleStreamEvent,
   ServerLifecycleStreamReadyEvent,
+  ServerLifecycleStreamStalledEvent,
   ServerLifecycleStreamWelcomeEvent,
   ServerLifecycleWelcomePayload,
 } from "./server.lifecycle";
@@ -391,6 +392,7 @@ export {
   ServerLifecycleReadyPayload,
   ServerLifecycleStreamEvent,
   ServerLifecycleStreamReadyEvent,
+  ServerLifecycleStreamStalledEvent,
   ServerLifecycleStreamWelcomeEvent,
   ServerLifecycleWelcomePayload,
 };

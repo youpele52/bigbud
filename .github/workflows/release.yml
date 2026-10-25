@@ -193,7 +193,7 @@ jobs:
         run: bun run --cwd apps/desktop vitest run src/backend/cuaDriver.windowsSweep.native.test.ts
 
       - name: Align package versions to release version
-        run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.version }}"
+        run: node scripts/update-release-package-versions.ts "${{ needs.preflight.outputs.tag }}"
 
       - name: Validate macOS signing credentials
         if: matrix.platform == 'mac'
@@ -267,6 +267,15 @@ jobs:
           fi
 
           bun run dist:desktop:artifact -- "${args[@]}"
+
+      - name: Preserve signed macOS app on notarization failure
+        if: failure() && matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: notarization-recovery-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: notarization-recovery/
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: Smoke test packaged workspace watcher
         shell: bash
@@ -390,9 +399,41 @@ jobs:
           path: release-publish/*
           if-no-files-found: error
 
+  workspace_agent_windows_arm64:
+    name: Build Windows ARM64 server workspace agent
+    needs: preflight
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - name: Build and test read-only native helper
+        env:
+          BIGBUD_AGENT_BUILD_VERSION: ${{ needs.preflight.outputs.version }}
+          BIGBUD_AGENT_BUILD_DIGEST: ${{ github.sha }}
+        run: |
+          cargo test --locked --package bigbud-remote-agent --test inspect_local
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --locked --release --package bigbud-remote-agent
+      - name: Stage native server artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force release-publish | Out-Null
+          Copy-Item target/release/bigbud-remote-agent.exe release-publish/server-workspace-agent-win32-arm64.exe
+          $identity = & release-publish/server-workspace-agent-win32-arm64.exe --check
+          if ($LASTEXITCODE -ne 0 -or $identity -notmatch 'windows\s+aarch64$') { throw 'Native ARM64 identity mismatch' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-workspace-agent-win32-arm64
+          path: release-publish/*
+          if-no-files-found: error
+
   release:
     name: Publish GitHub Release
-    needs: [preflight, build, remote_agent_build]
+    needs: [preflight, build, remote_agent_build, workspace_agent_windows_arm64]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -444,6 +485,7 @@ jobs:
           version='${{ needs.preflight.outputs.version }}'
           node scripts/build-remote-agent-release-manifest.ts \
              --version "$version" \
+            --tag "${{ needs.preflight.outputs.tag }}" \
             --build-digest "$GITHUB_SHA" \
             --repository "$GITHUB_REPOSITORY" \
             --output release-assets/remote-agent-manifest.json \

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ThreadComposerSurfaceContext } from "~/components/chat/view/ThreadComposerSurface";
 import { Button } from "~/components/ui/button";
 
+import { StatusBanner } from "../common/StatusBanner";
 import { attachCompactScreenshot } from "./compactScreenshotAttachment";
 
 export function CompactChatScreenshotReceiver({
@@ -81,32 +82,40 @@ export function CompactChatScreenshotReceiver({
 
   if (!failure) return null;
   return (
-    <div
+    <StatusBanner
+      dismissalKey={["compact-chat", threadId, "screenshot", failure.captureId]}
+      variant="warning"
       role="status"
-      className="flex items-center gap-2 border-b border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground"
-    >
-      <span className="flex-1">{failure.message}</span>
-      <Button size="xs" variant="outline" onClick={() => setAttempt((value) => value + 1)}>
-        Retry
-      </Button>
-      {failure.captureId ? (
-        <Button
-          size="xs"
-          variant="ghost"
-          onClick={() => {
-            void bridge
-              ?.acknowledge(failure.captureId!)
-              .then(() => {
-                setFailure(null);
-              })
-              .catch(() =>
-                setFailure({ ...failure, message: "Could not discard the screenshot. Try again." }),
-              );
-          }}
-        >
-          Discard screenshot
-        </Button>
-      ) : null}
-    </div>
+      description={failure.message}
+      dismissLabel="Dismiss screenshot warning"
+      action={
+        <>
+          <Button size="xs" variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+            Retry
+          </Button>
+          {failure.captureId ? (
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={() => {
+                void bridge
+                  ?.acknowledge(failure.captureId!)
+                  .then(() => {
+                    setFailure(null);
+                  })
+                  .catch(() =>
+                    setFailure({
+                      ...failure,
+                      message: "Could not discard the screenshot. Try again.",
+                    }),
+                  );
+              }}
+            >
+              Discard screenshot
+            </Button>
+          ) : null}
+        </>
+      }
+    />
   );
 }

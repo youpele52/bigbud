@@ -72,6 +72,7 @@ export function makeStartedTerminalEvent(terminalId: string): TerminalEvent {
 export function resetTerminalStore(): void {
   useTerminalStateStore.persist.clearStorage();
   useTerminalStateStore.setState({
+    terminalLayoutByThreadId: {},
     terminalStateByThreadId: {},
     panelTerminalStateByThreadId: {},
     terminalLabelOverridesByThreadId: {},

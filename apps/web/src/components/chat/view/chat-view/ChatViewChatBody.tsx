@@ -1,9 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { useCallback } from "react";
+import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
+import { useCallback, useMemo } from "react";
 
 import { useThreadActions } from "~/hooks/useThreadActions";
 import BranchToolbar from "~/components/git/BranchToolbar";
 import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBanner";
+import { LegacyOpencodeNotice } from "../../common/LegacyOpencodeNotice";
 import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
@@ -11,6 +13,7 @@ import { AccessModeInfoBanner } from "../../common/AccessModeInfoBanner";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
 import { DelegatedChildrenCard } from "../../agents/DelegatedChildrenCard";
 import { ChatAgentActivityFeed } from "../../agents/ChatAgentActivityFeed";
+import { makeSubagentStopHandler } from "../../agents/SubagentRow.stop";
 import { isFreshActiveProviderAgent } from "../../agents/agentActivity.presentation";
 import { ThreadReaderOutline } from "../../scroller/ThreadReaderOutline";
 import { FloatingPlanCard } from "../../plan/FloatingPlanCard";
@@ -26,6 +29,12 @@ import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import type { ChatViewTimelineState } from "./chat-view-timeline.hooks";
 import { resolveAgentActivityPresentation } from "./chat-view-agent-activity.logic";
+import { useOpencodeV2RetainedHistory } from "./useOpencodeV2RetainedHistory";
+import { OpencodeV2RetainedHistoryNotice } from "../../common/OpencodeV2RetainedHistoryNotice";
+import { useOpenCodeRuntimeSetup } from "../../provider/useOpenCodeRuntimeSetup";
+import { OpenCodeSetupStatus } from "../../provider/OpenCodeSetupStatus";
+import { ThreadNoticeBanner } from "../../common/ThreadNoticeBanner";
+import { ThreadRecoveryNotices } from "../ThreadRecoveryNotices";
 
 interface ChatViewChatBodyProps {
   readonly base: ChatViewBaseState;
@@ -51,6 +60,20 @@ export function ChatViewChatBody({
   onOpenOrchestra,
 }: ChatViewChatBodyProps) {
   const { branchThread } = useThreadActions();
+  const openCodeSetup = useOpenCodeRuntimeSetup({
+    status: composer.activeProviderStatus,
+    settings: base.settings.providers.opencodeV2,
+    directory: composer.gitCwd ?? workspaceRoot,
+    threadId: base.isServerThread ? base.activeThread?.id : undefined,
+    threadError: base.activeThread?.error,
+  });
+  const retainedHistory = useOpencodeV2RetainedHistory(
+    base.isServerThread && base.activeThread?.modelSelection.provider === "opencodeV2"
+      ? base.activeThread.id
+      : undefined,
+    composer.gitCwd ?? workspaceRoot,
+    JSON.stringify(base.settings.providers.opencodeV2),
+  );
   const mainActivityVisible =
     thread.isWorking || thread.isCompacting || thread.showMemoryReviewStatus;
   const activityPresentation = resolveAgentActivityPresentation({
@@ -66,6 +89,14 @@ export function ChatViewChatBody({
     handleReplyToMessage,
     userTurnAnchors,
   } = useChatViewContentHandlers({ base, runtime, thread });
+  const stopSubagentThreadId =
+    base.isServerThread && composer.activeProviderStatus?.subagentStop === true
+      ? base.activeThread?.id
+      : undefined;
+  const onStopSubagent = useMemo(
+    () => (stopSubagentThreadId ? makeSubagentStopHandler(stopSubagentThreadId) : undefined),
+    [stopSubagentThreadId],
+  );
   const onUseHandoffFromBanner = useCallback(() => {
     if (!base.activeThread) return;
     void interactions.onCreateHandoffBranch(
@@ -76,7 +107,31 @@ export function ChatViewChatBody({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-chat-body>
-      <ProviderStatusBanner status={composer.activeProviderStatus} />
+      {base.isServerThread && isLegacyOpencodeThread(base.activeThread) ? (
+        <LegacyOpencodeNotice threadId={base.threadId} />
+      ) : null}
+      {openCodeSetup.result?.jobId ? (
+        <OpenCodeSetupStatus
+          threadId={base.threadId}
+          result={openCodeSetup.result}
+          error={openCodeSetup.error}
+          onRetry={openCodeSetup.retry}
+          onCancel={() => void openCodeSetup.cancel()}
+        />
+      ) : openCodeSetup.error ? (
+        <ThreadNoticeBanner
+          threadId={base.threadId}
+          kind="opencode-setup"
+          variant={openCodeSetup.severity}
+          title="OpenCode setup"
+          description={openCodeSetup.error}
+          dismissLabel="Dismiss OpenCode setup notice"
+        />
+      ) : null}
+      <ProviderStatusBanner status={composer.activeProviderStatus} threadId={base.threadId} />
+      {retainedHistory ? (
+        <OpencodeV2RetainedHistoryNotice threadId={base.threadId} message={retainedHistory} />
+      ) : null}
       <ContextWindowWarningBanner
         threadId={base.activeThread!.id}
         usage={thread.activeContextWindow}
@@ -85,15 +140,21 @@ export function ChatViewChatBody({
       />
       <ThreadErrorBanner
         error={base.activeThread!.error}
-        onDismiss={() => runtime.setThreadError(base.activeThread!.id, null)}
+        threadId={base.activeThread!.id}
+        provider={base.activeThread!.modelSelection.provider}
       />
-      <AccessModeInfoBanner
-        threadId={base.threadId}
-        provider={composer.selectedProvider}
-        runtimeMode={base.runtimeMode}
-        accessModeChangeId={runtime.accessModeChangeId}
-        connectionMode={base.settings.providers.opencodeV2.connectionMode ?? "shared"}
-      />
+      {base.isServerThread && base.activeThread ? (
+        <ThreadRecoveryNotices thread={base.activeThread} />
+      ) : null}
+      {!retainedHistory ? (
+        <AccessModeInfoBanner
+          threadId={base.threadId}
+          provider={composer.selectedProvider}
+          runtimeMode={base.runtimeMode}
+          accessModeChangeId={runtime.accessModeChangeId}
+          connectionMode="shared"
+        />
+      ) : null}
 
       <div className="flex min-h-0 min-w-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -113,7 +174,8 @@ export function ChatViewChatBody({
                 onTouchEnd={runtime.scrollBehavior.onMessagesTouchEnd}
                 onTouchCancel={runtime.scrollBehavior.onMessagesTouchEnd}
               >
-                {base.activeThread?.parentThread ? (
+                {/* A fork names its source in its own notice. */}
+                {base.activeThread?.parentThread && !base.activeThread.forkOrigin ? (
                   <div className="mb-4 flex items-center gap-3">
                     <span className="h-px flex-1 bg-border" />
                     <Link
@@ -146,6 +208,8 @@ export function ChatViewChatBody({
                 <DelegatedChildrenCard items={base.activeThread!.delegatedChildren ?? []} />
                 <MessagesTimeline
                   key={base.activeThread!.id}
+                  emptyChatGreeting={timeline.emptyChatGreeting}
+                  shimmerEmptyChat={timeline.shimmerEmptyChat}
                   isWorking={thread.isWorking}
                   activeTurnInProgress={interactions.activeTurnInProgress}
                   activeTurnStartedAt={thread.activeWorkStartedAt}
@@ -160,6 +224,8 @@ export function ChatViewChatBody({
                   nowIso={thread.nowIso}
                   expandedWorkGroups={base.expandedWorkGroups}
                   onToggleWorkGroup={interactions.onToggleWorkGroup}
+                  activityAccordionOpenById={base.activityAccordionOpenById}
+                  onSetActivityAccordionOpen={interactions.onSetActivityAccordionOpen}
                   changedFilesExpandedByTurnId={base.threadChangedFilesExpandedByTurnId}
                   onSetChangedFilesExpanded={(turnId, expanded) => {
                     if (base.isServerThread) {
@@ -172,6 +238,7 @@ export function ChatViewChatBody({
                   isRevertingCheckpoint={base.isRevertingCheckpoint}
                   onImageExpand={base.setExpandedImage}
                   markdownCwd={composer.gitCwd ?? undefined}
+                  preferredProvider={base.activeThread!.modelSelection.provider}
                   resolvedTheme={base.resolvedTheme}
                   timestampFormat={base.timestampFormat}
                   workspaceRoot={workspaceRoot}
@@ -187,7 +254,11 @@ export function ChatViewChatBody({
                   }}
                   onReaderPositionChange={runtime.scrollBehavior.updateReaderPosition}
                 />
-                <ChatAgentActivityFeed agents={base.activeThread!.providerAgents ?? []} />
+                <ChatAgentActivityFeed
+                  agents={base.activeThread!.providerAgents ?? []}
+                  nowIso={thread.nowIso}
+                  onStopSubagent={onStopSubagent}
+                />
               </div>
 
               <div className="pointer-events-none absolute top-1/2 right-2 z-20 flex h-[75%] w-10 -translate-y-1/2 items-center justify-end sm:right-2 sm:w-10">
@@ -253,15 +324,17 @@ export function ChatViewChatBody({
             ) : null}
           </div>
 
-          <ChatViewMainComposer
-            base={base}
-            composer={composer}
-            thread={thread}
-            runtime={runtime}
-            interactions={interactions}
-            onOpenOrchestra={onOpenOrchestra}
-            onOpenReplySource={handleOpenReplySource}
-          />
+          {!retainedHistory ? (
+            <ChatViewMainComposer
+              base={base}
+              composer={composer}
+              thread={thread}
+              runtime={runtime}
+              interactions={interactions}
+              onOpenOrchestra={onOpenOrchestra}
+              onOpenReplySource={handleOpenReplySource}
+            />
+          ) : null}
 
           <BranchToolbar
             threadId={base.activeThread!.id}

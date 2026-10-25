@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { type AppCheckStatus } from "../../lib/checkStatus";
 import type { ServerRemoteAgentRuntimeSummary } from "@bigbud/contracts/server/server.ts";
+import type { SshAuthMode } from "../../lib/ssh";
 
 interface PendingRemoteAccessAction {
   readonly executionTargetId: string;
@@ -11,7 +12,7 @@ interface PendingRemoteAccessAction {
   readonly onCancel?: () => void;
 }
 
-export type RemoteExecutionAuthMode = "ssh-key-passphrase" | "password";
+export type RemoteExecutionAuthMode = SshAuthMode;
 
 export interface RemoteExecutionCheckState {
   readonly status: AppCheckStatus;
@@ -49,6 +50,7 @@ interface RemoteAccessState {
   closeAuthDialog: () => void;
   clearAuthDialog: () => void;
   setAuthSecret: (secret: string) => void;
+  setAuthPrompt: (mode: SshAuthMode, label: string) => void;
   setAuthError: (error: string | null) => void;
   setIsAuthenticating: (authenticating: boolean) => void;
 }
@@ -158,6 +160,8 @@ export const useRemoteAccessStore = create<RemoteAccessState>()((set) => ({
       isAuthenticating: false,
     }),
   setAuthSecret: (authSecret) => set({ authSecret }),
+  setAuthPrompt: (authMode, authPromptLabel) =>
+    set({ authMode, authPromptLabel, authSecret: "", authError: null }),
   setAuthError: (authError) => set({ authError }),
   setIsAuthenticating: (isAuthenticating) => set({ isAuthenticating }),
 }));

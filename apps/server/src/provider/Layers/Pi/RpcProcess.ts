@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
 
 import {
@@ -13,7 +13,8 @@ import {
 } from "./PiRemoteWorkspaceBridge.ts";
 import { composeBridgeCleanups } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
-import { assertSshExecutionTargetReady } from "../../../ssh/sshVerification.ts";
+import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
+import { killProcessTree } from "../../../utils/killProcessTree.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import {
   isLocalWorkspaceTarget,
@@ -22,6 +23,9 @@ import {
 import { describePiExit } from "./RpcProcess.errors.ts";
 import { createPiRpcProcessLifecycle, type PiRpcProcessLifecycle } from "./RpcProcess.lifecycle.ts";
 import { isPiRpcResponse } from "./RpcProcess.message.ts";
+import { migrateBundledPiConfig } from "./ConfigMigration.ts";
+import { detectPiSettlementSupport } from "./RpcProcess.capabilities.ts";
+import { serializePiPromptRequests } from "./RpcProcess.promptDispatch.ts";
 import type {
   PiRpcCommand,
   PiRpcProcess,
@@ -48,29 +52,6 @@ export type {
   PiRpcToolResult,
   PiRpcWriteOnlyCommand,
 } from "./RpcProcess.types.ts";
-
-function resolvePiRpcProcessInvocation(options: PiRpcProcessOptions): {
-  readonly command: string;
-  readonly args: ReadonlyArray<string>;
-} {
-  const rpcArgs = options.sessionFile ? ["--session", options.sessionFile] : [];
-  if (isLocalProviderRuntimeTarget(options.providerRuntimeTarget)) {
-    const invocation = buildPiRpcInvocation(options.binaryPath, rpcArgs);
-    return {
-      command: invocation.command,
-      args: invocation.args,
-    };
-  }
-
-  const executionTargetId = options.providerRuntimeTarget.executionTargetId;
-  assertSshExecutionTargetReady(executionTargetId);
-  return buildSshCommandInvocation({
-    executionTargetId,
-    command: options.binaryPath,
-    args: ["--mode", "rpc", ...rpcArgs],
-    ...(options.workspaceTarget.cwd ? { cwd: options.workspaceTarget.cwd } : {}),
-  });
-}
 
 async function preparePiRpcProcessBridge(
   options: PiRpcProcessOptions,
@@ -133,8 +114,24 @@ function writeJsonLine(
   });
 }
 
-export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcProcess> {
+export async function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcProcess> {
   const executionTargetId = options.providerRuntimeTarget.executionTargetId;
+  if (!isLocalProviderRuntimeTarget(options.providerRuntimeTarget)) {
+    // Checked before any bridge or process starts, without blocking the event loop.
+    await assertSshExecutionTargetReadyAsync(executionTargetId);
+  }
+  if (
+    isLocalProviderRuntimeTarget(options.providerRuntimeTarget) &&
+    buildPiRpcInvocation(options.binaryPath).bundledCliPath
+  ) {
+    await migrateBundledPiConfig(
+      options.env ?? process.env,
+      isLocalWorkspaceTarget(options.workspaceTarget)
+        ? (options.workspaceTarget.cwd ?? process.cwd())
+        : undefined,
+    );
+  }
+  const capabilities = await detectPiSettlementSupport(options);
   return preparePiRpcProcessBridge(options).then((bridge) => {
     const rpcArgs = [
       ...(options.sessionFile ? ["--session", options.sessionFile] : []),
@@ -143,7 +140,16 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
     ];
     const invocation = isLocalProviderRuntimeTarget(options.providerRuntimeTarget)
       ? buildPiRpcInvocation(options.binaryPath, rpcArgs)
-      : resolvePiRpcProcessInvocation(options);
+      : buildSshCommandInvocation({
+          executionTargetId,
+          command: options.binaryPath,
+          args: [
+            "--mode",
+            "rpc",
+            ...(options.sessionFile ? ["--session", options.sessionFile] : []),
+          ],
+          ...(options.workspaceTarget.cwd ? { cwd: options.workspaceTarget.cwd } : {}),
+        });
     const localSpawnCwd =
       bridge?.cwd ??
       (isLocalProviderRuntimeTarget(options.providerRuntimeTarget) &&
@@ -277,7 +283,7 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
     });
 
     const request = async <TData = unknown>(
-      command: PiRpcRequestCommand,
+      command: PiRpcRequestCommand & { readonly id?: string },
       timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
     ): Promise<PiRpcResponse<TData>> => {
       const terminalError = lifecycle.terminalError();
@@ -297,7 +303,7 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
         );
       }
 
-      const id = `pi-${randomUUID()}`;
+      const id = command.id ?? `pi-${randomUUID()}`;
       const response = await new Promise<PiRpcResponse>((resolve, reject) => {
         const timeout = setTimeout(() => {
           lifecycle.removePending(id);
@@ -332,17 +338,7 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
       };
     };
 
-    const killPiChild = (signal: NodeJS.Signals) => {
-      if (process.platform === "win32" && child.pid !== undefined) {
-        try {
-          spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-          return;
-        } catch {
-          // Fall through to direct kill when taskkill is unavailable.
-        }
-      }
-      child.kill(signal);
-    };
+    const killPiChild = (signal: NodeJS.Signals) => killProcessTree(child, signal);
 
     const stop = async () => {
       if (exitPromise) {
@@ -379,11 +375,12 @@ export function createPiRpcProcess(options: PiRpcProcessOptions): Promise<PiRpcP
 
     return {
       child,
+      ...capabilities,
       command: invocation.command,
       args: invocation.args,
       ...(localSpawnCwd ? { cwd: localSpawnCwd } : {}),
       stderrTail: () => stderrTail,
-      request,
+      request: serializePiPromptRequests(request),
       write,
       subscribe,
       stop,

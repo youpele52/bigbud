@@ -37,7 +37,7 @@ This lets bigbud retain its richer terminal features without routing every raw o
 ## Related Work
 
 - Source: the terminal comparison and architecture request in bigbud thread `9191707a-cc9e-4673-9b92-3f18f3868469`.
-- Preserve the implemented safeguards in [Terminal harness icon reliability plan](2026-09-23-terminal-harness-icon-plan.md), especially authoritative local null identities, runtime generations, close tombstones, and identity state surviving output-buffer eviction.
+- Preserve the implemented safeguards in [retired terminal harness icon plan's summary](README.md#retired-records), especially authoritative local null identities, runtime generations, close tombstones, and identity state surviving output-buffer eviction.
 - Reference implementation: [t3code snapshot `c2fa9fc911daeac97df4760f95fc57dca42b84c8`](https://github.com/pingdotgg/t3code/tree/c2fa9fc911daeac97df4760f95fc57dca42b84c8). Read and adapt, never copy directly; follow `.opencode/agents/fork-upstream-adapter.md`.
 - Notes / Kanban: none identified. Lookup was attempted, but workspace tools returned `Workspace tools are not ready`; this is not evidence that no related records exist. No issue ID or PR was supplied.
 

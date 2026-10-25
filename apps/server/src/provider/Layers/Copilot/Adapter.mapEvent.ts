@@ -148,11 +148,40 @@ export const mapEvent = (
           },
         ];
       case "assistant.usage": {
+        if (event.agentId || event.data.parentToolCallId || event.data.initiator) return [];
+        if (event.data.inputTokens === undefined && event.data.outputTokens === undefined)
+          return [];
         const usage = normalizeUsage(event);
+        const input = event.data.inputTokens ?? 0;
+        const output = event.data.outputTokens ?? 0;
+        const subtotal = input + output;
+        if (![input, output, subtotal].every((n) => Number.isSafeInteger(n) && n >= 0)) return [];
         const accounting = makeTokenUsageAccounting({
-          scope: "turn",
-          scopeId: turnId,
+          scope: "item",
+          scopeId: `${session.session.sessionId}:${event.id}`,
           usage,
+          processedTokens: subtotal,
+          canonical: {
+            version: 2,
+            source: "provider-reported",
+            basis: "copilot-api-call-cache-inclusion-unverified",
+            completeness: "partial",
+            inputTokens: null,
+            outputTokens: event.data.outputTokens ?? null,
+            cacheReadTokens: null,
+            cacheWriteTokens: null,
+            reasoningTokens: null,
+            reportedTotal: null,
+            subtotal,
+            model: event.data.model,
+            raw: {
+              input: event.data.inputTokens ?? null,
+              output: event.data.outputTokens ?? null,
+              cacheRead: event.data.cacheReadTokens ?? null,
+              cacheWrite: event.data.cacheWriteTokens ?? null,
+              reasoning: event.data.reasoningTokens ?? null,
+            },
+          },
         });
         return [
           {
@@ -166,7 +195,6 @@ export const mapEvent = (
             }),
             type: "thread.token-usage.updated",
             payload: {
-              usage,
               ...(accounting ? { accounting } : {}),
             },
           },

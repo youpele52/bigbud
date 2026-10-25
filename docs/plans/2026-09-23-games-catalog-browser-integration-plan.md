@@ -16,7 +16,7 @@ Add a **Games** entry immediately after Scheduled in bigbud's left sidebar. It o
 
 - Source: this thread's approved 11-game list, navigation discussion, and Games/Plugins screenshot. No stable bigbud note or Kanban link is available; workspace note creation returned `Workspace tools are not ready`.
 - No issue ID supplied.
-- Relevant existing browser UI plan: `docs/plans/2026-09-11-right-panel-thread-tabs-plan.md`; revalidate against the live implementation before use.
+- Use the current right-panel/browser implementation as the UI reference. The old right-panel thread proposal was retired because the later trunk/tributary direction excludes thread navigation there; do not recreate that rejected layout.
 
 ## Problem
 

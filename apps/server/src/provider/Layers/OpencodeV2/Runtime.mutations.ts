@@ -42,6 +42,11 @@ export class V2RuntimeMutations {
       throw new Error("V2 native mutation is unconfirmed; process namespace quarantined.");
   }
 
+  /** Pending/unconfirmed physical mutations stay busy regardless of wrapper timeout or lease expiry. */
+  busyCount() {
+    return this.current ? 1 : 0;
+  }
+
   private verify(record: Mutation): void {
     if (
       this.current !== record ||
@@ -75,15 +80,22 @@ export class V2RuntimeMutations {
   ): Promise<T> {
     return this.withNamespace(async () => {
       const validate = await beforeDispatch?.();
+      const activation = session.activation;
       return this.runOwned(
         session.lease.process,
         operation,
-        request,
+        (signal) =>
+          activation?.token
+            ? activation.gate.dispatch(activation.token, () => request(signal))
+            : request(signal),
         verify,
         timeoutMs,
         undefined,
         false,
-        validate,
+        () => {
+          validate?.();
+          if (activation?.token) activation.gate.assertReservation(activation.token);
+        },
       );
     });
   }

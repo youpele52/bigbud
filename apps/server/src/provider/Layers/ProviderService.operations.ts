@@ -37,6 +37,7 @@ import {
 import type { makeResolveRoutableSession } from "./ProviderServiceSessionRouting.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import { readPersistedSessionEpoch } from "./ProviderServiceHelpers.ts";
+import { stopAdaptersWithin } from "./ProviderService.stopAll.ts";
 
 /** Return type of `makeResolveRoutableSession` — the curried session resolver. */
 export type ResolveRoutableSession = ReturnType<typeof makeResolveRoutableSession>;
@@ -278,16 +279,28 @@ export function makeRollbackConversation(
 }
 
 /**
+ * Why every provider is being stopped. Every reason here is the app or backend going away,
+ * never a user's Stop, so recovery intents are suspended, never revoked.
+ */
+export type ProviderStopAllReason = "app-exit";
+
+/**
  * Builds an Effect that stops all active provider sessions and marks bindings
- * as stopped in the directory. Uses `Effect.gen` to avoid the IIFE pattern.
+ * as stopped in the directory. Order: persist live bindings, stop every adapter
+ * concurrently with a per-adapter timeout, then mark directory entries stopped.
  */
 export function makeRunStopAll(
   adapters: ReadonlyArray<Adapter>,
   directory: ProviderSessionDirectoryShape,
   upsertSessionBinding: UpsertSessionBinding,
   analytics: AnalyticsServiceShape,
+  options?: {
+    readonly reason?: ProviderStopAllReason;
+    readonly suspendRecoveryIntents?: (reason: ProviderStopAllReason) => Effect.Effect<void>;
+  },
 ): Effect.Effect<void> {
   return Effect.gen(function* () {
+    yield* options?.suspendRecoveryIntents?.(options.reason ?? "app-exit") ?? Effect.void;
     const threadIds = yield* directory.listThreadIds();
     const activeSessions = yield* Effect.forEach(adapters, (adapter) =>
       adapter.listSessions(),
@@ -300,7 +313,7 @@ export function makeRunStopAll(
             lastRuntimeEventAt: new Date().toISOString(),
           }),
     ).pipe(Effect.asVoid);
-    yield* Effect.forEach(adapters, (adapter) => adapter.stopAll()).pipe(Effect.asVoid);
+    yield* stopAdaptersWithin(adapters);
     yield* Effect.forEach(threadIds, (threadId) =>
       directory.getProvider(threadId).pipe(
         Effect.flatMap((provider) =>

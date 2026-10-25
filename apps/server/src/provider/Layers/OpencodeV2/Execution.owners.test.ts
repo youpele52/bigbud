@@ -53,3 +53,58 @@ it("joins already dispatched execution settlement and caps retained exact-owner 
   settle();
   await Promise.all(retained);
 });
+
+it("H1: a dispatched-then-failed execution stays uncertain after join until reconciled with proof", async () => {
+  const owners = new V2ActiveExecutions(),
+    controller = new AbortController();
+  const failed = owners.run(controller, () =>
+    owners.dispatch(
+      controller,
+      async () => {
+        throw new RangeError("Maximum call stack size exceeded");
+      },
+      "receipt-key",
+    ),
+  );
+  await expect(failed).rejects.toThrow(RangeError);
+  await owners.join();
+  expect(owners.busyCount()).toBe(1);
+  expect(owners.uncertainEntries()).toEqual([
+    expect.objectContaining({ controller, receiptKey: "receipt-key" }),
+  ]);
+  // Without native drain, or with drain but neither durable receipt nor interrupt acknowledgement, stay held.
+  const proofless = [
+    { nativeDrained: false, receiptDurable: true, interruptAcknowledged: true },
+    { nativeDrained: true, receiptDurable: false, interruptAcknowledged: false },
+  ];
+  for (const evidence of proofless) expect(owners.reconcile(controller, evidence)).toBe(false);
+  expect(owners.busyCount()).toBe(1);
+  const proof = { nativeDrained: true, receiptDurable: true, interruptAcknowledged: false };
+  expect(owners.reconcile(new AbortController(), proof)).toBe(false);
+  expect(owners.reconcile(controller, proof)).toBe(true);
+  expect(owners.busyCount()).toBe(0);
+  expect(owners.uncertainEntries()).toEqual([]);
+});
+
+it("an undispatched failure never becomes uncertain and reconcile cannot clear active work", async () => {
+  const owners = new V2ActiveExecutions(),
+    controller = new AbortController();
+  await expect(
+    owners.run(controller, async () => {
+      throw new Error("pre-dispatch refusal");
+    }),
+  ).rejects.toThrow("pre-dispatch refusal");
+  expect(owners.busyCount()).toBe(0);
+  let release!: () => void;
+  const physical = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const running = owners.run(controller, () => owners.dispatch(controller, () => physical));
+  await Promise.resolve();
+  const proof = { nativeDrained: true, receiptDurable: true, interruptAcknowledged: true };
+  expect(owners.reconcile(controller, proof)).toBe(false);
+  expect(owners.busyCount()).toBe(1);
+  release();
+  await running;
+  expect(owners.busyCount()).toBe(0);
+});

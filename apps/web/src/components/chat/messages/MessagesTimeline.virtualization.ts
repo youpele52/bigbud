@@ -39,6 +39,9 @@ function resolveRecentTurnsBoundaryIndex(
   return 0;
 }
 
+// Open timeline accordions are deliberately not boundaries: their state is persisted above
+// the virtualizer and reflected in row estimates, so remounted rows render and size the same.
+// Pinning every opened accordion would unvirtualize the rest of the thread from that turn on.
 function resolveExpandedBoundaryIndex(input: {
   rows: ReadonlyArray<MessagesTimelineRow>;
   expandedWorkGroups?: Readonly<Record<string, boolean>>;

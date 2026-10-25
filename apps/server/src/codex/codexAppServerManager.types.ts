@@ -91,6 +91,12 @@ export interface CodexSessionContext {
   pendingApprovals: Map<ApprovalRequestId, PendingApprovalRequest>;
   pendingUserInputs: Map<ApprovalRequestId, PendingUserInputRequest>;
   collabReceiverTurns: Map<string, TurnId>;
+  /**
+   * Known child agent threads and their running turn (`null` when idle). Unlike
+   * `collabReceiverTurns` it survives the parent turn, because children can outlive it and
+   * thread Stop must interrupt each child thread itself (a parent interrupt does not cascade).
+   */
+  collabChildTurns: Map<string, TurnId | null>;
   activeModelCatalog: CodexModelCatalog;
   effectiveModelSelection: CodexEffectiveModelSelection | undefined;
   nextRequestId: number;

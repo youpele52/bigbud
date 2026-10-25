@@ -124,11 +124,11 @@ export const makeProcessSessionHandlers = ({
 
   const processTurnInterruptRequested = Effect.fn("processTurnInterruptRequested")(function* (
     event: Extract<ProviderIntentEvent, { type: "thread.turn-interrupt-requested" }>,
-  ): Effect.fn.Return<void, ProviderServiceError | OrchestrationDispatchError> {
+  ): Effect.fn.Return<boolean, ProviderServiceError | OrchestrationDispatchError> {
     const thread = yield* resolveThread(event.payload.threadId);
     if (!thread) {
       yield* cancelPendingFlush(event);
-      return;
+      return false;
     }
     const operation = event.payload.operation;
     if (
@@ -143,7 +143,7 @@ export const makeProcessSessionHandlers = ({
         (operation.reservedPromptIds.length > 0 &&
           exactQueuedPrefix(thread, operation.reservedPromptIds).length === 0))
     )
-      return;
+      return false;
     let runtimeSession = yield* providerService
       .listSessions()
       .pipe(Effect.map((sessions) => sessions.find((session) => session.threadId === thread.id)));
@@ -187,7 +187,7 @@ export const makeProcessSessionHandlers = ({
             : {}),
         });
       }
-      return;
+      return false;
     }
 
     if (
@@ -212,7 +212,7 @@ export const makeProcessSessionHandlers = ({
         createdAt: event.payload.createdAt,
       });
       yield* cancelPendingFlush(event);
-      return;
+      return false;
     }
 
     const projectedTurnFence = boundSession?.activeTurnId ?? thread.latestTurn?.turnId ?? null;
@@ -236,7 +236,7 @@ export const makeProcessSessionHandlers = ({
         createdAt: event.payload.createdAt,
       });
       yield* cancelPendingFlush(event);
-      return;
+      return false;
     }
 
     if (
@@ -259,7 +259,7 @@ export const makeProcessSessionHandlers = ({
             : {}),
         });
       }
-      return;
+      return false;
     }
 
     if (!runtimeSession && event.payload.pendingFlushIntent !== undefined) {
@@ -286,7 +286,7 @@ export const makeProcessSessionHandlers = ({
         }
         if (event.payload.operation) yield* completeInterruptContinue(event);
         else yield* cancelPendingFlush(event);
-        return;
+        return false;
       }
       if (
         event.payload.turnId !== undefined &&
@@ -306,7 +306,7 @@ export const makeProcessSessionHandlers = ({
           createdAt: event.payload.createdAt,
         });
         yield* cancelPendingFlush(event);
-        return;
+        return false;
       }
     }
 
@@ -344,7 +344,7 @@ export const makeProcessSessionHandlers = ({
           }),
         ),
       );
-    if (!interruptAcknowledged) return;
+    if (!interruptAcknowledged) return false;
     if (event.payload.operation) {
       yield* setTurnControlOperation({
         orchestrationEngine,
@@ -365,11 +365,12 @@ export const makeProcessSessionHandlers = ({
       if (event.payload.operation && settledThread?.session?.activeTurnId == null) {
         yield* completeInterruptContinue(event);
       }
-      return;
+      return true;
     }
     // Interrupt acknowledgement only confirms that the provider accepted the
     // request. Keep the projected turn active until runtime ingestion or
     // authoritative reconciliation confirms terminal settlement.
+    return true;
   });
 
   const {

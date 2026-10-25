@@ -16,6 +16,8 @@ function makeSettings(enabled: boolean): ClaudeSettings {
       fileCheckpointRewind: false,
       nativeFork: false,
     },
+    maxSubagentSpawnDepth: null,
+    maxConcurrentSubagents: null,
   };
 }
 

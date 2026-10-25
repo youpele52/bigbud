@@ -117,7 +117,7 @@ export class V2IsolatedMcp {
         this.timeoutMs,
       );
     }
-    for (const server of [...owned.keys()])
+    for (const server of Array.from(owned.keys()))
       if (!proposal.some((item) => item.name === server)) {
         await this.runtime.mutations.run(
           session,

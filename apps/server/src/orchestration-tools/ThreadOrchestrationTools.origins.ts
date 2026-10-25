@@ -1,4 +1,5 @@
 import { CommandId, EventId, type ProjectId, type ThreadId } from "@bigbud/contracts";
+import type { DelegationModelChoiceLinkedSummary } from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
 import { createHash } from "node:crypto";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
@@ -15,6 +16,7 @@ function delegationLinkedActivityCommand(input: {
   childProjectId: ProjectId;
   childTitle: string;
   createdAt: string;
+  modelChoice?: DelegationModelChoiceLinkedSummary | undefined;
 }) {
   return {
     type: "thread.activity.append" as const,
@@ -29,6 +31,7 @@ function delegationLinkedActivityCommand(input: {
         childThreadId: input.childThreadId,
         childProjectId: input.childProjectId,
         childTitle: input.childTitle,
+        ...(input.modelChoice !== undefined ? { modelChoice: input.modelChoice } : {}),
       },
       turnId: null,
       createdAt: input.createdAt,
@@ -43,6 +46,7 @@ export function notifyDelegationLinked(
   childProjectId: ProjectId,
   childTitle: string,
   createdAt: string,
+  modelChoice?: DelegationModelChoiceLinkedSummary,
 ) {
   return input.orchestrationEngine.dispatch(
     delegationLinkedActivityCommand({
@@ -51,6 +55,7 @@ export function notifyDelegationLinked(
       childProjectId,
       childTitle,
       createdAt,
+      modelChoice,
     }),
   );
 }

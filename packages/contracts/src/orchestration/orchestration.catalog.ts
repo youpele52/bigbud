@@ -62,6 +62,8 @@ export const ThreadSummary = Schema.Struct({
   sessionStatus: Schema.NullOr(OrchestrationSessionStatus),
   providerName: Schema.NullOr(TrimmedNonEmptyString),
   activeTurnId: Schema.NullOr(TurnId),
+  /** Owned native descendants may outlive the parent turn (OrchestrationSession.retainedFamily). */
+  retainedFamily: Schema.optional(Schema.Boolean),
   latestTurnState: Schema.NullOr(OrchestrationLatestTurnState),
   isWatching: Schema.Boolean,
   isWatched: Schema.Boolean,

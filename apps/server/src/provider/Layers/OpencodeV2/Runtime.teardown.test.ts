@@ -81,9 +81,11 @@ it("quarantines an abort-ignoring native interrupt beyond its deadline while sib
     const interrupt = vi
       .spyOn(http.client.session, "interrupt")
       .mockImplementationOnce(async (...args) => {
+        // Hold an already-dispatched response, not work that would start after its deadline.
+        const response = await original(...args);
         entered.resolve();
         await gate.promise;
-        return original(...args);
+        return response;
       });
     vi.useFakeTimers();
     const stop = runtime.stop(threadId).then(
@@ -91,6 +93,9 @@ it("quarantines an abort-ignoring native interrupt beyond its deadline while sib
       () => "failure",
     );
     await entered.promise;
+    expect(
+      http.calls.filter((call) => call.pathname === `/api/session/${nativeId}/interrupt`),
+    ).toHaveLength(1);
     try {
       await vi.advanceTimersByTimeAsync(10001);
     } finally {
@@ -127,6 +132,8 @@ it("quarantines an abort-ignoring native interrupt beyond its deadline while sib
     } finally {
       gate.resolve();
       await flushMicrotasks();
+      // Late response delivery/observer settlement is asynchronous; await actual owner release.
+      await expect.poll(() => runtime.teardown.has(threadId), { timeout: 5000 }).toBe(false);
     }
     if (blocked) {
       await runtime.start(start);

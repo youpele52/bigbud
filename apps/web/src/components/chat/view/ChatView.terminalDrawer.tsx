@@ -18,6 +18,7 @@ interface PersistentThreadTerminalDrawerProps {
   closeShortcutLabel: string | undefined;
   keybindings: ResolvedKeybindingsConfig;
   onAddTerminalContext: (selection: TerminalContextSelection) => void;
+  onToggleExpanded: () => void;
 }
 
 interface PersistentTerminalLaunchContext {
@@ -36,6 +37,7 @@ export function PersistentThreadTerminalDrawer({
   closeShortcutLabel,
   keybindings,
   onAddTerminalContext,
+  onToggleExpanded,
 }: PersistentThreadTerminalDrawerProps) {
   const drawer = useThreadTerminalDrawer(threadId, launchContext, visible);
   const project = drawer.project;
@@ -44,13 +46,15 @@ export function PersistentThreadTerminalDrawer({
   const canRenderDrawer = Boolean(project && cwd);
   const animatedVisible = visible && drawerOpen;
   const terminalVisible = animatedVisible && presentation !== "hidden";
-  const [shouldRender, setShouldRender] = useState(() => canRenderDrawer && animatedVisible);
+  const parked = presentation === "hidden" || (!visible && drawerOpen);
+  const [shouldRender, setShouldRender] = useState(() => canRenderDrawer && drawerOpen);
   const [isTransitionVisible, setIsTransitionVisible] = useState(
-    () => canRenderDrawer && animatedVisible,
+    () => canRenderDrawer && drawerOpen,
   );
 
   useEffect(() => {
-    if (canRenderDrawer && animatedVisible) {
+    // Only logical open/close animates. Thread activation must not collapse or remount xterm.
+    if (canRenderDrawer && drawerOpen) {
       setShouldRender(true);
       const frameId = requestAnimationFrame(() => {
         setIsTransitionVisible(true);
@@ -60,7 +64,7 @@ export function PersistentThreadTerminalDrawer({
       };
     }
     setIsTransitionVisible(false);
-  }, [animatedVisible, canRenderDrawer]);
+  }, [drawerOpen, canRenderDrawer]);
 
   const handleAddTerminalContext = useCallback(
     (selection: TerminalContextSelection) => {
@@ -83,8 +87,10 @@ export function PersistentThreadTerminalDrawer({
       data-terminal-presentation={presentation}
       className={cn(
         "overflow-hidden transition-[max-height,opacity,transform] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[max-height,opacity,transform]",
-        presentation === "fill" && "min-h-0 flex-1",
-        presentation === "hidden" && "hidden pointer-events-none",
+        !parked && presentation === "fill" && "min-h-0 flex-1",
+        // WebGL disposal rebuilds xterm's DOM renderer and measures glyph widths synchronously.
+        // display:none makes every measurement zero and defeats its width cache.
+        parked && "invisible pointer-events-none absolute inset-x-0 bottom-0",
         isTransitionVisible
           ? "translate-y-0 opacity-100"
           : "pointer-events-none translate-y-3 opacity-0",
@@ -93,13 +99,13 @@ export function PersistentThreadTerminalDrawer({
         if (event.target !== event.currentTarget) {
           return;
         }
-        if (!isTransitionVisible) {
+        if (!drawerOpen && !isTransitionVisible) {
           setShouldRender(false);
         }
       }}
       style={{
         maxHeight:
-          presentation === "fill"
+          !parked && presentation === "fill"
             ? undefined
             : isTransitionVisible
               ? `${drawer.terminalState.terminalHeight}px`
@@ -135,6 +141,7 @@ export function PersistentThreadTerminalDrawer({
         onHeightChange={drawer.setTerminalHeight}
         onAddTerminalContext={handleAddTerminalContext}
         fillAvailableSpace={presentation === "fill"}
+        onToggleExpanded={onToggleExpanded}
       />
     </div>
   );

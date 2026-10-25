@@ -6,6 +6,7 @@ export type RightPanelKind =
   | "kanban"
   | "notes"
   | "system"
+  | "usage"
   | "terminal";
 
 let requestedRightPanel: RightPanelKind | null = null;

@@ -22,21 +22,6 @@ async function info(filename: string) {
   }
 }
 
-/** Validate the existing parent before creating storage; never create owned files in a repository. */
-export async function assertV2ProfileStorageLocation(profile: string) {
-  let ancestor = await realpath(path.dirname(profile));
-  for (let depth = 0; depth < 128; depth++) {
-    if (await info(path.join(ancestor, ".git")))
-      throw new Error(
-        "V2 runtime storage must be outside repository/worktree roots; choose a separate dedicated profile path.",
-      );
-    const parent = path.dirname(ancestor);
-    if (parent === ancestor) return;
-    ancestor = parent;
-  }
-  throw new Error("V2 storage boundary: repository ancestry exceeds bound.");
-}
-
 async function pointer(filename: string) {
   const stat = await info(filename);
   if (!stat) return undefined;

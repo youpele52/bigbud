@@ -179,6 +179,8 @@ function mapThreadRow(
     pendingInterruptFlushIntent: row.pendingInterruptFlushIntent ?? null,
     pendingTurnControlOperation: row.pendingTurnControlOperation ?? null,
     queueHold: row.queueHold === 1,
+    pendingTurnStart: row.pendingTurnStart ?? null,
+    recovery: row.recovery ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,
@@ -193,6 +195,7 @@ function mapThreadRow(
     session: groupedRows.sessionsByThread.get(row.threadId) ?? null,
     watchingThreads: groupedRows.watchingThreadsByWatcher.get(row.threadId) ?? [],
     ...(row.parentThread !== null ? { parentThread: row.parentThread } : {}),
+    ...(row.forkOrigin ? { forkOrigin: row.forkOrigin } : {}),
   };
 }
 
@@ -351,6 +354,7 @@ export function assembleSnapshotRows(rows: {
       providerName: row.providerName,
       runtimeMode: row.runtimeMode,
       activeTurnId: row.activeTurnId,
+      retainedFamily: row.retainedFamily === 1,
       reason: row.reason,
       lastError: row.lastError,
       updatedAt: row.updatedAt,

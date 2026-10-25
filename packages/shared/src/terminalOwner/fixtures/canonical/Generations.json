@@ -1,0 +1,9 @@
+{
+  "type": "Generations",
+  "input": {
+    "main": "0",
+    "controller": "0",
+    "host": "0"
+  },
+  "canonical": "000000000000000000000000000000000000000000000000"
+}

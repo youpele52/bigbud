@@ -31,11 +31,12 @@ import type {
   ProviderTurnInspectionState,
   ProviderTurnLiveness,
 } from "@bigbud/contracts/orchestration/providerTurnLiveness";
+import type { ProviderStopSubagentInput } from "@bigbud/contracts/server/subagents";
 import { ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
 
 import type { ProviderServiceError } from "../Errors.ts";
-import type { ProviderAdapterCapabilities } from "./ProviderAdapter.ts";
+import type { ProviderAdapterCapabilities, ProviderThreadSubagentRef } from "./ProviderAdapter.ts";
 import type {
   ProviderSessionRuntimeListCursor,
   ProviderSessionRuntimeListInput,
@@ -118,6 +119,20 @@ export interface ProviderServiceShape {
     readonly input: string;
     readonly turnId?: import("@bigbud/contracts").TurnId;
     readonly sessionEpoch?: number;
+  }) => Effect.Effect<void, ProviderServiceError>;
+
+  /** Stop one running provider subagent (D3); Stop-all is `interruptTurn`. */
+  readonly stopSubagent?: (
+    input: ProviderStopSubagentInput,
+  ) => Effect.Effect<void, ProviderServiceError>;
+
+  /**
+   * Thread Stop's subagent cascade for the live session only: the adapter's
+   * `stopThreadSubagents`, else per-subagent Stop when supported, else nothing.
+   */
+  readonly stopThreadSubagents?: (input: {
+    readonly threadId: ThreadId;
+    readonly subagents: ReadonlyArray<ProviderThreadSubagentRef>;
   }) => Effect.Effect<void, ProviderServiceError>;
 
   readonly inspectActiveTurn: (input: {

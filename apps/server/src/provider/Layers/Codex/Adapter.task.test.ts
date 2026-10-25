@@ -248,7 +248,13 @@ taskLayer("CodexAdapterLive task events", (it) => {
         lastReasoningOutputTokens: 0,
         compactsAutomatically: true,
       });
-      assert.deepEqual(firstEvent.value.payload.accounting, {
+      const { codexObservation, ...accounting } = firstEvent.value.payload.accounting!;
+      assert.equal(codexObservation?.nativeThreadId, "thread-1");
+      assert.equal(codexObservation?.total.subtotal, 11_839);
+      assert.equal(codexObservation?.last?.subtotal, 126);
+      assert.equal(codexObservation?.total.inputTokens, 11_833);
+      assert.equal(codexObservation?.last?.cacheReadTokens, 0);
+      assert.deepEqual(accounting, {
         scope: "turn",
         scopeId: "turn-1",
         processedTokens: 126,

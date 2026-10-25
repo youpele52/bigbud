@@ -16,6 +16,10 @@ import {
   TurnId,
 } from "@bigbud/contracts";
 import { Schema, ServiceMap } from "effect";
+import {
+  CodexUsageObservation,
+  UsageAccountingV2,
+} from "@bigbud/contracts/orchestration/providerRuntime.usage";
 import type { Effect } from "effect";
 
 import type { ProjectionRepositoryError } from "../Errors.ts";
@@ -34,6 +38,8 @@ export const ProjectionThreadActivity = Schema.Struct({
 export type ProjectionThreadActivity = typeof ProjectionThreadActivity.Type;
 
 export const ProjectionUsageContribution = Schema.Struct({
+  accounting: Schema.optional(UsageAccountingV2),
+  codexObservation: Schema.optional(CodexUsageObservation),
   contributionId: Schema.String,
   activityId: EventId,
   threadId: ThreadId,
@@ -92,10 +98,22 @@ export const DeleteProjectionThreadActivitiesInput = Schema.Struct({
 export type DeleteProjectionThreadActivitiesInput =
   typeof DeleteProjectionThreadActivitiesInput.Type;
 
+export const ListPendingDelegatedModelChoiceRequestsInput = Schema.Struct({
+  limit: NonNegativeInt,
+  /** Keyset cursor, so unresolvable rows can never starve a sweep page (M4). */
+  after: Schema.optional(Schema.Struct({ createdAt: IsoDateTime, activityId: EventId })),
+});
+export type ListPendingDelegatedModelChoiceRequestsInput =
+  typeof ListPendingDelegatedModelChoiceRequestsInput.Type;
+
 /**
  * ProjectionThreadActivityRepositoryShape - Service API for projected thread activity.
  */
 export interface ProjectionThreadActivityRepositoryShape {
+  readonly retireUsageTurns?: (
+    threadId: ThreadId,
+    turnIds: readonly string[],
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
   /**
    * Insert or replace a projected thread activity row.
    *
@@ -145,6 +163,19 @@ export interface ProjectionThreadActivityRepositoryShape {
   readonly advanceUsageBackfillState: (
     state: ProjectionUsageBackfillState,
   ) => Effect.Effect<void, ProjectionRepositoryError>;
+
+  /** Delegated model-choice requests without a resolution, on threads not deleted (oldest first). */
+  readonly listPendingDelegatedModelChoiceRequests: (
+    input: ListPendingDelegatedModelChoiceRequestsInput,
+  ) => Effect.Effect<
+    ReadonlyArray<{
+      readonly threadId: ThreadId;
+      readonly activityId: EventId;
+      readonly createdAt: string;
+      readonly payload: unknown;
+    }>,
+    ProjectionRepositoryError
+  >;
 }
 
 /**

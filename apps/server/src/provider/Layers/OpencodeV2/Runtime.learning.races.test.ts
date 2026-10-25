@@ -39,12 +39,18 @@ it("late cleanup of a cancelled installed attempt cannot remove a successor owni
       { threadId: ownerThreadId, cwd: directory, modelSelection, runtimeMode: "approval-required" },
       attempt,
     );
-    const rejected = expect(start).rejects.toThrow();
+    let startSettled = false;
+    const rejected = expect(
+      start.finally(() => {
+        startSettled = true;
+      }),
+    ).rejects.toThrow();
     await recoveryEntered.promise;
     const cancelled = runtime.cancelStart(attempt);
     recovery.resolve();
-    await rejected;
     await cleanupEntered.promise;
+    // A registered startup failure joins the exact-owner cancellation instead of settling first.
+    expect(startSettled).toBe(false);
     // A delayed native interrupt still targets this durable native ID. Rebinding before
     // it settles would expose a successor's generation to the old cleanup request.
     const blocked = await runtime
@@ -59,6 +65,7 @@ it("late cleanup of a cancelled installed attempt cannot remove a successor owni
         () => true,
       );
     cleanup.resolve();
+    await rejected;
     await cancelled;
     expect(blocked).toBe(true);
     await runtime.start({

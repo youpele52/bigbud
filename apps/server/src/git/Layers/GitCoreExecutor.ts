@@ -5,6 +5,8 @@
  */
 import { Effect, FileSystem, Option, Path, Scope, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { gitNeedsWorkspaceReservation, withWorktreeAccess } from "./WorktreeAccess.ts";
 
 import { GitCommandError } from "@bigbud/contracts";
 import { type ExecuteGitInput, type ExecuteGitResult } from "../Services/GitCore.ts";
@@ -104,9 +106,11 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const workspaceSql = yield* Effect.serviceOption(SqlClient.SqlClient);
 
-  return Effect.fnUntraced(function* (
+  const execute = Effect.fnUntraced(function* (
     input: ExecuteGitInput,
+    onPhysicalExit?: () => void,
   ): Effect.fn.Return<ExecuteGitResult, GitCommandError, never> {
     const commandInput = {
       ...input,
@@ -156,6 +160,7 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
             input.progress?.onStderrLine,
           ),
           child.exitCode.pipe(
+            Effect.tap(() => Effect.sync(() => onPhysicalExit?.())),
             Effect.map((value) => Number(value)),
             Effect.mapError(toGitCommandError(commandInput, "failed to report exit code.")),
           ),
@@ -215,6 +220,36 @@ export const makeRawExecute = Effect.fn("makeRawExecute")(function* (): Effect.f
       ),
     );
   });
+  return (input: ExecuteGitInput) => {
+    if (
+      Option.isNone(workspaceSql) ||
+      input.operation === "worktree.lifecycle" ||
+      !gitNeedsWorkspaceReservation(input.args)
+    )
+      return execute(input);
+    let physicallySettled = false;
+    return execute({
+      ...input,
+      args: ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      operation: "worktree.access.identity",
+    }).pipe(
+      Effect.flatMap((identity) =>
+        withWorktreeAccess(
+          workspaceSql.value,
+          {
+            cwd: input.cwd,
+            repository: identity.stdout.replace(/\r?\n$/, ""),
+            blocksRuntime: ["checkout", "switch"].includes(input.args[0] ?? ""),
+            isPhysicallySettled: () => physicallySettled,
+          },
+          execute(input, () => {
+            physicallySettled = true;
+          }),
+        ),
+      ),
+      Effect.mapError(toGitCommandError(input, "workspace mutation admission failed.")),
+    );
+  };
 });
 
 // ---------------------------------------------------------------------------

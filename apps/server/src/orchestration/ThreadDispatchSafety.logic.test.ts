@@ -6,6 +6,7 @@ import {
   isThreadConfirmedIdleForDispatch,
   isThreadTurnDispatchBlocked,
 } from "./ThreadDispatchSafety.logic.ts";
+import { requestedPayload } from "./deciderThreads.delegationModelChoice.test.helpers.ts";
 
 const now = "2026-08-13T00:00:00.000Z";
 const threadId = ThreadId.makeUnsafe("dispatch-safety-thread");
@@ -125,5 +126,33 @@ describe("thread dispatch safety", () => {
         }),
       ),
     ).toBe(false);
+  });
+
+  it("blocks a pending delegated model choice until it is resolved", () => {
+    const requested = {
+      id: "choice-requested" as never,
+      tone: "info" as const,
+      kind: "delegation.model-choice-requested",
+      summary: "Choose a model",
+      payload: requestedPayload,
+      turnId: null,
+      createdAt: now,
+    };
+    expect(isThreadTurnDispatchBlocked(thread({ activities: [requested] }))).toBe(true);
+    const resolved = {
+      ...requested,
+      id: "choice-resolved" as never,
+      kind: "delegation.model-choice-resolved",
+      payload: {
+        choiceId: requestedPayload.choiceId,
+        requested: requestedPayload.requested,
+        fallback: requestedPayload.fallback,
+        reason: requestedPayload.reason,
+        used: requestedPayload.fallback,
+        outcome: "fallback",
+        resolvedBy: "timeout",
+      },
+    };
+    expect(isThreadTurnDispatchBlocked(thread({ activities: [requested, resolved] }))).toBe(false);
   });
 });

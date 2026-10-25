@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./RpcProcess.capabilities.ts", () => ({
+  detectPiSettlementSupport: vi.fn(async () => ({
+    supportsAgentSettled: false,
+    supportsPromptDisposition: false,
+  })),
+}));
+
 const { spawnMock, createPiRemoteWorkspaceBridgeMock } = vi.hoisted(() => ({
   spawnMock: vi.fn(),
   createPiRemoteWorkspaceBridgeMock: vi.fn(),

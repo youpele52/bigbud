@@ -3,13 +3,15 @@ import { ChildProcessSpawner } from "effect/unstable/process";
 import {
   PROVIDER_KINDS,
   ServerHandoffJobError,
+  TextGenerationError,
   type ServerHandoffJob,
   type ServerStartHandoffJobInput,
 } from "@bigbud/contracts";
 
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ProjectionOperationalStateQuery } from "../orchestration/Services/ProjectionOperationalStateQuery.ts";
-import { resolveProviderWorkload } from "../provider/providerWorkloadSupport.ts";
+import { runInternalTextGeneration } from "../git/Layers/InternalTextGenerationPolicy.ts";
+import { lastSuccessfulThreadModel } from "../git/Layers/InternalTextGeneration.success.ts";
 import { writeHandoffDocumentFile } from "./wsHandoffDocument";
 import { resolveDefaultChatCwd, ServerSettingsService } from "./serverSettings.ts";
 import {
@@ -90,67 +92,48 @@ export const makeServerHandoffJobs = Effect.gen(function* () {
       const availableProviderKinds = PROVIDER_KINDS.filter(
         (provider) => settings.providers[provider].enabled,
       );
-      const resolution = resolveProviderWorkload({
-        requested: settings.textGenerationModelSelection,
-        workload: "unattendedTextGeneration",
-        availableProviderKinds,
-        fallbackOrder: ["codex", "claudeAgent"],
-      });
-      const actualSelection = resolution.actual;
-      if (!actualSelection) {
-        return yield* new ServerHandoffJobError({
-          message: resolution.reason ?? "No supported handoff provider is available.",
-        });
-      }
-      const generationModel = yield* Effect.try({
-        try: () => normalizeHandoffModelSelection(actualSelection, availableProviderKinds),
-        catch: (cause) =>
-          new ServerHandoffJobError({
-            message:
-              cause instanceof Error
-                ? cause.message
-                : "No supported handoff provider is available.",
-            cause,
+      const finalMarkdown = yield* runInternalTextGeneration({
+        operation: "generateHandoff",
+        preference: settings.textGenerationModelSelection,
+        successful: lastSuccessfulThreadModel(thread),
+        generate: (selection) =>
+          Effect.gen(function* () {
+            const generationModel = yield* Effect.try({
+              try: () => normalizeHandoffModelSelection(selection, availableProviderKinds),
+              catch: (cause) =>
+                new TextGenerationError({
+                  operation: "generateHandoff",
+                  detail: String(cause),
+                  cause,
+                }),
+            });
+            const generateMarkdown = (context: string, mode: "chunk" | "final") => {
+              const input = {
+                cwd,
+                prompt: buildHandoffPrompt({
+                  context,
+                  ...(existing.focus ? { focus: existing.focus } : {}),
+                  mode,
+                }),
+                modelSelection: generationModel,
+              };
+              return generationModel.provider === "claudeAgent"
+                ? generateClaudeHandoff(deps, { ...input, modelSelection: generationModel })
+                : generateCodexHandoff(deps, { ...input, modelSelection: generationModel });
+            };
+            const partials = yield* Effect.forEach(
+              chunks,
+              (chunk, index) =>
+                generateMarkdown(chunk, chunks.length > 1 ? "chunk" : "final").pipe(
+                  Effect.map((markdown) => `## Slice ${index + 1}\n\n${markdown}`),
+                ),
+              { concurrency: 1 },
+            );
+            return chunks.length === 1
+              ? partials[0]!.replace(/^## Slice 1\s+/u, "").trim()
+              : yield* generateMarkdown(partials.join("\n\n"), "final");
           }),
       });
-      yield* Effect.annotateCurrentSpan({
-        "handoff.requested-provider": resolution.requested.provider,
-        "handoff.actual-provider": generationModel.provider,
-        ...(resolution.reason ? { "handoff.fallback-reason": resolution.reason } : {}),
-      });
-      const generateMarkdown = (context: string, mode: "chunk" | "final") =>
-        generationModel.provider === "claudeAgent"
-          ? generateClaudeHandoff(deps, {
-              cwd,
-              prompt: buildHandoffPrompt({
-                context,
-                ...(existing.focus ? { focus: existing.focus } : {}),
-                mode,
-              }),
-              modelSelection: generationModel,
-            })
-          : generateCodexHandoff(deps, {
-              cwd,
-              prompt: buildHandoffPrompt({
-                context,
-                ...(existing.focus ? { focus: existing.focus } : {}),
-                mode,
-              }),
-              modelSelection: generationModel,
-            });
-
-      const partials = yield* Effect.forEach(
-        chunks,
-        (chunk, index) =>
-          generateMarkdown(chunk, chunks.length > 1 ? "chunk" : "final").pipe(
-            Effect.map((markdown) => `## Slice ${index + 1}\n\n${markdown}`),
-          ),
-        { concurrency: 1 },
-      );
-      const finalMarkdown =
-        chunks.length === 1
-          ? partials[0]!.replace(/^## Slice 1\s+/u, "").trim()
-          : yield* generateMarkdown(partials.join("\n\n"), "final");
       const outputPath = yield* Effect.tryPromise({
         try: () => writeHandoffDocumentFile({ title: thread.title, content: finalMarkdown }),
         catch: (cause) =>

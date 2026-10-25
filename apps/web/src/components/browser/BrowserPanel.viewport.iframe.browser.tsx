@@ -52,6 +52,13 @@ describe("BrowserIframeViewport lifecycle", () => {
       iframe.dispatchEvent(new Event("load"));
 
       expect(onNavigationCommit).toHaveBeenCalledWith("https://requested.example/");
+      expect(iframe.getAttribute("sandbox")).toBe(
+        "allow-scripts allow-forms allow-same-origin allow-downloads",
+      );
+      expect(host.querySelector('[role="note"]')?.textContent).toContain(
+        "even when loading appears complete",
+      );
+      expect(host.querySelector("a")?.href).toBe("https://requested.example/");
     } finally {
       await screen.unmount();
       host.remove();

@@ -1,4 +1,10 @@
-import { EventId, type ProviderRuntimeEvent, ThreadId, TurnId } from "@bigbud/contracts";
+import {
+  EventId,
+  type ProviderRuntimeEvent,
+  RuntimeItemId,
+  ThreadId,
+  TurnId,
+} from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
 import { toolingRuntimeEventToActivities } from "./ProviderRuntimeIngestion.helpers.activities.tooling.ts";
@@ -52,6 +58,52 @@ describe("toolingRuntimeEventToActivities", () => {
         nested: { password: "[redacted]" },
       },
     });
+  });
+
+  it("keeps the runtime item ID on tool lifecycle activities so start and end pair up", () => {
+    const base = {
+      eventId: EventId.makeUnsafe("event-tool"),
+      provider: "claudeAgent" as const,
+      createdAt,
+      threadId,
+      turnId,
+      itemId: RuntimeItemId.makeUnsafe("item-7"),
+    };
+    const started = toolingRuntimeEventToActivities(
+      {
+        ...base,
+        type: "item.started",
+        payload: { itemType: "command_execution", title: "Run tests" },
+      } as Extract<ProviderRuntimeEvent, { type: "item.started" }>,
+      helpers,
+      {},
+    );
+    const updated = toolingRuntimeEventToActivities(
+      {
+        ...base,
+        type: "item.updated",
+        payload: { itemType: "command_execution", title: "Run tests", status: "inProgress" },
+      } as Extract<ProviderRuntimeEvent, { type: "item.updated" }>,
+      helpers,
+      {},
+    );
+    const completed = toolingRuntimeEventToActivities(
+      {
+        ...base,
+        type: "item.completed",
+        payload: { itemType: "command_execution", title: "Run tests" },
+      } as Extract<ProviderRuntimeEvent, { type: "item.completed" }>,
+      helpers,
+      {},
+    );
+    expect(started[0]?.payload).toEqual({ itemType: "command_execution", itemId: "item-7" });
+    expect(updated[0]?.kind).toBe("tool.updated");
+    expect(updated[0]?.payload).toEqual({
+      itemType: "command_execution",
+      itemId: "item-7",
+      status: "inProgress",
+    });
+    expect(completed[0]?.payload).toEqual({ itemType: "command_execution", itemId: "item-7" });
   });
 
   it("uses the correlated tool use as the stable summary identity", () => {

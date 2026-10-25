@@ -63,7 +63,16 @@ export const DEFAULT_BINDINGS = compile([
   { shortcut: modShortcut("j", { shiftKey: true }), command: "terminalPanel.toggle" },
   { shortcut: modShortcut("b"), command: "sidebar.toggle" },
   { shortcut: modShortcut(","), command: "settings.toggle" },
-  { shortcut: modShortcut("f"), command: "search.toggle" },
+  {
+    shortcut: modShortcut("f"),
+    command: "search.toggle",
+    whenAst: whenNot(whenIdentifier("terminalFocus")),
+  },
+  {
+    shortcut: modShortcut("f"),
+    command: "terminal.find",
+    whenAst: whenIdentifier("terminalFocus"),
+  },
   {
     shortcut: modShortcut("g", { shiftKey: true }),
     command: "terminal.split",

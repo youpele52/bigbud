@@ -7,7 +7,9 @@ import { THREAD_ID, makeDeterministicRandomService, makeHarness } from "./Adapte
 
 describe("ClaudeAdapterLive forwarded subagent text", () => {
   it.effect("associates forwarded text with a verified agent task", () => {
-    const harness = makeHarness();
+    const harness = makeHarness({
+      serverSettings: { providers: { claudeAgent: { rollout: { forwardedSubagentText: true } } } },
+    });
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       const eventsFiber = yield* adapter.streamEvents.pipe(
@@ -36,7 +38,7 @@ describe("ClaudeAdapterLive forwarded subagent text", () => {
         ...base,
         subtype: "background_tasks_changed",
         uuid: "task-snapshot-1",
-        tasks: [{ task_id: "task-1", task_type: "agent", description: "Review files" }],
+        tasks: [{ task_id: "task-1", task_type: "local_agent", description: "Review files" }],
       } as unknown as SDKMessage);
       harness.query.emit({
         type: "assistant",

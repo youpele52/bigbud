@@ -18,6 +18,7 @@ import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/provider
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { getThreadOrchestrationToolDispatcher } from "../../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { createCopilotOrchestrationToolSurface } from "./Adapter.session.orchestrationTools.ts";
+import { migrateBundledCopilotConfig } from "./ConfigMigration.ts";
 import {
   ProviderAdapterProcessError,
   ProviderAdapterSessionNotFoundError,
@@ -133,6 +134,22 @@ export const makeStartSession =
           : undefined,
         useLegacyExecutionTargetForProviderRuntime: false,
       });
+      if (
+        copilotSettings.binaryPath === "copilot" &&
+        isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
+        !deps.options?.clientFactory
+      ) {
+        yield* Effect.tryPromise({
+          try: () => migrateBundledCopilotConfig(),
+          catch: (cause) =>
+            new ProviderAdapterProcessError({
+              provider: PROVIDER,
+              threadId: input.threadId,
+              detail: toMessage(cause, "Failed to migrate bundled Copilot configuration."),
+              cause,
+            }),
+        });
+      }
       const remoteWorkspaceBridge =
         isLocalProviderRuntimeTarget(executionContext.providerRuntimeTarget) &&
         isRemoteWorkspaceTarget(executionContext.workspaceTarget)

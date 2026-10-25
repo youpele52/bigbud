@@ -44,7 +44,7 @@ it("instruction verification cannot clear quarantine after losing the owner duri
       await rejected;
       expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(0);
       expect(() => runtime.mutations.assertSafe()).toThrow("quarantined");
-      expect(owner.row?.state).toBe("dispatch-intent");
+      expect(owner.row?.state).toBe("reserved");
     } finally {
       Object.assign(owner.lease, { generation });
     }

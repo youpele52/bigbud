@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveReleaseMetadata } from "./lib/release-metadata.ts";
+import { copyReleaseSmokePatches } from "./lib/release-smoke.patches.ts";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -28,6 +29,7 @@ function copyWorkspaceManifestFixture(targetRoot: string): void {
     mkdirSync(dirname(destinationPath), { recursive: true });
     cpSync(sourcePath, destinationPath);
   }
+  copyReleaseSmokePatches(repoRoot, targetRoot);
 }
 
 function writeMacManifestFixtures(

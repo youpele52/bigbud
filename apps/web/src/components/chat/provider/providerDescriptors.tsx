@@ -92,14 +92,8 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
     settings: {
       path: binary(
         "Automatic native TUI service discovery",
-        "Shared mode uses your installed OpenCode TUI service, accounts and configuration. No binary override is needed. Recommended runtime 2.0.26+; qualified older versions remain usable. This override is used only for explicit isolated mode. Restart after connection changes.",
+        "Connects only to your already-running shared native OpenCode service with your accounts and configuration. Native service discovery and required thread-tools ABI qualification are separate checks. No private-profile or SSH fallback is supported.",
       ),
-      home: {
-        key: "opencodeV2ProfileRoot",
-        placeholder: "/absolute/path/to/new-bigbud-v2-profile",
-        description:
-          "Advanced isolated mode only. Separate private storage outside workspaces; existing profiles/history are never moved or copied. Shared mode ignores this path and uses your native service.",
-      },
     },
     customModels: null,
     traitsEnabled: false,

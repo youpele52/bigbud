@@ -48,6 +48,7 @@ async function createIndependentDraft(draft: ProjectDraftThread): Promise<Thread
       createdAt: new Date().toISOString(),
       branch: draft.branch,
       worktreePath: draft.worktreePath,
+      ...(draft.worktreeBinding ? { worktreeBinding: draft.worktreeBinding } : {}),
       envMode: draft.envMode,
       runtimeMode: draft.runtimeMode,
       interactionMode: draft.interactionMode,

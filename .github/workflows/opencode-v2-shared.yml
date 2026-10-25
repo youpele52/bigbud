@@ -1,0 +1,293 @@
+name: OpenCode V2 API logical history (disposable fixtures)
+on:
+  workflow_dispatch:
+    inputs:
+      qualification:
+        description: Run the macOS ARM64 native qualification job (provision or qualify, chosen from the committed approval)
+        type: boolean
+        default: false
+  push:
+    branches: ["task/opencode-v2-*"]
+permissions:
+  contents: read
+jobs:
+  windows:
+    name: Windows ${{ matrix.arch }} OpenCode ${{ matrix.version }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-2022
+            version: "2.0.24"
+          - arch: x64
+            runner: windows-2022
+            version: "2.1.4"
+          - arch: arm64
+            runner: windows-11-arm
+            version: "2.0.24"
+          - arch: arm64
+            runner: windows-11-arm
+            version: "2.1.4"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Native Windows ARM64 binaries require Bun >=1.3.10.
+          bun-version: "1.3.14"
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - name: Verify native JavaScript runtime architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: |
+          node -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Node architecture mismatch"); console.log(process.version, process.platform, process.arch)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          bun -e 'if (process.arch !== process.env.EXPECTED_ARCH) throw new Error("Bun architecture mismatch"); console.log(Bun.version, process.platform, process.arch)'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Portable candidate and configuration namespace checks
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/provider/Layers/OpencodeV2/NativeCompatibility.platform.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.sources.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.qualification.test.ts
+      - name: Build bounded native helper
+        id: helper-build
+        run: cargo build --locked --package bigbud-remote-agent
+      - name: Exercise native metadata protocol
+        run: cargo test --locked --package bigbud-remote-agent --test inspect_local
+      - name: Diagnose disposable fixture ACL boundaries
+        if: ${{ always() && hashFiles('target/debug/bigbud-remote-agent.exe') != '' }}
+        run: node scripts/opencode-v2-windows-diagnostics.ts
+      - name: Download official disposable OpenCode package and verify registry integrity
+        id: fixture
+        if: ${{ !cancelled() && steps.helper-build.outcome == 'success' }}
+        shell: pwsh
+        run: |
+          node scripts/opencode-v2-fixture.ts "${{ matrix.version }}" (Join-Path $env:RUNNER_TEMP "opencode-fixture-${{ matrix.version }}")
+      - name: API transport, logical history, consent and secure registration (required fixtures)
+        if: ${{ !cancelled() && steps.fixture.outcome == 'success' }}
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/provider/Layers/OpencodeV2/SharedService.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.application.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.logical.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.binding.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.learning.test.ts
+          src/provider/Layers/OpencodeV2/Runtime.creation.consent.test.ts
+          src/provider/Layers/OpencodeV2/Runtime.recovery.fences.test.ts
+          src/ws/serverSettings.consentWatcher.test.ts
+          src/provider/Layers/OpencodeV2/Application.consent.test.ts
+          src/provider/Layers/OpencodeV2/EventHub.connection.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.context.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.model.routing.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/NativeFiles.windows.test.ts
+          src/provider/Layers/OpencodeV2/NativeFiles.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/PluginSetup.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.windows.identity.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.windows.identity.native.test.ts
+          src/provider/Layers/OpencodeV2/RebootRecovery.host.windows.native.test.ts
+          src/provider/Layers/OpencodeV2/RebootRecovery.host.windows.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.capabilities.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.protocol.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.protocol.direction.test.ts
+          src/provider/Layers/OpencodeV2/ProfileIsolation.windows.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.registration.test.ts
+      - name: Package resolver and ARM64 PE identity tests
+        if: ${{ !cancelled() && steps.helper-build.outcome == 'success' }}
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/remote-agent/localWorkspaceWatchAgent.binary.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.packaging.test.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: opencode-v2-helper-${{ matrix.arch }}-${{ matrix.version }}
+          path: target/debug/bigbud-remote-agent.exe
+          if-no-files-found: error
+  unix:
+    name: API ${{ matrix.runner }} OpenCode ${{ matrix.version }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-14]
+        version: ["2.0.24", "2.1.4"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Download verified disposable native fixture
+        run: node scripts/opencode-v2-fixture.ts "${{ matrix.version }}" "$RUNNER_TEMP/opencode-fixture-${{ matrix.version }}"
+      - name: Required native API/history and deterministic safety matrix
+        run: >-
+          bun run --cwd apps/server vitest run
+          src/provider/Layers/OpencodeV2/SharedService.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.application.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.logical.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.context.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.model.routing.native.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.binding.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.learning.test.ts
+          src/provider/Layers/OpencodeV2/Runtime.creation.consent.test.ts
+          src/provider/Layers/OpencodeV2/Runtime.recovery.fences.test.ts
+          src/ws/serverSettings.consentWatcher.test.ts
+          src/provider/Layers/OpencodeV2/Application.consent.test.ts
+          src/provider/Layers/OpencodeV2/EventHub.connection.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.capabilities.test.ts
+          src/provider/Layers/OpencodeV2/SharedService.registration.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.platform.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.sources.test.ts
+          src/provider/Layers/OpencodeV2/NativeCompatibility.qualification.test.ts
+          src/provider/Layers/OpencodeV2/RebootRecovery.host.linux.test.ts
+  # Native qualification of the retail release in V2_NATIVE_QUALIFICATION_TARGET. Never runs on an
+  # ordinary task push: only on `task/opencode-v2-qualify-*` branches or an explicit dispatch input.
+  # Mode comes from the committed approvals catalog: without an approval it provisions (download,
+  # hash, image/environment evidence and the approval record to commit, no retail launch); with one
+  # it verifies the runner still matches and runs all eight scopes under loopback-only egress.
+  # Scope file lists come from V2_NATIVE_QUALIFICATION_SUITE (suite v2, shared production path only).
+  # The public-network Catalog.native smoke is excluded from qualification by design.
+  macos-arm64-qualification:
+    name: Native qualification macOS 15 ARM64 OpenCode 2.1.4
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.qualification) || (github.event_name == 'push' && startsWith(github.ref_name, 'task/opencode-v2-qualify-')) }}
+    runs-on: macos-15
+    timeout-minutes: 120
+    env:
+      QUAL_ROOT: /Users/runner/work/_temp/opencode-v2-qualification
+      QUAL_OUT: /Users/runner/work/_temp/opencode-v2-qualification-artifacts
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - name: Verify disposable runner layout
+        run: |
+          set -euo pipefail
+          test "$(uname -s) $(uname -m)" = "Darwin arm64"
+          test "$RUNNER_TEMP" = /Users/runner/work/_temp
+          test "$(cd "$RUNNER_TEMP" && pwd -P)" = /Users/runner/work/_temp
+          test ! -e "$QUAL_ROOT"
+          mkdir -p "$QUAL_ROOT/tmp" "$QUAL_OUT"
+          echo "ImageOS=$ImageOS ImageVersion=$ImageVersion"
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - name: Download pinned official 2.1.4 package (npm sha512, chmod 0555, SHA-256)
+        run: |
+          set -euo pipefail
+          node scripts/opencode-v2-fixture.ts 2.1.4 "$QUAL_ROOT/fixture" --qualification
+          cp "$QUAL_ROOT/fixture/fixture.json" "$QUAL_OUT/fixture.json"
+      - name: Export the exact qualification environment
+        run: bun apps/server/scripts/assembleThreadToolNativeQualification.ts env >> "$GITHUB_ENV"
+      - name: Select provision or qualify mode
+        id: mode
+        run: echo "mode=$(bun apps/server/scripts/assembleThreadToolNativeQualification.ts mode)" >> "$GITHUB_OUTPUT"
+      - name: Provision approval evidence (no retail launch)
+        if: ${{ steps.mode.outputs.mode == 'provision' }}
+        run: bun apps/server/scripts/assembleThreadToolNativeQualification.ts provision "$QUAL_OUT"
+      - name: Verify the committed approval describes this runner
+        if: ${{ steps.mode.outputs.mode == 'qualify' }}
+        run: bun apps/server/scripts/assembleThreadToolNativeQualification.ts verify
+      - name: Retail image SHA-256 before
+        id: before
+        if: ${{ steps.mode.outputs.mode == 'qualify' }}
+        run: echo "sha256=$(shasum -a 256 "$BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: "Scope api-transport-admission (loopback-only egress)"
+        if: ${{ !cancelled() && steps.mode.outputs.mode == 'qualify' && steps.before.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          files="$(bun apps/server/scripts/assembleThreadToolNativeQualification.ts files api-transport-admission)"
+          # shellcheck disable=SC2086
+          sandbox-exec -f scripts/opencode-v2-qualification-egress.sb \
+            bun run --cwd apps/server vitest run $files \
+            --reporter=default --reporter=json --outputFile.json="$QUAL_OUT/scope-api-transport-admission.json"
+      - name: "Scope native-tool-schema-catalog-permissions (loopback-only egress)"
+        if: ${{ !cancelled() && steps.mode.outputs.mode == 'qualify' && steps.before.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          files="$(bun apps/server/scripts/assembleThreadToolNativeQualification.ts files native-tool-schema-catalog-permissions)"
+          # shellcheck disable=SC2086
+          sandbox-exec -f scripts/opencode-v2-qualification-egress.sb \
+            bun run --cwd apps/server vitest run $files \
+            --reporter=default --reporter=json --outputFile.json="$QUAL_OUT/scope-native-tool-schema-catalog-permissions.json"
+      - name: "Scope isolation-hooks (loopback-only egress)"
+        if: ${{ !cancelled() && steps.mode.outputs.mode == 'qualify' && steps.before.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          files="$(bun apps/server/scripts/assembleThreadToolNativeQualification.ts files isolation-hooks)"
+          # shellcheck disable=SC2086
+          sandbox-exec -f scripts/opencode-v2-qualification-egress.sb \
+            bun run --cwd apps/server vitest run $files \
+            --reporter=default --reporter=json --outputFile.json="$QUAL_OUT/scope-isolation-hooks.json"
+      - name: "Scope rpc-crypto-cancellation (loopback-only egress)"
+        if: ${{ !cancelled() && steps.mode.outputs.mode == 'qualify' && steps.before.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          files="$(bun apps/server/scripts/assembleThreadToolNativeQualification.ts files rpc-crypto-cancellation)"
+          # shellcheck disable=SC2086
+          sandbox-exec -f scripts/opencode-v2-qualification-egress.sb \
+            bun run --cwd apps/server vitest run $files \
+            --reporter=default --reporter=json --outputFile.json="$QUAL_OUT/scope-rpc-crypto-cancellation.json"
+      - name: "Scope history-receipt-approval-integration (loopback-only egress)"
+        if: ${{ !cancelled() && steps.mode.outputs.mode == 'qualify' && steps.before.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          files="$(bun apps/server/scripts/assembleThreadToolNativeQualification.ts files history-receipt-approval-integration)"
+          # shellcheck disable=SC2086
+          sandbox-exec -f scripts/opencode-v2-qualification-egress.sb \
+            bun run --cwd apps/server vitest run $files \
+            --reporter=default --reporter=json --outputFile.json="$QUAL_OUT/scope-history-receipt-approval-integration.json"
+      - name: "Scope source-config-autoload (loopback-only egress)"
+        if: ${{ !cancelled() && steps.mode.outputs.mode == 'qualify' && steps.before.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          files="$(bun apps/server/scripts/assembleThreadToolNativeQualification.ts files source-config-autoload)"
+          # shellcheck disable=SC2086
+          sandbox-exec -f scripts/opencode-v2-qualification-egress.sb \
+            bun run --cwd apps/server vitest run $files \
+            --reporter=default --reporter=json --outputFile.json="$QUAL_OUT/scope-source-config-autoload.json"
+      - name: "Scope two-location-lifecycle (loopback-only egress)"
+        if: ${{ !cancelled() && steps.mode.outputs.mode == 'qualify' && steps.before.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          files="$(bun apps/server/scripts/assembleThreadToolNativeQualification.ts files two-location-lifecycle)"
+          # shellcheck disable=SC2086
+          sandbox-exec -f scripts/opencode-v2-qualification-egress.sb \
+            bun run --cwd apps/server vitest run $files \
+            --reporter=default --reporter=json --outputFile.json="$QUAL_OUT/scope-two-location-lifecycle.json"
+      - name: "Scope packaged-ab (loopback-only egress)"
+        if: ${{ !cancelled() && steps.mode.outputs.mode == 'qualify' && steps.before.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          files="$(bun apps/server/scripts/assembleThreadToolNativeQualification.ts files packaged-ab)"
+          # shellcheck disable=SC2086
+          sandbox-exec -f scripts/opencode-v2-qualification-egress.sb \
+            bun run --cwd apps/server vitest run $files \
+            --reporter=default --reporter=json --outputFile.json="$QUAL_OUT/scope-packaged-ab.json"
+      - name: Retail image SHA-256 after and qualification summary
+        if: ${{ !cancelled() && steps.mode.outputs.mode == 'qualify' && steps.before.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          after="$(shasum -a 256 "$BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY" | cut -d' ' -f1)"
+          bun apps/server/scripts/assembleThreadToolNativeQualification.ts summary \
+            "$QUAL_OUT/qualification-summary.json" "${{ steps.before.outputs.sha256 }}" "$after"
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: opencode-v2-native-qualification-${{ steps.mode.outputs.mode || 'failed' }}-${{ github.run_id }}
+          path: /Users/runner/work/_temp/opencode-v2-qualification-artifacts
+          if-no-files-found: warn

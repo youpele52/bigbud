@@ -50,7 +50,6 @@ import {
   markPeriodicReconciliationTerminal,
   selectPeriodicReconciliationThreads,
 } from "./ProviderRuntimeIngestion.periodic.ts";
-import { superviseProviderTurns } from "./ProviderTurnSupervisor.ts";
 import { recoverTurnControlOperations } from "./ProviderRuntimeIngestion.turnControlRecovery.ts";
 
 const RECONCILIATION_RUNTIME_EVENT_TYPES = new Set([
@@ -88,6 +87,10 @@ const make = Effect.fn("make")(function* () {
   };
 
   const processRuntimeEvent = makeRuntimeEventProcessor(processorServices, cacheHelpers);
+  // Shutdown boundary: persist throttled provider-subagent progress before the scope closes.
+  yield* Effect.addFinalizer(() =>
+    processRuntimeEvent.flushPendingSubagentUpserts.pipe(Effect.ignore),
+  );
 
   const processDomainEvent = (_event: TurnStartRequestedDomainEvent) => Effect.void;
 
@@ -172,12 +175,6 @@ const make = Effect.fn("make")(function* () {
       Effect.tap((worker) => Effect.sync(() => threadWorkers.set(threadId, worker))),
     );
   };
-
-  const superviseActiveTurns = () =>
-    superviseProviderTurns({
-      orchestrationEngine,
-      providerService,
-    });
 
   const reconcileThreadSessionsAtStartup = Effect.fn("reconcileThreadSessionsAtStartup")(
     function* () {
@@ -319,13 +316,6 @@ const make = Effect.fn("make")(function* () {
         }),
       ),
     );
-    yield* superviseActiveTurns().pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("provider runtime ingestion failed to supervise persisted turns", {
-          cause: Cause.pretty(cause),
-        }),
-      ),
-    );
     yield* Effect.forkScoped(
       Stream.runForEach(providerService.streamEvents, (event) => {
         if (RECONCILIATION_RUNTIME_EVENT_TYPES.has(event.type)) {
@@ -337,11 +327,9 @@ const make = Effect.fn("make")(function* () {
         );
       }),
     );
+    // Turn health and sleep recovery run in ProviderTurnSupervisor, started by the reactor.
     yield* Effect.forkScoped(
-      Effect.all([reconcileActiveThreadSessions(), superviseActiveTurns()], {
-        concurrency: 2,
-        discard: true,
-      }).pipe(Effect.repeat(Schedule.fixed("5 seconds"))),
+      reconcileActiveThreadSessions().pipe(Effect.repeat(Schedule.fixed("5 seconds"))),
     );
     yield* Effect.forkScoped(
       Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) => {

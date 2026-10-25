@@ -99,7 +99,7 @@ describe("FilePreview existing numeric history integration", () => {
 
       const raw = await switchMode("raw");
       moveReader(raw, 573);
-      document.querySelector<HTMLButtonElement>('[aria-label="Close"]')!.click();
+      document.querySelector<HTMLButtonElement>('[aria-label="Close file"]')!.click();
       await vi.waitFor(() => expect(document.querySelector(".file-preview-code")).toBeNull());
       expect(historyEntry(0).scrollTop).toBe(573);
       document.querySelector<HTMLButtonElement>("button")!.click();

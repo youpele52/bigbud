@@ -15,6 +15,9 @@ for (const runtimeTarget of ["local", "ssh:synthetic-runtime"]) {
       await mkdir(synthetic);
       let preparedDirectory = synthetic;
       const cleanup = vi.fn(async () => {});
+      const install = vi.fn(async () => {
+        throw new Error("Hidden learning must not trigger required-plugin installation.");
+      });
       const prepareSession: NonNullable<V2IsolatedRuntimeOptions["prepareSession"]> = async (
         input,
         _signal,
@@ -25,6 +28,7 @@ for (const runtimeTarget of ["local", "ssh:synthetic-runtime"]) {
           input: { ...input, cwd: preparedDirectory },
           options: {
             ...runtime.options,
+            threadToolsPreflight: install,
             config: { ...runtime.options.config, runtimeTargetId: runtimeTarget },
             remoteSessionConformance: {
               providerRuntimeTargetId: runtimeTarget,
@@ -68,6 +72,7 @@ for (const runtimeTarget of ["local", "ssh:synthetic-runtime"]) {
         expect(http.calls).toHaveLength(calls);
         expect(acquire).not.toHaveBeenCalled();
         expect(cleanup).toHaveBeenCalledTimes(4);
+        expect(install).not.toHaveBeenCalled();
       } finally {
         await owned.close();
       }

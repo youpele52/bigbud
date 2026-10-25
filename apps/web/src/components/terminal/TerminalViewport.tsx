@@ -10,13 +10,25 @@ import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { canTerminalAutoFocus } from "~/lib/terminalFocus";
 import { isElectron } from "~/config/env";
-import { readNativeApi } from "../../rpc/nativeApi";
 import { useSettings } from "../../hooks/useSettings";
 import { useComposerDraftStore, type AnnotationIntent } from "../../stores/composer";
 import { makeAnnotationId } from "../files/FilesPanel.shared";
-import { terminalFontFamilyFromSettings } from "./terminalTypography";
+import {
+  bundledTerminalFontFromSettings,
+  terminalFontFamilyFromSettings,
+  terminalLineHeightFromSettings,
+} from "./terminalTypography";
 import { useTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { useTerminalViewportSession } from "./TerminalViewport.session";
+import { pickTerminalInteractionSettings } from "./TerminalViewport.addons";
+import { TerminalFindBar } from "./TerminalFindBar";
+import { TerminalViewportStatus } from "./TerminalViewportStatus";
+import { useTerminalResizeRequest } from "./TerminalViewport.resize";
+import { useTerminalLaunchBinding } from "./TerminalViewport.launch";
+import { readTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { writeSystemMessage } from "./ThreadTerminalDrawer.logic";
+import { fitTerminalViewport } from "./TerminalViewport.fit";
+export { fitTerminalViewport } from "./TerminalViewport.fit";
 import {
   TerminalViewportAnnotationComposer,
   type PendingTerminalAnnotation,
@@ -25,10 +37,12 @@ import {
   acceptsTerminalDrop,
   pasteDroppedTerminalPaths,
   readDroppedTerminalPaths,
+  rejectWslTerminalFileDrop,
 } from "./TerminalViewport.drop";
 
 export interface TerminalViewportProps {
   threadId: ThreadId;
+  visible: boolean;
   terminalId: string;
   terminalLabel: string;
   executionTargetId?: ExecutionTargetId | undefined;
@@ -44,32 +58,9 @@ export interface TerminalViewportProps {
   keybindings: ResolvedKeybindingsConfig;
 }
 
-interface FitTerminalViewportInput {
-  container: Pick<HTMLDivElement, "getBoundingClientRect"> | null;
-  terminal: Pick<Terminal, "buffer" | "scrollToBottom"> | null;
-  fitAddon: Pick<FitAddon, "fit"> | null;
-  requestTerminalResize: () => void;
-}
-
-export function fitTerminalViewport(input: FitTerminalViewportInput): void {
-  const { container, terminal, fitAddon, requestTerminalResize } = input;
-  if (!terminal || !fitAddon || !container) return;
-
-  const { width, height } = container.getBoundingClientRect();
-  if (width < 32 || height < 32) {
-    return;
-  }
-
-  const wasAtBottom = terminal.buffer.active.viewportY >= terminal.buffer.active.baseY;
-  fitAddon.fit();
-  if (wasAtBottom) {
-    terminal.scrollToBottom();
-  }
-  requestTerminalResize();
-}
-
 export function TerminalViewport({
   threadId,
+  visible,
   terminalId,
   terminalLabel,
   executionTargetId,
@@ -84,6 +75,12 @@ export function TerminalViewport({
   drawerHeight,
   keybindings,
 }: TerminalViewportProps) {
+  const launch = useTerminalLaunchBinding(threadId, terminalId, {
+    cwd,
+    worktreePath,
+    executionTargetId,
+    runtimeEnv,
+  });
   const wrapperRef = useRef<HTMLDivElement>(null);
   const mountRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -94,10 +91,7 @@ export function TerminalViewport({
   const selectionActionRequestIdRef = useRef(0);
   const selectionActionOpenRef = useRef(false);
   const selectionActionTimerRef = useRef<number | null>(null);
-  const lastAppliedTerminalEventIdRef = useRef(0);
-  const terminalHydratedRef = useRef(false);
   const dropPathModeRef = useRef<"posix" | "powershell" | "cmd" | "wsl" | "msys">("posix");
-  const resizeRequestStateRef = useRef({ inFlight: false, pending: false });
   const dragDepthRef = useRef(0);
   const handleSessionExited = useEffectEvent(() => {
     onSessionExited();
@@ -148,7 +142,8 @@ export function TerminalViewport({
   const settings = useSettings();
   const terminalFontFamily = terminalFontFamilyFromSettings(settings.terminalFontFamily);
   const terminalFontSize = settings.terminalFontSize;
-  const usesBundledTerminalFont = settings.terminalFontFamily === "meslo-nerd-font-mono";
+  const bundledTerminalFont = bundledTerminalFontFromSettings(settings.terminalFontFamily);
+  const terminalLineHeight = terminalLineHeightFromSettings(settings.terminalFontFamily);
 
   // autoFocus and worktreePath are read at mount / specific moments only.
   // They are stored in refs so their current values are accessible without
@@ -157,11 +152,23 @@ export function TerminalViewport({
   const worktreePathRef = useRef(worktreePath);
   // Keep refs in sync without triggering effects
   autoFocusRef.current = autoFocus;
-  worktreePathRef.current = worktreePath;
+  worktreePathRef.current = launch.worktreePath;
 
   const keybindingsRef = useTerminalKeybindings({ keybindings });
 
-  useTerminalViewportSession({
+  const {
+    inputEnabled,
+    deliveryError,
+    rendering,
+    retryGpu,
+    retryDelivery,
+    historyUnavailable,
+    restartDelivery,
+    startupPending,
+    startupFailed,
+    directoryNotice,
+    find,
+  } = useTerminalViewportSession({
     containerRef: mountRef,
     terminalRef,
     fitAddonRef,
@@ -171,64 +178,41 @@ export function TerminalViewport({
     selectionActionRequestIdRef,
     selectionActionOpenRef,
     selectionActionTimerRef,
-    lastAppliedTerminalEventIdRef,
-    terminalHydratedRef,
     keybindingsRef,
     autoFocusRef,
     worktreePathRef,
     dropPathModeRef,
     threadId,
+    visible,
     terminalId,
     readTerminalLabel,
-    executionTargetId,
-    cwd,
-    runtimeEnv,
+    executionTargetId: launch.executionTargetId,
+    cwd: launch.cwd,
+    runtimeEnv: launch.runtimeEnv,
     terminalFontFamily,
     terminalFontSize,
-    usesBundledTerminalFont,
+    bundledTerminalFont,
+    terminalLineHeight,
+    terminalGpuAcceleration: settings.terminalGpuAcceleration,
+    terminalThemeDark: settings.terminalThemeDark,
+    terminalThemeLight: settings.terminalThemeLight,
+    ...pickTerminalInteractionSettings(settings),
     onSessionExited: handleSessionExited,
     onAddTerminalContext: handleAddTerminalContext,
     onRequestTerminalAnnotation: handleRequestTerminalAnnotation,
   });
 
-  useEffect(() => {
-    resizeRequestStateRef.current = { inFlight: false, pending: false };
-  }, [terminalId, threadId]);
-
-  const requestTerminalResize = useEffectEvent(() => {
-    const api = readNativeApi();
-    const terminal = terminalRef.current;
-    if (!api || !terminal) return;
-    if (resizeRequestStateRef.current.inFlight) {
-      resizeRequestStateRef.current.pending = true;
-      return;
-    }
-    resizeRequestStateRef.current.inFlight = true;
-    resizeRequestStateRef.current.pending = false;
-    void api.terminal
-      .resize({
-        threadId,
-        terminalId,
-        cols: terminal.cols,
-        rows: terminal.rows,
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        resizeRequestStateRef.current.inFlight = false;
-        if (!resizeRequestStateRef.current.pending) {
-          return;
-        }
-        resizeRequestStateRef.current.pending = false;
-        requestTerminalResize();
-      });
-  });
+  const requestTerminalResize = useTerminalResizeRequest({ terminalRef, threadId, terminalId });
 
   const fitAndResizeTerminal = useEffectEvent(() => {
+    if (!visible) return;
     fitTerminalViewport({
       container: mountRef.current,
       terminal: terminalRef.current,
       fitAddon: fitAddonRef.current,
-      requestTerminalResize,
+      requestTerminalResize: () => {
+        if (inputEnabled) requestTerminalResize();
+      },
     });
   });
   const readNativeFilePath = useEffectEvent((file: File) =>
@@ -274,12 +258,21 @@ export function TerminalViewport({
     event.preventDefault();
     dragDepthRef.current = 0;
     setIsDragOver(false);
+    if (!inputEnabled) return;
+    const actualTarget =
+      readTerminalLaunch(threadId, terminalId)?.executionTargetId ?? launch.executionTargetId;
+    if (
+      rejectWslTerminalFileDrop(actualTarget, (message) => {
+        if (terminalRef.current) writeSystemMessage(terminalRef.current, message);
+      })
+    )
+      return;
     const paths = readDroppedTerminalPaths({
       dataTransfer: event.dataTransfer,
       readNativeFilePath,
     });
     const pasteablePaths = (
-      isRemoteExecutionTargetId(executionTargetId)
+      isRemoteExecutionTargetId(actualTarget)
         ? paths.filter((path) => path.origin === "internal")
         : paths
     ).map((path) => path.path);
@@ -291,18 +284,18 @@ export function TerminalViewport({
   });
 
   useEffect(() => {
-    if (!autoFocus) return;
+    if (!visible || !autoFocus) return;
     void focusRequestId;
     const terminal = terminalRef.current;
     if (!terminal || !canTerminalAutoFocus()) return;
     const frame = window.requestAnimationFrame(() => {
-      if (!canTerminalAutoFocus()) return;
+      if (terminalRef.current !== terminal || !canTerminalAutoFocus()) return;
       terminal.focus();
     });
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [autoFocus, focusRequestId]);
+  }, [autoFocus, focusRequestId, visible]);
 
   useEffect(() => {
     void drawerHeight;
@@ -313,7 +306,7 @@ export function TerminalViewport({
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [drawerHeight, resizeEpoch]);
+  }, [drawerHeight, resizeEpoch, visible, inputEnabled]);
 
   useEffect(() => {
     const container = wrapperRef.current;
@@ -368,6 +361,24 @@ export function TerminalViewport({
       onDrop={onDrop}
     >
       <div ref={mountRef} className="h-full w-full" />
+      <TerminalViewportStatus
+        threadId={threadId}
+        terminalId={terminalId}
+        terminalLabel={terminalLabel}
+        visible={visible}
+        inputEnabled={inputEnabled}
+        deliveryError={deliveryError}
+        startupPending={startupPending}
+        startupFailed={startupFailed}
+        directoryNotice={directoryNotice}
+        rendering={rendering}
+        retryGpu={retryGpu}
+        retryDelivery={retryDelivery}
+        historyUnavailable={historyUnavailable}
+        restartDelivery={restartDelivery}
+        gpuRequested={settings.terminalGpuAcceleration !== "off"}
+      />
+      {find.open ? <TerminalFindBar find={find} /> : null}
       {pendingAnnotation ? (
         <TerminalViewportAnnotationComposer
           pendingAnnotation={pendingAnnotation}

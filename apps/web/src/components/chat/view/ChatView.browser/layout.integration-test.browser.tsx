@@ -1,3 +1,4 @@
+import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { createChatViewBrowserTestContext } from "./context";
@@ -6,13 +7,18 @@ import {
   expectComposerActionsContained,
   findComposerProviderModelPicker,
   waitForButtonByText,
-  waitForButtonContainingText,
   waitForElement,
 } from "./dom";
 import {
   createSnapshotWithPendingUserInput,
   createSnapshotWithPlanFollowUpPrompt,
 } from "./scenarioFixtures";
+
+/** Offset from the footer's content edge, so responsive footer padding does not count as a shift. */
+function footerContentOffset(footer: HTMLElement, element: HTMLElement): number {
+  const paddingLeft = Number.parseFloat(getComputedStyle(footer).paddingLeft) || 0;
+  return element.getBoundingClientRect().left - footer.getBoundingClientRect().left - paddingLeft;
+}
 
 const ctx = createChatViewBrowserTestContext();
 ctx.registerLifecycleHooks();
@@ -25,10 +31,27 @@ describe("ChatView footer layout integration", () => {
     });
 
     try {
-      const firstOption = await waitForButtonContainingText("Tight");
-      firstOption.click();
-      await waitForButtonByText("Previous");
-      await waitForButtonByText("Submit answers");
+      // The question is shown in the timeline; the answer is typed into the composer and sent.
+      await waitForElement(
+        () =>
+          document.querySelector<HTMLElement>(
+            '[data-timeline-row-id="user-input-question:req-browser-user-input"]',
+          ),
+        "Unable to find the pending question.",
+      );
+      await waitForElement(
+        () =>
+          document.querySelector<HTMLElement>(
+            '[data-testid="composer-editor"][aria-placeholder="Type your answer to continue..."]',
+          ),
+        "Composer should ask for the answer.",
+      );
+      await page.getByTestId("composer-editor").fill("Tight");
+      const send = await waitForElement(
+        () => document.querySelector<HTMLButtonElement>('button[aria-label="Send message"]'),
+        "Unable to find the send button.",
+      );
+      await vi.waitFor(() => expect(send.disabled).toBe(false));
       await mounted.setContainerSize(COMPACT_FOOTER_VIEWPORT);
       await expectComposerActionsContained();
     } finally {
@@ -51,8 +74,7 @@ describe("ChatView footer layout integration", () => {
         findComposerProviderModelPicker,
         "Unable to find provider model picker.",
       );
-      const initialModelPickerOffset =
-        initialModelPicker.getBoundingClientRect().left - footer.getBoundingClientRect().left;
+      const initialModelPickerOffset = footerContentOffset(footer, initialModelPicker);
       const initialImplementButton = await waitForButtonByText("Implement");
       const initialImplementWidth = initialImplementButton.getBoundingClientRect().width;
 
@@ -62,7 +84,10 @@ describe("ChatView footer layout integration", () => {
         "Unable to find implementation actions trigger.",
       );
 
-      await mounted.setContainerSize({ width: 440, height: WIDE_FOOTER_VIEWPORT.height });
+      // A 440px window, as on a phone: the sidebar collapses, unlike a shrunken host in a wide window.
+      const narrow = { ...WIDE_FOOTER_VIEWPORT, name: "narrow-footer", width: 440 };
+      await mounted.setViewport(narrow);
+      await mounted.setContainerSize(narrow);
       await expectComposerActionsContained();
 
       const implementButton = await waitForButtonByText("Implement");
@@ -78,8 +103,7 @@ describe("ChatView footer layout integration", () => {
         const compactModelPicker = findComposerProviderModelPicker();
         expect(compactModelPicker).toBeTruthy();
 
-        const compactModelPickerOffset =
-          compactModelPicker!.getBoundingClientRect().left - footer.getBoundingClientRect().left;
+        const compactModelPickerOffset = footerContentOffset(footer, compactModelPicker!);
 
         expect(Math.abs(implementRect.right - implementActionsRect.left)).toBeLessThanOrEqual(1);
         expect(Math.abs(implementRect.top - implementActionsRect.top)).toBeLessThanOrEqual(1);

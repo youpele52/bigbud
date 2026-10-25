@@ -25,6 +25,7 @@ export interface SessionStartDeps {
   readonly serverSettingsService: {
     readonly getSettings: Effect.Effect<
       {
+        readonly promptSuggestions?: boolean;
         readonly providers: {
           readonly claudeAgent: {
             readonly binaryPath: string;
@@ -34,6 +35,8 @@ export interface SessionStartDeps {
               readonly forwardedSubagentText: boolean;
               readonly mcpControls: boolean;
             };
+            readonly maxSubagentSpawnDepth?: number | null;
+            readonly maxConcurrentSubagents?: number | null;
           };
         };
       },

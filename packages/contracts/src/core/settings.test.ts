@@ -25,7 +25,7 @@ const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
 
 describe("DEFAULT_CLIENT_SETTINGS", () => {
   test("defaults terminal appearance settings for client settings", () => {
-    expect(DEFAULT_CLIENT_SETTINGS.terminalFontFamily).toBe("meslo-nerd-font-mono");
+    expect(DEFAULT_CLIENT_SETTINGS.terminalFontFamily).toBe("jetbrains-mono-nerd-font");
     expect(DEFAULT_CLIENT_SETTINGS.terminalFontSize).toBe(12);
     expect(DEFAULT_CLIENT_SETTINGS.windowMaterial).toBe("automatic");
   });
@@ -37,7 +37,7 @@ describe("DEFAULT_CLIENT_SETTINGS", () => {
   });
 
   test("shows every provider in the composer by default", () => {
-    expect(DEFAULT_CLIENT_SETTINGS.hiddenComposerProviders).toEqual([]);
+    expect(DEFAULT_SERVER_SETTINGS.hiddenComposerProviders).toEqual([]);
   });
 });
 
@@ -105,7 +105,7 @@ it.effect("decodes valid terminal appearance settings", () =>
 
 it.effect("defaults composer provider visibility when decoding older settings", () =>
   Effect.gen(function* () {
-    const parsed = yield* decodeClientSettings({ terminalFontSize: 14 });
+    const parsed = yield* decodeServerSettings({ greetingName: "" });
 
     assert.deepStrictEqual(parsed.hiddenComposerProviders, []);
   }),

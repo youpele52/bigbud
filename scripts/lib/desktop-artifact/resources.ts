@@ -259,9 +259,17 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(
           target: target === "dmg" ? [target, "zip"] : [target],
           icon: "icon.icns",
           category: "public.app-category.developer-tools",
+          // The afterSign hook owns submission and ticket validation.
+          notarize: false,
           extendInfo: {
             LSBackgroundOnly: false,
             LSUIElement: false,
+            NSCameraUsageDescription:
+              "bigbud uses your camera only when you allow a browser site to access it.",
+            NSMicrophoneUsageDescription:
+              "bigbud uses your microphone for voice input and browser sites you explicitly allow.",
+            NSLocationWhenInUseUsageDescription:
+              "bigbud shares your location only with browser sites you explicitly allow.",
           },
         };
         // Only pass entitlements for signed builds. Ad-hoc codesign (used when

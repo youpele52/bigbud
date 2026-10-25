@@ -20,6 +20,10 @@ export function mapCreatedProjectThread(
     interactionMode: event.payload.interactionMode,
     branch: event.payload.branch,
     worktreePath: event.payload.worktreePath,
+    ...(event.payload.parentThread ? { parentThread: event.payload.parentThread } : {}),
+    ...(event.payload.forkOrigin ? { forkOrigin: event.payload.forkOrigin } : {}),
+    // A fork holding the source's uncertain message starts with its queue held.
+    queueHold: event.payload.forkOrigin?.pendingDelivery === "held",
     latestTurn: null,
     createdAt: event.payload.createdAt,
     updatedAt: event.payload.updatedAt,

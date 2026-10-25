@@ -1,5 +1,5 @@
 import type { ProviderSession, ThreadId } from "@bigbud/contracts";
-import { Effect } from "effect";
+import { Deferred, Effect } from "effect";
 
 import type { SessionState } from "./TestProviderAdapter.integration.types.ts";
 
@@ -9,6 +9,7 @@ export function makeTestProviderAdapterControls(
 ) {
   let listSessionFailuresRemaining = 0;
   let listSessionHangsRemaining = 0;
+  let startSessionHold: Deferred.Deferred<void> | null = null;
 
   return {
     listSessions: () =>
@@ -50,6 +51,18 @@ export function makeTestProviderAdapterControls(
     hangNextListSessions: (): Effect.Effect<void, never> =>
       Effect.sync(() => {
         listSessionHangsRemaining += 1;
+      }),
+    /** Holds the next session start open, before the session exists, until the returned release. */
+    holdNextStartSession: (): Effect.Effect<Effect.Effect<void>, never> =>
+      Deferred.make<void>().pipe(
+        Effect.tap((hold) => Effect.sync(() => (startSessionHold = hold))),
+        Effect.map((hold) => Deferred.succeed(hold, undefined).pipe(Effect.asVoid)),
+      ),
+    awaitStartSessionHold: (): Effect.Effect<void, never> =>
+      Effect.suspend(() => {
+        const hold = startSessionHold;
+        startSessionHold = null;
+        return hold ? Deferred.await(hold) : Effect.void;
       }),
   };
 }

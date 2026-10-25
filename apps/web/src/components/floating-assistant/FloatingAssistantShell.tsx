@@ -10,6 +10,7 @@ import { ThreadComposerSurface } from "~/components/chat/view/ThreadComposerSurf
 import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { BigbudLogo } from "~/components/sidebar/SidebarProjectItem";
 import { Button } from "~/components/ui/button";
+import { StatusBanner } from "../common/StatusBanner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
 
@@ -229,25 +230,38 @@ export function CompactChatShell({
         </div>
       </header>
       {selectionUnavailable ? (
-        <p className="border-b border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-foreground">
-          Your selected floating chat model is unavailable. Choose another model before sending.
-        </p>
+        <StatusBanner
+          dismissalKey={["compact-chat", threadId, "model-unavailable"]}
+          variant="warning"
+          dismissLabel="Dismiss floating model warning"
+          description="Your selected floating chat model is unavailable. Choose another model before sending."
+        />
       ) : null}
       {projectLoadError ? (
-        <div className="flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          <span>Floating chat could not load: {projectLoadError}</span>
-          <Button size="xs" variant="outline" onClick={retryProjectLoad}>
-            Retry
-          </Button>
-        </div>
+        <StatusBanner
+          dismissalKey={["compact-chat", "project-load"]}
+          variant="error"
+          dismissLabel="Dismiss floating project load error"
+          description={`Floating chat could not load: ${projectLoadError}`}
+          action={
+            <Button size="xs" variant="outline" onClick={retryProjectLoad}>
+              Retry
+            </Button>
+          }
+        />
       ) : null}
       {threadSyncError ? (
-        <div className="flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-          <span>Floating chat could not synchronize: {threadSyncError}</span>
-          <Button size="xs" variant="outline" onClick={retryThreadSync}>
-            Retry
-          </Button>
-        </div>
+        <StatusBanner
+          dismissalKey={["compact-chat", threadId, "thread-sync"]}
+          variant="error"
+          dismissLabel="Dismiss floating thread sync error"
+          description={`Floating chat could not synchronize: ${threadSyncError}`}
+          action={
+            <Button size="xs" variant="outline" onClick={retryThreadSync}>
+              Retry
+            </Button>
+          }
+        />
       ) : null}
       {projectLoadError ? null : (
         <ThreadComposerSurface

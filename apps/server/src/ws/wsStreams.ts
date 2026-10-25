@@ -19,6 +19,7 @@ import {
   thinkingActivityIdFromRuntimeEvent,
 } from "../orchestration/thinkingActivity";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
+import { validateServerConfigEvent } from "./wsConfigDiagnostics";
 
 export const ORDERED_ORCHESTRATION_PENDING_CAPACITY = 2_000;
 
@@ -214,7 +215,7 @@ export function makeServerConfigUpdateStream(input: {
         keybindingsUpdates,
         Stream.merge(providerStatuses, Stream.merge(settingsUpdates, discoveryUpdates)),
       ),
-    );
+    ).pipe(Stream.mapEffect(validateServerConfigEvent));
   });
 }
 

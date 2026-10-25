@@ -9,6 +9,8 @@ import { selectTerminalEventEntries, terminalEventBufferKey } from "./helpers.st
 
 export interface TerminalAgentVersion {
   readonly updatedAt: string;
+  /** Input recency is presentation-only and must not affect lifecycle event ordering. */
+  readonly lastActiveAt?: string;
   readonly runtimeGeneration: string | null;
   readonly status: "running" | "terminated" | "closed";
   readonly retiredGenerations: ReadonlyArray<string>;
@@ -112,6 +114,13 @@ function applyCandidate(
         ...state.terminalAgentVersionByKey,
         [key]: {
           updatedAt: candidate.updatedAt,
+          lastActiveAt:
+            current?.lastActiveAt &&
+            state.terminalAgentProviderByKey[key] === candidate.provider &&
+            current.runtimeGeneration === candidate.runtimeGeneration &&
+            current.lastActiveAt > candidate.updatedAt
+              ? current.lastActiveAt
+              : candidate.updatedAt,
           runtimeGeneration: candidate.runtimeGeneration,
           status: candidate.kind === "end" ? "terminated" : "running",
           retiredGenerations,

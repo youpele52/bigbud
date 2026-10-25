@@ -192,4 +192,49 @@ describe("direct turn-start dispatch safety", () => {
       expect(JSON.stringify(events)).not.toContain("unresolved turn");
     },
   );
+
+  it("refuses, never queues, a sleep recovery continuation once the thread is busy", async () => {
+    const initial = readModel();
+    const userStart = await Effect.runPromise(
+      decideThreadTurnStartCommand({
+        command: command("user-first", "user-first"),
+        readModel: initial,
+      }),
+    );
+    let busy = initial;
+    for (const [index, event] of userStart.entries()) {
+      busy = await Effect.runPromise(
+        projectEvent(busy, { ...event, sequence: index + 1 } as OrchestrationEvent),
+      );
+    }
+    const continuation = command("sleep-continue", "sleep-continuation");
+    const sleepRecovery = {
+      ...continuation,
+      message: {
+        ...continuation.message,
+        originSegments: [
+          {
+            kind: "sleepRecovery" as const,
+            actor: "automation" as const,
+            text: "Continue",
+            sourceThreads: [],
+            verified: true,
+          },
+        ],
+      },
+    };
+    const exit = await Effect.runPromise(
+      Effect.exit(decideThreadTurnStartCommand({ command: sleepRecovery, readModel: busy })),
+    );
+    expect(exit._tag).toBe("Failure");
+    expect(JSON.stringify(exit)).toContain("prompt_not_queueable");
+    // The same message from an idle thread starts normally.
+    const idle = await Effect.runPromise(
+      decideThreadTurnStartCommand({ command: sleepRecovery, readModel: initial }),
+    );
+    expect(idle.map((event) => event.type)).toEqual([
+      "thread.message-sent",
+      "thread.turn-start-requested",
+    ]);
+  });
 });

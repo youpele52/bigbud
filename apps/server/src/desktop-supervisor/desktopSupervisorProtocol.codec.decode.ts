@@ -215,8 +215,23 @@ function decodeAttach(bytes: Uint8Array, attached: boolean): DesktopSupervisorFr
       };
 }
 
+function decodeHeartbeat(bytes: Uint8Array): DesktopSupervisorFrame {
+  let monotonicMillis = 0;
+  let suspendedMillis: number | undefined;
+  decodeMessage(bytes, (field, wireType, reader) => {
+    if (field === 1) monotonicMillis = readUint(wireType, reader);
+    else if (field === 2) suspendedMillis = readUint(wireType, reader);
+    else reader.skip(wireType);
+  });
+  return {
+    type: "heartbeat",
+    value: { monotonicMillis, ...(suspendedMillis !== undefined ? { suspendedMillis } : {}) },
+  };
+}
+
 function decodeSimpleFrame(field: number, bytes: Uint8Array): DesktopSupervisorFrame {
   if (field === 1 || field === 2) return decodeHello(bytes, field === 2);
+  if (field === 8) return decodeHeartbeat(bytes);
   if (field === 3 || field === 4) return decodeAttach(bytes, field === 4);
   if (field === 6) return { type: "eventBatch", value: decodeEventBatch(bytes) };
   if (field === 7) return { type: "applicationAck", value: decodeApplicationAck(bytes) };
@@ -225,10 +240,7 @@ function decodeSimpleFrame(field: number, bytes: Uint8Array): DesktopSupervisorF
   if (field === 10) return { type: "metricsSnapshot" };
   const value = { first: "", second: "", generation: 0, sequence: 0, kind: 0 };
   decodeMessage(bytes, (nested, wireType, reader) => {
-    if (nested === 1 && (field === 8 || field === 9)) {
-      if (field === 8) value.sequence = readUint(wireType, reader);
-      else value.first = readString(wireType, reader);
-    } else if (nested === 1) value.first = readString(wireType, reader);
+    if (nested === 1) value.first = readString(wireType, reader);
     else if (nested === 2 && field === 9) value.generation = readUint(wireType, reader);
     else if (nested === 2) value.second = readString(wireType, reader);
     else if (nested === 3 && field === 13) {
@@ -249,7 +261,6 @@ function decodeSimpleFrame(field: number, bytes: Uint8Array): DesktopSupervisorF
       },
     };
   }
-  if (field === 8) return { type: "heartbeat", value: { monotonicMillis: value.sequence } };
   if (field === 9) {
     return {
       type: "recoveryRequired",

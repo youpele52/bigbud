@@ -7,6 +7,20 @@ interface SearchFocusRequest {
   requestId: number;
 }
 
+/** A terminal search hit to reveal: the terminal's find bar opens on this query and line. */
+export interface TerminalFindRequest {
+  threadId: ThreadId;
+  terminalId: string;
+  query: string;
+  lineText: string;
+  requestId: number;
+  /** `Date.now()` when requested; a request no view picked up soon after is stale. */
+  createdAt: number;
+}
+
+/** A hit's terminal mounts right after navigation; later than this the request is abandoned. */
+export const TERMINAL_FIND_REQUEST_TTL_MS = 15_000;
+
 export interface FileSearchContext {
   readonly path: string;
   readonly contents: string;
@@ -18,6 +32,7 @@ interface SearchState {
   fileSearchContext: FileSearchContext | null;
   activeFileSearchContext: FileSearchContext | null;
   focusRequest: SearchFocusRequest | null;
+  terminalFindRequest: TerminalFindRequest | null;
   setSearchOpen: (open: boolean) => void;
   toggleSearchOpen: () => void;
   setFileSearchContext: (context: FileSearchContext) => void;
@@ -25,6 +40,8 @@ interface SearchState {
   openSearchForFileContext: () => boolean;
   requestMessageFocus: (threadId: ThreadId, messageId: MessageId) => void;
   clearFocusRequest: (requestId: number) => void;
+  requestTerminalFind: (request: Omit<TerminalFindRequest, "requestId" | "createdAt">) => void;
+  clearTerminalFindRequest: (requestId: number) => void;
 }
 
 export const useSearchStore = create<SearchState>((set) => ({
@@ -32,6 +49,7 @@ export const useSearchStore = create<SearchState>((set) => ({
   fileSearchContext: null,
   activeFileSearchContext: null,
   focusRequest: null,
+  terminalFindRequest: null,
   setSearchOpen: (open) =>
     set((state) =>
       state.searchOpen === open
@@ -65,4 +83,16 @@ export const useSearchStore = create<SearchState>((set) => ({
     })),
   clearFocusRequest: (requestId) =>
     set((state) => (state.focusRequest?.requestId === requestId ? { focusRequest: null } : state)),
+  requestTerminalFind: (request) =>
+    set((state) => ({
+      terminalFindRequest: {
+        ...request,
+        requestId: (state.terminalFindRequest?.requestId ?? 0) + 1,
+        createdAt: Date.now(),
+      },
+    })),
+  clearTerminalFindRequest: (requestId) =>
+    set((state) =>
+      state.terminalFindRequest?.requestId === requestId ? { terminalFindRequest: null } : state,
+    ),
 }));

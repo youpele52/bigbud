@@ -5,6 +5,10 @@ import { type AppState } from "./main.store";
 import { buildLatestTurn, updateThreadState } from "./helpers.store";
 import { prependSidebarPinnedThreadId, removeSidebarThreadId } from "./helpers.sidebar.store";
 import { applyActiveThreadCountTransition } from "./helpers.projectThreadCount.store";
+import {
+  clearPendingTurnStartRequest,
+  requestTurnStart,
+} from "./events.store.threads.turnStartRequest";
 
 function applyLifecycleThreadUpdate(
   state: AppState,
@@ -188,17 +192,32 @@ export function applyThreadMetaEvent(
         runtimeMode: event.payload.runtimeMode,
         interactionMode: event.payload.interactionMode,
         pendingSourceProposedPlan: event.payload.sourceProposedPlan,
+        turnStartRequest: requestTurnStart(event.payload.messageId, event.payload.createdAt),
         updatedAt: event.occurredAt,
       }));
     }
 
+    case "thread.recovery-updated": {
+      return updateThreadState(state, event.payload.threadId, (thread) => ({
+        ...thread,
+        recovery: event.payload.recovery,
+      }));
+    }
+
     case "thread.turn-interrupt-requested": {
-      if (event.payload.turnId === undefined) {
-        return state;
-      }
-      return updateThreadState(state, event.payload.threadId, (thread) => {
+      return updateThreadState(state, event.payload.threadId, (current) => {
+        // An interrupt abandons a turn start that has not begun yet.
+        const turnStartRequest = clearPendingTurnStartRequest(current.turnStartRequest);
+        const thread =
+          turnStartRequest === current.turnStartRequest
+            ? current
+            : { ...current, turnStartRequest };
         const latestTurn = thread.latestTurn;
-        if (latestTurn === null || latestTurn.turnId !== event.payload.turnId) {
+        if (
+          event.payload.turnId === undefined ||
+          latestTurn === null ||
+          latestTurn.turnId !== event.payload.turnId
+        ) {
           return thread;
         }
         return {

@@ -1,209 +1,194 @@
+/**
+ * ProviderTurnSupervisorLive - wires the recovery coordinator to its inputs.
+ *
+ * Inputs: the 5 s tick; sleep epochs (`epoch-ended`, `network-online`); canonical provider
+ * runtime events; orchestration domain events. Every intent mutation runs under one permit, so
+ * the coordinator never races itself. Provider calls (inspection, stop) release the permit and
+ * re-check the intent's revision afterwards. Without the recovery repository, only today's
+ * health supervision runs.
+ *
+ * @module ProviderTurnSupervisorLive
+ */
+import { Cause, Effect, Layer, Option, Schedule, Semaphore, Stream } from "effect";
+
+import { ProviderDispatchAttemptRepository } from "../../persistence/Services/ProviderDispatchAttempts.ts";
+import { ThreadRecoveryIntentRepository } from "../../persistence/Services/ThreadRecoveryIntents.ts";
+import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import { ServerConfig } from "../../startup/config.ts";
+import { SystemSleepEpochs } from "../../system-sleep/Services/SystemSleepEpochs.ts";
+import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import {
-  PROVIDER_CHECKING_SESSION_REASON,
-  PROVIDER_LOST_SESSION_REASON,
-  PROVIDER_RECOVERING_SESSION_REASON,
-  PROVIDER_STALLED_SESSION_REASON,
-} from "@bigbud/contracts/constants/providerRuntime.constant";
-import type { ProviderTurnLiveness } from "@bigbud/contracts/orchestration/providerTurnLiveness";
-import { Effect, Option } from "effect";
+  ProviderTurnSupervisor,
+  type ProviderTurnSupervisorShape,
+} from "../Services/ProviderTurnSupervisor.ts";
+import { superviseProviderTurns } from "./ProviderTurnSupervisor.health.ts";
+import {
+  observeDomainEvent,
+  observeRuntimeEvent,
+  observeSleepEvent,
+} from "./ProviderTurnSupervisor.observe.ts";
+import { runRecoveryPass } from "./ProviderTurnSupervisor.recovery.ts";
+import { handleBackendStart } from "./ProviderTurnSupervisor.startup.ts";
+import {
+  makeRecoveryMemory,
+  readSleepContinuationEnabled,
+  type RecoveryContext,
+} from "./ProviderTurnSupervisor.state.ts";
 
-import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
-import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
-import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
+export const PROVIDER_TURN_SUPERVISOR_INTERVAL = "5 seconds";
+/** Settled and revoked intents are kept this long for diagnosis. */
+const RESOLVED_INTENT_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
-export const PROVIDER_TURN_SILENCE_THRESHOLD_MS = 90_000;
-export const PROVIDER_TURN_INSPECTION_TIMEOUT_MS = 10_000;
-export const PROVIDER_TURN_MAX_INSPECTION_FAILURES = 3;
+const RECOVERY_DOMAIN_EVENT_TYPES = new Set([
+  "thread.session-set",
+  "thread.turn-start-failed",
+  "thread.recovery-updated",
+  "thread.turn-start-requested",
+  "thread.prompt-queued",
+  "thread.turn-interrupt-requested",
+  "thread.session-stop-requested",
+]);
 
-const INSPECTION_BACKOFF_MS = [0, 15_000, 30_000, 60_000] as const;
-const STATUS_UNCONFIRMED_ERROR =
-  "bigbud cannot confirm whether the provider is still working. No prompt was resent.";
-const LOST_SESSION_ERROR =
-  "The provider no longer reports this turn or its session. You can stop it or check again.";
+const RECOVERY_RUNTIME_EVENT_TYPES = new Set([
+  // Opens the coordinator's tracking of the turn and its tool items.
+  "turn.started",
+  "runtime.error",
+  "turn.completed",
+  "turn.aborted",
+  "session.exited",
+  "turn.plan.updated",
+  "turn.proposed.delta",
+  "turn.diff.updated",
+  "item.started",
+  "item.updated",
+  "item.completed",
+  "content.delta",
+  "request.opened",
+  "user-input.requested",
+  "task.progress",
+  "tool.progress",
+  "tool.summary",
+]);
 
-function shouldInspect(liveness: ProviderTurnLiveness, nowMs: number): boolean {
-  const progressAt = Date.parse(liveness.lastMeaningfulProgressAt);
-  if (
-    liveness.inspectionStatus !== "checking" &&
-    (!Number.isFinite(progressAt) || nowMs - progressAt < PROVIDER_TURN_SILENCE_THRESHOLD_MS)
-  ) {
-    return false;
-  }
-  const inspectedAt = Date.parse(liveness.lastInspectionAt ?? "");
-  const backoff =
-    INSPECTION_BACKOFF_MS[
-      Math.min(liveness.consecutiveInspectionFailures, INSPECTION_BACKOFF_MS.length - 1)
-    ] ?? INSPECTION_BACKOFF_MS.at(-1)!;
-  return !Number.isFinite(inspectedAt) || nowMs - inspectedAt >= backoff;
+export interface ProviderTurnSupervisorOptions {
+  /** Clock for deterministic tests. */
+  readonly nowMs?: () => number;
+  /** Defaults to `BIGBUD_SLEEP_CONTINUATION` (on unless `0`). */
+  readonly continuationEnabled?: boolean;
+  /** Wall time this process started; defaults to the real process start. */
+  readonly processStartedAtMs?: number;
 }
 
-function projectHealthState(input: {
-  readonly orchestrationEngine: OrchestrationEngineShape;
-  readonly liveness: ProviderTurnLiveness;
-  readonly status: "running" | "ready" | "error";
-  readonly reason: string | null;
-  readonly lastError: string | null;
-  readonly occurredAt: string;
-  readonly terminal?: boolean;
-  readonly clearHealthProjection?: boolean;
-}) {
-  return Effect.gen(function* () {
-    const thread = (yield* input.orchestrationEngine.getReadModel()).threads.find(
-      (candidate) => candidate.id === input.liveness.threadId,
+const logFailure =
+  (message: string) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A | void, never, R> =>
+    effect.pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.interrupt
+          : Effect.logWarning(message, { cause: Cause.pretty(cause) }),
+      ),
     );
-    const current = thread?.session;
-    if (!thread || !current || current.activeTurnId !== input.liveness.turnId) return;
-    if ((input.liveness.sessionEpoch ?? 0) !== (current.sessionEpoch ?? 0)) return;
-    const isHealthProjection =
-      current.reason === PROVIDER_CHECKING_SESSION_REASON ||
-      current.reason === PROVIDER_RECOVERING_SESSION_REASON ||
-      current.reason === PROVIDER_STALLED_SESSION_REASON ||
-      current.reason === PROVIDER_LOST_SESSION_REASON;
-    if (input.clearHealthProjection && current.status === "error" && !isHealthProjection) {
-      return;
+
+export const makeProviderTurnSupervisor = Effect.fn("makeProviderTurnSupervisor")(function* (
+  options: ProviderTurnSupervisorOptions = {},
+) {
+  const engine = yield* OrchestrationEngineService;
+  const providerService = yield* ProviderService;
+  const intents = yield* Effect.serviceOption(ThreadRecoveryIntentRepository);
+  const attempts = yield* Effect.serviceOption(ProviderDispatchAttemptRepository);
+  const sleep = yield* Effect.serviceOption(SystemSleepEpochs);
+  const config = yield* Effect.serviceOption(ServerConfig);
+  const permit = yield* Semaphore.make(1);
+  // Callers hold the permit. Taking it back is uninterruptible, so the count stays balanced.
+  const outsidePermit = <A, E>(effect: Effect.Effect<A, E>) =>
+    Effect.acquireUseRelease(
+      permit.release(1),
+      () => effect,
+      () => permit.take(1),
+    );
+  const nowMs = options.nowMs ?? (() => Date.now());
+  const ctx: RecoveryContext | null = Option.isSome(intents)
+    ? {
+        engine,
+        providerService,
+        intents: intents.value,
+        attempts,
+        sleep,
+        continuationEnabled: options.continuationEnabled ?? readSleepContinuationEnabled(),
+        nowMs,
+        memory: makeRecoveryMemory(),
+        outsidePermit,
+      }
+    : null;
+  const serialized = <A, E>(effect: Effect.Effect<A, E>) => permit.withPermits(1)(effect);
+  const recovery = <E>(run: (context: RecoveryContext) => Effect.Effect<void, E>) =>
+    ctx === null ? Effect.void : serialized(run(ctx)).pipe(logFailure("sleep recovery failed"));
+
+  const runPass: ProviderTurnSupervisorShape["runPass"] = Effect.all(
+    [
+      superviseProviderTurns({
+        orchestrationEngine: engine,
+        providerService,
+        now: () => new Date(nowMs()),
+      }).pipe(logFailure("provider turn supervision failed")),
+      recovery(runRecoveryPass),
+    ],
+    { discard: true },
+  );
+
+  const start: ProviderTurnSupervisorShape["start"] = Effect.fn("start")(function* () {
+    if (ctx !== null) {
+      const startReason = Option.getOrUndefined(config)?.desktopStartReason;
+      yield* recovery((context) =>
+        handleBackendStart(context, {
+          startReason,
+          processStartedAtMs: options.processStartedAtMs ?? Date.now() - process.uptime() * 1_000,
+        }),
+      );
+      if (!ctx.continuationEnabled) {
+        yield* Effect.logInfo("automatic sleep continuation is off (BIGBUD_SLEEP_CONTINUATION=0)");
+      }
     }
-    yield* input.orchestrationEngine
-      .dispatch({
-        type: "thread.session.set",
-        commandId: serverCommandId("provider-turn-health"),
-        threadId: thread.id,
-        expectedActiveTurnId: input.liveness.turnId,
-        expectedSessionEpoch: current.sessionEpoch ?? 0,
-        session: {
-          ...current,
-          status: input.status,
-          activeTurnId: input.terminal ? null : input.liveness.turnId,
-          reason: input.clearHealthProjection && isHealthProjection ? null : input.reason,
-          lastError: input.clearHealthProjection && isHealthProjection ? null : input.lastError,
-          updatedAt: input.occurredAt,
-        },
-        createdAt: input.occurredAt,
-      })
-      .pipe(Effect.asVoid);
-  });
-}
-
-export function superviseProviderTurns(input: {
-  readonly orchestrationEngine: OrchestrationEngineShape;
-  readonly providerService: ProviderServiceShape;
-  readonly now?: () => Date;
-}) {
-  return Effect.gen(function* () {
-    const now = input.now?.() ?? new Date();
-    const nowMs = now.getTime();
-    const occurredAt = now.toISOString();
-    const livenessRows = yield* input.providerService.listActiveTurnLiveness();
-    const readModel = yield* input.orchestrationEngine.getReadModel();
-    const threadsById = new Map(readModel.threads.map((thread) => [thread.id, thread]));
-
-    yield* Effect.forEach(
-      livenessRows.filter((entry) => shouldInspect(entry, nowMs)),
-      (liveness) =>
-        Effect.gen(function* () {
-          const thread = threadsById.get(liveness.threadId);
-          if (!thread || thread.session?.activeTurnId !== liveness.turnId) return;
-          if ((liveness.sessionEpoch ?? 0) !== (thread.session.sessionEpoch ?? 0)) return;
-
-          yield* input.providerService.recordTurnInspection({
-            threadId: liveness.threadId,
-            turnId: liveness.turnId,
-            sessionEpoch: liveness.sessionEpoch ?? 0,
-            observedAt: occurredAt,
-            status: "checking",
-            failed: false,
-          });
-          const inspection = yield* input.providerService
-            .inspectActiveTurn({
-              threadId: liveness.threadId,
-              turnId: liveness.turnId,
-              sessionEpoch: liveness.sessionEpoch ?? 0,
-            })
-            .pipe(Effect.timeoutOption(PROVIDER_TURN_INSPECTION_TIMEOUT_MS), Effect.option);
-          const result = Option.getOrUndefined(Option.flatten(inspection));
-          const inspectionStatus = result?.status ?? "timed-out";
-          const failedInspection = result === undefined;
-          yield* input.providerService.recordTurnInspection({
-            threadId: liveness.threadId,
-            turnId: liveness.turnId,
-            sessionEpoch: liveness.sessionEpoch ?? 0,
-            observedAt: result?.observedAt ?? occurredAt,
-            status: inspectionStatus,
-            failed: failedInspection,
-          });
-
-          if (result?.status === "completed" || result?.status === "failed") {
-            const claimed = yield* input.providerService.claimTurnTerminal({
-              threadId: liveness.threadId,
-              turnId: liveness.turnId,
-              provider: liveness.provider,
-              sessionEpoch: liveness.sessionEpoch ?? 0,
-              terminalAt: occurredAt,
-            });
-            if (claimed) {
-              const failed = result.status === "failed";
-              yield* projectHealthState({
-                orchestrationEngine: input.orchestrationEngine,
-                liveness,
-                status: failed ? "error" : "ready",
-                reason: null,
-                lastError: failed
-                  ? (result.errorEvidence?.detail ??
-                    "The provider authoritatively reported that the turn failed.")
-                  : null,
-                occurredAt,
-                terminal: true,
-              });
-            }
-            return;
-          }
-
-          if (result?.status === "running" || result?.status === "waiting-for-user") {
-            yield* projectHealthState({
-              orchestrationEngine: input.orchestrationEngine,
-              liveness,
-              status: "running",
-              reason: null,
-              lastError: null,
-              occurredAt,
-              clearHealthProjection: true,
-            });
-            return;
-          }
-
-          if (result?.status === "missing") {
-            yield* projectHealthState({
-              orchestrationEngine: input.orchestrationEngine,
-              liveness,
-              status: "error",
-              reason: PROVIDER_LOST_SESSION_REASON,
-              lastError: result.errorEvidence?.detail ?? LOST_SESSION_ERROR,
-              occurredAt,
-            });
-            return;
-          }
-
-          if (result?.status === "unavailable") return;
-
-          if (liveness.consecutiveInspectionFailures + 1 >= PROVIDER_TURN_MAX_INSPECTION_FAILURES) {
-            yield* projectHealthState({
-              orchestrationEngine: input.orchestrationEngine,
-              liveness,
-              status: "error",
-              reason: PROVIDER_STALLED_SESSION_REASON,
-              lastError: STATUS_UNCONFIRMED_ERROR,
-              occurredAt,
-            });
-          }
-        }).pipe(
-          Effect.catchCause((cause) =>
-            Effect.logWarning("provider turn supervision failed", {
-              threadId: liveness.threadId,
-              turnId: liveness.turnId,
-              cause,
-            }),
-          ),
+    yield* runPass;
+    yield* Effect.forkScoped(
+      runPass.pipe(Effect.repeat(Schedule.fixed(PROVIDER_TURN_SUPERVISOR_INTERVAL))),
+    );
+    if (ctx === null) return;
+    yield* Effect.forkScoped(
+      Stream.runForEach(providerService.streamEvents, (event) =>
+        RECOVERY_RUNTIME_EVENT_TYPES.has(event.type)
+          ? recovery((context) => observeRuntimeEvent(context, event))
+          : Effect.void,
+      ),
+    );
+    yield* Effect.forkScoped(
+      Stream.runForEach(engine.streamDomainEvents, (event) =>
+        RECOVERY_DOMAIN_EVENT_TYPES.has(event.type)
+          ? recovery((context) => observeDomainEvent(context, event))
+          : Effect.void,
+      ),
+    );
+    if (Option.isSome(sleep)) {
+      yield* Effect.forkScoped(
+        Stream.runForEach(sleep.value.events, (event) =>
+          recovery((context) => observeSleepEvent(context, event)),
         ),
-      { concurrency: 4 },
+      );
+    }
+    yield* Effect.forkScoped(
+      recovery((context) =>
+        context.intents.pruneResolved({
+          before: new Date(context.nowMs() - RESOLVED_INTENT_RETENTION_MS).toISOString(),
+        }),
+      ).pipe(Effect.repeat(Schedule.fixed("1 hour"))),
     );
   });
-}
+
+  return { start, runPass } satisfies ProviderTurnSupervisorShape;
+});
+
+export const ProviderTurnSupervisorLive = Layer.effect(
+  ProviderTurnSupervisor,
+  makeProviderTurnSupervisor(),
+);

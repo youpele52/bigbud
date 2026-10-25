@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { UsageAttribution } from "./providerRuntime.usage";
 import {
   ApprovalRequestId,
   CommandId,
@@ -14,6 +15,8 @@ import {
   TurnId,
 } from "../core/baseSchemas";
 import { ChatAttachment } from "./orchestration.attachments";
+import { TurnStartFailureClass } from "./orchestration.turnFailure";
+import { ThreadForkOrigin } from "./orchestration.fork";
 import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -60,6 +63,8 @@ export const ThreadCreatedPayload = Schema.Struct({
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   parentThread: Schema.optional(ParentThreadReference),
+  /** Present only on server-side forks; older events decode without it. */
+  forkOrigin: Schema.optional(ThreadForkOrigin),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
 });
@@ -169,6 +174,7 @@ export const ThreadMessageSentPayload = Schema.Struct({
 });
 
 export const ThreadTurnStartRequestedPayload = Schema.Struct({
+  usageAttribution: Schema.optional(UsageAttribution),
   threadId: ThreadId,
   messageId: MessageId,
   replyTo: Schema.optional(OrchestrationMessageReply),
@@ -188,6 +194,10 @@ export const ThreadTurnStartFailedPayload = Schema.Struct({
   threadId: ThreadId,
   context: Schema.Literals(["message-validation", "provider-session-start", "provider-turn-start"]),
   detail: TrimmedNonEmptyString.check(Schema.isMaxLength(2_000)),
+  /** Absent on events written before classification existed. */
+  failureClass: Schema.optional(TurnStartFailureClass),
+  /** The user message whose start failed. Absent on events written before it was recorded. */
+  messageId: Schema.optional(MessageId),
   createdAt: IsoDateTime,
 });
 
