@@ -58,6 +58,22 @@ export function withClaudeSubagentCaps(
   };
 }
 
+/**
+ * Claude Code resumes an interrupted turn on its own when this is set. bigbud decides that
+ * itself after sleep (reconcile first, never replay), so a user's shell value must not reach
+ * the CLI.
+ */
+const CLAUDE_RESUME_INTERRUPTED_TURN_ENV = "CLAUDE_CODE_RESUME_INTERRUPTED_TURN";
+
+/** The environment without `CLAUDE_CODE_RESUME_INTERRUPTED_TURN`; unchanged when it is absent. */
+export function withoutClaudeInterruptedTurnResume(
+  environment: Readonly<Record<string, string | undefined>>,
+): Readonly<Record<string, string | undefined>> {
+  if (!(CLAUDE_RESUME_INTERRUPTED_TURN_ENV in environment)) return environment;
+  const { [CLAUDE_RESUME_INTERRUPTED_TURN_ENV]: _removed, ...rest } = environment;
+  return rest;
+}
+
 type ClaudeNativeEffort = NonNullable<ClaudeModelInfo["supportedEffortLevels"]>[number];
 
 export function resolveClaudeRuntimeTraits(
@@ -149,7 +165,9 @@ export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
       ...(input.promptSuggestions ? { promptSuggestions: true } : {}),
       canUseTool: input.canUseTool,
       ...(input.onElicitation ? { onElicitation: input.onElicitation } : {}),
-      env: withClaudeSubagentCaps(input.environment ?? process.env, input.subagentCaps),
+      env: withoutClaudeInterruptedTurnResume(
+        withClaudeSubagentCaps(input.environment ?? process.env, input.subagentCaps),
+      ),
       ...(input.runtimeCwd && !input.hasRemoteWorkspaceBridge
         ? { additionalDirectories: [input.runtimeCwd] }
         : {}),

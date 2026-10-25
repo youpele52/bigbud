@@ -32,7 +32,7 @@ describe("dormant V2 capability and composition boundaries", () => {
     expect(providerWorkloadSupport("opencodeV2")).toEqual({
       interactive: true,
       learning: false,
-      unattendedTextGeneration: false,
+      unattendedTextGeneration: true,
       usageAccounting: true,
     });
     expect(providerAdvertisesRemoteWorkspaceSupport(snapshot)).toBe(false);

@@ -1,6 +1,7 @@
 import { randomBytes, sign, timingSafeEqual } from "node:crypto";
 import { Schema } from "effect";
 import { callV2ThreadRpc } from "./Client.guard.orchestration.ts";
+import { v2OwnerRegistration } from "./Orchestration.registration.ts";
 import { detachV2Enrollment } from "./Orchestration.enrollment.detach.ts";
 import {
   signV2ThreadEnvelope,
@@ -198,6 +199,7 @@ export class V2ThreadEnrollment {
       owner.nativeSessionId,
       (operation) => this.controls.observe(operation),
       signal,
+      v2OwnerRegistration(owner),
     );
     const ack = Schema.decodeUnknownSync(Ack)(value, { onExcessProperty: "error" });
     if (

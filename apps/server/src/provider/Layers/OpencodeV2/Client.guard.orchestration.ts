@@ -7,10 +7,11 @@ import {
 import { V2_THREAD_RPC, type V2ThreadEnvelope } from "./Orchestration.protocol.ts";
 import type { V2LegacyThreadEnvelope } from "./Orchestration.protocol.legacy.ts";
 import { v2Request, type OpencodeV2Client } from "./Client.ts";
+import type { V2ThreadRegistration } from "./Orchestration.registration.ts";
 
 export interface V2RpcAuthority {
-  readonly rpcID: typeof V2_THREAD_RPC;
-  readonly method: "info" | V2ThreadEnvelope["operation"];
+  readonly rpcID: string;
+  readonly method: "info" | "authorize" | "fence" | "receipt" | V2ThreadEnvelope["operation"];
   readonly directory: string;
   readonly bodyDigest: string;
   readonly ownerDigest?: string;
@@ -37,7 +38,7 @@ export async function assertV2OrchestrationRpc(
   if (
     context.intent === "health" ||
     (context.intent === "cleanup" &&
-      (!["inspect", "detach"].includes(authority.method) ||
+      (!["inspect", "detach", "fence"].includes(authority.method) ||
         authority.nativeSessionId !== context.nativeSessionId ||
         !authority.ownerDigest ||
         !authority.enrollmentNonce))
@@ -68,6 +69,7 @@ export async function callV2ThreadRpc(
   nativeSessionId?: string,
   observe?: (operation: Promise<unknown>) => void,
   signal?: AbortSignal,
+  registration?: V2ThreadRegistration,
 ) {
   signal?.throwIfAborted();
   const context = currentV2RequestContext();
@@ -79,8 +81,11 @@ export async function callV2ThreadRpc(
     throw new Error("V2 thread-tools RPC operation mismatch.");
   if (envelope?.protocol === "bigbud.thread.v1" && !["inspect", "detach"].includes(method))
     throw new Error("V2 legacy thread-tools authority is cleanup-only.");
+  if (registration && envelope && registration.issuer !== envelope.issuer)
+    throw new Error("V2 thread-tools registration issuer mismatch.");
+  const rpcID = registration?.id ?? V2_THREAD_RPC;
   const authority: V2RpcAuthority = Object.freeze({
-    rpcID: V2_THREAD_RPC,
+    rpcID,
     method,
     directory,
     bodyDigest: createHash("sha256").update(JSON.stringify({ input })).digest("hex"),
@@ -98,7 +103,7 @@ export async function callV2ThreadRpc(
       (signal) => {
         const operation = client.rpc.call(
           {
-            rpcID: V2_THREAD_RPC,
+            rpcID,
             method,
             location: { directory },
             input: JSON.parse(JSON.stringify(input)),

@@ -38,6 +38,8 @@ export function ChatGreetingIntegrationHarness() {
         nowIso={thread.nowIso}
         expandedWorkGroups={base.expandedWorkGroups}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={base.activityAccordionOpenById}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={base.threadChangedFilesExpandedByTurnId}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}

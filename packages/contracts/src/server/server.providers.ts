@@ -184,6 +184,7 @@ export const ServerProvider = Schema.Struct({
         id: TrimmedNonEmptyString,
         name: TrimmedNonEmptyString,
         description: Schema.optional(Schema.String),
+        systemPromptHash: Schema.optional(TrimmedNonEmptyString),
       }),
     ),
   ),

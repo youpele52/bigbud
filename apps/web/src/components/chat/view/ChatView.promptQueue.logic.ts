@@ -1,10 +1,14 @@
 import type {
   CommandId,
   MessageId,
+  ModelSelection,
   OrchestrationTurnControlOperation,
+  ProviderInteractionMode,
+  RuntimeMode,
   ThreadId,
   TurnId,
 } from "@bigbud/contracts";
+import type { UploadChatAttachment } from "@bigbud/contracts/orchestration/orchestration.attachments.ts";
 import { useCallback, useMemo } from "react";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { newCommandId, newMessageId } from "~/lib/utils";
@@ -15,9 +19,26 @@ export interface QueuedPrompt {
   id: string;
   text: string;
   createdAt: string;
+  /** Already in the transcript; the server redelivers it, so the panel does not list it. */
+  alreadySent?: boolean | undefined;
 }
 
 export type QueuePromptResult = "queued" | "empty" | "full";
+
+/** Everything a composer send carries; execution settings only when they differ from the thread. */
+export interface QueuedPromptSubmission {
+  readonly text: string;
+  readonly attachments?: ReadonlyArray<UploadChatAttachment>;
+  readonly replyToMessageId?: MessageId;
+  readonly modelSelection?: ModelSelection;
+  readonly runtimeMode?: RuntimeMode;
+  readonly interactionMode?: ProviderInteractionMode;
+}
+
+/** Prompts the user queued; already-sent redeliveries are shown by their timeline bubble. */
+export function visibleQueuedPrompts<T extends QueuedPrompt>(prompts: readonly T[]): T[] {
+  return prompts.filter((prompt) => prompt.alreadySent !== true);
+}
 
 export function formatQueuedPromptText(prompts: readonly QueuedPrompt[]) {
   const numberedPrompts = prompts
@@ -143,21 +164,42 @@ export function buildComposerFollowUpCommand(input: {
   readonly threadId: ThreadId;
   readonly commandId: CommandId;
   readonly messageId: MessageId;
-  readonly text: string;
+  readonly submission: QueuedPromptSubmission;
   readonly createdAt: string;
 }) {
+  const { submission } = input;
   return {
     type: "thread.message.submit" as const,
     commandId: input.commandId,
     threadId: input.threadId,
-    message: { messageId: input.messageId, text: input.text },
+    message: {
+      messageId: input.messageId,
+      text: submission.text.trim(),
+      ...(submission.attachments?.length ? { attachments: [...submission.attachments] } : {}),
+      ...(submission.replyToMessageId !== undefined
+        ? { replyToMessageId: submission.replyToMessageId }
+        : {}),
+    },
+    ...(submission.modelSelection !== undefined
+      ? { modelSelection: submission.modelSelection }
+      : {}),
+    ...(submission.runtimeMode !== undefined ? { runtimeMode: submission.runtimeMode } : {}),
+    ...(submission.interactionMode !== undefined
+      ? { interactionMode: submission.interactionMode }
+      : {}),
     delivery: "auto" as const,
     createdAt: input.createdAt,
   };
 }
 
+function isEmptySubmission(submission: QueuedPromptSubmission) {
+  return submission.text.trim().length === 0 && (submission.attachments?.length ?? 0) === 0;
+}
+
 export function usePromptQueue(input: UsePromptQueueInput) {
-  const queuedPrompts = input.projectedPrompts;
+  // Control commands cover the whole server queue; the panel and limit use the visible part.
+  const allQueuedPrompts = input.projectedPrompts;
+  const queuedPrompts = useMemo(() => visibleQueuedPrompts(allQueuedPrompts), [allQueuedPrompts]);
   const controlPending =
     input.controlOperation != null &&
     !["completed", "failed", "superseded", "cancelled"].includes(input.controlOperation.state);
@@ -166,32 +208,37 @@ export function usePromptQueue(input: UsePromptQueueInput) {
   const hasQueuedPrompts = queuedPromptCount > 0;
   const canQueueMorePrompts = queuedPromptCount < MAX_QUEUED_PROMPTS;
 
-  const queuePrompt = useCallback(
-    (text: string): QueuePromptResult => {
-      const trimmed = text.trim();
-      if (trimmed.length === 0) {
-        return "empty";
-      }
-
-      if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) {
-        return "full";
-      }
-      const id = input.newId();
-      const createdAt = new Date().toISOString();
-      void readNativeApi()
-        ?.orchestration.dispatchCommand(
-          buildComposerFollowUpCommand({
-            commandId: newCommandId(),
-            threadId: input.threadId,
-            messageId: id as MessageId,
-            text: trimmed,
-            createdAt,
-          }),
-        )
-        .catch((error: unknown) => input.onError(promptQueueErrorMessage(error)));
+  /** Queues a full composer submission; rejects when the server refuses it. */
+  const submitQueuedPrompt = useCallback(
+    async (submission: QueuedPromptSubmission): Promise<QueuePromptResult> => {
+      if (isEmptySubmission(submission)) return "empty";
+      if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) return "full";
+      const api = readNativeApi();
+      if (!api) throw new Error("The app is not connected.");
+      await api.orchestration.dispatchCommand(
+        buildComposerFollowUpCommand({
+          commandId: newCommandId(),
+          threadId: input.threadId,
+          messageId: input.newId() as MessageId,
+          submission,
+          createdAt: new Date().toISOString(),
+        }),
+      );
       return "queued";
     },
     [input, queuedPrompts.length],
+  );
+
+  const queuePrompt = useCallback(
+    (text: string): QueuePromptResult => {
+      if (isEmptySubmission({ text })) return "empty";
+      if (queuedPrompts.length >= MAX_QUEUED_PROMPTS) return "full";
+      void submitQueuedPrompt({ text }).catch((error: unknown) =>
+        input.onError(promptQueueErrorMessage(error)),
+      );
+      return "queued";
+    },
+    [input, queuedPrompts.length, submitQueuedPrompt],
   );
 
   const removeQueuedPrompt = useCallback(
@@ -212,7 +259,7 @@ export function usePromptQueue(input: UsePromptQueueInput) {
   const interruptAndFlushQueuedPrompts = useCallback(
     () =>
       sendNowQueuedPrompts({
-        queuedPromptIds: queuedPrompts.map((prompt) => prompt.id as MessageId),
+        queuedPromptIds: allQueuedPrompts.map((prompt) => prompt.id as MessageId),
         activeTurnInProgress: input.activeTurnInProgress,
         persistSettingsBeforeRelease: input.persistSettingsBeforeRelease,
         interrupt: (queuedPromptIds) =>
@@ -229,7 +276,7 @@ export function usePromptQueue(input: UsePromptQueueInput) {
           ),
         onError: input.onError,
       }),
-    [input, queuedPrompts],
+    [allQueuedPrompts, input],
   );
 
   const steerQueuedPrompts = useCallback(async () => {
@@ -251,7 +298,7 @@ export function usePromptQueue(input: UsePromptQueueInput) {
           threadId: input.threadId,
           turnId: input.activeTurnId,
           commandId: newCommandId(),
-          queuedPromptIds: queuedPrompts.map((prompt) => prompt.id as MessageId),
+          queuedPromptIds: allQueuedPrompts.map((prompt) => prompt.id as MessageId),
           sessionEpoch: input.sessionEpoch,
           createdAt: new Date().toISOString(),
         }),
@@ -259,7 +306,7 @@ export function usePromptQueue(input: UsePromptQueueInput) {
     } catch (error) {
       input.onError(promptQueueErrorMessage(error));
     }
-  }, [controlPending, input, queuedPrompts]);
+  }, [allQueuedPrompts, controlPending, input, queuedPrompts.length]);
 
   return useMemo(
     () => ({
@@ -271,6 +318,7 @@ export function usePromptQueue(input: UsePromptQueueInput) {
       nativeSteer: input.nativeSteer === true,
       controlOperation: input.controlOperation ?? null,
       queuePrompt,
+      submitQueuedPrompt,
       removeQueuedPrompt,
       interruptAndFlushQueuedPrompts,
       steerQueuedPrompts,
@@ -287,6 +335,7 @@ export function usePromptQueue(input: UsePromptQueueInput) {
       queuedPrompts,
       removeQueuedPrompt,
       steerQueuedPrompts,
+      submitQueuedPrompt,
     ],
   );
 }

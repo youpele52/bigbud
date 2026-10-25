@@ -21,6 +21,10 @@ export type TextGenerationProvider = ProviderKind;
  */
 export interface InternalTextGenerationContext {
   readonly successfulModelSelection?: ModelSelection | null;
+  /** Required metadata ownership is persisted by the router for its actual native candidate. */
+  readonly beforeV2Dispatch?: (
+    selection: ModelSelection,
+  ) => Effect.Effect<void, TextGenerationError>;
 }
 
 export interface CommitMessageGenerationInput extends InternalTextGenerationContext {

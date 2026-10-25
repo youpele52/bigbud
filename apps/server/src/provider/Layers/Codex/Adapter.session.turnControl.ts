@@ -11,6 +11,7 @@ export function makeCodexTurnControl(manager: CodexAppServerManager): Pick<
   "interruptTurn"
 > & {
   readonly steerTurn: NonNullable<CodexAdapterShape["steerTurn"]>;
+  readonly stopThreadSubagents: NonNullable<CodexAdapterShape["stopThreadSubagents"]>;
 } {
   const interruptTurn: CodexAdapterShape["interruptTurn"] = (threadId, turnId) =>
     Effect.tryPromise({
@@ -32,5 +33,20 @@ export function makeCodexTurnControl(manager: CodexAppServerManager): Pick<
           catch: (cause) => toRequestError(threadId, "turn/steer", cause),
         });
 
-  return { interruptTurn, steerTurn };
+  // A parent `turn/interrupt` does not stop child agent threads (live probe, codex-cli 0.163.0),
+  // so thread Stop interrupts every running child thread, foreground or background.
+  const stopThreadSubagents: NonNullable<CodexAdapterShape["stopThreadSubagents"]> = (
+    threadId,
+    subagents,
+  ) =>
+    Effect.tryPromise({
+      try: () =>
+        manager.interruptChildTurns(
+          threadId,
+          subagents.map((subagent) => subagent.nativeId),
+        ),
+      catch: (cause) => toRequestError(threadId, "turn/interrupt", cause),
+    });
+
+  return { interruptTurn, steerTurn, stopThreadSubagents };
 }

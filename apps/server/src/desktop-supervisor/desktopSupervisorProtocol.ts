@@ -119,7 +119,17 @@ export type DesktopSupervisorFrame =
         readonly appliedProjectionSequence: number;
       };
     }
-  | { readonly type: "heartbeat"; readonly value: { readonly monotonicMillis: number } }
+  | {
+      readonly type: "heartbeat";
+      readonly value: {
+        readonly monotonicMillis: number;
+        /**
+         * Protocol 1.4: total time the machine spent suspended since boot, set by the
+         * supervisor when it echoes a heartbeat. Absent from older supervisors.
+         */
+        readonly suspendedMillis?: number;
+      };
+    }
   | {
       readonly type: "recoveryRequired";
       readonly value: {

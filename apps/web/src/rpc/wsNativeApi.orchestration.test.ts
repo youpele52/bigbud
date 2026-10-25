@@ -14,7 +14,7 @@ import {
   rpcClientMock,
   terminalEventListeners,
 } from "./wsNativeApi.test.helpers";
-import { markWsSubscriptionListenerFailure } from "./wsTransport";
+import { markWsSubscriptionListenerFailure } from "./wsTransport.errors";
 
 describe("wsNativeApi — orchestration", () => {
   it("keeps recovery retryable after repeated orchestration application failures", async () => {

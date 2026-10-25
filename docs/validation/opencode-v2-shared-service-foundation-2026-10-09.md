@@ -3,7 +3,7 @@
 ## Scope and gates
 
 Implemented the independent first slice of the
-[shared-service plan](../plans/2026-10-09-opencode-v2-shared-service-plan.md).
+[consolidated shared-service contract](../reports/providers-opencode-v2.md#consolidated-adoption-and-setup-decisions).
 Only new `SharedService.*` modules/tests and new documentation were authored;
 no prior SharedService files existed at initial inspection. Existing attachment,
 UI, runtime, composition and settings work was not edited.
@@ -255,11 +255,11 @@ Additional parent checks:
   existing warnings; typecheck completed all nine tasks. No authored-file limit
   violation was reported.
 
-The [sandbox diagnosis](opencode-v2-sandbox-diagnosis-2026-10-10.md) passed all
+The [consolidated sandbox diagnosis](#consolidated-startup-and-sandbox-incidents) passed all
 four unchanged tests and correlated historical stalls with host sleep. A fresh
 parent 2.0.26 disposable startup timeout and separate pre-RUN runner stall did not
 reproduce and are **not** attributed to sleep. The
-[native startup diagnosis](opencode-v2-native-startup-diagnosis-2026-10-10.md)
+[consolidated native startup diagnosis](#consolidated-startup-and-sandbox-incidents)
 records real 2.0.24/2.0.26 requalification, bounded diagnostic capture and the
 unknown historical cause; no timeout increase or assertion relaxation occurred.
 
@@ -766,3 +766,14 @@ subagent support would require a separately approved ownership/lifecycle feature
 not an eligibility workaround. Exo's explicit 410 deprecation and Ling's model
 unavailability remain distinct upstream outcomes. **Big Pickle generation remains
 unresolved; this audit records a source/contract boundary, not a repair.**
+
+## Consolidated startup and sandbox incidents
+
+Consolidated on 22 October, 2026 from two completed, separate 10 October incident records. They are historical evidence, not current blockers or a claim that retired private-runtime modules need to be restored.
+
+- **Sandbox stall:** unchanged sandbox tests passed all four assertions, including real kernel containment, output overflow, timeout escalation and cancellation waiting for physical close. No production fix, permission relaxation, skipped containment assertion or deadline increase was needed. macOS power logs correlated the 527,083 ms kernel-test wall time with 530 seconds of sleep, and a separate 454,155 ms migration test with 458 seconds of sleep. This established an environment explanation for those stalls only; the interrupted runs had no final failure summary or whole-suite pass. Final command-scoped idle-sleep protection yielded four passing tests in 36.03 seconds, without changing persistent power settings; it could not prevent lid/critical-battery/forced sleep. Other mobile-port and periodic-ingestion failures were separate, not sandbox defects. Historical evidence used `shared-v2-qualification/continuation-*` logs.
+- **Disposable native startup:** separate 2.0.26 registration polls failed at 15 seconds, followed by a pre-Vitest-`RUN` stall at the outer deadline. No sleep occurred; neither failure was attributed to the sandbox sleep incident. The original fixture discarded child output/registration errors, so the original startup cause remains unknown, and no fixture execution was established for the pre-`RUN` stall.
+- **Implemented diagnostic correction:** the native fixture retained at most 8 KiB of sanitized startup output plus spawn/exit/signal and last sanitized registration-error state; credential-related lines and URL userinfo were filtered, and registration/environment bodies were never logged. The 15-second deadline, actual registration checks, synthetic model, containment and cleanup stayed unchanged. A direct disposable 2.0.26 child registered in 1.01 seconds; later application/transport runs passed two files / two tests each on installed 2.0.26, official-copy 2.0.26 and installed 2.0.24 (8.22 / 7.91 / 7.81 seconds). A `/usr/bin/false` negative control failed as expected in 15.55 seconds with exit-code/missing-registration diagnostics. These narrower reproductions did not identify or repair an underlying native startup fault.
+- The historical actual-version runs used disposable HOME/XDG/database/config and synthetic listeners, not user credentials or the installed service. All owned children were cleaned up; no billed prompt, daemon administration or source-level timeout workaround was performed. Evidence used `shared-v2-qualification/diagnosis-*` logs in the original temporary OpenCode directory. Whole-tree checks and broader independent acceptance were parent-owned, not granted by either incident diagnosis.
+
+For current release qualification and platform limits, use the [gap-closure ledger](opencode-v2-gap-closure-final-2026-10-15.md), not these historical fixture successes.

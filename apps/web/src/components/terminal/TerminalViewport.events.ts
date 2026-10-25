@@ -48,7 +48,8 @@ export function makeApplyTerminalEvent(input: {
     }
 
     if (event.type === "output") {
-      input.writeBatcher.write(activeTerminal, event.data);
+      // Server output carries flow-control credit, released once xterm parses it.
+      input.writeBatcher.write(activeTerminal, event.data, event.data.length);
       input.clearSelectionAction();
       return;
     }

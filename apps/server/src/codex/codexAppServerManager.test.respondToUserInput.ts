@@ -95,6 +95,7 @@ describe("respondToUserInput", () => {
       pendingApprovals: new Map(),
       pendingUserInputs: new Map(),
       collabReceiverTurns: new Map(),
+      collabChildTurns: new Map(),
     };
     type ApprovalRequestContext = {
       session: typeof context.session;

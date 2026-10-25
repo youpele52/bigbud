@@ -2,78 +2,38 @@ import { randomUUID } from "node:crypto";
 
 import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
 import {
-  remoteAgentCancelEvidence,
-  remoteAgentProcessTerminalEvidence,
-} from "./remoteAgentTerminalEvidence.ts";
+  RemoteAgentReattachRecovery,
+  currentRemoteAgentReattachEnvironment,
+  isDefinitiveReattachFailure,
+  type RemoteAgentReattachEnvironment,
+} from "./remoteAgentProcessClient.reattach.ts";
+import { markRemoteAgentReplayGap } from "./remoteAgentProcessClient.replayGap.ts";
+import { remoteAgentCancelEvidence } from "./remoteAgentTerminalEvidence.ts";
 import type {
   RemoteAgentCancelResponse,
   RemoteAgentProcessCompleted,
   RemoteAgentProcessOutput,
 } from "./remoteAgentProtocol.ts";
+import {
+  RemoteAgentProcessError,
+  append,
+  errorFromCompleted,
+  isUnknownOperationError,
+  outcomeUnknownAfterRetention,
+  reattachCancelled,
+  type RemoteAgentProcessResult,
+  type RemoteAgentProcessRunInput,
+} from "./remoteAgentProcessClient.types.ts";
 
-export interface RemoteAgentProcessResult {
-  readonly accepted: boolean;
-  readonly duplicate: boolean;
-  readonly stdout: Uint8Array;
-  readonly stderr: Uint8Array;
-  readonly completed: RemoteAgentProcessCompleted;
-}
+export {
+  RemoteAgentProcessError,
+  type RemoteAgentProcessResult,
+  type RemoteAgentProcessRunInput,
+} from "./remoteAgentProcessClient.types.ts";
 
-export interface RemoteAgentProcessRunInput {
-  readonly workspaceHandle: string;
-  readonly operationId: string;
-  readonly requestDigest: Uint8Array;
-  readonly command: string;
-  readonly args?: ReadonlyArray<string>;
-  readonly timeoutMs?: number;
-  readonly maxOutputBytes?: number;
-  readonly environment?: ReadonlyArray<{ readonly name: string; readonly value: string }>;
-  readonly stdin?: Uint8Array;
-  readonly requestId?: string;
-}
-
-export class RemoteAgentProcessError extends Error {
-  readonly _tag = "RemoteAgentProcessError";
-
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly outcome: "unknown" | "terminal" | "rejected" = "unknown",
-  ) {
-    super(message);
-    this.name = "RemoteAgentProcessError";
-  }
-}
-
-function append(chunks: Uint8Array[], bytes: Uint8Array): Uint8Array {
-  const total = chunks.reduce((sum, chunk) => sum + chunk.length, bytes.length);
-  const result = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-  result.set(bytes, offset);
-  return result;
-}
-
-function errorFromCompleted(completed: RemoteAgentProcessCompleted): Error | null {
-  if (remoteAgentProcessTerminalEvidence(completed) !== "verified-terminal")
-    return new RemoteAgentProcessError(
-      "PROCESS_OUTCOME_UNKNOWN",
-      "Remote process history expired without a verified execution outcome.",
-    );
-  return completed.errorCode && completed.errorCode !== "NONZERO_EXIT"
-    ? new RemoteAgentProcessError(completed.errorCode, completed.errorMessage, "terminal")
-    : null;
-}
-
-function isUnknownOperationError(cause: unknown): boolean {
-  return (
-    (cause instanceof RemoteAgentProcessError && cause.code === "PROCESS_OUTCOME_UNKNOWN") ||
-    (cause instanceof RemoteAgentConnectionError &&
-      cause.message.includes("operation is unknown or expired"))
-  );
+export interface RemoteAgentProcessClientOptions {
+  /** Clock, timers and wake signal for delayed reattach; tests inject these. */
+  readonly reattach?: RemoteAgentReattachEnvironment;
 }
 
 export class RemoteAgentProcessClient {
@@ -82,6 +42,7 @@ export class RemoteAgentProcessClient {
   constructor(
     readonly connection: RemoteAgentConnection,
     private readonly reconnect?: () => Promise<RemoteAgentProcessClient>,
+    private readonly options: RemoteAgentProcessClientOptions = {},
   ) {}
 
   async cancel(input: {
@@ -166,9 +127,17 @@ export class RemoteAgentProcessClient {
       )) as typeof accepted;
     } catch (cause) {
       if (!this.reconnect) throw cause;
-      const replacement = await this.reconnect();
       try {
-        return await replacement.attach({ operationId: input.operationId });
+        return await this.resumeAfterTransport({
+          cause,
+          duplicate: false,
+          operationId: input.operationId,
+          requestId: randomUUID(),
+          afterSequence: 0,
+          stdout: [],
+          stderr: [],
+          signal: input.signal,
+        });
       } catch (attachCause) {
         if (!isUnknownOperationError(attachCause)) throw attachCause;
         throw new RemoteAgentProcessError(
@@ -186,7 +155,14 @@ export class RemoteAgentProcessClient {
     }
     return this.trackResult(
       input.operationId,
-      this.collectResult(accepted.value.duplicate, input.operationId, requestId, 0, 0),
+      this.collectResult(
+        accepted.value.duplicate,
+        input.operationId,
+        requestId,
+        0,
+        undefined,
+        input.signal,
+      ),
     );
   }
 
@@ -194,6 +170,7 @@ export class RemoteAgentProcessClient {
     readonly operationId: string;
     readonly afterSequence?: number;
     readonly requestId?: string;
+    readonly signal?: AbortSignal;
   }): Promise<RemoteAgentProcessResult> {
     const requestId = input.requestId ?? randomUUID();
     await this.connection.send({
@@ -206,7 +183,14 @@ export class RemoteAgentProcessClient {
     });
     return this.trackResult(
       input.operationId,
-      this.collectResult(false, input.operationId, requestId, input.afterSequence ?? 0, 0),
+      this.collectResult(
+        false,
+        input.operationId,
+        requestId,
+        input.afterSequence ?? 0,
+        undefined,
+        input.signal,
+      ),
     );
   }
 
@@ -231,11 +215,13 @@ export class RemoteAgentProcessClient {
     operationId: string,
     requestId: string,
     afterSequence: number,
-    reconnectAttempts: number,
+    recovery?: RemoteAgentReattachRecovery,
+    signal?: AbortSignal,
   ): Promise<RemoteAgentProcessResult> {
     const stdout: Uint8Array[] = [];
     const stderr: Uint8Array[] = [];
     let nextSequence = afterSequence + 1;
+    let replayGap = false;
     const seenSequences = new Set<number>();
     while (true) {
       let frame: Awaited<ReturnType<RemoteAgentConnection["nextFrame"]>>;
@@ -256,9 +242,10 @@ export class RemoteAgentProcessClient {
           operationId,
           requestId,
           afterSequence: nextSequence - 1,
-          reconnectAttempts,
+          recovery,
           stdout,
           stderr,
+          signal,
         });
       }
       if (frame.type === "protocolError") {
@@ -304,9 +291,10 @@ export class RemoteAgentProcessClient {
             operationId,
             requestId,
             afterSequence: nextSequence - 1,
-            reconnectAttempts,
+            recovery,
             stdout,
             stderr,
+            signal,
           });
         }
         continue;
@@ -319,59 +307,92 @@ export class RemoteAgentProcessClient {
       }
       if (frame.type === "processAttachResponse") {
         if (frame.value.operationId !== operationId) continue;
+        // Contact is back: a later drop gets its immediate attempts and full retention.
+        recovery?.reset();
         if (frame.value.firstRetainedSequence > nextSequence) {
-          throw new RemoteAgentProcessError(
-            "PROCESS_OUTPUT_GAP",
-            "Remote process output was acknowledged or expired without recoverable local bytes.",
-          );
+          // The agent retained only a suffix (protocol 1.3 replay gap). The
+          // terminal result stays authoritative; the missing bytes are lost.
+          replayGap = true;
+          nextSequence = frame.value.firstRetainedSequence;
         }
         continue;
       }
       if (frame.type !== "processCompleted" || frame.value.operationId !== operationId) continue;
-      const completed = frame.value as RemoteAgentProcessCompleted;
-      const error = errorFromCompleted(completed);
+      const received = frame.value as RemoteAgentProcessCompleted;
+      const error = errorFromCompleted(received);
       if (error) throw error;
+      const completed = replayGap ? markRemoteAgentReplayGap(received) : received;
       return {
         accepted: true,
         duplicate,
         stdout: append(stdout, new Uint8Array()),
         stderr: append(stderr, new Uint8Array()),
         completed,
+        ...(replayGap ? { replayGap: true } : {}),
       };
     }
   }
 
+  /**
+   * Reattaches after a transport interruption: three immediate attempts, then
+   * on each network-online or sleep wake signal, or a 1-30 s jittered backoff,
+   * until the agent's retained result would have expired. Only then is the
+   * outcome unknown. Reattach never spawns; definitive failures, such as an
+   * agent restart, are not retried. An aborted `signal` ends it as cancelled.
+   */
   private async resumeAfterTransport(input: {
     readonly cause: unknown;
     readonly duplicate: boolean;
     readonly operationId: string;
     readonly requestId: string;
     readonly afterSequence: number;
-    readonly reconnectAttempts: number;
+    readonly recovery?: RemoteAgentReattachRecovery | undefined;
     readonly stdout: ReadonlyArray<Uint8Array>;
     readonly stderr: ReadonlyArray<Uint8Array>;
+    readonly signal?: AbortSignal | undefined;
   }): Promise<RemoteAgentProcessResult> {
-    if (!this.reconnect || input.reconnectAttempts >= 3) throw input.cause;
-    const replacement = await this.reconnect();
-    await replacement.connection.send({
-      type: "processAttachRequest",
-      value: {
-        requestId: `${input.requestId}:attach:${input.reconnectAttempts + 1}`,
-        operationId: input.operationId,
-        afterSequence: input.afterSequence,
-      },
-    });
-    const resumed = await replacement.collectResult(
-      input.duplicate,
-      input.operationId,
-      input.requestId,
-      input.afterSequence,
-      input.reconnectAttempts + 1,
-    );
-    return {
-      ...resumed,
-      stdout: append([...input.stdout], resumed.stdout),
-      stderr: append([...input.stderr], resumed.stderr),
-    };
+    if (!this.reconnect || isDefinitiveReattachFailure(input.cause)) throw input.cause;
+    const recovery =
+      input.recovery ??
+      new RemoteAgentReattachRecovery(
+        this.options.reattach ?? currentRemoteAgentReattachEnvironment(),
+      );
+    let lastCause = input.cause;
+    while (true) {
+      const next = await recovery.beforeAttempt(input.signal);
+      if (next === "cancelled") throw reattachCancelled();
+      if (next === "expired") throw outcomeUnknownAfterRetention(lastCause);
+      let replacement: RemoteAgentProcessClient;
+      try {
+        replacement = await this.reconnect();
+        await replacement.connection.send({
+          type: "processAttachRequest",
+          value: {
+            requestId: `${input.requestId}:attach:${recovery.attempts}`,
+            operationId: input.operationId,
+            afterSequence: input.afterSequence,
+          },
+        });
+      } catch (cause) {
+        if (isDefinitiveReattachFailure(cause)) throw cause;
+        lastCause = cause;
+        continue;
+      }
+      // Stopped while connecting: the attach request is harmless, but nothing waits for it.
+      if (input.signal?.aborted) throw reattachCancelled();
+      const resumed = await replacement.collectResult(
+        input.duplicate,
+        input.operationId,
+        input.requestId,
+        input.afterSequence,
+        recovery,
+        input.signal,
+      );
+      return {
+        ...resumed,
+        stdout: append([...input.stdout], resumed.stdout),
+        stderr: append([...input.stderr], resumed.stderr),
+      };
+    }
   }
 }

@@ -7,7 +7,7 @@ import {
   STANDALONE_PAGE_SCROLL_CLASS,
   STANDALONE_PAGE_WIDTH_CLASS,
 } from "../standalone/StandalonePageContent";
-import { Button } from "../ui/button";
+import { ResourceConnectionStatus } from "./ResourceConnectionStatus";
 import { ResourceCollectionStatus } from "./ResourceCollectionStatus";
 import { ResourceMetricCard } from "./ResourceMetricCard";
 import { WidgetPreferences } from "./WidgetPreferences";
@@ -66,26 +66,7 @@ export function SystemPanel({ visible }: { visible: boolean }) {
         ) : (
           <>
             {connection !== "connected" ? (
-              <CenteredStatus
-                loading={connection === "connecting"}
-                className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground"
-              >
-                <p>
-                  {connection === "connecting"
-                    ? "Connecting to this computer’s System Monitor"
-                    : `System Monitor unavailable${reason ? `: ${reason}` : ""}`}
-                </p>
-                {connection === "unavailable" ? (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    className="mt-2"
-                    onClick={() => void retryResourceMonitor()}
-                  >
-                    Retry
-                  </Button>
-                ) : null}
-              </CenteredStatus>
+              <ResourceConnectionStatus connecting={connection === "connecting"} reason={reason} />
             ) : null}
             {connection === "connected" ? (
               <ResourceCollectionStatus

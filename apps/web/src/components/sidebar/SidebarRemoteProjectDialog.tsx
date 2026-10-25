@@ -1,4 +1,3 @@
-import { Button } from "../ui/button";
 import {
   Dialog,
   DialogDescription,
@@ -8,27 +7,31 @@ import {
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
+import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import type {
-  RemoteProjectAuthMode,
+  RemoteProjectConnectionSource,
   RemoteProjectDraft,
-  RemoteProjectTransport,
+  RequestRemoteProjectUnlock,
+  UpdateRemoteProjectDraft,
 } from "./Sidebar.projects.logic";
-import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
+import { rememberRemoteProjectConnectionSource } from "./Sidebar.projects.connectionSourcePreference";
 import { remoteProjectAgentTarget, SidebarRemoteAgentStatus } from "./SidebarRemoteAgentStatus";
-
-type RemoteProjectField =
-  | "displayName"
-  | "host"
-  | "username"
-  | "port"
-  | "workspaceRoot"
-  | "sshKeyPath";
-
-type RemoteProjectFieldErrors = Partial<Record<RemoteProjectField, string>>;
-
-const remoteProjectInputClassName =
-  "mt-1.5 flex border-border bg-card font-sans has-focus-visible:border-ring/45 has-focus-visible:ring-0 [&_input]:placeholder:text-xs [&_input]:placeholder:tracking-normal";
+import { SidebarRemoteProjectManualFields } from "./SidebarRemoteProjectDialog.manualFields";
+import { SidebarRemoteProjectPathField } from "./SidebarRemoteProjectDialog.pathField";
+import {
+  RemoteProjectAuthenticationFields,
+  RemoteProjectConnectionOptions,
+  remoteProjectInputClassName,
+  type RemoteProjectFieldErrors,
+} from "./SidebarRemoteProjectDialog.options";
+import {
+  SidebarRemoteProjectSshConfigAdvanced,
+  SidebarRemoteProjectSshConfigHostField,
+} from "./SidebarRemoteProjectDialog.sshConfigFields";
+import { useSshConfigHosts } from "./SidebarRemoteProjectDialog.sshConfigHosts";
+import { useRemoteProjectSourceInference } from "./SidebarRemoteProjectDialog.sourceInference";
 
 interface SidebarRemoteProjectDialogProps {
   mode: "add" | "edit";
@@ -40,57 +43,11 @@ interface SidebarRemoteProjectDialogProps {
   isSubmitting: boolean;
   isVerifying: boolean;
   onOpenChange: (open: boolean) => void;
-  onFieldChange: <
-    K extends RemoteProjectField | "authMode" | "remoteTransport" | "providerRuntimeLocation",
-  >(
-    field: K,
-    value: K extends "authMode"
-      ? RemoteProjectAuthMode
-      : K extends "remoteTransport"
-        ? RemoteProjectTransport
-        : K extends "providerRuntimeLocation"
-          ? ProviderRuntimeLocation
-          : string,
-  ) => void;
+  onFieldChange: UpdateRemoteProjectDraft;
+  /** Switches the source without invalidating verification; edit-mode inference only. */
+  onAdoptConnectionSource: (source: RemoteProjectConnectionSource) => void;
+  onRequestUnlock: RequestRemoteProjectUnlock;
   onSubmit: () => void;
-}
-
-function FieldError({ message }: { message: string | undefined }) {
-  if (!message) {
-    return null;
-  }
-  return <p className="text-destructive text-xs leading-4">{message}</p>;
-}
-
-function AuthModeButton({
-  active,
-  disabled = false,
-  description,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  disabled?: boolean;
-  description: string;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      aria-pressed={active}
-      className={`rounded-xl border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-60 ${
-        active
-          ? "border-primary/35 bg-primary/8 text-foreground shadow-xs/5"
-          : "border-border/70 bg-muted/24 text-foreground/90 hover:bg-accent/50"
-      }`}
-      onClick={onClick}
-    >
-      <div className="text-sm font-medium">{label}</div>
-      <div className="mt-1 text-xs leading-5 text-muted-foreground">{description}</div>
-    </button>
-  );
 }
 
 export function SidebarRemoteProjectDialog({
@@ -104,24 +61,58 @@ export function SidebarRemoteProjectDialog({
   isVerifying,
   onOpenChange,
   onFieldChange,
+  onAdoptConnectionSource,
+  onRequestUnlock,
   onSubmit,
 }: SidebarRemoteProjectDialogProps) {
   const isEditing = mode === "edit";
+  const isSshConfig = draft.connectionSource === "ssh-config";
   const agentTarget = isEditing ? remoteProjectAgentTarget(draft) : null;
+  const hosts = useSshConfigHosts(open && (isSshConfig || isEditing));
+  useRemoteProjectSourceInference({
+    open,
+    mode,
+    draft,
+    hosts,
+    busy: isVerifying || isSubmitting || error !== null || verificationMessage !== null,
+    onAdopt: onAdoptConnectionSource,
+  });
+
+  const changeSource = (source: RemoteProjectConnectionSource) => {
+    if (!isEditing) rememberRemoteProjectConnectionSource(source);
+    onFieldChange("connectionSource", source);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>
-            {isEditing ? "Edit SSH remote project" : "Add SSH remote project"}
-          </DialogTitle>
+          <DialogTitle>{isEditing ? "Edit remote project" : "Add remote project"}</DialogTitle>
           <DialogDescription>
-            bigbud verifies the SSH target before it {isEditing ? "updates" : "creates"} the remote
-            project. You can keep the provider runtime local or run it on the remote host.
+            Open a project on another machine over SSH. bigbud checks the connection before{" "}
+            {isEditing ? "saving your changes" : "adding it"}.
           </DialogDescription>
         </DialogHeader>
 
         <DialogPanel className="space-y-4">
+          <ToggleGroup
+            aria-label="Connection source"
+            className="w-full"
+            variant="outline"
+            value={[draft.connectionSource]}
+            onValueChange={(values) => {
+              const next = values[0];
+              if (next === "manual" || next === "ssh-config") changeSource(next);
+            }}
+          >
+            <ToggleGroupItem className="flex-1 text-sm" value="ssh-config">
+              From SSH config
+            </ToggleGroupItem>
+            <ToggleGroupItem className="flex-1 text-sm" value="manual">
+              Enter manually
+            </ToggleGroupItem>
+          </ToggleGroup>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <label htmlFor="remote-project-display-name" className="block sm:col-span-2">
               <span className="text-xs font-medium text-foreground">Display name</span>
@@ -135,137 +126,45 @@ export function SidebarRemoteProjectDialog({
               />
             </label>
 
-            <label htmlFor="remote-project-host" className="block">
-              <span className="text-xs font-medium text-foreground">Host or IP</span>
-              <Input
-                id="remote-project-host"
-                aria-invalid={fieldErrors.host ? true : undefined}
-                className={remoteProjectInputClassName}
-                placeholder="devbox or 192.168.1.10"
-                spellCheck={false}
-                value={draft.host}
-                onChange={(event) => onFieldChange("host", event.target.value)}
+            {isSshConfig ? (
+              <div className="sm:col-span-2">
+                <SidebarRemoteProjectSshConfigHostField
+                  draft={draft}
+                  fieldErrors={fieldErrors}
+                  hosts={hosts}
+                  onFieldChange={onFieldChange}
+                  onUseManual={() => changeSource("manual")}
+                />
+              </div>
+            ) : (
+              <SidebarRemoteProjectManualFields
+                draft={draft}
+                fieldErrors={fieldErrors}
+                onFieldChange={onFieldChange}
               />
-              <FieldError message={fieldErrors.host} />
-            </label>
+            )}
 
-            <label htmlFor="remote-project-username" className="block">
-              <span className="text-xs font-medium text-foreground">Username</span>
-              <Input
-                id="remote-project-username"
-                className={remoteProjectInputClassName}
-                placeholder="Optional"
-                spellCheck={false}
-                value={draft.username}
-                onChange={(event) => onFieldChange("username", event.target.value)}
-              />
-            </label>
-
-            <label htmlFor="remote-project-port" className="block">
-              <span className="text-xs font-medium text-foreground">Port</span>
-              <Input
-                id="remote-project-port"
-                aria-invalid={fieldErrors.port ? true : undefined}
-                className={`${remoteProjectInputClassName} max-w-48`}
-                inputMode="numeric"
-                placeholder="22"
-                spellCheck={false}
-                value={draft.port}
-                onChange={(event) => onFieldChange("port", event.target.value)}
-              />
-              <FieldError message={fieldErrors.port} />
-            </label>
-
-            <label htmlFor="remote-project-path" className="block sm:col-span-2">
-              <span className="text-xs font-medium text-foreground">Remote project path</span>
-              <Input
-                id="remote-project-path"
-                aria-invalid={fieldErrors.workspaceRoot ? true : undefined}
-                className={remoteProjectInputClassName}
-                placeholder="/srv/app or ~/workspace/project"
-                spellCheck={false}
-                value={draft.workspaceRoot}
-                onChange={(event) => onFieldChange("workspaceRoot", event.target.value)}
-              />
-              <FieldError message={fieldErrors.workspaceRoot} />
-            </label>
-          </div>
-
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-foreground">Connection method</div>
-            <p className="text-muted-foreground text-xs leading-4">
-              The bigbud remote agent keeps remote terminals and long-running work available through
-              reconnects. Direct SSH runs each operation over SSH without installing an agent. This
-              choice is independent of where the provider runtime runs.
-            </p>
-            <div aria-label="Connection method" className="grid gap-2 sm:grid-cols-2" role="group">
-              <AuthModeButton
-                active={draft.remoteTransport === "agent"}
-                description="Requires installation on the remote host."
-                label="bigbud remote agent"
-                onClick={() => onFieldChange("remoteTransport", "agent")}
-              />
-              <AuthModeButton
-                active={draft.remoteTransport === "direct-ssh"}
-                description="Uses your existing SSH setup without an agent."
-                label="Direct SSH"
-                onClick={() => onFieldChange("remoteTransport", "direct-ssh")}
+            <div className="sm:col-span-2">
+              <SidebarRemoteProjectPathField
+                draft={draft}
+                fieldErrors={fieldErrors}
+                onFieldChange={onFieldChange}
+                onRequestUnlock={onRequestUnlock}
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-foreground">Provider runtime</div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <AuthModeButton
-                active={draft.providerRuntimeLocation === "local"}
-                description="Run the provider on this machine while using the remote workspace."
-                label="Local runtime"
-                onClick={() => onFieldChange("providerRuntimeLocation", "local")}
-              />
-              <AuthModeButton
-                active={draft.providerRuntimeLocation === "remote"}
-                description="Run the provider CLI on the remote host. Requires the CLI and auth there."
-                label="Remote runtime"
-                onClick={() => onFieldChange("providerRuntimeLocation", "remote")}
-              />
-            </div>
-          </div>
+          <RemoteProjectConnectionOptions draft={draft} onFieldChange={onFieldChange} />
 
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-foreground">Authentication</div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <AuthModeButton
-                active={draft.authMode === "ssh-key"}
-                description="Leave the key path blank to use your SSH agent or default identities."
-                label="SSH key"
-                onClick={() => onFieldChange("authMode", "ssh-key")}
-              />
-              <AuthModeButton
-                active={draft.authMode === "password"}
-                description="Prompt for the SSH password when the remote target needs reconnecting."
-                label="Password"
-                onClick={() => onFieldChange("authMode", "password")}
-              />
-            </div>
-          </div>
-
-          {draft.authMode === "ssh-key" ? (
-            <label htmlFor="remote-project-key" className="block">
-              <span className="text-xs font-medium text-foreground">SSH key path</span>
-              <Input
-                id="remote-project-key"
-                className={remoteProjectInputClassName}
-                placeholder="Leave blank to use your SSH agent or defaults or e.g. ~/.ssh/id_ed25519"
-                spellCheck={false}
-                value={draft.sshKeyPath}
-                onChange={(event) => onFieldChange("sshKeyPath", event.target.value)}
-              />
-              <p className="mt-1.5 text-muted-foreground text-xs leading-4">
-                Optional. When set, bigbud uses only this key for the connection.
-              </p>
-            </label>
-          ) : null}
+          {isSshConfig ? (
+            <SidebarRemoteProjectSshConfigAdvanced
+              draft={draft}
+              fieldErrors={fieldErrors}
+              onFieldChange={onFieldChange}
+            />
+          ) : (
+            <RemoteProjectAuthenticationFields draft={draft} onFieldChange={onFieldChange} />
+          )}
 
           {verificationMessage ? (
             <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/8 px-3 py-2 text-emerald-700 text-xs leading-4 dark:text-emerald-300">

@@ -1,5 +1,7 @@
 import * as Crypto from "node:crypto";
 import { registerSystemMonitorIpc } from "./system-monitor/ipc";
+import { makeMainOwnershipRecovery } from "./backend/ownershipRecovery.main";
+import { registerOwnershipRecoveryIpc } from "./window/ipcHandlers.ownershipRecovery";
 import { startSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
 import type { SystemMonitorBridge } from "./system-monitor/bridge";
 
@@ -60,6 +62,7 @@ import { sweepWindowsCuaDriverProcesses } from "./backend/cuaDriver.windowsSweep
 import { assertWindowsFilesReplaceable } from "./backend/windowsFileReplaceability";
 import { resolveWindowsUpdateTargets } from "./updater/windowsUpdateTargets";
 import { registerTerminalRenderingIpc } from "./main.terminalRendering";
+import { startDesktopConnectivitySignals } from "./connectivity/connectivitySignals.main";
 
 interface BootstrapDesktopOptions {
   readonly baseDir: string;
@@ -238,11 +241,20 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     const role = windowRegistry.getRole(sender);
     return role === "main" || role === "compact-chat";
   });
+  registerOwnershipRecoveryIpc(() => {
+    const contents = getMainWindow()?.webContents;
+    return contents && windowRegistry.isTrusted(contents) ? contents : undefined;
+  }, makeMainOwnershipRecovery(getIsQuitting));
   await startSystemMonitorAgentBridge(systemMonitor).catch(() => {
     logHeader("system monitor agent bridge unavailable");
   });
   registerFloatingAssistantIpc();
   logHeader("bootstrap ipc handlers registered");
+  startDesktopConnectivitySignals({
+    channel: channels.connectivitySignal,
+    getIsQuitting,
+    logHeader,
+  });
   setMainWindow(makeWindow());
   logHeader("bootstrap main window created");
   if (desktopPreferences.get().floatingAssistantEnabled && desktopPreferences.get().mascotVisible) {

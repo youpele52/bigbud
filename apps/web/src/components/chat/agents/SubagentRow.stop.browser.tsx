@@ -50,7 +50,7 @@ describe("per-subagent Stop", () => {
     expect(onStop).toHaveBeenCalledWith(expect.objectContaining({ nativeId: "a" }));
     await expect.element(stop).toBeDisabled();
     // No optimistic state: the row keeps the server-reported status.
-    expect(document.body.textContent).toContain("Working");
+    expect(document.body.textContent).toContain("working");
     request.resolve();
     await expect.element(stop).toBeEnabled();
   });
@@ -65,6 +65,67 @@ describe("per-subagent Stop", () => {
     expect(add).toHaveBeenCalledWith(
       expect.objectContaining({ type: "error", description: "That subagent is not running." }),
     );
+  });
+
+  it("leads the row in place of the agent icon and keeps the row collapsed when clicked", async () => {
+    const onStop = vi.fn(() => Promise.resolve());
+    await render(
+      <SubagentsCard
+        agents={[agent("a", { model: "claude-opus-5-5", lastToolName: "Bash" })]}
+        nowIso={NOW}
+        onStopSubagent={onStop}
+      />,
+    );
+    const row = document.querySelector<HTMLElement>('[data-subagent-row="claudeAgent:thread:1:a"]');
+    const stop = row?.querySelector<HTMLElement>("[data-subagent-stop]");
+    const name = row?.querySelector<HTMLElement>("[data-subagent-name]");
+    expect(stop).toBeTruthy();
+    expect(
+      row?.querySelector("[data-subagent-leading]")?.getAttribute("data-subagent-leading"),
+    ).toBe("stop");
+    // Leading slot: Stop sits left of the name, ahead of the model chip.
+    expect(stop!.getBoundingClientRect().right).toBeLessThanOrEqual(
+      name!.getBoundingClientRect().left,
+    );
+    const toggle = page.getByRole("button", { name: "Details for Subject a" });
+    await page.getByRole("button", { name: "Stop Subject a" }).click();
+    expect(onStop).toHaveBeenCalledTimes(1);
+    await expect.element(toggle).toHaveAttribute("aria-expanded", "false");
+    await toggle.click();
+    await expect.element(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("turns red and explains itself in a tooltip on hover", async () => {
+    const screen = await render(
+      <SubagentsCard agents={[agent("a")]} nowIso={NOW} onStopSubagent={() => Promise.resolve()} />,
+    );
+    const stop = page.getByRole("button", { name: "Stop Subject a" });
+    await expect.element(stop).toHaveClass(/hover:text-red-600/);
+    await expect.element(stop).toHaveClass(/\[:hover,\[data-pressed\]\]:bg-red-500\/10/);
+    // The ghost variant's accent hover background is replaced, not stacked under red.
+    await expect.element(stop).not.toHaveClass(/\[:hover,\[data-pressed\]\]:bg-accent/);
+    await stop.hover();
+    await expect.element(page.getByText("Stop Subject a", { exact: true })).toBeVisible();
+    // Unmount through React so the tooltip portal is removed before the body is cleared.
+    await screen.unmount();
+  });
+
+  it("aligns names: rows that cannot be stopped keep the agent icon in the same slot", async () => {
+    await render(
+      <SubagentsCard
+        agents={[agent("a"), agent("done", { status: "completed" })]}
+        nowIso={NOW}
+        onStopSubagent={() => Promise.resolve()}
+      />,
+    );
+    await page.getByRole("button", { name: /Show 1 more/ }).click();
+    const names = [...document.querySelectorAll<HTMLElement>("[data-subagent-name]")];
+    expect(names).toHaveLength(2);
+    expect(names[0]!.getBoundingClientRect().left).toBe(names[1]!.getBoundingClientRect().left);
+    const doneRow = document.querySelector('[data-subagent-row="claudeAgent:thread:1:done"]');
+    expect(
+      doneRow?.querySelector("[data-subagent-leading]")?.getAttribute("data-subagent-leading"),
+    ).toBe("icon");
   });
 
   it("offers Stop only for fresh running rows of a provider that supports it", async () => {

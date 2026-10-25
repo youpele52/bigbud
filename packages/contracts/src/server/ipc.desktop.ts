@@ -1,3 +1,5 @@
+import type { OwnershipRecoveryState } from "./ipc.ownershipRecovery";
+
 export type DesktopBackendStartupStatus =
   | "idle"
   | "starting"
@@ -47,13 +49,34 @@ export interface DesktopBackendDevelopmentDiagnostics {
 }
 
 export interface DesktopBackendStartupState {
+  readonly ownershipRecovery?: OwnershipRecoveryState;
   readonly generation: number;
   readonly startedAt: number;
   readonly status: DesktopBackendStartupStatus;
+  /** Whole-percent progress of local data migration while `status` is `upgrading`, when known. */
+  readonly progressPercent?: number | undefined;
   readonly failureReason?: DesktopBackendStartupFailureReason | undefined;
   readonly diagnostics?: DesktopBackendStartupDiagnostics | undefined;
   /** Present only in an unpackaged Electron development runtime. */
   readonly developmentDiagnostics?: DesktopBackendDevelopmentDiagnostics | undefined;
+}
+
+/** Operating-system hints from Electron main that let the renderer reconnect immediately. */
+export type DesktopConnectivitySignalKind =
+  | "suspend"
+  | "resume"
+  | "lock-screen"
+  | "unlock-screen"
+  | "online"
+  | "offline";
+
+export interface DesktopConnectivitySignal {
+  readonly kind: DesktopConnectivitySignalKind;
+  /** Increases per published signal within one app run, so windows can drop duplicates. */
+  readonly sequence: number;
+  readonly occurredAt: number;
+  /** Latest main-process `net.isOnline()` result, or null before the first poll. */
+  readonly online: boolean | null;
 }
 
 export type DesktopUpdateStatus =

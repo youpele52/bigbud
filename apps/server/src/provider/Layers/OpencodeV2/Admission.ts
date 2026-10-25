@@ -16,13 +16,26 @@ export class V2AdmissionUnconfirmed extends Schema.TaggedErrorClass<V2AdmissionU
   { detail: Schema.String },
 ) {}
 
-export type V2AdmissionError = ProviderTurnAdmissionError | V2AdmissionUnconfirmed;
+/** Only preparation before durable dispatch intent may carry this classification. */
+export class V2PreparationFailed extends Schema.TaggedErrorClass<V2PreparationFailed>()(
+  "V2PreparationFailed",
+  { detail: Schema.String },
+) {}
+
+export type V2AdmissionError =
+  | ProviderTurnAdmissionError
+  | V2AdmissionUnconfirmed
+  | V2PreparationFailed;
 
 export interface V2AdmissionRequest {
   readonly identity: ProviderTurnAdmissionIdentity;
   readonly binding: ProviderTurnAdmissionBinding;
   readonly fingerprint: string;
   readonly isCurrent: () => boolean;
+  /** Non-executing preparation may be retried only against the same immutable reservation. */
+  readonly prepare?: (
+    row: ProviderTurnAdmission,
+  ) => Effect.Effect<void, V2AdmissionUnconfirmed | V2PreparationFailed>;
   /** Native ack/observed projection must correlate exact session and admission material. */
   readonly dispatch: (row: ProviderTurnAdmission) => Effect.Effect<boolean, V2AdmissionUnconfirmed>;
   readonly reconcile: (
@@ -83,6 +96,11 @@ export const admitV2Turn = Effect.fn("admitV2Turn")(function* (request: V2Admiss
       );
     return accepted;
   }
+  if (request.prepare) yield* request.prepare(row);
+  if (!request.isCurrent())
+    return yield* new V2AdmissionUnconfirmed({
+      detail: "V2 preparation owner changed before prompt dispatch; reservation retained.",
+    });
   row = yield* journal.transition(row, "dispatch-intent", new Date().toISOString());
   // Any failure after this durable write, including cancellation before RPC, stays uncertain.
   if (!request.isCurrent())

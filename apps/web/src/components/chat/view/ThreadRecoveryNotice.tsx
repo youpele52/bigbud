@@ -49,11 +49,7 @@ export function ThreadRecoveryNotice({
     () => deriveThreadRecoveryNotice({ request: turnStartRequest, clock, failure, nowMs }),
     [clock, failure, nowMs, turnStartRequest],
   );
-  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "recovery", [
-    turnStartRequest,
-    failure,
-    notice,
-  ]);
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "recovery");
 
   useEffect(() => {
     if (nextChangeInMs === null) return;

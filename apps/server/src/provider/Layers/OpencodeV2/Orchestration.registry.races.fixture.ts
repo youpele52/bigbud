@@ -1,4 +1,9 @@
 import { randomBytes, sign } from "node:crypto";
+import {
+  v2ScopedNativeSessionPrefix,
+  v2CompactNativeSessionId,
+} from "./Orchestration.sessionIdentity.ts";
+import { v2NativeRegistrationMetadata } from "./Runtime.registration.ts";
 import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 import { makeV2ThreadPluginHost } from "./Orchestration.plugin.host.fixture.ts";
 import { openV2ThreadTransport } from "./Orchestration.transport.ts";
@@ -76,15 +81,24 @@ export async function makeV2RegistryRaceFixture() {
         bigbud_provider: "opencodeV2",
         bigbud_thread: owner.threadId,
         bigbud_storage: owner.storageIdentity,
+        ...v2NativeRegistrationMetadata({
+          registrationFamily: "scoped",
+          profileIssuer: owner.issuer,
+        }),
       },
     };
   };
   const plugin = (await import(app.artifact.entryUri)).default;
-  const dispose = await plugin.setup(host.context);
-  function owner(index: number) {
+  let dispose = await plugin.setup(host.context);
+  function owner(index: number, namespaced: boolean | "compact" = false) {
     const value: V2ThreadOwner = {
       ...base,
-      nativeSessionId: `native-${index}`,
+      nativeSessionId:
+        namespaced === "compact"
+          ? v2CompactNativeSessionId(app.artifact.issuer, index.toString(16).padStart(64, "0"))
+          : namespaced
+            ? `${v2ScopedNativeSessionPrefix(app.artifact.issuer)}${index.toString(16).padStart(64, "0")}`
+            : `native-${index}`,
       threadId: `thread-${index}`,
       callbackUrl: transport.url,
       callbackToken: randomBytes(32).toString("hex"),
@@ -120,6 +134,10 @@ export async function makeV2RegistryRaceFixture() {
     host,
     owner,
     envelope,
+    async restart() {
+      await dispose();
+      dispose = await plugin.setup(host.context);
+    },
     holdProof: (run?: () => Promise<void>) => {
       holdProof = run;
     },

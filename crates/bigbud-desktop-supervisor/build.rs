@@ -1,4 +1,5 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    println!("cargo:rerun-if-changed=../../protocol/desktop-supervisor/process_identity.proto");
     println!("cargo:rerun-if-changed=../../protocol/desktop-supervisor/v1.proto");
     println!("cargo:rerun-if-changed=../../protocol/system-monitor/v1.proto");
     println!("cargo:rerun-if-changed=../../protocol/system-monitor/app.proto");
@@ -14,6 +15,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .compile_protos(
             &[
                 "../../protocol/desktop-supervisor/v1.proto",
+                "../../protocol/desktop-supervisor/process_identity.proto",
                 "../../protocol/system-monitor/v1.proto",
             ],
             &["../../protocol"],

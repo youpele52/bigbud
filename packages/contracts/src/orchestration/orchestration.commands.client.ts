@@ -32,6 +32,7 @@ import {
   ClientThreadMessageSubmitCommand,
   ThreadMessageSubmitCommand,
 } from "./orchestration.commands.client.messageSubmit";
+import { ThreadRecoveryResolveCommand } from "./orchestration.recovery";
 
 export const ProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),
@@ -336,6 +337,7 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadPathCheckpointCaptureCommand,
   ThreadPathCheckpointRestoreCommand,
   ThreadSessionStopCommand,
+  ThreadRecoveryResolveCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -369,5 +371,6 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadPathCheckpointCaptureCommand,
   ThreadPathCheckpointRestoreCommand,
   ThreadSessionStopCommand,
+  ThreadRecoveryResolveCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;

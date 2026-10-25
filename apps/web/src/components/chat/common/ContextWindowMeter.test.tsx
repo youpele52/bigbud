@@ -34,6 +34,7 @@ const BASE_USAGE = {
 
 function makeProps(overrides: Partial<React.ComponentProps<typeof ContextWindowMeter>> = {}) {
   return {
+    threadId: "thread-one",
     usage: BASE_USAGE,
     handoffAvailable: true,
     onUseHandoff: vi.fn(),

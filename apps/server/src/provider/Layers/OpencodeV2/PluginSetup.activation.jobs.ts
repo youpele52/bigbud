@@ -6,6 +6,10 @@ import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
 import { V2_NATIVE_CONTRACT_DIGEST } from "./NativeCompatibility.contract.ts";
 import { v2NativeProofMetadata } from "./NativeCompatibility.status.ts";
 import { runDetachedV2Caller } from "./Runtime.caller.ts";
+import {
+  v2ReadinessSetupReason,
+  type V2ReadinessFailure,
+} from "./Orchestration.readiness.failure.ts";
 import type { V2NativeRuntimeProof, V2NativeSemanticProfile } from "./NativeCompatibility.types.ts";
 
 export type V2ActivationState =
@@ -23,8 +27,10 @@ export type V2ActivationState =
   | "cancelled"
   | "deferred";
 export interface V2ActivationJobScope {
+  readonly readinessFailure?: V2ReadinessFailure;
   readonly root: string;
   readonly issuer: string;
+  readonly registrationId?: string;
   readonly transport: string;
   readonly generation: string;
   readonly digest: string;
@@ -65,6 +71,7 @@ interface Interest {
   detach: () => void;
 }
 interface Job {
+  readinessFailure?: V2ReadinessFailure;
   readonly id: string;
   readonly key: string;
   readonly scope: V2ActivationJobScope;
@@ -95,6 +102,7 @@ export class V2ActivationJobs {
     const key = JSON.stringify([
       scope.root,
       scope.issuer,
+      scope.registrationId,
       scope.transport,
       scope.generation,
       scope.consentRevision,
@@ -106,7 +114,8 @@ export class V2ActivationJobs {
         if (
           !existing.settled &&
           existing.scope.root === scope.root &&
-          existing.scope.issuer === scope.issuer
+          existing.scope.issuer === scope.issuer &&
+          existing.scope.registrationId === scope.registrationId
         )
           throw new Error("V2 conflicting activation proposal/physical writer remains owned.");
       if (this.jobs.size >= 32) {
@@ -128,6 +137,7 @@ export class V2ActivationJobs {
       const timer = setTimeout(() => controller.abort(), 300000);
       timer.unref();
       job = {
+        ...(scope.readinessFailure ? { readinessFailure: scope.readinessFailure } : {}),
         id,
         key,
         scope,
@@ -136,7 +146,14 @@ export class V2ActivationJobs {
         deadline,
         timer,
         interests: new Map(),
-        status: { jobId: id, state: "checking", desiredDigest: scope.digest },
+        status: {
+          jobId: id,
+          state: "checking",
+          desiredDigest: scope.digest,
+          ...(scope.readinessFailure
+            ? { reason: v2ReadinessSetupReason(scope.readinessFailure)! }
+            : {}),
+        },
         promise: Promise.resolve(),
         settled: false,
       };
@@ -148,6 +165,13 @@ export class V2ActivationJobs {
     }
     job.permit.assertCurrent();
     job.controller.signal.throwIfAborted();
+    if (!job.readinessFailure && scope.readinessFailure) {
+      job.readinessFailure = scope.readinessFailure;
+      job.status = {
+        ...job.status,
+        reason: v2ReadinessSetupReason(job.readinessFailure, job.status.reason)!,
+      };
+    }
     if (job.interests.size >= 32) throw new Error("V2 activation interest capacity reached.");
     const interestId = randomBytes(16).toString("hex"),
       owned = job;
@@ -217,6 +241,7 @@ export class V2ActivationJobs {
       !job ||
       job.scope.root !== scope.root ||
       job.scope.issuer !== scope.issuer ||
+      job.scope.registrationId !== scope.registrationId ||
       job.scope.transport !== scope.transport ||
       job.scope.generation !== scope.generation ||
       job.scope.consentRevision !== scope.consentRevision
@@ -278,7 +303,9 @@ export class V2ActivationJobs {
                 jobId: job.id,
                 state,
                 desiredDigest: job.scope.digest,
-                ...(reason ? { reason } : {}),
+                ...(reason || job.readinessFailure
+                  ? { reason: v2ReadinessSetupReason(job.readinessFailure, reason)! }
+                  : {}),
                 ...(state === "waiting-for-idle" ? { retryAfter: 2000 } : {}),
               };
             },
@@ -315,10 +342,12 @@ export class V2ActivationJobs {
                   : ("incompatible" as const),
             }
           : {}),
-        reason:
+        reason: v2ReadinessSetupReason(
+          job.readinessFailure,
           error instanceof Error && error.message.startsWith("V2 ")
             ? error.message
             : "V2 activation did not verify; history/uncertain evidence was retained.",
+        )!,
       };
     } finally {
       clearTimeout(job.timer);

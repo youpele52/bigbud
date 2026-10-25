@@ -169,7 +169,10 @@ switch (command) {
     });
     const out =
       flag("--out") ??
-      path.join(repoRoot, "docs/validation/opencode-v2-native-qualification-2.0.29-evidence.json");
+      path.join(
+        repoRoot,
+        `docs/validation/opencode-v2-native-qualification-${TARGET.nativeVersion}-evidence.json`,
+      );
     await writeJson(out, packet);
     console.log(reviewsFile ? `Evidence packet written: ${out}` : `Unreviewed packet: ${out}`);
     break;

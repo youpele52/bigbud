@@ -98,10 +98,16 @@ describe("Right panel navigation", () => {
         .map((item) => item.element().textContent);
       expect(menuLabels.indexOf("Usage")).toBeGreaterThanOrEqual(0);
       expect(menuLabels.indexOf("Usage")).toBeLessThan(menuLabels.indexOf("System"));
-      await page.getByRole("menuitem", { name: "Usage", exact: true }).click();
+      const usageMenuItem = page.getByRole("menuitem", { name: "Usage", exact: true });
+      expect(
+        usageMenuItem.element().querySelector("svg.lucide-chart-no-axes-combined"),
+      ).not.toBeNull();
+      await usageMenuItem.click();
       expect(useRightPanelTabsStore.getState().activeTabId).toBe("usage");
       expect(useRightPanelTabsStore.getState().openTabs).toEqual(["files", "system", "usage"]);
-      await expect.element(page.getByRole("button", { name: "Usage", exact: true })).toBeVisible();
+      const usageTab = page.getByRole("button", { name: "Usage", exact: true });
+      await expect.element(usageTab).toBeVisible();
+      expect(usageTab.element().querySelector("svg.lucide-chart-no-axes-combined")).not.toBeNull();
       await page.getByRole("button", { name: "Files", exact: true }).click();
       expect(useRightPanelTabsStore.getState().activeTabId).toBe("files");
       await page.getByRole("button", { name: "Usage", exact: true }).click();

@@ -7,6 +7,7 @@ import type { V2ActivationParticipant } from "./PluginSetup.activation.ts";
 import type { V2PluginSetupArtifact } from "./PluginSetup.record.ts";
 import { makeV2AutomaticPluginSetup } from "./PluginSetup.native.ts";
 import { assertV2PluginUpgradeIdle } from "./PluginSetup.upgrade.ts";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { verifyV2ThreadTools } from "./Orchestration.readiness.ts";
 import {
   verifyV2NativeEligibility,
@@ -79,7 +80,12 @@ async function activationAttempt(
     );
     job.assertCurrent();
     signal.throwIfAborted();
-    await assertV2NativeRuntimePolicy(job.connection.client, proof, signal);
+    await assertV2NativeRuntimePolicy(
+      job.connection.client,
+      proof,
+      signal,
+      v2ThreadRegistration(proposal.artifact),
+    );
     job.assertCurrent();
     signal.throwIfAborted();
     proof.assertCurrent();

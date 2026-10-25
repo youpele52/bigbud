@@ -83,6 +83,7 @@ export function startupLayer(
         Layer.succeed(ProviderRegistry, {
           getProviders: Effect.succeed([]),
           refresh: () => Effect.succeed([]),
+          refreshUsageLimits: Effect.succeed([]),
           streamChanges: Stream.empty,
           awaitFirstReadyProvider: Effect.succeed(Option.none()),
           openChanges: Effect.succeed(Stream.empty),

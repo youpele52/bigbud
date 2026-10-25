@@ -121,6 +121,9 @@ function encodeFrameValue(frame: DesktopSupervisorFrame): { field: number; bytes
       return { field: 15, bytes: writer.finish() };
     case "heartbeat":
       writer.fieldUint(1, frame.value.monotonicMillis);
+      if (frame.value.suspendedMillis !== undefined) {
+        writer.fieldUint(2, frame.value.suspendedMillis);
+      }
       return { field: 8, bytes: writer.finish() };
     case "metricsSnapshot":
       return { field: 10, bytes: writer.finish() };

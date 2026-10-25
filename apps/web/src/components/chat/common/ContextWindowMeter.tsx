@@ -17,6 +17,7 @@ function formatPercentage(value: number | null): string | null {
 }
 
 export function ContextWindowMeter(props: {
+  threadId: string;
   usage: ContextWindowSnapshot;
   handoffAvailable: boolean;
   onUseHandoff: () => void;
@@ -129,6 +130,7 @@ export function ContextWindowMeter(props: {
           ) : null}
           {isOverWarningThreshold && (
             <StatusBanner
+              dismissalKey={["thread", props.threadId, "context-window"]}
               variant="warning"
               icon={<TriangleAlertIcon />}
               className="mt-2"

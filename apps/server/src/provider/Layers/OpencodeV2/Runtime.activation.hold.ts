@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
+import { v2FamilyInteractionCount } from "./Runtime.family.interactions.state.ts";
 
 /** Why a retained execution reservation was not settled. Observability only: never authority. */
 export type V2SettlementHoldReason =
@@ -15,6 +16,10 @@ export type V2SettlementHoldReason =
   | "unresolved-journal"
   | "binding"
   | "native-active"
+  | "family-persistence"
+  | "family-live"
+  | "family-callbacks"
+  | "family-interactions"
   /** The reservation/token changed while the exact-session drain read was in flight. */
   | "callbacks";
 
@@ -22,14 +27,19 @@ export type V2SettlementHoldReason =
 export function v2SettlementBusyReason(
   runtime: OpencodeV2Runtime,
   owner: V2RuntimeSession,
+  includeAdmission = true,
 ): V2SettlementHoldReason | undefined {
   if (runtime.mutations.busyCount()) return "mutations-busy";
-  if (owner.admissionInFlight) return "admission-in-flight";
+  if (includeAdmission && owner.admissionInFlight) return "admission-in-flight";
   if (owner.coding?.busyCount?.()) return "coding-busy";
   if (owner.publicationUnconfirmed) return "publication-unconfirmed";
   if (owner.finalEvents?.length) return "final-events";
   if (owner.finalPublication?.state === "pending") return "final-publication-pending";
   if (owner.pendingInteractions?.size) return "pending-interactions";
+  if (owner.family?.persistenceUncertain) return "family-persistence";
+  if (owner.familyControl?.busyCount?.()) return "family-callbacks";
+  if (v2FamilyInteractionCount(owner)) return "family-interactions";
+  if (owner.family?.live) return "family-live";
   return undefined;
 }
 

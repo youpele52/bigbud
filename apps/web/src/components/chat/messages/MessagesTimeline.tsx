@@ -5,10 +5,8 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../../utils/scroll";
 import { deriveChatReaderPosition } from "../scroller/chatScroll.readerPosition.logic";
 import { deriveChatScrollRowsFromTimeline } from "../scroller/chatScroll.timelineRows";
-import {
-  deriveMessagesTimelineRows,
-  estimateMessagesTimelineRowHeight,
-} from "./MessagesTimeline.logic";
+import { deriveMessagesTimelineRows } from "./MessagesTimeline.logic";
+import { estimateMessagesTimelineRowHeight } from "./MessagesTimeline.estimate";
 import {
   NonVirtualizedMessagesTimelineRows,
   VirtualizedMessagesTimelineRows,
@@ -20,6 +18,7 @@ import {
 } from "./MessagesTimeline.virtualization";
 import { measureVisibleTimelineElement, useTimelineWidth } from "./MessagesTimeline.measurement";
 import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
+import { CHAT_COLUMN_CLASS_NAME } from "../common/chatColumn";
 
 export const MessagesTimeline = memo(function MessagesTimeline({
   emptyChatGreeting,
@@ -36,6 +35,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   nowIso,
   expandedWorkGroups,
   onToggleWorkGroup,
+  activityAccordionOpenById,
+  onSetActivityAccordionOpen,
   changedFilesExpandedByTurnId,
   onSetChangedFilesExpanded,
   onOpenTurnDiff,
@@ -44,6 +45,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   isRevertingCheckpoint,
   onImageExpand,
   markdownCwd,
+  preferredProvider,
   resolvedTheme,
   timestampFormat,
   workspaceRoot,
@@ -135,6 +137,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       if (!row) return 96;
       return estimateMessagesTimelineRowHeight(row, {
         expandedWorkGroups,
+        activityAccordionOpenById,
         timelineWidthPx,
         turnDiffSummaryByAssistantMessageId,
       });
@@ -269,6 +272,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         estimateRowHeight: (row) =>
           estimateMessagesTimelineRowHeight(row, {
             expandedWorkGroups,
+            activityAccordionOpenById,
             timelineWidthPx,
             turnDiffSummaryByAssistantMessageId,
           }),
@@ -289,6 +293,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       scrollContainer.removeEventListener("scroll", publishReaderPosition);
     };
   }, [
+    activityAccordionOpenById,
     expandedWorkGroups,
     onReaderPositionChange,
     rowVirtualizer,
@@ -310,7 +315,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     <div
       ref={timelineRootRef}
       data-timeline-root="true"
-      className="mx-auto w-full min-w-0 max-w-3xl overflow-x-hidden"
+      className={`${CHAT_COLUMN_CLASS_NAME} overflow-x-hidden`}
     >
       {virtualizedRowCount > 0 && (
         <div className="relative" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
@@ -320,6 +325,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             measureElement={rowVirtualizer.measureElement}
             expandedWorkGroups={expandedWorkGroups}
             onToggleWorkGroup={onToggleWorkGroup}
+            activityAccordionOpenById={activityAccordionOpenById}
+            onSetActivityAccordionOpen={onSetActivityAccordionOpen}
             completionSummary={completionSummary}
             turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
             changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
@@ -330,6 +337,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
             isRevertingCheckpoint={isRevertingCheckpoint}
             onImageExpand={onImageExpand}
             markdownCwd={markdownCwd}
+            preferredProvider={preferredProvider}
             resolvedTheme={resolvedTheme}
             nowIso={nowIso}
             timestampFormat={timestampFormat}
@@ -350,6 +358,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         rows={nonVirtualizedRows}
         expandedWorkGroups={expandedWorkGroups}
         onToggleWorkGroup={onToggleWorkGroup}
+        activityAccordionOpenById={activityAccordionOpenById}
+        onSetActivityAccordionOpen={onSetActivityAccordionOpen}
         completionSummary={completionSummary}
         turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
         changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
@@ -360,6 +370,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         isRevertingCheckpoint={isRevertingCheckpoint}
         onImageExpand={onImageExpand}
         markdownCwd={markdownCwd}
+        preferredProvider={preferredProvider}
         resolvedTheme={resolvedTheme}
         nowIso={nowIso}
         timestampFormat={timestampFormat}

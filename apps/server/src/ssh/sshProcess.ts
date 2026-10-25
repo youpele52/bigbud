@@ -4,7 +4,8 @@ import {
   type ProcessRunResult,
 } from "../utils/processRunner.ts";
 import { buildSshCommandInvocation } from "./sshCommand.ts";
-import { assertSshExecutionTargetReady } from "./sshVerification.ts";
+import { assertSshExecutionTargetReadyAsync } from "./sshVerification.ts";
+import { inspectSshHostTrust, inspectSshHostTrustOnFailure } from "./sshHostTrust.ts";
 
 export interface RunSshCommandInput {
   readonly executionTargetId: string | null | undefined;
@@ -22,14 +23,20 @@ export interface RunSshCommandInput {
 }
 
 export async function runSshCommand(input: RunSshCommandInput): Promise<ProcessRunResult> {
-  assertSshExecutionTargetReady(input.executionTargetId);
+  await assertSshExecutionTargetReadyAsync(input.executionTargetId);
   const invocation = buildSshCommandInvocation(input);
-  return runProcess(invocation.command, invocation.args, {
+  const result = await runProcess(invocation.command, invocation.args, {
     ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
     ...(input.allowNonZeroExit !== undefined ? { allowNonZeroExit: input.allowNonZeroExit } : {}),
     ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
     ...(input.maxBufferBytes !== undefined ? { maxBufferBytes: input.maxBufferBytes } : {}),
     ...(input.outputMode !== undefined ? { outputMode: input.outputMode } : {}),
     ...(input.onStdoutChunk ? { onStdoutChunk: input.onStdoutChunk } : {}),
-  });
+  }).catch((error: unknown) =>
+    inspectSshHostTrustOnFailure(input.executionTargetId ?? "local", error),
+  );
+  if (/host key verification failed/i.test(result.stderr)) {
+    await inspectSshHostTrust(input.executionTargetId ?? "local");
+  }
+  return result;
 }

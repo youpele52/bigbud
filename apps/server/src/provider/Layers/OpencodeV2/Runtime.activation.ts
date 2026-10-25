@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { isDeepStrictEqual } from "node:util";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession } from "./Runtime.types.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 import { v2Request } from "./Client.ts";
@@ -6,6 +7,7 @@ import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeMutations } from "./Runtime.mutations.ts";
 import { currentV2CallerSignal, assertV2CallerCurrent } from "./Runtime.caller.ts";
 import { captureV2OperationAuthority } from "./Client.guard.ts";
+import { refreshV2FamilyDrain } from "./Runtime.family.drain.ts";
 import {
   runInV2Settlement,
   v2SettlementBusyReason,
@@ -23,11 +25,13 @@ export async function awaitV2RuntimeReady(
   directory: string,
   signal: AbortSignal | undefined,
   hidden: boolean,
+  identity?: import("./Orchestration.selection.ts").V2SessionRegistrationIdentity,
 ) {
   assertV2CallerCurrent();
   const caller = currentV2CallerSignal();
   if (caller) signal = AbortSignal.any([caller, ...(signal ? [signal] : [])]);
-  if (options.activation) return options.activation.awaitReady(client, directory, signal, hidden);
+  if (options.activation)
+    return options.activation.awaitReady(client, directory, signal, hidden, identity);
   if (!hidden) await options.threadToolsPreflight?.(client, directory, signal);
   assertV2CallerCurrent();
   return undefined;
@@ -102,7 +106,11 @@ async function settleV2RuntimeReservationOnce(
 ): Promise<V2SettlementHoldReason | undefined> {
   const activation = owner.activation,
     token = activation?.token;
-  if (!activation || !token) return undefined;
+  if (!activation || !token) {
+    owner.backgroundClosure?.assertCurrent();
+    delete owner.backgroundClosure;
+    return undefined;
+  }
   const authority = captureV2OperationAuthority();
   const epoch = owner.epoch,
     dirty = owner.dirtyGeneration,
@@ -111,6 +119,11 @@ async function settleV2RuntimeReservationOnce(
   const validate = () => {
     authority.assertCurrent();
     owner.consentPermit?.assertCurrent();
+    if (owner.backgroundClosure) {
+      if (owner.backgroundClosure.turnId !== owner.row?.turnId)
+        throw new Error("V2 background settlement turn changed; reservation retained.");
+      owner.backgroundClosure.assertCurrent();
+    }
     if (
       owner.stopped ||
       runtime.sessions.get(owner.threadId) !== owner ||
@@ -131,9 +144,11 @@ async function settleV2RuntimeReservationOnce(
     validate();
   }
   const busy = () => v2SettlementBusyReason(runtime, owner);
+  await refreshV2FamilyDrain(owner, validate);
   const held = busy();
   if (held) return held;
-  if (owner.row && (owner.row.state !== "terminal" || !owner.terminalDelivered))
+  const reserved = row?.state === "reserved";
+  if (row && !reserved && (row.state !== "terminal" || !owner.terminalDelivered))
     return "row-not-terminal";
   const unresolved = await Effect.runPromise(
     runtime.options.journal.listBoundPage({
@@ -143,7 +158,12 @@ async function settleV2RuntimeReservationOnce(
     }),
   );
   validate();
-  if (unresolved.length) return "unresolved-journal";
+  // A reservation proves no prompt dispatch intent exists. Keep it intact for exact retry;
+  // discharge only its physical setup token, never an unknown or different admission.
+  if (
+    reserved ? unresolved.length !== 1 || !isDeepStrictEqual(unresolved[0], row) : unresolved.length
+  )
+    return "unresolved-journal";
   const binding = runtime.options.sharedBindings
     ? await Effect.runPromise(runtime.options.sharedBindings.find(owner.threadId))
     : undefined;
@@ -164,6 +184,25 @@ async function settleV2RuntimeReservationOnce(
   );
   validate();
   if (active[owner.native.id]) return "native-active";
+  if (reserved || owner.familyControl?.nativeReceipt) {
+    const inbox = await v2Request("family activation input drain", (signal) =>
+      owner.lease.process.client.session.inbox.list({ sessionID: owner.native.id }, { signal }),
+    );
+    validate();
+    if (inbox.length) return "native-active";
+  }
+  await refreshV2FamilyDrain(owner, validate);
+  if (reserved) {
+    const latest = await Effect.runPromise(
+      runtime.options.journal.listBoundPage({
+        threadId: owner.threadId,
+        limit: 2,
+        unresolvedOnly: true,
+      }),
+    );
+    validate();
+    if (latest.length !== 1 || !isDeepStrictEqual(latest[0], row)) return "unresolved-journal";
+  }
   if (owner.activation !== activation || activation.token !== token) return "callbacks";
   const late = busy();
   if (late) return late;
@@ -175,5 +214,6 @@ async function settleV2RuntimeReservationOnce(
   });
   activation.token = undefined;
   activation.phase = "settled";
+  delete owner.backgroundClosure;
   return undefined;
 }

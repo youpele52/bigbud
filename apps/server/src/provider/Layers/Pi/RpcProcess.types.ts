@@ -238,6 +238,7 @@ export interface PiRpcToolResult {
 export type PiRpcStdoutEvent =
   | { readonly type: "agent_start" }
   | { readonly type: "agent_end" }
+  | { readonly type: "agent_settled"; readonly aborted?: boolean }
   | {
       readonly type: "turn_start";
       readonly turnIndex?: number;
@@ -333,13 +334,15 @@ export interface PiRpcProcessOptions {
 }
 
 export interface PiRpcProcess {
+  readonly supportsAgentSettled?: boolean;
+  readonly supportsPromptDisposition?: boolean;
   readonly child: ChildProcessWithoutNullStreams;
   readonly command: string;
   readonly args: ReadonlyArray<string>;
   readonly cwd?: string;
   readonly stderrTail: () => string;
   readonly request: <TData = unknown>(
-    command: PiRpcRequestCommand,
+    command: PiRpcRequestCommand & { readonly id?: string },
     timeoutMs?: number,
   ) => Promise<PiRpcResponse<TData>>;
   readonly write: (command: PiRpcCommand) => Promise<void>;

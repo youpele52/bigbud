@@ -5,6 +5,7 @@ import type { OpencodeV2AdapterShape } from "../../Services/OpencodeV2/Adapter.t
 import { ProviderAdapterValidationError } from "../../Errors.ts";
 import type { V2ConsentAuthority } from "./Application.consent.ts";
 import { runAuthorizedV2 } from "./Client.guard.ts";
+import { withV2CallerAsyncContext } from "./Client.guard.async.ts";
 import { v2SharedRegistrationFile } from "./SharedService.registration.ts";
 import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
 
@@ -29,12 +30,14 @@ export function makeV2ApplicationInvoke<EnsureError>(
               : undefined,
             () =>
               Effect.runPromise(
-                ensure.pipe(
-                  Effect.flatMap((entry) =>
-                    Effect.suspend(() => {
-                      signal.throwIfAborted();
-                      return run(entry.adapter);
-                    }),
+                withV2CallerAsyncContext(
+                  ensure.pipe(
+                    Effect.flatMap((entry) =>
+                      Effect.suspend(() => {
+                        signal.throwIfAborted();
+                        return run(entry.adapter);
+                      }),
+                    ),
                   ),
                 ),
                 { signal },

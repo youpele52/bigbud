@@ -22,6 +22,8 @@ const agent = (id: string, overrides: Partial<OrchestrationTask> = {}): Orchestr
 });
 
 const longText = "Investigate the provider subagent pipeline end to end ".repeat(12);
+const statusDot = (id: string) =>
+  document.querySelector<HTMLElement>(`[data-subagent-row="${id}"] [data-subagent-status-dot]`);
 
 const agents: OrchestrationTask[] = [
   agent("root", {
@@ -67,14 +69,24 @@ describe("SubagentsCard", () => {
   for (const width of [375, 1280]) {
     it(`shows status, model, elapsed time and details without overflow at ${width}px`, async () => {
       await renderCard(width);
-      await expect
-        .element(page.getByText("Working", { exact: true }).first())
-        .toHaveClass(/text-blue-600/);
-      await expect.element(page.getByText("Done", { exact: true })).toHaveClass(/text-emerald-600/);
-      await expect.element(page.getByText("Failed", { exact: true })).toHaveClass(/text-red-600/);
-      await expect
-        .element(page.getByText("Last seen", { exact: true }))
-        .toHaveClass(/text-amber-600/);
+      const labelTones = [
+        ["working", /text-blue-600/],
+        ["done", /text-emerald-600/],
+        ["failed", /text-red-600/],
+        ["last seen", /text-amber-600/],
+      ] as const;
+      for (const [label, tone] of labelTones) {
+        await expect.element(page.getByText(label, { exact: true }).first()).toHaveClass(tone);
+      }
+      expect(statusDot("root")?.classList).toContain("bg-blue-500");
+      expect(statusDot("root")?.classList).toContain("animate-breathe");
+      expect(statusDot("root")?.classList).toContain("motion-reduce:animate-none");
+      expect(statusDot("done")?.classList).toContain("bg-emerald-500");
+      expect(statusDot("done")?.classList).not.toContain("animate-breathe");
+      expect(statusDot("failed")?.classList).toContain("bg-red-500");
+      expect(statusDot("failed")?.classList).not.toContain("animate-breathe");
+      expect(statusDot("stale")?.classList).toContain("bg-amber-500");
+      expect(statusDot("stale")?.classList).not.toContain("animate-breathe");
       await expect
         .element(page.getByTitle(/claude-sonnet-4-5-20250929/))
         .toHaveTextContent(/· high$/);
@@ -94,10 +106,38 @@ describe("SubagentsCard", () => {
     });
   }
 
+  it("animates the status dot while a subagent is starting", async () => {
+    await page.viewport(375, 800);
+    await render(<SubagentsCard agents={[agent("pending", { status: "pending" })]} />);
+    await expect.element(page.getByText("starting", { exact: true })).toHaveClass(/text-blue-600/);
+    expect(statusDot("pending")?.classList).toContain("animate-breathe");
+    expect(statusDot("pending")?.classList).toContain("motion-reduce:animate-none");
+  });
+
   it("nests a child under its parent task with indentation", async () => {
     await renderCard(1280);
     const child = document.querySelector<HTMLElement>('[data-subagent-row="child"]');
     expect(child?.getAttribute("aria-label")).toContain("child of Subject root");
     expect(child?.style.paddingLeft).toBe("18px");
+  });
+
+  it("shows the assignment and background mode before any progress, without expanding", async () => {
+    await page.viewport(375, 800);
+    await render(
+      <SubagentsCard
+        agents={[
+          agent("review", {
+            subagentType: "systematic-debugging-assistant",
+            description: "Diagnose restart and coexistence failures",
+            background: true,
+          }),
+        ]}
+      />,
+    );
+    await expect.element(page.getByText("Background", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByText("Diagnose restart and coexistence failures", { exact: true }))
+      .toBeVisible();
+    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(375);
   });
 });

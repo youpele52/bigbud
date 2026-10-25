@@ -22,6 +22,7 @@ import {
 import { assertV2CanonicalNativeApi } from "./NativeCompatibility.api.ts";
 import { parseV2CanonicalCandidate } from "./NativeCompatibility.version.ts";
 import { V2_NATIVE_CONTRACT_DIGEST } from "./NativeCompatibility.contract.ts";
+import { v2ThreadRegistration, type V2ThreadRegistration } from "./Orchestration.registration.ts";
 import {
   V2NativeCompatibilityError,
   type V2NativeRuntimeProof,
@@ -41,9 +42,15 @@ export async function verifyV2NativeEligibility(
   root: string,
   signal?: AbortSignal,
 ): Promise<V2NativeRuntimeProof> {
-  return (await verifyV2NativeReleaseEligibility(client, directory, root, signal)).bindBootstrap(
-    artifact,
-  );
+  return (
+    await verifyV2NativeReleaseEligibility(
+      client,
+      directory,
+      root,
+      signal,
+      v2ThreadRegistration(artifact),
+    )
+  ).bindBootstrap(artifact);
 }
 
 /** Internal fixture composition supplies a verifier explicitly; production has no env/settings bypass. */
@@ -56,7 +63,13 @@ export async function verifyV2NativeReadOnlyEligibility(
   eligibility: V2NativeEligibilityVerifier,
 ) {
   return eligibility === verifyV2NativeEligibility
-    ? verifyV2NativeReleaseEligibility(client, directory, root, signal)
+    ? verifyV2NativeReleaseEligibility(
+        client,
+        directory,
+        root,
+        signal,
+        v2ThreadRegistration(artifact),
+      )
     : eligibility(artifact, client, directory, root, signal);
 }
 
@@ -66,6 +79,7 @@ export async function verifyV2NativeReleaseEligibility(
   directory: string,
   root: string,
   signal?: AbortSignal,
+  selectedRegistration?: V2ThreadRegistration,
 ): Promise<V2NativeReleaseProof> {
   const context = currentV2RequestContext(),
     binding = v2NativeCompatibilityBinding(client);
@@ -187,12 +201,15 @@ export async function verifyV2NativeReleaseEligibility(
     nativeContractDigest: V2_NATIVE_CONTRACT_DIGEST,
     semanticProfile,
     ...(qualified ? { qualificationRecordId: qualified.id } : {}),
+    ...(qualified?.record.nativeFamilySourceDigest
+      ? { nativeFamilySourceDigest: qualified.record.nativeFamilySourceDigest }
+      : {}),
     consumedApiDigest,
     directory,
     root,
     consentRevision: context.permit.revision,
   });
-  await assertV2NativeSourcePolicy(sources, proof, signal);
+  await assertV2NativeSourcePolicy(sources, proof, signal, selectedRegistration);
   const final = await readV2SharedRegistration(binding.descriptor.registrationFile);
   assertCurrent();
   if (!sameV2SharedRegistration(registration, final))

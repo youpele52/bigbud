@@ -4,12 +4,12 @@
 
 Plan: [gap-closure plan](../plans/2026-10-15-opencode-v2-gap-closure-plan.md) §3.1–3.4. Result ledger to write afterwards: `docs/validation/opencode-v2-live-turn-<date>.md`.
 
-**Run this only after G1.** The [2.0.29 qualification](opencode-v2-native-qualification-2.0.29-2026-10-15.md) must be promoted, so the provider card shows green "ready" without "qualification is incomplete". Before that, steps 3.2.3 and the G3 exit cannot pass. A dry rehearsal of steps 1–2 is harmless, but do not send a billed turn for G3 until G1 is green.
+**Run this only after G1.** The qualification target is now [2.1.4](opencode-v2-native-qualification-2.1.4-2026-10-24.md) and must be promoted before steps 3.2.3 and the G3 exit can pass. Since 2026-10-24 the provider card no longer shows qualification: it is green "ready" for a service at or above 2.1.4 and amber "Update recommended" below it, so a green card alone does not prove G1. A dry rehearsal of steps 1–2 is harmless, but do not send a billed turn for G3 until G1 is green.
 
 ## 0. Ground rules
 
 - **Billed and user-operated.** Make one attempt per failure, never replay a prompt, and never retry setup automatically (see §4).
-- **The native daemon is yours.** Nothing here starts, stops or reconfigures your OpenCode 2.0.29 service, and nothing touches `~/.config/opencode`, `~/.local/share/opencode` or the keychain.
+- **The native daemon is yours.** Nothing here starts, stops or reconfigures your OpenCode 2.1.4 service, and nothing touches `~/.config/opencode`, `~/.local/share/opencode` or the keychain.
 - **Redaction.** Before pasting anything into the ledger, remove tokens, passwords, `authorization` headers, API keys, `service.json` contents, prompt and reply text beyond the tool names, and absolute paths outside the project.
 
 ## 1. Preconditions (§3.1)
@@ -60,12 +60,12 @@ node apps/server/dist/bin.mjs --base-dir ~/.bigbud-gap-closure --port 3790   # R
 
 Open the URL the server prints (normally `http://127.0.0.1:3790`). Keep this terminal: its log is evidence.
 
-### 1.3 Native OpenCode 2.0.29 is running and consistent
+### 1.3 Native OpenCode 2.1.4 is running and consistent
 
 These checks only read the registration and use the public info endpoint:
 
 - The registration file is `${XDG_STATE_HOME:-~/.local/state}/opencode/service.json`. Record only its `version` and `pid`, never the endpoint password.
-- In bigbud, **Settings → Providers → OpenCode → Show detected setup** shows the native version. It must equal the registration `version`, which must be `2.0.29`.
+- In bigbud, **Settings → Providers → OpenCode → Show detected setup** shows the native version. It must equal the registration `version`, which must be `2.1.4` (the qualification target).
 
 ### 1.4 Location
 
@@ -77,7 +77,7 @@ Record a timestamp for every step.
 
 1. Open **Settings → Providers → OpenCode** and enable it.
 2. Read and switch on **Trust native service execution**. This is the expanded `managed-thread-tools-v2` acknowledgement.
-3. Wait until **Show detected setup** reports `ready` for the project Location and for its parent directory (the second Location). Confirm the provider card is **green "ready"** with no "qualification is incomplete" suffix. Amber means G1 is not promoted: stop here.
+3. Wait until **Show detected setup** reports `ready` for the project Location and for its parent directory (the second Location). Confirm the provider card is **green "ready"** (amber "Update recommended" means the service is older than 2.1.4). The card no longer reflects qualification: confirm G1 by checking that `NativeCompatibility.qualification.registry.ts` holds the reviewed 2.1.4 darwin/arm64 record. If it is empty, G1 is not promoted: stop here.
 4. Start a new OpenCode chat. Choose a connected native model, not a free-tier "Big Pickle" model (HTTP 403, deferred D3). Record the provider and model names.
 5. Send a prompt asking the model to call `bigbud_thread_v1_get_thread_status` for this chat, then `bigbud_thread_v1_create_thread` for a small child task. For example: "Use get_thread_status on this chat, then create_thread a child chat titled 'G3 child' that lists the files in docs/plans."
 6. Confirm the child chat appears in the sidebar and starts running.
@@ -98,7 +98,7 @@ Record a timestamp for every step.
 | Signed receipt count       | Count only: `find <stateDir>/opencode-v2-thread-tools -type f \| wc -l` before step 2.5 and after step 2.9 (never print the contents). For canonical command receipts, use an online backup, never the live database: `sqlite3 <stateDir>/state.sqlite ".backup '/tmp/g3-state.sqlite'"`, then `sqlite3 -readonly /tmp/g3-state.sqlite "SELECT COUNT(*) FROM orchestration_command_receipts;"`, then delete `/tmp/g3-state.sqlite` | Counts increase for the tool calls                                                                                                                                                                  |
 | Qualification check        | Output of `thread-tools:native-qualification:check` from the same build (§1.2)                                                                                                                                                                                                                                                                                                                                                     | `qualifiedRecords: 1`, `qualified: true`                                                                                                                                                            |
 | Lock                       | `<stateDir>/backend.lock` (pid, port, startedAt)                                                                                                                                                                                                                                                                                                                                                                                   | Exactly one owner: your backend                                                                                                                                                                     |
-| Native identity            | Registration `version`/`pid` and the detected-setup version                                                                                                                                                                                                                                                                                                                                                                        | `2.0.29`, consistent before and after                                                                                                                                                               |
+| Native identity            | Registration `version`/`pid` and the detected-setup version                                                                                                                                                                                                                                                                                                                                                                        | `2.1.4`, consistent before and after                                                                                                                                                                |
 
 The ledger must state: "zero `prior physical admission remains owned` errors".
 

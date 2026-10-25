@@ -20,6 +20,7 @@ describe("user turn success threshold binding", () => {
           requestMessageId: id,
           turnId: TurnId.makeUnsafe("actual-turn"),
           createdAt: "2026-10-17T00:00:00.000Z",
+          providerIdle: false,
         }),
       );
       expect(dispatch).toHaveBeenCalledTimes(role === "user" ? 1 : 0);
@@ -29,7 +30,7 @@ describe("user turn success threshold binding", () => {
             activity: expect.objectContaining({
               kind: "text-generation.user-turn-bound",
               turnId: "actual-turn",
-              payload: { messageId: id },
+              payload: { messageId: id, providerIdle: false },
             }),
           }),
         );

@@ -8,7 +8,7 @@ import {
 } from "./SharedService.test.fixture.ts";
 import {
   assertV2SharedQualifiedVersion,
-  makeV2SharedUpdateNotice,
+  isV2SharedUpdateRecommended,
 } from "./SharedService.compatibility.ts";
 
 it("borrows a qualified older service with two bounded authenticated GETs only", async () => {
@@ -57,16 +57,11 @@ it("rejects an older stable V2 with missing APIs, not its patch number, without 
   }
 });
 
-it("emits one advisory warning per app session, not a permanent ready-status warning", () => {
-  const notice = makeV2SharedUpdateNotice();
-  expect(notice("2.0.26")).toBeUndefined();
-  expect(notice("2.0.24")).toMatchObject({
-    severity: "warning",
-    message: expect.stringContaining("remains usable"),
-  });
-  expect(notice("2.0.24")).toBeUndefined();
-  expect(notice("2.0.26")).toBeUndefined();
-  expect(notice("2.0.27")).toBeUndefined();
+it("recommends an update only below the supported client version", () => {
+  for (const older of ["2.0.24", "2.0.29", "2.0.99", "2.1.3"])
+    expect(isV2SharedUpdateRecommended(older)).toBe(true);
+  for (const current of ["2.1.4", "2.1.5", "2.1.10", "2.2.0", "2.999.0"])
+    expect(isV2SharedUpdateRecommended(current)).toBe(false);
 });
 
 it.each([

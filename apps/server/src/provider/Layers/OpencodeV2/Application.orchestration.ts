@@ -11,6 +11,7 @@ import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { V2ThreadImplementationRegistry } from "./Orchestration.implementation.ts";
 import { V2ImplementationSelection } from "./Orchestration.implementation.selection.ts";
 import { readV2RetainedArtifact } from "./Orchestration.artifact.retained.ts";
+import { assertV2SessionBootstrap } from "./Orchestration.selection.ts";
 import {
   verifyV2NativeEligibility,
   type V2NativeEligibilityVerifier,
@@ -84,6 +85,7 @@ export async function makeV2ApplicationOrchestration(
       const installed = session.activation
         ? await readV2RetainedArtifact(artifact, session.activation.stamp.bootstrapDigest)
         : artifact;
+      assertV2SessionBootstrap(installed, session.native.id);
       const info = await verifyV2ThreadTools(
         installed,
         session.lease.process.client,

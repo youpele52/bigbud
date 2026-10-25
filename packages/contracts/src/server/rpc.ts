@@ -10,6 +10,11 @@ import {
 
 import { WS_METHODS } from "../constants/websocket.constant";
 import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
+import {
+  WsSubscribeTerminalSessionRpc,
+  WsTerminalOutputAckRpc,
+  WsTerminalSearchRpc,
+} from "./rpc.terminalStream";
 import { WsTerminalWslDistributionsRpc } from "./rpc.terminalTargets";
 import {
   WsKanbanCreateRpc,
@@ -45,7 +50,11 @@ import {
   WsServerTriggerAutomationRpc,
   WsServerUpdateAutomationRpc,
 } from "./rpc.automation";
-import { WsServerGetUsageSummaryRpc } from "./rpc.usage";
+import { WsServerGetUsageSummaryRpc, WsServerRefreshUsageLimitsRpc } from "./rpc.usage";
+import {
+  WsServerGetWsConnectionDiagnosticsRpc,
+  WsServerReportWsConnectionDiagnosticsRpc,
+} from "./rpc.connectionDiagnostics";
 import { WsProviderStopSubagentRpc } from "./rpc.subagents";
 import {
   WsPluginsGitAvailabilityRpc,
@@ -119,6 +128,9 @@ import {
   WsServerRestartRemoteAgentRpc,
   WsServerGetRemoteAgentRestartStatusRpc,
 } from "./rpc.remoteAgent";
+import { WsServerListSshConfigHostsRpc } from "./rpc.sshConfig";
+import { WsServerListRemoteFoldersRpc } from "./rpc.remoteFolders";
+import { WsServerTrustSshHostRpc } from "./rpc.sshHostTrust";
 import {
   WsOrchestrationAcknowledgeDeliveryRpc,
   WsOrchestrationAcknowledgeDeliveryBaselineRpc,
@@ -181,9 +193,13 @@ export const WsRpcGroup = RpcGroup.make(
   WsPluginsUninstallRpc,
   WsServerGetConfigRpc,
   WsServerPingRpc,
+  WsServerReportWsConnectionDiagnosticsRpc,
+  WsServerGetWsConnectionDiagnosticsRpc,
   WsServerRefreshProvidersRpc,
   WsServerActivateCliProxyRpc,
   WsServerVerifyExecutionTargetRpc,
+  WsServerListSshConfigHostsRpc,
+  WsServerListRemoteFoldersRpc,
   WsServerInstallRemoteAgentRpc,
   WsServerConnectRemoteAgentRpc,
   WsServerGetRemoteAgentUpdateStatusRpc,
@@ -191,6 +207,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetRemoteAgentRestartStatusRpc,
   WsServerUnlockSshKeyRpc,
   WsServerUnlockSshPasswordRpc,
+  WsServerTrustSshHostRpc,
   WsServerUpsertKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
@@ -220,6 +237,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerTriggerAutomationRpc,
   WsServerListAutomationRunsRpc,
   WsServerGetUsageSummaryRpc,
+  WsServerRefreshUsageLimitsRpc,
   WsProviderStopSubagentRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
@@ -265,6 +283,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
   WsTerminalSnapshotRpc,
+  WsTerminalOutputAckRpc,
+  WsTerminalSearchRpc,
+  WsSubscribeTerminalSessionRpc,
   WsTerminalWslDistributionsRpc,
   WsTerminalResizeRpc,
   WsTerminalClearRpc,

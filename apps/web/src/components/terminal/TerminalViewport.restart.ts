@@ -13,7 +13,8 @@ export function makeTerminalRestartAction(input: {
   terminal: Terminal;
   readSnapshot: () => TerminalSessionSnapshot | null;
   disposed: () => boolean;
-  prepare: () => Delivery;
+  /** Installs the new lane and resolves once its stream is registered with the server. */
+  prepare: () => Promise<Delivery>;
   isCurrent: (delivery: Delivery) => boolean;
   onSnapshot: (snapshot: TerminalSessionSnapshot) => void;
   onFailure: (error: Error) => void;
@@ -30,7 +31,8 @@ export function makeTerminalRestartAction(input: {
         "Restart this terminal? This terminates its running shell and programs. Unsaved work in those programs may be lost. A fresh terminal will be started.",
       );
       if (!confirmed || input.disposed()) return;
-      delivery = input.prepare();
+      delivery = await input.prepare();
+      if (input.disposed() || !input.isCurrent(delivery)) return;
       const snapshot = await input.api.terminal.restart({
         threadId: previous.threadId,
         terminalId: previous.terminalId,

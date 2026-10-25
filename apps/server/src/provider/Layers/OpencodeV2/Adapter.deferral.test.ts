@@ -128,6 +128,7 @@ it.each(["completion", "revocation"] as const)(
                 const scope = {
                   root: directory,
                   issuer: app.artifact.issuer,
+                  registrationId: `bigbud.thread.v2.${app.artifact.issuer}`,
                   transport: descriptor.registrationFile,
                   generation: descriptor.generation,
                   consentRevision: coordinator.consent.currentRevision(),

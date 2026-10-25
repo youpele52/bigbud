@@ -1,0 +1,14 @@
+{
+  "abi": "opencode.native-family.v1",
+  "baseline": "9b4ec5714d481559990db0a816d5dec19541a814",
+  "sourceDigest": "63a01d5479a5934de6b18b3af0346e5bf3e571fb1f913f75721cd093418e28cb",
+  "patchSha256": "4b0e0d2b9731d6ab826af5b375b0eda8db1cb54cd9ea0315c35089f34289b9fd",
+  "ledgerSha256": "8d94234cdefef4bb8407e454395b476bfb5ba253d446ed27ac2b708d6b633d73",
+  "modules": {
+    "ledger.mjs": "8d94234cdefef4bb8407e454395b476bfb5ba253d446ed27ac2b708d6b633d73",
+    "receipt-shared.mjs": "1aaa4e3451b09f27b22fc947c91d35bea3563f6ed2f419f9cd7339b2201caaa2",
+    "family.receipt.mjs": "c71d9468751a91042c50468a6a94b64ee8cc77c6977295120fde5c3762e2dd77"
+  },
+  "evidenceKind": "source-unit-only",
+  "nativeQualification": false
+}

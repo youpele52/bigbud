@@ -27,6 +27,7 @@ export function resolveRuntimeTaskIdentity(input: {
   readonly incomingTaskId: RuntimeTaskId;
   readonly incomingKind?: OrchestrationTaskKind;
   readonly incomingNativeId?: string;
+  readonly provider?: string;
   readonly currentTasks: ReadonlyArray<OrchestrationTask>;
 }) {
   const nativeId = input.incomingNativeId ?? input.incomingTaskId;
@@ -39,7 +40,10 @@ export function resolveRuntimeTaskIdentity(input: {
   // identity may contribute classification or lifecycle state.
   const previousScoped = input.currentTasks.find((task) => task.id === scopedId);
   const kind = input.incomingKind ?? previousScoped?.kind ?? "task";
-  const id = kind === "providerSubagent" ? scopedId : input.incomingTaskId;
+  // Only V2 enrolled-family events can preserve a storage/root/native identity across epochs.
+  const durable =
+    input.provider === "opencodeV2" && /^bbv2-owned:[a-f0-9]{64}$/.test(input.incomingTaskId);
+  const id = kind === "providerSubagent" && !durable ? scopedId : input.incomingTaskId;
   return {
     id,
     kind,

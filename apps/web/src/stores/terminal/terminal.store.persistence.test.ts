@@ -48,3 +48,23 @@ describe("terminal layout hydration", () => {
     expect(result.terminalLabelOverridesByThreadId).toBe(old.terminalLabelOverridesByThreadId);
   });
 });
+
+describe("terminal persistence write gating", () => {
+  it("keeps every persisted slice identical across output-only event batches", () => {
+    const store = useTerminalStateStore;
+    const before = terminalPersistenceOptions.partialize(store.getState());
+    store.getState().applyTerminalEvents([
+      {
+        type: "output",
+        threadId: "thread-output-only",
+        terminalId: "default",
+        data: "frame",
+        createdAt: new Date(0).toISOString(),
+      },
+    ]);
+    const after = terminalPersistenceOptions.partialize(store.getState());
+    for (const key of Object.keys(before) as Array<keyof typeof before>) {
+      expect(after[key]).toBe(before[key]);
+    }
+  });
+});

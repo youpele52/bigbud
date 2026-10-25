@@ -20,6 +20,7 @@ import { composerSurfaceStyles } from "../../composer/ComposerSurface.styles";
 import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 import { deriveVisiblePromptSuggestion } from "../../../../logic/promptSuggestion.logic";
+import { describeThreadBackgroundWork } from "../ChatView.subagents.logic";
 
 import { useChatViewComposerActions } from "./ChatViewComposer.actions";
 import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
@@ -59,8 +60,12 @@ export function ChatViewComposer({
   const { keyVerified } = useSttStore();
   const attachmentPolicy = providerAttachmentPolicy(composer.selectedProvider);
   const promptHasText = base.prompt.trim().length > 0;
+  const backgroundWork = describeThreadBackgroundWork(base.activeThread);
   const isDefaultComposerState =
-    !interactions.pendingAction && thread.phase !== "running" && !thread.showPlanFollowUpPrompt;
+    !backgroundWork.hasBackgroundWork &&
+    !interactions.pendingAction &&
+    thread.phase !== "running" &&
+    !thread.showPlanFollowUpPrompt;
   const micReplacesSend =
     keyVerified === true && !base.composerSendState.hasSendableContent && isDefaultComposerState;
 
@@ -298,7 +303,6 @@ export function ChatViewComposer({
                 onTogglePlanCard={runtime.togglePlanCard}
                 onRuntimeModeChange={runtime.handleRuntimeModeChange}
               />
-
               <div
                 data-chat-composer-actions="right"
                 data-chat-composer-primary-actions-compact={
@@ -313,6 +317,7 @@ export function ChatViewComposer({
                   <>
                     {thread.activeContextWindow ? (
                       <ContextWindowMeter
+                        threadId={base.threadId}
                         usage={thread.activeContextWindow}
                         handoffAvailable={handoffAvailable}
                         onUseHandoff={onUseHandoffFromMeter}
@@ -360,6 +365,8 @@ export function ChatViewComposer({
                     compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
                     pendingAction={interactions.pendingAction}
                     isRunning={thread.activeSessionTurnRunning}
+                    hasBackgroundWork={backgroundWork.hasBackgroundWork}
+                    backgroundSubagentCount={backgroundWork.backgroundSubagentCount}
                     showPlanFollowUpPrompt={thread.showPlanFollowUpPrompt}
                     promptHasText={promptHasText}
                     isSendBusy={thread.isSendBusy}

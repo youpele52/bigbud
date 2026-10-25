@@ -2,6 +2,7 @@ import {
   type ExecutionTargetId,
   type MessageId,
   type OrchestrationTask,
+  type ProviderKind,
   type TurnId,
 } from "@bigbud/contracts";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
@@ -12,6 +13,10 @@ import { type ExpandedImagePreview } from "../common/ExpandedImagePreview";
 import { type TurnDiffSummary } from "../../../models/types";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
 import type { MarkdownAnchorClick } from "../../common/BaseMarkdown";
+import type {
+  ActivityAccordionOpenById,
+  SetActivityAccordionOpen,
+} from "../common/ActivityAccordion.state";
 
 export const MIN_ALWAYS_UNVIRTUALIZED_TAIL_ROWS = 8;
 export const RECENT_COMPLETED_TURNS_TO_KEEP_MOUNTED = 2;
@@ -31,6 +36,9 @@ export interface MessagesTimelineProps {
   nowIso: string;
   expandedWorkGroups: Record<string, boolean>;
   onToggleWorkGroup: (groupId: string) => void;
+  /** Persisted timeline accordion open state; see `MessagesTimeline.accordion.ts`. */
+  activityAccordionOpenById: ActivityAccordionOpenById;
+  onSetActivityAccordionOpen: SetActivityAccordionOpen;
   changedFilesExpandedByTurnId: Record<string, boolean>;
   onSetChangedFilesExpanded: (turnId: TurnId, expanded: boolean) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
@@ -39,6 +47,7 @@ export interface MessagesTimelineProps {
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   markdownCwd: string | undefined;
+  preferredProvider?: ProviderKind | undefined;
   resolvedTheme: "light" | "dark";
   timestampFormat: TimestampFormat;
   workspaceRoot: string | undefined;
@@ -66,6 +75,9 @@ export interface MessagesTimelineRowContentProps {
   row: MessagesTimelineRow;
   expandedWorkGroups: Record<string, boolean>;
   onToggleWorkGroup: (groupId: string) => void;
+  /** Persisted timeline accordion open state; see `MessagesTimeline.accordion.ts`. */
+  activityAccordionOpenById: ActivityAccordionOpenById;
+  onSetActivityAccordionOpen: SetActivityAccordionOpen;
   completionSummary: string | null;
   turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
   changedFilesExpandedByTurnId: Record<string, boolean>;
@@ -76,6 +88,7 @@ export interface MessagesTimelineRowContentProps {
   isRevertingCheckpoint: boolean;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   markdownCwd: string | undefined;
+  preferredProvider?: ProviderKind | undefined;
   resolvedTheme: "light" | "dark";
   nowIso: string;
   timestampFormat: TimestampFormat;

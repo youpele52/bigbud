@@ -16,19 +16,18 @@ import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 import { providerSubagentEvent } from "../../providerSubagents.ts";
-import { v2Request } from "./Client.ts";
+import { readV2ObservedChildren } from "./Runtime.subagents.read.ts";
+import { v2SubagentAssignments } from "./Runtime.subagents.assignment.ts";
 import { EventId } from "@bigbud/contracts/core/baseSchemas";
+import { invalidateV2OwnedFamily } from "./Runtime.family.observe.ts";
 import {
   V2_SUBAGENT_MAX_CHILDREN,
   demoteV2Subagent,
   hasV2SubagentCall,
   isV2SubagentLive,
   mapV2Subagent,
-  v2ObservedChildren,
   type V2SubagentContent,
 } from "./Runtime.subagents.map.ts";
-
-const OBSERVER_TIMEOUT_MS = 5_000;
 
 interface V2SubagentObserverState {
   hinted: boolean;
@@ -40,6 +39,8 @@ interface V2SubagentUpdate {
   readonly content: V2SubagentContent;
   /** Native `time.updated`, the provider revision that orders observations. */
   readonly updatedMs?: number;
+  /** Native idle/outcome revisions can advance without changing `time.updated`. */
+  readonly idleMs?: number;
 }
 
 const observers = new WeakMap<V2RuntimeSession, V2SubagentObserverState>();
@@ -56,6 +57,7 @@ function observerState(session: V2RuntimeSession): V2SubagentObserverState {
 /** EventHub child hint: request a bounded observer refresh through the coalesced repair queue. */
 export function noteV2ChildHint(runtime: OpencodeV2Runtime, session: V2RuntimeSession) {
   if (session.stopped) return;
+  invalidateV2OwnedFamily(session);
   observerState(session).hinted = true;
   runtime.scheduleRepair(session, false);
 }
@@ -93,25 +95,21 @@ function taskEvent(
   );
 }
 
-async function readChildren(session: V2RuntimeSession) {
-  const client = session.lease.process.client;
-  const listing = await v2Request(
-    "session.list",
-    (signal) =>
-      client.session.list(
-        { parentID: session.native.id, limit: V2_SUBAGENT_MAX_CHILDREN },
-        { signal },
-      ),
-    { timeoutMs: OBSERVER_TIMEOUT_MS },
-  );
-  const children = v2ObservedChildren(listing.data, session.native.id);
-  const active =
-    children.length === 0
-      ? {}
-      : await v2Request("session.active", (signal) => client.session.active({ signal }), {
-          timeoutMs: OBSERVER_TIMEOUT_MS,
-        });
-  return { children, active };
+/** Idle markers order terminal evidence independently of ordinary session metadata updates. */
+function isRegressedObservation(
+  previous: V2SubagentUpdate | undefined,
+  child: SessionInfo,
+  content: V2SubagentContent,
+) {
+  if (!previous) return false;
+  const updated = previous.updatedMs ?? -Infinity;
+  if (child.time.updated < updated) return true;
+  if (isV2SubagentLive(previous.content)) return false;
+  const ended = previous.idleMs ?? updated;
+  if (isV2SubagentLive(content)) return child.time.updated <= Math.max(updated, ended);
+  if (previous.idleMs !== undefined && child.time.idle === undefined) return true;
+  const nextEnded = child.time.idle ?? child.time.updated;
+  return nextEnded < ended || (nextEnded === ended && content.status !== previous.content.status);
 }
 
 function changedUpdates(
@@ -119,19 +117,67 @@ function changedUpdates(
   state: V2SubagentObserverState,
   children: ReadonlyArray<SessionInfo>,
   active: Parameters<typeof mapV2Subagent>[0]["active"],
+  assistants: readonly SessionMessageInfo[],
 ) {
   const updates: V2SubagentUpdate[] = [];
+  const observed = new Set<string>();
+  if (
+    new Set([...state.children.keys(), ...children.map((child) => child.id)]).size >
+    V2_SUBAGENT_MAX_CHILDREN
+  )
+    throw new Error("V2 retained child observation capacity exceeded.");
+  const assignments = v2SubagentAssignments(assistants, new Set(children.map((child) => child.id)));
   for (const child of children) {
-    if (!state.children.has(child.id) && state.children.size >= V2_SUBAGENT_MAX_CHILDREN) break;
-    const content = mapV2Subagent({
-      threadId: session.threadId,
-      epoch: session.epoch,
-      child,
-      active,
-      ...(session.row ? { turnId: session.row.turnId } : {}),
+    const previous = state.children.get(child.id);
+    const assignment = assignments.get(child.id);
+    // Only an exact launch call in this admitted turn proves first association.
+    // Discovery during a newer turn is not evidence that the newer turn launched it.
+    const turnId = previous?.content.turnId ?? (assignment ? session.row?.turnId : undefined);
+    const content = {
+      ...mapV2Subagent({
+        threadId: session.threadId,
+        epoch: session.epoch,
+        child,
+        active,
+        ...(turnId ? { turnId } : {}),
+      }),
+      // A later root turn need not contain the earlier child's native launch call.
+      // Preserve the exact correlated assignment instead of replacing it with a title.
+      ...(previous?.content.parentToolUseId
+        ? {
+            description: previous.content.description,
+            prompt: previous.content.prompt,
+            background: previous.content.background,
+            parentToolUseId: previous.content.parentToolUseId,
+          }
+        : {}),
+      ...assignment,
+    };
+    if (isRegressedObservation(previous, child, content)) continue;
+    observed.add(child.id);
+    if (
+      previous?.signature === JSON.stringify(content) &&
+      previous.updatedMs === child.time.updated &&
+      previous.idleMs === child.time.idle
+    )
+      continue;
+    updates.push({
+      content,
+      updatedMs: child.time.updated,
+      ...(child.time.idle !== undefined ? { idleMs: child.time.idle } : {}),
     });
-    if (state.children.get(child.id)?.signature === JSON.stringify(content)) continue;
-    updates.push({ content, updatedMs: child.time.updated });
+  }
+  // Listing absence is not deletion or settlement. Missing/regressed live children
+  // retain their last known status, but no longer claim fresh activity.
+  for (const [id, entry] of state.children) {
+    if (observed.has(id)) continue;
+    const content = demoteV2Subagent(entry.content);
+    if (content)
+      updates.push({
+        content,
+        ...(entry.updatedMs !== undefined ? { updatedMs: entry.updatedMs } : {}),
+        ...(entry.idleMs !== undefined ? { idleMs: entry.idleMs } : {}),
+      });
   }
   return updates;
 }
@@ -150,13 +196,19 @@ export async function observeV2Subagents(
   if (!hinted && !live && !hasV2SubagentCall(assistants)) return;
   let updates: V2SubagentUpdate[];
   try {
-    const { children, active } = await readChildren(session);
+    const { children, active } = await readV2ObservedChildren(session, validate);
     validate();
     session.lease.hub.noteChildren(
       session.native.id,
       children.map((child) => child.id),
     );
-    updates = changedUpdates(session, state, children, active);
+    updates = changedUpdates(
+      session,
+      state,
+      children.filter((child) => !session.family?.child(child.id)),
+      active,
+      assistants,
+    );
   } catch {
     try {
       validate();
@@ -166,7 +218,13 @@ export async function observeV2Subagents(
     updates = Array.from(state.children.values()).flatMap((entry) => {
       const content = demoteV2Subagent(entry.content);
       return content
-        ? [{ content, ...(entry.updatedMs !== undefined ? { updatedMs: entry.updatedMs } : {}) }]
+        ? [
+            {
+              content,
+              ...(entry.updatedMs !== undefined ? { updatedMs: entry.updatedMs } : {}),
+              ...(entry.idleMs !== undefined ? { idleMs: entry.idleMs } : {}),
+            },
+          ]
         : [];
     });
   }

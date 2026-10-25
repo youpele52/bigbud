@@ -7,16 +7,34 @@ import {
   type SubscriptionRetryDelay,
 } from "./wsTransport.retry";
 import { runWsStreamOnSession } from "./wsTransport.stream";
-import { recordWsProtocolRecovery } from "./wsConnectionState";
+import { recordWsProtocolRecovery, recordWsReconnectScheduled } from "./wsConnectionState";
 import {
   closeWsTransportSession,
   createWsTransportSession,
   type TransportSession,
 } from "./wsTransport.session";
-import { waitForExplicitWsRecovery, waitForWsRetry } from "./wsTransport.wait";
+import { waitForWsRetry } from "./wsTransport.wait";
 import { scopedWsFiniteRequest, withWsRequestDeadline } from "./wsTransport.request";
 import type { WsInitialApplicationDeadline } from "./wsTransport.initialValue";
-import { type WsProtocolLifecycleHandlers, type WsRpcProtocolClient } from "./protocol";
+import {
+  createWsConnectionControls,
+  type WsConnectionControls,
+  type WsProtocolLifecycleHandlers,
+  type WsRpcProtocolClient,
+} from "./protocol";
+import {
+  isUnknownRequestTagError,
+  isWsSubscriptionListenerFailure,
+  markWsSubscriptionListenerFailure,
+  WsSubscriptionCompletedError,
+  WsTransportDisconnectedError,
+  wsSubscriptionErrorCause,
+} from "./wsTransport.errors";
+import {
+  resolveWsProtocolRecoveryDelayMs,
+  WS_PROTOCOL_FAILURE_ESCALATION,
+  WsProtocolFailureWindow,
+} from "./wsTransport.protocolWindow";
 
 interface SubscribeOptions {
   readonly initialApplication?: WsInitialApplicationDeadline;
@@ -30,60 +48,11 @@ interface RequestOptions {
   readonly timeout?: Option.Option<Duration.Input>;
 }
 
+/** `down` means the socket closed and the transport is waiting to retry. */
+type WsLinkState = "connecting" | "open" | "down";
+
 const DEFAULT_SUBSCRIPTION_RETRY_DELAY_MS = Duration.millis(250);
 const NOOP: () => void = () => undefined;
-const SUBSCRIPTION_LISTENER_FAILURE_NAME = "WsSubscriptionListenerError";
-
-export class WsSubscriptionCompletedError extends Error {
-  constructor() {
-    super("Persistent WebSocket subscription completed unexpectedly.");
-    this.name = "WsSubscriptionCompletedError";
-  }
-}
-
-export class WsProtocolRecoveryExhaustedError extends Error {
-  constructor() {
-    super("WebSocket RPC recovery exhausted. Retry explicitly to reconnect.");
-    this.name = "WsProtocolRecoveryExhaustedError";
-  }
-}
-
-class WsSubscriptionListenerError extends Error {
-  readonly listenerCause: unknown;
-
-  constructor(cause: unknown) {
-    super(formatErrorMessage(cause));
-    this.name = SUBSCRIPTION_LISTENER_FAILURE_NAME;
-    this.listenerCause = cause;
-  }
-}
-
-export function markWsSubscriptionListenerFailure(error: unknown): unknown {
-  return isWsSubscriptionListenerFailure(error) ? error : new WsSubscriptionListenerError(error);
-}
-
-export function isWsSubscriptionListenerFailure(error: unknown): boolean {
-  return error instanceof Error && error.name === SUBSCRIPTION_LISTENER_FAILURE_NAME;
-}
-
-function subscriptionErrorCause(error: unknown): unknown {
-  return error instanceof WsSubscriptionListenerError ? error.listenerCause : error;
-}
-
-function formatErrorMessage(error: unknown): string {
-  if (
-    error instanceof Error &&
-    typeof error.message === "string" &&
-    error.message.trim().length > 0
-  ) {
-    return error.message;
-  }
-  return String(error);
-}
-
-function isUnknownRequestTagError(error: unknown): boolean {
-  return formatErrorMessage(error).includes("Unknown request tag:");
-}
 
 export class WsTransport {
   private readonly lifecycleHandlers: WsProtocolLifecycleHandlers | undefined;
@@ -91,20 +60,36 @@ export class WsTransport {
   private disposed = false;
   private hasReportedTransportDisconnect = false;
   private reconnectOperation: Promise<void> | null = null;
-  private protocolFailures = 0;
-  private protocolExhausted = false;
-  private sessionCreatedAt = Date.now();
+  private retiring = false;
+  private hasOpened = false;
+  private link: WsLinkState = "connecting";
+  private readonly protocolFailures = new WsProtocolFailureWindow();
+  private readonly controls: WsConnectionControls;
   private readonly disposalController = new AbortController();
   private readonly subscriptionControllers = new Set<AbortController>();
-  private readonly recoveryWaiters = new Set<() => void>();
   private nextSessionId = 0;
   private activeSessionId = 0;
   private session: TransportSession;
 
-  constructor(url?: string, lifecycleHandlers?: WsProtocolLifecycleHandlers) {
+  constructor(
+    url?: string,
+    lifecycleHandlers?: WsProtocolLifecycleHandlers,
+    controls: WsConnectionControls = createWsConnectionControls(),
+  ) {
     this.lifecycleHandlers = lifecycleHandlers;
     this.url = url;
+    this.controls = controls;
     this.session = this.createSession();
+  }
+
+  /** True after a live socket dropped and no replacement attempt is in flight yet. */
+  get isDisconnected(): boolean {
+    return !this.disposed && this.hasOpened && (this.retiring || this.link === "down");
+  }
+
+  /** Fails fast while disconnected; the first connection still waits as before. */
+  private assertConnectedOrConnecting(): void {
+    if (this.isDisconnected) throw new WsTransportDisconnectedError();
   }
 
   async request<TSuccess>(
@@ -115,8 +100,9 @@ export class WsTransport {
       throw new Error("Transport disposed");
     }
 
+    this.assertConnectedOrConnecting();
     await this.reconnectOperation;
-    if (this.protocolExhausted) throw new WsProtocolRecoveryExhaustedError();
+    this.assertConnectedOrConnecting();
 
     const session = this.session;
     return await session.runtime.runPromise(
@@ -137,8 +123,9 @@ export class WsTransport {
       throw new Error("Transport disposed");
     }
 
+    this.assertConnectedOrConnecting();
     await this.reconnectOperation;
-    if (this.protocolExhausted) throw new WsProtocolRecoveryExhaustedError();
+    this.assertConnectedOrConnecting();
 
     const session = this.session;
     await session.runtime.runPromise(
@@ -173,13 +160,9 @@ export class WsTransport {
         if (!active || this.disposed) {
           return;
         }
+        // Subscriptions keep waiting on the live reconnect operation; they never give up.
         await this.reconnectOperation;
         if (!active || this.disposed) return;
-        if (this.protocolExhausted) {
-          options?.onError?.(new WsProtocolRecoveryExhaustedError());
-          await waitForExplicitWsRecovery(this.recoveryWaiters, controller.signal);
-          continue;
-        }
 
         const session = this.session;
         try {
@@ -199,7 +182,6 @@ export class WsTransport {
             () => {
               retryAttempt = 0;
               this.hasReportedTransportDisconnect = false;
-              if (Date.now() - this.sessionCreatedAt >= 30_000) this.protocolFailures = 0;
             },
             markWsSubscriptionListenerFailure,
             options?.initialApplication,
@@ -225,7 +207,7 @@ export class WsTransport {
             continue;
           }
           const listenerFailure = isWsSubscriptionListenerFailure(error);
-          const reportedError = subscriptionErrorCause(error);
+          const reportedError = wsSubscriptionErrorCause(error);
           if (!listenerFailure && isUnknownRequestTagError(error)) {
             options?.onError?.(reportedError);
             console.warn("WebSocket RPC subscription unavailable", {
@@ -288,9 +270,13 @@ export class WsTransport {
       throw new Error("Transport disposed");
     }
 
-    if (this.reconnectOperation) return this.reconnectOperation;
-    this.protocolFailures = 0;
-    this.protocolExhausted = false;
+    if (this.reconnectOperation) {
+      // An explicit reconnect skips a pending protocol-recovery backoff.
+      if (this.retiring) this.controls.backoff.wake();
+      return this.reconnectOperation;
+    }
+    this.protocolFailures.reset();
+    this.controls.backoff.reset();
     const reconnectOperation = (async () => {
       if (this.disposed) {
         throw new Error("Transport disposed");
@@ -300,10 +286,7 @@ export class WsTransport {
       const previousSession = this.session;
       this.activeSessionId = 0;
       await this.closeSession(previousSession);
-      if (!this.disposed) {
-        this.session = this.createSession();
-        for (const resume of this.recoveryWaiters) resume();
-      }
+      if (!this.disposed) this.session = this.createSession();
     })();
 
     this.reconnectOperation = reconnectOperation;
@@ -312,6 +295,17 @@ export class WsTransport {
     } finally {
       if (this.reconnectOperation === reconnectOperation) this.reconnectOperation = null;
     }
+  }
+
+  /**
+   * Skips the current backoff wait without tearing down the session. Does nothing while the
+   * socket is open or an attempt is already in flight, so wake signals cannot stack upgrades.
+   */
+  reconnectNow(): boolean {
+    if (this.disposed) return false;
+    if (!this.retiring && this.link !== "down") return false;
+    this.controls.backoff.wake();
+    return true;
   }
 
   async dispose() {
@@ -332,45 +326,67 @@ export class WsTransport {
     const sessionId = this.nextSessionId + 1;
     this.nextSessionId = sessionId;
     this.activeSessionId = sessionId;
-    this.sessionCreatedAt = Date.now();
-    return createWsTransportSession(this.url, {
-      ...this.lifecycleHandlers,
-      isActive: () => !this.disposed && this.activeSessionId === sessionId,
-      onProtocolFailure: () => {
-        this.retireProtocolSession(sessionId);
-        this.lifecycleHandlers?.onProtocolFailure?.();
+    this.link = "connecting";
+    const handlers = this.lifecycleHandlers;
+    const isCurrent = () => !this.disposed && this.activeSessionId === sessionId;
+    return createWsTransportSession(
+      this.url,
+      {
+        ...handlers,
+        isActive: isCurrent,
+        onAttempt: (socketUrl) => {
+          this.link = "connecting";
+          handlers?.onAttempt?.(socketUrl);
+        },
+        onOpen: (details) => {
+          this.link = "open";
+          this.hasOpened = true;
+          handlers?.onOpen?.(details);
+        },
+        onError: (message) => {
+          this.link = "down";
+          handlers?.onError?.(message);
+        },
+        onClose: (details) => {
+          this.link = "down";
+          handlers?.onClose?.(details);
+        },
+        onProtocolFailure: () => {
+          this.retireProtocolSession(sessionId);
+          handlers?.onProtocolFailure?.();
+        },
       },
-    });
+      this.controls,
+    );
   }
 
+  /** Protocol defects back off harder inside a sliding 30 s window, but never stop. */
   private retireProtocolSession(sessionId: number): void {
     if (this.disposed || this.activeSessionId !== sessionId || this.reconnectOperation) return;
     this.activeSessionId = 0;
-    this.protocolFailures += 1;
-    this.protocolExhausted = this.protocolFailures >= 3;
-    recordWsProtocolRecovery(this.protocolExhausted);
+    this.retiring = true;
+    this.link = "down";
+    const failuresInWindow = this.protocolFailures.record();
+    const delayMs = resolveWsProtocolRecoveryDelayMs(failuresInWindow);
+    if (failuresInWindow >= WS_PROTOCOL_FAILURE_ESCALATION) {
+      console.warn("WebSocket RPC protocol failures repeated; backing off before recovery.", {
+        delayMs,
+        failuresInWindow,
+      });
+    }
+    recordWsProtocolRecovery();
+    recordWsReconnectScheduled(delayMs);
     const previousSession = this.session;
     const operation = (async () => {
-      await this.closeSession(previousSession);
-      if (this.protocolExhausted || this.disposed) return;
-      await waitForWsRetry(
-        cappedExponentialRetryDelay({
-          attempt: this.protocolFailures,
-          baseMs: 250,
-          maxMs: 8_000,
-        }),
-        this.disposalController.signal,
-      );
+      await this.closeSession(previousSession).catch(() => undefined);
+      if (this.disposed) return;
+      await this.controls.backoff.sleep(delayMs, this.disposalController.signal);
       if (!this.disposed) this.session = this.createSession();
     })();
     this.reconnectOperation = operation;
-    void operation
-      .finally(() => {
-        if (this.reconnectOperation === operation) this.reconnectOperation = null;
-      })
-      .catch(() => {
-        this.protocolExhausted = true;
-        recordWsProtocolRecovery(true);
-      });
+    void operation.finally(() => {
+      if (this.reconnectOperation === operation) this.reconnectOperation = null;
+      this.retiring = false;
+    });
   }
 }

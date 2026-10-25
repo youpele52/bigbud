@@ -10,6 +10,7 @@ import type {
 } from "@bigbud/contracts/orchestration/orchestration.delivery.ts";
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 import type { OrchestrationReplayEventsResult } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
+import type { OrchestrationDeliverySessionEndReason } from "@bigbud/contracts/server/connectionDiagnostics.ts";
 
 import { AsyncBoundedChannel } from "./desktopSupervisorChannel.ts";
 import {
@@ -58,6 +59,7 @@ export class DesktopSupervisorDeliverySession {
   restartAttempt = 0;
   hasAttached = false;
   closed = false;
+  endReason: OrchestrationDeliverySessionEndReason | null = null;
   ackGate: AckGate | null = null;
   baselineGate: BaselineGate | null = null;
   lastBaseline: { readonly recoveryId: string; readonly sequence: number } | null = null;
@@ -96,6 +98,7 @@ export class DesktopSupervisorDeliverySession {
     void this.run().catch((cause: unknown) => {
       if (!this.closed) {
         const error = cause instanceof Error ? cause : new Error(String(cause));
+        this.markEnded("session-failed");
         void this.emitLifecycle("degraded", error.name).finally(() => this.close());
       }
     });
@@ -241,8 +244,14 @@ export class DesktopSupervisorDeliverySession {
     return this.attachedOwner === owner && this.attachedGeneration === this.generation;
   }
 
+  /** Records why the session ended for diagnostics; the first reason wins. */
+  markEnded(reason: OrchestrationDeliverySessionEndReason): void {
+    this.endReason ??= reason;
+  }
+
   close(reason = "subscription_closed"): void {
     if (this.closed) return;
+    if (reason === "subscription_superseded") this.markEnded("superseded");
     this.closed = true;
     this.failInFlight(new Error(`desktop delivery ${reason}`));
     const baselineGate = this.baselineGate;
@@ -329,6 +338,7 @@ export class DesktopSupervisorDeliverySession {
     } catch (cause) {
       if (!isDesktopSupervisorIncompatibleProtocolError(cause)) throw cause;
       await this.emitLifecycle("incompatible", "incompatible_protocol");
+      this.markEnded("session-failed");
       this.close();
       return;
     }

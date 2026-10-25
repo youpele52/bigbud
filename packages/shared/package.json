@@ -4,6 +4,34 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./backendOwnership.paths": {
+      "types": "./src/backendOwnership.paths.ts",
+      "import": "./src/backendOwnership.paths.ts"
+    },
+    "./machineIdentity": {
+      "types": "./src/machineIdentity.ts",
+      "import": "./src/machineIdentity.ts"
+    },
+    "./processStartToken": {
+      "types": "./src/processStartToken.ts",
+      "import": "./src/processStartToken.ts"
+    },
+    "./backendOwnership.record": {
+      "types": "./src/backendOwnership.record.ts",
+      "import": "./src/backendOwnership.record.ts"
+    },
+    "./backendOwnership.control": {
+      "types": "./src/backendOwnership.control.ts",
+      "import": "./src/backendOwnership.control.ts"
+    },
+    "./usageTokenMix": {
+      "types": "./src/usageTokenMix.ts",
+      "import": "./src/usageTokenMix.ts"
+    },
+    "./discoveryReference": {
+      "types": "./src/discoveryReference.ts",
+      "import": "./src/discoveryReference.ts"
+    },
     "./providerTurnFailure": {
       "types": "./src/providerTurnFailure.ts",
       "import": "./src/providerTurnFailure.ts"
@@ -23,6 +51,14 @@
     "./terminalExecutionTarget": {
       "types": "./src/terminalExecutionTarget.ts",
       "import": "./src/terminalExecutionTarget.ts"
+    },
+    "./terminalText": {
+      "types": "./src/terminalText.ts",
+      "import": "./src/terminalText.ts"
+    },
+    "./terminalSynchronizedOutput": {
+      "types": "./src/terminalSynchronizedOutput.ts",
+      "import": "./src/terminalSynchronizedOutput.ts"
     },
     "./terminalOwner/cleanupGrant.model": {
       "types": "./src/terminalOwner/cleanupGrant.model.ts",
@@ -95,6 +131,10 @@
     "./delegatedModelChoice": {
       "types": "./src/delegatedModelChoice.ts",
       "import": "./src/delegatedModelChoice.ts"
+    },
+    "./queuedPromptOrder": {
+      "types": "./src/queuedPromptOrder.ts",
+      "import": "./src/queuedPromptOrder.ts"
     },
     "./providerAttachments": {
       "types": "./src/providerAttachments.ts",
@@ -176,6 +216,10 @@
       "types": "./src/String.ts",
       "import": "./src/String.ts"
     },
+    "./historySwipe": {
+      "types": "./src/historySwipe.ts",
+      "import": "./src/historySwipe.ts"
+    },
     "./projectScripts": {
       "types": "./src/projectScripts.ts",
       "import": "./src/projectScripts.ts"
@@ -223,6 +267,10 @@
     "./DevPorts": {
       "types": "./src/DevPorts.ts",
       "import": "./src/DevPorts.ts"
+    },
+    "./DevLauncher": {
+      "types": "./src/DevLauncher.ts",
+      "import": "./src/DevLauncher.ts"
     },
     "./releaseChannel": {
       "types": "./src/releaseChannel.ts",

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Exit, Layer, ManagedRuntime, Scope } from "effect";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as NodeSqlite from "../persistence/NodeSqliteClient.ts";
 import OwnersMigration from "../persistence/Migrations/111_RemoteAgentRuntimeBindings.ts";
 import ReplayMigration from "../persistence/Migrations/112_RemoteAgentReplayFence.ts";
@@ -32,12 +32,25 @@ import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import * as RemoteDefault from "./remoteAgentDefault.ts";
 import { runRestartFixtureTool } from "./remoteAgentOwners.httpFixture.ts";
 import * as SshProcess from "../ssh/sshProcess.ts";
+import { configureRemoteAgentReattachEnvironment } from "./remoteAgentProcessClient.reattach.ts";
 
-vi.mock("../ssh/sshVerification.ts", () => ({ assertSshExecutionTargetReady: () => undefined }));
+vi.mock("../ssh/sshVerification.ts", () => ({
+  assertSshExecutionTargetReady: () => undefined,
+  assertSshExecutionTargetReadyAsync: async () => undefined,
+}));
 vi.mock("../ssh/sshCommand.ts", () => ({
   buildSshCommandInvocation: () => ({ command: "fixture", args: [] }),
 }));
-afterEach(() => vi.restoreAllMocks());
+// A lost controller link is permanent here: give up reattaching at once instead of
+// retrying until the 24 h result retention would have expired.
+let restoreReattachEnvironment: (() => void) | undefined;
+beforeEach(() => {
+  restoreReattachEnvironment = configureRemoteAgentReattachEnvironment({ retentionMs: 0 });
+});
+afterEach(() => {
+  restoreReattachEnvironment?.();
+  vi.restoreAllMocks();
+});
 
 describe("application terminal owner recovery after server services restart", () => {
   it("restores a retryable tool invocation on its original runtime without persisting command secrets or redispatching", async () => {

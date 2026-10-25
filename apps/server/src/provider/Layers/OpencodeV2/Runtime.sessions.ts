@@ -1,7 +1,8 @@
 import type { ModelRef, SessionInfo } from "@opencode/client";
+import path from "node:path";
 import { Effect } from "effect";
 import { v2Request } from "./Client.ts";
-import { assertV2NoSavedGrants } from "./Runtime.permissions.saved.ts";
+import { assertV2SavedGrantsCompatible } from "./Runtime.permissions.saved.ts";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession, V2StartInput } from "./Runtime.types.ts";
 import type { V2RuntimeMutations } from "./Runtime.mutations.ts";
 import { v2LocalToolPolicy } from "./Runtime.policy.ts";
@@ -9,6 +10,7 @@ import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
 import { resolveV2RuntimeBinding } from "./Runtime.binding.ts";
 import { assertV2ModelAvailable } from "./Runtime.model.availability.ts";
 import { v2SharedToolPolicy } from "./Runtime.policy.shared.ts";
+import { v2SharedProtectedResources } from "./Runtime.policy.shared.paths.ts";
 import { decodeV2Cursor } from "./Runtime.cursor.ts";
 import { decodeV2NativeSession } from "./Runtime.session.decode.ts";
 import { assertV2ThreadPolicy } from "./Orchestration.admission.ts";
@@ -18,6 +20,10 @@ import {
   conservedSharedPolicy,
 } from "./Runtime.sessions.shared.ts";
 import { awaitV2RuntimeReady, V2PreAdmissionRetry } from "./Runtime.activation.ts";
+import {
+  matchesV2NativeRegistration,
+  v2NativeRegistrationMetadata,
+} from "./Runtime.registration.ts";
 
 /** Rebinding is unsupported; compare native selection, not just the runtime fingerprint. */
 export function assertV2Model(actual: ModelRef | undefined, requested: ModelRef): void {
@@ -42,6 +48,13 @@ export function v2ResumeCursor(
     model: { ...session.model },
     connectionMode: connectionMode ?? (session.sharedTransport ? "shared" : "isolated"),
     identityVersion: 1,
+    ...(session.native.metadata?.bigbud_registration === "scoped"
+      ? {
+          identityVersion: 2,
+          profileIssuer: session.native.metadata.bigbud_issuer,
+          registrationFamily: "scoped",
+        }
+      : {}),
   } as const;
 }
 
@@ -56,8 +69,9 @@ export async function createRuntimeSession(
   const requests = cancellation ? { signal: cancellation } : {};
   if (input.provider !== undefined && input.provider !== "opencodeV2")
     throw new Error("V2 provider mismatch.");
+  const binding = await resolveV2RuntimeBinding(options, input);
   const { runtimeTarget, workspaceTarget, root, directory, storageIdentity, nativeSessionId } =
-    await resolveV2RuntimeBinding(options, input);
+    binding;
   const retained = await Effect.runPromise(options.journal.latestBound(input.threadId));
   if (
     retained &&
@@ -91,12 +105,12 @@ export async function createRuntimeSession(
       throw new Error("V2 resume ownership mismatch; no fresh-session fallback.");
     }
   }
-  const model: ModelRef = {
+  // Attach retained history before applying a new turn selection through the idle switch guard.
+  const model: ModelRef = cursor?.model ?? {
     providerID: selection.subProviderID,
     id: selection.model,
     ...(selection.options?.variant ? { variant: selection.options.variant } : {}),
   };
-  if (cursor?.model) assertV2Model(cursor.model, model);
   const localTools = options.enableLocalTools === true && !disableTools;
   let permissions = options.config.sharedService
     ? v2SharedToolPolicy(
@@ -115,6 +129,18 @@ export async function createRuntimeSession(
       });
   cancellation?.throwIfAborted();
   await options.authorizeExecution?.();
+  if (options.nativeSubagents)
+    permissions.push(
+      ...v2SharedProtectedResources([
+        path.join(options.nativeSubagents.stateDirectory, "opencode-v2-native-families"),
+      ]).flatMap((resource) =>
+        ["read", "edit", "external_directory"].map((action) => ({
+          action,
+          resource,
+          effect: "deny" as const,
+        })),
+      ),
+    );
   cancellation?.throwIfAborted();
   let shared: Awaited<ReturnType<typeof prepareSharedCreation>> | undefined;
   let activation: V2RuntimeSession["activation"];
@@ -131,6 +157,7 @@ export async function createRuntimeSession(
         directory,
         cancellation,
         !localTools,
+        { ...binding, threadId: input.threadId },
       );
       cancellation?.throwIfAborted();
       return await mutations.withNamespace(async () => {
@@ -154,13 +181,7 @@ export async function createRuntimeSession(
             transport: options.config.sharedService.registrationFile,
           });
         shared = options.config.sharedService
-          ? await prepareSharedCreation(
-              options,
-              input,
-              { runtimeTarget, workspaceTarget, root, directory, storageIdentity, nativeSessionId },
-              model,
-              permissions,
-            )
+          ? await prepareSharedCreation(options, input, binding, model, permissions)
           : undefined;
         let sharedRow = shared?.row;
         const verify = async () => {
@@ -175,6 +196,7 @@ export async function createRuntimeSession(
           );
           return (
             observed.id === nativeSessionId &&
+            matchesV2NativeRegistration(observed, binding) &&
             observed.location.directory === directory &&
             observed.metadata?.bigbud_thread === input.threadId &&
             observed.metadata.bigbud_storage === storageIdentity &&
@@ -256,6 +278,7 @@ export async function createRuntimeSession(
                   bigbud_provider: "opencodeV2",
                   bigbud_thread: input.threadId,
                   bigbud_storage: storageIdentity,
+                  ...v2NativeRegistrationMetadata(binding),
                 },
                 permissions,
               },
@@ -277,6 +300,7 @@ export async function createRuntimeSession(
         }
         if (
           native.id !== nativeSessionId ||
+          !matchesV2NativeRegistration(native, binding) ||
           native.location.directory !== directory ||
           native.metadata?.bigbud_provider !== "opencodeV2" ||
           native.metadata.bigbud_thread !== input.threadId ||
@@ -289,9 +313,11 @@ export async function createRuntimeSession(
         assertV2Model(native.model, model);
         if (shared?.row.identityKind === "adopted-legacy-v1")
           permissions = conservedSharedPolicy(native.permissions, permissions);
-        if (options.threadBridge && localTools) assertV2ThreadPolicy({ toolPolicy: permissions });
+        if (options.threadBridge && localTools)
+          assertV2ThreadPolicy({ toolPolicy: permissions, native });
         if (shared && sharedRow) await shared.verify(sharedRow);
-        if (localTools) await assertV2NoSavedGrants(lease.process.client, native);
+        if (localTools)
+          await assertV2SavedGrantsCompatible(lease.process.client, native, permissions);
         // Reset only this owned session's permissions. Never trust persisted broad approvals.
         mutations?.assertSafe();
         cancellation?.throwIfAborted();
@@ -323,7 +349,7 @@ export async function createRuntimeSession(
             providerRuntimeExecutionTargetId: runtimeTarget,
             workspaceExecutionTargetId: workspaceTarget,
             cwd: directory,
-            model: selection.model,
+            model: model.id,
             createdAt: now,
             updatedAt: now,
             sessionEpoch: input.sessionEpoch ?? 0,

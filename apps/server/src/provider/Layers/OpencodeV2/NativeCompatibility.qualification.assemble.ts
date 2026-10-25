@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 import { V2_NATIVE_CONTRACT_DIGEST } from "./NativeCompatibility.contract.ts";
 import { v2NativeQualificationResultsDigest } from "./NativeCompatibility.evidence.ts";
 import {
@@ -205,7 +206,7 @@ export function v2QualificationEvidencePacket(input: {
     nativeVersion: TARGET.nativeVersion,
     platform: TARGET.platform,
     arch: TARGET.arch,
-    clientVersion: "2.0.26",
+    clientVersion: OPENCODE_V2_CLIENT_VERSION,
     nativeContractDigest: V2_NATIVE_CONTRACT_DIGEST,
     bootstrapContractDigests: [V2_COMPATIBILITY_DIGEST],
     bootstrapGeneratorSourceDigest: input.bootstrapGeneratorSourceDigest,

@@ -24,6 +24,8 @@ import type {
   SessionOpServices,
 } from "./ProviderCommandReactorSessionOps.types.ts";
 import { shouldStampRunningSessionAfterSend } from "./ProviderCommandReactorSessionOps.send.stamp.ts";
+import { isLiveProviderSessionIdle } from "../../provider/liveProviderSessionIdle.ts";
+import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import type { TurnStartRecoveryAttempt } from "./ProviderCommandReactorSessionOps.recovery.turnStart.ts";
 import type { TurnStartDispatchPhase } from "./ProviderCommandReactorSessionOps.recovery.dispatch.phase.ts";
 import { recordSubmittedUserTurn } from "./ProviderCommandReactorSessionOps.userTurn.ts";
@@ -85,6 +87,7 @@ export const sendTurnAttempt = (
     const shouldBootstrapFromTranscript =
       !reviving &&
       shouldRebuildProviderContextFromTranscript({
+        provider: input.modelSelection.provider,
         thread,
         bootstrapThread,
         activeSession,
@@ -196,12 +199,6 @@ export const sendTurnAttempt = (
       sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
     });
 
-    yield* recordSubmittedUserTurn(services, {
-      threadId: input.threadId,
-      ...(input.requestMessageId ? { requestMessageId: input.requestMessageId } : {}),
-      turnId: turn.turnId,
-      createdAt: input.createdAt,
-    });
     const sessionAfterTurn = (yield* resolveThread(input.threadId))?.session ?? null;
     const liveSession = yield* providerService
       .listSessions()
@@ -217,13 +214,12 @@ export const sendTurnAttempt = (
       sessionAfterTurn.providerName === sessionBeforeTurn.providerName &&
       sessionAfterTurn.runtimeMode === sessionBeforeTurn.runtimeMode;
 
-    if (
-      shouldStampRunningSessionAfterSend({
-        liveSession,
-        sessionAfterTurn,
-        sessionUnchangedSinceSend,
-      })
-    ) {
+    const stamped = shouldStampRunningSessionAfterSend({
+      liveSession,
+      sessionAfterTurn,
+      sessionUnchangedSinceSend,
+    });
+    if (stamped) {
       yield* setThreadSession({
         threadId: input.threadId,
         session: {
@@ -245,4 +241,30 @@ export const sendTurnAttempt = (
         expectedSessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
       });
     }
+    const providerIdle = liveSession === undefined || isLiveProviderSessionIdle(liveSession);
+    if (!stamped && !providerIdle && sessionAfterTurn?.activeTurnId == null) {
+      // Not stamped because the projection moved during the send, yet the provider is still
+      // busy: project its live turn so the pending start clears only once the turn is visible.
+      const thread = yield* resolveThread(input.threadId);
+      const visible = thread
+        ? buildThreadReconciliationCommand({ thread, liveSession, occurredAt: input.createdAt })
+        : null;
+      if (visible?.type === "thread.session.set" && visible.session.activeTurnId !== null) {
+        yield* setThreadSession({
+          threadId: input.threadId,
+          session: visible.session,
+          createdAt: input.createdAt,
+          expectedSessionEpoch: thread?.session?.sessionEpoch ?? 0,
+        });
+      }
+    }
+    // After any running stamp: an idle provider's acceptance clears the pending-start gate and
+    // triggers a queue flush; a busy one leaves the gate to the now-visible running turn.
+    yield* recordSubmittedUserTurn(services, {
+      threadId: input.threadId,
+      ...(input.requestMessageId ? { requestMessageId: input.requestMessageId } : {}),
+      turnId: turn.turnId,
+      createdAt: input.createdAt,
+      providerIdle,
+    });
   });

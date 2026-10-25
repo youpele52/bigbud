@@ -6,7 +6,10 @@ import {
   type OrchestrationThread,
   type ThreadId,
 } from "@bigbud/contracts";
-import { successfulUserTurns } from "@bigbud/shared/internalTextGeneration";
+import {
+  successfulUserTurns,
+  hasTextGenerationUncertainty,
+} from "@bigbud/shared/internalTextGeneration";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 import {
   getThreadTitleVersion,
@@ -18,8 +21,10 @@ import { lastSuccessfulThreadModel } from "../../git/Layers/InternalTextGenerati
 import { sameTextGenerationWorkspace } from "../../git/Layers/InternalTextGeneration.requests.ts";
 import {
   recordThreadTextGenerationStatus,
+  recordThreadTextGenerationStatusRequired,
   withThreadTextGenerationJob,
 } from "../../git/Layers/InternalTextGeneration.status.ts";
+import { makeTextGenerationDispatchClaim } from "../../git/Layers/InternalTextGeneration.dispatch.ts";
 import {
   serverCommandId,
   shouldRetryGeneratedThreadTitle,
@@ -48,6 +53,29 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
     const { orchestrationEngine: engine, resolveThread } = services;
     const initial = yield* resolveThread(input.threadId);
     if (!initial || initial.archivedAt || initial.deletingAt || initial.deletedAt) return;
+    const unresolved = ([1, 2, 3, 4] as const).find((stage) => {
+      const state = readTitleStage(initial, stage);
+      return state?.state === "uncertain" || state?.state === "started";
+    });
+    if (unresolved || hasTextGenerationUncertainty(initial.activities, "title")) {
+      if (unresolved && readTitleStage(initial, unresolved)?.state === "started") {
+        yield* recordTitleStage(services, initial, unresolved, "uncertain");
+      }
+      if (
+        !initial.activities.some(
+          (item) =>
+            item.kind === "text-generation.uncertain" &&
+            (item.payload as { operation?: unknown } | null)?.operation === "title",
+        )
+      )
+        yield* recordThreadTextGenerationStatusRequired(
+          engine,
+          input.threadId,
+          "title",
+          "uncertain",
+        );
+      return;
+    }
     if (!input.retry && titlePipelineFinished(initial)) return;
     const titleVersion = getThreadTitleVersion(input.threadId);
     const allowed = (thread: OrchestrationThread | undefined): boolean =>
@@ -109,7 +137,12 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
       return;
     }
 
-    const attempt = (stage: TitleStage, thread: OrchestrationThread, exactModel?: ModelSelection) =>
+    const attempt = (
+      stage: TitleStage,
+      thread: OrchestrationThread,
+      claim: ReturnType<typeof makeTextGenerationDispatchClaim>,
+      exactModel?: ModelSelection,
+    ) =>
       Effect.gen(function* () {
         const successful = exactModel ?? lastSuccessfulThreadModel(thread);
         const context = stage === 4 ? buildElevatorSummaryTranscript(thread.messages) : null;
@@ -128,6 +161,7 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
           ...(input.attachments?.length ? { attachments: input.attachments } : {}),
           modelSelection: exactModel ?? input.modelSelection,
           successfulModelSelection: successful,
+          beforeV2Dispatch: claim.beforeV2Dispatch,
           titleSeed: input.titleSeed,
           ...(exactModel ? { verifiedThreadModelOnly: true } : {}),
         });
@@ -175,18 +209,39 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
 
     const execute = (stage: TitleStage, thread: OrchestrationThread, model?: ModelSelection) =>
       Effect.gen(function* () {
+        const claim = makeTextGenerationDispatchClaim(engine, input.threadId, "title");
         const result = yield* Effect.exit(
-          attempt(stage, thread, model).pipe(
+          attempt(stage, thread, claim, model).pipe(
             Effect.onInterrupt(() =>
               input.retry
                 ? Effect.void
-                : recordTitleStage(services, thread, stage, "cancelled", model),
+                : recordTitleStage(
+                    services,
+                    thread,
+                    stage,
+                    claim.isClaimed() ? "uncertain" : "cancelled",
+                    model,
+                  ),
             ),
           ),
         );
         if (Exit.isSuccess(result)) return result.value;
         if (Cause.hasInterruptsOnly(result.cause)) return yield* Effect.interrupt;
         const error = Cause.findErrorOption(result.cause);
+        if (
+          Option.isSome(error) &&
+          Schema.is(TextGenerationError)(error.value) &&
+          error.value.kind === "uncertain"
+        ) {
+          yield* recordThreadTextGenerationStatusRequired(
+            engine,
+            input.threadId,
+            "title",
+            "uncertain",
+            error.value.uncertaintyId ? { uncertaintyId: error.value.uncertaintyId } : {},
+          );
+          return "uncertain" as const;
+        }
         if (
           Option.isSome(error) &&
           Schema.is(TextGenerationError)(error.value) &&
@@ -198,6 +253,13 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
           stage,
           cause: Cause.pretty(result.cause),
         });
+        if (claim.isClaimed())
+          yield* recordThreadTextGenerationStatusRequired(
+            engine,
+            input.threadId,
+            "title",
+            "failed",
+          );
         return "failed" as const;
       });
 
@@ -205,12 +267,13 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
       const model = lastSuccessfulThreadModel(initial);
       const finalRecovery = readTitleStage(initial, 4) !== null;
       if (finalRecovery && !model) return;
-      yield* recordThreadTextGenerationStatus(engine, input.threadId, "title", "started");
+      yield* recordThreadTextGenerationStatusRequired(engine, input.threadId, "title", "started");
       const outcome = yield* execute(
         finalRecovery ? 4 : 1,
         initial,
         finalRecovery ? (model ?? undefined) : undefined,
       );
+      if (outcome === "uncertain") return;
       yield* recordThreadTextGenerationStatus(
         engine,
         input.threadId,
@@ -225,13 +288,15 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
       if (!thread || !allowed(thread)) return;
       const existing = readTitleStage(thread, stage);
       if (existing?.state === "started") {
-        // A prior process may have dispatched this stage. Consume it, but never replay paid work.
-        yield* recordTitleStage(services, thread, stage, "failed", existing.model);
-        if (stage === 4)
-          yield* recordThreadTextGenerationStatus(engine, input.threadId, "title", "failed", {
-            finalFailure: true,
-          });
-        continue;
+        // No settlement witness exists for this durable claim. A different stage is still paid replay.
+        yield* recordTitleStage(services, thread, stage, "uncertain", existing.model);
+        yield* recordThreadTextGenerationStatusRequired(
+          engine,
+          input.threadId,
+          "title",
+          "uncertain",
+        );
+        return;
       }
       if (existing?.state === "failed") continue;
       if (existing) return;
@@ -242,6 +307,7 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
       yield* recordTitleStage(services, thread, stage, "started", model);
       const outcome = yield* execute(stage, thread, model);
       yield* recordTitleStage(services, thread, stage, outcome, model);
+      if (outcome === "uncertain") return;
       if (outcome !== "failed") {
         yield* recordThreadTextGenerationStatus(
           engine,

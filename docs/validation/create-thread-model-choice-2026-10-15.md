@@ -1,6 +1,6 @@
 # create_thread model choice — validation ledger (2026-10-15)
 
-Plan: `docs/plan/2026-10-15-create-thread-model-choice-plan.md` (Phases 0–4; Phase 5 deferred).
+Plan: `docs/plans/2026-10-15-create-thread-model-choice-plan.md` (Phases 0–4; Phase 5 deferred).
 Worktree: `.claude/worktrees/create-thread-model-choice`, branch `feat/create-thread-model-choice`,
 base `plan/terminal-rust-gpu-reliability` @ `6a6e27052`.
 

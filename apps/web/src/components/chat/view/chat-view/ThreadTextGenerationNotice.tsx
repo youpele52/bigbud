@@ -16,18 +16,22 @@ export function ThreadTextGenerationNotice(props: {
   const notices = (["title", "summary"] as const).flatMap((operation) => {
     const activity = props.activities.findLast(
       (item) =>
-        ["text-generation.failed", "text-generation.completed", "text-generation.started"].includes(
-          item.kind,
-        ) &&
+        [
+          "text-generation.failed",
+          "text-generation.completed",
+          "text-generation.started",
+          "text-generation.uncertain",
+        ].includes(item.kind) &&
         typeof item.payload === "object" &&
         item.payload !== null &&
         "operation" in item.payload &&
         item.payload.operation === operation,
     );
-    return eligible &&
-      activity?.kind === "text-generation.failed" &&
-      (operation === "summary" ||
-        (activity.payload as { finalFailure?: boolean }).finalFailure === true)
+    return activity?.kind === "text-generation.uncertain" ||
+      (eligible &&
+        activity?.kind === "text-generation.failed" &&
+        (operation === "summary" ||
+          (activity.payload as { finalFailure?: boolean }).finalFailure === true))
       ? [{ operation, activity }]
       : [];
   });
@@ -60,18 +64,20 @@ export function ThreadTextGenerationNotice(props: {
           threadId={props.threadId}
           operation={operation}
           role="status"
-          variant={activity.kind === "text-generation.failed" ? "warning" : "info"}
+          variant="warning"
           description={activity.summary}
           dismissLabel={`Dismiss thread ${operation} generation notice`}
           action={
-            <Button
-              size="xs"
-              variant="ghost"
-              disabled={pending !== null}
-              onClick={() => void retry(operation, activity.id)}
-            >
-              {pending === operation ? "Requesting…" : "Retry"}
-            </Button>
+            activity.kind === "text-generation.uncertain" ? null : (
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={pending !== null}
+                onClick={() => void retry(operation, activity.id)}
+              >
+                {pending === operation ? "Requesting…" : "Retry"}
+              </Button>
+            )
           }
         />
       ))}

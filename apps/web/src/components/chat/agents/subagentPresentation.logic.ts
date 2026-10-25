@@ -1,5 +1,6 @@
 import type {
   OrchestrationSubagentMetrics,
+  OrchestrationSubagentStep,
   OrchestrationTask,
 } from "@bigbud/contracts/orchestration/orchestration.thread.tasks.ts";
 
@@ -27,19 +28,20 @@ const isActive = (agent: OrchestrationTask) =>
 
 const isStale = (agent: OrchestrationTask) => isActive(agent) && !agent.activityFresh;
 
+/** Lowercase, matching the per-step status labels in the details list. */
 export function subagentStatusLabel(agent: OrchestrationTask): string {
-  if (isStale(agent)) return "Last seen";
+  if (isStale(agent)) return "last seen";
   switch (agent.status) {
     case "pending":
-      return "Starting";
+      return "starting";
     case "inProgress":
-      return "Working";
+      return "working";
     case "completed":
-      return "Done";
+      return "done";
     case "failed":
-      return "Failed";
+      return "failed";
     case "stopped":
-      return "Stopped";
+      return "stopped";
   }
 }
 
@@ -48,6 +50,11 @@ export function subagentStatusTone(agent: OrchestrationTask): SubagentStatusTone
   if (agent.status === "completed") return "done";
   if (agent.status === "failed") return "failed";
   return "working";
+}
+
+/** Breathe only for fresh pending/running work, matching the sidebar provider indicator. */
+export function subagentStatusIsAnimating(agent: OrchestrationTask): boolean {
+  return isActive(agent) && agent.activityFresh === true;
 }
 
 export function visibleSubagents<T>(agents: ReadonlyArray<T>, expanded: boolean): ReadonlyArray<T> {
@@ -64,12 +71,18 @@ export function subagentModelLabel(agent: OrchestrationTask): string | undefined
 }
 
 export function subagentActivityLine(agent: OrchestrationTask): string | undefined {
+  if (!isActive(agent)) {
+    if (agent.status === "failed" && agent.terminalReason) return agent.terminalReason;
+    if (agent.resultSummary) return agent.resultSummary;
+  }
   if (agent.progressSummary) return agent.progressSummary;
   if (agent.lastToolName && isActive(agent))
     return `Running ${formatToolDisplayName(agent.lastToolName)}`;
   return (
     agent.resultSummary ??
-    (agent.lastToolName ? `Ran ${formatToolDisplayName(agent.lastToolName)}` : undefined)
+    (agent.lastToolName ? `Ran ${formatToolDisplayName(agent.lastToolName)}` : undefined) ??
+    agent.description ??
+    (agent.subject !== subagentDisplayName(agent) ? agent.subject : undefined)
   );
 }
 
@@ -128,4 +141,26 @@ export function hasSubagentDetails(agent: OrchestrationTask): boolean {
     (agent.recentSteps && agent.recentSteps.length > 0) ||
     subagentMetricsLabel(agent.metrics),
   );
+}
+
+/** Step label without a repeated tool prefix ("Bash: ls" → "ls"); the tool has its own column. */
+export function subagentStepLabel(step: OrchestrationSubagentStep): string | undefined {
+  if (!step.label) return undefined;
+  for (const prefix of new Set([step.toolName, formatToolDisplayName(step.toolName)])) {
+    const head = `${prefix}:`;
+    if (step.label.toLowerCase().startsWith(head.toLowerCase())) {
+      const rest = step.label.slice(head.length).trim();
+      return rest.length > 0 ? rest : undefined;
+    }
+  }
+  return step.label;
+}
+
+/** "Recent steps · 5 of 29" when the provider reports a tool total, else just the shown count. */
+export function subagentRecentStepsLabel(agent: OrchestrationTask): string {
+  const shown = agent.recentSteps?.length ?? 0;
+  const total = agent.metrics?.toolUses;
+  return total !== undefined && total >= shown
+    ? `Recent steps · ${shown} of ${total}`
+    : `Recent steps · ${shown}`;
 }

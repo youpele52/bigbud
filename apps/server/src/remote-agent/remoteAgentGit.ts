@@ -104,7 +104,8 @@ export function makeRemoteAgentGitExecutor(resolver: RemoteAgentGitClientResolve
     return Effect.serviceOption(RemoteAgentGitActionBinding).pipe(
       Effect.flatMap((actionBinding) =>
         Effect.tryPromise({
-          try: async () => {
+          // An interrupted git call aborts `signal`, ending a reattach that waits for the link.
+          try: async (signal) => {
             const client = durable ? undefined : await resolver.resolve(input.executionTargetId);
             const handle = remoteAgentWorkspaceHandle(input);
             const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -140,6 +141,7 @@ export function makeRemoteAgentGitExecutor(resolver: RemoteAgentGitClientResolve
               ...(input.stdin !== undefined
                 ? { stdin: new TextEncoder().encode(input.stdin) }
                 : {}),
+              signal,
             };
             const result = durable
               ? await resolver.runOwned({

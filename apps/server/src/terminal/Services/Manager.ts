@@ -6,6 +6,10 @@
  *
  * @module TerminalManager
  */
+import type {
+  TerminalSearchInput,
+  TerminalSearchResult,
+} from "@bigbud/contracts/workspace/terminal.search.ts";
 import {
   TerminalClearInput,
   TerminalCloseInput,
@@ -71,6 +75,11 @@ export interface TerminalStartInput extends TerminalOpenInput {
   rows: number;
 }
 
+export interface TerminalSubscribeOptions {
+  /** `legacyDetection` keeps output only for sessions whose agent detection runs in the client. */
+  readonly outputScope?: "all" | "legacyDetection";
+}
+
 /**
  * TerminalManagerShape - Service API for terminal session lifecycle operations.
  */
@@ -129,7 +138,23 @@ export interface TerminalManagerShape {
    */
   readonly subscribe: (
     listener: (event: TerminalEvent) => Effect.Effect<void>,
+    options?: TerminalSubscribeOptions,
   ) => Effect.Effect<() => void>;
+
+  /**
+   * Hold or release a terminal's PTY output for one delivery subscriber (producer flow control).
+   * Succeeds with whether the running process supports pausing; unsupported adapters are bounded
+   * by delivery overflow instead.
+   */
+  /** Search the output terminals retain (newest lines first); scan on demand, no index. */
+  readonly search?: (input: TerminalSearchInput) => Effect.Effect<TerminalSearchResult>;
+
+  readonly setOutputHold?: (input: {
+    readonly threadId: string;
+    readonly terminalId: string;
+    readonly holderId: string;
+    readonly held: boolean;
+  }) => Effect.Effect<boolean>;
 }
 
 /**

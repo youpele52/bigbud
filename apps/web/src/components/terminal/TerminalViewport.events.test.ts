@@ -30,7 +30,7 @@ describe("makeApplyTerminalEvent", () => {
     apply({ ...base, type: "output", data: "hello" });
     apply({ ...base, type: "error", message: "failure" });
     apply({ ...base, type: "exited", exitCode: 1, exitSignal: null });
-    expect(lane.write).toHaveBeenNthCalledWith(1, terminal, "hello");
+    expect(lane.write).toHaveBeenNthCalledWith(1, terminal, "hello", 5);
     expect(lane.write).toHaveBeenNthCalledWith(2, terminal, "\r\n[terminal] failure\r\n");
     expect(lane.write).toHaveBeenNthCalledWith(
       3,

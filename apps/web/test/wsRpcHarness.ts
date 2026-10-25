@@ -35,6 +35,7 @@ const STREAM_METHODS = new Set<string>([
   WS_METHODS.gitRunStackedAction,
   WS_METHODS.subscribeOrchestrationDomainEvents,
   WS_METHODS.subscribeTerminalEvents,
+  WS_METHODS.subscribeTerminalSession,
   WS_METHODS.subscribeServerConfig,
   WS_METHODS.subscribeServerLifecycle,
   WS_METHODS.subscribeThinkingActivityDeltas,
@@ -217,12 +218,18 @@ export class BrowserWsRpcHarness {
     if (!pubsub) {
       throw new Error(`No stream registered for ${method}`);
     }
+    // Like the server, a terminal-scoped stream always starts with its registration item.
+    const registration =
+      method === WS_METHODS.subscribeTerminalSession
+        ? [{ type: "subscribed", subscriptionId: `harness-${this.requests.length}` }]
+        : [];
     // Subscribe before sending initial values: client ACK backpressure must not lose live events.
     return Stream.unwrap(
       Effect.map(PubSub.subscribe(pubsub), (subscription) =>
-        Stream.fromIterable(this.getInitialStreamValues(request) ?? []).pipe(
-          Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription))),
-        ),
+        Stream.fromIterable([
+          ...registration,
+          ...(this.getInitialStreamValues(request) ?? []),
+        ]).pipe(Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription)))),
       ),
     );
   }

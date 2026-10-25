@@ -4,13 +4,15 @@ import { sharedServiceNativeFixture } from "./SharedService.native.fixture.ts";
 import { readV2SharedRegistration } from "./SharedService.registration.ts";
 import { makeOwnedClient } from "./Client.ts";
 import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
-import { V2_THREAD_RPC } from "./Orchestration.protocol.ts";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
+import { v2NativeRegistrationMetadata } from "./Runtime.registration.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 it.skipIf(!binary)(
   "portable required plugin registers narrow tools/RPC and stops primary model requests when callback ownership fails",
   async () => {
     const app = await makeV2ThreadPluginFixture();
+    const selected = v2ThreadRegistration(app.artifact);
     const native = await sharedServiceNativeFixture(binary!, async (filename) => {
       const config = JSON.parse(await readFile(filename, "utf8"));
       config.plugins = [app.artifact.pluginUri];
@@ -30,13 +32,13 @@ it.skipIf(!binary)(
       expect(info.pid).toBe(native.child.pid);
       const location = { directory: native.workspace };
       const rpc = async (method: string, input: unknown = {}) =>
-        (await client.rpc.call({ rpcID: V2_THREAD_RPC, method, location, input: input as never }))
+        (await client.rpc.call({ rpcID: selected.id, method, location, input: input as never }))
           .output as Record<string, unknown>;
       const pluginInfo = await rpc("info");
       expect(pluginInfo).toMatchObject({
         artifactDigest: app.artifact.artifactDigest,
         issuer: app.artifact.issuer,
-        tools: expect.arrayContaining(["bigbud_thread_v1_send_thread_message"]),
+        tools: expect.arrayContaining([selected.tool("send_thread_message")]),
       });
       const id = `ses_bigbud_${"a".repeat(64)}`;
       const owner = app.bind(id, native.workspace);
@@ -48,6 +50,10 @@ it.skipIf(!binary)(
           bigbud_provider: "opencodeV2",
           bigbud_thread: owner.threadId,
           bigbud_storage: owner.storageIdentity,
+          ...v2NativeRegistrationMetadata({
+            registrationFamily: "scoped",
+            profileIssuer: app.artifact.issuer,
+          }),
         },
         permissions: [
           { action: "*", resource: "*", effect: "allow" },
@@ -81,9 +87,9 @@ it.skipIf(!binary)(
           action: "rename_thread",
           input: { title: "Renamed disposable target", targetThreadId: "other-provider-thread" },
         },
-      ];
+      ] as const;
       for (const [index, item] of cases.entries()) {
-        native.state.tool = `bigbud_thread_v1_${item.action}`;
+        native.state.tool = selected.tool(item.action);
         native.state.input = item.input;
         await client.session.prompt({ sessionID: id, text: `Synthetic canonical ${item.action}` });
         await expect.poll(() => app.state.invocations.length, { timeout: 15000 }).toBe(index + 1);
@@ -115,9 +121,9 @@ it.skipIf(!binary)(
         .toBe("failed");
       expect(native.state.modelRequests).toBe(before);
       expect(app.state.invocations).toHaveLength(5);
-      expect(native.state.advertised.has("bigbud_thread_v1_create_thread")).toBe(true);
-      expect(native.state.advertised.has("bigbud_thread_v1_get_thread_status")).toBe(true);
-      expect(native.state.advertised.has("bigbud_thread_v1_list_threads")).toBe(true);
+      expect(native.state.advertised.has(selected.tool("create_thread"))).toBe(true);
+      expect(native.state.advertised.has(selected.tool("get_thread_status"))).toBe(true);
+      expect(native.state.advertised.has(selected.tool("list_threads"))).toBe(true);
       expect(native.state.advertised.has("bigbud_orchestration")).toBe(false);
     } finally {
       await native.close();

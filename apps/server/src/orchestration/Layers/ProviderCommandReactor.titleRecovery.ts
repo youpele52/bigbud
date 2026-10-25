@@ -17,10 +17,10 @@ export const makeTitleStageRecovery = Effect.gen(function* () {
         AND activity.thread_id > ${after}
         AND thread.deleted_at IS NULL AND thread.deleting_at IS NULL AND thread.archived_at IS NULL
       GROUP BY activity.thread_id
-      HAVING SUM(CASE WHEN json_extract(activity.payload_json, '$.state') IN ('completed','cancelled','unchanged') THEN 1 ELSE 0 END) = 0
+      HAVING SUM(CASE WHEN json_extract(activity.payload_json, '$.state') IN ('completed','cancelled','unchanged','uncertain') THEN 1 ELSE 0 END) = 0
         AND NOT EXISTS (SELECT 1 FROM projection_thread_activities final
           WHERE final.thread_id = activity.thread_id AND json_extract(final.payload_json, '$.operation') = 'title'
-            AND (final.kind = 'text-generation.completed' OR
+            AND (final.kind IN ('text-generation.completed','text-generation.uncertain') OR
               (final.kind = 'text-generation.failed' AND json_extract(final.payload_json, '$.finalFailure') = 1)))
       ORDER BY activity.thread_id ASC LIMIT 100`,
   });

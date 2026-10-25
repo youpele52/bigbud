@@ -87,7 +87,6 @@ export function FilesPanelRefreshCoordinator({
   const previewRegistrationRef = useRef<PreviewRegistration | null>(null);
   const loadDirectoryRef = useRef(loadDirectory);
   loadDirectoryRef.current = loadDirectory;
-  const coordinator = useMemo(() => createFilesPanelRefreshCoordinator(), []);
 
   const registerPreview = useCallback((registration: PreviewRegistration) => {
     previewRegistrationRef.current = registration;
@@ -136,16 +135,13 @@ export function FilesPanelRefreshCoordinator({
   }
 
   useEffect(() => {
-    return () => coordinator.dispose();
-  }, [coordinator]);
-
-  useEffect(() => {
-    coordinator.cancelAll();
     if (!workspaceRoot || !watchEnabled) return;
 
     const api = readNativeApi();
     if (!api) return;
 
+    // Each subscription lifecycle owns its queue, including Strict Mode effect replay.
+    const coordinator = createFilesPanelRefreshCoordinator();
     const previewTask = (): FilesPanelRefreshTask | null => {
       if (!previewPath) return null;
       return {
@@ -229,11 +225,10 @@ export function FilesPanelRefreshCoordinator({
 
     return () => {
       for (const unsubscribeDirectory of unsubscribe) unsubscribeDirectory();
-      coordinator.cancelAll();
+      coordinator.dispose();
     };
   }, [
     activePreviewDirectory,
-    coordinator,
     previewPath,
     watchablePreviewDirectory,
     watchEnabled,

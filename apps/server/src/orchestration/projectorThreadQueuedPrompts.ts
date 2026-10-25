@@ -2,6 +2,7 @@ import type { OrchestrationEvent, OrchestrationReadModel } from "@bigbud/contrac
 import { Effect } from "effect";
 
 import { updateThread } from "./projectorHelpers.ts";
+import { insertQueuedPrompt } from "@bigbud/shared/queuedPromptOrder";
 
 type QueuedPromptEvent = Extract<
   OrchestrationEvent,
@@ -30,7 +31,11 @@ export function projectThreadQueuedPromptEvent(
       return Effect.succeed({
         ...model,
         threads: updateThread(model.threads, thread.id, {
-          queuedPrompts: [...(thread.queuedPrompts ?? []), event.payload.prompt],
+          queuedPrompts: insertQueuedPrompt(
+            thread.queuedPrompts ?? [],
+            event.payload.prompt,
+            event.payload.queuePosition,
+          ),
           updatedAt: event.occurredAt,
         }),
       });

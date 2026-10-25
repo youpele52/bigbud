@@ -74,17 +74,17 @@ export const V2_NATIVE_QUALIFICATION_EXCLUDED: Readonly<Record<string, string>> 
 
 /** Values fixed at preparation time (npm metadata, upstream tag, approved runner layout). */
 export const V2_NATIVE_QUALIFICATION_TARGET = Object.freeze({
-  nativeVersion: "2.0.29",
+  nativeVersion: "2.1.4",
   platform: "darwin",
   arch: "arm64",
   semanticProfile: "v2-system-global-config-v1",
-  nativeSourceCommit: "042d0832f5f3a73eaa039a58a7d565776f6d4290",
+  nativeSourceCommit: "68bc26b7da1990ce10ffecfbc1e09eb13aa5d824",
   npmPackage: "@opencode/cli-darwin-arm64",
   npmIntegrity:
-    "sha512-2tJOM20RpOjNeWsYcV3VfRFPDTeu1yMMbEqAQm1sEKmHX9087Sx/TxhwBlvtiudOGq6Kr3zyKmW1t7aFF6qCsQ==",
-  npmTarball: "https://registry.npmjs.org/@opencode/cli-darwin-arm64/-/cli-darwin-arm64-2.0.29.tgz",
-  executableSha256: "7f46ba1dad86b730903d9adf54015bb4e706fc1ab6a247affc5a635cd8a663f3",
-  approvalId: "gh-macos-15-arm64-opencode-2-0-29",
+    "sha512-QwjyvovTdT0gFi5rxUyPVlYePIe3ELduR9olu+KJWe089XVIDOTMhxylBe/ZGIpvoXHYo6bp2NskIiqCFAEXsw==",
+  npmTarball: "https://registry.npmjs.org/@opencode/cli-darwin-arm64/-/cli-darwin-arm64-2.1.4.tgz",
+  executableSha256: "d8a65dd253dbea759ae0dd829792ff219b40178c7decffea822430a4d1ccadb3",
+  approvalId: "gh-macos-15-arm64-opencode-2-1-4",
   machineId: "github-macos-15-arm64",
   runnerLabel: "macos-15",
   fixtureRoot: "/Users/runner/work/_temp/opencode-v2-qualification",

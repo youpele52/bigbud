@@ -5,6 +5,7 @@ import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
 import { ServerConfig } from "./startup/config";
 import { StateDirLockLive } from "./startup/backendInstance";
+import { withOwnershipShutdown } from "./startup/ownershipShutdown";
 import { fixPath } from "./utils/os-jank";
 import { makeRoutesLayer } from "./server.routes.ts";
 import { OpenLive } from "./utils/open";
@@ -91,10 +92,14 @@ import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
 import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
 import { isRemoteAgentExecutionTarget } from "./remote-agent/remoteAgentDefault.ts";
-import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.ts";
+import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.layer.ts";
+import { ConnectionDiagnosticsLive } from "./connection-diagnostics/Layers/ConnectionDiagnostics.ts";
+import { EventLoopLagMonitorLive } from "./connection-diagnostics/Layers/EventLoopLagMonitor.ts";
+import { withServerShutdownSignal } from "./connection-diagnostics/Layers/ServerShutdownSignal.ts";
 import { DirectResourceCleanupRepositoryLive } from "./persistence/Layers/DirectResourceCleanupRepository.ts";
 import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResourceCleanupExecutor.ts";
 import { DirectResourceCleanupRecoveryLive } from "./deletion/Layers/DirectResourceCleanupRecovery.ts";
+import * as Recovery from "./server.recoveryLayers.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -110,6 +115,7 @@ const PtyAdapterLive = Layer.unwrap(
 const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(OrchestrationReactorLive.pipe(Layer.provide(LearningReactorLive))),
   Layer.provideMerge(ProviderRuntimeIngestionLive),
+  Layer.provideMerge(Recovery.ProviderTurnSupervisorLive),
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
   Layer.provideMerge(SchedulerReactorLive),
@@ -139,6 +145,7 @@ const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationProjectionPipelineLayerLive,
   ThreadRetentionRepositoryLive,
   PurgeJobRepositoryLive,
+  Recovery.RecoveryPersistenceLayerLive,
 );
 
 const ComputerUseLayerLive = ComputerUseLive.pipe(
@@ -238,6 +245,7 @@ const makeProviderLayerLive = (
         Layer.provide(adapterRegistryLayer),
         Layer.provide(providerSessionDirectoryLayer),
         Layer.provide(ProviderTurnLivenessRepositoryLive),
+        Layer.provide(Recovery.RecoveryPersistenceLayerLive),
       );
     }),
   );
@@ -324,15 +332,19 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(OpencodeServerManagerLive),
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
-  Layer.provideMerge(OpenLive),
+  Layer.provideMerge(
+    Layer.mergeAll(OpenLive, EventLoopLagMonitorLive, Recovery.SleepEvidenceLayerLive),
+  ),
   Layer.provideMerge(ServerLifecycleEventsLive),
   Layer.provideMerge(
     Layer.mergeAll(
       MobileRemoteControlLive.pipe(Layer.provide(ServerSettingsLive)),
       DesktopSupervisorDeliveryLive,
+      ConnectionDiagnosticsLive,
     ),
   ),
-);
+  // One sleep epoch view shared by every evidence source and the recovery coordinator.
+).pipe(Layer.provideMerge(Recovery.SystemSleepEpochsLive));
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
   Layer.provideMerge(RuntimeDependenciesLive),
@@ -362,7 +374,8 @@ export const makeServerLayer = Layer.unwrap(
       ThreadToolModelSourcesLive,
     );
 
-    return serverApplicationLayer.pipe(
+    // The shutdown signal finalizes first, before routes close their WebSocket streams.
+    return withServerShutdownSignal(serverApplicationLayer).pipe(
       Layer.provideMerge(RuntimeServicesLive),
       Layer.provideMerge(HttpServerLive),
       // One backend per state directory: acquired before the port binds and persistence opens,
@@ -376,8 +389,6 @@ export const makeServerLayer = Layer.unwrap(
 );
 
 // Important: Only `ServerConfig` should be provided by the CLI layer!!! Don't let other requirements leak into the launch layer.
-export const runServer = Layer.launch(makeServerLayer) satisfies Effect.Effect<
-  never,
-  any,
-  ServerConfig
->;
+export const runServer = withOwnershipShutdown(
+  Layer.launch(makeServerLayer),
+) satisfies Effect.Effect<void, any, ServerConfig>;

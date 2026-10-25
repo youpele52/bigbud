@@ -1,10 +1,12 @@
 import path from "node:path";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { randomBytes } from "node:crypto";
 import { Schema } from "effect";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
 import {
   V2PluginPublication,
-  V2_MANAGED_PLUGIN_FILENAME,
+  v2ManagedPluginFilename,
+  v2PublicationProtocol,
   v2ManagedPluginEntry,
   v2PluginContentHash,
   type V2PluginSetupArtifact,
@@ -51,7 +53,7 @@ export async function publishV2ManagedPlugin(
   authority.assertCurrent();
   authority.signal.throwIfAborted();
   authority.waiterSignal?.throwIfAborted();
-  const key = JSON.stringify([root, artifact.issuer]);
+  const key = JSON.stringify([root, artifact.issuer, v2ManagedPluginFilename(artifact)]);
   let job = jobs.get(key);
   if (
     job &&
@@ -152,7 +154,7 @@ async function publishExclusive(
     artifact.privateKey,
     artifact.publicKey,
   );
-  const key = JSON.stringify([root, V2_MANAGED_PLUGIN_FILENAME]);
+  const key = JSON.stringify([root, v2ManagedPluginFilename(artifact)]);
   let saved = await records.read(key);
   let record = saved
     ? Schema.decodeUnknownSync(V2PluginPublication)(saved.value, { onExcessProperty: "error" })
@@ -207,7 +209,7 @@ async function publishExclusive(
         throw new Error("V2 installation revalidation successor preserved after adoption.");
     }
     const plugins = await ensureV2NativePluginsDirectory(root, rootIdentity, authority);
-    const filename = path.join(plugins.directory, V2_MANAGED_PLUGIN_FILENAME);
+    const filename = path.join(plugins.directory, v2ManagedPluginFilename(artifact));
     const read = () => readV2NativePluginFile(filename, true, 16384);
     let existing = await read();
     if (
@@ -237,7 +239,7 @@ async function publishExclusive(
           )))
     )
       throw new Error(
-        "V2 required-plugin filename is not this app's exact signed prior entry; collision preserved.",
+        `V2 required-plugin filename is not this app's exact signed prior entry (${record ? "content or file identity changed" : "installation record missing for this profile"}); collision preserved. Native configuration was not overwritten.`,
       );
     if (record && !existing && record.phase !== "reserved")
       throw new Error(
@@ -261,6 +263,7 @@ async function publishExclusive(
       root,
       artifact,
       authority,
+      v2ThreadRegistration(artifact).family,
     );
     let staging: V2PluginStaging | undefined;
     let retainWindowsStaging = false;
@@ -282,7 +285,7 @@ async function publishExclusive(
       if (existing && !previous)
         throw new Error("V2 required-plugin upgrade lacks exact predecessor authority.");
       record = {
-        protocol: "bigbud.thread.install.v1",
+        protocol: v2PublicationProtocol(artifact),
         root,
         rootIdentity,
         pluginsIdentity: plugins.identity,

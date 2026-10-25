@@ -14,6 +14,7 @@ import { randomBytes } from "node:crypto";
 import * as fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import * as Ownership from "@bigbud/shared/backendOwnership.record";
 
 import { Data } from "effect";
 
@@ -23,20 +24,7 @@ import { compareProcessStartToken, processStartToken } from "../utils/processSta
 export const STATE_DIR_LOCK_FILENAME = "backend.lock";
 const FORMAT = "bigbud.backend-lock.v1";
 
-export interface StateDirLockRecord {
-  readonly format: typeof FORMAT;
-  readonly pid: number;
-  /** Environment-independent process start token, or null when unobtainable on this platform.
-   * Tokens written by older builds are not comparable and therefore never prove PID reuse. */
-  readonly startedAt: string | null;
-  readonly port: number;
-  readonly hostname: string;
-  /** Stable machine identity (`utils/machineIdentity.ts`); absent in older records or when the
-   * platform offers none. Hostnames change with the network on macOS; this does not. */
-  readonly machineId?: string | null;
-  readonly acquiredAt: string;
-  readonly nonce: string;
-}
+export type StateDirLockRecord = Ownership.StateDirLockRecord;
 
 export class StateDirLockError extends Data.TaggedError("StateDirLockError")<{
   readonly message: string;
@@ -74,28 +62,7 @@ const errorCode = (cause: unknown) =>
   cause instanceof Error && "code" in cause ? String(cause.code) : undefined;
 
 export function parseStateDirLockRecord(raw: string): StateDirLockRecord | undefined {
-  try {
-    const value = JSON.parse(raw) as Partial<StateDirLockRecord>;
-    if (
-      value.format !== FORMAT ||
-      !Number.isSafeInteger(value.pid) ||
-      (value.pid ?? 0) < 1 ||
-      !(value.startedAt === null || typeof value.startedAt === "string") ||
-      !Number.isSafeInteger(value.port) ||
-      typeof value.hostname !== "string" ||
-      !(
-        value.machineId === undefined ||
-        value.machineId === null ||
-        typeof value.machineId === "string"
-      ) ||
-      typeof value.acquiredAt !== "string" ||
-      typeof value.nonce !== "string"
-    )
-      return undefined;
-    return value as StateDirLockRecord;
-  } catch {
-    return undefined;
-  }
+  return Ownership.parseStateDirLockRecord(raw);
 }
 
 /** Same machine by stable machine id when both sides carry one; otherwise by hostname (older
@@ -217,6 +184,7 @@ export async function acquireStateDirLock(input: {
   readonly port: number;
   readonly probe?: StateDirLockProbe;
   readonly now?: () => Date;
+  readonly control?: Ownership.OwnershipControl;
 }): Promise<StateDirLockHandle> {
   const probe = input.probe ?? defaultStateDirLockProbe;
   const lockPath = path.join(input.stateDir, STATE_DIR_LOCK_FILENAME);
@@ -232,6 +200,7 @@ export async function acquireStateDirLock(input: {
     ...(machineId ? { machineId } : {}),
     acquiredAt: (input.now?.() ?? new Date()).toISOString(),
     nonce,
+    ...(input.control ? { control: input.control } : {}),
   };
   const content = `${JSON.stringify(record)}\n`;
   for (let attempt = 0; attempt < 8; attempt++) {

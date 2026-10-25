@@ -6,7 +6,7 @@ import { Effect } from "effect";
 import { ThreadId } from "@bigbud/contracts";
 import { expect, it, vi } from "vitest";
 import { withV2AutomaticSetupApplication } from "./PluginSetup.application.fixture.ts";
-import { V2_MANAGED_PLUGIN_FILENAME } from "./PluginSetup.record.ts";
+import { v2ManagedPluginFilename } from "./PluginSetup.record.ts";
 
 vi.mock("./Catalog.public.ts", async (original) => ({
   ...(await original<typeof import("./Catalog.public.ts")>()),
@@ -30,9 +30,9 @@ it.skipIf(!binary)(
   async () => {
     await withV2AutomaticSetupApplication(
       binary!,
-      async ({ native, registration, client, configRoot }) => {
+      async ({ app, native, registration, client, configRoot }) => {
         const adapter = registration.adapterService;
-        const filename = path.join(configRoot, "plugins", V2_MANAGED_PLUGIN_FILENAME);
+        const filename = path.join(configRoot, "plugins", v2ManagedPluginFilename(app.artifact));
         const globalBefore = await readFile(native.configFile);
         const secondary = path.join(configRoot, "opencode.jsonc");
         const legacy =
@@ -95,9 +95,9 @@ it.skipIf(!binary)(
   async () => {
     await withV2AutomaticSetupApplication(
       binary!,
-      async ({ native, registration, settings, client, configRoot }) => {
+      async ({ app, native, registration, settings, client, configRoot }) => {
         const adapter = registration.adapterService;
-        const filename = path.join(configRoot, "plugins", V2_MANAGED_PLUGIN_FILENAME);
+        const filename = path.join(configRoot, "plugins", v2ManagedPluginFilename(app.artifact));
         const models = (await Effect.runPromise(registration.providerService.refresh)).models;
         const original = await readFile(native.configFile);
         const unchanged = (await client.session.list()).data;

@@ -1,31 +1,20 @@
-import { parseStandaloneComposerSlashCommand } from "../../../logic/composer";
-import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
-import { appendTerminalContextsToPrompt } from "../../../lib/terminalContext";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { recordModelUsage } from "../../../models/recentlyUsedModels";
 import type { ChatAttachment } from "../../../models/types";
 import type { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecutionAccessGate";
 import { newCommandId, newMessageId } from "~/lib/utils";
-import { toastManager } from "../../ui/toast";
 
-import {
-  appendBrowserAnnotationsToPrompt,
-  buildExpiredTerminalContextToastCopy,
-  deriveComposerSendState,
-  formatOutgoingPrompt,
-} from "./ChatView.logic";
 import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
 import {
   buildOptimisticAttachments,
   buildThreadBootstrap,
   buildTurnAttachments,
-  IMAGE_ONLY_BOOTSTRAP_PROMPT,
 } from "./ChatView.sendTurn.helpers";
 import {
   persistThreadSettingsForNextTurnIfServer,
   prepareSendContext,
 } from "./ChatView.sendTurn.actions.shared";
-import { formatReadDocumentPrompt, parseReadDocumentCommand } from "./ChatView.sendTurn.read";
+import { notifyOmittedTerminalContexts, prepareComposerPrompt } from "./ChatView.sendTurn.prepare";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
 import { digestMaterializationRequest } from "../../../stores/materialization/materializationRequestDigest";
 import {
@@ -56,15 +45,7 @@ export async function sendChatTurn({
   const {
     activeProject: project,
     activeThread: thread,
-    promptRef,
-    composerImages,
-    composerFiles,
-    composerAnnotations,
-    composerTerminalContexts,
-    selectedProvider,
     selectedModel,
-    selectedProviderModels,
-    selectedPromptEffort,
     selectedModelSelection,
     runtimeMode,
     interactionMode,
@@ -73,78 +54,18 @@ export async function sendChatTurn({
     shouldAutoScrollRef,
   } = input;
   if (!thread) return;
-  const attachmentIssue = providerAttachmentIssue(selectedProvider, [
-    ...composerImages,
-    ...composerFiles,
-  ]);
-  if (attachmentIssue) {
-    input.setThreadError(thread.id, attachmentIssue);
-    return;
-  }
-
-  const promptForSend = promptRef.current;
+  const prepared = await prepareComposerPrompt({ api, sendInput: input, resetComposerDraft });
+  if (!prepared || !project) return;
   const {
-    trimmedPrompt,
-    sendableTerminalContexts: sendableComposerTerminalContexts,
+    promptText: promptForSend,
+    transformedPromptText: transformedPromptTextForSend,
+    outgoingMessageText,
+    images: composerImagesSnapshot,
+    files: composerFilesSnapshot,
+    annotations: composerAnnotationsSnapshot,
+    terminalContexts: composerTerminalContextsSnapshot,
     expiredTerminalContextCount,
-    hasSendableContent,
-  } = deriveComposerSendState({
-    prompt: promptForSend,
-    imageCount: composerImages.length,
-    fileCount: composerFiles.length,
-    annotationCount: composerAnnotations.length,
-    terminalContexts: composerTerminalContexts,
-  });
-
-  const standaloneSlashCommand =
-    composerImages.length === 0 &&
-    composerFiles.length === 0 &&
-    composerAnnotations.length === 0 &&
-    sendableComposerTerminalContexts.length === 0
-      ? parseStandaloneComposerSlashCommand(trimmedPrompt)
-      : null;
-  if (standaloneSlashCommand) {
-    if (standaloneSlashCommand === "plan" || standaloneSlashCommand === "default") {
-      input.handleInteractionModeChange(standaloneSlashCommand);
-    }
-    resetComposerDraft();
-    return;
-  }
-
-  const readDocumentCommand = parseReadDocumentCommand(trimmedPrompt);
-
-  if (!hasSendableContent) {
-    if (expiredTerminalContextCount > 0) {
-      const toastCopy = buildExpiredTerminalContextToastCopy(expiredTerminalContextCount, "empty");
-      toastManager.add({
-        type: "warning",
-        title: toastCopy.title,
-        description: toastCopy.description,
-      });
-    }
-    return;
-  }
-  if (!project) return;
-
-  const promptTextForSend = readDocumentCommand
-    ? await api.server
-        .readDocumentUrl({ url: readDocumentCommand.url })
-        .then(formatReadDocumentPrompt)
-        .catch((error: unknown) => {
-          toastManager.add({
-            type: "error",
-            title: "Could not read document URL",
-            description: error instanceof Error ? error.message : "Check the URL and try again.",
-          });
-          return null;
-        })
-    : promptForSend;
-  if (!promptTextForSend) {
-    return;
-  }
-  const transformedPromptTextForSend = input.transformPromptForSend
-    ? input.transformPromptForSend(promptTextForSend)
-    : promptTextForSend;
+  } = prepared;
 
   const sendContext = await prepareSendContext({
     input,
@@ -159,32 +80,9 @@ export async function sendChatTurn({
   const isServer = !isDraft;
   let turnStartSucceeded = false;
   try {
-    const composerImagesSnapshot = [...composerImages];
-    const composerFilesSnapshot = [...composerFiles];
-    const composerAnnotationsSnapshot = [...composerAnnotations];
-    const composerTerminalContextsSnapshot = [...sendableComposerTerminalContexts];
-    const messageTextWithTerminalContexts = appendTerminalContextsToPrompt(
-      transformedPromptTextForSend,
-      composerTerminalContextsSnapshot,
-    );
-    const messageTextForSend = appendBrowserAnnotationsToPrompt(
-      messageTextWithTerminalContexts,
-      composerAnnotationsSnapshot,
-    );
     let messageIdForSend = newMessageId();
     let commandIdForSend = newCommandId();
     const messageCreatedAt = new Date().toISOString();
-    const outgoingMessageText = formatOutgoingPrompt({
-      provider: selectedProvider,
-      model: selectedModel,
-      models: selectedProviderModels,
-      effort: selectedPromptEffort,
-      text: messageTextForSend || IMAGE_ONLY_BOOTSTRAP_PROMPT,
-      subProviderID:
-        "subProviderID" in selectedModelSelection
-          ? selectedModelSelection.subProviderID
-          : undefined,
-    });
     const requestDigest = await digestMaterializationRequest({
       kind: "turn",
       threadId: threadIdForSend,
@@ -255,17 +153,7 @@ export async function sendChatTurn({
     input.scrollToUserTurnAnchor(messageIdForSend);
 
     input.setThreadError(threadIdForSend, null);
-    if (expiredTerminalContextCount > 0) {
-      const toastCopy = buildExpiredTerminalContextToastCopy(
-        expiredTerminalContextCount,
-        "omitted",
-      );
-      toastManager.add({
-        type: "warning",
-        title: toastCopy.title,
-        description: toastCopy.description,
-      });
-    }
+    notifyOmittedTerminalContexts(expiredTerminalContextCount);
     resetComposerDraft();
 
     await (async () => {

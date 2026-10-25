@@ -62,6 +62,7 @@ describe("gate G2a: OpenCode V2 fresh-session replay", () => {
 
   it("a session-dead V2 turn start gets one revive and never a fresh transcript replay", async () => {
     const harness = await createHarness({
+      workspaceRoot: await tempDir("g2a-recovery-workspace-"),
       threadModelSelection: { provider: "opencodeV2", model: "synthetic-model" },
       sessionRecovery: "resume-restart",
     });

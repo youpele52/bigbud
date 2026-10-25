@@ -38,6 +38,7 @@ export function observeOpenCodeSetup(
 ) {
   let active = true;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let interest: Pick<Result, "jobId" | "interestId"> | undefined;
   const deadline = setTimeout(() => {
     if (!active) return;
     active = false;
@@ -51,9 +52,21 @@ export function observeOpenCodeSetup(
   }
   async function check(next: ServerOpencodeV2ThreadToolsSetupInput) {
     try {
-      const result = await request(next);
+      const reply = await request(next);
+      const result = {
+        ...reply,
+        ...(reply.jobId === interest?.jobId && interest?.interestId
+          ? { interestId: interest.interestId }
+          : {}),
+      };
+      interest = result;
       if (!active) return;
-      if (next.operation === "status" && result.status === "ready") {
+      if (
+        next.operation === "status" &&
+        input.operation !== "status" &&
+        input.operation !== "cancel-interest" &&
+        result.status === "ready"
+      ) {
         // A coalesced global activation job may have verified a different Location.
         void check(input);
         return;

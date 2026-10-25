@@ -30,7 +30,7 @@ it("rebound listener cannot expose primary tools, forge invocation success, or r
     if (received.length === 0)
       await expect(host.request(owner.nativeSessionId)).rejects.toThrow("Required");
     expect(received).toHaveLength(1);
-    const tool = host.tools.get("bigbud_thread_v1_send_thread_message")!;
+    const tool = host.tools.get(`bb2_${app.artifact.issuer.slice(0, 32)}_send_thread_message`)!;
     await expect(
       tool.execute(
         { threadId: "SECRET-TARGET", message: "SECRET-MESSAGE" },

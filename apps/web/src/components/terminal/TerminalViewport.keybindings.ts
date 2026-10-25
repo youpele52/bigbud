@@ -5,6 +5,7 @@ import {
   isDiffToggleShortcut,
   isTerminalClearShortcut,
   isTerminalCloseShortcut,
+  isTerminalFindShortcut,
   isTerminalNewShortcut,
   isTerminalSplitShortcut,
   isTerminalToggleShortcut,
@@ -26,6 +27,10 @@ interface AttachTerminalKeybindingsInput {
   readonly api: NativeApi;
   readonly acceptsInput?: () => boolean;
   readonly writeNotice?: (terminal: Terminal, message: string) => void;
+  /** Ordered input lane of the view; shortcuts then share the coalescing queue with typing. */
+  readonly sendInput?: (data: string) => void;
+  /** Opens the view's find bar; without it the find shortcut is left to the app. */
+  readonly onFind?: () => void;
 }
 
 interface TerminalKeyEventHandlerInput extends Omit<AttachTerminalKeybindingsInput, "terminal"> {
@@ -69,10 +74,16 @@ export function createTerminalKeyEventHandler({
   api,
   acceptsInput = () => true,
   writeNotice = writeSystemMessage,
+  sendInput,
+  onFind,
 }: TerminalKeyEventHandlerInput): (event: KeyboardEvent) => boolean {
   const sendTerminalInput = async (data: string, fallbackError: string) => {
     const activeTerminal = terminalRef.current;
     if (!activeTerminal || !acceptsInput()) return;
+    if (sendInput) {
+      sendInput(data);
+      return;
+    }
     try {
       await api.terminal.write({ threadId, terminalId, data });
     } catch (error) {
@@ -97,6 +108,15 @@ export function createTerminalKeyEventHandler({
       isTerminalCloseShortcut(event, currentKeybindings, options) ||
       isDiffToggleShortcut(event, currentKeybindings, options)
     ) {
+      return false;
+    }
+
+    if (onFind && isTerminalFindShortcut(event, currentKeybindings, options)) {
+      if (event.type === "keydown") {
+        event.preventDefault();
+        event.stopPropagation();
+        onFind();
+      }
       return false;
     }
 

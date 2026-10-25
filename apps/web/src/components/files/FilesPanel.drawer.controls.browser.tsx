@@ -101,19 +101,25 @@ describe("single Files header controls", () => {
   });
 
   it.each([900, 500, 320])(
-    "keeps the shared file-close X beside a long filename and hittable above an overlay at width %s",
+    "centers the file path between history and a right-aligned file-close X at width %s",
     async (width) => {
       const file =
         "directory-with-a-long-name/a-very-long-file-name-that-must-not-hide-its-close-button.ts";
       const mounted = await render(<DrawerHarness initialPreview={file} width={width} />);
       try {
-        filesHandle().click();
-        await vi.waitFor(() => expect(treeRegion().inert).toBe(false));
+        const header = document.querySelector<HTMLElement>("[data-file-preview-header]")!;
+        const identity = header.querySelector<HTMLElement>("[data-file-preview-identity]")!;
         const close = button("Close file");
-        expect(close.closest("[data-file-preview-identity]")).not.toBeNull();
+        expect(close.closest("[data-file-preview-identity]")).toBeNull();
         expect(document.querySelectorAll('[aria-label="Close file"]')).toHaveLength(1);
+        const headerBounds = header.getBoundingClientRect();
         const bounds = close.getBoundingClientRect();
-        expect(bounds.right).toBeLessThanOrEqual(treeRegion().getBoundingClientRect().left);
+        const identityBounds = identity.getBoundingClientRect();
+        expect(headerBounds.right - bounds.right).toBeLessThanOrEqual(12);
+        expect(identityBounds.left).toBeGreaterThanOrEqual(
+          button("Forward").getBoundingClientRect().right,
+        );
+        expect(identityBounds.right).toBeLessThanOrEqual(bounds.left);
         expect(
           document
             .elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)
@@ -132,6 +138,21 @@ describe("single Files header controls", () => {
       }
     },
   );
+
+  it("centers a short file path within the preview header", async () => {
+    const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" />);
+    try {
+      const header = document.querySelector<HTMLElement>("[data-file-preview-header]")!;
+      const identity = header.querySelector<HTMLElement>("[data-file-preview-identity]")!;
+      const headerBounds = header.getBoundingClientRect();
+      const identityBounds = identity.getBoundingClientRect();
+      const headerCenter = headerBounds.left + headerBounds.width / 2;
+      const identityCenter = identityBounds.left + identityBounds.width / 2;
+      expect(Math.abs(headerCenter - identityCenter)).toBeLessThanOrEqual(1);
+    } finally {
+      await mounted.unmount();
+    }
+  });
 
   it("suppresses real edge hover after Escape or folder toggle until leaving and reentering, while clicks still open persistently", async () => {
     const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" />);

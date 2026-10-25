@@ -21,9 +21,11 @@ vi.mock("./ui/toast", () => ({
   toastManager: { add: mocks.add, update: mocks.update, close: mocks.close },
 }));
 vi.mock("./WebSocketConnectionSurface.heartbeat", () => ({
-  useWebSocketHeartbeat: () => () => undefined,
+  useWebSocketHeartbeat: () => ({ invalidate: () => undefined, probeNow: () => undefined }),
 }));
-vi.mock("../rpc/wsRpcClient", () => ({ getWsRpcClient: () => ({ reconnect: mocks.reconnect }) }));
+vi.mock("../rpc/wsRpcClient", () => ({
+  getWsRpcClient: () => ({ reconnect: mocks.reconnect, reconnectNow: () => false }),
+}));
 
 import { AppAtomRegistryProvider } from "../rpc/atomRegistry";
 import {
@@ -131,7 +133,7 @@ describe("real cached config recovery coordinator", () => {
   it("offers explicit physical reconnect and displays a fixed safe failure", async () => {
     const generation = beginServerConfigReadiness(true);
     updateServerConfigReadiness(generation, { stream: "exhausted", failure: "protocol_failed" });
-    recordWsProtocolRecovery(true);
+    recordWsProtocolRecovery();
     mocks.reconnect.mockRejectedValueOnce(new Error("token=private-token /private/provider/path"));
     screen = await render(
       <AppAtomRegistryProvider>

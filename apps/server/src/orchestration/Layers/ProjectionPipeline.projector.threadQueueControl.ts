@@ -2,6 +2,7 @@ import type { OrchestrationEvent } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 
 import type { ProjectionThreadRepositoryShape } from "../../persistence/Services/ProjectionThreads.ts";
+import { insertQueuedPrompt } from "@bigbud/shared/queuedPromptOrder";
 
 export const projectThreadQueueControlEvent = Effect.fn("projectThreadQueueControlEvent")(
   function* (input: {
@@ -52,7 +53,7 @@ export const projectThreadQueueControlEvent = Effect.fn("projectThreadQueueContr
       event.type === "thread.prompt-queued"
         ? row.queuedPrompts.some((prompt) => prompt.id === event.payload.prompt.id)
           ? row.queuedPrompts
-          : [...row.queuedPrompts, event.payload.prompt]
+          : insertQueuedPrompt(row.queuedPrompts, event.payload.prompt, event.payload.queuePosition)
         : event.type === "thread.queued-prompt-removed"
           ? row.queuedPrompts.filter((prompt) => prompt.id !== event.payload.messageId)
           : row.queuedPrompts.filter((prompt) => !event.payload.messageIds.includes(prompt.id));

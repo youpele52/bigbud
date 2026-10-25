@@ -55,3 +55,16 @@ export function observeModelChoice(choiceId: string, nowMs: number): number {
 export function modelChoiceObservationCount(): number {
   return modelChoiceObservations.size;
 }
+
+/**
+ * When this browser first saw a thread's sleep recovery state, keyed by thread and
+ * `sleepRecoveryStateKey`, so the 3 s hide and the 6 s notice survive remounts.
+ */
+const sleepRecoveryObservations = new Map<string, number>();
+
+export function observeSleepRecoveryState(threadId: ThreadId, stateKey: string, nowMs: number) {
+  const key = `${threadId}\0${stateKey}`;
+  const observedAtMs = sleepRecoveryObservations.get(key) ?? nowMs;
+  remember(sleepRecoveryObservations, key, observedAtMs);
+  return observedAtMs;
+}

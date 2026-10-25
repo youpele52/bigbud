@@ -48,6 +48,11 @@ describe("ProviderCommandReactor blocking send admission", () => {
     );
 
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    // The requested turn is busy until the reactor records the provider's acceptance.
+    await waitFor(async () => {
+      const readModel = await Effect.runPromise(harness.engine.getReadModel());
+      return readModel.threads.find((thread) => thread.id === threadId)?.pendingTurnStart === null;
+    });
 
     const afterFirst = await Effect.runPromise(harness.engine.getReadModel());
     const firstThread = afterFirst.threads.find((thread) => thread.id === threadId);

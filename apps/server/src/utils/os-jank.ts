@@ -1,4 +1,5 @@
 import * as OS from "node:os";
+import { resolveOwnershipBaseDir } from "@bigbud/shared/backendOwnership.paths";
 import { Effect, Path } from "effect";
 import {
   listLoginShellCandidates,
@@ -73,9 +74,5 @@ export const expandHomePath = Effect.fn(function* (input: string) {
 });
 
 export const resolveBaseDir = Effect.fn(function* (raw: string | undefined) {
-  const { join, resolve } = yield* Path.Path;
-  if (!raw || raw.trim().length === 0) {
-    return join(OS.homedir(), ".bigbud");
-  }
-  return resolve(yield* expandHomePath(raw.trim()));
+  return yield* Effect.sync(() => resolveOwnershipBaseDir(raw));
 });

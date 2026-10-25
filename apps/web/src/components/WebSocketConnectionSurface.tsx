@@ -26,8 +26,9 @@ export function WebSocketConnectionSurface({ children }: { readonly children: Re
 
   const confirmedFailure = readiness.fallback === "failed" || readiness.stream === "exhausted";
   if (
-    serverConfig === null &&
-    (delayElapsed || confirmedFailure || shouldShowDesktopStartupBlockingState(desktopStartup))
+    desktopStartup?.ownershipRecovery?.phase === "yielded" ||
+    (serverConfig === null &&
+      (delayElapsed || confirmedFailure || shouldShowDesktopStartupBlockingState(desktopStartup)))
   ) {
     return (
       <WebSocketBlockingState

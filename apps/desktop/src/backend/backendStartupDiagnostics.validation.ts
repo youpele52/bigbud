@@ -4,6 +4,7 @@ import type {
   DesktopBackendStartupFailureReason,
   DesktopBackendStartupState,
 } from "@bigbud/contracts/server/ipc.desktop.ts";
+import { isOwnershipRecoveryState } from "./ownershipRecovery.validation";
 import {
   MAX_STARTUP_ERROR_MESSAGE_LENGTH,
   MAX_STARTUP_STDERR_TAIL_LENGTH,
@@ -117,6 +118,7 @@ export function isBackendStartupState(
     typeof state.startedAt === "number" &&
     Number.isFinite(state.startedAt) &&
     statusValid &&
+    (state.ownershipRecovery === undefined || isOwnershipRecoveryState(state.ownershipRecovery)) &&
     (state.failureReason === undefined || isFailureReason(state.failureReason)) &&
     (state.diagnostics === undefined || isDiagnostics(state.diagnostics)) &&
     (state.developmentDiagnostics === undefined ||

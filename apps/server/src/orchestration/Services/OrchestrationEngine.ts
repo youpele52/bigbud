@@ -38,6 +38,8 @@ export interface OrchestrationEngineShape {
   readonly withWorkspaceBarrier?: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
   /** Stable identity for this server process, used to fence recovery frames. */
   readonly serverEpoch?: string;
+  /** Last sequence persisted before this process started; later events are this process's. */
+  readonly startupSequence?: number;
 
   /** Shared deletion fence and subtree operation for orchestration reactors. */
   readonly threadDeletion?: ThreadDeletionShape;

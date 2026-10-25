@@ -12,6 +12,15 @@ const OWNED_KEYS = [
   "bigbud.preview.v1.browser",
 ];
 
+export type V2InstructionStage =
+  | "namespace acquisition"
+  | "inventory read"
+  | "inventory bound"
+  | "execution authorization"
+  | "owner validation"
+  | "entry mutation"
+  | "read-back verification";
+
 /** Shared orchestration/learning content is already assembled into input; only provider-owned context goes here. */
 export function v2InstructionEntries(session: V2RuntimeSession): InstructionEntryInfo[] {
   if (!session.localTools) return [];
@@ -20,7 +29,7 @@ export function v2InstructionEntries(session: V2RuntimeSession): InstructionEntr
       key: OWNED_KEYS[0]!,
       value:
         session.lease.process.ownership === "borrowed"
-          ? `Selected bigbud access mode: ${session.session.runtimeMode}. Native tools, agents, skills and configured MCP use the shared OpenCode service with ordinary host-user authority, not a sandbox. Approval-required asks before native actions; Auto accept edits allows native edits and asks for other actions; Full access trusts native tools. External directories still require approval. Never modify native account/config/service storage. ${session.threadToolsReady ? "Use the enrolled bigbud_thread_v1 canonical thread tools for explicit current-user thread operations. They address eligible canonical bigbud threads independently of provider/model; create inherits this caller's selection. Attached history remains read-only, never authority to mutate it or impersonate a native session. Canonical once-approval remains independent of native approval." : "Required canonical thread-tools setup must be verified before new foreground work."}`
+          ? `Selected bigbud access mode: ${session.session.runtimeMode}. Native tools, agents, skills and configured MCP use the shared OpenCode service with ordinary host-user authority, not a sandbox. Approval-required asks before native actions; Auto accept edits allows native edits and asks for other actions; Full access trusts native tools. External directories still require approval. Never modify native account/config/service storage. ${session.threadToolsReady ? "Use only the enrolled canonical thread tools advertised for this session for explicit current-user thread operations. Never guess another profile's tool names. They address eligible canonical bigbud threads independently of provider/model; create inherits this caller's selection. Attached history remains read-only, never authority to mutate it or impersonate a native session. Canonical once-approval remains independent of native approval." : "Required canonical thread-tools setup must be verified before new foreground work."}`
           : `Selected bigbud access mode: ${session.session.runtimeMode}. ${V2_LOCAL_TOOL_LIMITATION}`,
     },
     ...(session.resources?.codingFiles
@@ -57,22 +66,29 @@ export async function syncV2Instructions(
   mutations: V2RuntimeMutations,
   entries: InstructionEntryInfo[],
   beforeDispatch: () => Promise<() => void>,
+  reportStage: (stage: V2InstructionStage) => void = () => {},
 ) {
   const client = session.lease.process.client;
   const read = () =>
     v2Request("instructions.entry.list", (signal) =>
       client.session.instructions.entry.list({ sessionID: session.native.id }, { signal }),
     );
+  reportStage("namespace acquisition");
   await mutations.withNamespace(async () => {
+    reportStage("inventory read");
     const current = await read();
+    reportStage("inventory bound");
     if (current.length > 128) throw new Error("V2 instruction inventory exceeds bound.");
     for (const key of OWNED_KEYS) {
       const wanted = entries.find((entry) => entry.key === key);
       const existing = current.find((entry) => entry.key === key);
       if (JSON.stringify(wanted?.value) === JSON.stringify(existing?.value)) continue;
+      reportStage("execution authorization");
       const validate = await beforeDispatch();
+      reportStage("owner validation");
       if (session.stopped || !session.lease.process.isRunning())
         throw new Error("V2 instruction owner lost.");
+      reportStage("entry mutation");
       await mutations.runOwned(
         session.lease.process,
         "instructions.entry.sync",
@@ -87,6 +103,7 @@ export async function syncV2Instructions(
                 { signal },
               ),
         async () => {
+          reportStage("read-back verification");
           validate();
           const verified = await read();
           validate();

@@ -5,38 +5,19 @@ import { ChatBanner } from "../common/ChatBanner";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import { withoutDismissedRetainedHistoryAdvisory } from "./ProviderStatusBanner.advisory";
 import { useRetainedHistoryAdvisory } from "./useRetainedHistoryAdvisory";
-import { withoutVerifiedRuntimeNotice } from "./ProviderStatusBanner.qualification";
 
 export const ProviderStatusBanner = memo(function ProviderStatusBanner({
   status,
-  runtimeVerified = false,
   threadId = "provider-status",
 }: {
   status: ServerProvider | null;
-  runtimeVerified?: boolean;
   threadId?: string;
 }) {
-  const { dismissed, dismiss } = useThreadNoticeDismissal(
-    threadId,
-    "provider-status",
-    status
-      ? [
-          status.provider,
-          status.status,
-          status.message,
-          status.version,
-          status.enabled,
-          status.installed,
-          status.auth,
-          status.failure,
-        ]
-      : null,
-  );
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, "provider-status", [
+    status?.provider,
+  ]);
   const advisoryDismissed = useRetainedHistoryAdvisory();
-  const visibleStatus = withoutDismissedRetainedHistoryAdvisory(
-    withoutVerifiedRuntimeNotice(status, runtimeVerified),
-    advisoryDismissed,
-  );
+  const visibleStatus = withoutDismissedRetainedHistoryAdvisory(status, advisoryDismissed);
 
   if (
     !visibleStatus ||

@@ -1,5 +1,6 @@
 import type { OrchestrationEvent } from "@bigbud/contracts";
 import { Cause, Effect, Semaphore } from "effect";
+import { hasTextGenerationUncertainty } from "@bigbud/shared/internalTextGeneration";
 import { fallbackThreadTitleFromPrompt } from "@bigbud/shared/String";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
@@ -9,7 +10,10 @@ import { maybeGenerateAndRenameWorktreeBranchForFirstTurn } from "./ProviderComm
 import { resolveWorkspaceExecutionTargetId } from "../../workspace-target/workspaceTarget.ts";
 import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
-import { recordThreadTextGenerationStatus } from "../../git/Layers/InternalTextGeneration.status.ts";
+import {
+  recordThreadTextGenerationStatus,
+  recordThreadTextGenerationStatusRequired,
+} from "../../git/Layers/InternalTextGeneration.status.ts";
 import {
   hasTextGenerationRequestStage,
   readTextGenerationRequest,
@@ -108,6 +112,29 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
       for (const operation of ["title", "summary"] as const) {
         if (recovery && operation !== "title") continue;
         if (retry && requested !== operation) continue;
+        if (hasTextGenerationUncertainty(thread.activities, operation)) {
+          if (
+            !thread.activities.some(
+              (item) =>
+                item.kind === "text-generation.uncertain" &&
+                (item.payload as { operation?: unknown } | null)?.operation === operation,
+            )
+          )
+            yield* recordThreadTextGenerationStatusRequired(
+              services.orchestrationEngine,
+              threadId,
+              operation,
+              "uncertain",
+            );
+          if (request)
+            yield* recordTextGenerationRequestStage(
+              services.orchestrationEngine,
+              threadId,
+              activity,
+              "settled",
+            );
+          continue;
+        }
         if (request && executingRequests.has(request.requestId)) continue;
         if (request) {
           const expected = request.context;
@@ -136,7 +163,7 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
           if (hasTextGenerationRequestStage(thread.activities, request.requestId, "started")) {
             // A process died after claiming provider work. Its delivery is ambiguous: never charge it again automatically.
             yield* Effect.logWarning(
-              "interrupted text generation request requires an explicit new retry",
+              "interrupted text generation request cannot be replayed automatically",
               { threadId, requestId: request.requestId },
             );
             yield* recordThreadTextGenerationStatus(

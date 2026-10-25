@@ -11,6 +11,26 @@ import type { V2ProcessLease, OpencodeV2ServerManager } from "./ServerManager.ts
 import type { V2ProcessConfig } from "./ServerManager.child.ts";
 
 export interface V2RuntimeSession {
+  family?: import("./Subagents.ownership.ts").V2OwnedFamily;
+  familyQualification?: import("./Runtime.family.ts").V2SubagentQualification | undefined;
+  /** Host-exit retirement authority, independent of cached pending counts and UI liveness. */
+  familyPhysicalDrain?: import("./Subagents.bridge.drain.ts").V2FamilyPhysicalDrain;
+  familyControl?: {
+    readonly nativeReceipt?: (
+      inputID: string,
+    ) => Promise<import("./Subagents.extension.ts").V2FamilyReceipt>;
+    readonly confirmCancellation?: () => Promise<void>;
+    readonly refreshNative?: () => Promise<void>;
+    readonly busyCount?: () => number;
+    readonly childBusyCount?: (sessionID: string) => number;
+    readonly fence: () => Promise<void>;
+    readonly authorizeInput: (
+      row: import("@bigbud/contracts/orchestration/providerTurnAdmission.ts").ProviderTurnAdmission,
+    ) => Promise<void>;
+  };
+  detachSubagentGuard?: (() => void | Promise<void>) | undefined;
+  /** Exact turn's observed native-arrival fence, retained through physical reservation settlement. */
+  backgroundClosure?: { readonly turnId: string; readonly assertCurrent: () => void };
   activation?: {
     readonly gate: import("./PluginSetup.activation.gate.ts").V2ActivationGate;
     readonly stamp: import("./PluginSetup.activation.gate.ts").V2ReadyStamp;
@@ -63,7 +83,11 @@ export interface V2RuntimeSession {
   readonly emitted: Set<string>;
   readonly messages: Map<string, SessionMessageInfo>;
   pendingInteractions?: Map<string, ProviderRuntimeEvent>;
-  runtimeState?: { signature: string; sequence: number };
+  runtimeState?: {
+    signature: string;
+    sequence: number;
+    state?: "error" | "running" | "waiting" | "ready";
+  };
   finalEvents?: ProviderRuntimeEvent[];
   lossPending?: boolean;
   finalPublication?: {
@@ -96,6 +120,15 @@ export interface V2SessionResources {
 
 /** Explicit harness authorization; never inferred from saved provider enabled settings. */
 export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessConfig> {
+  readonly nativeSubagents?: {
+    readonly stateDirectory: string;
+    readonly qualification?: import("./Runtime.family.ts").V2SubagentQualification;
+    readonly prepare?: (
+      owner: V2RuntimeSession,
+      runtime: import("./Runtime.ts").OpencodeV2Runtime,
+    ) => Promise<import("./Runtime.family.ts").V2SubagentQualification | undefined>;
+  };
+  readonly profileIssuer?: () => Promise<string>;
   readonly activation?: {
     readonly coordinator: import("./PluginSetup.activation.ts").V2ThreadToolsActivation;
     readonly beforeSharedHistory?: (scope: {
@@ -112,6 +145,7 @@ export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessC
       directory: string,
       signal: AbortSignal | undefined,
       hidden: boolean,
+      identity?: import("./Orchestration.selection.ts").V2SessionRegistrationIdentity,
     ) => Promise<{
       gate: import("./PluginSetup.activation.gate.ts").V2ActivationGate;
       stamp: import("./PluginSetup.activation.gate.ts").V2ReadyStamp;

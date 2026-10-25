@@ -14,9 +14,9 @@ import {
 } from "./PluginSetup.paths.ts";
 import { inspectV2PluginControls } from "./PluginSetup.policy.ts";
 import { publishV2ManagedPlugin } from "./PluginSetup.publication.ts";
-import { V2_MANAGED_PLUGIN_FILENAME, type V2PluginSetupArtifact } from "./PluginSetup.record.ts";
+import { v2ManagedPluginFilename, type V2PluginSetupArtifact } from "./PluginSetup.record.ts";
 import { verifyV2ThreadTools } from "./Orchestration.readiness.ts";
-import { V2_THREAD_RPC } from "./Orchestration.protocol.ts";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { readV2CompatibleManualBootstrap } from "./Orchestration.readiness.manual.ts";
 import {
   verifyV2NativeEligibility,
@@ -25,6 +25,7 @@ import {
 import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
 import { v2NativeRuntimePlatform } from "./NativeCompatibility.platform.ts";
 import { atV2SetupStage } from "./PluginSetup.diagnostics.ts";
+import { setupV2NativeFamily } from "./Subagents.setup.ts";
 
 /** Only explicit expanded acknowledgement + an execution context can administer this one managed entry. */
 export function makeV2AutomaticPluginSetup(
@@ -78,7 +79,14 @@ export function makeV2AutomaticPluginSetup(
         readV2PluginConfigScope(client, directory, root, authority, artifact, eligibility),
       );
       const configured = await atV2SetupStage("config-controls", () =>
-        inspectV2PluginControls(sources.entries, root, authority, directory, sources.machinePaths),
+        inspectV2PluginControls(
+          sources.entries,
+          root,
+          authority,
+          directory,
+          sources.machinePaths,
+          v2ThreadRegistration(artifact),
+        ),
       );
       signal?.throwIfAborted();
       const inventory = await atV2SetupStage("plugin-inventory", () =>
@@ -89,12 +97,14 @@ export function makeV2AutomaticPluginSetup(
         ),
       );
       authority.assertCurrent();
-      const matches = inventory.data.filter((plugin) => plugin.id === V2_THREAD_RPC);
+      const matches = inventory.data.filter(
+        (plugin) => plugin.id === v2ThreadRegistration(artifact).id,
+      );
       if (inventory.data.length > 1000 || matches.length > 1)
         throw new Error(
           "V2 required-plugin namespace has duplicate/colliding native records; explicit remediation is required.",
         );
-      const managed = path.join(root, "plugins", V2_MANAGED_PLUGIN_FILENAME);
+      const managed = path.join(root, "plugins", v2ManagedPluginFilename(artifact));
       const manual = [
         artifact.directory,
         fileURLToPath(artifact.entryUri),
@@ -106,6 +116,15 @@ export function makeV2AutomaticPluginSetup(
       );
       if (retainedManual) {
         authority.assertCurrent();
+        await setupV2NativeFamily(
+          retainedManual,
+          client,
+          directory,
+          root,
+          authority,
+          configured,
+          eligibility,
+        );
         return retainedManual;
       }
       signal?.throwIfAborted();
@@ -127,6 +146,15 @@ export function makeV2AutomaticPluginSetup(
           eligibility,
           root,
         );
+        await setupV2NativeFamily(
+          artifact,
+          client,
+          directory,
+          root,
+          authority,
+          configured,
+          eligibility,
+        );
         return artifact;
       }
       v2NativeRuntimePlatform();
@@ -135,6 +163,15 @@ export function makeV2AutomaticPluginSetup(
       );
       authority.assertCurrent();
       await atV2SetupStage("publication", () => publishV2ManagedPlugin(artifact, root, authority));
+      await setupV2NativeFamily(
+        artifact,
+        client,
+        directory,
+        root,
+        authority,
+        configured,
+        eligibility,
+      );
       signal?.throwIfAborted();
       await atV2SetupStage("readiness", () =>
         settleV2PluginReadiness(
@@ -155,7 +192,9 @@ export function makeV2AutomaticPluginSetup(
         ),
       );
       authority.assertCurrent();
-      const installed = final.data.filter((plugin) => plugin.id === V2_THREAD_RPC);
+      const installed = final.data.filter(
+        (plugin) => plugin.id === v2ThreadRegistration(artifact).id,
+      );
       if (
         installed.length !== 1 ||
         installed[0]?.source.type !== "local" ||
@@ -189,7 +228,9 @@ async function settleV2PluginReadiness(
       { signal: authority.signal },
     );
     authority.assertCurrent();
-    const records = inventory.data.filter((plugin) => plugin.id === V2_THREAD_RPC);
+    const records = inventory.data.filter(
+      (plugin) => plugin.id === v2ThreadRegistration(artifact).id,
+    );
     if (inventory.data.length > 1000 || records.length > 1)
       throw new Error(
         "V2 required-plugin settled namespace has duplicate/colliding records; explicit remediation is required.",

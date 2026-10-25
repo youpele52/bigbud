@@ -293,7 +293,7 @@ export const handleTurnEnd = Effect.fn("handleTurnEnd")(function* (deps: {
   if (!turnId) {
     return;
   }
-  if (deps.session.completedTurnBoundary) {
+  if (deps.session.completedTurnBoundary && !deps.session.process.supportsAgentSettled) {
     return;
   }
 

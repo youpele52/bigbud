@@ -20,7 +20,8 @@ import { useComposerDraftStore } from "../../stores/composer";
 import { __resetNativeApiForTests } from "../../rpc/nativeApi";
 import { getRouter } from "../../config/router";
 import { useStore } from "../../stores/main";
-import { BrowserWsRpcHarness } from "../../../test/wsRpcHarness";
+import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../../test/wsRpcHarness";
+import { resolveCatalogRpc } from "../chat/view/ChatView.browser/context.catalog";
 import { createBaseServerConfig } from "./KeybindingsToast.browser.config";
 
 const THREAD_ID = "thread-kb-toast-test" as ThreadId;
@@ -122,7 +123,14 @@ function buildFixture(): TestFixture {
   };
 }
 
-function resolveWsRpc(tag: string): unknown {
+function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
+  // Startup reads the bounded project/thread catalogs and the selected thread's detail.
+  const catalogResult = resolveCatalogRpc(body, fixture.snapshot);
+  if (catalogResult !== undefined) return catalogResult;
+  const tag = body._tag;
+  if (tag === WS_METHODS.serverPing) {
+    return { serverTime: fixture.snapshot.updatedAt };
+  }
   if (tag === ORCHESTRATION_WS_METHODS.getSnapshot) {
     return fixture.snapshot;
   }
@@ -266,7 +274,7 @@ describe("Keybindings update toast", () => {
 
   beforeEach(async () => {
     await rpcHarness.reset({
-      resolveUnary: (request) => resolveWsRpc(request._tag),
+      resolveUnary: resolveWsRpc,
       getInitialStreamValues: (request) => {
         if (request._tag === WS_METHODS.subscribeServerLifecycle) {
           return [

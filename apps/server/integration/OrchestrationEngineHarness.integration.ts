@@ -14,6 +14,7 @@ import { ProjectionCheckpointRepositoryLive } from "../src/persistence/Layers/Pr
 import { ProjectionPendingApprovalRepositoryLive } from "../src/persistence/Layers/ProjectionPendingApprovals.ts";
 import { ProviderSessionRuntimeRepositoryLive } from "../src/persistence/Layers/ProviderSessionRuntime.ts";
 import { makeSqlitePersistenceLive } from "../src/persistence/Layers/Sqlite.ts";
+import { waitForNodeSqliteWorkersIdle } from "../src/persistence/NodeSqliteClient.worker.bridge.ts";
 import { ProjectionThreadWatchRepositoryLive } from "../src/persistence/Layers/ProjectionThreadWatches.ts";
 import { ProjectionKanbanRepositoryLive } from "../src/persistence/Layers/ProjectionKanban.ts";
 import { ProjectionNoteRepositoryLive } from "../src/persistence/Layers/ProjectionNotes.ts";
@@ -33,10 +34,12 @@ import { CheckpointReactorLive } from "../src/orchestration/Layers/CheckpointRea
 import { OrchestrationEngineLive } from "../src/orchestration/Layers/OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "../src/orchestration/Layers/ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "../src/orchestration/Layers/ProjectionSnapshotQuery.ts";
+import { ProjectionOperationalStateQueryLive } from "../src/orchestration/Layers/ProjectionOperationalStateQuery.ts";
 import { RuntimeReceiptBusTest } from "../src/orchestration/Layers/RuntimeReceiptBus.ts";
 import { OrchestrationReactorLive } from "../src/orchestration/Layers/OrchestrationReactor.ts";
 import { ProviderCommandReactorLive } from "../src/orchestration/Layers/ProviderCommandReactor.ts";
 import { ProviderRuntimeIngestionLive } from "../src/orchestration/Layers/ProviderRuntimeIngestion.ts";
+import { ProviderTurnSupervisorLive } from "../src/orchestration/Layers/ProviderTurnSupervisor.ts";
 import { ComputerUseDisabledTestLayer } from "../src/orchestration/Layers/OrchestrationEngine.test.helpers.ts";
 import { OrchestrationEngineService } from "../src/orchestration/Services/OrchestrationEngine.ts";
 import { OrchestrationReactor } from "../src/orchestration/Services/OrchestrationReactor.ts";
@@ -93,9 +96,12 @@ export const makeOrchestrationIntegrationHarness = (
           listProviders: () => Effect.succeed([adapterHarness.provider]),
         } as typeof ProviderAdapterRegistry.Service)
       : null;
-    const rootDir = yield* fileSystem.makeTempDirectoryScoped({
-      prefix: "t3-orchestration-integration-",
-    });
+    for (const response of options?.nextSessionTurnResponses ?? []) {
+      yield* adapterHarness!.queueTurnResponseForNextSession(response);
+    }
+    const rootDir =
+      options?.rootDir ??
+      (yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-orchestration-integration-" }));
     const workspaceDir = path.join(rootDir, "workspace");
     const { stateDir, dbPath } = yield* deriveServerPaths(rootDir, undefined).pipe(
       Effect.provideService(Path.Path, path),
@@ -104,8 +110,14 @@ export const makeOrchestrationIntegrationHarness = (
     yield* fileSystem.makeDirectory(stateDir, { recursive: true });
     yield* initializeGitWorkspace(workspaceDir);
 
-    const persistenceLayer = makeSqlitePersistenceLive(dbPath);
-    const orchestrationLayer = OrchestrationEngineLive.pipe(
+    const persistenceLayer = makeSqlitePersistenceLive(dbPath, {
+      worker: options?.sqliteWorker ?? true,
+    });
+    // A restarted harness loads persisted operational state at startup, as production does.
+    const engineLayer = options?.rootDir
+      ? OrchestrationEngineLive.pipe(Layer.provide(ProjectionOperationalStateQueryLive))
+      : OrchestrationEngineLive;
+    const orchestrationLayer = engineLayer.pipe(
       Layer.provide(OrchestrationProjectionPipelineLive),
       Layer.provide(OrchestrationEventStoreLive),
       Layer.provide(OrchestrationCommandReceiptRepositoryLive),
@@ -262,6 +274,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(schedulerReactorLayer),
       Layer.provideMerge(threadWatchReactorLayer),
       Layer.provideMerge(learningReactorLayer),
+      Layer.provideMerge(ProviderTurnSupervisorLive.pipe(Layer.provide(runtimeServicesLayer))),
     );
     const clockLayer = options?.testClock ? TestClock.layer() : Layer.empty;
     const layer = Layer.empty.pipe(
@@ -305,6 +318,7 @@ export const makeOrchestrationIntegrationHarness = (
       runtime.runPromise(Effect.service(RuntimeReceiptBus)),
     ).pipe(Effect.orDie);
 
+    if (options?.beforeReactorStart) yield* options.beforeReactorStart(engine);
     const scope = yield* Scope.make("sequential");
     yield* tryRuntimePromise("start OrchestrationReactor", () =>
       runtime.runPromise(reactor.start().pipe(Scope.provide(scope))),
@@ -342,8 +356,14 @@ export const makeOrchestrationIntegrationHarness = (
       waitForDomainEvent,
       waitForPendingApproval,
       waitForReceipt,
+      // With the SQLite worker, fibers re-arm TestClock sleeps only after their worker
+      // I/O settles, so wait for it before and after moving the clock.
       advanceClock: (duration) =>
-        Effect.promise(() => runtime.runPromise(Effect.scoped(TestClock.adjust(duration)))),
+        Effect.promise(async () => {
+          await waitForNodeSqliteWorkersIdle();
+          await runtime.runPromise(Effect.scoped(TestClock.adjust(duration)));
+          await waitForNodeSqliteWorkersIdle();
+        }),
       dispose,
     } satisfies OrchestrationIntegrationHarness;
   });

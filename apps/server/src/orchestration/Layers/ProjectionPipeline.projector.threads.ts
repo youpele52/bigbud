@@ -14,6 +14,8 @@ import {
 import { type ProjectorDefinition, type ProjectorDeps } from "./ProjectionPipeline.projectors.ts";
 import { advancesThreadActivityAt } from "./ProjectionPipeline.projector.projects.lastUsed.ts";
 import { projectThreadQueueControlEvent } from "./ProjectionPipeline.projector.threadQueueControl.ts";
+import { projectThreadPendingTurnStartEvent } from "./ProjectionPipeline.projector.threadPendingTurnStart.ts";
+import { projectThreadRecoveryEvent } from "./ProjectionPipeline.projector.threadRecovery.ts";
 
 function resolveSyncedElevatorSummary(input: {
   readonly currentTitle: string;
@@ -63,6 +65,9 @@ export function makeThreadsProjector(
         occurredAt: event.occurredAt,
       });
     }
+    // Before queue control: that projector returns early for events that also move this gate.
+    yield* projectThreadPendingTurnStartEvent({ event, repository: projectionThreadRepository });
+    yield* projectThreadRecoveryEvent({ event, repository: projectionThreadRepository });
     if (yield* projectThreadQueueControlEvent({ event, repository: projectionThreadRepository }))
       return;
     switch (event.type) {
@@ -98,6 +103,7 @@ export function makeThreadsProjector(
           queuedPrompts: [],
           pendingInterruptFlushIntent: null,
           pendingTurnControlOperation: null,
+          pendingTurnStart: null,
           // A fork holding the source's uncertain message starts with its queue held (plan D17).
           queueHold: event.payload.forkOrigin?.pendingDelivery === "held",
           createdAt: event.payload.createdAt,

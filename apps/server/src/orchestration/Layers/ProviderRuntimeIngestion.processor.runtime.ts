@@ -157,6 +157,12 @@ export function makeRuntimeEventProcessor(
             providerName: event.provider,
             runtimeMode: thread.session?.runtimeMode ?? "full-access",
             activeTurnId: nextActiveTurnId,
+            retainedFamily:
+              event.provider === "opencodeV2" &&
+              event.type !== "session.exited" &&
+              (event.type === "session.state.changed"
+                ? (event.payload.retainedFamily ?? thread.session?.retainedFamily ?? false)
+                : (thread.session?.retainedFamily ?? false)),
             sessionEpoch: sessionEpoch ?? 0,
             reason:
               event.type === "session.state.changed"

@@ -7,7 +7,10 @@ import {
 import { syntheticV2QualificationRecord } from "./NativeCompatibility.qualification.fixture.ts";
 import { V2_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.ts";
 import { V2_NATIVE_QUALIFICATION_SCOPES } from "./NativeCompatibility.types.ts";
-import { V2_NATIVE_QUALIFICATION_SUITE_REVISION } from "./NativeCompatibility.qualification.suite.ts";
+import {
+  V2_NATIVE_QUALIFICATION_SUITE_REVISION,
+  V2_NATIVE_QUALIFICATION_TARGET,
+} from "./NativeCompatibility.qualification.suite.ts";
 
 // Empty-registry behavior is proven on a mocked empty registry, independent of promotion.
 vi.mock("./NativeCompatibility.qualification.registry.ts", () => ({
@@ -15,8 +18,8 @@ vi.mock("./NativeCompatibility.qualification.registry.ts", () => ({
   V2_NATIVE_RELEASE_INCOMPATIBILITIES: [],
 }));
 
-/** Holds before and after promotion without editing: empty, or exactly the reviewed 2.0.29 record. */
-it("the release registry is empty or holds exactly the darwin/arm64 2.0.29 record of the current suite revision", async () => {
+/** Holds before and after promotion without editing: empty, or exactly the reviewed target record. */
+it("the release registry is empty or holds exactly the darwin/arm64 qualification-target record of the current suite revision", async () => {
   const actual = await vi.importActual<
     typeof import("./NativeCompatibility.qualification.registry.ts")
   >("./NativeCompatibility.qualification.registry.ts");
@@ -28,7 +31,7 @@ it("the release registry is empty or holds exactly the darwin/arm64 2.0.29 recor
   expect(registry.qualified.size).toBeLessThanOrEqual(1);
   for (const { record } of registry.qualified.values())
     expect(record).toMatchObject({
-      nativeVersion: "2.0.29",
+      nativeVersion: V2_NATIVE_QUALIFICATION_TARGET.nativeVersion,
       platform: "darwin",
       arch: "arm64",
       suiteRevision: V2_NATIVE_QUALIFICATION_SUITE_REVISION,

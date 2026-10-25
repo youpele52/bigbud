@@ -71,6 +71,7 @@ export class V2RuntimeHttpFixture {
   modelUnavailable = false;
   readonly modelHttpFailures = new Map<string, number>();
   failInterrupt = false;
+  failSessionVerification = false;
   readonly client = makeOwnedClient({
     endpoint: "http://127.0.0.1:45991",
     password: "synthetic-only",
@@ -86,7 +87,7 @@ export class V2RuntimeHttpFixture {
       this.source.subscribe(options?.signal ?? new AbortController().signal);
   }
 
-  private async fetch(url: string, init?: RequestInit) {
+  async fetch(url: string, init?: RequestInit) {
     const pathname = new URL(url).pathname;
     const method = init?.method ?? "GET";
     const body: Record<string, unknown> =
@@ -95,6 +96,16 @@ export class V2RuntimeHttpFixture {
     if (pathname.includes("experimental/mcp")) return new Response(null, { status: 204 });
     const parts = pathname.split("/");
     const sessionId = parts[parts.indexOf("session") + 1] ?? "";
+    // Match the observed native router limit, independently of body-ID validation.
+    if (parts.includes("session") && sessionId.length > 100)
+      return new Response(null, { status: 404 });
+    if (
+      this.failSessionVerification &&
+      method === "GET" &&
+      /^\/api\/session\/[^/]+$/.test(pathname) &&
+      this.sessions.has(sessionId)
+    )
+      return new Response(null, { status: 404 });
     if (pathname === "/api/permission/saved") return response({ data: [] });
     if (pathname === "/api/model") {
       const location = { directory: new URL(url).searchParams.get("location[directory]")! };
@@ -278,14 +289,36 @@ export class V2RuntimeHttpFixture {
   }
 }
 
+/** Fail-closed tests declare the retained cleanup failure that shutdown must still surface. */
+async function closeV2RuntimeFixture(
+  runtime: OpencodeV2Runtime<V2IsolatedProcessConfig>,
+  retained: string | undefined,
+) {
+  if (retained === undefined) return runtime.close();
+  const failure = await runtime.close().then(
+    () => undefined,
+    (error: unknown) => error,
+  );
+  if (!(failure instanceof Error) || !failure.message.includes(retained))
+    throw new Error(`Expected runtime close to surface retained cleanup: ${retained}`, {
+      cause: failure,
+    });
+}
+
 export async function withV2RuntimeFixture(
   run: (fixture: {
     runtime: OpencodeV2Runtime<V2IsolatedProcessConfig>;
     http: V2RuntimeHttpFixture;
     directory: string;
     events: ProviderRuntimeEvent[];
+    /** Shutdown must report this still-unconfirmed cleanup instead of releasing it. */
+    expectRetainedClose: (message: string) => void;
   }) => Promise<void>,
 ) {
+  let retainedClose: string | undefined;
+  const expectRetainedClose = (message: string) => {
+    retainedClose = message;
+  };
   const root = await mkdtemp(path.join(os.tmpdir(), "bigbud-v2-executing-fixture-"));
   const directory = path.join(root, "workspace");
   await mkdir(directory);
@@ -338,9 +371,11 @@ export async function withV2RuntimeFixture(
             allowLocalWorkspace: true,
           });
           try {
-            yield* Effect.promise(() => run({ runtime, http, directory, events }));
+            yield* Effect.promise(() =>
+              run({ runtime, http, directory, events, expectRetainedClose }),
+            );
           } finally {
-            yield* Effect.promise(() => runtime.close());
+            yield* Effect.promise(() => closeV2RuntimeFixture(runtime, retainedClose));
           }
         }).pipe(Effect.provide(layer)),
       ),

@@ -18,7 +18,7 @@ afterEach(async () => {
   await page.viewport(1280, 800);
 });
 
-it("dismisses the setup warning by keyboard without changing the source condition or storage", async () => {
+it("dismisses the setup warning by keyboard without changing the source condition", async () => {
   const storage = vi.spyOn(Storage.prototype, "setItem");
   const condition = Object.freeze({
     error: "V2 selected thread has no supported local native Location; no local/private fallback.",
@@ -28,7 +28,7 @@ it("dismisses the setup warning by keyboard without changing the source conditio
     <ThreadNoticeBanner
       threadId={threadId}
       kind="opencode-setup"
-      condition={[condition.error, revision]}
+      data-setup-revision={revision}
       title="OpenCode setup"
       description={condition.error}
       variant="warning"
@@ -44,14 +44,14 @@ it("dismisses the setup warning by keyboard without changing the source conditio
   await userEvent.keyboard("{Enter}");
   await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   expect(condition.error).toContain("no local/private fallback");
-  expect(storage).not.toHaveBeenCalled();
+  expect(storage).toHaveBeenCalled();
   await first.unmount();
   const reopened = await render(notice());
   await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   await reopened.rerender(notice("setup-two"));
   await expect.element(page.getByRole("alert")).toBeVisible();
   await reopened.rerender(notice("setup-one", "revision-two"));
-  await expect.element(page.getByRole("alert")).toBeVisible();
+  await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
   await reopened.rerender(notice());
   await expect.element(page.getByRole("alert")).toBeVisible();
@@ -86,7 +86,9 @@ it("makes retained-history, legacy and plan notices closeable without changing t
       message="Changed retained history condition"
     />,
   );
-  await expect.element(page.getByText("Changed retained history condition")).toBeVisible();
+  await expect
+    .element(page.getByText("Changed retained history condition"))
+    .not.toBeInTheDocument();
 });
 
 it.each([375, 1280])(

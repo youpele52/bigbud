@@ -4,6 +4,7 @@ import type { resolveV2RuntimeBinding } from "./Runtime.binding.ts";
 import { borrowV2SharedService } from "./SharedService.connection.ts";
 import { findSharedSession, prepareSharedCreation } from "./Runtime.sessions.shared.ts";
 import { assertV2Model } from "./Runtime.sessions.ts";
+import { matchesV2NativeRegistration } from "./Runtime.registration.ts";
 
 /** Terminal reuse verifies exact retained native history without acquiring a hub or mutating it. */
 export async function verifyV2SharedLearningHistory(
@@ -18,6 +19,7 @@ export async function verifyV2SharedLearningHistory(
     const native = await findSharedSession(process.client, binding.nativeSessionId);
     if (
       !native ||
+      !matchesV2NativeRegistration(native, binding) ||
       native.id !== binding.nativeSessionId ||
       native.location.directory !== binding.directory ||
       native.metadata?.bigbud_thread !== input.threadId ||

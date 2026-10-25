@@ -11,6 +11,8 @@ export const recordSubmittedUserTurn = (
     requestMessageId?: MessageId;
     turnId: TurnId;
     createdAt: string;
+    /** The provider was idle again when acceptance was recorded, so the turn already ended. */
+    providerIdle: boolean;
   },
 ) =>
   Effect.gen(function* () {
@@ -35,7 +37,7 @@ export const recordSubmittedUserTurn = (
           tone: "info",
           summary: "User turn submitted",
           turnId: input.turnId,
-          payload: { messageId: input.requestMessageId },
+          payload: { messageId: input.requestMessageId, providerIdle: input.providerIdle },
           createdAt: input.createdAt,
         },
       })

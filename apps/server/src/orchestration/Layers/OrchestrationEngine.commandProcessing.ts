@@ -40,6 +40,7 @@ import { makeLifecycleQueuedPromptFlushCommand } from "../QueuedPromptFlush.logi
 import type { BoundedCommandAdmission } from "../../command-admission/CommandAdmission.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { persistRejectedCommandReceipt } from "./OrchestrationEngine.rejectionReceipt.ts";
+import { makeRecoveryIntentRecorder } from "./OrchestrationEngine.recoveryIntents.ts";
 import {
   calculateCommandPayloadDigest,
   type OrchestrationCommandPayloadDigest,
@@ -86,6 +87,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
   const projectionPipeline = yield* OrchestrationProjectionPipeline;
   const retentionRepository = yield* Effect.serviceOption(ThreadRetentionRepository);
   const visibleBrowser = yield* VisibleBrowserControl;
+  const recordRecoveryIntent = yield* makeRecoveryIntentRecorder;
 
   return (envelope: CommandEnvelope): Effect.Effect<boolean> => {
     const dispatchStartSequence = input.readModel().snapshotSequence;
@@ -183,6 +185,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                 );
                 nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
                 yield* projectionPipeline.projectEvent(savedEvent);
+                yield* recordRecoveryIntent(savedEvent, envelope.command);
                 yield* persistWorktreeRuntimeCwd(sql, savedEvent);
                 committedEvents.push(savedEvent);
               }

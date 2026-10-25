@@ -71,7 +71,7 @@ describe("staged title startup recovery", () => {
     });
     expect(harness.sendTurn).not.toHaveBeenCalled();
   });
-  it("consumes a durable ambiguous stage and runs only the next metadata stage without replaying chat", async () => {
+  it("retains a durable ambiguous stage without paying for a later stage or replaying chat", async () => {
     const harness = await createHarness({
       startReactor: false,
       serverSettingsOverrides: {
@@ -111,12 +111,14 @@ describe("staged title startup recovery", () => {
       Effect.succeed({ title: "Recovered second title stage" }),
     );
     await harness.startReactor();
-    await waitFor(async () => (await readThread()).title === "Recovered second title stage");
-    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
+    await waitFor(async () =>
+      (await readThread()).activities.some((item) => item.kind === "text-generation.uncertain"),
+    );
+    expect(harness.generateThreadTitle).not.toHaveBeenCalled();
     expect(harness.sendTurn).not.toHaveBeenCalled();
     expect(harness.startSession).not.toHaveBeenCalled();
     await harness.startReactor();
     await harness.drain();
-    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
+    expect(harness.generateThreadTitle).not.toHaveBeenCalled();
   });
 });

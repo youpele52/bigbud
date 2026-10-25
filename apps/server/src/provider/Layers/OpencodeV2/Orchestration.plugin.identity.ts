@@ -1,6 +1,8 @@
 import { V2_THREAD_OWNER_FIELDS, V2_ENROLLMENT_PROTOCOL } from "./Orchestration.protocol.ts";
-import { V2_BOOTSTRAP_ABI } from "./Orchestration.plugin.specs.ts";
-import { V2_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.ts";
+import {
+  V2_COMPATIBILITY_DIGEST,
+  V2_BOOTSTRAP_COMPATIBILITY,
+} from "./Orchestration.compatibility.ts";
 
 /** Emit only portable Node primitives, with the exact same signing-field order as the app. */
 export function renderV2ThreadIdentity(publicKey: string): string {
@@ -17,7 +19,7 @@ function bounded(value, limit=4096) { return typeof value === "string" && value.
 function hex(value, length) { return typeof value === "string" && new RegExp("^[a-f0-9]{"+length+"}$").test(value); }
 export function validateOwner(owner, artifact) {
   if (!owner || typeof owner !== "object" || Object.keys(owner).length !== fields.length || fields.some(field => !(field in owner))) fail();
-  if (owner.protocol !== protocol || owner.issuer !== issuer || owner.bootstrapDigest !== artifact || !hex(artifact,64) || owner.bootstrapAbi!==${JSON.stringify(V2_BOOTSTRAP_ABI)} || owner.compatibilityDigest!==${JSON.stringify(V2_COMPATIBILITY_DIGEST)} || !hex(owner.implementationDigest,64) || !hex(owner.enrollmentNonce,32) || !hex(owner.callbackToken,64)) fail();
+  if (owner.protocol !== protocol || owner.issuer !== issuer || owner.bootstrapDigest !== artifact || !hex(artifact,64) || owner.bootstrapAbi!==${JSON.stringify(V2_BOOTSTRAP_COMPATIBILITY.bootstrapAbi)} || owner.compatibilityDigest!==${JSON.stringify(V2_COMPATIBILITY_DIGEST)} || !hex(owner.implementationDigest,64) || !hex(owner.enrollmentNonce,32) || !hex(owner.callbackToken,64)) fail();
   if (["threadId","nativeSessionId","storageIdentity","directory","transportGeneration","callbackUrl"].some(field => !bounded(owner[field]))) fail();
   if (owner.runtimeTargetId !== "local" || owner.workspaceTargetId !== "local" || [owner.sessionEpoch,owner.consentRevision].some(value => !Number.isSafeInteger(value) || value < 0)) fail();
   let url; try { url=new URL(owner.callbackUrl); } catch { fail(); }

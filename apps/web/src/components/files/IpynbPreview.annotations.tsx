@@ -30,6 +30,7 @@ export function NotebookAnnotationComposer({
     <div className="sticky bottom-3 mx-auto mt-3">
       <AnnotationComposerPanel
         targetLabel={formatAnnotationTargetLabel(selectedRange)}
+        selectionPreview={selectedFlatText}
         onCancel={() => setSelectedRange(null)}
         onSubmit={({ intent, comment }) => {
           onCreateAnnotation({

@@ -30,6 +30,8 @@ import { hasOpencodeV2ManagedPluginTrust } from "@bigbud/shared/opencodeNativeTr
 import { OrchestrationEngineService } from "../../../orchestration/Services/OrchestrationEngine.ts";
 import { inferredV2SetupLocation } from "./ThreadToolsSetup.location.ts";
 import { resolveDefaultChatCwd } from "../../../ws/serverSettings.persistence.ts";
+import { selectV2SetupArtifact } from "./ThreadToolsSetup.registration.ts";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { v2ApplicationConfigKey } from "./Application.configKey.ts";
 import { v2NativeCompatibilitySetupResult } from "./ThreadToolsSetup.compatibility.ts";
 import { v2NativeProofMetadata, v2NativeReadyNotice } from "./NativeCompatibility.status.ts";
@@ -54,7 +56,6 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
             input.operation === "cancel-interest" ? input.interestId : undefined,
           );
           const readyNotice = v2NativeReadyNotice(
-            state.qualificationState,
             "Required bootstrap verified. A later normal foreground action may proceed; no prompt was resumed in the background.",
           );
           return {
@@ -131,12 +132,12 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
         const value = full.providers.opencodeV2;
         const inferred = await inferredV2SetupLocation(
           input,
-          resolveDefaultChatCwd(full) || config.cwd || process.cwd(),
+          resolveDefaultChatCwd(full),
           Option.getOrUndefined(engine),
         );
         if (!path.isAbsolute(inferred)) return unavailable;
         const directory = await realpath(inferred);
-        const artifact = await exportV2ThreadArtifact(config.stateDir);
+        let artifact = await exportV2ThreadArtifact(config.stateDir);
         const implementations = new V2ThreadImplementationRegistry();
         await V2ImplementationSelection.open(artifact, implementations);
         const defaultImplementationDigest = implementations.current().implementationDigest;
@@ -177,6 +178,20 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
               : {}),
           });
           if (issue) return { ...result, status: "incompatible-history", message: issue };
+          artifact = await selectV2SetupArtifact(artifact, {
+            threadId: input.threadId,
+            directory,
+            binding,
+            admission,
+            ...(Option.isSome(history) && history.value.providerName === "opencodeV2"
+              ? { cursor: history.value.resumeCursor }
+              : {}),
+          });
+          Object.assign(result, {
+            artifactDirectoryUri: artifact.pluginUri,
+            artifactDigest: artifact.artifactDigest,
+            configAddition: { plugins: [artifact.pluginUri] },
+          });
         }
         if (resolveOpencodeV2ConnectionMode(value) !== "shared")
           return {
@@ -244,6 +259,26 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
               | Awaited<ReturnType<typeof verifyV2ThreadTools>>["nativeProof"]
               | undefined;
             try {
+              if (v2ThreadRegistration(artifact).family === "legacy") {
+                const { nativeProof } = await verifyV2ThreadTools(
+                  artifact,
+                  connection.client,
+                  directory,
+                  callerSignal,
+                  undefined,
+                  activation.nativeEligibility,
+                  result.nativePluginConfigRoot,
+                );
+                return {
+                  ...result,
+                  status: "ready",
+                  activationState: "ready",
+                  ...v2NativeProofMetadata(nativeProof),
+                  ...v2NativeReadyNotice(
+                    "Exact retained legacy bootstrap verified. Its global entry and native history are unchanged; new chats use the independent profile-scoped registration.",
+                  ),
+                } as ServerOpencodeV2ThreadToolsSetupResult;
+              }
               await recoverV2RebootForSetup({
                 artifact,
                 activation,
@@ -338,7 +373,6 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
                   }
                 : {}),
               ...v2NativeReadyNotice(
-                nativeProof ? v2NativeProofMetadata(nativeProof).qualificationState : undefined,
                 "Required plugin ABI, issuer, artifact and detected Location verified. Compatible foreground chats enroll automatically. Only the proven required global entry is managed; account/model/permission settings are never changed.",
               ),
             };

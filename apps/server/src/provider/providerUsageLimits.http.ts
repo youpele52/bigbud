@@ -21,7 +21,10 @@ export function makeHttpUsageLimitsReader(input: {
   let retained: { scope: string; limits: ServerProviderUsageLimits } | undefined;
   let cached: { scope: string; limits: ServerProviderUsageLimits; expiresAt: number } | undefined;
 
-  return async function readUsageLimits(signal: AbortSignal): Promise<ServerProviderUsageLimits> {
+  return async function readUsageLimits(
+    signal: AbortSignal,
+    force = false,
+  ): Promise<ServerProviderUsageLimits> {
     const checkedAt = new Date().toISOString();
     let scope: string | undefined;
     try {
@@ -35,7 +38,7 @@ export function makeHttpUsageLimitsReader(input: {
       // The fingerprint is private to this reader and is never sent to clients or logs.
       scope = createHash("sha256").update(credential.secret).digest("hex");
       if (retained?.scope !== scope) retained = undefined;
-      if (cached?.scope === scope && cached.expiresAt > Date.now()) return cached.limits;
+      if (!force && cached?.scope === scope && cached.expiresAt > Date.now()) return cached.limits;
       const response = await (input.fetch ?? fetch)(input.url, {
         headers: { Accept: "application/json", "User-Agent": "bigbud", ...credential.headers },
         redirect: "error",

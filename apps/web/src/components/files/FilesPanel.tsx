@@ -19,6 +19,7 @@ import { EMPTY_ENTRIES, makeAnnotationId } from "./FilesPanel.shared";
 import { renderFilesPanelTreeBody } from "./FilesPanel.body";
 import { FilesPanelRefreshCoordinator } from "./FilesPanelRefreshCoordinator";
 import { useFilesPanelDirectoryLoader } from "./useFilesPanelDirectoryLoader";
+import { useFilesPanelSwipeNavigation } from "./useFilesPanelSwipeNavigation";
 import {
   useFilesPanelAuxNavigation,
   useFilesPanelHistory,
@@ -183,6 +184,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     [navigateHistory],
   );
   useFilesPanelAuxNavigation(panelContainerRef, canNavigateHistory, navigateFileHistory);
+  useFilesPanelSwipeNavigation(panelContainerRef, canNavigateHistory, navigateFileHistory);
 
   useEffect(() => {
     if (!directoryNavigationRequest) return;

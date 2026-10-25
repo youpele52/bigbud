@@ -115,6 +115,8 @@ export function createCopilotThreadOrchestrationTools(
     },
     {
       name: "browser",
+      // Native tool discovery must not use the model-reserved browser namespace.
+      namespace: { name: "bigbud_browser", description: "Browser automation provided by bigbud" },
       description: BROWSER_TOOL_DESCRIPTION,
       parameters: BROWSER_TOOL_PARAMETERS,
       handler: async (args) => {

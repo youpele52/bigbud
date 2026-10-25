@@ -3,7 +3,7 @@
 **Date:** 16 October, 2026
 **Created:** 16 October, 2026, 07:55 CEST
 **Last modified:** 16 October, 2026, 08:10 CEST
-**Status:** Proposed — ready for implementation. Ready now: Phases 1, 2, 3, 5, 6.1–6.4, 6.6, and Phase 4 steps 1–3 (read-only observer). Gated: Phase 4 step 4 (enabling native V2 subagents) on G4. Deferred by decision: 6.5 and 6.7.
+**Status:** Core SDK, subagent display and prompt-suggestion work implemented; see the [implementation ledger](../validation/claude-sdk-subagent-display-2026-10-16.md). OpenCode native-family production enablement remains externally qualified/gated in the [current family evidence](../validation/opencode-v2-subagent-evidence-2026-10-16.md), not proved by the older observer-only checkpoint. Deferred by decision: 6.5 (subagent transcript) and 6.7 (native rewind/fork). Historical planning snapshots below are not today's missing-code checklist.
 **Owner:** bigbud server/provider and web maintainers (implementation agent to be assigned)
 **Repository baseline:** worktree `/Users/youpele/DevWorld/bigbud/.claude/worktrees/claude-sdk-subagent-display`, branch `feat/claude-sdk-subagent-display`, created from HEAD `f690b7fd65` of `plan/terminal-rust-gpu-reliability`; clean except this plan. Research began at `6bb04aefe2`; the user's later commits `3029f9bc15` (node-pty) and `f690b7fd65` (Rust plan) touch nothing in scope.
 
@@ -18,7 +18,7 @@ OpenCode V2 shows no subagents because bigbud denies native subagents for securi
 ## Related Work
 
 - [In-chat agent activity plan](2026-09-28-in-chat-agent-activity-plan.md): implemented. It added `OrchestrationTask.kind = "providerSubagent"`, scoped identities, recent-agent hydration, `SubagentsCard`, and the Pi, Copilot, OpenCode V1 and Claude mappings that this plan extends. Its evidence-gate rules still apply.
-- [Claude SDK hardening](claude-sdk-hardening.md): implemented. It covers explicit approvals, single-use query recovery with no replay, and the exact-pin policy. Its tests must stay green.
+- [Consolidated Claude SDK hardening](../validation/claude-sdk-subagent-display-2026-10-16.md#consolidated-direct-sdk-hardening--22-october-2026): implemented. It covers explicit approvals, single-use query recovery with no replay, and the exact-pin policy. Its tests must stay green.
 - [Dead thread recovery](2026-10-15-dead-thread-recovery-plan.md): fork copies tasks with `activityFresh: false` (`apps/server/src/orchestration/deciderThreads.fork.logic.ts:195-220`).
 - [OpenCode V2 gap closure](2026-10-15-opencode-v2-gap-closure-plan.md) and the [V2 implementation plan](2026-09-29-opencode-v2-provider-implementation-plan.md). Line 959 of the latter records that "subagent remains denied" because creating a native child does not pass the parent's permissions to it.
 - [Rust background service plan](2026-10-15-rust-background-service-plan.md): cites line numbers in the SDK 0.3.293 `sdk.d.ts`. Phase 1 shifts those numbers.
@@ -91,7 +91,7 @@ Observed facts:
 
 - `apps/server/package.json:33` pins the SDK exactly at `0.3.293`. The other protocol-coupled SDKs are also pinned exactly: `@anthropic-ai/sdk` 0.115.0, Copilot 1.0.7 and `@opencode/client` 2.0.26. This plan keeps exact pins, per the hardening plan.
 - 0.3.301 has the same peer ranges: `zod ^4` (the lockfile has 4.3.6), `@anthropic-ai/sdk >=0.93.0`, and `@modelcontextprotocol/sdk ^1.29.0` (the lockfile has 1.29.0). It also has eight native optional packages at 0.3.301.
-- `CLAUDE_AGENT_SDK_VERSION` (`Adapter.sdk.ts:3`) is asserted in `Adapter.sdk.routing.test.ts:112` and mentioned in `docs/providers-claude.md:38`.
+- `CLAUDE_AGENT_SDK_VERSION` (`Adapter.sdk.ts:3`) is asserted in `Adapter.sdk.routing.test.ts:112` and documented in `docs/development/providers-claude.md`.
 - bigbud runs the user's own Claude CLI binary (`Adapter.session.ts:146`; `Adapter.session.options.ts:92`). The installed CLI is 2.1.301, which matches SDK 0.3.301.
 
 ### SDK changes from 0.3.293 to 0.3.301
@@ -186,7 +186,7 @@ Line references point into `apps/server/src/provider/Layers/Claude/` unless note
 ### Phase 1: SDK upgrade to 0.3.301 (no behavior change)
 
 1. Set `apps/server/package.json:33` to the exact version `0.3.301` and run `bun install`. Review the lockfile diff: only the SDK and its eight native packages should change.
-2. Update `CLAUDE_AGENT_SDK_VERSION` (`Adapter.sdk.ts:3`), the assertion in `Adapter.sdk.routing.test.ts:112`, and `docs/providers-claude.md`. The 0.3.219 fixtures stay as they are, labeled historical.
+2. Update `CLAUDE_AGENT_SDK_VERSION` (`Adapter.sdk.ts:3`), the assertion in `Adapter.sdk.routing.test.ts:112`, and `docs/development/providers-claude.md`. The 0.3.219 fixtures stay as they are, labeled historical.
 3. Fix only type breaks; all new SDK fields are optional.
 4. Re-run the approval, permission, traits, recovery and controls suites. With `suppressAlwaysAllowRule` absent, session grants must stay safe-only (`Adapter.approval.permissions.ts`).
 5. Add a revalidation note to the Rust background-service plan for its SDK line references.

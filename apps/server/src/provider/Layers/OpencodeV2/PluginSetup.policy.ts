@@ -6,6 +6,7 @@ import { readV2NativePluginFile } from "./PluginSetup.fs.ts";
 import { V2_THREAD_RPC, V2_THREAD_ACTIONS } from "./Orchestration.protocol.ts";
 import { v2PermissionEffect } from "./Runtime.policy.match.ts";
 import type { V2PluginSetupAuthority } from "./PluginSetup.paths.ts";
+import type { V2ThreadRegistration } from "./Orchestration.registration.ts";
 
 const parse = Schema.decodeUnknownSync(fromLenientJson(Schema.Unknown));
 const pattern = (expression: string, value: string) =>
@@ -16,6 +17,11 @@ const pattern = (expression: string, value: string) =>
       .join(".*")}$`,
   ).test(value);
 
+export function assertV2PluginRegistrationEnabled(configured: readonly string[], id: string) {
+  if (configured.some((entry) => entry.startsWith("-") && pattern(entry.slice(1), id)))
+    throw new Error("V2 required native family plugin is explicitly disabled; no setup override.");
+}
+
 /** Parse only to validate/control installation; no JSONC serialization, credential copying or config writes. */
 export async function inspectV2PluginControls(
   entries: Awaited<ReturnType<OpencodeV2Client["config"]["get"]>>,
@@ -23,6 +29,7 @@ export async function inspectV2PluginControls(
   authority: V2PluginSetupAuthority,
   directory: string,
   machinePaths: ReadonlySet<string> = new Set(),
+  registration?: V2ThreadRegistration,
 ) {
   const documents: Array<{ info: Record<string, unknown>; filename?: string }> = [];
   const filenames = new Set([path.join(root, "opencode.json"), path.join(root, "opencode.jsonc")]);
@@ -74,7 +81,12 @@ export async function inspectV2PluginControls(
         throw new Error(
           "V2 native plugin entry cannot be safely interpreted; legacy entries were not rewritten.",
         );
-      if (entry.startsWith("-") && pattern(entry.slice(1), V2_THREAD_RPC))
+      if (
+        entry.startsWith("-") &&
+        [V2_THREAD_RPC, ...(registration ? [registration.id] : [])].some((id) =>
+          pattern(entry.slice(1), id),
+        )
+      )
         throw new Error(
           "V2 required plugin is explicitly removed/denied by native configuration. Automatic setup will not override that policy.",
         );
@@ -89,8 +101,11 @@ export async function inspectV2PluginControls(
   const rules = entries.flatMap((entry) =>
     entry.type === "document" ? (entry.info.permissions ?? []) : [],
   );
-  for (const action of V2_THREAD_ACTIONS)
-    if (v2PermissionEffect(rules, `bigbud_thread_v1_${action}`, "*") === "deny")
+  for (const name of [
+    ...V2_THREAD_ACTIONS.map((action) => `bigbud_thread_v1_${action}`),
+    ...(registration?.tools ?? []),
+  ])
+    if (v2PermissionEffect(rules, name, "*") === "deny")
       throw new Error(
         "V2 required canonical tool is explicitly denied by native permissions; no grants or setup override.",
       );

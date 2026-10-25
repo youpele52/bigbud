@@ -56,6 +56,14 @@ describe("collectRemoteProjectWorktreePaths", () => {
         authMode: "ssh-key",
         remoteTransport: "agent",
         providerRuntimeLocation: "local",
+        connectionSource: "manual",
+        inactiveConnection: {
+          host: "",
+          username: "",
+          port: "",
+          sshKeyPath: "",
+          authMode: "ssh-key",
+        },
       },
     });
 
@@ -99,6 +107,14 @@ describe("collectRemoteProjectWorktreePaths", () => {
         authMode: "ssh-key",
         remoteTransport: "agent",
         providerRuntimeLocation: "local",
+        connectionSource: "manual",
+        inactiveConnection: {
+          host: "",
+          username: "",
+          port: "",
+          sshKeyPath: "",
+          authMode: "ssh-key",
+        },
       },
     });
 

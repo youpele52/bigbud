@@ -19,6 +19,7 @@ import {
 import type { TerminalViewportIntake } from "./TerminalViewport.intake";
 import { ensureThreadMaterialized } from "../../lib/threadMaterialization";
 import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { preserveTerminalScroll } from "./terminalScrollState";
 
 interface TerminalSelectionActionStateRefs {
   readonly selectionActionRequestIdRef: MutableRefObject<number>;
@@ -63,7 +64,8 @@ interface TerminalOpenSessionInput {
   readonly autoFocusRef: MutableRefObject<boolean>;
   readonly containerRef: RefObject<HTMLDivElement | null>;
   readonly attachOnly?: boolean;
-  readonly beforeOpen?: () => void;
+  /** Subscribes the view; open waits for the server-side registration so no event is missed. */
+  readonly beforeOpen?: () => void | Promise<void>;
   readonly onSnapshot?: (
     snapshot: import("@bigbud/contracts/workspace/terminal.ts").TerminalSessionSnapshot,
   ) => void;
@@ -181,11 +183,7 @@ export function fitTerminalViewport(input: {
   const activeFitAddon = input.fitAddonRef.current;
   if (!activeTerminal || !activeFitAddon || !hasUsableTerminalViewportSize(input.containerRef))
     return false;
-  const wasAtBottom = activeTerminal.buffer.active.viewportY >= activeTerminal.buffer.active.baseY;
-  activeFitAddon.fit();
-  if (wasAtBottom) {
-    activeTerminal.scrollToBottom();
-  }
+  preserveTerminalScroll(activeTerminal, () => activeFitAddon.fit());
   return true;
 }
 
@@ -244,7 +242,8 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
   }
   fitTerminalViewport(input);
   // Subscribe immediately before the snapshot request, not during font/layout waits.
-  input.beforeOpen?.();
+  await input.beforeOpen?.();
+  if (input.disposed()) return true;
   if (!input.attachOnly) await ensureThreadMaterialized(input.threadId);
   if (input.disposed()) return true;
   if (input.attachOnly && !api.terminal.snapshot) {

@@ -13,9 +13,13 @@ import {
   type CodexSessionFixture,
 } from "./codexAppServerManager.startSession.mcp.fixtures.ts";
 
-const processMocks = vi.hoisted(() => ({
-  startCodexAppServerProcess: vi.fn(),
-}));
+const processMocks = vi.hoisted(() => {
+  const startCodexAppServerProcess = vi.fn();
+  return {
+    startCodexAppServerProcess,
+    startCodexAppServerProcessAsync: vi.fn(async () => startCodexAppServerProcess()),
+  };
+});
 
 vi.mock("./codexAppServerManager.process", () => processMocks);
 vi.mock("./codexVersionCheck", () => ({

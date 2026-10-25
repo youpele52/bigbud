@@ -1,6 +1,6 @@
 import path from "node:path";
 import {
-  V2_MANAGED_PLUGIN_FILENAME,
+  v2PublicationFilename,
   v2PluginContentHash,
   type V2PluginPublication,
 } from "./PluginSetup.record.ts";
@@ -18,7 +18,7 @@ export async function revalidateV2InstallationIdentity(
 ) {
   const pluginsIdentity = await v2NativePluginDirectory(path.join(root, "plugins"));
   const entry = await readV2NativePluginFile(
-    path.join(root, "plugins", V2_MANAGED_PLUGIN_FILENAME),
+    path.join(root, "plugins", v2PublicationFilename(old)),
     true,
     16384,
   );

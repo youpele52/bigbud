@@ -4,6 +4,10 @@ import type { V2ThreadToolsActivation } from "./PluginSetup.activation.ts";
 import type { V2ActivationJobScope } from "./PluginSetup.activation.jobs.ts";
 import { assertV2PreviousHistoryRetired } from "./Orchestration.enrollment.recovery.ts";
 import type { V2BackendInstance } from "./Orchestration.instances.ts";
+import {
+  selectV2SessionArtifact,
+  type V2SessionRegistrationIdentity,
+} from "./Orchestration.selection.ts";
 
 /** Required execution infrastructure is lazy, not optional: catalog discovery stays truthful when setup/storage fails. */
 export function makeV2RequiredOrchestration(
@@ -55,6 +59,7 @@ export function makeV2RequiredOrchestration(
   };
   return {
     bridge,
+    issuer: async () => (await acquire()).artifact.issuer,
     activation: {
       coordinator: activation,
       beforeSharedHistory: async ({
@@ -83,10 +88,14 @@ export function makeV2RequiredOrchestration(
         directory: string,
         signal: AbortSignal | undefined,
         hidden: boolean,
+        identity?: V2SessionRegistrationIdentity,
       ) => {
-        if (hidden) return activation.passiveReady(descriptor, directory);
         const broker = await acquire();
-        return activation.awaitReady(broker.artifact, descriptor, client, directory, signal);
+        if (!identity)
+          throw new Error("V2 session registration identity required before activation.");
+        const artifact = await selectV2SessionArtifact(broker.artifact, broker.records, identity);
+        if (hidden) return activation.passiveReady(descriptor, directory, artifact);
+        return activation.awaitReady(artifact, descriptor, client, directory, signal);
       },
     },
     preflight: async (

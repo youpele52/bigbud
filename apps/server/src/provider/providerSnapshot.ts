@@ -185,6 +185,7 @@ export function buildServerProvider(input: {
   const message = nonEmptyTrimmed(input.probe.message);
   const nativeSteer =
     input.provider === "pi" ||
+    input.provider === "copilot" ||
     (input.provider === "codex" &&
       input.probe.version !== null &&
       compareCodexCliVersions(input.probe.version, MINIMUM_CODEX_CLI_VERSION) >= 0);
@@ -204,9 +205,9 @@ export function buildServerProvider(input: {
     ...(input.usageLimits ? { usageLimits: input.usageLimits } : {}),
     slashCommands: [...(input.slashCommands ?? [])],
     skills: [...(input.skills ?? [])],
-    // App-level steering is universal; providers without native steering use
-    // the explicit interrupt-and-continue strategy.
-    supportsSteer: input.provider !== "opencodeV2",
+    // Steer only adds instructions to the running turn; it never interrupts. Providers
+    // without native steering offer Send now and Stop instead.
+    supportsSteer: nativeSteer,
     supportsAttachments: providerAttachmentPolicy(input.provider).supported,
     ...(PROVIDER_SUBAGENT_CAPABILITIES[input.provider].stop === true ? { subagentStop: true } : {}),
     turnControl: {

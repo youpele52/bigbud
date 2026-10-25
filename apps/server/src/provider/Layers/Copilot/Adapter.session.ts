@@ -25,6 +25,7 @@ import {
   type ActiveCopilotSession,
   buildThreadSnapshot,
   isSessionNotFoundError,
+  sendOnCopilotSession,
   toMessage,
   toSendTurnError,
 } from "./Adapter.types.ts";
@@ -37,6 +38,14 @@ export const makeSendTurn =
   (input) =>
     Effect.gen(function* () {
       const record = yield* deps.requireSession(input.threadId);
+      if (record.activeTurnId) {
+        // Same busy refusal as other adapters; the orchestrator re-queues the message.
+        return yield* new ProviderAdapterValidationError({
+          provider: PROVIDER,
+          operation: "sendTurn",
+          issue: `Turn '${record.activeTurnId}' is already active. Interrupt or wait for it to complete before starting another turn.`,
+        });
+      }
       const prepared = yield* Effect.tryPromise({
         try: () =>
           prepareManagedAttachmentContext(
@@ -111,28 +120,24 @@ export const makeSendTurn =
       record.lastPlanFingerprint = undefined;
       record.updatedAt = new Date().toISOString();
 
+      // A new turn waits behind any in-flight work; `immediate` is reserved for steering.
       const sendPayload: Parameters<typeof record.session.send>[0] = {
         prompt: prepared.text,
         ...(attachments.length > 0 ? { attachments } : {}),
-        mode: "immediate",
+        mode: "enqueue",
       };
 
       yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await record.session.send(sendPayload);
-          } catch (firstError) {
-            if (isSessionNotFoundError(firstError)) {
-              const freshSession = await record.renewSession();
-              record.session = freshSession;
-              await record.session.send(sendPayload);
-            } else {
-              throw firstError;
-            }
-          }
-        },
+        try: () => sendOnCopilotSession(record, sendPayload),
         catch: toSendTurnError,
-      });
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.sync(() => {
+            // A failed send never started this turn; keep the session usable.
+            if (record.activeTurnId === turnId) record.activeTurnId = undefined;
+          }),
+        ),
+      );
 
       return {
         threadId: input.threadId,

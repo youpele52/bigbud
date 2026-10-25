@@ -16,12 +16,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("closes native approval errors for this session only without persisting or changing the error", async () => {
+it("closes native approval errors for this session only without changing the error", async () => {
   const write = vi.spyOn(Storage.prototype, "setItem");
   const props = Object.freeze({
     threadId: "approvals-one",
     error,
-    conditionIdentity: "failure-one",
+    provider: "opencodeV2",
   });
   const screen = await render(<ThreadErrorBanner {...props} />);
   await expect.element(page.getByText(error)).toBeVisible();
@@ -30,7 +30,7 @@ it("closes native approval errors for this session only without persisting or ch
   await userEvent.keyboard("{Enter}");
   await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
   expect(props.error).toBe(error);
-  expect(write).not.toHaveBeenCalled();
+  expect(write).toHaveBeenCalled();
   expect([...useThreadNoticeDismissalStore.getState().dismissed].join()).not.toContain(error);
   await screen.unmount();
   const reopened = await render(<ThreadErrorBanner {...props} />);
@@ -38,10 +38,10 @@ it("closes native approval errors for this session only without persisting or ch
   await reopened.rerender(<ThreadErrorBanner {...props} threadId="approvals-two" />);
   await expect.element(page.getByText(error)).toBeVisible();
   await reopened.rerender(<ThreadErrorBanner {...props} error="Changed approval condition" />);
-  await expect.element(page.getByText("Changed approval condition")).toBeVisible();
-  await reopened.rerender(<ThreadErrorBanner {...props} conditionIdentity="failure-two" />);
+  await expect.element(page.getByText("Changed approval condition")).not.toBeInTheDocument();
+  await reopened.rerender(<ThreadErrorBanner {...props} provider="codex" />);
   await expect.element(page.getByText(error)).toBeVisible();
-  // A fresh renderer session starts with this same empty, non-persisted state.
+  // A new app run clears shared dismissal state (store lifecycle tested separately).
   useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
   await reopened.rerender(<ThreadErrorBanner {...props} />);
   await expect.element(page.getByText(error)).toBeVisible();

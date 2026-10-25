@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import {
   type GitActionProgressEvent,
   type GitManagerServiceError,
-  type TerminalEvent,
   WS_METHODS,
 } from "@bigbud/contracts";
 
@@ -33,6 +32,9 @@ import {
   getRemoteAgentRestartStatusEffect,
   restartRemoteAgentEffect,
 } from "./wsRemoteAgentRestart.ts";
+import { listSshConfigHostsEffect } from "./wsSshConfigHosts.ts";
+import { listRemoteFoldersEffect } from "./wsRemoteFolders.ts";
+import { trustSshHostEffect } from "./wsSshHostTrust.ts";
 
 function gitMutationOperationId(operationId: string | undefined, target?: string): string {
   if (!operationId && !isLocalExecutionTarget(target))
@@ -56,6 +58,10 @@ function withGitMutationOperationId<
 
 export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScope?: Scope.Scope) {
   return {
+    [WS_METHODS.serverTrustSshHost]: (input: Parameters<typeof trustSshHostEffect>[0]) =>
+      observeRpcEffect(WS_METHODS.serverTrustSshHost, trustSshHostEffect(input), {
+        "rpc.aggregate": "server",
+      }),
     [WS_METHODS.terminalWslDistributions]: () =>
       observeRpcEffect(
         WS_METHODS.terminalWslDistributions,
@@ -90,6 +96,14 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
         ),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverListSshConfigHosts]: () =>
+      observeRpcEffect(WS_METHODS.serverListSshConfigHosts, listSshConfigHostsEffect(), {
+        "rpc.aggregate": "server",
+      }),
+    [WS_METHODS.serverListRemoteFolders]: (input: Parameters<typeof listRemoteFoldersEffect>[0]) =>
+      observeRpcEffect(WS_METHODS.serverListRemoteFolders, listRemoteFoldersEffect(input), {
+        "rpc.aggregate": "server",
+      }),
     [WS_METHODS.serverInstallRemoteAgent]: (
       input: Parameters<typeof installRemoteAgentEffect>[0],
     ) =>
@@ -368,17 +382,6 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
       observeRpcEffect(WS_METHODS.terminalClose, context.terminalManager.close(input), {
         "rpc.aggregate": "terminal",
       }),
-    [WS_METHODS.subscribeTerminalEvents]: (_input: unknown) =>
-      observeRpcStream(
-        WS_METHODS.subscribeTerminalEvents,
-        Stream.callback<TerminalEvent>((queue) =>
-          Effect.acquireRelease(
-            context.terminalManager.subscribe((event) => Queue.offer(queue, event)),
-            (unsubscribe) => Effect.sync(unsubscribe),
-          ),
-        ),
-        { "rpc.aggregate": "terminal" },
-      ),
   };
 }
 import { runThreadAwareGitAction } from "./wsGitTextGenerationContext.ts";

@@ -12,10 +12,11 @@ import type { OpencodeV2Client } from "./Client.ts";
 import type { V2NativeRuntimeProof } from "./NativeCompatibility.types.ts";
 import type { V2ActivationParticipant } from "./PluginSetup.activation.ts";
 import { deferred } from "./Test.fixtures.ts";
+import { readV2ActivationIdle } from "./PluginSetup.activation.activity.ts";
 
 /** Actual jobs/transaction/signed publication; only native API/qualification claims are synthetic. */
 export async function makeV2ActivationTransactionFixture(
-  idle: (signal?: AbortSignal) => Promise<boolean>,
+  idle?: (signal?: AbortSignal) => Promise<boolean>,
 ) {
   const app = await makeV2ThreadPluginFixture(),
     f = await makeV2ActivationJobsFixture(),
@@ -77,6 +78,11 @@ export async function makeV2ActivationTransactionFixture(
     f.consent,
     async (job) => {
       const phase = job.phase;
+      const proposal = {
+        artifact: app.artifact,
+        directories: new Set([root]),
+        scope: { gate, participants },
+      };
       await runV2ActivationTransaction(
         {
           ...job,
@@ -85,10 +91,10 @@ export async function makeV2ActivationTransactionFixture(
             if (state === "waiting-for-idle") waiting.resolve();
           },
         },
-        { artifact: app.artifact, directories: new Set([root]), scope: { gate, participants } },
+        proposal,
         f.settings,
         f.consent,
-        idle,
+        idle ?? ((signal) => readV2ActivationIdle(job, proposal, signal)),
         async (_artifact, _client, directory) => proof(directory),
       );
     },
@@ -96,6 +102,7 @@ export async function makeV2ActivationTransactionFixture(
   );
   return {
     app,
+    client,
     root,
     scope,
     gate,

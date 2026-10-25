@@ -1,15 +1,6 @@
-import { RoboticIcon } from "@hugeicons/core-free-icons";
-import { HugeiconsIcon } from "@hugeicons/react";
+import { AiIcon } from "../AiIcon";
 
-/** Shares AI settings artwork while preserving each surface's CSS sizing. */
+/** Shares AI artwork while preserving each surface's CSS sizing. */
 export function SettingsAiIcon({ className }: { className?: string }) {
-  return (
-    <HugeiconsIcon
-      aria-hidden="true"
-      className={className}
-      icon={RoboticIcon}
-      size={14}
-      strokeWidth={2}
-    />
-  );
+  return <AiIcon className={className} />;
 }

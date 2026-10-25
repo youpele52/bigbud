@@ -14,7 +14,7 @@ export const ComposerPlanFollowUpBanner = memo(function ComposerPlanFollowUpBann
     <ThreadNoticeBanner
       threadId={threadId}
       kind="plan-follow-up"
-      condition={[planId, planTitle]}
+      scope={[planId]}
       role="status"
       title="Plan ready"
       description={planTitle}

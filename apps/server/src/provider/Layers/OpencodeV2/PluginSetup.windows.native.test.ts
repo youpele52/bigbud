@@ -6,7 +6,7 @@ import { ownV2WindowsFixture } from "./SharedService.windows.fixture.mjs";
 import { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
 import { publishV2ManagedPlugin } from "./PluginSetup.publication.ts";
-import { V2_MANAGED_PLUGIN_FILENAME } from "./PluginSetup.record.ts";
+import { v2ManagedPluginFilename } from "./PluginSetup.record.ts";
 import { windowsMkdir, windowsRead, windowsList, v2WindowsFiles } from "./NativeFiles.windows.ts";
 
 it.skipIf(process.platform !== "win32")(
@@ -40,12 +40,14 @@ it.skipIf(process.platform !== "win32")(
       const authority = { signal: new AbortController().signal, assertCurrent: () => {} };
       await publishV2ManagedPlugin(artifact, config, authority);
       const entry = await windowsRead(
-        path.join(config, "plugins", V2_MANAGED_PLUGIN_FILENAME),
+        path.join(config, "plugins", v2ManagedPluginFilename(artifact)),
         true,
       );
       expect(entry.content).toContain(artifact.entryUri);
       await publishV2ManagedPlugin(artifact, config, authority);
-      expect(await windowsList(path.join(config, "plugins"))).toEqual([V2_MANAGED_PLUGIN_FILENAME]);
+      expect(await windowsList(path.join(config, "plugins"))).toEqual([
+        v2ManagedPluginFilename(artifact),
+      ]);
       const installed = await V2ThreadRecords.open(
         artifact.root,
         "installations",
@@ -53,7 +55,7 @@ it.skipIf(process.platform !== "win32")(
         artifact.publicKey,
       );
       expect(
-        (await installed.read(JSON.stringify([config, V2_MANAGED_PLUGIN_FILENAME])))?.value,
+        (await installed.read(JSON.stringify([config, v2ManagedPluginFilename(artifact)])))?.value,
       ).toMatchObject({ phase: "committed", nextIdentity: entry.identity });
     } finally {
       v2WindowsFiles.close();

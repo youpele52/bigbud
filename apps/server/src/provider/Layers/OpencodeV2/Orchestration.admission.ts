@@ -8,13 +8,18 @@ import { v2ReplyGuard } from "./Runtime.replies.ts";
 import { v2PermissionEffect } from "./Runtime.policy.match.ts";
 import { V2_THREAD_ACTIONS } from "./Orchestration.protocol.ts";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
+import { v2NativeToolName } from "./Runtime.registration.ts";
 
 /** All narrow native actions must remain usable under the original final-rule order; never append grants. */
-export function assertV2ThreadPolicy(session: Pick<V2RuntimeSession, "toolPolicy">) {
+export function assertV2ThreadPolicy(
+  session: Pick<V2RuntimeSession, "toolPolicy"> & Partial<Pick<V2RuntimeSession, "native">>,
+) {
   for (const action of V2_THREAD_ACTIONS) {
     if (
       !session.toolPolicy ||
-      v2PermissionEffect(session.toolPolicy, `bigbud_thread_v1_${action}`, "*") === "deny"
+      v2PermissionEffect(session.toolPolicy, `bigbud_thread_v1_${action}`, "*") === "deny" ||
+      v2PermissionEffect(session.toolPolicy, v2NativeToolName(session.native, action), "*") ===
+        "deny"
     )
       throw new Error(
         "V2 required thread-tools denied by retained native policy; history preserved read-only without grant changes.",
@@ -93,7 +98,7 @@ async function correlateV2ThreadInvocation(
         if (
           request.sessionID !== session.native.id ||
           assistant.agent !== request.agent ||
-          part.name !== `bigbud_thread_v1_${request.action}` ||
+          part.name !== v2NativeToolName(session.native, request.action) ||
           part.state.status !== "running" ||
           JSON.stringify(part.state.input) !== JSON.stringify(request.input)
         )

@@ -24,6 +24,21 @@ const waiting: ServerOpencodeV2ThreadToolsSetupResult = {
 const input = { refresh: true, directory: "/workspace" } as const;
 afterEach(() => vi.useRealTimers());
 
+it("retains the authorized cancel interest while polling status-only replies", async () => {
+  vi.useFakeTimers();
+  const interestId = "c".repeat(32);
+  const request = vi
+    .fn()
+    .mockResolvedValueOnce({ ...waiting, interestId })
+    .mockResolvedValue(waiting);
+  const result = vi.fn();
+  const stop = observeOpenCodeSetup(request, input, result, vi.fn());
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(result).toHaveBeenLastCalledWith({ ...waiting, interestId });
+  expect(request).toHaveBeenLastCalledWith({ operation: "status", jobId: waiting.jobId });
+  stop();
+});
+
 it("polls the same job and re-verifies the chat Location before reporting ready", async () => {
   vi.useFakeTimers();
   const request = vi

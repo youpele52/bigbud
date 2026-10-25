@@ -24,7 +24,10 @@ export function isAllowedBrowserNavigation(
 }
 
 /** Binds the navigation policy to the top-level lifecycle of one browser guest. */
-export function bindBrowserNavigationPolicy(guestWebContents: WebContents): void {
+export function bindBrowserNavigationPolicy(
+  guestWebContents: WebContents,
+  onBlocked?: () => void,
+): void {
   const enforce = (event: NavigationEvent, url: string, isMainFrame: boolean): void => {
     if (!isMainFrame) return;
 
@@ -34,6 +37,7 @@ export function bindBrowserNavigationPolicy(guestWebContents: WebContents): void
       })
     ) {
       event.preventDefault();
+      onBlocked?.();
     }
   };
 

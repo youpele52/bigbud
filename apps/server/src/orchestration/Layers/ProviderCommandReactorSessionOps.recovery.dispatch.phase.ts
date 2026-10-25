@@ -3,8 +3,9 @@
  * dispatch rules (no import cycle between them).
  *
  * A failure is proven to precede dispatch when it was raised before the provider send was invoked,
- * by provider routing before any adapter dispatch, or when the adapter explicitly marked it
- * `session-dead` (the adapter knows its own dispatch point).
+ * by provider routing before any adapter dispatch, by a failed `may-have-been-sent` write (which
+ * stops the send), or when the adapter explicitly marked it `session-dead` (the adapter knows
+ * its own dispatch point).
  *
  * @module ProviderCommandReactorSessionOps.recovery.dispatch.phase
  */
@@ -17,6 +18,7 @@ import {
   ProviderAdapterSessionClosedError,
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
+  ProviderDispatchAttemptPersistenceError,
   ProviderSessionNotFoundError,
   ProviderValidationError,
 } from "../../provider/Errors.ts";
@@ -52,5 +54,7 @@ export function provenBeforeDispatch(error: unknown, phase: TurnStartDispatchPha
   // Routing errors precede adapter dispatch; only the refusal texts classify as session-dead.
   if (Schema.is(ProviderSessionNotFoundError)(error) || Schema.is(ProviderValidationError)(error))
     return true;
+  // The dispatch record could not be written, so the adapter send was never invoked.
+  if (Schema.is(ProviderDispatchAttemptPersistenceError)(error)) return true;
   return adapterMarkedSessionDead(error);
 }

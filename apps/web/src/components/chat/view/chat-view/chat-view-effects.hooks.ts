@@ -48,6 +48,7 @@ export function useChatViewEffects({
     setComposerCursor,
     setComposerHighlightedItemId,
     setComposerTrigger,
+    setActivityAccordionOpenById,
     setExpandedImage,
     setExpandedWorkGroups,
     setIsDragOverComposer,
@@ -125,6 +126,7 @@ export function useChatViewEffects({
 
   useEffect(() => {
     setExpandedWorkGroups({});
+    setActivityAccordionOpenById({});
     closePullRequestDialog();
     setProviderUnlocked(false);
     if (planCardOpenOnNextThreadRef.current) {
@@ -139,6 +141,7 @@ export function useChatViewEffects({
     closePullRequestDialog,
     planCardDismissedForTurnRef,
     planCardOpenOnNextThreadRef,
+    setActivityAccordionOpenById,
     setExpandedWorkGroups,
     setPlanCardOpen,
     setProviderUnlocked,

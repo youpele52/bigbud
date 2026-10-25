@@ -298,6 +298,16 @@ export function useChatViewInteractions({
     [base],
   );
 
+  const { setActivityAccordionOpenById } = base;
+  const onSetActivityAccordionOpen = useCallback(
+    (accordionId: string, open: boolean) => {
+      setActivityAccordionOpenById((existing) =>
+        existing[accordionId] === open ? existing : { ...existing, [accordionId]: open },
+      );
+    },
+    [setActivityAccordionOpenById],
+  );
+
   const onRevertUserMessage = useCallback(
     (messageId: MessageId) => {
       const targetTurnCount = timeline.revertTurnCountByUserMessageId.get(messageId);
@@ -340,6 +350,7 @@ export function useChatViewInteractions({
     navigateExpandedImage,
     onOpenTurnDiff,
     onToggleWorkGroup,
+    onSetActivityAccordionOpen,
     onRevertUserMessage,
     onEnvModeChange: (mode: DraftThreadEnvMode) => {
       if (base.isLocalDraftThread) {

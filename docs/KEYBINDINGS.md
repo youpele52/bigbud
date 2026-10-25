@@ -1,10 +1,8 @@
 # Keybindings
 
-bigbud reads keybindings from:
+bigbud stores custom keybindings at `<stateDir>/keybindings.json`. The default packaged-server path is `~/.bigbud/userdata/keybindings.json`; development uses `~/.bigbud/dev/keybindings.json`. A custom `BIGBUD_HOME` or release-channel identity changes the base directory. See [release identity and data isolation](./development/release.md#side-by-side-identity-and-data-isolation).
 
-- `~/.bigbud/userdata/keybindings.json`
-
-The file must be a JSON array of rules:
+The file is a JSON array of rules, for example:
 
 ```json
 [
@@ -13,115 +11,77 @@ The file must be a JSON array of rules:
 ]
 ```
 
-See the full schema for more details: [`packages/contracts/src/server/keybindings.ts`](../packages/contracts/src/server/keybindings.ts)
+These are example overrides, not the defaults. The server merges custom rules with defaults, backfills missing default commands on startup, and reports configuration issues. See the [schema](../packages/contracts/src/server/keybindings.ts) and [configuration service](../apps/server/src/keybindings/keybindings.ts).
 
 ## Defaults
 
-```json
-[
-  { "key": "mod+j", "command": "terminal.toggle" },
-  { "key": "mod+b", "command": "sidebar.toggle" },
-  { "key": "mod+,", "command": "settings.toggle" },
-  { "key": "mod+f", "command": "search.toggle" },
-  { "key": "mod+n", "command": "terminal.new", "when": "terminalFocus" },
-  { "key": "mod+w", "command": "terminal.close", "when": "terminalFocus" },
-  { "key": "mod+shift+g", "command": "diff.toggle", "when": "!terminalFocus" },
-  { "key": "mod+shift+g", "command": "terminal.split", "when": "terminalFocus" },
-  { "key": "mod+shift+b", "command": "browser.toggle", "when": "!terminalFocus" },
-  { "key": "mod+p", "command": "commandPalette.toggle", "when": "!terminalFocus" },
-  { "key": "mod+n", "command": "chat.new", "when": "!terminalFocus" },
-  { "key": "mod+shift+o", "command": "chat.new", "when": "!terminalFocus" },
-  { "key": "mod+shift+n", "command": "chat.newLocal", "when": "!terminalFocus" },
-  { "key": "mod+o", "command": "editor.openFavorite" },
-  { "key": "mod+shift+[", "command": "thread.previous" },
-  { "key": "mod+shift+]", "command": "thread.next" },
-  { "key": "mod+1", "command": "thread.jump.1" },
-  { "key": "mod+2", "command": "thread.jump.2" },
-  { "key": "mod+3", "command": "thread.jump.3" },
-  { "key": "mod+4", "command": "thread.jump.4" },
-  { "key": "mod+5", "command": "thread.jump.5" },
-  { "key": "mod+6", "command": "thread.jump.6" },
-  { "key": "mod+7", "command": "thread.jump.7" },
-  { "key": "mod+8", "command": "thread.jump.8" },
-  { "key": "mod+9", "command": "thread.jump.9" }
-]
-```
+`mod` is `Cmd` on macOS and `Ctrl` on Windows/Linux. Focus-specific rules let the same shortcut do different things inside and outside a terminal.
 
-For the most up to date defaults, see [`DEFAULT_KEYBINDINGS` in `apps/server/src/keybindings/keybindings.ts`](../apps/server/src/keybindings/keybindings.ts)
+| Shortcut          | Command                           | Default context  |
+| ----------------- | --------------------------------- | ---------------- |
+| `mod+j`           | `terminal.toggle`                 | Any              |
+| `mod+shift+j`     | `terminalPanel.toggle`            | Any              |
+| `mod+b`           | `sidebar.toggle`                  | Any              |
+| `mod+,`           | `settings.toggle`                 | Any              |
+| `mod+f`           | `search.toggle`                   | Outside terminal |
+| `mod+f`           | `terminal.find`                   | Terminal focused |
+| `mod+shift+g`     | `terminal.split`                  | Terminal focused |
+| `mod+n`           | `terminal.new`                    | Terminal focused |
+| `mod+w`           | `terminal.close`                  | Terminal focused |
+| `mod+w`           | `rightPanel.closeTab`             | Outside terminal |
+| `mod+g`           | `git.toggle`                      | Outside terminal |
+| `mod+shift+g`     | `diff.toggle`                     | Outside terminal |
+| `mod+shift+b`     | `browser.toggle`                  | Outside terminal |
+| `mod+shift+e`     | `files.toggle`                    | Outside terminal |
+| `alt+mod+b`       | `rightPanel.toggle`               | Outside terminal |
+| `mod+t`           | `rightPanel.newTab`               | Outside terminal |
+| `mod+p`           | `commandPalette.toggle`           | Outside terminal |
+| `mod+l`           | `chat.focus`                      | Outside terminal |
+| `mod+n`           | `chat.new`                        | Outside terminal |
+| `mod+alt+n`       | `chat.newLocal`                   | Outside terminal |
+| `mod+shift+n`     | `notes.toggle`                    | Outside terminal |
+| `mod+shift+s`     | `sidecar.toggle`                  | Outside terminal |
+| `mod+shift+t`     | `planCard.toggle`                 | Outside terminal |
+| `mod+o`           | `project.open`                    | Outside terminal |
+| `mod+shift+o`     | `editor.openFavorite`             | Outside terminal |
+| `mod+shift+[`     | `thread.previous`                 | Any              |
+| `mod+shift+]`     | `thread.next`                     | Any              |
+| `mod+1` … `mod+9` | `thread.jump.1` … `thread.jump.9` | Any              |
 
-## Configuration
+The authoritative defaults are [`DEFAULT_KEYBINDINGS`](../apps/server/src/keybindings/keybindings.ts). Existing user overrides can differ from these defaults.
 
-### Rule Shape
+## Available commands
 
-Each entry supports:
+- `terminal.toggle`, `terminalPanel.toggle`: toggle the terminal drawer or terminal panel.
+- `terminal.split`, `terminal.new`, `terminal.close`, `terminal.find`: split, create, close, or search a terminal.
+- `git.toggle`, `diff.toggle`, `browser.toggle`, `files.toggle`, `notes.toggle`: toggle the corresponding workspace panel.
+- `rightPanel.toggle`, `rightPanel.newTab`, `rightPanel.closeTab`: toggle the right panel, open its panel switcher, or close its active tab.
+- `commandPalette.toggle`, `sidebar.toggle`, `settings.toggle`, `search.toggle`: toggle the corresponding interface.
+- `chat.focus`: focus the chat composer.
+- `chat.new`: create a chat preserving the active thread's branch/worktree context.
+- `chat.newLocal`: create a chat in a new environment according to the app's local/worktree preference.
+- `sidecar.toggle`, `planCard.toggle`: toggle Sidecar or the floating Tasks/Plan card.
+- `project.open`: open the project picker.
+- `editor.openFavorite`: open the active workspace in the preferred editor.
+- `thread.previous`, `thread.next`, `thread.jump.1` … `thread.jump.9`: navigate sidebar threads.
+- `script.{id}.run`: run a project script, for example `script.test.run`.
 
-- `key` (required): shortcut string, like `mod+j`, `ctrl+k`, `cmd+shift+d`
-- `command` (required): action ID
-- `when` (optional): boolean expression controlling when the shortcut is active
+## Rule shape and key syntax
 
-Invalid rules are ignored. Invalid config files are ignored. Warnings are logged by the server.
+- `key` (required): a shortcut such as `mod+j`, `ctrl+k`, or `cmd+shift+d`.
+- `command` (required): an action ID from the schema.
+- `when` (optional): a boolean expression controlling when the shortcut is active.
 
-### Available Commands
+Supported modifiers include `mod`, `cmd`/`meta`, `ctrl`/`control`, `shift`, and `alt`/`option`.
 
-- `terminal.toggle`: open/close terminal drawer
-- `terminal.split`: split terminal (in focused terminal context by default)
-- `terminal.new`: create new terminal (in focused terminal context by default)
-- `terminal.close`: close/kill the focused terminal (in focused terminal context by default)
-- `diff.toggle`: open/close the diff panel
-- `browser.toggle`: open/close the browser panel
-- `commandPalette.toggle`: open or close the global command palette
-- `sidebar.toggle`: open/close the sidebar
-- `settings.toggle`: open/close settings
-- `search.toggle`: open/close search
-- `chat.new`: create a new chat thread preserving the active thread's branch/worktree state
-- `chat.newLocal`: create a new chat thread for the active project in a new environment (local/worktree determined by app settings (default `local`))
-- `editor.openFavorite`: open current project/worktree in the last-used editor
-- `thread.previous`: navigate to the previous thread
-- `thread.next`: navigate to the next thread
-- `thread.jump.{1-9}`: jump to one of the first visible thread slots in the sidebar
-- `script.{id}.run`: run a project script by id (for example `script.test.run`)
+## Conditions and precedence
 
-### Key Syntax
-
-Supported modifiers:
-
-- `mod` (`cmd` on macOS, `ctrl` on non-macOS)
-- `cmd` / `meta`
-- `ctrl` / `control`
-- `shift`
-- `alt` / `option`
+Available context keys are `terminalFocus` and `terminalOpen`. Expressions support `!`, `&&`, `||`, and parentheses. Unknown condition keys evaluate to `false`.
 
 Examples:
 
-- `mod+j`
-- `mod+shift+d`
-- `ctrl+l`
-- `cmd+p`
+- `"terminalFocus"`
+- `"terminalOpen && !terminalFocus"`
+- `"terminalFocus || terminalOpen"`
 
-### `when` Conditions
-
-Currently available context keys:
-
-- `terminalFocus`
-- `terminalOpen`
-
-Supported operators:
-
-- `!` (not)
-- `&&` (and)
-- `||` (or)
-- parentheses: `(` `)`
-
-Examples:
-
-- `"when": "terminalFocus"`
-- `"when": "terminalOpen && !terminalFocus"`
-- `"when": "terminalFocus || terminalOpen"`
-
-Unknown condition keys evaluate to `false`.
-
-### Precedence
-
-- Rules are evaluated in array order.
-- For a key event, the last rule where both `key` matches and `when` evaluates to `true` wins.
-- That means precedence is across commands, not only within the same command.
+The last matching active rule wins, including when several commands use the same key. See the [compiler](../apps/server/src/keybindings/keybindings.compiler.ts) for validation and default-merge behavior.

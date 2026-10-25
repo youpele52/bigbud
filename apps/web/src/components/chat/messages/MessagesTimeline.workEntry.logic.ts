@@ -1,5 +1,6 @@
+import type { ComponentType } from "react";
+import { AiIcon } from "../../AiIcon";
 import {
-  BotIcon,
   CheckIcon,
   CircleAlertIcon,
   EyeIcon,
@@ -21,7 +22,7 @@ export type TimelineWorkEntry = Extract<
 >["groupedEntries"][number];
 
 export function workToneIcon(tone: TimelineWorkEntry["tone"]): {
-  icon: LucideIcon;
+  icon: LucideIcon | typeof AiIcon;
   className: string;
 } {
   if (tone === "error") {
@@ -32,7 +33,7 @@ export function workToneIcon(tone: TimelineWorkEntry["tone"]): {
   }
   if (tone === "thinking") {
     return {
-      icon: BotIcon,
+      icon: AiIcon,
       className: "text-foreground/92",
     };
   }
@@ -78,7 +79,34 @@ export function workEntryRawCommand(
   return rawCommand === workEntry.command.trim() ? null : rawCommand;
 }
 
-export function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
+/** Characters of command or detail text that comfortably fit the truncated inline preview. */
+export const WORK_ENTRY_INLINE_PREVIEW_MAX_CHARS = 80;
+
+/**
+ * Full text blocks for the collapsed "Details" disclosure under a work entry: the complete
+ * (raw) command and any detail it hides. Empty when the inline preview already shows it all.
+ */
+export function workEntryDetailBlocks(
+  workEntry: Pick<TimelineWorkEntry, "command" | "rawCommand" | "detail">,
+): string[] {
+  const command = workEntry.command?.trim() || undefined;
+  const fullCommand = workEntryRawCommand(workEntry) ?? command;
+  const detail = workEntry.detail?.trim() || undefined;
+  const hiddenDetail = detail && detail !== command && detail !== fullCommand ? detail : undefined;
+  const blocks = [fullCommand, hiddenDetail].filter((block): block is string => Boolean(block));
+  const inlinePreview = command ?? detail;
+  const exceedsPreview = blocks.some(
+    (block) =>
+      block !== inlinePreview ||
+      block.includes("\n") ||
+      block.length > WORK_ENTRY_INLINE_PREVIEW_MAX_CHARS,
+  );
+  return exceedsPreview ? blocks : [];
+}
+
+export function workEntryIcon(
+  workEntry: TimelineWorkEntry,
+): LucideIcon | ComponentType<{ className?: string }> {
   if (workEntry.requestKind === "browser") return GlobeIcon;
   if (workEntry.requestKind === "command") return TerminalIcon;
   if (workEntry.requestKind === "file-read") return EyeIcon;

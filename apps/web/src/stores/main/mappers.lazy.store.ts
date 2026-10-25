@@ -6,6 +6,7 @@ import type {
 import { EventId } from "@bigbud/contracts";
 
 import type { Project, SidebarThreadSummary, Thread } from "../../models/types";
+import { isUserInputHistoryActivity } from "./userInputHistory.store";
 import {
   mapMessage,
   mapProposedPlan,
@@ -42,6 +43,8 @@ function mapSummarySession(summary: ThreadSummary): Thread["session"] {
     status: toLegacySessionStatus(summary.sessionStatus),
     orchestrationStatus: summary.sessionStatus,
     ...(summary.activeTurnId ? { activeTurnId: summary.activeTurnId } : {}),
+    // Keeps the main composer's Stop for descendants that outlive the parent turn after reload.
+    ...(summary.retainedFamily ? { retainedFamily: true } : {}),
     createdAt: summary.updatedAt,
     updatedAt: summary.updatedAt,
   };
@@ -55,7 +58,9 @@ function mapSummaryLatestTurn(summary: ThreadSummary): Thread["latestTurn"] {
     turnId: summary.activeTurnId,
     state: summary.latestTurnState,
     requestedAt: summary.updatedAt,
-    startedAt: summary.latestTurnState === "running" ? summary.updatedAt : null,
+    // Every summarized turn has started (the summary has no exact start time). A null start would
+    // make a completed turn look unsettled after a reload and hide e.g. the plan follow-up actions.
+    startedAt: summary.updatedAt,
     completedAt: summary.latestTurnState === "running" ? null : summary.updatedAt,
     assistantMessageId: null,
   };
@@ -197,7 +202,9 @@ export function mergeThreadDetail(
           sourceProposedPlan: thread.pendingSourceProposedPlan,
         })
       : thread.latestTurn;
-  const detailActivities = mergePendingActivities(detail);
+  const detailActivities = mergePendingActivities(detail).filter(
+    (activity) => !loadingOlder || isUserInputHistoryActivity(activity),
+  );
   const activities = [...thread.activities, ...detailActivities]
     .filter((activity, index, all) => all.findIndex((entry) => entry.id === activity.id) === index)
     .toSorted(
@@ -221,7 +228,7 @@ export function mergeThreadDetail(
     ...thread,
     messages,
     latestTurn,
-    activities: loadingOlder ? thread.activities : activities,
+    activities,
     proposedPlans: loadingOlder ? thread.proposedPlans : proposedPlans,
     providerAgents: loadingOlder
       ? (thread.providerAgents ?? [])

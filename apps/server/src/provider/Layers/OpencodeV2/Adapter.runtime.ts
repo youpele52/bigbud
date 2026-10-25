@@ -9,6 +9,7 @@ import { v2ExecutionFailureClass, v2ExecutionIssue } from "./Adapter.execution.e
 import { V2StartAttempt } from "./Runtime.start.ts";
 import { V2_EXECUTION_CAPABILITIES } from "./Adapter.capabilities.ts";
 import { currentV2RequestContext } from "./Client.guard.ts";
+import { v2Promise, v2TryPromise } from "./Client.guard.async.ts";
 import { guardV2Publication, validV2Publication } from "./Runtime.publication.ts";
 import { runV2Caller } from "./Runtime.caller.ts";
 import { V2ActivationDeferred } from "./PluginSetup.activation.errors.ts";
@@ -47,7 +48,7 @@ export const makeV2RuntimeAdapter = Effect.fn("makeV2RuntimeAdapter")(function* 
     },
   });
   const call = <T>(operation: string, run: () => Promise<T>) =>
-    Effect.tryPromise({
+    v2TryPromise({
       try: (signal) =>
         ["stopSession", "stopAll", "shutdown", "interruptTurn"].includes(operation)
           ? run()
@@ -81,7 +82,7 @@ export const makeV2RuntimeAdapter = Effect.fn("makeV2RuntimeAdapter")(function* 
         ).pipe(
           Effect.onExit((exit) =>
             Exit.isFailure(exit) && !deferred
-              ? Effect.promise(() => runtime.cancelStart(attempt))
+              ? v2Promise(() => runtime.cancelStart(attempt))
               : Effect.void,
           ),
         );

@@ -3,7 +3,7 @@ import path from "node:path";
 import { expect, it, vi } from "vitest";
 import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 import { publishV2ManagedPlugin } from "./PluginSetup.publication.ts";
-import { V2_MANAGED_PLUGIN_FILENAME } from "./PluginSetup.record.ts";
+import { v2ManagedPluginFilename } from "./PluginSetup.record.ts";
 
 const fault = vi.hoisted(() => ({ mode: "none" as "none" | "write" | "collision" }));
 vi.mock("node:fs/promises", async (original) => {
@@ -21,7 +21,10 @@ vi.mock("node:fs/promises", async (original) => {
       return handle;
     },
     link: async (...args: Parameters<typeof fs.link>) => {
-      if (fault.mode === "collision" && String(args[1]).endsWith("bigbud-thread-tools-managed.js"))
+      if (
+        fault.mode === "collision" &&
+        /bigbud-thread-tools-[a-f0-9]{64}\.js$/.test(String(args[1]))
+      )
         await fs.writeFile(args[1], "// foreign publication won", { mode: 0o600, flag: "wx" });
       return fs.link(...args);
     },
@@ -40,7 +43,7 @@ it.skipIf(process.platform === "win32")(
         const original = '// unchanged user file\n{"plugins":[]}\n';
         await writeFile(config, original, { mode: 0o600 });
         const authority = { signal: new AbortController().signal, assertCurrent: () => {} };
-        const filename = path.join(root, "plugins", V2_MANAGED_PLUGIN_FILENAME);
+        const filename = path.join(root, "plugins", v2ManagedPluginFilename(app.artifact));
         fault.mode = mode;
         await expect(publishV2ManagedPlugin(app.artifact, root, authority)).rejects.toThrow();
         fault.mode = "none";

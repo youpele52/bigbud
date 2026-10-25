@@ -83,7 +83,7 @@ Green: the same two files pass **11/11** after the fix, including the drain-fail
   - **Deviation from the plan:** the plan named `serverRuntimeStartup.bootstrap.ts` and `serverLifecycleEvents.ts`. The first holds only the welcome/project bootstrap, which runs after persistence. The second is a welcome/ready event pub/sub with no shutdown hook. Neither can order the lock before persistence or release it.
 - **Shared helper:** `processStartToken` moved to `apps/server/src/utils/processStartToken.ts`, and `remoteAgentController.ts` now reuses it.
 - **Not covered:** CLI maintenance commands in `cli.ts` (recovery, compaction, purge) open the database without the lock. They are outside this item and noted as a follow-up.
-- **Developer docs:** `.docs/scripts.md` ("Running multiple dev instances") now explains that port offsets do not separate data, and that concurrent instances need distinct `BIGBUD_HOME` values. `docs/GETTING_STARTED.md` is end-user documentation and covers no dev flow, so it is unchanged.
+- **Developer docs:** `docs/development/scripts.md` now explains that port offsets do not separate data and that concurrent instances need distinct `BIGBUD_HOME` values. The website's end-user guide (`apps/marketing/src/components/page-specific/docs/_docs-content.md`) covers no dev flow; the redundant root getting-started document was later retired.
 
 **Live verification** used a fresh `BIGBUD_HOME` under the job's temporary directory, with every provider disabled in the seeded `settings.json`.
 
@@ -131,7 +131,7 @@ Modified (`apps/server/src/provider/Layers/OpencodeV2/` unless noted):
 
 - Production: `Execution.owners.ts` (87), `Orchestration.bridge.activation.ts` (141), `Orchestration.bridge.ts` (363), `Orchestration.bridge.invoke.ts` (125), `Orchestration.receipts.ts` (94), `PluginSetup.activation.gate.ts` (240), `Runtime.activation.ts` (179), `Runtime.settlement.ts` (134), `Runtime.send.ts` (195), `Runtime.replies.ts` (131), `Runtime.admission.owner.ts` (59), `Client.guard.ts` (167), `Runtime.types.ts` (162), `apps/server/src/server.ts` (376)
 - Tests: `Execution.owners.test.ts` (110), `Runtime.activation.settlement.test.ts` (97), `Runtime.settlement.test.ts` (62), `Runtime.settlement.safety.test.ts` (130), `PluginSetup.activation.gate.test.ts` (107), `NativeCompatibility.runtime.guard.test.ts` (54)
-- Docs: `.docs/scripts.md`, and this ledger
+- Docs: `docs/development/scripts.md`, and this ledger
 
 Every code file is at most 400 lines. `Runtime.ts` (397 lines) was not touched.
 

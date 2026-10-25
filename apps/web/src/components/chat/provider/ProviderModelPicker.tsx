@@ -31,12 +31,11 @@ import {
   type ModelOption,
   UNAVAILABLE_PROVIDER_OPTIONS,
 } from "./ProviderModelPicker.models";
-import { getProviderDescriptor } from "./providerDescriptors";
 import { useCliProxyActivation } from "../../../hooks/useCliProxyActivation";
 import { useSettings } from "../../../hooks/useSettings";
 import { getVisibleComposerProviders } from "../../../models/provider/composerVisibility.models";
 import type { ProviderModelPickerProps } from "./ProviderModelPicker.types";
-import { developmentProviderOptions } from "./ProviderModelPicker.models";
+import { visibleProviderOptionsForPicker } from "./ProviderModelPicker.models";
 
 export { visibleModelOptionsForPicker } from "./ProviderModelPicker.models";
 export { AVAILABLE_PROVIDER_OPTIONS } from "./ProviderModelPicker.models";
@@ -47,12 +46,12 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
   const hiddenComposerProviders = useSettings((settings) => settings.hiddenComposerProviders);
   const visibleProviderOptions = useMemo(
     () =>
-      developmentProviderOptions(props.providers).filter(
-        (option) =>
-          getVisibleComposerProviders(hiddenComposerProviders).includes(option.value) &&
-          getProviderDescriptor(option.value).isVisible(props.providers),
+      visibleProviderOptionsForPicker(
+        props.providers,
+        hiddenComposerProviders,
+        props.allowedProviders,
       ),
-    [hiddenComposerProviders, props.providers],
+    [hiddenComposerProviders, props.providers, props.allowedProviders],
   );
   const noComposerProviders = getVisibleComposerProviders(hiddenComposerProviders).length === 0;
   const recentOptionsByProvider = useMemo(() => {

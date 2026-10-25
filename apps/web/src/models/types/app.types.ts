@@ -23,6 +23,10 @@ import type { DelegationModelChoiceLinkedSummary } from "@bigbud/contracts/orche
 import type { DelegatedModelChoiceRecord } from "@bigbud/shared/delegatedModelChoice";
 import type { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
 import type { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
+import type {
+  ThreadRecovery,
+  ThreadRecoveryStatus,
+} from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
 import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import {
   DEFAULT_RUNTIME_MODE as _DEFAULT_RUNTIME_MODE,
@@ -227,6 +231,8 @@ export interface Thread {
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;
   turnStartRequest?: ThreadTurnStartRequest | null | undefined;
+  /** Sleep and wake recovery state from the server projection. */
+  recovery?: ThreadRecovery | null;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
   branch: string | null;
   worktreePath: string | null;
@@ -266,11 +272,14 @@ export interface SidebarThreadSummary {
   hasPendingUserInput: boolean;
   hasActionableProposedPlan: boolean;
   providerAgents?: OrchestrationTask[];
+  /** `continuing` keeps the pill on Working while bigbud resumes a turn after sleep. */
+  recoveryStatus?: ThreadRecoveryStatus | null;
 }
 
 export type ThreadSessionProvider = ProviderKind | "unknown";
 
 export interface ThreadSession {
+  retainedFamily?: boolean | undefined;
   provider: ThreadSessionProvider;
   status: SessionPhase | "error" | "closed";
   activeTurnId?: TurnId | undefined;

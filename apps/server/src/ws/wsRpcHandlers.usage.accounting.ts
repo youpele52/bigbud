@@ -1,6 +1,11 @@
 import { Schema } from "effect";
 import { UsageAccountingV2 } from "@bigbud/contracts/orchestration/providerRuntime.usage";
 import type { UsageSourceMetadata } from "@bigbud/contracts/server/usage.ts";
+import {
+  contributionTokenMix,
+  unsplitUsageTokenMix,
+  usageTokenMixKeys,
+} from "@bigbud/shared/usageTokenMix";
 
 type Entry = {
   readonly usedTokens: number;
@@ -17,6 +22,11 @@ const keys = [
 
 /** Aggregate provenance from selected contributions, never from provider capability declarations. */
 export function summarizeUsageSources(entries: readonly Entry[]): UsageSourceMetadata {
+  return summarizeUsageAccounting(entries, false).accounting;
+}
+
+export function summarizeUsageAccounting(entries: readonly Entry[], includeTokenMix = true) {
+  const tokenMix = includeTokenMix ? { ...unsplitUsageTokenMix(0) } : undefined;
   const result: UsageSourceMetadata = {
     source: "none",
     partial: false,
@@ -42,6 +52,14 @@ export function summarizeUsageSources(entries: readonly Entry[]): UsageSourceMet
         /* Old or malformed metadata must not manufacture a breakdown. */
       }
     }
+    if (tokenMix) {
+      const mix = contributionTokenMix(entry.usedTokens, canonical);
+      for (const key of usageTokenMixKeys) {
+        tokenMix[key] += mix[key];
+        if (!Number.isSafeInteger(tokenMix[key]))
+          throw new Error("Usage aggregate exceeds safe integer range");
+      }
+    }
     if (entry.source === "estimated") {
       estimated = true;
       mutable.estimatedTokens += entry.usedTokens;
@@ -65,7 +83,7 @@ export function summarizeUsageSources(entries: readonly Entry[]): UsageSourceMet
     if (value !== null && !Number.isSafeInteger(value))
       throw new Error("Usage aggregate exceeds safe integer range");
   }
-  return {
+  const accounting: UsageSourceMetadata = {
     ...mutable,
     source: estimated
       ? reported
@@ -75,4 +93,5 @@ export function summarizeUsageSources(entries: readonly Entry[]): UsageSourceMet
         ? "provider-reported"
         : "none",
   };
+  return { accounting, tokenMix };
 }

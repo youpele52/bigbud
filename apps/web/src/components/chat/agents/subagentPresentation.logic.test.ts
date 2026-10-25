@@ -7,8 +7,11 @@ import {
   subagentDisplayName,
   subagentMetricsLabel,
   subagentModelLabel,
+  subagentRecentStepsLabel,
+  subagentStatusIsAnimating,
   subagentStatusLabel,
   subagentStatusTone,
+  subagentStepLabel,
   subagentTimeLabel,
   visibleSubagents,
 } from "./subagentPresentation.logic";
@@ -27,6 +30,13 @@ const agent = (id: string, overrides: Partial<OrchestrationTask> = {}): Orchestr
   ...overrides,
 });
 
+const step = (toolName: string, label?: string) => ({
+  toolName,
+  status: "completed" as const,
+  at: "2026-09-28T12:00:00Z",
+  ...(label ? { label } : {}),
+});
+
 describe("subagent presentation", () => {
   it("shows one row until expanded", () => {
     const agents = [agent("one"), agent("two")];
@@ -34,18 +44,20 @@ describe("subagent presentation", () => {
     expect(visibleSubagents(agents, true).map((entry) => entry.id)).toEqual(["one", "two"]);
   });
 
-  it("labels and colors every status with text, never color alone", () => {
+  it("labels and tones every status, animating only fresh pending or running work", () => {
     const cases: Array<[Partial<OrchestrationTask>, string, string]> = [
-      [{ status: "pending" }, "Starting", "working"],
-      [{ status: "inProgress" }, "Working", "working"],
-      [{ status: "inProgress", activityFresh: false }, "Last seen", "warning"],
-      [{ status: "stopped" }, "Stopped", "warning"],
-      [{ status: "completed" }, "Done", "done"],
-      [{ status: "failed" }, "Failed", "failed"],
+      [{ status: "pending" }, "starting", "working"],
+      [{ status: "inProgress" }, "working", "working"],
+      [{ status: "inProgress", activityFresh: false }, "last seen", "warning"],
+      [{ status: "stopped" }, "stopped", "warning"],
+      [{ status: "completed" }, "done", "done"],
+      [{ status: "failed" }, "failed", "failed"],
     ];
     for (const [overrides, label, tone] of cases) {
-      expect(subagentStatusLabel(agent("a", overrides))).toBe(label);
-      expect(subagentStatusTone(agent("a", overrides))).toBe(tone);
+      const task = agent("a", overrides);
+      expect(subagentStatusLabel(task)).toBe(label);
+      expect(subagentStatusTone(task)).toBe(tone);
+      expect(subagentStatusIsAnimating(task)).toBe(label === "starting" || label === "working");
     }
   });
 
@@ -69,6 +81,38 @@ describe("subagent presentation", () => {
       subagentActivityLine(agent("a", { status: "completed", resultSummary: "All good" })),
     ).toBe("All good");
     expect(subagentActivityLine(agent("a"))).toBeUndefined();
+  });
+  it("shows the assignment before progress arrives, across providers", () => {
+    expect(subagentActivityLine(agent("explore", { description: "Find the session owner" }))).toBe(
+      "Find the session owner",
+    );
+    expect(subagentActivityLine(agent("Review changes", { subagentType: "reviewer" }))).toBe(
+      "Review changes",
+    );
+    expect(
+      subagentActivityLine(agent("explore", { description: "Find owner", lastToolName: "Grep" })),
+    ).toBe("Running Grep");
+  });
+
+  it("shows the final result or failure instead of obsolete progress", () => {
+    expect(
+      subagentActivityLine(
+        agent("done", {
+          status: "completed",
+          progressSummary: "Still looking",
+          resultSummary: "Found it",
+        }),
+      ),
+    ).toBe("Found it");
+    expect(
+      subagentActivityLine(
+        agent("failed", {
+          status: "failed",
+          progressSummary: "Still looking",
+          terminalReason: "Permission denied",
+        }),
+      ),
+    ).toBe("Permission denied");
   });
   it("formats only owned tool identifiers without changing progress summaries or stored names", () => {
     const raw = "bigbud_thread_v1_rename_thread";
@@ -124,5 +168,35 @@ describe("subagent presentation", () => {
       ),
     ).toBe(true);
     expect(hasSubagentDetails(agent("metrics", { metrics: { toolUses: 1 } }))).toBe(true);
+  });
+
+  it("drops a repeated tool prefix from step labels without losing the command", () => {
+    expect(subagentStepLabel(step("Bash", "Bash: sleep 20"))).toBe("sleep 20");
+    expect(subagentStepLabel(step("Bash", "bash: ls -la"))).toBe("ls -la");
+    expect(subagentStepLabel(step("Bash", "Bash:"))).toBeUndefined();
+    expect(subagentStepLabel(step("Read", "apps/web/src/index.css"))).toBe(
+      "apps/web/src/index.css",
+    );
+    expect(subagentStepLabel(step("Read", "Bash: not a prefix of Read"))).toBe(
+      "Bash: not a prefix of Read",
+    );
+    expect(subagentStepLabel(step("Grep"))).toBeUndefined();
+  });
+
+  it("counts recent steps against the reported tool total when it is consistent", () => {
+    const recentSteps = [
+      { toolName: "Read", status: "completed" as const, at: "2026-09-28T12:00:00Z" },
+      { toolName: "Bash", status: "running" as const, at: "2026-09-28T12:00:01Z" },
+    ];
+    expect(subagentRecentStepsLabel(agent("a", { recentSteps, metrics: { toolUses: 29 } }))).toBe(
+      "Recent steps · 2 of 29",
+    );
+    expect(subagentRecentStepsLabel(agent("b", { recentSteps, metrics: { toolUses: 2 } }))).toBe(
+      "Recent steps · 2 of 2",
+    );
+    expect(subagentRecentStepsLabel(agent("d", { recentSteps, metrics: { toolUses: 1 } }))).toBe(
+      "Recent steps · 2",
+    );
+    expect(subagentRecentStepsLabel(agent("c", { recentSteps }))).toBe("Recent steps · 2");
   });
 });

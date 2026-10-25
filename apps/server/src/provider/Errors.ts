@@ -158,6 +158,24 @@ export class ProviderSessionDirectoryPersistenceError extends Schema.TaggedError
   }
 }
 
+/**
+ * ProviderDispatchAttemptPersistenceError - The `may-have-been-sent` dispatch record could not
+ * be written. It is raised before the adapter send, which then never happens, so the turn
+ * provably did not reach the provider.
+ */
+export class ProviderDispatchAttemptPersistenceError extends Schema.TaggedErrorClass<ProviderDispatchAttemptPersistenceError>()(
+  "ProviderDispatchAttemptPersistenceError",
+  {
+    threadId: Schema.String,
+    detail: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {
+  override get message(): string {
+    return `Could not record the provider dispatch for thread ${this.threadId}; the turn was not sent: ${this.detail}`;
+  }
+}
+
 export type ProviderAdapterError =
   | ProviderAdapterValidationError
   | ProviderAdapterSessionNotFoundError
@@ -170,5 +188,6 @@ export type ProviderServiceError =
   | ProviderUnsupportedError
   | ProviderSessionNotFoundError
   | ProviderSessionDirectoryPersistenceError
+  | ProviderDispatchAttemptPersistenceError
   | ProviderAdapterError
   | CheckpointServiceError;

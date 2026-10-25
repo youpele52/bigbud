@@ -2,7 +2,7 @@ import { PROVIDER_DISPLAY_NAMES } from "@bigbud/contracts/constants/provider.con
 
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 /** Exact preview client/CLI pair; this pin is not full release conformance approval. */
-export const OPENCODE_V2_CLIENT_VERSION = "2.0.26";
+export const OPENCODE_V2_CLIENT_VERSION = "2.1.4";
 export const OPENCODE_V2_PROVIDER = "opencodeV2";
 export const OPENCODE_V2_DISPLAY_NAME = PROVIDER_DISPLAY_NAMES.opencodeV2;
 

@@ -102,7 +102,15 @@ const make = Effect.gen(function* () {
     const valid =
       (current.state === "reserved" && state === "dispatch-intent") ||
       (current.state === "dispatch-intent" && state === "accepted") ||
-      (current.state === "accepted" && state === "terminal");
+      (current.state === "accepted" && state === "terminal") ||
+      // Revision 1 terminal/interrupted is durable proof of cancellation before dispatch.
+      // The CAS below cannot cancel a reservation that concurrently gained dispatch intent.
+      (current.namespace === "foreground" &&
+        current.state === "reserved" &&
+        current.revision === 0 &&
+        state === "terminal" &&
+        terminalOutcome === "interrupted" &&
+        finalText === undefined);
     if (
       !valid ||
       (state !== "terminal" && (finalText !== undefined || terminalOutcome !== undefined))

@@ -17,6 +17,7 @@ import { useGitPanelViewStore } from "~/stores/git/gitPanelView.store";
 import { GitPanelChanges } from "./GitPanelChanges";
 import { GitPanelHistory } from "./GitPanelHistory";
 import { GitPanelSyncControl } from "./GitPanelSyncControl";
+import { StatusBanner } from "../common/StatusBanner";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
 
 interface GitPanelProps {
@@ -189,9 +190,12 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
         </div>
       </div>
       {gitStatusError ? (
-        <div className="border-b border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-          Git status refresh failed: {gitStatusError}
-        </div>
+        <StatusBanner
+          dismissalKey={["git-panel", executionTargetId, cwd, "status-refresh"]}
+          variant="error"
+          dismissLabel="Dismiss Git status error"
+          description={`Git status refresh failed: ${gitStatusError}`}
+        />
       ) : null}
       {activeView === "changes" ? (
         <GitPanelChanges

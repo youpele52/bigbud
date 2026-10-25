@@ -9,7 +9,7 @@ export function TerminalRenderingSettings() {
   return (
     <SettingsRow
       title="Terminal GPU rendering"
-      description="Auto (default) and On attempt WebGL when application GPU policy allows, with safe DOM fallback. Off uses DOM. Hidden terminals release GPU resources. Active mode is shown in each terminal."
+      description="Auto (default) and On attempt WebGL when application GPU policy allows, with safe DOM fallback. Off uses DOM. Recently hidden terminals keep their GPU context for quick switching (up to six). Active mode is shown in each terminal."
       resetAction={
         setting !== DEFAULT_UNIFIED_SETTINGS.terminalGpuAcceleration ? (
           <SettingResetButton

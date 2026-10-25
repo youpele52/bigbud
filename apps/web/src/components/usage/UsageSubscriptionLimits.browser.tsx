@@ -2,11 +2,14 @@ import "../../index.css";
 
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { page, userEvent } from "vitest/browser";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { UsageSubscriptionLimits } from "./UsageSubscriptionLimits";
 import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
+
+const api = vi.hoisted(() => ({ refreshUsageLimits: vi.fn() }));
+vi.mock("../../rpc/nativeApi", () => ({ ensureNativeApi: () => ({ server: api }) }));
 
 const checkedAt = "2026-09-06T12:00:00.000Z";
 let mounted: Awaited<ReturnType<typeof render>> | undefined;
@@ -35,6 +38,7 @@ describe("UsageSubscriptionLimits", () => {
     await mounted?.unmount();
     mounted = undefined;
     document.body.innerHTML = "";
+    vi.clearAllMocks();
   });
 
   it("renders available windows, subscription type, and extra usage", async () => {
@@ -56,6 +60,84 @@ describe("UsageSubscriptionLimits", () => {
     await expect
       .element(page.getByRole("progressbar", { name: "Extra usage" }))
       .toHaveAttribute("aria-valuenow", "75");
+  });
+
+  it("refreshes all subscription limits via the dedicated API with Settings-style loading and alignment", async () => {
+    let finish!: () => void;
+    api.refreshUsageLimits.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await renderLimits(status("available"));
+    const refresh = page.getByRole("button", { name: "Refresh subscription limits" });
+    const allowance = page
+      .getByText("Remaining allowance", { exact: true })
+      .element()
+      .getBoundingClientRect();
+    const button = refresh.element().getBoundingClientRect();
+    expect(button.left).toBeGreaterThan(allowance.right);
+    expect(
+      Math.abs(button.top + button.height / 2 - (allowance.top + allowance.height / 2)),
+    ).toBeLessThan(2);
+    expect(button.width).toBe(20);
+    await refresh.click();
+    await expect.element(refresh).toBeDisabled();
+    expect(refresh.element().querySelector(".animate-spin")).not.toBeNull();
+    expect(api.refreshUsageLimits).toHaveBeenCalledOnce();
+    finish();
+    await expect.element(refresh).toBeEnabled();
+    expect(refresh.element().querySelector(".animate-spin")).toBeNull();
+  });
+
+  it("recovers the refresh control after a transport failure and shows a retry message", async () => {
+    api.refreshUsageLimits.mockRejectedValueOnce(new Error("offline"));
+    await renderLimits(status("unavailable"));
+    const refresh = page.getByRole("button", { name: "Refresh subscription limits" });
+    await refresh.click();
+    await expect
+      .element(page.getByRole("alert"))
+      .toHaveTextContent("Couldn’t refresh limits. Try again.");
+    await expect.element(refresh).toBeEnabled();
+    api.refreshUsageLimits.mockResolvedValueOnce({ providers: [] });
+    await refresh.click();
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    expect(api.refreshUsageLimits).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps limit resets display-only and below limits in compact Usage", async () => {
+    mounted = await render(
+      <UsageSubscriptionLimits
+        compact
+        limits={[
+          {
+            ...status("available"),
+            source: "codex-app-server",
+            windows: [{ id: "weekly", kind: "seven-day", label: "Weekly limit", utilization: 10 }],
+            manualResets: { availableCount: 2, availableExpiries: [null], detailsComplete: false },
+          },
+        ]}
+      />,
+    );
+    await expect.element(page.getByText("Limit resets", { exact: true })).toBeVisible();
+    await expect
+      .element(page.getByRole("button", { name: "Available (2)" }))
+      .toHaveAttribute("aria-pressed", "true");
+    await expect.element(page.getByRole("button", { name: "Available (2)" })).toBeDisabled();
+    await expect.element(page.getByText("No expiry", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("Expiry unavailable for 1 reset")).toBeVisible();
+    const quota = page
+      .getByRole("progressbar", { name: "Weekly limit" })
+      .element()
+      .getBoundingClientRect();
+    expect(
+      page.getByText("Limit resets", { exact: true }).element().getBoundingClientRect().top,
+    ).toBeGreaterThan(quota.bottom);
+    expect(page.getByRole("button").all()).toHaveLength(2);
+    await expect
+      .element(page.getByRole("button", { name: "Refresh subscription limits" }))
+      .toBeVisible();
   });
 
   it.each([
@@ -85,9 +167,12 @@ describe("UsageSubscriptionLimits", () => {
     await expect.element(page.getByText("25% remaining")).toBeInTheDocument();
   });
 
-  it("hides unsupported subscription limits", async () => {
+  it("keeps refresh available when subscription limits are unavailable", async () => {
     await renderLimits(status("unavailable"));
-    expect(document.querySelector("section")).toBeNull();
+    expect(document.querySelector('[data-slot="card"]')).toBeNull();
+    await expect
+      .element(page.getByRole("button", { name: "Refresh subscription limits" }))
+      .toBeVisible();
   });
 
   it.each([
@@ -165,6 +250,7 @@ describe("UsageSubscriptionLimits", () => {
     const progress = page.getByRole("progressbar", { name: "5-hour limit" });
     await expect.element(progress).toHaveAttribute("tabindex", "0");
     await userEvent.tab();
+    await userEvent.tab();
     await expect.element(progress).toHaveFocus();
     await expect.element(page.getByText("99.5% used · 0.5% left")).toBeVisible();
     await expect.element(progress).toHaveAttribute("aria-description", "99.5% used · 0.5% left");
@@ -178,7 +264,7 @@ describe("UsageSubscriptionLimits", () => {
       { ...status("available"), source: "codex-app-server", extraUsage: { enabled: false } },
       { ...status("available"), source: "cursor-dashboard", extraUsage: { enabled: true } },
     );
-    expect(document.querySelectorAll('[data-slot="tooltip-trigger"]')).toHaveLength(1);
+    expect(document.querySelectorAll('[data-slot="tooltip-trigger"]')).toHaveLength(2);
     await page.getByRole("progressbar", { name: "Extra usage" }).hover();
     await expect.element(page.getByText("25% used · 75% left")).toBeVisible();
     await expect.element(page.getByText("Disabled", { exact: true })).toBeInTheDocument();

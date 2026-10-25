@@ -309,7 +309,7 @@ crates/bigbud-remote-agent/src/operations/journal/inspect.relationships.rs
 
 Tracked diff: six files, 242 insertions / 35 deletions; all nine partial source/test files were inspected. This plan is the only authorized new planning file. The protected investigation is ignored (`git check-ignore` confirmed); do not assume ignored means disposable.
 
-Instructions inspected: supplied global assistant instructions, root `AGENTS.md`, `crates/AGENTS.md`, and the guide now at `docs/plans/_plan-authoring-guide--do-not-delete.md`, plus surfaced `docs/CONTEXT.md`; accepted native boundary read. No other repository `AGENTS.md` found. Required plan content is organized under this planner's mandated metadata/goal/evidence/scope/phases/validation/handoff sections, incorporating the repository guide's summary, related work, non-goals, risks, criteria, and questions.
+Instructions inspected: supplied global assistant instructions, root `AGENTS.md`, `crates/AGENTS.md`, and the guide now at `docs/plans/_plan-authoring-guide--do-not-delete.md`, plus the terminology now consolidated in `docs/development/encyclopedia.md` and `docs/development/release.md`; accepted native boundary read. No other repository `AGENTS.md` found. Required plan content is organized under this planner's mandated metadata/goal/evidence/scope/phases/validation/handoff sections, incorporating the repository guide's summary, related work, non-goals, risks, criteria, and questions.
 
 Toolchain constraints from `package.json`: Bun 1.3.9, Node ^24.13.1, Vitest ^4, Effect 4.0.0-beta.43, Oxfmt/Oxlint; reuse current lockfiles, no dependency additions planned. External fixture evidence is historical and must be reproduced for acceptance.
 

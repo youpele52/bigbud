@@ -20,9 +20,9 @@ import {
 } from "./SharedService.compatibility.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
 import { currentV2RequestContext } from "./Client.guard.ts";
-import { resolveV2NativeReleaseQualification } from "./NativeCompatibility.qualification.ts";
-import { parseV2CanonicalCandidate } from "./NativeCompatibility.version.ts";
-import { OPENCODE_UNQUALIFIED_RUNTIME_WARNING } from "@bigbud/shared/opencodeAdvisory";
+import { v2CallerContextEntry, v2Promise } from "./Client.guard.async.ts";
+import { opencodeUpdateAdvice } from "@bigbud/shared/opencodeAdvisory";
+import { opencodeAgentSystemHash } from "../../opencodeAgentSource.ts";
 import {
   v2SharedDiscoveryFailure,
   type V2DiscoveryPhase,
@@ -77,10 +77,8 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
       phase = "catalog normalization";
       const nativeModels = normalizeV2Catalog(catalog, config.workspace, providers);
       const shared = Boolean(config.process.sharedService);
-      const unqualified =
-        shared &&
-        parseV2CanonicalCandidate(info.version) &&
-        !resolveV2NativeReleaseQualification(info.version);
+      // Release qualification evidence is not a readiness gate; only an outdated service warns.
+      const outdated = shared && isV2SharedUpdateRecommended(info.version);
       phase = "integration.list";
       const integrations = shared
         ? await v2Request("integration.list", (signal) =>
@@ -139,7 +137,7 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
           probe: {
             installed: true,
             version: info.version,
-            status: shared && nativeModels.length && !unqualified ? "ready" : "warning",
+            status: shared && nativeModels.length && !outdated ? "ready" : "warning",
             auth: connected?.length
               ? {
                   status: "authenticated",
@@ -150,31 +148,32 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
                 }
               : { status: "unknown" },
             message: shared
-              ? nativeModels.length
-                ? [
-                    "Connected to your native OpenCode service.",
-                    unqualified ? OPENCODE_UNQUALIFIED_RUNTIME_WARNING : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")
-                : "No native models are available. Connect a provider in OpenCode; bigbud detects account changes automatically."
+              ? [
+                  nativeModels.length
+                    ? "Connected to your native OpenCode service."
+                    : "No native models are available. Connect a provider in OpenCode; bigbud detects account changes automatically.",
+                  outdated
+                    ? opencodeUpdateAdvice(info.version, V2_RECOMMENDED_RUNTIME_VERSION)
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")
               : `${catalogMessage}Configure a provider in the isolated profile; accounts are not verified by browsing. ${V2_LOCAL_TOOL_LIMITATION}`,
           },
         }),
         ...(!application ? { developmentOnly: true } : {}),
         ...(shared ? { supportsLocalRuntimeRemoteWorkspace: false } : {}),
-        ...(shared && isV2SharedUpdateRecommended(info.version)
-          ? { runtimeUpdateRecommended: V2_RECOMMENDED_RUNTIME_VERSION }
-          : {}),
+        ...(outdated ? { runtimeUpdateRecommended: V2_RECOMMENDED_RUNTIME_VERSION } : {}),
         ...(agents
           ? {
               nativeAgents: agents.data
                 .filter(({ hidden }) => !hidden)
                 // oxlint-disable-next-line no-map-spread -- copy-on-write required; inputs are native/cached snapshots
-                .map(({ id, name, description }) => ({
+                .map(({ id, name, description, system }) => ({
                   id,
                   name,
                   ...(description ? { description } : {}),
+                  ...(system?.trim() ? { systemPromptHash: opencodeAgentSystemHash(system) } : {}),
                 })),
             }
           : {}),
@@ -263,8 +262,9 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
   );
   const refresh = Effect.gen(function* () {
     const enabled = yield* isEnabled;
+    const enterCaller = yield* v2CallerContextEntry;
     let snapshot: ServerProvider = enabled
-      ? yield* Effect.promise(() => {
+      ? yield* v2Promise(() => {
           pending ??= runtime
             .authorized(() => probe(enabled))
             .finally(() => {
@@ -274,7 +274,10 @@ export const makeV2DevelopmentProvider = Effect.fn("makeV2DevelopmentProvider")(
         })
       : disabledSnapshot();
     if (!(yield* isEnabled)) snapshot = disabledSnapshot();
-    yield* snapshots.publish(snapshot, currentV2RequestContext()?.permit.assertCurrent);
+    yield* snapshots.publish(
+      snapshot,
+      enterCaller(() => currentV2RequestContext()?.permit.assertCurrent),
+    );
     return snapshot;
   });
   yield* Effect.addFinalizer(() =>

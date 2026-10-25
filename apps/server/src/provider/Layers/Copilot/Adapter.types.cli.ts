@@ -76,7 +76,7 @@ export function resolveCopilotRuntimeInvocation(
     try {
       const require = createRequire(import.meta.url);
       const resolve =
-        input.resolve ?? createRequire(require.resolve("@github/copilot-sdk")).resolve;
+        input.resolve ?? createRequire(require.resolve("@github/copilot/package.json")).resolve;
       return {
         path: resolve(packageName),
         args: [],

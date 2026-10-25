@@ -25,6 +25,7 @@ import { OrchestrationProject } from "./orchestration.project";
 import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import { ThreadForkOrigin } from "./orchestration.fork";
 import { OrchestrationTask } from "./orchestration.thread.tasks";
+import { ThreadRecovery } from "./orchestration.recovery";
 
 export const ELEVATOR_SUMMARY_MAX_CHARS = 150;
 export const ElevatorSummary = TrimmedNonEmptyString.check(
@@ -106,6 +107,7 @@ export const OrchestrationSessionStatus = Schema.Literals([
 export type OrchestrationSessionStatus = typeof OrchestrationSessionStatus.Type;
 
 export const OrchestrationSession = Schema.Struct({
+  retainedFamily: Schema.optional(Schema.Boolean),
   threadId: ThreadId,
   status: OrchestrationSessionStatus,
   providerName: Schema.NullOr(TrimmedNonEmptyString),
@@ -199,6 +201,11 @@ export const OrchestrationQueuedPrompt = Schema.Struct({
   bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
   originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
+  /**
+   * The message is already in the transcript; the provider refused it as busy. Flushing
+   * redelivers it under the same message ID instead of adding a second message.
+   */
+  alreadySent: Schema.optional(Schema.Boolean),
 });
 export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 
@@ -257,6 +264,15 @@ export const OrchestrationPendingInterruptFlushIntent = Schema.Struct({
 export type OrchestrationPendingInterruptFlushIntent =
   typeof OrchestrationPendingInterruptFlushIntent.Type;
 
+/** A requested turn the provider has not bound yet; queued prompts wait behind it. */
+export const OrchestrationPendingTurnStart = Schema.Struct({
+  messageId: MessageId,
+  requestedAt: IsoDateTime,
+  /** Sequence of the `thread.turn-start-requested` event that opened the gate. */
+  requestedSequence: Schema.optional(NonNegativeInt),
+});
+export type OrchestrationPendingTurnStart = typeof OrchestrationPendingTurnStart.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -285,6 +301,13 @@ export const OrchestrationThread = Schema.Struct({
     Schema.NullOr(OrchestrationTurnControlOperation),
   ).pipe(Schema.withDecodingDefault(() => null)),
   queueHold: Schema.optional(Schema.Boolean).pipe(Schema.withDecodingDefault(() => false)),
+  pendingTurnStart: Schema.optional(Schema.NullOr(OrchestrationPendingTurnStart)).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
+  /** Sleep and wake recovery notice. Absent on snapshots written before recovery existed. */
+  recovery: Schema.optional(Schema.NullOr(ThreadRecovery)).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),

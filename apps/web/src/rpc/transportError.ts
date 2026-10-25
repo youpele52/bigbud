@@ -4,6 +4,7 @@ const TRANSPORT_ERROR_PATTERNS = [
   /\bSocketCloseError\b/i,
   /\bSocketOpenError\b/i,
   new RegExp(`Unable to connect to the ${APP_SERVER_NAME} WebSocket\\.`, "i"),
+  new RegExp(`Not connected to the ${APP_SERVER_NAME}\\. Reconnecting`, "i"),
   /\bping timeout\b/i,
   /\bAll fibers interrupted without error\b/i,
 ] as const;

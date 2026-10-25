@@ -32,6 +32,7 @@ import { resolveAgentActivityPresentation } from "./chat-view-agent-activity.log
 import { useOpencodeV2RetainedHistory } from "./useOpencodeV2RetainedHistory";
 import { OpencodeV2RetainedHistoryNotice } from "../../common/OpencodeV2RetainedHistoryNotice";
 import { useOpenCodeRuntimeSetup } from "../../provider/useOpenCodeRuntimeSetup";
+import { OpenCodeSetupStatus } from "../../provider/OpenCodeSetupStatus";
 import { ThreadNoticeBanner } from "../../common/ThreadNoticeBanner";
 import { ThreadRecoveryNotices } from "../ThreadRecoveryNotices";
 
@@ -109,29 +110,25 @@ export function ChatViewChatBody({
       {base.isServerThread && isLegacyOpencodeThread(base.activeThread) ? (
         <LegacyOpencodeNotice threadId={base.threadId} />
       ) : null}
-      <ProviderStatusBanner
-        status={composer.activeProviderStatus}
-        runtimeVerified={openCodeSetup.verified}
-        threadId={base.threadId}
-      />
-      {openCodeSetup.error ? (
+      {openCodeSetup.result?.jobId ? (
+        <OpenCodeSetupStatus
+          threadId={base.threadId}
+          result={openCodeSetup.result}
+          error={openCodeSetup.error}
+          onRetry={openCodeSetup.retry}
+          onCancel={() => void openCodeSetup.cancel()}
+        />
+      ) : openCodeSetup.error ? (
         <ThreadNoticeBanner
           threadId={base.threadId}
           kind="opencode-setup"
-          condition={[
-            openCodeSetup.error,
-            openCodeSetup.severity,
-            openCodeSetup.noticeIdentity,
-            base.settings.providers.opencodeV2,
-            composer.gitCwd ?? workspaceRoot,
-            composer.activeProviderStatus?.version,
-          ]}
           variant={openCodeSetup.severity}
           title="OpenCode setup"
           description={openCodeSetup.error}
           dismissLabel="Dismiss OpenCode setup notice"
         />
       ) : null}
+      <ProviderStatusBanner status={composer.activeProviderStatus} threadId={base.threadId} />
       {retainedHistory ? (
         <OpencodeV2RetainedHistoryNotice threadId={base.threadId} message={retainedHistory} />
       ) : null}
@@ -144,10 +141,7 @@ export function ChatViewChatBody({
       <ThreadErrorBanner
         error={base.activeThread!.error}
         threadId={base.activeThread!.id}
-        conditionIdentity={[
-          base.activeThread!.turnStartRequest,
-          base.activeThread!.activities.findLast((activity) => activity.tone === "error")?.id,
-        ]}
+        provider={base.activeThread!.modelSelection.provider}
       />
       {base.isServerThread && base.activeThread ? (
         <ThreadRecoveryNotices thread={base.activeThread} />
@@ -230,6 +224,8 @@ export function ChatViewChatBody({
                   nowIso={thread.nowIso}
                   expandedWorkGroups={base.expandedWorkGroups}
                   onToggleWorkGroup={interactions.onToggleWorkGroup}
+                  activityAccordionOpenById={base.activityAccordionOpenById}
+                  onSetActivityAccordionOpen={interactions.onSetActivityAccordionOpen}
                   changedFilesExpandedByTurnId={base.threadChangedFilesExpandedByTurnId}
                   onSetChangedFilesExpanded={(turnId, expanded) => {
                     if (base.isServerThread) {
@@ -242,6 +238,7 @@ export function ChatViewChatBody({
                   isRevertingCheckpoint={base.isRevertingCheckpoint}
                   onImageExpand={base.setExpandedImage}
                   markdownCwd={composer.gitCwd ?? undefined}
+                  preferredProvider={base.activeThread!.modelSelection.provider}
                   resolvedTheme={base.resolvedTheme}
                   timestampFormat={base.timestampFormat}
                   workspaceRoot={workspaceRoot}

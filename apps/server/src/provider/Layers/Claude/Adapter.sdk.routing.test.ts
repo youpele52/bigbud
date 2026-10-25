@@ -111,7 +111,7 @@ describe("Claude SDK normalized message routing", () => {
       assert.equal(warning?.type, "runtime.warning");
       if (warning?.type === "runtime.warning") {
         assert.deepEqual(warning.payload.detail, {
-          sdkVersion: "0.3.301",
+          sdkVersion: "0.3.310",
           message: "system/task_updated",
         });
         assert.equal(JSON.stringify(warning).includes("must-not-project"), false);

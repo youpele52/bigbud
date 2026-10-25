@@ -10,6 +10,7 @@ import {
 } from "./ServerManager.child.ts";
 import { OpencodeV2IsolatedFixtureManager as OpencodeV2ServerManager } from "./ServerManager.fixture.ts";
 import { OpencodeV2DevelopmentSessions } from "./DevelopmentSessions.ts";
+import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 import { makeNoExecutionAdmissionTransport } from "./Adapter.admission.ts";
 import { Effect } from "effect";
 import { ThreadId, MessageId } from "@bigbud/contracts/core/baseSchemas";
@@ -40,7 +41,7 @@ describe.skipIf(process.platform === "win32")(
       const process = await startOwnedV2Process(input, grants.get(input));
       processes.push(process);
       expect(process.isRunning()).toBe(true);
-      expect((await process.client.server.info()).version).toBe("2.0.26");
+      expect((await process.client.server.info()).version).toBe(OPENCODE_V2_CLIENT_VERSION);
       await process.close();
       expect(process.isRunning()).toBe(false);
       expect(await readFile(path.join(input.profileRoot, "synthetic-history"), "utf8")).toBe(

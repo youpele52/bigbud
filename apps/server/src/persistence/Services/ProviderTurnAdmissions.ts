@@ -52,7 +52,8 @@ export interface ProviderTurnAdmissionsShape {
   readonly find: (
     identity: ProviderTurnAdmissionIdentity,
   ) => Effect.Effect<ProviderTurnAdmission | undefined, ProviderTurnAdmissionError>;
-  /** Compare-and-swap prevents concurrent attempts from both acquiring dispatch. */
+  /** Compare-and-swap prevents double dispatch. Foreground reserved(0) may become
+   * terminal/interrupted(1) without output: preserved proof of pre-dispatch cancellation. */
   readonly transition: (
     current: ProviderTurnAdmission,
     state: ProviderTurnAdmissionState,

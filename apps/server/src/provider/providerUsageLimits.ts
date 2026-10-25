@@ -27,13 +27,13 @@ export function availableUsageLimits(
   source: UsageLimitsSource,
   checkedAt: string,
   windows: ReadonlyArray<ServerProviderUsageLimitWindow>,
-  extra: Pick<UsageLimits, "subscriptionType" | "extraUsage"> = {},
+  extra: Pick<UsageLimits, "subscriptionType" | "extraUsage" | "manualResets"> = {},
 ): UsageLimits {
   return Schema.decodeUnknownSync(ServerProviderUsageLimits)({
     source,
     checkedAt,
     lastSuccessfulAt: checkedAt,
-    status: windows.length > 0 ? "available" : "unavailable",
+    status: windows.length > 0 || extra.manualResets ? "available" : "unavailable",
     windows,
     ...extra,
   });

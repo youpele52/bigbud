@@ -31,13 +31,7 @@ vi.mock("./certificateChallengeManager", () => ({
   },
 }));
 
-vi.mock("./browserNavigationPolicy", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./browserNavigationPolicy")>();
-  return {
-    ...actual,
-    bindBrowserNavigationPolicy: bindBrowserNavigationPolicyMock,
-  };
-});
+vi.mock("./browserPopups", () => ({ bindBrowserPopups: bindBrowserNavigationPolicyMock }));
 
 vi.mock("./browserSession", () => ({
   BROWSER_SESSION_PARTITION: "persist:bigbud-browser",
@@ -207,11 +201,7 @@ describe("windowManager context menu", () => {
 
     expect(window?.webContents.send).toHaveBeenCalledTimes(1);
     expect(attachGuestMock).toHaveBeenCalledWith(window?.webContents, guestWebContents);
-    expect(bindBrowserNavigationPolicyMock).toHaveBeenCalledWith(guestWebContents);
-    const guestWindowOpenHandler = guestWebContents.setWindowOpenHandler.mock.calls[0]?.[0];
-    expect(guestWindowOpenHandler?.({ url: "https://untrusted.example/popup" })).toEqual({
-      action: "deny",
-    });
+    expect(bindBrowserNavigationPolicyMock).toHaveBeenCalledWith(window, guestWebContents);
     expect(window?.webContents.send).toHaveBeenCalledWith(
       "desktop:menu-action",
       "close-browser-context-menu",

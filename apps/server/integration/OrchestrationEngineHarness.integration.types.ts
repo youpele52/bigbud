@@ -12,6 +12,7 @@ import type { OrchestrationRuntimeReceipt } from "../src/orchestration/Services/
 import type { ProviderService } from "../src/provider/Services/ProviderService.ts";
 
 import type { TestProviderAdapterHarness } from "./TestProviderAdapter.integration.ts";
+import type { TestTurnResponse } from "./TestProviderAdapter.integration.types.ts";
 
 export interface PendingApprovalRow {
   readonly status: "pending" | "resolved";
@@ -62,4 +63,12 @@ export interface MakeOrchestrationIntegrationHarnessOptions {
   readonly provider?: ProviderKind;
   readonly realCodex?: boolean;
   readonly testClock?: boolean;
+  /** Run the harness database on the SQLite worker thread, as production does (default true). */
+  readonly sqliteWorker?: boolean;
+  /** Reuse a state directory the caller owns, to boot on a database a previous run left. */
+  readonly rootDir?: string;
+  /** Turn responses for the next provider session, queued before the reactors start. */
+  readonly nextSessionTurnResponses?: ReadonlyArray<TestTurnResponse>;
+  /** Runs after the engine is built and before the reactors subscribe, as startup phases do. */
+  readonly beforeReactorStart?: (engine: OrchestrationEngineShape) => Effect.Effect<void>;
 }

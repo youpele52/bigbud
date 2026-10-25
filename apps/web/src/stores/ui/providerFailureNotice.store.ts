@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
-import { createMemoryStorage, resolveStorage } from "../../lib/storage";
+import { createSessionNoticeStorage } from "../../lib/sessionNoticeStorage";
 
 interface FailureNotice {
   readonly message: string;
@@ -49,40 +49,6 @@ export function createProviderFailureNoticeStore(storage: StateStorage) {
   );
 }
 
-function noticeStorage(): StateStorage {
-  const fallback = createMemoryStorage();
-  try {
-    const storage = resolveStorage(typeof window !== "undefined" ? window.localStorage : null);
-    return {
-      getItem: (key) => {
-        try {
-          return storage.getItem(key);
-        } catch {
-          return fallback.getItem(key);
-        }
-      },
-      setItem: (key, value) => {
-        fallback.setItem(key, value);
-        try {
-          storage.setItem(key, value);
-        } catch {
-          console.warn(
-            "[provider-failure-notice] Dismissal could not be saved across page reloads.",
-          );
-        }
-      },
-      removeItem: (key) => {
-        fallback.removeItem(key);
-        try {
-          storage.removeItem(key);
-        } catch {
-          /* In-memory state remains available. */
-        }
-      },
-    };
-  } catch {
-    return fallback;
-  }
-}
-
-export const useProviderFailureNoticeStore = createProviderFailureNoticeStore(noticeStorage());
+export const useProviderFailureNoticeStore = createProviderFailureNoticeStore(
+  createSessionNoticeStorage(),
+);

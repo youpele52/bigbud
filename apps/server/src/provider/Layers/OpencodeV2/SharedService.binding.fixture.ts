@@ -6,7 +6,7 @@ import type { V2ConsentAuthority } from "./Application.consent.ts";
 /** Independent local detach owners over one synthetic native history; no daemon lifecycle. */
 export function sharedV2FixtureOptions(
   runtime: OpencodeV2Runtime,
-  http: V2RuntimeHttpFixture,
+  http: Pick<V2RuntimeHttpFixture, "client">,
   consent?: V2ConsentAuthority,
 ) {
   const manager = new OpencodeV2ServerManager({

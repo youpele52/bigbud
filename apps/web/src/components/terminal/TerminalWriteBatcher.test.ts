@@ -19,7 +19,7 @@ describe("TerminalWriteBatcher", () => {
     lanes.push(lane);
     return { terminal, lane, failure, callbacks };
   }
-  it("flush cannot bypass a withheld callback; barriers remain ordered", () => {
+  it("pipelines output within the window but barriers wait for every in-flight write", () => {
     const { terminal, lane, callbacks } = fixture();
     const barrier = vi.fn();
     lane.write(terminal as never, "alpha");
@@ -29,11 +29,12 @@ describe("TerminalWriteBatcher", () => {
     lane.write(terminal as never, "gamma");
     lane.flush();
     vi.runAllTimers();
-    expect(terminal.write).toHaveBeenCalledTimes(1);
+    expect(terminal.write).toHaveBeenCalledTimes(2);
+    expect(terminal.write).toHaveBeenNthCalledWith(2, "beta", expect.any(Function));
     expect(barrier).not.toHaveBeenCalled();
     callbacks.shift()?.();
     vi.runAllTimers();
-    expect(terminal.write).toHaveBeenNthCalledWith(2, "beta", expect.any(Function));
+    expect(barrier).not.toHaveBeenCalled();
     callbacks.shift()?.();
     vi.runAllTimers();
     expect(barrier).toHaveBeenCalledOnce();
@@ -78,10 +79,11 @@ describe("TerminalWriteBatcher", () => {
   it("splits bounded writes without breaking surrogate pairs and yields to siblings", () => {
     const one = fixture();
     const two = fixture();
-    one.lane.write(one.terminal as never, "x".repeat(8191) + "😀end");
+    const units = TERMINAL_WRITE_LIMITS.writeUnits;
+    one.lane.write(one.terminal as never, "x".repeat(units - 1) + "😀end");
     two.lane.write(two.terminal as never, "sibling");
     vi.runAllTimers();
-    expect(one.terminal.write.mock.calls[0]?.[0]).toBe("x".repeat(8191));
+    expect(one.terminal.write.mock.calls[0]?.[0]).toBe("x".repeat(units - 1));
     expect(two.terminal.write).toHaveBeenCalledOnce();
     one.callbacks.shift()?.();
     vi.runAllTimers();

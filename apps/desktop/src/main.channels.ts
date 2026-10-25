@@ -1,4 +1,6 @@
 export const desktopIpcChannels = {
+  recoverBackendOwnership: "desktop:recover-backend-ownership",
+  checkBackendOwnership: "desktop:check-backend-ownership",
   systemMonitorSubscribe: "desktop:system-monitor-subscribe",
   systemMonitorUpdate: "desktop:system-monitor-update",
   systemMonitorUnsubscribe: "desktop:system-monitor-unsubscribe",
@@ -34,6 +36,7 @@ export const desktopIpcChannels = {
   requestFileAccess: "desktop:request-file-access",
   backendStartupState: "desktop:backend-startup-state",
   backendStartupGetState: "desktop:backend-startup-get-state",
+  connectivitySignal: "desktop:connectivity-signal",
   getWindowRole: "desktop:get-window-role",
   getTerminalRenderingPolicy: "desktop:get-terminal-rendering-policy",
   openMainWindow: "desktop:open-main-window",

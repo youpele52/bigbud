@@ -98,6 +98,7 @@ export {
   ThreadUnpinnedPayload,
   ThreadUserInputResponseRequestedPayload,
 } from "./orchestration.events.thread";
+import { ThreadRecoveryUpdatedPayload } from "./orchestration.recovery";
 
 export const OrchestrationEventType = Schema.Literals([
   "project.created",
@@ -140,6 +141,7 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.activity-appended",
   "thread.task-upserted",
   "thread.task-removed",
+  "thread.recovery-updated",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
@@ -366,6 +368,11 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.task-removed"),
     payload: ThreadTaskRemovedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.recovery-updated"),
+    payload: ThreadRecoveryUpdatedPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;

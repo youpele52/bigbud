@@ -42,6 +42,11 @@ import {
   type FileSearchResult,
 } from "./SearchPalette.results";
 import { toProjectSearchResults, type ProjectSearchResult } from "./SearchPalette.projectResults";
+import { useTerminalSearchResults } from "./SearchPalette.terminalResults";
+import {
+  revealTerminalSearchResult,
+  type TerminalSearchResult,
+} from "./SearchPalette.terminalResults.logic";
 
 interface SearchPaletteDialogContentProps {
   activeThreadId: ThreadId | null;
@@ -73,6 +78,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   const [visibleThreadCount, setVisibleThreadCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
   const [visibleProjectCount, setVisibleProjectCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
   const [visibleFileCount, setVisibleFileCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
+  const [visibleTerminalCount, setVisibleTerminalCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
   const [visibleCurrentFileMatchCount, setVisibleCurrentFileMatchCount] = useState(
     INITIAL_VISIBLE_RESULT_COUNT,
   );
@@ -104,6 +110,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
     setVisibleThreadCount(INITIAL_VISIBLE_RESULT_COUNT);
     setVisibleProjectCount(INITIAL_VISIBLE_RESULT_COUNT);
     setVisibleFileCount(INITIAL_VISIBLE_RESULT_COUNT);
+    setVisibleTerminalCount(INITIAL_VISIBLE_RESULT_COUNT);
     setVisibleCurrentFileMatchCount(INITIAL_VISIBLE_RESULT_COUNT);
   }, [debouncedQuery, open]);
 
@@ -168,6 +175,20 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
         };
       });
   }, [debouncedNormalizedQuery, threads, projects]);
+
+  const terminalSearch = useTerminalSearchResults({
+    query: debouncedMessageQuery,
+    enabled: open,
+    threads,
+  });
+
+  const handleSelectTerminal = (result: TerminalSearchResult) => {
+    setOpen(false);
+    revealTerminalSearchResult(result, debouncedMessageQuery);
+    if (result.threadId !== activeThreadId) {
+      void navigate({ to: "/$threadId", params: { threadId: result.threadId } });
+    }
+  };
 
   const handleSelectThread = (threadId: ThreadId) => {
     setOpen(false);
@@ -344,6 +365,13 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
                       onSelectThread={handleSelectThread}
                       onSelectProject={handleSelectProject}
                       onSelectFile={handleSelectFile}
+                      terminalResults={terminalSearch.results}
+                      visibleTerminalResults={terminalSearch.results.slice(0, visibleTerminalCount)}
+                      isTerminalSearchPending={terminalSearch.isPending}
+                      onShowMoreTerminals={() =>
+                        setVisibleTerminalCount((current) => current + INITIAL_VISIBLE_RESULT_COUNT)
+                      }
+                      onSelectTerminal={handleSelectTerminal}
                       onSelectCurrentFileMatch={handleSelectCurrentFileMatch}
                       initialVisibleResultCount={INITIAL_VISIBLE_RESULT_COUNT}
                     />

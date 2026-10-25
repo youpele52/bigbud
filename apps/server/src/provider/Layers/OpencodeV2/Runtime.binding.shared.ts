@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { decodeV2Cursor } from "./Runtime.cursor.ts";
+import { v2RetainedRegistrationFamily } from "./Runtime.registration.ts";
 import type { V2IsolatedRuntimeOptions, V2StartInput } from "./Runtime.types.ts";
 
 /** Local durable evidence wins over newly derived IDs; conflicts never permit replacement. */
@@ -30,6 +31,8 @@ export async function retainedSharedIdentity(
     ...(cursor ? [cursor] : []),
   ];
   const first = candidates[0];
+  const profileIssuer = await options.profileIssuer?.();
+  const registrationFamily = v2RetainedRegistrationFamily(row, cursor, profileIssuer);
   for (const candidate of candidates) {
     if (
       candidate.nativeSessionId !== first?.nativeSessionId ||
@@ -43,6 +46,10 @@ export async function retainedSharedIdentity(
       throw new Error("V2 retained shared history conflicts; no replacement or replay.");
   }
   return first
-    ? { nativeSessionId: first.nativeSessionId, storageIdentity: first.storageIdentity }
+    ? {
+        nativeSessionId: first.nativeSessionId,
+        storageIdentity: first.storageIdentity,
+        registrationFamily,
+      }
     : undefined;
 }

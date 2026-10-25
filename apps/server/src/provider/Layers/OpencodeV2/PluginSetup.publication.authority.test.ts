@@ -4,7 +4,7 @@ import { expect, it, vi } from "vitest";
 import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 import { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
 import { publishV2ManagedPlugin } from "./PluginSetup.publication.ts";
-import { V2_MANAGED_PLUGIN_FILENAME } from "./PluginSetup.record.ts";
+import { v2ManagedPluginFilename } from "./PluginSetup.record.ts";
 
 const state = vi.hoisted(() => ({ changed: false, link: 0, rename: 0 }));
 vi.mock("./Orchestration.plugin.ts", async (original) => {
@@ -20,11 +20,11 @@ vi.mock("node:fs/promises", async (original) => {
   return {
     ...fs,
     link: (...args: Parameters<typeof fs.link>) => {
-      if (String(args[1]).endsWith("bigbud-thread-tools-managed.js")) state.link++;
+      if (/bigbud-thread-tools-[a-f0-9]{64}\.js$/.test(String(args[1]))) state.link++;
       return fs.link(...args);
     },
     rename: (...args: Parameters<typeof fs.rename>) => {
-      if (String(args[1]).endsWith("bigbud-thread-tools-managed.js")) state.rename++;
+      if (/bigbud-thread-tools-[a-f0-9]{64}\.js$/.test(String(args[1]))) state.rename++;
       return fs.rename(...args);
     },
   };
@@ -38,7 +38,7 @@ it.each(["first", "replacement"] as const)(
         root = path.join(app.root, "owned-config"),
         controller = new AbortController();
       await mkdir(root, { mode: 0o700 });
-      const filename = path.join(root, "plugins", V2_MANAGED_PLUGIN_FILENAME);
+      const filename = path.join(root, "plugins", v2ManagedPluginFilename(app.artifact));
       let current = true,
         liveGate = true;
       const authority = {

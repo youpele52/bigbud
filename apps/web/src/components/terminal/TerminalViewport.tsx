@@ -20,6 +20,8 @@ import {
 } from "./terminalTypography";
 import { useTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { useTerminalViewportSession } from "./TerminalViewport.session";
+import { pickTerminalInteractionSettings } from "./TerminalViewport.addons";
+import { TerminalFindBar } from "./TerminalFindBar";
 import { TerminalViewportStatus } from "./TerminalViewportStatus";
 import { useTerminalResizeRequest } from "./TerminalViewport.resize";
 import { useTerminalLaunchBinding } from "./TerminalViewport.launch";
@@ -165,6 +167,7 @@ export function TerminalViewport({
     startupPending,
     startupFailed,
     directoryNotice,
+    find,
   } = useTerminalViewportSession({
     containerRef: mountRef,
     terminalRef,
@@ -191,6 +194,9 @@ export function TerminalViewport({
     bundledTerminalFont,
     terminalLineHeight,
     terminalGpuAcceleration: settings.terminalGpuAcceleration,
+    terminalThemeDark: settings.terminalThemeDark,
+    terminalThemeLight: settings.terminalThemeLight,
+    ...pickTerminalInteractionSettings(settings),
     onSessionExited: handleSessionExited,
     onAddTerminalContext: handleAddTerminalContext,
     onRequestTerminalAnnotation: handleRequestTerminalAnnotation,
@@ -372,6 +378,7 @@ export function TerminalViewport({
         restartDelivery={restartDelivery}
         gpuRequested={settings.terminalGpuAcceleration !== "off"}
       />
+      {find.open ? <TerminalFindBar find={find} /> : null}
       {pendingAnnotation ? (
         <TerminalViewportAnnotationComposer
           pendingAnnotation={pendingAnnotation}

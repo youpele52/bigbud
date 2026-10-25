@@ -12,6 +12,12 @@
     <!-- Allow microphone access for STT voice transcription -->
     <key>com.apple.security.device.audio-input</key>
     <true/>
+    <!-- Browser camera access still requires per-site consent and macOS approval. -->
+    <key>com.apple.security.device.camera</key>
+    <true/>
+    <!-- Browser location still requires per-site consent and macOS approval. -->
+    <key>com.apple.security.personal-information.location</key>
+    <true/>
     <!-- Allow unsigned executable memory for native addon compatibility.
          Required by some native Node.js modules loaded at runtime. -->
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>

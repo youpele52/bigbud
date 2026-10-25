@@ -12,7 +12,7 @@ it("loads outside the checkout without node_modules in both Node and Bun, and re
     const script = `import(${JSON.stringify(app.artifact.entryUri)}).then(module=>console.log(module.default.id))`;
     for (const binary of ["node", "bun"]) {
       const result = await promisify(execFile)(binary, ["-e", script], { cwd: app.root });
-      expect(result.stdout.trim()).toBe("bigbud.thread.v1");
+      expect(result.stdout.trim()).toBe(`bigbud.thread.v2.${app.artifact.issuer}`);
     }
     expect((await exportV2ThreadArtifact(app.root)).artifactDigest).toBe(
       app.artifact.artifactDigest,

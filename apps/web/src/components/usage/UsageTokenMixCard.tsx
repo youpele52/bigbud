@@ -9,11 +9,11 @@ import { formatCompactNumber } from "./UsagePage.format";
 import { disjointUsageMix } from "./UsageAccounting.logic";
 
 const tokenMixChartConfig = {
-  cacheWriteTokens: { color: "var(--chart-5)", label: "Cache write" },
-  cachedInputTokens: { color: "var(--chart-1)", label: "Cached" },
   inputTokens: { color: "var(--chart-2)", label: "Input" },
+  cacheReadTokens: { color: "var(--chart-1)", label: "Cache read" },
+  cacheWriteTokens: { color: "var(--chart-5)", label: "Cache write" },
   outputTokens: { color: "var(--chart-3)", label: "Output" },
-  reasoningOutputTokens: { color: "var(--chart-4)", label: "Reasoning" },
+  unclassifiedTokens: { color: "var(--muted-foreground)", label: "Unsplit usage" },
 } as const;
 
 function UsageTokenMixCard({ totals }: { readonly totals: ServerUsageSummaryResult["totals"] }) {
@@ -29,10 +29,8 @@ function UsageTokenMixCard({ totals }: { readonly totals: ServerUsageSummaryResu
         <CardContent className="p-0">
           <Empty className="min-h-64">
             <EmptyHeader>
-              <EmptyTitle>Breakdown incomplete.</EmptyTitle>
-              <EmptyDescription>
-                Token type details are not available for this range.
-              </EmptyDescription>
+              <EmptyTitle>No usage yet.</EmptyTitle>
+              <EmptyDescription>No tokens recorded for this range.</EmptyDescription>
             </EmptyHeader>
           </Empty>
         </CardContent>
@@ -79,6 +77,11 @@ function UsageTokenMixCard({ totals }: { readonly totals: ServerUsageSummaryResu
             </div>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Input may include unseparated cache usage. Reasoning stays in Output.
+          {chartData.some((entry) => entry.id === "unclassifiedTokens") &&
+            " Unsplit usage has no reliable category breakdown."}
+        </p>
         <div className="space-y-2">
           {chartData.map((entry) => (
             <div key={entry.id} className="flex items-center justify-between gap-3 text-sm">
@@ -96,40 +99,15 @@ function UsageTokenMixCard({ totals }: { readonly totals: ServerUsageSummaryResu
 }
 
 function buildTokenMixData(totals: ServerUsageSummaryResult["totals"]) {
-  const mix = disjointUsageMix(totals.accounting);
-  if (!mix) return [];
-  return [
-    {
-      id: "cacheWriteTokens",
-      label: tokenMixChartConfig.cacheWriteTokens.label,
-      value: mix.cacheWriteTokens,
-      fill: tokenMixChartConfig.cacheWriteTokens.color,
-    },
-    {
-      id: "cachedInputTokens",
-      label: tokenMixChartConfig.cachedInputTokens.label,
-      value: mix.cachedInputTokens,
-      fill: tokenMixChartConfig.cachedInputTokens.color,
-    },
-    {
-      id: "inputTokens",
-      label: tokenMixChartConfig.inputTokens.label,
-      value: mix.inputTokens,
-      fill: tokenMixChartConfig.inputTokens.color,
-    },
-    {
-      id: "outputTokens",
-      label: tokenMixChartConfig.outputTokens.label,
-      value: mix.outputTokens,
-      fill: tokenMixChartConfig.outputTokens.color,
-    },
-    {
-      id: "reasoningOutputTokens",
-      label: tokenMixChartConfig.reasoningOutputTokens.label,
-      value: mix.reasoningOutputTokens,
-      fill: tokenMixChartConfig.reasoningOutputTokens.color,
-    },
-  ].filter((entry) => entry.value > 0);
+  const mix = disjointUsageMix(totals);
+  return Object.entries(tokenMixChartConfig)
+    .map(([id, config]) => ({
+      id,
+      label: config.label,
+      value: mix[id as keyof typeof mix],
+      fill: config.color,
+    }))
+    .filter((entry) => entry.value > 0);
 }
 
 export { UsageTokenMixCard };

@@ -8,7 +8,7 @@ import { sharedV2FixtureOptions } from "./SharedService.binding.fixture.ts";
 import { makeV2DevelopmentProvider } from "./Development.provider.ts";
 import { v2SharedDiscoveryFailure } from "./Development.provider.diagnostics.ts";
 import { V2HttpStatusError } from "./Client.errors.ts";
-import { OPENCODE_UNQUALIFIED_RUNTIME_WARNING } from "@bigbud/shared/opencodeAdvisory";
+import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 
 it("never exposes native error messages, credentials or response bodies in discovery diagnostics", () => {
   const error = Object.assign(new Error("private prompt-body secret token"), {
@@ -28,9 +28,9 @@ it.each(["model.list", "provider.list", "integration.list", "agent.list", "skill
       const options = sharedV2FixtureOptions(fixture, http);
       const runtime = new OpencodeV2Runtime(options);
       try {
-        vi.spyOn(http.client.server, "info").mockResolvedValue({ version: "2.0.24" } as Awaited<
-          ReturnType<typeof http.client.server.info>
-        >);
+        vi.spyOn(http.client.server, "info").mockResolvedValue({
+          version: OPENCODE_V2_CLIENT_VERSION,
+        } as Awaited<ReturnType<typeof http.client.server.info>>);
         const provider = vi
           .spyOn(http.client.provider, "list")
           .mockResolvedValue({ location: { directory }, data: [] });
@@ -56,9 +56,7 @@ it.each(["model.list", "provider.list", "integration.list", "agent.list", "skill
                 async () => ({ models: [], stale: false }),
               );
               const healthy = yield* discovery.refresh;
-              // Unqualified runtimes stay usable with an amber disclosure (10-14 plan §1a).
-              expect(healthy.status).toBe("warning");
-              expect(healthy.message).toContain(OPENCODE_UNQUALIFIED_RUNTIME_WARNING);
+              expect(healthy.status).toBe("ready");
               expect(healthy.models.length).toBeGreaterThan(0);
               expect(healthy.models.every((model) => model.availability === "available")).toBe(
                 true,
@@ -79,7 +77,6 @@ it.each(["model.list", "provider.list", "integration.list", "agent.list", "skill
                 true,
               );
               expect(failed.message).toContain(`${phase} (HTTP 500)`);
-              expect(failed.message).not.toContain(OPENCODE_UNQUALIFIED_RUNTIME_WARNING);
               expect(failed.message).toContain(JSON.stringify(directory));
               expect(failed.message).toContain("not proof of a disconnected account");
               expect(http.calls.some((call) => call.method !== "GET")).toBe(false);

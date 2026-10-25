@@ -78,7 +78,7 @@ describe("physical RPC protocol recovery", () => {
     stopB();
   });
 
-  it("caps deterministic protocol recovery and permits explicit retry without losing subscribers", async () => {
+  it("backs off harder on repeated protocol defects but never stops recovering", async () => {
     const transport = createTransport(transports, "ws://localhost:3020");
     const onError = vi.fn();
     const stop = transport.subscribe(
@@ -93,13 +93,18 @@ describe("physical RPC protocol recovery", () => {
       await waitFor(() => expect(requests(socket)).toHaveLength(1));
       socket.serverMessage(JSON.stringify({ _tag: "Defect", defect: "deterministic failure" }));
     }
-    await waitFor(() => expect(getWsConnectionStatus().reconnectPhase).toBe("exhausted"));
-    await waitFor(() => expect(onError).toHaveBeenCalledOnce());
+    // The third defect inside the window escalates to the reconnect ladder instead of stopping.
+    await waitFor(() => expect(getWsConnectionStatus().reconnectPhase).toBe("waiting"));
+    expect(getWsConnectionStatus().nextRetryAt).not.toBeNull();
+    expect(transport.isDisconnected).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
     expect(sockets).toHaveLength(3);
-    await transport.reconnect();
+    // A wake signal skips the escalated wait without dropping the logical subscriber.
+    expect(transport.reconnectNow()).toBe(true);
     await waitFor(() => expect(sockets).toHaveLength(4));
     getSocket(sockets).open();
     await waitFor(() => expect(requests(getSocket(sockets))).toHaveLength(1));
+    expect(onError).not.toHaveBeenCalled();
     stop();
   });
 

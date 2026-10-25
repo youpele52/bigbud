@@ -1,4 +1,5 @@
 import * as Schema from "effect/Schema";
+import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 export const V2NativePlatform = Schema.Literals(["darwin", "linux", "win32"]);
 export const V2NativeArch = Schema.Literals(["arm64", "x64"]);
 
@@ -20,11 +21,12 @@ export type V2NativeSemanticProfile = typeof V2NativeSemanticProfile.Type;
 const Hex = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 const Text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200));
 export const V2NativeQualificationRecord = Schema.Struct({
+  nativeFamilySourceDigest: Schema.optionalKey(Hex),
   format: Schema.Literal("bigbud.thread.native-qualification.v1"),
   nativeVersion: Text,
   platform: V2NativePlatform,
   arch: V2NativeArch,
-  clientVersion: Schema.Literal("2.0.26"),
+  clientVersion: Schema.Literal(OPENCODE_V2_CLIENT_VERSION),
   nativeContractDigest: Hex,
   bootstrapContractDigests: Schema.Array(Hex).check(Schema.isMinLength(1), Schema.isMaxLength(8)),
   bootstrapGeneratorSourceDigest: Hex,
@@ -85,6 +87,8 @@ export class V2NativeCompatibilityError extends Error {
 }
 
 export interface V2NativeRuntimeProof {
+  /** Release-reviewed custom runtime source identity; absent for stock native builds. */
+  readonly nativeFamilySourceDigest?: string;
   readonly evidenceKind: "qualified" | "candidate" | "runtime-checked";
   readonly assertCurrent: () => void;
   readonly assertConfigRead: () => void;

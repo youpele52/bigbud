@@ -13,6 +13,7 @@ import type { V2PluginSetupAuthority } from "./PluginSetup.paths.ts";
 import { captureV2OperationAuthority } from "./Client.guard.ts";
 import { acquireV2WindowsPublicationLock } from "./PluginSetup.lock.windows.ts";
 import type { V2WindowsFileIdentity } from "./NativeFiles.windows.ts";
+import type { V2RegistrationFamily } from "./Orchestration.registration.ts";
 
 const encoded = (root: string, issuer: string, pid: number, nonce: string) =>
   Buffer.from(JSON.stringify(["bigbud.thread.install.lock.v1", root, issuer, pid, nonce]));
@@ -24,9 +25,19 @@ export async function acquireV2PluginPublicationLock(
   root: string,
   artifact: Pick<V2PluginSetupArtifact, "issuer" | "privateKey" | "publicKey">,
   requested: V2PluginSetupAuthority,
+  family: V2RegistrationFamily = "legacy",
 ) {
   const authority = captureV2OperationAuthority(requested);
-  const filename = path.join(directory, ".bigbud-thread-tools-managed.lock");
+  // Immutable profile slots share a directory, not a writer identity. Never inspect or
+  // reclaim another slot's retained lock. Private record locks keep their historical name.
+  if (!/^[a-f0-9]{64}$/.test(artifact.issuer))
+    throw new Error("V2 publication lock issuer rejected.");
+  const filename = path.join(
+    directory,
+    family === "scoped"
+      ? `.bigbud-thread-tools-${artifact.issuer}.lock`
+      : ".bigbud-thread-tools-managed.lock",
+  );
   const nonce = randomBytes(16).toString("hex");
   const content = JSON.stringify({
     root,

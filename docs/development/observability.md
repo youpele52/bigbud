@@ -1,0 +1,527 @@
+# Observability
+
+bigbud has one server-side observability model:
+
+- pretty logs go to stdout for humans
+- retained completed spans go to a local NDJSON trace file
+- traces and metrics can also be exported over OTLP to a real backend like Grafana LGTM
+
+The local trace file is the persisted diagnostic artifact, not a complete audit log or canonical application history. There is no separate persisted server stdout log file. Production trace retention omits fast successful spans; use diagnostic capture when investigating missing detail.
+
+## Where To Find Things
+
+### Logs
+
+Logs are human-facing only:
+
+- destination: stdout
+- format: `Logger.consolePretty()`
+- persistence: none
+
+If you want a log message to show up in the trace file, emit it inside an active span with `Effect.log...`. `Logger.tracerLogger` will attach it as a span event.
+
+### Traces
+
+Retained spans are written as NDJSON records to `serverTracePath` (by default, `~/.bigbud/userdata/logs/server.trace.ndjson`, or `~/.bigbud/dev/logs/server.trace.ndjson` for development). A custom home, release channel, or trace-file override changes that path. The [trace policy](../../apps/server/src/observability/TracePolicy.ts) defaults to production mode: it retains errors, explicitly retained spans, spans taking at least 500 ms (100 ms for SQL), and no sample of other fast successes.
+
+Important fields in each record:
+
+- `name`: span name
+- `traceId`, `spanId`, `parentSpanId`: correlation
+- `durationMs`: elapsed time
+- `attributes`: structured context
+- `events`: embedded logs and custom events
+- `exit`: `Success`, `Failure`, or `Interrupted` for `effect-span` records; browser/OTLP records use their status fields instead
+
+The schema lives in `apps/server/src/observability/TraceRecord.ts`.
+
+### Metrics
+
+Metrics are not written to a local file.
+
+- local persistence: none
+- remote export: OTLP only, when configured
+- current definitions: `apps/server/src/observability/Metrics.ts`
+
+If OTLP is not configured, metrics still exist in-process, but you will not have a local artifact to inspect.
+
+### Related Artifacts
+
+Provider event NDJSON files still exist for provider runtime streams. Those are separate from the main server trace file.
+
+## Run The Server In Instrumented Mode
+
+There are two useful modes:
+
+- local-only: stdout + local `server.trace.ndjson`
+- full local observability: stdout + local trace file + OTLP export to Grafana/Tempo/Prometheus
+
+The local trace file is always on. OTLP export is opt-in.
+
+### Option 1: Local Traces Only
+
+You do not need any extra env vars. Just run the app normally and inspect `server.trace.ndjson`.
+
+Examples (the standalone server entry must be built first):
+
+```bash
+bun run --cwd apps/server start
+```
+
+```bash
+bun dev
+```
+
+```bash
+bun dev:desktop
+```
+
+### Option 2: Run With A Local LGTM Stack
+
+#### 1. Start Grafana LGTM
+
+```bash
+docker run --name lgtm \
+  -p 3000:3000 \
+  -p 4317:4317 \
+  -p 4318:4318 \
+  --rm -ti \
+  grafana/otel-lgtm
+```
+
+Then open `http://localhost:3000`.
+
+Default Grafana login:
+
+- username: `admin`
+- password: `admin`
+
+#### 2. Export OTLP env vars
+
+```bash
+export BIGBUD_OTLP_TRACES_URL=http://localhost:4318/v1/traces
+export BIGBUD_OTLP_METRICS_URL=http://localhost:4318/v1/metrics
+export BIGBUD_OTLP_SERVICE_NAME=bigbud-local
+```
+
+Legacy `T3CODE_OTLP_*` environment aliases remain supported.
+
+Optional:
+
+```bash
+export BIGBUD_TRACE_MIN_LEVEL=Info
+export BIGBUD_TRACE_TIMING_ENABLED=true
+```
+
+#### 3. Launch the app from that same shell
+
+Built standalone server:
+
+```bash
+bun run --cwd apps/server start
+```
+
+Monorepo web/server dev:
+
+```bash
+bun dev
+```
+
+Monorepo desktop dev:
+
+```bash
+bun dev:desktop
+```
+
+Packaged desktop app:
+
+Launch the actual app executable from the same shell so the desktop app and embedded backend inherit `BIGBUD_OTLP_*`.
+
+macOS app bundle example:
+
+```bash
+BIGBUD_OTLP_TRACES_URL=http://localhost:4318/v1/traces \
+BIGBUD_OTLP_METRICS_URL=http://localhost:4318/v1/metrics \
+BIGBUD_OTLP_SERVICE_NAME=bigbud-desktop \
+"/Applications/bigbud.app/Contents/MacOS/bigbud"
+```
+
+Direct binary example:
+
+```bash
+BIGBUD_OTLP_TRACES_URL=http://localhost:4318/v1/traces \
+BIGBUD_OTLP_METRICS_URL=http://localhost:4318/v1/metrics \
+BIGBUD_OTLP_SERVICE_NAME=bigbud-desktop \
+./path/to/your/desktop-app-binary
+```
+
+Do not rely on launching from Finder, Spotlight, the dock, or the Start menu after setting shell env vars. Those launches usually will not pick them up.
+
+#### 4. Fully restart after changing env
+
+The backend reads observability config at process start. If you change OTLP env vars, stop the app completely and start it again.
+
+## How To Use Traces And Metrics To Debug The Server
+
+### Start With The Local Trace File
+
+The trace file is the fastest way to inspect raw span data.
+
+Tail it:
+
+```bash
+tail -f "${BIGBUD_HOME:-$HOME/.bigbud}/userdata/logs/server.trace.ndjson"
+```
+
+In monorepo dev, use:
+
+```bash
+tail -f "${BIGBUD_HOME:-$HOME/.bigbud}/dev/logs/server.trace.ndjson"
+```
+
+The commands below assume `BIGBUD_HOME` is set. For default standalone storage, use `export BIGBUD_HOME="$HOME/.bigbud"`; for development, substitute `dev` for `userdata`. Channel-isolated installs use their own [base directory](./release.md#side-by-side-identity-and-data-isolation).
+
+Show failed Effect spans (OTLP/browser spans use status fields instead):
+
+```bash
+jq -c 'select(.type == "effect-span" and .exit._tag != "Success") | {
+  name,
+  durationMs,
+  exit,
+  attributes
+}' "$BIGBUD_HOME/userdata/logs/server.trace.ndjson"
+```
+
+Show slow spans:
+
+```bash
+jq -c 'select(.durationMs > 1000) | {
+  name,
+  durationMs,
+  traceId,
+  spanId
+}' "$BIGBUD_HOME/userdata/logs/server.trace.ndjson"
+```
+
+Inspect embedded log events:
+
+```bash
+jq -c 'select(any(.events[]?; .attributes["effect.logLevel"] != null)) | {
+  name,
+  durationMs,
+  events: [
+    .events[]
+    | select(.attributes["effect.logLevel"] != null)
+    | {
+        message: .name,
+        level: .attributes["effect.logLevel"]
+      }
+  ]
+}' "$BIGBUD_HOME/userdata/logs/server.trace.ndjson"
+```
+
+Follow one trace:
+
+```bash
+jq -r 'select(.traceId == "TRACE_ID_HERE") | [
+  .name,
+  .spanId,
+  (.parentSpanId // "-"),
+  .durationMs
+] | @tsv' "$BIGBUD_HOME/userdata/logs/server.trace.ndjson"
+```
+
+Filter orchestration commands:
+
+```bash
+jq -c 'select(.attributes["orchestration.command_type"] != null) | {
+  name,
+  durationMs,
+  commandType: .attributes["orchestration.command_type"],
+  aggregateKind: .attributes["orchestration.aggregate_kind"]
+}' "$BIGBUD_HOME/userdata/logs/server.trace.ndjson"
+```
+
+Filter git activity:
+
+```bash
+jq -c 'select(.attributes["git.operation"] != null) | {
+  name,
+  durationMs,
+  operation: .attributes["git.operation"],
+  cwd: .attributes["git.cwd"],
+  hookEvents: [
+    .events[]
+    | select(.name == "git.hook.started" or .name == "git.hook.finished")
+  ]
+}' "$BIGBUD_HOME/userdata/logs/server.trace.ndjson"
+```
+
+### Use Tempo When You Need A Real Trace Viewer
+
+Tempo is better than raw NDJSON when you want to:
+
+- search across many traces
+- inspect parent/child relationships visually
+- compare many slow traces
+- drill into one failing request without hand-joining by `traceId`
+
+Recommended flow in Grafana:
+
+1. Open `Explore`.
+2. Pick the `Tempo` data source.
+3. Set the time range to something recent like `Last 15 minutes`.
+4. Start broad. Do not begin with a very narrow query.
+5. Look for spans from your configured service name, then narrow by span name or attributes.
+
+Good first searches:
+
+- service name such as `bigbud-local`, `bigbud-dev`, or `bigbud-desktop`
+- span names like `sql.execute`, `git.runCommand`, `provider.sendTurn`
+- orchestration spans with attributes like `orchestration.command_type`
+
+Once you know traces are arriving, narrower TraceQL queries like `name = "sql.execute"` become useful.
+
+### Use Metrics To See Systemic Problems
+
+Traces are best for one request. Metrics are best for trends.
+
+Good metric families to watch:
+
+- `t3_rpc_request_duration`
+- `t3_orchestration_command_duration`
+- `t3_orchestration_command_ack_duration`
+- `t3_provider_turn_duration`
+- `t3_git_command_duration`
+- `t3_db_query_duration`
+
+Counters tell you volume and failure rate:
+
+- `t3_rpc_requests_total`
+- `t3_orchestration_commands_total`
+- `t3_provider_turns_total`
+- `t3_git_commands_total`
+- `t3_db_queries_total`
+
+Use metrics when the question is:
+
+- "is this always slow?"
+- "did this get worse after a change?"
+- "which command type is failing most often?"
+
+Use traces when the question is:
+
+- "what happened in this specific request?"
+- "which child span caused this one slow interaction?"
+- "what logs were emitted inside the failing flow?"
+
+### What The New Ack Metric Means
+
+`t3_orchestration_command_ack_duration` measures:
+
+- start: command dispatch enters the orchestration engine
+- end: the first committed domain event for that command is published by the server
+
+That is a server-side acknowledgment metric. It does not measure:
+
+- websocket transit to the browser
+- client receipt
+- React render time
+
+If you need those later, add client-side instrumentation or a dedicated server fanout metric.
+
+## Common Workflows
+
+### "Why did this request fail?"
+
+1. Start with the local NDJSON file.
+2. Find spans where `exit._tag != "Success"`.
+3. Group by `traceId`.
+4. Inspect sibling spans and span events.
+5. If needed, move to Tempo for the full trace tree.
+
+### "Why is the UI feeling slow?"
+
+1. Search for slow top-level spans in the trace file or Tempo.
+2. Check child spans for sqlite, git, provider, or terminal work.
+3. Look at the matching duration metrics to see whether the slowness is systemic.
+
+### "Did this command take too long to acknowledge?"
+
+1. Check `t3_orchestration_command_ack_duration` by `commandType`.
+2. If it is high, inspect the corresponding orchestration trace.
+3. Look at child spans for projection, sqlite, provider, or git work.
+
+### "Are git hooks causing latency?"
+
+1. Filter `git.operation` spans.
+2. Inspect `git.hook.started` and `git.hook.finished` events.
+3. Compare hook timing to the enclosing git span duration.
+
+### "Why do I have spans locally but nothing in Grafana?"
+
+Usually one of these is true:
+
+- `BIGBUD_OTLP_TRACES_URL` was not set
+- the app was launched from a different environment than the one where you exported the vars
+- the app was not fully restarted after changing env
+- Grafana is looking at the wrong time range or service name
+
+If the local NDJSON file is updating, local tracing is working. The problem is almost always OTLP export configuration or process startup.
+
+## How To Think About Adding Tracing To Future Code
+
+### Prefer Boundaries Over Tiny Helpers
+
+Good span boundaries:
+
+- RPC methods
+- orchestration command handling
+- provider adapter calls
+- external process calls
+- persistence writes
+- queue handoffs
+
+Avoid tracing every tiny helper. Most helpers should inherit the active span rather than create a new one.
+
+### Reuse `Effect.fn(...)` Where It Already Exists
+
+The codebase already uses `Effect.fn("name")` heavily. That should usually be your first tracing boundary.
+
+For ad hoc work:
+
+```ts
+import { Effect } from "effect";
+
+const runThing = Effect.gen(function* () {
+  yield* Effect.annotateCurrentSpan({
+    "thing.id": "abc123",
+    "thing.kind": "example",
+  });
+
+  yield* Effect.logInfo("starting thing");
+  return yield* doWork();
+}).pipe(Effect.withSpan("thing.run"));
+```
+
+### Put High-Cardinality Detail On Spans
+
+Use span annotations for IDs, paths, and other detailed context:
+
+```ts
+yield *
+  Effect.annotateCurrentSpan({
+    "provider.thread_id": input.threadId,
+    "provider.request_id": input.requestId,
+    "git.cwd": input.cwd,
+  });
+```
+
+### Keep Metric Labels Low Cardinality
+
+Good metric labels:
+
+- operation kind
+- method name
+- provider kind
+- aggregate kind
+- outcome
+
+Bad metric labels:
+
+- raw thread IDs
+- command IDs
+- file paths
+- cwd
+- full prompts
+- full model strings when a normalized family label would do
+
+Detailed context belongs on spans, not metrics.
+
+### Use Logs As Span Events
+
+Logs inside a span become part of the trace story:
+
+```ts
+yield * Effect.logInfo("starting provider turn");
+yield * Effect.logDebug("waiting for approval response");
+```
+
+Those messages show up as span events because `Logger.tracerLogger` is installed.
+
+### Use The Pipeable Metrics API
+
+`withMetrics(...)` is the default way to attach a counter and timer to an effect:
+
+```ts
+import { someCounter, someDuration, withMetrics } from "../observability/Metrics.ts";
+
+const program = doWork().pipe(
+  withMetrics({
+    counter: someCounter,
+    timer: someDuration,
+    attributes: {
+      operation: "work",
+    },
+  }),
+);
+```
+
+## Detailed API Reference
+
+### Runtime Wiring
+
+The server observability layer is assembled in `apps/server/src/observability/Layers/Observability.ts`.
+
+It provides:
+
+- pretty stdout logger
+- `Logger.tracerLogger`
+- local NDJSON tracer
+- optional OTLP trace exporter
+- optional OTLP metrics exporter
+- Effect trace-level and timing refs
+
+### Env Vars
+
+Local trace file:
+
+- `BIGBUD_TRACE_MODE`: `production` (default), `diagnostic`, or `all`. Diagnostic mode retains fast successful spans temporarily; all mode retains them without the diagnostic expiry. Increased capture can contain more sensitive context and consume more disk space.
+- `BIGBUD_TRACE_DIAGNOSTIC_TTL_MS`: diagnostic capture duration, default `900000` (15 minutes), then production retention resumes.
+- `BIGBUD_TRACE_FILE`: override trace file path
+- `BIGBUD_TRACE_MAX_BYTES`: per-file rotation size, default `10485760`
+- `BIGBUD_TRACE_MAX_FILES`: rotated file count, default `10`
+- `BIGBUD_TRACE_BATCH_WINDOW_MS`: flush window, default `200`
+- `BIGBUD_TRACE_MIN_LEVEL`: minimum trace level, default `Info`
+- `BIGBUD_TRACE_TIMING_ENABLED`: enable timing metadata, default `true`
+
+OTLP export:
+
+- `BIGBUD_OTLP_TRACES_URL`: OTLP trace endpoint
+- `BIGBUD_OTLP_METRICS_URL`: OTLP metric endpoint
+- `BIGBUD_OTLP_EXPORT_INTERVAL_MS`: export interval, default `10000`
+- `BIGBUD_OTLP_SERVICE_NAME`: service name, default `bigbud-server`
+
+Legacy `T3CODE_*` env vars remain supported during the compatibility migration.
+
+If the OTLP URLs are unset, local tracing still works and metrics stay in-process only.
+
+### What Is Instrumented Today
+
+Current high-value span and metric boundaries include:
+
+- Effect RPC websocket request spans from `effect/rpc`
+- RPC request metrics in `apps/server/src/observability/RpcInstrumentation.ts`
+- startup phases
+- orchestration command processing
+- orchestration command acknowledgment latency
+- provider session and turn operations
+- git command execution and git hook events
+- terminal session lifecycle
+- sqlite query execution
+
+### Current Constraints
+
+- logs outside spans are not persisted
+- metrics are not snapshotted locally
+- trace absence is not proof that an operation did not run: production retention filters fast successful spans, and traces are diagnostics rather than canonical state

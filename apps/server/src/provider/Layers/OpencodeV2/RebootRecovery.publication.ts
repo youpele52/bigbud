@@ -9,7 +9,7 @@ import { recoveryDigest } from "./RebootRecovery.schema.ts";
 import { recoveryOwner } from "./RebootRecovery.evidence.ts";
 import {
   V2PluginPublication,
-  V2_MANAGED_PLUGIN_FILENAME,
+  v2PublicationFilename,
   type V2PluginSetupArtifact,
 } from "./PluginSetup.record.ts";
 import {
@@ -43,7 +43,7 @@ export async function recoverV2RebootPublication(
     proof.checkpoint.issuer !== artifact.issuer ||
     old.next.issuer !== artifact.issuer ||
     old.root !== root ||
-    key !== JSON.stringify([root, V2_MANAGED_PLUGIN_FILENAME]) ||
+    key !== JSON.stringify([root, v2PublicationFilename(old)]) ||
     old.phase !== "committed" ||
     !old.nextIdentity ||
     proof.checkpoint.owners.some((entry) => {
@@ -56,7 +56,7 @@ export async function recoverV2RebootPublication(
     throw new Error(
       "V2 reboot publication requires the exact sealed legacy installation and current recovery boot.",
     );
-  const filename = path.join(root, "plugins", V2_MANAGED_PLUGIN_FILENAME);
+  const filename = path.join(root, "plugins", v2PublicationFilename(old));
   const name = createHash("sha256").update(key).digest("hex");
   const archived = JSON.parse(
     await readV2ThreadPrivateFile(

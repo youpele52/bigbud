@@ -2,6 +2,7 @@ import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { expect, it, vi } from "vitest";
 import { withV2ProductionThreadTools } from "./Orchestration.production.fixture.ts";
 import { V2_NATIVE_RELEASE_QUALIFICATIONS } from "./NativeCompatibility.qualification.registry.ts";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 
 // Runtime-checked policy is proven on a mocked empty registry, independent of promotion.
 vi.mock("./NativeCompatibility.qualification.registry.ts", () => ({
@@ -9,6 +10,41 @@ vi.mock("./NativeCompatibility.qualification.registry.ts", () => ({
   V2_NATIVE_RELEASE_INCOMPATIBILITIES: [],
 }));
 import { v2NativeProofMetadata, v2NativeReadyNotice } from "./NativeCompatibility.status.ts";
+
+it.each(["plugin-removal", "tool-deny"] as const)(
+  "bound eligibility rejects selected scoped %s",
+  async (kind) => {
+    await withV2ProductionThreadTools(
+      async (f) => {
+        const selected = v2ThreadRegistration(f.artifact),
+          original = f.http.client.config.get;
+        f.http.client.config.get = async (...args) => [
+          ...(await original(...args)),
+          {
+            type: "document" as const,
+            info:
+              kind === "plugin-removal"
+                ? { plugins: [`-${selected.id}`] }
+                : {
+                    permissions: [
+                      {
+                        action: selected.tool("list_threads"),
+                        resource: "*",
+                        effect: "deny" as const,
+                      },
+                    ],
+                  },
+          },
+        ];
+        await expect(f.runtimeProof()).rejects.toMatchObject({
+          reasonCode: "config-source-unverified",
+        });
+      },
+      "full-access",
+      "2.0.29",
+    );
+  },
+);
 
 it.each(["2.0.28", "2.0.29", "2.9.123"])(
   "empty qualification registry permits runtime-verified %s canonical HTTP/SQLite flow with warning",
@@ -20,9 +56,10 @@ it.each(["2.0.28", "2.0.29", "2.9.123"])(
         expect(proof.evidenceKind).toBe("runtime-checked");
         expect(proof).not.toHaveProperty("qualificationRecordId");
         expect(v2NativeProofMetadata(proof).qualificationState).toBe("unqualified");
-        expect(v2NativeReadyNotice("unqualified", "Verified")).toMatchObject({
-          severity: "warning",
-          message: expect.stringContaining("semantic qualification is incomplete"),
+        // Missing release evidence is not a user action: runtime-checked readiness is success.
+        expect(v2NativeReadyNotice("Verified")).toEqual({
+          severity: "success",
+          message: "Verified",
         });
         const created = (await f.invoke(
           "create_thread",

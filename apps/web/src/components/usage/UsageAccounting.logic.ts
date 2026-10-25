@@ -1,4 +1,5 @@
-import type { UsageSourceMetadata } from "@bigbud/contracts/server/usage.ts";
+import type { ServerUsageTotals, UsageSourceMetadata } from "@bigbud/contracts/server/usage.ts";
+import { reconciledUsageTokenMix, unsplitUsageTokenMix } from "@bigbud/shared/usageTokenMix";
 
 export function usageSourceLabel(
   accounting: Pick<UsageSourceMetadata, "source"> | undefined,
@@ -11,32 +12,10 @@ export function usageSourceLabel(
       : "";
 }
 
-/** Only draw disjoint categories when all inclusion relationships are known. */
-export function disjointUsageMix(accounting: UsageSourceMetadata | undefined) {
-  if (!accounting) return undefined;
-  const { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, reasoningTokens } =
-    accounting;
-  if (
-    inputTokens === null ||
-    outputTokens === null ||
-    cacheReadTokens === null ||
-    cacheWriteTokens === null ||
-    reasoningTokens === null
-  )
-    return undefined;
-  const fresh = inputTokens - cacheReadTokens - cacheWriteTokens;
-  const visibleOutput = outputTokens - reasoningTokens;
-  if (
-    fresh < 0 ||
-    visibleOutput < 0 ||
-    inputTokens + outputTokens !== accounting.reportedTokens + accounting.estimatedTokens
-  )
-    return undefined;
-  return {
-    inputTokens: fresh,
-    cachedInputTokens: cacheReadTokens,
-    cacheWriteTokens,
-    outputTokens: visibleOutput,
-    reasoningOutputTokens: reasoningTokens,
-  };
+/** Never infer category detail from old-server numeric counters or null-poisoned aggregates. */
+export function disjointUsageMix(totals: Pick<ServerUsageTotals, "usedTokens" | "tokenMix">) {
+  return (
+    reconciledUsageTokenMix(totals.tokenMix, totals.usedTokens) ??
+    unsplitUsageTokenMix(totals.usedTokens)
+  );
 }

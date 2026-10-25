@@ -5,11 +5,12 @@ import { v2Request, type OpencodeV2Client } from "./Client.ts";
 import type { V2PluginSetupArtifact } from "./PluginSetup.record.ts";
 import {
   V2PluginPublication,
-  V2_MANAGED_PLUGIN_FILENAME,
+  v2PublicationFilename,
   v2PluginContentHash,
 } from "./PluginSetup.record.ts";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
 import { readV2NativePluginFile } from "./PluginSetup.fs.ts";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 
 /** Private bytes alone do not establish the native entry's source, uniqueness or exact managed predecessor. */
 export async function assertV2NativeThreadSource(
@@ -22,7 +23,9 @@ export async function assertV2NativeThreadSource(
     (signal) => client.plugin.list({ location: { directory } }, { signal }),
     { timeoutMs: 5000 },
   );
-  const matches = inventory.data.filter((plugin) => plugin.id === "bigbud.thread.v1");
+  const matches = inventory.data.filter(
+    (plugin) => plugin.id === v2ThreadRegistration(artifact).id,
+  );
   if (
     inventory.data.length > 1000 ||
     matches.length !== 1 ||
@@ -49,7 +52,7 @@ export async function assertV2NativeThreadSource(
     const record = Schema.decodeUnknownSync(V2PluginPublication)(signed.value, {
       onExcessProperty: "error",
     });
-    if (source !== path.join(record.root, "plugins", V2_MANAGED_PLUGIN_FILENAME)) continue;
+    if (source !== path.join(record.root, "plugins", v2PublicationFilename(record))) continue;
     if (
       record.phase !== "committed" ||
       record.next.issuer !== artifact.issuer ||

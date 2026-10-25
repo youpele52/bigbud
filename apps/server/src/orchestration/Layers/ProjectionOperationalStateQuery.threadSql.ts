@@ -63,6 +63,8 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
         pending_turn_control_operation_json AS "pendingTurnControlOperation",
         queue_hold AS "queueHold",
+        pending_turn_start_json AS "pendingTurnStart",
+        recovery_json AS "recovery",
         archived_at AS "archivedAt", pinned_at AS "pinnedAt", deleting_at AS "deletingAt",
         deleted_at AS "deletedAt"
       FROM projection_threads
@@ -189,6 +191,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         provider_session_id AS "providerSessionId", provider_thread_id AS "providerThreadId",
         runtime_mode AS "runtimeMode", active_turn_id AS "activeTurnId",
         session_epoch AS "sessionEpoch", reason,
+        retained_family AS "retainedFamily",
         last_error AS "lastError", updated_at AS "updatedAt"
       FROM projection_thread_sessions
       WHERE thread_id = ${threadId}

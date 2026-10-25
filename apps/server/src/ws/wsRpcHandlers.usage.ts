@@ -11,11 +11,12 @@ import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
 import { usageProviderCoverage } from "../orchestration/usageAccountingSupport.ts";
 import type { WsRpcContext } from "./wsRpcContext";
 import { computeCurrentStreakDays } from "./wsRpcHandlers.usage.streak.ts";
-import { summarizeUsageSources } from "./wsRpcHandlers.usage.accounting.ts";
-import type { UsageSourceMetadata } from "@bigbud/contracts/server/usage.ts";
+import { summarizeUsageAccounting } from "./wsRpcHandlers.usage.accounting.ts";
+import type { UsageSourceMetadata, UsageTokenMix } from "@bigbud/contracts/server/usage.ts";
 
 type UsageAccumulator = {
   accounting?: UsageSourceMetadata;
+  tokenMix?: UsageTokenMix;
   usedTokens: number;
   inputTokens: number;
   cachedInputTokens: number;
@@ -104,9 +105,11 @@ function addUsage(target: UsageGroup, entry: UsageEntry) {
   target.turnKeys.add(entry.turnKey);
 }
 
-function completeUsageGroup(group: UsageGroup): UsageAccumulator {
+function completeUsageGroup(group: UsageGroup, includeTokenMix = false): UsageAccumulator {
+  const { accounting, tokenMix } = summarizeUsageAccounting(group.entries, includeTokenMix);
   return {
-    accounting: summarizeUsageSources(group.entries),
+    accounting,
+    ...(tokenMix ? { tokenMix } : {}),
     usedTokens: group.usedTokens,
     inputTokens: group.inputTokens,
     cachedInputTokens: group.cachedInputTokens,
@@ -159,14 +162,14 @@ function buildUsageSummary(
   const providers = sortBreakdownEntries(
     Array.from(providerMap.entries(), ([label, group]) => ({
       id: label,
-      label,
+      label: label === "unknown" ? "Unattributed usage" : label,
       ...completeUsageGroup(group),
     })),
   );
   const models = sortBreakdownEntries(
     Array.from(modelMap.entries(), ([label, group]) => ({
       id: label,
-      label,
+      label: label === "unknown" ? "Unattributed usage" : label,
       ...completeUsageGroup(group),
     })),
   );
@@ -185,7 +188,7 @@ function buildUsageSummary(
     generatedAt: now.toISOString(),
     historyStatus,
     providerCoverage: usageProviderCoverage(),
-    totals: completeUsageGroup(totals),
+    totals: completeUsageGroup(totals, true),
     buckets,
     providers,
     models,

@@ -158,7 +158,7 @@ describe("ThreadModelChoiceNotice", () => {
     await renderNotice("thread-none", []);
     expect(page.getByRole("status").elements()).toHaveLength(0);
   });
-  it("hides the picker without picking a model and shows the later resolved condition", async () => {
+  it("hides the picker without picking a model and keeps the resolved choice closed", async () => {
     const requested = modelChoiceActivity("requested", makeRequestedPayload());
     const first = await renderNotice("thread-dismiss", [requested]);
     await page.getByRole("button", { name: "Dismiss model choice notice" }).click();
@@ -175,6 +175,6 @@ describe("ThreadModelChoiceNotice", () => {
         }}
       />,
     );
-    await expect.element(page.getByRole("status")).toBeVisible();
+    await expect.element(page.getByRole("status")).not.toBeInTheDocument();
   });
 });

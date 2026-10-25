@@ -38,7 +38,9 @@ function shouldCleanOutDir(): boolean {
 }
 
 export default defineConfig({
-  entry: ["src/bin.ts"],
+  // The SQLite worker is a separate entry so `dist/NodeSqliteWorker.mjs` sits
+  // beside the bundle, where `NodeSqliteClient.worker.ts` resolves it.
+  entry: { bin: "src/bin.ts", NodeSqliteWorker: "src/persistence/NodeSqliteWorker.ts" },
   format: ["esm"],
   outDir: "dist",
   // import.meta.url resolves beside the bundled server, not the original source tree.

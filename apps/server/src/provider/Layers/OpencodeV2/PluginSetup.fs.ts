@@ -111,7 +111,8 @@ export async function readV2NativePluginFile(
   }
 }
 
-/** Create only the plugins child of an already attested root; never recursively create arbitrary roots. */
+/** Cross-profile directory coordination uses atomic mkdir/EEXIST plus root/child attestation.
+ * Slots are disjoint: no profile owns this shared child and no retained slot lock gates its creation. */
 export async function ensureV2NativePluginsDirectory(
   root: string,
   identity: V2PluginFileIdentity,
@@ -178,7 +179,7 @@ export async function releaseV2OwnedPublicationLock(
   filename: string,
   identity: V2PluginFileIdentity,
 ) {
-  if (path.basename(filename) !== ".bigbud-thread-tools-managed.lock")
+  if (!/^\.bigbud-thread-tools-(?:managed|[a-f0-9]{64})\.lock$/.test(path.basename(filename)))
     throw new Error("V2 owned lock finalizer path rejected.");
   return removeV2OwnedFile(filename, identity, () => {}, 1);
 }

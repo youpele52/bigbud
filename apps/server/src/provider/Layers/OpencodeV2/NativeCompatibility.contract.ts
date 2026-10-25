@@ -58,6 +58,8 @@ const descriptor = {
     "registration.dispose",
   ]),
   semanticObligations: Object.freeze([
+    "native-session-path-at-most-100-full-issuer-and-digest-256-bit-compact-v3",
+    "permanent-compact-and-retained-hex-session-deny-boundaries",
     "ordered-native-catalog-deny",
     "context-generate-compaction-isolation",
     "rpc-cancellation-physical-lifetime",
@@ -66,6 +68,10 @@ const descriptor = {
     "bounded-native-activity",
     "two-location-watcher-lifetime",
     "canonical-once-approval-receipts-history",
+    "issuer-scoped-registrations-coexist-with-legacy",
+    "profile-bound-native-history-and-tool-isolation",
+    "permanent-issuer-session-deny-namespace-with-bounded-active-registry",
+    "independent-publication-locks-and-atomic-shared-directory-creation",
   ]),
   bounds: Object.freeze({
     bodyBytes: 2097152,

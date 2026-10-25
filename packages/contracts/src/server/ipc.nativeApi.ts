@@ -1,4 +1,5 @@
 import type { ServerSettings, ServerSettingsPatch } from "../core/settings";
+import type { ServerTrustSshHostInput, ServerTrustSshHostResult } from "./server.sshHostTrust";
 import type {
   ClientOrchestrationCommand,
   GetCommandOutcomeInput,
@@ -33,8 +34,11 @@ import type * as Git from "../workspace/git";
 import type * as Worktrees from "../workspace/worktrees";
 import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
+import type * as TerminalStream from "../workspace/terminal.stream";
+import type * as TerminalSearch from "../workspace/terminal.search";
 import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
 import type * as Automation from "./automation";
+import type * as ConnectionDiagnostics from "./connectionDiagnostics";
 import type { ContextMenuItem } from "./ipc";
 import type * as Kanban from "./kanban";
 import type * as Mobile from "./mobile";
@@ -42,6 +46,8 @@ import type * as Notes from "./notes";
 import type * as PinnedThreads from "./pinnedThreads";
 import type * as Server from "./server";
 import type * as RemoteRestart from "./server.remoteRestart";
+import type * as SshConfig from "./server.sshConfig";
+import type * as RemoteFolders from "./server.remoteFolders";
 import type * as Handoff from "./server.handoff";
 import type * as Retention from "./threadRetention";
 import type * as Teach from "./teach";
@@ -85,7 +91,19 @@ export interface NativeApi {
       input: typeof Terminal.TerminalRestartInput.Encoded,
     ) => Promise<Terminal.TerminalSessionSnapshot>;
     close: (input: typeof Terminal.TerminalCloseInput.Encoded) => Promise<void>;
+    /** Sidebar/agent state; output only for sessions whose agent detection runs in the client. */
     onEvent: (callback: (event: Terminal.TerminalEvent) => void) => () => void;
+    /** One terminal's events for a mounted view, flow-controlled by `ackOutput`. */
+    subscribeSession?: (
+      input: TerminalStream.TerminalSessionStreamInput,
+      callback: (item: TerminalStream.TerminalSessionStreamItem) => void,
+      options?: { onError?: (error: unknown) => void },
+    ) => () => void;
+    ackOutput?: (input: TerminalStream.TerminalOutputAckInput) => Promise<void>;
+    /** Retained output of the server's terminals, newest lines first. */
+    search?: (
+      input: TerminalSearch.TerminalSearchInput,
+    ) => Promise<TerminalSearch.TerminalSearchResult>;
   };
   projects: {
     listDirectory: (
@@ -176,10 +194,17 @@ export interface NativeApi {
   server: {
     getConfig: () => Promise<Server.ServerConfig>;
     refreshProviders: () => Promise<Server.ServerProviderUpdatedPayload>;
+    refreshUsageLimits: () => Promise<Server.ServerProviderUpdatedPayload>;
     activateCliProxy: () => Promise<Server.ServerProviderUpdatedPayload>;
     verifyExecutionTarget: (
       input: Server.ServerVerifyExecutionTargetInput,
     ) => Promise<Server.ServerVerifyExecutionTargetResult>;
+    listSshConfigHosts: (
+      input: SshConfig.ServerListSshConfigHostsInput,
+    ) => Promise<SshConfig.ServerListSshConfigHostsResult>;
+    listRemoteFolders: (
+      input: RemoteFolders.ServerListRemoteFoldersInput,
+    ) => Promise<RemoteFolders.ServerListRemoteFoldersResult>;
     installRemoteAgent: (
       input: Server.ServerInstallRemoteAgentInput,
     ) => Promise<Server.ServerInstallRemoteAgentResult>;
@@ -201,6 +226,7 @@ export interface NativeApi {
     unlockSshPassword: (
       input: Server.ServerUnlockSshPasswordInput,
     ) => Promise<Server.ServerUnlockSshPasswordResult>;
+    trustSshHost: (input: ServerTrustSshHostInput) => Promise<ServerTrustSshHostResult>;
     upsertKeybinding: (
       input: Server.ServerUpsertKeybindingInput,
     ) => Promise<Server.ServerUpsertKeybindingResult>;
@@ -282,6 +308,10 @@ export interface NativeApi {
     ) => Promise<Usage.ServerUsageSummaryResult>;
     /** Stop one running provider subagent; Stop-all is unchanged. */
     stopSubagent: (input: Subagents.ProviderStopSubagentInput) => Promise<void>;
+    /** Recent connection reports and server stalls; optional until every transport wires it. */
+    getWsConnectionDiagnostics?: (
+      input: ConnectionDiagnostics.ServerGetWsConnectionDiagnosticsInput,
+    ) => Promise<ConnectionDiagnostics.ServerWsConnectionDiagnosticsSnapshot>;
   };
   orchestration: {
     getSidebarThreadCatalog: () => Promise<GetSidebarThreadCatalogResult>;

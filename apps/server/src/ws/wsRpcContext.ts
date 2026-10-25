@@ -61,6 +61,7 @@ import { PluginRegistry, type PluginRegistryShape } from "../plugins/Services/Pl
 import { makeCoalescedPromiseEffect } from "./wsRpcContext.helpers";
 import { observeConfigStage, validateServerConfig } from "./wsConfigDiagnostics";
 import { DesktopSupervisorDelivery } from "../desktop-supervisor/desktopSupervisorDelivery.ts";
+import { ConnectionDiagnostics } from "../connection-diagnostics/Services/ConnectionDiagnostics.ts";
 import { CommandGateway } from "../command-gateway/Services/CommandGateway.ts";
 import { makeWsRpcCommandDispatch } from "./wsRpcContext.commandDispatch.ts";
 import { makeV2ThreadToolsSetup } from "../provider/Layers/OpencodeV2/ThreadToolsSetup.ts";
@@ -117,6 +118,7 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     const schedulerReactor = yield* SchedulerReactor;
     const mobileRemoteControl = yield* MobileRemoteControl;
     const desktopSupervisorDelivery = yield* DesktopSupervisorDelivery;
+    const connectionDiagnostics = yield* ConnectionDiagnostics;
     const fileSystem = yield* FileSystem.FileSystem;
     const resolveBootstrapWorktreeIdentity = yield* makeBootstrapWorktreeIdentityResolver;
     const handoffJobs = yield* makeServerHandoffJobs;
@@ -317,6 +319,7 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
       dispatchShellCommand,
       discoveryRegistry,
       desktopSupervisorDelivery,
+      connectionDiagnostics,
       fileSystem,
       git,
       gitManager,

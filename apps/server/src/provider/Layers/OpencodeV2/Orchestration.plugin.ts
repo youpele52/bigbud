@@ -1,9 +1,8 @@
-import { V2_NATIVE_BOOTSTRAP_SPECS, V2_BOOTSTRAP_ABI } from "./Orchestration.plugin.specs.ts";
+import { V2_NATIVE_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.ts";
 import {
   V2_COMPATIBILITY_DIGEST,
   V2_BOOTSTRAP_COMPATIBILITY,
 } from "./Orchestration.compatibility.ts";
-import { V2_THREAD_RPC } from "./Orchestration.protocol.ts";
 import { renderV2CanonicalCandidateGuard } from "./NativeCompatibility.version.ts";
 
 /** Bootstrap public semantics are frozen; app implementation releases cannot change native registrations. */
@@ -14,18 +13,19 @@ import {protocol,issuer,hash,callback,fail} from "./identity.mjs";
 import {registry} from "./registry.mjs";
 const artifact=new URL(import.meta.url).pathname.split("/").at(-2);
 if(!/^[a-f0-9]{64}$/.test(artifact)) fail();
-const specs=${JSON.stringify(specs)};
+const pluginId="bigbud.thread.v2."+issuer;
+const specs=${JSON.stringify(specs)}.map(spec=>({...spec,name:"bb2_"+issuer.slice(0,32)+"_"+spec.action}));
 const object={type:"object",additionalProperties:true};
 const envelope={type:"object",required:["protocol","operation","issuer","ownerDigest","enrollmentNonce","requestId","authExpiresAt","leaseRevision","leaseExpiresAt","owner","signature"],properties:Object.fromEntries(["protocol","operation","issuer","ownerDigest","enrollmentNonce","requestId","authExpiresAt","leaseRevision","leaseExpiresAt","owner","signature"].map(name=>[name,{}])),additionalProperties:false};
 ${renderV2CanonicalCandidateGuard()}
 function id(value){return typeof value==="string"&&value.length>0&&Buffer.byteLength(value)<=4096;}
 function registration(value){if(!value||typeof value.dispose!=="function")fail();return value;}
-export default {id:${JSON.stringify(V2_THREAD_RPC)},async setup(ctx) {
+export default {id:pluginId,async setup(ctx) {
   if(!candidate(ctx?.app?.version)||!id(ctx?.location?.directory)||![ctx?.tool?.list,ctx?.tool?.transform,ctx?.session?.get,ctx?.session?.hook,ctx?.rpc?.register].every(value=>typeof value==="function"))fail();
   const lifetime=new AbortController(), owned=new Map(), registrations=[];
   const state=registry(ctx,artifact,lifetime);
   const setupInstanceId=randomBytes(16).toString("hex");
-  const marker=" [bigbud.thread.v1/"+artifact+"/"+setupInstanceId+"]";
+  const marker=" ["+pluginId+"/"+artifact+"/"+setupInstanceId+"]";
   async function healthy() {
     const tools=await ctx.tool.list();
     if(!Array.isArray(tools)||tools.length>1000)fail();
@@ -60,8 +60,8 @@ export default {id:${JSON.stringify(V2_THREAD_RPC)},async setup(ctx) {
          if(result.active!==true || lifetime.signal.aborted || entry.controller.signal.aborted || state.current(event.sessionID)!==entry) fail();
       }
     })));
-    registrations.push(registration(await ctx.rpc.register({id:${JSON.stringify(V2_THREAD_RPC)},events:{},methods:Object.fromEntries(["info","enroll","renew","inspect","detach"].map(name=>[name,{input:name==="info"?{type:"object",properties:{},additionalProperties:false}:envelope,output:object}]))},{
-      async info() { await healthy(); return {protocol:${JSON.stringify(V2_THREAD_RPC)},enrollmentProtocol:protocol,issuer,artifactDigest:artifact,bootstrapDigest:artifact,bootstrapAbi:${JSON.stringify(V2_BOOTSTRAP_ABI)},compatibilityDigest:${JSON.stringify(V2_COMPATIBILITY_DIGEST)},schemaDigest:${JSON.stringify(V2_BOOTSTRAP_COMPATIBILITY.schemaDigest)},setupInstanceId,nativeVersion:ctx.app.version,tools:specs.map(spec=>spec.name)}; },
+    registrations.push(registration(await ctx.rpc.register({id:"bigbud.thread.v2."+issuer,events:{},methods:Object.fromEntries(["info","enroll","renew","inspect","detach"].map(name=>[name,{input:name==="info"?{type:"object",properties:{},additionalProperties:false}:envelope,output:object}]))},{
+      async info() { await healthy(); return {protocol:"bigbud.thread.v2."+issuer,enrollmentProtocol:protocol,issuer,artifactDigest:artifact,bootstrapDigest:artifact,bootstrapAbi:${JSON.stringify(V2_BOOTSTRAP_COMPATIBILITY.bootstrapAbi)},compatibilityDigest:${JSON.stringify(V2_COMPATIBILITY_DIGEST)},schemaDigest:${JSON.stringify(V2_BOOTSTRAP_COMPATIBILITY.schemaDigest)},setupInstanceId,nativeVersion:ctx.app.version,tools:specs.map(spec=>spec.name)}; },
       ...Object.fromEntries(["enroll","renew","inspect","detach"].map(name=>[name,(input,context)=>state.run(name,input,context)]))
     })));
   } catch(error) { state.close(); for(const registration of registrations.reverse()) await registration.dispose(); throw error; }

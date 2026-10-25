@@ -6,6 +6,7 @@ import {
   type ThreadId,
 } from "@bigbud/contracts";
 import { Cause, Effect } from "effect";
+import { hasTextGenerationUncertainty } from "@bigbud/shared/internalTextGeneration";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { sanitizeElevatorSummary } from "../../git/Utils.ts";
@@ -16,8 +17,11 @@ import { lastSuccessfulThreadModel } from "../../git/Layers/InternalTextGenerati
 import { sameTextGenerationWorkspace } from "../../git/Layers/InternalTextGeneration.requests.ts";
 import {
   recordThreadTextGenerationStatus,
+  recordThreadTextGenerationStatusRequired,
   withThreadTextGenerationJob,
 } from "../../git/Layers/InternalTextGeneration.status.ts";
+import { uncertainTextGenerationError } from "../../git/Layers/InternalTextGeneration.uncertainty.ts";
+import { makeTextGenerationDispatchClaim } from "../../git/Layers/InternalTextGeneration.dispatch.ts";
 
 const THREAD_ELEVATOR_SUMMARY_INITIAL_MESSAGE_COUNT = 5;
 const THREAD_ELEVATOR_SUMMARY_REFRESH_MESSAGE_INTERVAL = 10;
@@ -109,6 +113,7 @@ export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) 
   }) {
     const thread = yield* services.resolveThread(input.threadId);
     if (thread?.archivedAt || thread?.deletingAt || thread?.deletedAt) return;
+    if (thread && hasTextGenerationUncertainty(thread.activities, "summary")) return;
     if (!thread || (!input.force && !shouldRefreshThreadElevatorSummary({ thread }))) {
       return;
     }
@@ -163,12 +168,19 @@ export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) 
         projects: readModel.projects,
       }) ?? resolveDefaultChatCwd(serverSettings);
 
+    const claim = makeTextGenerationDispatchClaim(
+      services.orchestrationEngine,
+      input.threadId,
+      "summary",
+    );
+
     const summary = yield* services.textGeneration
       .generateThreadElevatorSummary({
         cwd: generationCwd,
         transcript,
         modelSelection: thread.modelSelection,
         successfulModelSelection: lastSuccessfulThreadModel(thread),
+        beforeV2Dispatch: claim.beforeV2Dispatch,
       })
       .pipe(
         Effect.map((generated) => sanitizeElevatorSummary(generated.summary)),
@@ -184,25 +196,34 @@ export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) 
               ),
         ),
         Effect.catchCause((cause) =>
-          Cause.hasInterruptsOnly(cause)
-            ? Effect.interrupt
-            : Effect.logWarning(
-                "provider command reactor failed to generate thread elevator summary",
-                {
-                  threadId: input.threadId,
-                  cause: Cause.pretty(cause),
-                },
-              ).pipe(
-                Effect.andThen(
-                  recordThreadTextGenerationStatus(
-                    services.orchestrationEngine,
-                    input.threadId,
-                    "summary",
-                    "failed",
-                  ),
-                ),
-                Effect.as(""),
-              ),
+          Effect.gen(function* () {
+            const uncertainty = uncertainTextGenerationError(cause);
+            if (Cause.hasInterruptsOnly(cause)) {
+              if (claim.isClaimed())
+                yield* recordThreadTextGenerationStatusRequired(
+                  services.orchestrationEngine,
+                  input.threadId,
+                  "summary",
+                  "uncertain",
+                );
+              return yield* Effect.interrupt;
+            }
+            yield* Effect.logWarning(
+              "provider command reactor failed to generate thread elevator summary",
+              {
+                threadId: input.threadId,
+                cause: Cause.pretty(cause),
+              },
+            );
+            yield* recordThreadTextGenerationStatus(
+              services.orchestrationEngine,
+              input.threadId,
+              "summary",
+              uncertainty ? "uncertain" : "failed",
+              uncertainty?.uncertaintyId ? { uncertaintyId: uncertainty.uncertaintyId } : undefined,
+            );
+            return "";
+          }),
         ),
       );
 

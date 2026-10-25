@@ -18,16 +18,7 @@ export function v2NativeProofMetadata(proof: V2NativeRuntimeProof) {
   };
 }
 
-/** Successful runtime readiness is usable with an amber disclosure, not a false qualification claim. */
-export function v2NativeReadyNotice(
-  qualificationState: string | undefined,
-  qualifiedMessage: string,
-) {
-  return qualificationState === "unqualified"
-    ? {
-        severity: "warning" as const,
-        message:
-          "Connected; runtime bridge checks passed. Native semantic qualification is incomplete.",
-      }
-    : { severity: "success" as const, message: qualifiedMessage };
+/** Passed runtime bridge checks are ready; release qualification evidence is not a user action. */
+export function v2NativeReadyNotice(message: string) {
+  return { severity: "success" as const, message };
 }

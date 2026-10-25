@@ -1,4 +1,3 @@
-import { LoaderIcon, RefreshCwIcon } from "lucide-react";
 import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
 import { type ProviderKind } from "@bigbud/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -8,8 +7,7 @@ import { ensureNativeApi } from "../../rpc/nativeApi";
 import { hasOpencodeV2ManagedPluginTrust } from "@bigbud/shared/opencodeNativeTrust";
 import { useUiStateStore } from "../../stores/ui/ui.store";
 import { toastManager } from "../ui/toast";
-import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { RefreshIconButton } from "../ui/RefreshIconButton";
 import { useServerProviders } from "../../rpc/serverState";
 import { useCliProxyActivation } from "../../hooks/useCliProxyActivation";
 import { SettingsSection } from "./settingsLayout";
@@ -172,27 +170,11 @@ export function ProvidersSettingsSection({
       headerAction={
         <div className="flex items-center gap-1.5">
           <ProviderLastChecked lastCheckedAt={lastCheckedAt} />
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  size="icon-xs"
-                  variant="ghost"
-                  className="size-5 rounded-sm p-0 text-muted-foreground hover:text-foreground"
-                  disabled={isRefreshingProviders}
-                  onClick={() => void refreshProviders()}
-                  aria-label="Refresh provider status"
-                >
-                  {isRefreshingProviders ? (
-                    <LoaderIcon className="size-3 animate-spin" />
-                  ) : (
-                    <RefreshCwIcon className="size-3" />
-                  )}
-                </Button>
-              }
-            />
-            <TooltipPopup side="top">Refresh provider status</TooltipPopup>
-          </Tooltip>
+          <RefreshIconButton
+            label="Refresh provider status"
+            busy={isRefreshingProviders}
+            onClick={() => void refreshProviders()}
+          />
         </div>
       }
     >

@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { TerminalInteractionSettingsFields } from "./settings.terminal";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedString } from "./baseSchemas";
@@ -120,6 +121,11 @@ export const ClientSettingsSchema = Schema.Struct({
   terminalGpuAcceleration: TerminalGpuAcceleration.pipe(
     Schema.withDecodingDefault(() => "auto" as const),
   ),
+  // Terminal theme names per app appearance. "bigbud" is the app-derived theme; unknown names
+  // resolve to it at runtime so the built-in catalog can evolve without a schema migration.
+  terminalThemeDark: Schema.String.pipe(Schema.withDecodingDefault(() => "bigbud")),
+  terminalThemeLight: Schema.String.pipe(Schema.withDecodingDefault(() => "bigbud")),
+  ...TerminalInteractionSettingsFields,
   contextWindowWarningThresholdTokens: ContextWindowWarningThreshold.pipe(
     Schema.withDecodingDefault(() => DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD),
   ),

@@ -1,5 +1,7 @@
-import { type ChildProcess as ChildProcessHandle, spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
+
+import { killProcessTree } from "./killProcessTree.ts";
 
 export interface ProcessRunOptions {
   shell?: boolean | undefined;
@@ -87,23 +89,6 @@ function normalizeBufferError(
 
 const DEFAULT_MAX_BUFFER_BYTES = 8 * 1024 * 1024;
 
-/**
- * On Windows with `shell: true`, `child.kill()` only terminates the `cmd.exe`
- * wrapper, leaving the actual command running. Use `taskkill /T` to kill the
- * entire process tree instead.
- */
-function killChild(child: ChildProcessHandle, signal: NodeJS.Signals = "SIGTERM"): void {
-  if (process.platform === "win32" && child.pid !== undefined) {
-    try {
-      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-      return;
-    } catch {
-      // fallback to direct kill
-    }
-  }
-  child.kill(signal);
-}
-
 function appendChunkWithinLimit(
   target: string,
   currentBytes: number,
@@ -155,7 +140,7 @@ export async function runProcess(
     });
     const kill = (signal: NodeJS.Signals = "SIGTERM") => {
       if (options.shell === false) child.kill(signal);
-      else killChild(child, signal);
+      else killProcessTree(child, signal);
     };
     const stdoutDecoder = new StringDecoder(options.encoding ?? "utf8");
     const stderrDecoder = new StringDecoder(options.encoding ?? "utf8");

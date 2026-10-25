@@ -9,7 +9,7 @@ import {
   waitFor,
 } from "./wsTransport.test.helpers";
 import { WsTransport } from "./wsTransport";
-import { isWsSubscriptionListenerFailure } from "./wsTransport";
+import { isWsSubscriptionListenerFailure } from "./wsTransport.errors";
 
 const sockets: MockWebSocket[] = [];
 const transports: WsTransport[] = [];

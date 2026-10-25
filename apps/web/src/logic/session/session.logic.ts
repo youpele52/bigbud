@@ -117,6 +117,8 @@ export type TimelineEntry =
       kind: "user-input-question";
       createdAt: string;
       pendingUserInput: PendingUserInput;
+      answers?: Readonly<Record<string, unknown>>;
+      answeredAt?: string;
     };
 
 // ── Format utilities ──────────────────────────────────────────────────

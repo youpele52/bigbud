@@ -6,6 +6,7 @@ import type {
 } from "@bigbud/contracts";
 import { Equal } from "effect";
 
+import { canUserReleasePendingTurnStart } from "./PendingTurnStart.logic.ts";
 import { isThreadConfirmedIdleForDispatch } from "./ThreadDispatchSafety.logic.ts";
 
 export const terminalTurnControlStates = new Set([
@@ -29,6 +30,30 @@ export function canAutoDispatchQueuedPrompts(thread: OrchestrationThread): boole
     !thread.pendingInterruptFlushIntent &&
     isThreadConfirmedIdleForDispatch(thread)
   );
+}
+
+/**
+ * A busy-refused message was sent before anything still queued, so it is redelivered first:
+ * after prompts an interrupt or control operation already captured, and after earlier
+ * redeliveries. Returns a 1-based queue position.
+ */
+export function redeliveryQueuePosition(thread: OrchestrationThread): number {
+  const prompts = thread.queuedPrompts ?? [];
+  const captured = new Set<MessageId>([
+    ...(thread.pendingInterruptFlushIntent?.queuedPromptIds ?? []),
+    ...(hasActiveQueueReservation(thread)
+      ? (thread.pendingTurnControlOperation?.reservedPromptIds ?? [])
+      : []),
+  ]);
+  const index = prompts.findIndex(
+    (prompt) => !captured.has(prompt.id) && prompt.alreadySent !== true,
+  );
+  return (index < 0 ? prompts.length : index) + 1;
+}
+
+/** Already-sent redeliveries sit outside the user's visible queue limit. */
+export function countedQueuedPrompts(prompts: ReadonlyArray<OrchestrationQueuedPrompt>): number {
+  return prompts.filter((prompt) => prompt.alreadySent !== true).length;
 }
 
 export function samePromptIds(
@@ -62,8 +87,10 @@ export function sameQueuedPromptOptions(left: QueueOptions, right: QueueOptions)
   );
 }
 
+/** Prompts that must start their own turn under their own message ID. */
 export function hasNonCombinableQueuedPromptMetadata(prompt: OrchestrationQueuedPrompt): boolean {
   return Boolean(
+    prompt.alreadySent ||
     prompt.text.trim().length === 0 ||
     prompt.attachments?.length ||
     prompt.replyTo ||
@@ -113,6 +140,25 @@ export function canNativelySteerQueuedPrefix(
   );
 }
 
+/**
+ * The user's explicit "Send now" may override a pending start that has held the queue too long,
+ * so a start that hung without binding or failing cannot block the thread forever.
+ */
+export function userReleasesStalePendingTurnStart(input: {
+  readonly thread: OrchestrationThread;
+  readonly userRelease?: boolean | undefined;
+  readonly controlOperationId?: CommandId | undefined;
+  readonly releasedAt?: string | undefined;
+}): boolean {
+  return (
+    input.userRelease === true &&
+    input.controlOperationId === undefined &&
+    input.thread.pendingTurnStart != null &&
+    input.releasedAt !== undefined &&
+    canUserReleasePendingTurnStart(input.thread, input.releasedAt)
+  );
+}
+
 export function consumableQueuedPrefix(input: {
   readonly thread: OrchestrationThread;
   readonly messageIds: ReadonlyArray<MessageId>;
@@ -120,6 +166,11 @@ export function consumableQueuedPrefix(input: {
   readonly consumeOnly?: boolean | undefined;
   /** The user's explicit "Send now"; only it may release a held queue (`queueHold`). */
   readonly userRelease?: boolean | undefined;
+  /**
+   * Server time of the user's release; lets "Send now" override a stale pending start. Never a
+   * command's client-set `createdAt`, so a client clock running ahead cannot release early.
+   */
+  readonly releasedAt?: string | undefined;
 }) {
   const { thread, messageIds, controlOperationId, consumeOnly } = input;
   const userReleasesHold = input.userRelease === true && controlOperationId === undefined;
@@ -150,7 +201,10 @@ export function consumableQueuedPrefix(input: {
     consumeOnly
   )
     return [];
-  if (!consumeOnly && !isThreadConfirmedIdleForDispatch(thread)) return [];
+  const dispatchThread = userReleasesStalePendingTurnStart(input)
+    ? { ...thread, pendingTurnStart: null }
+    : thread;
+  if (!consumeOnly && !isThreadConfirmedIdleForDispatch(dispatchThread)) return [];
   const intent = thread.pendingInterruptFlushIntent;
   if (
     intent &&

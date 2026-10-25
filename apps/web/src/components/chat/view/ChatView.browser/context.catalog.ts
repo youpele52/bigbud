@@ -66,6 +66,7 @@ function summarizeThread(thread: OrchestrationReadModel["threads"][number]): Thr
     sessionStatus: thread.session?.status ?? null,
     providerName: thread.session?.providerName ?? null,
     activeTurnId: thread.session?.activeTurnId ?? thread.latestTurn?.turnId ?? null,
+    retainedFamily: thread.session?.retainedFamily ?? false,
     latestTurnState: thread.latestTurn?.state ?? null,
     isWatching: (thread.watchingThreads?.length ?? 0) > 0,
     isWatched: false,

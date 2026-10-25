@@ -83,11 +83,13 @@ const failedNotice = (failureClass: string): ThreadRecoveryNoticeDerivation => (
     "failed",
     failureClass === "provider-unavailable"
       ? "The provider is not available (not installed, not executable, or disabled). Fix it in Settings, or continue in a new thread."
-      : isForkOnlyFailureClass(failureClass)
-        ? "This thread's provider session cannot be resumed. Continue in a new thread to keep working."
-        : failureClass === "invalid-request"
-          ? "The provider rejected this request (for example, the model is no longer offered). See the error above, or continue in a new thread and pick another model."
-          : "The turn did not start. See the error above for details.",
+      : failureClass === "unsafe-to-replay"
+        ? "This turn could not be safely resumed automatically. Review and resolve the error above before sending again or continuing in a new thread."
+        : isForkOnlyFailureClass(failureClass)
+          ? "This thread's provider session cannot be resumed. Continue in a new thread to keep working."
+          : failureClass === "invalid-request"
+            ? "The provider rejected this request (for example, the model is no longer offered). See the error above, or continue in a new thread and pick another model."
+            : "The turn did not start. See the error above for details.",
   ),
   nextChangeInMs: null,
 });

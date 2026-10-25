@@ -145,7 +145,7 @@ for (const disableAt of ["instruction-read", "instruction-put"] as const) {
         requestMessageId: MessageId.makeUnsafe(`disable-${disableAt}`),
       };
       await expect(runtime.send(input)).rejects.toThrow();
-      expect(runtime.get(threadId).row?.state).toBe("dispatch-intent");
+      expect(runtime.get(threadId).row?.state).toBe("reserved");
       expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(0);
       const mutations = http.calls.filter(
         (call) => call.pathname.includes("/instructions/entries") && call.method !== "GET",
@@ -153,8 +153,8 @@ for (const disableAt of ["instruction-read", "instruction-put"] as const) {
       expect(mutations).toHaveLength(disableAt === "instruction-read" ? 0 : 1);
       expect(() => runtime.mutations.assertSafe()).not.toThrow();
       enabled = true;
-      await expect(runtime.send(input)).rejects.toThrow();
-      expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(0);
+      await runtime.send(input);
+      expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(1);
     });
   });
 }

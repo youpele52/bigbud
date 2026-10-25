@@ -9,12 +9,11 @@ import { useNavigate, useLocation } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { toastManager } from "../components/ui/toast";
-import { publishTerminalOutput } from "../components/terminal/TerminalOutputStream";
 import { resolveAndPersistPreferredEditor } from "../models/editor";
 import { readNativeApi } from "../rpc/nativeApi";
 import { setOrchestrationDeliveryLifecycle } from "../rpc/orchestrationDeliveryState";
+import { handleDeliveryApplicationFailure } from "./-__root.delivery-failure";
 import {
-  containDeliveryApplicationFailure,
   recoverAndAcknowledgeDeliveryBaseline,
   routeOrchestrationDeliveryBatch,
 } from "./-__root.delivery-routing";
@@ -240,10 +239,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       removeFromSelection,
       removeTerminalState,
       removeOrphanedTerminalStates,
-      applyTerminalEvent: (event) => {
-        publishTerminalOutput(event);
-        applyTerminalEvents([event]);
-      },
+      applyTerminalEvent: (event) => applyTerminalEvents([event]),
     });
     const deliveryApplicationQueue = createAsyncOperationQueue();
 
@@ -316,14 +312,13 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
               acknowledge: api.orchestration.acknowledgeDelivery,
             });
           })
-          .catch((error: unknown) => {
-            console.error("[orchestration-recovery] Event application failed.", { error });
-            return containDeliveryApplicationFailure({
+          .catch((error: unknown) =>
+            handleDeliveryApplicationFailure({
               itemType: item.type,
               error,
               fallbackToBoundedRecovery,
-            });
-          }),
+            }),
+          ),
       {
         onResubscribe: () => undefined,
       },
@@ -333,7 +328,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       if (thread && thread.archivedAt !== null) {
         return;
       }
-      publishTerminalOutput(event);
+      // Mounted views read their own scoped streams; this feed only updates terminal state.
       pendingTerminalEvents.push(event);
       if (pendingTerminalEvents.length >= 128) flushPendingTerminalEvents();
       schedulePendingTerminalEventsFlush();

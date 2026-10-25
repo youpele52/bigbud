@@ -1,11 +1,19 @@
+import {
+  V2_SCOPED_NATIVE_SESSION_PREFIX,
+  V2_COMPACT_NATIVE_SESSION_PREFIX,
+} from "./Orchestration.sessionIdentity.ts";
+
 /** Enrollment changes are atomic after proof; revoke never waits behind a renewal. */
 export function renderV2ThreadRegistry(): string {
   return `import {randomBytes} from "node:crypto";
-import {authenticate,validateOwner,ownerDigest,callback,verifyProof,fail} from "./identity.mjs";
+import {issuer,authenticate,validateOwner,ownerDigest,callback,verifyProof,fail} from "./identity.mjs";
 import {legacyCleanupRegistry} from "./legacy.mjs";
 export function registry(ctx, artifact, lifetime) {
   const legacyCleanup=legacyCleanupRegistry();
   const owners=new Map(), managed=new Set(), tombstones=new Map(), pending=new Map(); let active=0;
+  const sessionPrefix=${JSON.stringify(V2_SCOPED_NATIVE_SESSION_PREFIX)}+issuer+"_";
+  const compactPrefix=${JSON.stringify(V2_COMPACT_NATIVE_SESSION_PREFIX)}+Buffer.from(issuer,"hex").toString("base64url")+"_";
+  function namespaced(sessionID) { return typeof sessionID==="string" && ((sessionID.startsWith(sessionPrefix) && /^[a-f0-9]{64}$/.test(sessionID.slice(sessionPrefix.length))) || (sessionID.startsWith(compactPrefix) && /^[A-Za-z0-9_-]{43}$/.test(sessionID.slice(compactPrefix.length)))); }
   function prune() { for(const [nonce,value] of tombstones) if(value.until<=Date.now()) tombstones.delete(nonce); }
   function exact(input) {
     const entry=owners.get(input.enrollmentNonce);
@@ -17,10 +25,12 @@ export function registry(ctx, artifact, lifetime) {
     return [...owners.values()].find(entry=>entry.owner.nativeSessionId===sessionID && !entry.revoked && entry.expiry>Date.now());
   }
   async function verifyNative(owner, signal) {
+    if(owner.nativeSessionId.startsWith(${JSON.stringify(V2_COMPACT_NATIVE_SESSION_PREFIX)}) && !namespaced(owner.nativeSessionId)) fail();
     signal?.throwIfAborted();
     const native=await ctx.session.get({sessionID:owner.nativeSessionId},{signal});
     signal?.throwIfAborted();
     if(native.id!==owner.nativeSessionId || native.parentID || native.fork || native.location.directory!==owner.directory || ctx.location.directory!==owner.directory || native.metadata?.bigbud_provider!=="opencodeV2" || native.metadata.bigbud_thread!==owner.threadId || native.metadata.bigbud_storage!==owner.storageIdentity) fail();
+    if(native.metadata.bigbud_issuer!==owner.issuer || native.metadata.bigbud_registration!=="scoped" || native.metadata.bigbud_identity!=="shared-api-v2") fail();
   }
   async function prove(owner, revision, expiry, signal) {
     const controller=new AbortController(), bounded=AbortSignal.any([controller.signal,...(signal?[signal]:[])]);
@@ -59,7 +69,7 @@ export function registry(ctx, artifact, lifetime) {
     const owner=entry?.owner??input.owner;
     validateOwner(owner,artifact);
     if(owner.enrollmentNonce!==input.enrollmentNonce || ownerDigest(owner)!==input.ownerDigest) fail();
-    if(!managed.has(owner.nativeSessionId) && managed.size>=32) fail();
+    if(!namespaced(owner.nativeSessionId) && !managed.has(owner.nativeSessionId) && managed.size>=32) fail();
     for(const other of owners.values()) if(other.owner.nativeSessionId===owner.nativeSessionId && other!==entry && !other.revoked && other.expiry>Date.now()) fail();
     if(!entry && owners.size>=32) { for(const [nonce,value] of owners) if(value.revoked || value.expiry<=Date.now()) owners.delete(nonce); if(owners.size>=32) fail(); }
     const cancelled=AbortSignal.any([controller.signal,lifetime.signal,...(entry?[entry.controller.signal]:[]),...(signal?[signal]:[])]);
@@ -68,8 +78,8 @@ export function registry(ctx, artifact, lifetime) {
     cancelled.throwIfAborted();
     if(tombstones.has(input.enrollmentNonce) || (entry && (entry.revoked || entry.expiry<=Date.now() || entry.revision!==expectedRevision)) || (!entry && owners.has(input.enrollmentNonce))) fail();
     for(const other of owners.values()) if(other.owner.nativeSessionId===owner.nativeSessionId && other!==entry && !other.revoked && other.expiry>Date.now()) fail();
-    if(!entry && (owners.size>=32 || (!managed.has(owner.nativeSessionId) && managed.size>=32))) fail();
-    managed.add(owner.nativeSessionId);
+    if(!entry && (owners.size>=32 || (!namespaced(owner.nativeSessionId) && !managed.has(owner.nativeSessionId) && managed.size>=32))) fail();
+    if(!namespaced(owner.nativeSessionId)) managed.add(owner.nativeSessionId);
     if(!entry) { entry={owner,digest:input.ownerDigest,revision:0,expiry:0,revoked:false,controller}; owners.set(owner.enrollmentNonce,entry); }
     entry.revision=input.leaseRevision; entry.expiry=input.leaseExpiresAt;
     return result(entry);
@@ -90,7 +100,7 @@ export function registry(ctx, artifact, lifetime) {
     pending.set(key,{signature,operation:operationPromise,controller});
     try { return await operationPromise; } finally { pending.delete(key); active--; }
   }
-  return {current,known(sessionID) { return managed.has(sessionID); },run,close() { lifetime.abort(); for(const entry of owners.values()) { entry.revoked=true; entry.controller.abort(); } }};
+  return {current,known(sessionID) { return namespaced(sessionID) || managed.has(sessionID); },run,close() { lifetime.abort(); for(const entry of owners.values()) { entry.revoked=true; entry.controller.abort(); } }};
 }
 `;
 }

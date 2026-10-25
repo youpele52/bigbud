@@ -157,8 +157,15 @@ export const PROVIDER_SUBAGENT_CAPABILITIES: {
     support: "gated",
     fields: [],
     evidence:
-      "@opencode/client 2.0.26 exposes child SessionInfo and session.created.parentID, and a read-only observer ships, but gate G4 (permission inheritance, request routing, interrupt) is not proven, so the subagent tool stays denied (docs/validation/opencode-v2-subagent-evidence-2026-10-16.md).",
-    tests: ["provider/Layers/OpencodeV2/Runtime.subagents.test.ts"],
+      "Repository source implements the pre-execution permission ceiling, exact child routing, durable family Stop/physical-drain authority and cardless SQL-hydrated Stop. The portable v2.0.26 native-family patch supplies authenticated completion admission; stock native lacks that primitive. Source-only checks/review do not qualify a runtime: isolation, release and exact native-family qualification registries remain empty, so production stays gated (docs/validation/opencode-v2-subagent-evidence-2026-10-16.md).",
+    tests: [
+      "provider/Layers/OpencodeV2/Runtime.subagents.test.ts",
+      "provider/Layers/OpencodeV2/Runtime.subagents.observations.test.ts",
+      "provider/Layers/OpencodeV2/Runtime.subagents.read.test.ts",
+      "provider/Layers/OpencodeV2/Runtime.subagents.http.test.ts",
+      "provider/Layers/OpencodeV2/Subagents.prerequisites.test.ts",
+      "provider/Layers/OpencodeV2/Runtime.family.execution.test.ts",
+    ],
   },
   pi: {
     support: "native",

@@ -37,7 +37,9 @@ export function getOpenCodeSettingsStatus(provider: ServerProvider | undefined, 
             ? "Reconnecting"
             : provider.status === "error" || provider.failure
               ? "Connection failed"
-              : "Setup needs attention",
+              : provider.runtimeUpdateRecommended
+                ? "Update recommended"
+                : "Setup needs attention",
           tone:
             provider.status === "error" || provider.failure
               ? ("error" as const)

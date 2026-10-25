@@ -83,8 +83,11 @@ it("uses the same friendly name for subagent activity, steps and latest-tool det
     <SubagentRowDetails agent={{ ...agent, recentSteps: [] }} id="agent-details" />,
   );
   await expect
-    .element(page.getByText("Latest tool:"))
-    .toHaveTextContent("Latest tool: bigbud renamer");
+    .element(page.getByRole("region", { name: "Latest tool" }))
+    .toHaveTextContent("Latest toolbigbud renamer");
+  await expect
+    .element(page.getByText("bigbud renamer", { exact: true }))
+    .toHaveAttribute("title", raw);
   expect(JSON.stringify(agent)).toBe(original);
 });
 

@@ -1,18 +1,19 @@
+import type { BannerIdentity } from "../../../stores/ui/useBannerDismissal";
 import type { StatusBannerProps } from "../../common/StatusBanner";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import { ChatBanner } from "./ChatBanner";
 
-/** Dismiss only this presentation, for this thread and condition, until the renderer reloads. */
+/** Dismiss only this presentation, for this thread and semantic scope, until the app run ends. */
 export function ThreadNoticeBanner({
   threadId,
   kind,
-  condition,
+  scope,
   ...props
-}: Omit<StatusBannerProps, "onDismiss"> & {
+}: Omit<StatusBannerProps, "onDismiss" | "dismissalKey"> & {
   readonly threadId: string;
   readonly kind: string;
-  readonly condition: unknown;
+  readonly scope?: BannerIdentity;
 }) {
-  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, kind, condition);
+  const { dismissed, dismiss } = useThreadNoticeDismissal(threadId, kind, scope);
   return dismissed ? null : <ChatBanner {...props} onDismiss={dismiss} />;
 }

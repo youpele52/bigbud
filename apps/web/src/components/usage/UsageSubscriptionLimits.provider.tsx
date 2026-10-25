@@ -1,6 +1,5 @@
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react";
-import { formatHumanReadableDate } from "~/utils/timestamp";
 import { StatusBanner } from "../common/StatusBanner";
 import { CenteredStatus } from "../common/CenteredStatus";
 import {
@@ -9,6 +8,8 @@ import {
   SUBSCRIPTION_PROVIDER_LABELS,
 } from "./UsageSubscriptionLimits.logic";
 import { UsageSubscriptionLimitProgress } from "./UsageSubscriptionLimits.progress";
+import { UsageSubscriptionManualResets } from "./UsageSubscriptionLimits.resets";
+import { formatSubscriptionTimestamp } from "./UsageSubscriptionLimits.timestamp";
 
 export function UsageSubscriptionProviderLimits({
   limits,
@@ -38,6 +39,8 @@ export function UsageSubscriptionProviderLimits({
       ) : null}
       {limits.status === "stale" ? (
         <StatusBanner
+          dismissalKey={["subscription-limits", limits.source, "stale"]}
+          dismissLabel={`Dismiss ${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} stale subscription limits warning`}
           centered
           variant="warning"
           icon={<TriangleAlertIcon />}
@@ -46,7 +49,7 @@ export function UsageSubscriptionProviderLimits({
             <>
               Showing the last successful values
               {limits.lastSuccessfulAt
-                ? ` from ${formatHumanReadableDate(limits.lastSuccessfulAt, "date-time")}`
+                ? ` from ${formatSubscriptionTimestamp(limits.lastSuccessfulAt)}`
                 : ""}
               .
             </>
@@ -55,6 +58,8 @@ export function UsageSubscriptionProviderLimits({
       ) : null}
       {limits.status === "error" ? (
         <StatusBanner
+          dismissalKey={["subscription-limits", limits.source, "error"]}
+          dismissLabel={`Dismiss ${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} subscription limits error`}
           centered
           variant="error"
           icon={<CircleAlertIcon />}
@@ -96,6 +101,9 @@ export function UsageSubscriptionProviderLimits({
             )
           ) : null}
         </div>
+      ) : null}
+      {hasRetainedLimits && limits.manualResets ? (
+        <UsageSubscriptionManualResets resets={limits.manualResets} />
       ) : null}
     </section>
   );

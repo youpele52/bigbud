@@ -1,82 +1,10 @@
-import type { SessionInfo } from "@opencode/client";
-import type { ProviderRuntimeEvent } from "@bigbud/contracts";
-import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { describe, expect, it, vi } from "vitest";
 
-import { withV2RuntimeFixture, type V2RuntimeHttpFixture } from "./Runtime.fixture.ts";
-import type { OpencodeV2Runtime } from "./Runtime.ts";
-import type { V2RuntimeSession } from "./Runtime.types.ts";
+import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
+import { startRunning, addChild, taskEvents } from "./Runtime.subagents.fixture.ts";
 import { v2PermissionEffect } from "./Runtime.policy.match.ts";
 import { v2LocalToolPolicy } from "./Runtime.policy.ts";
 import { v2SharedToolPolicy } from "./Runtime.policy.shared.ts";
-
-const modelSelection = {
-  provider: "opencodeV2",
-  subProviderID: "synthetic-provider",
-  model: "synthetic-model",
-} as const;
-
-type TaskEvent = Extract<ProviderRuntimeEvent, { type: "task.updated" }>;
-const taskEvents = (events: ProviderRuntimeEvent[]) =>
-  events.filter((event): event is TaskEvent => event.type === "task.updated");
-
-async function startRunning(
-  runtime: OpencodeV2Runtime,
-  http: V2RuntimeHttpFixture,
-  directory: string,
-  name: string,
-  subagentCall = true,
-) {
-  const threadId = ThreadId.makeUnsafe(name);
-  http.autoComplete = false;
-  await runtime.start({ threadId, cwd: directory, modelSelection, runtimeMode: "full-access" });
-  await runtime.send({
-    threadId,
-    modelSelection,
-    requestMessageId: MessageId.makeUnsafe(`${name}-request`),
-    input: "synthetic",
-  });
-  const session = runtime.get(threadId);
-  http.messages.get(session.native.id)!.push({
-    id: "msg_parent",
-    type: "assistant",
-    agent: "build",
-    model: session.model,
-    time: { created: 3 },
-    content: subagentCall
-      ? [
-          {
-            type: "tool",
-            id: "tool_subagent",
-            name: "subagent",
-            time: { created: 3 },
-            state: { status: "running", input: {}, metadata: {} },
-          },
-        ]
-      : [],
-    cost: 0,
-    tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
-  });
-  return session;
-}
-
-function addChild(http: V2RuntimeHttpFixture, session: V2RuntimeSession, patch = {}) {
-  const child: SessionInfo = {
-    id: "ses_child",
-    parentID: session.native.id,
-    projectID: "synthetic",
-    agent: "explore",
-    title: "Index the docs folder",
-    model: { providerID: "synthetic-provider", id: "synthetic-model", variant: "high" },
-    cost: 0.002,
-    tokens: { input: 100, output: 40, reasoning: 10, cache: { read: 5, write: 0 } },
-    time: { created: 1_000, updated: 2_000 },
-    location: session.native.location,
-    ...patch,
-  };
-  http.sessions.set(child.id, child);
-  return child;
-}
 
 describe("OpenCode v2 read-only subagent observer", () => {
   it("maps an active child to a providerSubagent task without liveness evidence", async () => {
@@ -84,7 +12,10 @@ describe("OpenCode v2 read-only subagent observer", () => {
       const session = await startRunning(runtime, http, directory, "observe-active");
       addChild(http, session);
       // A sibling fork and an unrelated session are never subagents.
-      addChild(http, session, { id: "ses_fork", fork: { sessionID: "x", boundary: {} } });
+      addChild(http, session, {
+        id: "ses_fork",
+        fork: { sessionID: "x", boundary: { type: "through", messageID: "msg_fork" } },
+      });
       addChild(http, session, { id: "ses_other", parentID: "ses_unrelated" });
       vi.spyOn(http.client.session, "active").mockResolvedValue({
         ses_child: { type: "running" },
@@ -107,10 +38,10 @@ describe("OpenCode v2 read-only subagent observer", () => {
         depth: 1,
         metrics: { totalTokens: 150, costUsd: 0.002 },
         source: "observed",
-        turnId: session.row?.turnId,
         createdAt: new Date(1_000).toISOString(),
       });
       expect(task?.payload.endedAt).toBeUndefined();
+      expect(task?.payload.turnId).toBeUndefined(); // Unlinked tool metadata proves no parent turn.
       // Unchanged state emits nothing new.
       await runtime.reconcile(session);
       expect(taskEvents(events)).toHaveLength(1);
@@ -146,11 +77,11 @@ describe("OpenCode v2 read-only subagent observer", () => {
         metrics: { totalTokens: 150, costUsd: 0.002, durationMs: 2_500 },
       });
       expect(latest.payload.freshness.providerRevision).toBe(4_000);
-      for (const [outcome, status] of [
-        ["failed", "failed"],
-        ["interrupted", "stopped"],
+      for (const [outcome, status, idle] of [
+        ["failed", "failed", 4_500],
+        ["interrupted", "stopped", 4_600],
       ] as const) {
-        addChild(http, session, { outcome, time: { created: 1_000, updated: 5_000 } });
+        addChild(http, session, { outcome, time: { created: 1_000, updated: 5_000, idle } });
         await runtime.reconcile(session);
         expect(taskEvents(events).at(-1)?.payload.status).toBe(status);
       }

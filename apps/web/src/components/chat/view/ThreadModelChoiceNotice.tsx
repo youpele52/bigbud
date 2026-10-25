@@ -42,7 +42,7 @@ export function ThreadModelChoiceNotice({
     <ThreadNoticeBanner
       threadId={thread.id}
       kind="model-choice"
-      condition={record}
+      scope={[record.choiceId]}
       variant={notice.tone}
       role="status"
       aria-live="polite"

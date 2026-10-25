@@ -7,6 +7,7 @@ import { ServerConfig } from "../startup/config";
 import { makeWsRpcContext } from "./wsRpcContext";
 import { makeWsRpcAutomationHandlers } from "./wsRpcHandlers.automation";
 import { makeWsRpcGitTerminalHandlers } from "./wsRpcHandlers.gitTerminal";
+import { makeWsRpcTerminalSessionHandlers } from "./wsRpcHandlers.terminalSession";
 import { makeWsRpcWorktreeHandlers } from "./wsRpcHandlers.worktrees.ts";
 import { makeWsRpcKanbanHandlers } from "./wsRpcHandlers.kanban";
 import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
@@ -16,6 +17,7 @@ import { makeWsRpcSubagentHandlers } from "./wsRpcHandlers.subagents";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer";
 import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
 import { makeWsRpcPluginHandlers } from "./wsRpcHandlers.plugins";
+import { makeWsRpcConnectionDiagnosticsHandlers } from "./wsRpcHandlers.connectionDiagnostics.ts";
 import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
@@ -42,8 +44,10 @@ const makeWsRpcLayer = (
         ...makeWsRpcUsageHandlers(context),
         ...makeWsRpcSubagentHandlers(context),
         ...makeWsRpcGitTerminalHandlers(context, worktreeScope),
+        ...makeWsRpcTerminalSessionHandlers(context),
         ...makeWsRpcWorktreeHandlers(context, worktreeScope),
         ...makeWsRpcPluginHandlers(context),
+        ...makeWsRpcConnectionDiagnosticsHandlers(context),
       });
     }),
   );

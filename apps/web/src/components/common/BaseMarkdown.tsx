@@ -103,7 +103,7 @@ function MarkdownCodeBlock({
 }: {
   code: string;
   children: ReactNode;
-  sourceProps: Record<string, number>;
+  sourceProps: Record<string, number | string>;
 }) {
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

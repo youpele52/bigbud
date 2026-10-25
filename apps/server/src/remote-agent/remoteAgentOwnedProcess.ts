@@ -135,7 +135,10 @@ export function makeOwnedRemoteAgentProcess(
       await control.registry.update((state) => pinRemoteAgentBuild(state, pinOwner, buildId));
       if (!created || owner.state !== "prepared") {
         // Output acknowledgements may outlive the process that held their bytes. Never invent a full result.
-        result = await client.attach({ operationId: owner.resourceId });
+        result = await client.attach({
+          operationId: owner.resourceId,
+          ...(input.request.signal ? { signal: input.request.signal } : {}),
+        });
       } else {
         await store.update(input.ownerKey, (current) => ({
           ...current,
@@ -152,7 +155,8 @@ export function makeOwnedRemoteAgentProcess(
       const terminal =
         owner.state === "terminal" ||
         cause instanceof RemoteAgentWorkspaceError ||
-        (cause instanceof RemoteAgentProcessError && cause.outcome !== "unknown");
+        (cause instanceof RemoteAgentProcessError &&
+          (cause.outcome === "terminal" || cause.outcome === "rejected"));
       const resourceId = owner.resourceId;
       if (!workspaceRequestSent && !terminal && created) {
         try {

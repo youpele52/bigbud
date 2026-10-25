@@ -13,6 +13,8 @@ import {
 import { V2ThreadImplementationRegistry } from "./Orchestration.implementation.ts";
 import type { V2PureAction, V2PureJson } from "./Orchestration.implementation.types.ts";
 import { deferred } from "./Test.fixtures.ts";
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
+import { v2NativeRegistrationMetadata } from "./Runtime.registration.ts";
 
 const binary = process.env.BIGBUD_OPENCODE_V2_SHARED_TEST_BINARY;
 /** Boundary qualification only: real native bootstrap/crypto/executors, immutable broker handlers and owned fake canonical result. */
@@ -54,14 +56,19 @@ it.skipIf(!binary)(
       const second = path.join(native.profile, "second-location");
       await mkdir(second);
       const locations = [native.workspace, second];
-      const shim = path.join(probes!.directory, "bigbud-thread-tools-managed.js");
+      const selected = v2ThreadRegistration(a.artifact);
+      const metadata = v2NativeRegistrationMetadata({
+        registrationFamily: "scoped",
+        profileIssuer: a.artifact.issuer,
+      });
+      const shim = path.join(probes!.directory, selected.filename);
       await writeFile(shim, `export {default} from ${JSON.stringify(a.artifact.entryUri)};\n`, {
         mode: 0o600,
         flag: "wx",
       });
       const info = (directory: string) =>
         client.rpc.call(
-          { rpcID: "bigbud.thread.v1", method: "info", input: {}, location: { directory } },
+          { rpcID: selected.id, method: "info", input: {}, location: { directory } },
           { signal: AbortSignal.timeout(5000) },
         );
       for (const directory of locations)
@@ -76,13 +83,14 @@ it.skipIf(!binary)(
           bigbud_provider: "opencodeV2",
           bigbud_thread: "disposable-canonical-thread",
           bigbud_storage: "disposable-storage",
+          ...metadata,
         },
       });
       const ownerA = a.bind(first.id, native.workspace);
       const rpc = (directory: string, method: string, input: ReturnType<typeof a.envelope>) =>
         client.rpc.call(
           {
-            rpcID: "bigbud.thread.v1",
+            rpcID: selected.id,
             method,
             input: JSON.parse(JSON.stringify(input)),
             location: { directory },
@@ -96,7 +104,7 @@ it.skipIf(!binary)(
       const before = await Promise.all(
         locations.map((directory) => readV2LifecycleCounters(client, directory)),
       );
-      native.state.tool = "bigbud_thread_v1_list_threads";
+      native.state.tool = selected.tool("list_threads");
       native.state.input = {};
       await client.session.prompt({
         sessionID: first.id,
@@ -136,6 +144,7 @@ it.skipIf(!binary)(
           bigbud_provider: "opencodeV2",
           bigbud_thread: "disposable-canonical-thread",
           bigbud_storage: "disposable-storage",
+          ...metadata,
         },
       });
       b.bind(next.id, second);

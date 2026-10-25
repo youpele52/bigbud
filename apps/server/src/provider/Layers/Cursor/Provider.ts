@@ -269,6 +269,7 @@ export const CursorProviderLive = Layer.effect(
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       initialSnapshot: buildInitialCursorProviderSnapshot,
       checkProvider,
+      readUsageLimits: () => Effect.promise((signal) => readCursorUsageLimits(signal, true)),
       recoverModelDiscovery: true,
       decorateSnapshot,
       enrichSnapshot: ({ settings, snapshot, generation, publishSnapshot }) => {

@@ -2,7 +2,8 @@ import { WS_METHODS } from "@bigbud/contracts";
 import { Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
-import { WsTransport, WsSubscriptionCompletedError } from "./wsTransport";
+import { WsTransport } from "./wsTransport";
+import { WsSubscriptionCompletedError } from "./wsTransport.errors";
 import {
   MockWebSocket,
   createTransport,

@@ -9,6 +9,7 @@ import {
   v2ThreadPrivateDirectory,
 } from "../src/provider/Layers/OpencodeV2/Orchestration.storage.ts";
 import { prepareV2InstallationRevalidation } from "../src/provider/Layers/OpencodeV2/PluginSetup.revalidation.ts";
+import { v2OwnerRegistration } from "../src/provider/Layers/OpencodeV2/Orchestration.registration.ts";
 
 /** Explicit maintenance approval only: does not replace the installation or touch native history. */
 async function main() {
@@ -18,9 +19,12 @@ async function main() {
       "state-dir": { type: "string" },
       "config-root": { type: "string" },
       "backup-dir": { type: "string" },
+      "registration-family": { type: "string", default: "legacy" },
       "approve-device-revalidation": { type: "boolean" },
     },
   });
+  if (!["legacy", "scoped"].includes(values["registration-family"]))
+    throw new Error("V2 --registration-family must be legacy or scoped.");
   if (
     !values["state-dir"] ||
     !values["config-root"] ||
@@ -76,6 +80,13 @@ async function main() {
         issuer,
         { directory, databaseDigest },
         assertCurrent,
+        v2OwnerRegistration({
+          issuer,
+          bootstrapAbi:
+            values["registration-family"] === "scoped"
+              ? "bigbud.thread.bootstrap.v2"
+              : "bigbud.thread.bootstrap.v1",
+        }).filename,
       ),
     path.join(state, "state.sqlite"),
   );

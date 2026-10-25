@@ -10,6 +10,8 @@ import { MessagesTimeline } from "../messages/MessagesTimeline";
 import {
   createBaseTimelineProps,
   createMessage,
+} from "../messages/MessagesTimeline.virtualization.test.fixtures";
+import {
   setViewport,
   waitForElement,
   waitForLayout,

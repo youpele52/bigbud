@@ -27,7 +27,7 @@ import {
   interruptV2Execution,
   installV2UnsafePermissionRejector,
 } from "./Runtime.replies.ts";
-import { emitV2RuntimeEvent } from "./Runtime.events.ts";
+import { emitV2RuntimeEvent, isV2FinalLifecycleEvent } from "./Runtime.events.ts";
 import { needsV2FinalRepair } from "./Runtime.finalization.ts";
 import { V2RuntimeTeardown } from "./Runtime.teardown.ts";
 import { V2RuntimeMutations } from "./Runtime.mutations.ts";
@@ -35,10 +35,11 @@ import { sendV2Turn } from "./Runtime.send.ts";
 import { installV2UnsupportedFormCanceller } from "./Runtime.forms.unsupported.ts";
 import { runAuthorizedV2, runV2Cleanup, currentV2RequestContext } from "./Client.guard.ts";
 import { inspectV2Turn } from "./Runtime.inspect.ts";
-import { consumeV2RuntimeEvent } from "./Runtime.stream.ts";
+import { registerV2RuntimeOwner } from "./Runtime.registration.owner.ts";
 import type { V2ProcessConfig } from "./ServerManager.child.ts";
 import { watchV2OutputPublication } from "./Runtime.publication.failure.ts";
-import { noteV2ChildHint } from "./Runtime.subagents.ts";
+import { attachV2OwnedFamily } from "./Runtime.family.ts";
+import { retireV2FailedStart } from "./Runtime.start.failure.ts";
 
 /** Owned preview execution engine shared by application routing and disposable conformance harnesses. */
 export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
@@ -119,11 +120,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
   }
 
   async emit(session: V2RuntimeSession, event: ProviderRuntimeEvent, validate?: () => void) {
-    const lifecycle =
-      session.stopped &&
-      ["turn.aborted", "session.exited", "request.resolved", "user-input.resolved"].includes(
-        event.type,
-      );
+    const lifecycle = session.stopped && isV2FinalLifecycleEvent(event);
     const epoch = session.epoch;
     const hubGeneration = session.lease.hub.generation(session.native.id);
     const dirtyGeneration = session.dirtyGeneration;
@@ -202,33 +199,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
         await releaseV2PreparedSession(owner);
         throw new Error("V2 late session start disposed.");
       }
-      const unregister = owner.lease.hub.register({
-        nativeSessionId: owner.native.id,
-        location: owner.native.location.directory,
-        onEvent: (event, signal) => {
-          const epoch = owner.epoch;
-          const dirty = owner.dirtyGeneration;
-          const generation = owner.lease.hub.generation(owner.native.id);
-          const validate = () => {
-            signal.throwIfAborted();
-            owner.consentPermit?.assertCurrent();
-            if (
-              this.sessions.get(owner.threadId) !== owner ||
-              owner.stopped ||
-              owner.epoch !== epoch ||
-              owner.dirtyGeneration !== dirty ||
-              owner.lease.hub.generation(owner.native.id) !== generation
-            )
-              throw new Error("V2 stale stream delivery rejected.");
-          };
-          return this.exclusive(owner, () => consumeV2RuntimeEvent(this, owner, event, validate));
-        },
-        onDirty: () => {
-          this.scheduleRepair(owner);
-        },
-        onDrained: () => this.scheduleRepair(owner, false),
-        onChildHint: () => noteV2ChildHint(this, owner),
-      });
+      const unregister = registerV2RuntimeOwner(this, owner, (run) => this.exclusive(owner, run));
       const unsubscribeDeath = observeV2ProcessLifecycle(owner.lease.process, () => {
         owner.stopped = true;
         owner.coding?.revoke();
@@ -240,6 +211,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
       Object.assign(owner, { unregister, unsubscribeDeath });
       session = owner;
       this.sessions.set(input.threadId, owner);
+      await attachV2OwnedFamily(this, owner);
       installV2UnsafePermissionRejector(this, owner);
       installV2UnsupportedFormCanceller(this, owner);
       await this.options.codingBridge?.attach(owner, this);
@@ -247,7 +219,10 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
       // Startup repair participates in the same queue as hub/poll/user operations.
       await this.exclusive(owner, () => recoverV2Session(this, owner));
       await this.options.threadBridge?.attach(owner, this);
-      if (owner.activation?.token && owner.row?.state !== "terminal" && owner.row) {
+      if (
+        owner.activation?.token &&
+        (owner.row?.state === "dispatch-intent" || owner.row?.state === "accepted")
+      ) {
         owner.activation.gate.nativeRunning(owner.activation.token);
         attempt.phase = "native-running";
       }
@@ -263,13 +238,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
         attempt.phase = "uncertain";
       }
       if (session) {
-        session.stopped = true;
-        session.coding?.revoke();
-        session.unregister();
-        session.unsubscribeDeath();
-        session.consentPermit?.release();
-        if (this.sessions.get(input.threadId) === session) this.sessions.delete(input.threadId);
-        await releaseV2PreparedSession(session);
+        await retireV2FailedStart(this, session);
       }
       throw error;
     } finally {
@@ -322,6 +291,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
     return this.authorized(async () => {
       if (
         hasV2RetainedReservation(session) &&
+        !session.family?.live &&
         !needsV2FinalRepair(session) &&
         !session.publicationUnconfirmed &&
         !session.lease.hub.isDirty(session.native.id)
@@ -378,9 +348,19 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
   async stop(threadId: ThreadId, expected?: V2RuntimeSession) {
     if (!expected) this.starting.get(threadId)?.controller.abort();
     const owner = expected ?? this.sessions.get(threadId);
-    await runV2Cleanup(owner?.sharedTransport, owner?.native.id ?? "", () =>
-      this.teardown.stop(threadId, expected),
-    );
+    const familyFence =
+      owner && (!expected || this.sessions.get(threadId) === expected)
+        ? owner.family?.fence()
+        : undefined;
+    await runV2Cleanup(owner?.sharedTransport, owner?.native.id ?? "", async () => {
+      const settled = await Promise.allSettled([
+        familyFence,
+        owner?.familyControl?.fence(),
+        this.teardown.stop(threadId, expected),
+      ]);
+      const failed = settled.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") throw failed.reason;
+    });
   }
 
   async close() {

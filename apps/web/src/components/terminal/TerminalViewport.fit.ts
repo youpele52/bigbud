@@ -1,9 +1,9 @@
 import type { FitAddon } from "@xterm/addon-fit";
-import type { Terminal } from "@xterm/xterm";
+import { preserveTerminalScroll, type TerminalScrollTarget } from "./terminalScrollState";
 
 interface FitTerminalViewportInput {
   container: Pick<HTMLDivElement, "getBoundingClientRect"> | null;
-  terminal: Pick<Terminal, "buffer" | "scrollToBottom"> | null;
+  terminal: TerminalScrollTarget | null;
   fitAddon: Pick<FitAddon, "fit"> | null;
   requestTerminalResize: () => void;
 }
@@ -13,8 +13,6 @@ export function fitTerminalViewport(input: FitTerminalViewportInput): void {
   if (!terminal || !fitAddon || !container) return;
   const { width, height } = container.getBoundingClientRect();
   if (width < 32 || height < 32) return;
-  const wasAtBottom = terminal.buffer.active.viewportY >= terminal.buffer.active.baseY;
-  fitAddon.fit();
-  if (wasAtBottom) terminal.scrollToBottom();
+  preserveTerminalScroll(terminal, () => fitAddon.fit());
   requestTerminalResize();
 }

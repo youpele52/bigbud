@@ -9,12 +9,15 @@ import {
   queueV2FinalEvents,
 } from "./Runtime.finalization.ts";
 import { v2ShutdownSignal } from "./Runtime.shutdown.ts";
+import { hasV2UnconfirmedFamily } from "./Runtime.family.loss.ts";
 
 interface Teardown {
   readonly owner: V2RuntimeSession;
   completion: Promise<void>;
   pending: number;
   unconfirmed: boolean;
+  /** Exact-owner cleanup resolved: drained observations retired the family before any later host exit. */
+  confirmed?: boolean;
   finished: boolean;
   unsubscribeDeath: () => void;
   repairQueued?: boolean;
@@ -51,6 +54,9 @@ export class V2RuntimeTeardown {
   private release(record: Teardown): void {
     if (
       !record.finished ||
+      // Confirmed cleanup already retired the family; a later host exit (such as this
+      // owner's own last-lease release) is not family loss.
+      (!record.confirmed && hasV2UnconfirmedFamily(record.owner)) ||
       needsV2FinalRepair(record.owner) ||
       ((record.pending || record.unconfirmed) && !record.owner.lease.process.hasExited?.())
     )
@@ -154,6 +160,7 @@ export class V2RuntimeTeardown {
               (request) => this.observe(record, request),
               this.shutdownSignal,
             );
+            record.confirmed = true;
           } catch (error) {
             // Without a still-observed operation that can settle, cleanup uncertainty
             // needs generation death rather than a speculative successful rebind.

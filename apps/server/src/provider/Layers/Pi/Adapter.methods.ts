@@ -14,6 +14,7 @@ import {
 } from "./Adapter.session.helpers.ts";
 import { makePiSessionControlMethods } from "./Adapter.session.control.ts";
 import { makeRespondToUserInput } from "./Adapter.methods.respondToUserInput.ts";
+import { makePiStopThreadSubagents } from "./Adapter.methods.threadSubagentStop.ts";
 import { requirePiSession } from "./Adapter.methods.session.ts";
 import { createPiMethodSetup } from "./Adapter.methods.setup.ts";
 import { makePiStartSession } from "./Adapter.methods.startSession.ts";
@@ -21,6 +22,7 @@ import type { PiAdapterMethodDependencies } from "./Adapter.methods.types.ts";
 import { isPiProcessAlive, toMessage } from "./Adapter.utils.ts";
 import { promptDispatchFailureClass } from "../../providerTurnDispatch.ts";
 import { canReadManagedProviderPaths } from "../../../attachments/providerAttachments.managed.ts";
+import { settleHandledPiPrompt } from "./Adapter.stream.settled.ts";
 
 export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
   const { prepareAttachments, stopSessionRecord } = createPiMethodSetup({
@@ -77,11 +79,19 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     }
     session.updatedAt = new Date().toISOString();
     session.turns.push({ id: turnId, items: [] });
+    if (session.process.supportsAgentSettled) {
+      (session.pendingPromptTurnIds ??= new Set()).add(turnId);
+      (session.pendingPromptQueueStarts ??= new Map()).set(
+        turnId,
+        session.promptQueue?.sequence ?? 0,
+      );
+    }
 
     const aliveBeforeDispatch = isPiProcessAlive(session.process);
-    yield* Effect.tryPromise({
+    const response = yield* Effect.tryPromise({
       try: () =>
-        session.process.request({
+        session.process.request<{ disposition?: string }>({
+          id: turnId,
           type: "prompt",
           message: prepared.text,
           ...(images.length > 0 ? { images } : {}),
@@ -110,6 +120,8 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
       ),
       Effect.tapError(() =>
         Effect.sync(() => {
+          session.pendingPromptTurnIds?.delete(turnId);
+          session.pendingPromptQueueStarts?.delete(turnId);
           if (queuedWhileRunning) {
             const queuedTurnIndex = session.queuedTurnIds.findIndex(
               (queuedTurnId) => queuedTurnId === turnId,
@@ -132,6 +144,9 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
       ),
     );
 
+    if (response.data?.disposition === "handled") {
+      yield* settleHandledPiPrompt({ ...deps, session, turnId });
+    }
     return {
       threadId: input.threadId,
       turnId,
@@ -207,6 +222,7 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     sendTurn,
     interruptTurn,
     steerTurn,
+    stopThreadSubagents: makePiStopThreadSubagents({ requireSession }),
     respondToRequest,
     respondToUserInput,
     ...sessionControlMethods,
@@ -216,6 +232,7 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     | "sendTurn"
     | "interruptTurn"
     | "steerTurn"
+    | "stopThreadSubagents"
     | "respondToRequest"
     | "respondToUserInput"
     | "stopSession"

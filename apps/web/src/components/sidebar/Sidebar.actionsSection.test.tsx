@@ -151,6 +151,13 @@ describe("SidebarActionsSection", () => {
     );
   });
 
+  it("uses the shared chart artwork for Usage", () => {
+    const html = renderActions();
+
+    expect(html).toContain("lucide-chart-no-axes-combined");
+    expect(html).not.toContain("lucide-chart-column");
+  });
+
   it("applies the group class so per-row hover reveal works for the kbd hint", () => {
     const html = renderActions("⌘N");
 

@@ -2,10 +2,15 @@
 import { Effect, Layer, ServiceMap } from "effect";
 import { TextGenerationError, type ModelSelection } from "@bigbud/contracts";
 
-import { TextGeneration, type TextGenerationShape } from "../Services/TextGeneration.ts";
+import {
+  TextGeneration,
+  type TextGenerationShape,
+  type InternalTextGenerationContext,
+} from "../Services/TextGeneration.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
 import { CursorTextGenerationLive } from "./CursorTextGeneration.ts";
+import { OpencodeV2TextGenerationLive } from "./OpencodeV2TextGeneration.ts";
 import {
   generateCopilotThreadTitleNative,
   generateOpencodeThreadElevatorSummaryNative,
@@ -18,6 +23,14 @@ import { runInternalTextGeneration } from "./InternalTextGenerationPolicy.ts";
 import { sanitizeElevatorSummary } from "../Utils.ts";
 import { shouldRetryGeneratedThreadTitle } from "../../orchestration/Layers/ProviderCommandReactorHelpers.ts";
 
+/** A durable claim may await settings changes; its captured candidate must remain the one dispatched. */
+function capture(selection: ModelSelection | null | undefined): ModelSelection | null {
+  if (!selection) return null;
+  const snapshot = structuredClone(selection);
+  if (snapshot.options) Object.freeze(snapshot.options);
+  return Object.freeze(snapshot);
+}
+
 class CodexTextGen extends ServiceMap.Service<CodexTextGen, TextGenerationShape>()(
   "t3/git/Layers/RoutingTextGeneration/CodexTextGen",
 ) {}
@@ -27,12 +40,16 @@ class ClaudeTextGen extends ServiceMap.Service<ClaudeTextGen, TextGenerationShap
 class CursorTextGen extends ServiceMap.Service<CursorTextGen, TextGenerationShape>()(
   "t3/git/Layers/RoutingTextGeneration/CursorTextGen",
 ) {}
+class OpencodeV2TextGen extends ServiceMap.Service<OpencodeV2TextGen, TextGenerationShape>()(
+  "bigbud/git/Layers/RoutingTextGeneration/OpencodeV2TextGen",
+) {}
 
 /** Build one shared routing policy; injectable native services keep policy tests provider-free. */
 export function makeInternalTextGenerationRouter(deps: {
   readonly codex: TextGenerationShape;
   readonly claude: TextGenerationShape;
   readonly cursor: TextGenerationShape;
+  readonly opencodeV2?: TextGenerationShape;
   readonly serverSettingsService: typeof ServerSettingsService.Service;
   readonly opencodeServerManager: typeof OpencodeServerManager.Service;
 }): TextGenerationShape {
@@ -47,6 +64,8 @@ export function makeInternalTextGenerationRouter(deps: {
         return claude;
       case "cursor":
         return cursor;
+      case "opencodeV2":
+        return deps.opencodeV2 ?? null;
       default:
         return null;
     }
@@ -61,7 +80,7 @@ export function makeInternalTextGenerationRouter(deps: {
 
   const run = <A extends object>(
     operation: keyof TextGenerationShape,
-    input: {
+    input: InternalTextGenerationContext & {
       readonly successfulModelSelection?: ModelSelection | null;
       readonly message?: string;
       readonly transcript?: string;
@@ -101,19 +120,33 @@ export function makeInternalTextGenerationRouter(deps: {
             }),
         ),
       );
+      const preference = input.verifiedThreadModelOnly
+        ? null
+        : capture(settings.textGenerationModelSelection);
+      const successful = capture(input.successfulModelSelection);
+      const enabled = new Set(
+        Object.entries(settings.providers)
+          .filter(([, value]) => value.enabled)
+          .map(([provider]) => provider),
+      );
       return yield* runInternalTextGeneration({
         operation,
-        preference: input.verifiedThreadModelOnly ? null : settings.textGenerationModelSelection,
-        successful: input.successfulModelSelection ?? null,
+        preference,
+        successful,
         generate: (selection) =>
-          !settings.providers[selection.provider]?.enabled
+          !enabled.has(selection.provider)
             ? Effect.fail(
                 new TextGenerationError({
                   operation,
                   detail: `Provider '${selection.provider}' is disabled.`,
                 }),
               )
-            : generate(selection).pipe(
+            : (selection.provider === "opencodeV2" && input.beforeV2Dispatch
+                ? input
+                    .beforeV2Dispatch(selection)
+                    .pipe(Effect.andThen(Effect.suspend(() => generate(selection))))
+                : generate(selection)
+              ).pipe(
                 Effect.flatMap((result) => {
                   const text =
                     operation === "generateThreadElevatorSummary" &&
@@ -218,6 +251,7 @@ const makeRoutingTextGeneration = Effect.gen(function* () {
     codex: yield* CodexTextGen,
     claude: yield* ClaudeTextGen,
     cursor: yield* CursorTextGen,
+    opencodeV2: yield* OpencodeV2TextGen,
     serverSettingsService: yield* ServerSettingsService,
     opencodeServerManager: yield* OpencodeServerManager,
   });
@@ -232,6 +266,9 @@ const InternalClaudeLayer = Layer.effect(ClaudeTextGen, TextGeneration.asEffect(
 const InternalCursorLayer = Layer.effect(CursorTextGen, TextGeneration.asEffect()).pipe(
   Layer.provide(CursorTextGenerationLive),
 );
+const InternalOpencodeV2Layer = Layer.effect(OpencodeV2TextGen, TextGeneration.asEffect()).pipe(
+  Layer.provide(OpencodeV2TextGenerationLive),
+);
 
 export const RoutingTextGenerationLive = Layer.effect(
   TextGeneration,
@@ -240,4 +277,5 @@ export const RoutingTextGenerationLive = Layer.effect(
   Layer.provide(InternalCodexLayer),
   Layer.provide(InternalClaudeLayer),
   Layer.provide(InternalCursorLayer),
+  Layer.provide(InternalOpencodeV2Layer),
 );

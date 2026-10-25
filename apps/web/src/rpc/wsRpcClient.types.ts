@@ -128,6 +128,8 @@ export interface WsRpcClient {
   readonly worktrees: NonNullable<NativeApi["worktrees"]>;
   readonly dispose: () => Promise<void>;
   readonly reconnect: () => Promise<void>;
+  /** Skips the current reconnect backoff wait; returns whether a wait was cut short. */
+  readonly reconnectNow: () => boolean;
   readonly terminal: {
     readonly wslDistributions: RpcUnaryNoArgMethod<typeof WS_METHODS.terminalWslDistributions>;
     readonly snapshot: RpcUnaryMethod<typeof WS_METHODS.terminalSnapshot>;
@@ -137,7 +139,17 @@ export interface WsRpcClient {
     readonly clear: RpcUnaryMethod<typeof WS_METHODS.terminalClear>;
     readonly restart: RpcUnaryMethod<typeof WS_METHODS.terminalRestart>;
     readonly close: RpcUnaryMethod<typeof WS_METHODS.terminalClose>;
-    readonly onEvent: RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>;
+    readonly onEvent: (
+      listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>>[0],
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
+    readonly subscribeSession: (
+      input: RpcInput<typeof WS_METHODS.subscribeTerminalSession>,
+      listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeTerminalSession>>[0],
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
+    readonly ackOutput: RpcUnaryMethod<typeof WS_METHODS.terminalOutputAck>;
+    readonly search: RpcUnaryMethod<typeof WS_METHODS.terminalSearch>;
   };
   readonly browser: {
     readonly completeCommand: (input: VisibleBrowserCommandResult) => Promise<void>;
@@ -232,8 +244,11 @@ export interface WsRpcClient {
     readonly ping: RpcUnaryNoArgMethod<typeof WS_METHODS.serverPing>;
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
     readonly refreshProviders: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshProviders>;
+    readonly refreshUsageLimits: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshUsageLimits>;
     readonly activateCliProxy: RpcUnaryNoArgMethod<typeof WS_METHODS.serverActivateCliProxy>;
     readonly verifyExecutionTarget: RpcUnaryMethod<typeof WS_METHODS.serverVerifyExecutionTarget>;
+    readonly listSshConfigHosts: RpcUnaryMethod<typeof WS_METHODS.serverListSshConfigHosts>;
+    readonly listRemoteFolders: RpcUnaryMethod<typeof WS_METHODS.serverListRemoteFolders>;
     readonly installRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverInstallRemoteAgent>;
     readonly connectRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverConnectRemoteAgent>;
     readonly restartRemoteAgent: (
@@ -247,6 +262,7 @@ export interface WsRpcClient {
     >;
     readonly unlockSshKey: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshKey>;
     readonly unlockSshPassword: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshPassword>;
+    readonly trustSshHost: RpcUnaryMethod<typeof WS_METHODS.serverTrustSshHost>;
     readonly upsertKeybinding: RpcUnaryMethod<typeof WS_METHODS.serverUpsertKeybinding>;
     readonly getSettings: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetSettings>;
     readonly updateSettings: (
@@ -317,6 +333,9 @@ export interface WsRpcClient {
       input: ServerGetUsageSummaryInput,
     ) => Promise<ServerUsageSummaryResult>;
     readonly stopSubagent: (input: ProviderStopSubagentInput) => Promise<void>;
+    readonly getWsConnectionDiagnostics: RpcUnaryMethod<
+      typeof WS_METHODS.serverGetWsConnectionDiagnostics
+    >;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   };

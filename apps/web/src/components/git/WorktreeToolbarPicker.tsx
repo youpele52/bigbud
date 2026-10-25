@@ -71,7 +71,7 @@ export function WorktreeToolbarPicker(props: {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => event.stopPropagation()}
-          className="mb-1 w-full border-b bg-transparent px-2 py-2 text-sm outline-none"
+          className="mb-1 w-full border-b bg-transparent px-2 py-2 text-xs tracking-tight placeholder:text-xs placeholder:tracking-tight placeholder:text-muted-foreground/50 outline-none"
         />
         <div className="max-h-64 overflow-y-auto">
           {props.inventory.entries
@@ -83,7 +83,6 @@ export function WorktreeToolbarPicker(props: {
             .map((entry) => (
               <MenuSub key={entry.path}>
                 <MenuSubTrigger title={entry.path}>
-                  <WorktreeIcon />
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate">{entry.main ? "Main checkout" : entry.name}</span>
                     <span className="truncate text-xs text-muted-foreground">
@@ -112,14 +111,10 @@ export function WorktreeToolbarPicker(props: {
           disabled={props.createDisabled || !props.inventory.local}
           onClick={props.onCreate}
         >
-          <WorktreeIcon />
           Create worktree…
         </MenuItem>
         {props.inventory.local && props.onOperations && (
-          <MenuItem onClick={props.onOperations}>
-            <WorktreeIcon />
-            Worktree operations…
-          </MenuItem>
+          <MenuItem onClick={props.onOperations}>Worktree operations…</MenuItem>
         )}
       </MenuPopup>
     </Menu>

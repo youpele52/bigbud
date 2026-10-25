@@ -8,6 +8,8 @@ import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { TerminalRenderingSettings } from "./TerminalRenderingSettings";
+import { TerminalThemeSettings } from "./TerminalThemeSettings";
+import { TerminalInteractionSettings } from "./TerminalInteractionSettings";
 
 const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }> = [
   {
@@ -122,7 +124,9 @@ export function TerminalSettingsSection() {
         }
       />
 
+      <TerminalThemeSettings />
       <TerminalRenderingSettings />
+      <TerminalInteractionSettings />
     </SettingsSection>
   );
 }

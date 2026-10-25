@@ -23,6 +23,7 @@ export class TerminalRendererController {
   private addon: TerminalWebglAddon | undefined;
   private listener: IDisposable | undefined;
   private release: (() => void) | undefined;
+  private unretain: (() => void) | undefined;
   private generation = 0;
   private disposed = false;
   private loading = false;
@@ -49,20 +50,59 @@ export class TerminalRendererController {
   ): void {
     const previous = this.request;
     this.request = { setting, visible, policy };
-    const reason = !visible
-      ? "Hidden terminal uses DOM."
-      : setting === "off"
-        ? null
-        : !policy?.allowed
-          ? (policy?.reason ?? "Awaiting application rendering policy.")
-          : null;
-    if (!visible || setting === "off" || !policy?.allowed) {
-      this.fallback(reason);
+    if (setting === "off") {
+      this.fallback(null);
+      return;
+    }
+    if (!visible) {
+      // An attached context is parked for a quick return; a pending attach is abandoned.
+      if (this.addon && !this.loading) this.retain();
+      else this.fallback("Hidden terminal uses DOM.");
+      return;
+    }
+    if (!policy?.allowed) {
+      this.fallback(policy?.reason ?? "Awaiting application rendering policy.");
+      return;
+    }
+    if (this.unretain) {
+      this.resume();
       return;
     }
     const changed =
       !previous || previous.setting !== setting || !previous.visible || !previous.policy?.allowed;
     if (changed && !this.addon && !this.loading) void this.attempt(false);
+  }
+
+  private retain(): void {
+    if (this.unretain) return;
+    this.release?.();
+    this.release = undefined;
+    this.unretain = this.budget.retain(() => {
+      this.unretain = undefined;
+      this.fallback("Hidden GPU context released for other terminals; terminal uses DOM.");
+    });
+  }
+
+  private resume(): void {
+    this.unretain?.();
+    this.unretain = undefined;
+    const release = this.budget.reserve();
+    if (!release) {
+      this.fallback("Visible GPU context budget exhausted.");
+      return;
+    }
+    this.release = release;
+  }
+
+  /** Glyph shaping changed (ligatures): WebGL must rebuild its atlas on a fresh attachment. */
+  reattach(): void {
+    if (!this.addon || this.loading) return;
+    if (!this.request?.visible) {
+      this.fallback("Hidden terminal uses DOM.");
+      return;
+    }
+    this.fallback(null);
+    void this.attempt(true);
   }
 
   retry(): void {
@@ -155,6 +195,8 @@ export class TerminalRendererController {
     if (addon) this.disposeAddon(addon);
     this.release?.();
     this.release = undefined;
+    this.unretain?.();
+    this.unretain = undefined;
     if (addon && !this.disposed) {
       try {
         this.terminal.refresh(0, this.terminal.rows - 1);

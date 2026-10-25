@@ -2,9 +2,11 @@ import { useState } from "react";
 import { SquareIcon } from "lucide-react";
 import type { OrchestrationTask, ThreadId } from "@bigbud/contracts";
 
+import { cn } from "~/lib/utils";
 import { readNativeApi } from "~/rpc/nativeApi";
 import { Button } from "../../ui/button";
 import { toastManager } from "../../ui/toast";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import { isFreshActiveProviderAgent } from "./agentActivity.presentation";
 import { subagentDisplayName } from "./subagentPresentation.logic";
 
@@ -27,6 +29,7 @@ export function canStopSubagent(agent: OrchestrationTask): boolean {
 export function SubagentStopButton(props: {
   agent: OrchestrationTask;
   onStop: SubagentStopHandler;
+  className?: string | undefined;
 }) {
   const [pending, setPending] = useState(false);
   const name = subagentDisplayName(props.agent);
@@ -45,18 +48,31 @@ export function SubagentStopButton(props: {
     }
   };
   return (
-    <Button
-      type="button"
-      size="icon-xs"
-      variant="ghost"
-      className="shrink-0 text-muted-foreground hover:text-foreground"
-      aria-label={`Stop ${name}`}
-      title={`Stop ${name}`}
-      data-subagent-stop
-      disabled={pending}
-      onClick={() => void stop()}
-    >
-      <SquareIcon aria-hidden="true" className="size-3" />
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            className={cn(
+              "shrink-0 text-muted-foreground [:hover,[data-pressed]]:bg-red-500/10 hover:text-red-600 focus-visible:text-red-600 dark:hover:text-red-400 dark:focus-visible:text-red-400",
+              props.className,
+            )}
+            aria-label={`Stop ${name}`}
+            data-subagent-stop
+            disabled={pending}
+            onClick={(event) => {
+              // Stop sits inside the row's details toggle; keep it from expanding the row.
+              event.stopPropagation();
+              void stop();
+            }}
+          >
+            <SquareIcon aria-hidden="true" className="size-3" />
+          </Button>
+        }
+      />
+      <TooltipPopup>Stop {name}</TooltipPopup>
+    </Tooltip>
   );
 }

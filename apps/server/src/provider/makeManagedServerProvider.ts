@@ -1,4 +1,9 @@
 import type { ServerProvider } from "@bigbud/contracts";
+import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
+import {
+  managedProviderUsageRefresh,
+  makeManagedProviderUsagePublication,
+} from "./managedProviderUsage.ts";
 import { Deferred, Duration, Effect, Option, PubSub, Ref, Scope, Stream } from "effect";
 import * as Semaphore from "effect/Semaphore";
 
@@ -39,6 +44,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   }) => Effect.Effect<ServerProvider, ServerSettingsError>;
   readonly preserveEnrichedSnapshot?: boolean;
   readonly recoverModelDiscovery?: boolean;
+  readonly readUsageLimits?: (settings: Settings) => Effect.Effect<ServerProviderUsageLimits>;
 }): Effect.fn.Return<ServerProviderShape, ServerSettingsError, Scope.Scope> {
   const refreshSemaphore = yield* Semaphore.make(1);
   const recoverModels = yield* makeModelDiscoveryRecovery();
@@ -59,6 +65,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     initialProbeComplete: !initialSnapshot.enabled,
   });
   const settingsRef = yield* Ref.make(initialSettings);
+  const usagePublication = makeManagedProviderUsagePublication(snapshotRef, changesPubSub);
 
   const applySnapshotBase = Effect.fn("applySnapshot")(function* (
     nextSettings: Settings,
@@ -78,6 +85,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
 
     const generation = options?.generation ?? (yield* Ref.get(generationRef));
     if (generation !== (yield* Ref.get(generationRef))) return yield* Ref.get(snapshotRef);
+    const usageRevision = usagePublication.revision;
     yield* enrichment.cancel;
     const isCurrent = Ref.get(generationRef).pipe(Effect.map((value) => value === generation));
     const enrich = (snapshot: ServerProvider) => {
@@ -104,9 +112,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
         publish: (enriched) =>
           Effect.gen(function* () {
             if (!(yield* isCurrent)) return;
-            if (areProviderSnapshotsEqual(yield* Ref.get(snapshotRef), enriched)) return;
-            yield* Ref.set(snapshotRef, enriched);
-            yield* PubSub.publish(changesPubSub, enriched);
+            yield* usagePublication.publish(enriched, usageRevision);
           }),
       });
     };
@@ -203,11 +209,8 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
                 ? yield* input.decorateSnapshot({ settings: nextSettings, snapshot, generation })
                 : snapshot;
               if (generation !== (yield* Ref.get(generationRef))) return;
-              if (!areProviderSnapshotsEqual(yield* Ref.get(snapshotRef), decorated)) {
-                yield* Ref.set(snapshotRef, decorated);
-                yield* PubSub.publish(changesPubSub, decorated);
-              }
-              yield* enrich(decorated);
+              const published = yield* usagePublication.publish(decorated, usageRevision);
+              yield* enrich(published);
             }).pipe(Effect.ignoreCause({ log: true })),
         })
       : yield* probeOnce;
@@ -238,10 +241,13 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       currentSnapshot,
       input.preserveEnrichedSnapshot === true && !input.recoverModelDiscovery,
     );
-    const nextSnapshot =
+    const nextSnapshot = usagePublication.preserve(
       options?.recovery === undefined
         ? checkedSnapshot
-        : withProviderRecovery(checkedSnapshot, options.recovery, generation);
+        : withProviderRecovery(checkedSnapshot, options.recovery, generation),
+      usageRevision,
+      yield* Ref.get(snapshotRef),
+    );
     const previousSnapshot = yield* Ref.get(snapshotRef);
     const snapshotChanged = !areProviderSnapshotsEqual(previousSnapshot, nextSnapshot);
     yield* Ref.set(settingsRef, nextSettings);
@@ -329,6 +335,22 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   ).pipe(Effect.forkScoped);
 
   return {
+    ...(input.readUsageLimits
+      ? {
+          refreshUsageLimits: refreshSemaphore.withPermits(1)(
+            managedProviderUsageRefresh({
+              read: input.readUsageLimits,
+              didRefresh: usagePublication.didRefresh,
+              getSettings: input.getSettings,
+              settingsRef,
+              snapshotRef,
+              generationRef,
+              changes: changesPubSub,
+              haveSettingsChanged: input.haveSettingsChanged,
+            }),
+          ),
+        }
+      : {}),
     getSnapshot: Effect.gen(function* () {
       const nextSettings = yield* input.getSettings;
       const previousSettings = yield* Ref.get(settingsRef);

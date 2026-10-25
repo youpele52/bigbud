@@ -91,7 +91,7 @@ export async function withV2FacadeCancellationFixture(
         ? []
         : [
             {
-              id: "bigbud.thread.v1",
+              id: `bigbud.thread.v2.${app.artifact.issuer}`,
               source: { type: "local", path: app.artifact.directory },
               features: { server: true, rpc: true },
               state: { status: "active" },

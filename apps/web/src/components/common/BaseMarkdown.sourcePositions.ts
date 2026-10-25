@@ -1,3 +1,5 @@
+import { addSourceTextPositions, type MarkdownSourceNode } from "./BaseMarkdown.sourceText";
+
 const SOURCE_POSITION_TAGS = new Set([
   "address",
   "article",
@@ -118,12 +120,15 @@ function addSourcePosition(node: SourcePositionNode, lineMap: ReadonlyArray<numb
 
 export function createSourcePositionPlugin(lineMap: ReadonlyArray<number>) {
   return () =>
-    (tree: unknown): void => {
+    (tree: unknown, file: { readonly value: unknown }): void => {
       addSourcePosition(tree as SourcePositionNode, lineMap);
+      addSourceTextPositions(tree as MarkdownSourceNode, lineMap, String(file.value));
     };
 }
 
-export function sourcePositionProps(props: Record<string, unknown>): Record<string, number> {
+export function sourcePositionProps(
+  props: Record<string, unknown>,
+): Record<string, number | string> {
   const startLine = props["data-source-start-line"];
   const endLine = props["data-source-end-line"];
   if (
@@ -137,5 +142,8 @@ export function sourcePositionProps(props: Record<string, unknown>): Record<stri
   return {
     "data-source-start-line": startLine,
     "data-source-end-line": endLine,
+    ...(typeof props["data-source-code-lines"] === "string"
+      ? { "data-source-code-lines": props["data-source-code-lines"] }
+      : {}),
   };
 }

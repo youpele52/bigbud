@@ -18,7 +18,10 @@ export function v2RetainedHistoryIssue(input: {
   }
   if (cursor?.connectionMode === "isolated")
     return "Retired isolated V2 history is read-only. Its transcript and bindings are retained; native history is never acquired, migrated, recreated or replayed.";
-  if (input.binding && input.binding.directory !== input.directory)
+  if (
+    (input.binding && input.binding.directory !== input.directory) ||
+    (cursor && cursor.directory !== input.directory)
+  )
     return "Retained V2 history belongs to another native Location; canonical history remains read-only here.";
   if (
     (cursor || input.hasAdmission) &&

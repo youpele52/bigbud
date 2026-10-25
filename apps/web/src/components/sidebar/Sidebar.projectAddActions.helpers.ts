@@ -27,7 +27,10 @@ export function createRemoteProjectFieldErrors(
 ): RemoteProjectFieldErrors {
   const errors: RemoteProjectFieldErrors = {};
   if (draft.host.trim().length === 0) {
-    errors.host = "Enter an SSH host, IP, or SSH config host.";
+    errors.host =
+      draft.connectionSource === "ssh-config"
+        ? "Pick an SSH config host."
+        : "Enter an SSH host, IP, or SSH config host.";
   }
   const port = draft.port.trim();
   if (port.length > 0) {
@@ -37,11 +40,36 @@ export function createRemoteProjectFieldErrors(
     }
   }
   if (draft.workspaceRoot.trim().length === 0) {
-    errors.workspaceRoot = "Enter the remote project path.";
+    errors.workspaceRoot = "Choose a folder or enter the remote project path.";
   }
   return errors;
 }
 
 export function hasRemoteProjectFieldErrors(errors: RemoteProjectFieldErrors): boolean {
   return Object.values(errors).some((value) => typeof value === "string" && value.length > 0);
+}
+
+const CONNECTION_ERROR_FIELDS: ReadonlyArray<RemoteProjectField> = [
+  "host",
+  "username",
+  "port",
+  "sshKeyPath",
+];
+
+/**
+ * Clears errors for an edited field, keeping the same object when there are none. Switching the
+ * connection source swaps every connection field, so their errors no longer apply.
+ */
+export function withoutRemoteProjectFieldError(
+  errors: RemoteProjectFieldErrors,
+  field: string,
+): RemoteProjectFieldErrors {
+  const cleared =
+    field === "connectionSource" ? CONNECTION_ERROR_FIELDS : [field as RemoteProjectField];
+  if (!cleared.some((key) => key in errors)) {
+    return errors;
+  }
+  const next = { ...errors };
+  for (const key of cleared) delete next[key];
+  return next;
 }

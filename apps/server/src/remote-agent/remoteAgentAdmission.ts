@@ -37,7 +37,10 @@ export function makeRemoteAgentAdmission(
   dependencies: {
     readonly bindings?: RemoteAgentConnectionBindings;
     readonly control?: (target: string) => Promise<RemoteAgentControl>;
-    readonly connect?: (target: string, runtime: RemoteAgentRuntime) => RemoteAgentConnection;
+    readonly connect?: (
+      target: string,
+      runtime: RemoteAgentRuntime,
+    ) => RemoteAgentConnection | Promise<RemoteAgentConnection>;
     readonly historicalLegacy?: {
       readonly artifact: RemoteAgentArtifact;
       readonly trustStore: RemoteAgentArtifactTrustStore;

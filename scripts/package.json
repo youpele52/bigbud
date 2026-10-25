@@ -18,6 +18,7 @@
     "@effect/vitest": "catalog:",
     "@types/bun": "catalog:",
     "@xterm/headless": "6.0.0",
+    "@xterm/xterm": "6.0.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

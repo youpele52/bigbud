@@ -18,8 +18,8 @@ The server-owned runtime and filesystem path, subtree fencing, direct retention 
 
 ## Related Work
 
-- [Automatic thread cleanup](../thread-retention.md) documents the current retention behavior that this plan supersedes.
-- [Local Project Thread Purge Recovery Record](2026-08-17-local-project-thread-purge-recovery.md) documents the prior direct administrative cleanup and its attachment validation.
+- [Automatic thread cleanup](../THREAD_RETENTION.md) documents the current retention behavior that this plan supersedes.
+- [Local Project Thread Purge Recovery Runbook](2026-08-17-local-project-thread-purge-recovery.runbook.md) documents the prior direct administrative cleanup and its attachment validation.
 - [Donna-kukama Thread Purge Recovery Runbook](2026-08-17-donna-kukama-thread-purge-recovery.runbook.md) records the dependency inventory that the new cascade migration must cover.
 - None identified for a repository issue, pull request, bigbud note, or Kanban card.
 
@@ -155,7 +155,7 @@ The renderer also has a second owner for worktree cleanup. `useThreadActions.ts`
 4. Invoke `ThreadDeletion.deleteNow` for each eligible root, sequentially with a bounded per-run batch size. Record one concise daily summary with deleted, skipped, and failed counts.
 5. Make the manual control perform the same selection and direct deletion immediately after confirmation. Return the result to the UI; do not create a durable run, claim a slot, yield scheduled work, or poll an intermediate state.
 6. Update `ThreadRetentionSettingsSection` to say that checks run daily and that manual deletion runs now. Remove the safe-checkpoint status copy, run polling, priority wording, and deferred state UI.
-7. Update `docs/thread-retention.md` to describe the direct behavior, protections, no-undo semantics, and backup-only recovery.
+7. Update `docs/THREAD_RETENTION.md` to describe the direct behavior, protections, no-undo semantics, and backup-only recovery.
 
 **Expected result:** The manual button means delete now. Daily cleanup is predictable, bounded, and cannot be blocked by historical failed purge jobs.
 

@@ -218,7 +218,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     );
   });
 
-  const { interruptTurn, steerTurn } = makeCodexTurnControl(manager);
+  const { interruptTurn, steerTurn, stopThreadSubagents } = makeCodexTurnControl(manager);
 
   const readThread: CodexAdapterShape["readThread"] = (threadId) =>
     Effect.tryPromise({
@@ -346,6 +346,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     sendTurn,
     interruptTurn,
     steerTurn,
+    stopThreadSubagents,
     inspectActiveTurn: unavailableActiveTurnInspection("codex"),
     readThread,
     rollbackThread,

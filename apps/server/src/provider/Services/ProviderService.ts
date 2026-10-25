@@ -36,7 +36,7 @@ import { ServiceMap } from "effect";
 import type { Effect, Stream } from "effect";
 
 import type { ProviderServiceError } from "../Errors.ts";
-import type { ProviderAdapterCapabilities } from "./ProviderAdapter.ts";
+import type { ProviderAdapterCapabilities, ProviderThreadSubagentRef } from "./ProviderAdapter.ts";
 import type {
   ProviderSessionRuntimeListCursor,
   ProviderSessionRuntimeListInput,
@@ -125,6 +125,15 @@ export interface ProviderServiceShape {
   readonly stopSubagent?: (
     input: ProviderStopSubagentInput,
   ) => Effect.Effect<void, ProviderServiceError>;
+
+  /**
+   * Thread Stop's subagent cascade for the live session only: the adapter's
+   * `stopThreadSubagents`, else per-subagent Stop when supported, else nothing.
+   */
+  readonly stopThreadSubagents?: (input: {
+    readonly threadId: ThreadId;
+    readonly subagents: ReadonlyArray<ProviderThreadSubagentRef>;
+  }) => Effect.Effect<void, ProviderServiceError>;
 
   readonly inspectActiveTurn: (input: {
     readonly threadId: ThreadId;

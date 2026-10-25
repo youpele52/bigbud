@@ -7,6 +7,7 @@ import {
   type MessagesTimelineRow,
 } from "../messages/MessagesTimeline.logic";
 import { MessagesTimelineWorkGroup } from "../messages/MessagesTimeline.workGroup";
+import { CHAT_COLUMN_CLASS_NAME } from "../common/chatColumn";
 import { ChatAgentActivityFeed } from "./ChatAgentActivityFeed";
 import { SubagentsCard } from "./SubagentsCard";
 
@@ -45,45 +46,102 @@ function messageRow(id: string, turnId: string, createdAt: string): MessagesTime
   };
 }
 
+function workRow(groupedEntries: unknown[]): never {
+  return {
+    kind: "work",
+    id: "work",
+    createdAt: "2026-09-28T12:00:00.000Z",
+    groupedEntries,
+  } as never;
+}
+
+/** Markup of the accordion's top-right actions slot, which precedes the panel. */
+function headerActions(markup: string): string {
+  return markup.slice(
+    markup.indexOf('data-slot="activity-accordion-actions"'),
+    markup.indexOf('data-slot="activity-accordion-panel"'),
+  );
+}
+
 describe("compact Subagents presentation", () => {
-  it("shares the compact Work log shell and right-aligned overflow presentation", () => {
+  it("keeps the live card shell with a right-aligned overflow toggle", () => {
     const subagents = renderToStaticMarkup(
       <SubagentsCard
         agents={[{ ...agent("one"), progressSummary: "Reviewing UI components" }, agent("two")]}
       />,
     );
+    expect(subagents).toContain("rounded-xl border border-border/45 bg-card/25 px-2 py-1.5");
+    expect(subagents).not.toContain("<details");
+    expect(subagents).toContain("Subagents (2)");
+    expect(subagents).toContain("Show 1 more");
+    expect(subagents).toContain("items-center justify-between");
+    expect(subagents.match(/text-xs/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(subagents).toContain("text-[9px]");
+    expect(subagents).toContain("sm:text-[9px]");
+    expect(subagents).toContain("bg-blue-500");
+    expect(subagents).toContain("text-blue-600 dark:text-blue-400");
+    expect(subagents).toContain(">working<");
+  });
+
+  it("renders timeline history as a collapsed accordion sharing the live card body", () => {
+    const agents = [agent("one", false), agent("two", false)];
+    const history = renderToStaticMarkup(
+      <SubagentsCard agents={agents} presentation="accordion" />,
+    );
+    const live = renderToStaticMarkup(<SubagentsCard agents={agents} />);
+    expect(history).toContain('aria-label="Subagents"');
+    expect(history).toMatch(/<details data-slot="activity-accordion" data-variant="section"/);
+    expect(history).not.toMatch(/<details[^>]*\sopen=""/);
+    expect(history).toContain("Subagents (2)");
+    expect(history).not.toContain("rounded-xl border border-border/45 bg-card/25");
+    // The overflow toggle sits in the header's top-right actions slot, outside the panel.
+    expect(headerActions(history)).toContain("Show 1 more");
+    const panel = history.slice(history.indexOf('data-slot="activity-accordion-panel"'));
+    expect(panel).toContain('data-subagent-row="one"');
+    expect(panel).not.toContain("Show 1 more");
+    expect(live).toContain('data-subagent-row="one"');
+  });
+
+  it("puts work-log overflow in the accordion header and groups a lone tool call too", () => {
     const workLog = renderToStaticMarkup(
       <MessagesTimelineWorkGroup
-        row={
-          {
-            kind: "work",
-            id: "work",
-            createdAt: "2026-09-28T12:00:00.000Z",
-            groupedEntries: [
-              { id: "one", tone: "status", label: "One" },
-              { id: "two", tone: "status", label: "Two" },
-            ],
-          } as never
-        }
+        row={workRow([
+          { id: "one", tone: "info", label: "One" },
+          { id: "two", tone: "info", label: "Two" },
+        ])}
         isExpanded={false}
         onToggleWorkGroup={() => {}}
         executionTargetId={undefined}
       />,
     );
-    const shell = "rounded-xl border border-border/45 bg-card/25 px-2 py-1.5";
-    expect(subagents).toContain(shell);
-    expect(workLog).toContain(shell);
-    expect(subagents).toContain("Subagents (2)");
+    expect(workLog).toMatch(/<details data-slot="activity-accordion" data-variant="section"/);
     expect(workLog).toContain("Work log (2)");
-    expect(subagents).toContain("Show 1 more");
-    expect(workLog).toContain("Show 1 more");
-    expect(subagents).toContain("items-center justify-between");
-    expect(workLog).toContain("items-center justify-between");
-    expect(subagents.match(/text-xs/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
-    expect(subagents).toContain("text-[9px]");
-    expect(subagents).toContain("sm:text-[9px]");
-    expect(subagents).toContain("text-blue-600 dark:text-blue-400");
-    expect(subagents).toContain(">Working<");
+    expect(headerActions(workLog)).toContain("Show 1 more");
+    expect(workLog.slice(workLog.indexOf('data-slot="activity-accordion-panel"'))).not.toContain(
+      "Show 1 more",
+    );
+    expect(workLog).not.toContain("rounded-xl border border-border/45 bg-card/25");
+
+    const single = renderToStaticMarkup(
+      <MessagesTimelineWorkGroup
+        row={workRow([{ id: "tool", tone: "tool", label: "Read file" }])}
+        isExpanded={false}
+        onToggleWorkGroup={() => {}}
+        executionTargetId={undefined}
+      />,
+    );
+    expect(single).toMatch(/<details data-slot="activity-accordion" data-variant="section"/);
+    expect(single).toContain("Tool calls (1)");
+    expect(single).not.toContain('data-slot="activity-accordion-actions"');
+    expect(single.slice(single.indexOf('data-slot="activity-accordion-panel"'))).toContain(
+      "Read file",
+    );
+    expect(single).toContain("group-hover/work-log:opacity-100");
+  });
+
+  it("keeps the live card in the shared conversation column used by timeline rows", () => {
+    const markup = renderToStaticMarkup(<ChatAgentActivityFeed agents={[agent("live")]} />);
+    expect(markup).toContain(`class="${CHAT_COLUMN_CLASS_NAME} mt-2 mb-8"`);
   });
 
   it("anchors completion to its turn before later user and assistant messages", () => {

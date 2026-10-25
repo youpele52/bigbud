@@ -28,6 +28,34 @@ const available = {
 } as const;
 
 describe("ServerProviderUsageLimits", () => {
+  it("decodes display-only banked resets without private grant identifiers", () => {
+    const decoded = Schema.decodeUnknownSync(ServerProviderUsageLimits)({
+      ...available,
+      source: "codex-app-server",
+      manualResets: {
+        availableCount: 3,
+        availableExpiries: ["2026-11-01T12:00:00.000Z", null],
+        detailsComplete: false,
+        credits: [{ id: "private-credit-id" }],
+      },
+    });
+    expect(decoded.manualResets).toEqual({
+      availableCount: 3,
+      availableExpiries: ["2026-11-01T12:00:00.000Z", null],
+      detailsComplete: false,
+    });
+    expect(JSON.stringify(decoded)).not.toContain("private-credit-id");
+  });
+
+  it.each([-1, 1.5, Infinity, "2"])("rejects invalid banked reset counts: %s", (availableCount) => {
+    expect(() =>
+      Schema.decodeUnknownSync(ServerProviderUsageLimits)({
+        ...available,
+        manualResets: { availableCount, availableExpiries: [], detailsComplete: false },
+      }),
+    ).toThrow();
+  });
+
   it.each(["codex-app-server", "cursor-dashboard", "opencode-go-api"])(
     "decodes %s without exposing raw credentials",
     (source) => {

@@ -39,6 +39,7 @@ export const SessionConfiguredPayload = Schema.Struct({
 export type SessionConfiguredPayload = typeof SessionConfiguredPayload.Type;
 
 export const SessionStateChangedPayload = Schema.Struct({
+  retainedFamily: Schema.optional(Schema.Boolean),
   state: RuntimeSessionState,
   reason: Schema.optional(TrimmedNonEmptyStringSchema),
   detail: Schema.optional(Schema.Unknown),

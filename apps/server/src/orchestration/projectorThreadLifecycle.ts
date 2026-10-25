@@ -102,6 +102,7 @@ export function projectThreadCreated(
         queuedPrompts: [],
         pendingInterruptFlushIntent: null,
         pendingTurnControlOperation: null,
+        pendingTurnStart: null,
         // A fork holding the source's uncertain message starts with its queue held (plan D17).
         queueHold: payload.forkOrigin?.pendingDelivery === "held",
         createdAt: payload.createdAt,

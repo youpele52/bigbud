@@ -91,11 +91,16 @@ pub struct OperationRegistry {
     max_operations: usize,
     max_output_bytes: usize,
     retention: Duration,
+    max_terminal_output_bytes: usize,
     operations: HashMap<String, OperationRecord>,
 }
 
 #[path = "registry.rs"]
 mod registry;
+#[path = "registry.restore.rs"]
+mod registry_restore;
+#[path = "registry.retention.rs"]
+mod registry_retention;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AcceptResult {
