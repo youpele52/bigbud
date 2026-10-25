@@ -7,6 +7,7 @@ import { render } from "vitest-browser-react";
 import { __resetNativeApiForTests } from "../../../rpc/nativeApi";
 import { ThreadErrorBanner } from "../common/ThreadErrorBanner";
 import { usePromptQueue } from "./ChatView.promptQueue.logic";
+import { persistThreadSettingsForNextTurn } from "./chat-view/chat-view-runtime.persist";
 
 const threadId = ThreadId.makeUnsafe("thread-prompt-queue-errors");
 const projectedPrompts = [
@@ -17,6 +18,7 @@ function Harness(props: {
   onError: (message: string) => void;
   active?: boolean;
   onInterrupt?: (options?: { queuedPromptIdsAfterSettlement?: readonly string[] }) => Promise<void>;
+  persistSettingsBeforeRelease?: () => Promise<void>;
 }) {
   const queue = usePromptQueue({
     threadId,
@@ -25,6 +27,7 @@ function Harness(props: {
     onInterrupt: props.onInterrupt ?? (async () => {}),
     onError: props.onError,
     newId: () => "prompt-new",
+    persistSettingsBeforeRelease: props.persistSettingsBeforeRelease,
   });
   return (
     <>
@@ -40,7 +43,7 @@ function RenderedErrorHarness() {
   const [error, setError] = useState<string | null>(null);
   return (
     <>
-      <ThreadErrorBanner error={error} onDismiss={() => setError(null)} />
+      <ThreadErrorBanner error={error} threadId={threadId} />
       <Harness onError={setError} />
     </>
   );
@@ -124,6 +127,7 @@ describe("usePromptQueue command rejection", () => {
     expect(dispatchCommand.mock.calls[1]?.[0]).toMatchObject({
       type: "thread.queued-prompt.flush",
       messageIds: ["prompt-1"],
+      userRelease: true,
     });
   });
 
@@ -138,5 +142,31 @@ describe("usePromptQueue command rejection", () => {
     expect(onInterrupt).toHaveBeenCalledWith({ queuedPromptIdsAfterSettlement: ["prompt-1"] });
     expect(dispatchCommand).not.toHaveBeenCalled();
     expect(document.querySelector("output")?.textContent).toBe("Projected prompt");
+  });
+
+  it("saves the composer's model on a held fork before Send now releases it", async () => {
+    const dispatchCommand = vi.fn(async (_command: unknown) => ({ sequence: 1 }));
+    window.nativeApi = { orchestration: { dispatchCommand } } as never;
+    __resetNativeApiForTests();
+    const persist = () =>
+      persistThreadSettingsForNextTurn({
+        threadId,
+        createdAt: "2026-08-01T00:00:01.000Z",
+        modelSelection: { provider: "claudeAgent", model: "sonnet" },
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        serverThread: {
+          modelSelection: { provider: "codex", model: "model-a" },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+        },
+      });
+    await render(<Harness onError={() => {}} persistSettingsBeforeRelease={persist} />);
+    await page.getByRole("button", { name: "Send now" }).click();
+    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledTimes(2));
+    expect(dispatchCommand.mock.calls.map((call) => (call[0] as { type: string }).type)).toEqual([
+      "thread.meta.update",
+      "thread.queued-prompt.flush",
+    ]);
   });
 });

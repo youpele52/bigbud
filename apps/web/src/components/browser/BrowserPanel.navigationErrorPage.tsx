@@ -41,6 +41,7 @@ export function BrowserPanelNavigationErrorPage({
       onReload={onReload}
       onGoBack={onGoBack}
       onVisitAnyway={onVisitAnyway}
+      externalUrl={agentControlled ? undefined : failure.validatedURL}
     />
   );
 }

@@ -5,12 +5,18 @@ import {
   ThreadId,
 } from "@bigbud/contracts";
 import { Effect, Equal, Schema } from "effect";
+import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
+import {
+  isLegacyOpencodeThread,
+  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+} from "@bigbud/shared/providerLifecycle";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
 import { mapProviderSessionStatusToOrchestrationStatus } from "./ProviderCommandReactorHelpers.ts";
 import { startProviderSession } from "./ProviderCommandReactorSessionOps.start.ts";
+import { assertActiveV2SessionLocation } from "./ProviderCommandReactorSessionOps.activeLocation.ts";
 import {
   ongoingProviderWorkError,
   capturedModelSelectionError,
@@ -23,7 +29,7 @@ import type {
 } from "./ProviderCommandReactorSessionOps.types.ts";
 
 import { sendTurnAttempt } from "./ProviderCommandReactorSessionOps.send.ts";
-import { withOneShotContextLimitRecovery } from "./ProviderCommandReactorSessionOps.recovery.ts";
+import { withTurnStartRecovery } from "./ProviderCommandReactorSessionOps.recovery.turnStart.ts";
 
 export const ensureSessionForThread = (services: SessionOpServices) =>
   Effect.fn("ensureSessionForThread")(function* (
@@ -42,6 +48,12 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
     const thread = readModel.threads.find((entry) => entry.id === threadId);
     if (!thread) {
       return yield* Effect.die(new Error(`Thread '${threadId}' was not found in read model.`));
+    }
+    if (isLegacyOpencodeThread(thread)) {
+      return yield* new ProviderValidationError({
+        operation: "ProviderCommandReactor.ensureSessionForThread",
+        issue: LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+      });
     }
     const desiredRuntimeMode = options?.runtimeMode ?? thread.runtimeMode;
     const currentProvider: import("@bigbud/contracts").ProviderKind | undefined = Schema.is(
@@ -73,7 +85,21 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       resolveThreadWorkspaceCwd({
         thread,
         projects: readModel.projects,
-      }) ?? resolveDefaultChatCwd(serverSettings);
+        defaultChatCwd: resolveDefaultChatCwd(serverSettings),
+      }) ??
+      (preferredProvider === "opencodeV2" ? undefined : resolveDefaultChatCwd(serverSettings));
+    if (
+      !effectiveCwd ||
+      (preferredProvider === "opencodeV2" &&
+        !readModel.projects.some(
+          (project) => project.id === thread.projectId && !project.deletedAt,
+        ))
+    ) {
+      return yield* new ProviderValidationError({
+        operation: "ProviderCommandReactor.ensureSessionForThread",
+        issue: `Thread '${threadId}' has no canonical native Location; no local/private fallback.`,
+      });
+    }
     const resolveActiveSession = (tId: ThreadId) =>
       providerService
         .listSessions()
@@ -119,6 +145,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       });
 
     const activeSession = yield* resolveActiveSession(threadId);
+    yield* assertActiveV2SessionLocation(activeSession, effectiveCwd);
     // Per-turn callers always supply their resolved runtime. Preserve existing
     // explicit session-reconfiguration behavior when no turn override is given.
     const ongoingWorkError =
@@ -207,7 +234,11 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
     if (ongoingWorkError) return yield* ongoingWorkError;
 
     const startedSession = yield* start(
-      options?.restartFreshIfInactive ? { fresh: true } : undefined,
+      options?.restartFreshIfInactive
+        ? { fresh: true }
+        : options?.resumeCursor !== undefined
+          ? { resumeCursor: options.resumeCursor }
+          : undefined,
     );
     capabilityContextStates.delete(threadId);
     yield* bindSessionToThread(startedSession);
@@ -219,15 +250,29 @@ export const sendTurnForThread = (services: SessionOpServices) =>
     const thread = yield* services.resolveThread(input.threadId);
     if (!thread) return;
     const effectiveInput = { ...input, ...resolveTurnExecutionSettings(thread, input) };
-    yield* withOneShotContextLimitRecovery({
+    const attachmentIssue =
+      providerAttachmentIssue(
+        thread.session?.providerName ?? effectiveInput.modelSelection.provider,
+        input.attachments,
+      ) ?? providerAttachmentIssue(effectiveInput.modelSelection.provider, input.attachments);
+    if (attachmentIssue)
+      return yield* new ProviderValidationError({
+        operation: "ProviderCommandReactor.sendTurnForThread",
+        issue: attachmentIssue,
+      });
+    yield* withTurnStartRecovery({
       threadId: input.threadId,
+      provider: effectiveInput.modelSelection.provider,
       providerService: services.providerService,
+      orchestrationEngine: services.orchestrationEngine,
       states: services.capabilityContextStates,
-      attempt: () => sendTurnAttempt(services, ensureSessionForThread(services))(effectiveInput),
+      attempt: (recovery, dispatch) =>
+        sendTurnAttempt(
+          services,
+          ensureSessionForThread(services),
+        )({ ...effectiveInput, ...(recovery ? { recovery } : {}), dispatch }),
     });
   });
 
-export {
-  maybeGenerateAndRenameWorktreeBranchForFirstTurn,
-  maybeGenerateThreadTitleForFirstTurn,
-} from "./ProviderCommandReactorSessionOps.firstTurn.ts";
+export { maybeGenerateAndRenameWorktreeBranchForFirstTurn } from "./ProviderCommandReactorSessionOps.firstTurn.ts";
+export { maybeGenerateThreadTitleForFirstTurn } from "./ProviderCommandReactorSessionOps.title.ts";

@@ -133,18 +133,18 @@ export const PendingApprovalDialog = memo(function PendingApprovalDialog({
               {workingDirectory ? (
                 <>
                   <dt className="text-muted-foreground">Directory</dt>
-                  <dd className="break-all font-mono text-xs text-foreground">
+                  <dd className="break-all text-sm font-light text-foreground">
                     {workingDirectory}
                   </dd>
                 </>
               ) : null}
             </dl>
           </div>
-          {approval.detail ? (
+          {approval.executionIntent || approval.detail ? (
             <div className="rounded-xl border border-border/70 bg-muted/24 p-3">
               <p className="mb-2 font-medium text-sm">Requested action</p>
               <pre className="overflow-x-auto whitespace-pre-wrap break-words font-mono text-xs text-foreground">
-                {approval.detail}
+                {approval.executionIntent?.content ?? approval.detail}
               </pre>
             </div>
           ) : (

@@ -4,12 +4,11 @@ import type {
   ServerProvider,
   ServerProviderModel,
 } from "@bigbud/contracts";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 
 import { capabilitiesFromManagedModel } from "./managedServerCatalog.effort.ts";
 import { providerModelsFromSettings } from "./providerSnapshot";
 import { getSubProviderDisplayName } from "./subProviderDisplayNames";
-import { runCoordinatedProviderProbe } from "./providerProbeCoordinator.ts";
 
 interface ManagedCatalogModel {
   readonly id: string;
@@ -73,7 +72,8 @@ export function resolveManagedServerCatalog(input: {
   };
 }
 
-export const enrichManagedServerCatalog = Effect.fn("enrichManagedServerCatalog")(function* <
+/** Caller owns the source-attempt probe permit and deadline; never reacquire them here. */
+export const discoverManagedServerCatalog = Effect.fn("discoverManagedServerCatalog")(function* <
   E,
   R,
 >(input: {
@@ -93,16 +93,7 @@ export const enrichManagedServerCatalog = Effect.fn("enrichManagedServerCatalog"
         durationMs: 0,
       },
     });
-  const result = yield* runCoordinatedProviderProbe(input.catalogSnapshot);
-  if (Option.isNone(result)) {
-    yield* Effect.logWarning("provider model catalog refresh timed out", {
-      provider: input.provider,
-    });
-    yield* publishUnavailable(new Date().toISOString());
-    return;
-  }
-
-  const snapshot = result.value;
+  const snapshot = yield* input.catalogSnapshot;
   if (snapshot.failure?.classification === "retryable") {
     yield* Effect.logWarning("provider model catalog refresh failed", {
       provider: input.provider,

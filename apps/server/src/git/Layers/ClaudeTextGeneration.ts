@@ -34,6 +34,7 @@ import {
 import { normalizeClaudeModelOptionsWithCapabilities } from "@bigbud/shared/model";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { getClaudeModelCapabilities } from "../../provider/Layers/Claude/Provider.ts";
+import { makeGeneratePromptSuggestion } from "./TextGeneration.promptSuggestion.ts";
 
 const CLAUDE_TIMEOUT_MS = 180_000;
 
@@ -80,7 +81,8 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       | "generatePrContent"
       | "generateBranchName"
       | "generateThreadTitle"
-      | "generateThreadElevatorSummary";
+      | "generateThreadElevatorSummary"
+      | "generatePromptSuggestion";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -366,6 +368,15 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     generateBranchName,
     generateThreadTitle,
     generateThreadElevatorSummary,
+    generatePromptSuggestion: makeGeneratePromptSuggestion({
+      provider: "claudeAgent",
+      run: ({ outputSchema, ...args }) =>
+        runClaudeJson({
+          ...args,
+          operation: "generatePromptSuggestion",
+          outputSchemaJson: outputSchema,
+        }),
+    }),
   } satisfies TextGenerationShape;
 });
 

@@ -9,10 +9,11 @@ pub(super) fn spawn_pty_job(
     subscribers: Subscribers,
     job: crate::pty::PtyJob,
 ) {
+    let completion = super::job_lifecycle::Completion::begin();
     let pty_id = job.handle.id.clone();
-    let pid = job.handle.pid;
     std::thread::spawn(move || {
-        crate::pty::run_events(job.reader, pid, |event| match event {
+        let _completion = completion;
+        crate::pty::run_events(job.reader, &job.handle, |event| match event {
             crate::pty::PtyEvent::Output(bytes) => {
                 let response = sessions
                     .lock()
@@ -41,7 +42,9 @@ pub(super) fn spawn_process_job(
     subscribers: Subscribers,
     job: ProcessJob,
 ) {
+    let completion = super::job_lifecycle::Completion::begin();
     std::thread::spawn(move || {
+        let _completion = completion;
         let operation_id = job.operation_id.clone();
         let (output_sender, output_receiver) = mpsc::channel();
         let process_thread = std::thread::spawn({
@@ -82,6 +85,8 @@ pub(super) fn spawn_process_job(
             .ok()
             .and_then(|mut session| session.complete_streamed_process_job(job, result).ok());
         if let Some(responses) = responses {
+            #[cfg(test)]
+            super::test_hooks::completion_barrier(&operation_id);
             let _ = broadcast_responses(&subscribers, &operation_id, responses);
             remove_all_subscribers(&subscribers, &operation_id);
         }

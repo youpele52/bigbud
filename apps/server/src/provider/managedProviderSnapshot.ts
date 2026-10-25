@@ -26,6 +26,9 @@ function preserveLastGoodUsageLimits(
   const previous = current.usageLimits;
   if (
     !probed.enabled ||
+    // HTTP readers retain values only after matching their private credential scope.
+    // Codex has no account identity here, so never inherit another account's quota.
+    next?.source !== "claude-agent-sdk" ||
     next?.status !== "error" ||
     (previous?.status !== "available" && previous?.status !== "stale")
   ) {

@@ -1,6 +1,6 @@
 import { type AppCheckStatus } from "../lib/checkStatus";
 import type { ServerVerifyExecutionTargetResult } from "@bigbud/contracts/server/server";
-import { getPassphraseProtectedSshKeyPath, getPasswordProtectedSshTargetLabel } from "../lib/ssh";
+import { getSshAuthPrompt } from "../lib/ssh";
 import type { RemoteExecutionAuthMode } from "../stores/remoteAccess/remoteAccess.store";
 
 export const REMOTE_EXECUTION_FOREGROUND_TIMEOUT_MS = 5_000;
@@ -62,25 +62,22 @@ function resolveRemoteExecutionErrorTip(errorMessage: string): string {
 export function resolveRemoteExecutionFailureStatus(
   errorMessage: string,
 ): RemoteExecutionCheckStatus {
-  const keyPath = getPassphraseProtectedSshKeyPath(errorMessage);
-  if (keyPath) {
+  const prompt = getSshAuthPrompt(errorMessage);
+  if (prompt) {
     return {
       status: "auth_required",
-      message: errorMessage,
-      tip: "Enter the SSH key passphrase to finish verifying remote access.",
-      authMode: "ssh-key-passphrase",
-      promptLabel: keyPath,
-    };
-  }
-
-  const targetLabel = getPasswordProtectedSshTargetLabel(errorMessage);
-  if (targetLabel) {
-    return {
-      status: "auth_required",
-      message: errorMessage,
-      tip: "Enter the SSH password to finish verifying remote access.",
-      authMode: "password",
-      promptLabel: targetLabel,
+      message:
+        prompt.mode === "host-trust"
+          ? "SSH server identity confirmation is required."
+          : errorMessage,
+      tip:
+        prompt.mode === "host-trust"
+          ? "Verify and approve the server fingerprint to continue."
+          : prompt.mode === "password"
+            ? "Enter the SSH password to finish verifying remote access."
+            : "Enter the SSH key passphrase to finish verifying remote access.",
+      authMode: prompt.mode,
+      promptLabel: prompt.label,
     };
   }
 

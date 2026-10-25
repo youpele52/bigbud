@@ -16,7 +16,13 @@ import {
   queuedPromptMatchesCommand,
   resolvePromptReferences,
 } from "./ThreadPromptAdmission.logic.ts";
+import { countedQueuedPrompts } from "./QueuedPromptPolicy.logic.ts";
 import { isThreadTurnDispatchBlocked } from "./ThreadDispatchSafety.logic.ts";
+import {
+  hasSleepRecoveryOrigin,
+  verifiedOrchestraAssignmentSegments,
+} from "./ThreadMessageOrigin.logic.ts";
+import { requireThreadAttachmentsSupported } from "./ThreadAttachmentAdmission.ts";
 
 export function requireThreadReadyForMutation(input: {
   readonly thread: OrchestrationThread;
@@ -63,7 +69,16 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
     threadId: command.threadId,
   });
   yield* requireThreadReadyForMutation({ thread: targetThread, command });
+  yield* requireThreadAttachmentsSupported(targetThread, command);
   if (isThreadTurnDispatchBlocked(targetThread)) {
+    // The thread got busy after the coordinator's idle check: user activity wins.
+    if (hasSleepRecoveryOrigin(command.message)) {
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail: "A sleep recovery continuation is sent only to an idle thread; it is not queued.",
+        code: "prompt_not_queueable",
+      });
+    }
     const existing = targetThread.queuedPrompts?.find(
       (prompt) => prompt.id === command.message.messageId,
     );
@@ -76,13 +91,17 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
       }
       return [];
     }
+    // A message already in the transcript is redelivered only through its busy re-queue.
+    if (targetThread.messages.some((message) => message.id === command.message.messageId)) {
+      return [];
+    }
     const queuedEvent = yield* makeQueuedPromptEvent({
       command,
       readModel,
       targetThread,
       queuePosition: (targetThread.queuedPrompts?.length ?? 0) + 1,
     });
-    if ((targetThread.queuedPrompts?.length ?? 0) >= MAX_QUEUED_PROMPTS) {
+    if (countedQueuedPrompts(targetThread.queuedPrompts ?? []) >= MAX_QUEUED_PROMPTS) {
       return yield* new OrchestrationCommandInvariantError({
         commandType: command.type,
         detail: PROMPT_QUEUE_FULL_DETAIL,
@@ -97,6 +116,12 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
     targetThread,
   });
   const sourceProposedPlan = references.sourceProposedPlan;
+  const claimedOrchestraAssignment = command.message.originSegments?.some(
+    (segment) => segment.kind === "orchestraAssignment",
+  );
+  const originSegments = claimedOrchestraAssignment
+    ? verifiedOrchestraAssignmentSegments({ message: command.message, targetThread, readModel })
+    : command.message.originSegments;
   const userMessageEvent: Omit<OrchestrationEvent, "sequence"> = {
     ...withEventBase({
       aggregateKind: "thread",
@@ -112,6 +137,7 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
       text: command.message.text,
       attachments: command.message.attachments,
       ...(references.replyTo !== undefined ? { replyTo: references.replyTo } : {}),
+      ...(originSegments !== undefined ? { originSegments } : {}),
       turnId: null,
       streaming: false,
       createdAt: command.createdAt,
@@ -128,6 +154,11 @@ export const decideThreadTurnStartCommand = Effect.fn("decideThreadTurnStartComm
     causationEventId: userMessageEvent.eventId,
     type: "thread.turn-start-requested",
     payload: {
+      usageAttribution: {
+        provider: (command.modelSelection ?? targetThread.modelSelection).provider,
+        model: (command.modelSelection ?? targetThread.modelSelection).model,
+        interactionMode: command.interactionMode,
+      },
       threadId: command.threadId,
       messageId: command.message.messageId,
       ...(references.replyTo !== undefined ? { replyTo: references.replyTo } : {}),

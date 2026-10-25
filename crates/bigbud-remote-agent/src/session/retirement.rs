@@ -1,5 +1,3 @@
-use std::time::Instant;
-
 use super::AgentSession;
 
 impl AgentSession {
@@ -34,24 +32,20 @@ impl AgentSession {
 
     pub fn force_restart_work(&mut self) {
         for session in self.pty_sessions.values() {
-            if session
-                .handle
-                .snapshot()
-                .is_ok_and(|snapshot| snapshot.state == crate::pty::PtyState::Running)
-            {
+            if !session.handle.child_reaped() {
                 let _ = session.handle.force_kill();
             }
         }
     }
 
     fn restart_work_idle_inner(&mut self) -> bool {
-        let process_idle = !self.process_operations.has_live_operations(Instant::now());
-        let pty_idle = self.pty_sessions.values().all(|session| {
-            session
-                .handle
-                .snapshot()
-                .is_ok_and(|snapshot| snapshot.state != crate::pty::PtyState::Running)
-        });
+        let process_idle = !self.process_operations.has_live_operations();
+        let pty_idle = self
+            .pty_sessions
+            .values()
+            .all(|session| session.handle.native_settled());
+        #[cfg(unix)]
+        let pty_idle = pty_idle && crate::pty::pending_cleanup_settled();
         process_idle && pty_idle
     }
 
@@ -60,14 +54,13 @@ impl AgentSession {
     }
 
     pub fn is_idle_for_retirement(&mut self) -> bool {
-        let process_idle = !self.process_operations.has_live_operations(Instant::now());
-        let pty_idle = self.pty_sessions.values().all(|session| {
-            session
-                .handle
-                .snapshot()
-                .map(|snapshot| snapshot.state != crate::pty::PtyState::Running)
-                .unwrap_or(false)
-        });
+        let process_idle = !self.process_operations.has_live_operations();
+        let pty_idle = self
+            .pty_sessions
+            .values()
+            .all(|session| session.handle.native_settled());
+        #[cfg(unix)]
+        let pty_idle = pty_idle && crate::pty::pending_cleanup_settled();
         process_idle && pty_idle
     }
 }

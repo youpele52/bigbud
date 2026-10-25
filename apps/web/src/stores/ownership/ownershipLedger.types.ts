@@ -1,10 +1,12 @@
 import type { ProjectId, ProviderInteractionMode, RuntimeMode, ThreadId } from "@bigbud/contracts";
 import type { DraftThreadEnvMode } from "../composer/types.store";
+import type { WorktreeBinding } from "@bigbud/contracts/workspace/worktreeBinding.ts";
 
 export const OWNERSHIP_SCOPES = ["main", "compact"] as const;
 export type OwnershipScope = (typeof OWNERSHIP_SCOPES)[number];
 
 export interface OwnershipDraftRecord {
+  readonly worktreeBinding?: WorktreeBinding | undefined;
   readonly threadId: ThreadId;
   readonly projectId: ProjectId;
   readonly generation: number;

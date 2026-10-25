@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { getThreadStatusViaOrchestration } from "./ThreadOrchestrationTools.ts";
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
+import { requestedPayload } from "../orchestration/deciderThreads.delegationModelChoice.test.helpers.ts";
 
 const callerThreadId = ThreadId.makeUnsafe("caller-thread");
 const childThreadId = ThreadId.makeUnsafe("child-thread");
@@ -146,5 +147,43 @@ describe("getThreadStatusViaOrchestration", () => {
         threadId: childThreadId,
       }),
     ).rejects.toThrow("was not found");
+  });
+  it("returns requested vs used for a delegated child's model choice", async () => {
+    const repository = makeRepository(childThreadId, callerThreadId);
+    const requested = {
+      id: "choice-requested",
+      tone: "info",
+      kind: "delegation.model-choice-requested",
+      summary: "Choose a model",
+      payload: requestedPayload,
+      turnId: null,
+      createdAt: "2026-10-15T10:00:00.000Z",
+    };
+    const engine = {
+      getReadModel: () =>
+        Effect.succeed({
+          threads: [
+            makeThread(callerThreadId, callerProjectId),
+            makeThread(childThreadId, otherProjectId, { activities: [requested] }),
+          ],
+          projects: [],
+        }),
+    } as unknown as OrchestrationEngineShape;
+
+    await expect(
+      run({
+        orchestrationEngine: engine,
+        threadDelegationRepository: repository,
+        callerThreadId,
+        threadId: childThreadId,
+      }),
+    ).resolves.toMatchObject({
+      workflowStatus: "connecting",
+      modelChoice: {
+        status: "pending",
+        requested: requestedPayload.requested,
+        used: requestedPayload.fallback,
+      },
+    });
   });
 });

@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { ArrowUpRightIcon } from "lucide-react";
-import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { openLinkFromClick } from "~/lib/openLink";
 import { resolveAndPersistPreferredEditor } from "../../models/editor";
 import { ensureNativeApi } from "../../rpc/nativeApi";
 import { useServerAvailableEditors, useServerObservability } from "../../rpc/serverState";
@@ -10,21 +9,7 @@ import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { ABOUT_CHANGELOG_URL, ABOUT_LINKS } from "./AboutSettingsSection.links";
 import { AboutManualInstallRow, AboutVersionRow } from "./AboutSettingsSection.version";
 
-function useOpenAboutExternalUrl() {
-  const navigate = useNavigate();
-
-  return useCallback(
-    (url: string) => {
-      void navigate({ to: "/" }).then(() => {
-        openBrowserPanel({ url });
-      });
-    },
-    [navigate],
-  );
-}
-
 export function AboutSettingsSection() {
-  const openExternalUrl = useOpenAboutExternalUrl();
   const observability = useServerObservability();
   const availableEditors = useServerAvailableEditors();
   const [isOpeningLogsDirectory, setIsOpeningLogsDirectory] = useState(false);
@@ -90,7 +75,7 @@ export function AboutSettingsSection() {
             size="xs"
             variant="outline"
             className="gap-1"
-            onClick={() => openExternalUrl(ABOUT_CHANGELOG_URL)}
+            onClick={() => openLinkFromClick(ABOUT_CHANGELOG_URL)}
           >
             View changelog
             <ArrowUpRightIcon className="size-3 shrink-0" aria-hidden="true" />
@@ -106,7 +91,7 @@ export function AboutSettingsSection() {
                 variant="ghost"
                 size="sm"
                 className="gap-1.5 px-0 text-muted-foreground text-xs hover:bg-transparent"
-                onClick={() => openExternalUrl(url)}
+                onClick={() => openLinkFromClick(url)}
               >
                 {label}
                 <ArrowUpRightIcon className="size-3 shrink-0" aria-hidden="true" />
@@ -136,7 +121,7 @@ export function AboutSettingsSection() {
         description={diagnosticsDescription}
         status={
           <>
-            <span className="block break-all font-mono text-[11px] text-foreground">
+            <span className="block break-all text-sm font-light text-foreground">
               {logsDirectoryPath ?? "Resolving logs directory..."}
             </span>
             {openDiagnosticsError ? (

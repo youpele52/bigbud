@@ -6,7 +6,9 @@ import type {
   ThreadId,
   MessageId,
   ProjectId,
+  ServerProvider,
 } from "@bigbud/contracts";
+import type { ServerSettings } from "@bigbud/contracts/core/settings.ts";
 import type { Effect } from "effect";
 
 import type { ThreadWorkflowStatusSnapshot } from "../orchestration/ThreadWorkflowStatus.logic.ts";
@@ -14,8 +16,10 @@ import type { ThreadDelegationRepositoryShape } from "../persistence/Services/Th
 import type {
   listPinnedThreadsViaOrchestration,
   setThreadPinnedViaOrchestration,
-  createThreadViaOrchestration,
 } from "./ThreadOrchestrationTools.ts";
+import type { createThreadViaOrchestration } from "./ThreadOrchestrationTools.createThread.ts";
+import type { listAvailableModelsViaOrchestration } from "./ThreadOrchestrationTools.listAvailableModels.ts";
+import type { RecentModelSelection } from "./ThreadOrchestrationTools.modelChoice.usable.ts";
 import type { sendThreadMessageViaOrchestration } from "./ThreadOrchestrationTools.sendMessage.ts";
 import type {
   ListThreadsStatusFilter,
@@ -24,13 +28,20 @@ import type {
 import type { AgentWorkspaceToolInput } from "./AgentWorkspaceTools.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
+  readonly getSystemResources?: () => Effect.Effect<Record<string, unknown>, Error>;
   readonly workspace?: (
     input: AgentWorkspaceToolInput,
   ) => Effect.Effect<Record<string, unknown>, Error>;
   readonly rename: (input: {
     readonly threadId: ThreadId;
+    readonly targetThreadId?: ThreadId;
     readonly title: string;
-  }) => Effect.Effect<{ readonly title: string }, Error>;
+    readonly invocationId?: string;
+    readonly sourceMessageId?: MessageId;
+  }) => Effect.Effect<
+    { readonly title: string; readonly threadId?: ThreadId; readonly commandId?: string },
+    Error
+  >;
   readonly archive: (input: {
     readonly threadId: ThreadId;
   }) => Effect.Effect<{ readonly archived: true }, Error>;
@@ -63,7 +74,13 @@ export interface ThreadOrchestrationToolDispatcherShape {
     readonly task: string;
     readonly projectId?: ProjectId;
     readonly watchForCompletion: boolean;
+    /** Raw agent request; validated server-side and never a reason to fail (Goal 11). */
+    readonly modelSelection?: unknown;
   }) => ReturnType<typeof createThreadViaOrchestration>;
+  readonly listAvailableModels?: (input: {
+    readonly callerThreadId: ThreadId;
+    readonly limit?: number | undefined;
+  }) => ReturnType<typeof listAvailableModelsViaOrchestration>;
   readonly sendMessage?: (input: {
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
@@ -80,7 +97,28 @@ export interface ThreadOrchestrationToolDispatcherShape {
   }) => ReturnType<typeof listThreadsViaOrchestration>;
 }
 
+/**
+ * Runtime inputs of delegated model choice. The engine layer that installs the dispatcher cannot
+ * depend on provider layers, so a server layer installs these beside it (plan D9).
+ */
+export interface ThreadToolModelSources {
+  /** Cached snapshots only; the tool path never refreshes providers. */
+  readonly getProviders: Effect.Effect<ReadonlyArray<ServerProvider>>;
+  readonly getSettings: Effect.Effect<ServerSettings, Error>;
+  readonly listRecent: (limit: number) => Effect.Effect<ReadonlyArray<RecentModelSelection>, Error>;
+  readonly hasInteractiveClient: () => boolean;
+}
+
 let dispatcher: ThreadOrchestrationToolDispatcherShape | null = null;
+let modelSources: ThreadToolModelSources | null = null;
+
+export function setThreadToolModelSources(next: ThreadToolModelSources | null): void {
+  modelSources = next;
+}
+
+export function getThreadToolModelSources(): ThreadToolModelSources | null {
+  return modelSources;
+}
 
 export function setThreadOrchestrationToolDispatcher(
   next: ThreadOrchestrationToolDispatcherShape | null,

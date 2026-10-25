@@ -5,6 +5,21 @@ import { toSessionKey } from "./Manager.shell";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import type { TerminalSessionState } from "./Manager.types";
+import {
+  normalizeTerminalAgentDetection,
+  type TerminalAgentDetection,
+} from "./Manager.agentDetection.ts";
+
+function sameAgent(
+  left: TerminalSessionState["activeAgent"],
+  right: TerminalSessionState["activeAgent"],
+) {
+  return (
+    left?.id === right?.id &&
+    (left?.names.length ?? 0) === (right?.names.length ?? 0) &&
+    (left?.names.every((name, index) => name === right?.names[index]) ?? true)
+  );
+}
 
 export function pollAgentIdentityWith(
   ctx: ProcessLifecycleContext,
@@ -28,7 +43,12 @@ export function pollAgentIdentityWith(
           error: error.message,
         }).pipe(
           Effect.as(
-            Option.none<ReadonlyMap<number, TerminalSessionState["activeAgentProvider"]>>(),
+            Option.none<
+              ReadonlyMap<
+                number,
+                TerminalAgentDetection | TerminalSessionState["activeAgentProvider"]
+              >
+            >(),
           ),
         ),
       ),
@@ -37,7 +57,9 @@ export function pollAgentIdentityWith(
 
     for (const session of localSessions) {
       if (!result.value.has(session.pid)) continue;
-      const detectedProvider = result.value.get(session.pid) ?? null;
+      const detection = normalizeTerminalAgentDetection(result.value.get(session.pid) ?? null);
+      const detectedProvider = detection?.provider ?? null;
+      const detectedAgent = detection?.agent ?? null;
       const event = yield* ctx.modifyManagerState((managerState) => {
         const current = managerState.sessions.get(
           toSessionKey(session.threadId, session.terminalId),
@@ -51,7 +73,7 @@ export function pollAgentIdentityWith(
           return [null, managerState] as const;
         }
 
-        if (detectedProvider === null && current.activeAgentProvider !== null) {
+        if (detection === null && (current.activeAgent || current.activeAgentProvider !== null)) {
           current.agentIdentityMisses += 1;
           if (current.agentIdentityMisses < 2) {
             return [null, managerState] as const;
@@ -60,10 +82,14 @@ export function pollAgentIdentityWith(
           current.agentIdentityMisses = 0;
         }
 
-        if (current.activeAgentProvider === detectedProvider) {
+        if (
+          current.activeAgentProvider === detectedProvider &&
+          sameAgent(current.activeAgent, detectedAgent)
+        ) {
           return [null, managerState] as const;
         }
         current.activeAgentProvider = detectedProvider;
+        current.activeAgent = detectedAgent;
         current.updatedAt = nextTerminalTimestamp(current.updatedAt);
         return [
           {
@@ -73,6 +99,7 @@ export function pollAgentIdentityWith(
             createdAt: current.updatedAt,
             runtimeGeneration: current.runtimeGeneration,
             provider: detectedProvider,
+            agent: detectedAgent,
           },
           managerState,
         ] as const;

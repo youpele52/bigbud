@@ -70,4 +70,23 @@ describe("prepare message submission state", () => {
     );
     expect(load.mock.calls).toEqual([[threadId, "history"]]);
   });
+
+  it.each([
+    ["thread.delegation.model-choice.expire", { resolvedBy: "timeout" }],
+    ["thread.delegation.model-choice.pick", { modelSelection: { provider: "codex", model: "m" } }],
+  ] as const)("loads full activity history before resolving a held %s", async (type, extra) => {
+    // The startup window omits idle threads' activities; resolution must see the pending choice.
+    const load = vi.fn(() => Effect.sync(() => undefined));
+    await Effect.runPromise(
+      makePrepareCommandState({ threadStateHydrator: { load } })({
+        type,
+        commandId: CommandId.makeUnsafe("resolve"),
+        threadId,
+        choiceId: "choice",
+        createdAt: "2026-10-15T00:00:00.000Z",
+        ...extra,
+      } as OrchestrationCommand),
+    );
+    expect(load.mock.calls).toEqual([[threadId, "history"]]);
+  });
 });

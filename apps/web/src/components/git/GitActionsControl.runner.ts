@@ -56,6 +56,7 @@ export interface GitActionRunnerCallbacks {
     onConfirmed?: () => void;
     filePaths?: string[];
   }) => void;
+  onActionError?: (error: unknown) => void;
 }
 
 interface UseGitActionRunnerInput {
@@ -89,7 +90,12 @@ export function useGitActionRunner({
   const activeGitActionProgressRef = useRef<ActiveGitActionProgress | null>(null);
 
   const runImmediateGitActionMutation = useMutation(
-    gitRunStackedActionMutationOptions({ cwd: gitCwd, executionTargetId, queryClient }),
+    gitRunStackedActionMutationOptions({
+      cwd: gitCwd,
+      executionTargetId,
+      queryClient,
+      threadId: activeServerThread?.id,
+    }),
   );
 
   const isRunning = runImmediateGitActionMutation.isPending;
@@ -175,7 +181,9 @@ export function useGitActionRunner({
     }: RunGitActionWithToastInput) => {
       const actionStatus = statusOverride ?? gitStatusForActions;
       const actionBranch = actionStatus?.branch ?? null;
-      const actionIsDefaultBranch = featureBranch ? false : isDefaultBranch;
+      const actionIsDefaultBranch = featureBranch
+        ? false
+        : (statusOverride?.isDefaultBranch ?? isDefaultBranch);
       const actionCanCommit =
         action === "commit" || action === "commit_push" || action === "commit_push_pr";
       const includesCommit =
@@ -358,6 +366,7 @@ export function useGitActionRunner({
           description: err instanceof Error ? err.message : "An error occurred.",
           data: scopedToastData,
         });
+        callbacks.onActionError?.(err);
       }
     },
   );

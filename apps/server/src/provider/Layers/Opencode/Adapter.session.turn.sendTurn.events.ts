@@ -5,8 +5,10 @@ import type { TurnMethodDeps } from "./Adapter.session.ts";
 import type { PromptResultInfo, PromptResultPart } from "./Adapter.session.prompt.ts";
 import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
+import { normalizeOpencodeUsage } from "./Adapter.usage.ts";
 
 export function toPromptTurnEvents(input: {
+  readonly provider?: "opencode" | "kilocode";
   readonly record: ActiveOpencodeSession;
   readonly threadId: import("@bigbud/contracts").ThreadId;
   readonly turnId: TurnId;
@@ -27,26 +29,14 @@ export function toPromptTurnEvents(input: {
     }
 
     if (promptInfo.tokens) {
-      const inputTokens = promptInfo.tokens.input ?? 0;
-      const outputTokens = promptInfo.tokens.output ?? 0;
-      const cachedInputTokens = promptInfo.tokens.cache?.read ?? 0;
-      const usedTokens = inputTokens + outputTokens + cachedInputTokens;
-
-      if (usedTokens > 0) {
-        const usage = {
-          usedTokens,
-          totalProcessedTokens: usedTokens,
-          ...(inputTokens > 0 ? { inputTokens, lastInputTokens: inputTokens } : {}),
-          ...(cachedInputTokens > 0
-            ? { cachedInputTokens, lastCachedInputTokens: cachedInputTokens }
-            : {}),
-          ...(outputTokens > 0 ? { outputTokens, lastOutputTokens: outputTokens } : {}),
-          ...(usedTokens > 0 ? { lastUsedTokens: usedTokens } : {}),
-        };
+      const normalized = normalizeOpencodeUsage(promptInfo.tokens);
+      if (normalized) {
+        const { usage, canonical } = normalized;
         const accounting = makeTokenUsageAccounting({
           scope: "item",
           scopeId: promptInfo.id,
           usage,
+          canonical,
         });
         record.lastUsage = usage;
         events.push(
@@ -189,6 +179,15 @@ export function toPromptTurnEvents(input: {
           "turn.completed",
           {
             state: "completed",
+            ...(promptInfo.modelID
+              ? {
+                  actualModelSelection: {
+                    provider: input.provider ?? "opencode",
+                    model: promptInfo.modelID,
+                    ...(promptInfo.providerID ? { subProviderID: promptInfo.providerID } : {}),
+                  },
+                }
+              : {}),
             ...(record.lastUsage ? { usage: record.lastUsage } : {}),
           },
           { turnId },

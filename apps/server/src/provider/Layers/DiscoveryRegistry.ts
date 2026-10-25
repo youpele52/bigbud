@@ -22,6 +22,7 @@ import { ServerConfig } from "../../startup/config";
 import { ServerSettingsService } from "../../ws/serverSettings";
 import { PluginRegistry } from "../../plugins/Services/PluginRegistry";
 import { DiscoveryRegistry, type DiscoveryRegistryShape } from "../Services/DiscoveryRegistry";
+import { ProviderRegistry } from "../Services/ProviderRegistry";
 import {
   buildDiscoveryConfigDescriptors,
   buildDiscoveryFileDescriptors,
@@ -33,6 +34,8 @@ import {
 } from "./DiscoveryRegistry.parse.ts";
 import { createDiscoveryWatchStream } from "./DiscoveryRegistry.watch.ts";
 import { buildPluginSkillDescriptors, withPluginProvenance } from "./DiscoveryRegistry.plugins.ts";
+import { opencodeMarkdownAgentSystemHash } from "../opencodeAgentSource.ts";
+import { buildNativeDiscoveryEntries } from "./DiscoveryRegistry.native.ts";
 
 const EMPTY_DISCOVERY: ServerDiscoveryCatalog = {
   agents: [],
@@ -132,6 +135,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
   const config = yield* ServerConfig;
   const serverSettings = yield* ServerSettingsService;
   const pluginRegistry = yield* Effect.serviceOption(PluginRegistry);
+  const providerRegistry = yield* Effect.serviceOption(ProviderRegistry);
   const fallbackRescanInterval = resolveDiscoveryFallbackRescanInterval();
   const changesPubSub = yield* Effect.acquireRelease(
     PubSub.unbounded<ServerDiscoveryCatalog>(),
@@ -224,18 +228,26 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
           fs.readFileString(descriptor.path).pipe(
             Effect.map((content) => {
               const parsed = parseDiscoveryFile({ ...descriptor, content });
-              return parsed.kind === "skill"
-                ? {
-                    ...parsed,
-                    entry: withPluginProvenance(
-                      parsed.entry,
-                      descriptor as {
-                        readonly pluginId?: string;
-                        readonly pluginRevision?: string;
-                      },
-                    ),
-                  }
-                : parsed;
+              return {
+                ...parsed,
+                systemPromptHash:
+                  parsed.kind === "agent" &&
+                  descriptor.provider === "opencode" &&
+                  /\.(md|markdown)$/i.test(descriptor.path)
+                    ? opencodeMarkdownAgentSystemHash(content)
+                    : undefined,
+                ...(parsed.kind === "skill"
+                  ? {
+                      entry: withPluginProvenance(
+                        parsed.entry,
+                        descriptor as {
+                          readonly pluginId?: string;
+                          readonly pluginRevision?: string;
+                        },
+                      ),
+                    }
+                  : {}),
+              };
             }),
             Effect.catch(() => Effect.succeed(null)),
           ),
@@ -270,6 +282,15 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
 
       for (const entries of discoveredConfigAgents) {
         agentEntries.push(...entries);
+      }
+      if (Option.isSome(providerRegistry)) {
+        const providers = yield* providerRegistry.value.getProviders;
+        const native = providers.find(
+          (provider) => provider.provider === "opencodeV2" && provider.enabled,
+        );
+        const nativeCatalog = buildNativeDiscoveryEntries(native, discoveredFileEntries);
+        agentEntries.push(...nativeCatalog.agents);
+        skillEntries.push(...nativeCatalog.skills);
       }
 
       const catalog = {
@@ -313,6 +334,10 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
     );
   }
   const watchTargets = yield* resolveWatchTargets();
+  if (Option.isSome(providerRegistry))
+    yield* Stream.runForEach(providerRegistry.value.streamChanges, () => syncCatalog()).pipe(
+      Effect.forkScoped,
+    );
   yield* Effect.logInfo(
     `[DiscoveryRegistry] watching ${watchTargets.length} roots for auto-discovery changes`,
   );

@@ -18,6 +18,7 @@ export function makeReactorProvider(
         readonly interruptTurnFailure?: string;
         readonly interruptTurnLeavesSessionActive?: boolean;
         readonly stopSessionFailure?: string;
+        readonly sessionRecovery?: "resume-restart" | "fresh-restart" | "unsupported";
       }
     | undefined,
   now: string,
@@ -55,6 +56,12 @@ export function makeReactorProvider(
           : "full-access",
       ...(modelSelection.model !== undefined ? { model: modelSelection.model } : {}),
       threadId,
+      ...(typeof providerInput === "object" &&
+      providerInput !== null &&
+      "cwd" in providerInput &&
+      typeof providerInput.cwd === "string"
+        ? { cwd: providerInput.cwd }
+        : {}),
       resumeCursor: resumeCursor ?? { opaque: `resume-${sessionIndex}` },
       createdAt: now,
       updatedAt: now,
@@ -161,6 +168,7 @@ export function makeReactorProvider(
     getCapabilities: (_provider) =>
       Effect.succeed({
         sessionModelSwitch: input?.sessionModelSwitch ?? "in-session",
+        ...(input?.sessionRecovery ? { sessionRecovery: input.sessionRecovery } : {}),
       }),
     rollbackConversation: () => unsupported(),
     get streamEvents() {

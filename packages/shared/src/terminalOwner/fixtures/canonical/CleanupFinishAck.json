@@ -1,0 +1,18 @@
+{
+  "type": "FinishAck",
+  "input": {
+    "handshakeId": {
+      "$bytes": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b"
+    },
+    "sessionId": {
+      "$bytes": "2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c"
+    },
+    "finishDigest": {
+      "$bytes": "62d45c80b889e2e98cdd69b953d5f9c89edeb99dd0e202db177d32092a0ec8fb"
+    },
+    "ackProof": {
+      "$bytes": "e03265101497bd1cfcff090e02b679e33993b838336300659e0193a253dcdac0"
+    }
+  },
+  "canonical": "2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c62d45c80b889e2e98cdd69b953d5f9c89edeb99dd0e202db177d32092a0ec8fbe03265101497bd1cfcff090e02b679e33993b838336300659e0193a253dcdac0"
+}

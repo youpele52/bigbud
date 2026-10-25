@@ -44,6 +44,7 @@ import {
   type ServerGetAutomationInput,
   type ServerGetAutomationResult,
   type ServerGetUsageSummaryInput,
+  type ProviderStopSubagentInput,
   type ServerListAllAutomationsInput,
   type ServerListAllAutomationsResult,
   type ServerListAutomationRunsInput,
@@ -90,12 +91,14 @@ import type {
 
 import type { WsRpcProtocolClient } from "./protocol";
 import type { SubscriptionRetryDelay } from "./wsTransport.retry";
+import type { WsInitialApplicationDeadline } from "./wsTransport.initialValue";
 
 export type RpcTag = keyof WsRpcProtocolClient & string;
 type RpcMethod<TTag extends RpcTag> = WsRpcProtocolClient[TTag];
 type RpcInput<TTag extends RpcTag> = Parameters<RpcMethod<TTag>>[0];
 
 export interface StreamSubscriptionOptions {
+  readonly initialApplication?: WsInitialApplicationDeadline;
   readonly retryDelay?: SubscriptionRetryDelay;
   readonly onError?: (error: unknown) => void;
   readonly onResubscribe?: () => void;
@@ -122,16 +125,31 @@ export interface GitRunStackedActionOptions {
 }
 
 export interface WsRpcClient {
+  readonly worktrees: NonNullable<NativeApi["worktrees"]>;
   readonly dispose: () => Promise<void>;
   readonly reconnect: () => Promise<void>;
+  /** Skips the current reconnect backoff wait; returns whether a wait was cut short. */
+  readonly reconnectNow: () => boolean;
   readonly terminal: {
+    readonly wslDistributions: RpcUnaryNoArgMethod<typeof WS_METHODS.terminalWslDistributions>;
+    readonly snapshot: RpcUnaryMethod<typeof WS_METHODS.terminalSnapshot>;
     readonly open: RpcUnaryMethod<typeof WS_METHODS.terminalOpen>;
     readonly write: RpcUnaryMethod<typeof WS_METHODS.terminalWrite>;
     readonly resize: RpcUnaryMethod<typeof WS_METHODS.terminalResize>;
     readonly clear: RpcUnaryMethod<typeof WS_METHODS.terminalClear>;
     readonly restart: RpcUnaryMethod<typeof WS_METHODS.terminalRestart>;
     readonly close: RpcUnaryMethod<typeof WS_METHODS.terminalClose>;
-    readonly onEvent: RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>;
+    readonly onEvent: (
+      listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>>[0],
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
+    readonly subscribeSession: (
+      input: RpcInput<typeof WS_METHODS.subscribeTerminalSession>,
+      listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeTerminalSession>>[0],
+      options?: StreamSubscriptionOptions,
+    ) => () => void;
+    readonly ackOutput: RpcUnaryMethod<typeof WS_METHODS.terminalOutputAck>;
+    readonly search: RpcUnaryMethod<typeof WS_METHODS.terminalSearch>;
   };
   readonly browser: {
     readonly completeCommand: (input: VisibleBrowserCommandResult) => Promise<void>;
@@ -226,8 +244,11 @@ export interface WsRpcClient {
     readonly ping: RpcUnaryNoArgMethod<typeof WS_METHODS.serverPing>;
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
     readonly refreshProviders: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshProviders>;
+    readonly refreshUsageLimits: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshUsageLimits>;
     readonly activateCliProxy: RpcUnaryNoArgMethod<typeof WS_METHODS.serverActivateCliProxy>;
     readonly verifyExecutionTarget: RpcUnaryMethod<typeof WS_METHODS.serverVerifyExecutionTarget>;
+    readonly listSshConfigHosts: RpcUnaryMethod<typeof WS_METHODS.serverListSshConfigHosts>;
+    readonly listRemoteFolders: RpcUnaryMethod<typeof WS_METHODS.serverListRemoteFolders>;
     readonly installRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverInstallRemoteAgent>;
     readonly connectRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverConnectRemoteAgent>;
     readonly restartRemoteAgent: (
@@ -241,6 +262,7 @@ export interface WsRpcClient {
     >;
     readonly unlockSshKey: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshKey>;
     readonly unlockSshPassword: RpcUnaryMethod<typeof WS_METHODS.serverUnlockSshPassword>;
+    readonly trustSshHost: RpcUnaryMethod<typeof WS_METHODS.serverTrustSshHost>;
     readonly upsertKeybinding: RpcUnaryMethod<typeof WS_METHODS.serverUpsertKeybinding>;
     readonly getSettings: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetSettings>;
     readonly updateSettings: (
@@ -264,8 +286,14 @@ export interface WsRpcClient {
     readonly setThreadPinned: RpcUnaryMethod<typeof WS_METHODS.serverSetThreadPinned>;
     readonly readDocumentUrl: RpcUnaryMethod<typeof WS_METHODS.serverReadDocumentUrl>;
     readonly writeHandoffDocument: RpcUnaryMethod<typeof WS_METHODS.serverWriteHandoffDocument>;
+    readonly retryTextGeneration: (
+      input: import("@bigbud/contracts/server/rpc.textGeneration.ts").RetryThreadTextGenerationInput,
+    ) => Promise<void>;
     readonly startHandoffJob: (input: ServerStartHandoffJobInput) => Promise<ServerHandoffJob>;
     readonly getHandoffJob: (input: ServerGetHandoffJobInput) => Promise<ServerHandoffJob>;
+    readonly getOpencodeV2ThreadToolsSetup: (
+      input: ServerOpencodeV2ThreadToolsSetupInput,
+    ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
     readonly createMobileRemotePairing: (
       input: ServerCreateMobileRemotePairingInput,
     ) => Promise<ServerMobileRemotePairing>;
@@ -304,6 +332,10 @@ export interface WsRpcClient {
     readonly getUsageSummary: (
       input: ServerGetUsageSummaryInput,
     ) => Promise<ServerUsageSummaryResult>;
+    readonly stopSubagent: (input: ProviderStopSubagentInput) => Promise<void>;
+    readonly getWsConnectionDiagnostics: RpcUnaryMethod<
+      typeof WS_METHODS.serverGetWsConnectionDiagnostics
+    >;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   };
@@ -349,3 +381,7 @@ export interface WsRpcClient {
     ) => () => void;
   };
 }
+import type {
+  ServerOpencodeV2ThreadToolsSetupInput,
+  ServerOpencodeV2ThreadToolsSetupResult,
+} from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";

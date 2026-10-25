@@ -1,0 +1,14 @@
+{
+  "type": "ShutdownPtyReservation",
+  "input": {
+    "slot": 0,
+    "ptyId": {
+      "$bytes": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b"
+    },
+    "terminalGeneration": "1",
+    "resourceIdentity": {
+      "$bytes": "6464646464646464646464646464646464646464646464646464646464646464"
+    }
+  },
+  "canonical": "000000000b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b00000000000000016464646464646464646464646464646464646464646464646464646464646464"
+}

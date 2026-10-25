@@ -4,6 +4,14 @@
 **Status:** Implemented locally; Linux fixture validation pending; no commit, tag, issue, or push  
 **Operating parameters:** git tag `none`; issue ID `none`; push `no`
 
+## Consolidated historical handoff — 22 October, 2026
+
+The earlier `2026-09-07-remote-agent-implementation-status.md` handoff is retired. Its two-healthy-builds-plus-references policy is historical: the [two-version plan](2026-09-07-remote-agent-two-version-update-plan.md), residual corrections and this plan require at most two physical build digests, including candidates, with durable evidence retained and unsafe retirement deferred. Do not restore the old unbounded referenced-build policy.
+
+Carry forward the handoff's still-relevant boundaries: existing work remains generation-pinned; reclaim only a proven-dead controller's prepared, unsent reservation; never replay uncertain work, delete journals, or take over shared legacy state to force an upgrade. Managed Git routing and direct/custom SSH remain distinct. MCP/provider retries and Copilot filesystem handler recreation require stable originating invocation identity; where the SDK cannot prove it, ordinary first calls remain supported but ambiguous retries fail closed. Random IDs and content-based deduplication are not substitutes.
+
+The earlier aarch64 source-built fixtures were not published-artifact trust or live-VPS acceptance. x86_64/continued-load, real provider retry/restart paths, broad browser coverage, latest-source independent acceptance and deployment evidence remain bounded by their actual recorded results. Existing browser RouterProvider/Ping harness failures were not repaired by that handoff. Consult this plan and the [residual corrections](2026-09-08-remote-agent-residual-corrections-plan.md) for later evidence; no retired snapshot's green checks transfer to new source. The protected [0.2.205 investigation](remote-agent-0.2.205-upgrade.md) remains intact.
+
 ## Objective
 
 Bring the current remote-agent implementation into conformance with the main

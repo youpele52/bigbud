@@ -3,24 +3,23 @@ import { type Terminal } from "@xterm/xterm";
 import {
   type ExecutionTargetId,
   type TerminalDropPathMode,
-  type TerminalEvent,
   type ThreadId,
 } from "@bigbud/contracts";
 import { type MutableRefObject, type RefObject } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 
 import { readNativeApi } from "../../rpc/nativeApi";
-import { selectTerminalEventEntries } from "../../stores/terminal";
 import { useTerminalStateStore } from "../../stores/terminal";
 import { canTerminalAutoFocus } from "~/lib/terminalFocus";
 import {
   getTerminalSelectionRect,
   resolveTerminalSelectionActionPosition,
-  selectTerminalEventEntriesAfterSnapshot,
   writeSystemMessage,
-  writeTerminalSnapshot,
 } from "./ThreadTerminalDrawer.logic";
-import { type TerminalWriteBatcher } from "./TerminalWriteBatcher";
+import type { TerminalViewportIntake } from "./TerminalViewport.intake";
+import { ensureThreadMaterialized } from "../../lib/threadMaterialization";
+import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { preserveTerminalScroll } from "./terminalScrollState";
 
 interface TerminalSelectionActionStateRefs {
   readonly selectionActionRequestIdRef: MutableRefObject<number>;
@@ -53,7 +52,7 @@ interface TerminalOpenSessionInput {
   readonly disposed: () => boolean;
   readonly terminalRef: MutableRefObject<Terminal | null>;
   readonly fitAddonRef: MutableRefObject<FitAddon | null>;
-  readonly writeBatcher: TerminalWriteBatcher;
+  readonly intake: TerminalViewportIntake;
   readonly threadId: ThreadId;
   readonly terminalId: string;
   readonly executionTargetId?: ExecutionTargetId | undefined;
@@ -61,13 +60,15 @@ interface TerminalOpenSessionInput {
   readonly runtimeEnv?: Record<string, string> | undefined;
   readonly worktreePathRef: MutableRefObject<string | null | undefined>;
   readonly dropPathModeRef: MutableRefObject<TerminalDropPathMode>;
-  readonly usesBundledTerminalFont: boolean;
-  readonly terminalFontSize: number;
-  readonly applyTerminalEvent: (event: TerminalEvent) => void;
-  readonly lastAppliedTerminalEventIdRef: MutableRefObject<number>;
-  readonly terminalHydratedRef: MutableRefObject<boolean>;
+  readonly waitForTypography: () => Promise<void>;
   readonly autoFocusRef: MutableRefObject<boolean>;
   readonly containerRef: RefObject<HTMLDivElement | null>;
+  readonly attachOnly?: boolean;
+  /** Subscribes the view; open waits for the server-side registration so no event is missed. */
+  readonly beforeOpen?: () => void | Promise<void>;
+  readonly onSnapshot?: (
+    snapshot: import("@bigbud/contracts/workspace/terminal.ts").TerminalSessionSnapshot,
+  ) => void;
 }
 
 export function clearSelectionAction(refs: TerminalSelectionActionStateRefs) {
@@ -168,41 +169,22 @@ export async function showTerminalSelectionAction(input: ShowTerminalSelectionAc
       input.terminalRef.current?.clearSelection();
     }
   } finally {
-    input.selectionActionOpenRef.current = false;
+    if (requestId === input.selectionActionRequestIdRef.current)
+      input.selectionActionOpenRef.current = false;
   }
-}
-
-export async function waitForBundledTerminalFont(input: {
-  usesBundledTerminalFont: boolean;
-  terminalFontSize: number;
-}) {
-  if (!input.usesBundledTerminalFont || typeof document.fonts === "undefined") {
-    return;
-  }
-  const fontLoadTarget = `${input.terminalFontSize}px "MesloLGL Nerd Font Mono"`;
-  if (document.fonts.check(fontLoadTarget)) {
-    return;
-  }
-  const timeout = new Promise<void>((resolve) => {
-    window.setTimeout(resolve, 1_000);
-  });
-  await Promise.race([document.fonts.load(fontLoadTarget).then(() => undefined), timeout]).catch(
-    () => undefined,
-  );
 }
 
 export function fitTerminalViewport(input: {
+  containerRef: RefObject<HTMLDivElement | null>;
   terminalRef: MutableRefObject<Terminal | null>;
   fitAddonRef: MutableRefObject<FitAddon | null>;
 }) {
   const activeTerminal = input.terminalRef.current;
   const activeFitAddon = input.fitAddonRef.current;
-  if (!activeTerminal || !activeFitAddon) return;
-  const wasAtBottom = activeTerminal.buffer.active.viewportY >= activeTerminal.buffer.active.baseY;
-  activeFitAddon.fit();
-  if (wasAtBottom) {
-    activeTerminal.scrollToBottom();
-  }
+  if (!activeTerminal || !activeFitAddon || !hasUsableTerminalViewportSize(input.containerRef))
+    return false;
+  preserveTerminalScroll(activeTerminal, () => activeFitAddon.fit());
+  return true;
 }
 
 export function resizeServerTerminal(input: {
@@ -225,20 +207,21 @@ export function resizeServerTerminal(input: {
 }
 
 export function fitAndResizeServerTerminal(input: {
+  containerRef: RefObject<HTMLDivElement | null>;
   terminalRef: MutableRefObject<Terminal | null>;
   fitAddonRef: MutableRefObject<FitAddon | null>;
   threadId: ThreadId;
   terminalId: string;
 }) {
-  fitTerminalViewport(input);
-  resizeServerTerminal(input);
+  if (fitTerminalViewport(input)) resizeServerTerminal(input);
 }
 
 export function hasUsableTerminalViewportSize(containerRef: RefObject<HTMLDivElement | null>) {
   const mountElement = containerRef.current;
   if (!mountElement) return false;
   const { width, height } = mountElement.getBoundingClientRect();
-  return width >= 32 && height >= 32;
+  const visibility = getComputedStyle(mountElement).visibility;
+  return width >= 32 && height >= 32 && visibility !== "hidden" && visibility !== "collapse";
 }
 
 export async function openTerminalSession(input: TerminalOpenSessionInput): Promise<boolean> {
@@ -248,10 +231,7 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
   }
   const activeTerminal = input.terminalRef.current;
   if (!activeTerminal || !input.fitAddonRef.current) return true;
-  await waitForBundledTerminalFont({
-    usesBundledTerminalFont: input.usesBundledTerminalFont,
-    terminalFontSize: input.terminalFontSize,
-  });
+  await input.waitForTypography();
   if (input.disposed()) return true;
   await new Promise<void>((resolve) => {
     window.requestAnimationFrame(() => resolve());
@@ -260,46 +240,54 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
   if (!hasUsableTerminalViewportSize(input.containerRef)) {
     return false;
   }
-  fitAndResizeServerTerminal({
-    terminalRef: input.terminalRef,
-    fitAddonRef: input.fitAddonRef,
-    threadId: input.threadId,
-    terminalId: input.terminalId,
-  });
-  const snapshot = await api.terminal.open({
-    threadId: input.threadId,
-    terminalId: input.terminalId,
-    ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
-    cwd: input.cwd,
-    ...(input.worktreePathRef.current !== undefined
-      ? { worktreePath: input.worktreePathRef.current }
-      : {}),
-    cols: activeTerminal.cols,
-    rows: activeTerminal.rows,
-    ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
-  });
+  fitTerminalViewport(input);
+  // Subscribe immediately before the snapshot request, not during font/layout waits.
+  await input.beforeOpen?.();
   if (input.disposed()) return true;
-  useTerminalStateStore.getState().hydrateTerminalAgentFromSnapshot(snapshot);
-  input.dropPathModeRef.current = snapshot.dropPathMode;
-  input.writeBatcher.flush();
-  writeTerminalSnapshot(activeTerminal, snapshot);
-  const bufferedEntries = selectTerminalEventEntries(
-    useTerminalStateStore.getState().terminalEventEntriesByKey,
-    input.threadId,
-    input.terminalId,
-  );
-  const replayEntries = selectTerminalEventEntriesAfterSnapshot(
-    bufferedEntries,
-    snapshot.updatedAt,
-  );
-  for (const entry of replayEntries) {
-    input.applyTerminalEvent(entry.event);
+  if (!input.attachOnly) await ensureThreadMaterialized(input.threadId);
+  if (input.disposed()) return true;
+  if (input.attachOnly && !api.terminal.snapshot) {
+    throw new Error(
+      "View-only recovery is unavailable. Upgrade the server; the running process was not restarted.",
+    );
   }
-  input.lastAppliedTerminalEventIdRef.current = bufferedEntries.at(-1)?.id ?? 0;
-  input.terminalHydratedRef.current = true;
+  const snapshot = input.attachOnly
+    ? await api.terminal.snapshot!({ threadId: input.threadId, terminalId: input.terminalId })
+    : await api.terminal.open({
+        threadId: input.threadId,
+        terminalId: input.terminalId,
+        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+        cwd: input.cwd,
+        ...(input.worktreePathRef.current !== undefined
+          ? { worktreePath: input.worktreePathRef.current }
+          : {}),
+        cols: activeTerminal.cols,
+        rows: activeTerminal.rows,
+        ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
+      });
+  if (input.disposed()) return true;
+  input.onSnapshot?.(snapshot);
+  recordTerminalLaunch(snapshot);
+  if (snapshot.status === "error" || snapshot.pid === null) {
+    throw new Error(
+      "The terminal did not start. Check the target and shell configuration, then retry startup.",
+    );
+  }
+  useTerminalStateStore.getState().hydrateTerminalAgentFromSnapshot(snapshot);
+  if (
+    input.intake.snapshotUpdatedAt === null ||
+    snapshot.updatedAt >= input.intake.snapshotUpdatedAt
+  ) {
+    input.dropPathModeRef.current = snapshot.dropPathMode;
+  }
+  await input.intake.hydrate(snapshot);
+  if (input.disposed()) return true;
+  // Resize requests made while open was pending may have reached a not-yet-running
+  // PTY. Reconcile current geometry after replay, rather than leaving open's old size.
+  fitAndResizeServerTerminal(input);
   if (input.autoFocusRef.current && canTerminalAutoFocus()) {
     window.requestAnimationFrame(() => {
-      if (canTerminalAutoFocus()) {
+      if (!input.disposed() && canTerminalAutoFocus()) {
         activeTerminal.focus();
       }
     });

@@ -7,8 +7,6 @@ import { EventId } from "@bigbud/contracts";
 import {
   DateTime,
   Effect,
-  Exit,
-  Fiber,
   FileSystem,
   Layer,
   Option,
@@ -29,6 +27,9 @@ import {
   ProviderAdapterSessionNotFoundError,
   ProviderAdapterValidationError,
 } from "../../Errors.ts";
+import { stopAcpSessions } from "../../acp/AcpAdapterSupport.ts";
+import { makeAcpSessionStop } from "../../acp/AcpSessionStop.ts";
+import { requireLiveAdapterSession } from "../../providerSessionLookup.ts";
 import { CursorAdapter, type CursorAdapterShape } from "../../Services/Cursor/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { makeEventNdjsonLogger } from "../EventNdjsonLogger.ts";
@@ -46,6 +47,7 @@ import { makeStartSessionEffect } from "./Adapter.startSession.ts";
 
 import type { ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
   return Effect.gen(function* () {
     const fileSystem = yield* FileSystem.FileSystem;
@@ -98,39 +100,25 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
     const requireSession = (
       threadId: ThreadId,
     ): Effect.Effect<CursorSessionContext, ProviderAdapterSessionNotFoundError> => {
-      const ctx = sessions.get(threadId);
-      if (!ctx || ctx.stopped) {
-        return Effect.fail(
-          new ProviderAdapterSessionNotFoundError({ provider: PROVIDER, threadId }),
-        );
-      }
-      return Effect.succeed(ctx);
+      return requireLiveAdapterSession({
+        provider: PROVIDER,
+        threadId,
+        session: sessions.get(threadId),
+        isLive: (ctx) => !ctx.stopped,
+      });
     };
 
-    const stopSessionInternal = (ctx: CursorSessionContext) =>
-      Effect.gen(function* () {
-        if (ctx.stopped) return;
-        ctx.stopped = true;
-        yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
-        yield* settlePendingUserInputsAsCancelled(ctx.pendingUserInputs);
-        if (ctx.notificationFiber) {
-          yield* Fiber.interrupt(ctx.notificationFiber);
-        }
-        yield* Effect.tryPromise({
-          try: () => ctx.orchestrationBridgeCleanup?.() ?? Promise.resolve(),
-          catch: () => undefined,
-        }).pipe(Effect.ignore);
-        yield* Effect.ignore(Scope.close(ctx.scope, Exit.void));
-        sessions.delete(ctx.threadId);
-        yield* offerRuntimeEvent({
-          type: "session.exited",
-          ...(yield* makeEventStamp()),
-          sessionEpoch: ctx.sessionEpoch,
-          provider: PROVIDER,
-          threadId: ctx.threadId,
-          payload: { exitKind: "graceful" },
-        });
-      });
+    const stopSessionInternal = makeAcpSessionStop<CursorSessionContext>({
+      provider: PROVIDER,
+      sessions,
+      settlePending: (ctx) =>
+        Effect.all([
+          settlePendingApprovalsAsCancelled(ctx.pendingApprovals),
+          settlePendingUserInputsAsCancelled(ctx.pendingUserInputs),
+        ]).pipe(Effect.asVoid),
+      offerRuntimeEvent,
+      makeEventStamp,
+    });
 
     const getCursorSettings = (threadId: ThreadId) =>
       serverSettingsService.getSettings.pipe(
@@ -284,10 +272,10 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
       });
 
     const stopAll: CursorAdapterShape["stopAll"] = () =>
-      Effect.forEach(sessions.values(), stopSessionInternal, { discard: true });
+      stopAcpSessions(sessions.values(), stopSessionInternal);
 
     yield* Effect.addFinalizer(() =>
-      Effect.forEach(sessions.values(), stopSessionInternal, { discard: true }).pipe(
+      stopAcpSessions(sessions.values(), stopSessionInternal).pipe(
         Effect.tap(() => PubSub.shutdown(runtimeEventPubSub)),
         Effect.tap(() => managedNativeEventLogger?.close() ?? Effect.void),
       ),
@@ -297,7 +285,10 @@ function makeCursorAdapter(options?: CursorAdapterLiveOptions) {
 
     return {
       provider: PROVIDER,
-      capabilities: { sessionModelSwitch: "in-session" },
+      capabilities: {
+        sessionModelSwitch: "in-session",
+        subagents: PROVIDER_SUBAGENT_CAPABILITIES.cursor,
+      },
       startSession,
       sendTurn,
       interruptTurn,

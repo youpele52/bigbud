@@ -14,6 +14,7 @@ export type CodexTextGenerationOperation =
   | "generateBranchName"
   | "generateThreadTitle"
   | "generateThreadElevatorSummary"
+  | "generatePromptSuggestion"
   | "generateThreadHandoff";
 
 export const readStreamAsString = <E>(

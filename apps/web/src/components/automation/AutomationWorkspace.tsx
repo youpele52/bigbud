@@ -4,7 +4,7 @@ import {
   isBuiltInChatsProject,
   type AutomationId,
 } from "@bigbud/contracts";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { toastManager } from "~/components/ui/toast";
 import type { Project } from "~/models/types";
@@ -27,6 +27,8 @@ type AutomationSummary = Awaited<
 export interface AutomationWorkspaceState {
   readonly automations: ReadonlyArray<AutomationSummary>;
   readonly loading: boolean;
+  readonly hasLoaded: boolean;
+  readonly loadError: string | null;
   readonly projectOptions: ReadonlyArray<AutomationProjectOption>;
   readonly projectLabelById: ReadonlyMap<ProjectId, string>;
   readonly selectedProject: Project | null;
@@ -48,6 +50,9 @@ export function useAutomationWorkspace(
   const [selectedProjectId, setSelectedProjectId] = useState<ProjectId | null>(null);
   const [automations, setAutomations] = useState<ReadonlyArray<AutomationSummary>>([]);
   const [loading, setLoading] = useState(true);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const loadVersion = useRef(0);
 
   const { projects, projectOptions } = useMemo(() => {
     const visibleProjects = allProjects.filter((project) => !isBuiltInChatsProject(project.id));
@@ -103,29 +108,39 @@ export function useAutomationWorkspace(
       return;
     }
 
+    const version = ++loadVersion.current;
     setLoading(true);
+    setLoadError(null);
     try {
       const result = await listAllAutomations(api.server);
+      if (version !== loadVersion.current) return;
       setAutomations(result);
+      setHasLoaded(true);
     } catch (error) {
+      if (version !== loadVersion.current) return;
+      setLoadError(error instanceof Error ? error.message : "An error occurred.");
       toastManager.add({
         type: "error",
         title: "Failed to load automations",
         description: error instanceof Error ? error.message : "An error occurred.",
       });
-      setAutomations([]);
     } finally {
-      setLoading(false);
+      if (version === loadVersion.current) setLoading(false);
     }
   }, [api, readyToLoad]);
 
   useEffect(() => {
     void loadAutomations();
+    return () => {
+      loadVersion.current += 1;
+    };
   }, [loadAutomations]);
 
   return {
     automations,
     loading: loading || !readyToLoad,
+    hasLoaded,
+    loadError,
     projectOptions,
     projectLabelById,
     selectedProject,

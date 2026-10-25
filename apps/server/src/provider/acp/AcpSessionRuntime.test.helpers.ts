@@ -28,6 +28,7 @@ export function createFakeAcpSessionRuntime(): AcpSessionRuntimeShape {
         modelConfigId: undefined,
       }),
     ),
+    isAlive: Effect.succeed(true),
     getEvents: () => Stream.empty,
     getModeState: Effect.succeed({
       currentModeId: "default",

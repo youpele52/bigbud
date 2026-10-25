@@ -15,19 +15,46 @@ import { cliProxyDiagnostic } from "../provider/Layers/CliProxy/Diagnostic.ts";
 import { readPromptTextFromUrl } from "../attachments/documentUrl";
 import { exportThreadContext } from "../orchestration/ThreadContextExport";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
+import { TRACE_RETAIN_ATTRIBUTE } from "../observability/TracePolicy.ts";
 import type { WsRpcContext } from "./wsRpcContext";
 import { writeHandoffDocumentFile } from "./wsHandoffDocument";
+import { PingTraceSampler } from "./wsPingTraceSampler.ts";
 import { makeServerConfigUpdateStream } from "./wsStreams";
 import { resolveTextGenByProbeStatus } from "./wsSettingsResolver";
+import type { ServerOpencodeV2ThreadToolsSetupInput } from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";
+
+/** Identifies the WebSocket connection an RPC arrived on. */
+interface RpcCallOptions {
+  readonly clientId: number;
+}
 
 export function makeServerWsRpcHandlers(context: WsRpcContext) {
+  const pingTraceSampler = new PingTraceSampler();
   return {
-    [WS_METHODS.serverPing]: (_input: unknown) =>
+    [WS_METHODS.serverGetOpencodeV2ThreadToolsSetup]: (
+      input: ServerOpencodeV2ThreadToolsSetupInput,
+    ) =>
       observeRpcEffect(
-        WS_METHODS.serverPing,
-        Effect.sync(() => ({ serverTime: new Date().toISOString() })),
+        WS_METHODS.serverGetOpencodeV2ThreadToolsSetup,
+        context.v2ThreadToolsSetup.get(input),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverPing]: (_input: unknown, options?: RpcCallOptions) => {
+      const connection = options?.clientId ?? "unknown";
+      // The span only times the instant handler, so a duration rule would drop every
+      // ping. A fixed sample per connection keeps ping cadence next to subscription
+      // lifetimes; failed pings are kept by the trace policy's error rule.
+      const retain = pingTraceSampler.shouldRetain(connection, Date.now());
+      return observeRpcEffect(
+        WS_METHODS.serverPing,
+        Effect.sync(() => ({ serverTime: new Date().toISOString() })),
+        {
+          "rpc.aggregate": "server",
+          "ws.client_id": connection,
+          ...(retain ? { [TRACE_RETAIN_ATTRIBUTE]: true } : {}),
+        },
+      );
+    },
     [WS_METHODS.serverGetConfig]: (_input: unknown) =>
       observeRpcEffect(WS_METHODS.serverGetConfig, context.loadServerConfig, {
         "rpc.aggregate": "server",
@@ -36,6 +63,14 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverRefreshProviders,
         context.providerRegistry.refresh().pipe(Effect.map((providers) => ({ providers }))),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverRefreshUsageLimits]: (_input: unknown) =>
+      observeRpcEffect(
+        WS_METHODS.serverRefreshUsageLimits,
+        context.providerRegistry.refreshUsageLimits.pipe(
+          Effect.map((providers) => ({ providers })),
+        ),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverActivateCliProxy]: (_input: unknown) =>
@@ -191,6 +226,9 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
         }),
         { "rpc.aggregate": "server" },
       ),
+    [WS_METHODS.serverRetryTextGeneration]: (
+      input: import("@bigbud/contracts/server/rpc.textGeneration.ts").RetryThreadTextGenerationInput,
+    ) => requestTextGenerationRetry(context.orchestrationEngine, input, context.serverSettings),
     [WS_METHODS.serverStartHandoffJob]: (input: {
       readonly threadId: ThreadId;
       readonly focus?: string | undefined;
@@ -289,3 +327,4 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
       ),
   };
 }
+import { requestTextGenerationRetry } from "./wsRetryTextGeneration.ts";

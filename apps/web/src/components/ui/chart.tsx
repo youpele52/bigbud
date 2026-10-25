@@ -39,10 +39,12 @@ function ChartTooltipContent({
   label,
   labelFormatter,
   payload,
+  valueFormatter,
 }: {
   readonly active?: boolean;
   readonly label?: string;
   readonly labelFormatter?: (label: string) => string;
+  readonly valueFormatter?: (value: number | string, name?: string) => string;
   readonly payload?: ReadonlyArray<{
     readonly color?: string;
     readonly dataKey?: string | number;
@@ -75,7 +77,13 @@ function ChartTooltipContent({
               <span>{item.name ?? item.dataKey}</span>
             </div>
             <span className="font-medium text-foreground">
-              {typeof item.value === "number" ? item.value.toLocaleString() : item.value}
+              {item.value === undefined
+                ? null
+                : valueFormatter
+                  ? valueFormatter(item.value, item.name)
+                  : typeof item.value === "number"
+                    ? item.value.toLocaleString()
+                    : item.value}
             </span>
           </div>
         ))}

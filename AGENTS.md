@@ -2,9 +2,14 @@
 
 ## Task Completion Requirements
 
-- All of `bun fmt`, `bun lint`, and `bun typecheck` must pass before considering tasks completed.
-- **NEVER run `bun test`.** Always use `bun run test` (runs Vitest via Turbo). `bun test` invokes Bun's native test runner and bypasses Vitest entirely.
-- Rust changes must also pass `cargo fmt --all --check`, `cargo clippy --locked --workspace --all-targets -- -D warnings`, and `cargo test --locked --workspace`.
+- Before task completion and each commit, pass focused file-length, formatting, lint, type checks, and relevant tests for changed files and affected packages.
+- Enforce the 400-line source/test limit directly; use explicit formatter/linter paths and configured package typechecks. Root `bun lint` includes an unscoped length scan.
+- **Ask and wait for approval before any full-suite or repository-/workspace-wide checks**, including formatting, lint, types, tests, and length scans—even before commits.
+- Documentation-only changes need focused formatting and document/link checks; code checks are not applicable unless code or its configuration changes.
+- **NEVER run `bun test`.** Run focused Vitest tests through `bun run`; root `bun run test` requires full-suite approval.
+- Rust changes need formatting, Clippy, and relevant tests scoped to affected crates; workspace-wide checks require approval.
+- Report check scope and failures honestly; resolve task-related failures without changing unrelated work or claiming blocked checks passed.
+- Obtain fresh approval before every commit or push; that approval does not authorize broad validation, or vice versa.
 
 ## Core Priorities
 
@@ -52,9 +57,8 @@ cargo test --locked --workspace                      # Rust workspace tests
 **Focused test runs:**
 
 ```sh
-bun run --cwd apps/server vitest run                            # all server tests
-bun run --cwd apps/server vitest run src/path/to/file.test.ts  # single file
-bun run --cwd apps/web test:browser                             # Playwright (needs: bun run --cwd apps/web test:browser:install first)
+bun run --cwd apps/server vitest run src/path/to/file.test.ts
+bun run --cwd apps/web test:browser src/path/to/file.browser.tsx  # needs installed Playwright browser
 ```
 
 ## Toolchain Quirks
@@ -131,12 +135,14 @@ Default keybindings (defined in `apps/server/src/keybindings/keybindings.ts`):
 | `mod+shift+e`                 | Toggle files panel (when terminal is not focused)                      |
 | `mod+p`                       | Toggle command palette                                                 |
 | `mod+n`                       | New chat (when terminal not focused) / new terminal tab (when focused) |
-| `mod+shift+n`                 | New local chat                                                         |
-| `mod+o`                       | Open in favorite editor                                                |
+| `mod+alt+n`                   | New local chat (when terminal is not focused)                          |
+| `mod+shift+n`                 | Toggle notes (when terminal is not focused)                            |
+| `mod+o`                       | Open project picker (when terminal is not focused)                     |
+| `mod+shift+o`                 | Open in favorite editor (when terminal is not focused)                 |
 | `mod+shift+[` / `mod+shift+]` | Navigate previous/next thread                                          |
 | `mod+1` ... `mod+9`           | Jump to the first 9 visible thread slots in the sidebar                |
 
-`mod` resolves to `Cmd` on macOS and `Ctrl` on Windows/Linux.
+`mod` resolves to `Cmd` on macOS and `Ctrl` on Windows/Linux. See [docs/KEYBINDINGS.md](docs/KEYBINDINGS.md) for the complete current defaults and configuration rules.
 
 ## Reference Repos
 
@@ -149,3 +155,15 @@ Default keybindings (defined in `apps/server/src/keybindings/keybindings.ts`):
 bigbud is a purposeful fork of https://github.com/pingdotgg/t3code that has **intentionally diverged** — it has its own conventions, patterns, and features not present upstream. Changes from t3code cannot be copied directly; they must be read, understood, and adapted.
 
 For any task involving upstream t3code changes, use [`@fork-upstream-adapter`](.opencode/agents/fork-upstream-adapter.md) — it enforces the read → understand → adapt → verify workflow and prevents direct copy-paste transplants.
+
+<!-- BEGIN:turborepo-agent-rules -->
+
+# This is NOT the Turborepo you know
+
+Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+
+Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+
+This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
+
+<!-- END:turborepo-agent-rules -->

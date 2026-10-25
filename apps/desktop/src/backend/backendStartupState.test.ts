@@ -12,6 +12,7 @@ import {
   configureBackendStartupState,
   getBackendStartupState,
   recordBackendStartupFailure,
+  recordBackendStartupProgress,
   recordBackendStartupStatus,
 } from "./backendStartupState";
 
@@ -29,6 +30,24 @@ describe("backend startup state", () => {
     expect(getBackendStartupState().status).toBe("timedOut");
     expect(recordBackendStartupStatus(second, "ready")).toBe(true);
     expect(getBackendStartupState().status).toBe("ready");
+  });
+
+  it("records upgrading progress only while upgrading and clears it on the next status", () => {
+    const generation = beginBackendStartup();
+    expect(recordBackendStartupProgress(generation, 10)).toBe(false);
+    recordBackendStartupStatus(generation, "upgrading");
+    expect(recordBackendStartupProgress(generation, 42.7)).toBe(true);
+    expect(getBackendStartupState().progressPercent).toBe(42);
+    expect(recordBackendStartupProgress(generation, 42)).toBe(false);
+    expect(recordBackendStartupProgress(generation, 250)).toBe(true);
+    expect(getBackendStartupState().progressPercent).toBe(100);
+    // Projection replay reports a plain `upgrading`, which drops the stale migration percent.
+    expect(recordBackendStartupProgress(generation, undefined)).toBe(true);
+    expect(getBackendStartupState().progressPercent).toBeUndefined();
+    recordBackendStartupProgress(generation, 80);
+    recordBackendStartupStatus(generation, "starting");
+    expect(getBackendStartupState().progressPercent).toBeUndefined();
+    expect(recordBackendStartupProgress(generation, 50)).toBe(false);
   });
 
   it("returns transition acceptance for legal, unsupported, stale, and terminal statuses", () => {

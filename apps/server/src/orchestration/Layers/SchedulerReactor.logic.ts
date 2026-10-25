@@ -15,6 +15,10 @@ import { Data, Effect } from "effect";
 import type { AutomationScheduleRepositoryShape } from "../../persistence/Services/AutomationScheduleRepository.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { getNextCronTime } from "../Scheduler/cron.ts";
+import {
+  automationAlreadyAdmitted,
+  automationProviderLimitation,
+} from "./SchedulerReactor.admission.ts";
 
 export class AutomationCronError extends Data.TaggedError("AutomationCronError")<{
   readonly message: string;
@@ -88,34 +92,43 @@ export const dispatchAutomationRun = Effect.fn("dispatchAutomationRun")(function
   const executionPrompt = buildAutomationExecutionPrompt(input.prompt, input.run.startedAt);
   const readModel = yield* input.orchestrationEngine.getReadModel();
   const thread = readModel.threads.find((entry) => entry.id === input.run.threadId);
+  if (automationAlreadyAdmitted(thread, input.run)) {
+    yield* input.repository.recordRunDispatched({ runId: input.run.runId, dispatchedAt: now });
+    return { ok: true as const, skipped: true as const };
+  }
+  const limitation = automationProviderLimitation(thread);
 
-  const dispatchResult = yield* Effect.matchEffect(
-    input.orchestrationEngine.dispatch({
-      type: "thread.turn.start",
-      commandId: input.run.commandId,
-      threadId: input.run.threadId,
-      message: {
-        messageId: input.run.messageId,
-        role: "user",
-        text: executionPrompt,
-        attachments: [],
-      },
-      ...(thread?.modelSelection !== undefined ? { modelSelection: thread.modelSelection } : {}),
-      runtimeMode: thread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
-      interactionMode: thread?.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
-      createdAt: now,
-    }),
-    {
-      onFailure: () => Effect.succeed({ ok: false as const }),
-      onSuccess: () => Effect.succeed({ ok: true as const }),
-    },
-  );
+  const dispatchResult = limitation
+    ? { ok: false as const }
+    : yield* Effect.matchEffect(
+        input.orchestrationEngine.dispatch({
+          type: "thread.turn.start",
+          commandId: input.run.commandId,
+          threadId: input.run.threadId,
+          message: {
+            messageId: input.run.messageId,
+            role: "user",
+            text: executionPrompt,
+            attachments: [],
+          },
+          ...(thread?.modelSelection !== undefined
+            ? { modelSelection: thread.modelSelection }
+            : {}),
+          runtimeMode: thread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
+          interactionMode: thread?.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
+          createdAt: now,
+        }),
+        {
+          onFailure: () => Effect.succeed({ ok: false as const }),
+          onSuccess: () => Effect.succeed({ ok: true as const }),
+        },
+      );
 
   if (!dispatchResult.ok) {
     yield* input.repository.recordRunFailed({
       runId: input.run.runId,
       finishedAt: now,
-      errorMessage: "Failed to dispatch automation turn",
+      errorMessage: limitation ?? "Failed to dispatch automation turn",
     });
     if (input.scheduleKind === "once") {
       yield* input.repository

@@ -1,6 +1,6 @@
 import { type ContextMenuItem, type NativeApi } from "@bigbud/contracts";
 
-import { openBrowserPanel } from "~/stores/browser/browserPanel.actions";
+import { openLink } from "../lib/openLink";
 import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
 import { resetServerStateForTests } from "./serverState";
@@ -11,35 +11,18 @@ import {
 } from "./orchestrationDeliveryState";
 import { persistDeliveryCursor, readPersistedDeliveryCursor } from "./orchestrationDeliveryCursor";
 import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
-import { isWsSubscriptionListenerFailure } from "./wsTransport";
+import {
+  isWsSubscriptionListenerFailure,
+  isWsTransportDisconnectedError,
+  wsSubscriptionErrorCause,
+} from "./wsTransport.errors";
 import { cappedExponentialRetryDelay } from "./wsTransport.retry";
+import { resolveDeliveryConsumerId } from "./orchestrationDeliveryCursor";
 
 let instance: { api: NativeApi } | null = null;
-const DELIVERY_CONSUMER_STORAGE_KEY = "bigbud:orchestration-delivery-consumer";
 const MAX_ORCHESTRATION_NO_PROGRESS_FAILURES = 3;
 const ORCHESTRATION_RETRY_BASE_DELAY_MS = 250;
 const ORCHESTRATION_RETRY_MAX_DELAY_MS = 8_000;
-
-function resolveDeliveryConsumerId(): string {
-  try {
-    const existing = window.sessionStorage.getItem(DELIVERY_CONSUMER_STORAGE_KEY)?.trim();
-    if (existing) return existing;
-    const consumerId = crypto.randomUUID();
-    window.sessionStorage.setItem(DELIVERY_CONSUMER_STORAGE_KEY, consumerId);
-    return consumerId;
-  } catch {
-    return crypto.randomUUID();
-  }
-}
-
-function shouldOpenViaDesktopShell(url: string): boolean {
-  try {
-    const protocol = new URL(url).protocol;
-    return protocol !== "http:" && protocol !== "https:";
-  } catch {
-    return false;
-  }
-}
 
 export function __resetWsNativeApiForTests() {
   instance = null;
@@ -78,6 +61,11 @@ export function createWsNativeApi(): NativeApi {
   const markDeliveryProgress = () => {
     orchestrationApplicationFailures = 0;
   };
+  // An acknowledgement refused mid-batch because the socket dropped is not an application
+  // failure; the resubscription replays from `deliveryAppliedSequence` and admission dedupes.
+  const isApplicationFailure = (error: unknown) =>
+    isWsSubscriptionListenerFailure(error) &&
+    !isWsTransportDisconnectedError(wsSubscriptionErrorCause(error));
 
   const isActiveBaselineRecovery = (input: {
     readonly recoveryId: string;
@@ -117,7 +105,7 @@ export function createWsNativeApi(): NativeApi {
       },
       {
         retryDelay: ({ error }) =>
-          isWsSubscriptionListenerFailure(error)
+          isApplicationFailure(error)
             ? cappedExponentialRetryDelay({
                 attempt: orchestrationApplicationFailures,
                 baseMs: ORCHESTRATION_RETRY_BASE_DELAY_MS,
@@ -129,7 +117,7 @@ export function createWsNativeApi(): NativeApi {
           for (const callback of domainResubscribeCallbacks) callback();
         },
         shouldRetry: (error) => {
-          if (!isWsSubscriptionListenerFailure(error)) return true;
+          if (!isApplicationFailure(error)) return true;
           orchestrationApplicationFailures += 1;
           const identity = latestDeliveryIdentity;
           if (
@@ -178,6 +166,8 @@ export function createWsNativeApi(): NativeApi {
       },
     },
     terminal: {
+      wslDistributions: () => rpcClient.terminal.wslDistributions(),
+      snapshot: (input) => rpcClient.terminal.snapshot(input as never),
       open: (input) => rpcClient.terminal.open(input as never),
       write: (input) => rpcClient.terminal.write(input as never),
       resize: (input) => rpcClient.terminal.resize(input as never),
@@ -185,6 +175,10 @@ export function createWsNativeApi(): NativeApi {
       restart: (input) => rpcClient.terminal.restart(input as never),
       close: (input) => rpcClient.terminal.close(input as never),
       onEvent: (callback) => rpcClient.terminal.onEvent(callback),
+      subscribeSession: (input, callback, options) =>
+        rpcClient.terminal.subscribeSession(input as never, callback, options),
+      ackOutput: (input) => rpcClient.terminal.ackOutput(input),
+      search: (input) => rpcClient.terminal.search(input),
     },
     projects: {
       listDirectory: rpcClient.projects.listDirectory,
@@ -218,20 +212,9 @@ export function createWsNativeApi(): NativeApi {
       openInEditor: (cwd, editor) => rpcClient.shell.openInEditor({ cwd, editor }),
       openInTerminal: (cwd, terminal) => rpcClient.shell.openInTerminal({ cwd, terminal }),
       openPath: (path) => rpcClient.shell.openPath({ path }),
-      openExternal: async (url) => {
-        const nextUrl = url.trim();
-        if (!nextUrl) {
-          throw new Error("Unable to open link.");
-        }
-
-        if (window.desktopBridge && shouldOpenViaDesktopShell(nextUrl)) {
-          await window.desktopBridge.openExternal(nextUrl);
-          return;
-        }
-
-        openBrowserPanel({ url: nextUrl });
-      },
+      openExternal: openLink,
     },
+    worktrees: rpcClient.worktrees,
     git: {
       pull: rpcClient.git.pull,
       fetch: rpcClient.git.fetch,
@@ -266,8 +249,11 @@ export function createWsNativeApi(): NativeApi {
     server: {
       getConfig: rpcClient.server.getConfig,
       refreshProviders: rpcClient.server.refreshProviders,
+      refreshUsageLimits: rpcClient.server.refreshUsageLimits,
       activateCliProxy: rpcClient.server.activateCliProxy,
       verifyExecutionTarget: rpcClient.server.verifyExecutionTarget,
+      listSshConfigHosts: rpcClient.server.listSshConfigHosts,
+      listRemoteFolders: rpcClient.server.listRemoteFolders,
       installRemoteAgent: rpcClient.server.installRemoteAgent,
       connectRemoteAgent: rpcClient.server.connectRemoteAgent,
       restartRemoteAgent: rpcClient.server.restartRemoteAgent,
@@ -275,6 +261,7 @@ export function createWsNativeApi(): NativeApi {
       getRemoteAgentUpdateStatus: rpcClient.server.getRemoteAgentUpdateStatus,
       unlockSshKey: rpcClient.server.unlockSshKey,
       unlockSshPassword: rpcClient.server.unlockSshPassword,
+      trustSshHost: rpcClient.server.trustSshHost,
       upsertKeybinding: rpcClient.server.upsertKeybinding,
       getSettings: rpcClient.server.getSettings,
       updateSettings: rpcClient.server.updateSettings,
@@ -286,8 +273,10 @@ export function createWsNativeApi(): NativeApi {
       setThreadPinned: rpcClient.server.setThreadPinned,
       readDocumentUrl: rpcClient.server.readDocumentUrl,
       writeHandoffDocument: rpcClient.server.writeHandoffDocument,
+      retryTextGeneration: rpcClient.server.retryTextGeneration,
       startHandoffJob: rpcClient.server.startHandoffJob,
       getHandoffJob: rpcClient.server.getHandoffJob,
+      getOpencodeV2ThreadToolsSetup: rpcClient.server.getOpencodeV2ThreadToolsSetup,
       createMobileRemotePairing: rpcClient.server.createMobileRemotePairing,
       listMobileRemoteSessions: rpcClient.server.listMobileRemoteSessions,
       revokeMobileRemoteSession: rpcClient.server.revokeMobileRemoteSession,
@@ -304,6 +293,8 @@ export function createWsNativeApi(): NativeApi {
       triggerAutomation: rpcClient.server.triggerAutomation,
       listAutomationRuns: rpcClient.server.listAutomationRuns,
       getUsageSummary: rpcClient.server.getUsageSummary,
+      getWsConnectionDiagnostics: rpcClient.server.getWsConnectionDiagnostics,
+      stopSubagent: rpcClient.server.stopSubagent,
     },
     orchestration: {
       getSidebarThreadCatalog: () => rpcClient.orchestration.getSidebarThreadCatalog({}),

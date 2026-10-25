@@ -5,6 +5,10 @@ import {
   type ServerProvider,
 } from "@bigbud/contracts";
 import type { ReactNode } from "react";
+import {
+  providerAttachmentPolicy,
+  type ProviderAttachmentPolicy,
+} from "@bigbud/shared/providerAttachments";
 
 import {
   ClaudeAI,
@@ -48,7 +52,7 @@ export interface ProviderDescriptor {
   readonly settings: {
     readonly path: ProviderSettingsPath;
     readonly home?: {
-      readonly key: "codexHomePath";
+      readonly key: "codexHomePath" | "opencodeV2ProfileRoot";
       readonly placeholder: string;
       readonly description: ReactNode;
     };
@@ -56,6 +60,7 @@ export interface ProviderDescriptor {
   };
   readonly customModels: ProviderCustomModelsDescriptor | null;
   readonly traitsEnabled: boolean;
+  readonly attachments?: ProviderAttachmentPolicy;
 }
 
 const visible = () => true;
@@ -75,6 +80,24 @@ const customModels = (
 });
 
 const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
+  opencodeV2: {
+    provider: "opencodeV2",
+    label: PROVIDER_DISPLAY_NAMES.opencodeV2,
+    icon: OpenCodeIcon,
+    pickerAvailable: true,
+    isVisible: visible,
+    supportsSubProviderID: true,
+    catalogAuthoritative: true,
+    attachments: providerAttachmentPolicy("opencodeV2"),
+    settings: {
+      path: binary(
+        "Automatic native TUI service discovery",
+        "Connects only to your already-running shared native OpenCode service with your accounts and configuration. Native service discovery and required thread-tools ABI qualification are separate checks. No private-profile or SSH fallback is supported.",
+      ),
+    },
+    customModels: null,
+    traitsEnabled: false,
+  },
   codex: {
     provider: "codex",
     label: PROVIDER_DISPLAY_NAMES.codex,
@@ -159,8 +182,8 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
     provider: "opencode",
     label: PROVIDER_DISPLAY_NAMES.opencode,
     icon: OpenCodeIcon,
-    pickerAvailable: true,
-    isVisible: visible,
+    pickerAvailable: false,
+    isVisible: () => false,
     supportsSubProviderID: true,
     catalogAuthoritative: false,
     settings: { path: binary("OpenCode binary path", "Path to the OpenCode binary") },
@@ -214,8 +237,11 @@ export const PROVIDER_DESCRIPTORS = PROVIDER_KINDS.map(
 );
 
 export const PROVIDER_DESCRIPTOR_BY_KIND = DESCRIPTORS_BY_PROVIDER;
+export const PUBLIC_PROVIDER_DESCRIPTORS = PROVIDER_DESCRIPTORS.filter(
+  (descriptor) => descriptor.provider !== "opencode",
+);
 export type ProviderPickerKind = ProviderKind;
-export const PROVIDER_OPTIONS = PROVIDER_DESCRIPTORS.map((descriptor) => ({
+export const PROVIDER_OPTIONS = PUBLIC_PROVIDER_DESCRIPTORS.map((descriptor) => ({
   value: descriptor.provider,
   label: descriptor.label,
   available: descriptor.pickerAvailable,

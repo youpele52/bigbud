@@ -1,4 +1,5 @@
-import { Cause, Effect, Exit, FileSystem, Layer, Path } from "effect";
+import { Cause, Effect, Exit, FileSystem, Layer, Path, Option } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { open, stat } from "node:fs/promises";
 
@@ -67,6 +68,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
   const path = yield* Path.Path;
   const workspacePaths = yield* WorkspacePaths;
   const workspaceEntries = yield* WorkspaceEntries;
+  const workspaceSql = yield* Effect.serviceOption(SqlClient.SqlClient);
 
   const readFilePreview: WorkspaceFileSystemShape["readFilePreview"] = Effect.fn(
     "WorkspaceFileSystem.readFilePreview",
@@ -267,7 +269,13 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     });
   });
 
-  const writeFile = makeWorkspaceWriteFile({ fileSystem, path, workspacePaths, workspaceEntries });
+  const writeFile = makeWorkspaceWriteFile({
+    fileSystem,
+    path,
+    workspacePaths,
+    workspaceEntries,
+    ...(Option.isSome(workspaceSql) ? { sql: workspaceSql.value } : {}),
+  });
   return {
     readFilePreview,
     readFileRange,

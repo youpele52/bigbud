@@ -1,11 +1,13 @@
 import type { Readable } from "node:stream";
 
-import { recordBackendStartupStatus } from "./backendStartupState";
+import { recordBackendStartupProgress, recordBackendStartupStatus } from "./backendStartupState";
 import type { DesktopBackendStartupFailureReason } from "@bigbud/contracts/server/ipc.desktop.ts";
 
 const MAX_STARTUP_STATUS_BUFFER_LENGTH = 16 * 1024;
 const failureReasons = new Set<DesktopBackendStartupFailureReason>([
   "bootstrap_failed",
+  "state_directory_in_use",
+  "state_directory_owner_unverified",
   "projection_database_initialization_failed",
   "server_runtime_startup_failed",
   "unknown",
@@ -58,7 +60,11 @@ export function listenForBackendStartupStatus(
       try {
         const payload: unknown = JSON.parse(buffered);
         if (typeof payload === "object" && payload !== null) {
-          const { reason, status } = payload as { reason?: unknown; status?: unknown };
+          const { progress, reason, status } = payload as {
+            progress?: unknown;
+            reason?: unknown;
+            status?: unknown;
+          };
           if (status === "error") {
             recordBackendStartupStatus(
               generation,
@@ -68,6 +74,7 @@ export function listenForBackendStartupStatus(
           } else {
             const accepted = recordBackendStartupStatus(generation, status);
             if (accepted && status === "ready") onReady?.();
+            if (status === "upgrading") recordBackendStartupProgress(generation, progress);
           }
         }
       } catch {

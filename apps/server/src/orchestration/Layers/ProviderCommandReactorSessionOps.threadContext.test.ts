@@ -49,6 +49,24 @@ describe("prependThreadContextToProviderInput", () => {
     expect(result).toContain("hello provider");
   });
 
+  it("explains delegated model choice only where the bridge offers it", () => {
+    const supported = prependThreadContextToProviderInput({
+      ...baseInput,
+      supportsDelegatedModelChoice: true,
+    });
+    expect(supported).toContain("call `list_available_models`");
+    expect(supported).toContain("pass one as `modelSelection` to `create_thread`");
+    expect(supported).toContain("never fails or waits because of `modelSelection`");
+    expect(supported).toContain("`list_available_models`, `send_thread_message`");
+
+    const unsupported = prependThreadContextToProviderInput({
+      ...baseInput,
+      supportsDelegatedModelChoice: false,
+    });
+    expect(unsupported).not.toContain("list_available_models");
+    expect(unsupported).not.toContain("modelSelection");
+  });
+
   it("tells web runtime agents that desktop automation requires the desktop app", () => {
     const result = prependThreadContextToProviderInput({
       ...baseInput,

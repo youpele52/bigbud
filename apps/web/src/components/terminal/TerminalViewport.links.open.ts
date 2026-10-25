@@ -27,6 +27,7 @@ import {
   openPathInFilesPanelIfSupported,
 } from "../../stores/files/filesPanel.open";
 import { resolvePathLinkTarget } from "../../utils/terminal/links.utils";
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 
 interface NormalizedPath {
   readonly absolutePath: string;
@@ -242,6 +243,11 @@ function isBrowserPreviewPath(path: string): boolean {
 
 /** Resolve, classify, and open a terminal path without falling back to shell editors. */
 export async function openTerminalPath(input: OpenTerminalPathInput): Promise<void> {
+  if (isWslTerminalTargetId(input.executionTargetId)) {
+    throw new Error(
+      "File links are unavailable for WSL terminals. Use the shell to access files in the selected distro.",
+    );
+  }
   const resolved = resolveTerminalPath(input.rawPath, input.cwd);
   const classified = await classifyTerminalPath(input, resolved);
   const targetPath = pathWithPosition(classified.path.absolutePath, classified.position);

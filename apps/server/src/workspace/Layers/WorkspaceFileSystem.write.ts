@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile as readFileBytes } from "node:fs/promises";
 
 import { Effect, FileSystem, Path } from "effect";
+import type * as SqlClient from "effect/unstable/sql/SqlClient";
+import { withWorktreeAccess } from "../../git/Layers/WorktreeAccess.ts";
 import { resolveExecutionTargetId } from "@bigbud/contracts/core/baseSchemas.ts";
 
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
@@ -30,6 +32,7 @@ export function makeWorkspaceWriteFile(input: {
   readonly path: Path.Path;
   readonly workspacePaths: WorkspacePathsShape;
   readonly workspaceEntries: WorkspaceEntriesShape;
+  readonly sql?: SqlClient.SqlClient;
 }): WorkspaceFileSystemShape["writeFile"] {
   const writeFile: WorkspaceFileSystemShape["writeFile"] = Effect.fn(
     "WorkspaceFileSystem.writeFile",
@@ -138,5 +141,23 @@ export function makeWorkspaceWriteFile(input: {
     yield* input.workspaceEntries.invalidate(value.cwd);
     return { relativePath: target.relativePath };
   });
-  return writeFile;
+  return (value) =>
+    input.sql && isLocalExecutionTarget(value.executionTargetId)
+      ? withWorktreeAccess(
+          input.sql,
+          { cwd: value.cwd, repository: value.cwd },
+          writeFile(value),
+        ).pipe(
+          Effect.mapError(
+            (cause) =>
+              new WorkspaceFileSystemError({
+                cwd: value.cwd,
+                relativePath: value.relativePath,
+                operation: "workspaceFileSystem.writeFile",
+                detail: String(cause),
+                cause,
+              }),
+          ),
+        )
+      : writeFile(value);
 }

@@ -1,6 +1,6 @@
 import { DownloadIcon, InfoIcon, RotateCwIcon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { isElectron } from "../../config/env";
 import {
@@ -20,6 +20,7 @@ import {
   shouldShowDesktopUpdateButton,
   shouldToastDesktopUpdateActionResult,
 } from "../layout/desktopUpdate.logic";
+import { useBannerDismissal } from "../../stores/ui/useBannerDismissal";
 import { StatusBanner } from "../common/StatusBanner";
 import {
   Progress,
@@ -63,7 +64,11 @@ export function SidebarUpdatePill() {
   const isDownloadingPreview = isDownloadingPreviewEnabled();
   const queriedState = useDesktopUpdateState().data ?? null;
   const state = isDownloadingPreview ? downloadPreviewState : queriedState;
-  const [dismissed, setDismissed] = useState(false);
+  const { dismissed, dismiss } = useBannerDismissal([
+    "desktop",
+    "update",
+    state?.availableVersion ?? state?.downloadedVersion,
+  ]);
 
   const visible =
     (isDownloadingPreview || (isElectron && !import.meta.env.DEV)) &&
@@ -147,6 +152,8 @@ export function SidebarUpdatePill() {
     <div className="flex flex-col gap-1">
       {showArm64Warning && arm64Description && (
         <StatusBanner
+          dismissalKey={["desktop", "arm64-intel-build"]}
+          dismissLabel="Dismiss Intel build warning"
           variant="warning"
           icon={<TriangleAlertIcon />}
           className="rounded-2xl border-warning/40 bg-warning/8 text-xs"
@@ -155,7 +162,7 @@ export function SidebarUpdatePill() {
         />
       )}
       {visible && (
-        <div className="group/update relative w-full text-xs">
+        <div className="group/update relative w-full pr-6 text-xs">
           {state?.status === "downloading" ? (
             <Progress
               aria-label="Downloading update"
@@ -216,23 +223,23 @@ export function SidebarUpdatePill() {
               <TooltipPopup side="top">{tooltip}</TooltipPopup>
             </Tooltip>
           )}
-          {action === "download" && state?.status !== "downloading" && (
+          {
             <Tooltip>
               <TooltipTrigger
                 render={
                   <button
                     type="button"
                     aria-label="Dismiss update"
-                    className="absolute top-1 right-0 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/65 opacity-0 transition-[color,opacity] hover:text-foreground group-hover/update:opacity-100 focus-visible:opacity-100"
-                    onClick={() => setDismissed(true)}
+                    className="absolute top-1 right-0 inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/65 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={dismiss}
                   >
-                    <XIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
+                    <XIcon aria-hidden className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                   </button>
                 }
               />
               <TooltipPopup side="top">Dismiss until next launch</TooltipPopup>
             </Tooltip>
-          )}
+          }
         </div>
       )}
     </div>

@@ -32,6 +32,8 @@ import { openDiffPanel } from "./openDiffPanel";
 import { RightPanelLauncher } from "./RightPanelLauncher";
 import { RightPanelShell } from "./RightPanelShell";
 import { RightPanelTabs } from "./RightPanelTabs";
+import { SystemPanel } from "../resource-monitor/SystemPanel";
+import { UsagePanel } from "../usage/UsagePanel";
 import { useRightPanelWidth } from "./useRightPanelWidth";
 
 interface RightPanelHostProps {
@@ -65,6 +67,10 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const notesShortcutLabel = shortcutLabelForCommand(keybindings, "notes.toggle");
 
   const openDiff = () => openDiffPanel(navigate, activeThreadId);
+  const openSystem = () => useRightPanelTabsStore.getState().openTab("system");
+  const closeSystem = () => useRightPanelTabsStore.getState().closeTab("system");
+  const openUsage = () => useRightPanelTabsStore.getState().openTab("usage");
+  const closeUsage = () => useRightPanelTabsStore.getState().closeTab("usage");
 
   return (
     <RightPanelShell
@@ -89,6 +95,8 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         onCloseGit={closeGitPanel}
         onCloseKanban={closeKanbanPanel}
         onCloseNotes={closeNotesPanel}
+        onCloseSystem={closeSystem}
+        onCloseUsage={closeUsage}
         onCloseTerminal={closeTerminalPanel}
         onOpenNewBrowserTab={openNewBrowserTab}
         onOpenDiff={openDiff}
@@ -96,6 +104,8 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
         onOpenGit={openGitPanel}
         onOpenKanban={openKanbanPanel}
         onOpenNotes={openNotesPanel}
+        onOpenSystem={openSystem}
+        onOpenUsage={openUsage}
         onOpenTerminal={openTerminalPanel}
         notesShortcutLabel={notesShortcutLabel}
         terminalAvailable={Boolean(workspaceRoot)}
@@ -120,6 +130,8 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                   onToggleGit={openGitPanel}
                   onToggleKanban={openKanbanPanel}
                   onToggleNotes={openNotesPanel}
+                  onToggleSystem={openSystem}
+                  onToggleUsage={openUsage}
                   onToggleTerminal={openTerminalPanel}
                   notesShortcutLabel={notesShortcutLabel}
                   terminalAvailable={Boolean(workspaceRoot)}
@@ -130,6 +142,25 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
             {openTabs.map((tabId) => {
               const kind = getRightPanelTabKind(tabId);
               const isActive = activeTabId === tabId && rightPanelOpen;
+
+              if (kind === "system" || kind === "usage") {
+                return (
+                  <div
+                    key={tabId}
+                    className={cn(
+                      "absolute inset-0 flex min-h-0 flex-col overflow-hidden",
+                      !isActive && "pointer-events-none invisible",
+                    )}
+                    inert={!isActive ? true : undefined}
+                  >
+                    {kind === "system" ? (
+                      <SystemPanel visible={isActive} />
+                    ) : (
+                      <UsagePanel visible={isActive} />
+                    )}
+                  </div>
+                );
+              }
 
               if (kind === "browser") {
                 return (
@@ -161,7 +192,7 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                     )}
                     inert={!isActive ? true : undefined}
                   >
-                    <FilesPanelContent activeThreadId={activeThreadId ?? null} />
+                    <FilesPanelContent activeThreadId={activeThreadId ?? null} visible={isActive} />
                   </div>
                 );
               }
@@ -176,7 +207,10 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
                     )}
                     inert={!isActive ? true : undefined}
                   >
-                    <TerminalPanelContent activeThreadId={activeThreadId ?? null} />
+                    <TerminalPanelContent
+                      activeThreadId={activeThreadId ?? null}
+                      visible={isActive}
+                    />
                   </div>
                 );
               }

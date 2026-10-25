@@ -2,11 +2,13 @@ import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveReleaseMetadata } from "./lib/release-metadata.ts";
 
 export type RemoteAgentReleaseTarget = "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu";
 
 export interface RemoteAgentReleaseManifestInput {
   readonly version: string;
+  readonly tag?: string;
   readonly buildDigest: string;
   readonly repository: string;
   readonly signingKeyId: string;
@@ -23,7 +25,7 @@ export interface RemoteAgentReleaseManifest {
     readonly version: string;
     readonly buildDigest: string;
     readonly protocolMajor: 1;
-    readonly protocolMinor: 2;
+    readonly protocolMinor: 3;
     readonly targetTriple: RemoteAgentReleaseTarget;
     readonly sizeBytes: number;
     readonly sha256: string;
@@ -85,6 +87,10 @@ function signArtifact(
 export function buildRemoteAgentReleaseManifest(
   input: RemoteAgentReleaseManifestInput,
 ): RemoteAgentReleaseManifest {
+  const release = resolveReleaseMetadata(input.tag ?? input.version);
+  if (release.version !== input.version) {
+    throw new Error("Release tag must match the canonical release version.");
+  }
   assertSafeReleaseValue(input.version, "Release version", /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/);
   assertSafeReleaseValue(input.buildDigest, "Build digest", /^[A-Fa-f0-9]{7,64}$/);
   assertSafeReleaseValue(
@@ -109,11 +115,11 @@ export function buildRemoteAgentReleaseManifest(
       version: input.version,
       buildDigest: input.buildDigest,
       protocolMajor: 1 as const,
-      protocolMinor: 2 as const,
+      protocolMinor: 3 as const,
       targetTriple,
       sizeBytes: bytes.byteLength,
       sha256: createHash("sha256").update(bytes).digest("hex"),
-      url: `https://github.com/${input.repository}/releases/download/v${input.version}/${assetName}`,
+      url: `https://github.com/${input.repository}/releases/download/${release.tag}/${assetName}`,
     };
     return signArtifact(artifact, input.signingKeyPem, input.signingKeyId);
   });
@@ -164,6 +170,7 @@ function runCli(): void {
     .map((argument) => parseAssetSpec(argument.slice("--asset=".length)));
   const manifest = buildRemoteAgentReleaseManifest({
     version: argumentValue("--version"),
+    ...(process.argv.includes("--tag") ? { tag: argumentValue("--tag") } : {}),
     buildDigest: argumentValue("--build-digest"),
     repository: argumentValue("--repository"),
     signingKeyId: process.env.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID ?? "",

@@ -1,14 +1,15 @@
-import { type ProviderKind } from "@bigbud/contracts";
-import { Pencil, Plus, SquareSplitHorizontal, TerminalSquare, Trash2, XIcon } from "lucide-react";
+import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
+import { TerminalSquare, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
 import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 
 import { type ThreadTerminalGroup } from "../../models/types";
-import { TerminalActionButton } from "./TerminalActionButton";
+import { ThreadTerminalDrawerToolbar } from "./ThreadTerminalDrawerToolbar";
 import { ThreadTerminalDrawerRenameEditor } from "./ThreadTerminalDrawerRenameEditor";
 
 interface ThreadTerminalDrawerSidebarProps {
+  threadId?: ThreadId;
   resolvedTerminalGroups: ReadonlyArray<ThreadTerminalGroup>;
   resolvedActiveTerminalId: string;
   normalizedTerminalIds: ReadonlyArray<string>;
@@ -33,9 +34,12 @@ interface ThreadTerminalDrawerSidebarProps {
   onNewTerminalAction: () => void;
   onActiveTerminalChange: (terminalId: string) => void;
   onCloseTerminal: (terminalId: string) => void;
+  expanded?: boolean;
+  onToggleExpanded?: (() => void) | undefined;
 }
 
 export function ThreadTerminalDrawerSidebar({
+  threadId,
   resolvedTerminalGroups,
   resolvedActiveTerminalId,
   normalizedTerminalIds,
@@ -60,44 +64,28 @@ export function ThreadTerminalDrawerSidebar({
   onNewTerminalAction,
   onActiveTerminalChange,
   onCloseTerminal,
+  expanded = false,
+  onToggleExpanded,
 }: ThreadTerminalDrawerSidebarProps) {
   return (
     <aside className="flex w-36 min-w-36 flex-col border border-border/70 bg-muted/10">
       <div className="flex h-[22px] items-stretch justify-end border-b border-border/70">
-        <div className="inline-flex h-full items-stretch">
-          <TerminalActionButton
-            className="inline-flex h-full items-center px-1 text-foreground/90 transition-colors hover:bg-accent/70"
-            onClick={() => onStartTerminalRename(resolvedActiveTerminalId)}
-            label={renameTerminalActionLabel}
-          >
-            <Pencil className="size-3.25" />
-          </TerminalActionButton>
-          <TerminalActionButton
-            className={`inline-flex h-full items-center px-1 text-foreground/90 transition-colors ${
-              hasReachedSplitLimit
-                ? "border-l border-border/70 cursor-not-allowed opacity-45 hover:bg-transparent"
-                : "border-l border-border/70 hover:bg-accent/70"
-            }`}
-            onClick={onSplitTerminalAction}
-            label={splitTerminalActionLabel}
-          >
-            <SquareSplitHorizontal className="size-3.25" />
-          </TerminalActionButton>
-          <TerminalActionButton
-            className="inline-flex h-full items-center border-l border-border/70 px-1 text-foreground/90 transition-colors hover:bg-accent/70"
-            onClick={onNewTerminalAction}
-            label={newTerminalActionLabel}
-          >
-            <Plus className="size-3.25" />
-          </TerminalActionButton>
-          <TerminalActionButton
-            className="inline-flex h-full items-center border-l border-border/70 px-1 text-foreground/90 transition-colors hover:bg-accent/70"
-            onClick={() => onCloseTerminal(resolvedActiveTerminalId)}
-            label={closeTerminalActionLabel}
-          >
-            <Trash2 className="size-3.25" />
-          </TerminalActionButton>
-        </div>
+        <ThreadTerminalDrawerToolbar
+          threadId={threadId}
+          variant="sidebar"
+          hasReachedSplitLimit={hasReachedSplitLimit}
+          renameTerminalActionLabel={renameTerminalActionLabel}
+          splitTerminalActionLabel={splitTerminalActionLabel}
+          newTerminalActionLabel={newTerminalActionLabel}
+          closeTerminalActionLabel={closeTerminalActionLabel}
+          resolvedActiveTerminalId={resolvedActiveTerminalId}
+          onRenameTerminalAction={() => onStartTerminalRename(resolvedActiveTerminalId)}
+          onSplitTerminalAction={onSplitTerminalAction}
+          onNewTerminalAction={onNewTerminalAction}
+          onCloseTerminal={onCloseTerminal}
+          expanded={expanded}
+          onToggleExpanded={onToggleExpanded}
+        />
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-1 py-1">

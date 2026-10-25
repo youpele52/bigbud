@@ -25,6 +25,14 @@ export function asRuntimeItemId(value: string): RuntimeItemId {
 }
 
 export function turnStatusFromResult(result: SDKResultMessage): ProviderRuntimeTurnStatus {
+  // Current CLIs can pair an explicit interrupt with a turn-limit result, whose
+  // generic error text says nothing about cancellation. Native cause wins.
+  if (
+    result.terminal_reason === "aborted_streaming" ||
+    result.terminal_reason === "aborted_tools"
+  ) {
+    return "interrupted";
+  }
   if (result.subtype === "success") {
     return "completed";
   }

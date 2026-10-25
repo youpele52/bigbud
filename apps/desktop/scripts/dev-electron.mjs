@@ -1,7 +1,18 @@
+// Dev-only Electron launcher. The stop/restart state machine lives in
+// scripts/lib/dev-electron-launcher.ts; this file only wires the real host.
 import { spawn, spawnSync } from "node:child_process";
-import { watch } from "node:fs";
-import { join } from "node:path";
+import { existsSync, unwatchFile, watchFile } from "node:fs";
+import { join, resolve } from "node:path";
 
+import { DEV_RUNNER_PID_ENV } from "@bigbud/shared/DevLauncher";
+
+import { DevElectronLauncher } from "../../../scripts/lib/dev-electron-launcher.ts";
+import {
+  killTreeWindows,
+  listProcesses,
+  processAlive,
+} from "../../../scripts/lib/dev-process-tree.ts";
+import { prepareDevSystemMonitorEnv } from "./dev-system-monitor.mjs";
 import { desktopDir, resolveElectronPath } from "./electron-launcher.mjs";
 import { waitForResources } from "./wait-for-resources.mjs";
 
@@ -12,13 +23,12 @@ const requiredFiles = [
   "dist-electron/preload.js",
   "../server/dist/bin.mjs",
 ];
-const watchedDirectories = [
-  { directory: "dist-electron", files: new Set(["main.js", "preload.js"]) },
-  { directory: "../server/dist", files: new Set(["bin.mjs"]) },
-];
-const forcedShutdownTimeoutMs = 1_500;
-const restartDebounceMs = 120;
-const childTreeGracePeriodMs = 1_200;
+// Bun's directory fs.watch drops per-file events during multi-file rebuilds (tsdown writes the
+// bundle and ~20 chunks at once), so restarts were missed. Poll the outputs' stats instead.
+const BUILD_OUTPUT_POLL_MS = 300;
+const windows = process.platform === "win32";
+// The bigbud server's entry point, as it appears on its command line.
+const backendEntry = "server/dist/bin.mjs";
 
 await waitForResources({
   baseDir: desktopDir,
@@ -26,193 +36,111 @@ await waitForResources({
   tcpPort: port,
 });
 
-const childEnv = { ...process.env };
+const childEnv = prepareDevSystemMonitorEnv(process.env, resolve(desktopDir, "../.."));
 delete childEnv.ELECTRON_RUN_AS_NODE;
+// Only this launcher may end the dev session. Terminals inside the dev app must not inherit it.
+delete childEnv[DEV_RUNNER_PID_ENV];
 
-let shuttingDown = false;
-let restartTimer = null;
-let currentApp = null;
-let restartQueue = Promise.resolve();
-const expectedExits = new WeakSet();
+const devRunnerPid = Number.parseInt(process.env[DEV_RUNNER_PID_ENV] ?? "", 10);
 const watchers = [];
 
-function killChildTreeByPid(pid, signal) {
-  if (process.platform === "win32" || typeof pid !== "number") {
-    return;
-  }
-
-  spawnSync("pkill", [`-${signal}`, "-P", String(pid)], { stdio: "ignore" });
-}
-
 function cleanupStaleDevApps() {
-  if (process.platform === "win32") {
+  if (windows) {
     return;
   }
 
   spawnSync("pkill", ["-f", "--", `--t3code-dev-root=${desktopDir}`], { stdio: "ignore" });
 }
 
-function startApp() {
-  if (shuttingDown || currentApp !== null) {
-    return;
-  }
-
-  const app = spawn(
-    resolveElectronPath(true),
-    ["--no-deprecation", `--t3code-dev-root=${desktopDir}`, "dist-electron/main.js"],
-    {
-      cwd: desktopDir,
-      env: {
-        ...childEnv,
-        VITE_DEV_SERVER_URL: devServerUrl,
-      },
-      stdio: "inherit",
-    },
-  );
-
-  currentApp = app;
-
-  app.once("error", () => {
-    if (currentApp === app) {
-      currentApp = null;
-    }
-
-    if (!shuttingDown) {
-      scheduleRestart();
-    }
-  });
-
-  app.once("exit", (code, signal) => {
-    if (currentApp === app) {
-      currentApp = null;
-    }
-
-    const exitedAbnormally = signal !== null || code !== 0;
-    if (!shuttingDown && !expectedExits.has(app) && exitedAbnormally) {
-      scheduleRestart();
-    }
-  });
-}
-
-async function stopApp() {
-  const app = currentApp;
-  if (!app) {
-    return;
-  }
-
-  currentApp = null;
-  expectedExits.add(app);
-
-  await new Promise((resolve) => {
-    let settled = false;
-
-    const finish = () => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      resolve();
-    };
-
-    app.once("exit", finish);
-    app.kill("SIGTERM");
-    killChildTreeByPid(app.pid, "TERM");
-
-    setTimeout(() => {
-      if (settled) {
-        return;
-      }
-
-      app.kill("SIGKILL");
-      killChildTreeByPid(app.pid, "KILL");
-      finish();
-    }, forcedShutdownTimeoutMs).unref();
-  });
-}
-
-function scheduleRestart() {
-  if (shuttingDown) {
-    return;
-  }
-
-  if (restartTimer) {
-    clearTimeout(restartTimer);
-  }
-
-  restartTimer = setTimeout(() => {
-    restartTimer = null;
-    restartQueue = restartQueue
-      .catch(() => undefined)
-      .then(async () => {
-        await stopApp();
-        if (!shuttingDown) {
-          startApp();
-        }
-      });
-  }, restartDebounceMs);
-}
-
-function startWatchers() {
-  for (const { directory, files } of watchedDirectories) {
-    const watcher = watch(
-      join(desktopDir, directory),
-      { persistent: true },
-      (_eventType, filename) => {
-        if (typeof filename !== "string" || !files.has(filename)) {
-          return;
-        }
-
-        scheduleRestart();
+const launcher = new DevElectronLauncher({
+  windows,
+  launcherPid: process.pid,
+  devRunnerPid: Number.isInteger(devRunnerPid) && devRunnerPid > 0 ? devRunnerPid : undefined,
+  spawnApp() {
+    const app = spawn(
+      resolveElectronPath(true),
+      ["--no-deprecation", `--t3code-dev-root=${desktopDir}`, "dist-electron/main.js"],
+      {
+        cwd: desktopDir,
+        env: {
+          ...childEnv,
+          VITE_DEV_SERVER_URL: devServerUrl,
+        },
+        stdio: "inherit",
       },
     );
+    return {
+      pid: app.pid,
+      onExit: (listener) => {
+        app.once("exit", listener);
+      },
+      onError: (listener) => {
+        app.once("error", listener);
+      },
+    };
+  },
+  listProcesses: () => listProcesses(),
+  findBackend(candidates) {
+    if (windows || candidates.length === 0) {
+      return undefined;
+    }
+    const listing = spawnSync("ps", ["-o", "pid=,command=", "-p", candidates.join(",")], {
+      encoding: "utf8",
+    });
+    for (const line of (listing.stdout ?? "").split("\n")) {
+      const match = /^\s*(\d+)\s+(.*)$/.exec(line);
+      if (match && match[2].includes(backendEntry)) {
+        return Number(match[1]);
+      }
+    }
+    return undefined;
+  },
+  signal: (pid, signal) => {
+    process.kill(pid, signal);
+  },
+  killTree: killTreeWindows,
+  alive: processAlive,
+  now: () => Date.now(),
+  setTimer: (callback, ms) => setTimeout(callback, ms),
+  clearTimer: (timer) => clearTimeout(timer),
+  log: (message) => process.stderr.write(`${message}\n`),
+  closeWatchers() {
+    for (const file of watchers) {
+      unwatchFile(file);
+    }
+  },
+  exit: (code) => process.exit(code),
+});
 
-    watchers.push(watcher);
+function startWatchers() {
+  for (const relativePath of requiredFiles) {
+    const file = join(desktopDir, relativePath);
+    watchFile(file, { persistent: true, interval: BUILD_OUTPUT_POLL_MS }, (current, previous) => {
+      if (current.mtimeMs === previous.mtimeMs && current.size === previous.size) {
+        return;
+      }
+      // A clean rebuild deletes outputs first; the recreating write triggers the restart.
+      if (!requiredFiles.every((path) => existsSync(join(desktopDir, path)))) {
+        return;
+      }
+
+      launcher.onBuildOutputChanged();
+    });
+
+    watchers.push(file);
   }
-}
-
-function killChildTree(signal) {
-  if (process.platform === "win32") {
-    return;
-  }
-
-  // Kill direct children as a final fallback in case normal shutdown leaves stragglers.
-  spawnSync("pkill", [`-${signal}`, "-P", String(process.pid)], { stdio: "ignore" });
-}
-
-async function shutdown(exitCode) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-
-  if (restartTimer) {
-    clearTimeout(restartTimer);
-    restartTimer = null;
-  }
-
-  for (const watcher of watchers) {
-    watcher.close();
-  }
-
-  await stopApp();
-  killChildTree("TERM");
-  await new Promise((resolve) => {
-    setTimeout(resolve, childTreeGracePeriodMs);
-  });
-  killChildTree("KILL");
-
-  process.exit(exitCode);
 }
 
 startWatchers();
 cleanupStaleDevApps();
-startApp();
+launcher.start();
 
 process.once("SIGINT", () => {
-  void shutdown(130);
+  void launcher.shutdown(130);
 });
 process.once("SIGTERM", () => {
-  void shutdown(143);
+  void launcher.shutdown(143);
 });
 process.once("SIGHUP", () => {
-  void shutdown(129);
+  void launcher.shutdown(129);
 });

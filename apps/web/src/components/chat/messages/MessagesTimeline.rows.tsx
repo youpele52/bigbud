@@ -5,7 +5,10 @@ import type {
   ChatImageAttachment,
   ChatPathAttachment,
 } from "../../../models/types/app.types";
+import { SubagentsCard } from "../agents/SubagentsCard";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
+import { UserInputQuestions } from "./UserInputQuestions";
+import { AnsweredUserInput } from "./AnsweredUserInput";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
@@ -13,19 +16,22 @@ import { MessageReplyPreview } from "../common/MessageReplyPreview";
 import { MessagesTimelineWorkGroup } from "./MessagesTimeline.workGroup";
 import { MessagesTimelineAnnotations } from "./MessagesTimeline.annotations";
 import { MessagesTimelineDelegatedProvenance } from "./MessagesTimeline.delegatedProvenance";
+import { MessagesTimelineOrigins } from "./MessagesTimeline.origins";
 import { UserMessageBody } from "./MessagesTimeline.userMessage";
 import {
   type AssistantMessageRow,
   AssistantMessageBody,
 } from "./MessagesTimeline.assistantMessage";
 import { ThinkingMessageBody } from "./MessagesTimeline.thinking";
-import { Undo2Icon, ChevronDownIcon } from "lucide-react";
+import { Undo2Icon } from "lucide-react";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
 import { isVideoMimeType } from "~/lib/workspaceFilePreview";
 import { attachmentPreviewRoutePath, toAttachmentPreviewUrl } from "~/lib/attachmentPreview";
 import { formatTimestamp } from "../../../utils/timestamp";
 import { cn } from "~/lib/utils";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
+import { timelineRowAccordionControl } from "./MessagesTimeline.accordion";
+import { ActivityAccordion } from "../common/ActivityAccordion";
 import {
   UserFileReferenceChips,
   UserFileSourcePaths,
@@ -37,6 +43,8 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
     row,
     expandedWorkGroups,
     onToggleWorkGroup,
+    activityAccordionOpenById,
+    onSetActivityAccordionOpen,
     completionSummary,
     turnDiffSummaryByAssistantMessageId,
     changedFilesExpandedByTurnId,
@@ -60,6 +68,11 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
     onOpenReplySource,
     onBranchThread,
   } = props;
+  const accordion = timelineRowAccordionControl(
+    row,
+    activityAccordionOpenById,
+    onSetActivityAccordionOpen,
+  );
   return (
     <div
       className="pb-4"
@@ -68,12 +81,18 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
     >
+      {row.kind === "subagents-history" ? (
+        <SubagentsCard agents={row.agents} presentation="accordion" accordion={accordion} />
+      ) : null}
       {row.kind === "work" && (
         <MessagesTimelineWorkGroup
           row={row}
           isExpanded={expandedWorkGroups[row.id] ?? false}
           onToggleWorkGroup={onToggleWorkGroup}
           executionTargetId={workspaceExecutionTargetId}
+          accordion={accordion}
+          activityAccordionOpenById={activityAccordionOpenById}
+          onSetActivityAccordionOpen={onSetActivityAccordionOpen}
         />
       )}
       {row.kind === "message" &&
@@ -179,6 +198,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                     ))}
                   </div>
                 )}
+                <MessagesTimelineOrigins segments={row.message.originSegments} />
                 <UserFileReferenceChips
                   files={userFileReferences}
                   markdownCwd={markdownCwd}
@@ -208,15 +228,16 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                         </div>
                       ) : null}
                     </div>
-                    <details className="mt-2 group/read-doc">
-                      <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground/55 hover:text-muted-foreground/75">
-                        <ChevronDownIcon className="size-3 shrink-0 -rotate-90 transition-transform duration-150 group-open/read-doc:rotate-0" />
-                        Extracted contents
-                      </summary>
-                      <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/40 bg-background/45 p-2 font-mono text-[11px] leading-relaxed text-foreground/80">
+                    <ActivityAccordion
+                      variant="compact"
+                      title="Extracted contents"
+                      className="mt-2"
+                      panelClassName="pt-2"
+                    >
+                      <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/40 bg-background/45 p-2 font-mono text-[11px] leading-relaxed text-foreground/80">
                         {displayedUserMessage.readDocument.text}
                       </pre>
-                    </details>
+                    </ActivityAccordion>
                   </div>
                 )}
                 <MessagesTimelineAnnotations annotations={displayedUserMessage.annotations} />
@@ -227,6 +248,8 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                   displayedUserMessage.contexts.length > 0) && (
                   <UserMessageBody
                     text={displayedUserMessage.visibleText}
+                    sourceText={row.message.text}
+                    preferredProvider={props.preferredProvider}
                     terminalContexts={displayedUserMessage.contexts}
                     cwd={markdownCwd}
                   />
@@ -286,6 +309,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           markdownCwd={markdownCwd}
           onMarkdownAnchorClick={onMarkdownAnchorClick}
           timestampFormat={timestampFormat}
+          accordion={accordion}
         />
       )}
       {row.kind === "proposed-plan" && (
@@ -301,47 +325,27 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
       )}
 
       {row.kind === "user-input-question" && (
-        <div className="min-w-0 px-1 py-0.5">
-          <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
-            <p className="mb-2.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">
-              Input required
-            </p>
-            <div className="space-y-4">
-              {row.pendingUserInput.questions.map((question, index) => (
-                <div key={question.id}>
-                  <p className="mb-1 text-sm font-medium text-foreground/90">
-                    {row.pendingUserInput.questions.length > 1
-                      ? `${index + 1}. ${question.header || question.question}`
-                      : question.header || question.question}
-                  </p>
-                  {question.header && question.question !== question.header && (
-                    <p className="mb-1.5 text-sm text-muted-foreground/80">{question.question}</p>
-                  )}
-                  {question.options.length > 0 && (
-                    <ul className="space-y-1 pl-3">
-                      {question.options.map((option, index) => (
-                        <li
-                          key={`${question.id}:${option.id ?? `index:${index}`}`}
-                          className="text-sm text-muted-foreground/70"
-                        >
-                          <span className="font-medium text-foreground/70">{option.label}</span>
-                          {option.description ? (
-                            <span className="text-muted-foreground/55">
-                              {" "}
-                              — {option.description}
-                            </span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
+        // Answered questions are accordions, which share the work log's left edge.
+        <div className={cn("min-w-0 py-0.5", !row.answers && "px-1")}>
+          {row.answers ? (
+            <AnsweredUserInput
+              input={row.pendingUserInput}
+              answers={row.answers}
+              answeredAt={row.answeredAt ?? row.createdAt}
+              timestampFormat={timestampFormat}
+              accordion={accordion}
+            />
+          ) : (
+            <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
+              <p className="mb-2.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">
+                Input required
+              </p>
+              <UserInputQuestions questions={row.pendingUserInput.questions} />
+              <p className="mt-3 text-[11px] text-muted-foreground/45">
+                Type your answer below and press send to continue.
+              </p>
             </div>
-            <p className="mt-3 text-[11px] text-muted-foreground/45">
-              Type your answer below and press send to continue.
-            </p>
-          </div>
+          )}
         </div>
       )}
     </div>

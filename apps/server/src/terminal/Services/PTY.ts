@@ -23,9 +23,19 @@ export interface PtyExitEvent {
 }
 
 export interface PtyProcess {
+  /** Attached to an existing process whose earlier output is not replayed by this adapter. */
+  readonly recovered?: boolean;
+  /** Explicit replacement must wait for definitive exit and durable ownership release. */
+  readonly prepareRestart?: () => Promise<void>;
   readonly detach?: () => void;
   readonly pid: number;
   write(data: string): void;
+  /**
+   * Producer flow control: stop reading output so the child blocks on a full PTY buffer, then
+   * resume. Optional; adapters without it are bounded by delivery overflow instead.
+   */
+  readonly pause?: () => void;
+  readonly resume?: () => void;
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
   onData(callback: (data: string) => void): () => void;

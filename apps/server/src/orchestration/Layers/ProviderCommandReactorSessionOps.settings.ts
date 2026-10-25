@@ -24,6 +24,8 @@ export interface EnsureSessionOptions {
   readonly runtimeMode?: RuntimeMode;
   readonly restartFreshIfInactive?: boolean;
   readonly requireExactModel?: boolean;
+  /** Resume cursor of a dead session to revive when no live session exists (plan D12). */
+  readonly resumeCursor?: unknown;
 }
 
 // Resolve once per send, outside the retry loop. Later reads of the thread remain

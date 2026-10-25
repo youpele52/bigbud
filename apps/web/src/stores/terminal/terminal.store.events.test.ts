@@ -149,7 +149,7 @@ describe("terminalStateStore events", () => {
     ).toBe(2);
   });
 
-  it("applies started terminal events to terminal state, launch context, and event buffer", () => {
+  it("applies started events without overwriting another terminal's launch context", () => {
     const store = useTerminalStateStore.getState();
     store.applyTerminalEvent(makeStartedTerminalEvent("setup-bootstrap"));
 
@@ -166,10 +166,9 @@ describe("terminalStateStore events", () => {
     expect(terminalState.terminalOpen).toBe(true);
     expect(terminalState.activeTerminalId).toBe("setup-bootstrap");
     expect(terminalState.terminalIds).toEqual(["default", "setup-bootstrap"]);
-    expect(useTerminalStateStore.getState().terminalLaunchContextByThreadId[THREAD_ID]).toEqual({
-      cwd: "/tmp/worktree",
-      worktreePath: "/tmp/worktree",
-    });
+    expect(
+      useTerminalStateStore.getState().terminalLaunchContextByThreadId[THREAD_ID],
+    ).toBeUndefined();
     expect(entries).toHaveLength(1);
     expect(entries[0]?.event.type).toBe("started");
   });

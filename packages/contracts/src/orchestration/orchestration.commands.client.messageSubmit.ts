@@ -12,6 +12,7 @@ import { ChatAttachment, UploadChatAttachment } from "./orchestration.attachment
 import { ModelSelection, ProviderInteractionMode, RuntimeMode } from "./orchestration.provider";
 import { SourceProposedPlanReference } from "./orchestration.thread";
 import { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
+import { MessageOriginSegment } from "./orchestration.messageOrigin";
 
 /** Server-side form with normalized attachments. */
 export const ThreadMessageSubmitCommand = Schema.Struct({
@@ -38,6 +39,13 @@ export const ThreadMessageSubmitCommand = Schema.Struct({
   bootstrap: Schema.optional(ThreadTurnStartBootstrap),
   bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  /** Server-trusted provenance. The client command schema intentionally omits this field. */
+  originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
+  /**
+   * Server-only: re-queue a user message that is already in the transcript after the provider
+   * refused it as busy. The client command schema intentionally omits this field.
+   */
+  redeliverSentMessage: Schema.optional(Schema.Boolean),
   delivery: Schema.Literals(["auto", "queue"]).pipe(
     Schema.withDecodingDefault(() => "auto" as const),
   ),

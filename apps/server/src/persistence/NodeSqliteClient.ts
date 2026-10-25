@@ -4,26 +4,24 @@
  *
  * @module SqliteClient
  */
-import { DatabaseSync, type StatementSync } from "node:sqlite";
-import { chmodSync } from "node:fs";
-import { dirname } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
-import * as Cache from "effect/Cache";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
-import { identity } from "effect/Function";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as ServiceMap from "effect/ServiceMap";
-import * as Stream from "effect/Stream";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as Client from "effect/unstable/sql/SqlClient";
 import type { Connection } from "effect/unstable/sql/SqlConnection";
-import { SqlError, classifySqliteError } from "effect/unstable/sql/SqlError";
 import * as Statement from "effect/unstable/sql/Statement";
+
+import { openNodeSqliteDatabase } from "./NodeSqliteClient.files.ts";
+import { makeInProcessConnection } from "./NodeSqliteClient.inProcess.ts";
+import { makeWorkerConnection, resolveNodeSqliteWorkerEntry } from "./NodeSqliteClient.worker.ts";
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name";
 
@@ -45,6 +43,8 @@ export interface SqliteClientConfig {
   readonly spanAttributes?: Record<string, unknown> | undefined;
   readonly transformResultNames?: ((str: string) => string) | undefined;
   readonly transformQueryNames?: ((str: string) => string) | undefined;
+  /** Run the connection in a worker thread (default false); see `shouldUseWorker`. */
+  readonly worker?: boolean | undefined;
 }
 
 export interface SqliteMemoryClientConfig extends Omit<
@@ -74,6 +74,39 @@ const checkNodeSqliteCompat = () => {
   return Effect.void;
 };
 
+/**
+ * Worker selection: callers opt in with `worker: true`. `BIGBUD_SQLITE_WORKER=0`
+ * forces every connection in-process and `all` forces every connection into a
+ * worker (used to run test suites against the worker bridge).
+ */
+const shouldUseWorker = (options: SqliteClientConfig): boolean => {
+  const mode = process.env.BIGBUD_SQLITE_WORKER?.trim().toLowerCase();
+  if (mode === "0" || mode === "false") return false;
+  if (mode === "all") return true;
+  return options.worker ?? false;
+};
+
+const makeConnection = Effect.fn("makeConnection")(function* (
+  options: SqliteClientConfig,
+  openDatabase: () => DatabaseSync,
+): Effect.fn.Return<Connection, never, Scope.Scope> {
+  if (shouldUseWorker(options)) {
+    const entry = resolveNodeSqliteWorkerEntry();
+    if (entry) {
+      return yield* makeWorkerConnection(entry, {
+        filename: options.filename,
+        readonly: options.readonly ?? false,
+        allowExtension: options.allowExtension ?? false,
+        prepareCacheSize: options.prepareCacheSize ?? 200,
+      });
+    }
+    yield* Effect.logWarning(
+      "SQLite worker entry not found; running SQLite on the main thread instead.",
+    );
+  }
+  return yield* makeInProcessConnection(options, openDatabase);
+});
+
 const makeWithDatabase = Effect.fn("makeWithDatabase")(function* (
   options: SqliteClientConfig,
   openDatabase: () => DatabaseSync,
@@ -85,119 +118,8 @@ const makeWithDatabase = Effect.fn("makeWithDatabase")(function* (
     ? Statement.defaultTransforms(options.transformResultNames).array
     : undefined;
 
-  const makeConnection = Effect.gen(function* () {
-    const scope = yield* Effect.scope;
-    const db = openDatabase();
-    yield* Scope.addFinalizer(
-      scope,
-      Effect.sync(() => db.close()),
-    );
-
-    const statementReaderCache = new WeakMap<StatementSync, boolean>();
-    const hasRows = (statement: StatementSync): boolean => {
-      const cached = statementReaderCache.get(statement);
-      if (cached !== undefined) {
-        return cached;
-      }
-      const value = statement.columns().length > 0;
-      statementReaderCache.set(statement, value);
-      return value;
-    };
-
-    const prepareCache = yield* Cache.make({
-      capacity: options.prepareCacheSize ?? 200,
-      timeToLive: options.prepareCacheTTL ?? Duration.minutes(10),
-      lookup: (sql: string) =>
-        Effect.try({
-          try: () => db.prepare(sql),
-          catch: (cause) =>
-            new SqlError({
-              reason: classifySqliteError(cause, {
-                message: "Failed to prepare statement",
-                operation: "prepare",
-              }),
-            }),
-        }),
-    });
-
-    const runStatement = (statement: StatementSync, params: ReadonlyArray<unknown>, raw: boolean) =>
-      Effect.withFiber<ReadonlyArray<any>, SqlError>((fiber) => {
-        statement.setReadBigInts(Boolean(ServiceMap.get(fiber.services, Client.SafeIntegers)));
-        try {
-          if (hasRows(statement)) {
-            return Effect.succeed(statement.all(...(params as any)));
-          }
-          const result = statement.run(...(params as any));
-          return Effect.succeed(raw ? (result as unknown as ReadonlyArray<any>) : []);
-        } catch (cause) {
-          return Effect.fail(
-            new SqlError({
-              reason: classifySqliteError(cause, {
-                message: "Failed to execute statement",
-                operation: "execute",
-              }),
-            }),
-          );
-        }
-      });
-
-    const run = (sql: string, params: ReadonlyArray<unknown>, raw = false) =>
-      Effect.flatMap(Cache.get(prepareCache, sql), (s) => runStatement(s, params, raw));
-
-    const runValues = (sql: string, params: ReadonlyArray<unknown>) =>
-      Effect.acquireUseRelease(
-        Cache.get(prepareCache, sql),
-        (statement) =>
-          Effect.try({
-            try: () => {
-              if (hasRows(statement)) {
-                statement.setReturnArrays(true);
-                // Safe to cast to array after we've setReturnArrays(true)
-                return statement.all(...(params as any)) as unknown as ReadonlyArray<
-                  ReadonlyArray<unknown>
-                >;
-              }
-              statement.run(...(params as any));
-              return [];
-            },
-            catch: (cause) =>
-              new SqlError({
-                reason: classifySqliteError(cause, {
-                  message: "Failed to execute statement",
-                  operation: "execute",
-                }),
-              }),
-          }),
-        (statement) =>
-          Effect.sync(() => {
-            if (hasRows(statement)) {
-              statement.setReturnArrays(false);
-            }
-          }),
-      );
-
-    return identity<Connection>({
-      execute(sql, params, rowTransform) {
-        return rowTransform ? Effect.map(run(sql, params), rowTransform) : run(sql, params);
-      },
-      executeRaw(sql, params) {
-        return run(sql, params, true);
-      },
-      executeValues(sql, params) {
-        return runValues(sql, params);
-      },
-      executeUnprepared(sql, params, rowTransform) {
-        const effect = runStatement(db.prepare(sql), params ?? [], false);
-        return rowTransform ? Effect.map(effect, rowTransform) : effect;
-      },
-      executeStream(_sql, _params) {
-        return Stream.die("executeStream not implemented");
-      },
-    });
-  });
-
   const semaphore = yield* Semaphore.make(1);
-  const connection = yield* makeConnection;
+  const connection = yield* makeConnection(options, openDatabase);
 
   const acquirer = semaphore.withPermits(1)(Effect.succeed(connection));
   const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
@@ -224,30 +146,12 @@ const makeWithDatabase = Effect.fn("makeWithDatabase")(function* (
 const make = (
   options: SqliteClientConfig,
 ): Effect.Effect<Client.SqlClient, never, Scope.Scope | Reactivity.Reactivity> =>
-  makeWithDatabase(options, () => {
-    if (options.filename !== ":memory:" && dirname(options.filename) !== ".") {
-      chmodSync(dirname(options.filename), 0o700);
-    }
-    const database = new DatabaseSync(options.filename, {
-      readOnly: options.readonly ?? false,
+  makeWithDatabase(options, () =>
+    openNodeSqliteDatabase(options.filename, {
+      readonly: options.readonly ?? false,
       allowExtension: options.allowExtension ?? false,
-    });
-    if (options.filename !== ":memory:") {
-      for (const filename of [
-        options.filename,
-        `${options.filename}-wal`,
-        `${options.filename}-shm`,
-      ]) {
-        try {
-          chmodSync(filename, 0o600);
-        } catch (cause) {
-          if (!(cause instanceof Error) || !("code" in cause) || cause.code !== "ENOENT")
-            throw cause;
-        }
-      }
-    }
-    return database;
-  });
+    }),
+  );
 
 const makeMemory = (
   config: SqliteMemoryClientConfig = {},

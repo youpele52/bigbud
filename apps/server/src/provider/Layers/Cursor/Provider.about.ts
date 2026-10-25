@@ -11,14 +11,10 @@ import {
   providerModelsFromSettings,
   type CommandResult,
 } from "../../providerSnapshot.ts";
+import { stripTerminalControlSequences } from "@bigbud/shared/terminalText";
 import { EMPTY_CAPABILITIES, PROVIDER } from "./Provider.shared.ts";
 
 export const ABOUT_TIMEOUT_MS = 8_000;
-
-function stripAnsi(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/\x1b\[[0-9;]*[A-Za-z]|\x1b\].*?\x07/g, "");
-}
 
 function extractAboutField(plain: string, key: string): string | undefined {
   const regex = new RegExp(`^${key}\\s{2,}(.+)$`, "mi");
@@ -52,6 +48,11 @@ export function buildCursorProviderSnapshot(input: {
     provider: PROVIDER,
     enabled: input.cursorSettings.enabled,
     checkedAt: input.checkedAt,
+    modelDiscovery: {
+      status: input.discoveredModels?.length ? "live" : "unavailable",
+      source: "cursor-acp",
+      durationMs: 0,
+    },
     models: providerModelsFromSettings(
       input.discoveredModels ?? [],
       PROVIDER,
@@ -228,7 +229,7 @@ export function parseCursorAboutOutput(result: CommandResult): CursorAboutResult
     };
   }
 
-  const plain = stripAnsi(combined);
+  const plain = stripTerminalControlSequences(combined);
   const version = extractAboutField(plain, "CLI Version") ?? null;
   const userEmail = extractAboutField(plain, "User Email");
 

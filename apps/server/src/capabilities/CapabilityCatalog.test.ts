@@ -32,6 +32,19 @@ describe("capability catalog", () => {
     );
   });
 
+  it("extends thread.create with model choice and adds the read-only models list", () => {
+    const create = BIGBUD_CAPABILITY_CATALOG.tracks.find((track) => track.id === "thread.create");
+    const list = BIGBUD_CAPABILITY_CATALOG.tracks.find(
+      (track) => track.id === "thread.models.list",
+    );
+    expect(create?.guide.workflow).toContain("modelSelection");
+    expect(create?.relatedCapabilityIds).toContain("thread.models.list");
+    expect(list).toMatchObject({ risk: "read-only", relatedCapabilityIds: ["thread.create"] });
+    expect(list?.guide.workflow).toContain("list_available_models");
+    // OpenCode V2 does not offer these yet, so the guide stays conditional (Phase 5).
+    expect(list?.availability.join(" ")).toContain("not in OpenCode V2");
+  });
+
   it("reports missing related Tracks", () => {
     const catalog = createCapabilityCatalog([
       {

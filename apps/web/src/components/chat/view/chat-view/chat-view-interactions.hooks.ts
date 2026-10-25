@@ -20,6 +20,7 @@ import {
   renderProviderTraitsPicker,
 } from "../../provider/composerProviderRegistry";
 import { resolveEffectiveEnvMode } from "~/components/git/BranchToolbar.logic";
+import { preservePendingEnvMode } from "~/lib/threadMaterialization.envMode";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 import type { ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
 import type { ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
@@ -59,8 +60,8 @@ export function useChatViewInteractions({
 
   const envMode: DraftThreadEnvMode = resolveEffectiveEnvMode({
     activeWorktreePath: base.activeThread?.worktreePath ?? null,
-    hasServerThread: base.isServerThread,
-    draftThreadEnvMode: base.isLocalDraftThread ? base.draftThread?.envMode : undefined,
+    hasServerThread: base.isServerThread && (base.activeThread?.messages.length ?? 0) > 0,
+    draftThreadEnvMode: base.draftThread?.envMode ?? base.composerDraft.pendingEnvMode,
   });
 
   const {
@@ -200,6 +201,7 @@ export function useChatViewInteractions({
     base,
     thread,
     runtime,
+    provider: composer.selectedProvider,
   });
 
   const composerCommandHandlers = useComposerCommandHandlers({
@@ -296,6 +298,16 @@ export function useChatViewInteractions({
     [base],
   );
 
+  const { setActivityAccordionOpenById } = base;
+  const onSetActivityAccordionOpen = useCallback(
+    (accordionId: string, open: boolean) => {
+      setActivityAccordionOpenById((existing) =>
+        existing[accordionId] === open ? existing : { ...existing, [accordionId]: open },
+      );
+    },
+    [setActivityAccordionOpenById],
+  );
+
   const onRevertUserMessage = useCallback(
     (messageId: MessageId) => {
       const targetTurnCount = timeline.revertTurnCountByUserMessageId.get(messageId);
@@ -338,6 +350,7 @@ export function useChatViewInteractions({
     navigateExpandedImage,
     onOpenTurnDiff,
     onToggleWorkGroup,
+    onSetActivityAccordionOpen,
     onRevertUserMessage,
     onEnvModeChange: (mode: DraftThreadEnvMode) => {
       if (base.isLocalDraftThread) {
@@ -345,6 +358,8 @@ export function useChatViewInteractions({
           envMode: mode,
           ...(mode === "worktree" && base.draftThread?.worktreePath ? { worktreePath: null } : {}),
         });
+      } else if (base.activeThread?.messages.length === 0) {
+        preservePendingEnvMode(base.threadId, mode);
       }
       runtime.scheduleComposerFocus();
     },

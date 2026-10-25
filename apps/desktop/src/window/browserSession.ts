@@ -1,5 +1,6 @@
 import { session } from "electron";
 import type { Session, WebContents } from "electron";
+import { installBrowserPermissions } from "./browserPermissions";
 
 export const BROWSER_SESSION_PARTITION = "persist:bigbud-browser";
 let browserSession: Session | undefined;
@@ -11,10 +12,7 @@ export function initializeBrowserSession(): Session {
   }
 
   browserSession = session.fromPartition(BROWSER_SESSION_PARTITION);
-  browserSession.setPermissionRequestHandler((_webContents, _permission, callback, _details) => {
-    callback(false);
-  });
-  browserSession.setPermissionCheckHandler(() => false);
+  installBrowserPermissions(browserSession);
   return browserSession;
 }
 

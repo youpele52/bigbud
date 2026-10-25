@@ -11,15 +11,27 @@ export function makeLearningJobQueries(sql: SqlClient.SqlClient) {
     const rows = yield* sql
       .withTransaction(
         Effect.gen(function* () {
-          const reviewing = yield* sql<LearningJobAttempt>`
+          const reviewing = yield* sql<LearningJobAttempt & { held: number }>`
             SELECT job_id AS "jobId", thread_id AS "threadId", turn_id AS "turnId",
-              memory_user_message_count AS "memoryUserMessageCount", attempt_count AS "attemptCount"
+              memory_user_message_count AS "memoryUserMessageCount", attempt_count AS "attemptCount",
+              CASE WHEN provider = 'opencodeV2' AND EXISTS (SELECT 1 FROM thread_activity_leases
+                WHERE lease_id = 'learning:' || learning_jobs.job_id AND activity_kind = 'learning') THEN 1 ELSE 0 END AS held
             FROM learning_jobs WHERE state = 'reviewing'
           `;
-          yield* sql`DELETE FROM thread_activity_leases WHERE activity_kind = 'learning'`;
+          // A restart/TTL is not native cleanup proof. Completed V2 jobs passed the cleanup hook;
+          // every other exact V2 lease is retained, including previously failed cleanup.
+          yield* sql`DELETE FROM thread_activity_leases WHERE activity_kind = 'learning'
+            AND NOT EXISTS (SELECT 1 FROM learning_jobs job WHERE job.provider = 'opencodeV2'
+              AND job.state != 'completed' AND thread_activity_leases.lease_id = 'learning:' || job.job_id)`;
+          yield* sql`UPDATE learning_jobs SET state = 'failed', next_attempt_at = NULL,
+            outcome = 'cleanup-unconfirmed', updated_at = ${now}
+            WHERE state = 'reviewing' AND provider = 'opencodeV2'
+              AND EXISTS (SELECT 1 FROM thread_activity_leases WHERE lease_id = 'learning:' || learning_jobs.job_id AND activity_kind = 'learning')`;
           yield* sql`UPDATE learning_jobs SET state = CASE WHEN attempt_count >= 3 THEN 'failed' ELSE 'queued' END,
         next_attempt_at = NULL, outcome = 'interrupted', updated_at = ${now} WHERE state = 'reviewing'`;
-          return reviewing;
+          return reviewing.map(({ held, ...job }) =>
+            held ? Object.assign(job, { cleanupUnconfirmed: true }) : job,
+          );
         }),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("LearningJobRepository.recoverInterrupted")));

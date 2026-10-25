@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, FileSystem } from "effect";
 import { describe, expect } from "vitest";
 
 import {
@@ -215,6 +215,18 @@ it.layer(TestLayer)("git integration", (it) => {
         yield* git(clone, ["push", "origin", initialBranch]);
 
         const core = yield* GitCore;
+        const headBeforeDirtyPull = yield* git(source, ["rev-parse", "HEAD"]);
+        yield* writeTextFile(path.join(source, "local-only.txt"), "keep this work\n");
+        const dirtyPull = yield* Effect.result(core.pullCurrentBranch(source));
+        expect(dirtyPull._tag).toBe("Failure");
+        if (dirtyPull._tag === "Failure") {
+          expect(dirtyPull.failure.message).toContain("uncommitted working tree changes");
+        }
+        expect(yield* git(source, ["rev-parse", "HEAD"])).toBe(headBeforeDirtyPull);
+        expect(yield* git(source, ["status", "--short"])).toContain("local-only.txt");
+
+        const fileSystem = yield* FileSystem.FileSystem;
+        yield* fileSystem.remove(path.join(source, "local-only.txt"));
         const pulled = yield* core.pullCurrentBranch(source);
         expect(pulled.status).toBe("pulled");
         expect((yield* core.statusDetails(source)).behindCount).toBe(0);

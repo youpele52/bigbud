@@ -2,7 +2,8 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { type EventId, type ProviderRuntimeTurnStatus } from "@bigbud/contracts";
 import { Effect } from "effect";
 
-import { asRuntimeItemId, nativeProviderRefs, normalizeClaudeTokenUsage } from "./Adapter.utils.ts";
+import { asRuntimeItemId, nativeProviderRefs } from "./Adapter.utils.ts";
+import { normalizeClaudeTokenUsage, claudeCanonicalUsage } from "./Adapter.usage.ts";
 import { turnStatusFromResult } from "./Adapter.utils.sdk.ts";
 import { decodeClaudeResultMessage, type ClaudeSdkResult } from "./Adapter.sdk.messages.ts";
 import { claudeSdkDiagnostic } from "./Adapter.sdk.projections.ts";
@@ -44,9 +45,16 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
     errorMessage?: string,
     result?: ClaudeSdkResult,
   ) {
-    const resultContextWindow = result?.modelUsage
-      ? Math.max(...Object.values(result.modelUsage).map((usage) => usage.contextWindow))
-      : undefined;
+    const mainModel =
+      context.lastKnownTokenUsageTurnId === context.turnState?.turnId
+        ? context.lastKnownTokenUsageModel
+        : undefined;
+    const modelUsages = result?.modelUsage ?? {};
+    const resultContextWindow =
+      (mainModel ? modelUsages[mainModel]?.contextWindow : undefined) ??
+      (Object.keys(modelUsages).length === 1
+        ? Object.values(modelUsages)[0]?.contextWindow
+        : undefined);
     if (resultContextWindow !== undefined) {
       context.lastKnownContextWindow = resultContextWindow;
     }
@@ -56,7 +64,10 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
     );
     const accumulatedTotalProcessedTokens =
       accumulatedSnapshot?.totalProcessedTokens ?? accumulatedSnapshot?.usedTokens;
-    const lastGoodUsage = context.lastKnownTokenUsage;
+    const lastGoodUsage =
+      context.lastKnownTokenUsageTurnId === context.turnState?.turnId
+        ? context.lastKnownTokenUsage
+        : undefined;
     const maxTokens = resultContextWindow ?? context.lastKnownContextWindow;
     const usageSnapshot =
       lastGoodUsage !== undefined
@@ -71,7 +82,7 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
               ? { totalProcessedTokens: accumulatedTotalProcessedTokens }
               : {}),
           }
-        : accumulatedSnapshot;
+        : undefined;
 
     const turnState = context.turnState;
     if (!turnState) {
@@ -145,13 +156,21 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
 
     context.turns.push({ id: turnState.turnId, items: [...turnState.items] });
 
-    if (usageSnapshot) {
+    if (usageSnapshot || accumulatedSnapshot) {
       const usageStamp = yield* makeEventStamp();
+      const canonical = claudeCanonicalUsage(result?.usage);
       const accounting = accumulatedSnapshot
         ? makeTokenUsageAccounting({
             scope: "turn",
             scopeId: turnState.turnId,
             usage: accumulatedSnapshot,
+            canonical: canonical
+              ? {
+                  ...canonical,
+                  ...(mainModel ? { model: mainModel } : {}),
+                  completeness: status === "completed" ? canonical.completeness : "partial",
+                }
+              : undefined,
             finalized: true,
           })
         : undefined;
@@ -162,7 +181,10 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
         createdAt: usageStamp.createdAt,
         threadId: context.session.threadId,
         turnId: turnState.turnId,
-        payload: { usage: usageSnapshot, ...(accounting ? { accounting } : {}) },
+        payload: {
+          ...(usageSnapshot ? { usage: usageSnapshot } : {}),
+          ...(accounting ? { accounting } : {}),
+        },
         providerRefs: nativeProviderRefs(context),
       });
     }
@@ -186,10 +208,11 @@ export const makeTurnCompletionHandlers = (deps: TurnCompletionDeps) => {
     });
 
     const updatedAt = yield* nowIso;
+    context.lastSettledTurn = { turnId: turnState.turnId, completed: status === "completed" };
     context.turnState = undefined;
     context.session = {
       ...context.session,
-      status: "ready",
+      status: context.stopped || context.session.status === "closed" ? "closed" : "ready",
       activeTurnId: undefined,
       updatedAt,
       ...(status === "failed" && errorMessage ? { lastError: errorMessage } : {}),

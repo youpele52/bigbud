@@ -1,8 +1,10 @@
 import * as ChildProcess from "node:child_process";
 import * as FS from "node:fs";
+import { attachOwnershipHandoff, isOwnershipHandedOff } from "./ownershipHandoff";
+import { recordOwnershipLaunch, getOwnershipLaunch } from "./ownershipRecovery.launch";
+import { recordOwnershipRecovery } from "./backendStartupState";
 import { app } from "electron";
 import {
-  backendChildEnv,
   captureBackendOutput,
   type LogSink,
   writeBackendLifecycleEvent,
@@ -22,24 +24,34 @@ import {
 import { readPersistedBackendObservabilitySettings } from "../logging/logging";
 import { killBackendProcess } from "./backendProcess";
 import { stopBackendChild, stopBackendChildAndWait } from "./backendShutdown";
-import {
-  beginBackendStartup,
-  recordBackendStartupDevelopmentDiagnostics,
-  recordBackendStartupFailure,
-} from "./backendStartupState";
+import { beginBackendStartup, recordBackendStartupFailure } from "./backendStartupState";
 import {
   ensureBackendModulesPath,
   reportBackendModulesStartupFailure,
 } from "./backendModulesStartup";
 import { listenForBackendStartupStatus } from "./backendStartupStatusPipe";
-import { withBackendNodeOptions } from "./backendEnv";
-import {
-  createBackendStartupDiagnostics,
-  createDevelopmentBackendDiagnostics,
-} from "./backendStartupDiagnostics";
+import { buildBackendChildEnvironment } from "./backendEnv";
+import { createBackendStartupDiagnostics } from "./backendStartupDiagnostics";
 import { resolveComputerUseRuntimeEnv } from "./backendRuntimeEnv";
 import * as ProcessQuiescence from "./installedProcessQuiescence";
+import {
+  revokeSystemMonitorAgentToken,
+  rotateSystemMonitorAgentToken,
+} from "../system-monitor/agentBridge";
 import { resolveBackendStartWhenAllowed } from "./backendStartGuard";
+import { attachBackendChildLifecycle } from "./backendManager.child";
+import { captureBackendStderr } from "./backendManager.output";
+import {
+  buildBackendBootstrapEnvelope,
+  consumeBackendStartReason,
+  markNextBackendStartReason,
+} from "./backendBootstrapEnvelope";
+import {
+  asLifecycleHintStream,
+  attachBackendLifecycleHintPipe,
+  BACKEND_LIFECYCLE_HINT_STDIO_INDEX,
+  detachBackendLifecycleHintPipe,
+} from "./backendLifecycleHintPipe";
 export let backendProcess: ChildProcess.ChildProcess | null = null;
 export let backendPort = 0;
 export let backendAuthToken = "";
@@ -92,7 +104,12 @@ export function setBackendConnectionInfo(opts: {
 }
 export function scheduleBackendRestart(reason: string): void {
   if (!_deps) return;
-  if (_deps.getIsQuitting() || ProcessQuiescence.isInstalledProcessQuiescing() || restartTimer)
+  if (
+    _deps.getIsQuitting() ||
+    isOwnershipHandedOff() ||
+    ProcessQuiescence.isInstalledProcessQuiescing() ||
+    restartTimer
+  )
     return;
   const delayMs = Math.min(500 * 2 ** restartAttempt, 10_000);
   restartAttempt += 1;
@@ -110,6 +127,7 @@ export async function startBackend(): Promise<void> {
   if (!_deps) return;
   if (
     _deps.getIsQuitting() ||
+    isOwnershipHandedOff() ||
     ProcessQuiescence.isInstalledProcessQuiescing() ||
     backendProcess ||
     backendStartPending
@@ -129,6 +147,7 @@ export async function startBackend(): Promise<void> {
   }
   if (
     !computerUseRuntimeEnv ||
+    isOwnershipHandedOff() ||
     _deps.getIsQuitting() ||
     ProcessQuiescence.isInstalledProcessQuiescing() ||
     backendProcess
@@ -162,45 +181,40 @@ export async function startBackend(): Promise<void> {
   const packagedDesktopSupervisorBinary = resolvePackagedDesktopSupervisorBinary();
   const backendLauncherPath = resolveBackendLauncherPath();
   const backendNodeExecutable = resolveBackendNodeExecutable(backendLauncherPath);
+  const monitorAgentAccess = rotateSystemMonitorAgentToken();
   let child: ChildProcess.ChildProcess;
   try {
     child = ChildProcess.spawn(backendLauncherPath, [backendEntry, "--bootstrap-fd", "3"], {
       cwd: resolveBackendCwd(_deps.rootDir),
-      env: withBackendNodeOptions(
-        {
-          ...backendChildEnv(),
-          ...(packagedOpencodeBinDir
-            ? {
-                PATH: [packagedOpencodeBinDir, process.env.PATH]
-                  .filter((entry): entry is string => Boolean(entry && entry.length > 0))
-                  .join(process.platform === "win32" ? ";" : ":"),
-              }
-            : {}),
-          ...(packagedBundledSkillsDir
-            ? { BIGBUD_BUNDLED_SKILLS_DIR: packagedBundledSkillsDir }
-            : {}),
-          ...(packagedBundledAgentsDir
-            ? { BIGBUD_BUNDLED_AGENTS_DIR: packagedBundledAgentsDir }
-            : {}),
-          ...(packagedWorkspaceAgentBinary
-            ? { BIGBUD_LOCAL_WORKSPACE_AGENT_BINARY: packagedWorkspaceAgentBinary }
-            : {}),
-          ...(packagedDesktopSupervisorBinary
-            ? { BIGBUD_DESKTOP_SUPERVISOR_BINARY: packagedDesktopSupervisorBinary }
-            : {}),
-          ...computerUseRuntimeEnv,
-          BIGBUD_NODE_EXECUTABLE: backendNodeExecutable,
-          BIGBUD_DESKTOP_PACKAGED: app.isPackaged ? "1" : "0",
-          ELECTRON_RUN_AS_NODE: "1",
-          BIGBUD_STARTUP_STATUS_FD: "4",
-        },
-        _deps.backendMaxOldSpaceMb,
-      ),
+      env: recordOwnershipLaunch({
+        generation: startupGeneration,
+        baseDir: _deps.baseDir,
+        cwd: resolveBackendCwd(_deps.rootDir),
+        launcher: backendLauncherPath,
+        entry: backendEntry,
+        inspector:
+          packagedDesktopSupervisorBinary ??
+          (!app.isPackaged ? `${_deps.rootDir}/target/debug/bigbud-desktop-supervisor` : null),
+        env: buildBackendChildEnvironment({
+          packagedOpencodeBinDir,
+          packagedBundledSkillsDir,
+          packagedBundledAgentsDir,
+          packagedWorkspaceAgentBinary,
+          packagedDesktopSupervisorBinary,
+          computerUseRuntimeEnv,
+          backendNodeExecutable,
+          isPackaged: app.isPackaged,
+          backendMaxOldSpaceMb: _deps.backendMaxOldSpaceMb,
+        }),
+      }),
+      // fd 3 bootstrap (main to server, once), fd 4 startup status (server to
+      // main), fd 5 lifecycle hints; fd 6 handoff requests and fd 7 quiescence acknowledgments.
       stdio: captureBackendLogs
-        ? ["ignore", "pipe", "pipe", "pipe", "pipe"]
-        : ["ignore", "inherit", "pipe", "pipe", "pipe"],
+        ? ["ignore", "pipe", "pipe", "pipe", "pipe", "pipe", "pipe", "pipe"]
+        : ["ignore", "inherit", "pipe", "pipe", "pipe", "pipe", "pipe", "pipe"],
     });
   } catch (error) {
+    revokeSystemMonitorAgentToken();
     logBackendLifecycle(
       "child_spawn_threw",
       `generation=${startupGeneration} error=${String(error)}`,
@@ -243,20 +257,14 @@ export async function startBackend(): Promise<void> {
       },
     );
   }
-  let stderrTail = "";
-  const MAX_STDERR_TAIL = 8_192;
-  if (child.stderr) {
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => {
-      stderrTail = `${stderrTail}${chunk}`.slice(-MAX_STDERR_TAIL);
-      if (_deps?.isDevelopmentDiagnostics) {
-        recordBackendStartupDevelopmentDiagnostics(
-          startupGeneration,
-          createDevelopmentBackendDiagnostics({ stderrTail }),
-        );
-      }
-    });
-  }
+  const getStderrTail = captureBackendStderr(
+    child.stderr,
+    startupGeneration,
+    _deps.isDevelopmentDiagnostics,
+  );
+  const hintStream = asLifecycleHintStream(
+    (child.stdio as ReadonlyArray<unknown>)[BACKEND_LIFECYCLE_HINT_STDIO_INDEX],
+  );
   const bootstrapStream = child.stdio[3];
   if (bootstrapStream && "write" in bootstrapStream) {
     bootstrapStream.on("error", (error) => {
@@ -267,23 +275,23 @@ export async function startBackend(): Promise<void> {
       swallowPipeError();
     });
     bootstrapStream.write(
-      `${JSON.stringify({
-        mode: "desktop",
-        noBrowser: true,
+      buildBackendBootstrapEnvelope({
         port: backendPort,
         host: backendHost,
         t3Home: _deps.baseDir,
         authToken: backendAuthToken,
-        ...(backendObservabilitySettings.otlpTracesUrl
-          ? { otlpTracesUrl: backendObservabilitySettings.otlpTracesUrl }
-          : {}),
-        ...(backendObservabilitySettings.otlpMetricsUrl
-          ? { otlpMetricsUrl: backendObservabilitySettings.otlpMetricsUrl }
-          : {}),
-      })}\n`,
+        systemMonitorAgentAccess: monitorAgentAccess,
+        otlpTracesUrl: backendObservabilitySettings.otlpTracesUrl,
+        otlpMetricsUrl: backendObservabilitySettings.otlpMetricsUrl,
+        startReason: consumeBackendStartReason(),
+        // The server reads fd 5 only when the envelope announces it.
+        lifecycleHintFd: hintStream ? BACKEND_LIFECYCLE_HINT_STDIO_INDEX : null,
+        ownershipHandoff: process.platform === "darwin" || process.platform === "linux",
+      }),
     );
     bootstrapStream.end();
   } else {
+    revokeSystemMonitorAgentToken();
     logBackendLifecycle("bootstrap_pipe_missing", `generation=${startupGeneration}`);
     recordBackendStartupFailure(
       startupGeneration,
@@ -295,6 +303,27 @@ export async function startBackend(): Promise<void> {
     return;
   }
   backendProcess = child;
+  attachOwnershipHandoff(
+    child,
+    getOwnershipLaunch()!.stateDir,
+    () => {
+      expectedBackendExitChildren.add(child);
+      if (restartTimer) clearTimeout(restartTimer);
+      restartTimer = null;
+      recordOwnershipRecovery(startupGeneration, { phase: "yielded" });
+    },
+    () =>
+      backendProcess === child &&
+      !_deps?.getIsQuitting() &&
+      !ProcessQuiescence.isInstalledProcessQuiescing(),
+  );
+  const hintPipe = hintStream
+    ? attachBackendLifecycleHintPipe(hintStream, {
+        platform: process.platform,
+        log: (event, details) =>
+          logBackendLifecycle(event, `generation=${startupGeneration} ${details}`),
+      })
+    : undefined;
   let backendSessionClosed = false;
   const closeBackendSession = (details: string) => {
     if (backendSessionClosed) return;
@@ -306,77 +335,36 @@ export async function startBackend(): Promise<void> {
     `pid=${child.pid ?? "unknown"} port=${backendPort} cwd=${resolveBackendCwd(_deps.rootDir)} exec=${backendLauncherPath}`,
   );
   captureBackendOutput(child, backendLogSink);
-  child.on("error", (error) => {
-    logBackendLifecycle(
-      "child_error",
-      `generation=${startupGeneration} pid=${child.pid ?? "unknown"} error=${error.stack ?? error.message} stderr=${stderrTail}`,
-    );
-    recordBackendStartupFailure(
-      startupGeneration,
-      "child_spawn_failed",
-      createBackendStartupDiagnostics({
-        category: "process",
-        errorMessage: error.message,
-        stderrTail,
-      }),
-      _deps?.isDevelopmentDiagnostics
-        ? createDevelopmentBackendDiagnostics({ error, stderrTail })
-        : undefined,
-    );
-    if (_deps?.isDevelopmentDiagnostics) {
-      recordBackendStartupDevelopmentDiagnostics(
-        startupGeneration,
-        createDevelopmentBackendDiagnostics({ error, stderrTail }),
-      );
-    }
-    const wasExpected = expectedBackendExitChildren.has(child);
-    if (backendProcess === child) {
-      backendProcess = null;
-    }
-    closeBackendSession(`pid=${child.pid ?? "unknown"} error=${error.message}`);
-    if (wasExpected) {
-      return;
-    }
-    scheduleBackendRestart(error.message);
-  });
-  child.on("exit", (code, signal) => {
-    logBackendLifecycle(
-      "child_exit",
-      `generation=${startupGeneration} pid=${child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"} stderr=${stderrTail}`,
-    );
-    recordBackendStartupFailure(
-      startupGeneration,
-      "child_exit_before_ready",
-      createBackendStartupDiagnostics({
-        category: "process",
-        exitCode: code,
-        exitSignal: signal,
-        stderrTail,
-      }),
-      _deps?.isDevelopmentDiagnostics
-        ? createDevelopmentBackendDiagnostics({ exitCode: code, exitSignal: signal, stderrTail })
-        : undefined,
-    );
-    if (_deps?.isDevelopmentDiagnostics) {
-      recordBackendStartupDevelopmentDiagnostics(
-        startupGeneration,
-        createDevelopmentBackendDiagnostics({ exitCode: code, exitSignal: signal, stderrTail }),
-      );
-    }
-    const wasExpected = expectedBackendExitChildren.has(child);
-    if (backendProcess === child) {
-      backendProcess = null;
-    }
-    closeBackendSession(
-      `pid=${child.pid ?? "unknown"} code=${code ?? "null"} signal=${signal ?? "null"}`,
-    );
-    if (_deps?.getIsQuitting() || wasExpected) return;
-    const crashDetail = stderrTail.trim().slice(-512).replace(/\n/g, " ↵ ");
-    const reason = `code=${code ?? "null"} signal=${signal ?? "null"}${crashDetail ? ` stderr=${crashDetail}` : ""}`;
-    scheduleBackendRestart(reason);
+  attachBackendChildLifecycle(child, {
+    generation: startupGeneration,
+    isDevelopmentDiagnostics: _deps.isDevelopmentDiagnostics,
+    getIsQuitting: _deps.getIsQuitting,
+    getStderrTail,
+    isExpectedExit: () => expectedBackendExitChildren.has(child),
+    onDisconnected: () => {
+      if (hintPipe) detachBackendLifecycleHintPipe(hintPipe);
+      if (backendProcess === child) {
+        revokeSystemMonitorAgentToken();
+        backendProcess = null;
+      }
+    },
+    closeSession: closeBackendSession,
+    logLifecycle: logBackendLifecycle,
+    scheduleRestart: scheduleBackendRestart,
   });
 }
+/** Restarts a backend that stopped serving; an unexpected exit reuses the restart path. */
+export function restartUnresponsiveBackend(reason: string): void {
+  if (!_deps || _deps.getIsQuitting() || isOwnershipHandedOff()) return;
+  const child = backendProcess;
+  logBackendLifecycle("restart_unresponsive", `pid=${child?.pid ?? "none"} reason=${reason}`);
+  // The replacement backend must treat unsettled turns as outcome unknown.
+  markNextBackendStartReason("resume-probe-restart");
+  if (child) killBackendProcess(child);
+  else scheduleBackendRestart(reason);
+}
 export function stopBackend(): void {
+  revokeSystemMonitorAgentToken();
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;
@@ -388,6 +376,7 @@ export function stopBackend(): void {
 }
 
 export async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void> {
+  revokeSystemMonitorAgentToken();
   if (restartTimer) {
     clearTimeout(restartTimer);
     restartTimer = null;

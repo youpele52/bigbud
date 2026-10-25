@@ -30,6 +30,7 @@ export * from "./server/server.handoff";
 export * from "./server/server.storage";
 export * from "./server/automation";
 export * from "./server/usage";
+export * from "./server/subagents";
 export * from "./server/usageLimits";
 export * from "./core/settings";
 export * from "./workspace/git";

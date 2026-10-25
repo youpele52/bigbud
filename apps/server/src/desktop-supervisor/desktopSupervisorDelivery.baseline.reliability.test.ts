@@ -2,10 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 import type { OrchestrationReplayEventsResult } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 
-import {
-  DesktopSupervisorDeliveryCoordinator,
-  type DesktopSupervisorOwner,
-} from "./desktopSupervisorDelivery.ts";
+import { DesktopSupervisorDeliveryCoordinator } from "./desktopSupervisorDelivery.ts";
+import type { DesktopSupervisorOwner } from "./desktopSupervisorDelivery.types.ts";
 import { DESKTOP_SUPERVISOR_BASELINE_ACK_TIMEOUT_MS } from "./desktopSupervisorConfig.ts";
 import { DesktopSupervisorProtocolError } from "./desktopSupervisorProtocol.ts";
 

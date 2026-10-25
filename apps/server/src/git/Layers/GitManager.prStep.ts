@@ -35,10 +35,11 @@ export function makePrStep(
   const tempDir = process.env.TMPDIR ?? process.env.TEMP ?? process.env.TMP ?? "/tmp";
 
   const runPrStep = Effect.fn("runPrStep")(function* (
-    modelSelection: ModelSelection,
+    modelSelection: ModelSelection | null,
     cwd: string,
     fallbackBranch: string | null,
     emit: GitActionProgressEmitter,
+    successfulModelSelection?: ModelSelection | null,
   ) {
     const details = yield* gitCore.statusDetails(cwd);
     const branch = details.branch ?? fallbackBranch;
@@ -80,6 +81,12 @@ export function makePrStep(
     });
     const rangeContext = yield* gitCore.readRangeContext(cwd, baseBranch);
 
+    if (!modelSelection) {
+      return yield* gitManagerError(
+        "generatePrContent",
+        "Choose a text-generation model in settings to generate Git text without a thread.",
+      );
+    }
     const generated = yield* textGeneration.generatePrContent({
       cwd,
       baseBranch,
@@ -88,6 +95,7 @@ export function makePrStep(
       diffSummary: limitContext(rangeContext.diffSummary, 20_000),
       diffPatch: limitContext(rangeContext.diffPatch, 60_000),
       modelSelection,
+      successfulModelSelection: successfulModelSelection ?? null,
     });
 
     const bodyFile = path.join(tempDir, `bigbud-pr-body-${process.pid}-${randomUUID()}.md`);

@@ -4,6 +4,40 @@ import { RemoteAgentConnectionError, RemoteAgentConnection } from "./remoteAgent
 import { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
 
 describe("remote agent workspace client", () => {
+  it("rechecks queued authorization after durable preparation and never sends a revoked write", async () => {
+    const request = vi.fn();
+    let enabled = true;
+    const mutation = {
+      prepare: vi.fn(async () => {
+        enabled = false;
+      }),
+      terminal: vi.fn(),
+      unknown: vi.fn(),
+    };
+    const client = new RemoteAgentWorkspaceClient(
+      { request } as unknown as RemoteAgentConnection,
+      undefined,
+      mutation,
+    );
+    await expect(
+      client.writeFile(
+        {
+          workspaceHandle: "workspace",
+          path: "file.txt",
+          operationId: "revoked",
+          requestDigest: new Uint8Array([1]),
+          bytes: new Uint8Array([2]),
+        },
+        async () => {
+          if (!enabled) throw new Error("revoked");
+          return () => {};
+        },
+      ),
+    ).rejects.toThrow("revoked");
+    expect(request).not.toHaveBeenCalled();
+    expect(mutation.terminal).toHaveBeenCalledWith("revoked");
+    expect(mutation.unknown).not.toHaveBeenCalled();
+  });
   it("reports unknown outcome when a write loses transport before its response", async () => {
     const connection = {
       request: async () => {

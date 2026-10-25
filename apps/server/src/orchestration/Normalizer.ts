@@ -17,9 +17,11 @@ import { ServerConfig } from "../startup/config";
 import { parseBase64DataUrl } from "../attachments/imageMime";
 import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
 import { WorkspacePaths } from "../workspace/Services/WorkspacePaths";
+import { requireClientAttachmentsSupported } from "./Normalizer.attachments.ts";
 
 export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
   Effect.gen(function* () {
+    const canHydrateWorkspacePaths = yield* requireClientAttachmentsSupported(command);
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const serverConfig = yield* ServerConfig;
@@ -121,7 +123,13 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
     ) =>
       Effect.gen(function* () {
         const { name, mimeType } = attachment;
-        if (bytes.byteLength === 0 || bytes.byteLength > PROVIDER_SEND_TURN_MAX_FILE_BYTES) {
+        if (
+          bytes.byteLength === 0 ||
+          bytes.byteLength >
+            (mimeType.startsWith("image/")
+              ? PROVIDER_SEND_TURN_MAX_IMAGE_BYTES
+              : PROVIDER_SEND_TURN_MAX_FILE_BYTES)
+        ) {
           return yield* new OrchestrationDispatchCommandError({
             message: `File attachment '${name}' is empty or too large.`,
           });
@@ -135,7 +143,7 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
         }
 
         const persistedAttachment = {
-          type: "file" as const,
+          type: mimeType.startsWith("image/") ? ("image" as const) : ("file" as const),
           id: attachmentId,
           name,
           mimeType: mimeType.toLowerCase(),
@@ -278,7 +286,11 @@ export const normalizeDispatchCommand = (command: ClientOrchestrationCommand) =>
             // so providers that skip "path" attachments (Claude, Copilot, OpenCode,
             // and Codex's attachment resolver) still receive the file content.
             // Directories, missing files, and unreadable files remain path references.
-            if (path.isAbsolute(attachment.path) && attachment.entryKind === "file") {
+            if (
+              canHydrateWorkspacePaths &&
+              path.isAbsolute(attachment.path) &&
+              attachment.entryKind === "file"
+            ) {
               const stat = yield* fileSystem
                 .stat(attachment.path)
                 .pipe(Effect.orElseSucceed(() => null));

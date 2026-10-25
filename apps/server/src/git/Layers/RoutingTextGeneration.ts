@@ -1,34 +1,16 @@
-/**
- * RoutingTextGeneration – Dispatches text generation requests to the
- * provider-native implementation selected in each request input.
- *
- * Codex, Claude, and Cursor have full text-generation implementations. Other
- * providers still route to the best-supported fallback or native thread-title
- * helpers where available.
- *
- * @module RoutingTextGeneration
- */
+/** Exact-model dispatch for every internal text-generation operation. */
 import { Effect, Layer, ServiceMap } from "effect";
-import {
-  DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER,
-  PROVIDER_KINDS,
-  TextGenerationError,
-  type ModelSelection,
-  type ProviderKind,
-} from "@bigbud/contracts";
+import { TextGenerationError, type ModelSelection } from "@bigbud/contracts";
 
 import {
-  type BranchNameGenerationInput,
-  type CommitMessageGenerationInput,
-  type ThreadElevatorSummaryGenerationInput,
-  type PrContentGenerationInput,
   TextGeneration,
-  type TextGenerationProvider,
   type TextGenerationShape,
+  type InternalTextGenerationContext,
 } from "../Services/TextGeneration.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
 import { CursorTextGenerationLive } from "./CursorTextGeneration.ts";
+import { OpencodeV2TextGenerationLive } from "./OpencodeV2TextGeneration.ts";
 import {
   generateCopilotThreadTitleNative,
   generateOpencodeThreadElevatorSummaryNative,
@@ -37,303 +19,256 @@ import {
 } from "./ProviderNativeThreadTitleGeneration.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OpencodeServerManager } from "../../provider/Services/Opencode/ServerManager.ts";
-import { resolveProviderWorkload } from "../../provider/providerWorkloadSupport.ts";
+import { runInternalTextGeneration } from "./InternalTextGenerationPolicy.ts";
+import { sanitizeElevatorSummary } from "../Utils.ts";
+import { shouldRetryGeneratedThreadTitle } from "../../orchestration/Layers/ProviderCommandReactorHelpers.ts";
 
-// ---------------------------------------------------------------------------
-// Internal service tags so both concrete layers can coexist.
-// ---------------------------------------------------------------------------
+/** A durable claim may await settings changes; its captured candidate must remain the one dispatched. */
+function capture(selection: ModelSelection | null | undefined): ModelSelection | null {
+  if (!selection) return null;
+  const snapshot = structuredClone(selection);
+  if (snapshot.options) Object.freeze(snapshot.options);
+  return Object.freeze(snapshot);
+}
 
 class CodexTextGen extends ServiceMap.Service<CodexTextGen, TextGenerationShape>()(
   "t3/git/Layers/RoutingTextGeneration/CodexTextGen",
 ) {}
-
 class ClaudeTextGen extends ServiceMap.Service<ClaudeTextGen, TextGenerationShape>()(
   "t3/git/Layers/RoutingTextGeneration/ClaudeTextGen",
 ) {}
-
 class CursorTextGen extends ServiceMap.Service<CursorTextGen, TextGenerationShape>()(
   "t3/git/Layers/RoutingTextGeneration/CursorTextGen",
 ) {}
+class OpencodeV2TextGen extends ServiceMap.Service<OpencodeV2TextGen, TextGenerationShape>()(
+  "bigbud/git/Layers/RoutingTextGeneration/OpencodeV2TextGen",
+) {}
 
-function genericTextGenerationFallbackOrder(provider: ProviderKind): ReadonlyArray<ProviderKind> {
-  return provider === "pi" || provider === "kilocode" || provider === "opencode"
-    ? ["claudeAgent", "codex", "cursor"]
-    : ["codex", "claudeAgent", "cursor"];
-}
+/** Build one shared routing policy; injectable native services keep policy tests provider-free. */
+export function makeInternalTextGenerationRouter(deps: {
+  readonly codex: TextGenerationShape;
+  readonly claude: TextGenerationShape;
+  readonly cursor: TextGenerationShape;
+  readonly opencodeV2?: TextGenerationShape;
+  readonly serverSettingsService: typeof ServerSettingsService.Service;
+  readonly opencodeServerManager: typeof OpencodeServerManager.Service;
+}): TextGenerationShape {
+  const { codex, claude, cursor, serverSettingsService, opencodeServerManager } = deps;
+  const nativeDeps = { serverSettingsService, opencodeServerManager };
 
-export function normalizeTextGenerationModelSelection(
-  modelSelection: ModelSelection,
-): ModelSelection {
-  switch (modelSelection.provider) {
-    case "claudeAgent":
-    case "cliProxy":
-    case "codex":
-    case "cursor":
-      return modelSelection;
-    case "pi":
-    case "kilocode":
-    case "opencode":
-      return {
-        provider: "claudeAgent",
-        model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.claudeAgent,
-      };
-    case "copilot":
-    case "devin":
-      return {
-        provider: "codex",
-        model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
-      };
-  }
-}
-
-export function normalizeGitTextGenerationModelSelection(
-  modelSelection: ModelSelection,
-): ModelSelection {
-  return normalizeTextGenerationModelSelection(modelSelection);
-}
-
-export function normalizeGitCommitMessageGenerationInput(
-  input: CommitMessageGenerationInput,
-): CommitMessageGenerationInput {
-  return {
-    ...input,
-    modelSelection: normalizeGitTextGenerationModelSelection(input.modelSelection),
+  const route = (selection: ModelSelection) => {
+    switch (selection.provider) {
+      case "codex":
+        return codex;
+      case "claudeAgent":
+        return claude;
+      case "cursor":
+        return cursor;
+      case "opencodeV2":
+        return deps.opencodeV2 ?? null;
+      default:
+        return null;
+    }
   };
-}
+  const unsupported = (operation: string, selection: ModelSelection) =>
+    Effect.fail(
+      new TextGenerationError({
+        operation,
+        detail: `Provider '${selection.provider}' does not support ${operation} with the selected model.`,
+      }),
+    );
 
-export function normalizeGitPrContentGenerationInput(
-  input: PrContentGenerationInput,
-): PrContentGenerationInput {
-  return {
-    ...input,
-    modelSelection: normalizeGitTextGenerationModelSelection(input.modelSelection),
-  };
-}
-
-export function normalizeGitBranchNameGenerationInput(
-  input: BranchNameGenerationInput,
-): BranchNameGenerationInput {
-  return {
-    ...input,
-    modelSelection: normalizeGitTextGenerationModelSelection(input.modelSelection),
-  };
-}
-
-export function normalizeThreadElevatorSummaryGenerationInput(
-  input: ThreadElevatorSummaryGenerationInput,
-): ThreadElevatorSummaryGenerationInput {
-  return {
-    ...input,
-    modelSelection: normalizeTextGenerationModelSelection(input.modelSelection),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Routing implementation
-// ---------------------------------------------------------------------------
-
-function unsupportedTextGeneration(provider: ProviderKind, operation: string, reason?: string) {
-  return Effect.fail(
-    new TextGenerationError({
-      operation,
-      detail:
-        reason ??
-        `Provider '${provider}' does not support unattended text generation, and no supported fallback is available.`,
-    }),
-  );
-}
-
-const makeRoutingTextGeneration = Effect.gen(function* () {
-  const codex = yield* CodexTextGen;
-  const claude = yield* ClaudeTextGen;
-  const cursor = yield* CursorTextGen;
-  const serverSettingsService = yield* ServerSettingsService;
-  const opencodeServerManager = yield* OpencodeServerManager;
-
-  const resolveTextGenerationSelection = Effect.fn("resolveTextGenerationSelection")(
-    function* (input: {
-      readonly requested: ModelSelection;
-      readonly operation: string;
-      readonly fallbackOrder?: ReadonlyArray<ProviderKind>;
-      readonly normalizeGeneric?: boolean;
-    }) {
+  const run = <A extends object>(
+    operation: keyof TextGenerationShape,
+    input: InternalTextGenerationContext & {
+      readonly successfulModelSelection?: ModelSelection | null;
+      readonly message?: string;
+      readonly transcript?: string;
+      readonly attachments?: ReadonlyArray<unknown> | undefined;
+      readonly titleSeed?: string | undefined;
+      readonly verifiedThreadModelOnly?: boolean;
+    },
+    generate: (selection: ModelSelection) => Effect.Effect<A, TextGenerationError>,
+  ) =>
+    Effect.gen(function* () {
+      for (const field of ["message", "transcript"] as const) {
+        if (
+          field in input &&
+          typeof input[field] === "string" &&
+          input[field].trim().length === 0 &&
+          !(
+            field === "message" &&
+            "attachments" in input &&
+            Array.isArray(input.attachments) &&
+            input.attachments.length > 0
+          )
+        ) {
+          return yield* new TextGenerationError({
+            operation,
+            detail: `Invalid input: ${field} is empty.`,
+            kind: "invalid-input",
+          });
+        }
+      }
       const settings = yield* serverSettingsService.getSettings.pipe(
         Effect.mapError(
           (cause) =>
             new TextGenerationError({
-              operation: input.operation,
+              operation,
               detail: `Failed to load provider settings: ${cause.message}`,
               cause,
             }),
         ),
       );
-      const availableProviderKinds = PROVIDER_KINDS.filter(
-        (provider) => settings.providers[provider].enabled,
+      const preference = input.verifiedThreadModelOnly
+        ? null
+        : capture(settings.textGenerationModelSelection);
+      const successful = capture(input.successfulModelSelection);
+      const enabled = new Set(
+        Object.entries(settings.providers)
+          .filter(([, value]) => value.enabled)
+          .map(([provider]) => provider),
       );
-      const resolution = resolveProviderWorkload({
-        requested: input.requested,
-        workload: "unattendedTextGeneration",
-        availableProviderKinds,
-        fallbackOrder:
-          input.fallbackOrder ?? genericTextGenerationFallbackOrder(input.requested.provider),
+      return yield* runInternalTextGeneration({
+        operation,
+        preference,
+        successful,
+        generate: (selection) =>
+          !enabled.has(selection.provider)
+            ? Effect.fail(
+                new TextGenerationError({
+                  operation,
+                  detail: `Provider '${selection.provider}' is disabled.`,
+                }),
+              )
+            : (selection.provider === "opencodeV2" && input.beforeV2Dispatch
+                ? input
+                    .beforeV2Dispatch(selection)
+                    .pipe(Effect.andThen(Effect.suspend(() => generate(selection))))
+                : generate(selection)
+              ).pipe(
+                Effect.flatMap((result) => {
+                  const text =
+                    operation === "generateThreadElevatorSummary" &&
+                    "summary" in result &&
+                    typeof result.summary === "string"
+                      ? sanitizeElevatorSummary(result.summary)
+                      : operation === "generateThreadTitle" &&
+                          "title" in result &&
+                          typeof result.title === "string"
+                        ? result.title.trim()
+                        : null;
+                  const weakTitle =
+                    operation === "generateThreadTitle" &&
+                    text !== null &&
+                    shouldRetryGeneratedThreadTitle({
+                      generatedTitle: text,
+                      ...(input.titleSeed !== undefined ? { titleSeed: input.titleSeed } : {}),
+                    });
+                  return text === "" || weakTitle
+                    ? Effect.fail(
+                        new TextGenerationError({
+                          operation,
+                          detail: "Provider returned unusable output.",
+                          kind: "provider",
+                        }),
+                      )
+                    : Effect.succeed({ ...result, actualModelSelection: selection });
+                }),
+              ),
       });
-      if (!resolution.actual) {
-        return yield* unsupportedTextGeneration(
-          input.requested.provider,
-          input.operation,
-          resolution.reason ?? undefined,
-        );
-      }
-      const actual =
-        input.normalizeGeneric === false
-          ? resolution.actual
-          : normalizeTextGenerationModelSelection(resolution.actual);
-      yield* Effect.annotateCurrentSpan({
-        "text-generation.requested-provider": resolution.requested.provider,
-        "text-generation.actual-provider": actual.provider,
-        ...(resolution.reason ? { "text-generation.fallback-reason": resolution.reason } : {}),
-      });
-      return actual;
-    },
-  );
-
-  const route = (provider?: TextGenerationProvider): TextGenerationShape =>
-    provider === "claudeAgent" ? claude : provider === "cursor" ? cursor : codex;
+    });
 
   return {
     generateCommitMessage: (input) =>
-      Effect.gen(function* () {
-        const modelSelection = yield* resolveTextGenerationSelection({
-          requested: input.modelSelection,
-          operation: "generateCommitMessage",
-        });
-        const normalizedInput = normalizeGitCommitMessageGenerationInput({
-          ...input,
-          modelSelection,
-        });
-        return yield* route(normalizedInput.modelSelection.provider).generateCommitMessage(
-          normalizedInput,
-        );
+      run("generateCommitMessage", input, (selection) => {
+        const service = route(selection);
+        return service
+          ? service.generateCommitMessage({ ...input, modelSelection: selection })
+          : unsupported("generateCommitMessage", selection);
       }),
     generatePrContent: (input) =>
-      Effect.gen(function* () {
-        const modelSelection = yield* resolveTextGenerationSelection({
-          requested: input.modelSelection,
-          operation: "generatePrContent",
-        });
-        const normalizedInput = normalizeGitPrContentGenerationInput({ ...input, modelSelection });
-        return yield* route(normalizedInput.modelSelection.provider).generatePrContent(
-          normalizedInput,
-        );
+      run("generatePrContent", input, (selection) => {
+        const service = route(selection);
+        return service
+          ? service.generatePrContent({ ...input, modelSelection: selection })
+          : unsupported("generatePrContent", selection);
       }),
     generateBranchName: (input) =>
-      Effect.gen(function* () {
-        const modelSelection = yield* resolveTextGenerationSelection({
-          requested: input.modelSelection,
-          operation: "generateBranchName",
-        });
-        const normalizedInput = normalizeGitBranchNameGenerationInput({ ...input, modelSelection });
-        return yield* route(normalizedInput.modelSelection.provider).generateBranchName(
-          normalizedInput,
-        );
+      run("generateBranchName", input, (selection) => {
+        const service = route(selection);
+        return service
+          ? service.generateBranchName({ ...input, modelSelection: selection })
+          : unsupported("generateBranchName", selection);
       }),
     generateThreadTitle: (input) =>
-      Effect.gen(function* () {
-        const modelSelection = yield* resolveTextGenerationSelection({
-          requested: input.modelSelection,
-          operation: "generateThreadTitle",
-          fallbackOrder: ["codex", "claudeAgent", "cursor", "opencode", "copilot", "pi"],
-          normalizeGeneric: false,
-        });
-        const resolvedInput = { ...input, modelSelection };
-        switch (modelSelection.provider) {
-          case "codex":
-          case "claudeAgent":
-          case "cursor":
-            return yield* route(modelSelection.provider).generateThreadTitle(resolvedInput);
+      run("generateThreadTitle", input, (selection) => {
+        const resolved = { ...input, modelSelection: selection };
+        const service = route(selection);
+        if (service) return service.generateThreadTitle(resolved);
+        switch (selection.provider) {
           case "pi":
-            return yield* generatePiThreadTitleNative(
-              { serverSettingsService, opencodeServerManager },
-              {
-                ...input,
-                modelSelection,
-              },
-            );
+            return generatePiThreadTitleNative(nativeDeps, { ...input, modelSelection: selection });
           case "copilot":
-            return yield* generateCopilotThreadTitleNative(
-              { serverSettingsService, opencodeServerManager },
-              {
-                ...input,
-                modelSelection,
-              },
-            );
-          case "opencode":
-            return yield* generateOpencodeThreadTitleNative(
-              { serverSettingsService, opencodeServerManager },
-              {
-                ...input,
-                modelSelection,
-              },
-            );
-          default:
-            return yield* route("codex").generateThreadTitle({
+            return generateCopilotThreadTitleNative(nativeDeps, {
               ...input,
-              modelSelection: {
-                provider: "codex",
-                model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER.codex,
-              },
+              modelSelection: selection,
             });
+          case "opencode":
+            return generateOpencodeThreadTitleNative(nativeDeps, {
+              ...input,
+              modelSelection: selection,
+            });
+          default:
+            return unsupported("generateThreadTitle", selection);
         }
       }),
     generateThreadElevatorSummary: (input) =>
-      Effect.gen(function* () {
-        const modelSelection = yield* resolveTextGenerationSelection({
-          requested: input.modelSelection,
-          operation: "generateThreadElevatorSummary",
-          fallbackOrder: ["opencode", "codex", "claudeAgent", "cursor"],
-          normalizeGeneric: false,
-        });
-        const resolvedInput = { ...input, modelSelection };
-        if (modelSelection.provider === "opencode") {
-          return yield* generateOpencodeThreadElevatorSummaryNative(
-            { serverSettingsService, opencodeServerManager },
-            {
-              ...input,
-              modelSelection,
-            },
-          );
-        }
-        const normalizedInput = normalizeThreadElevatorSummaryGenerationInput(resolvedInput);
-        return yield* route(normalizedInput.modelSelection.provider).generateThreadElevatorSummary(
-          normalizedInput,
-        );
+      run("generateThreadElevatorSummary", input, (selection) => {
+        const resolved = { ...input, modelSelection: selection };
+        if (selection.provider === "opencode")
+          return generateOpencodeThreadElevatorSummaryNative(nativeDeps, {
+            ...input,
+            modelSelection: selection,
+          });
+        const service = route(selection);
+        return service
+          ? service.generateThreadElevatorSummary(resolved)
+          : unsupported("generateThreadElevatorSummary", selection);
+      }),
+    generatePromptSuggestion: (input) =>
+      run("generatePromptSuggestion", input, (selection) => {
+        const service = route(selection);
+        return service
+          ? service.generatePromptSuggestion({ ...input, modelSelection: selection })
+          : unsupported("generatePromptSuggestion", selection);
       }),
   } satisfies TextGenerationShape;
+}
+
+const makeRoutingTextGeneration = Effect.gen(function* () {
+  return makeInternalTextGenerationRouter({
+    codex: yield* CodexTextGen,
+    claude: yield* ClaudeTextGen,
+    cursor: yield* CursorTextGen,
+    opencodeV2: yield* OpencodeV2TextGen,
+    serverSettingsService: yield* ServerSettingsService,
+    opencodeServerManager: yield* OpencodeServerManager,
+  });
 });
 
-const InternalCodexLayer = Layer.effect(
-  CodexTextGen,
-  Effect.gen(function* () {
-    const svc = yield* TextGeneration;
-    return svc;
-  }),
-).pipe(Layer.provide(CodexTextGenerationLive));
-
-const InternalClaudeLayer = Layer.effect(
-  ClaudeTextGen,
-  Effect.gen(function* () {
-    const svc = yield* TextGeneration;
-    return svc;
-  }),
-).pipe(Layer.provide(ClaudeTextGenerationLive));
-
-const InternalCursorLayer = Layer.effect(
-  CursorTextGen,
-  Effect.gen(function* () {
-    const svc = yield* TextGeneration;
-    return svc;
-  }),
-).pipe(Layer.provide(CursorTextGenerationLive));
+const InternalCodexLayer = Layer.effect(CodexTextGen, TextGeneration.asEffect()).pipe(
+  Layer.provide(CodexTextGenerationLive),
+);
+const InternalClaudeLayer = Layer.effect(ClaudeTextGen, TextGeneration.asEffect()).pipe(
+  Layer.provide(ClaudeTextGenerationLive),
+);
+const InternalCursorLayer = Layer.effect(CursorTextGen, TextGeneration.asEffect()).pipe(
+  Layer.provide(CursorTextGenerationLive),
+);
+const InternalOpencodeV2Layer = Layer.effect(OpencodeV2TextGen, TextGeneration.asEffect()).pipe(
+  Layer.provide(OpencodeV2TextGenerationLive),
+);
 
 export const RoutingTextGenerationLive = Layer.effect(
   TextGeneration,
@@ -342,4 +277,5 @@ export const RoutingTextGenerationLive = Layer.effect(
   Layer.provide(InternalCodexLayer),
   Layer.provide(InternalClaudeLayer),
   Layer.provide(InternalCursorLayer),
+  Layer.provide(InternalOpencodeV2Layer),
 );

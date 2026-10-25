@@ -22,6 +22,15 @@ layer("ProjectionThreadMessageRepository", (it) => {
       const createdAt = "2026-02-28T19:00:00.000Z";
       const updatedAt = "2026-02-28T19:00:01.000Z";
       yield* insertProjectionThreadParent({ sql, threadId });
+      const originSegments = [
+        {
+          kind: "crossThreadAgent" as const,
+          actor: "agent" as const,
+          text: "initial",
+          sourceThreads: [{ threadId: ThreadId.makeUnsafe("source-thread"), title: "Source" }],
+          verified: true,
+        },
+      ];
       const persistedAttachments = [
         {
           type: "image" as const,
@@ -39,6 +48,7 @@ layer("ProjectionThreadMessageRepository", (it) => {
         role: "user",
         text: "initial",
         attachments: persistedAttachments,
+        originSegments,
         isStreaming: false,
         createdAt,
         updatedAt,
@@ -59,12 +69,14 @@ layer("ProjectionThreadMessageRepository", (it) => {
       assert.equal(rows.length, 1);
       assert.equal(rows[0]?.text, "updated");
       assert.deepEqual(rows[0]?.attachments, persistedAttachments);
+      assert.deepEqual(rows[0]?.originSegments, originSegments);
 
       const rowById = yield* repository.getByMessageId({ messageId });
       assert.equal(rowById._tag, "Some");
       if (rowById._tag === "Some") {
         assert.equal(rowById.value.text, "updated");
         assert.deepEqual(rowById.value.attachments, persistedAttachments);
+        assert.deepEqual(rowById.value.originSegments, originSegments);
       }
     }),
   );

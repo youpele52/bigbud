@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   countVisibleSummaryMessages,
+  buildElevatorSummaryTranscript,
   maybeGenerateThreadElevatorSummary,
   shouldRefreshThreadElevatorSummary,
 } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
@@ -40,6 +41,43 @@ function makeThread(input?: {
 }
 
 describe("ProviderCommandReactorHandlers.elevatorSummary", () => {
+  it("retains recent user intent when the newest assistant response exceeds the context budget", () => {
+    const context = buildElevatorSummaryTranscript([
+      { ...makeMessage("intent", "user"), text: "Fix the session reconnect regression" },
+      { ...makeMessage("oversized", "assistant"), text: "A".repeat(8_001) },
+    ]);
+    expect(context.length).toBeGreaterThan(0);
+    expect(context.length).toBeLessThanOrEqual(8_000);
+    expect(context).toContain("USER:\nFix the session reconnect regression");
+    expect(context).toContain("ASSISTANT:\nA");
+  });
+  it.each(["user", "assistant"] as const)(
+    "bounds an oversized standalone %s message without losing all context",
+    (role) => {
+      const context = buildElevatorSummaryTranscript([
+        { ...makeMessage("oversized", role), text: "😀".repeat(8_001) },
+      ]);
+      expect(context.length).toBeGreaterThan(0);
+      expect(context.length).toBeLessThanOrEqual(8_000);
+      expect(context).not.toMatch(/[\uD800-\uDFFF]/u);
+    },
+  );
+  it("reserves user intent even behind multiple oversized assistant responses", () => {
+    const context = buildElevatorSummaryTranscript([
+      { ...makeMessage("intent", "user"), text: "Preserve my latest user request" },
+      { ...makeMessage("assistant-1", "assistant"), text: "B".repeat(8_001) },
+      { ...makeMessage("assistant-2", "assistant"), text: "😀".repeat(8_001) },
+    ]);
+    expect(context).toContain("Preserve my latest user request");
+    expect(context.length).toBeLessThanOrEqual(8_000);
+    expect(context).not.toMatch(/[\uD800-\uDFFF]/u);
+  });
+  it("reads meaningful user intent after a large whitespace prefix without copying the whole message", () => {
+    const context = buildElevatorSummaryTranscript([
+      { ...makeMessage("intent", "user"), text: `${" ".repeat(8_001)}Fix reconnects` },
+    ]);
+    expect(context).toBe("USER:\nFix reconnects");
+  });
   it("counts only user and assistant messages", () => {
     expect(
       countVisibleSummaryMessages([
@@ -133,11 +171,14 @@ describe("ProviderCommandReactorHandlers.elevatorSummary", () => {
             model: "test-model",
           },
           worktreePath: "/tmp/project",
+          activities: [],
         };
         const services = {
           resolveThread: () => Effect.succeed(thread),
           serverSettingsService: {
-            getSettings: Effect.succeed({}),
+            getSettings: Effect.succeed({
+              textGenerationModelSelection: { provider: "codex", model: "explicit-model" },
+            }),
           },
           orchestrationEngine: {
             getReadModel: () =>
@@ -159,7 +200,18 @@ describe("ProviderCommandReactorHandlers.elevatorSummary", () => {
 
         yield* maybeGenerateThreadElevatorSummary(services)({ threadId });
 
-        expect(dispatch).not.toHaveBeenCalled();
+        expect(dispatch).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "thread.activity.append",
+            activity: expect.objectContaining({
+              kind: "text-generation.failed",
+              payload: { operation: "summary" },
+            }),
+          }),
+        );
+        expect(dispatch).not.toHaveBeenCalledWith(
+          expect.objectContaining({ type: "thread.meta.update" }),
+        );
       }),
     );
   });

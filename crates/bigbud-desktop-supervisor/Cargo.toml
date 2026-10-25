@@ -6,9 +6,16 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+bigbud-system = { path = "../bigbud-system" }
 prost.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_System_WindowsProgramming"] }
 
 [build-dependencies]
 prost-build.workspace = true

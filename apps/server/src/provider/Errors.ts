@@ -1,3 +1,4 @@
+import { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orchestration.turnFailure.ts";
 import { Schema } from "effect";
 
 import type { CheckpointServiceError } from "../checkpointing/Errors.ts";
@@ -11,6 +12,8 @@ export class ProviderAdapterValidationError extends Schema.TaggedErrorClass<Prov
     provider: Schema.String,
     operation: Schema.String,
     issue: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -27,6 +30,8 @@ export class ProviderAdapterSessionNotFoundError extends Schema.TaggedErrorClass
   {
     provider: Schema.String,
     threadId: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -43,6 +48,8 @@ export class ProviderAdapterSessionClosedError extends Schema.TaggedErrorClass<P
   {
     provider: Schema.String,
     threadId: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -60,6 +67,8 @@ export class ProviderAdapterRequestError extends Schema.TaggedErrorClass<Provide
     provider: Schema.String,
     method: Schema.String,
     detail: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -77,6 +86,8 @@ export class ProviderAdapterProcessError extends Schema.TaggedErrorClass<Provide
     provider: Schema.String,
     threadId: Schema.String,
     detail: Schema.String,
+    /** Turn-start failure class when the adapter knows it (see TurnStartFailureClass). */
+    failureClass: Schema.optional(TurnStartFailureClass),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
@@ -147,6 +158,24 @@ export class ProviderSessionDirectoryPersistenceError extends Schema.TaggedError
   }
 }
 
+/**
+ * ProviderDispatchAttemptPersistenceError - The `may-have-been-sent` dispatch record could not
+ * be written. It is raised before the adapter send, which then never happens, so the turn
+ * provably did not reach the provider.
+ */
+export class ProviderDispatchAttemptPersistenceError extends Schema.TaggedErrorClass<ProviderDispatchAttemptPersistenceError>()(
+  "ProviderDispatchAttemptPersistenceError",
+  {
+    threadId: Schema.String,
+    detail: Schema.String,
+    cause: Schema.optional(Schema.Defect),
+  },
+) {
+  override get message(): string {
+    return `Could not record the provider dispatch for thread ${this.threadId}; the turn was not sent: ${this.detail}`;
+  }
+}
+
 export type ProviderAdapterError =
   | ProviderAdapterValidationError
   | ProviderAdapterSessionNotFoundError
@@ -159,5 +188,6 @@ export type ProviderServiceError =
   | ProviderUnsupportedError
   | ProviderSessionNotFoundError
   | ProviderSessionDirectoryPersistenceError
+  | ProviderDispatchAttemptPersistenceError
   | ProviderAdapterError
   | CheckpointServiceError;

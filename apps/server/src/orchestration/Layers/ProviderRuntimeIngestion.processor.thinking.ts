@@ -144,6 +144,28 @@ export function makeThinkingProcessorHelpers(
     event: ProviderRuntimeEvent,
     itemId: string,
   ) {
+    if (
+      event.provider === "opencodeV2" &&
+      event.type === "item.completed" &&
+      event.payload.itemType === "reasoning" &&
+      event.payload.detail?.trim()
+    ) {
+      const activityId = thinkingActivityIdFromRuntimeEvent({
+        threadId: event.threadId,
+        turnId: event.turnId,
+        itemId: event.itemId,
+        streamKind: "reasoning_text",
+      });
+      yield* cacheHelpers.takeBufferedThinking(activityId);
+      yield* cacheHelpers.appendBufferedThinking({
+        activityId,
+        threadId: event.threadId,
+        turnId: toTurnId(event.turnId),
+        streamKind: "reasoning_text",
+        createdAt: event.createdAt,
+        delta: event.payload.detail,
+      });
+    }
     const activityIds = yield* cacheHelpers.listBufferedThinkingActivityIdsByItemToken(
       thinkingActivityItemToken(itemId),
     );

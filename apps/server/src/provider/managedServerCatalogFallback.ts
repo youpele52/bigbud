@@ -51,23 +51,23 @@ export function managedServerBuiltInModels(
   const gatewayModels =
     provider === "opencode"
       ? [
-          model("deepseek-v4-flash", "DeepSeek V4 Flash", "OpenCode Zen", "opencode", true),
-          model("claude-opus-5", "Claude Opus 5", "OpenCode Zen", "opencode", true),
-          model("gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite", "OpenCode Zen", "opencode", true),
+          model("gpt-6.1-sol", "GPT-6.1 Sol", "OpenCode Zen", "opencode", true),
+          model("claude-opus-5-5", "Claude Opus 5.5", "OpenCode Zen", "opencode", true),
+          model("claude-sonnet-5-5", "Claude Sonnet 5.5", "OpenCode Zen", "opencode", true),
         ]
       : [
-          model("sakana/sakana-namazu", "Sakana Namazu", "Kilo Gateway", "kilo", true),
-          model("upstage/solar-pro4", "Solar Pro 4", "Kilo Gateway", "kilo", true),
-          model("qwen/qwen3.8-max", "Qwen3.8 Max", "Kilo Gateway", "kilo", true),
+          model("openai/gpt-6.1-sol", "GPT-6.1 Sol", "Kilo Gateway", "kilo", true),
+          model("anthropic/claude-opus-5.5", "Claude Opus 5.5", "Kilo Gateway", "kilo", true),
+          model("anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5", "Kilo Gateway", "kilo", true),
         ];
 
   return [
     ...gatewayModels,
-    model("gpt-5.6-sol", "GPT-5.6 Sol", "OpenAI", "openai", true),
-    model("gpt-5.6-luna", "GPT-5.6 Luna", "OpenAI", "openai", true),
-    model("claude-opus-5", "Claude Opus 5", "Anthropic", "anthropic", true),
-    model("claude-sonnet-5", "Claude Sonnet 5", "Anthropic", "anthropic", true),
-    model("gemini-3.6-flash", "Gemini 3.6 Flash", "Google", "google", true),
+    model("gpt-6.1-sol", "GPT-6.1 Sol", "OpenAI", "openai", true),
+    model("gpt-6-astra", "GPT-6 Astra", "OpenAI", "openai", true),
+    model("claude-opus-5-5", "Claude Opus 5.5", "Anthropic", "anthropic", true),
+    model("claude-sonnet-5-5", "Claude Sonnet 5.5", "Anthropic", "anthropic", true),
+    model("gemini-3.8-flash", "Gemini 3.8 Flash", "Google", "google", true),
     model("gemini-3.5-flash-lite", "Gemini 3.5 Flash Lite", "Google", "google", true),
     model("deepseek-v4-pro", "DeepSeek V4 Pro", "DeepSeek", "deepseek", true),
     model("deepseek-v4-flash", "DeepSeek V4 Flash", "DeepSeek", "deepseek", true),

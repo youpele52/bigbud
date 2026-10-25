@@ -1,6 +1,10 @@
 import { NetService } from "@bigbud/shared/Net";
 import { parsePersistedServerObservabilitySettings } from "@bigbud/shared/serverSettings";
 import { APP_SERVER_SLUG } from "@bigbud/contracts";
+import {
+  DesktopBackendStartReason,
+  DesktopLifecycleHintFd,
+} from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 import { Config, Effect, FileSystem, LogLevel, Option, Path, Schema } from "effect";
 
 import {
@@ -15,6 +19,7 @@ import {
 import { readBootstrapEnvelope } from "../startup/bootstrap";
 import { expandHomePath, resolveBaseDir } from "../utils/os-jank";
 import { TraceModeSchema } from "../observability/TracePolicy.ts";
+import { setSystemMonitorAgentAccess } from "../orchestration-tools/ThreadSystemResourcesTool.ts";
 
 export const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 
@@ -30,6 +35,15 @@ const BootstrapEnvelopeSchema = Schema.Struct({
   logWebSocketEvents: Schema.optional(Schema.Boolean),
   otlpTracesUrl: Schema.optional(Schema.String),
   otlpMetricsUrl: Schema.optional(Schema.String),
+  systemMonitorAgentAccess: Schema.optional(
+    Schema.Struct({
+      endpoint: Schema.String,
+      token: Schema.String,
+    }),
+  ),
+  startReason: Schema.optional(DesktopBackendStartReason),
+  lifecycleHintFd: Schema.optional(DesktopLifecycleHintFd),
+  ownershipHandoff: Schema.optional(Schema.Boolean),
 });
 
 const aliasedConfig = <A>(primary: Config.Config<A>, legacy: Config.Config<A>) =>
@@ -174,6 +188,28 @@ const loadPersistedObservabilitySettings = Effect.fn(function* (settingsPath: st
   return parsePersistedServerObservabilitySettings(raw);
 });
 
+/**
+ * Only Electron main sends a desktop envelope. The hint pipe is read only when the envelope
+ * announces it: a desktop launch without it (an older desktop, an artifact check) may leave
+ * that fd number to one of Node's own descriptors.
+ */
+const desktopLifecycleFields = (
+  envelope: typeof BootstrapEnvelopeSchema.Type | undefined,
+  mode: RuntimeMode,
+): Pick<
+  ServerConfigShape,
+  "desktopStartReason" | "desktopLifecycleHintFd" | "desktopOwnershipHandoff"
+> =>
+  envelope === undefined || mode !== "desktop"
+    ? {}
+    : {
+        ...(envelope.ownershipHandoff === true ? { desktopOwnershipHandoff: true } : {}),
+        ...(envelope.lifecycleHintFd !== undefined
+          ? { desktopLifecycleHintFd: envelope.lifecycleHintFd }
+          : {}),
+        ...(envelope.startReason ? { desktopStartReason: envelope.startReason } : {}),
+      };
+
 export const resolveServerConfig = (
   flags: CliServerFlags,
   cliLogLevel: Option.Option<LogLevel.LogLevel>,
@@ -188,6 +224,7 @@ export const resolveServerConfig = (
       bootstrapFd !== undefined
         ? yield* readBootstrapEnvelope(BootstrapEnvelopeSchema, bootstrapFd)
         : Option.none();
+    setSystemMonitorAgentAccess(Option.getOrUndefined(bootstrapEnvelope)?.systemMonitorAgentAccess);
 
     const mode: RuntimeMode = Option.getOrElse(
       resolveOptionPrecedence(
@@ -337,5 +374,6 @@ export const resolveServerConfig = (
       authToken,
       autoBootstrapProjectFromCwd,
       logWebSocketEvents,
+      ...desktopLifecycleFields(Option.getOrUndefined(bootstrapEnvelope), mode),
     } satisfies ServerConfigShape;
   });

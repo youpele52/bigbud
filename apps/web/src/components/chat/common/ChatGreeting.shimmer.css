@@ -1,0 +1,46 @@
+.chat-greeting-mark-shimmer {
+  animation: chat-greeting-mark-shimmer 2s ease-in-out 1;
+}
+
+.chat-greeting-message-shimmer.shimmer {
+  animation:
+    tw-shimmer 2s ease-out 1,
+    chat-greeting-message-glint 2s ease-out 1;
+}
+
+@keyframes chat-greeting-mark-shimmer {
+  0%,
+  100% {
+    opacity: 0.7;
+    filter: brightness(1);
+  }
+
+  40% {
+    opacity: 1;
+    filter: brightness(1.35) drop-shadow(0 0 5px currentColor);
+  }
+}
+
+@keyframes chat-greeting-message-glint {
+  0%,
+  100% {
+    text-shadow: none;
+  }
+
+  40% {
+    text-shadow: 0 0 10px color-mix(in srgb, currentColor 40%, white);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-greeting-mark-shimmer,
+  .chat-greeting-message-shimmer.shimmer {
+    animation: none;
+  }
+
+  .chat-greeting-message-shimmer.shimmer {
+    background-image: none;
+    -webkit-text-fill-color: currentColor;
+    text-shadow: none;
+  }
+}

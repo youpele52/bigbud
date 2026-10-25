@@ -121,6 +121,9 @@ export function processorFixture(attemptCount = 1, memoryUserMessageCount: numbe
       return { ...input, updatedAt: now };
     }),
   );
+  const getCapabilities = vi.fn<ProviderServiceShape["getCapabilities"]>(() =>
+    Effect.succeed({ sessionModelSwitch: "unsupported", durableLearningReview: false }),
+  );
   const proposals = {
     getById: vi.fn<SkillChangeProposalRepositoryShape["getById"]>(() =>
       Effect.succeed(Option.none()),
@@ -131,13 +134,21 @@ export function processorFixture(attemptCount = 1, memoryUserMessageCount: numbe
   const layer = Layer.mergeAll(
     NodeServices.layer,
     Layer.succeed(LearningJobRepository, {
+      memorySnapshot: ({
+        documents,
+      }: Parameters<LearningJobRepositoryShape["memorySnapshot"]>[0]) => Effect.succeed(documents),
+      beginMemoryApplication: () => Effect.succeed("execute" as const),
+      completeMemoryApplication: () => Effect.void,
       claim,
       acquireLease,
       releaseLease,
       getReviewMessages,
       setState,
     } as unknown as LearningJobRepositoryShape),
-    Layer.succeed(ProviderService, { runBackgroundReview } as unknown as ProviderServiceShape),
+    Layer.succeed(ProviderService, {
+      runBackgroundReview,
+      getCapabilities,
+    } as unknown as ProviderServiceShape),
     Layer.succeed(MemoryStore, {
       read: (input) => Effect.succeed({ ...input, content: "", updatedAt: now }),
       write,
@@ -163,6 +174,7 @@ export function processorFixture(attemptCount = 1, memoryUserMessageCount: numbe
       }).pipe(Effect.provide(layer)),
     );
   return {
+    layer,
     job,
     thread,
     operations,
@@ -175,6 +187,7 @@ export function processorFixture(attemptCount = 1, memoryUserMessageCount: numbe
     getReadModel,
     getThreadOperationalState,
     runBackgroundReview,
+    getCapabilities,
     write,
     proposals,
     run,

@@ -11,6 +11,7 @@ import type {
 } from "@bigbud/contracts";
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { compareCodexCliVersions, MINIMUM_CODEX_CLI_VERSION } from "./codexCliVersion.ts";
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "./providerSubagents.capabilities.ts";
 import { Effect, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import { normalizeModelSlug } from "@bigbud/shared/model";
@@ -181,8 +182,10 @@ export function buildServerProvider(input: {
   supportsSteer?: boolean;
   probe: ProviderProbeResult;
 }): ServerProvider {
+  const message = nonEmptyTrimmed(input.probe.message);
   const nativeSteer =
     input.provider === "pi" ||
+    input.provider === "copilot" ||
     (input.provider === "codex" &&
       input.probe.version !== null &&
       compareCodexCliVersions(input.probe.version, MINIMUM_CODEX_CLI_VERSION) >= 0);
@@ -195,21 +198,23 @@ export function buildServerProvider(input: {
     auth: input.probe.auth,
     checkedAt: input.checkedAt,
     initialProbeComplete: true,
-    ...(input.probe.message ? { message: input.probe.message } : {}),
+    ...(message ? { message } : {}),
     ...(classifyProviderFailure(input) ? { failure: classifyProviderFailure(input) } : {}),
     models: input.models,
     ...(input.modelDiscovery ? { modelDiscovery: input.modelDiscovery } : {}),
     ...(input.usageLimits ? { usageLimits: input.usageLimits } : {}),
     slashCommands: [...(input.slashCommands ?? [])],
     skills: [...(input.skills ?? [])],
-    // App-level steering is universal; providers without native steering use
-    // the explicit interrupt-and-continue strategy.
-    supportsSteer: true,
+    // Steer only adds instructions to the running turn; it never interrupts. Providers
+    // without native steering offer Send now and Stop instead.
+    supportsSteer: nativeSteer,
+    supportsAttachments: providerAttachmentPolicy(input.provider).supported,
+    ...(PROVIDER_SUBAGENT_CAPABILITIES[input.provider].stop === true ? { subagentStop: true } : {}),
     turnControl: {
       nativeSteer,
       interruptTarget: input.provider === "codex" ? "exact-turn" : "current-session",
       activeTurnInspection: "unavailable",
-      continuation: true,
+      continuation: input.provider !== "opencodeV2",
     },
   };
 }
@@ -248,3 +253,4 @@ export const collectStreamAsString = <E>(
       (acc, chunk) => acc + chunk,
     ),
   );
+import { providerAttachmentPolicy } from "@bigbud/shared/providerAttachments";

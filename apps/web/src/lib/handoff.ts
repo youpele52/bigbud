@@ -92,16 +92,36 @@ function fileNameFromPath(filePath: string): string {
   return segments.at(-1) ?? "handoff.md";
 }
 
-export function buildHandoffSeedMessage(filePath: string): SeedMessageOutput {
+export function buildHandoffSeedMessage(
+  filePath: string,
+  sourceThreadId?: ThreadId,
+): SeedMessageOutput {
   const createdAt = new Date().toISOString();
+  const text = [
+    HANDOFF_SEED_INSTRUCTION_LINES[0],
+    `Handoff file: ${filePath}`,
+    HANDOFF_SEED_INSTRUCTION_LINES[1],
+  ].join("\n");
+  const sourceThread = sourceThreadId
+    ? useStore.getState().threads.find((thread) => thread.id === sourceThreadId)
+    : undefined;
   return {
     id: newMessageId(),
     role: "user",
-    text: [
-      HANDOFF_SEED_INSTRUCTION_LINES[0],
-      `Handoff file: ${filePath}`,
-      HANDOFF_SEED_INSTRUCTION_LINES[1],
-    ].join("\n"),
+    text,
+    ...(sourceThread
+      ? {
+          originSegments: [
+            {
+              kind: "handoff" as const,
+              actor: "agent" as const,
+              text,
+              sourceThreads: [{ threadId: sourceThread.id, title: sourceThread.title }],
+              verified: false,
+            },
+          ],
+        }
+      : {}),
     attachments: [
       {
         type: "path",

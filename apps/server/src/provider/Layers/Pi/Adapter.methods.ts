@@ -14,14 +14,18 @@ import {
 } from "./Adapter.session.helpers.ts";
 import { makePiSessionControlMethods } from "./Adapter.session.control.ts";
 import { makeRespondToUserInput } from "./Adapter.methods.respondToUserInput.ts";
+import { makePiStopThreadSubagents } from "./Adapter.methods.threadSubagentStop.ts";
 import { requirePiSession } from "./Adapter.methods.session.ts";
 import { createPiMethodSetup } from "./Adapter.methods.setup.ts";
 import { makePiStartSession } from "./Adapter.methods.startSession.ts";
 import type { PiAdapterMethodDependencies } from "./Adapter.methods.types.ts";
-import { toMessage } from "./Adapter.utils.ts";
+import { isPiProcessAlive, toMessage } from "./Adapter.utils.ts";
+import { promptDispatchFailureClass } from "../../providerTurnDispatch.ts";
+import { canReadManagedProviderPaths } from "../../../attachments/providerAttachments.managed.ts";
+import { settleHandledPiPrompt } from "./Adapter.stream.settled.ts";
 
 export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
-  const { appendTextFileAttachments, resolveImages, stopSessionRecord } = createPiMethodSetup({
+  const { prepareAttachments, stopSessionRecord } = createPiMethodSetup({
     attachmentsDir: deps.attachmentsDir,
     emit: deps.emit,
     makeSyntheticEvent: deps.makeSyntheticEvent,
@@ -42,6 +46,25 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
       });
     }
 
+    const attachmentAwareInput = appendPiAttachmentInstructions({
+      prompt: input.input ?? "",
+      hasFileAttachments: (input.attachments ?? []).some(
+        (attachment) => attachment.type === "file",
+      ),
+    });
+    const prepared = yield* prepareAttachments(
+      input.attachments ?? [],
+      attachmentAwareInput,
+      canReadManagedProviderPaths(session),
+    );
+    const images = prepared.attachments
+      .filter(({ attachment }) => attachment.type === "image")
+      .map(({ attachment, bytes }) => ({
+        type: "image" as const,
+        data: bytes.toString("base64"),
+        mimeType: attachment.mimeType,
+      }));
+
     if (input.modelSelection) {
       yield* applyModelSelection({ session, modelSelection: input.modelSelection });
     }
@@ -56,33 +79,37 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     }
     session.updatedAt = new Date().toISOString();
     session.turns.push({ id: turnId, items: [] });
+    if (session.process.supportsAgentSettled) {
+      (session.pendingPromptTurnIds ??= new Set()).add(turnId);
+      (session.pendingPromptQueueStarts ??= new Map()).set(
+        turnId,
+        session.promptQueue?.sequence ?? 0,
+      );
+    }
 
-    const images = yield* resolveImages(input.attachments ?? []);
-    const attachmentAwareInput = appendPiAttachmentInstructions({
-      prompt: input.input ?? "",
-      hasFileAttachments: (input.attachments ?? []).some(
-        (attachment) => attachment.type === "file",
-      ),
-    });
-    const messageText = yield* appendTextFileAttachments(
-      input.attachments ?? [],
-      attachmentAwareInput,
-    );
-    yield* Effect.tryPromise({
+    const aliveBeforeDispatch = isPiProcessAlive(session.process);
+    const response = yield* Effect.tryPromise({
       try: () =>
-        session.process.request({
+        session.process.request<{ disposition?: string }>({
+          id: turnId,
           type: "prompt",
-          message: messageText,
+          message: prepared.text,
           ...(images.length > 0 ? { images } : {}),
           ...(queuedWhileRunning ? { streamingBehavior: "steer" as const } : {}),
         }),
-      catch: (cause) =>
-        new ProviderAdapterRequestError({
+      catch: (cause) => {
+        const failureClass = promptDispatchFailureClass({
+          aliveBeforeDispatch,
+          aliveAfterFailure: isPiProcessAlive(session.process),
+        });
+        return new ProviderAdapterRequestError({
           provider: PROVIDER,
           method: "prompt",
           detail: toMessage(cause, "Failed to send Pi turn."),
+          ...(failureClass ? { failureClass } : {}),
           cause,
-        }),
+        });
+      },
     }).pipe(
       Effect.tapError((error) =>
         Effect.logError("Pi prompt RPC request failed", {
@@ -93,6 +120,8 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
       ),
       Effect.tapError(() =>
         Effect.sync(() => {
+          session.pendingPromptTurnIds?.delete(turnId);
+          session.pendingPromptQueueStarts?.delete(turnId);
           if (queuedWhileRunning) {
             const queuedTurnIndex = session.queuedTurnIds.findIndex(
               (queuedTurnId) => queuedTurnId === turnId,
@@ -115,6 +144,9 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
       ),
     );
 
+    if (response.data?.disposition === "handled") {
+      yield* settleHandledPiPrompt({ ...deps, session, turnId });
+    }
     return {
       threadId: input.threadId,
       turnId,
@@ -190,6 +222,7 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     sendTurn,
     interruptTurn,
     steerTurn,
+    stopThreadSubagents: makePiStopThreadSubagents({ requireSession }),
     respondToRequest,
     respondToUserInput,
     ...sessionControlMethods,
@@ -199,6 +232,7 @@ export function makePiAdapterMethods(deps: PiAdapterMethodDependencies) {
     | "sendTurn"
     | "interruptTurn"
     | "steerTurn"
+    | "stopThreadSubagents"
     | "respondToRequest"
     | "respondToUserInput"
     | "stopSession"

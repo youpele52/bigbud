@@ -17,6 +17,7 @@ import type { OfferClaudeRuntimeEvent } from "./Adapter.events.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeTurnCompletionHandlers } from "./Adapter.stream.turn.complete.ts";
+import { CLAUDE_AGENT_SDK_VERSION } from "./Adapter.sdk.ts";
 
 export interface TurnHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{
@@ -107,6 +108,7 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
     context: ClaudeSessionContext,
     message: string,
     detail?: unknown,
+    severity?: "error",
   ) {
     const turnState = context.turnState;
     const stamp = yield* makeEventStamp();
@@ -117,7 +119,11 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
       createdAt: stamp.createdAt,
       threadId: context.session.threadId,
       ...(turnState ? { turnId: asCanonicalTurnId(turnState.turnId) } : {}),
-      payload: { message, ...(detail !== undefined ? { detail } : {}) },
+      payload: {
+        message,
+        ...(detail !== undefined ? { detail } : {}),
+        ...(severity ? { severity } : {}),
+      },
       providerRefs: nativeProviderRefs(context),
     });
   });
@@ -153,7 +159,7 @@ export const makeTurnHandlers = (deps: TurnHandlerDeps) => {
       raw: {
         source: input.rawSource,
         method: input.rawMethod,
-        payload: { sdkVersion: "0.3.219" },
+        payload: { sdkVersion: CLAUDE_AGENT_SDK_VERSION },
       },
     });
   });

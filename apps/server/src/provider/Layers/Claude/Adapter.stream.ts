@@ -23,6 +23,7 @@ import { PROVIDER } from "./Adapter.types.ts";
 import { makeBlockHandlers } from "./Adapter.stream.blocks.ts";
 import { makeTurnHandlers } from "./Adapter.stream.turn.ts";
 import { makeMessageHandlers } from "./Adapter.stream.handlers.ts";
+import { cancelAbandonedClaudeRequest } from "./Adapter.approval.lifecycle.ts";
 
 /** Shared dependencies injected into all stream handler functions. */
 export interface StreamHandlerDeps {
@@ -70,6 +71,9 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
       updatedAt,
     };
 
+    for (const requestId of context.requestLedger.keys()) {
+      yield* cancelAbandonedClaudeRequest(context, requestId, deps);
+    }
     for (const pending of context.pendingApprovals.values()) {
       yield* Deferred.succeed(pending.decision, "cancel");
     }
@@ -150,9 +154,11 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
     context: ClaudeSessionContext,
     exit: Exit.Exit<void, Error>,
   ) {
-    if (context.stopped) {
+    if (context.stopped || sessions.get(context.session.threadId) !== context) {
       return;
     }
+    // Fence turn admission before completion/cleanup yields to other fibers.
+    context.session = { ...context.session, status: "closed" };
 
     if (Exit.isFailure(exit)) {
       if (isClaudeInterruptedCause(exit.cause)) {
@@ -165,16 +171,6 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
         }
       } else {
         const message = messageFromClaudeStreamCause(exit.cause, "Claude runtime stream failed.");
-        const recovery = context.recoverStream;
-        if (recovery) {
-          const recovered = yield* Effect.matchEffect(recovery(), {
-            onFailure: () => Effect.succeed(false),
-            onSuccess: () => Effect.succeed(true),
-          });
-          if (recovered) {
-            return;
-          }
-        }
         yield* turn.emitRuntimeError(context, message, Cause.pretty(exit.cause));
         yield* turn.completeTurn(context, "failed", message);
       }
@@ -182,6 +178,9 @@ export const makeStreamHandlers = (deps: StreamHandlerDeps) => {
       yield* turn.completeTurn(context, "interrupted", "Claude runtime stream ended.");
     }
 
+    // An exhausted SDK Query owns a finalized transport. Retire it; the provider
+    // router resumes saved history on the next explicit turn, without replaying
+    // the prompt whose execution may already have begun.
     yield* stopSessionInternal(context, {
       emitExitEvent: true,
     });

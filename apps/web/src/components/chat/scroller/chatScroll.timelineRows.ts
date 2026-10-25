@@ -1,6 +1,6 @@
 import { type MessageId } from "@bigbud/contracts";
 
-import { estimateMessagesTimelineRowHeight } from "../messages/MessagesTimeline.logic";
+import { estimateMessagesTimelineRowHeight } from "../messages/MessagesTimeline.estimate";
 import { type MessagesTimelineRow } from "../messages/MessagesTimeline.logic";
 import { type ChatScrollAnchorRow, type ChatScrollMessageRow } from "./chatScroll.constants";
 

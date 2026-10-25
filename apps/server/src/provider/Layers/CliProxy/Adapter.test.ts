@@ -8,7 +8,8 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { CliProxyAdapter } from "../../Services/CliProxy/Adapter.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
-import { FakeClaudeQuery } from "../Claude/Adapter.test.helpers.ts";
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
+import { FakeClaudeQuery } from "../Claude/Adapter.test.helpers.query.ts";
 import type { ClaudeAdapterLiveOptions } from "../Claude/Adapter.ts";
 import {
   makeCliProxyAdapterLive,
@@ -194,6 +195,7 @@ adapterLayer("CliProxyAdapterLive", (it) => {
         sessionRecovery: "fresh-restart",
         conversationRewind: "unsupported",
         conversationFork: "unsupported",
+        subagents: PROVIDER_SUBAGENT_CAPABILITIES.cliProxy,
       });
       yield* adapter.stopAll();
     }),

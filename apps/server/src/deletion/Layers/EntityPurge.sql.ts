@@ -4,36 +4,15 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
 import { makeEntityPurgeCheckpointSql } from "./EntityPurge.sql.checkpoints.ts";
+import { makeEntityPurgeResourceSql } from "./EntityPurge.sql.resources.ts";
+import { makeCountThreadRuntimes } from "./EntityPurge.sql.activity.ts";
 
 const ThreadInput = Schema.Struct({ threadId: ThreadId });
-const ThreadAttachmentInput = Schema.Struct({ threadId: ThreadId, attachmentId: Schema.String });
 const ProjectInput = Schema.Struct({ projectId: ProjectId });
 const ThreadIdRow = Schema.Struct({ threadId: ThreadId });
 const DeletionCandidateRow = Schema.Struct({
   entityKind: Schema.Literals(["thread", "project"]),
   entityId: Schema.String,
-});
-const ThreadAssetRow = Schema.Struct({
-  activityKind: Schema.NullOr(Schema.String),
-  activityPayloadJson: Schema.NullOr(Schema.String),
-  attachmentsJson: Schema.NullOr(Schema.String),
-  worktreePath: Schema.NullOr(Schema.String),
-  workspaceRoot: Schema.NullOr(Schema.String),
-});
-const ThreadWorktreeRow = Schema.Struct({
-  threadId: ThreadId,
-  worktreePath: Schema.String,
-});
-const ThreadIdentityRow = Schema.Struct({ threadId: Schema.String });
-const PurgeManifestRow = Schema.Struct({
-  entityId: Schema.String,
-  jobId: Schema.String,
-  resourceManifestJson: Schema.String,
-});
-const LiveWorktreeIdentityRow = Schema.Struct({
-  canonicalPath: Schema.String,
-  device: Schema.Number,
-  inode: Schema.Number,
 });
 const RemainingRow = Schema.Struct({ count: Schema.Number });
 const DeletionMarkerRow = Schema.Struct({ deletionSequence: Schema.Number });
@@ -41,96 +20,8 @@ type DeletionMarkerRow = typeof DeletionMarkerRow.Type;
 
 export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
   const checkpointQueries = makeEntityPurgeCheckpointSql(sql);
-  const readThreadAssets = SqlSchema.findAll({
-    Request: ThreadInput,
-    Result: ThreadAssetRow,
-    execute: ({ threadId }) => sql`
-      SELECT
-        NULL AS "activityKind",
-        NULL AS "activityPayloadJson",
-        messages.attachments_json AS "attachmentsJson",
-        threads.worktree_path AS "worktreePath",
-        projects.workspace_root AS "workspaceRoot"
-      FROM projection_threads AS threads
-      LEFT JOIN projection_projects AS projects ON projects.project_id = threads.project_id
-      LEFT JOIN projection_thread_messages AS messages ON messages.thread_id = threads.thread_id
-      WHERE threads.thread_id = ${threadId}
-      UNION ALL
-      SELECT NULL, NULL, messages.attachments_json, NULL, NULL
-      FROM projection_thread_messages AS messages
-      WHERE messages.thread_id = ${threadId} AND messages.attachments_json IS NOT NULL
-      UNION ALL
-      SELECT activities.kind, activities.payload_json, NULL, NULL, NULL
-      FROM projection_thread_activities AS activities
-      WHERE activities.thread_id = ${threadId}
-    `,
-  });
-
-  const attachmentIsShared = SqlSchema.findOne({
-    Request: ThreadAttachmentInput,
-    Result: Schema.Struct({ shared: Schema.Number }),
-    execute: ({ threadId, attachmentId }) => sql`
-      SELECT EXISTS (
-        SELECT 1
-        FROM projection_thread_attachment_refs
-        WHERE thread_id <> ${threadId}
-          AND attachment_id IN (${attachmentId}, '')
-      ) AS shared
-    `,
-  });
-
-  const listOtherThreadWorktrees = SqlSchema.findAll({
-    Request: ThreadInput,
-    Result: ThreadWorktreeRow,
-    execute: ({ threadId }) => sql`
-      SELECT thread_id AS "threadId", worktree_path AS "worktreePath"
-      FROM projection_threads
-      WHERE thread_id <> ${threadId} AND worktree_path IS NOT NULL
-    `,
-  });
-
-  const listKnownThreadIds = SqlSchema.findAll({
-    Request: Schema.Void,
-    Result: ThreadIdentityRow,
-    execute: () => sql`
-      SELECT thread_id AS "threadId" FROM projection_threads
-      UNION SELECT thread_id FROM orchestration_thread_identity
-      UNION SELECT entity_id FROM orchestration_deletion_markers WHERE entity_kind = 'thread'
-    `,
-  });
-
-  const listIncompleteThreadManifests = SqlSchema.findAll({
-    Request: ThreadInput,
-    Result: PurgeManifestRow,
-    execute: ({ threadId }) => sql`
-      SELECT job_id AS "jobId", entity_id AS "entityId",
-        resource_manifest_json AS "resourceManifestJson"
-      FROM purge_jobs
-      WHERE entity_kind = 'thread' AND entity_id <> ${threadId} AND status <> 'completed'
-    `,
-  });
-
-  const listLiveWorktreeIdentities = SqlSchema.findAll({
-    Request: ThreadInput,
-    Result: LiveWorktreeIdentityRow,
-    execute: () => sql`
-      SELECT canonical_path AS "canonicalPath", device, inode
-      FROM worktree_runtime_leases
-    `,
-  });
-
-  const countThreadRuntimes = SqlSchema.findOne({
-    Request: ThreadInput,
-    Result: RemainingRow,
-    execute: ({ threadId }) => sql`
-      SELECT (
-        (SELECT COUNT(*) FROM thread_activity_leases WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM worktree_runtime_leases WHERE thread_id = ${threadId}) +
-        (SELECT COUNT(*) FROM provider_session_runtime
-          WHERE thread_id = ${threadId} AND status IN ('starting', 'running'))
-      ) AS count
-    `,
-  });
+  const resources = makeEntityPurgeResourceSql(sql);
+  const countThreadRuntimes = makeCountThreadRuntimes(sql);
 
   const listProjectThreadIds = SqlSchema.findAll({
     Request: ProjectInput,
@@ -462,12 +353,7 @@ export function makeEntityPurgeSql(sql: SqlClient.SqlClient) {
     );
 
   return {
-    readThreadAssets,
-    attachmentIsShared,
-    listOtherThreadWorktrees,
-    listKnownThreadIds,
-    listIncompleteThreadManifests,
-    listLiveWorktreeIdentities,
+    ...resources,
     countThreadRuntimes,
     listProjectThreadIds,
     listDeletionCandidates,

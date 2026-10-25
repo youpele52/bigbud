@@ -3,7 +3,7 @@ import { type Terminal } from "@xterm/xterm";
 
 import { TerminalWriteBatcher } from "./TerminalWriteBatcher";
 import { selectPendingTerminalEventEntries } from "./ThreadTerminalDrawer.logic";
-import { writeSystemMessage, writeTerminalSnapshot } from "./ThreadTerminalDrawer.logic";
+import type { TerminalViewportIntake } from "./TerminalViewport.intake";
 
 interface TerminalRefLike {
   current: Terminal | null;
@@ -31,9 +31,12 @@ export function makeApplyTerminalEvent(input: {
   readonly hasHandledExitRef: BooleanRefLike;
   readonly dropPathModeRef: DropPathModeRefLike;
   readonly writeBatcher: TerminalWriteBatcher;
+  readonly replaySnapshot: TerminalViewportIntake["replay"];
+  readonly isDisposed: () => boolean;
   readonly clearSelectionAction: () => void;
   readonly handleSessionExited: () => void;
 }) {
+  let lifecycleGeneration = 0;
   return (event: TerminalEvent) => {
     const activeTerminal = input.terminalRef.current;
     if (!activeTerminal) {
@@ -45,31 +48,30 @@ export function makeApplyTerminalEvent(input: {
     }
 
     if (event.type === "output") {
-      input.writeBatcher.write(activeTerminal, event.data);
+      // Server output carries flow-control credit, released once xterm parses it.
+      input.writeBatcher.write(activeTerminal, event.data, event.data.length);
       input.clearSelectionAction();
       return;
     }
 
     if (event.type === "started" || event.type === "restarted") {
+      lifecycleGeneration++;
       input.hasHandledExitRef.current = false;
       input.dropPathModeRef.current = event.snapshot.dropPathMode;
       input.clearSelectionAction();
-      input.writeBatcher.flush();
-      writeTerminalSnapshot(activeTerminal, event.snapshot);
+      input.replaySnapshot(event.snapshot);
       return;
     }
 
     if (event.type === "cleared") {
       input.clearSelectionAction();
-      input.writeBatcher.flush();
-      activeTerminal.clear();
-      activeTerminal.write("\u001bc");
+      input.writeBatcher.barrier(() => activeTerminal.clear());
+      input.writeBatcher.write(activeTerminal, "\u001bc");
       return;
     }
 
     if (event.type === "error") {
-      input.writeBatcher.flush();
-      writeSystemMessage(activeTerminal, event.message);
+      input.writeBatcher.write(activeTerminal, `\r\n[terminal] ${event.message}\r\n`);
       return;
     }
 
@@ -79,21 +81,26 @@ export function makeApplyTerminalEvent(input: {
     ]
       .filter((value): value is string => value !== null)
       .join(", ");
-    input.writeBatcher.flush();
-    writeSystemMessage(
+    input.writeBatcher.write(
       activeTerminal,
-      details.length > 0 ? `Process exited (${details})` : "Process exited",
+      `\r\n[terminal] ${details.length > 0 ? `Process exited (${details})` : "Process exited"}\r\n`,
     );
     if (input.hasHandledExitRef.current) {
       return;
     }
     input.hasHandledExitRef.current = true;
-    window.setTimeout(() => {
-      if (!input.hasHandledExitRef.current) {
+    const exitGeneration = lifecycleGeneration;
+    input.writeBatcher.barrier(() => {
+      if (
+        input.isDisposed() ||
+        input.terminalRef.current !== activeTerminal ||
+        exitGeneration !== lifecycleGeneration ||
+        !input.hasHandledExitRef.current
+      ) {
         return;
       }
       input.handleSessionExited();
-    }, 0);
+    });
   };
 }
 

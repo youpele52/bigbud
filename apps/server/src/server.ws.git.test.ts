@@ -266,14 +266,16 @@ it.layer(serverTestLayer)("server router seam > websocket git", (it) => {
       );
       assert.equal(worktree.worktree.branch, "feature/demo");
 
-      yield* Effect.scoped(
+      const removal = yield* Effect.scoped(
         withRetriedWsRpcClient(wsUrl, (client) =>
           client[WS_METHODS.gitRemoveWorktree]({
             cwd: "/tmp/repo",
             path: "/tmp/wt",
           }),
         ),
-      );
+      ).pipe(Effect.result);
+      // A mocked Git primitive without durable storage/identity cannot authorize deletion.
+      assert.equal(removal._tag, "Failure");
 
       yield* Effect.scoped(
         withRetriedWsRpcClient(wsUrl, (client) =>

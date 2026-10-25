@@ -5,9 +5,13 @@ import type { ServerProvider } from "@bigbud/contracts";
 import { useServerProviders } from "../rpc/serverState";
 import { toastManager } from "./ui/toast";
 import { getProviderToastDecision } from "./ProviderRecoveryToastCoordinator.logic";
+import { useModelDiscoveryToasts } from "./useModelDiscoveryToasts";
+import { useOpencodeRetainedHistoryToast } from "./useOpencodeRetainedHistoryToast";
 
 export function ProviderRecoveryToastCoordinator() {
   const providers = useServerProviders();
+  useModelDiscoveryToasts(providers);
+  useOpencodeRetainedHistoryToast(providers);
   const navigate = useNavigate();
   const toastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
   const sawRecoveryRef = useRef(false);

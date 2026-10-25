@@ -4,6 +4,7 @@
  * Handles message filtering, capping, and preparation for branch operations.
  */
 import { type MessageId, type ThreadId } from "@bigbud/contracts";
+import type { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
 import { isHandoffSeedMessage } from "./handoff";
 import { newMessageId } from "./utils";
 
@@ -100,6 +101,7 @@ export interface SeedMessageOutput {
         readonly title: string;
       }
   >;
+  readonly originSegments?: ReadonlyArray<MessageOriginSegment>;
   readonly turnId: null;
   readonly streaming: false;
   readonly createdAt: string;

@@ -5,6 +5,7 @@ export function needsProviderRefresh(provider: ServerProvider): boolean {
 }
 
 export function isProviderRetryable(provider: ServerProvider): boolean {
+  if (provider.modelRecovery) return false;
   return provider.failure?.classification === "retryable";
 }
 
@@ -14,5 +15,6 @@ export function isProviderRetryable(provider: ServerProvider): boolean {
  * negative, but retain its user-action classification if all attempts fail.
  */
 export function isProviderStartupRetryable(provider: ServerProvider): boolean {
+  if (provider.modelRecovery) return false;
   return isProviderRetryable(provider) || provider.failure?.reason === "command-not-found";
 }

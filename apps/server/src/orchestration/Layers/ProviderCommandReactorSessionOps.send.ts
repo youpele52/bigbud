@@ -2,6 +2,7 @@ import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { BIGBUD_CAPABILITY_CATALOG } from "../../capabilities/BigbudCapabilityTracks.ts";
+import { providerSupportsDelegatedModelChoice } from "../../orchestration-tools/threadOrchestrationBridge.shared.ts";
 import { OrchestrationCommandInvariantError } from "../Errors.ts";
 import { buildResumedTurnInput, toNonEmptyProviderInput } from "./ProviderCommandReactorHelpers.ts";
 import {
@@ -23,13 +24,23 @@ import type {
   SessionOpServices,
 } from "./ProviderCommandReactorSessionOps.types.ts";
 import { shouldStampRunningSessionAfterSend } from "./ProviderCommandReactorSessionOps.send.stamp.ts";
+import { isLiveProviderSessionIdle } from "../../provider/liveProviderSessionIdle.ts";
+import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
+import type { TurnStartRecoveryAttempt } from "./ProviderCommandReactorSessionOps.recovery.turnStart.ts";
+import type { TurnStartDispatchPhase } from "./ProviderCommandReactorSessionOps.recovery.dispatch.phase.ts";
+import { recordSubmittedUserTurn } from "./ProviderCommandReactorSessionOps.userTurn.ts";
 
 export const sendTurnAttempt = (
   services: SessionOpServices,
   ensureSession: ReturnType<typeof ensureSessionForThread>,
 ) =>
   Effect.fn("sendTurnAttempt")(function* (
-    input: SendTurnForThreadInput & ResolvedTurnExecutionSettings,
+    input: SendTurnForThreadInput &
+      ResolvedTurnExecutionSettings & {
+        readonly recovery?: TurnStartRecoveryAttempt;
+        /** Marked immediately before the provider send: later failures may have been accepted. */
+        readonly dispatch?: TurnStartDispatchPhase;
+      },
   ) {
     const { providerService, setThreadSession, threadModelSelections, resolveThread } = services;
     const thread = yield* resolveThread(input.threadId);
@@ -71,19 +82,25 @@ export const sendTurnAttempt = (
       activeSession,
       activities: thread.activities,
     });
-    const shouldBootstrapFromTranscript = shouldRebuildProviderContextFromTranscript({
-      thread,
-      bootstrapThread,
-      activeSession,
-      messageText: input.messageText,
-      attachments: normalizedAttachments,
-    });
+    // A revive resumes the provider's own history, so it must not replay the transcript.
+    const reviving = input.recovery?.mode === "revive";
+    const shouldBootstrapFromTranscript =
+      !reviving &&
+      shouldRebuildProviderContextFromTranscript({
+        provider: input.modelSelection.provider,
+        thread,
+        bootstrapThread,
+        activeSession,
+        messageText: input.messageText,
+        attachments: normalizedAttachments,
+      });
 
     yield* ensureSession(input.threadId, input.createdAt, {
       ...(input.modelSelectionWasCaptured ? { modelSelection: input.modelSelection } : {}),
       runtimeMode: input.runtimeMode,
       requireExactModel: input.modelSelectionWasCaptured,
-      restartFreshIfInactive: shouldBootstrapFromTranscript,
+      restartFreshIfInactive: shouldBootstrapFromTranscript || input.recovery?.mode === "fresh",
+      ...(input.recovery?.mode === "revive" ? { resumeCursor: input.recovery.resumeCursor } : {}),
     });
     activeSession = yield* providerService
       .listSessions()
@@ -154,6 +171,7 @@ export const sendTurnAttempt = (
           computerUseEnabled: serverSettings.computerUseEnabled,
           agentBrowserPreference: serverSettings.agentBrowserPreference,
           serverMode: services.serverConfig.mode,
+          supportsDelegatedModelChoice: providerSupportsDelegatedModelChoice(modelForTurn.provider),
         });
     const providerInputWithReferencedThreads = yield* appendReferencedThreadsToProviderInput({
       providerInputText: providerInputWithCurrentThread ?? "",
@@ -164,11 +182,16 @@ export const sendTurnAttempt = (
     const normalizedInput = toNonEmptyProviderInput(providerInputWithReferencedThreads);
 
     const providerAttachments = normalizedAttachments.filter(
-      (attachment) => attachment.type === "file" || attachment.type === "image",
+      (attachment) =>
+        attachment.type === "file" ||
+        attachment.type === "image" ||
+        (modelForTurn.provider === "opencodeV2" && attachment.type === "path"),
     );
     const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
+    if (input.dispatch) input.dispatch.dispatched = true;
     const turn = yield* providerService.sendTurn({
       threadId: input.threadId,
+      ...(input.requestMessageId !== undefined ? { requestMessageId: input.requestMessageId } : {}),
       ...(normalizedInput ? { input: normalizedInput } : {}),
       ...(providerAttachments.length > 0 ? { attachments: providerAttachments } : {}),
       modelSelection: modelForTurn,
@@ -191,13 +214,12 @@ export const sendTurnAttempt = (
       sessionAfterTurn.providerName === sessionBeforeTurn.providerName &&
       sessionAfterTurn.runtimeMode === sessionBeforeTurn.runtimeMode;
 
-    if (
-      shouldStampRunningSessionAfterSend({
-        liveSession,
-        sessionAfterTurn,
-        sessionUnchangedSinceSend,
-      })
-    ) {
+    const stamped = shouldStampRunningSessionAfterSend({
+      liveSession,
+      sessionAfterTurn,
+      sessionUnchangedSinceSend,
+    });
+    if (stamped) {
       yield* setThreadSession({
         threadId: input.threadId,
         session: {
@@ -219,4 +241,30 @@ export const sendTurnAttempt = (
         expectedSessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
       });
     }
+    const providerIdle = liveSession === undefined || isLiveProviderSessionIdle(liveSession);
+    if (!stamped && !providerIdle && sessionAfterTurn?.activeTurnId == null) {
+      // Not stamped because the projection moved during the send, yet the provider is still
+      // busy: project its live turn so the pending start clears only once the turn is visible.
+      const thread = yield* resolveThread(input.threadId);
+      const visible = thread
+        ? buildThreadReconciliationCommand({ thread, liveSession, occurredAt: input.createdAt })
+        : null;
+      if (visible?.type === "thread.session.set" && visible.session.activeTurnId !== null) {
+        yield* setThreadSession({
+          threadId: input.threadId,
+          session: visible.session,
+          createdAt: input.createdAt,
+          expectedSessionEpoch: thread?.session?.sessionEpoch ?? 0,
+        });
+      }
+    }
+    // After any running stamp: an idle provider's acceptance clears the pending-start gate and
+    // triggers a queue flush; a busy one leaves the gate to the now-visible running turn.
+    yield* recordSubmittedUserTurn(services, {
+      threadId: input.threadId,
+      ...(input.requestMessageId ? { requestMessageId: input.requestMessageId } : {}),
+      turnId: turn.turnId,
+      createdAt: input.createdAt,
+      providerIdle,
+    });
   });

@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronDownIcon, MessageSquareIcon } from "lucide-react";
+import { MessageSquareIcon } from "lucide-react";
 import type {
   ChatFileAttachment,
   ChatPathAttachment,
@@ -13,6 +13,7 @@ import {
   ChatFileTargetContextMenu,
   useChatFileTargetContextMenu,
 } from "../common/ChatFileTargetContextMenu";
+import { ActivityAccordion } from "../common/ActivityAccordion";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 import { openChatFileTarget } from "../common/chatFileTargets";
 
@@ -148,55 +149,53 @@ export function UserFileSourcePaths(props: {
 
   return (
     <>
-      <details className="mb-2 group/files">
-        <summary className="flex cursor-pointer list-none items-center gap-1 text-xs text-muted-foreground/50 hover:text-muted-foreground/70">
-          <ChevronDownIcon className="size-3 shrink-0 transition-transform duration-150 group-open/files:rotate-0 -rotate-90" />
-          {props.files.length === 1 ? "1 attached file" : `${props.files.length} attached files`}
-        </summary>
-        <div className="mt-1.5 space-y-1 pl-1">
-          {props.files.map((file) => (
+      <ActivityAccordion
+        variant="compact"
+        title={
+          props.files.length === 1 ? "1 attached file" : `${props.files.length} attached files`
+        }
+        className="mb-2"
+        panelClassName="space-y-1 pl-1"
+      >
+        {props.files.map((file) => (
+          <div
+            key={`path-${file.id}`}
+            className="flex min-w-0 cursor-pointer items-start gap-1.5"
+            title="Double-click to open"
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              openChatFilePath(file.sourcePath, props.markdownCwd);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const targetPath = resolveMarkdownFileLinkTarget(file.sourcePath, props.markdownCwd);
+              if (!targetPath) return;
+              showContextMenu({
+                targetPath,
+                workspaceRoot: props.markdownCwd,
+                kind: "file",
+                x: event.clientX,
+                y: event.clientY,
+              });
+            }}
+          >
+            <VscodeEntryIcon
+              pathValue={file.sourcePath}
+              kind="file"
+              theme={props.resolvedTheme}
+              className="mt-0.5 shrink-0 opacity-50"
+            />
             <div
-              key={`path-${file.id}`}
-              className="flex min-w-0 cursor-pointer items-start gap-1.5"
-              title="Double-click to open"
-              onDoubleClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                openChatFilePath(file.sourcePath, props.markdownCwd);
-              }}
-              onContextMenu={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                const targetPath = resolveMarkdownFileLinkTarget(
-                  file.sourcePath,
-                  props.markdownCwd,
-                );
-                if (!targetPath) return;
-                showContextMenu({
-                  targetPath,
-                  workspaceRoot: props.markdownCwd,
-                  kind: "file",
-                  x: event.clientX,
-                  y: event.clientY,
-                });
-              }}
+              className="min-w-0 break-all text-[11px] text-muted-foreground/45"
+              title={file.sourcePath}
             >
-              <VscodeEntryIcon
-                pathValue={file.sourcePath}
-                kind="file"
-                theme={props.resolvedTheme}
-                className="mt-0.5 shrink-0 opacity-50"
-              />
-              <div
-                className="min-w-0 break-all text-[11px] text-muted-foreground/45"
-                title={file.sourcePath}
-              >
-                {file.sourcePath}
-              </div>
+              {file.sourcePath}
             </div>
-          ))}
-        </div>
-      </details>
+          </div>
+        ))}
+      </ActivityAccordion>
       <ChatFileTargetContextMenu contextMenuState={contextMenuState} onClose={hideContextMenu} />
     </>
   );

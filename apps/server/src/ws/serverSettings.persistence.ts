@@ -6,27 +6,16 @@ import {
 } from "@bigbud/contracts";
 import { fromLenientJson } from "@bigbud/shared/schemaJson";
 import { Equal, Schema } from "effect";
-import { resolveProviderWorkload } from "../provider/providerWorkloadSupport.ts";
+import {
+  EXISTING_SERVER_SETTINGS_FALLBACK,
+  normalizeExistingOpencodeSettings,
+} from "./serverSettings.opencodePolicy.ts";
 
 const UnknownJson = fromLenientJson(Schema.Unknown);
 
 export function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
-  const selection = settings.textGenerationModelSelection;
-  if (!PROVIDER_KINDS.includes(selection.provider as (typeof PROVIDER_KINDS)[number])) {
-    return settings;
-  }
-  const providerSettings =
-    settings.providers[selection.provider as keyof ServerSettings["providers"]];
-  if (providerSettings?.enabled) return settings;
-  const resolution = resolveProviderWorkload({
-    requested: selection,
-    workload: "unattendedTextGeneration",
-    availableProviderKinds: PROVIDER_KINDS.filter(
-      (provider) => settings.providers[provider].enabled,
-    ),
-  });
-  if (!resolution.actual || resolution.actual.provider === selection.provider) return settings;
-  return { ...settings, textGenerationModelSelection: resolution.actual };
+  // Availability must never rewrite an explicit preference into a different model.
+  return settings;
 }
 
 export function resolveDefaultChatCwd(settings: ServerSettings): string {
@@ -39,7 +28,7 @@ export function resolveDefaultChatCwd(settings: ServerSettings): string {
 
 /** Recover valid settings fields while retaining a well-formed historical selection. */
 export function decodeSettingsFieldWise(raw: string): ServerSettings | null {
-  const parsed = Schema.decodeUnknownExit(UnknownJson)(raw);
+  const parsed = Schema.decodeUnknownExit(UnknownJson)(normalizeExistingOpencodeSettings(raw));
   if (
     parsed._tag === "Failure" ||
     parsed.value === null ||
@@ -50,12 +39,25 @@ export function decodeSettingsFieldWise(raw: string): ServerSettings | null {
   }
 
   const input = parsed.value as Record<string, unknown>;
-  const next: Record<string, unknown> = { ...DEFAULT_SERVER_SETTINGS };
+  const next: Record<string, unknown> = { ...EXISTING_SERVER_SETTINGS_FALLBACK };
   for (const [key, value] of Object.entries(input)) {
     if (key === "providers" && value !== null && typeof value === "object") {
-      const providers = { ...DEFAULT_SERVER_SETTINGS.providers } as Record<string, unknown>;
+      const providers = { ...EXISTING_SERVER_SETTINGS_FALLBACK.providers } as Record<
+        string,
+        unknown
+      >;
       for (const [providerKey, providerValue] of Object.entries(value as Record<string, unknown>)) {
         if (!PROVIDER_KINDS.includes(providerKey as (typeof PROVIDER_KINDS)[number])) continue;
+        // Recover explicit consent separately when another V2 field is malformed.
+        if (providerKey === "opencodeV2") {
+          providers.opencodeV2 = {
+            ...EXISTING_SERVER_SETTINGS_FALLBACK.providers.opencodeV2,
+            enabled:
+              providerValue !== null &&
+              typeof providerValue === "object" &&
+              (providerValue as Record<string, unknown>).enabled === true,
+          };
+        }
         const decoded = Schema.decodeUnknownExit(ServerSettings)({
           providers: { [providerKey]: providerValue },
         });

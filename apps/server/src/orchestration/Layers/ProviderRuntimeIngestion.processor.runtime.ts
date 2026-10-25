@@ -5,8 +5,6 @@ import { RuntimeActivityGovernor } from "./ProviderRuntimeIngestion.activityGove
 import { processAssistantRuntimeEvent } from "./ProviderRuntimeIngestion.processor.runtime.assistant.ts";
 import {
   STRICT_PROVIDER_LIFECYCLE_GUARD,
-  normalizeRuntimeTurnState,
-  orchestrationSessionStatusFromRuntimeState,
   proposedPlanIdForTurn,
   proposedPlanIdFromEvent,
   runtimeEventToActivities,
@@ -15,14 +13,13 @@ import {
 } from "./ProviderRuntimeIngestion.helpers.ts";
 import {
   isProviderLifecycleEvent,
+  lifecycleSessionStatus,
   resolveProviderLifecycleGuard,
 } from "./ProviderRuntimeIngestion.lifecycle.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
 import { makeThinkingProcessorHelpers } from "./ProviderRuntimeIngestion.processor.thinking.ts";
-import {
-  makeRuntimeProcessorEventHelpers,
-  type TaskRuntimeEvent,
-} from "./ProviderRuntimeIngestion.processor.events.ts";
+import { makeRuntimeProcessorEventHelpers } from "./ProviderRuntimeIngestion.processor.events.ts";
+import { makeRuntimeTaskProcessor } from "./ProviderRuntimeIngestion.processor.tasks.ts";
 import type {
   RuntimeProcessorCacheHelpers,
   RuntimeProcessorServices,
@@ -31,13 +28,19 @@ import { ensureOrchestrationThreadState } from "../Services/OrchestrationEngine.
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import { lookupLiveSessionBestEffort } from "./ProviderRuntimeIngestion.processor.runtime.lookup.ts";
 import { providerCommandId } from "./ProviderRuntimeIngestion.processor.runtime.command.ts";
+import { runtimeSessionLastError } from "./ProviderRuntimeIngestion.processor.runtime.error.ts";
+import { makePromptSuggestionIngestion } from "./ProviderRuntimeIngestion.promptSuggestion.ts";
+import {
+  isSuccessfulModelEvent,
+  makeSuccessfulModelRecorder,
+} from "./ProviderRuntimeIngestion.successfulModel.ts";
 export function makeRuntimeEventProcessor(
   services: RuntimeProcessorServices,
   cacheHelpers: RuntimeProcessorCacheHelpers,
 ) {
   const { orchestrationEngine, serverSettingsService } = services;
-  let nextTaskOrdinal = 0;
   const activityGovernor = new RuntimeActivityGovernor();
+  const recordSuccessfulModel = makeSuccessfulModelRecorder(orchestrationEngine);
   const {
     rememberAssistantMessageId,
     forgetAssistantMessageId,
@@ -60,19 +63,29 @@ export function makeRuntimeEventProcessor(
     finalizeThinkingForTurn,
     finalizeThinkingForThread,
   } = makeThinkingProcessorHelpers(services, cacheHelpers, providerCommandId);
-  const { appendActivities, handleThreadMetadataUpdated, handleTurnDiffUpdated, upsertTask } =
+  const { appendActivities, handleThreadMetadataUpdated, handleTurnDiffUpdated } =
     makeRuntimeProcessorEventHelpers({
       orchestrationEngine,
       serverSettingsService,
       isGitRepoForThread,
       providerCommandId,
     });
-  return Effect.fn("processRuntimeEvent")(function* (event: ProviderRuntimeEvent) {
+  const taskProcessor = makeRuntimeTaskProcessor({ orchestrationEngine, providerCommandId });
+  const ingestPromptSuggestion = makePromptSuggestionIngestion({
+    orchestrationEngine,
+    serverSettingsService,
+  });
+  const processRuntimeEvent = Effect.fn("processRuntimeEvent")(function* (
+    event: ProviderRuntimeEvent,
+  ) {
     yield* ensureOrchestrationThreadState(orchestrationEngine, event.threadId, "history");
+    yield* taskProcessor.flushDue(event, event.threadId);
     const thread = (yield* orchestrationEngine.getReadModel()).threads.find(
       (entry) => entry.id === event.threadId,
     );
     if (!thread) return;
+    if (event.type === "turn.prompt-suggestion")
+      return yield* ingestPromptSuggestion(event, thread);
     const now = event.createdAt;
     const sessionEpoch = event.sessionEpoch;
     const projectedSessionEpoch = thread.session?.sessionEpoch ?? 0;
@@ -120,32 +133,8 @@ export function makeRuntimeEventProcessor(
               event.type === "session.exited"
             ? null
             : activeTurnId;
-      const status = (() => {
-        switch (event.type) {
-          case "session.state.changed":
-            return orchestrationSessionStatusFromRuntimeState(event.payload.state);
-          case "turn.started":
-            return "running";
-          case "session.exited":
-            return "stopped";
-          case "turn.completed":
-            return normalizeRuntimeTurnState(event.payload.state) === "failed" ? "error" : "ready";
-          case "turn.aborted":
-            return "ready";
-          case "session.started":
-          case "thread.started":
-            return activeTurnId !== null ? "running" : "ready";
-        }
-      })();
-      const lastError =
-        event.type === "session.state.changed" && event.payload.state === "error"
-          ? (event.payload.reason ?? thread.session?.lastError ?? "Provider session error")
-          : event.type === "turn.completed" &&
-              normalizeRuntimeTurnState(event.payload.state) === "failed"
-            ? (event.payload.errorMessage ?? thread.session?.lastError ?? "Turn failed")
-            : status === "ready"
-              ? null
-              : (thread.session?.lastError ?? null);
+      const status = lifecycleSessionStatus(event, activeTurnId);
+      const lastError = runtimeSessionLastError(event, status, thread.session?.lastError);
 
       if (shouldApplyThreadLifecycle) {
         if (event.type === "turn.started" && acceptedTurnStartedSourcePlan !== null) {
@@ -168,6 +157,12 @@ export function makeRuntimeEventProcessor(
             providerName: event.provider,
             runtimeMode: thread.session?.runtimeMode ?? "full-access",
             activeTurnId: nextActiveTurnId,
+            retainedFamily:
+              event.provider === "opencodeV2" &&
+              event.type !== "session.exited" &&
+              (event.type === "session.state.changed"
+                ? (event.payload.retainedFamily ?? thread.session?.retainedFamily ?? false)
+                : (thread.session?.retainedFamily ?? false)),
             sessionEpoch: sessionEpoch ?? 0,
             reason:
               event.type === "session.state.changed"
@@ -227,6 +222,8 @@ export function makeRuntimeEventProcessor(
     ) {
       return;
     }
+
+    if (isSuccessfulModelEvent(event)) yield* recordSuccessfulModel(event, thread, liveSession);
 
     const proposedPlanDelta =
       event.type === "turn.proposed.delta" ? event.payload.delta : undefined;
@@ -375,29 +372,7 @@ export function makeRuntimeEventProcessor(
       yield* handleTurnDiffUpdated({ event, thread, now });
     }
 
-    if (event.type === "task.removed") {
-      yield* orchestrationEngine.dispatch({
-        type: "thread.task.remove",
-        commandId: providerCommandId(event, "thread-task-remove"),
-        threadId: thread.id,
-        taskId: event.payload.taskId,
-        source: event.payload.source,
-        freshness: event.payload.freshness,
-        ...(event.payload.replacement ? { replacement: event.payload.replacement } : {}),
-        createdAt: event.createdAt,
-      });
-    } else if (
-      event.type === "task.started" ||
-      event.type === "task.progress" ||
-      event.type === "task.completed" ||
-      event.type === "task.updated"
-    ) {
-      yield* upsertTask({
-        event: event as unknown as TaskRuntimeEvent,
-        threadId: thread.id,
-        ordinal: nextTaskOrdinal++,
-      });
-    }
+    yield* taskProcessor.processTaskEvent(event, thread.id);
 
     const activities = runtimeEventToActivities(event, {
       model: thread.modelSelection.model,
@@ -415,5 +390,8 @@ export function makeRuntimeEventProcessor(
     if (event.type === "turn.completed" || event.type === "session.exited") {
       activityGovernor.clear({ threadId: thread.id, turnId: eventTurnId ?? null });
     }
+  });
+  return Object.assign(processRuntimeEvent, {
+    flushPendingSubagentUpserts: taskProcessor.flushAll,
   });
 }

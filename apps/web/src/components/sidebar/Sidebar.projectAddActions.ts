@@ -51,7 +51,9 @@ export interface SidebarProjectAddActionsOutput {
   openRemoteProjectEditDialog: SidebarRemoteProjectAddActionsOutput["openRemoteProjectEditDialog"];
   closeRemoteProjectDialog: SidebarRemoteProjectAddActionsOutput["closeRemoteProjectDialog"];
   updateRemoteProjectDraft: SidebarRemoteProjectAddActionsOutput["updateRemoteProjectDraft"];
+  adoptRemoteProjectConnectionSource: SidebarRemoteProjectAddActionsOutput["adoptRemoteProjectConnectionSource"];
   submitRemoteProjectDialog: SidebarRemoteProjectAddActionsOutput["submitRemoteProjectDialog"];
+  requestRemoteProjectUnlock: SidebarRemoteProjectAddActionsOutput["requestRemoteProjectUnlock"];
   remoteAgentInstallRequest: SidebarRemoteProjectAddActionsOutput["remoteAgentInstallRequest"];
   declineRemoteAgentInstall: SidebarRemoteProjectAddActionsOutput["declineRemoteAgentInstall"];
   completeRemoteAgentInstall: SidebarRemoteProjectAddActionsOutput["completeRemoteAgentInstall"];

@@ -3,50 +3,39 @@ import { assert, describe, it } from "vitest";
 import { getVscodeIconUrlForEntry } from "./icons.lib";
 
 describe("getVscodeIconUrlForEntry", () => {
-  it("uses exact filename matches from the vscode-icons manifest", () => {
+  it("uses Material Icon Theme filename mappings and theme variants", () => {
     const darkUrl = getVscodeIconUrlForEntry("pnpm-workspace.yaml", "file", "dark");
     const lightUrl = getVscodeIconUrlForEntry("pnpm-workspace.yaml", "file", "light");
 
-    assert.isTrue(darkUrl.endsWith("/file_type_pnpm.svg"));
-    assert.isTrue(lightUrl.endsWith("/file_type_light_pnpm.svg"));
+    assert.isTrue(darkUrl.endsWith("/icons/pnpm.svg"));
+    assert.isTrue(lightUrl.endsWith("/icons/pnpm_light.svg"));
   });
 
-  it("uses longest extension match for compound extensions", () => {
-    const iconUrl = getVscodeIconUrlForEntry("tsconfig.tsbuildinfo", "file", "dark");
-    const manifestStyleUrl = getVscodeIconUrlForEntry("buf.yaml", "file", "dark");
-    assert.isTrue(iconUrl.endsWith("/file_type_tsbuildinfo.svg"));
-    assert.isTrue(manifestStyleUrl.endsWith("/file_type_buf.svg"));
-  });
-
-  it("uses folder mappings and light-aware filename mappings", () => {
+  it("uses compound extensions and folder-name mappings", () => {
+    const fileUrl = getVscodeIconUrlForEntry("tsconfig.tsbuildinfo", "file", "dark");
     const folderUrl = getVscodeIconUrlForEntry("packages/src", "directory", "light");
-    const fileUrl = getVscodeIconUrlForEntry("AGENTS.md", "file", "light");
 
-    assert.isTrue(folderUrl.endsWith("/folder_type_src.svg"));
-    assert.isTrue(fileUrl.endsWith("/file_type_light_agents.svg"));
+    assert.isTrue(fileUrl.endsWith("/icons/json.svg"));
+    assert.isTrue(folderUrl.endsWith("/icons/folder-src.svg"));
   });
 
-  it("falls back to language-based mappings for path-only cases", () => {
+  it("supports language and framework icons", () => {
     const tsxUrl = getVscodeIconUrlForEntry("checkbox.tsx", "file", "light");
     const dockerfileUrl = getVscodeIconUrlForEntry("Dockerfile", "file", "dark");
-    const shellUrl = getVscodeIconUrlForEntry("entrypoint.sh", "file", "dark");
     const htmlUrl = getVscodeIconUrlForEntry("index.html", "file", "dark");
-    const cursorRulesUrl = getVscodeIconUrlForEntry("general.mdc", "file", "dark");
-    const githubWorkflowUrl = getVscodeIconUrlForEntry(".github/workflows/ci.yml", "file", "light");
+    const agentsUrl = getVscodeIconUrlForEntry("AGENTS.md", "file", "light");
 
-    assert.isTrue(tsxUrl.endsWith("/file_type_reactts.svg"));
-    assert.isTrue(dockerfileUrl.endsWith("/file_type_docker.svg"));
-    assert.isTrue(shellUrl.endsWith("/file_type_shell.svg"));
-    assert.isTrue(htmlUrl.endsWith("/file_type_html.svg"));
-    assert.isTrue(cursorRulesUrl.endsWith("/file_type_markdown.svg"));
-    assert.isTrue(githubWorkflowUrl.endsWith("/file_type_light_yaml.svg"));
+    assert.isTrue(tsxUrl.endsWith("/icons/react_ts.svg"));
+    assert.isTrue(dockerfileUrl.endsWith("/icons/docker.svg"));
+    assert.isTrue(htmlUrl.endsWith("/icons/html.svg"));
+    assert.isTrue(agentsUrl.endsWith("/icons/agent.svg"));
   });
 
-  it("falls back to defaults when there is no match", () => {
+  it("falls back to default file and folder icons when there is no match", () => {
     const fileUrl = getVscodeIconUrlForEntry("foo.unknown-ext", "file", "dark");
     const folderUrl = getVscodeIconUrlForEntry("totally-unknown-folder", "directory", "dark");
 
-    assert.isTrue(fileUrl.endsWith("/default_file.svg"));
-    assert.isTrue(folderUrl.endsWith("/default_folder.svg"));
+    assert.isTrue(fileUrl.endsWith("/icons/file.svg"));
+    assert.isTrue(folderUrl.endsWith("/icons/folder.svg"));
   });
 });

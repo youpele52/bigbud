@@ -1,5 +1,6 @@
 import { type MessageId } from "@bigbud/contracts";
-import { useRef, useState } from "react";
+import { providerAttachmentPolicy } from "@bigbud/shared/providerAttachments";
+import { useMemo, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
@@ -18,6 +19,8 @@ import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { composerSurfaceStyles } from "../../composer/ComposerSurface.styles";
 import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
 import { useSttStore } from "../../../../stores/stt/stt.store";
+import { deriveVisiblePromptSuggestion } from "../../../../logic/promptSuggestion.logic";
+import { describeThreadBackgroundWork } from "../ChatView.subagents.logic";
 
 import { useChatViewComposerActions } from "./ChatViewComposer.actions";
 import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
@@ -55,9 +58,14 @@ export function ChatViewComposer({
   onOpenReplySource,
 }: ChatViewComposerProps) {
   const { keyVerified } = useSttStore();
+  const attachmentPolicy = providerAttachmentPolicy(composer.selectedProvider);
   const promptHasText = base.prompt.trim().length > 0;
+  const backgroundWork = describeThreadBackgroundWork(base.activeThread);
   const isDefaultComposerState =
-    !interactions.pendingAction && thread.phase !== "running" && !thread.showPlanFollowUpPrompt;
+    !backgroundWork.hasBackgroundWork &&
+    !interactions.pendingAction &&
+    thread.phase !== "running" &&
+    !thread.showPlanFollowUpPrompt;
   const micReplacesSend =
     keyVerified === true && !base.composerSendState.hasSendableContent && isDefaultComposerState;
 
@@ -66,6 +74,20 @@ export function ChatViewComposer({
   const [isRecording, setIsRecording] = useState(false);
   const micRef = useRef<ComposerMicButtonHandle>(null);
   const activeReplyTarget = base.composerDraft.replyTarget;
+  const suggestionThread = base.isServerThread ? base.activeThread : undefined;
+  const suggestionBlocked =
+    thread.isComposerApprovalState ||
+    thread.isOpencodePendingUserInputMode ||
+    thread.showPlanFollowUpPrompt ||
+    base.composerDraft.shellMode;
+  const promptSuggestion = useMemo(
+    () =>
+      suggestionThread && !suggestionBlocked
+        ? (deriveVisiblePromptSuggestion(suggestionThread, base.settings.promptSuggestions)
+            ?.suggestion ?? null)
+        : null,
+    [suggestionThread, suggestionBlocked, base.settings.promptSuggestions],
+  );
   const {
     insertMention,
     onMicTranscript,
@@ -120,7 +142,13 @@ export function ChatViewComposer({
             composer.composerProviderState.composerSurfaceClassName,
           )}
         >
-          {!compact && <ChatViewComposerHeader thread={thread} interactions={interactions} />}
+          {!compact && (
+            <ChatViewComposerHeader
+              threadId={base.threadId}
+              thread={thread}
+              interactions={interactions}
+            />
+          )}
 
           <div
             className={cn(
@@ -201,6 +229,7 @@ export function ChatViewComposer({
               onChange={interactions.composerCommandHandlers.onPromptChange}
               onCommandKeyDown={interactions.composerCommandHandlers.onComposerCommandKey}
               onPaste={interactions.onComposerPaste}
+              promptSuggestion={promptSuggestion}
               placeholder={
                 thread.isComposerApprovalState
                   ? (thread.activePendingApproval?.detail ??
@@ -274,7 +303,6 @@ export function ChatViewComposer({
                 onTogglePlanCard={runtime.togglePlanCard}
                 onRuntimeModeChange={runtime.handleRuntimeModeChange}
               />
-
               <div
                 data-chat-composer-actions="right"
                 data-chat-composer-primary-actions-compact={
@@ -289,6 +317,7 @@ export function ChatViewComposer({
                   <>
                     {thread.activeContextWindow ? (
                       <ContextWindowMeter
+                        threadId={base.threadId}
                         usage={thread.activeContextWindow}
                         handoffAvailable={handoffAvailable}
                         onUseHandoff={onUseHandoffFromMeter}
@@ -306,12 +335,15 @@ export function ChatViewComposer({
                       className="sr-only"
                       tabIndex={-1}
                       onChange={interactions.onFileInputChange}
+                      disabled={!attachmentPolicy.supported}
                     />
                     <ComposerAttachmentMenu
                       onAttachFiles={interactions.onAttachFiles}
                       onOpenReadDialog={onOpenReadDialog}
                       onCallAgent={onCallAgent}
                       onUseSkill={onUseSkill}
+                      showAttachFiles={attachmentPolicy.supported}
+                      showReadDialog={attachmentPolicy.supported}
                       disabled={base.isConnecting || thread.isComposerApprovalState}
                     />
                   </>
@@ -333,6 +365,8 @@ export function ChatViewComposer({
                     compact={runtime.scrollBehavior.isComposerPrimaryActionsCompact}
                     pendingAction={interactions.pendingAction}
                     isRunning={thread.activeSessionTurnRunning}
+                    hasBackgroundWork={backgroundWork.hasBackgroundWork}
+                    backgroundSubagentCount={backgroundWork.backgroundSubagentCount}
                     showPlanFollowUpPrompt={thread.showPlanFollowUpPrompt}
                     promptHasText={promptHasText}
                     isSendBusy={thread.isSendBusy}

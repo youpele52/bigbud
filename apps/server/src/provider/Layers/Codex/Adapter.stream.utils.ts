@@ -32,9 +32,8 @@ export function normalizeCodexTokenUsage(value: unknown): ThreadTokenUsageSnapsh
 
   const totalProcessedTokens =
     asNumber(totalUsage?.total_tokens) ?? asNumber(totalUsage?.totalTokens);
-  const usedTokens =
-    asNumber(lastUsage?.total_tokens) ?? asNumber(lastUsage?.totalTokens) ?? totalProcessedTokens;
-  if (usedTokens === undefined || usedTokens <= 0) {
+  const usedTokens = asNumber(lastUsage?.total_tokens) ?? asNumber(lastUsage?.totalTokens);
+  if (usedTokens === undefined || !Number.isSafeInteger(usedTokens) || usedTokens < 0) {
     return undefined;
   }
 

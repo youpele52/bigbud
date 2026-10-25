@@ -1,4 +1,5 @@
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
+import { WorktreeIcon } from "../git/WorktreeIcon";
 
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
@@ -41,6 +42,7 @@ export function ThreadBehaviorSettingsRows() {
               aria-label="Default thread mode"
             >
               <SelectValue>
+                {settings.defaultThreadEnvMode === "worktree" && <WorktreeIcon />}
                 {settings.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
               </SelectValue>
             </SelectTrigger>
@@ -49,6 +51,7 @@ export function ThreadBehaviorSettingsRows() {
                 Local
               </SelectItem>
               <SelectItem hideIndicator value="worktree">
+                <WorktreeIcon />
                 New worktree
               </SelectItem>
             </SelectPopup>

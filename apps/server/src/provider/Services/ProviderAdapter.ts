@@ -24,6 +24,8 @@ import type {
 } from "@bigbud/contracts";
 import type { Effect } from "effect";
 import type { Stream } from "effect";
+import type { ProviderServiceShape } from "./ProviderService.ts";
+import type { ProviderSubagentCapability } from "../providerSubagents.capabilities.ts";
 
 export interface ProviderMcpOperations<TError> {
   readonly refresh: (
@@ -57,6 +59,9 @@ export interface ProviderTurnControlCapabilities {
 }
 
 export interface ProviderAdapterCapabilities {
+  /** Explicit durable job hook; not inferred from generic workload support or public availability. */
+  readonly durableLearningReview?: boolean;
+  readonly supportsAttachments?: boolean;
   /**
    * Declares whether changing the model on an existing session is supported.
    */
@@ -71,6 +76,16 @@ export interface ProviderAdapterCapabilities {
   readonly supportsSteer?: boolean;
   /** Structured execution strengths used by the provider-neutral turn controller. */
   readonly turnControl?: ProviderTurnControlCapabilities;
+  /**
+   * Native subagent support. Every production adapter must set its
+   * `PROVIDER_SUBAGENT_CAPABILITIES` entry (enforced by the conformance test).
+   */
+  readonly subagents?: ProviderSubagentCapability;
+  /**
+   * The provider emits its own `turn.prompt-suggestion` after a settled turn. Without it,
+   * bigbud generates one with the thread's model when the user allows it (Phase 7).
+   */
+  readonly nativePromptSuggestions?: boolean;
 }
 
 export interface ProviderThreadTurnSnapshot {
@@ -83,6 +98,12 @@ export interface ProviderThreadSnapshot {
   readonly turns: ReadonlyArray<ProviderThreadTurnSnapshot>;
 }
 
+/** A running subagent named by thread Stop; `background` children may outlive the turn. */
+export interface ProviderThreadSubagentRef {
+  readonly nativeId: string;
+  readonly background: boolean;
+}
+
 export interface ProviderAdapterShape<TError> {
   /**
    * Provider kind implemented by this adapter.
@@ -91,6 +112,10 @@ export interface ProviderAdapterShape<TError> {
   readonly capabilities: ProviderAdapterCapabilities;
   /** Provider-neutral MCP controls; omitted when the provider cannot support them. */
   readonly mcp?: ProviderMcpOperations<TError>;
+  /** Isolated durable job path; production workload availability remains separately gated. */
+  readonly runBackgroundReview?: (
+    input: Parameters<ProviderServiceShape["runBackgroundReview"]>[0],
+  ) => Effect.Effect<string, TError>;
 
   /**
    * Start a provider-backed session.
@@ -116,6 +141,21 @@ export interface ProviderAdapterShape<TError> {
     threadId: ThreadId,
     input: string,
     turnId?: TurnId,
+  ) => Effect.Effect<void, TError>;
+
+  /**
+   * Stop one running provider subagent by its native task ID. Present only when
+   * `capabilities.subagents.stop` is declared; Stop-all is `interruptTurn`.
+   */
+  readonly stopSubagent?: (threadId: ThreadId, nativeTaskId: string) => Effect.Effect<void, TError>;
+
+  /**
+   * Thread Stop: stop listed running subagents that `interruptTurn` does not end, such as
+   * detached background runs. Omit it when the interrupt already ends every child.
+   */
+  readonly stopThreadSubagents?: (
+    threadId: ThreadId,
+    subagents: ReadonlyArray<ProviderThreadSubagentRef>,
   ) => Effect.Effect<void, TError>;
 
   /** Authoritative provider-native inspection, or `unavailable` when unsupported. */

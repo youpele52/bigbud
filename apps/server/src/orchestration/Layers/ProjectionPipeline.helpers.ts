@@ -22,6 +22,7 @@ import {
   toSafeThreadAttachmentSegment,
 } from "../../attachments/attachmentStore.ts";
 import { ApprovalRequestId } from "@bigbud/contracts";
+import { PROMPT_SUGGESTION_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.promptSuggestion";
 
 // Re-export for use in projectors.ts
 export type { ProjectionRepositoryError };
@@ -157,7 +158,10 @@ export function retainProjectionActivitiesAfterRevert(
       .flatMap((turn) => (turn.turnId === null ? [] : [turn.turnId])),
   );
   return activities.filter(
-    (activity) => activity.turnId === null || retainedTurnIds.has(activity.turnId),
+    (activity) =>
+      // A revert or rollback clears the prompt suggestion (Phase 7).
+      activity.kind !== PROMPT_SUGGESTION_ACTIVITY_KIND &&
+      (activity.turnId === null || retainedTurnIds.has(activity.turnId)),
   );
 }
 

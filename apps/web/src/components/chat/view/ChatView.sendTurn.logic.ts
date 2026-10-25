@@ -1,14 +1,15 @@
 import { useCallback, useRef } from "react";
+import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecutionAccessGate";
-import { toastManager } from "../../ui/toast";
 import {
+  queueComposerTurn,
   respondToPendingUserInput,
   sendChatTurn,
   sendShellCommand,
   submitPlanFollowUp,
 } from "./ChatView.sendTurn.actions";
-import { canOptimisticallyQueuePrompt } from "./ChatView.sendTurn.admission.logic";
+import { canQueueComposerPrompt } from "./ChatView.sendTurn.admission.logic";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
 
 /** Returns the `onSend` handler for the composer form. */
@@ -39,6 +40,14 @@ export function useOnSend(input: UseOnSendInput) {
       } = inputRef.current;
 
       if (!api || !thread) return;
+      const attachmentIssue = providerAttachmentIssue(inputRef.current.selectedProvider, [
+        ...inputRef.current.composerImages,
+        ...inputRef.current.composerFiles,
+      ]);
+      if (attachmentIssue) {
+        inputRef.current.setThreadError(thread.id, attachmentIssue);
+        return;
+      }
       const resetComposerDraft = () => {
         pRef.current = "";
         inputRef.current.clearComposerDraftContent(thread.id);
@@ -57,22 +66,14 @@ export function useOnSend(input: UseOnSendInput) {
         });
         return;
       }
-      const canOptimisticallyQueue = canOptimisticallyQueuePrompt({
-        ...inputRef.current,
-        shouldQueuePrompt: shouldQueuePrompt(),
-        planFollowUp,
-      });
-      if (canOptimisticallyQueue) {
-        const queueResult = inputRef.current.queueComposerPrompt(trimmed);
-        if (queueResult === "queued") {
-          resetComposerDraft();
-        } else if (queueResult === "full") {
-          toastManager.add({
-            type: "warning",
-            title: "Prompt queue is full",
-            description: "Send or remove a queued prompt before adding another.",
-          });
-        }
+      if (
+        canQueueComposerPrompt({
+          ...inputRef.current,
+          shouldQueuePrompt: shouldQueuePrompt(),
+          planFollowUp,
+        })
+      ) {
+        await queueComposerTurn({ api, sendInput: inputRef.current, resetComposerDraft });
         return;
       }
       if ((sendBusy && !isForceSend() && !shouldQueuePrompt()) || connecting || inFlightRef.current)

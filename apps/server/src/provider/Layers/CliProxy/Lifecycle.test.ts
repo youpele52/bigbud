@@ -76,6 +76,75 @@ describe("makeCliProxyCommandRunner", () => {
 });
 
 describe("makeCliProxyLifecycle", () => {
+  it.each(["cliproxyapi", "cli-proxy-api"])(
+    "probes and launches %s with the selected config",
+    async (binary) => {
+      const child = { exitCode: null, once: vi.fn(), kill: vi.fn() };
+      const runner = vi.fn(async (command: string, args: ReadonlyArray<string>) =>
+        command === binary && args[0] === "--help"
+          ? ({ _tag: "available" } as const)
+          : ({ _tag: "missing" } as const),
+      );
+      const spawnDirect = vi.fn(() => child as never);
+      const lifecycle = makeCliProxyLifecycle({
+        commandRunner: runner,
+        platform: "linux",
+        spawnDirect,
+      });
+      await expect(lifecycle.activate({ configPath: "/selected.yaml" })).resolves.toEqual({
+        _tag: "started",
+        reused: false,
+      });
+      expect(spawnDirect).toHaveBeenCalledWith(
+        binary,
+        ["--config", "/selected.yaml"],
+        expect.any(Object),
+      );
+      expect(runner).toHaveBeenCalledWith("cliproxyapi", ["--help"]);
+      expect(runner.mock.calls.some(([, args]) => args.includes("--version"))).toBe(false);
+      if (binary === "cliproxyapi")
+        expect(runner).not.toHaveBeenCalledWith("cli-proxy-api", ["--help"]);
+      lifecycle.close();
+      expect(child.kill).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(["missing", "timeout", "execution-failed"] as const)(
+    "does not launch when probes return %s",
+    async (_tag) => {
+      const spawnDirect = vi.fn();
+      const runner = vi.fn(async () => ({ _tag }));
+      const lifecycle = makeCliProxyLifecycle({
+        commandRunner: runner,
+        platform: "win32",
+        spawnDirect,
+      });
+      await expect(lifecycle.activate({ configPath: "/selected.yaml" })).resolves.toEqual({
+        _tag: "unavailable",
+      });
+      expect(runner).toHaveBeenCalledWith("cliproxyapi", ["--help"]);
+      expect(runner).toHaveBeenCalledWith("cli-proxy-api", ["--help"]);
+      expect(spawnDirect).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["darwin", "linux"] as const)(
+    "preserves unverified service ownership on %s",
+    async (platform) => {
+      const spawnDirect = vi.fn();
+      const lifecycle = makeCliProxyLifecycle({
+        commandRunner: async () => ({ _tag: "available" }),
+        platform,
+        spawnDirect,
+      });
+      await expect(lifecycle.activate({ configPath: "/selected.yaml" })).resolves.toEqual({
+        _tag: "service-configuration-unverified",
+      });
+      lifecycle.close();
+      expect(spawnDirect).not.toHaveBeenCalled();
+    },
+  );
+
   it("single-flights activation and clears the flight after completion", async () => {
     const runner = vi.fn(async (command: string, args: ReadonlyArray<string>) => {
       if (command === "brew" && args[0] === "list") return { _tag: "available" } as const;
@@ -159,7 +228,7 @@ describe("makeCliProxyLifecycle", () => {
       release = resolve;
     });
     const runner = vi.fn(async (command: string, args: ReadonlyArray<string>) => {
-      if (command === "cli-proxy-api" && args[0] === "--version") {
+      if (command === "cli-proxy-api" && args[0] === "--help") {
         await gate;
         return { _tag: "available" } as const;
       }

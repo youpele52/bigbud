@@ -4,6 +4,150 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./backendOwnership.paths": {
+      "types": "./src/backendOwnership.paths.ts",
+      "import": "./src/backendOwnership.paths.ts"
+    },
+    "./machineIdentity": {
+      "types": "./src/machineIdentity.ts",
+      "import": "./src/machineIdentity.ts"
+    },
+    "./processStartToken": {
+      "types": "./src/processStartToken.ts",
+      "import": "./src/processStartToken.ts"
+    },
+    "./backendOwnership.record": {
+      "types": "./src/backendOwnership.record.ts",
+      "import": "./src/backendOwnership.record.ts"
+    },
+    "./backendOwnership.control": {
+      "types": "./src/backendOwnership.control.ts",
+      "import": "./src/backendOwnership.control.ts"
+    },
+    "./usageTokenMix": {
+      "types": "./src/usageTokenMix.ts",
+      "import": "./src/usageTokenMix.ts"
+    },
+    "./discoveryReference": {
+      "types": "./src/discoveryReference.ts",
+      "import": "./src/discoveryReference.ts"
+    },
+    "./providerTurnFailure": {
+      "types": "./src/providerTurnFailure.ts",
+      "import": "./src/providerTurnFailure.ts"
+    },
+    "./internalTextGeneration": {
+      "types": "./src/internalTextGeneration.ts",
+      "import": "./src/internalTextGeneration.ts"
+    },
+    "./opencodeNativeTrust": {
+      "types": "./src/opencodeNativeTrust.ts",
+      "import": "./src/opencodeNativeTrust.ts"
+    },
+    "./opencodeAdvisory": {
+      "types": "./src/opencodeAdvisory.ts",
+      "import": "./src/opencodeAdvisory.ts"
+    },
+    "./terminalExecutionTarget": {
+      "types": "./src/terminalExecutionTarget.ts",
+      "import": "./src/terminalExecutionTarget.ts"
+    },
+    "./terminalText": {
+      "types": "./src/terminalText.ts",
+      "import": "./src/terminalText.ts"
+    },
+    "./terminalSynchronizedOutput": {
+      "types": "./src/terminalSynchronizedOutput.ts",
+      "import": "./src/terminalSynchronizedOutput.ts"
+    },
+    "./terminalOwner/cleanupGrant.model": {
+      "types": "./src/terminalOwner/cleanupGrant.model.ts",
+      "import": "./src/terminalOwner/cleanupGrant.model.ts"
+    },
+    "./terminalOwner/shutdownInventory.model": {
+      "types": "./src/terminalOwner/shutdownInventory.model.ts",
+      "import": "./src/terminalOwner/shutdownInventory.model.ts"
+    },
+    "./terminalOwner/controller.model": {
+      "types": "./src/terminalOwner/controller.model.ts",
+      "import": "./src/terminalOwner/controller.model.ts"
+    },
+    "./terminalOwner/grant.model": {
+      "types": "./src/terminalOwner/grant.model.ts",
+      "import": "./src/terminalOwner/grant.model.ts"
+    },
+    "./terminalOwner/canonical": {
+      "types": "./src/terminalOwner/canonical.ts",
+      "import": "./src/terminalOwner/canonical.ts"
+    },
+    "./terminalOwner/auth": {
+      "types": "./src/terminalOwner/auth.ts",
+      "import": "./src/terminalOwner/auth.ts"
+    },
+    "./terminalOwner/auth.model": {
+      "types": "./src/terminalOwner/auth.model.ts",
+      "import": "./src/terminalOwner/auth.model.ts"
+    },
+    "./terminalOwner/permissions": {
+      "types": "./src/terminalOwner/permissions.ts",
+      "import": "./src/terminalOwner/permissions.ts"
+    },
+    "./terminalOwner/authority.model": {
+      "types": "./src/terminalOwner/authority.model.ts",
+      "import": "./src/terminalOwner/authority.model.ts"
+    },
+    "./terminalOwner/lease.model": {
+      "types": "./src/terminalOwner/lease.model.ts",
+      "import": "./src/terminalOwner/lease.model.ts"
+    },
+    "./terminalOwner/quota.model": {
+      "types": "./src/terminalOwner/quota.model.ts",
+      "import": "./src/terminalOwner/quota.model.ts"
+    },
+    "./terminalOwner/reservation.model": {
+      "types": "./src/terminalOwner/reservation.model.ts",
+      "import": "./src/terminalOwner/reservation.model.ts"
+    },
+    "./terminalOwner/cleanup.model": {
+      "types": "./src/terminalOwner/cleanup.model.ts",
+      "import": "./src/terminalOwner/cleanup.model.ts"
+    },
+    "./terminalOwner/environment": {
+      "types": "./src/terminalOwner/environment.ts",
+      "import": "./src/terminalOwner/environment.ts"
+    },
+    "./terminalOwner/artifactDag": {
+      "types": "./src/terminalOwner/artifactDag.ts",
+      "import": "./src/terminalOwner/artifactDag.ts"
+    },
+    "./providerLifecycle": {
+      "types": "./src/providerLifecycle.ts",
+      "import": "./src/providerLifecycle.ts"
+    },
+    "./threadFork": {
+      "types": "./src/threadFork.ts",
+      "import": "./src/threadFork.ts"
+    },
+    "./delegatedModelChoice": {
+      "types": "./src/delegatedModelChoice.ts",
+      "import": "./src/delegatedModelChoice.ts"
+    },
+    "./queuedPromptOrder": {
+      "types": "./src/queuedPromptOrder.ts",
+      "import": "./src/queuedPromptOrder.ts"
+    },
+    "./providerAttachments": {
+      "types": "./src/providerAttachments.ts",
+      "import": "./src/providerAttachments.ts"
+    },
+    "./providerApproval": {
+      "types": "./src/providerApproval.ts",
+      "import": "./src/providerApproval.ts"
+    },
+    "./providerUserInput": {
+      "types": "./src/providerUserInput.ts",
+      "import": "./src/providerUserInput.ts"
+    },
     "./games": {
       "types": "./src/games.ts",
       "import": "./src/games.ts"
@@ -72,9 +216,17 @@
       "types": "./src/String.ts",
       "import": "./src/String.ts"
     },
+    "./historySwipe": {
+      "types": "./src/historySwipe.ts",
+      "import": "./src/historySwipe.ts"
+    },
     "./projectScripts": {
       "types": "./src/projectScripts.ts",
       "import": "./src/projectScripts.ts"
+    },
+    "./terminalCommand": {
+      "types": "./src/terminalCommand.ts",
+      "import": "./src/terminalCommand.ts"
     },
     "./history": {
       "types": "./src/history.ts",
@@ -92,6 +244,14 @@
       "types": "./src/providerRuntime.ts",
       "import": "./src/providerRuntime.ts"
     },
+    "./promptSuggestion": {
+      "types": "./src/promptSuggestion.ts",
+      "import": "./src/promptSuggestion.ts"
+    },
+    "./providerSubagents": {
+      "types": "./src/providerSubagents.ts",
+      "import": "./src/providerSubagents.ts"
+    },
     "./workLog": {
       "types": "./src/workLog.ts",
       "import": "./src/workLog.ts"
@@ -107,6 +267,10 @@
     "./DevPorts": {
       "types": "./src/DevPorts.ts",
       "import": "./src/DevPorts.ts"
+    },
+    "./DevLauncher": {
+      "types": "./src/DevLauncher.ts",
+      "import": "./src/DevLauncher.ts"
     },
     "./releaseChannel": {
       "types": "./src/releaseChannel.ts",

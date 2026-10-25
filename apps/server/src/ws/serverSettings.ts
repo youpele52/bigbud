@@ -36,6 +36,8 @@ import {
   SchemaIssue,
 } from "effect";
 import * as Semaphore from "effect/Semaphore";
+import { ServerSettingsSnapshot, type SettingsSnapshot } from "./serverSettings.snapshot.ts";
+import { makeTestSettings } from "./serverSettings.testing.ts";
 import { ServerConfig } from "../startup/config";
 import { type DeepPartial, deepMerge } from "@bigbud/shared/Struct";
 import { fromLenientJson } from "@bigbud/shared/schemaJson";
@@ -52,6 +54,11 @@ import {
   reconcileThreadRetentionPolicy,
   type ThreadRetentionSettingsOperations,
 } from "./serverSettings.retention.ts";
+import {
+  normalizeExistingOpencodeSettings,
+  preserveOpencodeEnablePreference,
+  EXISTING_SERVER_SETTINGS_FALLBACK,
+} from "./serverSettings.opencodePolicy.ts";
 
 export interface ServerSettingsShape extends ThreadRetentionSettingsOperations {
   readonly start: Effect.Effect<void, ServerSettingsError>;
@@ -59,6 +66,8 @@ export interface ServerSettingsShape extends ThreadRetentionSettingsOperations {
   readonly ready: Effect.Effect<void, ServerSettingsError>;
 
   readonly getSettings: Effect.Effect<ServerSettings, ServerSettingsError>;
+  readonly currentSnapshot?: () => SettingsSnapshot | undefined;
+  readonly onSnapshotChange?: (listener: (snapshot: SettingsSnapshot) => void) => () => void;
 
   /** Patch settings and persist. Returns the new full settings object. */
   readonly updateSettings: (
@@ -74,36 +83,7 @@ export class ServerSettingsService extends ServiceMap.Service<
   ServerSettingsShape
 >()("t3/serverSettings/ServerSettingsService") {
   static readonly layerTest = (overrides: DeepPartial<ServerSettings> = {}) =>
-    Layer.effect(
-      ServerSettingsService,
-      Effect.gen(function* () {
-        const currentSettingsRef = yield* Ref.make<ServerSettings>(
-          deepMerge(DEFAULT_SERVER_SETTINGS, overrides),
-        );
-
-        return {
-          start: Effect.void,
-          ready: Effect.void,
-          getSettings: Ref.get(currentSettingsRef),
-          updateSettings: (patch) =>
-            Ref.get(currentSettingsRef).pipe(
-              Effect.map((currentSettings) => deepMerge(currentSettings, patch)),
-              Effect.tap((nextSettings) => Ref.set(currentSettingsRef, nextSettings)),
-            ),
-          setThreadRetentionPolicy: (policy) =>
-            Ref.updateAndGet(currentSettingsRef, (settings) => ({
-              ...settings,
-              threadRetentionPolicy: policy,
-            })),
-          initializeThreadRetentionPolicy: (policy, _source) =>
-            Ref.updateAndGet(currentSettingsRef, (settings) => ({
-              ...settings,
-              threadRetentionPolicy: policy,
-            })),
-          streamChanges: Stream.empty,
-        } satisfies ServerSettingsShape;
-      }),
-    );
+    Layer.effect(ServerSettingsService, makeTestSettings(overrides));
 }
 
 const ServerSettingsJson = fromLenientJson(ServerSettings);
@@ -115,6 +95,7 @@ const makeServerSettings = Effect.gen(function* () {
   const writeSemaphore = yield* Semaphore.make(1);
   const cacheKey = "settings" as const;
   const changesPubSub = yield* PubSub.unbounded<ServerSettings>();
+  const snapshot = new ServerSettingsSnapshot();
   const startedRef = yield* Ref.make(false);
   const authorizedRetentionPolicyRef = yield* Ref.make(
     DEFAULT_SERVER_SETTINGS.threadRetentionPolicy,
@@ -154,7 +135,7 @@ const makeServerSettings = Effect.gen(function* () {
       return reconcileThreadRetentionPolicy(DEFAULT_SERVER_SETTINGS, authorizedPolicy);
     }
 
-    const raw = yield* readRawConfig;
+    const raw = normalizeExistingOpencodeSettings(yield* readRawConfig);
     const decoded = Schema.decodeUnknownExit(ServerSettingsJson)(raw);
     if (decoded._tag === "Success") {
       return reconcileThreadRetentionPolicy(decoded.value, authorizedPolicy);
@@ -173,7 +154,7 @@ const makeServerSettings = Effect.gen(function* () {
       path: settingsPath,
       issues: Cause.pretty(decoded.cause),
     });
-    return reconcileThreadRetentionPolicy(DEFAULT_SERVER_SETTINGS, authorizedPolicy);
+    return reconcileThreadRetentionPolicy(EXISTING_SERVER_SETTINGS_FALLBACK, authorizedPolicy);
   });
 
   const settingsCache = yield* Cache.make<typeof cacheKey, ServerSettings, ServerSettingsError>({
@@ -193,6 +174,7 @@ const makeServerSettings = Effect.gen(function* () {
         string,
         unknown
       > | null) ?? {};
+    preserveOpencodeEnablePreference(sparseSettings, settings.providers.opencodeV2.enabled);
     if (options?.preserveThreadRetentionPolicy) {
       preserveThreadRetentionPolicy(sparseSettings, settings);
     }
@@ -233,6 +215,7 @@ const makeServerSettings = Effect.gen(function* () {
   ) =>
     Effect.gen(function* () {
       yield* writeSettingsAtomically(settings, options);
+      yield* Effect.sync(() => snapshot.accept(resolveTextGenerationProvider(settings)));
       yield* Cache.set(settingsCache, cacheKey, settings);
       yield* emitChange(settings);
       return resolveTextGenerationProvider(settings);
@@ -243,6 +226,7 @@ const makeServerSettings = Effect.gen(function* () {
       yield* Cache.invalidate(settingsCache, cacheKey);
       yield* quarantineUnauthorizedRetention;
       const settings = yield* getSettingsFromCache;
+      yield* Effect.sync(() => snapshot.accept(resolveTextGenerationProvider(settings)));
       yield* emitChange(settings);
     }),
   );
@@ -295,7 +279,8 @@ const makeServerSettings = Effect.gen(function* () {
     const startup = Effect.gen(function* () {
       yield* startWatcher;
       yield* Cache.invalidate(settingsCache, cacheKey);
-      yield* getSettingsFromCache;
+      const initial = yield* getSettingsFromCache;
+      yield* Effect.sync(() => snapshot.accept(resolveTextGenerationProvider(initial)));
       yield* quarantineUnauthorizedRetention;
     });
 
@@ -312,6 +297,8 @@ const makeServerSettings = Effect.gen(function* () {
     start,
     ready: Deferred.await(startedDeferred),
     getSettings: getSettingsFromCache.pipe(Effect.map(resolveTextGenerationProvider)),
+    currentSnapshot: snapshot.read,
+    onSnapshotChange: snapshot.subscribe,
     updateSettings: (patch) =>
       writeSemaphore.withPermits(1)(
         Effect.gen(function* () {

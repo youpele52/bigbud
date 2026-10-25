@@ -55,6 +55,8 @@ export function getProviderModelOptions(
       return options?.copilot;
     case "opencode":
       return options?.opencode;
+    case "opencodeV2":
+      return options?.opencodeV2;
     case "kilocode":
       return options?.kilocode;
     case "cursor":
@@ -113,6 +115,10 @@ export function createModelSelection(
     case "codex": {
       const codexOptions = options as ProviderModelOptions["codex"] | undefined;
       return codexOptions ? { provider, model, options: codexOptions } : { provider, model };
+    }
+    case "opencodeV2": {
+      const v2Options = options as ProviderModelOptions["opencodeV2"] | undefined;
+      return v2Options ? { provider, model, options: v2Options } : { provider, model };
     }
     case "claudeAgent": {
       const claudeOptions = options as ProviderModelOptions["claudeAgent"] | undefined;

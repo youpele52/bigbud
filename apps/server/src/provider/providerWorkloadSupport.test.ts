@@ -4,16 +4,66 @@ import {
   providerWorkloadSupport,
   resolveProviderWorkload,
   supportsProviderWorkload,
+  supportsScheduledLearning,
 } from "./providerWorkloadSupport.ts";
 
 describe("providerWorkloadSupport", () => {
+  it("declares V2 auxiliary text support without claiming learning or migrating accounting", () => {
+    expect(providerWorkloadSupport("opencodeV2")).toEqual({
+      interactive: true,
+      usageAccounting: true,
+      learning: false,
+      unattendedTextGeneration: true,
+    });
+    const requested = {
+      provider: "opencodeV2",
+      subProviderID: "synthetic",
+      model: "synthetic",
+    } as const;
+    expect(
+      resolveProviderWorkload({
+        requested,
+        workload: "unattendedTextGeneration",
+        availableProviderKinds: ["opencodeV2"],
+      }),
+    ).toEqual({ requested, actual: requested, action: "use-requested", reason: null });
+    expect(
+      resolveProviderWorkload({
+        requested,
+        workload: "interactive",
+        availableProviderKinds: ["opencodeV2"],
+      }).actual,
+    ).toEqual(requested);
+    expect(
+      resolveProviderWorkload({
+        requested,
+        workload: "usageAccounting",
+        availableProviderKinds: ["codex"],
+      }).action,
+    ).toBe("reject");
+    expect(
+      resolveProviderWorkload({
+        requested,
+        workload: "unattendedTextGeneration",
+        availableProviderKinds: ["codex"],
+      }),
+    ).toMatchObject({ requested, actual: { provider: "codex" }, action: "fallback" });
+  });
+  it("schedules V2 learning only with an explicit durable adapter hook, without changing public workload or other providers", () => {
+    expect(supportsScheduledLearning("opencodeV2")).toBe(false);
+    expect(supportsScheduledLearning("opencodeV2", true)).toBe(true);
+    expect(supportsScheduledLearning("cliProxy", true)).toBe(false);
+    expect(supportsScheduledLearning("codex")).toBe(true);
+    expect(supportsProviderWorkload("opencodeV2", "learning")).toBe(false);
+    expect(supportsProviderWorkload("opencodeV2", "unattendedTextGeneration")).toBe(true);
+  });
   it.each([
     ["codex", true, true, true, true],
     ["claudeAgent", true, true, true, true],
     ["cliProxy", true, false, false, false],
     ["copilot", true, true, true, true],
     ["kilocode", true, true, true, true],
-    ["opencode", true, true, true, true],
+    ["opencode", false, false, false, false],
     ["pi", true, true, true, true],
     ["cursor", true, true, true, false],
     ["devin", true, true, true, false],

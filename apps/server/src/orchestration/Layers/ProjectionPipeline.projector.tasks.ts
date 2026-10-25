@@ -1,5 +1,6 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { isTaskFreshnessNewer, mergeTaskPatch } from "@bigbud/shared/providerRuntime";
+import { isTaskFreshnessNewer } from "@bigbud/shared/providerRuntime";
+import { mergeTaskSnapshot } from "@bigbud/shared/providerSubagents";
 import { Effect, Option } from "effect";
 import {
   ORCHESTRATION_PROJECTOR_NAMES,
@@ -23,7 +24,7 @@ export function makeThreadTasksProjector(
       )
         return;
       const task = Option.isSome(existing)
-        ? mergeTaskPatch(existing.value.task, event.payload.task)
+        ? mergeTaskSnapshot(existing.value.task, event.payload.task)
         : event.payload.task;
       yield* repository.upsert({ taskId: task.id, threadId: event.payload.threadId, task });
       return;

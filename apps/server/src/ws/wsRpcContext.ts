@@ -1,4 +1,5 @@
-import { Effect, FileSystem, Option, Stream } from "effect";
+import { Effect, FileSystem, Option, Stream, Layer } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { GitCommandError } from "@bigbud/contracts";
 import { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention.ts";
 
@@ -58,9 +59,15 @@ import { makeServerHandoffJobs } from "./wsHandoffJobs.ts";
 import { ThreadRetention } from "../retention/Services/ThreadRetention.ts";
 import { PluginRegistry, type PluginRegistryShape } from "../plugins/Services/PluginRegistry";
 import { makeCoalescedPromiseEffect } from "./wsRpcContext.helpers";
+import { observeConfigStage, validateServerConfig } from "./wsConfigDiagnostics";
 import { DesktopSupervisorDelivery } from "../desktop-supervisor/desktopSupervisorDelivery.ts";
+import { ConnectionDiagnostics } from "../connection-diagnostics/Services/ConnectionDiagnostics.ts";
 import { CommandGateway } from "../command-gateway/Services/CommandGateway.ts";
 import { makeWsRpcCommandDispatch } from "./wsRpcContext.commandDispatch.ts";
+import { makeV2ThreadToolsSetup } from "../provider/Layers/OpencodeV2/ThreadToolsSetup.ts";
+import { ProviderSessionRuntimeRepositoryLive } from "../persistence/Layers/ProviderSessionRuntime.ts";
+import { ProviderTurnAdmissionsLive } from "../persistence/Layers/ProviderTurnAdmissions.ts";
+import { OpencodeV2SharedBindingsLive } from "../persistence/Layers/OpencodeV2SharedBindings.ts";
 import {
   RemoteAgentUpdateCoordinator,
   type RemoteAgentUpdateCoordinatorShape,
@@ -111,9 +118,22 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     const schedulerReactor = yield* SchedulerReactor;
     const mobileRemoteControl = yield* MobileRemoteControl;
     const desktopSupervisorDelivery = yield* DesktopSupervisorDelivery;
+    const connectionDiagnostics = yield* ConnectionDiagnostics;
     const fileSystem = yield* FileSystem.FileSystem;
     const resolveBootstrapWorktreeIdentity = yield* makeBootstrapWorktreeIdentityResolver;
     const handoffJobs = yield* makeServerHandoffJobs;
+    const sql = yield* Effect.serviceOption(SqlClient.SqlClient);
+    const v2ThreadToolsSetup = yield* Option.isSome(sql)
+      ? makeV2ThreadToolsSetup().pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              ProviderSessionRuntimeRepositoryLive,
+              ProviderTurnAdmissionsLive,
+              OpencodeV2SharedBindingsLive,
+            ).pipe(Layer.provide(Layer.succeed(SqlClient.SqlClient, sql.value))),
+          ),
+        )
+      : makeV2ThreadToolsSetup();
     const threadRetentionOption = yield* Effect.serviceOption(ThreadRetention);
     const pluginRegistryOption = yield* Effect.serviceOption(PluginRegistry);
     const pluginRegistry: PluginRegistryShape = Option.getOrElse(pluginRegistryOption, () => ({
@@ -246,20 +266,15 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     );
 
     const loadServerConfig = Effect.gen(function* () {
-      const keybindingsConfig = yield* keybindings.loadConfigState;
-      const providers = yield* providerRegistry.getProviders;
-      const discovery = yield* discoveryRegistry.getCatalog;
-      const rawSettings = yield* serverSettings.getSettings;
+      const keybindingsConfig = yield* observeConfigStage(
+        "keybindings",
+        keybindings.loadConfigState,
+      );
+      const providers = yield* observeConfigStage("providers", providerRegistry.getProviders);
+      const discovery = yield* observeConfigStage("discovery", discoveryRegistry.getCatalog);
+      const rawSettings = yield* observeConfigStage("settings", serverSettings.getSettings);
       const settings = resolveTextGenByProbeStatus(rawSettings, providers);
       const remoteAgentEnabled = isRemoteAgentConfigured();
-
-      const skillBreakdown = new Map<string, number>();
-      for (const skill of discovery.skills) {
-        skillBreakdown.set(skill.provider, (skillBreakdown.get(skill.provider) ?? 0) + 1);
-      }
-      yield* Effect.logInfo(
-        `[RPC] loadServerConfig → ${discovery.skills.length} skills, ${discovery.agents.length} agents. Provider breakdown: ${JSON.stringify([...skillBreakdown.entries()])}`,
-      );
 
       return {
         cwd: config.cwd,
@@ -291,9 +306,10 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
         },
         settings,
       };
-    });
+    }).pipe(Effect.flatMap(validateServerConfig));
 
     return {
+      worktreeSql: Option.getOrUndefined(sql),
       activateCliProxy,
       assertLocalGitExecutionTarget,
       automationScheduleRepository,
@@ -303,17 +319,22 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
       dispatchShellCommand,
       discoveryRegistry,
       desktopSupervisorDelivery,
+      connectionDiagnostics,
       fileSystem,
       git,
       gitManager,
       gitStatus,
       gitStatusBroadcaster,
       handoffJobs,
+      v2ThreadToolsSetup,
       keybindings,
       lifecycleEvents,
       loadServerConfig,
       mobileRemoteControl,
-      normalizeDispatchCommand,
+      normalizeDispatchCommand: (command: Parameters<typeof normalizeDispatchCommand>[0]) =>
+        normalizeDispatchCommand(command).pipe(
+          Effect.provideService(OrchestrationEngineService, orchestrationEngine),
+        ),
       open,
       orchestrationEngine,
       pluginRegistry,

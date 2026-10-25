@@ -97,12 +97,12 @@ export default function BranchToolbarProjectMenu({
             type="button"
             variant="ghost"
             size="xs"
-            className="gap-2 text-muted-foreground/60 hover:text-foreground/80"
+            className="max-w-full min-w-0 gap-2 text-muted-foreground/60 hover:text-foreground/80"
           />
         }
       >
         <ProjectLocationIcon className="size-3" project={activeProject} />
-        <span className="max-w-[8rem] truncate text-xs">{activeProject.name}</span>
+        <span className="min-w-0 max-w-[8rem] truncate text-xs">{activeProject.name}</span>
         <ChevronDownIcon className="size-3" />
       </MenuTrigger>
       <MenuPopup align="start" side="top" className="min-w-64">

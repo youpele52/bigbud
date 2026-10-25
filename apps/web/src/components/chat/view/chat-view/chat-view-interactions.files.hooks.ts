@@ -1,4 +1,6 @@
 import { useCallback, useRef } from "react";
+import { providerAttachmentPolicy } from "@bigbud/shared/providerAttachments";
+import type { ProviderKind } from "@bigbud/contracts";
 import { PROVIDER_SEND_TURN_MAX_ATTACHMENTS } from "@bigbud/contracts";
 import { randomUUID } from "~/lib/utils";
 
@@ -22,13 +24,25 @@ interface UseChatViewInteractionFilesInput {
   base: ChatViewBaseState;
   thread: ChatViewThreadDerivedState;
   runtime: ChatViewRuntimeState;
+  provider: ProviderKind;
 }
 
 export function useChatViewInteractionFiles({
   base,
   thread,
   runtime,
+  provider,
 }: UseChatViewInteractionFilesInput) {
+  const rejectAttachments = useCallback(() => {
+    const policy = providerAttachmentPolicy(provider);
+    if (policy.supported) return false;
+    toastManager.add({
+      type: "warning",
+      title: "Attachments unavailable",
+      description: policy.unavailableReason,
+    });
+    return true;
+  }, [provider]);
   const addComposerImages = useAddComposerImages({
     activeThreadId: base.activeThreadId,
     composerImagesRef: base.composerImagesRef,
@@ -38,7 +52,7 @@ export function useChatViewInteractionFiles({
     setThreadError: runtime.setThreadError,
   });
 
-  const addComposerFiles = useAddComposerFiles({
+  const addFiles = useAddComposerFiles({
     activeThreadId: base.activeThreadId,
     composerFilesRef: base.composerFilesRef,
     composerImagesLength: base.composerImages.length,
@@ -48,10 +62,21 @@ export function useChatViewInteractionFiles({
     setThreadError: runtime.setThreadError,
     isElectron,
   });
+  const addComposerFiles = useCallback(
+    (files: File[]) => {
+      if (rejectAttachments()) return false;
+      return addFiles(files);
+    },
+    [addFiles, rejectAttachments],
+  );
 
   const onComposerPaste = useCallback(
     (event: React.ClipboardEvent<HTMLElement>) => {
       const allFiles = Array.from(event.clipboardData.files);
+      if (allFiles.length > 0 && rejectAttachments()) {
+        event.preventDefault();
+        return;
+      }
       const imageFiles = allFiles.filter((file) => file.type.startsWith("image/"));
       const nonImageFiles = allFiles.filter((file) => !file.type.startsWith("image/"));
       if (imageFiles.length > 0) {
@@ -63,7 +88,7 @@ export function useChatViewInteractionFiles({
         addComposerFiles(nonImageFiles);
       }
     },
-    [addComposerFiles, addComposerImages],
+    [addComposerFiles, addComposerImages, rejectAttachments],
   );
 
   const hasAcceptedDragData = useCallback((event: React.DragEvent<HTMLElement>) => {
@@ -126,6 +151,7 @@ export function useChatViewInteractionFiles({
       base.dragDepthRef.current = 0;
       base.setIsDragOverComposer(false);
 
+      if (rejectAttachments()) return;
       if (hasThreadContextEntry && base.activeThreadId) {
         const payload = parseThreadContextDragPayload(
           event.dataTransfer.getData(BIGBUD_THREAD_CONTEXT_DRAG_MIME),
@@ -200,18 +226,23 @@ export function useChatViewInteractionFiles({
       if (nonImageFiles.length > 0) addComposerFiles(nonImageFiles);
       runtime.focusComposer();
     },
-    [addComposerFiles, addComposerImages, base, runtime],
+    [addComposerFiles, addComposerImages, base, runtime, rejectAttachments],
   );
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const onAttachFiles = useCallback(() => {
+    if (rejectAttachments()) return;
     fileInputRef.current?.click();
-  }, []);
+  }, [rejectAttachments]);
 
   const onFileInputChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const allFiles = Array.from(event.target.files ?? []);
+      if (rejectAttachments()) {
+        event.target.value = "";
+        return;
+      }
       const imageFiles = allFiles.filter((file) => file.type.startsWith("image/"));
       const nonImageFiles = allFiles.filter((file) => !file.type.startsWith("image/"));
       if (imageFiles.length > 0) addComposerImages(imageFiles);
@@ -219,7 +250,7 @@ export function useChatViewInteractionFiles({
       event.target.value = "";
       runtime.focusComposer();
     },
-    [addComposerFiles, addComposerImages, runtime],
+    [addComposerFiles, addComposerImages, runtime, rejectAttachments],
   );
 
   return {

@@ -115,7 +115,7 @@ export function CommitDialog({
                         return (
                           <div
                             key={file.path}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1 font-mono text-xs transition-colors hover:bg-accent/50"
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-sm font-light transition-colors hover:bg-accent/50"
                           >
                             {isEditingFiles && (
                               <Checkbox
@@ -162,7 +162,7 @@ export function CommitDialog({
                       })}
                     </div>
                   </ScrollArea>
-                  <div className="flex justify-end font-mono">
+                  <div className="flex justify-end text-sm tabular-nums">
                     <span className="text-success">
                       +{selectedFiles.reduce((sum, f) => sum + f.insertions, 0)}
                     </span>

@@ -1,46 +1,16 @@
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@bigbud/contracts";
 import { MOBILE_RECOVERY_WS_METHODS } from "@bigbud/contracts/server/mobile.recovery";
-import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
 import { assert, it } from "@effect/vitest";
-import { Effect, Layer, Stream } from "effect";
-import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
-import * as NodeSocket from "@effect/platform-node/NodeSocket";
+import { Effect, Stream } from "effect";
 
 import {
   buildAppUnderTest,
   getWsServerUrl,
   makeDefaultOrchestrationReadModel,
   serverTestLayer,
-  wsRpcOpenRetrySchedule,
 } from "./server.test.helpers.ts";
-
-const makeMobileWsRpcClient = RpcClient.make(MobileWsRpcGroup);
-type MobileWsRpcClient =
-  typeof makeMobileWsRpcClient extends Effect.Effect<infer Client, any, any> ? Client : never;
-
-const mobileWsRpcProtocolLayer = (wsUrl: string) =>
-  RpcClient.layerProtocolSocket().pipe(
-    Layer.provide(NodeSocket.layerWebSocket(wsUrl)),
-    Layer.provide(RpcSerialization.layerJson),
-  );
-
-const withMobileWsRpcClient = <A, E, R>(
-  wsUrl: string,
-  f: (client: MobileWsRpcClient) => Effect.Effect<A, E, R>,
-) => makeMobileWsRpcClient.pipe(Effect.flatMap(f), Effect.provide(mobileWsRpcProtocolLayer(wsUrl)));
-
-const withRetriedMobileWsRpcClient = <A, E, R>(
-  wsUrl: string,
-  f: (client: MobileWsRpcClient) => Effect.Effect<A, E, R>,
-) =>
-  withMobileWsRpcClient(wsUrl, f).pipe(
-    Effect.retry({
-      schedule: wsRpcOpenRetrySchedule,
-      times: 5,
-      while: (error) => String(error).includes("SocketOpenError"),
-    }),
-  );
+import { withMobileWsRpcClient, withRetriedMobileWsRpcClient } from "./server.test.mobile.ts";
 
 it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => {
   it.effect("rejects mobile websocket handshake when token is missing", () =>

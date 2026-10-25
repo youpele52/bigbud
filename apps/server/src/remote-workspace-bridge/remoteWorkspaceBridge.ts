@@ -30,10 +30,21 @@ export async function createRemoteWorkspaceBridge(input: {
   readonly workspaceTarget: WorkspaceTarget;
   readonly prefix: string;
   readonly readmeLines?: ReadonlyArray<string>;
+  readonly directory?: string;
+  readonly retainDirectory?: boolean;
 }): Promise<RemoteWorkspaceBridge> {
   assertRemoteWorkspaceTarget(input.workspaceTarget);
 
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), input.prefix));
+  const cwd = input.directory ?? (await fs.mkdtemp(path.join(os.tmpdir(), input.prefix)));
+  if (input.directory) {
+    await fs.mkdir(cwd, { recursive: true, mode: 0o700 });
+    if (
+      !path.isAbsolute(cwd) ||
+      (await fs.realpath(cwd)) !== cwd ||
+      !(await fs.lstat(cwd)).isDirectory()
+    )
+      throw new Error("Remote workspace bridge directory is not canonical.");
+  }
   const bridgeDir = path.join(cwd, ".bigbud");
   await fs.mkdir(bridgeDir, { recursive: true });
   await fs.writeFile(
@@ -53,7 +64,7 @@ export async function createRemoteWorkspaceBridge(input: {
       return absolutePath;
     },
     cleanup() {
-      return fs.rm(cwd, { recursive: true, force: true });
+      return fs.rm(input.retainDirectory ? bridgeDir : cwd, { recursive: true, force: true });
     },
   };
 }

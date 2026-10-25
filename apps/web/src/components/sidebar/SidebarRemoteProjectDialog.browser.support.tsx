@@ -20,7 +20,7 @@ vi.mock("../../stores/ui", () => ({
 }));
 vi.mock("../../stores/remoteAccess/remoteAccess.store", () => ({
   useRemoteAccessStore: Object.assign(() => new Set(), {
-    getState: () => ({ recordRemoteConnection: vi.fn() }),
+    getState: () => ({ recordRemoteConnection: vi.fn(), remoteConnections: {} }),
   }),
 }));
 vi.mock("../../hooks/useRemoteExecutionAccessGate", () => ({
@@ -46,6 +46,7 @@ import { useSidebarProjectActions } from "./Sidebar.projectActions";
 import { useSidebarRemoteProjectAddActions } from "./Sidebar.projectAddActions.remote";
 import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
 import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
+import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import type { CreateProjectInput, CreateProjectResult } from "./Sidebar.projectAddActions.helpers";
 
 export type CreateProject = (input: CreateProjectInput) => Promise<CreateProjectResult>;
@@ -111,12 +112,34 @@ function RemoteProjectEditHarness({
           if (!open) remote.closeRemoteProjectDialog();
         }}
         onFieldChange={remote.updateRemoteProjectDraft}
+        onAdoptConnectionSource={remote.adoptRemoteProjectConnectionSource}
+        onRequestUnlock={remote.requestRemoteProjectUnlock}
         onSubmit={() => void remote.submitRemoteProjectDialog()}
       />
       <SidebarRemoteAgentInstallDialog
         request={remote.remoteAgentInstallRequest}
         onDecline={remote.declineRemoteAgentInstall}
         onInstalled={remote.completeRemoteAgentInstall}
+      />
+      <SidebarUnlockSshKeyDialog
+        open={remote.isRemoteProjectUnlockDialogOpen}
+        keyPath={remote.remoteProjectUnlockKeyPath}
+        title={
+          remote.remoteProjectUnlockMode === "password" ? "Enter SSH password" : "Unlock SSH key"
+        }
+        fieldLabel={
+          remote.remoteProjectUnlockMode === "password" ? "SSH password" : "Key passphrase"
+        }
+        submitLabel={remote.remoteProjectUnlockMode === "password" ? "Continue" : "Unlock SSH key"}
+        description={`Unlock ${remote.remoteProjectUnlockKeyPath}`}
+        secret={remote.remoteProjectUnlockPassphrase}
+        error={remote.remoteProjectUnlockError}
+        isSubmitting={remote.isUnlockingRemoteProjectKey}
+        onOpenChange={(open) => {
+          if (!open) remote.closeRemoteProjectUnlockDialog();
+        }}
+        onSecretChange={remote.setRemoteProjectUnlockPassphrase}
+        onSubmit={() => void remote.submitRemoteProjectUnlock()}
       />
     </>
   );
@@ -145,6 +168,11 @@ export function setApi(input: {
   readonly verifyExecutionTarget: ReturnType<typeof vi.fn>;
   readonly installRemoteAgent?: ReturnType<typeof vi.fn>;
   readonly connectRemoteAgent?: ReturnType<typeof vi.fn>;
+  readonly listSshConfigHosts?: ReturnType<typeof vi.fn>;
+  readonly listRemoteFolders?: ReturnType<typeof vi.fn>;
+  readonly unlockSshKey?: ReturnType<typeof vi.fn>;
+  readonly unlockSshPassword?: ReturnType<typeof vi.fn>;
+  readonly trustSshHost?: ReturnType<typeof vi.fn>;
   readonly getSnapshot: ReturnType<typeof vi.fn>;
   readonly dispatchCommand: ReturnType<typeof vi.fn>;
   readonly show: ReturnType<typeof vi.fn>;
@@ -155,6 +183,11 @@ export function setApi(input: {
       verifyExecutionTarget: input.verifyExecutionTarget,
       installRemoteAgent: input.installRemoteAgent ?? vi.fn(),
       connectRemoteAgent: input.connectRemoteAgent ?? vi.fn(),
+      ...(input.listSshConfigHosts ? { listSshConfigHosts: input.listSshConfigHosts } : {}),
+      ...(input.listRemoteFolders ? { listRemoteFolders: input.listRemoteFolders } : {}),
+      ...(input.unlockSshKey ? { unlockSshKey: input.unlockSshKey } : {}),
+      ...(input.unlockSshPassword ? { unlockSshPassword: input.unlockSshPassword } : {}),
+      ...(input.trustSshHost ? { trustSshHost: input.trustSshHost } : {}),
     },
     orchestration: { getSnapshot: input.getSnapshot, dispatchCommand: input.dispatchCommand },
   } as never;
@@ -162,5 +195,6 @@ export function setApi(input: {
 
 export function resetApi() {
   document.body.innerHTML = "";
+  localStorage.removeItem("remote_project_connection_source");
   nativeApi.current = null as never;
 }

@@ -1,4 +1,4 @@
-import { type ModelSelection, TurnId } from "@bigbud/contracts";
+import { MessageId, type ModelSelection, TurnId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
@@ -134,6 +134,7 @@ describe("captured provider execution settings", () => {
 
   it("resolves legacy defaults once across context-limit recovery", async () => {
     const h = makeSettingsHarness();
+    const requestMessageId = MessageId.makeUnsafe("context-retry-message");
     h.sendTurn.mockImplementationOnce(() =>
       Effect.sync(() => {
         h.updateThread({
@@ -153,7 +154,12 @@ describe("captured provider execution settings", () => {
       ),
     );
     await Effect.runPromise(
-      sendTurnForThread(h.services)({ threadId, createdAt, messageText: "Retry this same prompt" }),
+      sendTurnForThread(h.services)({
+        threadId,
+        createdAt,
+        messageText: "Retry this same prompt",
+        requestMessageId,
+      }),
     );
     expect(h.startSession.mock.calls.map(([, input]) => input.runtimeMode)).toEqual([
       "full-access",
@@ -164,6 +170,10 @@ describe("captured provider execution settings", () => {
     ).toEqual([
       ["default-model", "default"],
       ["default-model", "default"],
+    ]);
+    expect(h.sendTurn.mock.calls.map(([input]) => input.requestMessageId)).toEqual([
+      requestMessageId,
+      requestMessageId,
     ]);
   });
 

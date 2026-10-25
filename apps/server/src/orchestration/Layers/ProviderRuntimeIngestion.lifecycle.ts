@@ -6,7 +6,50 @@ import type {
 } from "@bigbud/contracts";
 import { PROVIDER_RECOVERING_SESSION_REASON } from "@bigbud/contracts/constants/providerRuntime.constant";
 
-import { STRICT_PROVIDER_LIFECYCLE_GUARD, sameId } from "./ProviderRuntimeIngestion.helpers.ts";
+import {
+  STRICT_PROVIDER_LIFECYCLE_GUARD,
+  normalizeRuntimeTurnState,
+  orchestrationSessionStatusFromRuntimeState,
+  sameId,
+} from "./ProviderRuntimeIngestion.helpers.ts";
+
+type SessionLifecycleRuntimeEvent = Extract<
+  ProviderRuntimeEvent,
+  {
+    type:
+      | "session.started"
+      | "session.state.changed"
+      | "session.exited"
+      | "thread.started"
+      | "turn.started"
+      | "turn.completed"
+      | "turn.aborted";
+  }
+>;
+
+/** The projected session status after an accepted session or turn lifecycle event. */
+export function lifecycleSessionStatus(
+  event: SessionLifecycleRuntimeEvent,
+  activeTurnId: TurnId | null,
+) {
+  switch (event.type) {
+    case "session.state.changed":
+      return orchestrationSessionStatusFromRuntimeState(event.payload.state);
+    case "turn.started":
+      return "running" as const;
+    case "session.exited":
+      return "stopped" as const;
+    case "turn.completed":
+      return normalizeRuntimeTurnState(event.payload.state) === "failed"
+        ? ("error" as const)
+        : ("ready" as const);
+    case "turn.aborted":
+      return "ready" as const;
+    case "session.started":
+    case "thread.started":
+      return activeTurnId !== null ? ("running" as const) : ("ready" as const);
+  }
+}
 
 export function isProviderLifecycleEvent(event: ProviderRuntimeEvent): boolean {
   return (

@@ -25,6 +25,7 @@ docs/ideas/
 docs/handoff/
 /target/
 build-certs/
+/notarization-recovery/
 # Local server state can contain per-thread authorization tokens.
 /apps/server/userdata/
 # Bundled native skills ship with the app; ignore other local runtime state.

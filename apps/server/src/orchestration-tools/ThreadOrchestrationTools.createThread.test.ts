@@ -1,106 +1,72 @@
-import { MessageId, ProjectId, ThreadId, TurnId } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { createThreadViaOrchestration } from "./ThreadOrchestrationTools.ts";
-import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
-import type { ProjectionThreadWatchRepositoryShape } from "../persistence/Services/ProjectionThreadWatches.ts";
+import { createThreadViaOrchestration } from "./ThreadOrchestrationTools.createThread.ts";
 import type { PersistenceSqlError } from "../persistence/Errors.ts";
-
-const callerThreadId = ThreadId.makeUnsafe("caller-thread");
-const callerProjectId = ProjectId.makeUnsafe("caller-project");
-const targetProjectId = ProjectId.makeUnsafe("target-project");
-const sourceMessageId = MessageId.makeUnsafe("source-message");
-
-const callerThread = {
-  id: callerThreadId,
-  projectId: callerProjectId,
-  title: "Parent",
-  modelSelection: { provider: "codex", model: "gpt-5.4" },
-  runtimeMode: "full-access",
-  interactionMode: "default",
-  providerRuntimeExecutionTargetId: "provider-target",
-  workspaceExecutionTargetId: "workspace-target",
-  executionTargetId: "execution-target",
-  deletedAt: null,
-  deletingAt: null,
-};
-
-function makeSystem() {
-  const dispatch = vi.fn((_command: unknown) => Effect.succeed({ sequence: 1 }));
-  const engine = {
-    getReadModel: () =>
-      Effect.succeed({
-        projects: [
-          { id: callerProjectId, deletedAt: null, deletingAt: null },
-          { id: targetProjectId, deletedAt: null, deletingAt: null },
-        ],
-        threads: [callerThread],
-      }),
-    dispatch,
-  } as unknown as OrchestrationEngineShape;
-  const delegation = {
-    delegationId: "delegation-1",
-    callerThreadId,
-    sourceMessageId,
-    invocationId: "invocation-1",
-    parentDelegationId: null,
-    rootDelegationId: "delegation-1",
-    depth: 0,
-    targetKind: "project",
-    targetProjectId: callerProjectId,
-    targetCanonicalWorkspace: null,
-    childThreadId: ThreadId.makeUnsafe("child-thread"),
-    childTurnId: TurnId.makeUnsafe("child-turn"),
-    createdProjectId: null,
-    state: "reserved" as const,
-    resultJson: null,
-    errorJson: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  let getByInvocation: ThreadDelegationRepositoryShape["getByInvocation"] = () =>
-    Effect.succeed(Option.none());
-  const addActiveWatch = vi.fn(
-    (_input: unknown): Effect.Effect<void, PersistenceSqlError> => Effect.void,
-  );
-  const updateState = vi.fn(() => Effect.void);
-  const projectionThreadWatchRepository: ProjectionThreadWatchRepositoryShape = {
-    addActiveWatch,
-    replaceActiveWatchesForMessage: () => Effect.void,
-    listActiveByWatchedThread: () => Effect.succeed([]),
-    listActiveByWatcherAndMessage: () => Effect.succeed([]),
-    listActiveByWatcher: () => Effect.succeed([]),
-    markGroupTriggered: () => Effect.succeed(false),
-    cancelActiveForWatcher: () => Effect.void,
-    listAllActive: () => Effect.succeed([]),
-  };
-  const repository: ThreadDelegationRepositoryShape = {
-    getByInvocation: (input) => getByInvocation(input),
-    reserve: (_input) => Effect.succeed(delegation),
-    updateState,
-    storeResult: () => Effect.void,
-    findDirectByChild: () => Effect.succeed(Option.none()),
-  };
-  return {
-    engine,
-    dispatch,
-    repository,
-    projectionThreadWatchRepository,
-    addActiveWatch,
-    updateState,
-    delegation,
-    setGetByInvocation: (value: ThreadDelegationRepositoryShape["getByInvocation"]) => {
-      getByInvocation = value;
-    },
-  };
-}
+import {
+  callerProjectId,
+  callerThread,
+  callerThreadId,
+  makeSystem,
+  sourceMessageId,
+  targetProjectId,
+} from "./ThreadOrchestrationTools.createThread.test.helpers.ts";
 
 const run = (input: Parameters<typeof createThreadViaOrchestration>[0]) =>
   Effect.runPromise(createThreadViaOrchestration(input));
 
 describe("createThreadViaOrchestration", () => {
+  it("preserves V2 identity/supervised targets for canonical background children and cached delegation never dispatches again", async () => {
+    const modelSelection = {
+      provider: "opencodeV2",
+      model: "synthetic-model",
+      subProviderID: "synthetic-provider",
+    };
+    const system = makeSystem({
+      ...callerThread,
+      modelSelection,
+      runtimeMode: "approval-required",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "local",
+      executionTargetId: "local",
+    });
+    const input = {
+      orchestrationEngine: system.engine,
+      threadDelegationRepository: system.repository,
+      projectionThreadWatchRepository: system.projectionThreadWatchRepository,
+      callerThreadId,
+      sourceMessageId,
+      invocationId: "v2-tool:stable-native-call",
+      title: "V2 background child",
+      task: "Actual independent canonical work",
+      watchForCompletion: true,
+    };
+    await run(input);
+    expect(system.dispatch.mock.calls[0]?.[0]).toMatchObject({
+      type: "thread.create",
+      modelSelection,
+      runtimeMode: "approval-required",
+      providerRuntimeExecutionTargetId: "local",
+      workspaceExecutionTargetId: "local",
+    });
+    expect(system.dispatch.mock.calls[2]?.[0]).toMatchObject({
+      type: "thread.turn.start",
+      threadId: system.delegation.childThreadId,
+      modelSelection,
+    });
+    expect(system.addActiveWatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        watcherThreadId: callerThreadId,
+        watchedThreadId: system.delegation.childThreadId,
+        sourceMessageId,
+      }),
+    );
+    system.setGetByInvocation(() =>
+      Effect.succeed(Option.some({ ...system.delegation, state: "completed" as const })),
+    );
+    await run(input);
+    expect(system.dispatch).toHaveBeenCalledTimes(3);
+  });
   it("creates a child in the caller's project by default", async () => {
     const system = makeSystem();
     await run({
@@ -114,7 +80,7 @@ describe("createThreadViaOrchestration", () => {
       task: "Do the work",
       watchForCompletion: false,
     });
-    expect(system.dispatch).toHaveBeenCalledTimes(2);
+    expect(system.dispatch).toHaveBeenCalledTimes(3);
     expect(system.dispatch.mock.calls[0]?.[0]).toMatchObject({
       type: "thread.create",
       projectId: callerProjectId,
@@ -124,6 +90,14 @@ describe("createThreadViaOrchestration", () => {
       executionTargetId: "execution-target",
     });
     expect(system.dispatch.mock.calls[1]?.[0]).toMatchObject({
+      type: "thread.activity.append",
+      threadId: callerThreadId,
+      activity: {
+        kind: "delegation.child-linked",
+        payload: { childProjectId: callerProjectId, childTitle: "Child" },
+      },
+    });
+    expect(system.dispatch.mock.calls[2]?.[0]).toMatchObject({
       type: "thread.turn.start",
       message: { text: expect.stringContaining("delegated standalone thread") },
     });

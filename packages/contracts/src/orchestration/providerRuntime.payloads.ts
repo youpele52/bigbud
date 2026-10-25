@@ -1,6 +1,9 @@
 import { Option, Schema } from "effect";
+import { ApprovalExecutionIntent } from "./approvalIntent";
 
-import { NonNegativeInt, PositiveInt } from "../core/baseSchemas";
+import { NonNegativeInt } from "../core/baseSchemas";
+import { UserInputField } from "./providerRuntime.forms";
+import { ModelSelection } from "./orchestration.provider";
 export { McpOauthCompletedPayload, McpStatusUpdatedPayload } from "./providerRuntime.payloads.mcp";
 export {
   TaskCompletedPayload,
@@ -36,6 +39,7 @@ export const SessionConfiguredPayload = Schema.Struct({
 export type SessionConfiguredPayload = typeof SessionConfiguredPayload.Type;
 
 export const SessionStateChangedPayload = Schema.Struct({
+  retainedFamily: Schema.optional(Schema.Boolean),
   state: RuntimeSessionState,
   reason: Schema.optional(TrimmedNonEmptyStringSchema),
   detail: Schema.optional(Schema.Unknown),
@@ -66,45 +70,12 @@ export const ThreadMetadataUpdatedPayload = Schema.Struct({
 });
 export type ThreadMetadataUpdatedPayload = typeof ThreadMetadataUpdatedPayload.Type;
 
-export const ThreadTokenUsageSnapshot = Schema.Struct({
-  usedTokens: NonNegativeInt,
-  totalProcessedTokens: Schema.optional(NonNegativeInt),
-  maxTokens: Schema.optional(PositiveInt),
-  inputTokens: Schema.optional(NonNegativeInt),
-  cachedInputTokens: Schema.optional(NonNegativeInt),
-  outputTokens: Schema.optional(NonNegativeInt),
-  reasoningOutputTokens: Schema.optional(NonNegativeInt),
-  lastUsedTokens: Schema.optional(NonNegativeInt),
-  lastInputTokens: Schema.optional(NonNegativeInt),
-  lastCachedInputTokens: Schema.optional(NonNegativeInt),
-  lastOutputTokens: Schema.optional(NonNegativeInt),
-  lastReasoningOutputTokens: Schema.optional(NonNegativeInt),
-  toolUses: Schema.optional(NonNegativeInt),
-  durationMs: Schema.optional(NonNegativeInt),
-  compactsAutomatically: Schema.optional(Schema.Boolean),
-});
-export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
-
-export const ThreadTokenUsageAccountingScope = Schema.Literals(["turn", "item", "task"]);
-export type ThreadTokenUsageAccountingScope = typeof ThreadTokenUsageAccountingScope.Type;
-
-export const ThreadTokenUsageAccounting = Schema.Struct({
-  scope: ThreadTokenUsageAccountingScope,
-  scopeId: TrimmedNonEmptyStringSchema,
-  processedTokens: NonNegativeInt,
-  inputTokens: NonNegativeInt,
-  cachedInputTokens: NonNegativeInt,
-  outputTokens: NonNegativeInt,
-  reasoningOutputTokens: NonNegativeInt,
-  finalized: Schema.Boolean,
-});
-export type ThreadTokenUsageAccounting = typeof ThreadTokenUsageAccounting.Type;
-
-export const ThreadTokenUsageUpdatedPayload = Schema.Struct({
-  usage: ThreadTokenUsageSnapshot,
-  accounting: Schema.optional(ThreadTokenUsageAccounting),
-});
-export type ThreadTokenUsageUpdatedPayload = typeof ThreadTokenUsageUpdatedPayload.Type;
+export {
+  ThreadTokenUsageSnapshot,
+  ThreadTokenUsageAccountingScope,
+  ThreadTokenUsageAccounting,
+  ThreadTokenUsageUpdatedPayload,
+} from "./providerRuntime.usage";
 
 export const ThreadRealtimeStartedPayload = Schema.Struct({
   realtimeSessionId: Schema.optional(TrimmedNonEmptyStringSchema),
@@ -133,12 +104,14 @@ export type ThreadRealtimeClosedPayload = typeof ThreadRealtimeClosedPayload.Typ
 
 export const TurnStartedPayload = Schema.Struct({
   model: Schema.optional(TrimmedNonEmptyStringSchema),
+  modelSelection: Schema.optional(ModelSelection),
   effort: Schema.optional(TrimmedNonEmptyStringSchema),
 });
 export type TurnStartedPayload = typeof TurnStartedPayload.Type;
 
 export const TurnCompletedPayload = Schema.Struct({
   state: RuntimeTurnState,
+  actualModelSelection: Schema.optional(ModelSelection),
   stopReason: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
   usageAvailable: Schema.optional(Schema.Boolean),
   usage: Schema.optional(Schema.Unknown),
@@ -201,6 +174,7 @@ export const RequestOpenedPayload = Schema.Struct({
   requestType: CanonicalRequestType,
   detail: Schema.optional(TrimmedNonEmptyStringSchema),
   args: Schema.optional(Schema.Unknown),
+  executionIntent: Schema.optional(ApprovalExecutionIntent),
   autoApproveAfterMs: Schema.optional(NonNegativeInt),
   sessionApprovalAvailable: Schema.optional(Schema.Boolean),
   sessionApprovalLabel: Schema.optional(TrimmedNonEmptyStringSchema),
@@ -222,6 +196,7 @@ const UserInputQuestionOption = Schema.Struct({
 export type UserInputQuestionOption = typeof UserInputQuestionOption.Type;
 
 export const UserInputQuestion = Schema.Struct({
+  field: Schema.optional(UserInputField),
   id: TrimmedNonEmptyStringSchema,
   header: TrimmedNonEmptyStringSchema,
   question: TrimmedNonEmptyStringSchema,
@@ -340,6 +315,8 @@ export type FilesPersistedPayload = typeof FilesPersistedPayload.Type;
 export const RuntimeWarningPayload = Schema.Struct({
   message: TrimmedNonEmptyStringSchema,
   detail: Schema.optional(Schema.Unknown),
+  /** Additive: `error` shows the warning on the red error surface without failing the session. */
+  severity: Schema.optional(Schema.Literals(["warning", "error"])),
 });
 export type RuntimeWarningPayload = typeof RuntimeWarningPayload.Type;
 

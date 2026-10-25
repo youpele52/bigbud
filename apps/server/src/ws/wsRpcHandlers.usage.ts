@@ -10,8 +10,13 @@ import {
 import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
 import { usageProviderCoverage } from "../orchestration/usageAccountingSupport.ts";
 import type { WsRpcContext } from "./wsRpcContext";
+import { computeCurrentStreakDays } from "./wsRpcHandlers.usage.streak.ts";
+import { summarizeUsageAccounting } from "./wsRpcHandlers.usage.accounting.ts";
+import type { UsageSourceMetadata, UsageTokenMix } from "@bigbud/contracts/server/usage.ts";
 
 type UsageAccumulator = {
+  accounting?: UsageSourceMetadata;
+  tokenMix?: UsageTokenMix;
   usedTokens: number;
   inputTokens: number;
   cachedInputTokens: number;
@@ -21,6 +26,8 @@ type UsageAccumulator = {
 };
 
 type UsageEntry = UsageAccumulator & {
+  accountingJson?: string | null;
+  source?: "provider-reported" | "estimated";
   contributionId: string;
   threadId: string;
   turnId: string | null;
@@ -33,6 +40,7 @@ type UsageEntry = UsageAccumulator & {
 };
 
 type UsageGroup = Omit<UsageAccumulator, "turnCount"> & {
+  entries: UsageEntry[];
   turnKeys: Set<string>;
 };
 
@@ -78,6 +86,7 @@ function getBucketStart(isoDate: string, range: ServerUsageRange) {
 function emptyUsageGroup(): UsageGroup {
   return {
     usedTokens: 0,
+    entries: [],
     inputTokens: 0,
     cachedInputTokens: 0,
     outputTokens: 0,
@@ -87,6 +96,7 @@ function emptyUsageGroup(): UsageGroup {
 }
 
 function addUsage(target: UsageGroup, entry: UsageEntry) {
+  target.entries.push(entry);
   target.usedTokens += entry.usedTokens;
   target.inputTokens += entry.inputTokens;
   target.cachedInputTokens += entry.cachedInputTokens;
@@ -95,8 +105,11 @@ function addUsage(target: UsageGroup, entry: UsageEntry) {
   target.turnKeys.add(entry.turnKey);
 }
 
-function completeUsageGroup(group: UsageGroup): UsageAccumulator {
+function completeUsageGroup(group: UsageGroup, includeTokenMix = false): UsageAccumulator {
+  const { accounting, tokenMix } = summarizeUsageAccounting(group.entries, includeTokenMix);
   return {
+    accounting,
+    ...(tokenMix ? { tokenMix } : {}),
     usedTokens: group.usedTokens,
     inputTokens: group.inputTokens,
     cachedInputTokens: group.cachedInputTokens,
@@ -112,28 +125,12 @@ function sortBreakdownEntries<T extends { usedTokens: number; label: string }>(e
   );
 }
 
-function computeStreakDays(entries: ReadonlyArray<UsageEntry>) {
-  if (entries.length === 0) {
-    return 0;
-  }
-
-  const dayKeys = new Set(entries.map((entry) => entry.createdAt.slice(0, 10)));
-  const cursor = new Date();
-  cursor.setUTCHours(0, 0, 0, 0);
-
-  let streakDays = 0;
-  while (dayKeys.has(cursor.toISOString().slice(0, 10))) {
-    streakDays += 1;
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
-  }
-
-  return streakDays;
-}
-
 function buildUsageSummary(
   entries: ReadonlyArray<UsageEntry>,
   range: ServerUsageRange,
   historyStatus: ServerUsageSummaryResult["historyStatus"],
+  streakDays: number,
+  now: Date,
 ): ServerUsageSummaryResult {
   const totals = emptyUsageGroup();
   const bucketMap = new Map<string, UsageGroup>();
@@ -165,14 +162,14 @@ function buildUsageSummary(
   const providers = sortBreakdownEntries(
     Array.from(providerMap.entries(), ([label, group]) => ({
       id: label,
-      label,
+      label: label === "unknown" ? "Unattributed usage" : label,
       ...completeUsageGroup(group),
     })),
   );
   const models = sortBreakdownEntries(
     Array.from(modelMap.entries(), ([label, group]) => ({
       id: label,
-      label,
+      label: label === "unknown" ? "Unattributed usage" : label,
       ...completeUsageGroup(group),
     })),
   );
@@ -188,17 +185,17 @@ function buildUsageSummary(
 
   return {
     range,
-    generatedAt: new Date().toISOString(),
+    generatedAt: now.toISOString(),
     historyStatus,
     providerCoverage: usageProviderCoverage(),
-    totals: completeUsageGroup(totals),
+    totals: completeUsageGroup(totals, true),
     buckets,
     providers,
     models,
     favoriteProvider: providers[0] ?? null,
     favoriteModel: models[0] ?? null,
     favoriteMode,
-    streakDays: computeStreakDays(entries),
+    streakDays,
   };
 }
 
@@ -208,10 +205,14 @@ export function makeWsRpcUsageHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.serverGetUsageSummary,
         Effect.gen(function* () {
-          const rangeStart = getRangeStart(input.range, new Date());
-          const [rows, historyStatus] = yield* Effect.all([
+          const now = new Date();
+          const rangeStart = getRangeStart(input.range, now);
+          const tomorrow = new Date(now);
+          tomorrow.setUTCHours(24, 0, 0, 0);
+          const [rows, historyStatus, activeDays] = yield* Effect.all([
             context.projectionSnapshotQuery.getUsageEntries(rangeStart?.toISOString() ?? null),
             context.projectionSnapshotQuery.getUsageHistoryStatus(),
+            context.projectionSnapshotQuery.getUsageActiveDays(tomorrow.toISOString()),
           ]);
           const entries: UsageEntry[] = rows.flatMap((row) => {
             const createdAt = parseValidDate(row.createdAt);
@@ -228,7 +229,13 @@ export function makeWsRpcUsageHandlers(context: WsRpcContext) {
               : [];
           });
 
-          return buildUsageSummary(entries, input.range, historyStatus);
+          return buildUsageSummary(
+            entries,
+            input.range,
+            historyStatus,
+            computeCurrentStreakDays(activeDays, now),
+            now,
+          );
         }).pipe(Effect.mapError((cause) => toUsageError(cause, "Failed to load usage summary"))),
         { "rpc.aggregate": "server" },
       ),

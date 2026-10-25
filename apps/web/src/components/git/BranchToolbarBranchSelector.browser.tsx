@@ -116,18 +116,28 @@ function findButtonByText(text: string): HTMLButtonElement | null {
   ) ?? null) as HTMLButtonElement | null;
 }
 
-async function renderSelector() {
+async function renderSelector(
+  onCreateWorktreeRequest?: () => void,
+  workspaceLocked = false,
+  onWorktreeOperationsRequest?: () => void,
+  executionTargetId?: string,
+) {
   const host = document.createElement("div");
   document.body.append(host);
   const screen = await render(
     <BranchToolbarBranchSelector
       activeProjectCwd="/repo/project"
+      executionTargetId={executionTargetId}
       activeThreadBranch="main"
       activeWorktreePath={null}
       branchCwd="/repo/project"
       effectiveEnvMode="local"
       envLocked={false}
+      workspaceLocked={workspaceLocked}
       onSetThreadBranch={onSetThreadBranchSpy}
+      onSelectExistingWorktree={vi.fn()}
+      {...(onCreateWorktreeRequest ? { onCreateWorktreeRequest } : {})}
+      {...(onWorktreeOperationsRequest ? { onWorktreeOperationsRequest } : {})}
     />,
     { container: host },
   );
@@ -147,6 +157,66 @@ async function openBranchSubmenu(branchName = "feature/branch-042") {
 }
 
 describe("BranchToolbarBranchSelector", () => {
+  it.each(["ssh:remote", "wsl:Ubuntu", "remote-agent:remote"])(
+    "disables explicit creation on %s and explains the supported alternative",
+    async (executionTargetId) => {
+      const create = vi.fn();
+      const { host, screen } = await renderSelector(create, false, undefined, executionTargetId);
+      try {
+        await openBranchMenu();
+        const entry = page.getByRole("menuitem", { name: "Create worktree…" });
+        await expect.element(entry).toHaveAttribute("aria-disabled", "true");
+        await expect
+          .element(page.getByText("Explicit worktree creation is local-only.", { exact: false }))
+          .toBeVisible();
+        entry.element().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(create).not.toHaveBeenCalled();
+      } finally {
+        await screen.unmount();
+        host.remove();
+      }
+    },
+  );
+  it("keeps durable operation diagnostics reachable when the center picker is absent", async () => {
+    const operations = vi.fn();
+    const { host, screen } = await renderSelector(undefined, false, operations);
+    try {
+      await openBranchMenu();
+      await page.getByRole("menuitem", { name: "Worktree operations…" }).click();
+      expect(operations).toHaveBeenCalledOnce();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+  it("keeps first-create reachable without allowing an active checkout to switch branches", async () => {
+    const create = vi.fn();
+    const { host, screen } = await renderSelector(create, true);
+    try {
+      await openBranchMenu();
+      await expect
+        .element(page.getByRole("menuitem", { name: "Create worktree…" }))
+        .not.toHaveAttribute("aria-disabled", "true");
+      await page.getByRole("menuitem", { name: "Create worktree…" }).click();
+      expect(create).toHaveBeenCalledOnce();
+      expect(onSetThreadBranchSpy).not.toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
+  it("keeps first-worktree creation discoverable in the branch menu", async () => {
+    const create = vi.fn();
+    const { host, screen } = await renderSelector(create);
+    try {
+      await openBranchMenu();
+      await page.getByRole("menuitem", { name: "Create worktree…" }).click();
+      expect(create).toHaveBeenCalledOnce();
+    } finally {
+      await screen.unmount();
+      host.remove();
+    }
+  });
   afterEach(() => {
     vi.clearAllMocks();
     document.body.innerHTML = "";

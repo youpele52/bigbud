@@ -1,5 +1,6 @@
 import { memo } from "react";
-import { PaperclipIcon, PlusIcon, BotIcon, DumbbellIcon, BookOpenIcon } from "lucide-react";
+import { PaperclipIcon, PlusIcon, DumbbellIcon, BookOpenIcon } from "lucide-react";
+import { AiIcon } from "../../AiIcon";
 import { Button } from "../../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
@@ -58,7 +59,7 @@ export const ComposerAttachmentMenu = memo(function ComposerAttachmentMenu(props
         ) : null}
         {showCallAgent ? (
           <MenuItem onClick={props.onCallAgent}>
-            <BotIcon className="size-4 shrink-0" />
+            <AiIcon className="size-4 shrink-0" />
             Call agent
           </MenuItem>
         ) : null}

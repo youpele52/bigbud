@@ -21,7 +21,6 @@ import { CodexAdapter } from "../Services/Codex/Adapter.ts";
 import { CursorAdapter } from "../Services/Cursor/Adapter.ts";
 import { DevinAdapter } from "../Services/Devin/Adapter.ts";
 import { KilocodeAdapter } from "../Services/Kilocode/Adapter.ts";
-import { OpencodeAdapter } from "../Services/Opencode/Adapter.ts";
 import { PiAdapter } from "../Services/Pi/Adapter.ts";
 import type { AdapterRegistration } from "../ProviderRegistration.ts";
 
@@ -44,9 +43,15 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
           yield* CursorAdapter,
           yield* DevinAdapter,
           yield* KilocodeAdapter,
-          yield* OpencodeAdapter,
           yield* PiAdapter,
         ];
+  return makeAdapterLookup(adapters);
+});
+
+/** Shared routing seam for normal application composition and explicit adapter fixtures. */
+export function makeAdapterLookup(
+  adapters: ReadonlyArray<ProviderAdapterShape<ProviderAdapterError>>,
+): ProviderAdapterRegistryShape {
   const byProvider = new Map(adapters.map((adapter) => [adapter.provider, adapter]));
 
   const getByProvider: ProviderAdapterRegistryShape["getByProvider"] = (provider) => {
@@ -64,7 +69,7 @@ const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(fun
     getByProvider,
     listProviders,
   } satisfies ProviderAdapterRegistryShape;
-});
+}
 
 export function makeProviderAdapterRegistryLive(options?: ProviderAdapterRegistryLiveOptions) {
   return Layer.effect(ProviderAdapterRegistry, makeProviderAdapterRegistry(options));

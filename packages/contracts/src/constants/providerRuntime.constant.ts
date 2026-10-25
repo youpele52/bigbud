@@ -14,6 +14,8 @@ export const RUNTIME_EVENT_RAW_SOURCES = [
   "copilot.sdk.synthetic",
   "opencode.sdk.session-event",
   "opencode.sdk.synthetic",
+  "opencodeV2.client.session-event",
+  "opencodeV2.client.reconciliation",
   "pi.rpc.event",
   "pi.rpc.response",
   "pi.rpc.synthetic",
@@ -44,6 +46,7 @@ export const RUNTIME_SESSION_STATES = [
  * - `closed`: Thread has been closed
  * - `compacted`: Thread has been compacted
  * - `error`: Thread encountered an error
+ * - `reset`: The provider cleared its native conversation (bigbud history is kept)
  */
 export const RUNTIME_THREAD_STATES = [
   "active",
@@ -52,6 +55,7 @@ export const RUNTIME_THREAD_STATES = [
   "closed",
   "compacted",
   "error",
+  "reset",
 ] as const;
 
 /**

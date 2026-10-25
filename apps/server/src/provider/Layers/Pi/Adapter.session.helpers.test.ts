@@ -124,9 +124,10 @@ describe("PiAdapter.session.helpers attachments", () => {
     });
 
     expect(prompt).toContain("summarize this");
-    expect(prompt).toContain("Use attached document content only when it appears");
+    expect(prompt).toContain("Supplemental document text appears in <attached_file_contents>");
     expect(prompt).toContain("Use image OCR content only when it appears in <attached_image_ocr>");
-    expect(prompt).toContain("Do not call file-reading tools on attachment paths");
+    expect(prompt).toContain("Prefer the verified snapshot paths");
+    expect(prompt).toContain("Never bypass a denied read");
   });
 
   it("does not change prompts without file attachments", () => {

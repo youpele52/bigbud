@@ -4,11 +4,8 @@ import type {
   OrchestrationTask,
   ThreadId,
 } from "@bigbud/contracts";
-import {
-  compareTaskOrder,
-  isTaskFreshnessNewer,
-  mergeTaskPatch,
-} from "@bigbud/shared/providerRuntime";
+import { compareTaskOrder, isTaskFreshnessNewer } from "@bigbud/shared/providerRuntime";
+import { mergeTaskSnapshot } from "@bigbud/shared/providerSubagents";
 import { Effect } from "effect";
 
 import type { OrchestrationProjectorDecodeError } from "./Errors.ts";
@@ -61,7 +58,7 @@ export function projectThreadTaskEvent(
       const existing = current.find((task) => task.id === payload.task.id);
       if (existing && !isTaskFreshnessNewer(payload.task.freshness, existing.freshness))
         return nextBase;
-      const task = existing ? mergeTaskPatch(existing, payload.task) : payload.task;
+      const task = existing ? mergeTaskSnapshot(existing, payload.task) : payload.task;
       return updateTasks(
         nextBase,
         payload.threadId,

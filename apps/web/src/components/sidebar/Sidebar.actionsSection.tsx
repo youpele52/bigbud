@@ -1,10 +1,10 @@
 import {
-  BarChart3Icon,
   ClockIcon,
   Gamepad2,
   PlugIcon,
   SearchIcon,
   SquarePenIcon,
+  ActivityIcon,
 } from "lucide-react";
 import {
   DndContext,
@@ -20,12 +20,13 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import type { ReactNode } from "react";
-import { openBrowserPanel } from "../../stores/browser/browserPanel.actions";
+import { openLinkFromClick } from "../../lib/openLink";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useSearchStore } from "../../stores/ui/search.store";
 import { useUiStateStore } from "../../stores/ui/ui.store";
+import { UsageIcon } from "../usage/UsageIcon";
 import { Kbd } from "../ui/kbd";
 import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -48,6 +49,7 @@ interface SidebarActionsSectionProps {
   newThreadShortcutLabel: string | null | undefined;
   onOpenAutomations: () => void;
   onOpenUsage: () => void;
+  onOpenSystemMonitor: () => void;
   onOpenPlugins?: () => void;
   onOpenGames: () => void;
   sections: Partial<
@@ -55,7 +57,13 @@ interface SidebarActionsSectionProps {
   >;
 }
 
-const ICONS = { plugins: PlugIcon, scheduled: ClockIcon, games: Gamepad2, usage: BarChart3Icon };
+const ICONS = {
+  plugins: PlugIcon,
+  scheduled: ClockIcon,
+  games: Gamepad2,
+  usage: UsageIcon,
+  "resource-monitor": ActivityIcon,
+};
 const ROW_CLASS =
   "group flex h-7 w-full items-center gap-2 rounded-md px-2 text-left text-xs font-medium text-foreground/90 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 const sidebarCollisionDetection: CollisionDetection = (args) => {
@@ -141,7 +149,7 @@ export function SidebarFixedActions({
   const toggleSearchOpen = useSearchStore((state) => state.toggleSearchOpen);
   const keybindings = useServerKeybindings();
   return (
-    <div className="sticky top-0 z-20 flex flex-col gap-0.5 bg-sidebar px-2 pt-2">
+    <div className="flex flex-col gap-0.5 px-2 pt-2">
       <ActionRow
         label="New chat"
         icon={SquarePenIcon}
@@ -165,6 +173,7 @@ export function SidebarActionsSection({
   newThreadShortcutLabel,
   onOpenAutomations,
   onOpenUsage,
+  onOpenSystemMonitor,
   onOpenPlugins,
   onOpenGames,
   sections,
@@ -184,6 +193,7 @@ export function SidebarActionsSection({
     scheduled: onOpenAutomations,
     games: onOpenGames,
     usage: onOpenUsage,
+    "resource-monitor": onOpenSystemMonitor,
   };
 
   const showMissingGitPrompt = () => {
@@ -194,7 +204,7 @@ export function SidebarActionsSection({
         "Plugins need Git on this computer. Install Git, then try showing Plugins again.",
       actionProps: {
         children: "Install Git",
-        onClick: () => openBrowserPanel({ url: "https://git-scm.com/install/" }),
+        onClick: () => openLinkFromClick("https://git-scm.com/install/"),
       },
     });
   };

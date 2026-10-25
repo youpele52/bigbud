@@ -16,6 +16,8 @@ import {
 import { ATTACHMENT_PREVIEW_HANDOFF_TTL_MS } from "./shared";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
+import { useChatGreeting } from "../../common/ChatGreeting.hooks";
+import { deriveAnsweredUserInputs } from "~/logic/session/session.userInputHistory.logic";
 
 interface ChatViewTimelineStateInput {
   base: ChatViewBaseState;
@@ -116,6 +118,16 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
   );
 
   const serverMessages = activeThread?.messages;
+  const queuedPrompts = activeThread?.queuedPrompts;
+  // A send the server queued instead of starting is shown by the queue panel, not a bubble.
+  const settledOptimisticIds = useMemo(
+    () =>
+      new Set<string>([
+        ...(serverMessages ?? []).map((message) => message.id),
+        ...(queuedPrompts ?? []).map((prompt) => prompt.id),
+      ]),
+    [queuedPrompts, serverMessages],
+  );
   const timelineMessages = useMemo(() => {
     const messages = serverMessages ?? [];
     const serverMessagesWithPreviewHandoff =
@@ -157,20 +169,26 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
     if (optimisticUserMessages.length === 0) {
       return serverMessagesWithPreviewHandoff;
     }
-    const serverIds = new Set(serverMessagesWithPreviewHandoff.map((message) => message.id));
-    const pendingMessages = optimisticUserMessages.filter((message) => !serverIds.has(message.id));
+    const pendingMessages = optimisticUserMessages.filter(
+      (message) => !settledOptimisticIds.has(message.id),
+    );
     if (pendingMessages.length === 0) {
       return serverMessagesWithPreviewHandoff;
     }
     return [...serverMessagesWithPreviewHandoff, ...pendingMessages];
-  }, [attachmentPreviewHandoffByMessageId, optimisticUserMessages, serverMessages]);
+  }, [
+    attachmentPreviewHandoffByMessageId,
+    optimisticUserMessages,
+    serverMessages,
+    settledOptimisticIds,
+  ]);
 
   useEffect(() => {
     if (!activeThread?.id) return;
-    if (activeThread.messages.length === 0) {
+    if (settledOptimisticIds.size === 0) {
       return;
     }
-    const serverIds = new Set(activeThread.messages.map((message) => message.id));
+    const serverIds = settledOptimisticIds;
     const removedMessages = optimisticUserMessages.filter((message) => serverIds.has(message.id));
     if (removedMessages.length === 0) {
       return;
@@ -191,9 +209,19 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
     return () => {
       window.clearTimeout(timer);
     };
-  }, [activeThread, handoffAttachmentPreviews, optimisticUserMessages, setOptimisticUserMessages]);
+  }, [
+    activeThread?.id,
+    handoffAttachmentPreviews,
+    optimisticUserMessages,
+    setOptimisticUserMessages,
+    settledOptimisticIds,
+  ]);
 
   const { pendingUserInputs } = thread;
+  const answeredUserInputs = useMemo(
+    () => deriveAnsweredUserInputs(activeThread?.activities ?? []),
+    [activeThread?.activities],
+  );
 
   const timelineEntries = useMemo(
     () =>
@@ -202,8 +230,15 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
         activeThread?.proposedPlans ?? [],
         workLogEntries,
         pendingUserInputs,
+        answeredUserInputs,
       ),
-    [activeThread?.proposedPlans, pendingUserInputs, timelineMessages, workLogEntries],
+    [
+      activeThread?.proposedPlans,
+      pendingUserInputs,
+      answeredUserInputs,
+      timelineMessages,
+      workLogEntries,
+    ],
   );
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);
@@ -255,7 +290,21 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
     return deriveCompletionDividerBeforeEntryId(timelineEntries, activeLatestTurn);
   }, [activeLatestTurn, completionSummary, latestTurnSettled, timelineEntries]);
 
+  const chatGreeting = useChatGreeting({
+    threadId: base.threadId,
+    name: base.settings.greetingName,
+    isLocalDraftThread: base.isLocalDraftThread,
+    hasContent:
+      !activeThread ||
+      timelineEntries.length > 0 ||
+      (activeThread?.messages.length ?? 0) > 0 ||
+      activeLatestTurn !== null,
+    isWorking: thread.isWorking,
+  });
+
   return {
+    emptyChatGreeting: chatGreeting.greeting,
+    shimmerEmptyChat: chatGreeting.shimmer,
     timelineMessages,
     timelineEntries,
     turnDiffSummaryByAssistantMessageId,

@@ -18,8 +18,11 @@ import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { asRecord, decodeClaudeUserToolResult } from "./Adapter.sdk.messages.ts";
 import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
 import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
+import { isClaudeAgentTool, type SubagentHandlers } from "./Adapter.stream.subagents.ts";
 import { taskCreateResultId } from "./Adapter.tasks.reducer.parse.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
+import { normalizeClaudeTokenUsage, claudeCanonicalUsage } from "./Adapter.usage.ts";
+import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 
 interface MessageSpecificHandlerDeps {
   readonly makeEventStamp: () => Effect.Effect<{
@@ -30,10 +33,11 @@ interface MessageSpecificHandlerDeps {
   readonly nowIso: Effect.Effect<string>;
   readonly blocks: BlockHandlers;
   readonly turn: TurnHandlers;
+  readonly subagents: SubagentHandlers;
 }
 
 export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) => {
-  const { makeEventStamp, offerRuntimeEvent, nowIso, blocks, turn } = deps;
+  const { makeEventStamp, offerRuntimeEvent, nowIso, blocks, turn, subagents } = deps;
 
   const handleUserMessage = Effect.fn("handleUserMessage")(function* (
     context: ClaudeSessionContext,
@@ -47,6 +51,11 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       context.queuedUserMessageIds.delete(message.uuid);
     }
 
+    if (message.parent_tool_use_id) {
+      // A subagent's own tool results update its steps; they never touch main-thread tools.
+      yield* subagents.handleSubagentUser(context, message);
+      return;
+    }
     if (context.turnState) {
       context.turnState.items.push(message.message);
     }
@@ -131,6 +140,9 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
         raw: claudeSdkRuntimeRaw(message, "claude/user"),
       });
 
+      if (isClaudeAgentTool(tool.toolName)) {
+        yield* subagents.recordAgentToolOutput(context, tool.itemId, message.tool_use_result);
+      }
       const result = asRecord(message.tool_use_result) ?? tryParseJsonRecord(toolResult.text);
       const createdTaskId =
         tool.toolName === "TaskCreate" && !toolResult.isError
@@ -179,6 +191,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
             })
             .join("\n")
         : "";
+      yield* subagents.handleSubagentAssistant(context, message, summary);
       if (summary.length > 0) {
         const stamp = yield* makeEventStamp();
         yield* offerRuntimeEvent(context, {
@@ -242,6 +255,33 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       });
     }
 
+    const usage = normalizeClaudeTokenUsage(message.message?.usage, context.lastKnownContextWindow);
+    const canonical = claudeCanonicalUsage(message.message?.usage, true);
+    if (usage && canonical) {
+      context.lastKnownTokenUsage = usage;
+      context.lastKnownTokenUsageTurnId = context.turnState.turnId;
+      context.lastKnownTokenUsageModel = message.message.model;
+      const stamp = yield* makeEventStamp();
+      yield* offerRuntimeEvent(context, {
+        type: "thread.token-usage.updated",
+        ...stamp,
+        provider: PROVIDER,
+        threadId: context.session.threadId,
+        turnId: context.turnState.turnId,
+        payload: {
+          usage,
+          accounting: makeTokenUsageAccounting({
+            scope: "item",
+            scopeId: message.message.id,
+            usage,
+            processedTokens: canonical.subtotal,
+            canonical: { ...canonical, model: message.message.model },
+            finalized: false,
+          }),
+        },
+        providerRefs: nativeProviderRefs(context),
+      });
+    }
     const content = message.message?.content;
     if (Array.isArray(content)) {
       for (const block of content) {

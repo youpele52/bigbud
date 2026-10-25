@@ -13,6 +13,7 @@ import { ServerConfig } from "../startup/config.ts";
 import { WorkspacePathsLive } from "../workspace/Layers/WorkspacePaths.ts";
 import { normalizeDispatchCommand } from "./Normalizer.ts";
 import { calculateCommandPayloadDigest } from "./commandDigest.ts";
+import { OrchestrationEngineService } from "./Services/OrchestrationEngine.ts";
 
 const TestLayer = Layer.empty.pipe(
   Layer.provideMerge(WorkspacePathsLive),
@@ -64,6 +65,13 @@ function submission(attachments: ReadonlyArray<UploadChatAttachment>) {
 
 function normalize(command: ReturnType<typeof submission>) {
   return normalizeDispatchCommand(command).pipe(
+    Effect.provideService(OrchestrationEngineService, {
+      ensureThreadState: () =>
+        Effect.succeed({
+          workspaceExecutionTargetId: "local",
+          modelSelection: { provider: "codex" },
+        }),
+    } as unknown as typeof OrchestrationEngineService.Service),
     Effect.map((result) => {
       if (result.type !== "thread.message.submit") throw new Error("Expected submission");
       return result;

@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { type ChildProcessWithoutNullStreams, spawn, spawnSync } from "node:child_process";
+import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
+
+import { type KillProcessTreeOptions, killProcessTree } from "../utils/killProcessTree.ts";
 
 import { buildSshCommandInvocation } from "../ssh/sshCommand.ts";
-import { assertSshExecutionTargetReady } from "../ssh/sshVerification.ts";
+import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
 import { decodeDelimitedFrame, encodeDelimitedFrame } from "./remoteAgentProtocol.codec.ts";
 import {
   REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES,
@@ -52,25 +54,10 @@ export function remoteAgentLocalProcessArgs(
 
 export function closeRemoteAgentProcess(
   child: ClosableChildProcess,
-  options: {
-    readonly platform?: NodeJS.Platform;
-    readonly taskkill?: typeof spawnSync;
-  } = {},
+  options: KillProcessTreeOptions = {},
 ): void {
   child.stdin.end();
-  if ((options.platform ?? process.platform) === "win32" && child.pid !== undefined) {
-    try {
-      const result = (options.taskkill ?? spawnSync)(
-        "taskkill",
-        ["/pid", String(child.pid), "/T", "/F"],
-        { stdio: "ignore" },
-      );
-      if (result.status === 0) return;
-    } catch {
-      // taskkill unavailable — fall through to direct termination.
-    }
-  }
-  child.kill("SIGTERM");
+  killProcessTree(child, "SIGTERM", options);
 }
 
 export interface RemoteAgentSshProcessInput {
@@ -141,8 +128,8 @@ export class RemoteAgentConnection {
     return this.child.pid;
   }
 
-  static ssh(input: RemoteAgentSshProcessInput): RemoteAgentConnection {
-    assertSshExecutionTargetReady(input.executionTargetId);
+  static async ssh(input: RemoteAgentSshProcessInput): Promise<RemoteAgentConnection> {
+    await assertSshExecutionTargetReadyAsync(input.executionTargetId);
     const maxFrameBytes = input.maxFrameBytes ?? REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES;
     const invocation = buildSshCommandInvocation({
       executionTargetId: input.executionTargetId,

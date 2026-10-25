@@ -1,4 +1,5 @@
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
+import { unresolvedAdmissionSql } from "./ProviderTurnAdmissions.activity.ts";
 import type {
   ThreadRetentionAgeCriterion,
   ThreadRetentionSelectionMode,
@@ -59,7 +60,7 @@ export function retentionExclusionCaseSql(
         SELECT 1 FROM thread_activity_leases AS lease
         WHERE lease.thread_id = ${threadAlias}.thread_id
       ) THEN 'running'
-      WHEN (json_valid(${threadAlias}.queued_prompts_json) AND json_array_length(${threadAlias}.queued_prompts_json) > 0) OR EXISTS (
+      WHEN EXISTS (${unresolvedAdmissionSql(`${threadAlias}.thread_id`)}) OR (json_valid(${threadAlias}.queued_prompts_json) AND json_array_length(${threadAlias}.queued_prompts_json) > 0) OR EXISTS (
         SELECT 1 FROM projection_turns AS turn
         WHERE turn.thread_id = ${threadAlias}.thread_id AND turn.state = 'pending'
       ) OR EXISTS (

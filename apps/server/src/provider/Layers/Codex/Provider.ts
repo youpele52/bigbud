@@ -1,16 +1,5 @@
 import type { CodexSettings, ServerProviderSkill } from "@bigbud/contracts";
-import {
-  Cache,
-  Duration,
-  Effect,
-  Equal,
-  FileSystem,
-  Layer,
-  Option,
-  Path,
-  Result,
-  Stream,
-} from "effect";
+import { Effect, Equal, FileSystem, Layer, Option, Path, Result, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 
 import {
@@ -43,6 +32,7 @@ import { ServerSettingsError } from "@bigbud/contracts";
 import { getCodexFallbackModels } from "./Provider.models";
 import { hasCustomModelProvider, parseAuthStatusFromOutput } from "./Provider.auth";
 import { makeCodexInitialSnapshot } from "./Provider.initialSnapshot";
+import { readCodexSubscriptionUsage } from "./Provider.usageLimits.read.ts";
 
 export { getCodexModelCapabilities } from "./Provider.models";
 export {
@@ -60,13 +50,21 @@ const probeCodexCapabilities = (input: {
   readonly homePath?: string;
   readonly cwd: string;
 }) =>
-  Effect.tryPromise((signal) => probeCodexDiscovery({ ...input, signal })).pipe(
+  Effect.tryPromise((signal) =>
+    probeCodexDiscovery({ ...input, signal, includeUsageLimits: true }),
+  ).pipe(
     Effect.timeoutOption(CAPABILITIES_PROBE_TIMEOUT_MS),
-    Effect.result,
-    Effect.map((result) => {
-      if (Result.isFailure(result)) return undefined;
-      return Option.isSome(result.success) ? result.success.value : undefined;
-    }),
+    Effect.tap((result) =>
+      Option.isNone(result)
+        ? Effect.logWarning("Codex model discovery timed out", {
+            timeoutMs: CAPABILITIES_PROBE_TIMEOUT_MS,
+          })
+        : Effect.void,
+    ),
+    Effect.map(Option.getOrUndefined),
+    Effect.catchCause((cause) =>
+      Effect.logWarning("Codex model discovery failed", { cause }).pipe(Effect.as(undefined)),
+    ),
   );
 
 const runCodexCommand = Effect.fn("runCodexCommand")(function* (args: ReadonlyArray<string>) {
@@ -237,6 +235,11 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
   const resolvedModels = discovery
     ? includeConfiguredCodexModels(discovery.models, codexSettings.customModels)
     : adjustCodexModelsForAccount(fallbackModels, account);
+  const modelDiscovery = {
+    status: discovery ? (discovery.models.length ? "live" : "empty") : "unavailable",
+    source: discovery ? "codex-app-server" : "fallback",
+    durationMs: 0,
+  } as const;
 
   if (yield* hasCustomModelProvider) {
     return buildServerProvider({
@@ -244,6 +247,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       enabled: codexSettings.enabled,
       checkedAt,
       models: resolvedModels,
+      modelDiscovery,
       skills,
       probe: {
         installed: true,
@@ -267,6 +271,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       enabled: codexSettings.enabled,
       checkedAt,
       models: resolvedModels,
+      modelDiscovery,
       skills,
       probe: {
         installed: true,
@@ -287,6 +292,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       enabled: codexSettings.enabled,
       checkedAt,
       models: resolvedModels,
+      modelDiscovery,
       skills,
       probe: {
         installed: true,
@@ -306,7 +312,11 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
     enabled: codexSettings.enabled,
     checkedAt,
     models: resolvedModels,
+    modelDiscovery,
     skills,
+    ...(parsed.auth.status === "authenticated" && discovery?.usageLimits
+      ? { usageLimits: discovery.usageLimits }
+      : {}),
     probe: {
       installed: true,
       version: parsedVersion,
@@ -339,27 +349,7 @@ export const CodexProviderLive = Layer.effect(
       configFingerprint: (settings) =>
         JSON.stringify({ homePath: settings.homePath, customModels: settings.customModels }),
     });
-    const accountProbeCache = yield* Cache.make({
-      capacity: 4,
-      timeToLive: Duration.minutes(5),
-      lookup: (key: string) => {
-        const [binaryPath, homePath, cwd] = JSON.parse(key) as [string, string | undefined, string];
-        return probeCodexCapabilities({
-          binaryPath,
-          cwd,
-          ...(homePath ? { homePath } : {}),
-        });
-      },
-    });
-
-    const getDiscovery = (input: {
-      readonly binaryPath: string;
-      readonly homePath?: string;
-      readonly cwd: string;
-    }) =>
-      Cache.get(accountProbeCache, JSON.stringify([input.binaryPath, input.homePath, input.cwd]));
-
-    const checkProvider = checkCodexProviderStatus((input) => getDiscovery(input)).pipe(
+    const checkProvider = checkCodexProviderStatus(probeCodexCapabilities).pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(FileSystem.FileSystem, fileSystem),
       Effect.provideService(Path.Path, path),
@@ -376,6 +366,8 @@ export const CodexProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      readUsageLimits: readCodexSubscriptionUsage,
+      recoverModelDiscovery: true,
       decorateSnapshot,
       initialSnapshot: makeCodexInitialSnapshot,
     });

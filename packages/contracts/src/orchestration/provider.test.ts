@@ -131,6 +131,25 @@ describe("ProviderSessionStartInput", () => {
 });
 
 describe("ProviderSendTurnInput", () => {
+  it("keeps request message identity optional for existing payloads", () => {
+    const legacy = { threadId: "thread-legacy", input: "hello" } as const;
+
+    expect(decodeProviderSendTurnInput(legacy)).toMatchObject(legacy);
+  });
+
+  it("round-trips the persisted request message identity", () => {
+    const payload = {
+      threadId: "thread-identity",
+      requestMessageId: "message-persisted-request",
+      input: "hello",
+    } as const;
+    const decode = decodeProviderSendTurnInput(payload);
+    const encode = Schema.encodeUnknownSync(ProviderSendTurnInput)(decode);
+
+    expect(decode.requestMessageId).toBe(payload.requestMessageId);
+    expect(encode).toMatchObject(payload);
+  });
+
   it("accepts codex modelSelection", () => {
     const parsed = decodeProviderSendTurnInput({
       threadId: "thread-1",

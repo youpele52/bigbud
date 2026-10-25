@@ -9,6 +9,7 @@ import {
 } from "../../../observability/Metrics.ts";
 import { validateMcpAction, type ProviderMcpAction } from "../../providerMcp.ts";
 import type { ClaudeAdapterShape } from "../../Services/Claude/Adapter.ts";
+import { makeClaudeStopSubagent } from "./Adapter.controls.subagents.ts";
 import type { ClaudeSessionContext } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { reconcileClaudeInterruptQueue, toRequestError } from "./Adapter.utils.ts";
@@ -122,5 +123,7 @@ export function makeClaudeControlOperations(input: {
     },
   );
 
-  return { interruptTurn, mcp, readThread, rollbackThread };
+  const stopSubagent = makeClaudeStopSubagent(input);
+
+  return { interruptTurn, mcp, readThread, rollbackThread, stopSubagent };
 }

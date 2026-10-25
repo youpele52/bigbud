@@ -6,6 +6,7 @@ import type {
   OrchestrationReadModel,
   OrchestrationThread,
 } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
+import { resolvedHeldModelSelection } from "@bigbud/shared/delegatedModelChoice";
 import { Equal, Effect } from "effect";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
@@ -42,6 +43,11 @@ function invariant(
     detail,
     ...(code !== undefined ? { code } : {}),
   });
+}
+
+/** Server-only redelivery of a user message that is already in the transcript. */
+export function isSentMessageRedelivery(command: QueueablePromptCommand): boolean {
+  return command.type === "thread.message.submit" && command.redeliverSentMessage === true;
 }
 
 export type ResolvedPromptReferences = {
@@ -140,6 +146,10 @@ export function makeQueuedPrompt(input: {
       );
     }
     const references = yield* resolvePromptReferences(input);
+    const originSegments =
+      command.type === "thread.message.submit"
+        ? command.originSegments
+        : command.message.originSegments;
     return {
       id: command.message.messageId,
       text: command.message.text.trim(),
@@ -158,6 +168,8 @@ export function makeQueuedPrompt(input: {
       ...(references.sourceProposedPlan !== undefined
         ? { sourceProposedPlan: references.sourceProposedPlan }
         : {}),
+      ...(originSegments !== undefined ? { originSegments } : {}),
+      ...(isSentMessageRedelivery(command) ? { alreadySent: true } : {}),
     };
   });
 }
@@ -208,6 +220,13 @@ export function queuedPromptMatchesCommand(
     prompt.interactionMode === command.interactionMode &&
     prompt.bootstrapSourceThreadId === command.bootstrapSourceThreadId &&
     Equal.equals(prompt.sourceProposedPlan, command.sourceProposedPlan) &&
+    Equal.equals(
+      prompt.originSegments,
+      command.type === "thread.message.submit"
+        ? command.originSegments
+        : command.message.originSegments,
+    ) &&
+    (prompt.alreadySent === true) === isSentMessageRedelivery(command) &&
     command.bootstrap === undefined
   );
 }
@@ -219,8 +238,12 @@ export function queuedPromptToTurnStartCommand(input: {
   readonly createdAt: ThreadTurnStartCommand["createdAt"];
   readonly messageId?: ThreadTurnStartCommand["message"]["messageId"];
   readonly text?: string;
+  readonly originSegments?: ThreadTurnStartCommand["message"]["originSegments"];
 }): ThreadTurnStartCommand {
   const { prompt, thread } = input;
+  // A held delegated message uses the model its resolved choice picked (L7).
+  const modelSelection =
+    resolvedHeldModelSelection(thread.activities, prompt.id) ?? prompt.modelSelection;
   return {
     type: "thread.turn.start",
     commandId: input.commandId,
@@ -231,8 +254,11 @@ export function queuedPromptToTurnStartCommand(input: {
       text: input.text ?? prompt.text,
       attachments: prompt.attachments ?? [],
       ...(prompt.replyTo !== undefined ? { replyToMessageId: prompt.replyTo.messageId } : {}),
+      ...((input.originSegments ?? prompt.originSegments) !== undefined
+        ? { originSegments: input.originSegments ?? prompt.originSegments }
+        : {}),
     },
-    ...(prompt.modelSelection !== undefined ? { modelSelection: prompt.modelSelection } : {}),
+    ...(modelSelection !== undefined ? { modelSelection } : {}),
     ...(prompt.titleSeed !== undefined ? { titleSeed: prompt.titleSeed } : {}),
     runtimeMode: prompt.runtimeMode ?? thread.runtimeMode,
     interactionMode: prompt.interactionMode ?? thread.interactionMode,

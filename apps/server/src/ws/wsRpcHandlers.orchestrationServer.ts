@@ -302,6 +302,8 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
           appliedSequence: input.appliedSequence ?? 0,
           orchestrationEngine: context.orchestrationEngine,
           delivery: context.desktopSupervisorDelivery,
+          onSessionEnded: context.connectionDiagnostics.recordDeliverySessionEnded,
+          isServerShuttingDown: context.connectionDiagnostics.isServerShuttingDown,
         }),
         { "rpc.aggregate": "orchestration" },
       ),

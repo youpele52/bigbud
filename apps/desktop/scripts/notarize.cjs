@@ -1,4 +1,4 @@
-const { notarize } = require("@electron/notarize");
+const { runNotarization } = require("./notarize.pipeline.cjs");
 const { execFileSync, spawnSync } = require("node:child_process");
 const path = require("node:path");
 
@@ -14,12 +14,13 @@ function verifyCodeSignature(target, deep = false) {
   const args = ["--verify", "--strict", "--verbose=2"];
   if (deep) args.push("--deep");
   args.push(target);
-  execFileSync("codesign", args, { stdio: "inherit" });
+  execFileSync("codesign", args, { stdio: "inherit", timeout: 120000 });
 }
 
 function verifyTeamIdentifier(target, expectedTeamId) {
   const result = spawnSync("codesign", ["-dv", "--verbose=4", target], {
     encoding: "utf8",
+    timeout: 120000,
   });
   if (result.status !== 0) {
     throw new Error(`[afterSign] Could not inspect TeamIdentifier for ${target}`);
@@ -41,8 +42,7 @@ function verifyTeamIdentifier(target, expectedTeamId) {
  * Submits the signed .app to Apple for notarization, staples the resulting
  * ticket, and validates the staple before the DMG/ZIP is created.
  *
- * This script is invoked from a staged temp directory, so it resolves
- * @electron/notarize via NODE_PATH pointing back to the monorepo.
+ * The pipeline submits once; only ticket operations may be retried.
  */
 module.exports = async function afterSign(context) {
   const { electronPlatformName, appOutDir } = context;
@@ -74,22 +74,12 @@ module.exports = async function afterSign(context) {
 
   console.log(`[afterSign] Notarizing ${appPath}...`);
 
-  await notarize({
+  await runNotarization({
     appPath,
     appleId,
-    appleIdPassword,
+    password: appleIdPassword,
     teamId,
-  });
-
-  console.log("[afterSign] Stapling ticket...");
-  execFileSync("xcrun", ["stapler", "staple", appPath], { stdio: "inherit" });
-
-  console.log("[afterSign] Validating staple...");
-  execFileSync("xcrun", ["stapler", "validate", appPath], { stdio: "inherit" });
-
-  console.log("[afterSign] Assessing Gatekeeper acceptance...");
-  execFileSync("spctl", ["--assess", "--type", "execute", "--verbose=4", appPath], {
-    stdio: "inherit",
+    recoveryDir: process.env.BIGBUD_NOTARIZATION_RECOVERY_DIR,
   });
 
   console.log("[afterSign] Notarization complete.");

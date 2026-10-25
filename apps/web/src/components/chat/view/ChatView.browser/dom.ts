@@ -2,6 +2,8 @@ import { page } from "vitest/browser";
 import { expect, vi } from "vitest";
 
 import { isMacPlatform } from "../../../../lib/utils";
+import { getServerConfig } from "../../../../rpc/serverState";
+import { shortcutLabelForCommand } from "../../../../models/keybindings/keybindings.models";
 import type { MessageId } from "@bigbud/contracts";
 
 import { type ChatRouter, type UserRowMeasurement, type ViewportSpec } from "./types";
@@ -134,12 +136,14 @@ export async function expectComposerActionsContained(): Promise<void> {
         (button) => button.getBoundingClientRect(),
       );
       expect(buttonRects.length).toBeGreaterThanOrEqual(1);
-      const firstTop = buttonRects[0]?.top ?? 0;
+      // One row: buttons of different heights (e.g. 28px attachment, 32px send) share a center line.
+      const centerY = (rect: DOMRect) => rect.top + rect.height / 2;
+      const firstCenter = buttonRects[0] ? centerY(buttonRects[0]) : 0;
 
       for (const rect of buttonRects) {
         expect(rect.right).toBeLessThanOrEqual(footerRect.right + 0.5);
         expect(rect.bottom).toBeLessThanOrEqual(footerRect.bottom + 0.5);
-        expect(Math.abs(rect.top - firstTop)).toBeLessThanOrEqual(1.5);
+        expect(Math.abs(centerY(rect) - firstCenter)).toBeLessThanOrEqual(1.5);
       }
     },
     { timeout: 8_000, interval: 16 },
@@ -160,12 +164,16 @@ export async function waitForInteractionModeButton(
 
 export function dispatchChatNewShortcut(): void {
   const useMetaForMod = isMacPlatform(navigator.platform);
+  const binding = getServerConfig()?.keybindings.find((entry) => entry.command === "chat.new");
+  if (!binding) throw new Error("The browser fixture has no chat.new shortcut.");
+  const shortcut = binding.shortcut;
   window.dispatchEvent(
     new KeyboardEvent("keydown", {
-      key: "o",
-      shiftKey: true,
-      metaKey: useMetaForMod,
-      ctrlKey: !useMetaForMod,
+      key: shortcut.key,
+      shiftKey: shortcut.shiftKey,
+      altKey: shortcut.altKey,
+      metaKey: shortcut.metaKey || (shortcut.modKey && useMetaForMod),
+      ctrlKey: shortcut.ctrlKey || (shortcut.modKey && !useMetaForMod),
       bubbles: true,
       cancelable: true,
     }),
@@ -189,7 +197,7 @@ export function dispatchCommandPaletteShortcut(): void {
   const useMetaForMod = isMacPlatform(navigator.platform);
   window.dispatchEvent(
     new KeyboardEvent("keydown", {
-      key: "k",
+      key: "p",
       metaKey: useMetaForMod,
       ctrlKey: !useMetaForMod,
       bubbles: true,
@@ -220,10 +228,12 @@ export async function waitForNewThreadShortcutLabel(): Promise<void> {
   const newThreadButton = page.getByTestId("new-thread-button");
   await expect.element(newThreadButton).toBeInTheDocument();
   await newThreadButton.hover();
-  const shortcutLabel = isMacPlatform(navigator.platform)
-    ? "New thread (⌘N)"
-    : "New thread (Ctrl+N)";
-  await expect.element(page.getByText(shortcutLabel)).toBeInTheDocument();
+  const bindings = getServerConfig()?.keybindings ?? [];
+  const shortcutLabel =
+    shortcutLabelForCommand(bindings, "chat.newLocal", navigator.platform) ??
+    shortcutLabelForCommand(bindings, "chat.new", navigator.platform);
+  expect(shortcutLabel).toBeTruthy();
+  await expect.element(page.getByText(`New thread (${shortcutLabel})`)).toBeInTheDocument();
 }
 
 async function waitForImagesToLoad(scope: ParentNode): Promise<void> {

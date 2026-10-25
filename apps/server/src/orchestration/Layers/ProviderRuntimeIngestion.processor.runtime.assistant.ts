@@ -99,6 +99,15 @@ export const processAssistantRuntimeEvent = Effect.fn("processAssistantRuntimeEv
     }
   }
 
+  if (
+    event.provider === "opencodeV2" &&
+    event.type === "item.completed" &&
+    event.payload.itemType === "reasoning" &&
+    event.itemId
+  ) {
+    yield* input.thinkingHelpers.finalizeThinkingForItem(event, String(event.itemId));
+    return;
+  }
   if (event.type !== "item.completed" || event.payload.itemType !== "assistant_message") {
     return;
   }
@@ -119,6 +128,7 @@ export const processAssistantRuntimeEvent = Effect.fn("processAssistantRuntimeEv
     (event.provider === "pi" ||
       event.provider === "copilot" ||
       event.provider === "opencode" ||
+      event.provider === "opencodeV2" ||
       event.provider === "kilocode" ||
       (event.provider === "codex" &&
         typeof (event.payload.data as { item?: { text?: unknown } } | undefined)?.item?.text ===

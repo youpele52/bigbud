@@ -1,6 +1,6 @@
 import { Effect, Scope, ServiceMap } from "effect";
 
-import { assertSshExecutionTargetReady } from "../ssh/sshVerification.ts";
+import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
 import { isRemoteAgentExecutionTarget } from "./remoteAgentDefault.ts";
 import { openRemoteAgentControl, type RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
@@ -71,8 +71,11 @@ export interface RemoteAgentUpdateCoordinatorDependencies {
   readonly loadInstallSource?: RemoteAgentInstallSourceLoader;
   readonly openControl?: (target: string) => Promise<RemoteAgentControl>;
   readonly knownTargets?: () => Promise<ReadonlyArray<string>>;
-  readonly hasReusableCredentials?: (target: string) => boolean;
-  readonly connect?: (target: string, runtime: RemoteAgentRuntime) => RemoteAgentConnection;
+  readonly hasReusableCredentials?: (target: string) => boolean | Promise<boolean>;
+  readonly connect?: (
+    target: string,
+    runtime: RemoteAgentRuntime,
+  ) => RemoteAgentConnection | Promise<RemoteAgentConnection>;
   readonly logger?: (cause: unknown, target?: string) => void;
   readonly scheduler?: RemoteAgentUpdateScheduler;
 }
@@ -81,9 +84,12 @@ function sourceLoader(): RemoteAgentInstallSourceLoader {
   return makeRemoteAgentInstallSourceLoader();
 }
 
-function isReusableTarget(target: string, check: (target: string) => boolean): boolean {
+async function isReusableTarget(
+  target: string,
+  check: (target: string) => boolean | Promise<boolean>,
+): Promise<boolean> {
   try {
-    return check(target);
+    return await check(target);
   } catch {
     return false;
   }
@@ -109,8 +115,8 @@ export function makeRemoteAgentUpdateCoordinator(
   const openControl = dependencies.openControl ?? openRemoteAgentControl;
   const hasReusableCredentials =
     dependencies.hasReusableCredentials ??
-    ((target) => {
-      assertSshExecutionTargetReady(target);
+    (async (target) => {
+      await assertSshExecutionTargetReadyAsync(target);
       return true;
     });
   const logger =
@@ -144,7 +150,7 @@ export function makeRemoteAgentUpdateCoordinator(
     if (
       !item.triggers.has("authenticated") &&
       !item.forceRetry &&
-      !isReusableTarget(target, hasReusableCredentials)
+      !(await isReusableTarget(target, hasReusableCredentials))
     )
       return;
     const control = await openControl(target);
@@ -197,7 +203,7 @@ export function makeRemoteAgentUpdateCoordinator(
       return shared;
     },
     getStatus: async (target, reconnectRequestId) => {
-      if (!isReusableTarget(target, hasReusableCredentials))
+      if (!(await isReusableTarget(target, hasReusableCredentials)))
         return statusFromState(
           target,
           rootByTarget.get(target) ?? null,

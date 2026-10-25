@@ -8,6 +8,11 @@ import type {
   ProjectionUsageContribution,
 } from "../../persistence/Services/ProjectionThreadActivities.ts";
 import { supportsUsageAccounting } from "../usageAccountingSupport.ts";
+import {
+  CodexUsageObservation,
+  UsageAccountingV2,
+} from "@bigbud/contracts/orchestration/providerRuntime.usage";
+import { Schema } from "effect";
 
 type UsageAccountingPayload = {
   readonly provider?: unknown;
@@ -21,6 +26,8 @@ type UsageAccountingPayload = {
   readonly outputTokens?: unknown;
   readonly reasoningOutputTokens?: unknown;
   readonly finalized?: unknown;
+  readonly canonical?: unknown;
+  readonly codexObservation?: unknown;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -28,9 +35,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function nonNegativeInt(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? Math.trunc(value)
-    : undefined;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
 }
 
 function providerInteractionMode(value: unknown): ProviderInteractionMode | undefined {
@@ -55,7 +60,7 @@ export function usageContributionFromActivity(input: {
 
   const payload = accounting as UsageAccountingPayload;
   const provider = typeof payload.provider === "string" ? payload.provider.trim() : "";
-  if (!supportsUsageAccounting(provider)) {
+  if (provider !== "unknown" && !supportsUsageAccounting(provider)) {
     return undefined;
   }
   const model = typeof payload.model === "string" ? payload.model.trim() : "";
@@ -69,8 +74,7 @@ export function usageContributionFromActivity(input: {
     !interactionMode ||
     !scope ||
     !scopeId ||
-    processedTokens === undefined ||
-    processedTokens <= 0
+    processedTokens === undefined
   ) {
     return undefined;
   }
@@ -92,6 +96,10 @@ export function usageContributionFromActivity(input: {
     finalized: payload.finalized === true,
     sourceSequence: input.activity.sequence ?? null,
     updatedAt: input.activity.createdAt,
+    ...(Schema.is(UsageAccountingV2)(payload.canonical) ? { accounting: payload.canonical } : {}),
+    ...(Schema.is(CodexUsageObservation)(payload.codexObservation)
+      ? { codexObservation: payload.codexObservation }
+      : {}),
   };
 }
 
@@ -100,13 +108,17 @@ export function usageContributionFromBackfillRow(
 ): ProjectionUsageContribution | undefined {
   if (
     row.kind !== "context-window.updated" ||
-    !supportsUsageAccounting(row.provider) ||
+    (row.provider !== "unknown" && !supportsUsageAccounting(row.provider)) ||
     !isRecord(row.payload)
   ) {
     return undefined;
   }
 
   const existingAccounting = isRecord(row.payload.accounting) ? row.payload.accounting : undefined;
+  if (!existingAccounting && row.payload.usageSchemaVersion === 2) return undefined;
+  // Raw cumulative observations require ordered live reduction; replaying an ID-sorted
+  // historical scan would invent counter order. Existing durable consumption stays intact.
+  if (existingAccounting?.codexObservation) return undefined;
   const accounting = existingAccounting
     ? {
         ...existingAccounting,
@@ -122,6 +134,19 @@ export function usageContributionFromBackfillRow(
           scope: "turn",
           scopeId: row.turnId,
           processedTokens: row.payload.usedTokens,
+          canonical: {
+            version: 2,
+            source: "legacy",
+            basis: "legacy-context-derived",
+            completeness: "partial",
+            inputTokens: null,
+            outputTokens: null,
+            cacheReadTokens: null,
+            cacheWriteTokens: null,
+            reasoningTokens: null,
+            reportedTotal: null,
+            subtotal: nonNegativeInt(row.payload.usedTokens) ?? 0,
+          },
           inputTokens: row.payload.inputTokens,
           cachedInputTokens: row.payload.cachedInputTokens,
           outputTokens: row.payload.outputTokens,

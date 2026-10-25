@@ -2,20 +2,17 @@
 import {
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
-  ProviderSendTurnInput,
   ProviderStopSessionInput,
   type ProviderKind,
   type ProviderRuntimeEvent,
   type ThreadId,
 } from "@bigbud/contracts";
-import { Effect, Layer, PubSub, Stream } from "effect";
+import { Effect, Layer, PubSub } from "effect";
 
 import {
   providerMetricAttributes,
   providerSessionsTotal,
-  providerTurnDuration,
   providerTurnsTotal,
-  providerTurnMetricAttributes,
   withMetrics,
 } from "../../observability/Metrics.ts";
 import { ProviderAdapterRegistry } from "../Services/ProviderAdapterRegistry.ts";
@@ -28,7 +25,7 @@ import {
 } from "../providerCapabilities.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
-import { decodeInputOrValidationError, toValidationError } from "./ProviderServiceHelpers.ts";
+import { decodeInputOrValidationError } from "./ProviderServiceHelpers.ts";
 import type { ProviderServiceError } from "../Errors.ts";
 import { makeStartSessionInternal } from "./ProviderService.startSession.ts";
 import {
@@ -45,9 +42,16 @@ import {
   makeStopStaleSessionsForThread,
   makeUpsertSessionBinding,
 } from "./ProviderService.sessionLifecycle.ts";
-import { makeProcessProviderRuntimeEvent } from "./ProviderService.runtimeEvents.ts";
+import {
+  makeProcessProviderRuntimeEvent,
+  makeCanonicalRuntimePublisher,
+  canonicalRuntimeStream,
+} from "./ProviderService.runtimeEvents.ts";
 import { ProviderTurnLivenessRepository } from "../../persistence/Services/ProviderTurnLiveness.ts";
-import { recordAcceptedSendTurn } from "./ProviderService.sendTurn.record.ts";
+import { makeSendTurn } from "./ProviderService.sendTurn.ts";
+import { ProviderDispatchAttemptRepository } from "../../persistence/Services/ProviderDispatchAttempts.ts";
+import { ThreadRecoveryIntentRepository } from "../../persistence/Services/ThreadRecoveryIntents.ts";
+import { suspendRecoveryIntentsForStopAll } from "./ProviderService.stopAll.ts";
 import {
   makeTurnLivenessOperations,
   markProviderTurnTerminal,
@@ -58,6 +62,9 @@ import { makeInspectActiveTurn } from "./ProviderService.inspection.ts";
 import { makeInterruptTurn } from "./ProviderService.interrupt.ts";
 import { makeBackgroundReviews } from "./ProviderService.backgroundReview.ts";
 import { makeSteerTurn } from "./ProviderService.steer.ts";
+import { preserveStoppedProviderBinding } from "./ProviderService.stopSession.binding.ts";
+import { makeStopSubagent } from "./ProviderService.subagentStop.ts";
+import { makeStopThreadSubagents } from "./ProviderService.threadSubagentStop.ts";
 
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
@@ -99,11 +106,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   );
   const processRuntimeEvent = makeProcessProviderRuntimeEvent({
     observe: (event) => observeProviderRuntimeEvent(turnLiveness, event),
-    publish: (event) =>
-      (canonicalEventLogger ? canonicalEventLogger.write(event, null) : Effect.void).pipe(
-        Effect.andThen(PubSub.publish(runtimeEventPubSub, event)),
-        Effect.asVoid,
-      ),
+    publish: makeCanonicalRuntimePublisher(runtimeEventPubSub, canonicalEventLogger),
   });
 
   yield* monitorProviderRuntimeEvents({
@@ -148,73 +151,12 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     options: { reusePersistedResumeCursor: false },
   });
 
-  const sendTurn: ProviderServiceShape["sendTurn"] = Effect.fn("sendTurn")(function* (rawInput) {
-    const parsed = yield* decodeInputOrValidationError({
-      operation: "ProviderService.sendTurn",
-      schema: ProviderSendTurnInput,
-      payload: rawInput,
-    });
-
-    const input = { ...parsed, attachments: parsed.attachments ?? [] };
-    if (!input.input && input.attachments.length === 0) {
-      return yield* toValidationError(
-        "ProviderService.sendTurn",
-        "Either input text or at least one attachment is required",
-      );
-    }
-    yield* Effect.annotateCurrentSpan({
-      "provider.operation": "send-turn",
-      "provider.thread_id": input.threadId,
-      "provider.interaction_mode": input.interactionMode,
-      "provider.attachment_count": input.attachments.length,
-    });
-    let metricProvider = "unknown";
-    let metricModel = input.modelSelection?.model;
-    return yield* Effect.gen(function* () {
-      const routed = yield* resolveRoutableSession({
-        threadId: input.threadId,
-        operation: "ProviderService.sendTurn",
-        allowRecovery: true,
-        ...(input.sessionEpoch !== undefined ? { expectedSessionEpoch: input.sessionEpoch } : {}),
-      });
-      metricProvider = routed.adapter.provider;
-      metricModel = input.modelSelection?.model;
-      yield* Effect.annotateCurrentSpan({
-        "provider.kind": routed.adapter.provider,
-        ...(input.modelSelection?.model ? { "provider.model": input.modelSelection.model } : {}),
-      });
-      const turn = yield* routed.adapter.sendTurn(input);
-      yield* recordAcceptedSendTurn({
-        adapter: routed.adapter,
-        directory,
-        liveness: turnLiveness,
-        threadId: input.threadId,
-        turnId: turn.turnId,
-        sessionEpoch: input.sessionEpoch ?? 0,
-        ...(turn.resumeCursor !== undefined ? { resumeCursor: turn.resumeCursor } : {}),
-        ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
-      });
-      yield* analytics.record("provider.turn.sent", {
-        provider: routed.adapter.provider,
-        model: input.modelSelection?.model,
-        interactionMode: input.interactionMode,
-        attachmentCount: input.attachments.length,
-        hasInput: typeof input.input === "string" && input.input.trim().length > 0,
-      });
-      return turn;
-    }).pipe(
-      Effect.mapError((e) => e as ProviderServiceError),
-      withMetrics({
-        counter: providerTurnsTotal,
-        timer: providerTurnDuration,
-        attributes: () =>
-          providerTurnMetricAttributes({
-            provider: metricProvider,
-            model: metricModel,
-            extra: { operation: "send" },
-          }),
-      }),
-    );
+  const sendTurn = makeSendTurn({
+    resolveRoutableSession,
+    directory,
+    liveness: turnLiveness,
+    dispatchAttempts: yield* Effect.serviceOption(ProviderDispatchAttemptRepository),
+    analytics,
   });
 
   const interruptTurn = makeInterruptTurn({
@@ -222,6 +164,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     analytics,
   });
   const steerTurn = makeSteerTurn({ resolveRoutableSession });
+  const stopSubagent = makeStopSubagent({ resolveRoutableSession });
+  const stopThreadSubagents = makeStopThreadSubagents({ resolveRoutableSession });
 
   const inspectActiveTurn = makeInspectActiveTurn(registry, directory);
 
@@ -324,7 +268,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           terminalAt: new Date().toISOString(),
         });
         yield* options?.settleThreadLogs?.(input.threadId) ?? Effect.void;
-        yield* directory.remove(input.threadId);
+        yield* preserveStoppedProviderBinding(directory, input.threadId);
         yield* analytics.record("provider.session.stopped", { provider: routed.adapter.provider });
       }).pipe(
         Effect.mapError((e) => e as ProviderServiceError),
@@ -349,7 +293,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const rollbackConversation: ProviderServiceShape["rollbackConversation"] =
     makeRollbackConversation(resolveRoutableSession, analytics);
 
-  const runStopAll = makeRunStopAll(adapters, directory, upsertSessionBinding, analytics);
+  const recoveryIntents = yield* Effect.serviceOption(ThreadRecoveryIntentRepository);
+  const runStopAll = makeRunStopAll(adapters, directory, upsertSessionBinding, analytics, {
+    reason: "app-exit",
+    suspendRecoveryIntents: (reason) => suspendRecoveryIntentsForStopAll(recoveryIntents, reason),
+  });
 
   yield* Effect.addFinalizer(() =>
     Effect.catch(runStopAll, (cause) =>
@@ -364,6 +312,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     sendTurn,
     interruptTurn,
     steerTurn,
+    stopSubagent,
+    stopThreadSubagents,
     inspectActiveTurn,
     listActiveTurnLiveness,
     recordTurnInspection,
@@ -377,7 +327,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     rollbackConversation,
     // Each consumer independently receives all canonical runtime events.
     get streamEvents(): ProviderServiceShape["streamEvents"] {
-      return Stream.fromPubSub(runtimeEventPubSub);
+      return canonicalRuntimeStream(runtimeEventPubSub);
     },
   } satisfies ProviderServiceShape;
 });

@@ -4,7 +4,8 @@ import { BrowserWindow, Menu, nativeTheme, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import type { DesktopWindowMaterial } from "@bigbud/contracts/settings";
 import { hardenBrowserGuestPreferences } from "./browserGuestPreferences";
-import { bindBrowserNavigationPolicy, isAllowedBrowserNavigation } from "./browserNavigationPolicy";
+import { isAllowedBrowserNavigation } from "./browserNavigationPolicy";
+import { bindBrowserPopups } from "./browserPopups";
 import {
   BROWSER_SESSION_PARTITION,
   initializeBrowserSession,
@@ -227,8 +228,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
   window.webContents.on("did-attach-webview", (_event, guestWebContents) => {
     certificateChallengeManager.attachGuest(window.webContents, guestWebContents);
     if (isBrowserGuest(guestWebContents)) {
-      bindBrowserNavigationPolicy(guestWebContents);
-      guestWebContents.setWindowOpenHandler(() => ({ action: "deny" }));
+      bindBrowserPopups(window, guestWebContents);
       guestWebContents.on("before-input-event", (inputEvent, input) => {
         if (!isBrowserGuestFocusLocationShortcut(input)) return;
         inputEvent.preventDefault();

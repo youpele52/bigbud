@@ -1,4 +1,4 @@
-import { Effect, Exit, Layer, PubSub, Scope, Stream } from "effect";
+import { Effect, Exit, Layer, Option, PubSub, Queue, Scope, Stream } from "effect";
 import { WS_METHODS, WsRpcGroup } from "@bigbud/contracts";
 import { ThreadRetentionMutationAuthorization } from "@bigbud/contracts/server/rpc.retention";
 import type { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention";
@@ -11,7 +11,7 @@ const allowRetentionMutations: RpcMiddleware.RpcMiddleware<
   never
 > = (effect) => effect;
 
-type RpcServerInstance = RpcServer.RpcServer<any>;
+type RpcWriter = Parameters<RpcServer.Protocol["Service"]["run"]>[0];
 
 type BrowserWsClient = {
   send: (data: string) => void;
@@ -35,8 +35,10 @@ const STREAM_METHODS = new Set<string>([
   WS_METHODS.gitRunStackedAction,
   WS_METHODS.subscribeOrchestrationDomainEvents,
   WS_METHODS.subscribeTerminalEvents,
+  WS_METHODS.subscribeTerminalSession,
   WS_METHODS.subscribeServerConfig,
   WS_METHODS.subscribeServerLifecycle,
+  WS_METHODS.subscribeThinkingActivityDeltas,
 ]);
 
 const ALL_RPC_METHODS = Array.from(WsRpcGroup.requests.keys());
@@ -51,7 +53,9 @@ function normalizeRequest(tag: string, payload: unknown): NormalizedWsRpcRequest
   return { _tag: tag, payload };
 }
 
-function asEffect(result: UnaryResolverResult): Effect.Effect<unknown> {
+function asEffect(result: UnaryResolverResult): Effect.Effect<unknown, Error> {
+  const effect = result as Effect.Effect<unknown, Error>;
+  if (Effect.isEffect(effect)) return effect;
   if (result instanceof Promise) {
     return Effect.promise(() => result);
   }
@@ -64,7 +68,11 @@ export class BrowserWsRpcHarness {
   private readonly parser = RpcSerialization.json.makeUnsafe();
   private client: BrowserWsClient | null = null;
   private scope: Scope.Closeable | null = null;
-  private serverReady: Promise<RpcServerInstance> | null = null;
+  private serverReady: Promise<RpcWriter> | null = null;
+  private readonly connections = new Map<
+    BrowserWsClient,
+    { scope: Scope.Closeable; ready: Promise<RpcWriter> }
+  >();
   private resolveUnary: NonNullable<BrowserWsRpcHarnessOptions["resolveUnary"]> = () => ({});
   private getInitialStreamValues: NonNullable<
     BrowserWsRpcHarnessOptions["getInitialStreamValues"]
@@ -80,33 +88,52 @@ export class BrowserWsRpcHarness {
   }
 
   connect(client: BrowserWsClient): void {
-    if (this.scope) {
-      void Effect.runPromise(Scope.close(this.scope, Exit.void)).catch(() => undefined);
-    }
     if (this.streamPubSubs.size === 0) {
       this.initializeStreamPubSubs();
     }
     this.client = client;
     this.scope = Effect.runSync(Scope.make());
-    this.serverReady = Effect.runPromise(
-      Scope.provide(this.scope)(
-        RpcServer.makeNoSerialization(WsRpcGroup, this.makeServerOptions()),
-      ).pipe(
+    let resolveReady!: (writer: RpcWriter) => void;
+    let rejectReady!: (error: unknown) => void;
+    this.serverReady = new Promise((resolve, reject) => {
+      resolveReady = resolve;
+      rejectReady = reject;
+    });
+    const scope = this.scope;
+    this.connections.set(client, { scope, ready: this.serverReady });
+    const protocol = RpcServer.Protocol.of({
+      run: (write) => Effect.sync(() => resolveReady(write)).pipe(Effect.andThen(Effect.never)),
+      disconnects: Effect.runSync(Queue.unbounded<number>()),
+      send: (_clientId, response) => this.sendResponse(response, client),
+      end: () => Effect.void,
+      clientIds: Effect.succeed(new Set([0])),
+      initialMessage: Effect.succeed(Option.none()),
+      supportsAck: true,
+      supportsTransferables: false,
+      supportsSpanPropagation: true,
+    });
+    void Effect.runPromise(
+      RpcServer.make(WsRpcGroup).pipe(
         Effect.provide(
           Layer.mergeAll(
             this.makeLayer(),
             Layer.succeed(ThreadRetentionMutationAuthorization, allowRetentionMutations),
+            Layer.succeed(RpcServer.Protocol, protocol),
           ),
         ),
+        Effect.forkIn(scope),
       ),
-    ) as Promise<RpcServerInstance>;
+    ).catch(rejectReady);
   }
 
   async disconnect(): Promise<void> {
-    if (this.scope) {
-      await Effect.runPromise(Scope.close(this.scope, Exit.void)).catch(() => undefined);
-      this.scope = null;
-    }
+    await Promise.all(
+      [...this.connections.values()].map(({ scope }) =>
+        Effect.runPromise(Scope.close(scope, Exit.void)).catch(() => undefined),
+      ),
+    );
+    this.connections.clear();
+    this.scope = null;
     for (const pubsub of this.streamPubSubs.values()) {
       Effect.runSync(PubSub.shutdown(pubsub));
     }
@@ -121,14 +148,13 @@ export class BrowserWsRpcHarness {
     );
   }
 
-  async onMessage(rawData: string): Promise<void> {
-    const server = await this.serverReady;
-    if (!server) {
-      throw new Error("RPC test server is not connected");
-    }
+  async onMessage(rawData: string, client?: BrowserWsClient): Promise<void> {
+    const ready = client ? this.connections.get(client)?.ready : this.serverReady;
+    if (!ready) return; // Ignore late control frames from a disconnected test client.
+    const write = await ready;
     const messages = this.parser.decode(rawData);
     for (const message of messages) {
-      await Effect.runPromise(server.write(0, message as never));
+      await Effect.runPromise(write(0, message as never));
     }
   }
 
@@ -137,7 +163,24 @@ export class BrowserWsRpcHarness {
     if (!pubsub) {
       throw new Error(`No stream registered for ${method}`);
     }
-    Effect.runSync(PubSub.publish(pubsub, value));
+    const subscription = this.requests.findLast((request) => request._tag === method);
+    const item =
+      method === WS_METHODS.subscribeOrchestrationDomainEvents &&
+      value &&
+      typeof value === "object" &&
+      "sequence" in value
+        ? {
+            type: "batch",
+            route: "direct-unmanaged",
+            consumerId: subscription?.consumerId ?? "browser-test",
+            consumerGeneration: 0,
+            serverEpoch: "browser-test",
+            subscriptionGeneration: 0,
+            batchId: `browser-event-${value.sequence}`,
+            events: [value],
+          }
+        : value;
+    Effect.runSync(PubSub.publish(pubsub, item));
   }
 
   private makeLayer() {
@@ -150,19 +193,16 @@ export class BrowserWsRpcHarness {
     return WsRpcGroup.toLayer(handlers as never);
   }
 
-  private makeServerOptions() {
-    return {
-      onFromServer: (response: unknown) =>
-        Effect.sync(() => {
-          if (!this.client) {
-            return;
-          }
-          const encoded = this.parser.encode(response);
-          if (typeof encoded === "string") {
-            this.client.send(encoded);
-          }
-        }),
-    };
+  private sendResponse(response: unknown, client: BrowserWsClient) {
+    return Effect.sync(() => {
+      if (!this.connections.has(client)) {
+        return;
+      }
+      const encoded = this.parser.encode(response);
+      if (typeof encoded === "string") {
+        client.send(encoded);
+      }
+    });
   }
 
   private handleUnary(method: string, payload: unknown) {
@@ -178,8 +218,19 @@ export class BrowserWsRpcHarness {
     if (!pubsub) {
       throw new Error(`No stream registered for ${method}`);
     }
-    return Stream.fromIterable(this.getInitialStreamValues(request) ?? []).pipe(
-      Stream.concat(Stream.fromPubSub(pubsub)),
+    // Like the server, a terminal-scoped stream always starts with its registration item.
+    const registration =
+      method === WS_METHODS.subscribeTerminalSession
+        ? [{ type: "subscribed", subscriptionId: `harness-${this.requests.length}` }]
+        : [];
+    // Subscribe before sending initial values: client ACK backpressure must not lose live events.
+    return Stream.unwrap(
+      Effect.map(PubSub.subscribe(pubsub), (subscription) =>
+        Stream.fromIterable([
+          ...registration,
+          ...(this.getInitialStreamValues(request) ?? []),
+        ]).pipe(Stream.concat(Stream.fromEffectRepeat(PubSub.take(subscription)))),
+      ),
     );
   }
 }

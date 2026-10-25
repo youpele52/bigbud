@@ -15,6 +15,7 @@ import { DEFAULT_CLIENT_SETTINGS } from "@bigbud/contracts/settings";
 
 import type { TerminalContextDraft } from "../../../../lib/terminalContext";
 import { getRouter } from "../../../../config/router";
+import { DEFAULT_BINDINGS } from "../../../../models/keybindings/keybindings.models.test.helpers";
 
 export const THREAD_ID = "thread-browser-test" as ThreadId;
 export const UUID_ROUTE_RE = /^\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -107,7 +108,7 @@ export function createBaseServerConfig(): ServerConfig {
       kanbanDir: "/repo/project/.t3/kanban",
     },
     keybindingsConfigPath: "/repo/project/.bigbud-keybindings.json",
-    keybindings: [],
+    keybindings: DEFAULT_BINDINGS,
     issues: [],
     providers: [
       {
@@ -344,7 +345,10 @@ export function addThreadToSnapshot(
   };
 }
 
-export function createThreadCreatedEvent(threadId: ThreadId, sequence: number): OrchestrationEvent {
+export function createThreadCreatedEvent(
+  threadId: ThreadId,
+  sequence: number,
+): Extract<OrchestrationEvent, { type: "thread.created" }> {
   return {
     sequence,
     eventId: EventId.makeUnsafe(`event-thread-created-${sequence}`),

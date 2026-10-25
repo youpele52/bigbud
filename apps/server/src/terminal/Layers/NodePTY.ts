@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 
 import { Effect, FileSystem, Layer, Path } from "effect";
 import { PtyAdapter, PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
+import { terminalNodePtyArgs } from "./NodePTY.wsl";
 
 let didEnsureSpawnHelperExecutable = false;
 
@@ -26,6 +27,8 @@ const resolveNodePtySpawnHelperPath = Effect.gen(function* () {
   return null;
 }).pipe(Effect.orElseSucceed(() => null));
 
+// node-pty 1.1.0 (the stable release bigbud uses) ships prebuilt `spawn-helper` as 0644, and
+// copied or from-source installs (`build/Release`) can also lose the bit, so repair it.
 export const ensureNodePtySpawnHelperExecutable = Effect.fn(function* (explicitPath?: string) {
   const fs = yield* FileSystem.FileSystem;
   if (process.platform === "win32") return;
@@ -55,6 +58,14 @@ class NodePtyProcess implements PtyProcess {
   write(data: string): void {
     this.process.write(data);
   }
+
+  pause = (): void => {
+    this.process.pause();
+  };
+
+  resume = (): void => {
+    this.process.resume();
+  };
 
   resize(cols: number, rows: number): void {
     this.process.resize(cols, rows);
@@ -103,13 +114,17 @@ export const layer = Layer.effect(
     return {
       spawn: Effect.fn(function* (input) {
         yield* ensureNodePtySpawnHelperExecutableCached;
-        const ptyProcess = nodePty.spawn(input.shell, input.args ?? [], {
-          cwd: input.cwd,
-          cols: input.cols,
-          rows: input.rows,
-          env: input.env,
-          name: globalThis.process.platform === "win32" ? "xterm-color" : "xterm-256color",
-        });
+        const ptyProcess = nodePty.spawn(
+          input.shell,
+          terminalNodePtyArgs(input.args ?? [], input.executionTargetId),
+          {
+            cwd: input.cwd,
+            cols: input.cols,
+            rows: input.rows,
+            env: input.env,
+            name: globalThis.process.platform === "win32" ? "xterm-color" : "xterm-256color",
+          },
+        );
         return new NodePtyProcess(ptyProcess);
       }),
     } satisfies PtyAdapterShape;

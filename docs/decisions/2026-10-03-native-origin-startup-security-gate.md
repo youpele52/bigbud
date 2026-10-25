@@ -2,7 +2,7 @@
 
 Both0035P2 independentlySTATICCLOSED;216evidence accepted/no unchangedpreflight.
 Parentminimalorigin/startup design now adopted, no unresolved usercredential/dependency
-decision. Actualfresh--serve-db initializes/syncs DB/settings/source__chats__/11zero
+decision. Actualfresh--serve-db initializes/syncs DB/settings/source**chats**/11zero
 runtimeprojectors anddurablypublishes fixedprivatevalidatednativeHOME independent
 Linuxoriginregistrybeforeexposedports/listener. Boundedimmutable0600/nlink1 records
 canonicalpathsuid/devino/modes+actualrandomID, no cryptographic/hashauthority claim;

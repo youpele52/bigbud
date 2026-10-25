@@ -15,10 +15,17 @@ import { trimOrNull } from "./model.strings";
 
 type ProviderOptions = ProviderModelOptions[ProviderKind];
 
-export type ProviderEffortField = "reasoningEffort" | "effort" | "reasoning" | "thinkingLevel";
+export type ProviderEffortField =
+  | "reasoningEffort"
+  | "effort"
+  | "reasoning"
+  | "thinkingLevel"
+  | "variant";
 
 export function getProviderEffortField(provider: ProviderKind): ProviderEffortField | null {
   switch (provider) {
+    case "opencodeV2":
+      return "variant";
     case "codex":
     case "copilot":
     case "opencode":
@@ -83,6 +90,8 @@ export function buildNextProviderOptions(
     merged.reasoning = patch.reasoningEffort;
   }
   switch (provider) {
+    case "opencodeV2":
+      return merged as ProviderModelOptions["opencodeV2"];
     case "codex":
       return merged as CodexModelOptions;
     case "copilot":

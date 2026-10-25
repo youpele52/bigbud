@@ -114,6 +114,14 @@ message BaselineInstalled {
 
 message Heartbeat {
   uint64 monotonic_millis = 1;
+  // Added in protocol 1.4. Total time the machine has spent suspended since
+  // boot, filled in by the supervisor when it echoes a heartbeat. Linux:
+  // CLOCK_BOOTTIME - CLOCK_MONOTONIC; macOS: mach_continuous_time -
+  // mach_absolute_time; Windows: QueryInterruptTime -
+  // QueryUnbiasedInterruptTime. Never decreases within one supervisor
+  // process; 0 where the platform clocks are unavailable. Older supervisors
+  // never set it.
+  uint64 suspended_millis = 2;
 }
 
 enum RecoveryKind {

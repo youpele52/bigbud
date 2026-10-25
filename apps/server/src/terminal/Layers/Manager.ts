@@ -2,7 +2,8 @@ import {
   TerminalCwdError,
   TerminalRuntimeLeaseError,
 } from "@bigbud/contracts/workspace/terminal.ts";
-import { Effect, Layer } from "effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
@@ -11,6 +12,7 @@ import { TerminalManager } from "../Services/Manager";
 import { PtyAdapter } from "../Services/PTY";
 import { makeTerminalManagerWithOptions } from "./Manager.process";
 import { classifyTerminalRuntimeLeaseError } from "./Manager.leaseError.ts";
+import type { RuntimePathIdentity } from "./Manager.types";
 import {
   captureLocalRuntimePathIdentity,
   reconcileWorktreeRuntimeLeases,
@@ -24,6 +26,7 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
   const sql = yield* SqlClient.SqlClient;
   yield* reconcileWorktreeRuntimeLeases(sql, "terminal");
   const acquireWorktreeLease = Effect.fn("terminal.acquireWorktreeLease")(function* (input: {
+    runtimePathIdentity?: RuntimePathIdentity | undefined;
     threadId: string;
     terminalId: string;
     executionTargetId: string;
@@ -33,15 +36,17 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
     if (!isLocalExecutionTarget(input.executionTargetId)) {
       return;
     }
-    const identity = yield* Effect.tryPromise({
-      try: () => captureLocalRuntimePathIdentity(input.worktreePath ?? input.cwd),
-      catch: (cause) =>
-        new TerminalCwdError({
-          cwd: input.worktreePath ?? input.cwd,
-          reason: "statFailed",
-          cause,
-        }),
-    });
+    const identity =
+      input.runtimePathIdentity ??
+      (yield* Effect.tryPromise({
+        try: () => captureLocalRuntimePathIdentity(input.worktreePath ?? input.cwd),
+        catch: (cause) =>
+          new TerminalCwdError({
+            cwd: input.worktreePath ?? input.cwd,
+            reason: "statFailed",
+            cause,
+          }),
+      }));
     yield* sql`
       INSERT INTO worktree_runtime_leases (
         lease_id, thread_id, runtime_kind, canonical_path, device, inode, acquired_at, updated_at
@@ -96,6 +101,11 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
   return yield* makeTerminalManagerWithOptions({
     logsDir: terminalLogsDir,
     ptyAdapter,
+    resolveRuntimePathIdentity: (cwd) =>
+      Effect.tryPromise({
+        try: () => captureLocalRuntimePathIdentity(cwd),
+        catch: (cause) => new TerminalCwdError({ cwd, reason: "statFailed", cause }),
+      }),
     acquireWorktreeLease,
     markWorktreeLeaseStarted,
     releaseWorktreeLease,

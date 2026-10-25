@@ -4,6 +4,8 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
 import { ServerConfig } from "./startup/config";
+import { StateDirLockLive } from "./startup/backendInstance";
+import { withOwnershipShutdown } from "./startup/ownershipShutdown";
 import { fixPath } from "./utils/os-jank";
 import { makeRoutesLayer } from "./server.routes.ts";
 import { OpenLive } from "./utils/open";
@@ -16,12 +18,12 @@ import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/Provi
 import { ProviderTurnLivenessRepositoryLive } from "./persistence/Layers/ProviderTurnLiveness";
 import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
 import { makeClaudeAdapterLive } from "./provider/Layers/Claude/Adapter";
-import { CliProxyCompositionLive } from "./provider/Layers/CliProxy/Composition";
+import { OptionalProviderCompositionLive } from "./provider/Layers/OptionalProviderComposition.ts";
+import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
 import { makeCopilotAdapterLive } from "./provider/Layers/Copilot/Adapter";
 import { makeCursorAdapterLive } from "./provider/Layers/Cursor/Adapter";
 import { makeDevinAdapterLive } from "./provider/Layers/Devin/Adapter";
 import { makeKilocodeAdapterLive } from "./provider/Layers/Kilocode/Adapter";
-import { makeOpencodeAdapterLive } from "./provider/Layers/Opencode/Adapter";
 import { makePiAdapterLive } from "./provider/Layers/Pi/Adapter";
 import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerManager";
 import { makeProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
@@ -53,6 +55,7 @@ import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRun
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
 import { ThreadWatchReactorLive } from "./orchestration/Layers/ThreadWatchReactor";
+import { ThreadToolModelSourcesLive } from "./orchestration-tools/ThreadOrchestrationTools.modelSources.ts";
 import { makeProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
 import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
 import {
@@ -78,6 +81,7 @@ import { ProjectionThreadWatchRepositoryLive } from "./persistence/Layers/Projec
 import { LearningJobRepositoryLive } from "./persistence/Layers/LearningJobs";
 import { SkillChangeProposalRepositoryLive } from "./persistence/Layers/SkillChangeProposals";
 import { LearningReactorLive } from "./orchestration/Layers/LearningReactor";
+import { ClaudeProviderRefreshReactorLive } from "./provider/Layers/ClaudeProviderRefreshReactor";
 import { MemoryStoreLive } from "./learning/Layers/MemoryStore";
 import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
 import { ThreadRetentionRepositoryLive } from "./persistence/Layers/ThreadRetentionRepository.ts";
@@ -88,10 +92,14 @@ import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
 import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
 import { isRemoteAgentExecutionTarget } from "./remote-agent/remoteAgentDefault.ts";
-import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.ts";
+import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.layer.ts";
+import { ConnectionDiagnosticsLive } from "./connection-diagnostics/Layers/ConnectionDiagnostics.ts";
+import { EventLoopLagMonitorLive } from "./connection-diagnostics/Layers/EventLoopLagMonitor.ts";
+import { withServerShutdownSignal } from "./connection-diagnostics/Layers/ServerShutdownSignal.ts";
 import { DirectResourceCleanupRepositoryLive } from "./persistence/Layers/DirectResourceCleanupRepository.ts";
 import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResourceCleanupExecutor.ts";
 import { DirectResourceCleanupRecoveryLive } from "./deletion/Layers/DirectResourceCleanupRecovery.ts";
+import * as Recovery from "./server.recoveryLayers.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -107,6 +115,7 @@ const PtyAdapterLive = Layer.unwrap(
 const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(OrchestrationReactorLive.pipe(Layer.provide(LearningReactorLive))),
   Layer.provideMerge(ProviderRuntimeIngestionLive),
+  Layer.provideMerge(Recovery.ProviderTurnSupervisorLive),
   Layer.provideMerge(ProviderCommandReactorLive),
   Layer.provideMerge(CheckpointReactorLive),
   Layer.provideMerge(SchedulerReactorLive),
@@ -136,6 +145,7 @@ const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   OrchestrationProjectionPipelineLayerLive,
   ThreadRetentionRepositoryLive,
   PurgeJobRepositoryLive,
+  Recovery.RecoveryPersistenceLayerLive,
 );
 
 const ComputerUseLayerLive = ComputerUseLive.pipe(
@@ -207,9 +217,6 @@ const makeProviderLayerLive = (
       const kilocodeAdapterLayer = makeKilocodeAdapterLive(
         nativeEventLogger ? { nativeEventLogger } : undefined,
       );
-      const opencodeAdapterLayer = makeOpencodeAdapterLive(
-        nativeEventLogger ? { nativeEventLogger } : undefined,
-      );
       const piAdapterLayer = makePiAdapterLive(
         nativeEventLogger ? { nativeEventLogger } : undefined,
       );
@@ -225,7 +232,6 @@ const makeProviderLayerLive = (
         Layer.provide(cursorAdapterLayer),
         Layer.provide(devinAdapterLayer),
         Layer.provide(kilocodeAdapterLayer),
-        Layer.provide(opencodeAdapterLayer),
         Layer.provide(piAdapterLayer),
         Layer.provideMerge(providerSessionDirectoryLayer),
       );
@@ -239,6 +245,7 @@ const makeProviderLayerLive = (
         Layer.provide(adapterRegistryLayer),
         Layer.provide(providerSessionDirectoryLayer),
         Layer.provide(ProviderTurnLivenessRepositoryLive),
+        Layer.provide(Recovery.RecoveryPersistenceLayerLive),
       );
     }),
   );
@@ -246,17 +253,21 @@ const makeProviderLayerLive = (
 const ProviderInfrastructureLayerLive = Layer.unwrap(
   Effect.gen(function* () {
     const optionalRegistrations = yield* OptionalProviderRegistrations;
-    return Layer.mergeAll(
-      makeProviderLayerLive(optionalRegistrations),
-      makeProviderRegistryLive({
-        optionalRegistrations: optionalRegistrations.map((registration) => ({
-          provider: registration.provider,
-          service: registration.providerService,
-        })),
-      }),
+    return ClaudeProviderRefreshReactorLive.pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(
+          makeProviderLayerLive(optionalRegistrations),
+          makeProviderRegistryLive({
+            optionalRegistrations: optionalRegistrations.map((registration) => ({
+              provider: registration.provider,
+              service: registration.providerService,
+            })),
+          }),
+        ),
+      ),
     );
   }),
-).pipe(Layer.provide(CliProxyCompositionLive));
+).pipe(Layer.provide(OptionalProviderCompositionLive));
 
 const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
 
@@ -305,11 +316,11 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(OrchestrationLayerLive),
   Layer.provideMerge(ThreadRetentionLayerLive),
   Layer.provideMerge(ProjectionPersistenceLayerLive),
+  Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ProviderInfrastructureLayerLive),
-  Layer.provideMerge(TerminalLayerLive),
+  Layer.provideMerge(Layer.mergeAll(ThreadToolsActivationLive, TerminalLayerLive)),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(Layer.mergeAll(KeybindingsLive, DirectResourceCleanupLayerLive)),
-  Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(PluginRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(
@@ -317,19 +328,23 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   ),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),
-  // Shared OpenCode server manager — must be a singleton so health-checks and sessions share one process
+  // V1 protocol manager is retained for KiloCode only; OpenCode uses its V2 service.
   Layer.provideMerge(OpencodeServerManagerLive),
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),
-  Layer.provideMerge(OpenLive),
+  Layer.provideMerge(
+    Layer.mergeAll(OpenLive, EventLoopLagMonitorLive, Recovery.SleepEvidenceLayerLive),
+  ),
   Layer.provideMerge(ServerLifecycleEventsLive),
   Layer.provideMerge(
     Layer.mergeAll(
       MobileRemoteControlLive.pipe(Layer.provide(ServerSettingsLive)),
       DesktopSupervisorDeliveryLive,
+      ConnectionDiagnosticsLive,
     ),
   ),
-);
+  // One sleep epoch view shared by every evidence source and the recovery coordinator.
+).pipe(Layer.provideMerge(Recovery.SystemSleepEpochsLive));
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
   Layer.provideMerge(RuntimeDependenciesLive),
@@ -356,11 +371,16 @@ export const makeServerLayer = Layer.unwrap(
         disableLogger: !config.logWebSocketEvents,
       }),
       httpListeningLayer,
+      ThreadToolModelSourcesLive,
     );
 
-    return serverApplicationLayer.pipe(
+    // The shutdown signal finalizes first, before routes close their WebSocket streams.
+    return withServerShutdownSignal(serverApplicationLayer).pipe(
       Layer.provideMerge(RuntimeServicesLive),
       Layer.provideMerge(HttpServerLive),
+      // One backend per state directory: acquired before the port binds and persistence opens,
+      // released after both close.
+      Layer.provide(StateDirLockLive),
       Layer.provide(ObservabilityLive),
       Layer.provideMerge(FetchHttpClient.layer),
       Layer.provideMerge(PlatformServicesLive),
@@ -369,8 +389,6 @@ export const makeServerLayer = Layer.unwrap(
 );
 
 // Important: Only `ServerConfig` should be provided by the CLI layer!!! Don't let other requirements leak into the launch layer.
-export const runServer = Layer.launch(makeServerLayer) satisfies Effect.Effect<
-  never,
-  any,
-  ServerConfig
->;
+export const runServer = withOwnershipShutdown(
+  Layer.launch(makeServerLayer),
+) satisfies Effect.Effect<void, any, ServerConfig>;

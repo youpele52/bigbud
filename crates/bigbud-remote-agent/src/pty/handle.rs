@@ -82,6 +82,10 @@ impl PtyHandle {
             ws_xpixel: 0,
             ws_ypixel: 0,
         };
+        let mut reservation = cleanup::Reservation::reserve().map_err(PtyError::Io)?;
+        let spawn_gate = crate::spawn_gate::lock().map_err(PtyError::Io)?;
+        // SAFETY: all argv/env/cwd storage is preallocated and outlives fork. Child
+        // uses only chdir/execve/_exit (no Rust allocation/locks/unwind after fork).
         let pid = unsafe {
             libc::forkpty(
                 &mut master_fd,
@@ -94,32 +98,48 @@ impl PtyHandle {
             return Err(PtyError::Io(io::Error::last_os_error()));
         }
         if pid == 0 {
+            // SAFETY: valid NUL-terminated pointers were prepared before fork;
+            // failure cannot continue the shell in an unintended directory.
             unsafe {
-                libc::chdir(cwd.as_ptr());
+                if libc::chdir(cwd.as_ptr()) != 0 {
+                    libc::_exit(126);
+                }
                 libc::execve(executable.as_ptr(), argv.as_ptr(), envpointers.as_ptr());
                 libc::_exit(127);
             }
         }
 
-        let master = unsafe { std::fs::File::from_raw_fd(master_fd) };
+        let child = Arc::new(child::Child::new(pid));
+        reservation
+            .retain(Arc::clone(&child))
+            .map_err(PtyError::Io)?;
+        let master = platform::configure_master(master_fd, spawn_gate).map_err(PtyError::Io)?;
         let reader = master.try_clone().map_err(PtyError::Io)?;
+        let mut input_fd = master.try_clone().map_err(PtyError::Io)?;
+        let input = input::InputWriter::start(
+            format!("{pid}/{}", master.as_raw_fd()).into_bytes(),
+            move |bytes| std::io::Write::write(&mut input_fd, bytes),
+        )
+        .map_err(PtyError::Io)?;
         let handle = Arc::new(Self {
             id,
             pid: pid as u32,
             inner: Arc::new(PtyInner {
-                master: Mutex::new(master),
+                master: Mutex::new(Some(master)),
+                child,
+                input,
                 state: Mutex::new(PtyStateRecord {
                     state: PtyState::Running,
                     next_sequence: 1,
                     first_retained_sequence: 1,
                     retained_bytes: 0,
                     output: VecDeque::new(),
-                    last_input_sequence: 0,
                     exit_code: None,
                     signal: None,
                 }),
             }),
         });
+        reservation.transfer();
         Ok(PtyJob { handle, reader })
     }
 
@@ -138,31 +158,19 @@ impl PtyHandle {
 
     #[cfg(unix)]
     pub fn write_input(&self, sequence: u64, bytes: &[u8]) -> Result<bool, PtyError> {
-        if bytes.len() > MAX_INPUT_BYTES {
-            return Err(PtyError::InputLimit);
+        if self.snapshot()?.state != PtyState::Running {
+            return Err(PtyError::InputFenced);
         }
-        let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
-        if sequence <= state.last_input_sequence {
-            return Ok(false);
+        let admitted = self.inner.input.submit(sequence, bytes)?;
+        match self.inner.input.wait(sequence)? {
+            InputOutcome::Written(_) => Ok(admitted),
+            _ => Err(PtyError::InputFenced),
         }
-        let expected = state.last_input_sequence + 1;
-        if sequence != expected {
-            return Err(PtyError::InputSequence {
-                expected,
-                actual: sequence,
-            });
-        }
-        if state.state != PtyState::Running {
-            return Ok(false);
-        }
-        self.inner
-            .master
-            .lock()
-            .map_err(|_| poisoned())?
-            .write_all(bytes)
-            .map_err(PtyError::Io)?;
-        state.last_input_sequence = sequence;
-        Ok(true)
+    }
+
+    #[cfg(unix)]
+    pub fn input_status(&self, sequence: u64) -> Result<InputOutcome, PtyError> {
+        self.inner.input.status(sequence)
     }
 
     #[cfg(not(unix))]
@@ -179,6 +187,8 @@ impl PtyHandle {
             ws_ypixel: 0,
         };
         let master = self.inner.master.lock().map_err(|_| poisoned())?;
+        let master = master.as_ref().ok_or(PtyError::Unknown)?;
+        // SAFETY: master is owned/live and window has the exact ioctl winsize layout.
         let result = unsafe { libc::ioctl(master.as_raw_fd(), libc::TIOCSWINSZ, &window) };
         if result == -1 {
             return Err(PtyError::Io(io::Error::last_os_error()));
@@ -206,14 +216,7 @@ impl PtyHandle {
                     )));
                 }
             };
-            let result = unsafe { libc::kill(-(self.pid as i32), value) };
-            if result == -1 {
-                let error = io::Error::last_os_error();
-                if error.raw_os_error() != Some(libc::ESRCH) {
-                    return Err(PtyError::Io(error));
-                }
-            }
-            Ok(())
+            self.inner.child.signal(value).map_err(PtyError::Io)
         }
         #[cfg(not(unix))]
         {
@@ -228,6 +231,29 @@ impl PtyHandle {
         self.signal("SIGKILL")
     }
 
+    /// UI/input close is not evidence that the exclusively owned child was reaped.
+    pub fn child_reaped(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.inner.child.reaped()
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    }
+
+    pub fn native_settled(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.child_reaped() && self.inner.input.finished()
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    }
+
     #[cfg(unix)]
     pub fn append_output(&self, bytes: Vec<u8>) -> Result<PtyOutputChunk, PtyError> {
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
@@ -235,11 +261,14 @@ impl PtyHandle {
             return Err(PtyError::Unknown);
         }
         let sequence = state.next_sequence;
-        state.next_sequence += 1;
+        state.next_sequence = state
+            .next_sequence
+            .checked_add(1)
+            .ok_or(PtyError::InvalidAcknowledgement)?;
         state.retained_bytes += bytes.len();
         let chunk = PtyOutputChunk { sequence, bytes };
         state.output.push_back(chunk.clone());
-        while state.retained_bytes > MAX_OUTPUT_BYTES {
+        while state.retained_bytes > MAX_OUTPUT_BYTES || state.output.len() > 4096 {
             let Some(oldest) = state.output.pop_front() else {
                 break;
             };
@@ -257,6 +286,8 @@ impl PtyHandle {
     #[cfg(unix)]
     pub fn acknowledge(&self, sequence: u64) -> Result<(), PtyError> {
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
+        // Legacy ACK has always been a global retention cursor, not a per-view
+        // parser/durable ACK. Do not reinterpret stale acknowledgements here.
         if sequence >= state.next_sequence {
             return Err(PtyError::InvalidAcknowledgement);
         }
@@ -282,7 +313,10 @@ impl PtyHandle {
     #[cfg(unix)]
     pub fn replay(&self, after_sequence: u64) -> Result<Vec<PtyOutputChunk>, PtyError> {
         let state = self.inner.state.lock().map_err(|_| poisoned())?;
-        if after_sequence + 1 < state.first_retained_sequence {
+        if after_sequence >= state.next_sequence {
+            return Err(PtyError::InvalidAcknowledgement);
+        }
+        if after_sequence.saturating_add(1) < state.first_retained_sequence {
             return Err(PtyError::ReplayGap {
                 first_retained_sequence: state.first_retained_sequence,
             });
@@ -320,12 +354,18 @@ impl PtyHandle {
 
     #[cfg(unix)]
     pub fn mark_exited(&self, exit_code: Option<i32>, signal: Option<i32>) -> Result<(), PtyError> {
+        if !self.child_reaped() {
+            return Err(PtyError::Io(io::Error::other("PTY exit not verified")));
+        }
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         if state.state != PtyState::Closed {
             state.state = PtyState::Exited;
-            state.exit_code = exit_code;
-            state.signal = signal;
         }
+        state.exit_code = exit_code;
+        state.signal = signal;
+        drop(state);
+        self.inner.input.cancel();
+        drop(self.inner.master.lock().map_err(|_| poisoned())?.take());
         Ok(())
     }
 
@@ -345,6 +385,9 @@ impl PtyHandle {
         }
         let mut state = self.inner.state.lock().map_err(|_| poisoned())?;
         state.state = PtyState::Closed;
+        drop(state);
+        self.inner.input.shutdown()?;
+        drop(self.inner.master.lock().map_err(|_| poisoned())?.take());
         Ok(())
     }
 

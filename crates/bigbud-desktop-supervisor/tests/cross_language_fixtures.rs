@@ -37,6 +37,8 @@ fn decodes_shared_frames_and_batch_identity() -> Result<(), String> {
         "error",
         "install_baseline",
         "baseline_installed",
+        "heartbeat",
+        "heartbeat_suspended",
     ] {
         let encoded = decode_hex(fixtures[name])?;
         let frame = read_frame(&mut Cursor::new(encoded), DEFAULT_MAX_FRAME_BYTES)
@@ -55,6 +57,25 @@ fn decodes_shared_frames_and_batch_identity() -> Result<(), String> {
     };
     if canonical_batch_id(&batch) != fixtures["batch_id"] {
         return Err("batch fixture identity does not match the canonical digest".to_owned());
+    }
+    Ok(())
+}
+
+#[test]
+fn heartbeat_suspended_millis_is_additive_and_backward_compatible() -> Result<(), String> {
+    let fixtures = fixtures();
+    for (name, expected_suspended) in [("heartbeat", 0), ("heartbeat_suspended", 1_800_000)] {
+        let encoded = decode_hex(fixtures[name])?;
+        let Some(v1::Frame {
+            payload: Some(v1::frame::Payload::Heartbeat(heartbeat)),
+        }) = read_frame(&mut Cursor::new(encoded), DEFAULT_MAX_FRAME_BYTES)
+            .map_err(|error| error.to_string())?
+        else {
+            return Err(format!("fixture {name} did not decode as Heartbeat"));
+        };
+        if heartbeat.monotonic_millis != 42 || heartbeat.suspended_millis != expected_suspended {
+            return Err(format!("fixture {name} decoded as {heartbeat:?}"));
+        }
     }
     Ok(())
 }

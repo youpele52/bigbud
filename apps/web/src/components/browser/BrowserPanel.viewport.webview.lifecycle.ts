@@ -13,11 +13,7 @@ import type {
   PageTitleEvent,
   StartNavigationEvent,
 } from "./BrowserPanel.viewport.types";
-import {
-  browserSameTabPopupGuardScript,
-  isWebviewReady,
-  normalizeBrowserUrl,
-} from "./BrowserPanel.viewport.webview.utils";
+import { isWebviewReady, normalizeBrowserUrl } from "./BrowserPanel.viewport.webview.utils";
 
 interface BindWebviewLifecycleOptions {
   readonly bridge: DesktopBridge | undefined;
@@ -138,12 +134,6 @@ export function bindWebviewLifecycle({
         // Cross-origin and transient navigation states can reject script execution.
       });
   };
-  const installSameTabPopupGuard = () => {
-    if (!isWebviewReady(webview)) return;
-    void webview.executeJavaScript(browserSameTabPopupGuardScript, false).catch(() => {
-      // Ignore transient script-injection failures during navigation.
-    });
-  };
   const handleNavigate = (event: NavigateEvent) => {
     metadataGeneration += 1;
     updateNavState();
@@ -225,7 +215,6 @@ export function bindWebviewLifecycle({
   webview.addEventListener("did-navigate-in-page", handleNavigate as EventListener);
   webview.addEventListener("dom-ready", updateNavState);
   webview.addEventListener("dom-ready", readPageMetadata);
-  webview.addEventListener("dom-ready", installSameTabPopupGuard);
   webview.addEventListener("page-title-updated", handlePageTitle as EventListener);
   webview.addEventListener("page-favicon-updated", handlePageFavicon as EventListener);
   webview.addEventListener("did-fail-load", handleFailLoad as EventListener);
@@ -245,7 +234,6 @@ export function bindWebviewLifecycle({
     webview.removeEventListener("did-navigate-in-page", handleNavigate as EventListener);
     webview.removeEventListener("dom-ready", updateNavState);
     webview.removeEventListener("dom-ready", readPageMetadata);
-    webview.removeEventListener("dom-ready", installSameTabPopupGuard);
     webview.removeEventListener("page-title-updated", handlePageTitle as EventListener);
     webview.removeEventListener("page-favicon-updated", handlePageFavicon as EventListener);
     webview.removeEventListener("did-fail-load", handleFailLoad as EventListener);

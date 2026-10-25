@@ -32,6 +32,42 @@ const successfulCommand = (args: ReadonlyArray<string>) => {
 };
 
 describe("checkCodexProviderStatus model discovery", () => {
+  it.effect("attaches normalized ChatGPT limits to an authenticated provider snapshot", () =>
+    Effect.gen(function* () {
+      yield* withTempCodexHome();
+      const usageLimits = {
+        source: "codex-app-server" as const,
+        status: "available" as const,
+        checkedAt: "2026-10-08T12:00:00.000Z",
+        windows: [
+          {
+            id: "codex:primary",
+            kind: "five-hour" as const,
+            label: "5-hour limit",
+            utilization: 30,
+          },
+        ],
+      };
+      const snapshot = yield* checkCodexProviderStatus(() =>
+        Effect.succeed({
+          account: { type: "chatgpt" as const, planType: "plus" as const, sparkEnabled: false },
+          skills: [],
+          models: [discoveredModel],
+          usageLimits,
+        }),
+      );
+      assert.strictEqual(snapshot.status, "ready");
+      assert.deepStrictEqual(snapshot.usageLimits, usageLimits);
+    }).pipe(
+      Effect.provide(
+        Layer.mergeAll(
+          NodeServices.layer,
+          ServerSettingsService.layerTest(),
+          mockSpawnerLayer(successfulCommand),
+        ),
+      ),
+    ),
+  );
   it.effect("uses a successful empty discovery result instead of fallback models", () =>
     Effect.gen(function* () {
       yield* withTempCodexHome();

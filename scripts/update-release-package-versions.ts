@@ -1,6 +1,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveReleaseMetadata } from "./lib/release-metadata.ts";
 
 export const releasePackageFiles = [
   "apps/server/package.json",
@@ -22,17 +23,23 @@ export function updateReleasePackageVersions(
   version: string,
   options: UpdateReleasePackageVersionsOptions = {},
 ): { changed: boolean } {
+  const release = resolveReleaseMetadata(version);
   const rootDir = resolve(options.rootDir ?? process.cwd());
   let changed = false;
 
   for (const relativePath of releasePackageFiles) {
     const filePath = resolve(rootDir, relativePath);
     const packageJson = JSON.parse(readFileSync(filePath, "utf8")) as MutablePackageJson;
-    if (packageJson.version === version) {
+    const isServer = relativePath === "apps/server/package.json";
+    if (
+      packageJson.version === release.version &&
+      (!isServer || packageJson.bigbudReleaseTag === release.tag)
+    ) {
       continue;
     }
 
-    packageJson.version = version;
+    packageJson.version = release.version;
+    if (isServer) packageJson.bigbudReleaseTag = release.tag;
     writeFileSync(filePath, `${JSON.stringify(packageJson, null, 2)}\n`);
     changed = true;
   }

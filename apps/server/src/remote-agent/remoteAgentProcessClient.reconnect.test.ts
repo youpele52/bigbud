@@ -41,7 +41,7 @@ function output(sequence: number, text: string): RemoteAgentFrame {
 }
 
 describe("remote agent process client pre-acceptance recovery", () => {
-  it("surfaces missing durable output even when the retained operation completed successfully", async () => {
+  it("returns the verified exit code but marks output lost when the retained window moved past the cursor", async () => {
     const client = new RemoteAgentProcessClient(
       fakeConnection([
         {
@@ -57,9 +57,10 @@ describe("remote agent process client pre-acceptance recovery", () => {
         completed,
       ]),
     );
-    await expect(client.attach({ operationId: "operation" })).rejects.toMatchObject({
-      code: "PROCESS_OUTPUT_GAP",
-    });
+    const result = await client.attach({ operationId: "operation" });
+    expect(result.replayGap).toBe(true);
+    expect(result.completed).toMatchObject({ exitCode: 0, outputTruncated: true });
+    expect(result.stdout).toHaveLength(0);
   });
 
   it("reattaches when transport fails before the acceptance response", async () => {

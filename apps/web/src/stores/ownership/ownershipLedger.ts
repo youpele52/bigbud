@@ -119,12 +119,17 @@ export async function registerDraftOwnership(input: {
   readonly draft: DraftThreadState;
   readonly bindProject: boolean;
   readonly expectedGeneration?: number | undefined;
+  readonly expectedWorktreePath?: { readonly value: string | null };
   readonly options?: MutationOptions | undefined;
 }): Promise<OwnershipDraftRecord> {
   return mutate(input.options, (ledger, mutationId) => {
     const scope = input.scope ?? "main";
     const currentScope = getScopeState(ledger, scope);
     const existing = currentScope.draftsByThreadId[input.threadId];
+    if (input.expectedWorktreePath && existing?.worktreePath !== input.expectedWorktreePath.value)
+      throw new OwnershipLedgerUnavailableError(
+        "Draft workspace changed while selection was being saved.",
+      );
     if (
       input.expectedGeneration !== undefined &&
       existing?.generation !== input.expectedGeneration

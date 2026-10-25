@@ -53,9 +53,10 @@ describe("Claude SDK approval callbacks", () => {
           signal: new AbortController().signal,
           suggestions: [
             {
-              type: "setMode",
-              mode: "default",
-              destination: "session",
+              type: "addRules",
+              rules: [{ toolName }],
+              behavior: "allow",
+              destination: "localSettings",
             },
           ],
           toolUseID: `tool-${toolName}`,

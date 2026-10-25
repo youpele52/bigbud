@@ -296,3 +296,30 @@ export function buildThreadElevatorSummaryPrompt(input: ThreadElevatorSummaryPro
 
   return { prompt, outputSchema };
 }
+
+export interface PromptSuggestionPromptInput {
+  transcript: string;
+}
+
+/** The logical next user message, 15–150 characters, related to the recent conversation. */
+export function buildPromptSuggestionPrompt(input: PromptSuggestionPromptInput) {
+  const prompt = buildPromptFromMessage({
+    instruction:
+      "You predict the single most useful next message the user would send in this coding conversation.",
+    responseShape: "Return a JSON object with key: suggestion.",
+    rules: [
+      "Write it as the user, addressed to the assistant: a question or an instruction.",
+      "Make it the logical next step, directly related to what was just discussed or done.",
+      "Write between 15 and 150 characters, on one line.",
+      "Do not repeat the user's last message.",
+      "No quotes, prefixes, bullets, explanations or alternatives.",
+      "Never include secrets, credentials or tokens.",
+    ],
+    message: input.transcript,
+  });
+  const outputSchema = Schema.Struct({
+    suggestion: Schema.String,
+  });
+
+  return { prompt, outputSchema };
+}

@@ -1,8 +1,6 @@
-// TODO: Split by concern when this file is next touched.
 import "../../index.css";
 
 import {
-  DEFAULT_SERVER_SETTINGS,
   ORCHESTRATION_WS_METHODS,
   type MessageId,
   type OrchestrationReadModel,
@@ -22,7 +20,9 @@ import { useComposerDraftStore } from "../../stores/composer";
 import { __resetNativeApiForTests } from "../../rpc/nativeApi";
 import { getRouter } from "../../config/router";
 import { useStore } from "../../stores/main";
-import { BrowserWsRpcHarness } from "../../../test/wsRpcHarness";
+import { BrowserWsRpcHarness, type NormalizedWsRpcRequestBody } from "../../../test/wsRpcHarness";
+import { resolveCatalogRpc } from "../chat/view/ChatView.browser/context.catalog";
+import { createBaseServerConfig } from "./KeybindingsToast.browser.config";
 
 const THREAD_ID = "thread-kb-toast-test" as ThreadId;
 const PROJECT_ID = "project-1" as ProjectId;
@@ -38,66 +38,6 @@ let fixture: TestFixture;
 const rpcHarness = new BrowserWsRpcHarness();
 
 const wsLink = ws.link(/ws(s)?:\/\/.*/);
-
-function createBaseServerConfig(): ServerConfig {
-  return {
-    cwd: "/repo/project",
-    storage: {
-      notesDir: "/repo/project/.t3/notes",
-      kanbanDir: "/repo/project/.t3/kanban",
-    },
-    keybindingsConfigPath: "/repo/project/.bigbud-keybindings.json",
-    keybindings: [],
-    issues: [],
-    providers: [
-      {
-        provider: "codex",
-        enabled: true,
-        installed: true,
-        version: "0.116.0",
-        status: "ready",
-        auth: { status: "authenticated" },
-        checkedAt: NOW_ISO,
-        models: [],
-        slashCommands: [],
-        skills: [],
-      },
-    ],
-    discovery: {
-      agents: [],
-      skills: [],
-    },
-    availableEditors: [],
-    observability: {
-      logsDirectoryPath: "/repo/project/.t3/logs",
-      localTracingEnabled: true,
-      otlpTracesEnabled: false,
-      otlpMetricsEnabled: false,
-    },
-    settings: {
-      ...DEFAULT_SERVER_SETTINGS,
-      enableAssistantStreaming: false,
-      defaultThreadEnvMode: "local" as const,
-      textGenerationModelSelection: { provider: "codex" as const, model: "gpt-5.4-mini" },
-      providers: {
-        codex: { enabled: true, binaryPath: "", homePath: "", customModels: [] },
-        claudeAgent: {
-          ...DEFAULT_SERVER_SETTINGS.providers.claudeAgent,
-          enabled: true,
-          binaryPath: "",
-          customModels: [],
-        },
-        cliProxy: { enabled: true, configPath: "" },
-        copilot: { enabled: true, binaryPath: "", customModels: [] },
-        opencode: { enabled: true, binaryPath: "", customModels: [] },
-        kilocode: { enabled: true, binaryPath: "", customModels: [] },
-        pi: { enabled: true, binaryPath: "", customModels: [] },
-        cursor: { enabled: true, binaryPath: "agent", customModels: [], apiEndpoint: "" },
-        devin: { enabled: true, binaryPath: "devin", customModels: [] },
-      },
-    },
-  };
-}
 
 function createMinimalSnapshot(): OrchestrationReadModel {
   return {
@@ -173,7 +113,7 @@ function createMinimalSnapshot(): OrchestrationReadModel {
 function buildFixture(): TestFixture {
   return {
     snapshot: createMinimalSnapshot(),
-    serverConfig: createBaseServerConfig(),
+    serverConfig: createBaseServerConfig(NOW_ISO),
     welcome: {
       cwd: "/repo/project",
       projectName: "Project",
@@ -183,7 +123,14 @@ function buildFixture(): TestFixture {
   };
 }
 
-function resolveWsRpc(tag: string): unknown {
+function resolveWsRpc(body: NormalizedWsRpcRequestBody): unknown {
+  // Startup reads the bounded project/thread catalogs and the selected thread's detail.
+  const catalogResult = resolveCatalogRpc(body, fixture.snapshot);
+  if (catalogResult !== undefined) return catalogResult;
+  const tag = body._tag;
+  if (tag === WS_METHODS.serverPing) {
+    return { serverTime: fixture.snapshot.updatedAt };
+  }
   if (tag === ORCHESTRATION_WS_METHODS.getSnapshot) {
     return fixture.snapshot;
   }
@@ -327,7 +274,7 @@ describe("Keybindings update toast", () => {
 
   beforeEach(async () => {
     await rpcHarness.reset({
-      resolveUnary: (request) => resolveWsRpc(request._tag),
+      resolveUnary: resolveWsRpc,
       getInitialStreamValues: (request) => {
         if (request._tag === WS_METHODS.subscribeServerLifecycle) {
           return [

@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createCopilotThreadOrchestrationTools } from "./copilotThreadOrchestrationTools.ts";
 import { COMPUTER_USE_TOOL_DESCRIPTION } from "./orchestrationComputerUseTool.shared.ts";
-import { BROWSER_TOOL_DESCRIPTION } from "./orchestrationBrowserTool.shared.ts";
+import {
+  BROWSER_TOOL_DESCRIPTION,
+  BROWSER_TOOL_PARAMETERS,
+} from "./orchestrationBrowserTool.shared.ts";
 import {
   BIGBUD_PLAN_TRACKING_TOOL_DESCRIPTION,
   BIGBUD_PLAN_TRACKING_TOOL_NAME,
@@ -32,9 +35,11 @@ describe("createCopilotThreadOrchestrationTools", () => {
     const tools = makeTools();
 
     expect(tools.map((tool) => tool.name)).toEqual([
+      "get_system_resources",
       "rename_thread",
       "archive_thread",
       "create_thread",
+      "list_available_models",
       "list_threads",
       "list_pinned_threads",
       "pin_thread",
@@ -60,6 +65,29 @@ describe("createCopilotThreadOrchestrationTools", () => {
     expect(tools.find((tool) => tool.name === "unpin_thread")?.description).toContain(
       "Only use this when the user explicitly asks to unpin a thread.",
     );
+  });
+
+  it("isolates browser discovery without changing its schema or dispatch name", async () => {
+    const browser = vi.fn(async () => ({ action: "get_page_info", title: "Blank" }));
+    const tool = makeTools({ browser }).find((candidate) => candidate.name === "browser");
+
+    expect(tool?.namespace).toEqual({
+      name: "bigbud_browser",
+      description: "Browser automation provided by bigbud",
+    });
+    expect(tool?.parameters).toBe(BROWSER_TOOL_PARAMETERS);
+    expect(tool?.defer).toBeUndefined();
+    const result = await tool?.handler?.({ action: "get_page_info" }, INVOCATION);
+    expect(browser).toHaveBeenCalledExactlyOnceWith({ action: "get_page_info" });
+    expect(result).toMatchObject({ resultType: "success" });
+  });
+
+  it("rejects invalid browser actions before dispatch", async () => {
+    const browser = vi.fn();
+    const tool = makeTools({ browser }).find((candidate) => candidate.name === "browser");
+    const result = await tool?.handler?.({ action: "not-a-real-action" }, INVOCATION);
+    expect(browser).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ resultType: "failure" });
   });
 
   it("forwards decoded computer_use actions to the dispatcher", async () => {

@@ -25,6 +25,14 @@ export interface ClaudeSdkTaskMessage extends ClaudeSdkIdentity {
   readonly summary?: string;
   readonly lastToolName?: string;
   readonly subagentType?: string;
+  readonly runId?: string;
+  readonly taskType?: string;
+  readonly prompt?: string;
+  readonly isBackgrounded?: boolean;
+  readonly spawnDepth?: number;
+  readonly parentTaskId?: string;
+  readonly workflowName?: string;
+  readonly ambient?: boolean;
   readonly usage?: {
     readonly totalTokens: number;
     readonly toolUses: number;
@@ -37,6 +45,9 @@ export interface ClaudeSdkTaskNotification extends ClaudeSdkIdentity {
   readonly toolUseId?: string;
   readonly status: "completed" | "failed" | "stopped";
   readonly summary: string;
+  readonly runId?: string;
+  readonly reason?: string;
+  readonly ambient?: boolean;
   readonly usage?: {
     readonly totalTokens: number;
     readonly toolUses: number;
@@ -54,6 +65,10 @@ export interface ClaudeSdkBackgroundTasks extends ClaudeSdkIdentity {
     readonly taskId: string;
     readonly taskType: string;
     readonly description: string;
+    readonly runId?: string;
+    readonly subagentType?: string;
+    readonly parentTaskId?: string;
+    readonly ambient?: boolean;
   }>;
 }
 

@@ -69,6 +69,11 @@ export function makeThreadMessagesProjector(
             : previousMessage?.replyTo !== undefined
               ? { replyTo: previousMessage.replyTo }
               : {}),
+          ...(event.payload.originSegments !== undefined
+            ? { originSegments: event.payload.originSegments }
+            : previousMessage?.originSegments !== undefined
+              ? { originSegments: previousMessage.originSegments }
+              : {}),
           isStreaming: event.payload.streaming,
           createdAt: previousMessage?.createdAt ?? event.payload.createdAt,
           updatedAt: event.payload.updatedAt,

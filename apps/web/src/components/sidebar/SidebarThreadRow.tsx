@@ -19,11 +19,13 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
 import { SidebarThreadConnectingIndicator } from "./SidebarThreadConnectingIndicator";
 import { SidebarThreadProviderIcon } from "./SidebarThreadProviderIcon";
+import { SidebarThreadTerminalProviderIcon } from "./SidebarThreadTerminalProviderIcon";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
 import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
 import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
 import {
+  isProviderIconWorking,
   mergeRunningTerminalIds,
   prStatusIndicator,
   providerIconPresentationClass,
@@ -115,7 +117,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     return null;
   }
 
-  const isWorkingPresentation = threadStatus?.label === "Working";
+  const isWorkingPresentation = isProviderIconWorking(threadStatus);
   const connectingStartedAt =
     thread.session?.orchestrationStatus === "starting" ? thread.session.updatedAt : null;
   const isConnectingPresentation = shouldShowThreadConnectingPresentation(
@@ -216,25 +218,6 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
       }}
     >
       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-        {prStatus && (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label={prStatus.tooltip}
-                  className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
-                  onClick={(event) => {
-                    props.openPrLink(event, prStatus.url);
-                  }}
-                >
-                  <GitPullRequestIcon className="size-3" />
-                </button>
-              }
-            />
-            <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
-          </Tooltip>
-        )}
         {ProviderIcon ? (
           <SidebarThreadProviderIcon
             icon={ProviderIcon}
@@ -242,15 +225,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
             animationClass={providerIconAnimationClass}
           />
         ) : null}
-        {isConnectingPresentation ? (
-          <SidebarThreadConnectingIndicator connectingStartedAt={connectingStartedAt} />
-        ) : visibleThreadStatus ? (
-          <ThreadStatusLabel
-            status={visibleThreadStatus}
-            hideDot={visibleThreadStatus.label === "Done"}
-          />
-        ) : null}
-        {isAutomationThread ? <SidebarAutomationThreadIcon /> : null}
+        <SidebarThreadTerminalProviderIcon threadId={thread.id} />
         {props.renamingThreadId === thread.id ? (
           <input
             ref={props.onRenamingInputMount}
@@ -281,6 +256,34 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
         )}
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {prStatus && (
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <button
+                  type="button"
+                  aria-label={prStatus.tooltip}
+                  className={`inline-flex items-center justify-center ${prStatus.colorClass} cursor-pointer rounded-sm outline-hidden focus-visible:ring-1 focus-visible:ring-ring`}
+                  onClick={(event) => {
+                    props.openPrLink(event, prStatus.url);
+                  }}
+                >
+                  <GitPullRequestIcon className="size-3" />
+                </button>
+              }
+            />
+            <TooltipPopup side="top">{prStatus.tooltip}</TooltipPopup>
+          </Tooltip>
+        )}
+        {isConnectingPresentation ? (
+          <SidebarThreadConnectingIndicator connectingStartedAt={connectingStartedAt} />
+        ) : visibleThreadStatus ? (
+          <ThreadStatusLabel
+            status={visibleThreadStatus}
+            hideDot={visibleThreadStatus.label === "Done"}
+          />
+        ) : null}
+        {isAutomationThread ? <SidebarAutomationThreadIcon /> : null}
         {terminalStatus && (
           <span
             role="img"
@@ -303,7 +306,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
           <span className={threadMetaClassName}>
             {props.showThreadJumpHints && props.jumpLabel ? (
               <span
-                className="inline-flex h-5 items-center rounded-full border border-border/80 bg-background/90 px-1.5 font-mono text-[10px] font-medium tracking-tight text-foreground shadow-sm"
+                className="inline-flex h-5 items-center rounded-full border border-border/80 bg-background/90 px-1.5 text-xs font-medium tracking-tight text-foreground shadow-sm"
                 title={props.jumpLabel}
               >
                 {props.jumpLabel}

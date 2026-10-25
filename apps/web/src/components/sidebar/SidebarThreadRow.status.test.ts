@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { resolveThreadStatusPill } from "./Sidebar.logic.status";
 
 import {
+  isProviderIconWorking,
   mergeRunningTerminalIds,
   providerIconPresentationClass,
   shouldAnimateProviderIcon,
@@ -10,6 +12,22 @@ import {
 } from "./SidebarThreadRow.status";
 
 describe("SidebarThreadRow.status", () => {
+  it("uses a steady amber provider icon while awaiting an answer", () => {
+    const status = resolveThreadStatusPill({
+      thread: {
+        hasPendingUserInput: true,
+        hasPendingApprovals: false,
+        hasActionableProposedPlan: false,
+        interactionMode: "default",
+        latestTurn: null,
+        providerAgents: [],
+        session: null,
+      },
+    });
+    expect(status?.label).toBe("Awaiting Input");
+    expect(providerIconPresentationClass(status, false)).toBe("text-warning");
+    expect(isProviderIconWorking(status)).toBe(false);
+  });
   it("deduplicates running terminal ids across drawer and panel terminals", () => {
     expect(
       mergeRunningTerminalIds(["default", "panel-terminal-1"], ["panel-terminal-1", ""]),
@@ -105,6 +123,26 @@ describe("SidebarThreadRow.status", () => {
     expect(providerIconPresentationClass(null, false)).toBe("text-muted-foreground");
     expect(shouldAnimateProviderIcon({ isConnecting: true, isRunning: false })).toBe(true);
     expect(shouldAnimateProviderIcon({ isConnecting: false, isRunning: false })).toBe(false);
+  });
+
+  it("breathes for main or child work while preserving the resolved icon color", () => {
+    expect(isProviderIconWorking({ label: "Working" } as never)).toBe(true);
+    expect(isProviderIconWorking({ label: "Subagents Working" } as never)).toBe(true);
+    expect(isProviderIconWorking({ label: "Idle" } as never)).toBe(false);
+    const childStatus = {
+      label: "Subagents Working",
+      colorClass: "text-info-foreground",
+      dotClass: "bg-info-foreground",
+      pulse: true,
+    } as never;
+    expect(providerIconPresentationClass(childStatus, false)).toBe("text-violet-500");
+    expect(shouldShowThreadStatusLabel(childStatus)).toBe(false);
+    expect(
+      shouldAnimateProviderIcon({
+        isConnecting: false,
+        isRunning: isProviderIconWorking(childStatus),
+      }),
+    ).toBe(true);
   });
 
   it("uses the warning color for the provider icon during connecting", () => {

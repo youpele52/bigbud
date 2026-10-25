@@ -87,7 +87,8 @@ export function proposedPlanIdFromEvent(event: ProviderRuntimeEvent, threadId: s
   return `plan:${threadId}:event:${event.eventId}`;
 }
 
-type ContextWindowActivityPayload = ThreadTokenUsageSnapshot & {
+type ContextWindowActivityPayload = Partial<ThreadTokenUsageSnapshot> & {
+  readonly usageSchemaVersion: 2;
   readonly accounting?: ThreadTokenUsageAccounting & {
     readonly provider: ProviderKind;
     readonly model: string;
@@ -106,19 +107,20 @@ export function buildContextWindowActivityPayload(
 ): ContextWindowActivityPayload | undefined {
   if (
     event.type !== "thread.token-usage.updated" ||
-    (event.payload.usage.usedTokens <= 0 && (event.payload.accounting?.processedTokens ?? 0) <= 0)
+    ((event.payload.usage?.usedTokens ?? 0) <= 0 && !event.payload.accounting)
   ) {
     return undefined;
   }
   return {
+    usageSchemaVersion: 2,
     ...event.payload.usage,
-    ...(event.payload.accounting && attribution
+    ...(event.payload.accounting
       ? {
           accounting: {
             ...event.payload.accounting,
             provider: event.provider,
-            model: attribution.model,
-            interactionMode: attribution.interactionMode,
+            model: event.payload.accounting.canonical?.model ?? attribution?.model ?? "unknown",
+            interactionMode: attribution?.interactionMode ?? "default",
           },
         }
       : {}),

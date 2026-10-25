@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Effect, Layer, ServiceMap } from "effect";
+import { ServiceMap } from "effect";
 import type {
   OrchestrationApplicationAckInput,
   OrchestrationApplicationAckResult,
@@ -15,14 +15,15 @@ import {
   DESKTOP_SUPERVISOR_RESTART_ATTEMPTS,
   DESKTOP_SUPERVISOR_RESTART_WINDOW_MS,
   desktopSupervisorRestartDelayMs,
-  resolveDesktopSupervisorRuntimeConfig,
   type DesktopSupervisorRuntimeConfig,
 } from "./desktopSupervisorConfig.ts";
 import { DesktopSupervisorDeliverySession } from "./desktopSupervisorDelivery.session.ts";
 import { installSessionSupervisorBaseline } from "./desktopSupervisorDelivery.baseline.session.ts";
 import { hasLiveDesktopSupervisorSession } from "./desktopSupervisorDelivery.identity.ts";
+import { hasOpenDeliveryConsumer } from "./desktopSupervisorDelivery.presence.ts";
 import type {
   DesktopSupervisorDeliveryShape,
+  DesktopSupervisorOwner,
   DesktopSupervisorSubscription,
 } from "./desktopSupervisorDelivery.types.ts";
 import { DesktopSupervisorOwnerClient } from "./desktopSupervisorOwnerClient.ts";
@@ -33,18 +34,10 @@ import type {
 } from "./desktopSupervisorProtocol.ts";
 import { isDesktopSupervisorIncompatibleProtocolError } from "./desktopSupervisorProtocol.ts";
 import { computeDesktopSupervisorBatchId } from "./desktopSupervisorProtocol.codec.ts";
-
-export interface DesktopSupervisorOwner {
-  readonly attach: DesktopSupervisorOwnerClient["attach"];
-  readonly detach: DesktopSupervisorOwnerClient["detach"];
-  readonly enqueue: DesktopSupervisorOwnerClient["enqueue"];
-  readonly acknowledge: DesktopSupervisorOwnerClient["acknowledge"];
-  readonly installBaseline: DesktopSupervisorOwnerClient["installBaseline"];
-  readonly heartbeat: DesktopSupervisorOwnerClient["heartbeat"];
-  readonly onFailure: DesktopSupervisorOwnerClient["onFailure"];
-  readonly onFrame: DesktopSupervisorOwnerClient["onFrame"];
-  readonly close: DesktopSupervisorOwnerClient["close"];
-}
+import {
+  startDesktopSupervisorHeartbeat,
+  type DesktopSupervisorHeartbeatEcho,
+} from "./desktopSupervisorDelivery.heartbeat.ts";
 
 function delay(durationMs: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
@@ -60,6 +53,8 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
   private client: DesktopSupervisorOwner | null = null;
   private clientPromise: Promise<DesktopSupervisorOwner> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  /** Receives each heartbeat echo; the layer forwards suspended time to sleep epochs. */
+  heartbeatEchoObserver: ((echo: DesktopSupervisorHeartbeatEcho) => void) | null = null;
   private closed = false;
   private readonly ownerFactory: () => Promise<DesktopSupervisorOwner>;
 
@@ -109,6 +104,7 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
       offer: (event) => Promise.resolve(session.input.tryOffer(event)),
       take: () => session.output.take(),
       close: () => session.close(),
+      endReason: () => session.endReason,
     };
   }
 
@@ -128,6 +124,10 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     const session = this.sessions.get(this.sessionKey(input.consumerId, input.consumerGeneration));
     if (session) return session.acknowledgeBaseline(input);
     return Promise.resolve({ accepted: false, fenced: true, acknowledgedSequence: 0 });
+  }
+
+  hasOpenConsumer(): boolean {
+    return !this.closed && hasOpenDeliveryConsumer(this.authoritativeSessions.values());
   }
 
   get retainedConsumerGenerationCount(): number {
@@ -281,7 +281,10 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     this.closed = true;
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
     this.heartbeatTimer = null;
-    for (const session of new Set(this.sessions.values())) session.close();
+    for (const session of new Set(this.sessions.values())) {
+      session.markEnded("server-shutdown");
+      session.close();
+    }
     this.sessions.clear();
     this.authoritativeSessions.clear();
     const client = this.client;
@@ -318,15 +321,13 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
 
   private ensureHeartbeat(): void {
     if (this.heartbeatTimer) return;
-    const startedAt = Date.now();
-    this.heartbeatTimer = setInterval(() => {
-      const client = this.client;
-      if (!client || this.closed) return;
-      void client
-        .heartbeat(Date.now() - startedAt)
-        .catch((cause: unknown) => this.invalidateClient(cause, client));
-    }, DESKTOP_SUPERVISOR_HEARTBEAT_MS);
-    this.heartbeatTimer.unref?.();
+    this.heartbeatTimer = startDesktopSupervisorHeartbeat({
+      intervalMs: DESKTOP_SUPERVISOR_HEARTBEAT_MS,
+      getClient: () => this.client,
+      isClosed: () => this.closed,
+      onFailure: (cause, client) => this.invalidateClient(cause, client),
+      onEcho: (echo) => this.heartbeatEchoObserver?.(echo),
+    });
   }
 
   private handleUnsolicitedFrame(frame: DesktopSupervisorFrame): boolean {
@@ -387,13 +388,3 @@ export class DesktopSupervisorDelivery extends ServiceMap.Service<
   DesktopSupervisorDelivery,
   DesktopSupervisorDeliveryShape
 >()("bigbud/DesktopSupervisorDelivery") {}
-
-export const DesktopSupervisorDeliveryLive = Layer.effect(
-  DesktopSupervisorDelivery,
-  Effect.acquireRelease(
-    Effect.sync(
-      () => new DesktopSupervisorDeliveryCoordinator(resolveDesktopSupervisorRuntimeConfig()),
-    ),
-    (coordinator) => Effect.promise(() => coordinator.close()),
-  ),
-);

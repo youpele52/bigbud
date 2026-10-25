@@ -88,6 +88,8 @@ describe("MessagesTimeline message features", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -149,6 +151,8 @@ describe("MessagesTimeline message features", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{ [turnId]: false }}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -195,6 +199,8 @@ describe("MessagesTimeline message features", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -249,6 +255,8 @@ describe("MessagesTimeline message features", () => {
         nowIso="2026-06-16T20:39:31.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -299,6 +307,8 @@ describe("MessagesTimeline message features", () => {
         nowIso="2026-03-17T19:12:30.000Z"
         expandedWorkGroups={{}}
         onToggleWorkGroup={() => {}}
+        activityAccordionOpenById={{}}
+        onSetActivityAccordionOpen={() => {}}
         changedFilesExpandedByTurnId={{}}
         onSetChangedFilesExpanded={() => {}}
         onOpenTurnDiff={() => {}}
@@ -317,6 +327,6 @@ describe("MessagesTimeline message features", () => {
     expect(markup).toContain("$ ls");
     expect(markup).toContain("Antworten");
     expect(markup).toContain("font-size:12px");
-    expect(markup).toContain("MesloLGL Nerd Font Mono");
+    expect(markup).toContain("JetBrainsMono Nerd Font Mono");
   });
 });

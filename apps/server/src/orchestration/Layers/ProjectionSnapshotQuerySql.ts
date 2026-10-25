@@ -1,9 +1,3 @@
-/**
- * SQL query definitions for the ProjectionSnapshotQuery layer.
- *
- * All SqlSchema-based query builders are defined here and consumed by
- * ProjectionSnapshotQueryAssembly to build the full read model.
- */
 import { Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
@@ -42,12 +36,12 @@ import {
   ProjectionThreadIdLookupRowSchema,
   ProjectionThreadMessageDbRowSchema,
   ProjectionThreadProposedPlanDbRowSchema,
-  ProjectionThreadSessionDbRowSchema,
   ProjectionThreadWatchDbRowSchema,
   ProjectIdLookupInput,
   ThreadIdLookupInput,
   WorkspaceRootLookupInput,
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
+import { makeListProjectionSessionRows } from "./ProjectionSnapshotQuerySql.sessions.ts";
 
 // ---------------------------------------------------------------------------
 // Query factories (require a SqlClient instance)
@@ -101,6 +95,8 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
            pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
            pending_turn_control_operation_json AS "pendingTurnControlOperation",
            queue_hold AS "queueHold",
+           pending_turn_start_json AS "pendingTurnStart",
+           recovery_json AS "recovery",
           CASE
              WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
              ELSE json_object(
@@ -109,6 +105,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
                'projectId', COALESCE(parent_thread_project_id, project_id)
              )
           END AS "parentThread",
+          CASE WHEN fork_reason IS NULL THEN NULL ELSE json_object('forkPointMessageId', fork_point_message_id, 'reason', fork_reason, 'failureEventId', fork_failure_event_id) END AS "forkOrigin",
           latest_turn_id AS "latestTurnId",
           created_at AS "createdAt",
           updated_at AS "updatedAt",
@@ -135,6 +132,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           text,
           attachments_json AS "attachments",
           reply_to_json AS "replyTo",
+          origin_segments_json AS "originSegments",
           is_streaming AS "isStreaming",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
@@ -198,27 +196,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
     `,
   });
 
-  const listThreadSessionRows = SqlSchema.findAll({
-    Request: Schema.Void,
-    Result: ProjectionThreadSessionDbRowSchema,
-    execute: () =>
-      sql`
-        SELECT
-          thread_id AS "threadId",
-          status,
-          provider_name AS "providerName",
-          provider_session_id AS "providerSessionId",
-          provider_thread_id AS "providerThreadId",
-          runtime_mode AS "runtimeMode",
-          active_turn_id AS "activeTurnId",
-          session_epoch AS "sessionEpoch",
-          reason,
-          last_error AS "lastError",
-          updated_at AS "updatedAt"
-        FROM projection_thread_sessions
-        ORDER BY thread_id ASC
-      `,
-  });
+  const listThreadSessionRows = makeListProjectionSessionRows(sql);
 
   const listCheckpointRows = SqlSchema.findAll({
     Request: Schema.Void,

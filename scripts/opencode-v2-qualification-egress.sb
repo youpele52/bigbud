@@ -1,0 +1,10 @@
+; Loopback-only egress for the OpenCode V2 native qualification process tree (macOS seatbelt).
+; Applied with `sandbox-exec -f` around each scope run, so the hosted runner's own control channel
+; keeps working while every test, bigbud and retail OpenCode child can reach only localhost/UNIX
+; sockets. Verified locally: in-sandbox loopback HTTP 200, external HTTPS EPERM.
+; Its SHA-256 is part of the environment evidence; any edit requires a new approval record.
+(version 1)
+(allow default)
+(deny network-outbound)
+(allow network-outbound (remote ip "localhost:*"))
+(allow network-outbound (remote unix-socket))

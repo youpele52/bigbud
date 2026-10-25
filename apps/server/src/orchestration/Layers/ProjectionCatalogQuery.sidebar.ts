@@ -77,7 +77,7 @@ export function makeGetSidebarThreadCatalog(
           WHERE m.thread_id = t.thread_id AND m.role = 'user') AS "latestUserMessageAt",
         t.pinned_at AS "pinnedAt", s.status AS "sessionStatus",
         s.provider_name AS "providerName", s.active_turn_id AS "activeTurnId",
-        turn.state AS "latestTurnState",
+        s.retained_family AS "retainedFamily", turn.state AS "latestTurnState",
         EXISTS (SELECT 1 FROM projection_thread_watches w
           WHERE w.watcher_thread_id = t.thread_id AND w.status = 'active') AS "isWatching",
         EXISTS (SELECT 1 FROM projection_thread_watches w

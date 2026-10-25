@@ -23,6 +23,12 @@ Runtime modes are deliberate:
 
 The framed stdin/stdout protocol in `protocol/desktop-supervisor/v1.proto`
 defines the handshake, consumer generations, replay cursor, acknowledgements,
-timeouts, duplicate handling, and bounded queues. Signing, notarization,
+timeouts, duplicate handling, and bounded queues. Since protocol 1.4 the
+supervisor fills `Heartbeat.suspended_millis` when it echoes a heartbeat: the
+total time the machine has spent suspended since boot (Linux
+`CLOCK_BOOTTIME - CLOCK_MONOTONIC`, macOS `mach_continuous_time -
+mach_absolute_time`, Windows `QueryInterruptTime - QueryUnbiasedInterruptTime`).
+It is sleep evidence only; the TypeScript server decides what a jump means.
+Signing, notarization,
 native artifact publication, and broad release or soak certification remain
 external release gates and are not established by this crate alone.

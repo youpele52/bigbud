@@ -5,6 +5,8 @@ import { ServerConfig } from "../../startup/config.ts";
 import { ServerLoggerLive } from "../../startup/serverLogger.ts";
 import { makeLocalFileTracer } from "../LocalFileTracer.ts";
 import { BrowserTraceCollector } from "../Services/BrowserTraceCollector.ts";
+import { ServerSpanActivity } from "../Services/ServerSpanActivity.ts";
+import { SpanActivityTracker } from "../SpanActivity.ts";
 import { makeTraceSink } from "../TraceSink.ts";
 import { DEFAULT_TRACE_POLICY, makeTraceRecordRecorder } from "../TracePolicy.ts";
 import { traceRecordsDroppedTotal, traceRecordsRetainedTotal } from "../Metrics.load.ts";
@@ -64,6 +66,7 @@ export const ObservabilityLive = Layer.unwrap(
             // Trace policy metrics must never interfere with trace ingestion.
           }
         };
+        const spanActivity = new SpanActivityTracker();
         const tracer = yield* makeLocalFileTracer({
           filePath: config.serverTracePath,
           maxBytes: config.traceMaxBytes,
@@ -73,11 +76,13 @@ export const ObservabilityLive = Layer.unwrap(
           ...(delegate ? { delegate } : {}),
           tracePolicy,
           onTraceDecision,
+          spanActivity,
         });
         const recordBrowserTrace = makeTraceRecordRecorder(sink.push, tracePolicy, onTraceDecision);
 
         return Layer.mergeAll(
           Layer.succeed(Tracer.Tracer, tracer),
+          Layer.succeed(ServerSpanActivity, spanActivity),
           Layer.succeed(BrowserTraceCollector, {
             record: (records) =>
               Effect.sync(() => {

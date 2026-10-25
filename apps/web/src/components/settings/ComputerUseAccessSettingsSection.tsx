@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { MACOS_SCREEN_RECORDING_SETTINGS_URL } from "@bigbud/shared/screenRecording";
-import { ArrowUpRightIcon, BotIcon, InfoIcon } from "lucide-react";
+import { ArrowUpRightIcon, InfoIcon } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { Button } from "../ui/button";
@@ -17,6 +17,7 @@ import {
 import { ComputerUseLimitSettingsRows } from "./ComputerUseAccessSettingsSection.limits";
 import { PermissionStatusGrid } from "./ComputerUseAccessSettingsSection.permissions";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { SettingsAiIcon } from "./SettingsAiIcon";
 import { enableComputerUseInBackground } from "../computer-use/computerUseEnable";
 import { normalizeComputerUsePermissionMessage } from "../computer-use/computerUsePermissionMessage";
 import {
@@ -178,7 +179,7 @@ export function ComputerUseAccessSettingsSection() {
   }
 
   return (
-    <SettingsSection title="Computer Use" icon={<BotIcon className="size-3" />}>
+    <SettingsSection title="Computer Use" icon={<SettingsAiIcon className="size-3" />}>
       <SettingsRow
         title="Enable desktop automation"
         description={getComputerUseSettingsDescription(platform)}
@@ -258,7 +259,7 @@ export function ComputerUseAccessSettingsSection() {
                 {permissions.source.hostBundleId ? (
                   <div className="flex min-w-0 gap-1.5">
                     <dt className="shrink-0 text-muted-foreground">Host bundle:</dt>
-                    <dd className="break-all font-mono text-[11px] text-foreground">
+                    <dd className="break-all text-sm font-light text-foreground">
                       {permissions.source.hostBundleId}
                     </dd>
                   </div>

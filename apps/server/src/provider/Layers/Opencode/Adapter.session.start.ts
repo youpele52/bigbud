@@ -30,7 +30,8 @@ import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
-import { startEventStream, toMessage } from "./Adapter.stream.ts";
+import { toMessage } from "./Adapter.stream.ts";
+import { attachOpencodeEventStream } from "./Adapter.session.start.events.ts";
 import { formatManagedServerSdkError } from "../../managedServerProviderDiscovery.ts";
 import {
   makeOpencodeBridgeCleanup,
@@ -353,16 +354,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
 
       deps.sessions.set(input.threadId, record);
 
-      const eventStream = startEventStream(
-        record,
-        deps.handleEventFn,
-        deps.syntheticEventFn,
-        deps.emitFn,
-        deps.services,
-        deps.reconcileActiveTurn,
-      );
-      record.stopEventStream = eventStream.stop;
-      record.unsubscribeServerInvalidation = serverHandle.onInvalidated?.(eventStream.invalidate);
+      attachOpencodeEventStream(deps, record, serverHandle.onInvalidated);
 
       yield* deps.emitFn([
         yield* deps.syntheticEventFn(

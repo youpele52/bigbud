@@ -32,6 +32,12 @@ function upsertModelSelectionWithOptions(
   options: ProviderModelOptions[ProviderKind],
 ): ModelSelection {
   switch (provider) {
+    case "opencodeV2":
+      return createModelSelection(
+        provider,
+        current?.provider === provider ? current.model : DEFAULT_MODEL_BY_PROVIDER[provider],
+        options,
+      );
     case "codex": {
       const codexOptions = options as NonNullable<ProviderModelOptions["codex"]>;
       return current?.provider === "codex"

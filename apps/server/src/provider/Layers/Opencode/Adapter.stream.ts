@@ -20,6 +20,8 @@ import type { ActiveOpencodeSession } from "./Adapter.types.ts";
 import { toMessage } from "./Adapter.stream.utils.ts";
 import { logNativeEvent, type SyntheticEventFn } from "./Adapter.stream.primitives.ts";
 import { makeMapEvent } from "./Adapter.stream.mapEvent.ts";
+import { makeChildSessionTracker, tracksChildSessions } from "./Adapter.stream.children.ts";
+import { opencodeEventSessionId } from "./Adapter.stream.identity.ts";
 import type { EventNdjsonLogger } from "../EventNdjsonLogger.ts";
 
 export * from "./Adapter.stream.utils.ts";
@@ -92,11 +94,16 @@ export function startEventStream(
     readonly retryDelays?: ReadonlyArray<number>;
     readonly random?: () => number;
   },
+  provider: import("@bigbud/contracts").ProviderKind = "opencode",
 ): { stop(): void; invalidate(): void } {
   const abortController = new AbortController();
   session.sseAbortController = abortController;
   let invalidated = false;
   let healthNotificationEmitted = false;
+  const childTracker =
+    (provider === "opencode" || provider === "kilocode") && tracksChildSessions(provider)
+      ? makeChildSessionTracker(session, provider)
+      : undefined;
   const isOwner = () => session.sseAbortController === abortController;
   const reconcile = async () => {
     if (session.activeTurnId && isOwner())
@@ -140,17 +147,28 @@ export function startEventStream(
         const { stream } = await session.client.event.subscribe(undefined, {
           signal: abortController.signal,
         });
+        if (childTracker && typeof session.client.session?.children === "function") {
+          void childTracker
+            .refresh()
+            .then((childEvents) =>
+              childEvents.length && isOwner() && !abortController.signal.aborted
+                ? emitFn(childEvents).pipe(Effect.runPromiseWith(services))
+                : undefined,
+            )
+            .catch(() => undefined);
+        }
         if (attempt > 0) await reconcile();
         for await (const event of stream) {
           if (abortController.signal.aborted || !isOwner()) return;
 
-          // Filter events to only those for this session.
-          // In v2, sessionID is always on event.properties.sessionID.
-          const eventSessionId = (event.properties as Record<string, unknown>).sessionID as
-            | string
-            | undefined;
+          const eventSessionId = opencodeEventSessionId(event);
 
           if (eventSessionId && eventSessionId !== session.opencodeSessionId) {
+            if (childTracker && typeof session.client.session?.children === "function") {
+              const childEvents = await childTracker.handle(event).catch(() => []);
+              if (childEvents.length)
+                await emitFn(childEvents).pipe(Effect.runPromiseWith(services));
+            }
             continue;
           }
 

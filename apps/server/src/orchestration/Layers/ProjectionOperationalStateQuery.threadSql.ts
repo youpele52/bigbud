@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
+import { unresolvedModelChoiceRequestsCtes } from "../../persistence/DelegatedModelChoiceSql.ts";
 import {
   ProjectionCheckpointDbRowSchema,
   ProjectionLatestTurnDbRowSchema,
@@ -55,12 +56,15 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
           'threadId', parent_thread_id, 'title', parent_thread_title,
           'projectId', COALESCE(parent_thread_project_id, project_id)
         ) END AS "parentThread",
+        CASE WHEN fork_reason IS NULL THEN NULL ELSE json_object('forkPointMessageId', fork_point_message_id, 'reason', fork_reason, 'failureEventId', fork_failure_event_id) END AS "forkOrigin",
         latest_turn_id AS "latestTurnId", created_at AS "createdAt", updated_at AS "updatedAt",
         last_activity_at AS "lastActivityAt",
         queued_prompts_json AS "queuedPrompts",
         pending_interrupt_flush_intent_json AS "pendingInterruptFlushIntent",
         pending_turn_control_operation_json AS "pendingTurnControlOperation",
         queue_hold AS "queueHold",
+        pending_turn_start_json AS "pendingTurnStart",
+        recovery_json AS "recovery",
         archived_at AS "archivedAt", pinned_at AS "pinnedAt", deleting_at AS "deletingAt",
         deleted_at AS "deletedAt"
       FROM projection_threads
@@ -76,6 +80,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         SELECT
           message_id AS "messageId", thread_id AS "threadId", turn_id AS "turnId", role, text,
           attachments_json AS attachments, reply_to_json AS "replyTo",
+          origin_segments_json AS "originSegments",
           is_streaming AS "isStreaming", created_at AS "createdAt", updated_at AS "updatedAt"
         FROM projection_thread_messages
         WHERE thread_id = ${threadId}
@@ -93,6 +98,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
       SELECT
         message_id AS "messageId", thread_id AS "threadId", turn_id AS "turnId", role, text,
         attachments_json AS attachments, reply_to_json AS "replyTo",
+        origin_segments_json AS "originSegments",
         is_streaming AS "isStreaming", created_at AS "createdAt", updated_at AS "updatedAt"
       FROM projection_thread_messages
       WHERE thread_id = ${threadId}
@@ -104,16 +110,28 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
     Request: ThreadWindowRequest,
     Result: ProjectionThreadActivityDbRowSchema,
     execute: ({ threadId, limit }) => sql`
+      WITH ${unresolvedModelChoiceRequestsCtes(sql, threadId)}
       SELECT * FROM (
+        SELECT * FROM (
+          SELECT
+            activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
+            tone, kind, summary, payload_json AS payload, sequence, created_at AS "createdAt"
+          FROM projection_thread_activities
+          WHERE thread_id = ${threadId}
+          ORDER BY
+            CASE WHEN sequence IS NULL THEN 0 ELSE 1 END DESC,
+            sequence DESC, created_at DESC, activity_id DESC
+          LIMIT ${limit}
+        )
+        UNION
+        -- An unresolved delegated model choice always blocks dispatch, however old (H1).
         SELECT
-          activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
-          tone, kind, summary, payload_json AS payload, sequence, created_at AS "createdAt"
-        FROM projection_thread_activities
-        WHERE thread_id = ${threadId}
-        ORDER BY
-          CASE WHEN sequence IS NULL THEN 0 ELSE 1 END DESC,
-          sequence DESC, created_at DESC, activity_id DESC
-        LIMIT ${limit}
+          r.activity_id AS "activityId", r.thread_id AS "threadId", r.turn_id AS "turnId",
+          r.tone, r.kind, r.summary, r.payload_json AS payload, r.sequence,
+          r.created_at AS "createdAt"
+        FROM projection_thread_activities r
+        JOIN model_choice_unresolved unresolved ON unresolved.activity_id = r.activity_id
+        WHERE unresolved.thread_id = ${threadId}
       )
       ORDER BY
         CASE WHEN sequence IS NULL THEN 0 ELSE 1 END ASC,
@@ -173,6 +191,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         provider_session_id AS "providerSessionId", provider_thread_id AS "providerThreadId",
         runtime_mode AS "runtimeMode", active_turn_id AS "activeTurnId",
         session_epoch AS "sessionEpoch", reason,
+        retained_family AS "retainedFamily",
         last_error AS "lastError", updated_at AS "updatedAt"
       FROM projection_thread_sessions
       WHERE thread_id = ${threadId}

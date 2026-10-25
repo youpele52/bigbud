@@ -1,0 +1,164 @@
+{
+  "reservations": [
+    {
+      "slot": 16,
+      "ptyId": {
+        "$bytes": "1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7474747474747474747474747474747474747474747474747474747474747474"
+      }
+    },
+    {
+      "slot": 17,
+      "ptyId": {
+        "$bytes": "1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7575757575757575757575757575757575757575757575757575757575757575"
+      }
+    },
+    {
+      "slot": 18,
+      "ptyId": {
+        "$bytes": "1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d1d"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7676767676767676767676767676767676767676767676767676767676767676"
+      }
+    },
+    {
+      "slot": 19,
+      "ptyId": {
+        "$bytes": "1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7777777777777777777777777777777777777777777777777777777777777777"
+      }
+    },
+    {
+      "slot": 20,
+      "ptyId": {
+        "$bytes": "1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f1f"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7878787878787878787878787878787878787878787878787878787878787878"
+      }
+    },
+    {
+      "slot": 21,
+      "ptyId": {
+        "$bytes": "2020202020202020202020202020202020202020202020202020202020202020"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7979797979797979797979797979797979797979797979797979797979797979"
+      }
+    },
+    {
+      "slot": 22,
+      "ptyId": {
+        "$bytes": "2121212121212121212121212121212121212121212121212121212121212121"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a"
+      }
+    },
+    {
+      "slot": 23,
+      "ptyId": {
+        "$bytes": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+      }
+    },
+    {
+      "slot": 24,
+      "ptyId": {
+        "$bytes": "2323232323232323232323232323232323232323232323232323232323232323"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c7c"
+      }
+    },
+    {
+      "slot": 25,
+      "ptyId": {
+        "$bytes": "2424242424242424242424242424242424242424242424242424242424242424"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d7d"
+      }
+    },
+    {
+      "slot": 26,
+      "ptyId": {
+        "$bytes": "2525252525252525252525252525252525252525252525252525252525252525"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e7e"
+      }
+    },
+    {
+      "slot": 27,
+      "ptyId": {
+        "$bytes": "2626262626262626262626262626262626262626262626262626262626262626"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f7f"
+      }
+    },
+    {
+      "slot": 28,
+      "ptyId": {
+        "$bytes": "2727272727272727272727272727272727272727272727272727272727272727"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "8080808080808080808080808080808080808080808080808080808080808080"
+      }
+    },
+    {
+      "slot": 29,
+      "ptyId": {
+        "$bytes": "2828282828282828282828282828282828282828282828282828282828282828"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "8181818181818181818181818181818181818181818181818181818181818181"
+      }
+    },
+    {
+      "slot": 30,
+      "ptyId": {
+        "$bytes": "2929292929292929292929292929292929292929292929292929292929292929"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "8282828282828282828282828282828282828282828282828282828282828282"
+      }
+    },
+    {
+      "slot": 31,
+      "ptyId": {
+        "$bytes": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
+      },
+      "terminalGeneration": "1",
+      "resourceIdentity": {
+        "$bytes": "8383838383838383838383838383838383838383838383838383838383838383"
+      }
+    }
+  ]
+}

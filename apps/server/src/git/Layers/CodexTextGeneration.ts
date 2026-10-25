@@ -33,6 +33,7 @@ import {
   type CodexTextGenerationOperation,
   writeTempFile,
 } from "./CodexTextGeneration.helpers.ts";
+import { makeGeneratePromptSuggestion } from "./TextGeneration.promptSuggestion.ts";
 import { shouldEnableCodexCliFastMode } from "../../provider/Layers/Codex/Provider.cliOptions.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 
@@ -373,6 +374,15 @@ const makeCodexTextGeneration = Effect.gen(function* () {
     generateBranchName,
     generateThreadTitle,
     generateThreadElevatorSummary,
+    generatePromptSuggestion: makeGeneratePromptSuggestion({
+      provider: "codex",
+      run: ({ outputSchema, ...args }) =>
+        runCodexJson({
+          ...args,
+          operation: "generatePromptSuggestion",
+          outputSchemaJson: outputSchema,
+        }),
+    }),
   } satisfies TextGenerationShape;
 });
 

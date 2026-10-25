@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { assert, describe, it } from "@effect/vitest";
+import { expect } from "vitest";
 import { Effect, Random } from "effect";
 
 import { attachmentRelativePath } from "../../../attachments/attachmentStore.ts";
@@ -54,8 +55,8 @@ describe("ClaudeAdapter attachments", () => {
       const createInput = harness.getLastCreateQueryInput();
       const promptMessage = yield* Effect.promise(() => readFirstPromptMessage(createInput));
       assert.isDefined(promptMessage);
-      assert.deepEqual(promptMessage?.message.content, [
-        { type: "text", text: "What's in this image?" },
+      expect(promptMessage?.message.content).toEqual([
+        { type: "text", text: expect.stringContaining("What's in this image?") },
         {
           type: "image",
           source: {

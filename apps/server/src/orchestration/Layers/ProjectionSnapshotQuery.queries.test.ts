@@ -216,9 +216,18 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
 
       const entries = yield* snapshotQuery.getUsageEntries("2026-03-02T00:00:00.000Z");
       assert.equal(yield* snapshotQuery.getUsageHistoryStatus(), "building");
+      assert.deepEqual(
+        (yield* snapshotQuery.getUsageActiveDays("2026-03-03T00:00:00.000Z")).toSorted(),
+        ["2026-03-01", "2026-03-02"],
+      );
+      assert.deepEqual(yield* snapshotQuery.getUsageActiveDays("2026-03-02T00:00:00.000Z"), [
+        "2026-03-01",
+      ]);
 
       assert.deepEqual(entries, [
         {
+          accountingJson: null,
+          source: "provider-reported",
           contributionId: "codex:usage-thread:turn:current",
           threadId: "usage-thread",
           turnId: "current",
@@ -234,6 +243,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
         },
         {
           contributionId: "opencode:usage-thread:item:message-1",
+          accountingJson: null,
+          source: "provider-reported",
           threadId: "usage-thread",
           turnId: "current",
           createdAt: "2026-03-02T00:00:03.000Z",
@@ -277,6 +288,17 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       assert.ok(
         allTimeQueryPlan.some((row) =>
           row.detail.includes("idx_projection_usage_contributions_occurred"),
+        ),
+      );
+      const activeDaysPlan = (yield* sql`
+        EXPLAIN QUERY PLAN
+        SELECT DISTINCT date(occurred_at) AS day
+        FROM projection_usage_contributions
+        WHERE occurred_at < '2026-03-03T00:00:00.000Z' AND date(occurred_at) IS NOT NULL
+      `) as ReadonlyArray<{ detail: string }>;
+      assert.ok(
+        activeDaysPlan.some((row) =>
+          row.detail.includes("COVERING INDEX idx_projection_usage_contributions_occurred"),
         ),
       );
     }),

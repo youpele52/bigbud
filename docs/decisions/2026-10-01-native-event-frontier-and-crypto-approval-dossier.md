@@ -69,11 +69,11 @@ current index and project documentation show active upstream development. Approv
 should weigh older-line security maintenance against a broader latest-major audit.
 No exhaustive vulnerability audit or absence-of-advisories certification claimed.
 
-| Candidate | Registry checksum | Cached upstream VCS revision | License/MSRV/build |
-|---|---|---|---|
-| sha2 0.10.9 | a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283 | 82c36a428f8d6f05f3bfccdedb243e9d1f85359d | MIT OR Apache-2.0; manifest no MSRV; no build script |
+| Candidate       | Registry checksum                                                | Cached upstream VCS revision             | License/MSRV/build                                       |
+| --------------- | ---------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------- |
+| sha2 0.10.9     | a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283 | 82c36a428f8d6f05f3bfccdedb243e9d1f85359d | MIT OR Apache-2.0; manifest no MSRV; no build script     |
 | getrandom 0.3.4 | 899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd | 38e4ad38309a85b56eef4fc759535ccfc322ba9a | MIT OR Apache-2.0; Rust1.63; compiler-query build script |
-| base64 0.22.1 | 72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6 | e14400697453bcc85997119b874bc03d9601d0af | MIT OR Apache-2.0; Rust1.48; no build script |
+| base64 0.22.1   | 72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6 | e14400697453bcc85997119b874bc03d9601d0af | MIT OR Apache-2.0; Rust1.48; no build script             |
 
 Cached Cargo.toml, Cargo.toml.orig, .cargo_vcs_info.json, README and actual source
 examined. Checksums/VCS identify downloaded candidates, not an independent audit.

@@ -34,7 +34,7 @@ function ProgressValue({
   return (
     <ProgressPrimitive.Value
       data-slot="progress-value"
-      className={cn("font-mono text-xs tabular-nums text-muted-foreground", className)}
+      className={cn("text-xs tabular-nums text-muted-foreground", className)}
       {...props}
     />
   );

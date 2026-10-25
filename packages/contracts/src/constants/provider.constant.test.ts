@@ -20,6 +20,7 @@ describe("sortProviderKindsByDisplayName", () => {
       "devin",
       "kilocode",
       "opencode",
+      "opencodeV2",
       "pi",
     ]);
   });

@@ -32,6 +32,8 @@ export const ProjectThreadCountDbRow = ProjectThreadCount;
 export const ThreadSummaryDbRow = ThreadSummary.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(ModelSelection),
+    // projection_thread_sessions.retained_family; NULL when the thread has no session row.
+    retainedFamily: Schema.NullOr(Schema.Number),
     isWatching: Schema.Number,
     isWatched: Schema.Number,
     isDelegated: Schema.Number,
@@ -44,6 +46,7 @@ export function normalizeThreadSummary(row: ThreadSummaryDbRow): ThreadSummaryTy
   return {
     ...row,
     modelSelection: row.modelSelection as ThreadSummaryType["modelSelection"],
+    retainedFamily: row.retainedFamily === 1,
     isWatching: row.isWatching === 1,
     isWatched: row.isWatched === 1,
     isDelegated: row.isDelegated === 1,
@@ -73,6 +76,9 @@ export const ThreadDetailMessageDbRow = ProjectionThreadMessage.mapFields(
     isStreaming: Schema.Number,
     attachments: Schema.NullOr(Schema.fromJsonString(ProjectionThreadMessage.fields.attachments)),
     replyTo: Schema.NullOr(Schema.fromJsonString(ProjectionThreadMessage.fields.replyTo)),
+    originSegments: Schema.NullOr(
+      Schema.fromJsonString(ProjectionThreadMessage.fields.originSegments),
+    ),
   }),
 );
 export type ThreadDetailMessageDbRow = typeof ThreadDetailMessageDbRow.Type;

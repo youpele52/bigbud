@@ -40,6 +40,11 @@ import {
 } from "./ComposerPromptEditor.plugins";
 import { ComposerSurroundSelectionPlugin } from "./ComposerPromptEditor.surroundSelection";
 import {
+  ComposerPromptSuggestionGhost,
+  ComposerPromptSuggestionPlugin,
+  promptSuggestionAriaLabel,
+} from "./ComposerPromptEditor.suggestion";
+import {
   type ComposerPromptEditorHandle,
   type ComposerPromptEditorProps,
 } from "./ComposerPromptEditor.shared";
@@ -55,6 +60,7 @@ export function ComposerPromptEditorInner({
   discoveredSkills = [],
   disabled,
   placeholder,
+  promptSuggestion,
   className,
   compact = false,
   onRemoveTerminalContext,
@@ -64,6 +70,7 @@ export function ComposerPromptEditorInner({
   editorRef,
 }: ComposerPromptEditorInnerProps) {
   const [editor] = useLexicalComposerContext();
+  const ghostSuggestion = !disabled && terminalContexts.length === 0 ? promptSuggestion : null;
   const onChangeRef = useRef(onChange);
   const initialCursor = clampCollapsedComposerCursor(value, cursor);
   const terminalContextsSignature = terminalContextSignature(terminalContexts);
@@ -292,13 +299,20 @@ export function ComposerPromptEditorInner({
                 className,
               )}
               data-testid="composer-editor"
-              aria-placeholder={placeholder}
+              aria-placeholder={
+                ghostSuggestion ? promptSuggestionAriaLabel(ghostSuggestion) : placeholder
+              }
               placeholder={<span />}
               onPaste={onPaste}
             />
           }
           placeholder={
-            terminalContexts.length > 0 ? null : (
+            terminalContexts.length > 0 ? null : ghostSuggestion ? (
+              <ComposerPromptSuggestionGhost
+                suggestion={ghostSuggestion}
+                discoveredSkills={discoveredSkills}
+              />
+            ) : (
               <div className="pointer-events-none absolute inset-0 text-inherit leading-[inherit] text-muted-foreground/35">
                 {placeholder}
               </div>
@@ -307,6 +321,10 @@ export function ComposerPromptEditorInner({
           ErrorBoundary={LexicalErrorBoundary}
         />
         <OnChangePlugin onChange={handleEditorChange} />
+        <ComposerPromptSuggestionPlugin
+          suggestion={ghostSuggestion}
+          discoveredSkills={discoveredSkills}
+        />
         <ComposerCommandKeyPlugin {...(onCommandKeyDown ? { onCommandKeyDown } : {})} />
         <ComposerSurroundSelectionPlugin terminalContexts={terminalContexts} />
         <ComposerInlineTokenArrowPlugin />

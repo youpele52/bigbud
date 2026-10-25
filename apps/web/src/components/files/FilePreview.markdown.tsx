@@ -76,8 +76,8 @@ interface FilePreviewMarkdownViewProps {
   cwd: string;
   scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   contentRef: React.RefObject<HTMLDivElement | null>;
-  linesContainerRef: React.RefObject<HTMLDivElement | null>;
   selectedRange: { startLine: number; endLine: number } | null;
+  renderedRange?: Range | undefined;
   selectedText: string;
   onContextMenu: (event: React.MouseEvent<HTMLDivElement>) => void;
   onCreateAnnotation?: ((annotation: CodeAnnotationDraft) => void) | undefined;
@@ -90,8 +90,8 @@ export function FilePreviewMarkdownView({
   cwd,
   scrollContainerRef,
   contentRef,
-  linesContainerRef,
   selectedRange,
+  renderedRange,
   selectedText,
   onContextMenu,
   onCreateAnnotation,
@@ -112,9 +112,9 @@ export function FilePreviewMarkdownView({
       />
       {selectedRange && onCreateAnnotation ? (
         <FilePreviewAnnotationComposer
-          placement="sticky"
           scrollContainerRef={scrollContainerRef}
-          linesContainerRef={linesContainerRef}
+          linesContainerRef={contentRef}
+          renderedRange={renderedRange}
           selectedRange={selectedRange}
           selectedText={selectedText}
           onCreateAnnotation={onCreateAnnotation}

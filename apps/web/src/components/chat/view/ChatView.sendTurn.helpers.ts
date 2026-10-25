@@ -21,6 +21,7 @@ import {
   type revokeUserMessagePreviewUrls,
 } from "./ChatView.logic";
 import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
+import { desktopAttachmentPath, isRealAttachmentPath } from "./ChatView.attachments.logic";
 
 export const IMAGE_ONLY_BOOTSTRAP_PROMPT =
   "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
@@ -102,6 +103,9 @@ export function buildThreadBootstrap(input: {
             interactionMode: input.interactionMode,
             branch: input.thread.branch,
             worktreePath: input.thread.worktreePath,
+            ...(input.thread.worktreeBinding
+              ? { worktreeBinding: input.thread.worktreeBinding }
+              : {}),
             createdAt: input.thread.createdAt,
           },
         }
@@ -171,13 +175,25 @@ export function buildTurnAttachments(
   files: readonly ComposerFileAttachment[],
 ) {
   return Promise.all([
-    ...images.map(async (image) => ({
-      type: "image" as const,
-      name: image.name,
-      mimeType: image.mimeType,
-      sizeBytes: image.sizeBytes,
-      dataUrl: await readFileAsDataUrl(image.file),
-    })),
+    ...images.map(async (image) => {
+      const filePath = isElectron ? desktopAttachmentPath(image.file) : "";
+      if (filePath)
+        return {
+          type: "file" as const,
+          transport: "path" as const,
+          name: image.name,
+          mimeType: image.mimeType,
+          sizeBytes: image.sizeBytes,
+          filePath,
+        };
+      return {
+        type: "image" as const,
+        name: image.name,
+        mimeType: image.mimeType,
+        sizeBytes: image.sizeBytes,
+        dataUrl: await readFileAsDataUrl(image.file),
+      };
+    }),
     ...files.map(async (file) => {
       if (file.attachmentMode === "thread-reference") {
         return {
@@ -200,7 +216,7 @@ export function buildTurnAttachments(
           entryKind: file.entryKind ?? "file",
         };
       }
-      if (isElectron && file.filePath) {
+      if (isElectron && isRealAttachmentPath(file.filePath)) {
         return {
           type: "file" as const,
           transport: "path" as const,
@@ -210,10 +226,11 @@ export function buildTurnAttachments(
           filePath: file.filePath,
         };
       }
-      if (isElectron) {
-        throw new Error(`Missing filesystem path for attachment '${file.name}'.`);
-      }
-      const dataUrl = file.file ? await readFileAsDataUrl(file.file) : "";
+      if (!file.file)
+        throw new Error(
+          `Attachment '${file.name}' has no readable file or path. Reattach it before sending.`,
+        );
+      const dataUrl = await readFileAsDataUrl(file.file);
       return {
         type: "file" as const,
         transport: "base64" as const,
@@ -255,7 +272,8 @@ export function restoreShellComposerDraftAfterFailure(input: {
 
 export function restoreMessageComposerDraftAfterFailure(input: {
   readonly currentDraftEmpty: boolean;
-  readonly messageIdForSend: string;
+  /** The optimistic bubble to drop; `null` when the send showed none (a queued prompt). */
+  readonly messageIdForSend: string | null;
   readonly promptText: string;
   readonly promptRef: { current: string };
   readonly replyTarget: ChatMessage["replyTo"] | null;
@@ -278,14 +296,16 @@ export function restoreMessageComposerDraftAfterFailure(input: {
     return;
   }
 
-  input.setOptimisticUserMessages((existing) => {
-    const removed = existing.filter((message) => message.id === input.messageIdForSend);
-    for (const message of removed) {
-      input.revokeUserMessagePreviewUrls(message);
-    }
-    const next = existing.filter((message) => message.id !== input.messageIdForSend);
-    return next.length === existing.length ? existing : next;
-  });
+  if (input.messageIdForSend !== null) {
+    input.setOptimisticUserMessages((existing) => {
+      const removed = existing.filter((message) => message.id === input.messageIdForSend);
+      for (const message of removed) {
+        input.revokeUserMessagePreviewUrls(message);
+      }
+      const next = existing.filter((message) => message.id !== input.messageIdForSend);
+      return next.length === existing.length ? existing : next;
+    });
+  }
   input.promptRef.current = input.promptText;
   input.setPrompt(input.promptText);
   input.setComposerCursor(

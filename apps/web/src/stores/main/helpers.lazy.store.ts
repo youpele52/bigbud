@@ -52,6 +52,7 @@ function mergeSidebarThreadSummary(
     elevatorSummaryMessageCount:
       previous.elevatorSummaryMessageCount ?? mapped.elevatorSummaryMessageCount ?? 0,
     archivedAt: previous.archivedAt,
+    ...(previous.providerAgents !== undefined ? { providerAgents: previous.providerAgents } : {}),
     ...(previous.deletingAt !== undefined ? { deletingAt: previous.deletingAt } : {}),
   };
 }

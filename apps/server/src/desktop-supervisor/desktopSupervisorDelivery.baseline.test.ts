@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 
-import {
-  DesktopSupervisorDeliveryCoordinator,
-  type DesktopSupervisorOwner,
-} from "./desktopSupervisorDelivery.ts";
+import { DesktopSupervisorDeliveryCoordinator } from "./desktopSupervisorDelivery.ts";
+import type { DesktopSupervisorOwner } from "./desktopSupervisorDelivery.types.ts";
 
 function owner(): DesktopSupervisorOwner {
   return {

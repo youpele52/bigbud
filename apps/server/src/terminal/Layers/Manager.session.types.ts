@@ -1,5 +1,6 @@
 import { type TerminalEvent, type TerminalSessionSnapshot } from "@bigbud/contracts";
-import { Effect, Option } from "effect";
+import type * as Effect from "effect/Effect";
+import type * as Option from "effect/Option";
 
 import {
   type TerminalCwdError,
@@ -11,6 +12,7 @@ import {
   type TerminalManagerState,
   type TerminalSessionState,
   type TerminalStartInput,
+  type RuntimePathIdentity,
 } from "./Manager.types";
 
 export interface SessionApiContext {
@@ -46,8 +48,12 @@ export interface SessionApiContext {
   deleteAllHistoryForThread: (threadId: string) => Effect.Effect<void>;
   evictInactiveSessionsIfNeeded: () => Effect.Effect<void>;
   assertValidCwd: (cwd: string) => Effect.Effect<void, TerminalCwdError>;
+  resolveRuntimePathIdentity?:
+    | ((cwd: string) => Effect.Effect<RuntimePathIdentity, TerminalCwdError>)
+    | undefined;
   snapshot: (session: TerminalSessionState) => TerminalSessionSnapshot;
   acquireWorktreeLease: (input: {
+    runtimePathIdentity?: RuntimePathIdentity | undefined;
     threadId: string;
     terminalId: string;
     executionTargetId: string;

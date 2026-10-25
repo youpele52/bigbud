@@ -26,6 +26,7 @@ vi.mock("../../stores/ui/ui.store", () => ({
         "scheduled",
         "games",
         "usage",
+        "resource-monitor",
         "pinned",
         "chats",
         "projects",
@@ -69,6 +70,7 @@ function renderActions(newThreadShortcutLabel: string | null = null) {
       newThreadShortcutLabel={newThreadShortcutLabel}
       onOpenAutomations={vi.fn()}
       onOpenUsage={vi.fn()}
+      onOpenSystemMonitor={vi.fn()}
       onOpenGames={vi.fn()}
       sections={{
         pinned: () => <div>Pinned section</div>,
@@ -85,7 +87,8 @@ describe("SidebarActionsSection", () => {
     const html = renderActions();
     expect(html).toContain('data-sidebar-visual-group="primary"');
     expect(html).toContain('data-sidebar-visual-group="secondary"');
-    expect(html.indexOf("Usage")).toBeLessThan(
+    expect(html.indexOf("Usage")).toBeLessThan(html.indexOf("System Monitor"));
+    expect(html.indexOf("System Monitor")).toBeLessThan(
       html.indexOf('data-sidebar-visual-group="secondary"'),
     );
     expect(html.indexOf("Pinned section")).toBeGreaterThan(
@@ -139,12 +142,20 @@ describe("SidebarActionsSection", () => {
     expect(html).toContain("Search");
     expect(html).toContain("Scheduled");
     expect(html).toContain("Usage");
+    expect(html).toContain("System Monitor");
     expect(html.indexOf('aria-label="Open scheduled"')).toBeLessThan(
       html.indexOf('aria-label="Open games"'),
     );
     expect(html.indexOf('aria-label="Open games"')).toBeLessThan(
       html.indexOf('aria-label="Open usage"'),
     );
+  });
+
+  it("uses the shared chart artwork for Usage", () => {
+    const html = renderActions();
+
+    expect(html).toContain("lucide-chart-no-axes-combined");
+    expect(html).not.toContain("lucide-chart-column");
   });
 
   it("applies the group class so per-row hover reveal works for the kbd hint", () => {
@@ -183,6 +194,6 @@ describe("SidebarActionsSection", () => {
     const html = renderActions();
 
     expect(html).toContain('class="group flex h-7 w-full items-center');
-    expect(html.match(/class="group flex h-7 w-full items-center/g)).toHaveLength(6);
+    expect(html.match(/class="group flex h-7 w-full items-center/g)).toHaveLength(7);
   });
 });

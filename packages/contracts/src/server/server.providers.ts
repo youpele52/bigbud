@@ -51,6 +51,8 @@ export const ServerProviderModel = Schema.Struct({
   group: Schema.optional(TrimmedNonEmptyString),
   /** Sub-provider ID for routing (e.g. "openrouter", "google"). Used by the adapter to send the correct providerID in API calls. */
   subProviderID: Schema.optional(TrimmedNonEmptyString),
+  /** Catalog browsing is not credential proof; only native discovery establishes selectability. */
+  availability: Schema.optional(Schema.Literals(["available", "requires-setup"])),
 });
 export type ServerProviderModel = typeof ServerProviderModel.Type;
 
@@ -168,15 +170,29 @@ export type CliProxyDiagnostic = typeof CliProxyDiagnostic.Type;
 
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
+  /** Explicit isolated development composition, never a public-release availability flag. */
+  developmentOnly: Schema.optional(Schema.Boolean),
   enabled: Schema.Boolean,
   installed: Schema.Boolean,
   version: Schema.NullOr(TrimmedNonEmptyString),
   status: ServerProviderState,
   auth: ServerProviderAuth,
+  runtimeUpdateRecommended: Schema.optional(TrimmedNonEmptyString),
+  nativeAgents: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        id: TrimmedNonEmptyString,
+        name: TrimmedNonEmptyString,
+        description: Schema.optional(Schema.String),
+        systemPromptHash: Schema.optional(TrimmedNonEmptyString),
+      }),
+    ),
+  ),
   checkedAt: IsoDateTime,
   initialProbeComplete: Schema.optional(Schema.Boolean),
   message: Schema.optional(TrimmedNonEmptyString),
   recovery: Schema.optional(ServerProviderRecovery),
+  modelRecovery: Schema.optional(ServerProviderRecovery),
   failure: Schema.optional(ServerProviderFailure),
   cliProxyDiagnostic: Schema.optional(CliProxyDiagnostic),
   models: Schema.Array(ServerProviderModel),
@@ -186,6 +202,9 @@ export const ServerProvider = Schema.Struct({
   skills: ServerProviderSkills,
   supportsLocalRuntimeRemoteWorkspace: Schema.optional(Schema.Boolean),
   supportsSteer: Schema.optional(Schema.Boolean),
+  supportsAttachments: Schema.optional(Schema.Boolean),
+  /** Per-subagent Stop is available (Stop-all is separate and unchanged). */
+  subagentStop: Schema.optional(Schema.Boolean),
   turnControl: Schema.optional(
     Schema.Struct({
       nativeSteer: Schema.Boolean,

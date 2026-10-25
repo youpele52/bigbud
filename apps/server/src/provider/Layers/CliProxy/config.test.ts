@@ -65,6 +65,77 @@ tls:
 });
 
 describe("resolveCliProxyConfig", () => {
+  function resolve(content: string) {
+    return resolveCliProxyConfig("/v8.yaml", options({ "/v8.yaml": content }));
+  }
+
+  it("reads v8 listener and client keys without selecting upstream secrets", () => {
+    const result = resolve(`
+config-version: 8
+server:
+  host: "::1"
+  port: 9317
+  tls: { enable: true }
+access:
+  api-keys: ["", " client-secret "]
+api-keys:
+  claude:
+    - keys: [{ api-key: upstream-secret }]
+`);
+    expect(result.baseUrl.toString()).toBe("https://[::1]:9317/");
+    expect(result.apiKey).toBe("client-secret");
+    expectConfigError(
+      () => resolve("api-keys: { claude: [{ keys: [{ api-key: upstream-secret }] }] }"),
+      "MissingCredential",
+    );
+  });
+
+  it("uses field presence for mixed-layout overrides including false and empty host", () => {
+    const result = resolve(
+      `${validConfig}
+server: { host: "", port: 9317, tls: { enable: false } }
+access: { api-keys: [v8-secret] }
+`.replace("enable: false\n", "enable: true\n"),
+    );
+    expect(result.baseUrl.toString()).toBe("http://127.0.0.1:9317/");
+    expect(result.apiKey).toBe("v8-secret");
+    expectConfigError(() => resolve(`${validConfig}\nserver: { port: 0 }`), "InvalidPort");
+    expectConfigError(
+      () => resolve(`${validConfig}\naccess: { api-keys: [] }`),
+      "MissingCredential",
+    );
+  });
+
+  it("falls back per leaf, including TLS enable, without requiring migration", () => {
+    const result = resolve(`${validConfig.replace("enable: false", "enable: true")}
+config-version: 8
+server: { host: localhost, tls: { cert: ignored } }
+access: {}
+`);
+    expect(result.baseUrl.toString()).toBe("https://localhost:8317/");
+    expect(result.apiKey).toBe("secret-key");
+    expect(resolve("access: { api-keys: [client] }").baseUrl.toString()).toBe(
+      "http://127.0.0.1:8317/",
+    );
+  });
+
+  it.each([
+    "server: null",
+    "server: []",
+    "server: { host: [] }",
+    "server: { port: null }",
+    "server: { tls: null }",
+    "server: { tls: { enable: 1 } }",
+    "access: []",
+    "access: { api-keys: [123] }",
+  ])("rejects malformed v8 shapes: %s", (section) => {
+    expectConfigError(() => resolve(`${validConfig}\n${section}`), "ConfigInvalidShape");
+  });
+
+  it("enforces loopback safety on the winning v8 host", () => {
+    expectConfigError(() => resolve(`${validConfig}\nserver: { host: 10.0.0.8 }`), "UnsafeAddress");
+  });
+
   it("prefers an explicitly configured config file over discovered paths", () => {
     const configured = "/configured/config.yaml";
     const result = resolveCliProxyConfig(configured, options({ [configured]: validConfig }));

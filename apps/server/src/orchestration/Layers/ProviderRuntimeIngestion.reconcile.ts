@@ -75,6 +75,7 @@ function areSessionsEqual(
     left?.providerName === right.providerName &&
     left?.runtimeMode === right.runtimeMode &&
     left?.activeTurnId === right.activeTurnId &&
+    Boolean(left?.retainedFamily) === Boolean(right.retainedFamily) &&
     (left?.sessionEpoch ?? 0) === (right.sessionEpoch ?? 0) &&
     (left.reason ?? null) === (right.reason ?? null) &&
     left?.lastError === right.lastError &&
@@ -114,6 +115,9 @@ function toReconciledSession(input: {
       providerName: liveSession.provider,
       runtimeMode: thread.runtimeMode ?? liveSession.runtimeMode ?? DEFAULT_RUNTIME_MODE,
       activeTurnId: liveSession.activeTurnId ?? null,
+      retainedFamily:
+        liveSession.provider === "opencodeV2" &&
+        (liveSession.retainedFamily ?? currentSession?.retainedFamily ?? false),
       sessionEpoch: currentSession?.sessionEpoch ?? liveSession.sessionEpoch ?? 0,
       reason: healLegacyChecking
         ? null
@@ -134,6 +138,11 @@ function toReconciledSession(input: {
   }
 
   if (!currentSession) {
+    return null;
+  }
+  // A requested turn is still starting: its provider session is expected to be missing until
+  // the reactor binds or fails it, so `stopped` here would reopen the queue too early.
+  if (thread.pendingTurnStart != null) {
     return null;
   }
 

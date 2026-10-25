@@ -1,4 +1,7 @@
 import type { OrchestrationThreadActivity, ProviderRuntimeEvent } from "@bigbud/contracts";
+import { approvalRuntimeEventToActivities } from "@bigbud/shared/providerApproval";
+import { PROVIDER_TURN_FAILURE_NOTICE_KIND } from "@bigbud/shared/providerTurnFailure";
+import { serverRunId } from "../../startup/serverRunIdentity.ts";
 
 import { taskRuntimeEventToActivities } from "./ProviderRuntimeIngestion.helpers.activities.tasks.ts";
 import { toolingRuntimeEventToActivities } from "./ProviderRuntimeIngestion.helpers.activities.tooling.ts";
@@ -16,46 +19,31 @@ export function runtimeEventToActivitiesFromHelpers(
   })();
 
   switch (event.type) {
-    case "request.opened": {
-      if (event.payload.requestType === "tool_user_input") return [];
-      const requestKind = helpers.requestKindFromCanonicalRequestType(event.payload.requestType);
+    case "turn.completed": {
+      if (event.provider !== "opencodeV2" || event.payload.state !== "failed") return [];
       return [
         {
           id: event.eventId,
           createdAt: event.createdAt,
-          tone: "approval",
-          kind: "approval.requested",
-          summary:
-            requestKind === "browser"
-              ? "Browser approval requested"
-              : requestKind === "command"
-                ? "Command approval requested"
-                : requestKind === "file-read"
-                  ? "File-read approval requested"
-                  : requestKind === "file-change"
-                    ? "File-change approval requested"
-                    : "Approval requested",
+          tone: "error",
+          kind: PROVIDER_TURN_FAILURE_NOTICE_KIND,
+          summary: "OpenCode v2 turn failed",
           payload: {
-            requestId: helpers.toApprovalRequestId(event.requestId),
-            ...(requestKind ? { requestKind } : {}),
-            requestType: event.payload.requestType,
-            ...(event.payload.detail
-              ? { detail: helpers.truncateDetail(event.payload.detail) }
-              : {}),
-            ...(typeof event.payload.autoApproveAfterMs === "number"
-              ? { autoApproveAfterMs: event.payload.autoApproveAfterMs }
-              : {}),
-            ...(typeof event.payload.sessionApprovalAvailable === "boolean"
-              ? { sessionApprovalAvailable: event.payload.sessionApprovalAvailable }
-              : {}),
-            ...(event.payload.sessionApprovalLabel
-              ? { sessionApprovalLabel: helpers.truncateDetail(event.payload.sessionApprovalLabel) }
-              : {}),
+            serverRunId,
+            message: event.payload.errorMessage ?? "OpenCode v2 native execution failed.",
           },
           turnId: helpers.toTurnId(event.turnId) ?? null,
           ...sequence,
         },
       ];
+    }
+    case "request.opened": {
+      return approvalRuntimeEventToActivities(event, helpers).map((activity) =>
+        Object.assign(activity, {
+          turnId: helpers.toTurnId(event.turnId) ?? null,
+          ...sequence,
+        }),
+      );
     }
     case "request.resolved": {
       if (event.payload.requestType === "tool_user_input") return [];
@@ -104,7 +92,7 @@ export function runtimeEventToActivitiesFromHelpers(
         {
           id: event.eventId,
           createdAt: event.createdAt,
-          tone: "info",
+          tone: event.payload.severity === "error" ? "error" : "info",
           kind: "runtime.warning",
           summary: "Runtime warning",
           payload: {
@@ -171,6 +159,23 @@ export function runtimeEventToActivitiesFromHelpers(
     case "task.updated":
       return taskRuntimeEventToActivities(event, helpers, sequence);
     case "thread.state.changed":
+      if (event.payload.state === "reset") {
+        return [
+          {
+            id: event.eventId,
+            createdAt: event.createdAt,
+            tone: "info",
+            kind: "provider-conversation.reset",
+            summary: "Provider conversation cleared",
+            payload: {
+              state: event.payload.state,
+              ...(event.payload.detail !== undefined ? { detail: event.payload.detail } : {}),
+            },
+            turnId: helpers.toTurnId(event.turnId) ?? null,
+            ...sequence,
+          },
+        ];
+      }
       if (event.payload.state !== "compacted") return [];
       return [
         {

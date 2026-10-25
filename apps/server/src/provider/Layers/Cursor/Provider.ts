@@ -25,6 +25,8 @@ import { makeProviderEffortCacheDecorator } from "../../providerEffortCache.ts";
 import { CursorProvider } from "../../Services/Cursor/Provider.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { ServerConfig } from "../../../startup/config.ts";
+import { withHttpUsageLimits } from "../../providerUsageLimits.http.ts";
+import { readCursorUsageLimits } from "./Provider.usageLimits.ts";
 import {
   ABOUT_TIMEOUT_MS,
   buildCursorProviderSnapshot,
@@ -253,6 +255,7 @@ export const CursorProviderLive = Layer.effect(
     const checkProvider = checkCursorProviderStatus().pipe(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.flatMap((snapshot) => withHttpUsageLimits(snapshot, readCursorUsageLimits)),
     );
 
     return yield* makeManagedServerProvider<CursorSettings>({
@@ -266,6 +269,8 @@ export const CursorProviderLive = Layer.effect(
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       initialSnapshot: buildInitialCursorProviderSnapshot,
       checkProvider,
+      readUsageLimits: () => Effect.promise((signal) => readCursorUsageLimits(signal, true)),
+      recoverModelDiscovery: true,
       decorateSnapshot,
       enrichSnapshot: ({ settings, snapshot, generation, publishSnapshot }) => {
         if (

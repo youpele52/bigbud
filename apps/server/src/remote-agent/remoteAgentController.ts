@@ -1,22 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
+
+import { compareProcessStartToken, processStartToken } from "../utils/processStartToken.ts";
 
 export interface RemoteAgentControllerIdentity {
   readonly id: string;
   readonly pid: number;
   readonly startedAt: string;
-}
-
-function processStartToken(pid: number): string | undefined {
-  try {
-    const value = execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    return value ? value.replaceAll(/\s+/g, "_") : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 const controller: RemoteAgentControllerIdentity = {
@@ -36,8 +25,10 @@ export async function isRemoteAgentControllerAlive(
   if (identity.id === controller.id) return true;
   try {
     process.kill(identity.pid, 0);
-    const startedAt = processStartToken(identity.pid);
-    return startedAt === undefined || startedAt === identity.startedAt;
+    // Only comparable tokens that differ prove PID reuse; legacy or unobtainable ones fail closed.
+    return (
+      compareProcessStartToken(identity.startedAt, processStartToken(identity.pid)) !== "different"
+    );
   } catch (cause) {
     return cause instanceof Error && "code" in cause && cause.code === "EPERM";
   }

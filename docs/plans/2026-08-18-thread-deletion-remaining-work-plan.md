@@ -32,7 +32,7 @@ The bounded ownership migrations through 089 are now present for projection rows
    - a pinned subtree and an active subtree
    - manual time-based cleanup and the next scheduled cleanup
 3. Confirm the deletion confirmation says that child threads are permanently deleted with their parent.
-4. `docs/thread-retention.md` and user-facing wording describe projection and managed-resource deletion. Keep any claim that all local canonical history is erased gated on restart/replay validation.
+4. `docs/THREAD_RETENTION.md` and user-facing wording describe projection and managed-resource deletion. Keep any claim that all local canonical history is erased gated on restart/replay validation.
 
 **Exit criteria:** The release path passes all tests and desktop checks, and product wording matches what is actually removed.
 

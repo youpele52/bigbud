@@ -30,6 +30,9 @@ export function makeThreadTurnsProjector(
 
       case "thread.turn-start-requested": {
         yield* projectionTurnRepository.replacePendingTurnStart({
+          ...(event.payload.usageAttribution
+            ? { usageAttribution: event.payload.usageAttribution }
+            : {}),
           threadId: event.payload.threadId,
           messageId: event.payload.messageId,
           sourceProposedPlanThreadId: event.payload.sourceProposedPlan?.threadId ?? null,
@@ -59,6 +62,9 @@ export function makeThreadTurnsProjector(
               : "running";
           yield* projectionTurnRepository.upsertByTurnId({
             ...existingTurn.value,
+            usageAttribution:
+              existingTurn.value.usageAttribution ??
+              (Option.isSome(pendingTurnStart) ? pendingTurnStart.value.usageAttribution : null),
             state: nextState,
             pendingMessageId:
               existingTurn.value.pendingMessageId ??
@@ -79,14 +85,16 @@ export function makeThreadTurnsProjector(
                 ? pendingTurnStart.value.requestedAt
                 : event.occurredAt),
             requestedAt:
-              existingTurn.value.requestedAt ??
-              (Option.isSome(pendingTurnStart)
+              existingTurn.value.pendingMessageId === null && Option.isSome(pendingTurnStart)
                 ? pendingTurnStart.value.requestedAt
-                : event.occurredAt),
+                : existingTurn.value.requestedAt,
           });
         } else {
           yield* projectionTurnRepository.upsertByTurnId({
             turnId,
+            usageAttribution: Option.isSome(pendingTurnStart)
+              ? pendingTurnStart.value.usageAttribution
+              : null,
             threadId: event.payload.threadId,
             pendingMessageId: Option.isSome(pendingTurnStart)
               ? pendingTurnStart.value.messageId

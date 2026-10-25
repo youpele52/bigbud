@@ -59,7 +59,7 @@ describe("ClaudeAdapterLive", () => {
       assert.equal(session.cwd, "/srv/project");
       assert.equal(session.providerRuntimeExecutionTargetId, "local");
       assert.equal(session.workspaceExecutionTargetId, "ssh:host=devbox&user=root&port=22");
-      assert.equal(createInput?.options.permissionMode, undefined);
+      assert.equal(createInput?.options.permissionMode, "default");
       assert.equal(createInput?.options.cwd?.includes("bigbud-claude-remote-workspace-"), true);
       assert.deepEqual(createInput?.options.tools, [
         "AskUserQuestion",
@@ -88,7 +88,9 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_orchestration__archive_thread",
         "mcp__bigbud_orchestration__send_thread_message",
         "mcp__bigbud_orchestration__get_thread_status",
+        "mcp__bigbud_orchestration__get_system_resources",
         "mcp__bigbud_orchestration__list_threads",
+        "mcp__bigbud_orchestration__list_available_models",
         "mcp__bigbud_orchestration__list_pinned_threads",
         "mcp__bigbud_orchestration__pin_thread",
         "mcp__bigbud_orchestration__unpin_thread",

@@ -2,8 +2,13 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { Effect, Layer, Option, Schema, Struct } from "effect";
 import { ChatAttachment, OrchestrationMessageReply } from "@bigbud/contracts";
+import { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import {
+  estimateObservableTokens,
+  OBSERVABLE_ESTIMATOR_VERSION,
+} from "../../orchestration/usageObservable.ts";
 import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
 import {
   GetProjectionThreadMessageInput,
@@ -19,6 +24,7 @@ const ProjectionThreadMessageDbRowSchema = ProjectionThreadMessage.mapFields(
     isStreaming: Schema.Number,
     attachments: Schema.NullOr(Schema.fromJsonString(Schema.Array(ChatAttachment))),
     replyTo: Schema.NullOr(Schema.fromJsonString(OrchestrationMessageReply)),
+    originSegments: Schema.NullOr(Schema.fromJsonString(Schema.Array(MessageOriginSegment))),
   }),
 );
 
@@ -36,6 +42,7 @@ function toProjectionThreadMessage(
     updatedAt: row.updatedAt,
     ...(row.attachments !== null ? { attachments: row.attachments } : {}),
     ...(row.replyTo !== null ? { replyTo: row.replyTo } : {}),
+    ...(row.originSegments !== null ? { originSegments: row.originSegments } : {}),
   };
 }
 
@@ -48,21 +55,28 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
       const nextAttachmentsJson =
         row.attachments !== undefined ? JSON.stringify(row.attachments) : null;
       const nextReplyToJson = row.replyTo !== undefined ? JSON.stringify(row.replyTo) : null;
+      const nextOriginSegmentsJson =
+        row.originSegments !== undefined ? JSON.stringify(row.originSegments) : null;
       return sql`
         INSERT INTO projection_thread_messages (
           message_id,
+          observable_token_count,
+          observable_estimator_version,
           thread_id,
           turn_id,
           role,
           text,
           attachments_json,
           reply_to_json,
+          origin_segments_json,
           is_streaming,
           created_at,
           updated_at
         )
         VALUES (
           ${row.messageId},
+          ${estimateObservableTokens(row.text)},
+          ${OBSERVABLE_ESTIMATOR_VERSION},
           ${row.threadId},
           ${row.turnId},
           ${row.role},
@@ -83,6 +97,14 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
               WHERE message_id = ${row.messageId}
             )
           ),
+          COALESCE(
+            ${nextOriginSegmentsJson},
+            (
+              SELECT origin_segments_json
+              FROM projection_thread_messages
+              WHERE message_id = ${row.messageId}
+            )
+          ),
           ${row.isStreaming ? 1 : 0},
           ${row.createdAt},
           ${row.updatedAt}
@@ -93,6 +115,8 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           turn_id = excluded.turn_id,
           role = excluded.role,
           text = excluded.text,
+          observable_token_count = excluded.observable_token_count,
+          observable_estimator_version = excluded.observable_estimator_version,
           attachments_json = COALESCE(
             excluded.attachments_json,
             projection_thread_messages.attachments_json
@@ -100,6 +124,10 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           reply_to_json = COALESCE(
             excluded.reply_to_json,
             projection_thread_messages.reply_to_json
+          ),
+          origin_segments_json = COALESCE(
+            excluded.origin_segments_json,
+            projection_thread_messages.origin_segments_json
           ),
           is_streaming = excluded.is_streaming,
           created_at = excluded.created_at,
@@ -121,6 +149,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           text,
           attachments_json AS "attachments",
           reply_to_json AS "replyTo",
+          origin_segments_json AS "originSegments",
           is_streaming AS "isStreaming",
           created_at AS "createdAt",
           updated_at AS "updatedAt"
@@ -143,6 +172,7 @@ const makeProjectionThreadMessageRepository = Effect.gen(function* () {
           text,
           attachments_json AS "attachments",
           reply_to_json AS "replyTo",
+          origin_segments_json AS "originSegments",
           is_streaming AS "isStreaming",
           created_at AS "createdAt",
           updated_at AS "updatedAt"

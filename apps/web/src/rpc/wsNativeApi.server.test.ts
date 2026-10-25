@@ -38,6 +38,16 @@ describe("wsNativeApi — server", () => {
     expect(rpcClientMock.server.refreshProviders).toHaveBeenCalledWith();
   });
 
+  it("keeps subscription refresh separate from provider recovery", async () => {
+    rpcClientMock.server.refreshUsageLimits.mockResolvedValue({ providers: defaultProviders });
+    const { createWsNativeApi } = await import("./wsNativeApi");
+    await expect(createWsNativeApi().server.refreshUsageLimits()).resolves.toEqual({
+      providers: defaultProviders,
+    });
+    expect(rpcClientMock.server.refreshUsageLimits).toHaveBeenCalledWith();
+    expect(rpcClientMock.server.refreshProviders).not.toHaveBeenCalled();
+  });
+
   it("forwards CLIProxy activation directly to the RPC client", async () => {
     const refreshed = { providers: defaultProviders };
     rpcClientMock.server.activateCliProxy.mockResolvedValue(refreshed);

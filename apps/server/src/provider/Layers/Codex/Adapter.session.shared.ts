@@ -13,6 +13,10 @@ import {
 } from "../../Errors.ts";
 import { PROVIDER, toMessage } from "./Adapter.types.ts";
 
+/**
+ * The Codex manager refuses a turn for an unknown or closed session before writing anything (and
+ * the app server refuses one it does not know), so the turn never started: `session-dead`.
+ */
 export function toSessionError(
   threadId: ThreadId,
   cause: unknown,
@@ -22,6 +26,7 @@ export function toSessionError(
     return new ProviderAdapterSessionNotFoundError({
       provider: PROVIDER,
       threadId,
+      failureClass: "session-dead",
       cause,
     });
   }
@@ -29,6 +34,7 @@ export function toSessionError(
     return new ProviderAdapterSessionClosedError({
       provider: PROVIDER,
       threadId,
+      failureClass: "session-dead",
       cause,
     });
   }
@@ -44,6 +50,7 @@ function toModelSelectionError(
         provider: PROVIDER,
         operation,
         issue: cause.issue,
+        failureClass: "invalid-request",
         cause,
       })
     : undefined;

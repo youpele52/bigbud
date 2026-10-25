@@ -3,6 +3,7 @@ import { useSettingsSearch } from "./SettingsSearch.context";
 import { normalizeSettingsSearchQuery } from "./SettingsSearch.logic";
 import { SettingsPageContainer } from "./settingsLayout";
 import { AboutSettingsSection } from "./AboutSettingsSection";
+import { AboutConnectionDiagnosticsSection } from "./AboutConnectionDiagnosticsSection";
 
 function AboutProductHeader() {
   const { query } = useSettingsSearch();
@@ -23,6 +24,7 @@ export function AboutSettingsPanel() {
     <SettingsPageContainer>
       <AboutProductHeader />
       <AboutSettingsSection />
+      <AboutConnectionDiagnosticsSection />
     </SettingsPageContainer>
   );
 }

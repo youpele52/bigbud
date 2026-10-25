@@ -6,8 +6,8 @@
  * frame, prompt area, and footer layout.
  */
 export const composerSurfaceStyles = {
-  frame: "group rounded-[22px] p-px transition-colors duration-200",
-  surface: "rounded-[20px] border bg-card transition-colors duration-200",
+  frame: "group rounded-[calc(var(--card-surface-radius)+2px)] p-px transition-colors duration-200",
+  surface: "rounded-(--card-surface-radius) border bg-card transition-colors duration-200",
   surfaceFocus: "has-focus-visible:border-ring/45",
   surfaceDefaultBorder: "border-border",
   surfaceDragOver: "border-primary/70 bg-accent/30",

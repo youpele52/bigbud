@@ -21,14 +21,31 @@ export function createCopilotOrchestrationToolSurface(input: {
   const { dispatcher, threadId } = input;
   const listThreadsDispatch = dispatcher.listThreads;
   const workspaceDispatch = dispatcher.workspace;
+  const listAvailableModelsDispatch = dispatcher.listAvailableModels;
   return createCopilotThreadOrchestrationTools({
+    getSystemResources: () =>
+      dispatcher.getSystemResources
+        ? asRecord(dispatcher.getSystemResources())
+        : Promise.resolve({ available: false, reason: "desktop monitor unavailable" }),
     ...(workspaceDispatch
       ? {
           workspace: (tool, args) =>
             asRecord(workspaceDispatch({ callerThreadId: threadId, tool, arguments: args })),
         }
       : {}),
-    renameThread: (title) => Effect.runPromise(dispatcher.rename({ threadId, title })),
+    renameThread: (title, targetThreadId, invocationId) =>
+      Effect.runPromise(
+        dispatcher.rename({
+          threadId,
+          title,
+          ...(targetThreadId !== undefined
+            ? { targetThreadId: ThreadId.makeUnsafe(targetThreadId.trim()) }
+            : {}),
+          ...(invocationId !== undefined
+            ? { invocationId, sourceMessageId: MessageId.makeUnsafe(invocationId) }
+            : {}),
+        }),
+      ),
     archiveThread: () => Effect.runPromise(dispatcher.archive({ threadId }).pipe(Effect.asVoid)),
     getThreadStatus: (targetThreadId) =>
       asRecord(
@@ -69,7 +86,15 @@ export function createCopilotOrchestrationToolSurface(input: {
       ),
     computerUse: (action) => asRecord(dispatcher.computerUse({ threadId, action })),
     browser: (action) => asRecord(dispatcher.browser({ threadId, action })),
-    createThread: ({ invocationId, sourceMessageId, title, task, projectId, watchForCompletion }) =>
+    createThread: ({
+      invocationId,
+      sourceMessageId,
+      title,
+      task,
+      projectId,
+      watchForCompletion,
+      modelSelection,
+    }) =>
       asRecord(
         dispatcher.createThread?.({
           callerThreadId: threadId,
@@ -79,8 +104,20 @@ export function createCopilotOrchestrationToolSurface(input: {
           task,
           ...(projectId ? { projectId: ProjectId.makeUnsafe(projectId) } : {}),
           watchForCompletion,
+          ...(modelSelection !== undefined ? { modelSelection } : {}),
         }) ?? Effect.fail(new Error("Thread creation is not ready.")),
       ),
+    ...(listAvailableModelsDispatch
+      ? {
+          listAvailableModels: ({ limit }: { readonly limit?: number }) =>
+            asRecord(
+              listAvailableModelsDispatch({
+                callerThreadId: threadId,
+                ...(limit !== undefined ? { limit } : {}),
+              }),
+            ),
+        }
+      : {}),
     sendThreadMessage: ({ threadId: targetThreadId, message, delivery, invocationId }) =>
       asRecord(
         dispatcher.sendMessage?.({

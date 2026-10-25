@@ -86,7 +86,7 @@ export function makeSettingsHarness(provider: ProviderKind = "codex") {
         Effect.succeed({
           snapshotSequence: 0,
           threads: [thread],
-          projects: [],
+          projects: [{ id: thread.projectId, workspaceRoot: "/workspace" }],
           updatedAt: createdAt,
         }),
     },

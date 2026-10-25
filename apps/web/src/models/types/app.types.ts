@@ -18,6 +18,16 @@ import type {
   ProviderInteractionMode,
   RuntimeMode,
 } from "@bigbud/contracts";
+import type { ThreadDetailDelegatedChild } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
+import type { DelegationModelChoiceLinkedSummary } from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
+import type { DelegatedModelChoiceRecord } from "@bigbud/shared/delegatedModelChoice";
+import type { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestration.messageOrigin.ts";
+import type { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
+import type {
+  ThreadRecovery,
+  ThreadRecoveryStatus,
+} from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
+import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import {
   DEFAULT_RUNTIME_MODE as _DEFAULT_RUNTIME_MODE,
   DEFAULT_PROVIDER_INTERACTION_MODE as _DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -104,6 +114,7 @@ export interface ChatMessage {
   text: string;
   attachments?: ChatAttachment[];
   replyTo?: ChatMessageReplyTarget;
+  originSegments?: ReadonlyArray<MessageOriginSegment>;
   turnId?: TurnId | null;
   createdAt: string;
   completedAt?: string | undefined;
@@ -152,7 +163,39 @@ export interface Project {
   scripts: ProjectScript[];
 }
 
+/** Client view of the latest turn-start request; drives the reconnecting notice. */
+/** A `provider.session.recovery` step the server reported while this request was current. */
+export interface ThreadTurnStartRecoveryStep {
+  readonly step: string;
+  readonly outcome: string;
+}
+
+export interface ThreadTurnStartRequest {
+  messageId: MessageId;
+  requestedAt: string;
+  outcome: "pending" | "started" | "failed";
+  settledAt: string | null;
+  /** Attached by arrival order, never by comparing the server's and the request's clocks. */
+  recoverySteps: ReadonlyArray<ThreadTurnStartRecoveryStep>;
+}
+
+/**
+ * A delegated child's model choice as the trunk sees it: the full record mirrored from a loaded
+ * tributary, else the summary on the trunk's own `delegation.child-linked` activity.
+ */
+export type DelegatedChildModelChoice =
+  | { readonly source: "tributary"; readonly record: DelegatedModelChoiceRecord }
+  | { readonly source: "linked"; readonly summary: DelegationModelChoiceLinkedSummary };
+
+/** The server's delegated-child summary plus the web-only model choice mirror (never sent). */
+export type DelegatedChildSummary = ThreadDetailDelegatedChild & {
+  readonly modelChoice?: DelegatedChildModelChoice;
+};
+
 export interface Thread {
+  worktreeBinding?:
+    | import("@bigbud/contracts/workspace/worktreeBinding.ts").WorktreeBinding
+    | undefined;
   id: ThreadId;
   codexThreadId: string | null;
   projectId: ProjectId;
@@ -163,6 +206,8 @@ export interface Thread {
     threadId: ThreadId;
     title: string;
   };
+  /** Present only on server-side forks. */
+  forkOrigin?: ThreadForkOrigin;
   title: string;
   purpose?: OrchestrationThreadPurpose;
   elevatorSummary?: string | null;
@@ -173,6 +218,8 @@ export interface Thread {
   session: ThreadSession | null;
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
+  providerAgents?: OrchestrationTask[];
+  delegatedChildren?: DelegatedChildSummary[];
   queuedPrompts?: Array<OrchestrationQueuedPrompt>;
   pendingTurnControlOperation?: OrchestrationTurnControlOperation | null;
   queueHold?: boolean;
@@ -183,6 +230,9 @@ export interface Thread {
   deletingAt?: string | null;
   updatedAt?: string | undefined;
   latestTurn: OrchestrationLatestTurn | null;
+  turnStartRequest?: ThreadTurnStartRequest | null | undefined;
+  /** Sleep and wake recovery state from the server projection. */
+  recovery?: ThreadRecovery | null;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
   branch: string | null;
   worktreePath: string | null;
@@ -221,11 +271,15 @@ export interface SidebarThreadSummary {
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
   hasActionableProposedPlan: boolean;
+  providerAgents?: OrchestrationTask[];
+  /** `continuing` keeps the pill on Working while bigbud resumes a turn after sleep. */
+  recoveryStatus?: ThreadRecoveryStatus | null;
 }
 
 export type ThreadSessionProvider = ProviderKind | "unknown";
 
 export interface ThreadSession {
+  retainedFamily?: boolean | undefined;
   provider: ThreadSessionProvider;
   status: SessionPhase | "error" | "closed";
   activeTurnId?: TurnId | undefined;

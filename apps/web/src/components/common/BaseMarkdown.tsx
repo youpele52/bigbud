@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type MouseEvent,
 } from "react";
 import type { Components } from "react-markdown";
 import ReactMarkdown from "react-markdown";
@@ -20,12 +21,14 @@ import { cn } from "~/lib/utils";
 
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { useTheme } from "../../hooks/useTheme";
-import { openBrowserPanel } from "../../stores/browser/browserPanel.actions";
+import { openLinkFromClick } from "../../lib/openLink";
 import { resolveMarkdownFileLinkTarget, rewriteMarkdownFileUriHref } from "../../utils/markdown";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import { openChatFileTarget } from "../chat/common/chatFileTargets";
 import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { createSourcePositionPlugin, sourcePositionProps } from "./BaseMarkdown.sourcePositions";
+import { MarkdownTable } from "./MarkdownTable";
 
 export interface MarkdownAnchorClick {
   href: string;
@@ -100,7 +103,7 @@ function MarkdownCodeBlock({
 }: {
   code: string;
   children: ReactNode;
-  sourceProps: Record<string, number>;
+  sourceProps: Record<string, number | string>;
 }) {
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -187,21 +190,17 @@ export const BaseMarkdown = memo(function BaseMarkdown({
         }
         const targetPath = resolveMarkdownFileLinkTarget(href, cwd);
         if (!targetPath) {
-          return (
-            <a
-              {...props}
-              href={href}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                if (onAnchorClick) {
-                  onAnchorClick({ href, workspaceRoot: cwd });
-                  return;
-                }
-                openBrowserPanel({ url: href });
-              }}
-            />
-          );
+          const activateLink = (event: MouseEvent<HTMLAnchorElement>) => {
+            if (event.type === "auxclick" && event.button !== 1) return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (onAnchorClick) {
+              onAnchorClick({ href, workspaceRoot: cwd });
+              return;
+            }
+            openLinkFromClick(href);
+          };
+          return <a {...props} href={href} onClick={activateLink} onAuxClick={activateLink} />;
         }
 
         const linkText = typeof props.children === "string" ? props.children : "";
@@ -309,6 +308,28 @@ export const BaseMarkdown = memo(function BaseMarkdown({
             />
           </MarkdownCodeBlock>
         );
+      },
+      table({ node: _node, children }) {
+        return <MarkdownTable>{children}</MarkdownTable>;
+      },
+      thead({ node: _node, children, ...props }) {
+        return <TableHeader {...props}>{children}</TableHeader>;
+      },
+      tbody({ node: _node, children, ...props }) {
+        return <TableBody {...props}>{children}</TableBody>;
+      },
+      tr({ node: _node, children, className: rowClassName, ...props }) {
+        return (
+          <TableRow {...props} className={cn(rowClassName, "transition-none hover:bg-transparent")}>
+            {children}
+          </TableRow>
+        );
+      },
+      th({ node: _node, children, ...props }) {
+        return <TableHead {...props}>{children}</TableHead>;
+      },
+      td({ node: _node, children, ...props }) {
+        return <TableCell {...props}>{children}</TableCell>;
       },
     }),
     [cwd, diffThemeName, isStreaming, onAnchorClick, onFileContextMenu, resolvedTheme],

@@ -21,9 +21,10 @@ import {
 } from "./codexAppServerManager.modelSelection";
 import { normalizeCodexModelSlug } from "./codexModeInstructions";
 import { isRecoverableThreadResumeError } from "./codexStderrClassifier";
-import { startCodexAppServerProcess } from "./codexAppServerManager.process";
+import { startCodexAppServerProcessAsync } from "./codexAppServerManager.process";
 import { hasReadyMcpServers, sleep } from "./codexAppServerManager.mcp";
 import { createCodexMcpReadinessTracker } from "./codexAppServerManager.mcpReadiness.ts";
+import type { CodexPendingStarts } from "./codexAppServerManager.pendingStarts.ts";
 import { readObject, readString } from "./codexAppServerManager.protocol";
 import {
   type CodexAppServerStartSessionInput,
@@ -35,6 +36,7 @@ export { hasReadyMcpServers } from "./codexAppServerManager.mcp";
 export interface StartSessionOps {
   readonly runPromise: (effect: Effect.Effect<unknown, never>) => Promise<unknown>;
   readonly sessions: Map<ThreadId, CodexSessionContext>;
+  readonly pendingStarts: Pick<CodexPendingStarts, "begin">;
   readonly sendRequest: <T>(
     ctx: CodexSessionContext,
     method: string,
@@ -133,7 +135,12 @@ export async function startSession(
       createdAt: now,
       updatedAt: now,
     };
-    const child = startCodexAppServerProcess(input, resolvedCwd);
+    const pendingStart = ops.pendingStarts.begin(threadId);
+    const child = pendingStart.accept(
+      await startCodexAppServerProcessAsync(input, resolvedCwd, pendingStart.signal).catch(
+        pendingStart.fail,
+      ),
+    );
     const output = readline.createInterface({ input: child.stdout });
 
     context = {
@@ -149,6 +156,7 @@ export async function startSession(
       pendingApprovals: new Map(),
       pendingUserInputs: new Map(),
       collabReceiverTurns: new Map(),
+      collabChildTurns: new Map(),
       activeModelCatalog: undefined,
       effectiveModelSelection: undefined,
       nextRequestId: 1,

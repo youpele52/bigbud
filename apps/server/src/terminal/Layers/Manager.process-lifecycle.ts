@@ -1,7 +1,10 @@
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { type TerminalAgentDetector } from "./Manager.agentDetection";
-import { Effect, Fiber, Option, type Scope } from "effect";
+import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
+import type * as Scope from "effect/Scope";
 
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 
@@ -75,19 +78,27 @@ export function enqueueProcessEvent(
 
 export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot {
   return {
+    ...(session.wslIdentity ? { wslIdentity: session.wslIdentity } : {}),
     threadId: session.threadId,
     terminalId: session.terminalId,
     executionTargetId: session.executionTargetId,
     dropPathMode: session.dropPathMode,
     cwd: session.cwd,
     worktreePath: session.worktreePath,
+    runtimeEnv: { ...session.runtimeEnv },
+    ...(session.directoryFallback ? { directoryFallback: session.directoryFallback } : {}),
     status: session.status,
     pid: session.pid,
     runtimeGeneration: session.runtimeGeneration,
     ...(isLocalExecutionTarget(session.executionTargetId)
-      ? { activeAgentProvider: session.activeAgentProvider }
+      ? {
+          activeAgentProvider: session.activeAgentProvider,
+          activeAgent: session.activeAgent ?? null,
+        }
       : {}),
-    history: session.history,
+    history: session.history + session.pendingHistoryControlSequence,
+    ...(session.historyTruncated ? { historyTruncated: true } : {}),
+    ...(session.historyUnavailable ? { historyUnavailable: true } : {}),
     exitCode: session.exitCode,
     exitSignal: session.exitSignal,
     updatedAt: session.updatedAt,

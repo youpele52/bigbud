@@ -7,6 +7,7 @@ import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.
 import { type ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { usePersistComposerImageAttachments } from "./chat-view-effects.attachments.hooks";
+import { shouldTickElapsedClock } from "./chat-view-agent-activity.logic";
 
 interface ChatViewEffectsInput {
   base: ChatViewBaseState;
@@ -47,6 +48,7 @@ export function useChatViewEffects({
     setComposerCursor,
     setComposerHighlightedItemId,
     setComposerTrigger,
+    setActivityAccordionOpenById,
     setExpandedImage,
     setExpandedWorkGroups,
     setIsDragOverComposer,
@@ -124,6 +126,7 @@ export function useChatViewEffects({
 
   useEffect(() => {
     setExpandedWorkGroups({});
+    setActivityAccordionOpenById({});
     closePullRequestDialog();
     setProviderUnlocked(false);
     if (planCardOpenOnNextThreadRef.current) {
@@ -138,6 +141,7 @@ export function useChatViewEffects({
     closePullRequestDialog,
     planCardDismissedForTurnRef,
     planCardOpenOnNextThreadRef,
+    setActivityAccordionOpenById,
     setExpandedWorkGroups,
     setPlanCardOpen,
     setProviderUnlocked,
@@ -298,15 +302,19 @@ export function useChatViewEffects({
     terminalState.terminalOpen,
   ]);
 
+  const tickElapsedClock = shouldTickElapsedClock({
+    mainWorking: thread.isWorking,
+    agents: activeThread?.providerAgents,
+  });
   useEffect(() => {
-    if (!thread.isWorking) return;
+    if (!tickElapsedClock) return;
     const timer = window.setInterval(() => {
       setNowTick(Date.now());
     }, 1000);
     return () => {
       window.clearInterval(timer);
     };
-  }, [thread.isWorking, setNowTick]);
+  }, [tickElapsedClock, setNowTick]);
 
   useEffect(() => {
     if (embedded) return;

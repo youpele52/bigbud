@@ -63,6 +63,7 @@ describe("ProjectSetupScriptRunner", () => {
             ),
             Layer.provideMerge(
               Layer.succeed(TerminalManager, {
+                snapshot: () => Effect.die(new Error("unused")),
                 open,
                 write,
                 resize: () => Effect.void,
@@ -95,6 +96,11 @@ describe("ProjectSetupScriptRunner", () => {
       Effect.succeed({
         threadId: "thread-1",
         terminalId: "setup-setup",
+        executionTargetId: "ssh:devbox",
+        runtimeEnv: {
+          T3CODE_PROJECT_ROOT: "/repo/project",
+          T3CODE_WORKTREE_PATH: "/repo/worktrees/a",
+        },
         dropPathMode: "posix" as const,
         cwd: "/repo/worktrees/a",
         worktreePath: "/repo/worktrees/a",
@@ -140,6 +146,7 @@ describe("ProjectSetupScriptRunner", () => {
             ),
             Layer.provideMerge(
               Layer.succeed(TerminalManager, {
+                snapshot: () => Effect.die(new Error("unused")),
                 open,
                 write,
                 resize: () => Effect.void,

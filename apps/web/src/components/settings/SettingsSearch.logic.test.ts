@@ -32,4 +32,17 @@ describe("Settings search", () => {
   it("returns every match before the search field applies its display limit", () => {
     expect(getSettingsSearchResults("ai").length).toBeGreaterThan(6);
   });
+
+  it("finds all terminal controls in the Terminal group on the General page", () => {
+    expect(getSettingsSearchResults("terminal")).toEqual(
+      ["Terminal font", "Terminal font size", "Terminal GPU rendering"].map((label) => ({
+        label,
+        section: "Terminal",
+        to: "/settings/general",
+      })),
+    );
+    expect(getSettingsSearchResults("terminal gpu")).toEqual([
+      { label: "Terminal GPU rendering", section: "Terminal", to: "/settings/general" },
+    ]);
+  });
 });

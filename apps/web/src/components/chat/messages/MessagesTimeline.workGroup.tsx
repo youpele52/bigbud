@@ -1,6 +1,15 @@
-import { Button, textButtonTypography } from "../../ui/button";
-import { MAX_VISIBLE_WORK_LOG_ENTRIES, type MessagesTimelineRow } from "./MessagesTimeline.logic";
-import { SimpleWorkEntryRow, WorkEntryActionButtons } from "./MessagesTimeline.workEntry";
+import { ActivityAccordion } from "../common/ActivityAccordion";
+import type {
+  ActivityAccordionControl,
+  ActivityAccordionOpenById,
+  SetActivityAccordionOpen,
+} from "../common/ActivityAccordion.state";
+import { ActivityOverflowToggle } from "../common/ActivityOverflowToggle";
+import { workEntryDetailsAccordionControl } from "./MessagesTimeline.accordion";
+import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
+import { deriveWorkGroupPresentation } from "./MessagesTimeline.workGroup.logic";
+import { SimpleWorkEntryRow } from "./MessagesTimeline.workEntry";
+import { WorkEntryActionButtons } from "./MessagesTimeline.workEntry.actions";
 import type { ExecutionTargetId } from "@bigbud/contracts";
 
 type WorkGroupRow = Extract<MessagesTimelineRow, { kind: "work" }>;
@@ -10,6 +19,10 @@ interface MessagesTimelineWorkGroupProps {
   isExpanded: boolean;
   onToggleWorkGroup: (groupId: string) => void;
   executionTargetId: ExecutionTargetId | undefined;
+  /** Persisted group accordion state; collapsed until the user opens it. */
+  accordion?: ActivityAccordionControl | undefined;
+  activityAccordionOpenById?: ActivityAccordionOpenById | undefined;
+  onSetActivityAccordionOpen?: SetActivityAccordionOpen | undefined;
 }
 
 export function MessagesTimelineWorkGroup({
@@ -17,51 +30,53 @@ export function MessagesTimelineWorkGroup({
   isExpanded,
   onToggleWorkGroup,
   executionTargetId,
+  accordion,
+  activityAccordionOpenById,
+  onSetActivityAccordionOpen,
 }: MessagesTimelineWorkGroupProps) {
-  const groupedEntries = row.groupedEntries;
-  const hasOverflow = groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-  const visibleEntries =
-    hasOverflow && !isExpanded
-      ? groupedEntries.slice(-MAX_VISIBLE_WORK_LOG_ENTRIES)
-      : groupedEntries;
-  const hiddenCount = groupedEntries.length - visibleEntries.length;
-  const onlyToolEntries = groupedEntries.every((entry) => entry.tone === "tool");
-  const showHeader = hasOverflow || !onlyToolEntries;
-  const groupLabel = onlyToolEntries ? "Tool calls" : "Work log";
-  const showSingleEntryActionsOutside = visibleEntries.length === 1;
+  const presentation = deriveWorkGroupPresentation(row, isExpanded);
+  const { visibleEntries, showSingleEntryActionsOutside } = presentation;
   const singleVisibleEntry = showSingleEntryActionsOutside ? visibleEntries[0] : undefined;
+  const entries = (
+    <div className="space-y-0.5">
+      {visibleEntries.map((workEntry) => (
+        <SimpleWorkEntryRow
+          key={`work-row:${workEntry.id}`}
+          workEntry={workEntry}
+          executionTargetId={executionTargetId}
+          showActions={!showSingleEntryActionsOutside}
+          detailsAccordion={
+            activityAccordionOpenById && onSetActivityAccordionOpen
+              ? workEntryDetailsAccordionControl(
+                  workEntry.id,
+                  activityAccordionOpenById,
+                  onSetActivityAccordionOpen,
+                )
+              : undefined
+          }
+        />
+      ))}
+    </div>
+  );
 
   return (
     <div className="group/work-log flex flex-col items-start gap-1">
-      <div className="w-full rounded-xl border border-border/45 bg-card/25 px-2 py-1.5">
-        {showHeader && (
-          <div className="mb-1.5 flex items-center justify-between gap-2 px-0.5">
-            <p className={textButtonTypography}>
-              {groupLabel} ({groupedEntries.length})
-            </p>
-            {hasOverflow && (
-              <Button
-                size="xs"
-                variant="text"
-                type="button"
-                onClick={() => onToggleWorkGroup(row.id)}
-              >
-                {isExpanded ? "Show less" : `Show ${hiddenCount} more`}
-              </Button>
-            )}
-          </div>
-        )}
-        <div className="space-y-0.5">
-          {visibleEntries.map((workEntry) => (
-            <SimpleWorkEntryRow
-              key={`work-row:${workEntry.id}`}
-              workEntry={workEntry}
-              executionTargetId={executionTargetId}
-              showActions={!showSingleEntryActionsOutside}
+      <ActivityAccordion
+        title={presentation.title}
+        className="w-full"
+        actions={
+          presentation.hasOverflow ? (
+            <ActivityOverflowToggle
+              expanded={isExpanded}
+              hiddenCount={presentation.hiddenCount}
+              onToggle={() => onToggleWorkGroup(row.id)}
             />
-          ))}
-        </div>
-      </div>
+          ) : undefined
+        }
+        {...accordion}
+      >
+        {entries}
+      </ActivityAccordion>
       {singleVisibleEntry ? (
         <div className="flex items-center gap-1.5 px-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/work-log:opacity-100">
           <WorkEntryActionButtons

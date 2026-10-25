@@ -9,6 +9,7 @@ import type {
   ThreadId,
 } from "@bigbud/contracts";
 import type { ComposerTrigger } from "../../../logic/composer";
+import type { QueuedPromptSubmission, QueuePromptResult } from "./ChatView.promptQueue.logic";
 import type { PendingUserInput } from "../../../logic/session";
 import type { TerminalContextDraft } from "../../../lib/terminalContext";
 import type { ChatMessage, Project, ProposedPlan, Thread } from "../../../models/types";
@@ -92,6 +93,7 @@ export interface UseOnSendInput {
   ) => Promise<void>;
   onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
   onThreadMaterialized?: ((threadId: ThreadId) => Promise<void> | void) | undefined;
-  queueComposerPrompt: (prompt: string) => "queued" | "empty" | "full";
+  /** Queues a full composer submission while a turn runs; rejects when the server refuses it. */
+  submitQueuedComposerPrompt: (submission: QueuedPromptSubmission) => Promise<QueuePromptResult>;
   transformPromptForSend?: ((prompt: string) => string) | undefined;
 }

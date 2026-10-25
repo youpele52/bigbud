@@ -8,17 +8,87 @@ import type { Project } from "../../models/types";
 
 export type RemoteProjectAuthMode = "ssh-key" | "password";
 export type RemoteProjectTransport = "agent" | "direct-ssh";
+/** How the dialog finds the machine; UI-only, never part of the stored target. */
+export type RemoteProjectConnectionSource = "manual" | "ssh-config";
 
-export interface RemoteProjectDraft {
-  displayName: string;
+/** Fields each connection source keeps separately so values never leak between modes. */
+export interface RemoteProjectConnectionFields {
   host: string;
   username: string;
   port: string;
-  workspaceRoot: string;
   sshKeyPath: string;
   authMode: RemoteProjectAuthMode;
+}
+
+export interface RemoteProjectDraft extends RemoteProjectConnectionFields {
+  displayName: string;
+  workspaceRoot: string;
   remoteTransport: RemoteProjectTransport;
   providerRuntimeLocation: ProviderRuntimeLocation;
+  connectionSource: RemoteProjectConnectionSource;
+  /** Connection fields of the source that is not currently shown. */
+  inactiveConnection: RemoteProjectConnectionFields;
+}
+
+export type RemoteProjectDraftField = keyof RemoteProjectDraft;
+
+/** Returns whether the error was an SSH lock error and the unlock prompt opened. */
+export type RequestRemoteProjectUnlock = (
+  errorMessage: string,
+  continuation?: () => void,
+) => boolean;
+
+export type UpdateRemoteProjectDraft = <K extends RemoteProjectDraftField>(
+  field: K,
+  value: RemoteProjectDraft[K],
+) => void;
+
+function pickRemoteProjectConnection(
+  fields: RemoteProjectConnectionFields,
+): RemoteProjectConnectionFields {
+  return {
+    host: fields.host,
+    username: fields.username,
+    port: fields.port,
+    sshKeyPath: fields.sshKeyPath,
+    authMode: fields.authMode,
+  };
+}
+
+function createEmptyRemoteProjectConnection(): RemoteProjectConnectionFields {
+  return { host: "", username: "", port: "", sshKeyPath: "", authMode: "ssh-key" };
+}
+
+/** Assigns one field; switching the source swaps in that source's own connection fields. */
+export function applyRemoteProjectDraftChange<K extends RemoteProjectDraftField>(
+  draft: RemoteProjectDraft,
+  field: K,
+  value: RemoteProjectDraft[K],
+): RemoteProjectDraft {
+  if (field !== "connectionSource") {
+    return { ...draft, [field]: value };
+  }
+  if (value === draft.connectionSource) {
+    return draft;
+  }
+  return {
+    ...draft,
+    ...draft.inactiveConnection,
+    connectionSource: value as RemoteProjectConnectionSource,
+    inactiveConnection: pickRemoteProjectConnection(draft),
+  };
+}
+
+/** True when any setting would override what the SSH config provides for the host. */
+export function hasRemoteProjectConnectionOverrides(
+  fields: RemoteProjectConnectionFields,
+): boolean {
+  return (
+    fields.username.trim().length > 0 ||
+    fields.port.trim().length > 0 ||
+    fields.sshKeyPath.trim().length > 0 ||
+    fields.authMode !== "ssh-key"
+  );
 }
 
 export function isRemoteExecutionTargetId(executionTargetId: string | null | undefined): boolean {
@@ -33,17 +103,17 @@ export function makeSshExecutionTargetId(remoteTarget: string): string {
   return `ssh:${remoteTarget.trim()}`;
 }
 
-export function createDefaultRemoteProjectDraft(): RemoteProjectDraft {
+export function createDefaultRemoteProjectDraft(
+  connectionSource: RemoteProjectConnectionSource = "manual",
+): RemoteProjectDraft {
   return {
+    ...createEmptyRemoteProjectConnection(),
     displayName: "",
-    host: "",
-    username: "",
-    port: "",
     workspaceRoot: "",
-    sshKeyPath: "",
-    authMode: "ssh-key",
-    remoteTransport: "agent",
+    remoteTransport: "direct-ssh",
     providerRuntimeLocation: "local",
+    connectionSource,
+    inactiveConnection: createEmptyRemoteProjectConnection(),
   };
 }
 
@@ -97,14 +167,20 @@ export function createRemoteProjectDraft(project: Project): RemoteProjectDraft |
     return null;
   }
 
-  return {
-    displayName: project.name,
+  const connection: RemoteProjectConnectionFields = {
     host: parsed.host,
     username: parsed.username ?? "",
     port: parsed.port ?? "",
-    workspaceRoot: project.cwd ?? "",
     sshKeyPath: parsed.sshKeyPath ?? "",
     authMode: parsed.authMode,
+  };
+  return {
+    ...connection,
+    displayName: project.name,
+    workspaceRoot: project.cwd ?? "",
+    connectionSource: "manual",
+    // Both sources start from the stored connection so switching never loses it.
+    inactiveConnection: { ...connection },
     remoteTransport: parsed.remoteTransport,
     providerRuntimeLocation:
       resolveProviderRuntimeExecutionTargetId(project) === workspaceExecutionTargetId
@@ -173,4 +249,30 @@ export function deriveProjectTitleFromCwd(cwd: string): string {
   const trimmed = cwd.trim();
   const segments = trimmed.split(/[/\\]/).filter((segment) => segment.length > 0);
   return segments.at(-1) ?? trimmed;
+}
+
+function trimTrailingSlashes(value: string): string {
+  return value.length > 1 ? value.replace(/\/+$/u, "") : value;
+}
+
+/**
+ * True for `/` or the remote home folder: bigbud would watch and search all of it over SSH, and
+ * the agent would get the whole folder as its workspace.
+ */
+export function isBroadRemoteProjectRoot(path: string, homePath: string | null): boolean {
+  const normalized = trimTrailingSlashes(path.trim());
+  if (normalized === "/" || normalized === "~") return true;
+  return homePath !== null && normalized === trimTrailingSlashes(homePath.trim());
+}
+
+/** Joins a remote POSIX folder path and a child folder name. */
+export function joinRemoteFolderPath(parent: string, name: string): string {
+  return parent.endsWith("/") ? `${parent}${name}` : `${parent}/${name}`;
+}
+
+/** Parent of a remote POSIX folder path; `/` stays `/`. */
+export function parentRemoteFolderPath(path: string): string {
+  const normalized = trimTrailingSlashes(path);
+  const index = normalized.lastIndexOf("/");
+  return index <= 0 ? "/" : normalized.slice(0, index);
 }

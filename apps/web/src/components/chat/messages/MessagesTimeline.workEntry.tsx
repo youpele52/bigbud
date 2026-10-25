@@ -1,330 +1,36 @@
-// TODO: Split by concern when this file is next touched.
-import { memo, useMemo, useState } from "react";
-import { type ExecutionTargetId, LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
+import { memo } from "react";
+import { type ExecutionTargetId } from "@bigbud/contracts";
 import {
-  BotIcon,
-  CheckIcon,
-  CircleAlertIcon,
-  EyeIcon,
-  GlobeIcon,
-  HammerIcon,
-  KeyRoundIcon,
-  type LucideIcon,
-  SquarePenIcon,
-  TerminalIcon,
-  WrenchIcon,
-  ZapIcon,
-} from "lucide-react";
-import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
-import { normalizeCompactToolLabel } from "./MessagesTimeline.logic";
-import { Button } from "../../ui/button";
-import { MessageCopyButton } from "../common/MessageCopyButton";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
+  type TimelineWorkEntry,
+  toolWorkEntryHeading,
+  workEntryIcon,
+  workEntryDetailBlocks,
+  workEntryPreview,
+  workToneClass,
+  workToneIcon,
+} from "./MessagesTimeline.workEntry.logic";
+import { WorkEntryActionButtons } from "./MessagesTimeline.workEntry.actions";
+import { WorkEntryDetails } from "./MessagesTimeline.workEntry.details";
+import type { ActivityAccordionControl } from "../common/ActivityAccordion.state";
 import { attachmentPreviewRoutePath, toAttachmentPreviewUrl } from "~/lib/attachmentPreview";
 import { cn } from "~/lib/utils";
-import { readNativeApi } from "../../../rpc/nativeApi";
-import { getPassphraseProtectedSshKeyPath, getSshAuthFailureToastTitle } from "../../../lib/ssh";
-import { SidebarUnlockSshKeyDialog } from "../../sidebar/SidebarUnlockSshKeyDialog";
-import { toastManager } from "../../ui/toast";
-
-type TimelineWorkEntry = Extract<MessagesTimelineRow, { kind: "work" }>["groupedEntries"][number];
-
-export function workToneIcon(tone: TimelineWorkEntry["tone"]): {
-  icon: LucideIcon;
-  className: string;
-} {
-  if (tone === "error") {
-    return {
-      icon: CircleAlertIcon,
-      className: "text-foreground/92",
-    };
-  }
-  if (tone === "thinking") {
-    return {
-      icon: BotIcon,
-      className: "text-foreground/92",
-    };
-  }
-  if (tone === "info") {
-    return {
-      icon: CheckIcon,
-      className: "text-foreground/92",
-    };
-  }
-  return {
-    icon: ZapIcon,
-    className: "text-foreground/92",
-  };
-}
-
-export function workToneClass(tone: "thinking" | "tool" | "info" | "error"): string {
-  if (tone === "error") return "text-destructive-foreground/80";
-  if (tone === "tool") return "text-muted-foreground/70";
-  if (tone === "thinking") return "text-muted-foreground/65";
-  return "text-muted-foreground/40";
-}
-
-export function workEntryPreview(
-  workEntry: Pick<TimelineWorkEntry, "detail" | "command" | "changedFiles">,
-): string | null {
-  if (workEntry.command) return workEntry.command;
-  if (workEntry.detail) return workEntry.detail;
-  if ((workEntry.changedFiles?.length ?? 0) === 0) return null;
-  const [firstPath] = workEntry.changedFiles ?? [];
-  if (!firstPath) return null;
-  return workEntry.changedFiles!.length === 1
-    ? firstPath
-    : `${firstPath} +${workEntry.changedFiles!.length - 1} more`;
-}
-
-function workEntryRawCommand(
-  workEntry: Pick<TimelineWorkEntry, "command" | "rawCommand">,
-): string | null {
-  const rawCommand = workEntry.rawCommand?.trim();
-  if (!rawCommand || !workEntry.command) {
-    return null;
-  }
-  return rawCommand === workEntry.command.trim() ? null : rawCommand;
-}
-
-export function workEntryIcon(workEntry: TimelineWorkEntry): LucideIcon {
-  if (workEntry.requestKind === "browser") return GlobeIcon;
-  if (workEntry.requestKind === "command") return TerminalIcon;
-  if (workEntry.requestKind === "file-read") return EyeIcon;
-  if (workEntry.requestKind === "file-change") return SquarePenIcon;
-
-  if (workEntry.itemType === "command_execution" || workEntry.command) {
-    return TerminalIcon;
-  }
-  if (workEntry.itemType === "file_change" || (workEntry.changedFiles?.length ?? 0) > 0) {
-    return SquarePenIcon;
-  }
-  if (workEntry.itemType === "web_search") return GlobeIcon;
-  if (workEntry.itemType === "image_view") return EyeIcon;
-
-  const isBrowserTool =
-    workEntry.toolTitle && /browser|navigate|screenshot|web_search/i.test(workEntry.toolTitle);
-
-  if (isBrowserTool) return GlobeIcon;
-
-  switch (workEntry.itemType) {
-    case "mcp_tool_call":
-      return WrenchIcon;
-    case "dynamic_tool_call":
-    case "collab_agent_tool_call":
-      return HammerIcon;
-  }
-
-  return workToneIcon(workEntry.tone).icon;
-}
-
-function capitalizePhrase(value: string): string {
-  const trimmed = value.trim();
-  if (trimmed.length === 0) {
-    return value;
-  }
-  return `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`;
-}
-
-function browserToolHeading(toolTitle: string, action: string | undefined): string | null {
-  if (
-    toolTitle !== "browser" &&
-    !/^bigbud_orchestration(?:_[\w-]+)?_browser$/.test(toolTitle) &&
-    toolTitle !== "mcp__bigbud_orchestration__browser"
-  ) {
-    return null;
-  }
-
-  switch (action) {
-    case "capture":
-      return "Captured browser";
-    case "navigate":
-      return "Navigating browser";
-    case "click":
-      return "Clicking browser";
-    case "drag":
-      return "Dragging in browser";
-    case "scroll":
-      return "Scrolling browser";
-    case "type":
-      return "Typing in browser";
-    case "key":
-      return "Pressing key in browser";
-    case "wait":
-      return "Waiting for browser";
-    case "get_page_info":
-      return "Reading page information";
-    case "get_page_text":
-      return "Reading page text";
-    case "go_back":
-      return "Going back in browser";
-    case "go_forward":
-      return "Going forward in browser";
-    case "reload":
-      return "Reloading browser";
-    case "release_tab":
-      return "Releasing browser tab";
-    case "close_tab":
-      return "Closing browser tab";
-    default:
-      return "Browser";
-  }
-}
-
-export function toolWorkEntryHeading(workEntry: TimelineWorkEntry): string {
-  if (!workEntry.toolTitle) {
-    return capitalizePhrase(normalizeCompactToolLabel(workEntry.label));
-  }
-  const browserHeading = browserToolHeading(workEntry.toolTitle, workEntry.toolAction);
-  if (browserHeading) {
-    return browserHeading;
-  }
-  return capitalizePhrase(normalizeCompactToolLabel(workEntry.toolTitle));
-}
-
-function workEntryCopyText(workEntry: TimelineWorkEntry): string {
-  const lines: string[] = [];
-  const appendLine = (value: string | null | undefined) => {
-    const trimmed = value?.trim();
-    if (!trimmed) {
-      return;
-    }
-    if (lines.at(-1) === trimmed) {
-      return;
-    }
-    lines.push(trimmed);
-  };
-
-  appendLine(toolWorkEntryHeading(workEntry));
-  appendLine(workEntryRawCommand(workEntry) ?? workEntry.command ?? workEntry.detail);
-  if ((workEntry.changedFiles?.length ?? 0) > 0) {
-    appendLine(`Changed files:\n${workEntry.changedFiles!.join("\n")}`);
-  }
-
-  return lines.join("\n");
-}
-
-export const WorkEntryActionButtons = memo(function WorkEntryActionButtons(props: {
-  workEntry: TimelineWorkEntry;
-  executionTargetId?: ExecutionTargetId | undefined;
-  className?: string;
-}) {
-  const { workEntry, executionTargetId, className } = props;
-  const copyText = workEntryCopyText(workEntry);
-  const [isUnlockDialogOpen, setIsUnlockDialogOpen] = useState(false);
-  const [sshKeyPassphrase, setSshKeyPassphrase] = useState("");
-  const [sshKeyUnlockError, setSshKeyUnlockError] = useState<string | null>(null);
-  const [isUnlockingSshKey, setIsUnlockingSshKey] = useState(false);
-  const sshKeyPath = useMemo(
-    () =>
-      executionTargetId && executionTargetId !== LOCAL_EXECUTION_TARGET_ID
-        ? getPassphraseProtectedSshKeyPath(workEntry.detail)
-        : null,
-    [executionTargetId, workEntry.detail],
-  );
-
-  const submitSshKeyUnlock = async () => {
-    const passphrase = sshKeyPassphrase.trim();
-    if (!sshKeyPath || !executionTargetId || executionTargetId === LOCAL_EXECUTION_TARGET_ID) {
-      return;
-    }
-    if (passphrase.length === 0) {
-      setSshKeyUnlockError("Enter the SSH key passphrase.");
-      return;
-    }
-
-    const api = readNativeApi();
-    if (!api) {
-      setSshKeyUnlockError("Native API not found.");
-      return;
-    }
-
-    setIsUnlockingSshKey(true);
-    setSshKeyUnlockError(null);
-    try {
-      await api.server.unlockSshKey({
-        executionTargetId,
-        passphrase,
-      });
-      setIsUnlockDialogOpen(false);
-      setSshKeyPassphrase("");
-      toastManager.add({
-        type: "success",
-        title: "SSH key unlocked",
-        description: "Retry the turn now that the remote SSH key is available.",
-      });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to unlock the SSH key.";
-      setSshKeyUnlockError(errorMessage);
-      toastManager.add({
-        type: "error",
-        title: getSshAuthFailureToastTitle("ssh-key-passphrase"),
-        description: errorMessage,
-      });
-    } finally {
-      setIsUnlockingSshKey(false);
-    }
-  };
-
-  return (
-    <>
-      <div className={cn("flex min-w-0 items-center gap-2", className)}>
-        <MessageCopyButton text={copyText} />
-        {sshKeyPath ? (
-          <Button
-            size="xs"
-            variant="text"
-            type="button"
-            onClick={() => {
-              setSshKeyUnlockError(null);
-              setIsUnlockDialogOpen(true);
-            }}
-            title="Unlock SSH key"
-          >
-            <KeyRoundIcon className="size-3" />
-            <span>Unlock SSH key</span>
-          </Button>
-        ) : null}
-      </div>
-      {sshKeyPath ? (
-        <SidebarUnlockSshKeyDialog
-          open={isUnlockDialogOpen}
-          keyPath={sshKeyPath}
-          description={
-            <>
-              bigbud needs the passphrase for <code>{sshKeyPath}</code> before it can start provider
-              sessions on this remote target.
-            </>
-          }
-          secret={sshKeyPassphrase}
-          error={sshKeyUnlockError}
-          isSubmitting={isUnlockingSshKey}
-          onOpenChange={(open) => {
-            if (!isUnlockingSshKey) {
-              setIsUnlockDialogOpen(open);
-            }
-          }}
-          onSecretChange={setSshKeyPassphrase}
-          onSubmit={() => {
-            void submitSshKeyUnlock();
-          }}
-        />
-      ) : null}
-    </>
-  );
-});
+import { formatBigbudToolName } from "~/lib/toolPresentation";
 
 export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
   workEntry: TimelineWorkEntry;
   executionTargetId?: ExecutionTargetId | undefined;
   showActions?: boolean;
+  /** Persisted open state of the full command/detail disclosure. */
+  detailsAccordion?: ActivityAccordionControl | undefined;
 }) {
-  const { workEntry, executionTargetId, showActions = true } = props;
+  const { workEntry, executionTargetId, showActions = true, detailsAccordion } = props;
   const iconConfig = workToneIcon(workEntry.tone);
   const EntryIcon = workEntryIcon(workEntry);
   const heading = toolWorkEntryHeading(workEntry);
+  const rawToolName =
+    workEntry.toolPresentation?.rawName ?? (workEntry.toolTitle || workEntry.label);
   const preview = workEntryPreview(workEntry);
-  const rawCommand = workEntryRawCommand(workEntry);
+  const detailBlocks = workEntryDetailBlocks(workEntry);
   const displayText = preview ? `${heading} - ${preview}` : heading;
   const hasChangedFiles = (workEntry.changedFiles?.length ?? 0) > 0;
   const previewIsChangedFiles = hasChangedFiles && !workEntry.command && !workEntry.detail;
@@ -348,9 +54,14 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
                 workToneClass(workEntry.tone),
                 preview ? "text-muted-foreground/70" : "",
               )}
-              title={rawCommand ? undefined : displayText}
+              title={displayText}
             >
               <span
+                title={
+                  rawToolName && (workEntry.toolPresentation || formatBigbudToolName(rawToolName))
+                    ? rawToolName
+                    : undefined
+                }
                 className={cn(
                   workEntry.tone === "thinking" || workEntry.tone === "info"
                     ? workToneClass(workEntry.tone)
@@ -359,33 +70,9 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
               >
                 {heading}
               </span>
-              {preview &&
-                (rawCommand ? (
-                  <Tooltip>
-                    <TooltipTrigger
-                      closeDelay={0}
-                      delay={75}
-                      render={
-                        <span className="max-w-full cursor-default text-muted-foreground/55 transition-colors hover:text-muted-foreground/75 focus-visible:text-muted-foreground/75">
-                          {" "}
-                          - {preview}
-                        </span>
-                      }
-                    />
-                    <TooltipPopup
-                      align="start"
-                      className="max-w-[min(56rem,calc(100vw-2rem))] px-0 py-0"
-                      side="top"
-                    >
-                      <div className="max-w-[min(56rem,calc(100vw-2rem))] overflow-x-auto px-1.5 py-1 font-mono text-[11px] leading-4 whitespace-nowrap">
-                        {rawCommand}
-                      </div>
-                    </TooltipPopup>
-                  </Tooltip>
-                ) : (
-                  <span className="text-muted-foreground/55"> - {preview}</span>
-                ))}
+              {preview && <span className="text-muted-foreground/55"> - {preview}</span>}
             </p>
+            <WorkEntryDetails blocks={detailBlocks} accordion={detailsAccordion} />
           </div>
         </div>
       </div>
@@ -394,7 +81,7 @@ export const SimpleWorkEntryRow = memo(function SimpleWorkEntryRow(props: {
           {workEntry.changedFiles?.slice(0, 4).map((filePath: string) => (
             <span
               key={`${workEntry.id}:${filePath}`}
-              className="rounded-md border border-border/55 bg-background/75 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/75"
+              className="rounded-md border border-border/55 bg-background/75 px-1.5 py-0.5 text-xs font-light text-muted-foreground/75"
               title={filePath}
             >
               {filePath}

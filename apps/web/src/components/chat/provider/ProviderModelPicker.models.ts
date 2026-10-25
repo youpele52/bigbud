@@ -9,7 +9,9 @@ import {
   PROVIDER_OPTIONS,
   providerSupportsSubProviderID as descriptorSupportsSubProviderID,
   type ProviderPickerKind,
+  getProviderDescriptor,
 } from "./providerDescriptors";
+import { getVisibleComposerProviders } from "../../../models/provider/composerVisibility.models";
 
 export function isAvailableProviderOption(option: (typeof PROVIDER_OPTIONS)[number]): option is {
   value: ProviderKind;
@@ -25,6 +27,25 @@ export const PROVIDER_ICON_BY_PROVIDER = Object.fromEntries(
 
 export const AVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter(isAvailableProviderOption);
 export const UNAVAILABLE_PROVIDER_OPTIONS = PROVIDER_OPTIONS.filter((option) => !option.available);
+/** Visibility is independent of readiness; unavailable providers explain their status. */
+export function developmentProviderOptions(_providers: ReadonlyArray<ServerProvider> | undefined) {
+  return AVAILABLE_PROVIDER_OPTIONS;
+}
+
+/** Capability-limited pickers must not offer interactive-only or partial-operation providers. */
+export function visibleProviderOptionsForPicker(
+  providers: ReadonlyArray<ServerProvider> | undefined,
+  hidden: ReadonlyArray<ProviderKind>,
+  allowed?: ReadonlyArray<ProviderKind>,
+) {
+  const visible = getVisibleComposerProviders(hidden);
+  return developmentProviderOptions(providers).filter(
+    (option) =>
+      visible.includes(option.value) &&
+      (!allowed || allowed.includes(option.value)) &&
+      getProviderDescriptor(option.value).isVisible(providers),
+  );
+}
 export type { ProviderPickerKind } from "./providerDescriptors";
 
 const LARGE_PROVIDER_MODEL_COUNT_THRESHOLD = 10;
@@ -45,13 +66,18 @@ export function getProviderModelAvailability(input: {
   workspaceExecutionTargetId?: string | null | undefined;
 }) {
   const loading =
-    input.modelCount === 0 && (input.providers === undefined || input.provider === undefined);
+    input.modelCount === 0 &&
+    (input.providers === undefined ||
+      input.provider === undefined ||
+      (input.provider.provider === "opencodeV2" && input.provider.initialProbeComplete === false));
   const unavailableMessage =
     input.provider &&
     (!input.provider.enabled
       ? "Provider is disabled"
       : !input.provider.installed
-        ? "Provider is not installed"
+        ? input.provider.provider === "opencodeV2"
+          ? (input.provider.message ?? "Configure OpenCode v2 in Providers settings")
+          : "Provider is not installed"
         : input.provider.auth.status === "unauthenticated"
           ? "Provider login required"
           : input.provider.status === "error" || input.provider.status === "warning"
@@ -66,9 +92,10 @@ export function getProviderModelAvailability(input: {
     input.provider !== undefined &&
     (unsupportedRemoteWorkspace ||
       !input.provider.enabled ||
-      !input.provider.installed ||
-      input.provider.auth.status === "unauthenticated" ||
-      input.provider.status === "error" ||
+      ((!input.provider.installed ||
+        input.provider.auth.status === "unauthenticated" ||
+        input.provider.status === "error") &&
+        !(input.provider.provider === "opencodeV2" && input.modelCount > 0)) ||
       (input.provider.status === "warning" && input.modelCount === 0));
 
   return {
@@ -87,6 +114,7 @@ export type ModelOption = {
   name: string;
   group?: string | undefined;
   subProviderID?: string | undefined;
+  availability?: "available" | "requires-setup" | undefined;
 };
 
 /**
@@ -124,6 +152,10 @@ export function visibleModelOptionsForPicker(
   recentOptions: ReadonlyArray<ModelOption> | undefined,
   query: string,
 ): ReadonlyArray<ModelOption> {
+  if (provider === "opencodeV2")
+    return options.toSorted(
+      (a, b) => Number(b.availability === "available") - Number(a.availability === "available"),
+    );
   if (query.trim() || !recentOptions?.length || providerSupportsSubProviderID(provider)) {
     return options;
   }
@@ -149,7 +181,11 @@ export function groupModelOptions(options: ReadonlyArray<ModelOption>): GroupedS
   }
 
   const named: GroupedSection[] = [...namedMap.entries()]
-    .toSorted(([a], [b]) => a.localeCompare(b))
+    .toSorted(
+      ([a, modelsA], [b, modelsB]) =>
+        Number(modelsB.some((model) => model.availability === "available")) -
+          Number(modelsA.some((model) => model.availability === "available")) || a.localeCompare(b),
+    )
     .map(([group, models]) => ({ kind: "named" as const, group, models }));
   if (ungrouped.length > 0) {
     named.push({ kind: "ungrouped" as const, models: ungrouped });

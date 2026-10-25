@@ -60,7 +60,7 @@ export function MessagesTimelineAnnotations(props: { annotations: ParsedUserAnno
                     <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
                   ) : null}
                   {detail ? (
-                    <div className="truncate font-mono text-[11px] text-muted-foreground/80">
+                    <div className="truncate text-sm font-light text-muted-foreground/80">
                       {detail}
                     </div>
                   ) : null}

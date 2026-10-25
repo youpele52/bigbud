@@ -1,4 +1,5 @@
 import type { UserInputQuestion } from "@bigbud/contracts";
+import { validUserInputAnswer } from "@bigbud/shared/providerUserInput";
 
 export interface PendingUserInputDraftAnswer {
   /** Stable UI identities for selections, used when labels are duplicated. */
@@ -125,24 +126,46 @@ export function resolvePendingUserInputAnswer(
   question: UserInputQuestion,
   draft: PendingUserInputDraftAnswer | undefined,
 ): string | string[] | null {
-  const customAnswer = normalizeDraftAnswer(draft?.customAnswer);
+  const customAnswer =
+    question.field?.type === "string" && draft?.customAnswer
+      ? draft.customAnswer
+      : normalizeDraftAnswer(draft?.customAnswer);
   if (customAnswer) {
-    return customAnswer;
+    let answer: string | string[] = customAnswer;
+    if (question.field?.type === "multiselect") {
+      try {
+        const entries: unknown = JSON.parse(customAnswer);
+        if (
+          !Array.isArray(entries) ||
+          entries.length > 64 ||
+          entries.some((value) => typeof value !== "string")
+        )
+          return null;
+        answer = [...new Set([...selectedOptionValues(question, draft), ...(entries as string[])])];
+      } catch {
+        return null;
+      }
+    }
+    return validUserInputAnswer(question, answer) ? answer : null;
   }
 
   const selectedOptions = selectedOptionValues(question, draft);
   if (question.multiSelect) {
-    return selectedOptions.length > 0 ? selectedOptions : null;
+    return selectedOptions.length > 0 && validUserInputAnswer(question, selectedOptions)
+      ? selectedOptions
+      : null;
   }
 
-  return selectedOptions[0] ?? null;
+  const answer = selectedOptions[0] ?? null;
+  return validUserInputAnswer(question, answer) ? answer : null;
 }
 
 export function setPendingUserInputCustomAnswer(
   draft: PendingUserInputDraftAnswer | undefined,
   customAnswer: string,
+  question?: UserInputQuestion,
 ): PendingUserInputDraftAnswer {
-  if (customAnswer.trim().length > 0) {
+  if (customAnswer.trim().length > 0 && question?.field?.type !== "multiselect") {
     return { customAnswer };
   }
 
@@ -196,7 +219,10 @@ export function togglePendingUserInputOptionSelection(
   );
 
   return {
-    customAnswer: "",
+    customAnswer:
+      question.field?.type === "multiselect" && question.field.allowCustom
+        ? (draft?.customAnswer ?? "")
+        : "",
     ...(selectedOptionIds.length > 0 ? { selectedOptionIds } : {}),
     ...(selectedOptionLabels.length > 0 ? { selectedOptionLabels } : {}),
     ...(hasDuplicateLabels ? { selectedOptionKeys: nextEntries.map((entry) => entry.key) } : {}),
@@ -212,6 +238,7 @@ export function buildPendingUserInputAnswers(
   for (const question of questions) {
     const answer = resolvePendingUserInputAnswer(question, draftAnswers[question.id]);
     if (!answer) {
+      if (optionalAndBlank(question, draftAnswers[question.id])) continue;
       return null;
     }
     answers[question.id] = answer;
@@ -220,12 +247,26 @@ export function buildPendingUserInputAnswers(
   return answers;
 }
 
+function optionalAndBlank(
+  question: UserInputQuestion,
+  draft: PendingUserInputDraftAnswer | undefined,
+) {
+  return (
+    question.field?.required === false &&
+    !draft?.customAnswer?.length &&
+    selectedOptionEntries(question, draft).length === 0
+  );
+}
+
 export function countAnsweredPendingUserInputQuestions(
   questions: ReadonlyArray<UserInputQuestion>,
   draftAnswers: Record<string, PendingUserInputDraftAnswer>,
 ): number {
   return questions.reduce((count, question) => {
-    return resolvePendingUserInputAnswer(question, draftAnswers[question.id]) ? count + 1 : count;
+    return optionalAndBlank(question, draftAnswers[question.id]) ||
+      resolvePendingUserInputAnswer(question, draftAnswers[question.id])
+      ? count + 1
+      : count;
   }, 0);
 }
 
@@ -234,7 +275,9 @@ export function findFirstUnansweredPendingUserInputQuestionIndex(
   draftAnswers: Record<string, PendingUserInputDraftAnswer>,
 ): number {
   const unansweredIndex = questions.findIndex(
-    (question) => !resolvePendingUserInputAnswer(question, draftAnswers[question.id]),
+    (question) =>
+      !optionalAndBlank(question, draftAnswers[question.id]) &&
+      !resolvePendingUserInputAnswer(question, draftAnswers[question.id]),
   );
 
   return unansweredIndex === -1 ? Math.max(questions.length - 1, 0) : unansweredIndex;
@@ -273,6 +316,8 @@ export function derivePendingUserInputProgress(
     answeredQuestionCount,
     isLastQuestion,
     isComplete: buildPendingUserInputAnswers(questions, draftAnswers) !== null,
-    canAdvance: Boolean(resolvedAnswer),
+    canAdvance:
+      Boolean(resolvedAnswer) ||
+      (activeQuestion ? optionalAndBlank(activeQuestion, activeDraft) : false),
   };
 }

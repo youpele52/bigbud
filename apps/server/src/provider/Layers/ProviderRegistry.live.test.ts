@@ -211,9 +211,11 @@ it.layer(
       }),
     );
 
-    it.effect("does not block initial provider snapshots when OpenCode startup fails", () =>
+    it.effect("retires legacy OpenCode discovery even when explicitly enabled", () =>
       Effect.gen(function* () {
         const serverSettings = yield* makeMutableServerSettingsService();
+        yield* serverSettings.updateSettings({ providers: { opencode: { enabled: true } } });
+        let legacyProbes = 0;
         const serverConfig = yield* ServerConfig;
         const scope = yield* Scope.make();
         yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
@@ -229,6 +231,7 @@ it.layer(
           ),
           Layer.provideMerge(
             mockCommandSpawnerLayer((command, args) => {
+              if (command === "opencode") legacyProbes += 1;
               const joined = args.join(" ");
               if (joined === "--version") {
                 if (command === "codex") return { stdout: "codex 1.0.0\n", stderr: "", code: 0 };
@@ -252,7 +255,7 @@ it.layer(
           const registry = yield* ProviderRegistry;
 
           const initial = yield* registry.getProviders;
-          assert.strictEqual(initial.length, 8);
+          assert.strictEqual(initial.length, 7);
           assert.strictEqual(
             initial.find((provider) => provider.provider === "codex")?.status,
             "warning",
@@ -261,12 +264,7 @@ it.layer(
           for (let attempt = 0; attempt < 20; attempt += 1) {
             const providers = yield* registry.getProviders;
             const codexStatus = providers.find((provider) => provider.provider === "codex")?.status;
-            const opencodeStatus = providers.find(
-              (provider) => provider.provider === "opencode",
-            )?.status;
-            if (codexStatus === "ready" && opencodeStatus === "error") {
-              return;
-            }
+            if (codexStatus === "ready") break;
             yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 0)));
           }
 
@@ -277,17 +275,11 @@ it.layer(
             undefined,
           );
           assert.strictEqual(
-            providers.find((provider) => provider.provider === "codex")?.status,
-            "warning",
+            providers.find((provider) => provider.provider === "opencode"),
+            undefined,
           );
-          assert.strictEqual(
-            providers.find((provider) => provider.provider === "opencode")?.status,
-            "error",
-          );
-          assert.strictEqual(
-            providers.find((provider) => provider.provider === "opencode")?.message,
-            "OpenCode binary is not installed or not on PATH.",
-          );
+          yield* registry.refresh("opencode");
+          assert.strictEqual(legacyProbes, 0);
         }).pipe(Effect.provide(runtimeServices));
       }),
     );

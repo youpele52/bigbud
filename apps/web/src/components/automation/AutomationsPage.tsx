@@ -24,6 +24,7 @@ import { AutomationListContent, useAutomationWorkspace } from "./AutomationWorks
 import { AutomationListPageHeader } from "./AutomationPageHeader";
 import { AutomationPageShell } from "./AutomationPageShell";
 import { StandalonePageContent } from "../standalone/StandalonePageContent";
+import { StandalonePageLoading } from "../standalone/StandalonePageLoading";
 import { type AutomationProjectOption } from "./automationDirectory";
 import { createAutomationFromRequest } from "./automationCreate";
 import { resolveAutomationComposerModelSelection } from "./automationComposer";
@@ -43,6 +44,8 @@ export function AutomationsPage() {
   const {
     automations,
     loading,
+    hasLoaded,
+    loadError,
     projectOptions,
     reloadAutomations,
     selectedProjectId,
@@ -136,50 +139,65 @@ export function AutomationsPage() {
 
   return (
     <AutomationPageShell header={<AutomationListPageHeader />}>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <StandalonePageContent>
-          <div className="border-b border-border/70 pb-2">
-            <p className="text-sm text-foreground">Scheduled tasks</p>
-          </div>
-
-          <AutomationListContent
-            automations={automations}
-            loading={loading}
-            className=""
-            layout="inset"
-            onAutomationsChange={() => {
-              void reloadAutomations();
-            }}
-            selectedAutomationId={null}
-          />
-        </StandalonePageContent>
-
-        {builderThreadId && selectedProjectId ? (
-          <div className="shrink-0 px-3 pt-1.5 pb-1 sm:px-5 sm:pt-2">
-            <ThreadComposerSurface
-              className="[&_[data-testid=composer-editor]]:min-h-12"
-              threadId={builderThreadId}
-              seedPrompt={AUTOMATION_SKILL_PROMPT}
-              onOptimisticUserMessage={setRequestMessageId}
-              transformPromptForSend={(prompt) =>
-                buildAutomationSkillDispatchPrompt({
-                  rawPrompt: prompt,
-                  defaultProjectName: selectedProjectLabel ?? "Chats",
-                  deviceTimeZone: getDeviceTimeZone(),
-                })
-              }
-            />
-            <div className="mx-auto flex w-full max-w-[52rem] items-center px-2.5 pt-1 pb-3 sm:px-3">
-              <AutomationProjectMenu
-                projectOptions={projectOptions}
-                selectedProjectId={selectedProjectId}
-                selectedProjectName={selectedProjectLabel}
-                onSelectProject={setSelectedProjectId}
-              />
+      <StandalonePageLoading
+        loading={loading && !hasLoaded && !loadError}
+        label="Loading scheduled tasks"
+      >
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <StandalonePageContent>
+            <div className="border-b border-border/70 pb-2">
+              <p className="text-sm text-foreground">Scheduled tasks</p>
             </div>
-          </div>
-        ) : null}
-      </div>
+
+            {loadError ? (
+              <div role="alert" className="space-y-2 py-4 text-sm text-muted-foreground">
+                <p>Could not load scheduled tasks: {loadError}</p>
+                <Button size="sm" variant="outline" onClick={() => void reloadAutomations()}>
+                  Retry
+                </Button>
+              </div>
+            ) : null}
+            {hasLoaded ? (
+              <AutomationListContent
+                automations={automations}
+                loading={false}
+                className=""
+                layout="inset"
+                onAutomationsChange={() => {
+                  void reloadAutomations();
+                }}
+                selectedAutomationId={null}
+              />
+            ) : null}
+          </StandalonePageContent>
+
+          {builderThreadId && selectedProjectId ? (
+            <div className="shrink-0 px-3 pt-1.5 pb-1 sm:px-5 sm:pt-2">
+              <ThreadComposerSurface
+                className="[&_[data-testid=composer-editor]]:min-h-12"
+                threadId={builderThreadId}
+                seedPrompt={AUTOMATION_SKILL_PROMPT}
+                onOptimisticUserMessage={setRequestMessageId}
+                transformPromptForSend={(prompt) =>
+                  buildAutomationSkillDispatchPrompt({
+                    rawPrompt: prompt,
+                    defaultProjectName: selectedProjectLabel ?? "Chats",
+                    deviceTimeZone: getDeviceTimeZone(),
+                  })
+                }
+              />
+              <div className="mx-auto flex w-full max-w-[52rem] items-center px-2.5 pt-1 pb-3 sm:px-3">
+                <AutomationProjectMenu
+                  projectOptions={projectOptions}
+                  selectedProjectId={selectedProjectId}
+                  selectedProjectName={selectedProjectLabel}
+                  onSelectProject={setSelectedProjectId}
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </StandalonePageLoading>
     </AutomationPageShell>
   );
 }

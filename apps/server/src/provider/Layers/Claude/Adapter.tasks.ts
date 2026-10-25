@@ -1,6 +1,11 @@
 import { RuntimeTaskId, TurnId, type TurnPlanUpdatedPayload } from "@bigbud/contracts";
 import { compareTaskOrder } from "@bigbud/shared/providerRuntime";
 
+import {
+  isClaudeProviderSubagent,
+  resolveClaudeSubagentModel,
+  type ClaudeTaskClassificationOptions,
+} from "./Adapter.tasks.classify.ts";
 import { reduceClaudeTaskState } from "./Adapter.tasks.reducer.ts";
 import {
   makeClaudeTaskState,
@@ -36,13 +41,20 @@ export function reduceClaudeTasks(input: {
   return reduceClaudeTaskState(input).changed;
 }
 
+/**
+ * Plan checklist steps. Provider subagents are shown in the Subagents card, never as plan
+ * steps (D8); an unsupported harness keeps them as ordinary tasks.
+ */
 export function claudeTaskPlanPayload(
   state: ClaudeTaskState,
   includeEmpty = false,
+  providerSubagentsSupported = true,
 ): TurnPlanUpdatedPayload | undefined {
   const modern = Array.from(state.tasks.values()).filter(
     (task) =>
-      !task.legacyMember && (task.taskListMember || task.backgroundMember || task.observedMember),
+      !task.legacyMember &&
+      (task.taskListMember || task.backgroundMember || task.observedMember) &&
+      !isClaudeProviderSubagent(task, providerSubagentsSupported),
   );
   const visible =
     modern.length > 0
@@ -77,13 +89,36 @@ function runtimeSource(task: ClaudeTask) {
   return "lifecycle" as const;
 }
 
-export function claudeTaskRuntimeUpdates(state: ClaudeTaskState, taskIds?: ReadonlyArray<string>) {
+function subagentPayload(task: ClaudeTask, options: ClaudeTaskClassificationOptions) {
+  const model = resolveClaudeSubagentModel(task, options.agentModels);
+  return {
+    ...(model ? { model } : {}),
+    ...(task.effort ? { effort: task.effort } : {}),
+    ...(task.prompt ? { prompt: task.prompt } : {}),
+    ...(task.depth !== undefined ? { depth: task.depth } : {}),
+    ...(task.endedAt ? { endedAt: task.endedAt } : {}),
+    ...(task.resultSummary ? { resultSummary: task.resultSummary } : {}),
+    ...(task.metrics ? { metrics: task.metrics } : {}),
+    ...(task.recentSteps && task.recentSteps.length > 0 ? { recentSteps: task.recentSteps } : {}),
+  };
+}
+
+export function claudeTaskRuntimeUpdates(
+  state: ClaudeTaskState,
+  taskIds?: ReadonlyArray<string>,
+  options: ClaudeTaskClassificationOptions = { providerSubagentsSupported: true },
+) {
   const selected = taskIds ? new Set(taskIds) : undefined;
   return Array.from(state.tasks.values())
     .filter((task) => !task.legacyMember && (!selected || selected.has(task.id)))
     .toSorted(compareTaskOrder)
     .map((task) => ({
       taskId: RuntimeTaskId.makeUnsafe(task.id),
+      kind: isClaudeProviderSubagent(task, options.providerSubagentsSupported)
+        ? ("providerSubagent" as const)
+        : ("task" as const),
+      nativeId: task.id,
+      activityFresh: true,
       status: runtimeStatus(task),
       subject: task.subject,
       ...(task.description ? { description: task.description } : {}),
@@ -95,7 +130,7 @@ export function claudeTaskRuntimeUpdates(state: ClaudeTaskState, taskIds?: Reado
       ...(task.parentToolUseId ? { parentToolUseId: task.parentToolUseId } : {}),
       ...(task.parentTaskId ? { parentTaskId: RuntimeTaskId.makeUnsafe(task.parentTaskId) } : {}),
       ...(task.subagentType ? { subagentType: task.subagentType } : {}),
-      ...(task.backgroundMember ? { background: true } : {}),
+      ...(task.backgroundMember || task.background ? { background: true } : {}),
       ...(task.blockedBy
         ? { blockedBy: task.blockedBy.map((id) => RuntimeTaskId.makeUnsafe(id)) }
         : {}),
@@ -103,6 +138,7 @@ export function claudeTaskRuntimeUpdates(state: ClaudeTaskState, taskIds?: Reado
       ...(task.lastToolName ? { lastToolName: task.lastToolName } : {}),
       ...(task.usage !== undefined ? { usage: task.usage } : {}),
       ...(task.terminalReason ? { terminalReason: task.terminalReason } : {}),
+      ...subagentPayload(task, options),
       ...(task.turnId ? { turnId: TurnId.makeUnsafe(task.turnId) } : {}),
       order: task.order,
       membership: {

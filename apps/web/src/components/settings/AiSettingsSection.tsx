@@ -1,8 +1,8 @@
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
 import { Equal } from "effect";
+import { FULL_TEXT_GENERATION_PROVIDERS } from "@bigbud/shared/internalTextGeneration";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import {
-  createModelSelection,
   getCustomModelOptionsByProvider,
   resolveAppModelSelectionState,
 } from "../../models/provider";
@@ -11,6 +11,11 @@ import { ProviderModelPicker } from "../chat/provider/ProviderModelPicker";
 import { TraitsPicker } from "../chat/provider/TraitsPicker";
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
+import { PromptSuggestionSettingsRows } from "./AiSettingsSection.promptSuggestions";
+import {
+  selectTextGenerationModel,
+  updateTextGenerationModelOptions,
+} from "./AiSettingsSection.models";
 
 export function AiSettingsSection() {
   const settings = useSettings();
@@ -21,6 +26,10 @@ export function AiSettingsSection() {
   const textGenProvider = textGenerationModelSelection.provider;
   const textGenModel = textGenerationModelSelection.model;
   const textGenModelOptions = textGenerationModelSelection.options;
+  const textGenSubProvider =
+    "subProviderID" in textGenerationModelSelection
+      ? textGenerationModelSelection.subProviderID
+      : undefined;
   const gitModelOptionsByProvider = getCustomModelOptionsByProvider(
     settings,
     serverProviders,
@@ -89,9 +98,15 @@ export function AiSettingsSection() {
         }
       />
 
+      <PromptSuggestionSettingsRows />
+
       <SettingsRow
         title="Text generation model"
-        description="Configure the model used for generated commit messages, PR titles, and similar Git text."
+        description={
+          settings.textGenerationModelSelection
+            ? "Try this model first for internal text generation, then the thread’s last successful model."
+            : "No override. Thread generation waits for a successful chat model; Git text without a thread needs an explicit model."
+        }
         resetAction={
           isGitWritingModelDirty ? (
             <SettingResetButton
@@ -109,18 +124,24 @@ export function AiSettingsSection() {
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             <ProviderModelPicker
               provider={textGenProvider}
-              model={textGenModel}
+              model={textGenSubProvider ? `${textGenModel}::${textGenSubProvider}` : textGenModel}
+              allowedProviders={FULL_TEXT_GENERATION_PROVIDERS}
               lockedProvider={null}
               providers={serverProviders}
               modelOptionsByProvider={gitModelOptionsByProvider}
               triggerVariant="outline"
+              triggerLabel={settings.textGenerationModelSelection ? undefined : "No override"}
               triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
-              onProviderModelChange={(provider, model) => {
+              onProviderModelChange={(provider, model, subProviderID) => {
                 updateSettings({
                   textGenerationModelSelection: resolveAppModelSelectionState(
                     {
                       ...settings,
-                      textGenerationModelSelection: { provider, model },
+                      textGenerationModelSelection: selectTextGenerationModel(
+                        provider,
+                        model,
+                        subProviderID,
+                      ),
                     },
                     serverProviders,
                   ),
@@ -134,6 +155,7 @@ export function AiSettingsSection() {
                 []
               }
               model={textGenModel}
+              subProviderID={textGenSubProvider}
               prompt=""
               onPromptChange={() => {}}
               modelOptions={textGenModelOptions}
@@ -145,9 +167,8 @@ export function AiSettingsSection() {
                   textGenerationModelSelection: resolveAppModelSelectionState(
                     {
                       ...settings,
-                      textGenerationModelSelection: createModelSelection(
-                        textGenProvider,
-                        textGenModel,
+                      textGenerationModelSelection: updateTextGenerationModelOptions(
+                        textGenerationModelSelection,
                         nextOptions,
                       ),
                     },

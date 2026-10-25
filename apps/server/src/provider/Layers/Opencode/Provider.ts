@@ -12,7 +12,7 @@ import {
 import { spawnAndCollect } from "../../providerSnapshot";
 import { makeManagedServerProvider } from "../../makeManagedServerProvider";
 import {
-  enrichManagedServerCatalog,
+  discoverManagedServerCatalog,
   resolveManagedServerCatalog,
 } from "../../managedServerCatalog";
 import {
@@ -28,6 +28,8 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { listConnectedManagedServerProviders } from "../../managedServerProviderDiscovery.ts";
 import { isVersionAtLeast } from "./Provider.version";
 import { applyManagedProviderEffortCache } from "../../managedServerCatalog.cache.ts";
+import { withHttpUsageLimits } from "../../providerUsageLimits.http.ts";
+import { readOpencodeGoUsageLimits } from "./Provider.usageLimits.ts";
 
 const PROVIDER = "opencode" as const;
 const MINIMUM_OPENCODE_VERSION = "1.14.19";
@@ -196,7 +198,7 @@ export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatu
                 models: builtInModels,
                 message: "OpenCode is installed and ready.",
                 modelDiscovery: {
-                  status: "live",
+                  status: "unavailable",
                   source: options?.fallbackSource ?? "bundled-fallback",
                   durationMs: 0,
                 },
@@ -236,7 +238,7 @@ export const checkOpencodeProviderStatus = Effect.fn("checkOpencodeProviderStatu
                 checkedAt,
                 models: catalog.models,
                 modelDiscovery: {
-                  status: "live",
+                  status: catalog.configured ? "live" : "unavailable",
                   source: "opencode-provider-catalog",
                   durationMs: 0,
                 },
@@ -288,9 +290,6 @@ export const OpencodeProviderLive = Layer.effect(
     const path = yield* Path.Path;
     const serverManager = yield* OpencodeServerManager;
     const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const initialSettings = yield* serverSettings.getSettings.pipe(
-      Effect.map((settings) => settings.providers.opencode),
-    );
     const fallback = yield* loadManagedServerFallbackModels(PROVIDER);
     const withCache = (snapshot: ServerProvider, generation: number, persist: boolean) =>
       serverSettings.getSettings.pipe(
@@ -319,6 +318,7 @@ export const OpencodeProviderLive = Layer.effect(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(OpencodeServerManager, serverManager),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
+      Effect.flatMap((snapshot) => withHttpUsageLimits(snapshot, readOpencodeGoUsageLimits)),
       Effect.flatMap((snapshot) => withCache(snapshot, 0, false)),
     );
     const catalogProviderCheck = checkOpencodeProviderStatus({
@@ -329,6 +329,7 @@ export const OpencodeProviderLive = Layer.effect(
       Effect.provideService(ServerSettingsService, serverSettings),
       Effect.provideService(OpencodeServerManager, serverManager),
       Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, childProcessSpawner),
+      Effect.flatMap((snapshot) => withHttpUsageLimits(snapshot, readOpencodeGoUsageLimits)),
     );
 
     return yield* makeManagedServerProvider<OpencodeSettings>({
@@ -341,10 +342,12 @@ export const OpencodeProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      readUsageLimits: () => Effect.promise((signal) => readOpencodeGoUsageLimits(signal, true)),
+      recoverModelDiscovery: true,
       checkProviderAtStartup: checkProvider,
-      enrichSnapshot: ({ snapshot, generation, publishSnapshot }) =>
+      discoverSnapshot: ({ snapshot, generation, publishSnapshot }) =>
         snapshot.enabled && snapshot.status === "ready"
-          ? enrichManagedServerCatalog({
+          ? discoverManagedServerCatalog({
               provider: PROVIDER,
               baseSnapshot: snapshot,
               catalogSnapshot: catalogProviderCheck.pipe(
@@ -354,7 +357,7 @@ export const OpencodeProviderLive = Layer.effect(
             })
           : Effect.void,
       preserveEnrichedSnapshot: true,
-      initialSnapshot: makeInitialOpencodeSnapshot(initialSettings),
+      initialSnapshot: makeInitialOpencodeSnapshot,
     });
   }),
 );

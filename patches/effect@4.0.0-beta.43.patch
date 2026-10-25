@@ -1,0 +1,496 @@
+diff --git a/dist/unstable/rpc/RpcClient.js b/dist/unstable/rpc/RpcClient.js
+index 351d00b40ba5be07e38ad8571e9e8efb6cce6eac..b1e6da452829bff347a85c2e89aba59cd48a6989 100644
+--- a/dist/unstable/rpc/RpcClient.js
++++ b/dist/unstable/rpc/RpcClient.js
+@@ -48,14 +48,16 @@ export const makeNoSerialization = /*#__PURE__*/Effect.fnUntraced(function* (gro
+     return clearEntries(Exit.interrupt(parent.id));
+   }));
+   const clearEntries = Effect.fnUntraced(function* (exit) {
+-    for (const [id, entry] of entries) {
+-      entries.delete(id);
++    yield* Effect.forEach(Array.from(entries), ([id, entry]) => Effect.gen(function* () {
+       if (entry._tag === "Queue") {
++        yield* entry.cancel();
+         yield* exit._tag === "Success" ? Queue.end(entry.queue) : Queue.failCause(entry.queue, exit.cause);
+       } else {
++        yield* sendInterrupt(id, [], entry.context);
++        entries.delete(id);
+         entry.resume(exit);
+       }
+-    }
++    }), { concurrency: "unbounded", discard: true });
+   });
+   const onRequest = rpc => {
+     const isStream = RpcSchema.isStreamSchema(rpc.successSchema);
+@@ -114,7 +116,7 @@ export const makeNoSerialization = /*#__PURE__*/Effect.fnUntraced(function* (gro
+         }
+       };
+       entries.set(id, entry);
+-      fiber = send.pipe(span ? Effect.withParentSpan(span, {
++          fiber = send.pipe(Effect.onError(() => Effect.andThen(Effect.sync(() => entries.delete(id)), sendInterrupt(id, [], context))), span ? Effect.withParentSpan(span, {
+         captureStackTrace: false
+       }) : identity, Effect.runForkWith(parentFiber.services));
+       fiber.addObserver(exit => {
+@@ -137,18 +139,23 @@ export const makeNoSerialization = /*#__PURE__*/Effect.fnUntraced(function* (gro
+     const fiber = Fiber.getCurrent();
+     const id = generateRequestId();
+     const scope = ServiceMap.getUnsafe(fiber.services, Scope.Scope);
+-    yield* Scope.addFinalizerExit(scope, exit => {
+-      if (!entries.has(id)) return Effect.void;
++    let completed = false;
++    const cancel = (interruptors = []) => Effect.suspend(() => {
++      if (completed) return Effect.void;
++      completed = true;
+       entries.delete(id);
+-      return sendInterrupt(id, Exit.isFailure(exit) ? Array.from(Cause.interruptors(exit.cause)) : [], context);
++      return sendInterrupt(id, interruptors, context);
+     });
++    yield* Scope.addFinalizerExit(scope, exit => cancel(Exit.isFailure(exit) ? Array.from(Cause.interruptors(exit.cause)) : []));
+     const queue = yield* Queue.bounded(streamBufferSize);
+     entries.set(id, {
+       _tag: "Queue",
+       rpc,
+       queue,
+       scope,
+-      context
++      context,
++      cancel,
++      complete: () => { completed = true; }
+     });
+     yield* middleware(message => options.onFromClient({
+       message,
+@@ -236,6 +243,7 @@ export const makeNoSerialization = /*#__PURE__*/Effect.fnUntraced(function* (gro
+             entry.resume(message.exit);
+             return Effect.void;
+           }
++          entry.complete();
+           return message.exit._tag === "Success" ? Queue.end(entry.queue) : Queue.failCause(entry.queue, message.exit.cause);
+         }
+       case "Defect":
+@@ -282,6 +290,11 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (group, options) {
+     supportsTransferables
+   } = yield* Protocol;
+   const entries = new Map();
++  const cancelRequest = requestId => {
++    entries.delete(requestId);
++    // Cancellation owns the wire request independently of the response lookup table.
++    return send({ _tag: "Interrupt", requestId: String(requestId) });
++  };
+   const {
+     client,
+     write
+@@ -308,7 +321,7 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (group, options) {
+               id: String(message.id),
+               payload,
+               headers: Object.entries(message.headers)
+-            }, collector && collector.readUnsafe())));
++            }, collector && collector.readUnsafe())), Effect.onError(() => Effect.sync(() => entries.delete(message.id))));
+           }
+         case "Ack":
+           {
+@@ -321,13 +334,7 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (group, options) {
+           }
+         case "Interrupt":
+           {
+-            const entry = entries.get(message.requestId);
+-            if (!entry) return Effect.void;
+-            entries.delete(message.requestId);
+-            return send({
+-              _tag: "Interrupt",
+-              requestId: String(message.requestId)
+-            });
++            return cancelRequest(message.requestId);
+           }
+         case "Eof":
+           {
+@@ -348,12 +355,12 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (group, options) {
+             clientId: 0,
+             requestId: RequestId(message.requestId),
+             values: chunk
+-          })), Effect.onError(cause => write({
++          })), Effect.catchCause(cause => Effect.andThen(Effect.ignore(cancelRequest(requestId)), write({
+             _tag: "Exit",
+             clientId: 0,
+             requestId: RequestId(message.requestId),
+             exit: Exit.failCause(cause)
+-          })));
++          }))));
+         }
+       case "Exit":
+         {
+@@ -368,31 +375,31 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (group, options) {
+               requestId,
+               exit
+             }),
+-            onFailure: cause => write({
++            onFailure: cause => Effect.andThen(Effect.ignore(cancelRequest(requestId)), write({
+               _tag: "Exit",
+               clientId: 0,
+               requestId,
+               exit: Exit.failCause(cause)
+-            })
++            }))
+           }));
+         }
+       case "Defect":
+         {
+-          return write({
++          return Effect.suspend(() => write({
+             _tag: "Defect",
+             clientId: 0,
+             defect: decodeDefect(message.defect)
+-          });
++          })).pipe(Effect.catchCause(cause => write({ _tag: "Defect", clientId: 0, defect: Cause.squash(cause) })));
+         }
+       case "ClientProtocolError":
+         {
+           const exit = Exit.fail(message.error);
+-          return Effect.forEach(entries.keys(), requestId => write({
++          return Effect.forEach(Array.from(entries.keys()), requestId => Effect.andThen(Effect.ignore(cancelRequest(requestId)), write({
+             _tag: "Exit",
+             clientId: 0,
+             requestId,
+             exit: exit
+-          }));
++          })));
+         }
+       default:
+         {
+diff --git a/dist/unstable/rpc/RpcServer.js b/dist/unstable/rpc/RpcServer.js
+index cb90572dd87bdba73380185b061c00a612ddbe20..d36b2f8ff7c974d0b5ca7f2073133c46cf526edd 100644
+--- a/dist/unstable/rpc/RpcServer.js
++++ b/dist/unstable/rpc/RpcServer.js
+@@ -160,7 +160,13 @@ export const makeNoSerialization = /*#__PURE__*/Effect.fnUntraced(function* (gro
+       headers: request.headers,
+       payload: request.payload
+     };
+-    const result = entry.handler(request.payload, metadata);
++    const result = (() => {
++      try {
++        return entry.handler(request.payload, metadata);
++      } catch (defect) {
++        return Effect.die(defect);
++      }
++    })();
+     // if the handler requested forking, then we skip the concurrency control
+     const isWrapper = Rpc.isWrapper(result);
+     const isFork = isWrapper && result.fork;
+@@ -183,7 +189,7 @@ export const makeNoSerialization = /*#__PURE__*/Effect.fnUntraced(function* (gro
+       if (exit._tag === "Failure") {
+         reportCauseUnsafe(Fiber.getCurrent(), exit.cause);
+       }
+-      return close ? Effect.ensuring(write, close) : write;
++      return close ? Effect.andThen(close, write) : write;
+     });
+     if (enableTracing) {
+       const parentSpan = requestFiber.services.mapUnsafe.get(Tracer.ParentSpan.key);
+@@ -208,7 +214,8 @@ export const makeNoSerialization = /*#__PURE__*/Effect.fnUntraced(function* (gro
+     requestFiber.services.mapUnsafe.forEach((value, key) => serviceMap.set(key, value));
+     serviceMap.set(Scope.Scope.key, scope);
+     const runFork = Effect.runForkWith(ServiceMap.makeUnsafe(serviceMap));
+-    const fiber = trackFiber(runFork(effect, isUninterruptible ? {
++    const start = Latch.makeUnsafe(false);
++    const fiber = trackFiber(runFork(Effect.andThen(start.await, effect), isUninterruptible ? {
+       uninterruptible: true
+     } : undefined));
+     client.fibers.set(request.id, fiber);
+@@ -227,6 +234,7 @@ export const makeNoSerialization = /*#__PURE__*/Effect.fnUntraced(function* (gro
+         trackFiber(runFork(endClient(client)));
+       }
+     });
++    start.openUnsafe();
+     return Effect.void;
+   };
+   const streamEffect = (client, request, stream) => {
+@@ -318,7 +326,7 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (group, options) {
+               _tag: "Chunk",
+               requestId: String(response.requestId),
+               values
+-            }));
++            }), true);
+           }
+         case "Exit":
+           {
+@@ -370,14 +378,13 @@ export const make = /*#__PURE__*/Effect.fnUntraced(function* (group, options) {
+     return schemas;
+   };
+   const clients = new Map();
+-  const handleEncode = (client, requestId, encodeDefect, collector, effect, onSuccess) => (collector ? Effect.provideService(effect, Transferable.Collector, collector) : effect).pipe(Effect.flatMap(a => send(client.id, onSuccess(a), collector && collector.clearUnsafe())), Effect.catchCause(cause => {
++  const handleEncode = (client, requestId, encodeDefect, collector, effect, onSuccess, isChunk = false) => (collector ? Effect.provideService(effect, Transferable.Collector, collector) : effect).pipe(Effect.flatMap(a => send(client.id, onSuccess(a), collector && collector.clearUnsafe())), Effect.catchCause(cause => {
++    const defect = Cause.squash(Cause.map(cause, e => Schema.isSchemaError(e) ? e.issue.toString() : e));
++    // A failed chunk must fail its producer, not report success and wait for an Ack.
++    // The producer's onExit closes its scope before sending the request-local failure.
++    if (isChunk) return Effect.die(defect);
+     client.schemas.delete(requestId);
+-    const defect = Cause.squash(Cause.map(cause, e => e.issue.toString()));
+-    return Effect.andThen(sendRequestDefect(client, requestId, encodeDefect, defect), server.write(client.id, {
+-      _tag: "Interrupt",
+-      requestId,
+-      interruptors: []
+-    }));
++    return sendRequestDefect(client, requestId, encodeDefect, defect);
+   }));
+   const sendRequestDefect = (client, requestId, encodeDefect, defect) => Effect.catchCause(Effect.flatMap(encodeDefect(defect), encodedDefect => send(client.id, {
+     _tag: "Exit",
+diff --git a/src/unstable/rpc/RpcClient.ts b/src/unstable/rpc/RpcClient.ts
+index c129eecdfbc851956129de6a340b4c334cc55c51..78f4c7433f1342110c51edcdee41aa4c43409fe8 100644
+--- a/src/unstable/rpc/RpcClient.ts
++++ b/src/unstable/rpc/RpcClient.ts
+@@ -247,6 +247,8 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
+     readonly queue: Queue.Queue<any, any>
+     readonly scope: Scope.Scope
+     readonly context: ServiceMap.ServiceMap<never>
++    readonly cancel: (interruptors?: ReadonlyArray<number>) => Effect.Effect<void>
++    readonly complete: () => void
+   }
+   const entries = new Map<RequestId, ClientEntry>()
+ 
+@@ -260,16 +262,18 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
+   )
+ 
+   const clearEntries = Effect.fnUntraced(function*(exit: Exit.Exit<never>) {
+-    for (const [id, entry] of entries) {
+-      entries.delete(id)
++    yield* Effect.forEach(Array.from(entries), ([id, entry]) => Effect.gen(function*() {
+       if (entry._tag === "Queue") {
++        yield* entry.cancel()
+         yield* (exit._tag === "Success"
+           ? Queue.end(entry.queue as any)
+           : Queue.failCause(entry.queue as any, exit.cause)) as Effect.Effect<void>
+       } else {
++        yield* sendInterrupt(id, [], entry.context)
++        entries.delete(id)
+         entry.resume(exit)
+       }
+-    }
++    }), { concurrency: "unbounded", discard: true })
+   })
+ 
+   const onRequest = (rpc: Rpc.AnyWithProps) => {
+@@ -374,6 +378,10 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
+           }
+           entries.set(id, entry)
+           fiber = send.pipe(
++            Effect.onError(() => Effect.andThen(
++              Effect.sync(() => entries.delete(id)),
++              sendInterrupt(id, [], context)
++            )),
+             span ? Effect.withParentSpan(span, { captureStackTrace: false }) : identity,
+             Effect.runForkWith(parentFiber.services)
+           )
+@@ -415,19 +423,20 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
+     const id = generateRequestId()
+ 
+     const scope = ServiceMap.getUnsafe(fiber.services, Scope.Scope)
++    let completed = false
++    const cancel = (interruptors: ReadonlyArray<number> = []) => Effect.suspend(() => {
++      if (completed) return Effect.void
++      completed = true
++      entries.delete(id)
++      return sendInterrupt(id, interruptors, context)
++    })
+     yield* Scope.addFinalizerExit(
+       scope,
+-      (exit) => {
+-        if (!entries.has(id)) return Effect.void
+-        entries.delete(id)
+-        return sendInterrupt(
+-          id,
++      (exit) => cancel(
+           Exit.isFailure(exit) ?
+             Array.from(Cause.interruptors(exit.cause))
+-            : [],
+-          context
++            : []
+         )
+-      }
+     )
+ 
+     const queue = yield* Queue.bounded<any, any>(streamBufferSize)
+@@ -436,7 +445,9 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
+       rpc,
+       queue,
+       scope,
+-      context
++      context,
++      cancel,
++      complete: () => { completed = true }
+     })
+ 
+     yield* middleware(
+@@ -553,6 +564,7 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
+           entry.resume(message.exit)
+           return Effect.void
+         }
++        entry.complete()
+         return message.exit._tag === "Success"
+           ? Queue.end(entry.queue)
+           : Queue.failCause(entry.queue, message.exit.cause)
+@@ -623,6 +635,12 @@ export const make: <Rpcs extends Rpc.Any, const Flatten extends boolean = false>
+   }
+   const entries = new Map<RequestId, ClientEntry>()
+ 
++  const cancelRequest = (requestId: RequestId) => {
++    entries.delete(requestId)
++    // Cancellation owns the wire request independently of the response lookup table.
++    return send({ _tag: "Interrupt", requestId: String(requestId) })
++  }
++
+   const { client, write } = yield* makeNoSerialization(group, {
+     ...options,
+     supportsAck,
+@@ -652,7 +670,7 @@ export const make: <Rpcs extends Rpc.Any, const Flatten extends boolean = false>
+                 headers: Object.entries(message.headers)
+               }, collector && collector.readUnsafe())
+             )
+-          ) as Effect.Effect<void, RpcClientError>
++          ).pipe(Effect.onError(() => Effect.sync(() => entries.delete(message.id)))) as Effect.Effect<void, RpcClientError>
+         }
+         case "Ack": {
+           const entry = entries.get(message.requestId)
+@@ -663,13 +681,7 @@ export const make: <Rpcs extends Rpc.Any, const Flatten extends boolean = false>
+           }) as Effect.Effect<void, RpcClientError>
+         }
+         case "Interrupt": {
+-          const entry = entries.get(message.requestId)
+-          if (!entry) return Effect.void
+-          entries.delete(message.requestId)
+-          return send({
+-            _tag: "Interrupt",
+-            requestId: String(message.requestId)
+-          }) as Effect.Effect<void, RpcClientError>
++          return cancelRequest(message.requestId) as Effect.Effect<void, RpcClientError>
+         }
+         case "Eof": {
+           return Effect.void
+@@ -690,13 +702,13 @@ export const make: <Rpcs extends Rpc.Any, const Flatten extends boolean = false>
+           Effect.flatMap((chunk) =>
+             write({ _tag: "Chunk", clientId: 0, requestId: RequestId(message.requestId), values: chunk })
+           ),
+-          Effect.onError((cause) =>
+-            write({
++          Effect.catchCause((cause) =>
++            Effect.andThen(Effect.ignore(cancelRequest(requestId)), write({
+               _tag: "Exit",
+               clientId: 0,
+               requestId: RequestId(message.requestId),
+               exit: Exit.failCause(cause)
+-            })
++            }))
+           )
+         ) as Effect.Effect<void>
+       }
+@@ -710,18 +722,26 @@ export const make: <Rpcs extends Rpc.Any, const Flatten extends boolean = false>
+           Effect.orDie,
+           Effect.matchCauseEffect({
+             onSuccess: (exit) => write({ _tag: "Exit", clientId: 0, requestId, exit }),
+-            onFailure: (cause) => write({ _tag: "Exit", clientId: 0, requestId, exit: Exit.failCause(cause) })
++            onFailure: (cause) => Effect.andThen(
++              Effect.ignore(cancelRequest(requestId)),
++              write({ _tag: "Exit", clientId: 0, requestId, exit: Exit.failCause(cause) })
++            )
+           })
+         ) as Effect.Effect<void>
+       }
+       case "Defect": {
+-        return write({ _tag: "Defect", clientId: 0, defect: decodeDefect(message.defect as any) })
++        return Effect.suspend(() =>
++          write({ _tag: "Defect", clientId: 0, defect: decodeDefect(message.defect as any) })
++        ).pipe(Effect.catchCause((cause) => write({ _tag: "Defect", clientId: 0, defect: Cause.squash(cause) })))
+       }
+       case "ClientProtocolError": {
+         const exit = Exit.fail(message.error)
+         return Effect.forEach(
+-          entries.keys(),
+-          (requestId) => write({ _tag: "Exit", clientId: 0, requestId, exit: exit as any })
++          Array.from(entries.keys()),
++          (requestId) => Effect.andThen(
++            Effect.ignore(cancelRequest(requestId)),
++            write({ _tag: "Exit", clientId: 0, requestId, exit: exit as any })
++          )
+         )
+       }
+       default: {
+diff --git a/src/unstable/rpc/RpcServer.ts b/src/unstable/rpc/RpcServer.ts
+index b142b07c217512d740e27d8614b3efe880286cf3..0966e1f1447b5d412eb012be5e326066e262a633 100644
+--- a/src/unstable/rpc/RpcServer.ts
++++ b/src/unstable/rpc/RpcServer.ts
+@@ -241,7 +241,13 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any>(
+       headers: request.headers,
+       payload: request.payload
+     }
+-    const result = entry.handler(request.payload, metadata)
++    const result = (() => {
++      try {
++        return entry.handler(request.payload, metadata)
++      } catch (defect) {
++        return Effect.die(defect)
++      }
++    })()
+ 
+     // if the handler requested forking, then we skip the concurrency control
+     const isWrapper = Rpc.isWrapper(result)
+@@ -275,7 +281,7 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any>(
+       if (exit._tag === "Failure") {
+         reportCauseUnsafe(Fiber.getCurrent()!, exit.cause)
+       }
+-      return close ? Effect.ensuring(write, close) : write
++      return close ? Effect.andThen(close, write) : write
+     })
+     if (enableTracing) {
+       const parentSpan = requestFiber.services.mapUnsafe.get(
+@@ -308,9 +314,10 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any>(
+     requestFiber.services.mapUnsafe.forEach((value, key) => serviceMap.set(key, value))
+     serviceMap.set(Scope.Scope.key, scope)
+     const runFork = Effect.runForkWith(ServiceMap.makeUnsafe(serviceMap))
++    const start = Latch.makeUnsafe(false)
+     const fiber = trackFiber(
+       runFork(
+-        effect,
++        Effect.andThen(start.await, effect),
+         isUninterruptible ? { uninterruptible: true } : undefined
+       )
+     )
+@@ -334,6 +341,7 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any>(
+         trackFiber(runFork(endClient(client)))
+       }
+     })
++    start.openUnsafe()
+     return Effect.void
+   }
+ 
+@@ -485,7 +493,8 @@ export const make: <Rpcs extends Rpc.Any>(
+             schemas.encodeDefect,
+             schemas.collector,
+             Effect.provideServices(schemas.encodeChunk(response.values), schemas.services),
+-            (values) => ({ _tag: "Chunk", requestId: String(response.requestId), values })
++            (values) => ({ _tag: "Chunk", requestId: String(response.requestId), values }),
++            true
+           )
+         }
+         case "Exit": {
+@@ -571,17 +580,18 @@ export const make: <Rpcs extends Rpc.Any>(
+     encodeDefect: (u: unknown) => Effect.Effect<unknown, Schema.SchemaError>,
+     collector: Transferable.Collector["Service"] | undefined,
+     effect: Effect.Effect<A, Schema.SchemaError, R>,
+-    onSuccess: (a: A) => FromServerEncoded
++    onSuccess: (a: A) => FromServerEncoded,
++    isChunk = false
+   ) =>
+     (collector ? Effect.provideService(effect, Transferable.Collector, collector) : effect).pipe(
+       Effect.flatMap((a) => send(client.id, onSuccess(a), collector && collector.clearUnsafe())),
+       Effect.catchCause((cause) => {
++        const defect = Cause.squash(Cause.map(cause, (e) => Schema.isSchemaError(e) ? e.issue.toString() : e))
++        // A failed chunk must fail its producer, not report success and wait for an Ack.
++        // The producer's onExit closes its scope before sending the request-local failure.
++        if (isChunk) return Effect.die(defect)
+         client.schemas.delete(requestId)
+-        const defect = Cause.squash(Cause.map(cause, (e) => e.issue.toString()))
+-        return Effect.andThen(
+-          sendRequestDefect(client, requestId, encodeDefect, defect),
+-          server.write(client.id, { _tag: "Interrupt", requestId, interruptors: [] })
+-        )
++        return sendRequestDefect(client, requestId, encodeDefect, defect)
+       })
+     )
+ 

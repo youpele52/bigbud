@@ -179,10 +179,10 @@ describe("local workspace watcher agent binary", () => {
       resolveLocalWorkspaceWatchAgentBinary({
         environment: {},
         platform: "win32",
-        architecture: "arm64",
+        architecture: "ia32",
         searchFrom: [],
       }),
-    ).toThrow("does not support win32/arm64");
+    ).toThrow("does not support win32/ia32");
   });
 
   it("classifies a protocol mismatch as permanently unavailable with a bounded probe", () => {
@@ -218,7 +218,7 @@ describe("local workspace watcher agent binary", () => {
   it("maps Node's Darwin identity to Rust's macOS identity", () => {
     const probe = vi.fn(() => ({
       status: 0,
-      stdout: "bigbud-remote-agent\t0.1.0\t1\t2\tdigest\tmacos\taarch64\n",
+      stdout: "bigbud-remote-agent\t0.1.0\t1\t3\tdigest\tmacos\taarch64\n",
       stderr: "",
     }));
 

@@ -8,7 +8,7 @@
  */
 import type { ProviderKind, ServerProvider } from "@bigbud/contracts";
 import { ServiceMap } from "effect";
-import type { Effect, Option, Stream } from "effect";
+import type { Effect, Option, Scope, Stream } from "effect";
 
 export interface ProviderRegistryShape {
   /**
@@ -21,10 +21,20 @@ export interface ProviderRegistryShape {
    */
   readonly refresh: (provider?: ProviderKind) => Effect.Effect<ReadonlyArray<ServerProvider>>;
 
+  /** Fetch fresh subscription quota for every enabled supported provider, without recovery. */
+  readonly refreshUsageLimits: Effect.Effect<ReadonlyArray<ServerProvider>>;
+
   /**
    * Stream of provider snapshot updates.
    */
   readonly streamChanges: Stream.Stream<ReadonlyArray<ServerProvider>>;
+
+  /** Acquire a live subscription immediately, retained until the caller's scope closes. */
+  readonly openChanges: Effect.Effect<
+    Stream.Stream<ReadonlyArray<ServerProvider>>,
+    never,
+    Scope.Scope
+  >;
 
   /**
    * Await the first provider that reaches `status: "ready"` after startup.

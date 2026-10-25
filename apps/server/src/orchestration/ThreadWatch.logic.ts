@@ -119,6 +119,7 @@ export const dispatchThreadWatchTriggerTurn = Effect.fn("dispatchThreadWatchTrig
       watchForCompletion: false,
     }));
 
+    const text = buildThreadWatchTriggerPrompt({ completedThreads: input.completedThreads });
     yield* input.orchestrationEngine.dispatch({
       type: "thread.turn.start",
       commandId,
@@ -126,8 +127,20 @@ export const dispatchThreadWatchTriggerTurn = Effect.fn("dispatchThreadWatchTrig
       message: {
         messageId,
         role: "user",
-        text: buildThreadWatchTriggerPrompt({ completedThreads: input.completedThreads }),
+        text,
         attachments,
+        originSegments: [
+          {
+            kind: "completionWatch",
+            actor: "automation",
+            text,
+            sourceThreads: input.completedThreads.map((thread) => ({
+              threadId: thread.threadId,
+              title: thread.title,
+            })),
+            verified: true,
+          },
+        ],
       },
       ...(input.watcherThread.modelSelection !== undefined
         ? { modelSelection: input.watcherThread.modelSelection }

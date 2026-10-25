@@ -5,12 +5,12 @@ use std::sync::Arc;
 #[cfg(unix)]
 use std::collections::VecDeque;
 #[cfg(unix)]
-use std::io::{Read, Write};
+use std::io::Read;
 #[cfg(unix)]
 use std::sync::Mutex;
 
 #[cfg(unix)]
-use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::fd::AsRawFd;
 
 const MAX_INPUT_BYTES: usize = 64 * 1024;
 pub const MAX_OUTPUT_BYTES: usize = 4 * 1024 * 1024;
@@ -51,6 +51,12 @@ pub enum PtyError {
     InputSequence { expected: u64, actual: u64 },
     #[error("PTY input exceeds the configured 64 KiB limit")]
     InputLimit,
+    #[error("PTY input sequence conflicts with its reserved digest")]
+    InputConflict,
+    #[error("PTY input outcome expired or is unknown; it cannot be replayed")]
+    InputExpired,
+    #[error("PTY input is fenced after cancellation or uncertain delivery")]
+    InputFenced,
     #[error("PTY output acknowledgement is invalid")]
     InvalidAcknowledgement,
     #[error("PTY replay begins at sequence {first_retained_sequence}")]
@@ -63,7 +69,9 @@ pub enum PtyError {
 
 #[cfg(unix)]
 struct PtyInner {
-    master: Mutex<std::fs::File>,
+    master: Mutex<Option<std::fs::File>>,
+    child: Arc<child::Child>,
+    input: input::InputWriter,
     state: Mutex<PtyStateRecord>,
 }
 
@@ -74,7 +82,6 @@ struct PtyStateRecord {
     first_retained_sequence: u64,
     retained_bytes: usize,
     output: VecDeque<PtyOutputChunk>,
-    last_input_sequence: u64,
     exit_code: Option<i32>,
     signal: Option<i32>,
 }
@@ -105,39 +112,77 @@ pub enum PtyEvent {
 mod handle;
 
 #[cfg(unix)]
+#[path = "child.rs"]
+mod child;
+#[cfg(unix)]
+#[path = "cleanup.rs"]
+mod cleanup;
+#[cfg(unix)]
+#[path = "input.rs"]
+mod input;
+#[cfg(unix)]
+#[path = "platform.rs"]
+mod platform;
+#[cfg(unix)]
+pub use cleanup::{CleanupOwner, settled as pending_cleanup_settled};
+#[cfg(unix)]
+pub use input::InputOutcome;
+
+#[cfg(unix)]
 #[path = "environment.rs"]
 mod environment;
 
+#[cfg(all(test, unix))]
+#[path = "reliability.tests.rs"]
+mod reliability_tests;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
 
 #[cfg(unix)]
 #[allow(clippy::indexing_slicing)]
-pub fn run_events(mut reader: std::fs::File, pid: u32, mut callback: impl FnMut(PtyEvent)) {
+pub fn run_events(
+    mut reader: std::fs::File,
+    handle: &PtyHandle,
+    mut callback: impl FnMut(PtyEvent),
+) {
     let mut buffer = [0; READ_CHUNK_BYTES];
-    loop {
+    let mut exit = None;
+    while let Ok(result) = handle.inner.child.poll() {
+        exit = result;
         match reader.read(&mut buffer) {
             Ok(0) => break,
             Ok(size) => callback(PtyEvent::Output(buffer[..size].to_vec())),
             Err(error) if error.raw_os_error() == Some(libc::EIO) => break,
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                if exit.is_some() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => continue,
             Err(_) => break,
         }
     }
-    let mut status = 0;
-    let result = unsafe { libc::waitpid(pid as i32, &mut status, 0) };
-    if result > 0 {
-        let exit_code = if libc::WIFEXITED(status) {
-            Some(libc::WEXITSTATUS(status))
-        } else {
-            None
-        };
-        let signal = if libc::WIFSIGNALED(status) {
-            Some(libc::WTERMSIG(status))
-        } else {
-            None
-        };
-        callback(PtyEvent::Exited { exit_code, signal });
+    // EOF can precede actual child exit. This owned worker polls without holding
+    // state locks; restart escalation can still signal the live leader authority.
+    while exit.is_none() {
+        match handle.inner.child.poll() {
+            Ok(result) => exit = result,
+            Err(_) => return,
+        }
+        if exit.is_none() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+    if let Some(exit) = exit {
+        if handle.inner.input.shutdown().is_err() {
+            return;
+        }
+        callback(PtyEvent::Exited {
+            exit_code: exit.code,
+            signal: exit.signal,
+        });
     }
 }
 
@@ -145,9 +190,9 @@ pub fn run_events(mut reader: std::fs::File, pid: u32, mut callback: impl FnMut(
 pub fn run_events(_reader: (), _pid: u32, _callback: impl FnMut(PtyEvent)) {}
 
 #[cfg(unix)]
-pub fn read_events(reader: std::fs::File, pid: u32) -> Vec<PtyEvent> {
+pub fn read_events(reader: std::fs::File, handle: &PtyHandle) -> Vec<PtyEvent> {
     let mut events = Vec::new();
-    run_events(reader, pid, |event| events.push(event));
+    run_events(reader, handle, |event| events.push(event));
     events
 }
 

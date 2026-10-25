@@ -10,6 +10,7 @@ import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeInge
 import { SchedulerReactor } from "../Services/SchedulerReactor.ts";
 import { ThreadWatchReactor } from "../Services/ThreadWatchReactor.ts";
 import { LearningReactor } from "../Services/LearningReactor.ts";
+import { ProviderTurnSupervisor } from "../Services/ProviderTurnSupervisor.ts";
 
 export const makeOrchestrationReactor = Effect.gen(function* () {
   const providerRuntimeIngestion = yield* ProviderRuntimeIngestionService;
@@ -18,9 +19,12 @@ export const makeOrchestrationReactor = Effect.gen(function* () {
   const schedulerReactor = yield* SchedulerReactor;
   const threadWatchReactor = yield* ThreadWatchReactor;
   const learningReactor = yield* LearningReactor;
+  const providerTurnSupervisor = yield* ProviderTurnSupervisor;
 
   const start: OrchestrationReactorShape["start"] = Effect.fn("start")(function* () {
     yield* providerRuntimeIngestion.start();
+    // The single turn health and sleep recovery loop.
+    yield* providerTurnSupervisor.start();
     yield* providerCommandReactor.start();
     yield* checkpointReactor.start();
     yield* schedulerReactor.start();

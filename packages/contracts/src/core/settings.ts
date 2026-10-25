@@ -1,10 +1,10 @@
 import { Effect } from "effect";
+import { TerminalInteractionSettingsFields } from "./settings.terminal";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedString } from "./baseSchemas";
 import { ModelSelection } from "../orchestration/orchestration";
 import { ProviderKind } from "../orchestration/orchestration.provider";
-import { DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER } from "./model";
 import {
   TIMESTAMP_FORMATS,
   DEFAULT_TIMESTAMP_FORMAT,
@@ -14,14 +14,17 @@ import {
   DEFAULT_SIDEBAR_THREAD_SORT_ORDER,
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
-import { DEFAULT_PROVIDER_KIND } from "../constants/provider.constant";
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
+import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
+import { GreetingName } from "./settings.greeting";
 import {
   AgentBrowserPreference,
+  ClaudeSubagentCap,
   ComputerUseActionTimeoutMs,
   ComputerUseCheckInIntervalMs,
   DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
   DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS,
+  DelegatedThreadModelChoice,
   ThreadEnvMode,
 } from "./settings.serverShared";
 
@@ -29,6 +32,7 @@ export * from "./settings.serverPatch";
 export * from "./settings.threadRetention";
 export {
   AgentBrowserPreference,
+  ClaudeSubagentCap,
   COMPUTER_USE_ACTION_TIMEOUT_MS_MAX,
   COMPUTER_USE_ACTION_TIMEOUT_MS_MIN,
   COMPUTER_USE_CHECK_IN_INTERVAL_MS_MAX,
@@ -37,6 +41,7 @@ export {
   ComputerUseCheckInIntervalMs,
   DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
   DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS,
+  DelegatedThreadModelChoice,
   ThreadEnvMode,
 } from "./settings.serverShared";
 
@@ -63,7 +68,11 @@ export type SidebarProjectSortOrder = typeof SidebarProjectSortOrder.Type;
 export const SidebarThreadSortOrder = Schema.Literals(SIDEBAR_THREAD_SORT_ORDERS);
 export type SidebarThreadSortOrder = typeof SidebarThreadSortOrder.Type;
 
-export const TERMINAL_FONT_FAMILIES = ["meslo-nerd-font-mono", "system-monospace"] as const;
+export const TERMINAL_FONT_FAMILIES = [
+  "jetbrains-mono-nerd-font",
+  "meslo-nerd-font-mono",
+  "system-monospace",
+] as const;
 export const TERMINAL_FONT_SIZES = [11, 12, 13, 14, 15, 16, 17, 18] as const;
 export const DESKTOP_WINDOW_MATERIALS = ["automatic", "solid", "translucent"] as const;
 export const TERMINAL_FONT_SIZE_MIN = TERMINAL_FONT_SIZES[0];
@@ -73,6 +82,8 @@ export const CONTEXT_WINDOW_WARNING_THRESHOLD_MAX = 1_000_000;
 export const DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD = 120_000;
 
 export const TerminalFontFamily = Schema.Literals(TERMINAL_FONT_FAMILIES);
+export const TerminalGpuAcceleration = Schema.Literals(["auto", "on", "off"]);
+export type TerminalGpuAcceleration = typeof TerminalGpuAcceleration.Type;
 export type TerminalFontFamily = typeof TerminalFontFamily.Type;
 export const DesktopWindowMaterial = Schema.Literals(DESKTOP_WINDOW_MATERIALS);
 export type DesktopWindowMaterial = typeof DesktopWindowMaterial.Type;
@@ -84,6 +95,7 @@ const ContextWindowWarningThreshold = Schema.Int.check(
 ).check(Schema.isLessThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MAX));
 
 export const ClientSettingsSchema = Schema.Struct({
+  openWebLinksInApp: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   diffWordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
@@ -98,12 +110,22 @@ export const ClientSettingsSchema = Schema.Struct({
   ),
   timestampFormat: TimestampFormat.pipe(Schema.withDecodingDefault(() => DEFAULT_TIMESTAMP_FORMAT)),
   terminalFontFamily: TerminalFontFamily.pipe(
-    Schema.withDecodingDefault(() => "meslo-nerd-font-mono" as const satisfies TerminalFontFamily),
+    Schema.withDecodingDefault(
+      () => "jetbrains-mono-nerd-font" as const satisfies TerminalFontFamily,
+    ),
   ),
   windowMaterial: DesktopWindowMaterial.pipe(
     Schema.withDecodingDefault(() => "automatic" as const satisfies DesktopWindowMaterial),
   ),
   terminalFontSize: TerminalFontSize.pipe(Schema.withDecodingDefault(() => 12)),
+  terminalGpuAcceleration: TerminalGpuAcceleration.pipe(
+    Schema.withDecodingDefault(() => "auto" as const),
+  ),
+  // Terminal theme names per app appearance. "bigbud" is the app-derived theme; unknown names
+  // resolve to it at runtime so the built-in catalog can evolve without a schema migration.
+  terminalThemeDark: Schema.String.pipe(Schema.withDecodingDefault(() => "bigbud")),
+  terminalThemeLight: Schema.String.pipe(Schema.withDecodingDefault(() => "bigbud")),
+  ...TerminalInteractionSettingsFields,
   contextWindowWarningThresholdTokens: ContextWindowWarningThreshold.pipe(
     Schema.withDecodingDefault(() => DEFAULT_CONTEXT_WINDOW_WARNING_THRESHOLD),
   ),
@@ -117,7 +139,6 @@ export const ClientSettingsSchema = Schema.Struct({
     "unrestricted",
   ] as const).pipe(Schema.withDecodingDefault(() => "none")),
   hasSeenFileAccessPrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  hiddenComposerProviders: Schema.Array(ProviderKind).pipe(Schema.withDecodingDefault(() => [])),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
@@ -160,6 +181,8 @@ export const ClaudeSettings = Schema.Struct({
   binaryPath: makeBinaryPathSetting("claude"),
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
   rollout: ClaudeRolloutSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+  maxSubagentSpawnDepth: ClaudeSubagentCap.pipe(Schema.withDecodingDefault(() => null)),
+  maxConcurrentSubagents: ClaudeSubagentCap.pipe(Schema.withDecodingDefault(() => null)),
 });
 export type ClaudeSettings = typeof ClaudeSettings.Type;
 
@@ -177,7 +200,7 @@ export const CopilotSettings = Schema.Struct({
 export type CopilotSettings = typeof CopilotSettings.Type;
 
 export const OpencodeSettings = Schema.Struct({
-  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   binaryPath: makeBinaryPathSetting("opencode"),
   customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
 });
@@ -224,17 +247,19 @@ export const MobileRemoteControlSettings = Schema.Struct({
 export type MobileRemoteControlSettings = typeof MobileRemoteControlSettings.Type;
 
 export const ServerSettings = Schema.Struct({
+  greetingName: GreetingName.pipe(Schema.withDecodingDefault(() => "")),
   enableAssistantStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   enableThinkingStreaming: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  /** Show the provider's suggested next prompt after a settled turn (Phase 7). */
+  promptSuggestions: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  /** Generate one with the thread's model when the provider has none (an extra model call). */
+  generatedPromptSuggestions: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   defaultThreadEnvMode: ThreadEnvMode.pipe(
     Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
   ),
   defaultChatCwd: TrimmedString.pipe(Schema.withDecodingDefault(() => DEFAULT_CHAT_CWD)),
-  textGenerationModelSelection: ModelSelection.pipe(
-    Schema.withDecodingDefault(() => ({
-      provider: DEFAULT_PROVIDER_KIND,
-      model: DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER[DEFAULT_PROVIDER_KIND],
-    })),
+  textGenerationModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(() => null),
   ),
 
   // Provider specific settings
@@ -245,6 +270,7 @@ export const ServerSettings = Schema.Struct({
     copilot: CopilotSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     kilocode: KilocodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    opencodeV2: OpencodeV2DevelopmentSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     pi: PiSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     devin: DevinSettings.pipe(Schema.withDecodingDefault(() => ({}))),
@@ -264,6 +290,11 @@ export const ServerSettings = Schema.Struct({
   ),
   computerUseActionTimeoutMs: ComputerUseActionTimeoutMs.pipe(
     Schema.withDecodingDefault(() => DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS),
+  ),
+  /** Server-side so delegation can honor it with no client connected (OD1). */
+  hiddenComposerProviders: Schema.Array(ProviderKind).pipe(Schema.withDecodingDefault(() => [])),
+  delegatedThreadModelChoice: DelegatedThreadModelChoice.pipe(
+    Schema.withDecodingDefault(() => "agent" as const satisfies DelegatedThreadModelChoice),
   ),
 });
 export type ServerSettings = typeof ServerSettings.Type;

@@ -53,28 +53,23 @@ export function syncDeliveryRecoveryToast<TToastId>(
   return manager.add(toast);
 }
 
-export type WsAutoReconnectTrigger = "focus" | "online";
+/** Signals that should skip the current backoff wait and try again immediately. */
+export type WsAutoReconnectTrigger = "focus" | "online" | "visible" | "resume" | "unlock" | "ready";
 
 export function shouldAutoReconnect(
   status: WsConnectionStatus,
   trigger: WsAutoReconnectTrigger,
 ): boolean {
   const uiState = getWsConnectionUiState(status);
+  if (uiState === "connected") return false;
 
-  if (trigger === "online") {
-    return (
-      uiState === "offline" ||
-      uiState === "reconnecting" ||
-      uiState === "error" ||
-      status.reconnectPhase === "exhausted"
-    );
+  if (trigger === "focus") {
+    // Focus is frequent; only nudge a link that was live before.
+    return status.online && status.hasConnected && uiState === "reconnecting";
   }
 
-  return (
-    status.online &&
-    status.hasConnected &&
-    (uiState === "reconnecting" || status.reconnectPhase === "exhausted")
-  );
+  // Wake, unlock, visibility, network and backend readiness are definite reasons to retry.
+  return uiState === "offline" || uiState === "reconnecting" || uiState === "error";
 }
 
 export function shouldRestartStalledReconnect(
@@ -95,10 +90,34 @@ export function shouldShowDesktopStartupBlockingState(
   return startup?.status === "failed" || startup?.status === "timedOut";
 }
 
-export function shouldContinueDesktopStartupReconnect(
-  startup: DesktopBackendStartupState | null,
-): boolean {
-  return startup?.status === "starting" || startup?.status === "upgrading";
+/**
+ * `replace-session` rebuilds a session whose readiness wait failed; `skip-backoff` only cuts
+ * the current reconnect wait, so a connecting socket is never abandoned.
+ */
+export type DesktopStartupReconnect = "replace-session" | "skip-backoff";
+
+export function resolveDesktopStartupReconnect(
+  isDesktop: boolean,
+  previous: DesktopBackendStartupState | null,
+  current: DesktopBackendStartupState | null,
+): DesktopStartupReconnect | null {
+  if (!isDesktop || !previous || !current) return null;
+  if (
+    previous.status === "timedOut" &&
+    current.status === "ready" &&
+    previous.generation === current.generation
+  ) {
+    return "replace-session";
+  }
+  if (
+    previous.status === "failed" &&
+    (current.status === "starting" || current.status === "upgrading") &&
+    current.generation > previous.generation
+  ) {
+    return "replace-session";
+  }
+  // Any other arrival at `ready`, including a republished `ready` after wake.
+  return current.status === "ready" ? "skip-backoff" : null;
 }
 
 export function shouldReconnectAfterDesktopStartupTransition(
@@ -106,17 +125,5 @@ export function shouldReconnectAfterDesktopStartupTransition(
   previous: DesktopBackendStartupState | null,
   current: DesktopBackendStartupState | null,
 ): boolean {
-  if (!isDesktop || !previous || !current) return false;
-  if (
-    previous.status === "timedOut" &&
-    current.status === "ready" &&
-    previous.generation === current.generation
-  ) {
-    return true;
-  }
-  return (
-    previous.status === "failed" &&
-    (current.status === "starting" || current.status === "upgrading") &&
-    current.generation > previous.generation
-  );
+  return resolveDesktopStartupReconnect(isDesktop, previous, current) !== null;
 }

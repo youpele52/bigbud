@@ -22,24 +22,17 @@ import {
   RuntimeMode,
 } from "./orchestration.provider";
 import { ProjectScript } from "./orchestration.project";
-import {
-  ElevatorSummary,
-  OrchestrationMessage,
-  ParentThreadReference,
-  SourceProposedPlanReference,
-  OrchestrationThreadPurpose,
-} from "./orchestration.thread";
+import { ElevatorSummary, SourceProposedPlanReference } from "./orchestration.thread";
 import { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
+import * as MessageOrigin from "./orchestration.messageOrigin";
+import { ThreadForkCommand } from "./orchestration.fork";
+import { ThreadCreateCommand } from "./orchestration.commands.client.threadCreate";
+import { ThreadDelegationModelChoicePickCommand } from "./orchestration.delegationModelChoice";
 import {
   ClientThreadMessageSubmitCommand,
   ThreadMessageSubmitCommand,
 } from "./orchestration.commands.client.messageSubmit";
-
-export { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
-export {
-  ClientThreadMessageSubmitCommand,
-  ThreadMessageSubmitCommand,
-} from "./orchestration.commands.client.messageSubmit";
+import { ThreadRecoveryResolveCommand } from "./orchestration.recovery";
 
 export const ProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),
@@ -84,28 +77,6 @@ const ProjectDeleteCommand = Schema.Struct({
   type: Schema.Literal("project.delete"),
   commandId: CommandId,
   projectId: ProjectId,
-});
-
-const ThreadCreateCommand = Schema.Struct({
-  type: Schema.Literal("thread.create"),
-  commandId: CommandId,
-  threadId: ThreadId,
-  projectId: ProjectId,
-  title: TrimmedNonEmptyString,
-  purpose: Schema.optional(OrchestrationThreadPurpose),
-  providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
-  workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
-  executionTargetId: Schema.optional(ExecutionTargetId),
-  modelSelection: ModelSelection,
-  runtimeMode: RuntimeMode,
-  interactionMode: ProviderInteractionMode.pipe(
-    Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
-  ),
-  branch: Schema.NullOr(TrimmedNonEmptyString),
-  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
-  parentThread: Schema.optional(ParentThreadReference),
-  seedMessages: Schema.optional(Schema.Array(OrchestrationMessage)),
-  createdAt: IsoDateTime,
 });
 
 const ThreadDeleteCommand = Schema.Struct({
@@ -179,6 +150,7 @@ export const ThreadTurnStartCommand = Schema.Struct({
     text: Schema.String,
     attachments: Schema.Array(ChatAttachment),
     replyToMessageId: Schema.optional(MessageId),
+    originSegments: Schema.optional(Schema.Array(MessageOrigin.MessageOriginSegment)),
   }),
   modelSelection: Schema.optional(ModelSelection),
   titleSeed: Schema.optional(TrimmedNonEmptyString),
@@ -207,6 +179,8 @@ export const ThreadQueuedPromptFlushCommand = Schema.Struct({
   messageIds: Schema.Array(MessageId),
   messageId: MessageId,
   acknowledged: Schema.optional(Schema.Boolean),
+  /** The user's "Send now": releases a held queue (`queueHold`). The server never sets it. */
+  userRelease: Schema.optional(Schema.Boolean),
   consumeOnly: Schema.optional(Schema.Boolean),
   controlOperationId: Schema.optional(CommandId),
   createdAt: IsoDateTime,
@@ -237,6 +211,7 @@ const ClientThreadTurnStartCommand = Schema.Struct({
     text: Schema.String,
     attachments: Schema.Array(UploadChatAttachment),
     replyToMessageId: Schema.optional(MessageId),
+    originSegments: Schema.optional(Schema.Array(MessageOrigin.ClientOrchestraAssignmentOrigin)),
   }),
   modelSelection: Schema.optional(ModelSelection),
   titleSeed: Schema.optional(TrimmedNonEmptyString),
@@ -339,6 +314,8 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ProjectReconfigureCommand,
   ProjectDeleteCommand,
   ThreadCreateCommand,
+  ThreadForkCommand,
+  ThreadDelegationModelChoicePickCommand,
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,
@@ -360,6 +337,7 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadPathCheckpointCaptureCommand,
   ThreadPathCheckpointRestoreCommand,
   ThreadSessionStopCommand,
+  ThreadRecoveryResolveCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -370,6 +348,8 @@ export const ClientOrchestrationCommand = Schema.Union([
   ProjectReconfigureCommand,
   ProjectDeleteCommand,
   ThreadCreateCommand,
+  ThreadForkCommand,
+  ThreadDelegationModelChoicePickCommand,
   ThreadDeleteCommand,
   ThreadArchiveCommand,
   ThreadUnarchiveCommand,
@@ -391,5 +371,6 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadPathCheckpointCaptureCommand,
   ThreadPathCheckpointRestoreCommand,
   ThreadSessionStopCommand,
+  ThreadRecoveryResolveCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;

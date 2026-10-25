@@ -111,6 +111,14 @@ export interface ToolInFlight {
   readonly lastEmittedInputFingerprint?: string;
 }
 
+/** Bounded subagent hints parsed from an Agent/Task tool call's input. */
+export interface ClaudeAgentToolInput {
+  readonly requested_model?: string;
+  readonly effort?: string;
+  readonly prompt?: string;
+  readonly subagent_type?: string;
+}
+
 export interface ClaudeSessionContext {
   session: ProviderSession;
   readonly sessionEpoch: number;
@@ -142,8 +150,12 @@ export interface ClaudeSessionContext {
   readonly taskState: ClaudeTaskState;
   lastPlanFingerprint: string | undefined;
   turnState: ClaudeTurnState | undefined;
+  /** The turn that ended last; a native prompt suggestion binds to it (Phase 7). */
+  lastSettledTurn?: { readonly turnId: TurnId; readonly completed: boolean } | undefined;
   lastKnownContextWindow: number | undefined;
   lastKnownTokenUsage: ThreadTokenUsageSnapshot | undefined;
+  lastKnownTokenUsageTurnId?: string;
+  lastKnownTokenUsageModel?: string;
   lastAssistantUuid: string | undefined;
   lastInterruptReceipt: ClaudeInterruptReceipt | undefined;
   readonly queuedUserMessageIds: Set<string>;
@@ -152,11 +164,16 @@ export interface ClaudeSessionContext {
   mcpStatuses: Array<McpServerStatusEntry>;
   readonly requiredMcpServerNames: ReadonlySet<string>;
   readonly modernTaskExposure: boolean;
+  /** Resolved alternate harnesses (CLIProxyAPI) have no verified child event contract. */
+  readonly providerSubagentsSupported: boolean;
+  /** Whether the query forwards subagent text; only then does text become a progress summary. */
+  readonly forwardSubagentText: boolean;
+  /** `AgentInfo.model` by agent type, read best-effort from `initializationResult()`. */
+  agentModels: ReadonlyMap<string, string> | undefined;
+  /** Agent/Task tool inputs by tool-use ID, waiting for the matching `task_started`. */
+  readonly agentToolInputs: Map<string, ClaudeAgentToolInput>;
   readonly mcpControlsEnabled: boolean;
   refreshMcpStatuses: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
-  recoverStream: (() => Effect.Effect<void, ProviderAdapterProcessError>) | undefined;
-  recoveryInFlight: Promise<void> | undefined;
-  recoveryAttempts: number;
   stopped: boolean;
 }
 

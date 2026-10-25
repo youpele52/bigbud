@@ -45,6 +45,7 @@ export function ThreadTerminalDrawerViewport({
 }: ThreadTerminalDrawerViewportProps) {
   const sharedProps = {
     threadId,
+    visible,
     executionTargetId,
     cwd,
     ...(worktreePath !== undefined ? { worktreePath } : {}),

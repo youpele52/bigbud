@@ -35,6 +35,15 @@ describe("buildLegacyClientSettingsMigrationPatch", () => {
     ).toEqual({});
   });
 
+  it("upgrades saved Meslo from the oldest app settings without changing font size", () => {
+    expect(
+      buildLegacyClientSettingsMigrationPatch({
+        terminalFontFamily: "meslo-nerd-font-mono",
+        terminalFontSize: 16,
+      }),
+    ).toEqual({ terminalFontFamily: "jetbrains-mono-nerd-font", terminalFontSize: 16 });
+  });
+
   it("does not include the context window warning threshold (no legacy migration)", () => {
     const patch = buildLegacyClientSettingsMigrationPatch({
       contextWindowWarningThresholdTokens: 200_000,

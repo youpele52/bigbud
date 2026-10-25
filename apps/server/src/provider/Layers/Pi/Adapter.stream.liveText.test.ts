@@ -259,6 +259,7 @@ describe("PiAdapter stream integration — live text projection", () => {
       handleStdoutEvent(session, {
         type: "message_end",
         message: {
+          timestamp: 1790800000000,
           role: "assistant",
           content: [
             { type: "thinking", thinking: "Private reasoning" },

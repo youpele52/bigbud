@@ -1,5 +1,5 @@
 import type { DesktopWindowMaterial } from "../core/settings";
-import type { DesktopBackendStartupState } from "./ipc.desktop";
+import type { DesktopBackendStartupState, DesktopConnectivitySignal } from "./ipc.desktop";
 import type {
   DesktopRuntimeArch,
   DesktopRuntimeInfo,
@@ -11,7 +11,9 @@ import type {
 } from "./ipc.desktop";
 import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
+import type { DesktopSystemMonitorBridge } from "../system-monitor/types";
 import type { DesktopScreenshotBridge } from "./ipc.desktopScreenshot";
+import type { TerminalRenderingPolicy } from "./ipc.terminal";
 
 export type {
   DesktopRuntimeArch,
@@ -55,6 +57,7 @@ export interface DesktopNotificationInput {
   title: string;
   body?: string;
   silent?: boolean;
+  threadId?: string;
 }
 
 export interface DesktopTailscaleRemoteAccessStatus {
@@ -67,8 +70,13 @@ export interface DesktopTailscaleRemoteAccessStatus {
 }
 
 export interface DesktopBridge
-  extends DesktopComputerUseBridge, DesktopCertificateChallengeBridge, DesktopScreenshotBridge {
+  extends
+    DesktopComputerUseBridge,
+    DesktopCertificateChallengeBridge,
+    DesktopScreenshotBridge,
+    DesktopSystemMonitorBridge {
   getWindowRole?: () => DesktopWindowRole | null;
+  getTerminalRenderingPolicy?: () => Promise<TerminalRenderingPolicy>;
   openMainWindow?: (threadId?: string) => Promise<boolean>;
   openCompactChat?: () => Promise<boolean>;
   beginMascotDrag?: (point: { x: number; y: number }) => Promise<boolean>;
@@ -88,7 +96,11 @@ export interface DesktopBridge
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getBackendStartupState: () => Promise<DesktopBackendStartupState>;
+  recoverBackendOwnership?: (generation: number) => Promise<void>;
+  checkBackendOwnership?: (generation: number) => Promise<void>;
   onBackendStartupState: (listener: (state: DesktopBackendStartupState) => void) => () => void;
+  /** Sleep, wake, lock and network hints; absent on bridges that predate them. */
+  onConnectivitySignal?: (listener: (signal: DesktopConnectivitySignal) => void) => () => void;
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;

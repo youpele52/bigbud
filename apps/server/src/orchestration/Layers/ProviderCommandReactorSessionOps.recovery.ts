@@ -91,23 +91,3 @@ export const rolloverProviderSessionAtHighWater = Effect.fn("rolloverProviderSes
     return undefined;
   },
 );
-
-export const withOneShotContextLimitRecovery = <A, E, R>(input: {
-  readonly threadId: ThreadId;
-  readonly providerService: ProviderServiceShape;
-  readonly states: Map<string, ProviderCapabilityContextState>;
-  readonly attempt: () => Effect.Effect<A, E, R>;
-}): Effect.Effect<A, E | import("../../provider/Errors.ts").ProviderServiceError, R> =>
-  input.attempt().pipe(
-    Effect.catch((error) => {
-      if (!isProviderContextLimitError(error)) return Effect.fail(error);
-      return Effect.gen(function* () {
-        yield* Effect.logWarning("recovering provider session after context-limit failure", {
-          threadId: input.threadId,
-        });
-        yield* input.providerService.stopSession({ threadId: input.threadId });
-        input.states.delete(input.threadId);
-        return yield* input.attempt();
-      });
-    }),
-  );

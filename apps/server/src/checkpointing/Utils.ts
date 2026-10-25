@@ -1,5 +1,6 @@
 import { Encoding } from "effect";
 import { CheckpointRef, ProjectId, type ThreadId } from "@bigbud/contracts";
+import { BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts/constants/project.constant.ts";
 
 export const CHECKPOINT_REFS_PREFIX = "refs/bigbud/checkpoints";
 export const PATH_CHECKPOINT_REFS_PREFIX = "refs/bigbud/path-checkpoints";
@@ -81,14 +82,16 @@ export function resolveThreadWorkspaceCwd(input: {
     readonly id: ProjectId;
     readonly workspaceRoot: string | null;
   }>;
+  readonly defaultChatCwd?: string;
 }): string | undefined {
   const worktreeCwd = input.thread.worktreePath ?? undefined;
   if (worktreeCwd) {
     return worktreeCwd;
   }
 
-  return (
-    input.projects.find((project) => project.id === input.thread.projectId)?.workspaceRoot ??
-    undefined
-  );
+  const project = input.projects.find((project) => project.id === input.thread.projectId);
+  // Only intentional folderless Chats may use the configured default, never a missing project.
+  if (project?.id === BUILT_IN_CHATS_PROJECT_ID && project.workspaceRoot === null)
+    return input.defaultChatCwd;
+  return project?.workspaceRoot ?? undefined;
 }

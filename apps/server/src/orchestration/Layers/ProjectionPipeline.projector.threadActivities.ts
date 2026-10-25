@@ -4,7 +4,7 @@
  * @module ProjectionPipeline.projector.threadActivities
  */
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
 import {
   ORCHESTRATION_PROJECTOR_NAMES,
@@ -53,7 +53,22 @@ export function makeThreadActivitiesProjector(
             activity: event.payload.activity,
           });
           if (contribution) {
-            yield* projectionThreadActivityRepository.upsertUsageContribution(contribution);
+            const turn = contribution.turnId
+              ? yield* projectionTurnRepository.getByTurnId({
+                  threadId: contribution.threadId,
+                  turnId: contribution.turnId,
+                })
+              : Option.none();
+            const attribution = Option.isSome(turn) ? turn.value.usageAttribution : null;
+            yield* projectionThreadActivityRepository.upsertUsageContribution({
+              ...contribution,
+              model: contribution.accounting?.model ?? attribution?.model ?? "unknown",
+              interactionMode: attribution?.interactionMode ?? "default",
+              occurredAt:
+                (contribution.accounting || contribution.codexObservation) && Option.isSome(turn)
+                  ? turn.value.requestedAt
+                  : contribution.occurredAt,
+            });
           }
         }
         return;
@@ -62,9 +77,6 @@ export function makeThreadActivitiesProjector(
         const existingRows = yield* projectionThreadActivityRepository.listByThreadId({
           threadId: event.payload.threadId,
         });
-        if (existingRows.length === 0) {
-          return;
-        }
         const existingTurns = yield* projectionTurnRepository.listByThreadId({
           threadId: event.payload.threadId,
         });
@@ -73,6 +85,19 @@ export function makeThreadActivitiesProjector(
           existingTurns,
           event.payload.turnCount,
         );
+        const retired = existingTurns
+          .filter(
+            (turn) =>
+              turn.checkpointTurnCount === null ||
+              turn.checkpointTurnCount > event.payload.turnCount,
+          )
+          .flatMap((turn) => (turn.turnId ? [turn.turnId] : []));
+        if (projectionThreadActivityRepository.retireUsageTurns) {
+          yield* projectionThreadActivityRepository.retireUsageTurns(
+            event.payload.threadId,
+            retired,
+          );
+        }
         if (keptRows.length === existingRows.length) {
           return;
         }

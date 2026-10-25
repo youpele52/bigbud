@@ -1,6 +1,6 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option, Schema, Struct } from "effect";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
@@ -12,6 +12,10 @@ import {
   DeleteProjectionThreadSessionInput,
   GetProjectionThreadSessionInput,
 } from "../Services/ProjectionThreadSessions.ts";
+
+const ProjectionThreadSessionDbRow = ProjectionThreadSession.mapFields(
+  Struct.assign({ retainedFamily: Schema.Number }),
+);
 
 const makeProjectionThreadSessionRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -27,6 +31,7 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           runtime_mode,
           active_turn_id,
           session_epoch,
+          retained_family,
           reason,
           last_error,
           updated_at
@@ -38,6 +43,7 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           ${row.runtimeMode},
           ${row.activeTurnId},
           ${row.sessionEpoch ?? 0},
+          ${row.retainedFamily ? 1 : 0},
           ${row.reason},
           ${row.lastError},
           ${row.updatedAt}
@@ -49,6 +55,7 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           runtime_mode = excluded.runtime_mode,
           active_turn_id = excluded.active_turn_id,
           session_epoch = excluded.session_epoch,
+          retained_family = excluded.retained_family,
           reason = excluded.reason,
           last_error = excluded.last_error,
           updated_at = excluded.updated_at
@@ -57,7 +64,7 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
 
   const getProjectionThreadSessionRow = SqlSchema.findOneOption({
     Request: GetProjectionThreadSessionInput,
-    Result: ProjectionThreadSession,
+    Result: ProjectionThreadSessionDbRow,
     execute: ({ threadId }) =>
       sql`
         SELECT
@@ -67,6 +74,7 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           runtime_mode AS "runtimeMode",
           active_turn_id AS "activeTurnId",
           session_epoch AS "sessionEpoch",
+          retained_family AS "retainedFamily",
           reason,
           last_error AS "lastError",
           updated_at AS "updatedAt"
@@ -94,6 +102,8 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
 
   const getByThreadId: ProjectionThreadSessionRepositoryShape["getByThreadId"] = (input) =>
     getProjectionThreadSessionRow(input).pipe(
+      // oxlint-disable-next-line no-map-spread -- Option.map converts one readonly SQL row, not an array.
+      Effect.map(Option.map((row) => ({ ...row, retainedFamily: row.retainedFamily === 1 }))),
       Effect.mapError(
         toPersistenceSqlError("ProjectionThreadSessionRepository.getByThreadId:query"),
       ),

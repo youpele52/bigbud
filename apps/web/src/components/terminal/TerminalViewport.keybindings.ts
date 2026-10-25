@@ -5,6 +5,7 @@ import {
   isDiffToggleShortcut,
   isTerminalClearShortcut,
   isTerminalCloseShortcut,
+  isTerminalFindShortcut,
   isTerminalNewShortcut,
   isTerminalSplitShortcut,
   isTerminalToggleShortcut,
@@ -24,6 +25,12 @@ interface AttachTerminalKeybindingsInput {
   readonly terminalId: string;
   readonly keybindingsRef: MutableRefObject<ResolvedKeybindingsConfig>;
   readonly api: NativeApi;
+  readonly acceptsInput?: () => boolean;
+  readonly writeNotice?: (terminal: Terminal, message: string) => void;
+  /** Ordered input lane of the view; shortcuts then share the coalescing queue with typing. */
+  readonly sendInput?: (data: string) => void;
+  /** Opens the view's find bar; without it the find shortcut is left to the app. */
+  readonly onFind?: () => void;
 }
 
 interface TerminalKeyEventHandlerInput extends Omit<AttachTerminalKeybindingsInput, "terminal"> {
@@ -65,19 +72,29 @@ export function createTerminalKeyEventHandler({
   terminalId,
   keybindingsRef,
   api,
+  acceptsInput = () => true,
+  writeNotice = writeSystemMessage,
+  sendInput,
+  onFind,
 }: TerminalKeyEventHandlerInput): (event: KeyboardEvent) => boolean {
   const sendTerminalInput = async (data: string, fallbackError: string) => {
     const activeTerminal = terminalRef.current;
-    if (!activeTerminal) return;
+    if (!activeTerminal || !acceptsInput()) return;
+    if (sendInput) {
+      sendInput(data);
+      return;
+    }
     try {
       await api.terminal.write({ threadId, terminalId, data });
     } catch (error) {
-      writeSystemMessage(activeTerminal, error instanceof Error ? error.message : fallbackError);
+      if (terminalRef.current === activeTerminal && acceptsInput()) {
+        writeNotice(activeTerminal, error instanceof Error ? error.message : fallbackError);
+      }
     }
   };
 
   return (event) => {
-    if (suppressShiftEnter(event, terminal)) {
+    if (acceptsInput() && suppressShiftEnter(event, terminal)) {
       return false;
     }
 
@@ -93,6 +110,17 @@ export function createTerminalKeyEventHandler({
     ) {
       return false;
     }
+
+    if (onFind && isTerminalFindShortcut(event, currentKeybindings, options)) {
+      if (event.type === "keydown") {
+        event.preventDefault();
+        event.stopPropagation();
+        onFind();
+      }
+      return false;
+    }
+
+    if (!acceptsInput()) return false;
 
     const navigationData = terminalNavigationShortcutData(event);
     if (navigationData !== null) {

@@ -6,6 +6,7 @@ import {
   isSessionStalled,
 } from "../../logic/session";
 import { isThreadCompletedStatus } from "../../logic/thread/threadCompletion.logic";
+import { hasFreshActiveProviderAgent } from "../chat/agents/agentActivity.presentation";
 import { isSessionCompacting } from "../chat/common/threadActivityIndicator";
 
 export interface ThreadStatusPill {
@@ -15,6 +16,7 @@ export interface ThreadStatusPill {
     | "Failed"
     | "Idle"
     | "Working"
+    | "Subagents Working"
     | "Compacting"
     | "Getting Ready"
     | "Done"
@@ -33,6 +35,7 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   "Awaiting Input": 5,
   "Connection Warning": 4,
   Working: 4,
+  "Subagents Working": 3,
   Compacting: 4,
   "Getting Ready": 3,
   "Plan Ready": 2,
@@ -47,8 +50,12 @@ type ThreadStatusInput = Pick<
   | "hasPendingUserInput"
   | "interactionMode"
   | "latestTurn"
+  | "providerAgents"
   | "session"
-> & { lastVisitedAt?: string | undefined };
+> & {
+  lastVisitedAt?: string | undefined;
+  recoveryStatus?: SidebarThreadSummary["recoveryStatus"];
+};
 
 export function resolveThreadStatusPill(input: {
   thread: ThreadStatusInput;
@@ -63,11 +70,15 @@ export function resolveThreadStatusPill(input: {
   if (isSessionStalled(thread.session)) {
     return status("Provider Unavailable", "text-destructive", "bg-destructive");
   }
+  // bigbud is resuming a turn cut by sleep: the cut's session error is not the outcome.
+  if (thread.recoveryStatus === "continuing") {
+    return status("Working", "text-info-foreground", "bg-info-foreground", true);
+  }
   if (thread.session?.orchestrationStatus === "error" || thread.latestTurn?.state === "error") {
     return status("Failed", "text-destructive", "bg-destructive");
   }
   if (thread.hasPendingApprovals) return status("Pending Approval");
-  if (thread.hasPendingUserInput) return status("Awaiting Input");
+  if (thread.hasPendingUserInput) return status("Awaiting Input", "text-warning", "bg-warning");
   if (thread.session?.orchestrationStatus === "running" || hasActiveProviderProgress(thread)) {
     return isSessionCompacting(thread.session)
       ? status("Compacting", "text-warning", "bg-warning", true)
@@ -75,6 +86,9 @@ export function resolveThreadStatusPill(input: {
   }
   if (thread.session?.orchestrationStatus === "starting") {
     return status("Getting Ready", "text-info-foreground", "bg-info-foreground", true);
+  }
+  if (hasFreshActiveProviderAgent(thread.providerAgents)) {
+    return status("Subagents Working", "text-info-foreground", "bg-info-foreground", true);
   }
   if (
     !thread.hasPendingUserInput &&

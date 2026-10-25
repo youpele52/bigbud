@@ -10,7 +10,7 @@ import type { LearningJob } from "../../persistence/Services/LearningJobs.ts";
 import { SkillChangeProposalRepository } from "../../persistence/Services/SkillChangeProposals.ts";
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
-import { supportsProviderWorkload } from "../../provider/providerWorkloadSupport.ts";
+import { canScheduleProviderLearning } from "../../provider/Layers/ProviderService.learningSupport.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { LearningReactor, type LearningReactorShape } from "../Services/LearningReactor.ts";
 import { makeLearningJobProcessor } from "./LearningReactor.process.ts";
@@ -79,7 +79,7 @@ const makeLearningReactor = Effect.gen(function* () {
             : null;
           if (memoryUserMessageCount === null && !sourceUserMessage?.trim()) return;
           if (memoryUserMessageCount === null && !resolveSkillName(sourceUserMessage ?? "")) return;
-          if (!supportsProviderWorkload(event.provider, "learning")) return;
+          if (!(yield* canScheduleProviderLearning(providerService, event.provider))) return;
 
           const job = {
             jobId: `learning:${event.threadId}:${event.turnId}`,
@@ -207,8 +207,10 @@ const makeLearningReactor = Effect.gen(function* () {
           ? Effect.void
           : activityPublisher.outcome(
               job,
-              "interrupted",
-              "Memory review was interrupted and will recover",
+              job.cleanupUnconfirmed ? "failed" : "interrupted",
+              job.cleanupUnconfirmed
+                ? "Memory review cleanup remains unconfirmed; owner retained and automatic retry blocked"
+                : "Memory review was interrupted and will recover",
             ),
       { concurrency: 1 },
     );

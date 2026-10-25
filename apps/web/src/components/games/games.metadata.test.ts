@@ -6,7 +6,7 @@ vi.mock("~/rpc/wsHttpOrigin", () => ({ resolveWsHttpOrigin: () => "http://localh
 describe("Games catalog metadata", () => {
   beforeEach(() => vi.resetModules());
 
-  it("keeps all twelve approved destinations exact", () => {
+  it("keeps all thirteen approved destinations exact", () => {
     expect(GAMES.map((game) => game.url)).toEqual([
       "https://www.google.com/logos/2010/pacman10-i.html",
       "https://playsnake.org/",
@@ -17,6 +17,7 @@ describe("Games catalog metadata", () => {
       "https://littlealchemy2.com/",
       "https://neal.fun/infinite-craft/",
       "https://skribbl.io/",
+      "https://lagoslife.app/",
       "https://cardgames.io/solitaire/",
       "https://www.crazygames.com/game/word-wipe",
       "https://www.retrogames.cz/",

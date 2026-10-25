@@ -23,22 +23,15 @@ import { claudeSdkPermissionRuntimeRaw } from "./Adapter.sdk.projections.ts";
 import type { ClaudeSessionContext, PendingUserInput } from "./Adapter.types.ts";
 import { PROVIDER } from "./Adapter.types.ts";
 import { asCanonicalTurnId, asRuntimeRequestId, nativeProviderRefs } from "./Adapter.utils.ts";
+import { awaitClaudeCallback } from "./Adapter.approval.wait.ts";
+import { cancelAbandonedClaudeRequest } from "./Adapter.approval.lifecycle.ts";
+import { resolveClaudeRequest } from "./Adapter.approval.resolve.ts";
+import {
+  claudeUserInputQuestions,
+  elicitationContent,
+} from "./Adapter.approval.userInput.utils.ts";
 
 const MCP_ELICITATION_TIMEOUT_MS = 120_000;
-
-function elicitationContent(
-  answers: ProviderUserInputAnswers,
-): Record<string, string | number | boolean | string[]> {
-  const content: Record<string, string | number | boolean | string[]> = {};
-  for (const [key, value] of Object.entries(answers)) {
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      content[key] = value;
-    } else if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-      content[key] = value;
-    }
-  }
-  return content;
-}
 
 export function makeUserInputHandlers(deps: ApprovalHandlerDeps) {
   const {
@@ -64,162 +57,191 @@ export function makeUserInputHandlers(deps: ApprovalHandlerDeps) {
         message: "Invalid user-input callback correlation.",
       } satisfies PermissionResult;
     }
+    if (context.stopped || context.session.status === "closed" || callbackOptions.signal.aborted) {
+      return {
+        behavior: "deny",
+        message: "User cancelled tool execution.",
+      } satisfies PermissionResult;
+    }
 
     const existingInput = requestLedger.get(requestId);
     if (existingInput?.kind === "user-input" && existingInput.state === "resolved") {
       if (existingInput.result) return existingInput.result;
     }
-    if (existingInput?.kind === "user-input" && existingInput.state === "pending") {
-      const answers = yield* Deferred.await(existingInput.answers);
+    if (existingInput?.kind === "user-input" && existingInput.state !== "resolved") {
+      yield* awaitClaudeCallback(
+        callbackOptions.signal,
+        Deferred.await(existingInput.completion),
+        undefined,
+        runFork,
+      );
+      if (callbackOptions.signal.aborted || existingInput.cancelled || context.stopped) {
+        return {
+          behavior: "deny",
+          message: "User cancelled tool execution.",
+        } satisfies PermissionResult;
+      }
       const resolved = requestLedger.get(requestId);
       if (resolved?.kind === "user-input" && resolved.state === "resolved" && resolved.result) {
         return resolved.result;
       }
       return {
-        behavior: "allow",
-        updatedInput: { questions: toolInput.questions, answers },
+        behavior: "deny",
+        message: "User cancelled tool execution.",
       } satisfies PermissionResult;
     }
 
-    const rawQuestions = Array.isArray(toolInput.questions) ? toolInput.questions : [];
-    const questions: Array<UserInputQuestion> = rawQuestions.map(
-      (question: Record<string, unknown>, index: number) => ({
-        id:
-          typeof question.question === "string" && question.question.length > 0
-            ? question.question
-            : `q-${index}`,
-        header: typeof question.header === "string" ? question.header : `Question ${index + 1}`,
-        question: typeof question.question === "string" ? question.question : "",
-        options: Array.isArray(question.options)
-          ? question.options.map((option: Record<string, unknown>) => ({
-              label: typeof option.label === "string" ? option.label : "",
-              description: typeof option.description === "string" ? option.description : "",
-            }))
-          : [],
-        multiSelect: typeof question.multiSelect === "boolean" ? question.multiSelect : false,
-      }),
-    );
+    const questions = claudeUserInputQuestions(toolInput);
     const answersDeferred = yield* Deferred.make<ProviderUserInputAnswers>();
-    let aborted = false;
     const pendingInput: PendingUserInput = {
       questions,
       answers: answersDeferred,
       cancelled: false,
     };
-    const requestedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent(context, {
-      type: "user-input.requested",
-      eventId: requestedStamp.eventId,
-      provider: PROVIDER,
-      createdAt: requestedStamp.createdAt,
-      threadId: context.session.threadId,
-      ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-      requestId: asRuntimeRequestId(requestId),
-      payload: { questions },
-      providerRefs: nativeProviderRefs(context, {
-        providerItemId: callback.toolUseId,
-        providerRequestId: callback.requestId,
-        ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
-      }),
-      raw: claudeSdkPermissionRuntimeRaw("canUseTool/AskUserQuestion"),
-    });
+    const createdAt = new Date().toISOString();
     pendingUserInputs.set(requestId, pendingInput);
     const pendingLedgerEntry: PendingUserInputLedgerEntry = {
       kind: "user-input",
       state: "pending",
       requestId,
-      createdAt: requestedStamp.createdAt,
+      createdAt,
       questions,
       answers: answersDeferred,
       cancelled: false,
       providerRequestId: callback.requestId,
+      completion: Deferred.makeUnsafe<void>(),
       ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
       providerItemId: callback.toolUseId,
     };
     requestLedger.set(requestId, pendingLedgerEntry);
     trimRequestLedger(requestLedger);
-
-    const onAbort = () => {
-      if (!pendingUserInputs.has(requestId)) return;
-      aborted = true;
-      pendingUserInputs.delete(requestId);
-      runFork(Deferred.succeed(answersDeferred, {} as ProviderUserInputAnswers));
-    };
-    callbackOptions.signal.addEventListener("abort", onAbort, { once: true });
-    const answers = yield* Deferred.await(answersDeferred);
-    callbackOptions.signal.removeEventListener("abort", onAbort);
-    pendingUserInputs.delete(requestId);
-
-    const resolvedStamp = yield* makeEventStamp();
-    yield* offerRuntimeEvent(context, {
-      type: "user-input.resolved",
-      eventId: resolvedStamp.eventId,
-      provider: PROVIDER,
-      createdAt: resolvedStamp.createdAt,
-      threadId: context.session.threadId,
-      ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-      requestId: asRuntimeRequestId(requestId),
-      payload: pendingInput.sensitive
-        ? { answers: Object.fromEntries(Object.keys(answers).map((key) => [key, "[redacted]"])) }
-        : { answers },
-      providerRefs: nativeProviderRefs(context, {
-        providerItemId: callback.toolUseId,
-        providerRequestId: callback.requestId,
-        ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
-      }),
-      raw: claudeSdkPermissionRuntimeRaw("canUseTool/AskUserQuestion/resolved"),
-    });
-    const result: PermissionResult =
-      aborted || pendingInput.cancelled
-        ? { behavior: "deny", message: "User cancelled tool execution." }
-        : {
-            behavior: "allow",
-            updatedInput: { questions: toolInput.questions, answers },
+    return yield* Effect.gen(function* () {
+      const requestedStamp = yield* makeEventStamp();
+      yield* offerRuntimeEvent(context, {
+        type: "user-input.requested",
+        eventId: requestedStamp.eventId,
+        provider: PROVIDER,
+        createdAt,
+        threadId: context.session.threadId,
+        ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+        requestId: asRuntimeRequestId(requestId),
+        payload: { questions },
+        providerRefs: nativeProviderRefs(context, {
+          providerItemId: callback.toolUseId,
+          providerRequestId: callback.requestId,
+          ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
+        }),
+        raw: claudeSdkPermissionRuntimeRaw("canUseTool/AskUserQuestion"),
+      });
+      const answers = yield* awaitClaudeCallback(
+        callbackOptions.signal,
+        Deferred.await(answersDeferred),
+        {},
+        runFork,
+        Effect.sync(() => {
+          pendingInput.cancelled = true;
+          pendingLedgerEntry.cancelled = true;
+        }).pipe(Effect.andThen(Deferred.succeed(answersDeferred, {}))),
+      );
+      const settled = requestLedger.get(requestId);
+      if (settled?.kind === "user-input" && settled.state === "resolved" && settled.result) {
+        return settled.result;
+      }
+      let resolvedAt = new Date().toISOString();
+      return yield* resolveClaudeRequest(
+        context,
+        requestId,
+        callbackOptions.signal,
+        (cancelled) =>
+          Effect.gen(function* () {
+            const resolvedStamp = yield* makeEventStamp();
+            resolvedAt = resolvedStamp.createdAt;
+            yield* offerRuntimeEvent(context, {
+              type: "user-input.resolved",
+              eventId: resolvedStamp.eventId,
+              provider: PROVIDER,
+              createdAt: resolvedStamp.createdAt,
+              threadId: context.session.threadId,
+              ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+              requestId: asRuntimeRequestId(requestId),
+              payload:
+                cancelled() || pendingInput.cancelled
+                  ? { answers: {} }
+                  : pendingInput.sensitive
+                    ? {
+                        answers: Object.fromEntries(
+                          Object.keys(answers).map((key) => [key, "[redacted]"]),
+                        ),
+                      }
+                    : { answers },
+              providerRefs: nativeProviderRefs(context, {
+                providerItemId: callback.toolUseId,
+                providerRequestId: callback.requestId,
+                ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
+              }),
+              raw: claudeSdkPermissionRuntimeRaw("canUseTool/AskUserQuestion/resolved"),
+            });
+          }),
+        (cancelled) => {
+          pendingUserInputs.delete(requestId);
+          const result: PermissionResult =
+            cancelled || pendingInput.cancelled
+              ? { behavior: "deny", message: "User cancelled tool execution." }
+              : {
+                  behavior: "allow",
+                  updatedInput: { questions: toolInput.questions, answers },
+                };
+          const resolvedEntry: ResolvedUserInputLedgerEntry = {
+            kind: "user-input",
+            state: "resolved",
+            requestId,
+            createdAt,
+            resolvedAt,
+            answers: result.behavior === "deny" ? {} : answers,
+            result,
+            providerRequestId: callback.requestId,
+            ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
+            providerItemId: callback.toolUseId,
           };
-    const resolvedEntry: ResolvedUserInputLedgerEntry = {
-      kind: "user-input",
-      state: "resolved",
-      requestId,
-      createdAt: requestedStamp.createdAt,
-      resolvedAt: resolvedStamp.createdAt,
-      answers,
-      result,
-      providerRequestId: callback.requestId,
-      ...(callback.agentId ? { providerAgentId: callback.agentId } : {}),
-      providerItemId: callback.toolUseId,
-    };
-    requestLedger.set(requestId, resolvedEntry);
-    trimRequestLedger(requestLedger);
-    return result;
+          return { entry: resolvedEntry, result };
+        },
+      );
+    }).pipe(Effect.ensuring(cancelAbandonedClaudeRequest(context, requestId, deps)));
   });
 
   const onElicitation: OnElicitation = (
     request: ElicitationRequest,
-    options: { readonly signal: AbortSignal },
+    options: Parameters<OnElicitation>[1],
   ) =>
     runPromise(
       Effect.gen(function* () {
         const context = yield* Ref.get(contextRef);
-        if (!context) return { action: "cancel" } satisfies ElicitationResult;
-        const requestId = ApprovalRequestId.makeUnsafe(
-          request.elicitationId ?? crypto.randomUUID(),
-        );
+        if (
+          !context ||
+          context.stopped ||
+          context.session.status === "closed" ||
+          options.signal.aborted
+        )
+          return { action: "cancel" } satisfies ElicitationResult;
+        const requestId = ApprovalRequestId.makeUnsafe(options.requestId);
         const existing = requestLedger.get(requestId);
         if (existing?.kind === "user-input" && existing.state === "resolved") {
           return existing.elicitationResult ?? ({ action: "cancel" } satisfies ElicitationResult);
         }
-        if (existing?.kind === "user-input" && existing.state === "pending") {
-          const answers = yield* Deferred.await(existing.answers);
+        if (existing?.kind === "user-input") {
+          yield* awaitClaudeCallback(
+            options.signal,
+            Deferred.await(existing.completion),
+            undefined,
+            runFork,
+          );
+          if (options.signal.aborted || context.stopped)
+            return { action: "cancel" } satisfies ElicitationResult;
           const resolved = requestLedger.get(requestId);
           if (resolved?.kind === "user-input" && resolved.state === "resolved") {
             return resolved.elicitationResult ?? ({ action: "cancel" } satisfies ElicitationResult);
           }
-          return existing.cancelled || options.signal.aborted
-            ? ({ action: "cancel" } satisfies ElicitationResult)
-            : ({
-                action: "accept",
-                content: elicitationContent(answers),
-              } satisfies ElicitationResult);
+          return { action: "cancel" } satisfies ElicitationResult;
         }
 
         const properties =
@@ -254,78 +276,114 @@ export function makeUserInputHandlers(deps: ApprovalHandlerDeps) {
           answers: answersDeferred,
           cancelled: false,
           sensitive: true,
-          ...(request.elicitationId ? { providerRequestId: request.elicitationId } : {}),
+          providerRequestId: options.requestId,
+          completion: Deferred.makeUnsafe<void>(),
         });
         trimRequestLedger(requestLedger);
-        const stamp = yield* makeEventStamp();
-        yield* offerRuntimeEvent(context, {
-          type: "user-input.requested",
-          eventId: stamp.eventId,
-          provider: PROVIDER,
-          createdAt: stamp.createdAt,
-          threadId: context.session.threadId,
-          ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-          requestId: asRuntimeRequestId(requestId),
-          payload: { questions, ...(request.mode ? { mode: request.mode } : {}) },
-          providerRefs: nativeProviderRefs(context),
-          raw: claudeSdkPermissionRuntimeRaw("onElicitation/request"),
-        });
-        const onAbort = () => {
-          const current = pendingUserInputs.get(requestId);
-          if (!current) return;
-          current.cancelled = true;
-          runFork(Deferred.succeed(answersDeferred, {} as ProviderUserInputAnswers));
-        };
-        options.signal.addEventListener("abort", onAbort, { once: true });
-        const waitResult = yield* Effect.race(
-          Deferred.await(answersDeferred).pipe(Effect.map((answers) => ({ answers }) as const)),
-          Effect.sleep(Duration.millis(MCP_ELICITATION_TIMEOUT_MS)).pipe(
-            Effect.as({ timedOut: true } as const),
-          ),
-        );
-        options.signal.removeEventListener("abort", onAbort);
-        if ("timedOut" in waitResult) {
-          pending.cancelled = true;
-          yield* Deferred.succeed(answersDeferred, {});
-        }
-        const answers = "timedOut" in waitResult ? {} : waitResult.answers;
-        const cancelled = "timedOut" in waitResult || pending.cancelled || options.signal.aborted;
-        const elicitationResult = cancelled
-          ? ({ action: "cancel" } satisfies ElicitationResult)
-          : ({
-              action: "accept",
-              content: elicitationContent(answers),
-            } satisfies ElicitationResult);
-        pendingUserInputs.delete(requestId);
-        context.resolvedUserInputs.set(requestId, answers);
-        const resolvedStamp = yield* makeEventStamp();
-        requestLedger.set(requestId, {
-          kind: "user-input",
-          state: "resolved",
-          requestId,
-          createdAt,
-          resolvedAt: resolvedStamp.createdAt,
-          answers,
-          elicitationResult,
-          sensitive: true,
-          ...(request.elicitationId ? { providerRequestId: request.elicitationId } : {}),
-        });
-        trimRequestLedger(requestLedger);
-        yield* offerRuntimeEvent(context, {
-          type: "user-input.resolved",
-          eventId: resolvedStamp.eventId,
-          provider: PROVIDER,
-          createdAt: resolvedStamp.createdAt,
-          threadId: context.session.threadId,
-          ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
-          requestId: asRuntimeRequestId(requestId),
-          payload: {
-            answers: Object.fromEntries(Object.keys(answers).map((key) => [key, "[redacted]"])),
-          },
-          providerRefs: nativeProviderRefs(context),
-          raw: claudeSdkPermissionRuntimeRaw("onElicitation/resolved"),
-        });
-        return elicitationResult;
+        return yield* Effect.gen(function* () {
+          const stamp = yield* makeEventStamp();
+          yield* offerRuntimeEvent(context, {
+            type: "user-input.requested",
+            eventId: stamp.eventId,
+            provider: PROVIDER,
+            createdAt: stamp.createdAt,
+            threadId: context.session.threadId,
+            ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+            requestId: asRuntimeRequestId(requestId),
+            payload: { questions, ...(request.mode ? { mode: request.mode } : {}) },
+            providerRefs: nativeProviderRefs(context),
+            raw: claudeSdkPermissionRuntimeRaw("onElicitation/request"),
+          });
+          const waitResult = yield* awaitClaudeCallback(
+            options.signal,
+            Effect.race(
+              Deferred.await(answersDeferred).pipe(Effect.map((answers) => ({ answers }) as const)),
+              Effect.sleep(Duration.millis(MCP_ELICITATION_TIMEOUT_MS)).pipe(
+                Effect.as({ timedOut: true } as const),
+              ),
+            ),
+            { answers: {} } as
+              | { readonly answers: ProviderUserInputAnswers }
+              | { readonly timedOut: true },
+            runFork,
+            Effect.sync(() => {
+              pending.cancelled = true;
+              const entry = requestLedger.get(requestId);
+              if (entry?.kind === "user-input" && entry.state === "pending") entry.cancelled = true;
+            }).pipe(Effect.andThen(Deferred.succeed(answersDeferred, {}))),
+          );
+          const settled = requestLedger.get(requestId);
+          if (
+            settled?.kind === "user-input" &&
+            settled.state === "resolved" &&
+            settled.elicitationResult
+          ) {
+            return settled.elicitationResult;
+          }
+          if ("timedOut" in waitResult) {
+            pending.cancelled = true;
+            const entry = requestLedger.get(requestId);
+            if (entry?.kind === "user-input" && entry.state === "pending") entry.cancelled = true;
+            yield* Deferred.succeed(answersDeferred, {});
+          }
+          const answers = "timedOut" in waitResult ? {} : waitResult.answers;
+          let resolvedAt = new Date().toISOString();
+          return yield* resolveClaudeRequest<ElicitationResult>(
+            context,
+            requestId,
+            options.signal,
+            (cancelled) =>
+              Effect.gen(function* () {
+                const resolvedStamp = yield* makeEventStamp();
+                resolvedAt = resolvedStamp.createdAt;
+                yield* offerRuntimeEvent(context, {
+                  type: "user-input.resolved",
+                  eventId: resolvedStamp.eventId,
+                  provider: PROVIDER,
+                  createdAt: resolvedStamp.createdAt,
+                  threadId: context.session.threadId,
+                  ...(context.turnState
+                    ? { turnId: asCanonicalTurnId(context.turnState.turnId) }
+                    : {}),
+                  requestId: asRuntimeRequestId(requestId),
+                  payload: {
+                    answers:
+                      cancelled() || pending.cancelled
+                        ? {}
+                        : Object.fromEntries(
+                            Object.keys(answers).map((key) => [key, "[redacted]"]),
+                          ),
+                  },
+                  providerRefs: nativeProviderRefs(context),
+                  raw: claudeSdkPermissionRuntimeRaw("onElicitation/resolved"),
+                });
+              }),
+            (cancelled) => {
+              const elicitationResult =
+                cancelled || pending.cancelled
+                  ? ({ action: "cancel" } satisfies ElicitationResult)
+                  : ({
+                      action: "accept",
+                      content: elicitationContent(answers),
+                    } satisfies ElicitationResult);
+              pendingUserInputs.delete(requestId);
+              const finalAnswers = elicitationResult.action === "cancel" ? {} : answers;
+              context.resolvedUserInputs.set(requestId, finalAnswers);
+              const entry: ResolvedUserInputLedgerEntry = {
+                kind: "user-input",
+                state: "resolved",
+                requestId,
+                createdAt,
+                resolvedAt,
+                answers: finalAnswers,
+                elicitationResult,
+                sensitive: true,
+                providerRequestId: options.requestId,
+              };
+              return { entry, result: elicitationResult };
+            },
+          );
+        }).pipe(Effect.ensuring(cancelAbandonedClaudeRequest(context, requestId, deps)));
       }),
     );
 

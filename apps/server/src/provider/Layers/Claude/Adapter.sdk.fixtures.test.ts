@@ -1,7 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { CLAUDE_AGENT_SDK_VERSION } from "./Adapter.sdk.ts";
 import {
   sdkApiRetryFixture,
   sdkBackgroundTasksFixture,
@@ -39,7 +38,7 @@ function loadFixtureBundle(): FixtureBundle {
 describe("Claude SDK 0.3.219 task fixtures", () => {
   it("decodes the redacted task update and background snapshot shapes", () => {
     const fixture = loadFixtureBundle();
-    expect(fixture.sdkVersion).toBe(CLAUDE_AGENT_SDK_VERSION);
+    expect(fixture.sdkVersion).toBe("0.3.219");
 
     const taskUpdate = fixture.messages.find(
       (message) => decodeClaudeTaskUpdatedMessage(message) !== undefined,
@@ -74,13 +73,13 @@ describe("Claude SDK 0.3.219 task fixtures", () => {
       decodeClaudeMcpInitialization,
       decodeClaudeElicitationCompleteMessage,
     ];
-    expect(fixture.sdkVersion).toBe(CLAUDE_AGENT_SDK_VERSION);
+    expect(fixture.sdkVersion).toBe("0.3.219");
     expect(fixture.messages.map((message, index) => decoders[index]?.(message))).not.toContain(
       undefined,
     );
   });
 
-  it("builds deterministic typed SDK 0.3.219 message fixtures", () => {
+  it("builds deterministic fixtures conforming to the installed SDK types", () => {
     expect(decodeClaudeTaskStartedMessage(sdkTaskStartedFixture())?.taskId).toBe("task-fixture");
     expect(decodeClaudeTaskNotificationMessage(sdkTaskNotificationFixture())?.status).toBe(
       "completed",

@@ -104,7 +104,10 @@ export function makeRunStackedActionStep(input: {
         let preResolvedCommitSuggestion: CommitAndBranchSuggestion | undefined = undefined;
 
         const modelSelection = yield* serverSettingsService.getSettings.pipe(
-          Effect.map((settings) => settings.textGenerationModelSelection),
+          Effect.map(
+            (settings) =>
+              settings.textGenerationModelSelection ?? options?.successfulModelSelection ?? null,
+          ),
           Effect.mapError((cause) =>
             gitManagerError("runStackedAction", "Failed to get server settings.", cause),
           ),
@@ -125,6 +128,7 @@ export function makeRunStackedActionStep(input: {
             input.filePaths,
             input.executionTargetId,
             input.actionId,
+            options?.successfulModelSelection,
           );
           branchStep = result.branchStep;
           commitMessageForStep = result.resolvedCommitMessage;
@@ -150,6 +154,7 @@ export function makeRunStackedActionStep(input: {
                   options?.progressReporter,
                   input.actionId,
                   input.executionTargetId,
+                  options?.successfulModelSelection,
                 ),
               ),
             )
@@ -185,7 +190,13 @@ export function makeRunStackedActionStep(input: {
               .pipe(
                 Effect.tap(() => Ref.set(currentPhase, Option.some("pr"))),
                 Effect.flatMap(() =>
-                  runPrStep(modelSelection, input.cwd, currentBranch, progress.emit),
+                  runPrStep(
+                    modelSelection,
+                    input.cwd,
+                    currentBranch,
+                    progress.emit,
+                    options?.successfulModelSelection,
+                  ),
                 ),
               )
           : { status: "skipped_not_requested" as const };

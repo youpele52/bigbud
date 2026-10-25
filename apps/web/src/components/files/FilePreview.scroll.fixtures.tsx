@@ -67,7 +67,6 @@ export function ScrollHarness({
             cwd="/workspace"
             scrollContainerRef={refs.container}
             contentRef={refs.markdown}
-            linesContainerRef={refs.lines}
             selectedRange={null}
             selectedText=""
             onContextMenu={() => undefined}

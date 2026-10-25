@@ -14,5 +14,5 @@ export interface RuntimeEventActivityHelpers {
   ) => "browser" | "command" | "file-read" | "file-change" | undefined;
   readonly buildContextWindowActivityPayload: (
     event: ProviderRuntimeEvent,
-  ) => ThreadTokenUsageSnapshot | undefined;
+  ) => Partial<ThreadTokenUsageSnapshot> | undefined;
 }

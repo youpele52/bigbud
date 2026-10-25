@@ -67,6 +67,15 @@ describe("createOrchestraOperations", () => {
       "thread.create",
       "thread.turn.start",
     ]);
+    expect(mockDispatchCommand.mock.calls[2]?.[0].message.originSegments).toEqual([
+      {
+        kind: "orchestraAssignment",
+        actor: "userAssignment",
+        text: "First task",
+        sourceThreads: [{ threadId: parentThread.threadId, title: parentThread.title }],
+        verified: false,
+      },
+    ]);
     expect(mockWaitForStartedServerThread).not.toHaveBeenCalled();
   });
 });

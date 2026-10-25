@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AnnotationIntent } from "../../stores/composer";
 import { selectElementContents, showFilePreviewContextMenu } from "./FilePreview.contextMenu";
 import { FilePreviewCode } from "./FilePreview.code";
+import { resolveMarkdownPreviewAnnotationSelection } from "./FilePreview.markdown.selection";
 import { FilePreviewHeader } from "./FilePreviewHeader";
 import { FilePreviewMarkdownToggle, FilePreviewMarkdownView } from "./FilePreview.markdown";
 import { useTheme } from "../../hooks/useTheme";
@@ -59,9 +60,11 @@ export const FilePreview = memo(function FilePreview({
   onCreateAnnotation,
   onSearchMatch,
 }: FilePreviewProps) {
-  const [selectedRange, setSelectedRange] = useState<{ startLine: number; endLine: number } | null>(
-    null,
-  );
+  const [selectedRange, setSelectedRange] = useState<{
+    startLine: number;
+    endLine: number;
+    renderedRange?: Range;
+  } | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const linesContainerRef = useRef<HTMLDivElement>(null);
   const markdownContentRef = useRef<HTMLDivElement>(null);
@@ -172,16 +175,27 @@ export const FilePreview = memo(function FilePreview({
   const handlePreviewContextMenu = useCallback(
     (event: React.MouseEvent<HTMLElement>) => {
       const selectedText = window.getSelection()?.toString().trim() ?? "";
-      let annotationRange: { startLine: number; endLine: number } | null = null;
+      let annotationRange: {
+        startLine: number;
+        endLine: number;
+        renderedRange?: Range;
+      } | null = null;
 
       if (onCreateAnnotation && selectedText.length >= 2 && state.contents) {
-        const startIndex = state.contents.indexOf(selectedText);
-        if (startIndex !== -1) {
-          const endIndex = startIndex + selectedText.length;
-          annotationRange = {
-            startLine: state.contents.slice(0, startIndex).split("\n").length,
-            endLine: state.contents.slice(0, endIndex).split("\n").length,
-          };
+        if (isMarkdownFile && markdownViewMode === "preview") {
+          annotationRange = resolveMarkdownPreviewAnnotationSelection(
+            window.getSelection(),
+            markdownContentRef.current,
+          );
+        } else {
+          const startIndex = state.contents.indexOf(selectedText);
+          if (startIndex !== -1) {
+            const endIndex = startIndex + selectedText.length;
+            annotationRange = {
+              startLine: state.contents.slice(0, startIndex).split("\n").length,
+              endLine: state.contents.slice(0, endIndex).split("\n").length,
+            };
+          }
         }
       }
 
@@ -205,7 +219,14 @@ export const FilePreview = memo(function FilePreview({
               },
       });
     },
-    [absolutePath, onCreateAnnotation, relativePath, state.contents],
+    [
+      absolutePath,
+      isMarkdownFile,
+      markdownViewMode,
+      onCreateAnnotation,
+      relativePath,
+      state.contents,
+    ],
   );
 
   const handleHeaderContextMenu = useCallback(
@@ -269,8 +290,8 @@ export const FilePreview = memo(function FilePreview({
           cwd={cwd}
           scrollContainerRef={scrollContainerRef}
           contentRef={markdownContentRef}
-          linesContainerRef={linesContainerRef}
           selectedRange={selectedRange}
+          renderedRange={selectedRange?.renderedRange}
           selectedText={selectedText}
           onContextMenu={handlePreviewContextMenu}
           onCreateAnnotation={onCreateAnnotation}

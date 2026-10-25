@@ -14,8 +14,6 @@ import {
   buildCommandEndMarker,
   buildCommandScript,
   buildCommandStartMarker,
-  buildReadyMarker,
-  buildReadyScript,
   DEFAULT_COLS,
   DEFAULT_COMMAND_TIMEOUT_MS,
   DEFAULT_IDLE_TTL_MS,
@@ -29,6 +27,7 @@ import {
   trimLeadingCommandNewline,
 } from "./ThreadShellRunner.capture";
 import { consumeReadyCapture, emitCommandOutput } from "./ThreadShellRunner.runner.capture";
+import { waitForShellReady } from "./ThreadShellRunner.runner.ready";
 import {
   type ActiveCommandCapture,
   type HiddenShellSession,
@@ -92,17 +91,16 @@ export class PersistentThreadPtyShellRunner {
       release = resolve;
     });
 
-    this.threadLocks.set(
-      threadId,
-      previous.then(() => current),
-    );
+    // Compare against the stored tail (not `current`) so the last holder clears the entry.
+    const tail = previous.then(() => current);
+    this.threadLocks.set(threadId, tail);
     await previous.catch(() => undefined);
 
     try {
       return await run();
     } finally {
       release();
-      if (this.threadLocks.get(threadId) === current) {
+      if (this.threadLocks.get(threadId) === tail) {
         this.threadLocks.delete(threadId);
       }
     }
@@ -135,6 +133,7 @@ export class PersistentThreadPtyShellRunner {
     let lastError: Error | null = null;
 
     for (const candidate of shellCandidates) {
+      let spawned: PtyProcess | null = null;
       try {
         const process = await this.options.spawnPty({
           shell: candidate.shell,
@@ -144,6 +143,7 @@ export class PersistentThreadPtyShellRunner {
           rows: DEFAULT_ROWS,
           env: spawnEnv,
         });
+        spawned = process;
 
         const session: HiddenShellSession = {
           threadId,
@@ -161,9 +161,19 @@ export class PersistentThreadPtyShellRunner {
           this.handleExit(session, event.exitCode, event.signal);
         });
 
-        await this.initializeSession(session);
+        await waitForShellReady(
+          session,
+          this.options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS,
+        );
         return session;
       } catch (error) {
+        // A spawned shell that never became ready is never registered; kill it so it
+        // cannot outlive the failed attempt.
+        try {
+          spawned?.kill("SIGKILL");
+        } catch {
+          // Best-effort cleanup only.
+        }
         const spawnError =
           error instanceof Error ? error : new Error("Failed to spawn hidden shell session.");
         lastError = spawnError;
@@ -180,26 +190,6 @@ export class PersistentThreadPtyShellRunner {
     throw new Error(
       `${lastError?.message ?? "Failed to spawn hidden shell session."}${triedShells}`.trim(),
     );
-  }
-
-  private async initializeSession(session: HiddenShellSession): Promise<void> {
-    const readyMarker = buildReadyMarker();
-    await new Promise<void>((resolve, reject) => {
-      session.activeCapture = {
-        kind: "ready",
-        marker: readyMarker,
-        buffer: "",
-        resolve: () => {
-          session.activeCapture = null;
-          resolve();
-        },
-        reject: (error) => {
-          session.activeCapture = null;
-          reject(error);
-        },
-      };
-      session.process.write(`${buildReadyScript(readyMarker)}\r`);
-    });
   }
 
   private async executeCommand(

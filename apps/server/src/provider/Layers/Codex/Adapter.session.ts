@@ -1,11 +1,7 @@
 import { LOCAL_EXECUTION_TARGET_ID, type ProviderEvent } from "@bigbud/contracts";
-import { Effect, FileSystem, Queue, Stream } from "effect";
+import { Effect, Queue, Stream } from "effect";
 
-import {
-  ProviderAdapterProcessError,
-  ProviderAdapterRequestError,
-  ProviderAdapterValidationError,
-} from "../../Errors.ts";
+import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { CodexAdapterShape } from "../../Services/Codex/Adapter.ts";
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import type { CodexAppServerStartSessionInput } from "../../../codex/codexAppServerManager.ts";
@@ -19,12 +15,10 @@ import {
   createCodexThreadOrchestrationDynamicToolHandler,
   createCodexThreadOrchestrationDynamicTools,
 } from "../../../orchestration-tools/codexThreadDynamicTools.ts";
-import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
-  appendAttachedImageOcrContents,
-  appendAttachedFileContents,
-  extractPromptTextFromFile,
-} from "../../../attachments/documentText.ts";
+  canReadManagedProviderPaths,
+  prepareManagedAttachmentContext,
+} from "../../../attachments/providerAttachments.managed.ts";
 import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/providerRuntimeTarget.ts";
@@ -32,23 +26,20 @@ import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarg
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import { mapToRuntimeEvents } from "./Adapter.stream.ts";
+import { makeCodexSubagentTracker } from "./Adapter.stream.subagents.ts";
 import { toCodexManagerModelSelection } from "./Adapter.session.modelSelection.ts";
-import {
-  makeResolveAttachment,
-  toRequestError,
-  toStartSessionError,
-} from "./Adapter.session.shared.ts";
+import { toRequestError, toStartSessionError } from "./Adapter.session.shared.ts";
 import { PROVIDER, toMessage, type CodexAdapterLiveOptions } from "./Adapter.types.ts";
 import { acquireCodexManager, resolveCodexNativeEventLogger } from "./Adapter.session.bootstrap.ts";
 import { prepareCodexRemoteWorkspaceBridge } from "./Adapter.session.remoteWorkspace.ts";
 import { REMOTE_WORKSPACE_MCP_SERVER_NAME } from "../../../remote-workspace-bridge/remoteWorkspaceTools.ts";
 import { makeCodexTurnControl } from "./Adapter.session.turnControl.ts";
 
+import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 /** Builds the full Codex adapter shape given a manager and supporting services. */
 export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   options?: CodexAdapterLiveOptions,
 ) {
-  const fileSystem = yield* FileSystem.FileSystem;
   const serverConfig = yield* Effect.service(ServerConfig);
   const nativeEventLogger = yield* resolveCodexNativeEventLogger(options);
   const manager = yield* Effect.acquireRelease(acquireCodexManager(options), (m) =>
@@ -61,10 +52,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     }),
   );
   const serverSettingsService = yield* ServerSettingsService;
-  const resolveAttachment = makeResolveAttachment({
-    fileSystem,
-    attachmentsDir: serverConfig.attachmentsDir,
-  });
 
   const startSession: CodexAdapterShape["startSession"] = Effect.fn("startSession")(
     function* (input) {
@@ -129,7 +116,9 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
             })
           : undefined;
       const orchestrationConfig = buildCodexSessionOrchestrationConfig(orchestrationBridge);
-      const orchestrationDynamicTools = createCodexThreadOrchestrationDynamicTools();
+      const orchestrationDynamicTools = createCodexThreadOrchestrationDynamicTools({
+        delegatedModelChoice: true,
+      });
       const mergedConfigArgs = mergeCodexConfigArgs(
         remoteWorkspaceBridge?.configArgs,
         orchestrationConfig,
@@ -185,55 +174,33 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   );
 
   const sendTurn: CodexAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
-    const extractedTextBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
-    const imageOcrBlocks: Array<{ readonly fileName: string; readonly text: string }> = [];
-    const codexAttachments = yield* Effect.forEach(
-      input.attachments ?? [],
-      (attachment) =>
-        Effect.gen(function* () {
-          if (attachment.type === "file" || attachment.type === "image") {
-            const sourcePath =
-              (attachment.type === "file" ? attachment.sourcePath : undefined) ??
-              resolveAttachmentPath({ attachmentsDir: serverConfig.attachmentsDir, attachment });
-            if (sourcePath) {
-              const extractedText = yield* Effect.tryPromise({
-                try: () =>
-                  extractPromptTextFromFile({
-                    filePath: sourcePath,
-                    mimeType: attachment.mimeType,
-                    fileName: attachment.name,
-                  }),
-                catch: (cause) =>
-                  new ProviderAdapterRequestError({
-                    provider: PROVIDER,
-                    method: "turn/start",
-                    detail: toMessage(cause, "Failed to extract attachment text."),
-                    cause,
-                  }),
-              });
-              if (extractedText !== null) {
-                if (attachment.type === "file") {
-                  extractedTextBlocks.push({ fileName: attachment.name, text: extractedText });
-                } else {
-                  imageOcrBlocks.push({ fileName: attachment.name, text: extractedText });
-                }
-              }
-            }
-          }
-          return yield* resolveAttachment(input, attachment);
-        }),
-      { concurrency: 1 },
-    );
+    const session = manager.listSessions().find((session) => session.threadId === input.threadId);
+    const prepared = yield* Effect.tryPromise({
+      try: () =>
+        prepareManagedAttachmentContext(
+          input.input ?? "",
+          input.attachments ?? [],
+          serverConfig.attachmentsDir,
+          canReadManagedProviderPaths(session),
+        ),
+      catch: (cause) => toRequestError(input.threadId, "turn/start", cause),
+    });
+    const codexAttachments = prepared.attachments
+      .filter(
+        ({ attachment }) =>
+          attachment.type === "image" || attachment.mimeType === "application/pdf",
+      )
+      .map(({ attachment, bytes }) => ({
+        type: attachment.type === "image" ? ("image" as const) : ("file" as const),
+        url: `data:${attachment.mimeType};base64,${bytes.toString("base64")}`,
+      }));
 
     return yield* Effect.tryPromise({
       try: () => {
         const managerModelSelection = toCodexManagerModelSelection(input.modelSelection);
         const managerInput = {
           threadId: input.threadId,
-          input: appendAttachedImageOcrContents(
-            appendAttachedFileContents(input.input ?? "", extractedTextBlocks),
-            imageOcrBlocks,
-          ),
+          input: prepared.text,
           ...managerModelSelection,
           ...(input.interactionMode !== undefined
             ? { interactionMode: input.interactionMode }
@@ -251,7 +218,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     );
   });
 
-  const { interruptTurn, steerTurn } = makeCodexTurnControl(manager);
+  const { interruptTurn, steerTurn, stopThreadSubagents } = makeCodexTurnControl(manager);
 
   const readThread: CodexAdapterShape["readThread"] = (threadId) =>
     Effect.tryPromise({
@@ -330,9 +297,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
 
   const registerListener = Effect.fn("registerListener")(function* () {
     const services = yield* Effect.services<never>();
+    const subagents = makeCodexSubagentTracker();
     const listenerEffect = Effect.fn("listener")(function* (event: ProviderEvent) {
       yield* writeNativeEvent(event);
-      const runtimeEvents = mapToRuntimeEvents(event, event.threadId);
+      const runtimeEvents = [...mapToRuntimeEvents(event, event.threadId), ...subagents.map(event)];
       if (runtimeEvents.length === 0) {
         yield* Effect.logDebug("ignoring unhandled Codex provider event", {
           method: event.method,
@@ -365,6 +333,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      subagents: PROVIDER_SUBAGENT_CAPABILITIES.codex,
       supportsSteer: true,
       turnControl: {
         nativeSteer: true,
@@ -377,6 +346,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     sendTurn,
     interruptTurn,
     steerTurn,
+    stopThreadSubagents,
     inspectActiveTurn: unavailableActiveTurnInspection("codex"),
     readThread,
     rollbackThread,

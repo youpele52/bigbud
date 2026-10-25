@@ -2,8 +2,12 @@ import * as Schema from "effect/Schema";
 import * as Record from "effect/Record";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface LocalStorageOptions {
+interface LocalStorageKeyOptions {
   readonly legacyKeys?: ReadonlyArray<string>;
+}
+
+interface LocalStorageOptions<T> extends LocalStorageKeyOptions {
+  readonly migrateLegacyValue?: (value: T) => T;
 }
 
 const isomorphicLocalStorage: Storage =
@@ -48,7 +52,7 @@ function readRawLocalStorageItem(key: string, legacyKeys: ReadonlyArray<string>)
 export const getLocalStorageItem = <T, E>(
   key: string,
   schema: Schema.Codec<T, E>,
-  options?: LocalStorageOptions,
+  options?: LocalStorageOptions<T>,
 ): T | null => {
   const legacyKeys = options?.legacyKeys ?? [];
   const resolved = readRawLocalStorageItem(key, legacyKeys);
@@ -56,8 +60,13 @@ export const getLocalStorageItem = <T, E>(
 
   const decoded = decode(schema, resolved.item);
   if (resolved.key !== key) {
-    isomorphicLocalStorage.setItem(key, resolved.item);
+    const migrated = options?.migrateLegacyValue ? options.migrateLegacyValue(decoded) : decoded;
+    isomorphicLocalStorage.setItem(
+      key,
+      options?.migrateLegacyValue ? encode(schema, migrated) : resolved.item,
+    );
     isomorphicLocalStorage.removeItem(resolved.key);
+    return migrated;
   }
   return decoded;
 };
@@ -66,7 +75,7 @@ export const setLocalStorageItem = <T, E>(
   key: string,
   value: T,
   schema: Schema.Codec<T, E>,
-  options?: LocalStorageOptions,
+  options?: LocalStorageOptions<T>,
 ) => {
   const valueToSet = encode(schema, value);
   isomorphicLocalStorage.setItem(key, valueToSet);
@@ -75,7 +84,7 @@ export const setLocalStorageItem = <T, E>(
   }
 };
 
-export const removeLocalStorageItem = (key: string, options?: LocalStorageOptions) => {
+export const removeLocalStorageItem = (key: string, options?: LocalStorageKeyOptions) => {
   isomorphicLocalStorage.removeItem(key);
   for (const legacyKey of options?.legacyKeys ?? []) {
     isomorphicLocalStorage.removeItem(legacyKey);
@@ -101,7 +110,7 @@ export function useLocalStorage<T, E>(
   key: string,
   initialValue: T,
   schema: Schema.Codec<T, E>,
-  options?: LocalStorageOptions,
+  options?: LocalStorageOptions<T>,
 ): [T, (value: T | ((val: T) => T)) => void] {
   const legacyKeys = options?.legacyKeys;
 

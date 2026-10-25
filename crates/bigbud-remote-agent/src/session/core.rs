@@ -16,14 +16,24 @@ use crate::process::{self, ProcessOptions, run_bounded_process};
 use crate::pty;
 use crate::workspace::{WorkspaceError, WorkspaceRoot};
 
+#[path = "hello.rs"]
+mod hello;
 #[path = "journal_restore.rs"]
 mod journal_restore;
+#[path = "operation_handlers.rs"]
+mod operation_handlers;
+#[path = "process_attach.rs"]
+mod process_attach;
 #[path = "process_handlers.rs"]
 mod process_handlers;
 #[path = "protocol_helpers.rs"]
 mod protocol_helpers;
+#[path = "pty_controls.rs"]
+mod pty_controls;
 #[path = "pty_handlers.rs"]
 mod pty_handlers;
+pub use pty_controls::{PreparedPtyControl, is_pty_control};
+use pty_handlers::PtySession;
 #[path = "retirement.rs"]
 mod retirement;
 #[path = "workspace_handlers.rs"]
@@ -37,6 +47,9 @@ mod accepted_operations_tests;
 #[cfg(test)]
 #[path = "journal_restore.tests.rs"]
 mod journal_restore_tests;
+#[cfg(test)]
+#[path = "process_attach.tests.rs"]
+mod process_attach_tests;
 #[cfg(test)]
 #[path = "pty_handlers.tests.rs"]
 mod pty_handler_tests;
@@ -56,8 +69,12 @@ use protocol_helpers::{
     workspace_error_code,
 };
 
-const PROCESS_RESULT_RETENTION: Duration = Duration::from_secs(600);
-const ACCEPTED_OPERATION_RETENTION: Duration = Duration::from_secs(600);
+/// How long a terminal process result (state, exit code, output watermark)
+/// and an accepted-operation identity are kept. Long enough to survive a
+/// laptop sleep; retained output stays bounded by the per-operation and
+/// journal byte caps, and running work never expires.
+const PROCESS_RESULT_RETENTION: Duration = Duration::from_secs(24 * 60 * 60);
+const ACCEPTED_OPERATION_RETENTION: Duration = PROCESS_RESULT_RETENTION;
 const MAX_ACCEPTED_OPERATIONS: usize = 256;
 const MAX_CONCURRENT_PROCESS_OPERATIONS: usize = 32;
 const MAX_PROCESS_OPERATIONS: usize = 256;
@@ -117,12 +134,6 @@ pub struct AgentSession {
 struct AcceptedOperation {
     request_digest: Vec<u8>,
     expires_at: Instant,
-}
-
-struct PtySession {
-    handle: Arc<pty::PtyHandle>,
-    request_digest: Vec<u8>,
-    expires_at: Option<Instant>,
 }
 
 #[derive(Clone)]
@@ -186,7 +197,8 @@ impl AgentSession {
                 MAX_PROCESS_OPERATIONS,
                 8 * 1024 * 1024,
                 PROCESS_RESULT_RETENTION,
-            ),
+            )
+            .with_terminal_output_budget(MAX_OPERATION_JOURNAL_BYTES),
             process_journal,
             process_cancellations: HashMap::new(),
             pty_sessions: HashMap::new(),
@@ -251,144 +263,6 @@ impl AgentSession {
             _ if !self.ready => Err(SessionError::HelloRequired),
             _ => Err(SessionError::UnexpectedMessage),
         }
-    }
-
-    fn handle_client_hello(&mut self, hello: v1::ClientHello) -> Result<v1::Frame, SessionError> {
-        if hello.protocol_major != PROTOCOL_MAJOR {
-            return Err(SessionError::UnsupportedProtocolMajor {
-                actual: hello.protocol_major,
-                supported: PROTOCOL_MAJOR,
-            });
-        }
-        if hello.client_instance_id.is_empty() {
-            return Err(SessionError::MissingClientInstanceId);
-        }
-
-        self.ready = true;
-        Ok(v1::Frame {
-            payload: Some(v1::frame::Payload::AgentHello(v1::AgentHello {
-                protocol_major: PROTOCOL_MAJOR,
-                protocol_minor: PROTOCOL_MINOR,
-                agent_version: crate::identity::build_version().to_owned(),
-                build_digest: crate::identity::build_digest().to_owned(),
-                os: std::env::consts::OS.to_owned(),
-                architecture: std::env::consts::ARCH.to_owned(),
-                agent_instance_id: self.agent_instance_id.clone(),
-                agent_epoch: self.agent_epoch.clone(),
-                capabilities: [
-                    ("diagnostic", 1),
-                    ("workspace.files", 1),
-                    ("workspace.search", 1),
-                    ("workspace.write", 1),
-                    ("workspace.watch", 1),
-                    ("process.run", 1),
-                    ("process.attach", 1),
-                    ("terminal.pty", 1),
-                    ("supervisor.shutdown", 1),
-                    ("supervisor.restart", 1),
-                ]
-                .into_iter()
-                .map(|(name, major)| v1::Capability {
-                    name: name.to_owned(),
-                    major,
-                    minor: 0,
-                })
-                .collect(),
-                max_frame_bytes: bigbud_protocol::DEFAULT_MAX_FRAME_BYTES as u64,
-                max_operation_output_bytes: 8 * 1024 * 1024,
-                max_journal_bytes: 64 * 1024 * 1024,
-            })),
-        })
-    }
-
-    fn handle_diagnostic_request(
-        &mut self,
-        request: v1::DiagnosticRequest,
-    ) -> Result<v1::Frame, SessionError> {
-        if request.operation_id.is_empty() {
-            return Err(SessionError::MissingOperationId);
-        }
-
-        let _ = self.accept_operation(&request.operation_id, request.request_digest)?;
-
-        Ok(v1::Frame {
-            payload: Some(v1::frame::Payload::DiagnosticResponse(
-                v1::DiagnosticResponse {
-                    request_id: request.request_id,
-                    operation_id: request.operation_id,
-                    accepted: true,
-                    terminal: true,
-                    message: "agent-ready".to_owned(),
-                },
-            )),
-        })
-    }
-
-    fn handle_cancel_request(
-        &mut self,
-        request: v1::CancelRequest,
-    ) -> Result<v1::Frame, SessionError> {
-        let (cancelled, terminal, detail) =
-            if let Some(signal) = self.process_cancellations.get(&request.operation_id) {
-                signal.store(true, std::sync::atomic::Ordering::Relaxed);
-                let _ = self
-                    .process_operations
-                    .begin_cancel(&request.operation_id, Instant::now());
-                (true, false, "cancellation-requested")
-            } else if let Ok(snapshot) = self
-                .process_operations
-                .snapshot(&request.operation_id, Instant::now())
-            {
-                if snapshot.terminal.is_some() {
-                    (false, true, "operation-already-terminal")
-                } else {
-                    (false, false, "operation-cannot-be-cancelled")
-                }
-            } else {
-                (false, true, "operation-unknown-or-expired")
-            };
-        Ok(v1::Frame {
-            payload: Some(v1::frame::Payload::CancelResponse(v1::CancelResponse {
-                request_id: request.request_id,
-                operation_id: request.operation_id,
-                cancelled,
-                terminal,
-                detail: detail.to_owned(),
-            })),
-        })
-    }
-
-    fn accept_operation(
-        &mut self,
-        operation_id: &str,
-        request_digest: Vec<u8>,
-    ) -> Result<bool, SessionError> {
-        if operation_id.is_empty() {
-            return Err(SessionError::MissingOperationId);
-        }
-        let now = Instant::now();
-        self.accepted_operations
-            .retain(|_, operation| operation.expires_at > now);
-        if let Some(existing) = self.accepted_operations.get(operation_id) {
-            if existing.request_digest != request_digest {
-                return Err(SessionError::OperationIdConflict);
-            }
-            return Ok(true);
-        } else {
-            if self.accepted_operations.len() >= MAX_ACCEPTED_OPERATIONS {
-                return Err(SessionError::ResourceLimit(
-                    "accepted operation limit reached".to_owned(),
-                ));
-            }
-            self.accepted_operations.insert(
-                operation_id.to_owned(),
-                AcceptedOperation {
-                    request_digest,
-                    expires_at: now + ACCEPTED_OPERATION_RETENTION,
-                },
-            );
-        }
-        Ok(false)
     }
 }
 

@@ -5,6 +5,9 @@ import { Effect, Layer, Schema, Struct } from "effect";
 
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../Errors.ts";
 import { assertProjectionThreadParent } from "./ProjectionThreadOwnership.ts";
+import { makeListPendingDelegatedModelChoiceRequests } from "./ProjectionThreads.modelChoice.ts";
+import { reducePersistedCodexUsage, retireCodexUsageTurns } from "./ProjectionUsageCodex.ts";
+import { makeUpsertUsageContribution } from "./ProjectionUsageContributions.upsert.ts";
 
 import {
   DeleteProjectionThreadActivitiesInput,
@@ -14,7 +17,6 @@ import {
   ProjectionThreadActivityRepository,
   ProjectionUsageBackfillRow,
   ProjectionUsageBackfillState,
-  ProjectionUsageContribution,
   type ProjectionThreadActivityRepositoryShape,
 } from "../Services/ProjectionThreadActivities.ts";
 
@@ -125,77 +127,7 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
       sql`DELETE FROM projection_usage_contributions WHERE thread_id = ${threadId}`,
   });
 
-  const upsertProjectionUsageContributionRow = SqlSchema.void({
-    Request: ProjectionUsageContribution,
-    execute: (row) =>
-      sql`
-        INSERT INTO projection_usage_contributions (
-          contribution_id,
-          activity_id,
-          thread_id,
-          turn_id,
-          provider,
-          model,
-          interaction_mode,
-          occurred_at,
-          used_tokens,
-          input_tokens,
-          cached_input_tokens,
-          output_tokens,
-          reasoning_output_tokens,
-          finalized,
-          source_sequence,
-          updated_at
-        )
-        VALUES (
-          ${row.contributionId},
-          ${row.activityId},
-          ${row.threadId},
-          ${row.turnId},
-          ${row.provider},
-          ${row.model},
-          ${row.interactionMode},
-          ${row.occurredAt},
-          ${row.usedTokens},
-          ${row.inputTokens},
-          ${row.cachedInputTokens},
-          ${row.outputTokens},
-          ${row.reasoningOutputTokens},
-          ${row.finalized ? 1 : 0},
-          ${row.sourceSequence},
-          ${row.updatedAt}
-        )
-        ON CONFLICT (contribution_id)
-        DO UPDATE SET
-          activity_id = excluded.activity_id,
-          thread_id = excluded.thread_id,
-          turn_id = excluded.turn_id,
-          provider = excluded.provider,
-          model = excluded.model,
-          interaction_mode = excluded.interaction_mode,
-          occurred_at = excluded.occurred_at,
-          used_tokens = excluded.used_tokens,
-          input_tokens = excluded.input_tokens,
-          cached_input_tokens = excluded.cached_input_tokens,
-          output_tokens = excluded.output_tokens,
-          reasoning_output_tokens = excluded.reasoning_output_tokens,
-          finalized = excluded.finalized,
-          source_sequence = excluded.source_sequence,
-          updated_at = excluded.updated_at
-        WHERE (
-            excluded.source_sequence IS NOT NULL
-            AND (
-              projection_usage_contributions.source_sequence IS NULL
-              OR excluded.source_sequence >= projection_usage_contributions.source_sequence
-            )
-          )
-          OR (
-            excluded.source_sequence IS NULL
-            AND projection_usage_contributions.source_sequence IS NULL
-            AND excluded.updated_at >= projection_usage_contributions.updated_at
-          )
-      `,
-  });
+  const upsertProjectionUsageContributionRow = makeUpsertUsageContribution(sql);
 
   const getProjectionUsageBackfillStateRow = SqlSchema.findOne({
     Request: Schema.Void,
@@ -226,21 +158,20 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
           activity.created_at AS "createdAt",
           COALESCE(
             json_extract(activity.payload_json, '$.accounting.provider'),
-            json_extract(thread.model_selection_json, '$.provider'),
             'unknown'
           ) AS provider,
           COALESCE(
-            json_extract(activity.payload_json, '$.accounting.model'),
-            json_extract(thread.model_selection_json, '$.model'),
+            json_extract(activity.payload_json, '$.accounting.canonical.model'),
+            usage_turn.usage_model,
             'unknown'
           ) AS model,
           COALESCE(
-            json_extract(activity.payload_json, '$.accounting.interactionMode'),
-            thread.interaction_mode,
+            usage_turn.usage_interaction_mode,
             'default'
           ) AS "interactionMode"
         FROM projection_thread_activities AS activity
         INNER JOIN projection_threads AS thread ON thread.thread_id = activity.thread_id
+        LEFT JOIN projection_turns AS usage_turn ON usage_turn.thread_id = activity.thread_id AND usage_turn.turn_id = activity.turn_id
         WHERE activity.activity_id > ${afterActivityId}
         ORDER BY activity.activity_id ASC
         LIMIT ${limit}
@@ -306,22 +237,37 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
   const deleteUsageByThreadId: ProjectionThreadActivityRepositoryShape["deleteUsageByThreadId"] = (
     input,
   ) =>
-    deleteProjectionUsageContributionRows(input).pipe(
-      Effect.mapError(
-        toPersistenceSqlError("ProjectionThreadActivityRepository.deleteUsageByThreadId:query"),
-      ),
-    );
+    sql
+      .withTransaction(
+        Effect.gen(function* () {
+          yield* deleteProjectionUsageContributionRows(input);
+          yield* sql`DELETE FROM projection_usage_codex_state WHERE thread_id = ${input.threadId}`;
+          yield* sql`DELETE FROM projection_usage_codex_retired_turns WHERE thread_id = ${input.threadId}`;
+        }),
+      )
+      .pipe(
+        Effect.mapError(
+          toPersistenceSqlError("ProjectionThreadActivityRepository.deleteUsageByThreadId:query"),
+        ),
+      );
 
   const upsertUsageContribution: ProjectionThreadActivityRepositoryShape["upsertUsageContribution"] =
     (row) =>
-      upsertProjectionUsageContributionRow(row).pipe(
-        Effect.mapError(
-          toPersistenceSqlOrDecodeError(
-            "ProjectionThreadActivityRepository.upsertUsageContribution:query",
-            "ProjectionThreadActivityRepository.upsertUsageContribution:encodeRequest",
+      sql
+        .withTransaction(
+          Effect.gen(function* () {
+            const next = yield* reducePersistedCodexUsage(sql, row);
+            if (next) yield* upsertProjectionUsageContributionRow(next);
+          }),
+        )
+        .pipe(
+          Effect.mapError(
+            toPersistenceSqlOrDecodeError(
+              "ProjectionThreadActivityRepository.upsertUsageContribution:query",
+              "ProjectionThreadActivityRepository.upsertUsageContribution:encodeRequest",
+            ),
           ),
-        ),
-      );
+        );
 
   const getUsageBackfillState: ProjectionThreadActivityRepositoryShape["getUsageBackfillState"] =
     () =>
@@ -367,6 +313,7 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
       );
 
   return {
+    retireUsageTurns: (threadId, turnIds) => retireCodexUsageTurns(sql, threadId, turnIds),
     upsert,
     listByThreadId,
     deleteByThreadId,
@@ -375,6 +322,7 @@ const makeProjectionThreadActivityRepository = Effect.gen(function* () {
     getUsageBackfillState,
     listUsageBackfillBatch,
     advanceUsageBackfillState,
+    listPendingDelegatedModelChoiceRequests: makeListPendingDelegatedModelChoiceRequests(sql),
   } satisfies ProjectionThreadActivityRepositoryShape;
 });
 

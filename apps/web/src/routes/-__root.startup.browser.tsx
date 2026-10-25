@@ -22,6 +22,7 @@ vi.mock("../rpc/serverState", () => ({
   useDefaultChatCwd: () => null,
   useServerConfig: () => null,
   useServerProviders: () => [],
+  useServerKeybindings: () => [],
 }));
 vi.mock("../components/layout/StartupSplash", () => ({
   StartupSplash: ({ className = "" }: { className?: string }) => (
@@ -50,8 +51,10 @@ vi.mock("../components/ui/toast", () => ({
   },
 }));
 vi.mock("../components/WebSocketConnectionSurface", () => ({
-  WebSocketConnectionCoordinator: () => null,
   WebSocketConnectionSurface: ({ children }: { children: ReactNode }) => <>{children}</>,
+}));
+vi.mock("../components/WebSocketConnectionSurface.coordinator", () => ({
+  WebSocketConnectionCoordinator: () => null,
 }));
 
 vi.mock("./-__root.bootstrap", () => ({ ServerStateBootstrap: () => null }));
@@ -61,6 +64,18 @@ vi.mock("../components/SlowRpcAckToastCoordinator", () => ({
 }));
 vi.mock("../components/DesktopBackendStartupCoordinator", () => ({
   DesktopBackendStartupCoordinator: () => null,
+}));
+vi.mock("../components/CompactLinkHandoffCoordinator", () => ({
+  CompactLinkHandoffCoordinator: () => null,
+}));
+vi.mock("../components/games/GamesWorkToastCoordinator", () => ({
+  GamesWorkToastCoordinator: () => null,
+}));
+vi.mock("../components/ProviderRecoveryToastCoordinator", () => ({
+  ProviderRecoveryToastCoordinator: () => null,
+}));
+vi.mock("../components/DraftOwnershipCoordinator", () => ({
+  DraftOwnershipCoordinator: () => null,
 }));
 vi.mock("../components/floating-assistant/MascotStateCoordinator", () => ({
   MascotStateCoordinator: () => null,

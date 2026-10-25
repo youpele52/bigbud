@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveReleaseVersion } from "@bigbud/shared/releaseChannel";
 
 import {
   macArchitectureManifestName,
@@ -7,6 +8,21 @@ import {
 } from "./release-metadata";
 
 describe("release metadata", () => {
+  it.each(["v0.3.00", "0.3.00", " v0.3.00 "])(
+    "preserves legacy tag %s without relaxing canonical versions",
+    (input) => {
+      expect(resolveReleaseMetadata(input)).toEqual({
+        channel: "stable",
+        isPrerelease: false,
+        makeLatest: true,
+        tag: "v0.3.00",
+        updateChannel: "latest",
+        version: "0.3.0",
+      });
+      expect(resolveReleaseVersion("v0.3.00")).toBeNull();
+      expect(resolveReleaseVersion(resolveReleaseMetadata(input).version)?.version).toBe("0.3.0");
+    },
+  );
   it.each([
     ["1.2.3", "stable", "latest", false, true],
     ["v1.2.3-beta.1", "beta", "beta", true, false],

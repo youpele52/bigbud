@@ -138,17 +138,30 @@ export class RemoteAgentWorkspaceClient {
     return startRemoteAgentWorkspaceWatch({ connection: this.connection, ...input });
   }
 
-  async writeFile(input: {
-    readonly workspaceHandle: string;
-    readonly path: string;
-    readonly operationId: string;
-    readonly requestDigest: Uint8Array;
-    readonly bytes: Uint8Array;
-    readonly expectedSha256?: string;
-    readonly requestId?: string;
-  }): Promise<RemoteAgentWriteFileResponse> {
+  async writeFile(
+    input: {
+      readonly workspaceHandle: string;
+      readonly path: string;
+      readonly operationId: string;
+      readonly requestDigest: Uint8Array;
+      readonly bytes: Uint8Array;
+      readonly expectedSha256?: string;
+      readonly requestId?: string;
+    },
+    beforeRequest?: () => Promise<() => void>,
+  ): Promise<RemoteAgentWriteFileResponse> {
     const requestId = input.requestId ?? randomUUID();
     await this.mutation?.prepare(input.operationId, input.requestDigest);
+    try {
+      if (beforeRequest) {
+        const validate = await beforeRequest();
+        validate();
+      }
+    } catch (cause) {
+      // The final guard ran before any native request; this reservation is definitively undispatched.
+      await this.mutation?.terminal(input.operationId);
+      throw cause;
+    }
     try {
       const response = (await this.connection.request(
         {

@@ -1,56 +1,9 @@
-import {
-  CommandId,
-  DEFAULT_PROVIDER_INTERACTION_MODE,
-  MessageId,
-  ProjectId,
-  ThreadId,
-  type OrchestrationReadModel,
-} from "@bigbud/contracts";
+import { CommandId, MessageId } from "@bigbud/contracts";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import { decideThreadQueueCommand } from "./deciderThreads.turn.queue.ts";
-
-const now = "2026-08-01T00:00:00.000Z";
-const threadId = ThreadId.makeUnsafe("thread-queue");
-
-function readModel(overrides: Partial<OrchestrationReadModel["threads"][number]> = {}) {
-  return {
-    snapshotSequence: 0,
-    projects: [],
-    updatedAt: now,
-    threads: [
-      {
-        id: threadId,
-        projectId: ProjectId.makeUnsafe("project-1"),
-        title: "Queue",
-        elevatorSummary: null,
-        elevatorSummaryMessageCount: 0,
-        modelSelection: { provider: "codex", model: "gpt-5.4" },
-        runtimeMode: "full-access",
-        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-        branch: null,
-        worktreePath: null,
-        latestTurn: null,
-        queuedPrompts: [],
-        createdAt: now,
-        updatedAt: now,
-        archivedAt: null,
-        pinnedAt: null,
-        deletingAt: null,
-        deletedAt: null,
-        messages: [],
-        proposedPlans: [],
-        tasks: [],
-        activities: [],
-        checkpoints: [],
-        session: null,
-        watchingThreads: [],
-        ...overrides,
-      },
-    ],
-  } satisfies OrchestrationReadModel;
-}
+import { now, readModel, threadId } from "./deciderThreads.turn.queue.test.helpers.ts";
 
 const submit = (delivery: "auto" | "queue" = "auto") => ({
   type: "thread.message.submit" as const,

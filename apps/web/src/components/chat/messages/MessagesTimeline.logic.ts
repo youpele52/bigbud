@@ -1,11 +1,7 @@
-import { type MessageId } from "@bigbud/contracts";
+import { type OrchestrationTask } from "@bigbud/contracts";
 import { type TimelineEntry, type PendingUserInput } from "../../../logic/session";
 import { type WorkLogEntry } from "../../../logic/session";
-import { buildTurnDiffTree, type TurnDiffTreeNode } from "../../../lib/turnDiffTree";
-import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../../models/types";
-import { estimateTimelineMessageHeight } from "../../timelineHeight";
-
-export const MAX_VISIBLE_WORK_LOG_ENTRIES = 1;
+import { type ChatMessage, type ProposedPlan } from "../../../models/types";
 
 export interface TimelineDurationMessage {
   id: string;
@@ -44,10 +40,18 @@ export type MessagesTimelineRow =
       proposedPlan: ProposedPlan;
     }
   | {
+      kind: "subagents-history";
+      id: string;
+      createdAt: string;
+      agents: OrchestrationTask[];
+    }
+  | {
       kind: "user-input-question";
       id: string;
       createdAt: string;
       pendingUserInput: PendingUserInput;
+      answers?: Readonly<Record<string, unknown>>;
+      answeredAt?: string;
     }
   | { kind: "working"; id: string; createdAt: string | null };
 
@@ -74,11 +78,25 @@ export function normalizeCompactToolLabel(value: string): string {
   return value.replace(/\s+(?:complete|completed)\s*$/i, "").trim();
 }
 
+function isLiveTurnEntry(
+  createdAt: string,
+  input: { isWorking: boolean; activeTurnStartedAtMs: number },
+): boolean {
+  const createdAtMs = Date.parse(createdAt);
+  return (
+    input.isWorking &&
+    !Number.isNaN(input.activeTurnStartedAtMs) &&
+    !Number.isNaN(createdAtMs) &&
+    createdAtMs >= input.activeTurnStartedAtMs
+  );
+}
+
 export function deriveMessagesTimelineRows(input: {
   timelineEntries: ReadonlyArray<TimelineEntry>;
   completionDividerBeforeEntryId: string | null;
   isWorking: boolean;
   activeTurnStartedAt: string | null;
+  historicalAgents?: ReadonlyArray<OrchestrationTask>;
 }): MessagesTimelineRow[] {
   const nextRows: MessagesTimelineRow[] = [];
   const activeTurnStartedAtMs =
@@ -88,6 +106,7 @@ export function deriveMessagesTimelineRows(input: {
   const durationStartByMessageId = computeMessageDurationStart(
     input.timelineEntries.flatMap((entry) => (entry.kind === "message" ? [entry.message] : [])),
   );
+  const liveInput = { isWorking: input.isWorking, activeTurnStartedAtMs };
   const finalAssistantMessageIdByTurnId = new Map<string, string>();
 
   for (const timelineEntry of input.timelineEntries) {
@@ -126,17 +145,12 @@ export function deriveMessagesTimelineRows(input: {
     }
 
     if (timelineEntry.kind === "thinking") {
-      const entryCreatedAtMs = Date.parse(timelineEntry.createdAt);
       nextRows.push({
         kind: "thinking",
         id: timelineEntry.id,
         createdAt: timelineEntry.createdAt,
         entry: timelineEntry.entry,
-        streaming:
-          input.isWorking &&
-          !Number.isNaN(activeTurnStartedAtMs) &&
-          !Number.isNaN(entryCreatedAtMs) &&
-          entryCreatedAtMs >= activeTurnStartedAtMs,
+        streaming: isLiveTurnEntry(timelineEntry.createdAt, liveInput),
       });
       continue;
     }
@@ -157,6 +171,8 @@ export function deriveMessagesTimelineRows(input: {
         id: timelineEntry.id,
         createdAt: timelineEntry.createdAt,
         pendingUserInput: timelineEntry.pendingUserInput,
+        ...(timelineEntry.answers ? { answers: timelineEntry.answers } : {}),
+        ...(timelineEntry.answeredAt ? { answeredAt: timelineEntry.answeredAt } : {}),
       });
       continue;
     }
@@ -180,6 +196,8 @@ export function deriveMessagesTimelineRows(input: {
     });
   }
 
+  insertHistoricalSubagentRows(nextRows, input.historicalAgents ?? []);
+
   if (input.isWorking) {
     nextRows.push({
       kind: "working",
@@ -191,89 +209,37 @@ export function deriveMessagesTimelineRows(input: {
   return nextRows;
 }
 
-export function estimateMessagesTimelineRowHeight(
-  row: MessagesTimelineRow,
-  input: {
-    timelineWidthPx: number | null;
-    expandedWorkGroups?: Readonly<Record<string, boolean>>;
-    turnDiffSummaryByAssistantMessageId?: ReadonlyMap<MessageId, TurnDiffSummary>;
-  },
-): number {
-  switch (row.kind) {
-    case "work":
-      return estimateWorkRowHeight(row, input);
-    case "thinking":
-      return (
-        estimateTimelineMessageHeight(
-          {
-            role: "assistant",
-            text: row.entry.detail ?? row.entry.label,
-          },
-          { timelineWidthPx: input.timelineWidthPx },
-        ) + 34
-      );
-    case "proposed-plan":
-      return estimateTimelineProposedPlanHeight(row.proposedPlan);
-    case "user-input-question":
-      return estimateUserInputQuestionRowHeight(row.pendingUserInput);
-    case "working":
-      return 40;
-    case "message": {
-      let estimate = estimateTimelineMessageHeight(row.message, {
-        timelineWidthPx: input.timelineWidthPx,
-      });
-      const turnDiffSummary = input.turnDiffSummaryByAssistantMessageId?.get(row.message.id);
-      if (turnDiffSummary && turnDiffSummary.files.length > 0) {
-        estimate += estimateChangedFilesCardHeight(turnDiffSummary);
-      }
-      return estimate;
-    }
+export function insertHistoricalSubagentRows(
+  rows: MessagesTimelineRow[],
+  agents: ReadonlyArray<OrchestrationTask>,
+): void {
+  const groups = new Map<string, OrchestrationTask[]>();
+  for (const agent of agents) {
+    const key = agent.turnId ? `turn:${agent.turnId}` : `time:${agent.updatedAt}`;
+    groups.set(key, [...(groups.get(key) ?? []), agent]);
   }
-}
-
-function estimateWorkRowHeight(
-  row: Extract<MessagesTimelineRow, { kind: "work" }>,
-  input: {
-    expandedWorkGroups?: Readonly<Record<string, boolean>>;
-  },
-): number {
-  const isExpanded = input.expandedWorkGroups?.[row.id] ?? false;
-  const hasOverflow = row.groupedEntries.length > MAX_VISIBLE_WORK_LOG_ENTRIES;
-  const visibleEntries =
-    hasOverflow && !isExpanded ? MAX_VISIBLE_WORK_LOG_ENTRIES : row.groupedEntries.length;
-  const onlyToolEntries = row.groupedEntries.every((entry) => entry.tone === "tool");
-  const showHeader = hasOverflow || !onlyToolEntries;
-
-  // Card chrome, optional header, and one compact work-entry row per visible entry.
-  return 28 + (showHeader ? 26 : 0) + visibleEntries * 32;
-}
-
-function estimateTimelineProposedPlanHeight(proposedPlan: ProposedPlan): number {
-  const estimatedLines = Math.max(1, Math.ceil(proposedPlan.planMarkdown.length / 72));
-  return 120 + Math.min(estimatedLines * 22, 880);
-}
-
-function estimateUserInputQuestionRowHeight(pendingUserInput: PendingUserInput): number {
-  // Card chrome + header + question rows with options
-  const optionLineCount = pendingUserInput.questions.reduce((sum, q) => sum + q.options.length, 0);
-  return 80 + pendingUserInput.questions.length * 40 + optionLineCount * 28;
-}
-
-function estimateChangedFilesCardHeight(turnDiffSummary: TurnDiffSummary): number {
-  const treeNodes = buildTurnDiffTree(turnDiffSummary.files);
-  const visibleNodeCount = countTurnDiffTreeNodes(treeNodes);
-
-  // Card chrome: top/bottom padding, header row, and tree spacing.
-  return 60 + visibleNodeCount * 25;
-}
-
-function countTurnDiffTreeNodes(nodes: ReadonlyArray<TurnDiffTreeNode>): number {
-  let count = 0;
-  for (const node of nodes) {
-    count += 1;
-    if (node.kind === "directory") {
-      count += countTurnDiffTreeNodes(node.children);
-    }
+  const historyRows = [...groups.entries()]
+    .map(([key, groupedAgents]) => ({
+      kind: "subagents-history" as const,
+      id: `subagents-history:${key}`,
+      createdAt: groupedAgents.reduce(
+        (latest, agent) => (agent.updatedAt > latest ? agent.updatedAt : latest),
+        groupedAgents[0]!.updatedAt,
+      ),
+      agents: groupedAgents,
+      turnId: groupedAgents[0]?.turnId,
+    }))
+    .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt));
+  for (const history of historyRows) {
+    const turnIndex = history.turnId
+      ? rows.findLastIndex((row) => row.kind === "message" && row.message.turnId === history.turnId)
+      : -1;
+    const timestampIndex = rows.findIndex(
+      (row) => typeof row.createdAt === "string" && row.createdAt > history.createdAt,
+    );
+    const index =
+      turnIndex >= 0 ? turnIndex + 1 : timestampIndex >= 0 ? timestampIndex : rows.length;
+    const { turnId: _turnId, ...row } = history;
+    rows.splice(index, 0, row);
   }
-  return count;
 }

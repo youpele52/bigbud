@@ -220,6 +220,14 @@ export const makeGitStatusOps = Effect.fn("makeGitStatusOps")(function* (
           "Current branch has no upstream configured. Push with upstream first.",
         );
       }
+      if (details.hasWorkingTreeChanges) {
+        return yield* createGitCommandError(
+          "GitCore.pullCurrentBranch",
+          cwd,
+          ["pull", "--ff-only"],
+          "Cannot pull with uncommitted working tree changes. Commit or stash them first.",
+        );
+      }
       const beforeSha = yield* runGitStdout(
         "GitCore.pullCurrentBranch.beforeSha",
         cwd,

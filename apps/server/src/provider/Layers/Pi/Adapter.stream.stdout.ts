@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { EventId, ThreadId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { ThreadId, type ProviderRuntimeEvent } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import { isBigbudPlanTrackingToolName } from "../../../orchestration-tools/threadPlanTrackingTool.shared.ts";
@@ -14,13 +14,7 @@ import type {
   PiWriteNativeEvent,
 } from "./Adapter.types.ts";
 import type { PiRpcStdoutMessage } from "./RpcProcess.ts";
-import {
-  appendTurnItem,
-  eventBase,
-  extractTextContent,
-  normalizeString,
-  normalizeUsage,
-} from "./Adapter.utils.ts";
+import { appendTurnItem, eventBase, extractTextContent, normalizeString } from "./Adapter.utils.ts";
 import {
   emitWithTurnAppend,
   handlePlanToolExecutionStart,
@@ -31,9 +25,11 @@ import {
   handleTurnEnd,
 } from "./Adapter.stream.handlers.ts";
 import { settlePiAgentEnd } from "./Adapter.stream.agentLifecycle.ts";
+import { settlePiRun } from "./Adapter.stream.settled.ts";
+import { trackPiPromptQueue } from "./Adapter.stream.promptQueue.ts";
 import { recoverMissingPiAgentEnd } from "./Adapter.stream.missingAgentEnd.ts";
 import { handleRuntimeStatusEvent } from "./Adapter.stream.stdout.runtimeEvents.ts";
-import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
+import { piUsageEvent } from "./Adapter.usage.ts";
 
 export function makeHandleStdoutEvent(deps: {
   readonly emit: PiEmitEvents;
@@ -44,6 +40,7 @@ export function makeHandleStdoutEvent(deps: {
   readonly writeNativeEvent: PiWriteNativeEvent;
 }): PiStdoutEventHandler {
   return Effect.fn("handleStdoutEvent")(function* (session, message: PiRpcStdoutMessage) {
+    trackPiPromptQueue(session, message);
     yield* deps.writeNativeEvent(session.threadId, message);
 
     if (
@@ -193,36 +190,10 @@ export function makeHandleStdoutEvent(deps: {
           const itemId = session.currentAssistantMessageId ?? `assistant-${randomUUID()}`;
           session.currentAssistantMessageId = undefined;
 
-          const usage = normalizeUsage(message.message.usage);
-          if (usage) {
-            session.lastUsage = usage;
-          }
-
           const detail = extractTextContent(message.message);
           const events: ProviderRuntimeEvent[] = [];
-          if (usage) {
-            const accounting = makeTokenUsageAccounting({
-              scope: "item",
-              scopeId: itemId,
-              usage,
-            });
-            events.push({
-              ...eventBase({
-                eventId: EventId.makeUnsafe(randomUUID()),
-                createdAt,
-                threadId: session.threadId,
-                sessionEpoch: session.sessionEpoch,
-                ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
-                itemId,
-                raw,
-              }),
-              type: "thread.token-usage.updated",
-              payload: {
-                usage,
-                ...(accounting ? { accounting } : {}),
-              },
-            });
-          }
+          const usageEvent = piUsageEvent(session, message.message, itemId, createdAt, raw);
+          if (usageEvent) events.push(usageEvent);
 
           events.push({
             ...eventBase({
@@ -372,12 +343,15 @@ export function makeHandleStdoutEvent(deps: {
               .pipe(Effect.flatMap((event) => deps.emit([event]))),
         });
       case "agent_end": {
+        if (session.process.supportsAgentSettled) return;
         return yield* settlePiAgentEnd({
           emit: deps.emit,
           makeSyntheticEvent: deps.makeSyntheticEvent,
           session,
         });
       }
+      case "agent_settled":
+        return yield* settlePiRun({ ...deps, session, aborted: message.aborted === true });
       case "queue_update":
       case "compaction_start":
       case "compaction_end":

@@ -18,6 +18,8 @@ export const ServerProviderUsageLimitWindowKind = Schema.Literals([
   "seven-day-opus",
   "seven-day-sonnet",
   "model-scoped",
+  "rolling",
+  "monthly",
 ]);
 export type ServerProviderUsageLimitWindowKind = typeof ServerProviderUsageLimitWindowKind.Type;
 
@@ -44,14 +46,28 @@ export const ServerProviderExtraUsage = Schema.Struct({
 });
 export type ServerProviderExtraUsage = typeof ServerProviderExtraUsage.Type;
 
+/** Display-only banked resets; absent expiry details never imply no expiry. */
+export const ServerProviderManualResets = Schema.Struct({
+  availableCount: Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0)),
+  availableExpiries: Schema.Array(Schema.NullOr(IsoDateTime)),
+  detailsComplete: Schema.Boolean,
+});
+export type ServerProviderManualResets = typeof ServerProviderManualResets.Type;
+
 export const ServerProviderUsageLimits = Schema.Struct({
   status: ServerProviderUsageLimitStatus,
-  source: Schema.Literal("claude-agent-sdk"),
+  source: Schema.Literals([
+    "claude-agent-sdk",
+    "codex-app-server",
+    "cursor-dashboard",
+    "opencode-go-api",
+  ]),
   checkedAt: IsoDateTime,
   lastSuccessfulAt: Schema.optional(IsoDateTime),
   subscriptionType: Schema.optional(TrimmedNonEmptyString),
   message: Schema.optional(TrimmedNonEmptyString),
   windows: Schema.Array(ServerProviderUsageLimitWindow),
   extraUsage: Schema.optional(ServerProviderExtraUsage),
+  manualResets: Schema.optional(ServerProviderManualResets),
 });
 export type ServerProviderUsageLimits = typeof ServerProviderUsageLimits.Type;

@@ -26,6 +26,7 @@ export const ComposerPromptEditor = forwardRef<
     discoveredSkills,
     disabled,
     placeholder,
+    promptSuggestion,
     className,
     compact,
     onRemoveTerminalContext,
@@ -66,6 +67,7 @@ export const ComposerPromptEditor = forwardRef<
         discoveredSkills={discoveredSkills}
         disabled={disabled}
         placeholder={placeholder}
+        promptSuggestion={promptSuggestion}
         onRemoveTerminalContext={onRemoveTerminalContext}
         onChange={onChange}
         onPaste={onPaste}

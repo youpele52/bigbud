@@ -18,6 +18,7 @@ import {
 } from "@bigbud/shared/providerRuntime";
 import { Schema } from "effect";
 
+import { demotePersistedTaskActivity } from "./ProviderRuntimeIngestion.tasks.identity.ts";
 import {
   ProjectionCheckpointDbRowSchema,
   ProjectionLatestTurnDbRowSchema,
@@ -178,6 +179,8 @@ function mapThreadRow(
     pendingInterruptFlushIntent: row.pendingInterruptFlushIntent ?? null,
     pendingTurnControlOperation: row.pendingTurnControlOperation ?? null,
     queueHold: row.queueHold === 1,
+    pendingTurnStart: row.pendingTurnStart ?? null,
+    recovery: row.recovery ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,
@@ -192,6 +195,7 @@ function mapThreadRow(
     session: groupedRows.sessionsByThread.get(row.threadId) ?? null,
     watchingThreads: groupedRows.watchingThreadsByWatcher.get(row.threadId) ?? [],
     ...(row.parentThread !== null ? { parentThread: row.parentThread } : {}),
+    ...(row.forkOrigin ? { forkOrigin: row.forkOrigin } : {}),
   };
 }
 
@@ -238,6 +242,7 @@ export function assembleSnapshotRows(rows: {
       text: row.text,
       ...(row.attachments !== null ? { attachments: row.attachments } : {}),
       ...(row.replyTo !== null ? { replyTo: row.replyTo } : {}),
+      ...(row.originSegments !== null ? { originSegments: row.originSegments } : {}),
       turnId: row.turnId,
       streaming: row.isStreaming === 1,
       createdAt: row.createdAt,
@@ -266,11 +271,14 @@ export function assembleSnapshotRows(rows: {
     durableTaskThreads.add(row.threadId);
     updatedAt = maxIso(updatedAt, row.updatedAt);
     const tasks = tasksByThread.get(row.threadId) ?? [];
-    const existing = tasks.find((task) => task.id === row.task.id);
-    if (!existing || isTaskFreshnessNewer(row.task.freshness, existing.freshness)) {
+    const persistedTask = demotePersistedTaskActivity(row.task);
+    const existing = tasks.find((task) => task.id === persistedTask.id);
+    if (!existing || isTaskFreshnessNewer(persistedTask.freshness, existing.freshness)) {
       tasksByThread.set(
         row.threadId,
-        [...tasks.filter((task) => task.id !== row.task.id), row.task].toSorted(compareTaskOrder),
+        [...tasks.filter((task) => task.id !== persistedTask.id), persistedTask].toSorted(
+          compareTaskOrder,
+        ),
       );
     }
   }
@@ -302,7 +310,9 @@ export function assembleSnapshotRows(rows: {
         if (current && !isTaskFreshnessNewer(task.freshness, current.freshness)) {
           continue;
         }
-        const mergedTask = current ? mergeTaskPatch(current, task) : task;
+        const mergedTask = demotePersistedTaskActivity(
+          current ? mergeTaskPatch(current, task) : task,
+        );
         tasks.splice(
           0,
           tasks.length,
@@ -344,6 +354,7 @@ export function assembleSnapshotRows(rows: {
       providerName: row.providerName,
       runtimeMode: row.runtimeMode,
       activeTurnId: row.activeTurnId,
+      retainedFamily: row.retainedFamily === 1,
       reason: row.reason,
       lastError: row.lastError,
       updatedAt: row.updatedAt,

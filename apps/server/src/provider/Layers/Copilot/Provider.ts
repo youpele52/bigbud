@@ -40,9 +40,24 @@ const SEED_COPILOT_REASONING_LEVELS = [
 ] as const;
 
 const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
+  // GitHub's supported-model catalog and Models.dev github-copilot IDs, 2026-09-30.
+  ...[
+    ["gpt-6.1-sol", "GPT-6.1 Sol"],
+    ["gpt-6-astra", "GPT-6 Astra"],
+    ["gpt-6-sol", "GPT-6 Sol"],
+    ["gpt-6-luna", "GPT-6 Luna"],
+    ["claude-sonnet-5.5", "Claude Sonnet 5.5"],
+    ["claude-opus-5.5", "Claude Opus 5.5"],
+    ["gemini-3.8-flash", "Gemini 3.8 Flash"],
+  ].map(([slug, name]) => ({
+    slug: slug!,
+    name: name!,
+    isCustom: false,
+    capabilities: EMPTY_MODEL_CAPABILITIES,
+  })),
   {
-    slug: "gpt-5",
-    name: "GPT-5",
+    slug: "gpt-5.5",
+    name: "GPT-5.5",
     isCustom: false,
     capabilities: withEffortProvenance(
       {
@@ -67,8 +82,8 @@ const BUILT_IN_MODELS: ReadonlyArray<ServerProviderModel> = [
     ),
   },
   {
-    slug: "claude-sonnet-4",
-    name: "Claude Sonnet 4",
+    slug: "claude-sonnet-4.6",
+    name: "Claude Sonnet 4.6",
     isCustom: false,
     capabilities: EMPTY_MODEL_CAPABILITIES,
   },
@@ -130,6 +145,24 @@ function mapCopilotModel(model: ModelInfo): ServerProviderModel {
     isCustom: false,
     capabilities: mapCopilotModelCapabilities(model),
   };
+}
+
+/** Copilot Free can use Auto even when no explicit models are selectable. */
+export function resolveCopilotModels(
+  models: ReadonlyArray<ModelInfo>,
+  isAuthenticated: boolean,
+  customModels: ReadonlyArray<string>,
+): ReadonlyArray<ServerProviderModel> {
+  const discovered = models.map(mapCopilotModel);
+  if (isAuthenticated && discovered.length === 0) {
+    discovered.push({
+      slug: "auto",
+      name: "Auto",
+      isCustom: false,
+      capabilities: EMPTY_MODEL_CAPABILITIES,
+    });
+  }
+  return providerModelsFromSettings(discovered, PROVIDER, customModels, EMPTY_MODEL_CAPABILITIES);
 }
 
 function formatCopilotAuthLabel(authType: string | undefined): string | undefined {
@@ -212,18 +245,11 @@ export const checkCopilotProviderStatus = Effect.fn("checkCopilotProviderStatus"
       client.listModels(),
     ]);
 
-    const resolvedModels =
-      models.length > 0
-        ? [
-            ...models.map(mapCopilotModel),
-            ...providerModelsFromSettings(
-              [],
-              PROVIDER,
-              copilotSettings.customModels,
-              EMPTY_MODEL_CAPABILITIES,
-            ),
-          ]
-        : builtInModels;
+    const resolvedModels = resolveCopilotModels(
+      models,
+      auth.isAuthenticated,
+      copilotSettings.customModels,
+    );
 
     const probe: ProviderProbeResult = {
       installed: true,
@@ -244,6 +270,11 @@ export const checkCopilotProviderStatus = Effect.fn("checkCopilotProviderStatus"
       enabled: copilotSettings.enabled,
       checkedAt,
       models: resolvedModels,
+      modelDiscovery: {
+        status: models.length ? "live" : "empty",
+        source: "copilot-sdk",
+        durationMs: 0,
+      },
       probe,
     });
   }).pipe(Effect.result);
@@ -342,6 +373,7 @@ export const CopilotProviderLive = Layer.effect(
       ),
       haveSettingsChanged: (previous, next) => !Equal.equals(previous, next),
       checkProvider,
+      recoverModelDiscovery: true,
       decorateSnapshot,
       initialSnapshot: makeCopilotInitialSnapshot,
     });

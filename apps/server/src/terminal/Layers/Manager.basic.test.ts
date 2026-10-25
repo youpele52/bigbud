@@ -1,4 +1,5 @@
 import path from "node:path";
+import { homedir } from "node:os";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -32,7 +33,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
     }),
   );
 
-  it.effect("preserves non-notFound cwd stat failures", () =>
+  it.effect("uses Home immediately for inaccessible directories", () =>
     Effect.gen(function* () {
       const { manager, baseDir } = yield* createManager();
       const blockedRoot = path.join(baseDir, "blocked-root");
@@ -40,15 +41,12 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       yield* makeDirectory(blockedCwd);
       yield* chmod(blockedRoot, 0o000);
 
-      const error = yield* Effect.flip(manager.open(openInput({ cwd: blockedCwd }))).pipe(
-        Effect.ensuring(chmod(blockedRoot, 0o755).pipe(Effect.ignore)),
-      );
+      const snapshot = yield* manager
+        .open(openInput({ cwd: blockedCwd }))
+        .pipe(Effect.ensuring(chmod(blockedRoot, 0o755).pipe(Effect.ignore)));
 
-      expect(error).toMatchObject({
-        _tag: "TerminalCwdError",
-        cwd: blockedCwd,
-        reason: "statFailed",
-      });
+      expect(snapshot.cwd).toBe(homedir());
+      expect(snapshot.directoryFallback?.requestedCwd).toBe(blockedCwd);
     }),
   );
 
@@ -127,7 +125,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
     }),
   );
 
-  it.effect("respawns the terminal when the execution target changes", () =>
+  it.effect("reattaches without changing the process when chat target or cwd changes", () =>
     Effect.gen(function* () {
       const { manager, ptyAdapter } = yield* createManager();
       yield* manager.open(openInput());
@@ -139,10 +137,10 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
         }),
       );
 
-      expect(snapshot.executionTargetId).toBe("ssh:host=devbox&user=root&port=22&auth=ssh-key");
-      expect(snapshot.dropPathMode).toBe("posix");
-      expect(ptyAdapter.spawnInputs).toHaveLength(2);
-      expect(ptyAdapter.spawnInputs[1]?.shell).toBe("ssh");
+      expect(snapshot.executionTargetId).toBe("local");
+      expect(snapshot.cwd).toBe(process.cwd());
+      expect(ptyAdapter.spawnInputs).toHaveLength(1);
+      expect(ptyAdapter.processes[0]?.killed).toBe(false);
     }),
   );
 });

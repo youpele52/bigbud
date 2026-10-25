@@ -33,6 +33,11 @@ import {
 } from "../providerExecutionTargets.ts";
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import type { ProviderCapabilitiesResolver } from "../providerCapabilities.ts";
+import { assertProviderWorktreeIdentity } from "./ProviderService.worktreeIdentity.ts";
+import {
+  isRetiredProvider,
+  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+} from "@bigbud/shared/providerLifecycle";
 
 export function makeRecoverSessionForThread(
   registry: ProviderAdapterRegistryShape,
@@ -59,6 +64,19 @@ export function makeRecoverSessionForThread(
     },
     ProviderServiceError
   > {
+    if (
+      input.binding.runtimePayload &&
+      typeof input.binding.runtimePayload === "object" &&
+      "explicitlyStopped" in input.binding.runtimePayload &&
+      input.binding.runtimePayload.explicitlyStopped === true
+    )
+      return yield* toValidationError(
+        input.operation,
+        `Provider session for thread '${input.binding.threadId}' was explicitly stopped. Start it before sending more work; retained resume evidence is unchanged.`,
+      );
+    if (isRetiredProvider(input.binding.provider)) {
+      return yield* toValidationError(input.operation, LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+    }
     yield* Effect.annotateCurrentSpan({
       "provider.operation": "recover-session",
       "provider.kind": input.binding.provider,
@@ -127,6 +145,10 @@ export function makeRecoverSessionForThread(
         );
       }
 
+      // Reserve the workspace before recovery can spawn a process. A failed or
+      // unconfirmed start keeps this admission; only explicit teardown may release it.
+      yield* assertProviderWorktreeIdentity(input.binding.threadId);
+      yield* directory.upsert({ ...input.binding, status: "starting" });
       const resumed = yield* adapter.startSession({
         threadId: input.binding.threadId,
         provider: input.binding.provider,
@@ -204,6 +226,9 @@ export function makeResolveRoutableSession(
       );
     }
     const persistedEpoch = readPersistedSessionEpoch(binding.runtimePayload);
+    if (isRetiredProvider(binding.provider)) {
+      return yield* toValidationError(input.operation, LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+    }
     if (
       input.expectedSessionEpoch !== undefined &&
       persistedEpoch !== undefined &&

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron";
 import type { DesktopBridge } from "@bigbud/contracts";
 import type { DesktopCertificateChallengeEvent } from "@bigbud/contracts/server/ipc.desktopCertificate.ts";
 import { isBackendStartupState } from "./backend/backendStartupDiagnostics.validation";
+import { isDesktopConnectivitySignal } from "./connectivity/connectivitySignals.validation";
 import {
   CERTIFICATE_CHALLENGE_EVENT_CHANNEL,
   RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL,
@@ -57,6 +58,29 @@ const emptyBackendStartupState = { generation: 0, startedAt: 0, status: "idle" }
 const allowDevelopmentDiagnostics = process.defaultApp === true;
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  checkBackendOwnership: (generation) =>
+    ipcRenderer.invoke(desktopIpcChannels.checkBackendOwnership, generation),
+  recoverBackendOwnership: (generation) =>
+    ipcRenderer.invoke(desktopIpcChannels.recoverBackendOwnership, generation),
+  getTerminalRenderingPolicy: () =>
+    ipcRenderer.invoke(desktopIpcChannels.getTerminalRenderingPolicy),
+  systemMonitorSubscribe: (demand) =>
+    ipcRenderer.invoke(desktopIpcChannels.systemMonitorSubscribe, demand),
+  systemMonitorUpdate: (id, demand) =>
+    ipcRenderer.invoke(desktopIpcChannels.systemMonitorUpdate, id, demand),
+  systemMonitorUnsubscribe: (id) =>
+    ipcRenderer.invoke(desktopIpcChannels.systemMonitorUnsubscribe, id),
+  systemMonitorAck: (id, epoch, sequence) =>
+    ipcRenderer.invoke(desktopIpcChannels.systemMonitorAck, id, epoch, sequence),
+  systemMonitorQuery: (query) => ipcRenderer.invoke(desktopIpcChannels.systemMonitorQuery, query),
+  systemMonitorRetry: () => ipcRenderer.invoke(desktopIpcChannels.systemMonitorRetry),
+  onSystemMonitorEvent: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, value: unknown) => {
+      if (value && typeof value === "object") listener(value as Parameters<typeof listener>[0]);
+    };
+    ipcRenderer.on(desktopIpcChannels.systemMonitorEvent, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.systemMonitorEvent, handler);
+  },
   getWindowRole: () => {
     const result = ipcRenderer.sendSync(GET_WINDOW_ROLE_CHANNEL);
     return result === "main" || result === "mascot" || result === "compact-chat" ? result : null;
@@ -118,6 +142,13 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     };
     ipcRenderer.on(BACKEND_STARTUP_STATE_CHANNEL, wrappedListener);
     return () => ipcRenderer.removeListener(BACKEND_STARTUP_STATE_CHANNEL, wrappedListener);
+  },
+  onConnectivitySignal: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, signal: unknown) => {
+      if (isDesktopConnectivitySignal(signal)) listener(signal);
+    };
+    ipcRenderer.on(desktopIpcChannels.connectivitySignal, wrappedListener);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.connectivitySignal, wrappedListener);
   },
   getComputerUseRuntimeStatus: () => ipcRenderer.invoke(GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL),
   getComputerUsePermissionsStatus: () =>

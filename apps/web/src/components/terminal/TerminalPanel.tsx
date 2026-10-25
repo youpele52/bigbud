@@ -14,10 +14,12 @@ import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 
 interface TerminalPanelProps {
   activeThreadId?: ThreadId | null;
+  visible?: boolean;
 }
 
 export const TerminalPanelContent = memo(function TerminalPanelContent({
   activeThreadId,
+  visible = true,
 }: TerminalPanelProps) {
   const open = useTerminalPanelStore((state) => state.open);
   const keybindings = useServerKeybindings();
@@ -71,7 +73,7 @@ export const TerminalPanelContent = memo(function TerminalPanelContent({
         cwd={drawer.cwd}
         worktreePath={drawer.effectiveWorktreePath}
         runtimeEnv={drawer.runtimeEnv}
-        visible={open}
+        visible={open && visible}
         height={drawer.terminalState.terminalHeight}
         terminalIds={drawer.terminalState.terminalIds}
         activeTerminalId={drawer.terminalState.activeTerminalId}

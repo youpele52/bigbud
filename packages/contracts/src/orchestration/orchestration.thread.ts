@@ -8,7 +8,6 @@ import {
   MessageId,
   NonNegativeInt,
   ProjectId,
-  RuntimeTaskId,
   ThreadId,
   TrimmedString,
   TrimmedNonEmptyString,
@@ -23,6 +22,10 @@ import {
 import { ChatAttachment } from "./orchestration.attachments";
 import { ModelSelection } from "./orchestration.provider";
 import { OrchestrationProject } from "./orchestration.project";
+import { MessageOriginSegment } from "./orchestration.messageOrigin";
+import { ThreadForkOrigin } from "./orchestration.fork";
+import { OrchestrationTask } from "./orchestration.thread.tasks";
+import { ThreadRecovery } from "./orchestration.recovery";
 
 export const ELEVATOR_SUMMARY_MAX_CHARS = 150;
 export const ElevatorSummary = TrimmedNonEmptyString.check(
@@ -50,6 +53,7 @@ export const OrchestrationMessage = Schema.Struct({
   text: Schema.String,
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   replyTo: Schema.optional(OrchestrationMessageReply),
+  originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
   turnId: Schema.NullOr(TurnId),
   streaming: Schema.Boolean,
   createdAt: IsoDateTime,
@@ -103,6 +107,7 @@ export const OrchestrationSessionStatus = Schema.Literals([
 export type OrchestrationSessionStatus = typeof OrchestrationSessionStatus.Type;
 
 export const OrchestrationSession = Schema.Struct({
+  retainedFamily: Schema.optional(Schema.Boolean),
   threadId: ThreadId,
   status: OrchestrationSessionStatus,
   providerName: Schema.NullOr(TrimmedNonEmptyString),
@@ -161,79 +166,7 @@ export const OrchestrationThreadActivity = Schema.Struct({
 });
 export type OrchestrationThreadActivity = typeof OrchestrationThreadActivity.Type;
 
-export const OrchestrationTaskStatus = Schema.Literals([
-  "pending",
-  "inProgress",
-  "completed",
-  "failed",
-  "stopped",
-]);
-export type OrchestrationTaskStatus = typeof OrchestrationTaskStatus.Type;
-
-/** The source whose observed membership currently keeps a modern task visible. */
-export const OrchestrationTaskSource = Schema.Literals([
-  "lifecycle",
-  "taskList",
-  "background",
-  "observed",
-]);
-export type OrchestrationTaskSource = typeof OrchestrationTaskSource.Type;
-
-/** Additive ordering data; legacy snapshots decode into the deterministic legacy epoch. */
-export const OrchestrationTaskFreshness = Schema.Struct({
-  sessionEpoch: Schema.String.pipe(Schema.withDecodingDefault(() => "legacy")),
-  sourcePriority: NonNegativeInt.pipe(Schema.withDecodingDefault(() => 0)),
-  snapshotGeneration: Schema.optional(NonNegativeInt),
-  providerRevision: Schema.optional(Schema.Union([Schema.Number, Schema.String])),
-  providerMessageId: Schema.optional(TrimmedNonEmptyString),
-  providerTimestamp: Schema.optional(IsoDateTime),
-  observedOrdinal: NonNegativeInt.pipe(Schema.withDecodingDefault(() => 0)),
-});
-export type OrchestrationTaskFreshness = typeof OrchestrationTaskFreshness.Type;
-
-/** Provider-neutral durable task state, including optional subagent relationships. */
-export const OrchestrationTaskMembership = Schema.Struct({
-  taskList: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  background: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  observed: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  legacy: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-});
-export type OrchestrationTaskMembership = typeof OrchestrationTaskMembership.Type;
-
-export const OrchestrationTask = Schema.Struct({
-  id: RuntimeTaskId,
-  status: OrchestrationTaskStatus,
-  subject: TrimmedNonEmptyString,
-  description: Schema.optional(TrimmedNonEmptyString),
-  activeLabel: Schema.optional(TrimmedNonEmptyString),
-  sourceToolUseId: Schema.optional(TrimmedNonEmptyString),
-  requestId: Schema.optional(TrimmedNonEmptyString),
-  agentId: Schema.optional(TrimmedNonEmptyString),
-  parentAgentId: Schema.optional(TrimmedNonEmptyString),
-  parentToolUseId: Schema.optional(TrimmedNonEmptyString),
-  parentTaskId: Schema.optional(RuntimeTaskId),
-  subagentType: Schema.optional(TrimmedNonEmptyString),
-  background: Schema.optional(Schema.Boolean),
-  blockedBy: Schema.optional(Schema.Array(RuntimeTaskId)),
-  progressSummary: Schema.optional(TrimmedNonEmptyString),
-  lastToolName: Schema.optional(TrimmedNonEmptyString),
-  usage: Schema.optional(Schema.Unknown),
-  terminalReason: Schema.optional(TrimmedNonEmptyString),
-  turnId: Schema.optional(TurnId),
-  order: Schema.optional(NonNegativeInt),
-  membership: Schema.optional(OrchestrationTaskMembership),
-  source: OrchestrationTaskSource.pipe(Schema.withDecodingDefault(() => "lifecycle")),
-  freshness: OrchestrationTaskFreshness.pipe(
-    Schema.withDecodingDefault(() => ({
-      sessionEpoch: "legacy",
-      sourcePriority: 0,
-      observedOrdinal: 0,
-    })),
-  ),
-  createdAt: IsoDateTime,
-  updatedAt: IsoDateTime,
-});
-export type OrchestrationTask = typeof OrchestrationTask.Type;
+export * from "./orchestration.thread.tasks";
 
 export const OrchestrationLatestTurnState = Schema.Literals([
   "running",
@@ -267,6 +200,12 @@ export const OrchestrationQueuedPrompt = Schema.Struct({
   interactionMode: Schema.optional(ProviderInteractionMode),
   bootstrapSourceThreadId: Schema.optional(ThreadId),
   sourceProposedPlan: Schema.optional(SourceProposedPlanReference),
+  originSegments: Schema.optional(Schema.Array(MessageOriginSegment)),
+  /**
+   * The message is already in the transcript; the provider refused it as busy. Flushing
+   * redelivers it under the same message ID instead of adding a second message.
+   */
+  alreadySent: Schema.optional(Schema.Boolean),
 });
 export type OrchestrationQueuedPrompt = typeof OrchestrationQueuedPrompt.Type;
 
@@ -325,6 +264,15 @@ export const OrchestrationPendingInterruptFlushIntent = Schema.Struct({
 export type OrchestrationPendingInterruptFlushIntent =
   typeof OrchestrationPendingInterruptFlushIntent.Type;
 
+/** A requested turn the provider has not bound yet; queued prompts wait behind it. */
+export const OrchestrationPendingTurnStart = Schema.Struct({
+  messageId: MessageId,
+  requestedAt: IsoDateTime,
+  /** Sequence of the `thread.turn-start-requested` event that opened the gate. */
+  requestedSequence: Schema.optional(NonNegativeInt),
+});
+export type OrchestrationPendingTurnStart = typeof OrchestrationPendingTurnStart.Type;
+
 export const OrchestrationThread = Schema.Struct({
   id: ThreadId,
   projectId: ProjectId,
@@ -353,6 +301,13 @@ export const OrchestrationThread = Schema.Struct({
     Schema.NullOr(OrchestrationTurnControlOperation),
   ).pipe(Schema.withDecodingDefault(() => null)),
   queueHold: Schema.optional(Schema.Boolean).pipe(Schema.withDecodingDefault(() => false)),
+  pendingTurnStart: Schema.optional(Schema.NullOr(OrchestrationPendingTurnStart)).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
+  /** Sleep and wake recovery notice. Absent on snapshots written before recovery existed. */
+  recovery: Schema.optional(Schema.NullOr(ThreadRecovery)).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),
@@ -362,6 +317,7 @@ export const OrchestrationThread = Schema.Struct({
   deletingAt: Schema.optional(Schema.NullOr(IsoDateTime)),
   deletedAt: Schema.NullOr(IsoDateTime),
   parentThread: Schema.optional(ParentThreadReference),
+  forkOrigin: Schema.optional(ThreadForkOrigin),
   messages: Schema.Array(OrchestrationMessage),
   proposedPlans: Schema.Array(OrchestrationProposedPlan).pipe(Schema.withDecodingDefault(() => [])),
   // Optional for snapshots created before durable task projection was introduced.
