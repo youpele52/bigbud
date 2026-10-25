@@ -11,7 +11,7 @@ import {
   type TerminalEvent,
 } from "@bigbud/contracts";
 import type { ContextMenuItem } from "@bigbud/contracts";
-import { afterEach, beforeEach, vi, type Mock } from "vitest";
+import { afterEach, beforeAll, beforeEach, vi, type Mock } from "vitest";
 
 import type { WsRpcClient } from "./wsRpcClient";
 export { baseServerConfig, defaultProviders } from "./wsNativeApi.test.fixtures";
@@ -378,6 +378,11 @@ export function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): Deskt
     ...overrides,
   };
 }
+
+beforeAll(async () => {
+  getWindowForTest();
+  await import("./wsNativeApi");
+}, 60_000);
 
 beforeEach(() => {
   vi.resetModules();
