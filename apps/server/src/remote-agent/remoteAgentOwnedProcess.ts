@@ -1,3 +1,4 @@
+import { CommandCancelledError, withCommandCancellation } from "../utils/commandCancellation.ts";
 import { randomUUID } from "node:crypto";
 import type {
   RemoteAgentConnectionPool,
@@ -30,6 +31,8 @@ export interface OwnedRemoteProcessInput {
   readonly cwd: string;
   readonly request: RemoteAgentProcessRunInput;
   readonly newAfterTerminal?: boolean;
+  /** Tool callers join remote cancellation; legacy observers only stop reattaching. */
+  readonly cancelOnAbort?: boolean;
 }
 export type OwnedRemoteProcessRunner = (
   input: OwnedRemoteProcessInput,
@@ -40,6 +43,7 @@ export function makeOwnedRemoteAgentProcess(
   pool: RemoteAgentConnectionPool,
 ): OwnedRemoteProcessRunner {
   return async (input) => {
+    if (input.cancelOnAbort) input.request.signal?.throwIfAborted();
     const store = remoteAgentOwners();
     let owner = await reclaimDeadPreparedOwner(store, await store.get(input.ownerKey));
     let created = false;
@@ -135,10 +139,15 @@ export function makeOwnedRemoteAgentProcess(
       await control.registry.update((state) => pinRemoteAgentBuild(state, pinOwner, buildId));
       if (!created || owner.state !== "prepared") {
         // Output acknowledgements may outlive the process that held their bytes. Never invent a full result.
-        result = await client.attach({
-          operationId: owner.resourceId,
-          ...(input.request.signal ? { signal: input.request.signal } : {}),
-        });
+        result = await withCommandCancellation(
+          input.cancelOnAbort ? input.request.signal : undefined,
+          () =>
+            client.attach({
+              operationId: owner.resourceId,
+              ...(input.request.signal ? { signal: input.request.signal } : {}),
+            }),
+          () => client.cancelAndWait({ operationId: owner.resourceId }),
+        );
       } else {
         await store.update(input.ownerKey, (current) => ({
           ...current,
@@ -149,11 +158,16 @@ export function makeOwnedRemoteAgentProcess(
           input.request.workspaceHandle,
           input.cwd,
         );
-        result = await client.run({ ...input.request, operationId: owner.resourceId });
+        result = await withCommandCancellation(
+          input.cancelOnAbort ? input.request.signal : undefined,
+          () => client.run({ ...input.request, operationId: owner.resourceId }),
+          () => client.cancelAndWait({ operationId: owner.resourceId }),
+        );
       }
     } catch (cause) {
       const terminal =
         owner.state === "terminal" ||
+        cause instanceof CommandCancelledError ||
         cause instanceof RemoteAgentWorkspaceError ||
         (cause instanceof RemoteAgentProcessError &&
           (cause.outcome === "terminal" || cause.outcome === "rejected"));

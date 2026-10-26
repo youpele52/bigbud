@@ -134,6 +134,8 @@ export class V2ThreadBridge {
       storageIdentity: session.storageIdentity,
       directory: session.native.location.directory,
       runtimeTargetId: "local",
+      // Canonical ownership describes the local native Location, including synthetic Locations.
+      // Remote file authority stays in the session/binding and target-bound MCP credentials.
       workspaceTargetId: "local",
       sessionEpoch: session.epoch,
       transportGeneration: shared.generation,

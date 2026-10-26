@@ -1,6 +1,7 @@
 import {
   createThreadOrchestrationToolToken,
   writeThreadOrchestrationToolAuth,
+  type ThreadToolWorkspaceBinding,
 } from "./ThreadOrchestrationToolAuth.ts";
 export { renderMcpInvocationIdentitySource } from "./threadOrchestrationBridge.invocationIdentity.ts";
 
@@ -138,13 +139,16 @@ export function resolveOrchestrationBridgeHost(host: string | undefined): string
 }
 
 export async function prepareThreadOrchestrationSessionAuth(
-  input: Pick<ThreadOrchestrationSessionBridgeInput, "stateDir" | "threadId">,
+  input: Pick<ThreadOrchestrationSessionBridgeInput, "stateDir" | "threadId"> & {
+    readonly workspaceBinding?: ThreadToolWorkspaceBinding;
+  },
 ): Promise<{ readonly token: string }> {
   const token = createThreadOrchestrationToolToken();
   await writeThreadOrchestrationToolAuth({
     stateDir: input.stateDir,
     threadId: input.threadId,
     token,
+    ...(input.workspaceBinding ? { workspaceBinding: input.workspaceBinding } : {}),
   });
   return { token };
 }

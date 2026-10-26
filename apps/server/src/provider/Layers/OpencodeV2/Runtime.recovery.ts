@@ -28,7 +28,10 @@ export async function v2RuntimeProcessLost(runtime: OpencodeV2Runtime, session: 
   session.lossPending = true;
   session.stopped = true;
   session.coding?.revoke();
-  await session.coding?.cancelActive();
+  await Promise.all([
+    session.coding?.cancelActive(),
+    session.resources?.remoteCommands?.cancelActive(),
+  ]);
   session.unregister();
   if (session.lease.process.hasExited?.() !== true) {
     session.executionBlocked =

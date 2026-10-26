@@ -2,7 +2,11 @@ import { Effect } from "effect";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts/constants/project.constant.ts";
 import { expect, it, vi } from "vitest";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { inferredV2SetupLocation } from "./ThreadToolsSetup.location.ts";
+import { resolveV2RemoteLocation } from "./Application.remoteLocation.ts";
 import type { OrchestrationEngineShape } from "../../../orchestration/Services/OrchestrationEngine.ts";
 
 it("infers the actual worktree/project/default, never a supplied legacy directory for installation or a plugin config override", async () => {
@@ -48,7 +52,7 @@ it("infers the actual worktree/project/default, never a supplied legacy director
   thread.workspaceExecutionTargetId = "ssh:remote";
   await expect(
     inferredV2SetupLocation({ refresh: true, threadId }, "/default", engine),
-  ).rejects.toThrow("no supported local");
+  ).rejects.toThrow("no local/private fallback");
 });
 
 function canonicalLocation() {
@@ -224,3 +228,47 @@ it("does not recover a hydration failure or absent engine through arbitrary dire
     inferredV2SetupLocation({ refresh: true, threadId, directory: "/supplied" }, "/default"),
   ).rejects.toThrow("no arbitrary directory fallback");
 });
+
+it.each(["thread", "project", "worktree"])(
+  "uses the stable synthetic Location for a local runtime with a remote %s workspace",
+  async (kind) => {
+    const stateDir = await mkdtemp(path.join(os.tmpdir(), "v2-remote-location-"));
+    try {
+      const canonical = canonicalLocation();
+      canonical.thread.providerRuntimeExecutionTargetId = "local";
+      if (kind === "project") canonical.project.workspaceExecutionTargetId = "ssh:vps";
+      else canonical.thread.workspaceExecutionTargetId = "ssh:vps";
+      if (kind === "worktree") canonical.thread.worktreePath = "/remote/worktree";
+      const cwd = canonical.thread.worktreePath ?? canonical.project.workspaceRoot!;
+      const engine = {
+        ensureThreadState: () => Effect.succeed(canonical.thread),
+        getReadModel: () => Effect.succeed(canonical),
+      } as unknown as OrchestrationEngineShape;
+      const expected = await resolveV2RemoteLocation(stateDir, canonical.thread.id, "ssh:vps", cwd);
+      const resolve = () =>
+        inferredV2SetupLocation(
+          { refresh: true, threadId: canonical.thread.id, directory: "/untrusted" },
+          "/local-default",
+          engine,
+          stateDir,
+        );
+      await expect(resolve()).resolves.toBe(expected);
+      await writeFile(path.join(expected, "retained.txt"), "retained Location");
+      await expect(resolve()).resolves.toBe(expected);
+      expect(await readFile(path.join(expected, "retained.txt"), "utf8")).toBe("retained Location");
+      expect(await resolveV2RemoteLocation(stateDir, "another-thread", "ssh:vps", cwd)).not.toBe(
+        expected,
+      );
+      expect(
+        await resolveV2RemoteLocation(stateDir, canonical.thread.id, "ssh:other", cwd),
+      ).not.toBe(expected);
+      expect(
+        await resolveV2RemoteLocation(stateDir, canonical.thread.id, "ssh:vps", "/other/root"),
+      ).not.toBe(expected);
+      canonical.thread.providerRuntimeExecutionTargetId = "ssh:vps";
+      await expect(resolve()).rejects.toThrow("no supported local native Location");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  },
+);

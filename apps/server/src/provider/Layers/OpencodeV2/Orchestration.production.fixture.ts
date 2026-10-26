@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { v2ThreadRegistration } from "./Orchestration.registration.ts";
+import { resolveV2RemoteLocation } from "./Application.remoteLocation.ts";
 import { realpath, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_SERVER_SETTINGS, MessageId, ThreadId } from "@bigbud/contracts";
@@ -46,6 +47,7 @@ export async function withV2ProductionThreadTools(
   }) => Promise<void>,
   mode: "full-access" | "approval-required" = "full-access",
   runtimeCheckedVersion?: string,
+  remoteWorkspace = false,
 ) {
   await withV2RuntimeFixture(async ({ runtime: baseline, http, directory, events }) => {
     const app = await makeV2ThreadPluginFixture();
@@ -140,10 +142,31 @@ export async function withV2ProductionThreadTools(
               ...options,
               prepareSession: makeV2SharedTargetPreparation(options, app.root, canonical.port),
             });
+            if (remoteWorkspace) {
+              host.context.location.directory = yield* Effect.promise(() =>
+                resolveV2RemoteLocation(app.root, threadId, "ssh:vps", "/srv/project"),
+              );
+              const servers = new Map<string, string>();
+              http.client.mcp.add = async ({ location, server }) => {
+                servers.set(location!.directory!, server);
+              };
+              http.client.mcp.list = async ({ location } = {}) => ({
+                location: { directory: location!.directory! },
+                data: servers.has(location!.directory!)
+                  ? [{ name: servers.get(location!.directory!)!, status: { status: "connected" } }]
+                  : [],
+              });
+            }
             yield* Effect.promise(() =>
               runtime!.start({
                 threadId,
-                cwd: directory,
+                cwd: remoteWorkspace ? "/srv/project" : directory,
+                ...(remoteWorkspace
+                  ? {
+                      providerRuntimeExecutionTargetId: "local",
+                      workspaceExecutionTargetId: "ssh:vps",
+                    }
+                  : {}),
                 modelSelection: canonical.selection,
                 runtimeMode: mode,
               }),

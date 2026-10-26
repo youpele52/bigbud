@@ -1,16 +1,10 @@
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
 import path from "node:path";
 import type { V2IsolatedRuntimeOptions } from "./Runtime.types.ts";
-import {
-  prepareThreadOrchestrationSessionAuth,
-  resolveThreadOrchestrationHttpConfig,
-} from "../../../orchestration-tools/threadOrchestrationBridge.shared.ts";
-import {
-  deleteThreadOrchestrationToolAuth,
-  renewThreadOrchestrationToolAuth,
-} from "../../../orchestration-tools/ThreadOrchestrationToolAuth.ts";
+import { prepareV2SharedCanonicalResources } from "./Application.targets.auth.ts";
+import { prepareV2SharedRemoteTarget } from "./Application.targets.remote.ts";
 
-/** Local-only shared preparation never initializes a private profile, MCP server, or remote workspace. */
+/** Shared preparation keeps the provider local and binds remote files through bigbud tools. */
 export function makeV2SharedTargetPreparation(
   options: V2IsolatedRuntimeOptions,
   stateDir: string,
@@ -33,17 +27,24 @@ export function makeV2SharedTargetPreparation(
       defaultProviderRuntimeExecutionTargetId: "local",
       useLegacyExecutionTargetForProviderRuntime: false,
     });
-    if (
-      context.providerRuntimeTarget.executionTargetId !== "local" ||
-      context.workspaceTarget.executionTargetId !== "local"
-    )
+    if (context.providerRuntimeTarget.executionTargetId !== "local")
       throw new Error(
-        "Shared OpenCode v2 supports local native Locations only; no private/SSH fallback.",
+        "Shared OpenCode v2 requires a local provider runtime; remote files use bigbud workspace tools.",
       );
     if (!context.workspaceTarget.cwd) throw new Error("V2 selected native Location is required.");
     signal.throwIfAborted();
     await options.authorizeExecution?.();
     signal.throwIfAborted();
+    if (context.workspaceTarget.executionTargetId !== "local")
+      return prepareV2SharedRemoteTarget(
+        options,
+        input,
+        context.workspaceTarget,
+        stateDir,
+        port,
+        signal,
+        disableTools,
+      );
     // Canonical credentials are deliberately provisioned after successful native preflight by Runtime.sessions.
     return {
       options,
@@ -53,27 +54,13 @@ export function makeV2SharedTargetPreparation(
         ...(!disableTools
           ? {
               activateCanonicalTools: () =>
-                prepareV2SharedCanonicalResources(stateDir, input.threadId, port),
+                prepareV2SharedCanonicalResources(stateDir, input.threadId, port, {
+                  executionTargetId: context.workspaceTarget.executionTargetId,
+                  cwd: context.workspaceTarget.cwd!,
+                }),
             }
           : {}),
       },
     };
-  };
-}
-
-/** Canonical HTTP auth is app-internal; native enrollment receives a different per-owner callback token. */
-export async function prepareV2SharedCanonicalResources(
-  stateDir: string,
-  threadId: string,
-  port: number,
-) {
-  const { token } = await prepareThreadOrchestrationSessionAuth({ stateDir, threadId });
-  return {
-    orchestration: resolveThreadOrchestrationHttpConfig(
-      { stateDir, threadId, host: "127.0.0.1", port, providerSessionId: `opencodeV2:${threadId}` },
-      token,
-    ),
-    cleanup: () => deleteThreadOrchestrationToolAuth({ stateDir, threadId, token }),
-    renewCanonicalAuth: () => renewThreadOrchestrationToolAuth({ stateDir, threadId, token }),
   };
 }

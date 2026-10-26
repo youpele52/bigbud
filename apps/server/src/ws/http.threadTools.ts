@@ -23,6 +23,7 @@ import {
   handleListPinnedThreadsAction,
   handleListThreadsAction,
 } from "./http.threadTools.reads.ts";
+import { findRemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
 import { runRemoteWorkspaceProcess } from "./http.threadTools.remoteWorkspace.ts";
 import { handleRenameThreadAction } from "./http.threadTools.rename.ts";
 import { enterThreadToolInvocation } from "../orchestration-tools/threadToolInvocationFlights.ts";
@@ -39,6 +40,10 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
     let leave: (() => void) | undefined;
     return Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
+      const token = request.headers["x-bigbud-thread-tool-token"];
+      // Capture before body/auth/read-model I/O: Stop must fence requests already in flight.
+      const executionOwner = token ? findRemoteWorkspaceExecutions(token) : undefined;
+      const executionGeneration = executionOwner?.captureGeneration();
       const config = yield* ServerConfig;
       const dispatcher = getThreadOrchestrationToolDispatcher();
       if (!dispatcher) {
@@ -69,7 +74,6 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
           });
       }
 
-      const token = request.headers["x-bigbud-thread-tool-token"];
       if (!token) {
         return yield* new ThreadToolRequestError({
           status: 401,
@@ -113,6 +117,9 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       if (body.action === "remote_workspace_process") {
         const result = yield* runRemoteWorkspaceProcess({
           callerThreadId: threadId,
+          workspaceBinding: authRecord.workspaceBinding,
+          executionOwner,
+          executionGeneration,
           request: body,
         });
         return yield* HttpServerResponse.json({ ok: true, result });

@@ -6,6 +6,7 @@ import {
 
 export interface RunLocalToolCommandInput {
   readonly command: string;
+  readonly signal?: AbortSignal;
   readonly args?: ReadonlyArray<string>;
   readonly cwd?: string;
   readonly env?: ProcessRunOptions["env"];
@@ -18,6 +19,7 @@ export interface RunLocalToolCommandInput {
 
 export function runLocalToolCommand(input: RunLocalToolCommandInput): Promise<ProcessRunResult> {
   return runProcess(input.command, input.args ?? [], {
+    ...(input.signal ? { signal: input.signal } : {}),
     ...(input.cwd !== undefined ? { cwd: input.cwd } : {}),
     ...(input.env !== undefined ? { env: input.env } : {}),
     ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),

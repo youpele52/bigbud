@@ -42,7 +42,7 @@ it("N accepts exact L cleanup only; legacy tombstones cannot revoke the same-non
         storageIdentity: owner.storageIdentity,
         directory: owner.directory,
         runtimeTargetId: owner.runtimeTargetId,
-        workspaceTargetId: owner.workspaceTargetId,
+        workspaceTargetId: "local",
         sessionEpoch: owner.sessionEpoch,
         transportGeneration: owner.transportGeneration,
         consentRevision: owner.consentRevision,

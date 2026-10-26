@@ -31,6 +31,7 @@ export interface V2SubagentQualification {
 export async function attachV2OwnedFamily(runtime: OpencodeV2Runtime, owner: V2RuntimeSession) {
   if (owner.detachSubagentGuard) throw new Error("V2 native family guard is already attached.");
   const options = runtime.options.nativeSubagents;
+  if ((owner.session.workspaceExecutionTargetId ?? "local") !== "local") return;
   if (!options) return;
   owner.family = await V2OwnedFamily.open(options.stateDirectory, {
     storageIdentity: owner.storageIdentity,

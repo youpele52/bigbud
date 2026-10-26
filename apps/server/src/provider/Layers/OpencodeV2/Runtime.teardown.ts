@@ -54,6 +54,7 @@ export class V2RuntimeTeardown {
   private release(record: Teardown): void {
     if (
       !record.finished ||
+      record.owner.resources?.remoteCommands?.busyCount() ||
       // Confirmed cleanup already retired the family; a later host exit (such as this
       // owner's own last-lease release) is not family loss.
       (!record.confirmed && hasV2UnconfirmedFamily(record.owner)) ||
@@ -150,7 +151,14 @@ export class V2RuntimeTeardown {
     this.owners.set(threadId, record);
     // Canonical HTTP work can still be settling while native/session queues are occupied.
     // Abort/join physical executions before reserving the owner's cleanup queue.
-    record.completion = (owner.coding?.cancelActive() ?? Promise.resolve())
+    const remoteCancellation = owner.resources?.remoteCommands?.cancelActive();
+    const cancellations = Promise.all([owner.coding?.cancelActive(), remoteCancellation]).catch(
+      (error: unknown) => {
+        record.unconfirmed = true;
+        throw error;
+      },
+    );
+    record.completion = cancellations
       .then(() =>
         this.runtime.serialize(owner, async () => {
           let cleanupError: unknown;

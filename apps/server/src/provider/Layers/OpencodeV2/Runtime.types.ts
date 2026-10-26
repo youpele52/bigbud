@@ -98,9 +98,17 @@ export interface V2RuntimeSession {
 }
 
 export interface V2SessionResources {
+  readonly remoteCommands?: import("../../../remote-workspace-bridge/remoteWorkspaceExecutions.ts").RemoteWorkspaceExecutions;
+  readonly remoteWorkspace?: import("../../../workspace-target/workspaceTarget.ts").WorkspaceTarget & {
+    readonly serverName: string;
+  };
   readonly renewCanonicalAuth?: () => Promise<void>;
-  readonly activateCanonicalTools?: () => Promise<
-    Pick<V2SessionResources, "orchestration" | "cleanup" | "renewCanonicalAuth">
+  readonly activateCanonicalTools?: (
+    session: Omit<V2RuntimeSession, "unregister" | "unsubscribeDeath">,
+    mutations: import("./Runtime.mutations.ts").V2RuntimeMutations,
+    signal: AbortSignal,
+  ) => Promise<
+    Pick<V2SessionResources, "orchestration" | "cleanup" | "renewCanonicalAuth" | "remoteCommands">
   >;
   /** A shutdown signal bounds the retirement and swallows its failure (records stay recoverable). */
   onThreadToolsCleanup?: (shutdown?: AbortSignal) => Promise<void>;
@@ -184,6 +192,12 @@ export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessC
   readonly allowLocalWorkspace?: boolean;
   /** Application-only local builtin tools. Hidden learning and isolated harnesses remain deny-all. */
   readonly enableLocalTools?: boolean;
+  /** Production local runtime with target-bound MCP tools at a stable synthetic Location. */
+  readonly sharedRemoteWorkspace?: {
+    readonly directory: string;
+    readonly workspaceTarget: import("../../../workspace-target/workspaceTarget.ts").WorkspaceTarget;
+    readonly serverName: string;
+  };
   /** Development admission fence, rechecked after queued operations acquire ownership. */
   readonly authorizeExecution?: () => Promise<void>;
   /** Disposable loopback MCP fixtures only; never inferred from preview/settings flags. */

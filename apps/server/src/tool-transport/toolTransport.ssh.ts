@@ -1,9 +1,11 @@
 import { type ExecutionTargetId } from "@bigbud/contracts";
 
+import { runCancellableSshToolCommand } from "./toolTransport.ssh.cancellation.ts";
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
 
 export interface RunSshToolCommandInput {
   readonly executionTargetId: ExecutionTargetId;
+  readonly signal?: AbortSignal;
   readonly cwd?: string | undefined;
   readonly env?: NodeJS.ProcessEnv | Readonly<Record<string, string>> | undefined;
   readonly command: RunSshCommandInput["command"];
@@ -30,6 +32,8 @@ function normalizeEnvironment(
 
 export function runSshToolCommand(input: RunSshToolCommandInput) {
   const env = normalizeEnvironment(input.env);
+  if (input.signal)
+    return runCancellableSshToolCommand({ ...input, env: env ?? {}, signal: input.signal });
   return runSshCommand({
     executionTargetId: input.executionTargetId,
     command: input.command,

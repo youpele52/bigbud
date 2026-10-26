@@ -382,8 +382,8 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
       capabilities: {
         ...V2_APPLICATION_CAPABILITIES,
         supportsRemoteProviderRuntime: false,
-        supportsLocalRuntimeRemoteWorkspace: false,
-        needsBuiltinsDisabled: false,
+        supportsLocalRuntimeRemoteWorkspace: true,
+        needsBuiltinsDisabled: true,
       },
     } satisfies OptionalProviderRegistration;
   },

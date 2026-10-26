@@ -12,6 +12,7 @@ import {
 } from "@bigbud/shared/providerLifecycle";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
+import { resolveProviderSessionExecutionTargets } from "../../provider/providerSessionExecutionTargets.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
 import { mapProviderSessionStatusToOrchestrationStatus } from "./ProviderCommandReactorHelpers.ts";
@@ -145,7 +146,10 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       });
 
     const activeSession = yield* resolveActiveSession(threadId);
-    yield* assertActiveV2SessionLocation(activeSession, effectiveCwd);
+    yield* assertActiveV2SessionLocation(activeSession, effectiveCwd, {
+      ...resolveProviderSessionExecutionTargets(thread),
+      stateDir: services.serverConfig.stateDir,
+    });
     // Per-turn callers always supply their resolved runtime. Preserve existing
     // explicit session-reconfiguration behavior when no turn override is given.
     const ongoingWorkError =
