@@ -96,7 +96,7 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
       ),
     },
     customModels: null,
-    traitsEnabled: false,
+    traitsEnabled: true,
   },
   codex: {
     provider: "codex",
