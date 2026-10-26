@@ -50,7 +50,7 @@ describe("collab child conversation routing", () => {
     );
   });
 
-  it("suppresses child lifecycle notifications so they cannot replace the parent turn", () => {
+  it("isolates child lifecycle notifications so they cannot replace the parent turn", () => {
     const { manager, context, emitEvent, updateSession } = createCollabNotificationHarness();
 
     (
@@ -96,7 +96,15 @@ describe("collab child conversation routing", () => {
       },
     });
 
-    expect(emitEvent).not.toHaveBeenCalled();
+    expect(emitEvent).toHaveBeenCalledTimes(2);
+    expect(emitEvent).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ method: "subagent/turn/started" }),
+    );
+    expect(emitEvent).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ method: "subagent/turn/completed" }),
+    );
     expect(updateSession).not.toHaveBeenCalled();
   });
 
@@ -151,7 +159,7 @@ describe("collab child conversation routing", () => {
     );
   });
 
-  it("suppresses child lifecycle notifications even when the thread id is only top-level", () => {
+  it("isolates child lifecycle notifications even when the thread id is only top-level", () => {
     const { manager, context, emitEvent, updateSession } = createCollabNotificationHarness();
 
     (
@@ -185,7 +193,9 @@ describe("collab child conversation routing", () => {
       },
     });
 
-    expect(emitEvent).not.toHaveBeenCalled();
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "subagent/turn/started", turnId: "turn_parent" }),
+    );
     expect(updateSession).not.toHaveBeenCalled();
   });
 });

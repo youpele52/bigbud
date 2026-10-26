@@ -7,7 +7,8 @@ import {
   type JsonRpcRequest,
   type JsonRpcResponse,
 } from "./codexAppServerManager.types";
-import { toTurnId, toProviderItemId } from "./codexAppServerManager.utils";
+import { readResumeThreadId, toTurnId, toProviderItemId } from "./codexAppServerManager.utils";
+import { isCodexSessionAgent } from "./codexSubagentIdentity.ts";
 
 // ---------------------------------------------------------------------------
 // Low-level value readers
@@ -163,7 +164,10 @@ export function rememberCollabReceiverTurns(
             ?.map((value) => (typeof value === "string" ? value : null))
             .filter((value): value is string => value !== null) ?? [])
         : [];
+  const sessionThreadId = readResumeThreadId(context.session);
   for (const childThreadId of childThreadIds) {
+    if (isCodexSessionAgent(childThreadId, sessionThreadId, readString(item, "agentPath")))
+      continue;
     context.collabReceiverTurns.set(childThreadId, parentTurnId);
     if (!context.collabChildTurns.has(childThreadId)) {
       context.collabChildTurns.set(childThreadId, null);
@@ -179,22 +183,24 @@ const MAX_TRACKED_CHILD_THREADS = 200;
 
 /**
  * Records a known child thread's running turn from its own lifecycle notifications, which are
- * kept out of the parent session. Returns whether the notification belongs to a known child.
+ * kept out of the parent session. Stale completions must not clear a newer running turn.
  */
 export function trackCollabChildTurn(
   context: CodexSessionContext,
   method: string,
   providerThreadId: string | undefined,
   params: unknown,
-): boolean {
-  if (!providerThreadId || !context.collabChildTurns.has(providerThreadId)) return false;
+): "known" | "stale" | undefined {
+  if (!providerThreadId || !context.collabChildTurns.has(providerThreadId)) return undefined;
+  const turnId = readRouteFields(params).turnId;
   if (method === "turn/started") {
-    const turnId = toTurnId(readString(readObject(params, "turn"), "id"));
     if (turnId) context.collabChildTurns.set(providerThreadId, turnId);
-  } else if (method === "turn/completed") {
+  } else if (method === "turn/completed" || method === "turn/aborted") {
+    const active = context.collabChildTurns.get(providerThreadId);
+    if (active && turnId !== active) return "stale";
     context.collabChildTurns.set(providerThreadId, null);
   }
-  return true;
+  return "known";
 }
 
 export function shouldSuppressChildConversationNotification(method: string): boolean {

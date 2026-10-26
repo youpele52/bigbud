@@ -50,7 +50,7 @@ describe("Codex child agent threads", () => {
       threadId: CHILD,
       turn: { id: "child-turn", status: "inProgress" },
     });
-    expect(childStart.emitted).toEqual([]);
+    expect(childStart.emitted.map((event) => event.method)).toEqual(["subagent/turn/started"]);
     expect(childStart.updateSession).not.toHaveBeenCalled();
     expect(context.collabChildTurns.get(CHILD)).toBe("child-turn");
 
@@ -67,6 +67,7 @@ describe("Codex child agent threads", () => {
       threadId: CHILD,
       turn: { id: "child-turn", status: "interrupted" },
     });
+    expect(childEnd.emitted.map((event) => event.method)).toEqual(["subagent/turn/completed"]);
     expect(childEnd.updateSession).not.toHaveBeenCalled();
     expect(context.session.status).toBe("ready");
     expect(context.collabChildTurns.get(CHILD)).toBeNull();

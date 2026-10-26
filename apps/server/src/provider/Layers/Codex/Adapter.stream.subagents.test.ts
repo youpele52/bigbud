@@ -177,6 +177,49 @@ describe("Codex collab subagents", () => {
     });
   });
 
+  it.each(["session/exited", "session/closed"])(
+    "forgets child state on %s session events",
+    (method) => {
+      const tracker = makeCodexSubagentTracker();
+      tracker.map(collab("item/started", {}));
+      tracker.map({ ...notification(method, {}), kind: "session" });
+      expect(
+        tracker.map(
+          notification("subagent/turn/completed", {
+            threadId: "child-1",
+            turn: { id: "child-turn", status: "completed" },
+          }),
+        ),
+      ).toEqual([]);
+      const [fresh] = tasks(tracker.map(collab("item/started", { prompt: "New assignment" })));
+      expect(fresh?.payload.prompt).toBe("New assignment");
+    },
+  );
+
+  it("does not reuse an old epoch's child or parent-turn association after recovery", () => {
+    const tracker = makeCodexSubagentTracker();
+    tracker.map(collab("item/started", {}));
+    expect(
+      tracker.map({
+        ...notification("subagent/turn/completed", {
+          threadId: "child-1",
+          turn: { id: "child-turn", status: "completed" },
+        }),
+        sessionEpoch: 6,
+      }),
+    ).toEqual([]);
+    const [fresh] = tasks(
+      tracker.map({
+        ...collab("item/started", { prompt: "Recovered assignment" }),
+        sessionEpoch: 6,
+        turnId: TurnId.makeUnsafe("recovered-parent-turn"),
+      }),
+    );
+    expect(fresh?.turnId).toBe("recovered-parent-turn");
+    expect(fresh?.payload.taskId).toBe("codex:thread-codex:6:child-1");
+    expect(fresh?.payload.prompt).toBe("Recovered assignment");
+  });
+
   it("ignores unknown threads, other items and older payloads without collab fields", () => {
     const tracker = makeCodexSubagentTracker();
     expect(

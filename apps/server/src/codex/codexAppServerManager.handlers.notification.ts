@@ -40,18 +40,22 @@ export function handleServerNotification(
   const isChildConversation = childParentTurnId !== undefined;
   // A known child keeps its lifecycle out of the parent session even after the parent turn
   // ended, while its running turn is remembered for thread Stop.
-  const isKnownChildThread = trackCollabChildTurn(
+  const childTurn = trackCollabChildTurn(
     context,
     notification.method,
     providerThreadId,
     notification.params,
   );
-  if (
-    (isChildConversation || isKnownChildThread) &&
-    shouldSuppressChildConversationNotification(notification.method)
-  ) {
-    return;
-  }
+  if (childTurn === "stale") return;
+  const suppressParentLifecycle =
+    (isChildConversation || childTurn === "known") &&
+    shouldSuppressChildConversationNotification(notification.method);
+  const forwardChildTurn =
+    suppressParentLifecycle &&
+    (notification.method === "turn/started" ||
+      notification.method === "turn/completed" ||
+      notification.method === "turn/aborted");
+  if (suppressParentLifecycle && !forwardChildTurn) return;
   const textDelta =
     notification.method === "item/agentMessage/delta"
       ? readString(notification.params, "delta")
@@ -64,7 +68,8 @@ export function handleServerNotification(
     threadId: context.session.threadId,
     sessionEpoch: context.session.sessionEpoch!,
     createdAt: new Date().toISOString(),
-    method: notification.method,
+    // Child lifecycle is visible to the subagent tracker, never to parent turn handlers.
+    method: forwardChildTurn ? `subagent/${notification.method}` : notification.method,
     ...((childParentTurnId ?? rawRoute.turnId)
       ? { turnId: childParentTurnId ?? rawRoute.turnId }
       : {}),
@@ -72,6 +77,8 @@ export function handleServerNotification(
     textDelta,
     payload: notification.params,
   });
+
+  if (suppressParentLifecycle) return;
 
   if (notification.method === "thread/started") {
     const startedThreadId = normalizeProviderThreadId(
