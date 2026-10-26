@@ -218,8 +218,6 @@ export function consumableQueuedPrefix(input: {
   // should consume its safe compatible head. Control reservations must remain
   // exact so a stale or malformed reservation is never partially consumed.
   const hasControlReservation =
-    controlOperationId !== undefined ||
-    consumeOnly ||
-    thread.pendingInterruptFlushIntent !== undefined;
+    controlOperationId !== undefined || consumeOnly || thread.pendingInterruptFlushIntent != null;
   return !hasControlReservation ? compatible : compatible.length === prefix.length ? prefix : [];
 }
