@@ -19,7 +19,7 @@ describe("sidebar action preferences", () => {
         "pinned",
         "chats",
         "projects",
-        "remote-projects",
+        "remote-workspaces",
       ],
     );
   });
@@ -35,7 +35,7 @@ describe("sidebar action preferences", () => {
         "pinned",
         "chats",
         "projects",
-        "remote-projects",
+        "remote-workspaces",
         "search",
         "new-chat",
       ]),
@@ -48,7 +48,7 @@ describe("sidebar action preferences", () => {
       "pinned",
       "chats",
       "projects",
-      "remote-projects",
+      "remote-workspaces",
     ]);
   });
 
@@ -58,9 +58,9 @@ describe("sidebar action preferences", () => {
       "pinned",
       "chats",
       "projects",
-      "remote-projects",
+      "remote-workspaces",
     ]);
-    expect(moveSidebarActionToEdge(order, "remote-projects", "top")[0]).toBe("remote-projects");
+    expect(moveSidebarActionToEdge(order, "remote-workspaces", "top")[0]).toBe("remote-workspaces");
     expect(moveSidebarActionToEdge(order, "pinned", "bottom").at(-1)).toBe("pinned");
   });
 
@@ -74,7 +74,7 @@ describe("sidebar action preferences", () => {
     const initial = sanitizeSidebarActionOrder([]);
     expect(sidebarVisualGroups(initial, initial)).toEqual({
       primary: ["plugins", "scheduled", "games", "usage", "resource-monitor"],
-      secondary: ["pinned", "chats", "projects", "remote-projects"],
+      secondary: ["pinned", "chats", "projects", "remote-workspaces"],
     });
     const moved = reorderSidebarAction(initial, "pinned", "scheduled");
     expect(sidebarVisualGroups(moved, moved).primary).toEqual([

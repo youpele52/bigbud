@@ -99,8 +99,10 @@ export function readPersistedState(): UiState {
       lastActiveThreadId,
       projectsExpanded:
         typeof parsed.projectsExpanded === "boolean" ? parsed.projectsExpanded : true,
-      remoteProjectsExpanded:
-        typeof parsed.remoteProjectsExpanded === "boolean" ? parsed.remoteProjectsExpanded : false,
+      remoteWorkspacesExpanded:
+        typeof parsed.remoteWorkspacesExpanded === "boolean"
+          ? parsed.remoteWorkspacesExpanded
+          : parsed.remoteProjectsExpanded === true,
       threadChangedFilesExpandedById: sanitizePersistedThreadChangedFilesExpanded(
         parsed.threadChangedFilesExpandedById,
       ),
@@ -152,7 +154,7 @@ export function persistState(state: UiState): void {
         ...(state.lastActiveThreadId ? { lastActiveThreadId: state.lastActiveThreadId } : {}),
         projectOrderCwds,
         projectsExpanded: state.projectsExpanded,
-        remoteProjectsExpanded: state.remoteProjectsExpanded,
+        remoteWorkspacesExpanded: state.remoteWorkspacesExpanded,
         threadChangedFilesExpandedById,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
       } satisfies PersistedUiState),

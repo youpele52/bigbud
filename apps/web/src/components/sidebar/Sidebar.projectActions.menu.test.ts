@@ -22,6 +22,13 @@ describe("project context menu", () => {
     });
 
     expect(items[0]).toMatchObject({ id: "reconnect", label: "Reconnect", disabled: true });
+    expect(items.map((item) => item.label)).toEqual([
+      "Reconnect",
+      "Rename remote workspace",
+      "Edit remote workspace",
+      "Copy Workspace Path",
+      "Remove remote workspace",
+    ]);
     expect(items.map((item) => item.id)).toEqual([
       "reconnect",
       "rename",
@@ -45,5 +52,10 @@ describe("project context menu", () => {
       reconnectDisabled: false,
     });
     expect(items.map((item) => item.id)).toEqual(["rename", "copy-path", "delete"]);
+    expect(items.map((item) => item.label)).toEqual([
+      "Rename project",
+      "Copy Project Path",
+      "Remove project",
+    ]);
   });
 });

@@ -1,7 +1,7 @@
 import type { ProviderRuntimeLocation } from "../../lib/providerExecutionTargets";
-import type { RemoteProjectDraft } from "./Sidebar.projects.logic";
+import type { RemoteWorkspaceDraft } from "./Sidebar.remoteWorkspaces.logic";
 
-export type RemoteProjectField =
+export type RemoteWorkspaceField =
   | "displayName"
   | "host"
   | "username"
@@ -20,12 +20,12 @@ export type CreateProjectResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly error: string };
 
-export type RemoteProjectFieldErrors = Partial<Record<RemoteProjectField, string>>;
+export type RemoteWorkspaceFieldErrors = Partial<Record<RemoteWorkspaceField, string>>;
 
-export function createRemoteProjectFieldErrors(
-  draft: RemoteProjectDraft,
-): RemoteProjectFieldErrors {
-  const errors: RemoteProjectFieldErrors = {};
+export function createRemoteWorkspaceFieldErrors(
+  draft: RemoteWorkspaceDraft,
+): RemoteWorkspaceFieldErrors {
+  const errors: RemoteWorkspaceFieldErrors = {};
   if (draft.host.trim().length === 0) {
     errors.host =
       draft.connectionSource === "ssh-config"
@@ -40,16 +40,16 @@ export function createRemoteProjectFieldErrors(
     }
   }
   if (draft.workspaceRoot.trim().length === 0) {
-    errors.workspaceRoot = "Choose a folder or enter the remote project path.";
+    errors.workspaceRoot = "Choose a folder or enter the remote workspace path.";
   }
   return errors;
 }
 
-export function hasRemoteProjectFieldErrors(errors: RemoteProjectFieldErrors): boolean {
+export function hasRemoteWorkspaceFieldErrors(errors: RemoteWorkspaceFieldErrors): boolean {
   return Object.values(errors).some((value) => typeof value === "string" && value.length > 0);
 }
 
-const CONNECTION_ERROR_FIELDS: ReadonlyArray<RemoteProjectField> = [
+const CONNECTION_ERROR_FIELDS: ReadonlyArray<RemoteWorkspaceField> = [
   "host",
   "username",
   "port",
@@ -60,12 +60,12 @@ const CONNECTION_ERROR_FIELDS: ReadonlyArray<RemoteProjectField> = [
  * Clears errors for an edited field, keeping the same object when there are none. Switching the
  * connection source swaps every connection field, so their errors no longer apply.
  */
-export function withoutRemoteProjectFieldError(
-  errors: RemoteProjectFieldErrors,
+export function withoutRemoteWorkspaceFieldError(
+  errors: RemoteWorkspaceFieldErrors,
   field: string,
-): RemoteProjectFieldErrors {
+): RemoteWorkspaceFieldErrors {
   const cleared =
-    field === "connectionSource" ? CONNECTION_ERROR_FIELDS : [field as RemoteProjectField];
+    field === "connectionSource" ? CONNECTION_ERROR_FIELDS : [field as RemoteWorkspaceField];
   if (!cleared.some((key) => key in errors)) {
     return errors;
   }

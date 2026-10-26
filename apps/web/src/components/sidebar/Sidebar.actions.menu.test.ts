@@ -7,7 +7,7 @@ describe("sidebar item context menu", () => {
     const items = buildSidebarItemMenuItems({
       id: "projects",
       order: ["projects", ...SIDEBAR_ACTION_IDS.filter((id) => id !== "projects")],
-      visible: ["plugins", "pinned", "projects", "remote-projects"],
+      visible: ["plugins", "pinned", "projects", "remote-workspaces"],
       hidden: ["chats"],
     });
     expect(items).toContainEqual({ id: "hide", label: "Hide Projects" });
@@ -46,7 +46,7 @@ describe("sidebar item context menu", () => {
       id: null,
       order: SIDEBAR_ACTION_IDS,
       visible: [],
-      hidden: ["plugins", "pinned", "chats", "projects", "remote-projects"],
+      hidden: ["plugins", "pinned", "chats", "projects", "remote-workspaces"],
     });
     expect(recovery.some((item) => item.id === "show-all" && !item.disabled)).toBe(true);
     expect(recovery[0]?.id).toBe("show:plugins");

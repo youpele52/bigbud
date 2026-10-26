@@ -46,7 +46,7 @@ describe("sidebar action persistence", () => {
           "pinned",
           "chats",
           "projects",
-          "remote-projects",
+          "remote-workspaces",
         ],
         hiddenSidebarActions: ["games", "plugins"],
       });
@@ -60,7 +60,7 @@ describe("sidebar action persistence", () => {
           "pinned",
           "chats",
           "projects",
-          "remote-projects",
+          "remote-workspaces",
         ],
         hiddenSidebarActions: ["games", "plugins"],
       });

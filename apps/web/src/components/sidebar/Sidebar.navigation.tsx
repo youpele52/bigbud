@@ -35,7 +35,7 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
     },
     shouldShowProjectPathEntry: s.shouldShowProjectPathEntry,
     handleStartAddProject: s.handleStartAddProject,
-    openRemoteProjectDialog: s.openRemoteProjectDialog,
+    openRemoteWorkspaceDialog: s.openRemoteWorkspaceDialog,
     onCloseMobileSidebar: closeMobileSidebar,
     isElectron,
     newCwd: s.newCwd,
@@ -51,8 +51,8 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
     renderedProjects: s.renderedProjects,
     isExpanded: s.areProjectsExpanded,
     onExpandedChange: s.setAreProjectsExpanded,
-    isRemoteProjectsExpanded: s.areRemoteProjectsExpanded,
-    onRemoteProjectsExpandedChange: s.setAreRemoteProjectsExpanded,
+    isRemoteWorkspacesExpanded: s.areRemoteWorkspacesExpanded,
+    onRemoteWorkspacesExpandedChange: s.setAreRemoteWorkspacesExpanded,
     isManualProjectSorting: s.isManualProjectSorting,
     onDragStart: s.handleProjectDragStart,
     onDragEnd: s.handleProjectDragEnd,
@@ -104,7 +104,7 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
         projects: (headerProps: SidebarTopLevelHeaderProps) => (
           <SidebarProjectsSection {...projectProps} scope="local" headerProps={headerProps} />
         ),
-        "remote-projects": (headerProps: SidebarTopLevelHeaderProps) => (
+        "remote-workspaces": (headerProps: SidebarTopLevelHeaderProps) => (
           <SidebarProjectsSection {...projectProps} scope="remote" headerProps={headerProps} />
         ),
       }

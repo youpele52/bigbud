@@ -8,15 +8,15 @@ import type { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import type { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import type { resolveThreadStatusPill } from "./Sidebar.logic";
 import type {
-  RemoteProjectConnectionSource,
-  RemoteProjectDraft,
-  RequestRemoteProjectUnlock,
-  UpdateRemoteProjectDraft,
-} from "./Sidebar.projects.logic";
+  RemoteWorkspaceConnectionSource,
+  RemoteWorkspaceDraft,
+  RequestRemoteWorkspaceUnlock,
+  UpdateRemoteWorkspaceDraft,
+} from "./Sidebar.remoteWorkspaces.logic";
 import type { ThreadPr } from "./SidebarThreadRow";
 import type { Project } from "../../models/types";
 import type { SidebarThreadCountState } from "./SidebarRenderedProjectItem.types";
-import type { SidebarRemoteProjectAddActionsOutput } from "./Sidebar.projectAddActions.remote.types";
+import type { SidebarRemoteWorkspaceAddActionsOutput } from "./Sidebar.remoteWorkspaceAddActions.types";
 
 export type SidebarProjectSnapshot = Project & {
   expanded: boolean;
@@ -134,8 +134,8 @@ export interface SidebarState {
   setAreChatsExpanded: (expanded: boolean) => void;
   areProjectsExpanded: boolean;
   setAreProjectsExpanded: (expanded: boolean) => void;
-  areRemoteProjectsExpanded: boolean;
-  setAreRemoteProjectsExpanded: (expanded: boolean) => void;
+  areRemoteWorkspacesExpanded: boolean;
+  setAreRemoteWorkspacesExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
   setShowAllChats: (showAll: boolean) => void;
   hasMoreChats: boolean;
@@ -172,35 +172,35 @@ export interface SidebarState {
   handlePickFolder: () => Promise<void>;
   /** Cancel the add-project flow, resetting both the form and the visibility flag. */
   cancelAddProject: () => void;
-  isRemoteProjectDialogOpen: boolean;
-  remoteProjectDialogMode: "add" | "edit";
-  remoteProjectDraft: RemoteProjectDraft;
-  remoteProjectFieldErrors: Partial<
+  isRemoteWorkspaceDialogOpen: boolean;
+  remoteWorkspaceDialogMode: "add" | "edit";
+  remoteWorkspaceDraft: RemoteWorkspaceDraft;
+  remoteWorkspaceFieldErrors: Partial<
     Record<"displayName" | "host" | "username" | "port" | "workspaceRoot" | "sshKeyPath", string>
   >;
-  remoteProjectError: string | null;
-  remoteProjectVerificationMessage: string | null;
-  isVerifyingRemoteProject: boolean;
-  isSavingRemoteProject: boolean;
-  openRemoteProjectDialog: () => void;
-  openRemoteProjectEditDialog: (project: Project) => void;
-  closeRemoteProjectDialog: () => void;
-  updateRemoteProjectDraft: UpdateRemoteProjectDraft;
-  adoptRemoteProjectConnectionSource: (source: RemoteProjectConnectionSource) => void;
-  requestRemoteProjectUnlock: RequestRemoteProjectUnlock;
-  submitRemoteProjectDialog: () => Promise<void>;
-  remoteAgentInstallRequest: SidebarRemoteProjectAddActionsOutput["remoteAgentInstallRequest"];
+  remoteWorkspaceError: string | null;
+  remoteWorkspaceVerificationMessage: string | null;
+  isVerifyingRemoteWorkspace: boolean;
+  isSavingRemoteWorkspace: boolean;
+  openRemoteWorkspaceDialog: () => void;
+  openRemoteWorkspaceEditDialog: (project: Project) => void;
+  closeRemoteWorkspaceDialog: () => void;
+  updateRemoteWorkspaceDraft: UpdateRemoteWorkspaceDraft;
+  adoptRemoteWorkspaceConnectionSource: (source: RemoteWorkspaceConnectionSource) => void;
+  requestRemoteWorkspaceUnlock: RequestRemoteWorkspaceUnlock;
+  submitRemoteWorkspaceDialog: () => Promise<void>;
+  remoteAgentInstallRequest: SidebarRemoteWorkspaceAddActionsOutput["remoteAgentInstallRequest"];
   declineRemoteAgentInstall: () => void;
   completeRemoteAgentInstall: (message: string) => Promise<void>;
-  isRemoteProjectUnlockDialogOpen: boolean;
-  remoteProjectUnlockMode: import("../../lib/ssh").SshAuthMode | null;
-  remoteProjectUnlockKeyPath: string;
-  remoteProjectUnlockPassphrase: string;
-  remoteProjectUnlockError: string | null;
-  isUnlockingRemoteProjectKey: boolean;
-  closeRemoteProjectUnlockDialog: () => void;
-  setRemoteProjectUnlockPassphrase: (passphrase: string) => void;
-  submitRemoteProjectUnlock: () => Promise<void>;
+  isRemoteWorkspaceUnlockDialogOpen: boolean;
+  remoteWorkspaceUnlockMode: import("../../lib/ssh").SshAuthMode | null;
+  remoteWorkspaceUnlockKeyPath: string;
+  remoteWorkspaceUnlockPassphrase: string;
+  remoteWorkspaceUnlockError: string | null;
+  isUnlockingRemoteWorkspaceKey: boolean;
+  closeRemoteWorkspaceUnlockDialog: () => void;
+  setRemoteWorkspaceUnlockPassphrase: (passphrase: string) => void;
+  submitRemoteWorkspaceUnlock: () => Promise<void>;
   // Project rename
   renamingProjectId: ProjectId | null;
   renamingProjectTitle: string;
@@ -245,6 +245,7 @@ export interface SidebarState {
     projectId: ProjectId;
     projectName: string;
     threadCount: number;
+    isRemoteWorkspace: boolean;
   } | null;
   dismissPendingProjectDeleteConfirmation: () => void;
   confirmPendingProjectDelete: () => Promise<void>;

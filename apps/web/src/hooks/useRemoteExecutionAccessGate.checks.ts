@@ -56,7 +56,7 @@ export function ensureBackgroundRemoteExecutionToast(input: {
     return;
   }
 
-  const title = input.unavailableTitle ?? "Checking remote project";
+  const title = input.unavailableTitle ?? "Checking remote workspace";
   active.backgroundToastId = toastManager.add({
     type: "loading",
     title,
@@ -187,7 +187,7 @@ export function startRemoteExecutionCheck(input: {
           .setExecutionTargetCheck(input.executionTargetId, resolveRemoteExecutionVerifiedStatus());
       } catch (error) {
         const errorMessage =
-          error instanceof Error ? error.message : "Failed to reconnect to the remote project.";
+          error instanceof Error ? error.message : "Failed to reconnect to the remote workspace.";
         useRemoteAccessStore
           .getState()
           .setExecutionTargetCheck(

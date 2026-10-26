@@ -57,11 +57,13 @@ export function BigbudLogo({
 }
 
 export function ProjectSortMenu({
+  scope = "local",
   projectSortOrder,
   threadSortOrder,
   onProjectSortOrderChange,
   onThreadSortOrderChange,
 }: {
+  scope?: "local" | "remote";
   projectSortOrder: SidebarProjectSortOrder;
   threadSortOrder: SidebarThreadSortOrder;
   onProjectSortOrderChange: (sortOrder: SidebarProjectSortOrder) => void;
@@ -77,12 +79,14 @@ export function ProjectSortMenu({
         >
           <ArrowUpDownIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
         </TooltipTrigger>
-        <TooltipPopup side="right">Sort projects</TooltipPopup>
+        <TooltipPopup side="right">
+          Sort {scope === "remote" ? "workspaces" : "projects"}
+        </TooltipPopup>
       </Tooltip>
       <MenuPopup align="end" side="bottom" className="min-w-44">
         <MenuGroup>
           <div className="px-2 py-1 sm:text-xs font-medium text-muted-foreground">
-            Sort projects
+            Sort {scope === "remote" ? "workspaces" : "projects"}
           </div>
           <MenuRadioGroup
             value={projectSortOrder}

@@ -8,7 +8,7 @@ import type { Project } from "../../models/types";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { resolveRemoteExecutionFailureStatus } from "../../hooks/useRemoteExecutionAccessGate.shared";
-import { isSshExecutionTargetId } from "./Sidebar.projects.logic";
+import { isSshExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { toastManager } from "../ui/toast";
 import {

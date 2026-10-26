@@ -17,5 +17,5 @@ export function remoteAgentFailureDetail(cause: unknown): string {
 
 export function remoteAgentFailureMessage(cause: unknown): string {
   const detail = remoteAgentFailureDetail(cause).trimEnd();
-  return `${detail}${/[.!?]$/.test(detail) ? "" : "."} You can switch Connection method to Direct SSH in the remote project settings.`;
+  return `${detail}${/[.!?]$/.test(detail) ? "" : "."} You can switch Connection method to Direct SSH in the remote workspace settings.`;
 }

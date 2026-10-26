@@ -26,8 +26,8 @@ export interface BuildSidebarStateResultInput {
   setAreChatsExpanded: (expanded: boolean) => void;
   areProjectsExpanded: boolean;
   setAreProjectsExpanded: (expanded: boolean) => void;
-  areRemoteProjectsExpanded: boolean;
-  setAreRemoteProjectsExpanded: (expanded: boolean) => void;
+  areRemoteWorkspacesExpanded: boolean;
+  setAreRemoteWorkspacesExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
   setShowAllChats: (showAll: boolean) => void;
   hasMoreChats: boolean;
@@ -71,8 +71,8 @@ export function buildSidebarStateResult(input: BuildSidebarStateResultInput): Si
     setAreChatsExpanded: input.setAreChatsExpanded,
     areProjectsExpanded: input.areProjectsExpanded,
     setAreProjectsExpanded: input.setAreProjectsExpanded,
-    areRemoteProjectsExpanded: input.areRemoteProjectsExpanded,
-    setAreRemoteProjectsExpanded: input.setAreRemoteProjectsExpanded,
+    areRemoteWorkspacesExpanded: input.areRemoteWorkspacesExpanded,
+    setAreRemoteWorkspacesExpanded: input.setAreRemoteWorkspacesExpanded,
     showAllChats: input.showAllChats,
     setShowAllChats: input.setShowAllChats,
     hasMoreChats: input.hasMoreChats,

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
-import type { SidebarRemoteAgentInstallRequest } from "./Sidebar.projectAddActions.remote.types";
+import type { SidebarRemoteAgentInstallRequest } from "./Sidebar.remoteWorkspaceAddActions.types";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { REMOTE_AGENT_FAILURE_GUIDANCE } from "./SidebarRemoteAgentStatus.messages";
 import {

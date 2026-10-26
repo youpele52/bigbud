@@ -11,6 +11,8 @@ export interface PersistedUiState {
   lastActiveThreadId?: string;
   projectOrderCwds?: string[];
   projectsExpanded?: boolean;
+  remoteWorkspacesExpanded?: boolean;
+  /** Pre-rename persisted state; only read during hydration. */
   remoteProjectsExpanded?: boolean;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   threadLastVisitedAtById?: Record<string, string>;
@@ -22,7 +24,7 @@ export interface UiSidebarState {
   chatsExpanded: boolean;
   favouritesExpanded: boolean;
   projectsExpanded: boolean;
-  remoteProjectsExpanded: boolean;
+  remoteWorkspacesExpanded: boolean;
 }
 
 export interface UiProjectState {
@@ -59,7 +61,7 @@ export const initialState: UiState = {
     "pinned",
     "chats",
     "projects",
-    "remote-projects",
+    "remote-workspaces",
   ],
   hiddenSidebarActions: [],
   chatsExpanded: true,
@@ -68,7 +70,7 @@ export const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
   projectsExpanded: true,
-  remoteProjectsExpanded: false,
+  remoteWorkspacesExpanded: false,
   selectedProjectId: null,
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},

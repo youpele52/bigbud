@@ -30,7 +30,7 @@ vi.mock("../../stores/ui/ui.store", () => ({
         "pinned",
         "chats",
         "projects",
-        "remote-projects",
+        "remote-workspaces",
       ],
       hiddenSidebarActions: sidebarPreferences.hidden,
       setSidebarActionHidden: vi.fn(),
@@ -76,7 +76,7 @@ function renderActions(newThreadShortcutLabel: string | null = null) {
         pinned: () => <div>Pinned section</div>,
         chats: () => <div>Chats section</div>,
         projects: () => <div>Projects section</div>,
-        "remote-projects": () => <div>Remote Projects section</div>,
+        "remote-workspaces": () => <div>Remote Workspaces section</div>,
       }}
     />,
   );
@@ -104,7 +104,7 @@ describe("SidebarActionsSection", () => {
       "pinned",
       "chats",
       "projects",
-      "remote-projects",
+      "remote-workspaces",
     ];
     try {
       const html = renderActions();
@@ -112,7 +112,7 @@ describe("SidebarActionsSection", () => {
       expect(html).toContain('aria-label="Open search"');
       expect(html).not.toContain("Hidden items");
       expect(html).not.toContain("Pinned section");
-      expect(html).not.toContain("Remote Projects section");
+      expect(html).not.toContain("Remote Workspaces section");
       expect(html).not.toContain('aria-label="Open usage"');
     } finally {
       sidebarPreferences.hidden = [];

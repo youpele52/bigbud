@@ -83,10 +83,10 @@ export function SidebarUnlockSshKeyDialog({
               ) : null}
             </div>
           ) : (
-            <label htmlFor="remote-project-key-passphrase" className="block">
+            <label htmlFor="remote-workspace-key-passphrase" className="block">
               <span className="text-xs font-medium text-foreground">{fieldLabel}</span>
               <Input
-                id="remote-project-key-passphrase"
+                id="remote-workspace-key-passphrase"
                 autoFocus
                 type="password"
                 className={passphraseInputClassName}
