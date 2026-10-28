@@ -1,6 +1,7 @@
 import { type TerminalEvent } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { toSessionKey } from "./Manager.shell";
 import type { SessionApiContext } from "./Manager.session.types.ts";
@@ -45,9 +46,7 @@ export function subscribeToTerminalEvents(
       const events: TerminalEvent[] = [];
       const updatedAtByKey = new Map<string, string>();
       for (const session of state.sessions.values()) {
-        if (!isLocalExecutionTarget(session.executionTargetId)) {
-          continue;
-        }
+        if (isWslTerminalTargetId(session.executionTargetId)) continue;
         events.push({
           type: "agentIdentity",
           threadId: session.threadId,

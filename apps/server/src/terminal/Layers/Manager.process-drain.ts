@@ -12,6 +12,7 @@ import {
   isRetryableShellSpawnError,
   resolveShellCandidates,
 } from "./Manager.shell";
+import { createRemoteShellPidReader } from "./Manager.remote-identity.ts";
 import { buildRemoteTerminalShellCandidate } from "./Manager.remote.ts";
 import { withInteractiveTerminalIdentity } from "./Manager.shell.identity.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
@@ -25,7 +26,10 @@ import {
 import { type TerminalSessionState, type TerminalStartInput } from "./Manager.types";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 export { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
-export { pollSubprocessActivityWith } from "./Manager.process-drain.poll.ts";
+export {
+  pollSubprocessActivityWith,
+  startProcessPollingWith,
+} from "./Manager.process-drain.poll.ts";
 
 // ---------------------------------------------------------------------------
 // trySpawnWith
@@ -129,6 +133,7 @@ export function stopProcessWith(
       cleanupProcessHandles(session);
       session.process = null;
       session.pid = null;
+      session.remoteShellPid = undefined;
       session.hasRunningSubprocess = false;
       session.activeAgentProvider = null;
       session.activeAgent = null;
@@ -191,6 +196,7 @@ export function startSessionWith(
       session.pendingProcessEvents = [];
       session.pendingProcessEventIndex = 0;
       session.processEventDrainRunning = false;
+      session.remoteShellPid = undefined;
       session.runtimeEpoch += 1;
       session.runtimeGeneration = randomUUID();
       session.updatedAt = nextTerminalTimestamp(session.updatedAt);
@@ -226,19 +232,28 @@ export function startSessionWith(
 
             const processPid = ptyProcess.pid;
             const runtimeEpoch = session.runtimeEpoch;
+            const readRemotePid =
+              !isLocalExecutionTarget(session.executionTargetId) &&
+              !isWslTerminalTargetId(session.executionTargetId) &&
+              ptyProcess.pidDomain !== "remote"
+                ? createRemoteShellPidReader(session.runtimeGeneration, (pid) => {
+                    session.remoteShellPid = pid;
+                  })
+                : (data: string) => data;
             const unsubscribeData = ptyProcess.onData((data) => {
               if (session.runtimeEpoch !== runtimeEpoch) {
                 return;
               }
-              ctx.runFork(ctx.queuePtyOutput(session, processPid, data));
+              const output = readRemotePid(data);
+              if (output) ctx.runFork(ctx.queuePtyOutput(session, processPid, output));
             });
             const unsubscribeExit = ptyProcess.onExit((event) => {
               // Explicit restart owns the exit while awaiting durable remote release.
-              if (session.restartPending) return;
+              if (session.restartPending || session.runtimeEpoch !== runtimeEpoch) return;
               ctx.runFork(
                 Effect.gen(function* () {
                   yield* ctx.flushPtyOutput(session.threadId, session.terminalId);
-                  if (session.restartPending) return;
+                  if (session.restartPending || session.runtimeEpoch !== runtimeEpoch) return;
                   if (!enqueueProcessEvent(session, processPid, { type: "exit", event })) {
                     return;
                   }

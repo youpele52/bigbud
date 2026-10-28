@@ -10,6 +10,7 @@ import type {
 import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration.provider";
 import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
 import type { TerminalSubprocessChecker } from "./Manager.shell";
+import type { RemoteTerminalProcessInspector } from "./Manager.remote-inspection.ts";
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
 import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
 import type { TerminalAgentIdentity } from "@bigbud/contracts/workspace/terminal.agentIdentity.ts";
@@ -32,6 +33,7 @@ export const DEFAULT_OPEN_ROWS = 30;
 
 export interface TerminalSessionState {
   wslIdentity?: TerminalWslIdentity | undefined;
+  remoteShellPid?: number | undefined;
   remoteOwnerRecoveryRequired?: boolean;
   restartPending?: boolean;
   restartPreparation?: (() => Promise<void>) | undefined;
@@ -125,6 +127,7 @@ export interface TerminalManagerOptions {
   shellResolver?: () => string;
   subprocessChecker?: TerminalSubprocessChecker;
   agentDetector?: TerminalAgentDetector;
+  remoteProcessInspector?: RemoteTerminalProcessInspector;
   subprocessPollIntervalMs?: number;
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;

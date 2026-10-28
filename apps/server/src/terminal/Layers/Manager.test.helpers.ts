@@ -27,6 +27,7 @@ import {
   PtySpawnError,
 } from "../Services/PTY";
 import { makeTerminalManagerWithOptions } from "./Manager";
+import type { RemoteTerminalProcessInspector } from "./Manager.remote-inspection.ts";
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
 
 export class FakePtyProcess implements PtyProcess {
@@ -218,6 +219,7 @@ export interface CreateManagerOptions {
   shellResolver?: () => string;
   subprocessChecker?: (terminalPid: number) => Effect.Effect<boolean>;
   agentDetector?: TerminalAgentDetector;
+  remoteProcessInspector?: RemoteTerminalProcessInspector;
   subprocessPollIntervalMs?: number;
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;
@@ -255,6 +257,9 @@ export const createManager = (
           ? { subprocessChecker: options.subprocessChecker }
           : {}),
         agentDetector: options.agentDetector ?? (() => Effect.succeed(new Map())),
+        ...(options.remoteProcessInspector
+          ? { remoteProcessInspector: options.remoteProcessInspector }
+          : {}),
         ...(options.subprocessPollIntervalMs !== undefined
           ? { subprocessPollIntervalMs: options.subprocessPollIntervalMs }
           : {}),

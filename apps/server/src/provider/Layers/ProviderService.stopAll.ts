@@ -5,7 +5,7 @@
  * Each adapter's `stopAll` runs in a detached fiber that is awaited with a timeout, so the wait is
  * bounded even when an adapter's teardown sits in an uninterruptible region. A timed-out adapter is
  * logged and left to finish on its own. The timeout bounds this wait, not the stop: one ACP session
- * stop can take about 4.5 s (see `ACP_SESSION_STOP_WAIT` in `acp/AcpSessionStop.ts`).
+ * stop can take about 5 s (see `ACP_SESSION_STOP_WAIT` in `acp/AcpSessionStop.ts`).
  *
  * @module ProviderService.stopAll
  */

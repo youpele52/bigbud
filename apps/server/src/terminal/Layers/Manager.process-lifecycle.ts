@@ -6,7 +6,8 @@ import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 
-import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
+import type { RemoteTerminalProcessInspector } from "./Manager.remote-inspection.ts";
 
 import { type PtyAdapterShape, type PtyProcess } from "../Services/PTY";
 import { TerminalProcessSignalError, type TerminalSubprocessCheckError } from "./Manager.shell";
@@ -42,6 +43,7 @@ export interface ProcessLifecycleContext {
   // subprocessChecker may fail with TerminalSubprocessCheckError; errors are handled internally
   subprocessChecker: (pid: number) => Effect.Effect<boolean, TerminalSubprocessCheckError>;
   agentDetector: TerminalAgentDetector;
+  remoteProcessInspector?: RemoteTerminalProcessInspector;
   subprocessPollIntervalMs: number;
   shellResolver: () => string;
   ptyAdapter: PtyAdapterShape;
@@ -90,12 +92,12 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     status: session.status,
     pid: session.pid,
     runtimeGeneration: session.runtimeGeneration,
-    ...(isLocalExecutionTarget(session.executionTargetId)
-      ? {
+    ...(isWslTerminalTargetId(session.executionTargetId)
+      ? {}
+      : {
           activeAgentProvider: session.activeAgentProvider,
           activeAgent: session.activeAgent ?? null,
-        }
-      : {}),
+        }),
     history: session.history + session.pendingHistoryControlSequence,
     ...(session.historyTruncated ? { historyTruncated: true } : {}),
     ...(session.historyUnavailable ? { historyUnavailable: true } : {}),

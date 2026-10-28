@@ -23,6 +23,8 @@ export interface PtyExitEvent {
 }
 
 export interface PtyProcess {
+  /** pid belongs to the remote host, never to the local ssh transport. */
+  readonly pidDomain?: "remote";
   /** Attached to an existing process whose earlier output is not replayed by this adapter. */
   readonly recovered?: boolean;
   /** Explicit replacement must wait for definitive exit and durable ownership release. */

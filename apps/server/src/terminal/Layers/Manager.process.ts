@@ -10,11 +10,13 @@ import * as Semaphore from "effect/Semaphore";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import { type PtyProcess } from "../Services/PTY";
+import { scheduleRemoteTerminalInspection } from "./Manager.remote-inspection.schedule.ts";
+import { inspectRemoteTerminalProcesses } from "./Manager.remote-inspection.ts";
 import { defaultTerminalAgentDetector } from "./Manager.agentDetection";
 import { defaultShellResolver, defaultSubprocessChecker, toSessionKey } from "./Manager.shell";
 import {
   drainProcessEventsWith,
-  pollSubprocessActivityWith,
+  startProcessPollingWith,
   startSessionWith,
   stopProcessWith,
 } from "./Manager.process-drain";
@@ -263,6 +265,9 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       runFork,
       subprocessChecker,
       agentDetector,
+      remoteProcessInspector:
+        options.remoteProcessInspector ??
+        scheduleRemoteTerminalInspection(inspectRemoteTerminalProcesses),
       subprocessPollIntervalMs,
       shellResolver,
       ptyAdapter: options.ptyAdapter,
@@ -325,22 +330,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         eventType,
       );
 
-    const pollSubprocessActivity = () => pollSubprocessActivityWith(lifecycleCtx);
-
-    yield* Effect.forever(
-      readManagerState.pipe(
-        Effect.map((state) =>
-          [...state.sessions.values()].some((session) => session.status === "running"),
-        ),
-        Effect.flatMap((active) =>
-          active
-            ? pollSubprocessActivity().pipe(
-                Effect.flatMap(() => Effect.sleep(subprocessPollIntervalMs)),
-              )
-            : Effect.sleep(subprocessPollIntervalMs),
-        ),
-      ),
-    ).pipe(Effect.forkIn(workerScope));
+    yield* startProcessPollingWith(lifecycleCtx);
 
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {

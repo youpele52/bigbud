@@ -68,6 +68,7 @@ export function drainProcessEventsWith(
         cleanupProcessHandles(session);
         session.process = null;
         session.pid = null;
+        session.remoteShellPid = undefined;
         session.hasRunningSubprocess = false;
         session.activeAgentProvider = null;
         session.activeAgent = null;

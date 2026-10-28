@@ -1,10 +1,14 @@
-import { Deferred, Effect, Layer, Queue, Ref, Scope, ServiceMap, Stream } from "effect";
+import { Deferred, Effect, Layer, Option, Queue, Ref, Scope, ServiceMap, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as EffectAcpClient from "effect-acp/client";
 import * as EffectAcpErrors from "effect-acp/errors";
 import type * as EffectAcpSchema from "effect-acp/schema";
 import type * as EffectAcpProtocol from "effect-acp/protocol";
 
+import {
+  NOOP_PROCESS_LEDGER_TICKET,
+  ProcessLedger,
+} from "../../process-ledger/Services/ProcessLedger.ts";
 import { ACP_CHILD_FORCE_KILL_AFTER, addBoundedChildRelease } from "./AcpChildProcessRelease.ts";
 import {
   type AcpParsedSessionEvent,
@@ -173,8 +177,36 @@ const makeAcpSessionRuntime = (
             }),
         ),
       );
+    // Recorded so a backend that dies without running finalizers cannot orphan the agent: the
+    // next backend reaps it. Optional like other server-wide services, so tests and probes need
+    // no ledger; the server provides one. The release is registered before the (async) record
+    // write so an interruption in between still gets the bounded kill, and the record is dropped
+    // only after that kill.
+    const ledger = Option.getOrUndefined(yield* Effect.serviceOption(ProcessLedger));
+    const ledgerTicket = yield* Ref.make(NOOP_PROCESS_LEDGER_TICKET);
     // `forceKillAfter` alone does not bound the exit wait in this Effect version.
-    yield* addBoundedChildRelease(runtimeScope, child);
+    yield* addBoundedChildRelease(
+      runtimeScope,
+      child,
+      ACP_CHILD_FORCE_KILL_AFTER,
+      Effect.flatMap(Ref.get(ledgerTicket), (ticket) => ticket.release),
+    );
+    if (ledger) {
+      yield* ledger
+        .track({
+          pid: Number(child.pid),
+          command: options.spawn.command,
+          args: options.spawn.args,
+          // Detached on POSIX (the spawner default), so the agent leads its own process group.
+          kill: "group",
+          label: "acp-agent",
+        })
+        .pipe(
+          Effect.flatMap((ticket) => Ref.set(ledgerTicket, ticket)),
+          // Bounded (the identity probe has a timeout); never leaves a record nothing releases.
+          Effect.uninterruptible,
+        );
+    }
 
     const acpContext = yield* Layer.build(
       EffectAcpClient.layerChildProcess(child, {

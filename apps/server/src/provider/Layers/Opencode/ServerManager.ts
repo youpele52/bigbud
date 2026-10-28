@@ -1,12 +1,16 @@
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 
 import {
   OpencodeServerManager,
   type OpencodeServerAcquireInput,
   type OpencodeServerHandle,
 } from "../../Services/Opencode/ServerManager.ts";
+import {
+  ProcessLedger,
+  type ProcessLedgerShape,
+} from "../../../process-ledger/Services/ProcessLedger.ts";
 import { buildClientOptions, resolveBinaryPath } from "./ServerManager.helpers.ts";
 import { startManagedServer } from "./ServerManager.child.ts";
 import { LEGACY_OPENCODE_READ_ONLY_MESSAGE } from "@bigbud/shared/providerLifecycle";
@@ -57,6 +61,8 @@ export interface OpencodeServerManagerFactoryOptions {
     readonly executionTargetId: string;
     readonly binaryPath: string;
   }) => Promise<RunningManagedServer>;
+  /** Records started servers so a crashed backend's successor can reap them. */
+  readonly ledger?: ProcessLedgerShape | undefined;
 }
 
 export function makeOpencodeServerManager(options: OpencodeServerManagerFactoryOptions = {}) {
@@ -169,7 +175,12 @@ export function makeOpencodeServerManager(options: OpencodeServerManagerFactoryO
         .then(
           () =>
             options.startServer?.({ config, executionTargetId, binaryPath }) ??
-            startManagedServer({ config, executionTargetId, binaryPath }),
+            startManagedServer({
+              config,
+              executionTargetId,
+              binaryPath,
+              ledger: options.ledger,
+            }),
         )
         .catch((error) => {
           state.startPromise = null;
@@ -211,7 +222,11 @@ export function makeOpencodeServerManager(options: OpencodeServerManagerFactoryO
 
 export const OpencodeServerManagerLive = Layer.effect(
   OpencodeServerManager,
-  Effect.acquireRelease(Effect.sync(makeOpencodeServerManager), (manager) =>
-    Effect.promise(manager.closeAll),
-  ).pipe(Effect.map(({ acquire }) => ({ acquire }))),
+  Effect.gen(function* () {
+    const ledger = Option.getOrUndefined(yield* Effect.serviceOption(ProcessLedger));
+    return yield* Effect.acquireRelease(
+      Effect.sync(() => makeOpencodeServerManager({ ledger })),
+      (manager) => Effect.promise(manager.closeAll),
+    );
+  }).pipe(Effect.map(({ acquire }) => ({ acquire }))),
 );
