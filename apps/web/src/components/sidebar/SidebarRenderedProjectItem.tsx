@@ -1,12 +1,11 @@
 import {
-  ChevronRightIcon,
   FolderIcon,
   FolderOpenIcon,
   GripVerticalIcon,
   SquarePenIcon,
   Trash2Icon,
 } from "lucide-react";
-import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { useCallback, type MouseEvent } from "react";
 
 import {
@@ -28,6 +27,7 @@ import {
 } from "./SidebarRenderedProjectItem.types";
 import { SidebarRemoteWorkspaceStatusIcon } from "./SidebarRemoteWorkspaceStatusIcon";
 import { SidebarProjectChevron } from "./SidebarProjectChevron";
+import { SidebarProjectStatusIndicator } from "./SidebarProjectStatusIndicator";
 
 export function SidebarRenderedProjectItem({
   dragHandleProps,
@@ -266,22 +266,7 @@ export function SidebarRenderedProjectItem({
                   {project.expanded ? (
                     <SidebarProjectChevron expanded />
                   ) : projectStatus ? (
-                    <span
-                      aria-hidden="true"
-                      title={projectStatus.label}
-                      className={`relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
-                    >
-                      <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
-                        <span
-                          className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
-                            projectStatus.pulse ? "animate-pulse" : ""
-                          }`}
-                        />
-                      </span>
-                      <ChevronRightIcon
-                        className={`absolute inset-0 m-auto ${SIDEBAR_ICON_SIZE_CLASS} translate-x-1 text-muted-foreground/70 opacity-0 transition-all duration-150 group-hover/project-header:translate-x-0 group-hover/project-header:opacity-100`}
-                      />
-                    </span>
+                    <SidebarProjectStatusIndicator status={projectStatus} />
                   ) : (
                     <SidebarProjectChevron expanded={false} />
                   )}

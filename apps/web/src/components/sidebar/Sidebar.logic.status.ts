@@ -8,6 +8,7 @@ import {
 import { isThreadCompletedStatus } from "../../logic/thread/threadCompletion.logic";
 import { hasFreshActiveProviderAgent } from "../chat/agents/agentActivity.presentation";
 import { isSessionCompacting } from "../chat/common/threadActivityIndicator";
+import type { AgentWorkingBlobTone } from "../../constants/agentWorkingBlob";
 
 export interface ThreadStatusPill {
   label:
@@ -134,4 +135,10 @@ export function resolveProjectStatusIndicator(
       ? candidate
       : selected;
   }, null);
+}
+
+/** Collapsed project headers show the liquid loader for live work; subagent work uses its violet. */
+export function projectStatusBlobTone(status: ThreadStatusPill): AgentWorkingBlobTone | null {
+  if (status.label === "Subagents Working") return "subagent";
+  return status.label === "Working" || status.label === "Getting Ready" ? "agent" : null;
 }

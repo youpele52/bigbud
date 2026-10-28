@@ -57,6 +57,20 @@ export function subagentStatusIsAnimating(agent: OrchestrationTask): boolean {
   return isActive(agent) && agent.activityFresh === true;
 }
 
+/** Live loader state for a subagent: liquid while fresh work runs, a settled drop once done. */
+export function subagentStatusBlobState(agent: OrchestrationTask): "working" | "done" | null {
+  if (subagentStatusIsAnimating(agent)) return "working";
+  return subagentStatusTone(agent) === "done" ? "done" : null;
+}
+
+/** Loader state for one recent step; failed steps keep their red dot. */
+export function subagentStepBlobState(
+  status: OrchestrationSubagentStep["status"],
+): "working" | "done" | null {
+  if (status === "running") return "working";
+  return status === "completed" ? "done" : null;
+}
+
 export function visibleSubagents<T>(agents: ReadonlyArray<T>, expanded: boolean): ReadonlyArray<T> {
   return expanded ? agents : agents.slice(0, 1);
 }

@@ -20,7 +20,7 @@ import { RightPanelToggleButton } from "./RightPanelLauncherMenu";
 import { useIsThreadCompacting, useIsThreadRunning } from "../../../stores/main";
 import { truncateThreadName } from "../../sidebar/Sidebar.logic";
 import { ContentPanelHeaderBar } from "../../layout/ContentPanelHeaderBar";
-import { ThreadActivityDots, threadActivityLabel } from "./threadActivityIndicator";
+import { ThreadActivityIndicator, threadActivityLabel } from "./threadActivityIndicator";
 import { ChatLayoutMenu } from "./ChatHeader.layoutMenu";
 import type { TerminalLayoutMode } from "../view/chat-view/terminalLayout.logic";
 
@@ -108,7 +108,7 @@ export const ChatHeader = memo(function ChatHeader({
                   title={threadActivityLabel(activityTone)}
                   className="inline-flex items-center gap-[3px] pr-1"
                 >
-                  <ThreadActivityDots tone={activityTone} dotClassName="h-1 w-1" />
+                  <ThreadActivityIndicator tone={activityTone} />
                 </span>
               )}
             </span>

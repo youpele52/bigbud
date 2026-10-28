@@ -1,0 +1,96 @@
+/* Liquid working loader. Colours come from --agent-blob-* variables set by AgentWorkingBlob. */
+.agent-working-blob {
+  --agent-blob-mix: 1;
+  --agent-blob-base: color-mix(
+    in oklab,
+    var(--agent-blob-working) calc(var(--agent-blob-mix) * 100%),
+    var(--agent-blob-shift)
+  );
+  display: inline-block;
+  flex: none;
+  overflow: visible;
+  vertical-align: middle;
+  filter: drop-shadow(
+    0 0 var(--agent-blob-glow-size) color-mix(in srgb, var(--agent-blob-base) 40%, transparent)
+  );
+}
+
+.agent-working-blob[data-state="done"] {
+  --agent-blob-base: var(--agent-blob-done);
+  /* a few calm pulses, then a steady glow: settled loaders cost nothing to keep on screen */
+  animation: agent-blob-done-glow 2.4s ease-in-out 0.4s 3;
+}
+
+.agent-working-blob stop[class^="agent-blob-stop-"] {
+  transition: stop-color 0.5s;
+}
+
+.agent-working-blob .agent-blob-stop-0 {
+  stop-color: color-mix(in oklab, var(--agent-blob-base) 55%, white);
+}
+
+.agent-working-blob .agent-blob-stop-1 {
+  stop-color: var(--agent-blob-base);
+}
+
+.agent-working-blob .agent-blob-stop-2 {
+  stop-color: color-mix(in oklab, var(--agent-blob-base) 70%, black);
+}
+
+.agent-working-blob .agent-blob-stop-3 {
+  stop-color: color-mix(in oklab, var(--agent-blob-base) 75%, white);
+}
+
+.agent-working-blob .agent-blob-sheen {
+  opacity: 0.5;
+}
+
+@keyframes agent-blob-done-glow {
+  0%,
+  100% {
+    filter: drop-shadow(
+      0 0 var(--agent-blob-glow-size) color-mix(in srgb, var(--agent-blob-base) 40%, transparent)
+    );
+  }
+  50% {
+    filter: drop-shadow(
+      0 0 calc(var(--agent-blob-glow-size) * 2.2)
+        color-mix(in srgb, var(--agent-blob-base) 80%, transparent)
+    );
+  }
+}
+
+/* "." → ".." → "..." counting after a working verb; fixed width so nothing shifts. */
+.agent-working-ellipsis::after {
+  content: "...";
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  animation: agent-working-ellipsis 1.4s steps(4, end) infinite;
+}
+
+@keyframes agent-working-ellipsis {
+  0% {
+    content: "";
+  }
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75% {
+    content: "...";
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-working-blob[data-state="done"],
+  .agent-working-ellipsis::after {
+    animation: none;
+  }
+
+  .agent-working-blob stop[class^="agent-blob-stop-"] {
+    transition: none;
+  }
+}

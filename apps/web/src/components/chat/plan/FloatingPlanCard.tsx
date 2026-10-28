@@ -19,6 +19,7 @@ import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { Button } from "../../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
 import { toastManager } from "../../ui/toast";
+import { AgentWorkingBlob } from "../../ui/agent-working-blob";
 import ChatMarkdown from "../common/ChatMarkdown";
 
 function stepStatusIcon(status: string): ReactNode {
@@ -35,7 +36,7 @@ function stepStatusIcon(status: string): ReactNode {
         aria-label="Current step"
         className="inline-flex size-5 shrink-0 items-center justify-center"
       >
-        <span className="h-1.5 w-1.5 rounded-full bg-info-foreground" />
+        <AgentWorkingBlob />
       </span>
     );
   }

@@ -4,6 +4,7 @@ import { AiIcon } from "../../AiIcon";
 import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestration.thread.tasks.ts";
 
 import { cn } from "~/lib/utils";
+import { AgentWorkingBlob } from "../../ui/agent-working-blob";
 import { SubagentRowDetails } from "./SubagentRow.details";
 import { SubagentStopButton, canStopSubagent, type SubagentStopHandler } from "./SubagentRow.stop";
 import {
@@ -16,7 +17,7 @@ import {
   subagentStatusLabel,
   subagentStatusTone,
   subagentTimeLabel,
-  subagentStatusIsAnimating,
+  subagentStatusBlobState,
 } from "./subagentPresentation.logic";
 
 export function SubagentRow(props: {
@@ -31,6 +32,7 @@ export function SubagentRow(props: {
   const details = hasSubagentDetails(agent) || Boolean(props.parentLabel);
   const detailId = `subagent-${agent.id}-details`;
   const tone = SUBAGENT_STATUS_TONE_CLASSES[subagentStatusTone(agent)];
+  const blobState = subagentStatusBlobState(agent);
   const model = subagentModelLabel(agent);
   const activity = subagentActivityLine(agent);
   const name = subagentDisplayName(agent);
@@ -84,15 +86,15 @@ export function SubagentRow(props: {
               ) : null}
             </span>
             <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-              <span
-                aria-hidden="true"
-                data-subagent-status-dot
-                className={cn(
-                  "size-1.5 rounded-full",
-                  tone.dot,
-                  subagentStatusIsAnimating(agent) && "animate-breathe motion-reduce:animate-none",
-                )}
-              />
+              {blobState ? (
+                <AgentWorkingBlob tone="subagent" state={blobState} data-subagent-status-dot="" />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  data-subagent-status-dot
+                  className={cn("size-1.5 rounded-full", tone.dot)}
+                />
+              )}
               <span className={tone.text} data-subagent-status>
                 {subagentStatusLabel(agent)}
               </span>

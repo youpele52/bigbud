@@ -8,9 +8,11 @@ import {
   subagentMetricsLabel,
   subagentModelLabel,
   subagentRecentStepsLabel,
+  subagentStatusBlobState,
   subagentStatusIsAnimating,
   subagentStatusLabel,
   subagentStatusTone,
+  subagentStepBlobState,
   subagentStepLabel,
   subagentTimeLabel,
   visibleSubagents,
@@ -198,5 +200,25 @@ describe("subagent presentation", () => {
       "Recent steps · 2",
     );
     expect(subagentRecentStepsLabel(agent("c", { recentSteps }))).toBe("Recent steps · 2");
+  });
+});
+
+describe("subagent loader state", () => {
+  it("shows the working loader only for fresh pending or running subagents", () => {
+    expect(subagentStatusBlobState(agent("running"))).toBe("working");
+    expect(subagentStatusBlobState(agent("pending", { status: "pending" }))).toBe("working");
+    expect(subagentStatusBlobState(agent("stale", { activityFresh: false }))).toBeNull();
+  });
+
+  it("settles completed subagents into the done drop and keeps dots for problems", () => {
+    expect(subagentStatusBlobState(agent("done", { status: "completed" }))).toBe("done");
+    expect(subagentStatusBlobState(agent("failed", { status: "failed" }))).toBeNull();
+    expect(subagentStatusBlobState(agent("stopped", { status: "stopped" }))).toBeNull();
+  });
+
+  it("maps recent step statuses to loader states", () => {
+    expect(subagentStepBlobState("running")).toBe("working");
+    expect(subagentStepBlobState("completed")).toBe("done");
+    expect(subagentStepBlobState("failed")).toBeNull();
   });
 });

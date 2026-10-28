@@ -103,7 +103,7 @@ describe("ChatHeader", () => {
     },
   );
 
-  it("shows blue dots while running and orange dots while compacting", () => {
+  it("shows the liquid loader while running and orange dots while compacting", () => {
     mockIsThreadRunning = true;
 
     const runningMarkup = renderHeader({
@@ -117,8 +117,10 @@ describe("ChatHeader", () => {
       activeThreadId: "thread-compacting" as never,
     });
 
-    expect(runningMarkup).toContain("bg-info-foreground");
+    expect(runningMarkup).toContain("data-agent-working-blob");
+    expect(runningMarkup).toContain('data-state="working"');
     expect(compactingMarkup).toContain("bg-warning");
+    expect(compactingMarkup).not.toContain("data-agent-working-blob");
   });
 
   it("renders quick actions when chat has an open folder without a project header", () => {
