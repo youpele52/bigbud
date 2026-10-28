@@ -24,13 +24,14 @@ export class DesktopBackendStartupError extends Error {
 /**
  * The desktop bridge publishes its WebSocket URL before the backend starts so
  * startup UI can render immediately. Wait for the backend's fd4 readiness
- * signal before allowing the RPC layer to construct a socket.
+ * signal before every socket upgrade, including retries during a restart.
  */
 export function waitForDesktopBackendReady(
   bridge: DesktopBackendReadyBridge | undefined = typeof window === "undefined"
     ? undefined
     : window.desktopBridge,
   signal?: AbortSignal,
+  options?: { readonly waitForRestart?: boolean },
 ): Promise<void> {
   if (!bridge?.getBackendStartupState || !bridge.onBackendStartupState) {
     return Promise.resolve();
@@ -56,12 +57,19 @@ export function waitForDesktopBackendReady(
     };
     const applyState = (state: DesktopBackendStartupState) => {
       if (isReady(state)) finish();
-      else if (state.status === "failed") finish(new DesktopBackendStartupError(state));
+      else if (state.status === "failed" && !options?.waitForRestart) {
+        finish(new DesktopBackendStartupError(state));
+      }
     };
     unsubscribe = bridge.onBackendStartupState((state) => {
       receivedUpdate = true;
       applyState(state);
     });
+    // A bridge may synchronously replay its current state while subscribing.
+    if (settled) {
+      unsubscribe();
+      return;
+    }
     if (signal?.aborted) {
       abort();
       return;

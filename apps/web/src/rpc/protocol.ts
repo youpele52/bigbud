@@ -11,6 +11,7 @@ import {
   trackRpcRequestSent,
 } from "./requestLatencyState";
 import { WsOptionalRpcTracker } from "./protocol.optionalRpc";
+import { waitForDesktopBackendReady } from "./desktopBackendReady";
 import {
   getWsConnectionStatus,
   recordWsConnectionAttempt,
@@ -120,11 +121,6 @@ export function createWsRpcProtocolLayer(
   const lifecycle = composeLifecycleHandlers(handlers);
   const { backoff, upgradeGate } = controls;
   const optionalRpcs = new WsOptionalRpcTracker();
-  const resolvedUrl = resolveServerUrl({
-    url,
-    protocol: window.location.protocol === "https:" ? "wss" : "ws",
-    pathname: "/ws",
-  });
   const trackingWebSocketConstructorLayer = Layer.succeed(
     Socket.WebSocketConstructor,
     (socketUrl, protocols) => {
@@ -161,8 +157,23 @@ export function createWsRpcProtocolLayer(
       return socket;
     },
   );
-  // Storm guard: resolve the URL only after the previous upgrade opened or closed.
-  const guardedUrl = Effect.promise(() => upgradeGate.whenSettled()).pipe(Effect.as(resolvedUrl));
+  // Gate every physical upgrade, not just the initial RPC session. Desktop restarts
+  // can take longer than the reconnect backoff; don't dial a known-unready backend.
+  const guardedUrl = Effect.promise(async (signal) => {
+    await upgradeGate.whenSettled();
+    await waitForDesktopBackendReady(undefined, signal, { waitForRestart: true });
+    // Main may publish a replacement endpoint while we're waiting. Resolve it now,
+    // preserving explicit URLs and authentication instead of pinning the old target.
+    return resolveServerUrl({
+      url,
+      protocol: window.location.protocol === "https:" ? "wss" : "ws",
+      pathname: "/ws",
+    });
+  }).pipe(
+    // Socket acquisition is uninterruptible by default. A readiness wait must not
+    // hold session disposal or manual reconnect hostage while the backend is down.
+    Effect.interruptible,
+  );
   const socketLayer = Socket.layerWebSocket(guardedUrl, { openTimeout: WS_OPEN_TIMEOUT_MS }).pipe(
     Layer.provide(trackingWebSocketConstructorLayer),
   );
