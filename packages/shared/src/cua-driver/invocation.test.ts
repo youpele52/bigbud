@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   cuaDriverEmbeddedEnvironment,
+  cuaDriverHonoursPidFile,
   cuaDriverMcpArguments,
   cuaDriverServeArguments,
 } from "./invocation";
@@ -39,6 +40,38 @@ describe("cua-driver embedded invocation", () => {
       ]);
     },
   );
+
+  it("adds a private pid file only when asked, keeping the plain argv byte-identical", () => {
+    const plain = cuaDriverServeArguments("/private/run/cua.sock", "ai.bigbud.desktop");
+    expect(cuaDriverServeArguments("/private/run/cua.sock", "ai.bigbud.desktop", {})).toEqual(
+      plain,
+    );
+    expect(
+      cuaDriverServeArguments("/private/run/cua.sock", "ai.bigbud.desktop", {
+        pidFile: "/private/run/cua.pid",
+      }),
+    ).toEqual([...plain, "--pid-file", "/private/run/cua.pid"]);
+    expect(
+      cuaDriverServeArguments("/private/run/cua.sock", "ai.bigbud.desktop", {
+        pidFile: "/private/run/cua.pid",
+        cursorTheme: "ai.bigbud.agent-cursor",
+      }),
+    ).toEqual([
+      ...plain,
+      "--pid-file",
+      "/private/run/cua.pid",
+      "--cursor-theme",
+      "ai.bigbud.agent-cursor",
+    ]);
+  });
+
+  it("honours --pid-file for 0.38.0 only (0.9.1 parses but ignores it)", () => {
+    expect(cuaDriverHonoursPidFile("0.38.0")).toBe(true);
+    expect(cuaDriverHonoursPidFile("0.9.1")).toBe(false);
+    expect(cuaDriverHonoursPidFile(null)).toBe(false);
+    expect(cuaDriverHonoursPidFile(undefined)).toBe(false);
+    expect(cuaDriverHonoursPidFile("0.38.1")).toBe(false); // unlisted: decided when pinned
+  });
 
   it("rejects a missing embedded host identity", () => {
     expect(() => cuaDriverMcpArguments("/private/run/cua.sock", " ")).toThrow(

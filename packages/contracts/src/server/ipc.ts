@@ -93,6 +93,10 @@ export interface DesktopBridge
   onFloatingAssistantCallerChange?: (
     listener: (caller: FloatingAssistantCaller) => void,
   ) => () => void;
+  /** Mascot only: whether the mascot menu offers "Stop computer use". */
+  setComputerUseActive?: (active: boolean) => Promise<boolean>;
+  /** Mascot only: the user chose "Stop computer use" in the mascot menu. */
+  onStopComputerUseRequested?: (listener: () => void) => () => void;
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getBackendStartupState: () => Promise<DesktopBackendStartupState>;

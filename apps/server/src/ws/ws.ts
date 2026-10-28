@@ -18,6 +18,7 @@ import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrat
 import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
 import { makeWsRpcPluginHandlers } from "./wsRpcHandlers.plugins";
 import { makeWsRpcConnectionDiagnosticsHandlers } from "./wsRpcHandlers.connectionDiagnostics.ts";
+import { makeWsRpcComputerUseHandlers } from "./wsRpcHandlers.computerUse.ts";
 import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
@@ -33,6 +34,7 @@ const makeWsRpcLayer = (
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
       const context = yield* makeWsRpcContext(withBootstrapCommandLock);
+      const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
 
       return WsRpcGroup.of({
         ...makeWsRpcAutomationHandlers(context),
@@ -48,6 +50,7 @@ const makeWsRpcLayer = (
         ...makeWsRpcWorktreeHandlers(context, worktreeScope),
         ...makeWsRpcPluginHandlers(context),
         ...makeWsRpcConnectionDiagnosticsHandlers(context),
+        ...computerUseHandlers,
       });
     }),
   );

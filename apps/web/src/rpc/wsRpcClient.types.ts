@@ -130,6 +130,10 @@ export interface WsRpcClient {
   readonly reconnect: () => Promise<void>;
   /** Skips the current reconnect backoff wait; returns whether a wait was cut short. */
   readonly reconnectNow: () => boolean;
+  readonly computerUse: {
+    readonly subscribeActivity: RpcStreamMethod<typeof WS_METHODS.subscribeComputerUseActivity>;
+    readonly stop: RpcUnaryNoArgMethod<typeof WS_METHODS.computerUseStop>;
+  };
   readonly terminal: {
     readonly wslDistributions: RpcUnaryNoArgMethod<typeof WS_METHODS.terminalWslDistributions>;
     readonly snapshot: RpcUnaryMethod<typeof WS_METHODS.terminalSnapshot>;

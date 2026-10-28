@@ -1,7 +1,10 @@
 import * as Crypto from "node:crypto";
 import * as FS from "node:fs";
 
-import { makeCuaDriverChildEnvironment } from "@bigbud/shared/cua-driver/childEnvironment";
+import {
+  cuaDriverStateEnvironment,
+  makeCuaDriverChildEnvironment,
+} from "@bigbud/shared/cua-driver/childEnvironment";
 import { parseCuaDriverManifest } from "@bigbud/shared/cua-driver/manifest";
 import { CUA_DRIVER_POLICY_SHA256 } from "@bigbud/shared/cua-driver/policy";
 
@@ -17,12 +20,16 @@ export function validateCuaDriverPolicy(policyPath: string): void {
 export async function validateCuaDriverRuntime(
   binaryPath: string,
   policyPath?: string,
+  stateHome?: string,
 ): Promise<void> {
   if (policyPath) validateCuaDriverPolicy(policyPath);
   const result = await runCommand(
     binaryPath,
     ["manifest"],
-    makeCuaDriverChildEnvironment(process.env),
+    makeCuaDriverChildEnvironment(
+      process.env,
+      stateHome ? cuaDriverStateEnvironment(stateHome) : {},
+    ),
   );
   if (result.code !== 0) {
     throw new Error(result.stderr || "Computer Use runtime manifest command failed.");

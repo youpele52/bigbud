@@ -3,17 +3,23 @@ import * as Crypto from "node:crypto";
 import * as FS from "node:fs";
 import * as Path from "node:path";
 
-import { makeCuaDriverChildEnvironment } from "@bigbud/shared/cua-driver/childEnvironment";
+import {
+  cuaDriverStateEnvironment,
+  makeCuaDriverChildEnvironment,
+} from "@bigbud/shared/cua-driver/childEnvironment";
 import {
   cuaDriverEmbeddedEnvironment,
+  cuaDriverHonoursPidFile,
   cuaDriverServeArguments,
 } from "@bigbud/shared/cua-driver/invocation";
 
-import { resolveComputerUseRuntime } from "./cuaDriver";
+import { prepareCuaCursorTheme } from "./cuaDriver.cursorTheme";
+import { resolveComputerUseRuntime } from "./cuaDriver.runtime";
 import { stopChildProcessTreeAndWait } from "./backendShutdown";
+import { removeStaleDaemonSocket } from "./cuaDriver.daemon.endpoint";
 import { parseCuaDriverHealthReport, type CuaDriverHealthReport } from "./cuaDriver.health";
 import { callCuaDriverTool, stopCuaDriverMcpClientAndWait } from "./cuaDriver.mcpClient";
-import { resolveManagedPaths } from "./cuaDriver.paths";
+import { resolveManagedPaths, resolvePrivateStateHome } from "./cuaDriver.paths";
 import { runCommand } from "./cuaDriver.process";
 import { isInstalledProcessQuiescing } from "./installedProcessQuiescence";
 
@@ -24,6 +30,12 @@ interface DaemonState {
   readonly baseDir: string;
   readonly binaryPath: string;
   readonly endpoint: string;
+  /** Private run directory holding the socket (Unix) and the PID file. */
+  readonly runDir: string;
+  /** `--pid-file` inside `runDir`; `null` when the Driver version does not honour it. */
+  readonly pidFile: string | null;
+  /** Installed `--cursor-theme` id; `null` keeps the Driver's default cursor. */
+  readonly cursorTheme: string | null;
   readonly hostBundleId: string;
   readonly environment: NodeJS.ProcessEnv;
   child: ChildProcess.ChildProcess | null;
@@ -50,15 +62,20 @@ let stopPromise: Promise<void> | null = null;
 let runtimeGeneration = 0;
 let startGeneration = 0;
 
-function resolvePrivateEndpoint(baseDir: string): string {
+function resolvePrivateEndpoint(baseDir: string): {
+  readonly endpoint: string;
+  readonly runDir: string;
+  readonly pidFile: string;
+} {
   const suffix = Crypto.randomUUID();
-  if (process.platform === "win32") {
-    return `\\\\.\\pipe\\bigbud-cua-${suffix}`;
-  }
   const runDir = Path.join(resolveManagedPaths(baseDir).rootDir, "run", suffix);
   FS.mkdirSync(runDir, { recursive: true, mode: 0o700 });
   FS.chmodSync(runDir, 0o700);
-  return Path.join(runDir, "cua.sock");
+  const pidFile = Path.join(runDir, "cua.pid");
+  if (process.platform === "win32") {
+    return { endpoint: `\\\\.\\pipe\\bigbud-cua-${suffix}`, runDir, pidFile };
+  }
+  return { endpoint: Path.join(runDir, "cua.sock"), runDir, pidFile };
 }
 
 function spawnDaemon(state: DaemonState): void {
@@ -67,7 +84,12 @@ function spawnDaemon(state: DaemonState): void {
   state.ready = false;
   const child = ChildProcess.spawn(
     state.binaryPath,
-    [...cuaDriverServeArguments(state.endpoint, state.hostBundleId)],
+    [
+      ...cuaDriverServeArguments(state.endpoint, state.hostBundleId, {
+        ...(state.pidFile ? { pidFile: state.pidFile } : {}),
+        ...(state.cursorTheme ? { cursorTheme: state.cursorTheme } : {}),
+      }),
+    ],
     {
       env: makeCuaDriverChildEnvironment(process.env, state.environment),
       stdio: ["ignore", "pipe", "pipe"],
@@ -99,6 +121,11 @@ function spawnDaemon(state: DaemonState): void {
     state.restartTimer = setTimeout(() => {
       state.restartTimer = null;
       if (!state.stopping && !isInstalledProcessQuiescing()) {
+        if (removeStaleDaemonSocket(state.endpoint, state.runDir) === "blocked") {
+          state.lastError = `cua-driver endpoint ${state.endpoint} exists and is not a removable socket; not restarting.`;
+          console.error(`[desktop] ${state.lastError}`);
+          return;
+        }
         spawnDaemon(state);
         void waitUntilReady(state).then((health) => {
           if (health && !state.stopping) {
@@ -177,18 +204,23 @@ export async function startCuaDriverDaemon(
   const request = (async () => {
     const runtime = resolveComputerUseRuntime(baseDir);
     if (!runtime.binaryPath) return {};
-    const endpoint = resolvePrivateEndpoint(baseDir);
+    const { endpoint, runDir, pidFile } = resolvePrivateEndpoint(baseDir);
     runtimeGeneration += 1;
+    const stateHome = resolvePrivateStateHome(baseDir);
     const environment = {
       BIGBUD_CUA_DRIVER_PATH: runtime.binaryPath,
       BIGBUD_CUA_RUNTIME_GENERATION: String(runtimeGeneration),
       ...(runtime.policyPath ? { CUA_DRIVER_POLICY_FILE: runtime.policyPath } : {}),
+      ...cuaDriverStateEnvironment(stateHome),
       ...cuaDriverEmbeddedEnvironment(endpoint, hostBundleId),
     };
     const state: DaemonState = {
       baseDir,
       binaryPath: runtime.binaryPath,
       endpoint,
+      runDir,
+      pidFile: cuaDriverHonoursPidFile(runtime.version) ? pidFile : null,
+      cursorTheme: prepareCuaCursorTheme(stateHome, runtime.version),
       hostBundleId,
       environment,
       child: null,
@@ -319,9 +351,7 @@ export function stopCuaDriverDaemonAndWait(timeoutMs = 5_000): Promise<void> {
     }
     if (state.child === child) state.child = null;
     if (daemonState === state) daemonState = null;
-    if (process.platform !== "win32") {
-      FS.rmSync(Path.dirname(state.endpoint), { recursive: true, force: true });
-    }
+    FS.rmSync(state.runDir, { recursive: true, force: true });
   })();
   stopPromise = request;
   const clearRequest = () => {

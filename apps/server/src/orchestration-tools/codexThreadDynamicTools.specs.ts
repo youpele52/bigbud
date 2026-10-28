@@ -6,12 +6,14 @@ import {
   SEARCH_CAPABILITIES_TOOL_DESCRIPTION,
 } from "./capabilityCatalogTool.shared.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
-import { COPILOT_COMPUTER_USE_PARAMETERS } from "./orchestrationComputerUseTool.shared.ts";
+import {
+  computerUseToolDescription,
+  computerUseToolParameters,
+} from "./orchestrationComputerUseTool.selected.ts";
 import { LIST_THREADS_MAX_LIMIT } from "./ThreadOrchestrationTools.listThreads.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   BROWSER_TOOL_DESCRIPTION,
-  COMPUTER_USE_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_PARAMETERS,
   CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
@@ -216,8 +218,8 @@ export function createCodexThreadOrchestrationDynamicTools(
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "computer_use",
-      description: COMPUTER_USE_TOOL_DESCRIPTION,
-      inputSchema: COPILOT_COMPUTER_USE_PARAMETERS,
+      description: computerUseToolDescription(),
+      inputSchema: computerUseToolParameters(),
     },
   ];
 }

@@ -120,6 +120,14 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     return () =>
       ipcRenderer.removeListener(FLOATING_ASSISTANT_CALLER_CHANGED_CHANNEL, wrappedListener);
   },
+  setComputerUseActive: (active) =>
+    ipcRenderer.invoke(desktopIpcChannels.setMascotComputerUseActive, active),
+  onStopComputerUseRequested: (listener) => {
+    const wrappedListener = () => listener();
+    ipcRenderer.on(desktopIpcChannels.stopComputerUseRequested, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(desktopIpcChannels.stopComputerUseRequested, wrappedListener);
+  },
   getWsUrl: () => {
     const result = ipcRenderer.sendSync(GET_WS_URL_CHANNEL);
     return typeof result === "string" ? result : null;

@@ -2,7 +2,6 @@ import {
   type KanbanCard,
   type KanbanDeleteResult,
   type KanbanListResult,
-  type DesktopBridge,
   type Note,
   type NotesDeleteResult,
   type NotesListResult,
@@ -15,6 +14,7 @@ import { afterEach, beforeAll, beforeEach, vi, type Mock } from "vitest";
 
 import type { WsRpcClient } from "./wsRpcClient";
 export { baseServerConfig, defaultProviders } from "./wsNativeApi.test.fixtures";
+export { makeDesktopBridge } from "./wsNativeApi.test.desktopBridge";
 type DeepMock<T> = {
   [P in keyof T]: T[P] extends (...args: any[]) => any
     ? Mock
@@ -58,6 +58,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   dispose: vi.fn(),
   reconnect: vi.fn(),
   reconnectNow: vi.fn(() => false),
+  computerUse: { subscribeActivity: vi.fn(), stop: vi.fn() },
   terminal: {
     wslDistributions: vi.fn(),
     snapshot: vi.fn(),
@@ -236,147 +237,6 @@ function getWindowForTest(): Window & typeof globalThis & { desktopBridge?: unkn
     testGlobal.window = {} as Window & typeof globalThis & { desktopBridge?: unknown };
   }
   return testGlobal.window;
-}
-
-export function makeDesktopBridge(overrides: Partial<DesktopBridge> = {}): DesktopBridge {
-  return {
-    getWsUrl: () => null,
-    getMobileBackendBaseUrl: () => null,
-    getBackendStartupState: async () => ({ generation: 0, startedAt: 0, status: "idle" }),
-    onBackendStartupState: () => () => {},
-    getComputerUseRuntimeStatus: async () => ({
-      available: false,
-      ready: false,
-      repairRequired: true,
-      state: "missing",
-      source: "missing",
-      binaryPath: null,
-      version: null,
-      expectedVersion: "0.9.1",
-      manifestSchema: null,
-      policyVersion: null,
-      policySha256: null,
-      daemonState: "stopped",
-      platform: "darwin",
-      architecture: "arm64",
-      platformHealth: "degraded",
-      healthSummary: null,
-      lastError: null,
-      message: "Computer Use runtime is not installed yet.",
-      diagnostics: null,
-    }),
-    getComputerUsePermissionsStatus: async () => ({
-      runtimeAvailable: false,
-      granted: false,
-      message: "Computer Use runtime is not installed yet.",
-      permissions: [],
-    }),
-    requestComputerUsePermissions: async () => ({
-      runtimeAvailable: false,
-      granted: false,
-      message: "Computer Use runtime is not installed yet.",
-      permissions: [],
-    }),
-    installComputerUseRuntime: async () => ({
-      ok: false,
-      status: {
-        available: false,
-        ready: false,
-        repairRequired: true,
-        state: "missing",
-        source: "missing",
-        binaryPath: null,
-        version: null,
-        expectedVersion: "0.9.1",
-        manifestSchema: null,
-        policyVersion: null,
-        policySha256: null,
-        daemonState: "stopped",
-        platform: "darwin",
-        architecture: "arm64",
-        platformHealth: "degraded",
-        healthSummary: null,
-        lastError: null,
-        message: "Computer Use runtime is not installed yet.",
-        diagnostics: null,
-      },
-    }),
-    runComputerUseDoctor: async () => ({
-      available: false,
-      ready: false,
-      repairRequired: true,
-      state: "missing",
-      source: "missing",
-      binaryPath: null,
-      version: null,
-      expectedVersion: "0.9.1",
-      manifestSchema: null,
-      policyVersion: null,
-      policySha256: null,
-      daemonState: "stopped",
-      platform: "darwin",
-      architecture: "arm64",
-      platformHealth: "degraded",
-      healthSummary: null,
-      lastError: null,
-      message: "Computer Use runtime is not installed yet.",
-      diagnostics: null,
-    }),
-    getTailscaleRemoteAccessStatus: async () => ({
-      installed: false,
-      running: false,
-      online: false,
-      serving: false,
-      remoteBaseUrl: null,
-      error: "Tailscale CLI is not installed.",
-    }),
-    enableTailscaleRemoteAccess: async () => ({
-      installed: false,
-      running: false,
-      online: false,
-      serving: false,
-      remoteBaseUrl: null,
-      error: "Tailscale CLI is not installed.",
-    }),
-    disableTailscaleRemoteAccess: async () => ({
-      installed: false,
-      running: false,
-      online: false,
-      serving: false,
-      remoteBaseUrl: null,
-      error: "Tailscale CLI is not installed.",
-    }),
-    getFilePath: () => "",
-    pickFolder: async () => null,
-    confirm: async () => true,
-    onCertificateChallenge: () => () => undefined,
-    resolveCertificateChallenge: async () => false,
-    setTheme: async () => undefined,
-    setWindowMaterial: async () => undefined,
-    showContextMenu: async () => null,
-    openExternal: async () => true,
-    onMenuAction: () => () => undefined,
-    getUpdateState: async () => {
-      throw new Error("getUpdateState not implemented in test");
-    },
-    checkForUpdate: async () => {
-      throw new Error("checkForUpdate not implemented in test");
-    },
-    downloadUpdate: async () => {
-      throw new Error("downloadUpdate not implemented in test");
-    },
-    installUpdate: async () => {
-      throw new Error("installUpdate not implemented in test");
-    },
-    onUpdateState: () => () => undefined,
-    notifications: {
-      isSupported: async () => false,
-      show: async () => false,
-    },
-    copyToClipboard: async () => undefined,
-    requestFileAccess: async () => ({ success: false, granted: [], denied: [] }),
-    ...overrides,
-  };
 }
 
 beforeAll(async () => {

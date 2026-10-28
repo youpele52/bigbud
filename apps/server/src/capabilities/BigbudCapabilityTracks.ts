@@ -1,7 +1,6 @@
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   BROWSER_TOOL_DESCRIPTION,
-  COMPUTER_USE_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
@@ -13,6 +12,7 @@ import {
   SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
+import { computerUseToolDescription } from "../orchestration-tools/orchestrationComputerUseTool.selected.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "../orchestration-tools/AgentWorkspaceToolSpecs.ts";
 import {
   createCapabilityCatalog,
@@ -268,7 +268,7 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
   threadToolTrack({
     id: "computer.desktop",
     displayName: "Desktop computer use",
-    description: COMPUTER_USE_TOOL_DESCRIPTION,
+    description: computerUseToolDescription(),
     summary: "Automate native desktop apps and operating-system interactions when enabled.",
     triggers: ["The user requests native desktop app or operating-system interaction."],
     risk: "mutating",

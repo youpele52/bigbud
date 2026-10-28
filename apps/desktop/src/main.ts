@@ -306,6 +306,7 @@ app
     initBackendManager({
       rootDir: ROOT_DIR,
       baseDir: BASE_DIR,
+      cuaDriverBaseDir: mainConfig.cuaDriverBaseDir,
       backendMaxOldSpaceMb: desktopLinuxRuntimeConfig.backendMaxOldSpaceMb,
       cuaDriverHostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
       serverSettingsPath: SERVER_SETTINGS_PATH,
@@ -335,9 +336,14 @@ app
       isDevelopment,
     });
     void bootstrapDesktop({
-      baseDir: BASE_DIR,
+      baseDir: mainConfig.cuaDriverBaseDir,
       channels,
       cuaDriverHostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
+      computerUseGuard: {
+        rootDir: ROOT_DIR,
+        desktopDir: __dirname,
+        developmentRoot: mainConfig.computerUseDevelopmentRoot,
+      },
       desktopPreferences,
       desktopRuntimeInfo,
       floatingAssistantWindows,

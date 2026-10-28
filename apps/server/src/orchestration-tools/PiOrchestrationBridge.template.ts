@@ -1,4 +1,4 @@
-import { renderPiComputerUseToolSource } from "./orchestrationComputerUseTool.shared.ts";
+import { renderPiComputerUseTool } from "./orchestrationComputerUseTool.selected.ts";
 import { renderPiBrowserToolSource } from "./orchestrationBrowserTool.shared.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
@@ -297,7 +297,7 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "  },",
     "});",
     "",
-    renderPiComputerUseToolSource(),
+    renderPiComputerUseTool(),
     "",
     renderPiBrowserToolSource(),
     "",

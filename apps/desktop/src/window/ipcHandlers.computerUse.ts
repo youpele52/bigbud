@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { authorizedHandle, BROAD_RENDERER_ROLES } from "./ipcAuthorization";
 import type {
   DesktopComputerUseInstallResult,
   DesktopComputerUsePermissionsStatus,
@@ -22,24 +22,23 @@ export interface ComputerUseIpcHandlerDeps {
 }
 
 export function registerComputerUseIpcHandlers(deps: ComputerUseIpcHandlerDeps): void {
-  ipcMain.removeHandler(deps.GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL);
-  ipcMain.handle(deps.GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL, () =>
+  authorizedHandle(deps.GET_COMPUTER_USE_RUNTIME_STATUS_CHANNEL, BROAD_RENDERER_ROLES, () =>
     deps.getComputerUseRuntimeStatus(),
   );
 
-  ipcMain.removeHandler(deps.GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL);
-  ipcMain.handle(deps.GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL, () =>
+  authorizedHandle(deps.GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL, BROAD_RENDERER_ROLES, () =>
     deps.getComputerUsePermissionsStatus(),
   );
 
-  ipcMain.removeHandler(deps.REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL);
-  ipcMain.handle(deps.REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL, () =>
+  authorizedHandle(deps.REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL, BROAD_RENDERER_ROLES, () =>
     deps.requestComputerUsePermissions(deps.requestHostAccessibilityPermission()),
   );
 
-  ipcMain.removeHandler(deps.INSTALL_COMPUTER_USE_RUNTIME_CHANNEL);
-  ipcMain.handle(deps.INSTALL_COMPUTER_USE_RUNTIME_CHANNEL, () => deps.installComputerUseRuntime());
+  authorizedHandle(deps.INSTALL_COMPUTER_USE_RUNTIME_CHANNEL, BROAD_RENDERER_ROLES, () =>
+    deps.installComputerUseRuntime(),
+  );
 
-  ipcMain.removeHandler(deps.RUN_COMPUTER_USE_DOCTOR_CHANNEL);
-  ipcMain.handle(deps.RUN_COMPUTER_USE_DOCTOR_CHANNEL, () => deps.runComputerUseDoctor());
+  authorizedHandle(deps.RUN_COMPUTER_USE_DOCTOR_CHANNEL, BROAD_RENDERER_ROLES, () =>
+    deps.runComputerUseDoctor(),
+  );
 }

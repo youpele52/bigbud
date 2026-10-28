@@ -174,6 +174,7 @@ export * from "./rpc.workspace";
 
 export { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
 import { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
+import { WsComputerUseStopRpc, WsSubscribeComputerUseActivityRpc } from "./rpc.computerUse";
 
 export const WsRpcGroup = RpcGroup.make(
   WsServerRetryTextGenerationRpc,
@@ -239,6 +240,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetUsageSummaryRpc,
   WsServerRefreshUsageLimitsRpc,
   WsProviderStopSubagentRpc,
+  WsComputerUseStopRpc,
+  WsSubscribeComputerUseActivityRpc,
   WsProjectsSearchEntriesRpc,
   WsProjectsSearchFileContentsRpc,
   WsProjectsListDirectoryRpc,

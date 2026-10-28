@@ -1,15 +1,16 @@
-import { BrowserWindow, ipcMain, Menu } from "electron";
+import { BrowserWindow, Menu } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import type { ContextMenuItem } from "@bigbud/contracts";
 import { getDestructiveMenuIcon } from "../env/pathResolver";
+import { authorizedHandle, BROAD_RENDERER_ROLES } from "./ipcAuthorization";
 
 export function registerContextMenuIpcHandler(
   channel: string,
   getMainWindow: () => BrowserWindow | null,
 ): void {
-  ipcMain.removeHandler(channel);
-  ipcMain.handle(
+  authorizedHandle(
     channel,
+    BROAD_RENDERER_ROLES,
     async (event, items: ContextMenuItem[], position?: { x: number; y: number }) => {
       const normalizedItems = items
         .filter((item) => typeof item.id === "string" && typeof item.label === "string")

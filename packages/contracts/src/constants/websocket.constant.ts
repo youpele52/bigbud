@@ -126,6 +126,7 @@ export const WS_METHODS = {
   serverListAutomationRuns: "server.listAutomationRuns",
   serverGetUsageSummary: "server.getUsageSummary",
   providerStopSubagent: "provider.stopSubagent",
+  computerUseStop: "computerUse.stop",
 
   // Streaming subscriptions
   subscribeGitStatus: "subscribeGitStatus",
@@ -135,6 +136,7 @@ export const WS_METHODS = {
   subscribeTerminalSession: "subscribeTerminalSession",
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
+  subscribeComputerUseActivity: "subscribeComputerUseActivity",
   subscribeVisibleBrowserCommands: "subscribeVisibleBrowserCommands",
   completeVisibleBrowserCommand: "completeVisibleBrowserCommand",
   revokeVisibleBrowserLease: "revokeVisibleBrowserLease",

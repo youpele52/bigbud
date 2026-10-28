@@ -8,6 +8,7 @@ import { Effect } from "effect";
 
 import { createCopilotThreadOrchestrationTools } from "../../../orchestration-tools/copilotThreadOrchestrationTools.ts";
 import type { ThreadOrchestrationToolDispatcherShape } from "../../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
+import { dispatchComputerUseToolRequest } from "../../../orchestration-tools/computerUseToolRequest.ts";
 
 const asRecord = <A>(effect: Effect.Effect<A, Error>) =>
   Effect.runPromise(
@@ -85,6 +86,8 @@ export function createCopilotOrchestrationToolSurface(input: {
         }),
       ),
     computerUse: (action) => asRecord(dispatcher.computerUse({ threadId, action })),
+    computerUseV2: (request) =>
+      asRecord(dispatchComputerUseToolRequest(dispatcher, threadId, request)),
     browser: (action) => asRecord(dispatcher.browser({ threadId, action })),
     createThread: ({
       invocationId,

@@ -14,6 +14,7 @@ import { requestWsConnectionDiagnostics } from "./wsRpcClient.diagnostics";
 import { requestRemoteFolders, requestSshConfigHosts } from "./wsRpcClient.remoteSetup";
 import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
+import { createComputerUseRpcClient } from "./wsRpcClient.computerUse";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
 
 let sharedWsRpcClient: WsRpcClient | null = null;
@@ -53,6 +54,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     },
     reconnectNow: () => transport.reconnectNow(),
     terminal: createTerminalRpcClient(transport),
+    computerUse: createComputerUseRpcClient(transport),
     browser: {
       completeCommand: (input) =>
         transport.request((client) => client[WS_METHODS.completeVisibleBrowserCommand](input)),

@@ -2,7 +2,6 @@ import type { Tool } from "@github/copilot-sdk";
 import {
   BrowserAction,
   type BrowserAction as BrowserActionType,
-  ComputerUseAction,
   type ComputerUseAction as ComputerUseActionType,
 } from "@bigbud/contracts";
 import { Schema } from "effect";
@@ -14,9 +13,14 @@ import {
   RENAME_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import {
-  COMPUTER_USE_TOOL_DESCRIPTION,
-  COPILOT_COMPUTER_USE_PARAMETERS,
-} from "./orchestrationComputerUseTool.shared.ts";
+  computerUseToolDescription,
+  computerUseToolParameters,
+} from "./orchestrationComputerUseTool.selected.ts";
+import {
+  decodeComputerUseToolRequest,
+  unroutedComputerUseV2Result,
+  type ComputerUseV2ToolRequest,
+} from "./computerUseToolRequest.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
 import {
   createCopilotThreadDelegationTools,
@@ -48,10 +52,13 @@ export function createCopilotThreadOrchestrationTools(
     ) => Promise<{ readonly title: string }>;
     readonly archiveThread: () => Promise<void>;
     readonly computerUse: (action: ComputerUseActionType) => Promise<Record<string, unknown>>;
+    /** v2 desktop requests; absent means they fail closed (`control_unavailable`). */
+    readonly computerUseV2?: (
+      request: ComputerUseV2ToolRequest,
+    ) => Promise<Record<string, unknown>>;
     readonly browser: (action: BrowserActionType) => Promise<Record<string, unknown>>;
   },
 ): ReadonlyArray<Tool<{ title?: string; threadId?: string } & Record<string, unknown>>> {
-  const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
   const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
   return [
     ...(input.workspace ? createCopilotAgentWorkspaceTools(input.workspace) : []),
@@ -132,12 +139,17 @@ export function createCopilotThreadOrchestrationTools(
     },
     {
       name: "computer_use",
-      description: COMPUTER_USE_TOOL_DESCRIPTION,
-      parameters: COPILOT_COMPUTER_USE_PARAMETERS,
+      description: computerUseToolDescription(),
+      parameters: computerUseToolParameters(),
       handler: async (args) => {
         try {
-          const action = decodeComputerUseAction(args);
-          const result = await input.computerUse(action);
+          const request = decodeComputerUseToolRequest(args);
+          const result =
+            request.kind === "legacy"
+              ? await input.computerUse(request.action)
+              : input.computerUseV2
+                ? await input.computerUseV2(request)
+                : unroutedComputerUseV2Result(request);
           return successResult(JSON.stringify(result, null, 2));
         } catch (error) {
           const message = error instanceof Error ? error.message : "Computer-use action failed.";

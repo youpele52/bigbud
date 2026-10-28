@@ -11,6 +11,7 @@ import {
 import { clampBounds, COMPACT_CHAT_MIN_SIZE, compactChatBounds, MASCOT_SIZE } from "./mascotBounds";
 import { getIconOption } from "./windowManager";
 import { FloatingAssistantScreenshot } from "./floatingAssistantScreenshot";
+import { FloatingAssistantComputerUseStop } from "./floatingAssistantComputerUse";
 
 export interface FloatingAssistantWindowsDeps {
   readonly desktopDir: string;
@@ -28,6 +29,7 @@ export interface FloatingAssistantWindowsDeps {
 
 export class FloatingAssistantWindows {
   readonly screenshots: FloatingAssistantScreenshot;
+  readonly computerUse: FloatingAssistantComputerUseStop;
   #mascotCreation: Promise<BrowserWindow> | null = null;
   #compactCreation: Promise<BrowserWindow> | null = null;
   #mascotDragOffset: { x: number; y: number } | null = null;
@@ -39,6 +41,7 @@ export class FloatingAssistantWindows {
       isEnabled: () => deps.preferences.get().floatingAssistantEnabled,
       openChat: () => this.openCompactChat(),
     });
+    this.computerUse = new FloatingAssistantComputerUseStop(deps.registry);
   }
 
   ensureMascot(): Promise<BrowserWindow> {
@@ -237,6 +240,8 @@ export class FloatingAssistantWindows {
       if (role === "mascot") {
         Menu.buildFromTemplate(
           buildMascotContextMenuTemplate({
+            computerUseActive: this.computerUse.isActive,
+            onStopComputerUse: () => void this.computerUse.requestStop(),
             onDisable: () => {
               this.deps.onOpenMain();
               this.disable();
@@ -255,6 +260,11 @@ export class FloatingAssistantWindows {
         window,
       });
     });
+    // A reloading or crashed mascot reports its activity again once its server stream is up.
+    if (role === "mascot") {
+      window.webContents.on("did-start-loading", () => this.computerUse.reset());
+      window.webContents.on("render-process-gone", () => this.computerUse.reset());
+    }
     window.once("ready-to-show", () => {
       if (this.screenshots.isCapturing) return;
       if (role === "mascot") window.showInactive();
@@ -268,6 +278,9 @@ export class FloatingAssistantWindows {
 }
 
 export function buildMascotContextMenuTemplate(actions: {
+  /** Shown first, and only while an agent turn is using computer use. */
+  readonly computerUseActive: boolean;
+  readonly onStopComputerUse: () => void;
   readonly onDisable: () => void;
   readonly onHideMascot: () => void;
   readonly onOpenChat: () => void;
@@ -277,6 +290,12 @@ export function buildMascotContextMenuTemplate(actions: {
   readonly onRestart: () => void;
 }) {
   return [
+    ...(actions.computerUseActive
+      ? [
+          { label: "Stop computer use", click: actions.onStopComputerUse },
+          { type: "separator" as const },
+        ]
+      : []),
     { label: "Open chat", click: () => actions.onOpenChat() },
     { label: "Add screenshot to chat", click: actions.onScreenshot },
     { label: "New chat", click: () => actions.onOpenChat() },

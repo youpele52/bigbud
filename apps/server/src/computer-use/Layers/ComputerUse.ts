@@ -1,4 +1,5 @@
 import type { ComputerUseAction } from "@bigbud/contracts";
+import { resolveComputerUseSurface } from "@bigbud/shared/computer-use/surface";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -10,18 +11,7 @@ import { CuaDriver } from "../Services/CuaDriver.ts";
 import { ComputerUse, ComputerUseError, type ComputerUseShape } from "../Services/ComputerUse.ts";
 
 function resolveSurface(action: ComputerUseAction): "browser" | "desktop" {
-  switch (action.action) {
-    case "list_windows":
-    case "list_apps":
-    case "check_permissions":
-    case "doctor":
-    case "launch_app":
-    case "focus_app":
-    case "get_accessibility_tree":
-      return "desktop";
-    default:
-      return action.surface ?? "browser";
-  }
+  return resolveComputerUseSurface(action.action, "surface" in action ? action.surface : undefined);
 }
 
 export function isDesktopSurfaceAction(action: ComputerUseAction): boolean {

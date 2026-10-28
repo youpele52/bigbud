@@ -1,7 +1,10 @@
-import { ipcMain, type App, type WebContents } from "electron";
+import type { App, WebContents } from "electron";
 import type { TerminalRenderingPolicy } from "@bigbud/contracts/server/ipc.terminal";
 import { desktopIpcChannels } from "./main.channels";
 import { shouldArmLinuxGpuFallback, type LinuxOzonePlatform } from "./main.linuxRuntime";
+import { authorizedHandle, type IpcRoles } from "./window/ipcAuthorization";
+
+const TERMINAL_RENDERING_ROLES: IpcRoles = ["main", "compact-chat"];
 
 const HARDWARE_WEBGL_STATUSES = new Set([
   "enabled",
@@ -91,8 +94,9 @@ export function registerTerminalRenderingPolicy(
 }
 
 export function registerTerminalRenderingIpc(isTrusted: (sender: WebContents) => boolean): void {
-  ipcMain.handle(
+  authorizedHandle(
     desktopIpcChannels.getTerminalRenderingPolicy,
+    TERMINAL_RENDERING_ROLES,
     (event): TerminalRenderingPolicy => {
       if (!isTrusted(event.sender) || event.senderFrame !== event.sender.mainFrame)
         throw new Error("Untrusted terminal rendering policy request.");

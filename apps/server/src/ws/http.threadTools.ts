@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { Schema } from "effect";
-import { BrowserAction, ComputerUseAction, ThreadId } from "@bigbud/contracts";
+import { BrowserAction, ThreadId } from "@bigbud/contracts";
 
 import { ServerConfig } from "../startup/config.ts";
 import {
@@ -27,9 +27,12 @@ import { findRemoteWorkspaceExecutions } from "../remote-workspace-bridge/remote
 import { runRemoteWorkspaceProcess } from "./http.threadTools.remoteWorkspace.ts";
 import { handleRenameThreadAction } from "./http.threadTools.rename.ts";
 import { enterThreadToolInvocation } from "../orchestration-tools/threadToolInvocationFlights.ts";
+import {
+  decodeComputerUseToolRequest,
+  dispatchComputerUseToolRequest,
+} from "../orchestration-tools/computerUseToolRequest.ts";
 
 const THREAD_TOOLS_PATH = "/api/internal/thread-tools";
-const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
 const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
 
 export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
@@ -277,28 +280,27 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       }
 
       if (body.action === "computer_use") {
-        const computerUseAction = yield* Effect.try({
-          try: () => decodeComputerUseAction(body.computerUseAction),
+        const computerUseRequest = yield* Effect.try({
+          try: () => decodeComputerUseToolRequest(body.computerUseAction),
           catch: () =>
             new ThreadToolRequestError({
               status: 400,
               message: "Invalid computer-use action.",
             }),
         });
-        const result = yield* dispatcher
-          .computerUse({
-            threadId,
-            action: computerUseAction,
-          })
-          .pipe(
-            Effect.mapError(
-              (error) =>
-                new ThreadToolRequestError({
-                  status: 400,
-                  message: error instanceof Error ? error.message : "Computer-use action failed.",
-                }),
-            ),
-          );
+        const result = yield* dispatchComputerUseToolRequest(
+          dispatcher,
+          threadId,
+          computerUseRequest,
+        ).pipe(
+          Effect.mapError(
+            (error) =>
+              new ThreadToolRequestError({
+                status: 400,
+                message: error instanceof Error ? error.message : "Computer-use action failed.",
+              }),
+          ),
+        );
         return yield* HttpServerResponse.json({ ok: true, result });
       }
 

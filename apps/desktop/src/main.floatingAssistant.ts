@@ -1,9 +1,8 @@
-import { ipcMain } from "electron";
-
 import type { AppQuitActions } from "./main.appQuitActions";
 import { createCompactLinkHandoffCoordinator } from "./main.compactLinkHandoff";
 import { desktopIpcChannels } from "./main.channels";
 import { registerCompactScreenshotIpc } from "./window/ipcHandlers.compactScreenshot";
+import { authorizedHandle, authorizedOn, BROAD_RENDERER_ROLES } from "./window/ipcAuthorization";
 import type { DesktopWindowRegistry } from "./window/DesktopWindowRegistry";
 import type { DesktopPreferencesStore } from "./window/desktopPreferences";
 import type { FloatingAssistantWindows } from "./window/floatingAssistantWindows";
@@ -11,6 +10,8 @@ import {
   isCompactChatLinkHandoff,
   isDesktopRendererReadyAction,
 } from "./window/menuAction.validation";
+
+const MASCOT_RENDERER_ROLES = ["mascot"] as const;
 
 interface RegisterFloatingAssistantIpcOptions {
   readonly appQuitActions: AppQuitActions;
@@ -31,8 +32,7 @@ export function registerFloatingAssistantIpc(options: RegisterFloatingAssistantI
     windowRegistry,
   } = options;
   registerCompactScreenshotIpc(windowRegistry, floatingAssistantWindows.screenshots.handoff);
-  ipcMain.removeAllListeners(channels.getWindowRole);
-  ipcMain.on(channels.getWindowRole, (event) => {
+  authorizedOn(channels.getWindowRole, BROAD_RENDERER_ROLES, (event) => {
     event.returnValue = windowRegistry.getRole(event.sender);
   });
   const compactLinkHandoff = createCompactLinkHandoffCoordinator({
@@ -47,8 +47,7 @@ export function registerFloatingAssistantIpc(options: RegisterFloatingAssistantI
     },
     menuActionChannel: channels.menuAction,
   });
-  ipcMain.removeAllListeners(channels.menuAction);
-  ipcMain.on(channels.menuAction, (event, action: unknown) => {
+  authorizedOn(channels.menuAction, BROAD_RENDERER_ROLES, (event, action: unknown) => {
     const senderRole = windowRegistry.getRole(event.sender);
     if (senderRole === "compact-chat" && isCompactChatLinkHandoff(action)) {
       compactLinkHandoff.request(action);
@@ -65,12 +64,16 @@ export function registerFloatingAssistantIpc(options: RegisterFloatingAssistantI
     }
   });
   const register = (channel: string, handler: (value?: unknown) => unknown) => {
-    ipcMain.removeHandler(channel);
-    ipcMain.handle(channel, (event, value) => {
+    authorizedHandle(channel, BROAD_RENDERER_ROLES, (event, value) => {
       if (!windowRegistry.isTrusted(event.sender)) return false;
       return handler(value);
     });
   };
+  // Only the mascot renderer drives its own menu; a stray report cannot show the item.
+  authorizedHandle(channels.setMascotComputerUseActive, MASCOT_RENDERER_ROLES, (event, active) => {
+    if (!windowRegistry.isTrusted(event.sender) || typeof active !== "boolean") return false;
+    return floatingAssistantWindows.computerUse.setActive(event.sender.id, active);
+  });
   register(channels.openMainWindow, (threadId) => {
     openMainWindow(typeof threadId === "string" ? threadId : undefined);
     return true;

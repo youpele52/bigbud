@@ -1,18 +1,15 @@
-import * as FS from "node:fs";
-import * as Path from "node:path";
-
-import { app } from "electron";
-import { makeCuaDriverChildEnvironment } from "@bigbud/shared/cua-driver/childEnvironment";
+import {
+  cuaDriverStateEnvironment,
+  makeCuaDriverChildEnvironment,
+} from "@bigbud/shared/cua-driver/childEnvironment";
 import {
   CUA_DRIVER_POLICY_SHA256,
   CUA_DRIVER_POLICY_VERSION,
-  CUA_DRIVER_POLICY_YAML,
 } from "@bigbud/shared/cua-driver/policy";
 import { CUA_DRIVER_VERSION } from "@bigbud/shared/cua-driver/release";
 import type {
   DesktopComputerUseInstallResult,
   DesktopComputerUsePermissionsStatus,
-  DesktopComputerUseRuntimeSource,
   DesktopComputerUseRuntimeStatus,
 } from "@bigbud/contracts";
 
@@ -21,182 +18,24 @@ import {
   missingComputerUsePermissionsStatus,
 } from "./cuaDriver.permissions";
 import { installManagedComputerUseRuntime } from "./cuaDriver.install";
-import { validateCuaDriverPolicy } from "./cuaDriver.manifest";
 import {
   getCuaDriverDaemonEnvironment,
   getCuaDriverDaemonStatus,
   refreshCuaDriverDaemonHealth,
 } from "./cuaDriver.daemon";
-import { binaryName, resolveManagedPaths } from "./cuaDriver.paths";
+import { resolvePrivateStateHome } from "./cuaDriver.paths";
+import { resolveComputerUseRuntime } from "./cuaDriver.runtime";
 import { runCommand } from "./cuaDriver.process";
 
-function resolveBundledBinaryPath(): string | null {
-  if (!app.isPackaged) {
-    return null;
-  }
-
-  const candidates = [
-    process.platform === "darwin"
-      ? Path.join(
-          process.resourcesPath,
-          "server",
-          "cua-driver",
-          "CuaDriver.app",
-          "Contents",
-          "MacOS",
-          "cua-driver",
-        )
-      : null,
-    Path.join(process.resourcesPath, "server", "cua-driver", "bin", binaryName()),
-  ];
-
-  for (const candidate of candidates) {
-    if (candidate && FS.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-function resolveBundledPolicyPath(): string | null {
-  if (!app.isPackaged) return null;
-  const policyPath = Path.join(
-    process.resourcesPath,
-    "server",
-    "cua-driver",
-    "policy",
-    "bigbud.yaml",
-  );
-  try {
-    validateCuaDriverPolicy(policyPath);
-    return policyPath;
-  } catch {
-    return null;
-  }
-}
-
-function ensureCanonicalPolicy(policyPath: string): string {
-  try {
-    validateCuaDriverPolicy(policyPath);
-    return policyPath;
-  } catch {
-    FS.mkdirSync(Path.dirname(policyPath), { recursive: true });
-    const temporaryPath = `${policyPath}.${process.pid}.tmp`;
-    FS.writeFileSync(temporaryPath, CUA_DRIVER_POLICY_YAML, { encoding: "utf8", mode: 0o600 });
-    FS.renameSync(temporaryPath, policyPath);
-    validateCuaDriverPolicy(policyPath);
-    return policyPath;
-  }
-}
-
-interface ResolvedComputerUseRuntime {
-  readonly source: DesktopComputerUseRuntimeSource;
-  readonly binaryPath: string | null;
-  readonly policyPath: string | null;
-}
-
-function readActivatedRuntime(pointerPath: string): ResolvedComputerUseRuntime | null {
-  try {
-    const active = JSON.parse(FS.readFileSync(pointerPath, "utf8")) as Record<string, unknown>;
-    if (
-      typeof active.binaryPath !== "string" ||
-      typeof active.policyPath !== "string" ||
-      active.policyVersion !== CUA_DRIVER_POLICY_VERSION ||
-      active.policySha256 !== CUA_DRIVER_POLICY_SHA256 ||
-      !FS.existsSync(active.binaryPath)
-    ) {
-      return null;
-    }
-    validateCuaDriverPolicy(active.policyPath);
-    return { source: "managed", binaryPath: active.binaryPath, policyPath: active.policyPath };
-  } catch {
-    return null;
-  }
-}
-
-function resolveSystemBinaryPath(): string | null {
-  if (app.isPackaged && process.env.BIGBUD_CUA_ALLOW_SYSTEM_DRIVER !== "1") {
-    return null;
-  }
-  const rawPath = process.env.PATH;
-  if (!rawPath) {
-    return null;
-  }
-
-  const directories = rawPath.split(Path.delimiter).filter(Boolean);
-  const extensions =
-    process.platform === "win32"
-      ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT")
-          .split(";")
-          .filter(Boolean)
-          .map((value) => value.toLowerCase())
-      : [""];
-  const name = binaryName();
-
-  for (const directory of directories) {
-    if (process.platform === "win32") {
-      const lowerName = name.toLowerCase();
-      const hasExtension = extensions.some((extension) => lowerName.endsWith(extension));
-      const candidates = hasExtension
-        ? [Path.join(directory, name)]
-        : extensions.map((extension) => Path.join(directory, `${name}${extension.toLowerCase()}`));
-
-      for (const candidate of candidates) {
-        if (FS.existsSync(candidate)) {
-          return candidate;
-        }
-      }
-      continue;
-    }
-
-    const candidate = Path.join(directory, name);
-    if (FS.existsSync(candidate)) {
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-export function resolveComputerUseRuntime(baseDir: string): ResolvedComputerUseRuntime {
-  const bundledBinaryPath = resolveBundledBinaryPath();
-  const bundledPolicyPath = resolveBundledPolicyPath();
-  if (bundledBinaryPath && bundledPolicyPath) {
-    return { source: "bundled", binaryPath: bundledBinaryPath, policyPath: bundledPolicyPath };
-  }
-
-  const managedPaths = resolveManagedPaths(baseDir);
-  const activated = readActivatedRuntime(managedPaths.activePath);
-  if (activated) return activated;
-  const previous = readActivatedRuntime(managedPaths.previousPath);
-  if (previous) return previous;
-  if (FS.existsSync(managedPaths.legacyBinaryPath)) {
-    return {
-      source: "managed",
-      binaryPath: managedPaths.legacyBinaryPath,
-      policyPath: ensureCanonicalPolicy(managedPaths.policyPath),
-    };
-  }
-
-  const systemBinaryPath = resolveSystemBinaryPath();
-  if (systemBinaryPath) {
-    return {
-      source: "system",
-      binaryPath: systemBinaryPath,
-      policyPath: ensureCanonicalPolicy(managedPaths.policyPath),
-    };
-  }
-
-  return { source: "missing", binaryPath: null, policyPath: null };
-}
-
-async function readVersion(binaryPath: string): Promise<string | null> {
+async function readVersion(baseDir: string, binaryPath: string): Promise<string | null> {
   try {
     const result = await runCommand(
       binaryPath,
       ["--version"],
-      makeCuaDriverChildEnvironment(process.env),
+      makeCuaDriverChildEnvironment(
+        process.env,
+        cuaDriverStateEnvironment(resolvePrivateStateHome(baseDir)),
+      ),
     );
     const output = [result.stdout, result.stderr].filter(Boolean).join(" ").trim();
     return output.length > 0 ? output : null;
@@ -243,7 +82,7 @@ export async function getComputerUseRuntimeStatus(
     return missingStatus();
   }
 
-  const version = await readVersion(runtime.binaryPath);
+  const version = await readVersion(baseDir, runtime.binaryPath);
   const daemon = getCuaDriverDaemonStatus();
   const versionMatches = version?.includes(CUA_DRIVER_VERSION) === true;
   const runtimeValidated = versionMatches && runtime.policyPath !== null;

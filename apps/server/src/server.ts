@@ -70,9 +70,7 @@ import { ServerSettingsLive } from "./ws/serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
 import { makeConfiguredRemoteAgentLayers } from "./remote-agent/remoteAgentServerLayer.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability";
-import { BrowserManagerLive } from "./browser/Layers/BrowserManager";
-import { CuaDriverLive } from "./computer-use/Layers/CuaDriver";
-import { ComputerUseLive } from "./computer-use/Layers/ComputerUse";
+import { ComputerUseLayerLive } from "./server.computerUse.ts";
 import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
 import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
@@ -100,6 +98,7 @@ import { DirectResourceCleanupRepositoryLive } from "./persistence/Layers/Direct
 import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResourceCleanupExecutor.ts";
 import { DirectResourceCleanupRecoveryLive } from "./deletion/Layers/DirectResourceCleanupRecovery.ts";
 import * as Recovery from "./server.recoveryLayers.ts";
+import { ProcessLedgerLive } from "./process-ledger/Layers/ProcessLedger.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -146,12 +145,6 @@ const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   ThreadRetentionRepositoryLive,
   PurgeJobRepositoryLive,
   Recovery.RecoveryPersistenceLayerLive,
-);
-
-const ComputerUseLayerLive = ComputerUseLive.pipe(
-  Layer.provideMerge(BrowserManagerLive),
-  Layer.provide(CuaDriverLive),
-  Layer.provide(OpenLive),
 );
 
 const OrchestrationEngineLayerLive = OrchestrationEngineLive.pipe(
@@ -344,7 +337,9 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
     ),
   ),
   // One sleep epoch view shared by every evidence source and the recovery coordinator.
-).pipe(Layer.provideMerge(Recovery.SystemSleepEpochsLive));
+  // The process ledger sits below every layer that spawns provider children; it reaps a dead
+  // backend's orphans in the background at startup.
+).pipe(Layer.provideMerge(Recovery.SystemSleepEpochsLive), Layer.provideMerge(ProcessLedgerLive));
 
 const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
   Layer.provideMerge(RuntimeDependenciesLive),

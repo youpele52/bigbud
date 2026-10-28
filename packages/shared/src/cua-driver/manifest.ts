@@ -23,7 +23,9 @@ export function parseCuaDriverManifest(value: unknown): CuaDriverManifest {
     !invocation ||
     typeof invocation !== "object"
   ) {
-    throw new Error("Computer Use runtime manifest does not match the pinned 0.9.1 contract.");
+    throw new Error(
+      `Computer Use runtime manifest does not match the pinned ${CUA_DRIVER_VERSION} contract.`,
+    );
   }
   const invocationRecord = invocation as Record<string, unknown>;
   if (

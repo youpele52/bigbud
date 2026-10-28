@@ -4,6 +4,7 @@ import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { desktopIpcChannels } from "../main.channels";
 import { CompactScreenshotHandoff } from "./compactScreenshotHandoff";
 import { DesktopWindowRegistry } from "./DesktopWindowRegistry";
+import { configureIpcAuthorization } from "./ipcAuthorization";
 
 const handlers = vi.hoisted(
   () => new Map<string, (event: IpcMainInvokeEvent, value: unknown) => unknown>(),
@@ -22,7 +23,7 @@ describe("compact screenshot IPC", () => {
 
   it("allows only the live compact main frame to read or acknowledge a bounded capture ID", () => {
     const registry = new DesktopWindowRegistry();
-    const webContents = { id: 2, mainFrame: {} };
+    const webContents = { id: 2, mainFrame: {}, isDestroyed: () => false };
     registry.register("compact-chat", {
       webContents,
       once: vi.fn(),
@@ -37,6 +38,7 @@ describe("compact screenshot IPC", () => {
       sizeBytes: 1,
       dataUrl: "data:image/jpeg;base64,AA==",
     });
+    configureIpcAuthorization(registry);
     registerCompactScreenshotIpc(registry, handoff);
     const read = handlers.get(desktopIpcChannels.getPendingCompactScreenshot)!;
     const ack = handlers.get(desktopIpcChannels.acknowledgeCompactScreenshot)!;
@@ -45,11 +47,12 @@ describe("compact screenshot IPC", () => {
       senderFrame: webContents.mainFrame,
     } as IpcMainInvokeEvent;
     for (const event of [
-      { sender: { id: 1, mainFrame: {} }, senderFrame: {} },
+      { sender: { id: 1, mainFrame: {}, isDestroyed: () => false }, senderFrame: {} },
       { sender: webContents, senderFrame: {} },
     ]) {
+      // Unregistered sender and subframe: bounded denial before any effect.
       expect(read(event as IpcMainInvokeEvent, "thread")).toBeNull();
-      expect(ack(event as IpcMainInvokeEvent, "capture")).toBe(false);
+      expect(ack(event as IpcMainInvokeEvent, "capture")).toBeNull();
     }
     for (const invalid of [null, {}, "", " ", "x".repeat(257)]) {
       expect(read(trusted, invalid)).toBeNull();

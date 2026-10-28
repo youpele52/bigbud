@@ -1,7 +1,19 @@
 import type { BrowserWindow, WebContents } from "electron";
 
+/**
+ * Broad app renderers (full preload). `isTrusted`, `all()` and
+ * `broadRendererWindows()` (connectivity/update/backend-startup broadcasts,
+ * menu actions) cover only these.
+ */
 export const desktopWindowRoles = ["main", "mascot", "compact-chat"] as const;
-export type DesktopWindowRole = (typeof desktopWindowRoles)[number];
+/**
+ * Restricted computer-use safety surface (Stop/status/notice). It never loads
+ * the broad preload and is authorized only for its own channels.
+ */
+export const COMPUTER_USE_SAFETY_ROLE = "computer-use-stop" as const;
+export type DesktopWindowRole =
+  | (typeof desktopWindowRoles)[number]
+  | typeof COMPUTER_USE_SAFETY_ROLE;
 
 /** Tracks trusted desktop renderers; URLs are presentation, never authorization. */
 export class DesktopWindowRegistry {
@@ -27,8 +39,10 @@ export class DesktopWindowRegistry {
     return this.#rolesByWebContentsId.get(webContents.id) ?? null;
   }
 
+  /** A broad app renderer; the restricted safety role is never "trusted" here. */
   isTrusted(webContents: WebContents): boolean {
-    return this.getRole(webContents) !== null;
+    const role = this.getRole(webContents);
+    return role !== null && role !== COMPUTER_USE_SAFETY_ROLE;
   }
 
   all(): BrowserWindow[] {

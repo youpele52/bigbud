@@ -26,6 +26,7 @@ import type {
   listThreadsViaOrchestration,
 } from "./ThreadOrchestrationTools.listThreads.ts";
 import type { AgentWorkspaceToolInput } from "./AgentWorkspaceTools.ts";
+import type { ComputerUseV2Dispatch } from "./computerUseToolRequest.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
   readonly getSystemResources?: () => Effect.Effect<Record<string, unknown>, Error>;
@@ -62,6 +63,8 @@ export interface ThreadOrchestrationToolDispatcherShape {
     readonly threadId: ThreadId;
     readonly action: ComputerUseAction;
   }) => Effect.Effect<ComputerUseResult, Error>;
+  /** v2 desktop requests (selected only when the pinned Driver is 0.38.0). */
+  readonly computerUseV2?: ComputerUseV2Dispatch;
   readonly browser: (input: {
     readonly threadId: ThreadId;
     readonly action: BrowserAction;

@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 
 import {
   BrowserAction,
-  ComputerUseAction,
   MessageId,
   ProjectId,
   ThreadId,
@@ -27,10 +26,13 @@ import { BIGBUD_ORCHESTRATION_NAMESPACE } from "./codexThreadDynamicTools.specs.
 import { normalizeListThreadsStatus } from "./ThreadOrchestrationTools.listThreads.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES, type AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
 import { RenameThreadArguments } from "./threadRenameTool.shared.ts";
+import {
+  decodeComputerUseToolRequest,
+  dispatchComputerUseToolRequest,
+} from "./computerUseToolRequest.ts";
 
 export { createCodexThreadOrchestrationDynamicTools } from "./codexThreadDynamicTools.specs.ts";
 
-const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
 const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
 
 function inputText(text: string): CodexDynamicToolCallResult["contentItems"][number] {
@@ -301,12 +303,16 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
         };
       }
       case "computer_use": {
-        const action = decodeComputerUseAction(args);
-        const result = await Effect.runPromise(dispatcher.computerUse({ threadId, action }));
+        const request = decodeComputerUseToolRequest(args);
+        const result = await Effect.runPromise(
+          dispatchComputerUseToolRequest(dispatcher, threadId, request),
+        );
         return {
           contentItems: [
             inputText(JSON.stringify(result, null, 2)),
-            ...[inputImage(result)].flatMap((item) => (item ? [item] : [])),
+            ...["screenshot" in result ? inputImage(result) : null].flatMap((item) =>
+              item ? [item] : [],
+            ),
           ],
           success: true,
         };

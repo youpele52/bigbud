@@ -1,14 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const handlers = vi.hoisted(() => new Map<string, () => unknown>());
+const handlers = vi.hoisted(() => new Map<string, (event: unknown) => unknown>());
 const ipcMain = vi.hoisted(() => ({
-  handle: vi.fn((channel: string, handler: () => unknown) => handlers.set(channel, handler)),
+  handle: vi.fn((channel: string, handler: (event: unknown) => unknown) =>
+    handlers.set(channel, handler),
+  ),
   removeHandler: vi.fn(),
 }));
 
 vi.mock("electron", () => ({ ipcMain }));
 
 import { registerComputerUseIpcHandlers } from "./ipcHandlers.computerUse";
+import {
+  authorizeFakeSenders,
+  fakeIpcSender,
+  mainFrameEvent,
+} from "./ipcAuthorization.testSupport";
+
+const main = fakeIpcSender(1);
 
 function register() {
   const requestHostAccessibilityPermission = vi.fn(() => false);
@@ -39,15 +48,16 @@ describe("registerComputerUseIpcHandlers", () => {
     handlers.clear();
     ipcMain.handle.mockClear();
     ipcMain.removeHandler.mockClear();
+    authorizeFakeSenders([[main, "main"]]);
   });
 
   it("requests host Accessibility only for the explicit permission action", async () => {
     const calls = register();
 
-    await handlers.get("status")?.();
+    await handlers.get("status")?.(mainFrameEvent(main));
     expect(calls.requestHostAccessibilityPermission).not.toHaveBeenCalled();
 
-    await handlers.get("request")?.();
+    await handlers.get("request")?.(mainFrameEvent(main));
     expect(calls.requestHostAccessibilityPermission).toHaveBeenCalledOnce();
     expect(calls.requestComputerUsePermissions).toHaveBeenCalledWith(false);
     expect(calls.requestHostAccessibilityPermission.mock.invocationCallOrder[0]).toBeLessThan(

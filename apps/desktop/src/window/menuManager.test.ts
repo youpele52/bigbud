@@ -51,7 +51,9 @@ vi.mock("electron", () => ({
   },
 }));
 
+import { COMPUTER_USE_SAFETY_ROLE } from "./DesktopWindowRegistry";
 import { configureApplicationMenu, getSafeExternalUrl, makeResolveIconPath } from "./menuManager";
+import { configureRendererWindows } from "./rendererWindows";
 
 function getViewMenuEntries(): readonly MenuTemplateEntry[] {
   const viewMenu = menuHarness.buildTemplate?.find((entry) => entry.label === "View");
@@ -198,6 +200,40 @@ describe("configureApplicationMenu", () => {
       "desktop:menu-action",
       "reload-browser-ignoring-cache",
     );
+  });
+
+  it("never sends menu actions to a focused safety window", () => {
+    // Regression (review P3): menu actions went to the focused safety renderer.
+    menuHarness.buildTemplate = null;
+    focusedWindow.webContents.send.mockClear();
+    const mainWindow = {
+      ...focusedWindow,
+      webContents: { ...focusedWindow.webContents, send: vi.fn() },
+    };
+    configureRendererWindows({
+      getRole: (contents) =>
+        contents === (focusedWindow.webContents as never) ? COMPUTER_USE_SAFETY_ROLE : "main",
+    });
+    try {
+      configureApplicationMenu({
+        menuActionChannel: "desktop:menu-action",
+        getMainWindow: () => mainWindow as never,
+        setMainWindow: vi.fn(),
+        makeWindow: () => mainWindow as never,
+        checkForUpdates: async () => false,
+        getUpdateState: () => ({ status: "idle" }) as never,
+        isDevelopment: false,
+      });
+      const reload = getViewMenuEntries().find((entry) => entry.label === "Reload Browser");
+      reload?.click?.();
+      expect(focusedWindow.webContents.send).not.toHaveBeenCalled();
+      expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+        "desktop:menu-action",
+        "reload-browser",
+      );
+    } finally {
+      configureRendererWindows({ getRole: () => "main" });
+    }
   });
 
   it("prefers development desktop icons when running in development", () => {

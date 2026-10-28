@@ -1,7 +1,10 @@
-import { ipcMain, type WebContents } from "electron";
+import type { WebContents } from "electron";
 import type { MonitorDemand, MonitorProcessQuery } from "@bigbud/contracts/system-monitor/types";
 import { desktopIpcChannels } from "../main.channels";
 import { SystemMonitorBridge } from "./bridge";
+import { authorizedHandle, type IpcRoles } from "../window/ipcAuthorization";
+
+const MONITOR_ROLES: IpcRoles = ["main"];
 
 function demand(value: unknown): MonitorDemand {
   if (!value || typeof value !== "object") throw new Error("invalid monitor demand");
@@ -112,7 +115,7 @@ export function registerSystemMonitorIpc(
     if (!guard(sender).has(subscriptionId)) throw new Error("monitor subscription denied");
     return subscriptionId;
   };
-  ipcMain.handle(desktopIpcChannels.systemMonitorSubscribe, async (event, raw) => {
+  authorizedHandle(desktopIpcChannels.systemMonitorSubscribe, MONITOR_ROLES, async (event, raw) => {
     const ids = guard(event.sender);
     const subscriptionId = await bridge.subscribe(demand(raw));
     if (event.sender.isDestroyed()) {
@@ -122,22 +125,30 @@ export function registerSystemMonitorIpc(
     ids.add(subscriptionId);
     return subscriptionId;
   });
-  ipcMain.handle(desktopIpcChannels.systemMonitorUpdate, (event, rawId, rawDemand) => {
-    bridge.update(owned(event.sender, rawId), demand(rawDemand));
-  });
-  ipcMain.handle(desktopIpcChannels.systemMonitorUnsubscribe, (event, rawId) => {
+  authorizedHandle(
+    desktopIpcChannels.systemMonitorUpdate,
+    MONITOR_ROLES,
+    (event, rawId, rawDemand) => {
+      bridge.update(owned(event.sender, rawId), demand(rawDemand));
+    },
+  );
+  authorizedHandle(desktopIpcChannels.systemMonitorUnsubscribe, MONITOR_ROLES, (event, rawId) => {
     const subscriptionId = owned(event.sender, rawId);
     guard(event.sender).delete(subscriptionId);
     bridge.unsubscribe(subscriptionId);
   });
-  ipcMain.handle(desktopIpcChannels.systemMonitorAck, (event, rawId, rawEpoch, rawSequence) => {
-    bridge.ack(owned(event.sender, rawId), id(rawEpoch), id(rawSequence));
-  });
-  ipcMain.handle(desktopIpcChannels.systemMonitorQuery, (event, raw) => {
+  authorizedHandle(
+    desktopIpcChannels.systemMonitorAck,
+    MONITOR_ROLES,
+    (event, rawId, rawEpoch, rawSequence) => {
+      bridge.ack(owned(event.sender, rawId), id(rawEpoch), id(rawSequence));
+    },
+  );
+  authorizedHandle(desktopIpcChannels.systemMonitorQuery, MONITOR_ROLES, (event, raw) => {
     guard(event.sender);
     return bridge.query(query(raw));
   });
-  ipcMain.handle(desktopIpcChannels.systemMonitorRetry, (event) => {
+  authorizedHandle(desktopIpcChannels.systemMonitorRetry, MONITOR_ROLES, (event) => {
     guard(event.sender);
     return bridge.retry();
   });

@@ -36,6 +36,7 @@ import {
   MascotShell,
 } from "../components/floating-assistant/FloatingAssistantShell";
 import { MascotStateCoordinator } from "../components/floating-assistant/MascotStateCoordinator";
+import { MascotComputerUseStopBridge } from "../components/floating-assistant/MascotComputerUseStopBridge";
 import { useCompactChatThread } from "../hooks/useCompactChatThread";
 import { CompactLinkHandoffCoordinator } from "../components/CompactLinkHandoffCoordinator";
 import { DesktopRendererReadyCoordinator } from "../components/DesktopRendererReadyCoordinator";
@@ -61,6 +62,7 @@ export function RootRouteView() {
     return (
       <>
         <MascotStateCoordinator />
+        <MascotComputerUseStopBridge />
         <WebSocketConnectionCoordinator />
         <DesktopBackendStartupCoordinator />
         <MascotShell />

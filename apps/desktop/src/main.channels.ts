@@ -56,4 +56,6 @@ export const desktopIpcChannels = {
   getFloatingAssistantCaller: "desktop:get-floating-assistant-caller",
   setFloatingAssistantCaller: "desktop:set-floating-assistant-caller",
   floatingAssistantCallerChanged: "desktop:floating-assistant-caller-changed",
+  setMascotComputerUseActive: "desktop:set-mascot-computer-use-active",
+  stopComputerUseRequested: "desktop:stop-computer-use-requested",
 } as const;

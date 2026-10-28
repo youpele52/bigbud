@@ -93,6 +93,7 @@ it.skipIf(process.platform === "win32")(
     Manager.initBackendManager({
       rootDir: "/state",
       baseDir: "/state",
+      cuaDriverBaseDir: "/state",
       backendMaxOldSpaceMb: null,
       cuaDriverHostBundleId: "test",
       serverSettingsPath: "/state/settings.json",

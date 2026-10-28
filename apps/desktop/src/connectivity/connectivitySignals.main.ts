@@ -1,4 +1,4 @@
-import { BrowserWindow, net, powerMonitor } from "electron";
+import { net, powerMonitor } from "electron";
 import type { DesktopConnectivitySignal } from "@bigbud/contracts/server/ipc.desktop.ts";
 
 import {
@@ -11,6 +11,7 @@ import {
   getBackendStartupState,
   republishBackendStartupState,
 } from "../backend/backendStartupState";
+import { broadRendererWindows } from "../window/rendererWindows";
 import { DesktopConnectivitySignals } from "./connectivitySignals";
 
 interface StartDesktopConnectivitySignalsOptions {
@@ -22,8 +23,8 @@ interface StartDesktopConnectivitySignalsOptions {
 let activeSignals: DesktopConnectivitySignals | null = null;
 
 function broadcast(channel: string, signal: DesktopConnectivitySignal): void {
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send(channel, signal);
+  for (const window of broadRendererWindows()) {
+    window.webContents.send(channel, signal);
   }
 }
 

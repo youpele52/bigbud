@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { DesktopWindowRegistry } from "./DesktopWindowRegistry";
+import { COMPUTER_USE_SAFETY_ROLE, DesktopWindowRegistry } from "./DesktopWindowRegistry";
 
 function createWindow(id: number) {
   const handlers = new Map<string, () => void>();
@@ -34,5 +34,19 @@ describe("DesktopWindowRegistry", () => {
 
     expect(registry.getRole(mascotWebContents as never)).toBeNull();
     expect(registry.get("mascot")).toBeNull();
+  });
+
+  it("never treats the restricted safety role as a trusted broad renderer", () => {
+    const registry = new DesktopWindowRegistry();
+    const safety = createWindow(7);
+    const main = createWindow(8);
+    registry.register(COMPUTER_USE_SAFETY_ROLE, safety as never);
+    registry.register("main", main as never);
+
+    expect(registry.getRole(safety.webContents as never)).toBe(COMPUTER_USE_SAFETY_ROLE);
+    expect(registry.isTrusted(safety.webContents as never)).toBe(false);
+    expect(registry.isTrusted(main.webContents as never)).toBe(true);
+    // Broadcast targets are broad renderers only.
+    expect(registry.all()).toEqual([main]);
   });
 });

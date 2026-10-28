@@ -6,6 +6,7 @@ import type { MenuItemConstructorOptions } from "electron";
 import type { DesktopUpdateState } from "@bigbud/contracts";
 
 import { getAutoUpdateDisabledReason } from "../updater/updateState";
+import { broadRendererWindows } from "./rendererWindows";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,9 +107,14 @@ export function makeResolveIconPath(
 // Application menu
 // ---------------------------------------------------------------------------
 
+/** Menu actions never target the restricted safety renderer. */
+function focusedBroadWindow(): BrowserWindow | null {
+  const focused = BrowserWindow.getFocusedWindow();
+  return focused && broadRendererWindows().includes(focused) ? focused : null;
+}
+
 function dispatchMenuAction(deps: MenuManagerDeps, action: string): void {
-  const existingWindow =
-    BrowserWindow.getFocusedWindow() ?? deps.getMainWindow() ?? BrowserWindow.getAllWindows()[0];
+  const existingWindow = focusedBroadWindow() ?? deps.getMainWindow() ?? broadRendererWindows()[0];
   const targetWindow = existingWindow ?? deps.makeWindow();
   if (!existingWindow) {
     deps.setMainWindow(targetWindow);
@@ -174,7 +180,7 @@ function handleCheckForUpdatesMenuClick(deps: MenuManagerDeps): void {
     return;
   }
 
-  if (!BrowserWindow.getAllWindows().length) {
+  if (!broadRendererWindows().length) {
     deps.setMainWindow(deps.makeWindow());
   }
   void checkForUpdatesFromMenu(deps);

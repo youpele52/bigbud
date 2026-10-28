@@ -40,6 +40,7 @@ import {
 import { ServerSettingsService } from "./ws/serverSettings.ts";
 import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
 import { BootstrapCommandLockLive } from "./ws/wsBootstrap.lock.ts";
+import { ComputerUseActivityLive } from "./computer-use/Layers/ComputerUseActivity.ts";
 import { RemoteWorkspaceRuntime } from "./workspace-runtime/Services/WorkspaceRuntime.ts";
 import type { BuildAppUnderTestOptions } from "./server.test.app.types.ts";
 import { makeProjectionTestLayer } from "./server.test.app.projections.ts";
@@ -155,7 +156,9 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
           BootstrapCommandLockLive,
         ),
       ),
-      Layer.provide(Layer.mock(Open)({ ...options?.layers?.open })),
+      Layer.provide(
+        Layer.mergeAll(Layer.mock(Open)({ ...options?.layers?.open }), ComputerUseActivityLive),
+      ),
       Layer.provide(Layer.mock(GitCore)({ ...options?.layers?.gitCore })),
       Layer.provide(
         Layer.mock(GitManager)({

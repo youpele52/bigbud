@@ -9,7 +9,9 @@ import {
   type VisibleBrowserControlShape,
 } from "../../browser/Services/VisibleBrowserControl.ts";
 import type { ComputerUseShape } from "../../computer-use/Services/ComputerUse.ts";
+import type { ComputerUseActivityShape } from "../../computer-use/Services/ComputerUseActivity.ts";
 import { computerUseViaOrchestration } from "../../orchestration-tools/ThreadComputerUseTools.ts";
+import { computerUseV2ViaOrchestration } from "../../orchestration-tools/ThreadComputerUseTools.v2.ts";
 import {
   archiveThreadViaOrchestration as archiveThreadViaThreadTools,
   getThreadStatusViaOrchestration as getThreadStatusViaThreadTools,
@@ -40,6 +42,7 @@ import { executeBrowserAction } from "./OrchestrationEngine.browser.ts";
 export function installOrchestrationEngineToolDispatchers(input: {
   readonly browser: BrowserManagerShape;
   readonly computerUse: ComputerUseShape;
+  readonly computerUseActivity: Option.Option<ComputerUseActivityShape>;
   readonly engine: OrchestrationEngineShape;
   readonly fileSystem: FileSystem.FileSystem;
   readonly kanban: Option.Option<ProjectionKanbanRepositoryShape>;
@@ -128,6 +131,26 @@ export function installOrchestrationEngineToolDispatchers(input: {
           serverMode: input.serverConfig.mode,
           threadId: request.threadId,
           action: request.action,
+          checkInIntervalMs: settings.computerUseCheckInIntervalMs,
+          actionTimeoutMs: settings.computerUseActionTimeoutMs,
+          ...(Option.isSome(input.computerUseActivity)
+            ? { activity: input.computerUseActivity.value }
+            : {}),
+        });
+      }),
+    // No supervised port is connected yet (owner transport pending), so v2
+    // desktop requests fail closed with `control_unavailable`.
+    computerUseV2: (request) =>
+      Effect.gen(function* () {
+        const settings = yield* input.serverSettingsService.getSettings.pipe(
+          Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
+        );
+        return yield* computerUseV2ViaOrchestration({
+          orchestrationEngine: input.engine,
+          computerUseEnabled: settings.computerUseEnabled,
+          serverMode: input.serverConfig.mode,
+          threadId: request.threadId,
+          request: request.request,
           checkInIntervalMs: settings.computerUseCheckInIntervalMs,
           actionTimeoutMs: settings.computerUseActionTimeoutMs,
         });

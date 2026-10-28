@@ -265,6 +265,37 @@ describe("executeDesktopComputerUse", () => {
     expect(callTool).not.toHaveBeenCalledWith("scroll", expect.anything());
   });
 
+  it("forwards the shared dominant-axis scroll normalization unchanged", async () => {
+    const callTool = vi.fn((name: string) =>
+      name === "list_windows"
+        ? Effect.succeed({
+            content: [],
+            structuredContent: {
+              windows: [{ window_id: 1, pid: 2, bounds: { x: 0, y: 0, width: 100, height: 100 } }],
+            },
+          })
+        : Effect.succeed({ content: [] }),
+    );
+    for (const [deltaX, deltaY, direction, amount] of [
+      [3, -3, "up", 3],
+      [-250, 10, "left", 100],
+      [0.2, undefined, "right", 1],
+    ] as const) {
+      callTool.mockClear();
+      await Effect.runPromise(
+        executeDesktopComputerUse(THREAD_ID, makeDriver({ callTool }), {
+          action: "scroll",
+          deltaX,
+          ...(deltaY === undefined ? {} : { deltaY }),
+        }),
+      );
+      expect(callTool).toHaveBeenCalledWith(
+        "scroll",
+        expect.objectContaining({ pid: 2, window_id: 1, direction, amount }),
+      );
+    }
+  });
+
   it("surfaces session cleanup failure and resets the proxy", async () => {
     const resetProxy = vi.fn();
     const driver = makeDriver({

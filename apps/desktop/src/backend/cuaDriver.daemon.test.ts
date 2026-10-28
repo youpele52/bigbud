@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import * as Path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,9 +8,15 @@ const mocks = vi.hoisted(() => ({
   mkdirSync: vi.fn(),
   rmSync: vi.fn(),
   runCommand: vi.fn(async () => ({ code: 0 })),
+  makeChildEnvironment: vi.fn((..._args: unknown[]) => ({})),
+  resolvePrivateStateHome: vi.fn((_baseDir: string) => "/managed/home"),
+  serveArguments: vi.fn(() => ["serve"]),
+  resolveRuntime: vi.fn(() => ({ binaryPath: "/cua-driver", version: null as string | null })),
   spawned: [] as Array<ReturnType<typeof makeChild>>,
   spawn: vi.fn(),
   stopMcpClient: vi.fn(),
+  removeStaleSocket: vi.fn((): "absent" | "removed" | "blocked" => "absent"),
+  prepareCursorTheme: vi.fn((_stateHome: string, _version: string | null): string | null => null),
 }));
 
 function makeChild() {
@@ -44,15 +51,20 @@ vi.mock("node:fs", () => ({
   mkdirSync: mocks.mkdirSync,
   rmSync: mocks.rmSync,
 }));
-vi.mock("@bigbud/shared/cua-driver/childEnvironment", () => ({
-  makeCuaDriverChildEnvironment: vi.fn(() => ({})),
+vi.mock("@bigbud/shared/cua-driver/childEnvironment", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@bigbud/shared/cua-driver/childEnvironment")>()),
+  makeCuaDriverChildEnvironment: mocks.makeChildEnvironment,
 }));
-vi.mock("@bigbud/shared/cua-driver/invocation", () => ({
+vi.mock("@bigbud/shared/cua-driver/invocation", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@bigbud/shared/cua-driver/invocation")>()),
   cuaDriverEmbeddedEnvironment: vi.fn(() => ({ CUA_DRIVER_SOCKET: "/socket" })),
-  cuaDriverServeArguments: vi.fn(() => ["serve"]),
+  cuaDriverServeArguments: mocks.serveArguments,
 }));
-vi.mock("./cuaDriver", () => ({
-  resolveComputerUseRuntime: vi.fn(() => ({ binaryPath: "/cua-driver" })),
+vi.mock("./cuaDriver.cursorTheme", () => ({
+  prepareCuaCursorTheme: mocks.prepareCursorTheme,
+}));
+vi.mock("./cuaDriver.runtime", () => ({
+  resolveComputerUseRuntime: mocks.resolveRuntime,
 }));
 vi.mock("./cuaDriver.mcpClient", () => ({
   callCuaDriverTool: vi.fn(async () => ({
@@ -62,8 +74,12 @@ vi.mock("./cuaDriver.mcpClient", () => ({
     mocks.stopMcpClient();
   }),
 }));
+vi.mock("./cuaDriver.daemon.endpoint", () => ({
+  removeStaleDaemonSocket: mocks.removeStaleSocket,
+}));
 vi.mock("./cuaDriver.paths", () => ({
-  resolveManagedPaths: vi.fn(() => ({ rootDir: "/managed" })),
+  resolveManagedPaths: vi.fn(() => ({ rootDir: "/managed", homeDir: "/managed/home" })),
+  resolvePrivateStateHome: mocks.resolvePrivateStateHome,
 }));
 vi.mock("./cuaDriver.process", () => ({
   runCommand: mocks.runCommand,
@@ -87,6 +103,12 @@ describe("cua-driver daemon shutdown", () => {
       return child;
     });
     mocks.stopMcpClient.mockClear();
+    mocks.removeStaleSocket.mockReset().mockReturnValue("absent");
+    mocks.makeChildEnvironment.mockClear();
+    mocks.serveArguments.mockClear();
+    mocks.rmSync.mockClear();
+    mocks.prepareCursorTheme.mockReset().mockReturnValue(null);
+    mocks.resolveRuntime.mockReset().mockReturnValue({ binaryPath: "/cua-driver", version: null });
   });
 
   afterEach(() => {
@@ -107,6 +129,31 @@ describe("cua-driver daemon shutdown", () => {
     await Promise.all([first, second]);
     await daemon.stopCuaDriverDaemonAndWait();
     expect(child.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes a stale socket at the endpoint before respawning", async () => {
+    await loadStartedDaemon();
+    mocks.removeStaleSocket.mockReturnValue("removed");
+    emitExit(mocks.spawned[0]!);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(mocks.removeStaleSocket).toHaveBeenCalledOnce();
+    // Containment: the stale-socket check is scoped to the daemon's own run dir.
+    const [endpoint, runDir] = mocks.removeStaleSocket.mock.calls[0] as unknown as [string, string];
+    expect(Path.dirname(endpoint)).toBe(runDir);
+    expect(mocks.removeStaleSocket.mock.invocationCallOrder[0]!).toBeLessThan(
+      mocks.spawn.mock.invocationCallOrder[1]!,
+    );
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not respawn when the endpoint holds something that is not a socket", async () => {
+    const daemon = await loadStartedDaemon();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.removeStaleSocket.mockReturnValue("blocked");
+    emitExit(mocks.spawned[0]!);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(daemon.getCuaDriverDaemonStatus().lastError).toContain("not a removable socket");
   });
 
   it("cancels a scheduled restart", async () => {
@@ -162,5 +209,69 @@ describe("cua-driver daemon shutdown", () => {
 
     await expect(waitingStart).resolves.toEqual({});
     expect(mocks.spawn).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes a private --pid-file inside the run dir for a 0.38 runtime", async () => {
+    mocks.resolveRuntime.mockReturnValue({ binaryPath: "/cua-driver", version: "0.38.0" });
+    const daemon = await loadStartedDaemon();
+    expect(mocks.serveArguments).toHaveBeenCalledTimes(1);
+    const [endpoint, hostBundleId, options] = mocks.serveArguments.mock.calls[0]! as unknown as [
+      string,
+      string,
+      { pidFile?: string },
+    ];
+    expect(hostBundleId).toBe("host-id");
+    expect(options.pidFile).toMatch(/^\/managed\/run\/[^/]+\/cua\.pid$/);
+    if (process.platform !== "win32") {
+      expect(Path.dirname(options.pidFile!)).toBe(Path.dirname(endpoint));
+    }
+    // The run dir (socket and pid file) is removed with the daemon.
+    const stop = daemon.stopCuaDriverDaemonAndWait();
+    emitExit(mocks.spawned[0]!);
+    await stop;
+    expect(mocks.rmSync).toHaveBeenCalledWith(Path.dirname(options.pidFile!), {
+      recursive: true,
+      force: true,
+    });
+  });
+
+  it("selects the installed bigbud cursor theme when one was prepared", async () => {
+    mocks.resolveRuntime.mockReturnValue({ binaryPath: "/cua-driver", version: "0.38.0" });
+    mocks.prepareCursorTheme.mockReturnValue("ai.bigbud.agent-cursor");
+    await loadStartedDaemon();
+    expect(mocks.prepareCursorTheme).toHaveBeenCalledWith("/managed/home", "0.38.0");
+    expect(mocks.serveArguments).toHaveBeenCalledWith(
+      expect.any(String),
+      "host-id",
+      expect.objectContaining({ cursorTheme: "ai.bigbud.agent-cursor" }),
+    );
+  });
+
+  it.each([
+    ["0.9.1 (parses but ignores the flag)", "0.9.1"],
+    ["an unknown version", null],
+  ])("keeps the serve argv unchanged for %s", async (_label, version) => {
+    mocks.resolveRuntime.mockReturnValue({ binaryPath: "/cua-driver", version });
+    await loadStartedDaemon();
+    expect(mocks.serveArguments).toHaveBeenCalledWith(expect.any(String), "host-id", {});
+  });
+
+  it("runs the daemon and its helpers with the private state home and forwards it", async () => {
+    const daemon = await import("./cuaDriver.daemon");
+    const environment = await daemon.startCuaDriverDaemon("/base", "host-id");
+    const stateHome = "/managed/home";
+    const expected = { BIGBUD_CUA_STATE_HOME: stateHome };
+    expect(mocks.resolvePrivateStateHome).toHaveBeenCalledWith("/base");
+    // Daemon spawn, `status` polling and the health MCP call all carry it.
+    for (const call of mocks.makeChildEnvironment.mock.calls) {
+      expect(call[1]).toMatchObject(expected);
+    }
+    expect(mocks.makeChildEnvironment.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // Forwarded to the backend as the carrier key only: terminals and provider CLIs
+    // must not inherit the Driver overrides, which every Driver child derives at spawn.
+    expect(environment).toMatchObject(expected);
+    expect(environment.CUA_DRIVER_RS_HOME).toBeUndefined();
+    expect(environment.CUA_DRIVER_TELEMETRY_HOME).toBeUndefined();
+    expect(environment.HOME).toBeUndefined();
   });
 });

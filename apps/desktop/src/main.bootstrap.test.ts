@@ -54,10 +54,12 @@ vi.mock("./backend/cuaDriver", () => ({
   getComputerUseRuntimeStatus: vi.fn(),
   installComputerUseRuntime: vi.fn(),
   requestComputerUsePermissions: vi.fn(),
+  runComputerUseDoctor: vi.fn(),
+}));
+vi.mock("./backend/cuaDriver.runtime", () => ({
   resolveComputerUseRuntime: vi.fn(() => ({
     binaryPath: String.raw`C:\Program Files\bigbud\cua-driver.exe`,
   })),
-  runComputerUseDoctor: vi.fn(),
 }));
 vi.mock("./backend/cuaDriver.daemon", () => ({
   stopCuaDriverDaemon: vi.fn(),
@@ -97,6 +99,10 @@ vi.mock("./updater/autoUpdater", () => ({
 vi.mock("./window/ipcHandlers", () => ({ registerIpcHandlers: vi.fn() }));
 vi.mock("./system-monitor/ipc", () => ({ registerSystemMonitorIpc: vi.fn() }));
 vi.mock("./main.terminalRendering", () => ({ registerTerminalRenderingIpc: vi.fn() }));
+vi.mock("./computer-use/computerUse.bootstrap", () => ({
+  registerComputerUseSafetySurface: vi.fn(),
+  startComputerUseGuard: vi.fn(() => null),
+}));
 vi.mock("./connectivity/connectivitySignals.main", () => ({
   startDesktopConnectivitySignals: vi.fn(),
 }));
@@ -133,6 +139,11 @@ function makeBootstrapOptions(): Parameters<typeof bootstrapDesktop>[0] {
     systemMonitor: {} as never,
     channels: {} as never,
     cuaDriverHostBundleId: "bundle-id",
+    computerUseGuard: {
+      rootDir: "/repo",
+      desktopDir: "/repo/apps/desktop/dist",
+      developmentRoot: null,
+    },
     desktopPreferences: { get: () => ({ floatingAssistantEnabled: false }) } as never,
     desktopRuntimeInfo: {} as never,
     floatingAssistantWindows: { ensureMascot: vi.fn() } as never,
