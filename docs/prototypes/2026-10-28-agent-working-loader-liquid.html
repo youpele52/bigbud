@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bigbud · agent working loader (liquid metal)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Theme tokens mirrored from apps/web/src/index.css */
+      :root {
+        color-scheme: light;
+        --background: #fafafa;
+        --foreground: #171717;
+        --card: #ffffff;
+        --muted-foreground: #46464b;
+        --border: rgb(0 0 0 / 8%);
+        --info: #3b82f6;
+        --success: #10b981;
+        --track: rgb(0 0 0 / 6%);
+        --card-surface-radius: 20px;
+        /* matte black, like the mascot's default finish */
+        --metal-1: #5a5a5c;
+        --metal-2: #1c1c1e;
+        --metal-3: #0a0a0a;
+        --metal-4: #2e2e31;
+        --sheen: 0.18;
+      }
+      .dark {
+        color-scheme: dark;
+        --background: #0f0f0f;
+        --foreground: #f5f5f5;
+        --card: #141414;
+        --muted-foreground: #8a8a8a;
+        --border: rgb(255 255 255 / 6%);
+        --info: #3b82f6;
+        --success: #10b981;
+        --track: rgb(255 255 255 / 7%);
+        /* chrome */
+        --metal-1: #ffffff;
+        --metal-2: #c3c8d1;
+        --metal-3: #5d6676;
+        --metal-4: #e4e8ee;
+        --sheen: 0.55;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        font-size: 14px;
+        display: grid;
+        place-items: center;
+        transition:
+          background 0.3s,
+          color 0.3s;
+      }
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.035;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        background-size: 256px 256px;
+      }
+
+      main {
+        width: min(560px, calc(100vw - 32px));
+        display: grid;
+        gap: 16px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .caption {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--card-surface-radius);
+        padding: 20px;
+      }
+      button {
+        font: inherit;
+        font-size: 14px;
+        color: var(--foreground);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--track);
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+      }
+
+      /* ---------- The loader ---------- */
+      .agent-loader {
+        --tone: var(--info);
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .agent-loader[data-state="done"] {
+        --tone: var(--success);
+        --metal-1: #a7f3d0;
+        --metal-2: #34d399;
+        --metal-3: #047857;
+        --metal-4: #6ee7b7;
+        --sheen: 0.45;
+      }
+      .liquid {
+        flex: none;
+        display: block;
+        overflow: visible;
+        filter: drop-shadow(0 0 6px color-mix(in srgb, var(--tone) 45%, transparent));
+        transition: filter 0.4s;
+      }
+      .liquid stop {
+        transition: stop-color 0.5s;
+      }
+      .liquid .sheen {
+        opacity: var(--sheen);
+      }
+      .liquid .check {
+        fill: none;
+        stroke: #fff;
+        stroke-width: 6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 40;
+        stroke-dashoffset: 40;
+        transition: stroke-dashoffset 0.4s cubic-bezier(0.65, 0, 0.35, 1);
+      }
+      .agent-loader[data-state="done"] .liquid .check {
+        stroke-dashoffset: 0;
+        transition-delay: 0.45s;
+      }
+
+      .label {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .word {
+        display: inline-flex;
+        align-items: baseline;
+      }
+      .verb-slot {
+        position: relative;
+        display: inline-grid;
+        overflow: hidden;
+        height: 1.4em;
+        line-height: 1.4em;
+        font-weight: 500;
+        transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .verb {
+        grid-area: 1 / 1;
+        color: transparent;
+        background: linear-gradient(
+            90deg,
+            var(--muted-foreground) 0%,
+            var(--muted-foreground) 40%,
+            var(--foreground) 50%,
+            var(--muted-foreground) 60%,
+            var(--muted-foreground) 100%
+          )
+          0 0 / 250% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        animation: shimmer 2.2s linear infinite;
+        transition:
+          transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.45s,
+          filter 0.45s;
+      }
+      .verb.enter {
+        transform: translateY(100%);
+        opacity: 0;
+        filter: blur(3px);
+      }
+      .verb.leave {
+        transform: translateY(-100%);
+        opacity: 0;
+        filter: blur(3px);
+      }
+      .agent-loader[data-state="done"] .verb {
+        animation: none;
+        background: none;
+        color: var(--foreground);
+      }
+      .dots::after {
+        content: "";
+        display: inline-block;
+        width: 1.2em;
+        text-align: left;
+        color: var(--muted-foreground);
+        animation: dots 1.4s steps(4, end) infinite;
+      }
+      .agent-loader[data-state="done"] .dots {
+        display: none;
+      }
+      .elapsed {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .agent-loader.lg {
+        gap: 14px;
+      }
+      .agent-loader.lg .verb-slot {
+        font-size: 16px;
+      }
+
+      @keyframes shimmer {
+        from {
+          background-position: 100% 0;
+        }
+        to {
+          background-position: -50% 0;
+        }
+      }
+      @keyframes dots {
+        0% {
+          content: "";
+        }
+        25% {
+          content: ".";
+        }
+        50% {
+          content: "..";
+        }
+        75% {
+          content: "...";
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .verb,
+        .dots::after {
+          animation: none !important;
+        }
+        .verb {
+          background: none;
+          color: var(--muted-foreground);
+          transition: none;
+        }
+      }
+
+      /* timeline context mock */
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .bubble {
+        margin-left: auto;
+        max-width: 80%;
+        background: var(--track);
+        border-radius: 14px;
+        padding: 8px 12px;
+      }
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 16px 0;
+      }
+      .stage {
+        display: grid;
+        place-items: center;
+        padding: 20px 0 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Agent working loader · liquid metal</h1>
+          <div class="caption">Chrome in dark, matte black in light · blobs melt, split and rejoin</div>
+        </div>
+        <div class="controls">
+          <button id="toggle-done" type="button">Finish</button>
+          <button id="toggle-theme" type="button">Light</button>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="caption">Hero</div>
+        <div class="stage">
+          <div class="agent-loader lg" data-loader role="status" aria-live="polite">
+            <svg class="liquid" data-size="72" aria-hidden="true"></svg>
+            <span class="label">
+              <span class="word"><span class="verb-slot"><span class="verb">Thinking</span></span><span class="dots" aria-hidden="true"></span></span>
+              <span class="elapsed">0s</span>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="caption">In the timeline</div>
+        <div class="divider"></div>
+        <div class="row"><div class="bubble">Refactor the files panel loader and add retry on reconnect.</div></div>
+        <div class="divider"></div>
+        <div class="row">
+          <div class="agent-loader" data-loader role="status" aria-live="polite">
+            <svg class="liquid" data-size="26" aria-hidden="true"></svg>
+            <span class="label">
+              <span class="word"><span class="verb-slot"><span class="verb">Thinking</span></span><span class="dots" aria-hidden="true"></span></span>
+              <span class="elapsed">0s</span>
+            </span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      /* ---------- Liquid metal renderer ---------- */
+      const SATELLITE_COUNT = 5;
+      const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const TAU = Math.PI * 2;
+      const NS = "http://www.w3.org/2000/svg";
+      const rand = (min, max) => min + Math.random() * (max - min);
+      const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(TAU * Math.random());
+
+      // Blur + alpha threshold ("goo") on a mask, so one shared metal gradient fills the merged shape.
+      function buildSvg(svg, id) {
+        const size = Number(svg.dataset.size);
+        svg.setAttribute("viewBox", "0 0 100 100");
+        svg.setAttribute("width", size);
+        svg.setAttribute("height", size);
+        svg.innerHTML = `
+          <defs>
+            <filter id="goo-${id}" filterUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="4" />
+              <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" />
+            </filter>
+            <linearGradient id="metal-${id}" gradientUnits="userSpaceOnUse" x1="18" y1="12" x2="82" y2="88">
+              <stop offset="0" style="stop-color: var(--metal-1)" />
+              <stop offset="0.38" style="stop-color: var(--metal-2)" />
+              <stop offset="0.62" style="stop-color: var(--metal-3)" />
+              <stop offset="1" style="stop-color: var(--metal-4)" />
+            </linearGradient>
+            <radialGradient id="sheen-${id}">
+              <stop offset="0" stop-color="#fff" stop-opacity="1" />
+              <stop offset="1" stop-color="#fff" stop-opacity="0" />
+            </radialGradient>
+            <mask id="mask-${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+              <g filter="url(#goo-${id})" fill="#fff"></g>
+            </mask>
+          </defs>
+          <g mask="url(#mask-${id})">
+            <rect width="100" height="100" fill="url(#metal-${id})" />
+            <ellipse class="sheen" rx="16" ry="10" fill="url(#sheen-${id})" />
+          </g>
+          <path class="check" d="M39 51 L47 59 L62 43" />`;
+        const blobs = svg.querySelector("mask g");
+        const core = document.createElementNS(NS, "circle");
+        blobs.appendChild(core);
+        const satellites = Array.from({ length: SATELLITE_COUNT }, (_, i) => {
+          const el = document.createElementNS(NS, "circle");
+          blobs.appendChild(el);
+          return {
+            el,
+            angle: (i / SATELLITE_COUNT) * TAU,
+            omega: rand(0.5, 1.1) * (i % 2 ? -1 : 1),
+            omega0: 0,
+            radius: rand(6.5, 10),
+            reach: rand(19, 25),
+            amp: rand(8, 12),
+            freq: rand(0.55, 1.05),
+            phase: rand(0, TAU),
+          };
+        });
+        satellites.forEach((s) => (s.omega0 = s.omega));
+        return { core, satellites, sheen: svg.querySelector(".sheen"), merge: 0, mergeTarget: 0 };
+      }
+
+      function drawLiquid(liquid, t, dt) {
+        liquid.merge += (liquid.mergeTarget - liquid.merge) * Math.min(1, dt * 4);
+        const spread = 1 - liquid.merge;
+        const breathe = reducedMotion ? 1 : 1 + 0.06 * Math.sin(t * 2.2);
+        liquid.core.setAttribute("cx", 50);
+        liquid.core.setAttribute("cy", 50);
+        liquid.core.setAttribute("r", (17 + 6 * liquid.merge) * breathe);
+        for (const s of liquid.satellites) {
+          if (!reducedMotion) {
+            // angular speed wanders around its base, so the dance never repeats
+            s.omega += (s.omega0 - s.omega) * 0.8 * dt + gauss() * 0.9 * Math.sqrt(dt);
+            s.angle += s.omega * dt;
+          }
+          // reach out far enough to pinch off, then fall back and melt in
+          const distance = (s.reach + s.amp * Math.sin(t * s.freq + s.phase)) * spread;
+          s.el.setAttribute("cx", 50 + Math.cos(s.angle) * distance);
+          s.el.setAttribute("cy", 50 + Math.sin(s.angle) * distance);
+          s.el.setAttribute("r", s.radius * (0.6 + 0.4 * spread));
+        }
+        // the highlight slides slowly, like light catching a moving surface
+        liquid.sheen.setAttribute("cx", 40 + 6 * Math.sin(t * 0.7));
+        liquid.sheen.setAttribute("cy", 36 + 4 * Math.cos(t * 0.9));
+      }
+
+      const liquids = [...document.querySelectorAll("svg.liquid")].map((svg, i) => buildSvg(svg, i));
+      let last = performance.now();
+      liquids.forEach((l) => drawLiquid(l, 1.3, 0));
+
+      (function frame(now) {
+        // rAF timestamps can precede performance.now(); keep dt non-negative
+        const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+        last = now;
+        liquids.forEach((l) => drawLiquid(l, reducedMotion ? 1.3 : now / 1000, dt));
+        requestAnimationFrame(frame);
+      })(last);
+
+      /* ---------- Label: rotating verbs + elapsed time ---------- */
+      const VERBS = ["Thinking", "Reading files", "Planning", "Editing", "Running checks", "Reviewing"];
+      const loaders = [...document.querySelectorAll("[data-loader]")];
+      let start = performance.now();
+      let index = 0;
+      let done = false;
+
+      function formatElapsed(ms) {
+        const s = Math.floor(ms / 1000);
+        return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+      }
+
+      function measure(slot, text) {
+        const probe = document.createElement("span");
+        probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:inherit;font-weight:500";
+        probe.textContent = text;
+        slot.appendChild(probe);
+        const width = probe.offsetWidth;
+        probe.remove();
+        return width;
+      }
+
+      function swapVerb(loader, text) {
+        const slot = loader.querySelector(".verb-slot");
+        const current = slot.querySelector(".verb:not(.leave)");
+        const next = document.createElement("span");
+        next.className = "verb enter";
+        next.textContent = text;
+        slot.style.width = `${current.offsetWidth}px`;
+        slot.appendChild(next);
+        requestAnimationFrame(() => {
+          current.classList.add("leave");
+          next.classList.remove("enter");
+          slot.style.width = `${measure(slot, text)}px`;
+        });
+        setTimeout(() => current.remove(), 500);
+      }
+
+      setInterval(() => {
+        if (done) return;
+        index = (index + 1) % VERBS.length;
+        loaders.forEach((l) => swapVerb(l, VERBS[index]));
+      }, 2600);
+
+      setInterval(() => {
+        if (done) return;
+        const text = formatElapsed(performance.now() - start);
+        loaders.forEach((l) => (l.querySelector(".elapsed").textContent = text));
+      }, 250);
+
+      document.getElementById("toggle-done").addEventListener("click", (e) => {
+        done = !done;
+        liquids.forEach((l) => (l.mergeTarget = done ? 1 : 0));
+        loaders.forEach((l) => {
+          l.dataset.state = done ? "done" : "working";
+          swapVerb(l, done ? "Done" : VERBS[0]);
+        });
+        if (!done) {
+          start = performance.now();
+          index = 0;
+        }
+        e.currentTarget.textContent = done ? "Restart" : "Finish";
+      });
+
+      document.getElementById("toggle-theme").addEventListener("click", (e) => {
+        const dark = document.documentElement.classList.toggle("dark");
+        e.currentTarget.textContent = dark ? "Light" : "Dark";
+      });
+    </script>
+  </body>
+</html>

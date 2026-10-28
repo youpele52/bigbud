@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bigbud · agent working loader (life matrix)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Theme tokens mirrored from apps/web/src/index.css */
+      :root {
+        color-scheme: light;
+        --background: #fafafa;
+        --foreground: #171717;
+        --card: #ffffff;
+        --muted-foreground: #46464b;
+        --border: rgb(0 0 0 / 8%);
+        --info: #3b82f6;
+        --success: #10b981;
+        --track: rgb(0 0 0 / 6%);
+        --dot: rgb(0 0 0 / 10%);
+        --card-surface-radius: 20px;
+      }
+      .dark {
+        color-scheme: dark;
+        --background: #0f0f0f;
+        --foreground: #f5f5f5;
+        --card: #141414;
+        --muted-foreground: #8a8a8a;
+        --border: rgb(255 255 255 / 6%);
+        --info: #3b82f6;
+        --success: #10b981;
+        --track: rgb(255 255 255 / 7%);
+        --dot: rgb(255 255 255 / 10%);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        font-size: 14px;
+        display: grid;
+        place-items: center;
+        transition:
+          background 0.3s,
+          color 0.3s;
+      }
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.035;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        background-size: 256px 256px;
+      }
+
+      main {
+        width: min(560px, calc(100vw - 32px));
+        display: grid;
+        gap: 16px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .caption {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--card-surface-radius);
+        padding: 20px;
+      }
+      button {
+        font: inherit;
+        font-size: 14px;
+        color: var(--foreground);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--track);
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+      }
+
+      /* ---------- The loader ---------- */
+      .agent-loader {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .matrix {
+        flex: none;
+        display: block;
+      }
+
+      .label {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .word {
+        display: inline-flex;
+        align-items: baseline;
+      }
+      .verb-slot {
+        position: relative;
+        display: inline-grid;
+        overflow: hidden;
+        height: 1.4em;
+        line-height: 1.4em;
+        font-weight: 500;
+        transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .verb {
+        grid-area: 1 / 1;
+        color: transparent;
+        background: linear-gradient(
+            90deg,
+            var(--muted-foreground) 0%,
+            var(--muted-foreground) 40%,
+            var(--foreground) 50%,
+            var(--muted-foreground) 60%,
+            var(--muted-foreground) 100%
+          )
+          0 0 / 250% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        animation: shimmer 2.2s linear infinite;
+        transition:
+          transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.45s,
+          filter 0.45s;
+      }
+      .verb.enter {
+        transform: translateY(100%);
+        opacity: 0;
+        filter: blur(3px);
+      }
+      .verb.leave {
+        transform: translateY(-100%);
+        opacity: 0;
+        filter: blur(3px);
+      }
+      .agent-loader[data-state="done"] .verb {
+        animation: none;
+        background: none;
+        color: var(--foreground);
+      }
+      .dots::after {
+        content: "";
+        display: inline-block;
+        width: 1.2em;
+        text-align: left;
+        color: var(--muted-foreground);
+        animation: dots 1.4s steps(4, end) infinite;
+      }
+      .agent-loader[data-state="done"] .dots {
+        display: none;
+      }
+      .elapsed {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .agent-loader.lg {
+        gap: 14px;
+      }
+      .agent-loader.lg .verb-slot {
+        font-size: 16px;
+      }
+
+      @keyframes shimmer {
+        from {
+          background-position: 100% 0;
+        }
+        to {
+          background-position: -50% 0;
+        }
+      }
+      @keyframes dots {
+        0% {
+          content: "";
+        }
+        25% {
+          content: ".";
+        }
+        50% {
+          content: "..";
+        }
+        75% {
+          content: "...";
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .verb,
+        .dots::after {
+          animation: none !important;
+        }
+        .verb {
+          background: none;
+          color: var(--muted-foreground);
+          transition: none;
+        }
+      }
+
+      /* timeline context mock */
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .bubble {
+        margin-left: auto;
+        max-width: 80%;
+        background: var(--track);
+        border-radius: 14px;
+        padding: 8px 12px;
+      }
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 16px 0;
+      }
+      .stage {
+        display: grid;
+        place-items: center;
+        padding: 20px 0 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Agent working loader · life matrix</h1>
+          <div class="caption">Conway's Game of Life on a 9×9 dot matrix · respects reduced motion</div>
+        </div>
+        <div class="controls">
+          <button id="toggle-done" type="button">Finish</button>
+          <button id="toggle-theme" type="button">Light</button>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="caption">Hero</div>
+        <div class="stage">
+          <div class="agent-loader lg" data-loader role="status" aria-live="polite">
+            <canvas class="matrix" data-size="64" aria-hidden="true"></canvas>
+            <span class="label">
+              <span class="word"><span class="verb-slot"><span class="verb">Thinking</span></span><span class="dots" aria-hidden="true"></span></span>
+              <span class="elapsed">0s</span>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="caption">In the timeline</div>
+        <div class="divider"></div>
+        <div class="row"><div class="bubble">Refactor the files panel loader and add retry on reconnect.</div></div>
+        <div class="divider"></div>
+        <div class="row">
+          <div class="agent-loader" data-loader role="status" aria-live="polite">
+            <canvas class="matrix" data-size="24" aria-hidden="true"></canvas>
+            <span class="label">
+              <span class="word"><span class="verb-slot"><span class="verb">Thinking</span></span><span class="dots" aria-hidden="true"></span></span>
+              <span class="elapsed">0s</span>
+            </span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      /* ---------- Life matrix renderer ---------- */
+      const GRID = 9;
+      const TICK_MS = 150;
+      const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const TAU = Math.PI * 2;
+      // a check mark drawn in cells, shown when the work is done
+      const CHECK = [
+        [1, 4], [2, 5], [3, 6], [4, 5], [5, 4], [6, 3], [7, 2],
+      ];
+      const GLIDERS = [
+        [[1, 0], [2, 1], [0, 2], [1, 2], [2, 2]],
+        [[1, 0], [0, 1], [0, 2], [1, 2], [2, 2]],
+      ];
+
+      const idx = (x, y) => ((y + GRID) % GRID) * GRID + ((x + GRID) % GRID);
+
+      function seed(cells, density = 0.34) {
+        for (let i = 0; i < cells.length; i++) cells[i] = Math.random() < density ? 1 : 0;
+      }
+
+      function dropGlider(cells) {
+        const shape = GLIDERS[Math.floor(Math.random() * GLIDERS.length)];
+        const ox = Math.floor(Math.random() * GRID);
+        const oy = Math.floor(Math.random() * GRID);
+        shape.forEach(([x, y]) => (cells[idx(ox + x, oy + y)] = 1));
+      }
+
+      // Conway's rules on a wrap-around grid.
+      function step(cells) {
+        const next = new Uint8Array(cells.length);
+        for (let y = 0; y < GRID; y++) {
+          for (let x = 0; x < GRID; x++) {
+            let n = 0;
+            for (let dy = -1; dy <= 1; dy++)
+              for (let dx = -1; dx <= 1; dx++) if (dx || dy) n += cells[idx(x + dx, y + dy)];
+            const alive = cells[idx(x, y)];
+            next[idx(x, y)] = n === 3 || (alive && n === 2) ? 1 : 0;
+          }
+        }
+        return next;
+      }
+
+      function createMatrix(canvas) {
+        const size = Number(canvas.dataset.size);
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        canvas.style.width = `${size}px`;
+        canvas.style.height = `${size}px`;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(dpr, dpr);
+        const cells = new Uint8Array(GRID * GRID);
+        seed(cells);
+        return {
+          ctx,
+          size,
+          cells,
+          level: new Float32Array(GRID * GRID), // eased 0..1 brightness per cell
+          flash: new Float32Array(GRID * GRID), // newborn highlight
+          history: [],
+          done: false,
+          doneAt: 0,
+        };
+      }
+
+      function tick(m) {
+        if (m.done) return;
+        const prev = m.cells;
+        m.cells = step(prev);
+        for (let i = 0; i < m.cells.length; i++) if (m.cells[i] && !prev[i]) m.flash[i] = 1;
+        // still lifes, loops and die-offs look like a stall: stir the grid
+        const key = m.cells.join("");
+        const population = m.cells.reduce((a, b) => a + b, 0);
+        if (population < 4 || m.history.includes(key)) {
+          if (population < 4) seed(m.cells, 0.22);
+          dropGlider(m.cells);
+          m.history.length = 0;
+        }
+        m.history.push(key);
+        if (m.history.length > 12) m.history.shift();
+      }
+
+      function readColors() {
+        const css = getComputedStyle(document.documentElement);
+        return {
+          info: css.getPropertyValue("--info").trim(),
+          success: css.getPropertyValue("--success").trim(),
+          track: css.getPropertyValue("--dot").trim(),
+        };
+      }
+
+      function drawMatrix(m, now, dt, colors) {
+        const { ctx, size } = m;
+        const cell = size / GRID;
+        const half = (GRID - 1) / 2;
+        ctx.clearRect(0, 0, size, size);
+        for (let y = 0; y < GRID; y++) {
+          for (let x = 0; x < GRID; x++) {
+            const i = idx(x, y);
+            // when done, cells settle into the check in a ripple from the centre
+            const ripple = m.done ? Math.max(0, now - m.doneAt - Math.hypot(x - half, y - half) * 45) : 1;
+            const target = ripple > 0 ? m.cells[i] : m.level[i] > 0.5 ? 1 : 0;
+            m.level[i] += (target - m.level[i]) * Math.min(1, dt * 14);
+            m.flash[i] = Math.max(0, m.flash[i] - dt * 3);
+            const cx = (x + 0.5) * cell;
+            const cy = (y + 0.5) * cell;
+
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = colors.track;
+            ctx.beginPath();
+            ctx.arc(cx, cy, cell * 0.14, 0, TAU);
+            ctx.fill();
+
+            const l = m.level[i];
+            if (l < 0.02) continue;
+            const tone = m.done ? colors.success : colors.info;
+            ctx.globalAlpha = l;
+            ctx.shadowColor = tone;
+            ctx.shadowBlur = cell * (0.8 + m.flash[i]);
+            ctx.fillStyle = tone;
+            ctx.beginPath();
+            ctx.arc(cx, cy, cell * (0.2 + 0.16 * l + 0.08 * m.flash[i]), 0, TAU);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            if (m.flash[i] > 0.05 && !m.done) {
+              // newborn cells glint white before cooling to blue
+              ctx.globalAlpha = m.flash[i] * 0.85;
+              ctx.fillStyle = "#fff";
+              ctx.beginPath();
+              ctx.arc(cx, cy, cell * 0.16, 0, TAU);
+              ctx.fill();
+            }
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+
+      function setDone(m, done, now) {
+        m.done = done;
+        m.doneAt = now;
+        if (done) {
+          m.cells = new Uint8Array(GRID * GRID);
+          CHECK.forEach(([x, y]) => (m.cells[idx(x, y)] = 1));
+        } else {
+          seed(m.cells);
+          m.history.length = 0;
+        }
+      }
+
+      const matrices = [...document.querySelectorAll("canvas.matrix")].map(createMatrix);
+      let colors = readColors();
+      let last = performance.now();
+
+      if (!reducedMotion) setInterval(() => matrices.forEach(tick), TICK_MS);
+      (function frame(now) {
+        // rAF timestamps can precede performance.now(); keep dt non-negative
+        const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+        last = now;
+        matrices.forEach((m) => drawMatrix(m, now, reducedMotion ? 1 : dt, colors));
+        requestAnimationFrame(frame);
+      })(last);
+
+      /* ---------- Label: rotating verbs + elapsed time ---------- */
+      const VERBS = ["Thinking", "Reading files", "Planning", "Editing", "Running checks", "Reviewing"];
+      const loaders = [...document.querySelectorAll("[data-loader]")];
+      let start = performance.now();
+      let index = 0;
+      let done = false;
+
+      function formatElapsed(ms) {
+        const s = Math.floor(ms / 1000);
+        return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+      }
+
+      function measure(slot, text) {
+        const probe = document.createElement("span");
+        probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:inherit;font-weight:500";
+        probe.textContent = text;
+        slot.appendChild(probe);
+        const width = probe.offsetWidth;
+        probe.remove();
+        return width;
+      }
+
+      function swapVerb(loader, text) {
+        const slot = loader.querySelector(".verb-slot");
+        const current = slot.querySelector(".verb:not(.leave)");
+        const next = document.createElement("span");
+        next.className = "verb enter";
+        next.textContent = text;
+        slot.style.width = `${current.offsetWidth}px`;
+        slot.appendChild(next);
+        requestAnimationFrame(() => {
+          current.classList.add("leave");
+          next.classList.remove("enter");
+          slot.style.width = `${measure(slot, text)}px`;
+        });
+        setTimeout(() => current.remove(), 500);
+      }
+
+      setInterval(() => {
+        if (done) return;
+        index = (index + 1) % VERBS.length;
+        loaders.forEach((l) => swapVerb(l, VERBS[index]));
+      }, 2600);
+
+      setInterval(() => {
+        if (done) return;
+        const text = formatElapsed(performance.now() - start);
+        loaders.forEach((l) => (l.querySelector(".elapsed").textContent = text));
+      }, 250);
+
+      document.getElementById("toggle-done").addEventListener("click", (e) => {
+        done = !done;
+        matrices.forEach((m) => setDone(m, done, performance.now()));
+        loaders.forEach((l) => {
+          l.dataset.state = done ? "done" : "working";
+          swapVerb(l, done ? "Done" : VERBS[0]);
+        });
+        if (!done) {
+          start = performance.now();
+          index = 0;
+        }
+        e.currentTarget.textContent = done ? "Restart" : "Finish";
+      });
+
+      document.getElementById("toggle-theme").addEventListener("click", (e) => {
+        const dark = document.documentElement.classList.toggle("dark");
+        colors = readColors();
+        e.currentTarget.textContent = dark ? "Light" : "Dark";
+      });
+    </script>
+  </body>
+</html>

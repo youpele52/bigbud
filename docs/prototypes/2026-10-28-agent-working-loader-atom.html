@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bigbud · agent working loader (atom)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Theme tokens mirrored from apps/web/src/index.css */
+      :root {
+        color-scheme: light;
+        --background: #fafafa;
+        --foreground: #171717;
+        --card: #ffffff;
+        --muted-foreground: #46464b;
+        --border: rgb(0 0 0 / 8%);
+        --info: #3b82f6;
+        --success: #10b981;
+        --track: rgb(0 0 0 / 6%);
+        --card-surface-radius: 20px;
+      }
+      .dark {
+        color-scheme: dark;
+        --background: #0f0f0f;
+        --foreground: #f5f5f5;
+        --card: #141414;
+        --muted-foreground: #8a8a8a;
+        --border: rgb(255 255 255 / 6%);
+        --info: #3b82f6;
+        --success: #10b981;
+        --track: rgb(255 255 255 / 7%);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        font-size: 14px;
+        display: grid;
+        place-items: center;
+        transition:
+          background 0.3s,
+          color 0.3s;
+      }
+      body::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.035;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        background-size: 256px 256px;
+      }
+
+      main {
+        width: min(560px, calc(100vw - 32px));
+        display: grid;
+        gap: 16px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      h1 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .caption {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--card-surface-radius);
+        padding: 20px;
+      }
+      button {
+        font: inherit;
+        font-size: 14px;
+        color: var(--foreground);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 12px;
+        cursor: pointer;
+      }
+      button:hover {
+        background: var(--track);
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+      }
+
+      /* ---------- The loader ---------- */
+      .agent-loader {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .atom {
+        flex: none;
+        display: block;
+      }
+
+      .label {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 6px;
+        white-space: nowrap;
+      }
+      .word {
+        display: inline-flex;
+        align-items: baseline;
+      }
+      .verb-slot {
+        position: relative;
+        display: inline-grid;
+        overflow: hidden;
+        height: 1.4em;
+        line-height: 1.4em;
+        font-weight: 500;
+        transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      .verb {
+        grid-area: 1 / 1;
+        color: transparent;
+        background: linear-gradient(
+            90deg,
+            var(--muted-foreground) 0%,
+            var(--muted-foreground) 40%,
+            var(--foreground) 50%,
+            var(--muted-foreground) 60%,
+            var(--muted-foreground) 100%
+          )
+          0 0 / 250% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        animation: shimmer 2.2s linear infinite;
+        transition:
+          transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 0.45s,
+          filter 0.45s;
+      }
+      .verb.enter {
+        transform: translateY(100%);
+        opacity: 0;
+        filter: blur(3px);
+      }
+      .verb.leave {
+        transform: translateY(-100%);
+        opacity: 0;
+        filter: blur(3px);
+      }
+      .agent-loader[data-state="done"] .verb {
+        animation: none;
+        background: none;
+        color: var(--foreground);
+      }
+      .dots::after {
+        content: "";
+        display: inline-block;
+        width: 1.2em;
+        text-align: left;
+        color: var(--muted-foreground);
+        animation: dots 1.4s steps(4, end) infinite;
+      }
+      .agent-loader[data-state="done"] .dots {
+        display: none;
+      }
+      .elapsed {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        font-variant-numeric: tabular-nums;
+      }
+      .agent-loader.lg {
+        gap: 14px;
+      }
+      .agent-loader.lg .verb-slot {
+        font-size: 16px;
+      }
+
+      @keyframes shimmer {
+        from {
+          background-position: 100% 0;
+        }
+        to {
+          background-position: -50% 0;
+        }
+      }
+      @keyframes dots {
+        0% {
+          content: "";
+        }
+        25% {
+          content: ".";
+        }
+        50% {
+          content: "..";
+        }
+        75% {
+          content: "...";
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .verb,
+        .dots::after {
+          animation: none !important;
+        }
+        .verb {
+          background: none;
+          color: var(--muted-foreground);
+          transition: none;
+        }
+      }
+
+      /* timeline context mock */
+      .row {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .bubble {
+        margin-left: auto;
+        max-width: 80%;
+        background: var(--track);
+        border-radius: 14px;
+        padding: 8px 12px;
+      }
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin: 16px 0;
+      }
+      .stage {
+        display: grid;
+        place-items: center;
+        padding: 20px 0 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Agent working loader · atom</h1>
+          <div class="caption">Twelve electrons on drifting stochastic orbits · respects reduced motion</div>
+        </div>
+        <div class="controls">
+          <button id="toggle-done" type="button">Finish</button>
+          <button id="toggle-theme" type="button">Light</button>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="caption">Hero</div>
+        <div class="stage">
+          <div class="agent-loader lg" data-loader role="status" aria-live="polite">
+            <canvas class="atom" data-size="72" aria-hidden="true"></canvas>
+            <span class="label">
+              <span class="word"><span class="verb-slot"><span class="verb">Thinking</span></span><span class="dots" aria-hidden="true"></span></span>
+              <span class="elapsed">0s</span>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="caption">In the timeline</div>
+        <div class="divider"></div>
+        <div class="row"><div class="bubble">Refactor the files panel loader and add retry on reconnect.</div></div>
+        <div class="divider"></div>
+        <div class="row">
+          <div class="agent-loader" data-loader role="status" aria-live="polite">
+            <canvas class="atom" data-size="26" aria-hidden="true"></canvas>
+            <span class="label">
+              <span class="word"><span class="verb-slot"><span class="verb">Thinking</span></span><span class="dots" aria-hidden="true"></span></span>
+              <span class="elapsed">0s</span>
+            </span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      /* ---------- Atom renderer ---------- */
+      const ELECTRON_COUNT = 12;
+      const TRAIL_LENGTH = 22;
+      const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const TAU = Math.PI * 2;
+
+      function gauss() {
+        // Box–Muller: standard normal sample for the random walks
+        return Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(TAU * Math.random());
+      }
+      const rand = (min, max) => min + Math.random() * (max - min);
+      const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+      function createElectron(i) {
+        const omega0 = rand(2.4, 4.2) * (Math.random() < 0.3 ? -1 : 1);
+        return {
+          theta: (i / ELECTRON_COUNT) * TAU + rand(-0.4, 0.4),
+          omega: omega0,
+          omega0,
+          r: rand(0.6, 0.95),
+          rTarget: rand(0.6, 0.95),
+          tilt: rand(0.25, 0.9), // minor/major ratio of the projected orbit
+          tiltVel: 0,
+          phi: (i / ELECTRON_COUNT) * Math.PI + rand(-0.3, 0.3), // orbit plane rotation
+          phiVel: rand(-0.15, 0.15),
+          trail: [],
+        };
+      }
+
+      // Ornstein–Uhlenbeck style update: drift toward a mean, plus noise.
+      function stepElectron(e, dt) {
+        const sq = Math.sqrt(dt);
+        e.omega += (e.omega0 - e.omega) * 1.2 * dt + gauss() * 2.2 * sq;
+        e.theta += e.omega * dt;
+
+        // occasional "quantum leap" to a new shell
+        if (Math.random() < 0.35 * dt) e.rTarget = rand(0.5, 1);
+        e.r += (e.rTarget - e.r) * 3 * dt + gauss() * 0.04 * sq;
+        e.r = Math.min(1.05, Math.max(0.42, e.r));
+
+        e.tiltVel += -e.tiltVel * 1.5 * dt + gauss() * 0.9 * sq;
+        e.tilt += e.tiltVel * dt;
+        if (e.tilt < 0.18 || e.tilt > 0.95) {
+          e.tiltVel *= -1;
+          e.tilt = Math.min(0.95, Math.max(0.18, e.tilt));
+        }
+
+        e.phiVel += -e.phiVel * 0.8 * dt + gauss() * 0.5 * sq;
+        e.phi += e.phiVel * dt;
+      }
+
+      // Project the electron's tilted circular orbit onto the screen.
+      function project(e, radius) {
+        const ex = Math.cos(e.theta) * e.r * radius;
+        const ey = Math.sin(e.theta) * e.r * radius * e.tilt;
+        const c = Math.cos(e.phi);
+        const s = Math.sin(e.phi);
+        return { x: ex * c - ey * s, y: ex * s + ey * c, z: Math.sin(e.theta) };
+      }
+
+      function createAtom(canvas) {
+        const size = Number(canvas.dataset.size);
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = size * dpr;
+        canvas.height = size * dpr;
+        canvas.style.width = `${size}px`;
+        canvas.style.height = `${size}px`;
+        const ctx = canvas.getContext("2d");
+        ctx.scale(dpr, dpr);
+        return {
+          ctx,
+          size,
+          electrons: Array.from({ length: ELECTRON_COUNT }, (_, i) => createElectron(i)),
+          collapse: 0, // 0 = orbiting, 1 = fully collapsed into nucleus
+          collapseTarget: 0,
+          pop: 0,
+        };
+      }
+
+      function readColors() {
+        const css = getComputedStyle(document.documentElement);
+        return {
+          fg: css.getPropertyValue("--foreground").trim(),
+          info: css.getPropertyValue("--info").trim(),
+          success: css.getPropertyValue("--success").trim(),
+        };
+      }
+
+      function drawAtom(atom, t, dt, colors) {
+        const { ctx, size } = atom;
+        const c = size / 2;
+        const orbit = size * 0.38;
+        const eRadius = Math.max(1.2, size * 0.04);
+        const done = atom.collapseTarget === 1;
+
+        atom.collapse += (atom.collapseTarget - atom.collapse) * Math.min(1, dt * 5);
+        if (done) atom.pop = Math.min(1, atom.pop + dt * 2.5);
+        else atom.pop = Math.max(0, atom.pop - dt * 4);
+        const shrink = 1 - easeOut(atom.collapse);
+
+        ctx.clearRect(0, 0, size, size);
+
+        const points = atom.electrons.map((e) => {
+          if (!reducedMotion) stepElectron(e, dt);
+          const p = project(e, orbit * shrink);
+          e.trail.push({ x: p.x, y: p.y });
+          if (e.trail.length > TRAIL_LENGTH) e.trail.shift();
+          return { e, p };
+        });
+
+        const drawElectron = ({ e, p }) => {
+          const depth = 0.55 + 0.45 * ((p.z + 1) / 2); // dimmer when behind
+          const alpha = depth * shrink;
+          // fading comet trail
+          for (let i = 1; i < e.trail.length; i++) {
+            const a = e.trail[i - 1];
+            const b = e.trail[i];
+            const k = i / e.trail.length;
+            ctx.globalAlpha = alpha * k * 0.55;
+            ctx.strokeStyle = colors.info;
+            ctx.lineWidth = eRadius * 1.3 * k;
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.moveTo(c + a.x, c + a.y);
+            ctx.lineTo(c + b.x, c + b.y);
+            ctx.stroke();
+          }
+          // glow + body
+          ctx.globalAlpha = alpha;
+          ctx.shadowColor = colors.info;
+          ctx.shadowBlur = eRadius * 3;
+          ctx.fillStyle = colors.info;
+          ctx.beginPath();
+          ctx.arc(c + p.x, c + p.y, eRadius * (0.8 + 0.25 * depth), 0, TAU);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        };
+
+        // electrons behind the nucleus first, then nucleus, then front ones
+        const sorted = points.sort((a, b) => a.p.z - b.p.z);
+        sorted.filter(({ p }) => p.z < 0).forEach(drawElectron);
+
+        // nucleus: breathing while working, green pop when done
+        const breathe = reducedMotion ? 1 : 0.88 + 0.12 * Math.sin(t * 2.6);
+        // overshoot, then settle slightly larger
+        const popScale = done ? 1 + 0.25 * Math.sin(atom.pop * Math.PI) + 0.15 * atom.pop : 1;
+        const nucleusR = size * 0.09 * breathe * popScale;
+        const tone = done ? colors.success : colors.info;
+        const halo = ctx.createRadialGradient(c, c, 0, c, c, nucleusR * 3.2);
+        halo.addColorStop(0, tone);
+        halo.addColorStop(1, "transparent");
+        ctx.globalAlpha = done ? 0.45 : 0.22 + 0.12 * breathe;
+        ctx.fillStyle = halo;
+        ctx.beginPath();
+        ctx.arc(c, c, nucleusR * 3.2, 0, TAU);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = done ? colors.success : colors.fg;
+        ctx.beginPath();
+        ctx.arc(c, c, nucleusR, 0, TAU);
+        ctx.fill();
+        if (done) {
+          // a calm settled ring once the work is finished
+          ctx.globalAlpha = atom.pop;
+          ctx.strokeStyle = colors.success;
+          ctx.lineWidth = Math.max(1, size * 0.025);
+          ctx.beginPath();
+          ctx.arc(c, c, orbit * 0.75, 0, TAU);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+
+        sorted.filter(({ p }) => p.z >= 0).forEach(drawElectron);
+        ctx.globalAlpha = 1;
+      }
+
+      const atoms = [...document.querySelectorAll("canvas.atom")].map(createAtom);
+      let colors = readColors();
+      let last = performance.now();
+      // warm up so electrons start scattered with trails, not in a neat line
+      atoms.forEach((a) => {
+        for (let i = 0; i < 90; i++) drawAtom(a, i / 60, 1 / 60, colors);
+      });
+
+      (function frame(now) {
+        // rAF timestamps can precede performance.now(); a negative dt would NaN the random walks
+        const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+        last = now;
+        atoms.forEach((a) => drawAtom(a, now / 1000, dt, colors));
+        if (!reducedMotion) requestAnimationFrame(frame);
+      })(last);
+
+      /* ---------- Label: rotating verbs + elapsed time ---------- */
+      const VERBS = ["Thinking", "Reading files", "Planning", "Editing", "Running checks", "Reviewing"];
+      const loaders = [...document.querySelectorAll("[data-loader]")];
+      let start = performance.now();
+      let index = 0;
+      let done = false;
+
+      function formatElapsed(ms) {
+        const s = Math.floor(ms / 1000);
+        return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+      }
+
+      function measure(slot, text) {
+        const probe = document.createElement("span");
+        probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:inherit;font-weight:500";
+        probe.textContent = text;
+        slot.appendChild(probe);
+        const width = probe.offsetWidth;
+        probe.remove();
+        return width;
+      }
+
+      function swapVerb(loader, text) {
+        const slot = loader.querySelector(".verb-slot");
+        const current = slot.querySelector(".verb:not(.leave)");
+        const next = document.createElement("span");
+        next.className = "verb enter";
+        next.textContent = text;
+        slot.style.width = `${current.offsetWidth}px`;
+        slot.appendChild(next);
+        requestAnimationFrame(() => {
+          current.classList.add("leave");
+          next.classList.remove("enter");
+          slot.style.width = `${measure(slot, text)}px`;
+        });
+        setTimeout(() => current.remove(), 500);
+      }
+
+      setInterval(() => {
+        if (done) return;
+        index = (index + 1) % VERBS.length;
+        loaders.forEach((l) => swapVerb(l, VERBS[index]));
+      }, 2600);
+
+      setInterval(() => {
+        if (done) return;
+        const text = formatElapsed(performance.now() - start);
+        loaders.forEach((l) => (l.querySelector(".elapsed").textContent = text));
+      }, 250);
+
+      document.getElementById("toggle-done").addEventListener("click", (e) => {
+        done = !done;
+        atoms.forEach((a) => {
+          a.collapseTarget = done ? 1 : 0;
+          if (!done) a.electrons.forEach((el) => (el.trail.length = 0));
+          if (reducedMotion) {
+            a.collapse = a.collapseTarget;
+            a.pop = done ? 1 : 0;
+            drawAtom(a, 0, 0, colors);
+          }
+        });
+        loaders.forEach((l) => {
+          l.dataset.state = done ? "done" : "working";
+          swapVerb(l, done ? "Done" : VERBS[0]);
+        });
+        if (!done) {
+          start = performance.now();
+          index = 0;
+        }
+        e.currentTarget.textContent = done ? "Restart" : "Finish";
+      });
+
+      document.getElementById("toggle-theme").addEventListener("click", (e) => {
+        const dark = document.documentElement.classList.toggle("dark");
+        colors = readColors();
+        if (reducedMotion) atoms.forEach((a) => drawAtom(a, 0, 0, colors));
+        e.currentTarget.textContent = dark ? "Light" : "Dark";
+      });
+    </script>
+  </body>
+</html>
