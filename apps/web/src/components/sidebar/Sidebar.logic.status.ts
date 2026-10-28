@@ -126,7 +126,9 @@ export function resolveProjectStatusIndicator(
   statuses: ReadonlyArray<ThreadStatusPill | null>,
 ): ThreadStatusPill | null {
   return statuses.reduce<ThreadStatusPill | null>((selected, candidate) => {
-    if (candidate === null) return selected;
+    // Idle is the absence of a state. A grey dot next to a project does not say
+    // anything a missing marker does not already say.
+    if (candidate === null || candidate.label === "Idle") return selected;
     return selected === null ||
       THREAD_STATUS_PRIORITY[candidate.label] > THREAD_STATUS_PRIORITY[selected.label]
       ? candidate

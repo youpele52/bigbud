@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
+import { TurnId, type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contracts";
 import { PROVIDER_SUBAGENT_LIMITS } from "@bigbud/shared/providerSubagents";
 
 import type { ActivePiSession, PiSyntheticEventFn } from "./Adapter.types.ts";
@@ -71,6 +71,36 @@ function widgetMessage(widgetKey: string, value: unknown) {
 }
 
 describe("Pi async subagent status widget", () => {
+  it("retains a child's first turn association across later parent turns", () => {
+    const isolated = { ...session, activeTurnId: TurnId.makeUnsafe("root-1") } as ActivePiSession;
+    mapPiAsyncSubagentWidget(isolated, widgetMessage("subagent-async", snapshot(1000, "running")));
+    isolated.activeTurnId = TurnId.makeUnsafe("root-2");
+    const done = mapPiAsyncSubagentWidget(
+      isolated,
+      widgetMessage("subagent-async", snapshot(2000, "complete")),
+    );
+    expect(done).toHaveLength(4);
+    for (const event of done) {
+      expect(event).toMatchObject({
+        type: "task.updated",
+        payload: { turnId: "root-1", status: "completed" },
+      });
+    }
+  });
+
+  it("does not attach a previously detached child to a subsequent turn", () => {
+    const isolated = { ...session, activeTurnId: undefined } as ActivePiSession;
+    mapPiAsyncSubagentWidget(isolated, widgetMessage("subagent-async", snapshot(1000, "running")));
+    isolated.activeTurnId = TurnId.makeUnsafe("root-2");
+    const done = mapPiAsyncSubagentWidget(
+      isolated,
+      widgetMessage("subagent-async", snapshot(2000, "complete")),
+    );
+    for (const event of done) {
+      expect(event.turnId).toBeUndefined();
+      if (event.type === "task.updated") expect(event.payload.turnId).toBeUndefined();
+    }
+  });
   it("maps a detached workflow's child snapshot into visible agent tasks", async () => {
     const events: ProviderRuntimeEvent[] = [];
     const send = (data: unknown, widgetKey = "subagent-async") =>

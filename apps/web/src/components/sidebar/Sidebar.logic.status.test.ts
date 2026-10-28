@@ -374,4 +374,25 @@ describe("resolveProjectStatusIndicator", () => {
       ]),
     ).toMatchObject({ label: "Plan Ready", dotClass: "bg-primary" });
   });
+
+  it("omits idle threads so a project of only idle threads has no dot", () => {
+    const idle = {
+      label: "Idle" as const,
+      colorClass: "text-muted-foreground",
+      dotClass: "bg-muted-foreground",
+      pulse: false,
+    };
+    const done = {
+      label: "Done" as const,
+      colorClass: "text-primary",
+      dotClass: "bg-primary",
+      pulse: false,
+    };
+
+    expect(resolveProjectStatusIndicator([idle, idle])).toBeNull();
+    expect(resolveProjectStatusIndicator([idle, done])).toMatchObject({
+      label: "Done",
+      dotClass: "bg-primary",
+    });
+  });
 });

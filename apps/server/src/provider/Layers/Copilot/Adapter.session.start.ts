@@ -284,7 +284,9 @@ export const makeStartSession =
 
       record.unsubscribe = session.on((event) => {
         activeTurn =
-          event.type === "assistant.turn_start" ? TurnId.makeUnsafe(event.data.turnId) : activeTurn;
+          event.type === "assistant.turn_start" && !event.agentId
+            ? TurnId.makeUnsafe(event.data.turnId)
+            : activeTurn;
         void deps
           .handleEvent(record, event)
           .pipe(Effect.runPromise)
