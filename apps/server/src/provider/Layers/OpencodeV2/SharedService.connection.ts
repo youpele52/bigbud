@@ -1,3 +1,4 @@
+import { V2SharedServiceError } from "./SharedService.errors.ts";
 import { Service } from "@opencode/client/service";
 import { makeV2Client } from "./Client.ts";
 import {
@@ -12,16 +13,17 @@ import { bindV2NativeCompatibility } from "./NativeCompatibility.binding.ts";
 /** Borrow only a verified storage/generation. Closing releases our client, never the daemon. */
 export async function borrowV2SharedService(expected: V2SharedConnection): Promise<OwnedV2Process> {
   const actual = await resolveV2SharedConnection(expected.registrationFile);
-  if (
-    actual.storageIdentity !== expected.storageIdentity ||
-    actual.generation !== expected.generation
-  )
-    throw new Error(
+  if (actual.storageIdentity !== expected.storageIdentity)
+    throw new V2SharedServiceError("storage", "V2 shared storage namespace changed; no rebinding.");
+  if (actual.generation !== expected.generation)
+    throw new V2SharedServiceError(
+      "generation",
       "V2 shared service changed; restart bigbud to reconnect without rebinding history.",
     );
   const registration = await readV2SharedRegistration(expected.registrationFile);
   if (v2SharedGeneration(registration) !== actual.generation)
-    throw new Error(
+    throw new V2SharedServiceError(
+      "generation",
       "V2 shared registration changed after storage verification; no connection was borrowed.",
     );
   let closed = false,
@@ -37,7 +39,10 @@ export async function borrowV2SharedService(expected: V2SharedConnection): Promi
     ) {
       unavailable = true;
       for (const listener of listeners) listener();
-      throw new Error("V2 shared service generation changed; no automatic resend.");
+      throw new V2SharedServiceError(
+        "generation",
+        "V2 shared service generation changed; no automatic resend.",
+      );
     }
   };
   const client = makeV2Client({

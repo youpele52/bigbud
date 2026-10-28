@@ -109,7 +109,7 @@ describe("independent OpenCode v2 process manager", () => {
         .mockRejectedValueOnce(new Error("synthetic failure"))
         .mockResolvedValueOnce(fake.process),
     });
-    await expect(manager.acquire(config)).rejects.toThrow("acquisition failed");
+    await expect(manager.acquire(config)).rejects.toThrow("acquisition-unverified");
     const lease = await manager.acquire(config);
     await lease.release();
     await manager.close();

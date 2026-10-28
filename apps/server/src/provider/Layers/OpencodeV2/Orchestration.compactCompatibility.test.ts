@@ -43,6 +43,7 @@ it("freezes the exact previous descriptor and signed byte closure without downgr
             {
               id: `bigbud.thread.v2.${f.artifact.issuer}`,
               source: { type: "local", path: old.directory },
+              state: { status: "active" },
             },
           ],
         }),

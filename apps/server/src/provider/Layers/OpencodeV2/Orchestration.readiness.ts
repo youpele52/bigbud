@@ -84,7 +84,7 @@ export async function verifyV2ThreadTools(
         proof.nativeVersion,
       );
     operation = "source";
-    await assertV2NativeThreadSource(artifact, client, directory);
+    await assertV2NativeThreadSource(artifact, client, directory, root);
     signal?.throwIfAborted();
     proof.assertCurrent();
     return { ...info, nativeProof: proof };

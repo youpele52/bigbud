@@ -12,6 +12,8 @@ import {
   V2_N2_COMPATIBILITY_DIGEST,
   V2_N3_BOOTSTRAP_COMPATIBILITY,
   V2_N3_COMPATIBILITY_DIGEST,
+  V2_N4_BOOTSTRAP_COMPATIBILITY,
+  V2_N4_COMPATIBILITY_DIGEST,
 } from "./Orchestration.compatibility.legacy.ts";
 import { V2_SCOPED_BOOTSTRAP_ABI, V2_SCOPED_REGISTRATION } from "./Orchestration.registration.ts";
 import type { V2ThreadImplementation } from "./Orchestration.implementation.types.ts";
@@ -37,6 +39,7 @@ export type V2BootstrapCompatibility =
   | typeof V2_N1_BOOTSTRAP_COMPATIBILITY
   | typeof V2_N2_BOOTSTRAP_COMPATIBILITY
   | typeof V2_N3_BOOTSTRAP_COMPATIBILITY
+  | typeof V2_N4_BOOTSTRAP_COMPATIBILITY
   | typeof V2_N0_BOOTSTRAP_COMPATIBILITY;
 
 /** Resolve the installed descriptor's own exact bytes; never normalize old signatures to the preferred one. */
@@ -50,6 +53,7 @@ export function knownV2BootstrapCompatibility(
     [V2_N1_BOOTSTRAP_COMPATIBILITY, V2_N1_COMPATIBILITY_DIGEST],
     [V2_N2_BOOTSTRAP_COMPATIBILITY, V2_N2_COMPATIBILITY_DIGEST],
     [V2_N3_BOOTSTRAP_COMPATIBILITY, V2_N3_COMPATIBILITY_DIGEST],
+    [V2_N4_BOOTSTRAP_COMPATIBILITY, V2_N4_COMPATIBILITY_DIGEST],
   ] as const)
     if (digest === expected && JSON.stringify(value) === JSON.stringify(descriptor))
       return descriptor;
@@ -73,7 +77,9 @@ export function assertV2ImplementationCompatible(
       !(
         field === "bootstrapAbi" &&
         implementation.bootstrapAbi === V2_BOOTSTRAP_ABI &&
-        (descriptor === V2_BOOTSTRAP_COMPATIBILITY || descriptor === V2_N3_BOOTSTRAP_COMPATIBILITY)
+        (descriptor === V2_BOOTSTRAP_COMPATIBILITY ||
+          descriptor === V2_N3_BOOTSTRAP_COMPATIBILITY ||
+          descriptor === V2_N4_BOOTSTRAP_COMPATIBILITY)
       )
     )
       throw new Error(

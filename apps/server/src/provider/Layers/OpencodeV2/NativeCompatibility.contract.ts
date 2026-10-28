@@ -28,6 +28,7 @@ const descriptor = {
       "document.path?",
       "document.info.plugins?",
       "document.info.permissions?",
+      "document.info.policies?:provider.use|tool.use|integration.use:allow|deny",
     ],
     plugin: [
       "location.directory",
@@ -65,6 +66,8 @@ const descriptor = {
     "rpc-cancellation-physical-lifetime",
     "immutable-executable-snapshot",
     "ordered-config-source-policy",
+    "unattributed-virtual-and-managed-split-sources",
+    "reversed-document-native-policy-precedence-and-tool-action-resource",
     "bounded-native-activity",
     "two-location-watcher-lifetime",
     "canonical-once-approval-receipts-history",

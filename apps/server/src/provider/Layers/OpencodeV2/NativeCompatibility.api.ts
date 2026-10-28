@@ -72,6 +72,10 @@ function configProjection(response: Shape, read: Reader) {
   const rule = read.resolve(permissions.items);
   for (const field of ["action", "resource", "effect"]) read.requiredField(rule, field, "string");
   exactValues(read.field(rule, "effect"), ["allow", "ask", "deny"]);
+  const policy = read.resolve(read.field(info, "policies", "array").items);
+  for (const field of ["action", "resource", "effect"]) read.requiredField(policy, field, "string");
+  exactValues(read.field(policy, "action"), ["provider.use", "tool.use", "integration.use"]);
+  exactValues(read.field(policy, "effect"), ["allow", "deny"]);
 }
 
 function pluginProjection(data: Shape, read: Reader) {
@@ -153,7 +157,15 @@ export function assertV2CanonicalNativeApi(value: unknown, nativeVersion: string
           projection.push([id, (read.field(shell, "status").enum as string[]).toSorted()]);
         }
       }
-      projection.push([method, route, id, id === "rpc.call" ? "output" : response.type]);
+      projection.push([
+        method,
+        route,
+        id,
+        id === "rpc.call" ? "output" : response.type,
+        ...(id === "config.get"
+          ? ["policies:provider.use|tool.use|integration.use:allow|deny"]
+          : []),
+      ]);
     }
     // Canonical equivalent consumed projections have the same identity, independent of upstream ref names.
     return createHash("sha256")

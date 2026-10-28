@@ -83,14 +83,14 @@ it.each([
 ])("$platform uses its machine namespace and never makes it the publication root", (spec) => {
   const options = { platform: spec.platform, programData: "C:\\ProgramData" };
   const entries = [
-    { type: "directory", path: spec.system },
+    { type: "document", path: `${spec.root}${spec.sep}opencode.json`, info: {} },
+    { type: "directory", path: spec.root },
     {
       type: "document",
       path: `${spec.system}${spec.sep}opencode.json`,
       info: { plugins: ["-bigbud.thread.v1"] },
     },
-    { type: "document", path: `${spec.root}${spec.sep}opencode.json`, info: {} },
-    { type: "directory", path: spec.root },
+    { type: "directory", path: spec.system },
   ] as Awaited<ReturnType<OpencodeV2Client["config"]["get"]>>;
   expect(selectV2NativeConfigProfile(entries, spec.root, options)).toBe(
     "v2-system-global-config-v1",

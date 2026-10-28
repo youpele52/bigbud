@@ -15,7 +15,7 @@ it("loaded-bootstrap preflight cannot ignore a system/managed deny and never rea
   await mkdir(root, { mode: 0o700 });
   const { systemRoot, paths } = v2ConfigSourcePaths();
   const entries = [
-    { type: "directory", path: systemRoot },
+    { type: "directory", path: root },
     {
       type: "document",
       path:
@@ -27,7 +27,7 @@ it("loaded-bootstrap preflight cannot ignore a system/managed deny and never rea
         credentials: "SYNTHETIC-DO-NOT-CARRY",
       },
     },
-    { type: "directory", path: root },
+    ...(process.platform === "darwin" ? [] : [{ type: "directory", path: systemRoot }]),
   ];
   const get = vi.fn(async () => entries),
     client = { config: { get } } as unknown as OpencodeV2Client;

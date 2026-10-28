@@ -1,4 +1,5 @@
 import path from "node:path";
+import { v2AcquisitionFailure } from "./SharedService.errors.ts";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 import { currentV2RequestContext, runV2RequestContext } from "./Client.guard.ts";
@@ -189,7 +190,7 @@ export class OpencodeV2ServerManager {
           `OpenCode v2 development requires CLI ${OPENCODE_V2_CLIENT_VERSION}; incompatible version rejected.`
       )
         throw error;
-      throw new Error("OpenCode v2 process acquisition failed.", { cause: error });
+      throw v2AcquisitionFailure(error);
     }
     if (this.closed || this.entries.get(key) !== owned || !process.isRunning()) {
       owned.references--;

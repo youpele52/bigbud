@@ -64,7 +64,7 @@ export async function awaitV2ThreadToolsReady(
     throw new Error(
       "V2 retained legacy bootstrap is unavailable; history remains read-only. Restore its exact original installation; no cross-family migration or replacement was attempted.",
     );
-  const retainedManual = await readV2CompatibleManualBootstrap(
+  const retained = await readV2CompatibleManualBootstrap(
     artifact,
     client,
     directory,
@@ -72,9 +72,9 @@ export async function awaitV2ThreadToolsReady(
     coordinator.nativeEligibility,
     owned.scope.root,
   );
-  if (retainedManual) {
-    owned.gate.adoptRetained(retainedManual.artifactDigest);
-    const info = await verify(retainedManual);
+  if (retained) {
+    const info = await verify(retained);
+    owned.gate.adoptRetained(retained.artifactDigest);
     return {
       gate: owned.gate,
       stamp: owned.gate.verify(

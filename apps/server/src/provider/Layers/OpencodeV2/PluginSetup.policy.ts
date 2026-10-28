@@ -1,4 +1,9 @@
 import path from "node:path";
+import {
+  assertV2RequiredToolPolicies,
+  assertV2RawPolicyProjection,
+} from "./PluginSetup.policy.native.ts";
+import { V2DiagnosticError } from "./PluginSetup.diagnostics.ts";
 import { Schema } from "effect";
 import type { OpencodeV2Client } from "./Client.ts";
 import { fromLenientJson } from "@bigbud/shared/schemaJson";
@@ -31,6 +36,17 @@ export async function inspectV2PluginControls(
   machinePaths: ReadonlySet<string> = new Set(),
   registration?: V2ThreadRegistration,
 ) {
+  const names = [
+    ...V2_THREAD_ACTIONS.map((action) => `bigbud_thread_v1_${action}`),
+    ...(registration?.tools ?? []),
+  ];
+  // Canonical policies are validated before filesystem inspection or publication.
+  assertV2RequiredToolPolicies(
+    entries.flatMap((entry) =>
+      entry.type === "document" ? [entry.info as unknown as Record<string, unknown>] : [],
+    ),
+    names,
+  );
   const documents: Array<{ info: Record<string, unknown>; filename?: string }> = [];
   const filenames = new Set([path.join(root, "opencode.json"), path.join(root, "opencode.jsonc")]);
   for (const entry of entries)
@@ -63,7 +79,14 @@ export async function inspectV2PluginControls(
     }
     if (!decoded || typeof decoded !== "object" || Array.isArray(decoded))
       throw new Error("V2 native configuration document is not an object; no setup writes.");
-    documents.push({ info: decoded as Record<string, unknown>, filename });
+    const raw = decoded as Record<string, unknown>;
+    // Observed raw/canonical disagreement may be a pending native reload; never admit it.
+    const canonical = entries.find((entry) => entry.type === "document" && entry.path === filename);
+    assertV2RawPolicyProjection(
+      raw,
+      canonical?.type === "document" ? (canonical.info as unknown as Record<string, unknown>) : {},
+    );
+    documents.push({ info: raw, filename });
   }
   const configured: string[] = [];
   for (const document of documents) {
@@ -101,13 +124,8 @@ export async function inspectV2PluginControls(
   const rules = entries.flatMap((entry) =>
     entry.type === "document" ? (entry.info.permissions ?? []) : [],
   );
-  for (const name of [
-    ...V2_THREAD_ACTIONS.map((action) => `bigbud_thread_v1_${action}`),
-    ...(registration?.tools ?? []),
-  ])
+  for (const name of names)
     if (v2PermissionEffect(rules, name, "*") === "deny")
-      throw new Error(
-        "V2 required canonical tool is explicitly denied by native permissions; no grants or setup override.",
-      );
+      throw new V2DiagnosticError("config-controls", "permission-denied");
   return configured;
 }

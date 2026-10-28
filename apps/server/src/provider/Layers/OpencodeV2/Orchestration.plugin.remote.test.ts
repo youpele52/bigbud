@@ -11,7 +11,7 @@ it("preserves installed native identity bytes when adding app-side remote worksp
   // Fixed placeholder avoids private keys/user state. Changes require a separately designed
   // native bootstrap migration, not merely updating this expected digest.
   expect(createHash("sha256").update(renderV2ThreadIdentity("public-key")).digest("hex")).toBe(
-    "e0a2672745d84c035a348f99f1687d1c16d8c2f006f478fcb58bd23c285bea53",
+    "779d02f4db6adf42fadc98510e33e554b08a82d7b1536d75a57dcc37c7e1b9eb",
   );
 });
 

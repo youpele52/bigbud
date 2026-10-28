@@ -5,12 +5,12 @@ import { V2_CANONICAL_NATIVE_OPERATIONS } from "../src/provider/Layers/OpencodeV
 const input = process.argv[2];
 if (!input)
   throw new Error(
-    "Supply the saved official pinned 2.0.28 OpenAPI JSON; no native service or network is read.",
+    "Supply the saved official pinned 2.2.0 OpenAPI JSON; no native service or network is read.",
   );
 const source = await readFile(input, "utf8");
 if (
   createHash("sha256").update(source).digest("hex") !==
-  "7ec8b0a3ccf4b5161be5b49947e306f02cb04662048d796bd03bce905a84f109"
+  "928ca7cef0e59660b9ca23df2c1da927f8a242cfbf7e1e2a88e625e1efca235c"
 )
   throw new Error(
     "Official pinned API fixture bytes changed; review provenance before regeneration.",
@@ -40,9 +40,9 @@ function visit(value: unknown) {
 const records: unknown[] = [
   {
     kind: "provenance",
-    version: "2.0.28",
+    version: "2.2.0",
     openapi: api.openapi,
-    sourceCommit: "026b106bc5d41b679ffc413264229c340871e4d3",
+    sourceCommit: "1097e2668b1e08ad63bdf0b1c4860b9bc01e420c",
     sha256: createHash("sha256").update(source).digest("hex"),
   },
 ];

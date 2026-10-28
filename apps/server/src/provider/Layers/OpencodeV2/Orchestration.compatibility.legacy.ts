@@ -60,3 +60,19 @@ export const V2_N3_BOOTSTRAP_COMPATIBILITY = Object.freeze({
 });
 export const V2_N3_COMPATIBILITY_DIGEST =
   "86b15341c40011159d02fa8a599d3655f6cbab717902c3c0cb219e78ba6d454c";
+
+/** Exact compact-ID v3 descriptor from c015538b2ad999a1a76fb62186b8d8a3c540d9f8.
+ * A new native API fingerprint does not rewrite retained signed modules or confer qualification. */
+export const V2_N4_BOOTSTRAP_COMPATIBILITY = Object.freeze({
+  format: "bigbud.thread.compatibility.v2",
+  bootstrapAbi: "bigbud.thread.bootstrap.v3",
+  registration: "bigbud.thread.registration.issuer.v1",
+  enrollmentProtocol: "bigbud.thread.enrollment.v2",
+  callbackProtocol: "bigbud.thread.callback.v1",
+  schemaDigest: "614c41c704bc33dd72c7b0b0dde50bc0cd8e9d474a40542ae2ba3f411a49d853",
+  canonicalRequestAbi: "bigbud.thread.canonical.v1",
+  resultEncoding: "bigbud.thread.final-json.v1",
+  nativeContractDigest: "7d05fb68bf15ebb2258ae3256a4aa3f5e12f4cdd69440661d7ccd4c1cf261ed0",
+});
+export const V2_N4_COMPATIBILITY_DIGEST =
+  "d992b9c514082e59f91d877d954048e62a4a5025836b295097cdb64719d7b7db";
