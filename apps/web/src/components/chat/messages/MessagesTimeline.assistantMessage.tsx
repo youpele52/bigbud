@@ -4,6 +4,7 @@ import { stableVerbFromId } from "../../../utils/copy";
 import { formatElapsed } from "../../../logic/session";
 import { type TurnDiffSummary } from "../../../models/types";
 import { summarizeTurnDiffStats } from "../../../lib/turnDiffTree";
+import { activitySectionLabelTypography } from "../common/ActivityAccordion";
 import ChatMarkdown from "../common/ChatMarkdown";
 import { Button } from "../../ui/button";
 import { MessageCopyButton } from "../common/MessageCopyButton";
@@ -66,7 +67,7 @@ function ShellOutputCard(props: {
         minWidth: `min(100%, ${SHELL_OUTPUT_MIN_WIDTH})`,
       }}
     >
-      <div className="mb-2 flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">
+      <div className={cn("mb-2 flex items-center gap-1.5", activitySectionLabelTypography)}>
         <TerminalIcon className="size-3 shrink-0" />
         <span>Shell</span>
       </div>
@@ -237,7 +238,7 @@ function AssistantTurnDiffCard({
   return (
     <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
       <div className="mb-1.5 flex items-center justify-between gap-2">
-        <p className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground/65">
+        <p className={activitySectionLabelTypography}>
           <span>Changed files ({changedFileCountLabel})</span>
           {hasNonZeroStat(summaryStat) && (
             <>

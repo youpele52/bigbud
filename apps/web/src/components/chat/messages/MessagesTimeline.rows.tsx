@@ -31,7 +31,7 @@ import { formatTimestamp } from "../../../utils/timestamp";
 import { cn } from "~/lib/utils";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
 import { timelineRowAccordionControl } from "./MessagesTimeline.accordion";
-import { ActivityAccordion } from "../common/ActivityAccordion";
+import { ActivityAccordion, activitySectionLabelTypography } from "../common/ActivityAccordion";
 import {
   UserFileReferenceChips,
   UserFileSourcePaths,
@@ -337,9 +337,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
             />
           ) : (
             <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
-              <p className="mb-2.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">
-                Input required
-              </p>
+              <p className={cn("mb-2.5", activitySectionLabelTypography)}>Input required</p>
               <UserInputQuestions questions={row.pendingUserInput.questions} />
               <p className="mt-3 text-[11px] text-muted-foreground/45">
                 Type your answer below and press send to continue.

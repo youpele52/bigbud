@@ -38,8 +38,8 @@ const WORK_ENTRY_DETAILS_MAX_PRE_PX = 256;
 // A finished subagent row with its one-line summary.
 const SUBAGENT_ROW_PX = 28;
 const SUBAGENTS_VISIBLE_WHEN_COLLAPSED = 1;
-// Thinking markdown renders text-xs at 1.55 line height across the full timeline width.
-const THINKING_LINE_PX = 18.6;
+// Thinking markdown uses the same text-xs / leading-5 rhythm as work entries and subagents.
+const THINKING_LINE_PX = 20;
 const THINKING_AVG_CHAR_WIDTH_PX = 5.6;
 const THINKING_FALLBACK_CHARS_PER_LINE = 120;
 // Answered questions: text-sm lines are 20px. Label + mb-1, question + mb-1.5, options with

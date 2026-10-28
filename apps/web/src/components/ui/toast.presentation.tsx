@@ -2,6 +2,7 @@ import { Toast } from "@base-ui/react/toast";
 import { CheckIcon, CopyIcon, Wifi, XIcon, type LucideIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
+import { TOAST_DISMISS_ALL_HINT, useToastDismissAllGesture } from "./toast.dismissAll";
 
 function CopyErrorButton({ text }: { text: string }) {
   const { copyToClipboard, isCopied } = useCopyToClipboard();
@@ -29,9 +30,14 @@ export function ToastCloseButton({
   className?: string;
   exposeToAccessibility?: boolean;
 }) {
+  const dismissAllGesture = useToastDismissAllGesture();
   return (
     <Toast.Close
+      {...dismissAllGesture}
       aria-label="Close notification"
+      aria-description={TOAST_DISMISS_ALL_HINT}
+      aria-keyshortcuts="Shift+Delete"
+      title={TOAST_DISMISS_ALL_HINT}
       className={cn(
         "shrink-0 rounded-md p-1 text-muted-foreground opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
         className,
@@ -56,7 +62,7 @@ export function ToastTitleAndDescription({
 }) {
   const DisplayIcon = icon === "wifi" ? Wifi : Icon;
   return (
-    <div className="flex min-w-0 flex-1 gap-2">
+    <div className="flex min-w-0 flex-1 gap-2 pr-7">
       {DisplayIcon && (
         <div
           className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 mt-0.5"
@@ -66,7 +72,7 @@ export function ToastTitleAndDescription({
             className={
               icon === "wifi"
                 ? "text-warning"
-                : "in-data-[type=loading]:animate-spin in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:opacity-80"
+                : "in-data-[type=loading]:animate-spin in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:text-info"
             }
           />
         </div>
