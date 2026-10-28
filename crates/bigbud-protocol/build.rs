@@ -17,5 +17,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .map_err(|error| format!("failed to compile remote-agent protocol: {error}"))?;
 
+    for name in [
+        "v1",
+        "common",
+        "policy",
+        "episode",
+        "control",
+        "execution",
+        "outcome",
+    ] {
+        println!("cargo:rerun-if-changed=../../protocol/computer-use/{name}.proto");
+    }
+    config
+        .compile_protos(
+            &["../../protocol/computer-use/v1.proto"],
+            &["../../protocol"],
+        )
+        .map_err(|error| format!("failed to compile computer-use protocol: {error}"))?;
+
     Ok(())
 }

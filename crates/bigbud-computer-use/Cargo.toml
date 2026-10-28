@@ -1,0 +1,38 @@
+[package]
+name = "bigbud-computer-use"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Approved JSON crate for inspecting and rebuilding MCP frames (M2/M3);
+# resolved to 1.0.154 (std only, no derive).
+serde_json = "1"
+# Approved portable SHA-256; reuses the locked workspace sha2.
+sha2.workspace = true
+# Approved in-repo protocol crate (guard Hello/Status/Stop control frames).
+bigbud-protocol = { path = "../bigbud-protocol" }
+
+# Approved Unix binding edge; reuses locked 0.2.189. No SDK dependency.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Approved Windows binding edge; reuses locked 0.61.2 (as the supervisor and
+# remote agent do) in place of a hand-transcribed kernel32 ABI.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
+
+[lints]
+workspace = true
+
+# Physical fixtures are explicit-only and additionally #[ignore]-gated.
+[[test]]
+name = "dummy_lifecycle"
+path = "tests/dummy_lifecycle.rs"
+test = false

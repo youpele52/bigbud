@@ -1,0 +1,22 @@
+syntax = "proto3";
+package bigbud.computer_use.common;
+
+// Metadata only. This never authenticates a peer; the transport must authenticate
+// its one-use capability and process lifetime before interpreting Hello.
+message Hello {
+  uint32 protocol_major = 1;
+  uint32 protocol_minor = 2;
+  string tuple_digest = 3;
+  string role = 4;
+  string owner_generation = 5;
+  string worker_generation = 6;
+  string qualification_profile = 7;
+  uint32 control_frame_bytes = 8;
+  uint32 data_frame_bytes = 9;
+  string instance_id = 10;
+}
+
+message ProtocolError {
+  string request_id = 1;
+  string code = 2;
+}

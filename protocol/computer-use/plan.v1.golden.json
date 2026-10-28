@@ -1,0 +1,639 @@
+{
+  "format": "bigbud.computerUsePlan.v1",
+  "driver": "cua-driver 0.38.0 darwin static live-schema profile",
+  "cases": [
+    {
+      "name": "capture of a referenced target",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "capture",
+        "targetRef": "t1"
+      },
+      "plan": {
+        "binding": "target",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "get_window_state",
+            "arguments": {
+              "include_screenshot": true,
+              "include_accessibility_tree": false
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "capture of the genuine focused target",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "capture"
+      },
+      "plan": {
+        "binding": "focused_target",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "get_window_state",
+            "arguments": {
+              "include_screenshot": true,
+              "include_accessibility_tree": false
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "page info adds a bounded element tree",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "get_page_info",
+        "targetRef": "t1"
+      },
+      "plan": {
+        "binding": "target",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "get_window_state",
+            "arguments": {
+              "include_screenshot": true,
+              "include_accessibility_tree": true,
+              "tree_format": "elements",
+              "max_elements": 250,
+              "max_depth": 25,
+              "timeout_ms": 1000
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "background click consumes the stamped capture",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "click",
+        "observationRef": "o1",
+        "x": 10.5,
+        "y": 20,
+        "button": "right",
+        "captureAfter": true
+      },
+      "plan": {
+        "binding": "observation",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "click",
+            "arguments": {
+              "x": 10.5,
+              "y": 20,
+              "delivery_mode": "background",
+              "button": "right"
+            },
+            "stamp": ["session", "pid", "window_id", "capture_id"]
+          }
+        ],
+        "captureAfter": {
+          "kind": "driver",
+          "tool": "get_window_state",
+          "arguments": {
+            "include_screenshot": true,
+            "include_accessibility_tree": false
+          },
+          "stamp": ["session", "pid", "window_id"]
+        }
+      }
+    },
+    {
+      "name": "foreground click uses a non-restoring prelude",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "click",
+        "observationRef": "o1",
+        "x": 1,
+        "y": 2,
+        "delivery": "foreground"
+      },
+      "plan": {
+        "binding": "observation",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "bring_to_front",
+            "arguments": {},
+            "stamp": ["session", "pid", "window_id"]
+          },
+          {
+            "kind": "owner",
+            "step": "verify_foreground"
+          },
+          {
+            "kind": "driver",
+            "tool": "click",
+            "arguments": {
+              "x": 1,
+              "y": 2,
+              "delivery_mode": "foreground"
+            },
+            "stamp": ["session", "pid", "window_id", "capture_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "drag never invents a capture id",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "drag",
+        "observationRef": "o1",
+        "startX": 1,
+        "startY": 2,
+        "endX": 3,
+        "endY": 4
+      },
+      "plan": {
+        "binding": "observation",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "drag",
+            "arguments": {
+              "from_x": 1,
+              "from_y": 2,
+              "to_x": 3,
+              "to_y": 4,
+              "delivery_mode": "background",
+              "duration_ms": 500,
+              "steps": 20
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "coordinate scroll is chunked to at most 50",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "scroll",
+        "observationRef": "o1",
+        "x": 5,
+        "y": 6,
+        "deltaY": 80
+      },
+      "plan": {
+        "binding": "observation",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "scroll",
+            "arguments": {
+              "direction": "down",
+              "amount": 50,
+              "x": 5,
+              "y": 6,
+              "delivery_mode": "background"
+            },
+            "stamp": ["session", "pid", "window_id"]
+          },
+          {
+            "kind": "driver",
+            "tool": "scroll",
+            "arguments": {
+              "direction": "down",
+              "amount": 30,
+              "x": 5,
+              "y": 6,
+              "delivery_mode": "background"
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "coordinate-free scroll targets the window",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "scroll",
+        "targetRef": "t1",
+        "deltaX": -3
+      },
+      "plan": {
+        "binding": "target",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "scroll",
+            "arguments": {
+              "direction": "left",
+              "amount": 3,
+              "delivery_mode": "background"
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "type uses the foreground user default",
+      "userDefault": "foreground",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "type",
+        "targetRef": "t1",
+        "text": "hi"
+      },
+      "plan": {
+        "binding": "target",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "bring_to_front",
+            "arguments": {},
+            "stamp": ["session", "pid", "window_id"]
+          },
+          {
+            "kind": "owner",
+            "step": "verify_foreground"
+          },
+          {
+            "kind": "driver",
+            "tool": "type_text",
+            "arguments": {
+              "text": "hi",
+              "delivery_mode": "foreground"
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a chord maps to hotkey",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "key",
+        "targetRef": "t1",
+        "key": "Command+C"
+      },
+      "plan": {
+        "binding": "target",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "hotkey",
+            "arguments": {
+              "keys": ["cmd", "c"],
+              "delivery_mode": "background"
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a single key maps to press_key",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "key",
+        "targetRef": "t1",
+        "key": "Return",
+        "background": true
+      },
+      "plan": {
+        "binding": "target",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "press_key",
+            "arguments": {
+              "key": "return",
+              "delivery_mode": "background"
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "focus of a referenced target",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "focus_app",
+        "targetRef": "t1"
+      },
+      "plan": {
+        "binding": "target",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "bring_to_front",
+            "arguments": {},
+            "stamp": ["session", "pid", "window_id"]
+          },
+          {
+            "kind": "owner",
+            "step": "verify_foreground"
+          }
+        ]
+      }
+    },
+    {
+      "name": "focus by name resolves through the broker",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "focus_app",
+        "name": "Notes"
+      },
+      "plan": {
+        "binding": "broker_target",
+        "steps": [
+          {
+            "kind": "broker",
+            "operation": "resolve_app",
+            "name": "Notes"
+          },
+          {
+            "kind": "driver",
+            "tool": "bring_to_front",
+            "arguments": {},
+            "stamp": ["session", "pid", "window_id"]
+          },
+          {
+            "kind": "owner",
+            "step": "verify_foreground"
+          }
+        ]
+      }
+    },
+    {
+      "name": "launch is broker-only",
+      "userDefault": "foreground",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "launch_app",
+        "name": "Notes",
+        "background": true
+      },
+      "plan": {
+        "binding": "none",
+        "steps": [
+          {
+            "kind": "broker",
+            "operation": "launch",
+            "name": "Notes",
+            "delivery": "background"
+          }
+        ]
+      }
+    },
+    {
+      "name": "navigation is broker-only",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "navigate",
+        "url": "https://example.com"
+      },
+      "plan": {
+        "binding": "none",
+        "steps": [
+          {
+            "kind": "broker",
+            "operation": "navigate",
+            "url": "https://example.com",
+            "delivery": "background"
+          }
+        ]
+      }
+    },
+    {
+      "name": "navigation captureAfter is bound to the broker's verified target",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "navigate",
+        "url": "https://example.com",
+        "captureAfter": true
+      },
+      "plan": {
+        "binding": "broker_target",
+        "steps": [
+          {
+            "kind": "broker",
+            "operation": "navigate",
+            "url": "https://example.com",
+            "delivery": "background"
+          }
+        ],
+        "captureAfter": {
+          "kind": "driver",
+          "tool": "get_window_state",
+          "arguments": {
+            "include_screenshot": true,
+            "include_accessibility_tree": false
+          },
+          "stamp": ["session", "pid", "window_id"]
+        }
+      }
+    },
+    {
+      "name": "wait keeps the retained target for captureAfter",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "wait",
+        "targetRef": "t1",
+        "durationMs": 1500,
+        "captureAfter": true
+      },
+      "plan": {
+        "binding": "target",
+        "steps": [
+          {
+            "kind": "owner",
+            "step": "wait",
+            "durationMs": 1500
+          }
+        ],
+        "captureAfter": {
+          "kind": "driver",
+          "tool": "get_window_state",
+          "arguments": {
+            "include_screenshot": true,
+            "include_accessibility_tree": false
+          },
+          "stamp": ["session", "pid", "window_id"]
+        }
+      }
+    },
+    {
+      "name": "app discovery",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "list_apps"
+      },
+      "plan": {
+        "binding": "none",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "list_apps",
+            "arguments": {},
+            "stamp": ["session"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "window discovery",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "list_windows"
+      },
+      "plan": {
+        "binding": "none",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "list_windows",
+            "arguments": {},
+            "stamp": ["session"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "unscoped accessibility is filtered discovery",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "get_accessibility_tree"
+      },
+      "plan": {
+        "binding": "none",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "list_windows",
+            "arguments": {},
+            "stamp": ["session"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "targeted accessibility is a bounded tree read",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "get_accessibility_tree",
+        "targetRef": "t1",
+        "maxDepth": 7
+      },
+      "plan": {
+        "binding": "target",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "get_window_state",
+            "arguments": {
+              "include_screenshot": false,
+              "include_accessibility_tree": true,
+              "tree_format": "elements",
+              "max_elements": 250,
+              "max_depth": 7,
+              "timeout_ms": 1000
+            },
+            "stamp": ["session", "pid", "window_id"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "permissions never prompt or probe capture",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "check_permissions"
+      },
+      "plan": {
+        "binding": "none",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "check_permissions",
+            "arguments": {
+              "prompt": false,
+              "probe_direct_capture": false
+            },
+            "stamp": ["session"]
+          }
+        ]
+      }
+    },
+    {
+      "name": "doctor skips the capture probe",
+      "userDefault": "background",
+      "action": {
+        "schemaVersion": 2,
+        "surface": "desktop",
+        "action": "doctor"
+      },
+      "plan": {
+        "binding": "none",
+        "steps": [
+          {
+            "kind": "driver",
+            "tool": "health_report",
+            "arguments": {
+              "skip": ["screen_capture_capability"]
+            },
+            "stamp": ["session"]
+          }
+        ]
+      }
+    }
+  ]
+}

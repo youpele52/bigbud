@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "crates/bigbud-computer-use",
   "crates/bigbud-desktop-supervisor",
   "crates/bigbud-protocol",
   "crates/bigbud-system",

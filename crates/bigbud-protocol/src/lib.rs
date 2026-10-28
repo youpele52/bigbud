@@ -1,3 +1,4 @@
+pub mod computer_use;
 mod frame;
 mod generated;
 

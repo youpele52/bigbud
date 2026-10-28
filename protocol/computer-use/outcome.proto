@@ -1,0 +1,17 @@
+syntax = "proto3";
+package bigbud.computer_use.outcome;
+
+message LookupOperation {
+  string caller_id = 1;
+  string operation_id = 2;
+  bytes request_digest = 3;
+}
+// Content is trusted projection, never raw MCP. Lookup must recheck current
+// egress policy; expired/unauthorized results return content-free metadata.
+message OperationResult {
+  string operation_id = 1;
+  string completion = 2; // not_started | completed | unknown
+  string code = 3;
+  bytes projected_result = 4;
+  string capture_error = 5;
+}
