@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { ToastCloseButton, ToastTitleAndDescription } from "./toast.presentation";
 import { ToastVisibleAutoDismiss, usePruneThreadToastTimeouts } from "./toast.autoDismiss";
+import { useToastViewportFocus } from "./toast.focus";
 
 import { cn } from "~/lib/utils";
 import { buttonVariants } from "~/components/ui/button";
@@ -94,12 +95,18 @@ function Toasts({ position, limit }: { position: ToastPosition; limit: number })
       return Object.assign({}, toast, { limited, positionerProps: undefined });
     });
   const visibleToastLayout = buildVisibleToastLayout(visibleToasts);
+  const hasVisibleToasts = visibleToasts.some(
+    (toast) => !toast.limited && toast.transitionStatus !== "ending",
+  );
+  const viewportFocus = useToastViewportFocus(hasVisibleToasts);
 
   usePruneThreadToastTimeouts(toasts);
 
   return (
-    <Toast.Portal data-slot="toast-portal">
+    // Include Base UI's viewport-adjacent focus guards in keyboard exclusion.
+    <Toast.Portal data-slot="toast-portal" inert={!hasVisibleToasts}>
       <Toast.Viewport
+        {...viewportFocus}
         className={cn(
           "fixed z-50 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 [--toast-header-offset:52px] [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
           // Vertical positioning
@@ -145,8 +152,9 @@ function Toasts({ position, limit }: { position: ToastPosition; limit: number })
             <Toast.Root
               className={cn(
                 "absolute z-[calc(9999-var(--toast-index))] h-(--toast-calc-height) w-full select-none rounded-lg border bg-popover not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+                "min-h-(--toast-min-height) max-h-(--toast-max-height) [--toast-min-height:--spacing(12)] [--toast-max-height:--spacing(30)]",
                 // Severity remains visible even for notifications without an icon.
-                "border-l-4 data-[type=loading]:border-l-info data-[type=info]:border-l-info data-[type=success]:border-l-success data-[type=warning]:border-l-warning data-[type=error]:border-l-destructive",
+                "border-l-2 data-[type=loading]:border-l-info data-[type=info]:border-l-info data-[type=success]:border-l-success data-[type=warning]:border-l-warning data-[type=error]:border-l-destructive",
                 // Base positioning using data-position
                 "data-[position*=right]:right-0 data-[position*=right]:left-auto",
                 "data-[position*=left]:right-auto data-[position*=left]:left-0",
@@ -218,7 +226,7 @@ function Toasts({ position, limit }: { position: ToastPosition; limit: number })
               />
               <Toast.Content
                 className={cn(
-                  "pointer-events-auto overflow-hidden px-3.5 py-3 text-sm transition-opacity duration-250 data-expanded:opacity-100 relative flex flex-col gap-3",
+                  "pointer-events-auto min-h-[calc(var(--toast-min-height)-2px)] max-h-[calc(var(--toast-max-height)-2px)] overflow-hidden px-3.5 py-3 text-sm transition-opacity duration-250 data-expanded:opacity-100 relative flex flex-col gap-2",
                   hideCollapsedContent &&
                     "not-data-expanded:pointer-events-none not-data-expanded:opacity-0",
                 )}
@@ -234,7 +242,7 @@ function Toasts({ position, limit }: { position: ToastPosition; limit: number })
                   hideCopyButton={!showErrorCopyButton}
                 />
                 {actionProps && (
-                  <div className="flex items-center justify-end gap-2 pt-2">
+                  <div className="flex shrink-0 items-center justify-end gap-2">
                     <Toast.Action
                       className={cn(buttonVariants({ size: "xs" }), "shrink-0")}
                       data-slot="toast-action"
