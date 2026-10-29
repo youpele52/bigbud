@@ -5,7 +5,7 @@ import {
   capacityUsageStatus,
   type CapacityUsage,
 } from "./ResourceCapacityUsage.logic";
-import { formatPercent } from "./resourceMonitor.format";
+import { formatPercent, formatPercentEndpoint } from "./resourceMonitor.format";
 
 /** System memory keeps available/swap details without a redundant visible usage status. */
 export function ResourceMemoryUsage({ usage }: { usage: CapacityUsage }) {
@@ -16,6 +16,7 @@ export function ResourceMemoryUsage({ usage }: { usage: CapacityUsage }) {
         value={percent}
         label={`Memory capacity${percent === null ? " unavailable" : " used"}`}
         formatValue={formatPercent}
+        formatEndpoint={formatPercentEndpoint}
         description="of total host RAM"
         aria-valuetext={`${formatPercent(percent)} used · ${capacityUsageStatus(percent)}`}
       />
