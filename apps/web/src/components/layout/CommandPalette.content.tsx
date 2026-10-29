@@ -1,8 +1,4 @@
-import {
-  BUILT_IN_CHATS_PROJECT_ID,
-  type ExecutionTargetId,
-  isBuiltInChatsProject,
-} from "@bigbud/contracts";
+import { BUILT_IN_CHATS_PROJECT_ID, isBuiltInChatsProject } from "@bigbud/contracts";
 import { useNavigate } from "@tanstack/react-router";
 import {
   FolderIcon,
@@ -18,12 +14,12 @@ import { cn } from "~/lib/utils";
 import { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { resolveNewChatOptions } from "../../hooks/useHandleNewThread";
 import { useSettings } from "../../hooks/useSettings";
-import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { useResolvedWorkspace } from "../../hooks/useResolvedWorkspace";
 import { isVisibleThread } from "../../logic/thread/threadVisibility.logic";
 import { shortcutLabelForCommand } from "../../models/keybindings";
-import { useDefaultChatCwd, useServerKeybindings } from "../../rpc/serverState";
-import { useProjectById, useStore } from "../../stores/main";
-import { useCommandPaletteStore, useUiStateStore } from "../../stores/ui";
+import { useServerKeybindings } from "../../rpc/serverState";
+import { useStore } from "../../stores/main";
+import { useCommandPaletteStore } from "../../stores/ui";
 import {
   Command,
   CommandDialog,
@@ -53,47 +49,19 @@ function normalizeQuery(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function resolveWorkspaceSearchTarget(input: {
-  activeThread: { projectId: string; worktreePath?: string | null } | null | undefined;
-  selectedProject: { cwd?: string | null } | null | undefined;
-  defaultChatCwd: string | null;
-  selectedProjectExecutionTargetId?: ExecutionTargetId | null | undefined;
-}): { workspaceRoot: string | null; workspaceExecutionTargetId?: ExecutionTargetId | undefined } {
-  return {
-    workspaceRoot:
-      input.activeThread?.worktreePath ??
-      input.selectedProject?.cwd ??
-      input.defaultChatCwd ??
-      null,
-    workspaceExecutionTargetId: input.activeThread?.worktreePath
-      ? undefined
-      : (input.selectedProjectExecutionTargetId ?? undefined),
-  };
-}
-
 export function CommandPaletteDialogContent() {
   const navigate = useNavigate();
   const open = useCommandPaletteStore((store) => store.open);
   const setOpen = useCommandPaletteStore((store) => store.setOpen);
   const keybindings = useServerKeybindings();
   const settings = useSettings();
-  const { activeDraftThread, activeThread, defaultProjectId, handleNewThread } =
+  const { activeDraftThread, activeThread, defaultProjectId, handleNewThread, routeThreadId } =
     useHandleNewThread();
   const projects = useStore(useShallow((store) => store.projects));
   const threads = useStore(useShallow((store) => store.threads.filter(isVisibleThread)));
-  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
-  const selectedProject = useProjectById(activeThread?.projectId ?? selectedProjectId ?? null);
-  const defaultChatCwd = useDefaultChatCwd();
+  const { cwd: workspaceRoot, executionTargetId: workspaceExecutionTargetId } =
+    useResolvedWorkspace(routeThreadId);
   const [query, setQuery] = useState("");
-
-  const { workspaceRoot, workspaceExecutionTargetId } = resolveWorkspaceSearchTarget({
-    activeThread,
-    selectedProject,
-    defaultChatCwd,
-    selectedProjectExecutionTargetId: selectedProject
-      ? resolveWorkspaceExecutionTargetId(selectedProject)
-      : undefined,
-  });
 
   useEffect(() => {
     if (!open) {
