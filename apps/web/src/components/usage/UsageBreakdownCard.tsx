@@ -1,11 +1,11 @@
 import type { ServerUsageRange, ServerUsageSummaryResult } from "@bigbud/contracts/server/usage.ts";
 
 import { Card, CardContent, CardHeader } from "../ui/card";
-import { UsageBreakdownLines } from "./UsageBreakdownCard.line";
+import { UsageBreakdownAreas } from "./UsageBreakdownCard.area";
 import { buildBreakdownPieData } from "./UsageBreakdownCard.pie.logic";
 import { UsageDonut, UsageLegendList } from "./UsageDonut";
 import {
-  buildBreakdownLineRows,
+  buildBreakdownTrendRows,
   hasUsageBucketShares,
   type UsageBucketShareField,
   type UsageTimelineBucket,
@@ -52,14 +52,14 @@ export function UsageBreakdownCard({
           <p className="text-sm text-muted-foreground">No usage yet.</p>
         ) : showTrend ? (
           <div className="space-y-4">
-            <UsageBreakdownLines
+            <UsageBreakdownAreas
               range={range}
-              rows={buildBreakdownLineRows(timeline, series, field)}
+              rows={buildBreakdownTrendRows(timeline, series, field)}
               series={series}
             />
             <div
               aria-label={`${title} legend`}
-              className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground"
+              className="flex flex-wrap justify-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground"
               role="list"
             >
               {slices.map((slice) => (

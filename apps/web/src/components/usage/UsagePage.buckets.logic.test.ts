@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ServerUsageBucket } from "@bigbud/contracts/server/usage.ts";
 
 import {
-  buildBreakdownLineRows,
+  buildBreakdownTrendRows,
   describeUsageBucket,
   fillUsageTimeline,
   hasUsageBucketShares,
@@ -81,7 +81,7 @@ const series: BreakdownPieEntry[] = [
   { id: "other", label: "Other", usedTokens: 30, fill: "var(--chart-5)" },
 ];
 
-describe("buildBreakdownLineRows", () => {
+describe("buildBreakdownTrendRows", () => {
   it("gives each series its own tokens per bucket and folds unnamed ids into Other", () => {
     const timeline = fillUsageTimeline({
       range: "24h",
@@ -96,7 +96,7 @@ describe("buildBreakdownLineRows", () => {
         }),
       ],
     });
-    const rows = buildBreakdownLineRows(timeline, series, "providers");
+    const rows = buildBreakdownTrendRows(timeline, series, "providers");
     expect(rows.at(-1)).toEqual({ bucketStart: "2026-10-29T01:00:00.000Z", s0: 70, s1: 30 });
     expect(rows[0]).toEqual({ bucketStart: rows[0]?.bucketStart, s0: 0, s1: 0 });
   });

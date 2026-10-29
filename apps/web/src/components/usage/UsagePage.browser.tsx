@@ -264,7 +264,7 @@ describe("Usage page heading hierarchy", () => {
     mounted = await render(<UsagePage />);
     const trend = page.getByRole("button", { name: "Trend", exact: true });
     await expect.element(trend).toHaveAttribute("aria-pressed", "true");
-    await expect.poll(() => document.querySelectorAll(".recharts-line").length).toBe(2);
+    await expect.poll(() => document.querySelectorAll(".recharts-area").length).toBe(2);
     await expect
       .element(page.getByRole("list", { name: "Providers legend", exact: true }))
       .toHaveTextContent("Codex");
@@ -273,7 +273,7 @@ describe("Usage page heading hierarchy", () => {
 
     await page.getByRole("button", { name: "Split", exact: true }).click();
     await expect.poll(() => document.querySelectorAll(".recharts-pie").length).toBe(3);
-    expect(document.querySelectorAll(".recharts-line")).toHaveLength(0);
+    expect(document.querySelectorAll(".recharts-area")).toHaveLength(0);
     expect(document.body.textContent).not.toContain("Input may include unseparated cache usage");
   });
 
@@ -284,7 +284,7 @@ describe("Usage page heading hierarchy", () => {
     });
     mounted = await render(<UsagePage />);
     await expect.poll(() => document.querySelectorAll(".recharts-pie").length).toBe(3);
-    expect(document.querySelectorAll(".recharts-line")).toHaveLength(0);
+    expect(document.querySelectorAll(".recharts-area")).toHaveLength(0);
   });
 
   it("swaps token types for the selected period and back with the keyboard", async () => {

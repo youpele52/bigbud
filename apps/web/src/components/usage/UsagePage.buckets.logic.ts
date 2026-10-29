@@ -92,16 +92,16 @@ export function hasUsageBucketShares(
   return active.length > 0 && active.every((bucket) => bucket[field] !== undefined);
 }
 
-export type UsageLineRow = { readonly bucketStart: string } & Record<string, number | string>;
+export type UsageTrendRow = { readonly bucketStart: string } & Record<string, number | string>;
 
 export const breakdownSeriesKey = (index: number) => `s${index}`;
 
 /** One row per bucket with each series' tokens (`s0`…); unnamed ids fold into Other. */
-export function buildBreakdownLineRows(
+export function buildBreakdownTrendRows(
   timeline: ReadonlyArray<UsageTimelineBucket>,
   series: ReadonlyArray<BreakdownPieEntry>,
   field: UsageBucketShareField,
-): UsageLineRow[] {
+): UsageTrendRow[] {
   const named = new Set(series.filter((entry) => entry.id !== "other").map((entry) => entry.id));
   return timeline.map((bucket) => {
     const shares = bucket[field] ?? [];
@@ -111,7 +111,7 @@ export function buildBreakdownLineRows(
         .filter((share) => (entry.id === "other" ? !named.has(share.id) : share.id === entry.id))
         .reduce((total, share) => total + share.usedTokens, 0);
     });
-    return row as UsageLineRow;
+    return row as UsageTrendRow;
   });
 }
 
