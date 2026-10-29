@@ -100,12 +100,9 @@ export function MobileSessionGate({
   return (
     <div className="grid gap-2">
       {authorizationMessage ? (
-        <div
-          className="rounded-md border border-destructive/30 bg-destructive/8 px-3 py-2 text-xs text-muted-foreground"
-          role="status"
-        >
-          {authorizationMessage}
-        </div>
+        <Alert variant="error" className="px-3 py-2 text-xs" role="status">
+          <AlertDescription>{authorizationMessage}</AlertDescription>
+        </Alert>
       ) : null}
       {!authorizationMessage ? (
         <MobileConnectionNotice connection={connection} state={recoveryState} onRetry={restart} />
@@ -114,3 +111,4 @@ export function MobileSessionGate({
     </div>
   );
 }
+import { Alert, AlertDescription } from "~/components/ui/alert";

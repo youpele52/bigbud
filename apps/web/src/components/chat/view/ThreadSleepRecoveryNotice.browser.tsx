@@ -59,7 +59,7 @@ describe("ThreadSleepRecoveryNotice", () => {
     const status = page.getByRole("status");
     await expect.element(status).toHaveAttribute("aria-live", "polite");
     await expect.element(status).toHaveAttribute("data-sleep-recovery-notice", "resuming");
-    await expect.element(status).toHaveClass(/border-info/);
+    await expect.element(status).toHaveClass("border-l-info-foreground");
     await expect.element(page.getByText("Resuming after sleep…")).toBeVisible();
   });
 
@@ -68,7 +68,7 @@ describe("ThreadSleepRecoveryNotice", () => {
     vi.setSystemTime(new Date("2026-10-22T10:00:00.000Z"));
     await renderNotice(recovery({ status: "provider-continued", reason: "provider-continued" }));
     await expect.element(page.getByText("Codex continued on its own after sleep.")).toBeVisible();
-    await expect.element(page.getByRole("status")).toHaveClass(/border-info/);
+    await expect.element(page.getByRole("status")).toHaveClass("border-l-success");
     expect(page.getByRole("button", { name: "Continue" }).query()).toBeNull();
 
     await vi.advanceTimersByTimeAsync(6_000);
@@ -80,7 +80,7 @@ describe("ThreadSleepRecoveryNotice", () => {
   it("names the in-flight tool in amber and sends Continue only when chosen", async () => {
     await renderNotice(recovery({}));
     const alert = page.getByRole("alert");
-    await expect.element(alert).toHaveClass(/border-warning/);
+    await expect.element(alert).toHaveClass("border-l-warning");
     await expect
       .element(
         page.getByText(
@@ -134,7 +134,7 @@ describe("ThreadSleepRecoveryNotice", () => {
 
   it("says a cut response was interrupted, in amber, with Continue and Dismiss", async () => {
     await renderNotice(recovery({ reason: "interrupted-by-sleep", toolSummary: null }));
-    await expect.element(page.getByRole("alert")).toHaveClass(/border-warning/);
+    await expect.element(page.getByRole("alert")).toHaveClass("border-l-warning");
     await expect
       .element(page.getByText("The response was interrupted when the computer went to sleep."))
       .toBeVisible();

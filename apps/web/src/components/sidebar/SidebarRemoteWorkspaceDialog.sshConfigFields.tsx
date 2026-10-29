@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
+import { Alert, AlertAction, AlertDescription } from "../ui/alert";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { Input } from "../ui/input";
 import { RefreshIconButton } from "../ui/RefreshIconButton";
@@ -57,25 +58,29 @@ export function SidebarRemoteWorkspaceSshConfigHostField({
         <p className="text-muted-foreground text-xs">Reading SSH config…</p>
       ) : null}
       {hosts.status === "error" ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-destructive text-xs leading-4">
-          <span className="min-w-0 flex-1">{hosts.message}</span>
-          <Button variant="outline" size="xs" onClick={hosts.refresh}>
-            Retry
-          </Button>
-          <Button variant="outline" size="xs" onClick={onUseManual}>
-            Enter manually
-          </Button>
-        </div>
+        <Alert variant="error" className="text-xs leading-4">
+          <AlertDescription>{hosts.message}</AlertDescription>
+          <AlertAction>
+            <Button variant="outline" size="xs" onClick={hosts.refresh}>
+              Retry
+            </Button>
+            <Button variant="outline" size="xs" onClick={onUseManual}>
+              Enter manually
+            </Button>
+          </AlertAction>
+        </Alert>
       ) : null}
       {result && result.hosts.length === 0 ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/24 px-3 py-2 text-muted-foreground text-xs leading-4">
-          <span className="min-w-0 flex-1">
+        <Alert variant="info" role="status" className="text-xs leading-4">
+          <AlertDescription>
             No hosts found in the SSH config on {result.machineName}.
-          </span>
-          <Button variant="outline" size="xs" onClick={onUseManual}>
-            Enter manually
-          </Button>
-        </div>
+          </AlertDescription>
+          <AlertAction>
+            <Button variant="outline" size="xs" onClick={onUseManual}>
+              Enter manually
+            </Button>
+          </AlertAction>
+        </Alert>
       ) : null}
       {result && result.hosts.length > 0 ? (
         <SshConfigHostPicker

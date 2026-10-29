@@ -88,7 +88,7 @@ export function useChatViewProviderSwitch({
         }
         const sourceThreadId = base.activeThread.id;
         progressToastId = toastManager.add({
-          type: "info",
+          type: "loading",
           title: "Preparing handoff",
           description: "bigbud is generating a handoff document in the background.",
         });

@@ -1,4 +1,3 @@
-import { CircleCheckIcon, LoaderCircleIcon, TriangleAlertIcon, XCircleIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import type { Thread } from "../../../models/types/app.types";
@@ -7,17 +6,7 @@ import { Button } from "../../ui/button";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import { observeThreadTurnStartRequest } from "./ThreadRecoveryNotice.clock";
 import { deriveServerTurnFailure } from "./ThreadRecoveryNotice.failure";
-import {
-  deriveThreadRecoveryNotice,
-  type ThreadRecoveryNoticeTone,
-} from "./ThreadRecoveryNotice.logic";
-
-const NOTICE_ICONS: Record<ThreadRecoveryNoticeTone, typeof CircleCheckIcon> = {
-  info: LoaderCircleIcon,
-  success: CircleCheckIcon,
-  warning: TriangleAlertIcon,
-  error: XCircleIcon,
-};
+import { deriveThreadRecoveryNotice } from "./ThreadRecoveryNotice.logic";
 
 /**
  * Blue "Reconnecting…" after 5 s without a started turn; green, amber or red outcome after.
@@ -61,14 +50,12 @@ export function ThreadRecoveryNotice({
   useEffect(() => setNowMs(Date.now()), [turnStartRequest]);
 
   if (!notice || dismissed) return null;
-  const Icon = NOTICE_ICONS[notice.tone];
   return (
     <ChatBanner
-      variant={notice.tone}
+      variant={notice.tone === "info" ? "loading" : notice.tone}
       role="status"
       aria-live="polite"
       data-recovery-notice={notice.kind}
-      icon={<Icon className={notice.tone === "info" ? "animate-spin" : undefined} aria-hidden />}
       title={notice.title}
       description={notice.description}
       dismissLabel="Dismiss recovery notice"

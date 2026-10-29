@@ -197,8 +197,8 @@ export function useHandleNewThread() {
       const showOwnershipUnavailable = (reason: string) => {
         if (!shouldActivate()) return;
         toastManager.add({
-          type: "info",
-          title: "Checking your saved draft",
+          type: "warning",
+          title: "Saved draft check needs attention",
           description: `${reason} Your draft is safe; reconnect and try New Thread again.`,
         });
       };

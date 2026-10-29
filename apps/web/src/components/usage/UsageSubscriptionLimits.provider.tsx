@@ -1,7 +1,6 @@
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
-import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react";
 import { StatusBanner } from "../common/StatusBanner";
-import { CenteredStatus } from "../common/CenteredStatus";
+import { Alert, AlertDescription } from "../ui/alert";
 import {
   extraUsageUtilization,
   formatExtraUsageRemaining,
@@ -41,9 +40,7 @@ export function UsageSubscriptionProviderLimits({
         <StatusBanner
           dismissalKey={["subscription-limits", limits.source, "stale"]}
           dismissLabel={`Dismiss ${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} stale subscription limits warning`}
-          centered
           variant="warning"
-          icon={<TriangleAlertIcon />}
           title="Subscription limits may be out of date"
           description={
             <>
@@ -60,17 +57,15 @@ export function UsageSubscriptionProviderLimits({
         <StatusBanner
           dismissalKey={["subscription-limits", limits.source, "error"]}
           dismissLabel={`Dismiss ${SUBSCRIPTION_PROVIDER_LABELS[limits.source]} subscription limits error`}
-          centered
           variant="error"
-          icon={<CircleAlertIcon />}
           title={`Couldn't load ${title}`}
           description={limits.message ?? `${title} could not be refreshed.`}
         />
       ) : null}
       {limits.status === "pending" ? (
-        <CenteredStatus loading className="rounded-xl border px-3.5 py-3">
-          Checking {title}
-        </CenteredStatus>
+        <Alert variant="loading" role="status">
+          <AlertDescription>Checking {title}</AlertDescription>
+        </Alert>
       ) : null}
       {hasRetainedLimits ? (
         <div

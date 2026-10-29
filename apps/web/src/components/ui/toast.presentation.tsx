@@ -1,5 +1,5 @@
 import { Toast } from "@base-ui/react/toast";
-import { CheckIcon, CopyIcon, Wifi, XIcon, type LucideIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, LoaderCircleIcon, XIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { TOAST_DISMISS_ALL_HINT, useToastDismissAllGesture } from "./toast.dismissAll";
@@ -50,31 +50,22 @@ export function ToastCloseButton({
 }
 
 export function ToastTitleAndDescription({
-  Icon,
-  icon,
+  loading,
   description,
   hideCopyButton,
 }: {
-  Icon: LucideIcon | null;
-  icon?: "wifi" | undefined;
+  loading: boolean;
   description: unknown;
   hideCopyButton: boolean | undefined;
 }) {
-  const DisplayIcon = icon === "wifi" ? Wifi : Icon;
   return (
     <div className="flex min-h-0 min-w-0 flex-1 gap-2 pr-7">
-      {DisplayIcon && (
+      {loading && (
         <div
           className="[&>svg]:h-lh [&>svg]:w-4 [&_svg]:pointer-events-none [&_svg]:shrink-0 mt-0.5"
           data-slot="toast-icon"
         >
-          <DisplayIcon
-            className={
-              icon === "wifi"
-                ? "text-warning"
-                : "in-data-[type=loading]:animate-spin in-data-[type=error]:text-destructive in-data-[type=info]:text-info in-data-[type=success]:text-success in-data-[type=warning]:text-warning in-data-[type=loading]:text-info"
-            }
-          />
+          <LoaderCircleIcon className="animate-spin text-info-foreground" aria-hidden />
         </div>
       )}
 

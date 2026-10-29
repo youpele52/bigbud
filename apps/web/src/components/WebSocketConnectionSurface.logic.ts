@@ -3,7 +3,7 @@ import type { DesktopBackendStartupState } from "@bigbud/contracts/server/ipc.de
 import type { OrchestrationDeliveryLifecycle } from "@bigbud/contracts/orchestration/orchestration.delivery.ts";
 
 type DeliveryRecoveryToast = {
-  readonly type: "error" | "info" | "warning";
+  readonly type: "error" | "loading" | "warning";
   readonly title: string;
   readonly description: string;
   readonly timeout: 0;
@@ -30,7 +30,7 @@ export function syncDeliveryRecoveryToast<TToastId>(
     delivery.reasonCode === "replay_budget_exceeded" ||
     delivery.reasonCode === "replay_unavailable";
   const toast: DeliveryRecoveryToast = {
-    type: incompatible ? "error" : fallback ? "warning" : "info",
+    type: incompatible ? "error" : fallback ? "warning" : "loading",
     title: incompatible
       ? "Desktop delivery supervisor is incompatible"
       : fallback

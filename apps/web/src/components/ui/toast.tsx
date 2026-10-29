@@ -4,13 +4,6 @@ import { Toast } from "@base-ui/react/toast";
 import { createContext, useContext, type CSSProperties } from "react";
 import { useParams } from "@tanstack/react-router";
 import { ThreadId } from "@bigbud/contracts";
-import {
-  CircleAlertIcon,
-  CircleCheckIcon,
-  InfoIcon,
-  LoaderCircleIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
 import { ToastCloseButton, ToastTitleAndDescription } from "./toast.presentation";
 import { ToastVisibleAutoDismiss, usePruneThreadToastTimeouts } from "./toast.autoDismiss";
 import { useToastViewportFocus } from "./toast.focus";
@@ -19,15 +12,8 @@ import { cn } from "~/lib/utils";
 import { buttonVariants } from "~/components/ui/button";
 import { buildVisibleToastLayout, shouldHideCollapsedToastContent } from "./toast.logic";
 import { toastManager, anchoredToastManager, type ThreadToastData } from "./toast.manager";
+import { statusSurfaceAccent } from "./statusSurface";
 export type { ThreadToastData } from "./toast.manager";
-
-const TOAST_ICONS = {
-  error: CircleAlertIcon,
-  info: InfoIcon,
-  loading: LoaderCircleIcon,
-  success: CircleCheckIcon,
-  warning: TriangleAlertIcon,
-} as const;
 
 type ToastPosition =
   | "top-left"
@@ -137,7 +123,6 @@ function Toasts({ position, limit }: { position: ToastPosition; limit: number })
             <Toast.Root key={toast.id} toast={toast} hidden className="hidden" />
           ))}
         {visibleToastLayout.items.map(({ toast, visibleIndex, offsetY }) => {
-          const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
           const hideCollapsedContent = shouldHideCollapsedToastContent(
             visibleIndex,
             visibleToastLayout.items.length,
@@ -154,7 +139,7 @@ function Toasts({ position, limit }: { position: ToastPosition; limit: number })
                 "absolute z-[calc(9999-var(--toast-index))] h-(--toast-calc-height) w-full select-none rounded-lg border bg-popover not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
                 "min-h-(--toast-min-height) max-h-(--toast-max-height) [--toast-min-height:--spacing(12)] [--toast-max-height:--spacing(30)]",
                 // Severity remains visible even for notifications without an icon.
-                "border-l-2 data-[type=loading]:border-l-info data-[type=info]:border-l-info data-[type=success]:border-l-success data-[type=warning]:border-l-warning data-[type=error]:border-l-destructive",
+                statusSurfaceAccent(toast.type),
                 // Base positioning using data-position
                 "data-[position*=right]:right-0 data-[position*=right]:left-auto",
                 "data-[position*=left]:right-auto data-[position*=left]:left-0",
@@ -236,8 +221,7 @@ function Toasts({ position, limit }: { position: ToastPosition; limit: number })
                   exposeToAccessibility={visibleIndex === 0}
                 />
                 <ToastTitleAndDescription
-                  Icon={Icon}
-                  icon={toast.data?.icon}
+                  loading={toast.type === "loading"}
                   description={showErrorCopyButton ? toast.description : null}
                   hideCopyButton={!showErrorCopyButton}
                 />

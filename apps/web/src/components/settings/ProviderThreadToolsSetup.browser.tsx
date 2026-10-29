@@ -141,7 +141,7 @@ it("infers Location without a chat-directory input, exposes config placement onl
     await expect
       .element(screen.getByText("Detected chat Location: /actual-worktree"))
       .toBeVisible();
-    await expect.element(setupStatus(screen)).toHaveClass("border-success/32");
+    await expect.element(setupStatus(screen)).toHaveClass("border-l-2 border-l-success");
     const field = screen.getByRole("textbox", {
       name: "Plugin config directory (optional)",
     });
@@ -206,7 +206,7 @@ it("truthfully separates native failures and nonfatal settling/remediation statu
   try {
     await screen.getByText("Thread tools & setup", { exact: true }).click();
     await screen.getByRole("button", { name: "Retry setup" }).click();
-    await expect.element(setupStatus(screen)).toHaveClass("border-destructive/32");
+    await expect.element(setupStatus(screen)).toHaveClass("border-l-2 border-l-destructive");
     await screen.getByText("Thread tools & setup", { exact: true }).click();
     await expect.element(screen.getByRole("status")).toBeVisible();
     await screen.getByText("Thread tools & setup", { exact: true }).click();
@@ -217,7 +217,7 @@ it("truthfully separates native failures and nonfatal settling/remediation statu
       message: "V2 watching is settling; retry.",
     });
     await screen.getByRole("button", { name: "Retry setup" }).click();
-    await expect.element(setupStatus(screen)).toHaveClass("border-warning/32");
+    await expect.element(setupStatus(screen)).toHaveClass("border-l-2 border-l-warning");
   } finally {
     await screen.unmount();
   }
@@ -263,7 +263,7 @@ it("runtime-checked readiness is ready without a warning; incompatible states re
     await expect
       .element(screen.getByText("Native qualification: unqualified (2.0.28)"))
       .toBeVisible();
-    await expect.element(setupStatus(screen)).toHaveClass("border-success/32");
+    await expect.element(setupStatus(screen)).toHaveClass("border-l-2 border-l-success");
     expect(mocks.get).toHaveBeenCalledTimes(1);
     mocks.get.mockResolvedValue({
       ...result,
@@ -279,7 +279,7 @@ it("runtime-checked readiness is ready without a warning; incompatible states re
     await expect
       .element(screen.getByText("Native qualification: incompatible (2.0.28)"))
       .toBeVisible();
-    await expect.element(setupStatus(screen)).toHaveClass("border-destructive/32");
+    await expect.element(setupStatus(screen)).toHaveClass("border-l-2 border-l-destructive");
     expect(mocks.get).toHaveBeenCalledTimes(2);
   } finally {
     await screen.unmount();

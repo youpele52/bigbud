@@ -1,4 +1,4 @@
-import { DownloadIcon, InfoIcon, RotateCwIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { DownloadIcon, InfoIcon, RotateCwIcon, XIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
@@ -155,8 +155,7 @@ export function SidebarUpdatePill() {
           dismissalKey={["desktop", "arm64-intel-build"]}
           dismissLabel="Dismiss Intel build warning"
           variant="warning"
-          icon={<TriangleAlertIcon />}
-          className="rounded-2xl border-warning/40 bg-warning/8 text-xs"
+          className="rounded-2xl text-xs"
           title="Intel build on Apple Silicon"
           description={arm64Description}
         />

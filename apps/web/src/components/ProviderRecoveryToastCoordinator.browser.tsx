@@ -85,6 +85,7 @@ describe("ProviderRecoveryToastCoordinator", () => {
     await vi.waitFor(() => expect(mocks.add).toHaveBeenCalledTimes(1));
     const warning = mocks.add.mock.calls[0]![0];
     expect(warning.title).toBe("Starting providers");
+    expect(warning.type).toBe("loading");
     expect(warning.description).toContain("OpenCode, Pi");
 
     mocks.providers = [...failing];

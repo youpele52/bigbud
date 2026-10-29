@@ -1,6 +1,6 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CloudIcon } from "@hugeicons/core-free-icons";
-import { LaptopMinimalIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
+import { LaptopMinimalIcon, PlusIcon } from "lucide-react";
 import { type RefObject } from "react";
 import type { SidebarTopLevelHeaderProps } from "./SidebarSectionLabel";
 import {
@@ -121,8 +121,7 @@ export function SidebarProjectsSection({
             dismissalKey={["desktop", "arm64-intel-build"]}
             dismissLabel="Dismiss Intel build warning"
             variant="warning"
-            icon={<TriangleAlertIcon />}
-            className="rounded-2xl border-warning/40 bg-warning/8"
+            className="rounded-2xl"
             title="Intel build on Apple Silicon"
             description={arm64IntelBuildWarningDescription}
             action={

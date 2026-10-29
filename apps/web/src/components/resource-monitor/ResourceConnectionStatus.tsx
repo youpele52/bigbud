@@ -1,7 +1,6 @@
 import { retryResourceMonitor } from "~/stores/resource-monitor/resourceMonitor.store";
 
 import { StatusBanner } from "../common/StatusBanner";
-import { CenteredStatus } from "../common/CenteredStatus";
 import { Button } from "../ui/button";
 
 /** Same host notice in the full monitor and compact system panel shares one dismissal. */
@@ -21,11 +20,10 @@ export function ResourceConnectionStatus({
     <StatusBanner
       dismissalKey={["resource-monitor", scope, "connection"]}
       dismissLabel="Dismiss resource monitor connection status"
-      role="presentation"
-      centered
-      variant={connecting ? "info" : "warning"}
+      role="status"
+      variant={connecting ? "loading" : "warning"}
       description={
-        <CenteredStatus loading={connecting}>
+        <>
           <p>
             {connecting
               ? `Connecting to ${subject}`
@@ -35,13 +33,13 @@ export function ResourceConnectionStatus({
             <Button
               size="xs"
               variant="outline"
-              className="mt-2"
+              className="mt-2 self-start"
               onClick={() => void retryResourceMonitor()}
             >
               Retry
             </Button>
           ) : null}
-        </CenteredStatus>
+        </>
       }
     />
   );

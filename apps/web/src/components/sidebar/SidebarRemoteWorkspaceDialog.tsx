@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
+import { Alert, AlertDescription } from "../ui/alert";
 import { Input } from "../ui/input";
 import { ToggleGroup, ToggleGroupItem } from "../ui/toggle-group";
 import type {
@@ -167,9 +168,9 @@ export function SidebarRemoteWorkspaceDialog({
           )}
 
           {verificationMessage ? (
-            <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/8 px-3 py-2 text-emerald-700 text-xs leading-4 dark:text-emerald-300">
-              {verificationMessage}
-            </div>
+            <Alert variant="success" role="status" className="text-xs leading-4">
+              <AlertDescription>{verificationMessage}</AlertDescription>
+            </Alert>
           ) : null}
           {agentTarget && open ? (
             <SidebarRemoteAgentStatus executionTargetId={agentTarget} cwd={draft.workspaceRoot} />
@@ -186,9 +187,9 @@ export function SidebarRemoteWorkspaceDialog({
           ) : null}
 
           {error ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/8 px-3 py-2 text-destructive text-xs leading-4">
-              {error}
-            </div>
+            <Alert variant="error" className="text-xs leading-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           ) : null}
         </DialogPanel>
 

@@ -3,18 +3,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type DesktopComputerUsePermissionsStatus,
   type DesktopComputerUseRuntimeStatus,
+  type DesktopComputerUseInstallResult,
 } from "@bigbud/contracts";
 import { makeDesktopBridge } from "../../rpc/wsNativeApi.test.helpers";
 import { desktopComputerUseQueryKeys } from "../../lib/desktopComputerUseReactQuery";
 import { enableComputerUseInBackground } from "./computerUseEnable";
 
-const { addToast } = vi.hoisted(() => ({
+const { addToast, closeToast } = vi.hoisted(() => ({
   addToast: vi.fn(),
+  closeToast: vi.fn(),
 }));
 
 vi.mock("../ui/toast", () => ({
   toastManager: {
     add: addToast,
+    close: closeToast,
   },
 }));
 
@@ -62,7 +65,8 @@ function getTestWindow(): Window & typeof globalThis & { desktopBridge?: unknown
 
 describe("enableComputerUseInBackground", () => {
   beforeEach(() => {
-    addToast.mockReset();
+    addToast.mockReset().mockReturnValue("computer-use-progress");
+    closeToast.mockReset();
     Object.defineProperty(Navigator.prototype, "platform", {
       configurable: true,
       value: "MacIntel",
@@ -92,6 +96,7 @@ describe("enableComputerUseInBackground", () => {
     });
 
     expect(installRuntime).not.toHaveBeenCalled();
+    expect(closeToast).not.toHaveBeenCalled();
     expect(queryClient.getQueryData(desktopComputerUseQueryKeys.status())).toEqual(managedRuntime);
     expect(queryClient.getQueryData(desktopComputerUseQueryKeys.permissions())).toEqual(
       grantedPermissions,
@@ -146,7 +151,7 @@ describe("enableComputerUseInBackground", () => {
     });
 
     expect(addToast).toHaveBeenCalledWith({
-      type: "info",
+      type: "loading",
       title: "Setting up Computer Use",
       description: "bigbud is preparing desktop automation in the background.",
     });
@@ -186,11 +191,78 @@ describe("enableComputerUseInBackground", () => {
     });
     expect(installRuntime).not.toHaveBeenCalled();
     expect(addToast).toHaveBeenCalledWith({
-      type: "info",
+      type: "warning",
       title: "Finish macOS permissions",
       description:
         "Accessibility: not granted.\nScreen Recording: granted.\nApprove Accessibility, then check access again.",
     });
+  });
+
+  it.each([
+    ["success", "success", "Computer Use enabled"],
+    ["install failure", "error", "Computer Use setup failed"],
+    ["runtime not ready", "error", "Computer Use runtime is not ready"],
+    ["permissions attention", "warning", "Finish macOS permissions"],
+    ["install exception", "error", "Computer Use setup failed"],
+    ["permissions exception", "error", "Computer Use setup failed"],
+  ])("closes only the progress toast after %s", async (outcome, type, title) => {
+    const queryClient = new QueryClient();
+    let resolveInstall!: (result: DesktopComputerUseInstallResult) => void;
+    let rejectInstall!: (reason: Error) => void;
+    const installResult = new Promise<DesktopComputerUseInstallResult>((resolve, reject) => {
+      resolveInstall = resolve;
+      rejectInstall = reject;
+    });
+    const requestPermissions = vi.fn(async () => {
+      if (outcome === "permissions exception") throw new Error("Permissions unavailable");
+      return outcome === "permissions attention"
+        ? { ...grantedPermissions, granted: false, pendingHostAccessibilityApproval: true }
+        : grantedPermissions;
+    });
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    getTestWindow().desktopBridge = makeDesktopBridge({
+      getComputerUseRuntimeStatus: async () => ({ ...managedRuntime, repairRequired: true }),
+      installComputerUseRuntime: () => installResult,
+      requestComputerUsePermissions: requestPermissions,
+    });
+
+    enableComputerUseInBackground({ queryClient, updateSettings: vi.fn() });
+
+    await vi.waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith(expect.objectContaining({ type: "loading" }));
+    });
+    expect(closeToast).not.toHaveBeenCalled();
+    expect(requestPermissions).not.toHaveBeenCalled();
+    addToast.mockReturnValue("computer-use-terminal");
+    if (outcome === "install exception") {
+      rejectInstall(new Error("Install unavailable"));
+    } else {
+      resolveInstall({
+        ok: outcome !== "install failure",
+        status:
+          outcome === "runtime not ready"
+            ? { ...managedRuntime, ready: false, state: "unavailable" }
+            : managedRuntime,
+      });
+    }
+
+    await vi.waitFor(() => {
+      expect(closeToast).toHaveBeenCalledExactlyOnceWith("computer-use-progress");
+    });
+    expect(addToast).toHaveBeenCalledTimes(2);
+    expect(addToast).toHaveBeenLastCalledWith(expect.objectContaining({ type, title }));
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: desktopComputerUseQueryKeys.status(),
+    });
+    if (outcome === "permissions attention") {
+      expect(invalidateQueries).not.toHaveBeenCalledWith({
+        queryKey: desktopComputerUseQueryKeys.permissions(),
+      });
+    } else {
+      expect(invalidateQueries).toHaveBeenCalledWith({
+        queryKey: desktopComputerUseQueryKeys.permissions(),
+      });
+    }
   });
 
   it("repairs an available but incompatible runtime before requesting permissions", async () => {
@@ -251,7 +323,7 @@ describe("enableComputerUseInBackground", () => {
     });
 
     expect(addToast).toHaveBeenCalledWith({
-      type: "info",
+      type: "warning",
       title: "Finish desktop permissions",
       description:
         "Grant the needed operating system permissions in system settings, then return to bigbud and check access.",

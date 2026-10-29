@@ -1,6 +1,6 @@
 import "../../index.css";
 
-import { CircleAlertIcon, TriangleAlertIcon } from "lucide-react";
+import { GitForkIcon } from "lucide-react";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
@@ -58,7 +58,7 @@ describe("StatusBanner", () => {
     await render(
       <StatusBanner
         dismissalKey={["status-test"]}
-        icon={<TriangleAlertIcon data-testid="status-icon" />}
+        icon={<GitForkIcon data-testid="status-icon" />}
         title="Optional title"
         description="A status description"
         action={<button type="button">Retry</button>}
@@ -82,7 +82,8 @@ describe("StatusBanner", () => {
 
   it.each([
     ["default", "bg-transparent"],
-    ["info", "bg-info/4"],
+    ["info", "bg-transparent"],
+    ["loading", "bg-info/4"],
     ["success", "bg-success/4"],
     ["warning", "bg-warning/4"],
     ["error", "bg-destructive/4"],
@@ -134,7 +135,6 @@ describe("StatusBanner", () => {
     await render(
       <StatusBanner
         dismissalKey={["status-test"]}
-        icon={<CircleAlertIcon />}
         description={<span data-testid="description-node">Rich description</span>}
       />,
     );
@@ -142,7 +142,7 @@ describe("StatusBanner", () => {
     await expect.element(page.getByTestId("description-node")).toBeInTheDocument();
   });
 
-  it("centers optional status content without blocking dismissal", async () => {
+  it("aligns titles and descriptions even in formerly centered banners without blocking dismissal", async () => {
     const dismiss = vi.fn();
     await render(
       <div style={{ width: 280 }}>
@@ -150,7 +150,6 @@ describe("StatusBanner", () => {
           dismissalKey={["status-test"]}
           centered
           variant="warning"
-          icon={<TriangleAlertIcon data-testid="centered-status-icon" />}
           title="Unavailable"
           description="Usage unavailable for this provider."
           onDismiss={dismiss}
@@ -158,18 +157,11 @@ describe("StatusBanner", () => {
       </div>,
     );
     const alert = page.getByRole("alert").element();
-    const bounds = alert.getBoundingClientRect();
     const title = page.getByText("Unavailable", { exact: true }).element();
     const titleBounds = title.getBoundingClientRect();
-    const heading = alert.querySelector<HTMLElement>('[data-slot="alert-heading"]')!;
-    const headingBounds = heading.getBoundingClientRect();
-    expect(headingBounds.top - bounds.top).toBeLessThan(28);
-    expect((headingBounds.left + headingBounds.right) / 2).toBeCloseTo(
-      (bounds.left + bounds.right) / 2,
-      0,
-    );
-    const icon = page.getByTestId("centered-status-icon").element().getBoundingClientRect();
-    expect((icon.top + icon.bottom) / 2).toBeCloseTo((titleBounds.top + titleBounds.bottom) / 2, 0);
+    const description = alert.querySelector('[data-slot="alert-description"]')!;
+    expect(description.getBoundingClientRect().left).toBeCloseTo(titleBounds.left, 0);
+    expect(alert.querySelectorAll("svg")).toHaveLength(1); // Dismissal only.
     expect(alert.scrollWidth).toBeLessThanOrEqual(alert.clientWidth);
     await page.getByRole("button", { name: "Dismiss" }).click();
     expect(dismiss).toHaveBeenCalledOnce();

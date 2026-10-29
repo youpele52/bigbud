@@ -86,7 +86,7 @@ it.each([375, 1280])("matches shared banner layout and dismissal at %ipx", async
     const description = setup.querySelector<HTMLElement>("[title]")!;
     expect(getComputedStyle(description).webkitLineClamp).toBe("3");
     expect(getComputedStyle(setup).fontSize).toBe("14px");
-    expect(setup).toHaveClass("border-destructive/32");
+    expect(setup).toHaveClass("border-l-destructive");
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
     await screen.getByRole("button", { name: "Dismiss OpenCode setup status" }).click();
     await expect.element(screen.getByRole("status")).not.toBeInTheDocument();

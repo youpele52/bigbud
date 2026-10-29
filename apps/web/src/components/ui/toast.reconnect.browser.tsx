@@ -4,20 +4,19 @@ import { render } from "vitest-browser-react";
 vi.mock("@tanstack/react-router", () => ({ useParams: () => null }));
 import { AnchoredToastProvider, anchoredToastManager, ToastProvider, toastManager } from "./toast";
 
-it("renders a leading amber Wi-Fi icon with neutral text and restores the severity icon on update", async () => {
+it("renders a blue progress spinner and removes it when the connection is restored", async () => {
   const screen = await render(<ToastProvider />);
   const id = toastManager.add({
     title: "Disconnected",
     description: "Reconnecting 4/8",
     type: "loading",
     timeout: 0,
-    data: { icon: "wifi" },
   });
   await expect.element(screen.getByText("Reconnecting 4/8")).toBeVisible();
   const icon = document.querySelector('[data-slot="toast-icon"] svg');
-  expect(icon?.classList.contains("lucide-wifi")).toBe(true);
-  expect(icon?.classList.contains("text-warning")).toBe(true);
-  expect(icon && getComputedStyle(icon).animationName).toBe("none");
+  expect(icon?.classList.contains("lucide-loader-circle")).toBe(true);
+  expect(icon?.classList.contains("text-info-foreground")).toBe(true);
+  expect(icon && getComputedStyle(icon).animationName).not.toBe("none");
   const title = document.querySelector('[data-slot="toast-title"]');
   const description = document.querySelector('[data-slot="toast-description"]');
   expect(title && description && getComputedStyle(title).fontSize).toBe(
@@ -30,7 +29,7 @@ it("renders a leading amber Wi-Fi icon with neutral text and restores the severi
   toastManager.update(id, { type: "success", title: "Reconnected", data: {} });
   await expect.element(screen.getByText("Reconnected", { exact: true })).toBeVisible();
   expect(document.querySelector(".lucide-wifi")).toBeNull();
-  expect(document.querySelector(".lucide-circle-check")).not.toBeNull();
+  expect(document.querySelector('[data-slot="toast-icon"]')).toBeNull();
   toastManager.close(id);
 });
 

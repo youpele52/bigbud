@@ -136,7 +136,7 @@ function notifyRemoteExecutionCheckCompleted(executionTargetId: string) {
   }
   if (check.status === "auth_required") {
     toastManager.add({
-      type: "info",
+      type: "warning",
       title: "Remote authentication required",
       description: formatRemoteExecutionToastDescription(check),
     });

@@ -1,5 +1,4 @@
 import { useSettings } from "~/hooks/useSettings";
-import { TriangleAlertIcon } from "lucide-react";
 import { memo } from "react";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import { ChatBanner } from "./ChatBanner";
@@ -25,7 +24,6 @@ export const ContextWindowWarningBanner = memo(function ContextWindowWarningBann
   return (
     <ChatBanner
       variant="warning"
-      icon={<TriangleAlertIcon />}
       title="Context window warning"
       description={
         <>

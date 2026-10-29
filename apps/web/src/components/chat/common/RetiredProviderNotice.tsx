@@ -1,5 +1,4 @@
 import { getProviderReadOnlyMessage } from "@bigbud/shared/providerLifecycle";
-import { TriangleAlertIcon } from "lucide-react";
 import { ThreadNoticeBanner } from "./ThreadNoticeBanner";
 
 export function RetiredProviderNotice({
@@ -16,7 +15,6 @@ export function RetiredProviderNotice({
       kind={provider === "kilocode" ? "removed-kilocode" : "legacy-opencode"}
       variant="warning"
       role="status"
-      icon={<TriangleAlertIcon />}
       description={getProviderReadOnlyMessage(provider)}
       dismissLabel={`Dismiss legacy ${name} notice`}
     />

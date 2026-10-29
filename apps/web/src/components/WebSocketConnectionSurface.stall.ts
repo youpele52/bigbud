@@ -33,7 +33,7 @@ export function stallExplainsDrop(payload: ServerStalledPayload, drop: Connectio
   return !Number.isFinite(reconnectedAt) || startedAt <= reconnectedAt;
 }
 
-/** Blue: explains an earlier drop whose recovery toast is already gone. */
+/** Neutral information: explains an earlier drop whose recovery toast is already gone. */
 export function buildServerStallExplanationToast(payload: ServerStalledPayload) {
   return {
     type: "info" as const,

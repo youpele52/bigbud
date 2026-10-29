@@ -1,6 +1,5 @@
 import type { ServerOpencodeV2ThreadToolsSetupResult } from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
-import { CircleAlertIcon } from "lucide-react";
 import { ChatBanner } from "../common/ChatBanner";
 import { Button } from "../../ui/button";
 import { isPendingOpenCodeSetup } from "./opencodeSetup.observer";
@@ -35,19 +34,20 @@ export function OpenCodeSetupStatus({
   const variant =
     error || result?.severity === "error"
       ? "error"
-      : pending || result?.severity === "info"
-        ? "info"
+      : pending
+        ? "loading"
         : result?.severity === "warning"
           ? "warning"
           : result?.status === "ready"
             ? "success"
-            : "warning";
+            : result?.severity === "info"
+              ? "info"
+              : "warning";
   return (
     <section aria-label="OpenCode setup status" className="shrink-0">
       <ChatBanner
         role="status"
         variant={variant}
-        icon={<CircleAlertIcon />}
         title={title}
         description={
           <>
