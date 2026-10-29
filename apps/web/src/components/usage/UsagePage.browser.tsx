@@ -3,7 +3,7 @@ import "../../index.css";
 import type { ServerProvider } from "@bigbud/contracts/server/server.providers.ts";
 import type { ServerUsageSummaryResult } from "@bigbud/contracts/server/usage.ts";
 import type { ReactNode } from "react";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
@@ -50,7 +50,14 @@ const summary: ServerUsageSummaryResult = {
   historyStatus: "ready",
   providerCoverage: [],
   totals,
-  buckets: [{ ...totals, bucketStart: "2026-10-08T00:00:00Z" }],
+  buckets: [
+    {
+      ...totals,
+      bucketStart: "2026-10-08T00:00:00Z",
+      providers: [{ id: "codex", usedTokens: 100 }],
+      models: [{ id: "gpt-5", usedTokens: 100 }],
+    },
+  ],
   providers: [{ id: "codex", label: "Codex", usedTokens: 100, turnCount: 1 }],
   models: [{ id: "gpt-5", label: "GPT-5", usedTokens: 100, turnCount: 1 }],
   favoriteProvider: null,
@@ -96,7 +103,7 @@ describe("Usage page heading hierarchy", () => {
     document.body.innerHTML = "";
   });
 
-  it("uses the startup loader only until the first usable section arrives", async () => {
+  it("keeps the full-page loader until the usage summary arrives, even with limits ready", async () => {
     const providers = state.providers;
     state.providers = [];
     let finish!: (value: ServerUsageSummaryResult) => void;
@@ -110,13 +117,15 @@ describe("Usage page heading hierarchy", () => {
     await expect.element(page.getByRole("button", { name: "30d", exact: true })).toBeVisible();
     state.providers = providers;
     await mounted.rerender(<UsagePage />);
-    await expect
-      .element(page.getByRole("region", { name: "Codex subscription limits", exact: true }))
-      .toBeVisible();
-    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
+    expect(document.querySelectorAll(".animate-pulse-slow")).toHaveLength(1);
+    expect(document.body.textContent).not.toContain("Loading usage summary");
     finish(summary);
     await expect
       .element(page.getByRole("heading", { name: "Overview", exact: true }))
+      .toBeVisible();
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
+    await expect
+      .element(page.getByRole("region", { name: "Codex subscription limits", exact: true }))
       .toBeVisible();
     const limits = page.getByRole("region", { name: "Subscription limits", exact: true }).element();
     const overview = page.getByRole("region", { name: "Overview", exact: true }).element();
@@ -201,8 +210,8 @@ describe("Usage page heading hierarchy", () => {
     const headings = Array.from(document.querySelectorAll("h2"));
     expect(headings.map((heading) => heading.textContent)).toEqual([
       "Overview",
-      "Token usage",
-      "Breakdown",
+      "Activity",
+      "Providers & models",
       "Subscription limits",
     ]);
     for (const heading of headings) {
@@ -217,8 +226,8 @@ describe("Usage page heading hierarchy", () => {
       "Top provider",
       "Top model",
       "Streak",
-      "Over time",
-      "Token mix",
+      "Tokens per day",
+      "Token types",
       "Providers",
       "Models",
       "Claude",
@@ -242,10 +251,56 @@ describe("Usage page heading hierarchy", () => {
     expect(getUsageSummary).toHaveBeenCalledWith({ range: "7d" });
     await page.getByRole("button", { name: "30d", exact: true }).click();
     await expect.poll(() => getUsageSummary.mock.calls.at(-1)?.[0]).toEqual({ range: "30d" });
-    await page.getByRole("button", { name: "Share", exact: true }).click();
     await expect
       .element(page.getByRole("heading", { level: 3, name: "Providers", exact: true }))
       .toBeInTheDocument();
+    await page.getByRole("button", { name: "Split", exact: true }).click();
+    await expect
+      .element(page.getByRole("heading", { level: 3, name: "Providers", exact: true }))
+      .toBeInTheDocument();
+  });
+
+  it("toggles providers and models between trend and split", async () => {
+    mounted = await render(<UsagePage />);
+    const trend = page.getByRole("button", { name: "Trend", exact: true });
+    await expect.element(trend).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(() => document.querySelectorAll(".recharts-line").length).toBe(2);
+    await expect
+      .element(page.getByRole("list", { name: "Providers legend", exact: true }))
+      .toHaveTextContent("Codex");
+    // Only the token-types donut is drawn while providers and models show the trend.
+    expect(document.querySelectorAll(".recharts-pie")).toHaveLength(1);
+
+    await page.getByRole("button", { name: "Split", exact: true }).click();
+    await expect.poll(() => document.querySelectorAll(".recharts-pie").length).toBe(3);
+    expect(document.querySelectorAll(".recharts-line")).toHaveLength(0);
+    expect(document.body.textContent).not.toContain("Input may include unseparated cache usage");
+  });
+
+  it("shows the split when an older server sends no per-bucket split", async () => {
+    getUsageSummary.mockResolvedValue({
+      ...summary,
+      buckets: [{ ...totals, bucketStart: "2026-10-08T00:00:00Z" }],
+    });
+    mounted = await render(<UsagePage />);
+    await expect.poll(() => document.querySelectorAll(".recharts-pie").length).toBe(3);
+    expect(document.querySelectorAll(".recharts-line")).toHaveLength(0);
+  });
+
+  it("swaps token types for the selected period and back with the keyboard", async () => {
+    mounted = await render(<UsagePage />);
+    const chart = page.getByRole("group", { name: /Tokens per day/ });
+    await expect.element(chart).toBeVisible();
+    chart.element().focus();
+    await userEvent.keyboard("{ArrowLeft}");
+    const selected = page.getByRole("region", { name: "Selected period", exact: true });
+    await expect.element(selected).toBeVisible();
+    await expect.element(selected).toHaveTextContent("Share of range100.0%");
+    await expect.element(selected).toHaveTextContent("Top providerCodex");
+    await userEvent.keyboard("{Escape}");
+    await expect
+      .element(page.getByRole("region", { name: "Token types", exact: true }))
+      .toBeVisible();
   });
 
   it("retains empty usage hierarchy and the unavailable subscription limits notice", async () => {
@@ -263,12 +318,12 @@ describe("Usage page heading hierarchy", () => {
     );
     mounted = await render(<UsagePage />);
     await expect
-      .element(page.getByRole("heading", { level: 2, name: "Token usage" }))
+      .element(page.getByRole("heading", { level: 2, name: "Activity" }))
       .toBeInTheDocument();
     expect(Array.from(document.querySelectorAll("h2"), (heading) => heading.textContent)).toEqual([
       "Overview",
-      "Token usage",
-      "Breakdown",
+      "Activity",
+      "Providers & models",
       "Subscription limits",
     ]);
     await expect
