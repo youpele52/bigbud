@@ -64,6 +64,14 @@ describe("native terminal task titles", () => {
     expect(meaningfulTerminalTaskTitle("SomeTool: Review auth", false)).toBeNull();
   });
 
+  it("treats a logo-only foreground program like a plain shell", () => {
+    const herdr = { foregroundAgent: { id: "herdr", names: ["herdr"] } };
+    expect(resolveTaskTitle("Investigate websocket failures", herdr)).toBeNull();
+    expect(resolveTaskTitle("herdr: Review auth flow", herdr)).toBeNull();
+    expect(resolveTaskTitle("herdr: Review auth flow", { foregroundAgent: null })).toBeNull();
+    expect(resolveTaskTitle("✳ Fix reconnect handling", herdr)).toBe("Fix reconnect handling");
+  });
+
   it("rejects known cwd/worktree identities even when an agent labels them", () => {
     expect(
       meaningfulTerminalTaskTitle("Claude: My Project", true, ["/Users/me/My Project"]),

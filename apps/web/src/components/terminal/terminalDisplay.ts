@@ -1,5 +1,10 @@
 import { type ProviderKind, type TerminalEvent } from "@bigbud/contracts";
 
+import {
+  resolveTerminalAgentKind,
+  type TerminalAgentKind,
+} from "../../stores/terminal/terminal.store.agentKind";
+
 interface ResolveTerminalBaseLabelInput {
   projectName: string | null | undefined;
   cwd: string | null | undefined;
@@ -99,7 +104,7 @@ function readTerminalEventText(event: TerminalEvent): string {
 
 export function resolveTerminalProviderFromEvents(
   events: ReadonlyArray<{ event: TerminalEvent }>,
-): ProviderKind | null {
+): TerminalAgentKind | null {
   if (events.length === 0) {
     return null;
   }
@@ -108,12 +113,16 @@ export function resolveTerminalProviderFromEvents(
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]?.event;
     if (!event) continue;
-    if (event.type === "agentIdentity") return event.provider;
+    if (event.type === "agentIdentity") {
+      return resolveTerminalAgentKind(event.provider, event.agent) ?? null;
+    }
     if (event.type === "exited" || event.type === "error") return null;
     if (event.type === "started" || event.type === "restarted") {
-      if (event.snapshot.activeAgentProvider !== undefined) {
-        return event.snapshot.activeAgentProvider;
-      }
+      const kind = resolveTerminalAgentKind(
+        event.snapshot.activeAgentProvider,
+        event.snapshot.activeAgent,
+      );
+      if (kind !== undefined) return kind;
       legacyStartIndex = index;
       break;
     }

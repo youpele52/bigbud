@@ -1,4 +1,4 @@
-import { LOCAL_EXECUTION_TARGET_ID, type ProviderKind, type ThreadId } from "@bigbud/contracts";
+import { LOCAL_EXECUTION_TARGET_ID, type ThreadId } from "@bigbud/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { randomUUID } from "~/lib/utils";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
@@ -16,6 +16,7 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./terminalDisplay";
 import { closeTerminalConfirmed } from "./terminalLifecycle.operations";
 import { resolveManualTerminalTarget } from "../../stores/terminal/terminal.store.wsl";
+import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
 
 const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
 const EMPTY_TERMINAL_EVENT_ENTRIES_BY_KEY = Object.freeze({});
@@ -34,7 +35,7 @@ export interface UseThreadTerminalDrawerResult {
   executionTargetId: string | undefined;
   terminalBaseLabel: string;
   terminalLabelOverrides: Record<string, string>;
-  terminalProviderById: Readonly<Record<string, ProviderKind>>;
+  terminalProviderById: Readonly<Record<string, TerminalAgentKind>>;
   splitTerminal: () => void;
   createNewTerminal: () => void;
   activateTerminal: (terminalId: string) => void;
@@ -159,7 +160,7 @@ export function useThreadTerminalDrawer(
     [cwd, project?.name],
   );
   const terminalProviderById = useMemo(() => {
-    const nextById: Record<string, ProviderKind> = {};
+    const nextById: Record<string, TerminalAgentKind> = {};
     for (const terminalId of terminalState.terminalIds) {
       const key = terminalEventBufferKey(threadId, terminalId);
       if (Object.hasOwn(terminalAgentProviderByKey, key)) {

@@ -41,6 +41,21 @@ describe("terminal agent process detection", () => {
     expect(detectAgentForShell(100, shell, "posix")).toBeNull();
   });
 
+  it("recognizes the Muse CLI in a terminal pane", () => {
+    expect(agentFromProcessCommand("/Users/me/.local/bin/muse")).toBe("muse");
+    // Real shape on this platform: ~/.local/bin/muse is a bash launcher that
+    // execs the versioned native binary, so the steady-state process is
+    // `muse-bin-<version>`, never the bare `muse` name.
+    expect(agentFromProcessCommand("/Users/me/.local/bin/muse-bin-1.4.14-R7309.1")).toBe("muse");
+    const processes = parsePosixAgentProcesses(`
+      100 1 100 201 /bin/zsh
+      201 100 201 201 /Users/me/.local/bin/muse-bin-1.4.14-R7309.1
+    `);
+    expect(detectAgentForShell(100, processes, "posix")).toBe("muse");
+    expect(agentFromProcessCommand("rg 'muse' README.md")).toBeNull();
+    expect(agentFromProcessCommand("/Users/me/.local/bin/muse-binder --help")).toBeNull();
+  });
+
   it("recognizes supported runtime wrappers without matching unrelated output", () => {
     expect(
       agentFromProcessCommand(

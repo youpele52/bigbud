@@ -1,12 +1,13 @@
-import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
+import { type ThreadId } from "@bigbud/contracts";
 import { TerminalSquare, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
-import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 
 import { type ThreadTerminalGroup } from "../../models/types";
+import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
 import { ThreadTerminalDrawerToolbar } from "./ThreadTerminalDrawerToolbar";
 import { ThreadTerminalDrawerRenameEditor } from "./ThreadTerminalDrawerRenameEditor";
+import { terminalAgentIcon } from "./terminalAgentIcons";
 import { TerminalLifecycleLabel } from "./TerminalLifecycleStatus";
 
 interface ThreadTerminalDrawerSidebarProps {
@@ -18,7 +19,7 @@ interface ThreadTerminalDrawerSidebarProps {
   editingTerminalId: string | null;
   terminalRenameDraft: string;
   renameInputRef: (element: HTMLInputElement | null) => void;
-  terminalProviderById: Readonly<Record<string, ProviderKind>>;
+  terminalProviderById: Readonly<Record<string, TerminalAgentKind>>;
   showGroupHeaders: boolean;
   hasReachedSplitLimit: boolean;
   renameTerminalActionLabel: string;
@@ -124,7 +125,7 @@ export function ThreadTerminalDrawerSidebar({
                   const isActive = terminalId === resolvedActiveTerminalId;
                   const terminalProvider = terminalProviderById[terminalId] ?? null;
                   const ProviderIcon = terminalProvider
-                    ? PROVIDER_ICON_BY_PROVIDER[terminalProvider]
+                    ? terminalAgentIcon(terminalProvider)
                     : null;
                   const closeTerminalLabel = `Close ${
                     terminalLabelById.get(terminalId) ?? "terminal"
@@ -162,7 +163,7 @@ export function ThreadTerminalDrawerSidebar({
                           onDoubleClick={() => onStartTerminalRename(terminalId)}
                         >
                           {ProviderIcon ? (
-                            <ProviderIcon className="size-3 shrink-0" />
+                            <ProviderIcon className="size-3 shrink-0 animate-breathe motion-reduce:animate-none" />
                           ) : (
                             <TerminalSquare className="size-3 shrink-0" />
                           )}

@@ -1,12 +1,12 @@
 import {
   type ExecutionTargetId,
-  type ProviderKind,
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@bigbud/contracts";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { cn } from "~/lib/utils";
+import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
 import {
   DEFAULT_THREAD_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
@@ -53,7 +53,7 @@ interface ThreadTerminalDrawerProps {
   keybindings: ResolvedKeybindingsConfig;
   terminalBaseLabel: string;
   terminalLabelOverrides: Readonly<Record<string, string>>;
-  terminalProviderById: Readonly<Record<string, ProviderKind>>;
+  terminalProviderById: Readonly<Record<string, TerminalAgentKind>>;
   mode?: "drawer" | "panel";
   fillAvailableSpace?: boolean;
   onToggleExpanded?: (() => void) | undefined;

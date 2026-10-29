@@ -1,4 +1,5 @@
 import { PROVIDER_DISPLAY_NAMES } from "@bigbud/contracts/constants/provider.constant.ts";
+import type { TerminalOnlyAgentKind } from "@bigbud/contracts/constants/terminal.constant.ts";
 import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
 import type { TerminalAgentIdentity } from "@bigbud/contracts/workspace/terminal.agentIdentity.ts";
 
@@ -6,9 +7,16 @@ import type { TerminalAgentIdentity } from "@bigbud/contracts/workspace/terminal
 export interface TerminalAgentDescriptor extends TerminalAgentIdentity {
   readonly provider?: ProviderKind;
   readonly executables?: ReadonlyArray<string>;
+  /**
+   * Basename prefixes for versioned native binaries whose exact name carries
+   * a release suffix (e.g. Muse's launcher execs `muse-bin-<version>`).
+   */
+  readonly executablePrefixes?: ReadonlyArray<string>;
   readonly scriptPaths?: ReadonlyArray<string>;
   /** Literal, distinctive native title prefixes, including their separating whitespace. */
   readonly titlePrefixes?: ReadonlyArray<string>;
+  /** Recognised for the terminal logo only; its titles are never task evidence for thread names. */
+  readonly logoOnly?: true;
 }
 
 function providerAgent(
@@ -49,6 +57,9 @@ export const TERMINAL_AGENTS: ReadonlyArray<TerminalAgentDescriptor> = [
   }),
   providerAgent("codex", { executables: ["codex"], scriptPaths: ["/@openai/codex/"] }),
   providerAgent("copilot", { executables: ["copilot"] }),
+  // `muse` is a bash launcher that execs the versioned native binary
+  // `muse-bin-<version>`; the steady-state process never carries the bare name.
+  providerAgent("muse", { executables: ["muse"], executablePrefixes: ["muse-bin-"] }),
   providerAgent("devin", { executables: ["devin", "devin-cli"] }),
   { id: "gemini", names: ["Gemini", "Gemini CLI"], executables: ["gemini"] },
   { id: "aider", names: ["Aider"], executables: ["aider"] },
@@ -58,6 +69,13 @@ export const TERMINAL_AGENTS: ReadonlyArray<TerminalAgentDescriptor> = [
   { id: "qwen", names: ["Qwen", "Qwen Code"], executables: ["qwen"] },
   { id: "crush", names: ["Crush"], executables: ["crush"] },
   { id: "deepseek-build", names: ["DeepSeek Build"] },
+  // herdr hosts agents rather than being one, so it only lends the terminal its logo.
+  {
+    id: "herdr" satisfies TerminalOnlyAgentKind,
+    names: ["herdr"],
+    executables: ["herdr"],
+    logoOnly: true,
+  },
 ];
 
 /** Native foreground events already carry detector evidence; display names alone do not create it. */
