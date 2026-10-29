@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-const gitStatus = vi.hoisted(() => ({ value: "available" as "available" | "missing" }));
 const sidebarPreferences = vi.hoisted(() => ({ hidden: [] as string[] }));
 
 vi.mock("../../stores/ui/search.store", () => ({
@@ -13,16 +12,11 @@ vi.mock("../../rpc/serverState", () => ({
   useServerKeybindings: () => [],
 }));
 
-vi.mock("./Sidebar.actions.git", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./Sidebar.actions.git")>()),
-  usePluginGitAvailability: () => ({ status: gitStatus.value, check: vi.fn() }),
-}));
-
 vi.mock("../../stores/ui/ui.store", () => ({
   useUiStateStore: (selector: (state: unknown) => unknown) =>
     selector({
+      sidebarPrimaryGroupSize: 4,
       sidebarActionOrder: [
-        "plugins",
         "scheduled",
         "games",
         "usage",
@@ -97,10 +91,10 @@ describe("SidebarActionsSection", () => {
   });
   it("hides every configurable section while New chat and Search remain fixed", () => {
     sidebarPreferences.hidden = [
-      "plugins",
       "scheduled",
       "games",
       "usage",
+      "resource-monitor",
       "pinned",
       "chats",
       "projects",
@@ -118,17 +112,12 @@ describe("SidebarActionsSection", () => {
       sidebarPreferences.hidden = [];
     }
   });
-  it("keeps fixed actions visible without a hidden-items row when Git is missing", () => {
-    gitStatus.value = "missing";
-    try {
-      const html = renderActions();
-      expect(html).toContain('aria-label="New chat"');
-      expect(html).toContain('aria-label="Open search"');
-      expect(html).not.toContain('aria-label="Open plugins"');
-      expect(html).not.toContain("Hidden items");
-    } finally {
-      gitStatus.value = "available";
-    }
+  it("has no marketplace action or Git prerequisite prompt", () => {
+    const html = renderActions();
+    expect(html).toContain('aria-label="New chat"');
+    expect(html).toContain('aria-label="Open search"');
+    expect(html).not.toContain('aria-label="Open plugins"');
+    expect(html).not.toContain("Install Git");
   });
   it("renders the New chat, Search, Scheduled, and Usage actions with icons", () => {
     const html = renderActions();
@@ -194,6 +183,6 @@ describe("SidebarActionsSection", () => {
     const html = renderActions();
 
     expect(html).toContain('class="group flex h-7 w-full items-center');
-    expect(html.match(/class="group flex h-7 w-full items-center/g)).toHaveLength(7);
+    expect(html.match(/class="group flex h-7 w-full items-center/g)).toHaveLength(6);
   });
 });

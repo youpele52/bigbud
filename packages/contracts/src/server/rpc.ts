@@ -57,15 +57,6 @@ import {
 } from "./rpc.connectionDiagnostics";
 import { WsProviderStopSubagentRpc } from "./rpc.subagents";
 import {
-  WsPluginsGitAvailabilityRpc,
-  WsPluginsGetRpc,
-  WsPluginsInstallRpc,
-  WsPluginsListCatalogRpc,
-  WsPluginsRefreshCatalogRpc,
-  WsPluginsUninstallRpc,
-  WsPluginsUpdateRpc,
-} from "./rpc.plugins";
-import {
   WsServerPreviewThreadRetentionRpc,
   WsServerSetThreadRetentionPolicyRpc,
   WsServerStartThreadRetentionRpc,
@@ -168,8 +159,6 @@ export * from "./rpc.retention";
 export * from "./rpc.stream";
 export * from "./rpc.usage";
 export * from "./rpc.subagents";
-export * from "./plugins";
-export * from "./rpc.plugins";
 export * from "./rpc.workspace";
 
 export { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
@@ -185,13 +174,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsWorktreeDeleteRpc,
   WsWorktreeSelectRpc,
   WsServerOpencodeV2ThreadToolsSetupRpc,
-  WsPluginsGitAvailabilityRpc,
-  WsPluginsListCatalogRpc,
-  WsPluginsGetRpc,
-  WsPluginsRefreshCatalogRpc,
-  WsPluginsInstallRpc,
-  WsPluginsUpdateRpc,
-  WsPluginsUninstallRpc,
   WsServerGetConfigRpc,
   WsServerPingRpc,
   WsServerReportWsConnectionDiagnosticsRpc,

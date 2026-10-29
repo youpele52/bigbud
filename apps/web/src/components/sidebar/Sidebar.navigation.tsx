@@ -123,10 +123,6 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
             closeMobileSidebar();
             void navigate({ to: "/automations" });
           }}
-          onOpenPlugins={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/plugins" });
-          }}
           onOpenGames={() => {
             closeMobileSidebar();
             void navigate({ to: "/games" });

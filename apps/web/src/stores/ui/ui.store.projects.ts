@@ -2,6 +2,7 @@ import { type ProjectId } from "@bigbud/contracts";
 import {
   sanitizeHiddenSidebarActions,
   sanitizeSidebarActionOrder,
+  sanitizeSidebarPrimaryGroupSize,
 } from "../../components/sidebar/Sidebar.actions.logic";
 
 import {
@@ -92,6 +93,10 @@ export function readPersistedState(): UiState {
     return {
       ...initialState,
       sidebarActionOrder: sanitizeSidebarActionOrder(parsed.sidebarActionOrder),
+      sidebarPrimaryGroupSize: sanitizeSidebarPrimaryGroupSize(
+        parsed.sidebarPrimaryGroupSize,
+        parsed.sidebarActionOrder,
+      ),
       hiddenSidebarActions: sanitizeHiddenSidebarActions(parsed.hiddenSidebarActions),
       chatsExpanded: typeof parsed.chatsExpanded === "boolean" ? parsed.chatsExpanded : true,
       favouritesExpanded:
@@ -146,6 +151,7 @@ export function persistState(state: UiState): void {
       PERSISTED_STATE_KEY,
       JSON.stringify({
         sidebarActionOrder: state.sidebarActionOrder,
+        sidebarPrimaryGroupSize: state.sidebarPrimaryGroupSize,
         hiddenSidebarActions: state.hiddenSidebarActions,
         collapsedProjectCwds,
         chatsExpanded: state.chatsExpanded,

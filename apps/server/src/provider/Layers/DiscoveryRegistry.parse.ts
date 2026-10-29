@@ -32,7 +32,6 @@ const DISCOVERY_SOURCE_PRIORITY = {
   project: 0,
   user: 1,
   system: 2,
-  plugin: 3,
   config: 4,
 } satisfies Record<ServerDiscoveredAgent["source"], number>;
 

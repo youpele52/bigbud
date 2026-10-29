@@ -3,6 +3,7 @@ import type { SidebarActionId } from "../../components/sidebar/Sidebar.actions.l
 
 export interface PersistedUiState {
   sidebarActionOrder?: string[];
+  sidebarPrimaryGroupSize?: number;
   hiddenSidebarActions?: string[];
   chatsExpanded?: boolean;
   collapsedProjectCwds?: string[];
@@ -20,6 +21,7 @@ export interface PersistedUiState {
 
 export interface UiSidebarState {
   sidebarActionOrder: SidebarActionId[];
+  sidebarPrimaryGroupSize: number;
   hiddenSidebarActions: SidebarActionId[];
   chatsExpanded: boolean;
   favouritesExpanded: boolean;
@@ -52,8 +54,8 @@ export interface SyncThreadInput {
 }
 
 export const initialState: UiState = {
+  sidebarPrimaryGroupSize: 4,
   sidebarActionOrder: [
-    "plugins",
     "scheduled",
     "games",
     "usage",

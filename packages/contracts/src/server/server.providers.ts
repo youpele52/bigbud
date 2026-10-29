@@ -234,13 +234,7 @@ export type ServerProvider = typeof ServerProvider.Type;
 export const ServerProviders = Schema.Array(ServerProvider);
 export type ServerProviders = typeof ServerProviders.Type;
 
-export const ServerDiscoverySource = Schema.Literals([
-  "project",
-  "user",
-  "system",
-  "plugin",
-  "config",
-]);
+export const ServerDiscoverySource = Schema.Literals(["project", "user", "system", "config"]);
 export type ServerDiscoverySource = typeof ServerDiscoverySource.Type;
 
 export const ServerDiscoveryProviderLabel = Schema.Literals(SERVER_DISCOVERY_PROVIDER_LABELS);
@@ -264,8 +258,6 @@ export type ServerDiscoveredAgents = typeof ServerDiscoveredAgents.Type;
 export const ServerDiscoveredSkill = Schema.Struct({
   ...ServerDiscoveredEntryBase.fields,
   displayName: Schema.optional(TrimmedNonEmptyString),
-  pluginId: Schema.optional(TrimmedNonEmptyString),
-  pluginRevision: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerDiscoveredSkill = typeof ServerDiscoveredSkill.Type;
 

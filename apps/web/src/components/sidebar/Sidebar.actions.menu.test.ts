@@ -3,11 +3,21 @@ import { SIDEBAR_ACTION_IDS } from "./Sidebar.actions.logic";
 import { buildSidebarItemMenuItems } from "./Sidebar.actions.menu";
 
 describe("sidebar item context menu", () => {
+  it("permits resetting a migrated custom boundary even when the surviving order is default", () => {
+    const items = buildSidebarItemMenuItems({
+      id: null,
+      order: SIDEBAR_ACTION_IDS,
+      visible: SIDEBAR_ACTION_IDS,
+      hidden: [],
+      primaryGroupSize: 5,
+    });
+    expect(items.find((item) => item.id === "reset-order")?.disabled).toBe(false);
+  });
   it("offers both edge moves for a middle section", () => {
     const items = buildSidebarItemMenuItems({
       id: "projects",
       order: ["projects", ...SIDEBAR_ACTION_IDS.filter((id) => id !== "projects")],
-      visible: ["plugins", "pinned", "projects", "remote-workspaces"],
+      visible: ["scheduled", "pinned", "projects", "remote-workspaces"],
       hidden: ["chats"],
     });
     expect(items).toContainEqual({ id: "hide", label: "Hide Projects" });
@@ -37,7 +47,7 @@ describe("sidebar item context menu", () => {
       id: "pinned",
       order: SIDEBAR_ACTION_IDS,
       visible: ["pinned", "projects"],
-      hidden: ["plugins", "chats"],
+      hidden: ["games", "chats"],
     });
     expect(items.find((item) => item.id === "move-top")?.disabled).toBe(true);
     expect(items.find((item) => item.id === "move-bottom")?.disabled).toBe(false);
@@ -46,10 +56,10 @@ describe("sidebar item context menu", () => {
       id: null,
       order: SIDEBAR_ACTION_IDS,
       visible: [],
-      hidden: ["plugins", "pinned", "chats", "projects", "remote-workspaces"],
+      hidden: ["scheduled", "pinned", "chats", "projects", "remote-workspaces"],
     });
     expect(recovery.some((item) => item.id === "show-all" && !item.disabled)).toBe(true);
-    expect(recovery[0]?.id).toBe("show:plugins");
+    expect(recovery[0]?.id).toBe("show:scheduled");
     expect(recovery.at(-1)?.id).toBe("reset-order");
     expect(recovery.filter((item) => item.separator)).toHaveLength(2);
   });

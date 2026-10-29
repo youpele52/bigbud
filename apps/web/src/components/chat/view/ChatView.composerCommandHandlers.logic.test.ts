@@ -6,6 +6,7 @@ import {
   useComposerCommandHandlers,
   type UseComposerCommandHandlersInput,
 } from "./ChatView.composerCommandHandlers.logic";
+import type { ComposerCommandItem } from "../composer/ComposerCommandMenu";
 
 function makeInput(
   overrides: Partial<UseComposerCommandHandlersInput> = {},
@@ -78,6 +79,47 @@ describe("useComposerCommandHandlers", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it.each<{ item: ComposerCommandItem; replacement: string }>([
+    {
+      item: {
+        id: "path",
+        type: "path",
+        path: "src/file.ts",
+        pathKind: "file",
+        label: "file.ts",
+        description: "",
+      },
+      replacement: "@src/file.ts ",
+    },
+    {
+      item: {
+        id: "agent",
+        type: "agent",
+        agent: { id: "review", name: "review", provider: "codex", source: "user" },
+        label: "review",
+        description: "",
+      },
+      replacement: "@agent::review ",
+    },
+    {
+      item: {
+        id: "skill",
+        type: "skill",
+        skill: { id: "handoff", name: "handoff", provider: "bigbud", source: "system" },
+        label: "handoff",
+        description: "",
+      },
+      replacement: "@skill::handoff ",
+    },
+  ])("preserves direct $item.type insertion after marketplace removal", ({ item, replacement }) => {
+    const input = makeInput({ promptRef: { current: "@" }, composerCursor: 1 });
+    renderUseComposerCommandHandlers(input).onSelectComposerItem(item);
+    expect(input.applyPromptReplacement).toHaveBeenCalledWith(0, 1, replacement, {
+      expectedText: "@",
+    });
+    expect(input.setComposerHighlightedItemId).toHaveBeenCalledWith(null);
   });
 
   it("inserts generic provider slash commands instead of toggling default mode", () => {

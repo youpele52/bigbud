@@ -11,8 +11,6 @@ const targetPages = [
   "../automation/AutomationsPage.tsx",
   "../automation/AutomationDetailPage.tsx",
   "../automation/AutomationDetailPane.tsx",
-  "../plugins/PluginDetailsPage.tsx",
-  "../plugins/PluginStorePage.tsx",
   "../usage/UsagePage.tsx",
 ] as const;
 

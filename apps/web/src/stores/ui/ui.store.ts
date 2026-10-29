@@ -5,6 +5,7 @@ import {
   reorderSidebarAction,
   moveSidebarActionToEdge,
   SIDEBAR_ACTION_IDS,
+  SIDEBAR_PRIMARY_GROUP_SIZE,
   type SidebarActionId,
 } from "../../components/sidebar/Sidebar.actions.logic";
 
@@ -286,7 +287,11 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => ({
       sidebarActionOrder: moveSidebarActionToEdge(state.sidebarActionOrder, id, edge),
     })),
-  resetSidebarActionOrder: () => set({ sidebarActionOrder: [...SIDEBAR_ACTION_IDS] }),
+  resetSidebarActionOrder: () =>
+    set({
+      sidebarActionOrder: [...SIDEBAR_ACTION_IDS],
+      sidebarPrimaryGroupSize: SIDEBAR_PRIMARY_GROUP_SIZE,
+    }),
   syncProjects: (projects) => set((state) => syncProjects(state, projects)),
   syncThreads: (threads) => set((state) => syncThreads(state, threads)),
   markThreadVisited: (threadId, visitedAt) =>

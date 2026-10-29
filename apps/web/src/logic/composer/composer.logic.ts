@@ -8,7 +8,6 @@ export type ComposerSlashCommand =
   | "default"
   | "agents"
   | "skill"
-  | "plugins"
   | "skills"
   | "read";
 
@@ -26,7 +25,6 @@ const SLASH_COMMANDS: readonly ComposerSlashCommand[] = [
   "agents",
   "skill",
   "skills",
-  "plugins",
   "read",
 ];
 const isInlineTokenSegment = (
@@ -258,11 +256,11 @@ export function detectComposerTrigger(text: string, cursorInput: number): Compos
       };
     }
 
-    const discoveryMatch = /^\/(agents|skills|skill|plugins)(?:\s+(.*))?$/.exec(slashPrefix);
+    const discoveryMatch = /^\/(agents|skills|skill)(?:\s+(.*))?$/.exec(slashPrefix);
     if (discoveryMatch) {
       const rawCommand = discoveryMatch[1]?.toLowerCase();
       const command = rawCommand === "skill" ? "skills" : rawCommand;
-      if (command === "agents" || command === "skills" || command === "plugins") {
+      if (command === "agents" || command === "skills") {
         const query = (discoveryMatch[2] ?? "").trim();
         return {
           kind: "slash-command",

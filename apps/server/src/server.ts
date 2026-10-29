@@ -86,7 +86,6 @@ import { VisibleBrowserControlLive } from "./browser/Layers/VisibleBrowserContro
 import { PurgeJobRepositoryLive } from "./persistence/Layers/PurgeJobRepository.ts";
 import { ThreadRetentionLive } from "./retention/Layers/ThreadRetention.ts";
 import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
-import { PluginRegistryLive } from "./plugins/Layers/PluginRegistry";
 import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
 import { isRemoteAgentExecutionTarget } from "./remote-agent/remoteAgentDefault.ts";
 import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.layer.ts";
@@ -309,7 +308,6 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   Layer.provideMerge(Layer.mergeAll(ThreadToolsActivationLive, TerminalLayerLive)),
   Layer.provideMerge(PersistenceLayerLive),
   Layer.provideMerge(Layer.mergeAll(KeybindingsLive, DirectResourceCleanupLayerLive)),
-  Layer.provideMerge(PluginRegistryLive),
   Layer.provideMerge(ServerSettingsLive),
   Layer.provideMerge(
     ThreadShellRunnerLive.pipe(Layer.provide(PtyAdapterLive), Layer.provide(PersistenceLayerLive)),

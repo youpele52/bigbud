@@ -21,8 +21,8 @@ import {
 
 function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
+    sidebarPrimaryGroupSize: 4,
     sidebarActionOrder: [
-      "plugins",
       "scheduled",
       "games",
       "usage",

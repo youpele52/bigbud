@@ -12,7 +12,6 @@ import { GitManager } from "./git/Services/GitManager.ts";
 import { GitStatusBroadcaster } from "./git/Services/GitStatusBroadcaster.ts";
 import { Keybindings } from "./keybindings/keybindings.ts";
 import { MobileRemoteControl } from "./mobile/Services/MobileRemoteControl.ts";
-import { PluginRegistry } from "./plugins/Services/PluginRegistry.ts";
 import { BrowserTraceCollector } from "./observability/Services/BrowserTraceCollector.ts";
 import { OrchestrationEngineService } from "./orchestration/Services/OrchestrationEngine.ts";
 import { OrchestrationBootstrapRecipeRepository } from "./persistence/Services/OrchestrationBootstrapRecipes.ts";
@@ -122,23 +121,6 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
             revokeSession: () => Effect.void,
             validateSessionToken: () => Effect.succeed(null),
             ...options?.layers?.mobileRemoteControl,
-          }),
-          Layer.mock(PluginRegistry)({
-            listCatalog: Effect.succeed({
-              revision: "unavailable",
-              sync: { status: "unavailable" as const },
-              items: [],
-              installed: [],
-            }),
-            get: () => Effect.die("not implemented"),
-            refresh: Effect.die("not implemented"),
-            install: () => Effect.die("not implemented"),
-            update: () => Effect.die("not implemented"),
-            uninstall: () => Effect.die("not implemented"),
-            streamChanges: Stream.empty,
-            resolveAsset: () => Effect.sync(() => undefined),
-            getInstalledSkillRoots: Effect.succeed([]),
-            ...options?.layers?.pluginRegistry,
           }),
           Layer.succeed(CommandGateway, {
             dispatchNormalized: () => Effect.succeed({ sequence: 0 }),
