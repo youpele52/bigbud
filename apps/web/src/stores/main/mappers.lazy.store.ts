@@ -121,7 +121,7 @@ export function mapSidebarThreadSummary(summary: ThreadSummary): SidebarThreadSu
     worktreePath: summary.worktreePath,
     latestUserMessageAt: summary.latestUserMessageAt,
     hasPendingApprovals: summary.isAwaitingApproval,
-    hasPendingUserInput: false,
+    hasPendingUserInput: summary.isAwaitingUserInput ?? false,
     hasActionableProposedPlan: false,
   };
 }

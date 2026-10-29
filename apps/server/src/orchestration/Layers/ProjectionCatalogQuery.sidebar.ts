@@ -87,6 +87,8 @@ export function makeGetSidebarThreadCatalog(
             AND d.state NOT IN ('completed', 'compensated', 'failed')) AS "isDelegated",
         EXISTS (SELECT 1 FROM projection_pending_approvals a
           WHERE a.thread_id = t.thread_id AND a.status = 'pending') AS "isAwaitingApproval",
+        EXISTS (SELECT 1 FROM projection_pending_user_inputs u
+          WHERE u.thread_id = t.thread_id AND u.status = 'pending') AS "isAwaitingUserInput",
         membership.is_recent AS "isRecent", membership.is_pinned AS "isPinned"
       FROM membership
       JOIN projection_threads t ON t.thread_id = membership.thread_id

@@ -38,6 +38,7 @@ export const ThreadSummaryDbRow = ThreadSummary.mapFields(
     isWatched: Schema.Number,
     isDelegated: Schema.Number,
     isAwaitingApproval: Schema.Number,
+    isAwaitingUserInput: Schema.Number,
   }),
 );
 export type ThreadSummaryDbRow = typeof ThreadSummaryDbRow.Type;
@@ -51,6 +52,7 @@ export function normalizeThreadSummary(row: ThreadSummaryDbRow): ThreadSummaryTy
     isWatched: row.isWatched === 1,
     isDelegated: row.isDelegated === 1,
     isAwaitingApproval: row.isAwaitingApproval === 1,
+    isAwaitingUserInput: row.isAwaitingUserInput === 1,
   };
 }
 

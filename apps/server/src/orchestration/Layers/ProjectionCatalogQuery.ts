@@ -235,7 +235,11 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         EXISTS (
           SELECT 1 FROM projection_pending_approvals a
           WHERE a.thread_id = t.thread_id AND a.status = 'pending'
-        ) AS "isAwaitingApproval"
+        ) AS "isAwaitingApproval",
+        EXISTS (
+          SELECT 1 FROM projection_pending_user_inputs u
+          WHERE u.thread_id = t.thread_id AND u.status = 'pending'
+        ) AS "isAwaitingUserInput"
       FROM projection_threads t
       LEFT JOIN projection_thread_sessions s ON s.thread_id = t.thread_id
       LEFT JOIN projection_turns turn

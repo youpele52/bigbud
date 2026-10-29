@@ -287,7 +287,10 @@ export function updateThreadState(
   state: AppState,
   threadId: ThreadId,
   updater: (thread: Thread) => Thread,
-  options: { readonly preserveLatestUserMessageAt?: boolean } = {},
+  options: {
+    readonly preserveLatestUserMessageAt?: boolean;
+    readonly pendingUserInputChanged?: boolean;
+  } = {},
 ): AppState {
   let threads = updateThread(state.threads, threadId, (thread) => {
     const nextThread = updater(thread);
@@ -306,7 +309,13 @@ export function updateThreadState(
     options.preserveLatestUserMessageAt === false
       ? derivedSummary.latestUserMessageAt
       : latestTimestamp(previousSummary?.latestUserMessageAt, derivedSummary.latestUserMessageAt);
-  const nextSummary = { ...derivedSummary, latestUserMessageAt };
+  const nextSummary = {
+    ...derivedSummary,
+    latestUserMessageAt,
+    hasPendingUserInput:
+      derivedSummary.hasPendingUserInput ||
+      (!options.pendingUserInputChanged && previousSummary?.hasPendingUserInput === true),
+  };
   const sidebarThreadsById = sidebarThreadSummariesEqual(previousSummary, nextSummary)
     ? state.sidebarThreadsById
     : {

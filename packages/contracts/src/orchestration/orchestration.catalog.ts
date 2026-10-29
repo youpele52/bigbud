@@ -73,6 +73,7 @@ export const ThreadSummary = Schema.Struct({
   isWatched: Schema.Boolean,
   isDelegated: Schema.Boolean,
   isAwaitingApproval: Schema.Boolean,
+  isAwaitingUserInput: Schema.optional(Schema.Boolean),
 });
 export type ThreadSummary = typeof ThreadSummary.Type;
 
