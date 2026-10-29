@@ -79,7 +79,7 @@ export function ToastTitleAndDescription({
       )}
 
       <div
-        className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain [scrollbar-width:thin] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+        className="flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
         data-slot="toast-message"
         tabIndex={0}
         role="region"

@@ -1,8 +1,8 @@
 import "~/index.css";
 import { expect, it, vi } from "vitest";
-import { cdp, userEvent } from "vitest/browser";
+import { cdp, page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
-import { ToastProvider, toastManager } from "./toast";
+import { anchoredToastManager, ToastProvider, toastManager, type ToastPosition } from "./toast";
 
 vi.mock("@tanstack/react-router", () => ({ useParams: () => null }));
 
@@ -60,6 +60,48 @@ it("bounds short and long cards while keeping close, copy, and action controls a
   }
 });
 
+it.each(["light", "dark"])("reuses the shared app scrollbar in %s mode", async (theme) => {
+  const root = document.documentElement;
+  const wasDark = root.classList.contains("dark");
+  root.classList.toggle("dark", theme === "dark");
+  const screen = await render(
+    <ToastProvider>
+      <div
+        role="region"
+        aria-label="Shared scrollbar reference"
+        style={{ height: 48, width: 160, overflowY: "auto" }}
+      >
+        <div style={{ height: 300 }}>Scrollable app content</div>
+      </div>
+    </ToastProvider>,
+  );
+  try {
+    toastManager.add({ title: "Shared scrollbar", description: longDescription, timeout: 0 });
+    await expect.element(screen.getByText("Shared scrollbar", { exact: true })).toBeVisible();
+    await settle();
+    const message = cards()[0]!.querySelector<HTMLElement>('[data-slot="toast-message"]')!;
+    const reference = screen.getByRole("region", { name: "Shared scrollbar reference" }).element();
+    expect(message.scrollHeight).toBeGreaterThan(message.clientHeight);
+    expect(getComputedStyle(message).scrollbarWidth).toBe(
+      getComputedStyle(reference).scrollbarWidth,
+    );
+    expect(message.offsetWidth - message.clientWidth).toBe(6);
+    for (const [pseudo, properties] of [
+      ["::-webkit-scrollbar", ["width"]],
+      ["::-webkit-scrollbar-track", ["backgroundColor"]],
+      ["::-webkit-scrollbar-thumb", ["backgroundColor", "borderRadius"]],
+    ] as const) {
+      const actual = getComputedStyle(message, pseudo);
+      const shared = getComputedStyle(reference, pseudo);
+      for (const property of properties) expect(actual[property]).toBe(shared[property]);
+    }
+  } finally {
+    toastManager.close();
+    await screen.unmount();
+    root.classList.toggle("dark", wasDark);
+  }
+});
+
 it("uses bounded heights for stack spacing, including content updates", async () => {
   const screen = await render(<ToastProvider />);
   try {
@@ -88,6 +130,72 @@ it("uses bounded heights for stack spacing, including content updates", async ()
     await screen.unmount();
   }
 });
+
+it.each<ToastPosition>([
+  "top-left",
+  "top-center",
+  "top-right",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+])(
+  "keeps all %s cards equally wide in collapsed and expanded stacks on desktop and mobile",
+  async (position) => {
+    const screen = await render(
+      <ToastProvider position={position}>
+        <button type="button">Outside stack</button>
+      </ToastProvider>,
+    );
+    try {
+      await screen.getByRole("button", { name: "Outside stack" }).hover();
+      toastManager.add({ title: "Short card", type: "success", timeout: 0 });
+      anchoredToastManager.add({
+        title: "Long legacy card",
+        description: "unbroken-content-".repeat(50),
+        type: "error",
+        timeout: 0,
+        positionerProps: { anchor: document.body },
+      });
+      toastManager.add({ title: "Front card", type: "info", timeout: 0 });
+      await expect.element(screen.getByText("Front card")).toBeVisible();
+
+      const expectEqualWidths = () => {
+        const viewport = document.querySelector<HTMLElement>('[data-slot="toast-viewport"]')!;
+        const expected = viewport.getBoundingClientRect();
+        expect(cards()).toHaveLength(3);
+        for (const card of cards()) {
+          const bounds = card.getBoundingClientRect();
+          expect(bounds.width).toBeCloseTo(expected.width, 1);
+          expect(bounds.left).toBeCloseTo(expected.left, 1);
+          expect(bounds.right).toBeCloseTo(expected.right, 1);
+          expect(bounds.left).toBeGreaterThanOrEqual(0);
+          expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+        }
+      };
+
+      for (const width of [1280, 320]) {
+        await page.viewport(width, 900);
+        await settle();
+        expect(cards().every((card) => !card.hasAttribute("data-expanded"))).toBe(true);
+        expectEqualWidths();
+        await screen.getByText("Front card").hover();
+        await expect
+          .poll(() => cards().every((card) => card.hasAttribute("data-expanded")))
+          .toBe(true);
+        await settle();
+        expectEqualWidths();
+        await screen.getByRole("button", { name: "Outside stack" }).hover();
+        await settle();
+        expect(cards().every((card) => !card.hasAttribute("data-expanded"))).toBe(true);
+        expectEqualWidths();
+      }
+    } finally {
+      toastManager.close();
+      await screen.unmount();
+      await page.viewport(1280, 900);
+    }
+  },
+);
 
 it("allows touch scrolling inside a long message without dismissing the toast", async () => {
   const screen = await render(<ToastProvider />);
