@@ -31,9 +31,8 @@ const queued = {
   message: "Waiting for active native work.",
 };
 
-// role="status" sits on the inner StatusBanner; the severity tone is on the labelled section.
-const setupStatus = (screen: Awaited<ReturnType<typeof render>>) =>
-  screen.getByRole("region", { name: "OpenCode setup status" });
+// Setup uses the shared banner severity variants.
+const setupStatus = (screen: Awaited<ReturnType<typeof render>>) => screen.getByRole("status");
 
 it("Show status retains the queued handle and cancellation interest without another setup", async () => {
   const { interestId: _interest, ...status } = queued;
@@ -142,7 +141,7 @@ it("infers Location without a chat-directory input, exposes config placement onl
     await expect
       .element(screen.getByText("Detected chat Location: /actual-worktree"))
       .toBeVisible();
-    await expect.element(setupStatus(screen)).toHaveClass("text-success");
+    await expect.element(setupStatus(screen)).toHaveClass("border-success/32");
     const field = screen.getByRole("textbox", {
       name: "Plugin config directory (optional)",
     });
@@ -207,7 +206,7 @@ it("truthfully separates native failures and nonfatal settling/remediation statu
   try {
     await screen.getByText("Thread tools & setup", { exact: true }).click();
     await screen.getByRole("button", { name: "Retry setup" }).click();
-    await expect.element(setupStatus(screen)).toHaveClass("text-destructive");
+    await expect.element(setupStatus(screen)).toHaveClass("border-destructive/32");
     await screen.getByText("Thread tools & setup", { exact: true }).click();
     await expect.element(screen.getByRole("status")).toBeVisible();
     await screen.getByText("Thread tools & setup", { exact: true }).click();
@@ -218,7 +217,7 @@ it("truthfully separates native failures and nonfatal settling/remediation statu
       message: "V2 watching is settling; retry.",
     });
     await screen.getByRole("button", { name: "Retry setup" }).click();
-    await expect.element(setupStatus(screen)).toHaveClass("text-warning");
+    await expect.element(setupStatus(screen)).toHaveClass("border-warning/32");
   } finally {
     await screen.unmount();
   }
@@ -264,7 +263,7 @@ it("runtime-checked readiness is ready without a warning; incompatible states re
     await expect
       .element(screen.getByText("Native qualification: unqualified (2.0.28)"))
       .toBeVisible();
-    await expect.element(setupStatus(screen)).toHaveClass("text-success");
+    await expect.element(setupStatus(screen)).toHaveClass("border-success/32");
     expect(mocks.get).toHaveBeenCalledTimes(1);
     mocks.get.mockResolvedValue({
       ...result,
@@ -280,7 +279,7 @@ it("runtime-checked readiness is ready without a warning; incompatible states re
     await expect
       .element(screen.getByText("Native qualification: incompatible (2.0.28)"))
       .toBeVisible();
-    await expect.element(setupStatus(screen)).toHaveClass("text-destructive");
+    await expect.element(setupStatus(screen)).toHaveClass("border-destructive/32");
     expect(mocks.get).toHaveBeenCalledTimes(2);
   } finally {
     await screen.unmount();
