@@ -1,4 +1,4 @@
-import { ThreadId } from "@bigbud/contracts";
+import { ThreadId, TurnId } from "@bigbud/contracts";
 import { page } from "vitest/browser";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +7,7 @@ import { render } from "vitest-browser-react";
 import { __resetNativeApiForTests } from "../../../rpc/nativeApi";
 import { ThreadErrorBanner } from "../common/ThreadErrorBanner";
 import { usePromptQueue } from "./ChatView.promptQueue.logic";
-import { persistThreadSettingsForNextTurn } from "./chat-view/chat-view-runtime.persist";
+import { toastManager } from "~/components/ui/toast.manager";
 
 const threadId = ThreadId.makeUnsafe("thread-prompt-queue-errors");
 const projectedPrompts = [
@@ -17,17 +17,23 @@ const projectedPrompts = [
 function Harness(props: {
   onError: (message: string) => void;
   active?: boolean;
-  onInterrupt?: (options?: { queuedPromptIdsAfterSettlement?: readonly string[] }) => Promise<void>;
-  persistSettingsBeforeRelease?: () => Promise<void>;
+  settings?: boolean;
 }) {
   const queue = usePromptQueue({
     threadId,
     projectedPrompts,
     activeTurnInProgress: props.active === true,
-    onInterrupt: props.onInterrupt ?? (async () => {}),
+    activeTurnId: props.active ? TurnId.makeUnsafe("observed") : null,
+    sessionEpoch: 3,
     onError: props.onError,
     newId: () => "prompt-new",
-    persistSettingsBeforeRelease: props.persistSettingsBeforeRelease,
+    releaseSettings: props.settings
+      ? {
+          modelSelection: { provider: "claudeAgent", model: "sonnet" },
+          runtimeMode: "full-access",
+          interactionMode: "default",
+        }
+      : undefined,
   });
   return (
     <>
@@ -135,38 +141,57 @@ describe("usePromptQueue command rejection", () => {
     const dispatchCommand = vi.fn(async (_command: unknown) => ({ sequence: 1 }));
     window.nativeApi = { orchestration: { dispatchCommand } } as never;
     __resetNativeApiForTests();
-    const onInterrupt = vi.fn(async () => {});
-    await render(<Harness active onError={() => {}} onInterrupt={onInterrupt} />);
+    await render(<Harness active onError={() => {}} />);
     await page.getByRole("button", { name: "Send now" }).click();
-    await vi.waitFor(() => expect(onInterrupt).toHaveBeenCalledOnce());
-    expect(onInterrupt).toHaveBeenCalledWith({ queuedPromptIdsAfterSettlement: ["prompt-1"] });
-    expect(dispatchCommand).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledOnce());
+    expect(dispatchCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "thread.queued-prompt.flush",
+        expectedTurnId: "observed",
+        expectedSessionEpoch: 3,
+      }),
+    );
     expect(document.querySelector("output")?.textContent).toBe("Projected prompt");
   });
 
-  it("saves the composer's model on a held fork before Send now releases it", async () => {
+  it("captures the composer's model atomically with Send now", async () => {
     const dispatchCommand = vi.fn(async (_command: unknown) => ({ sequence: 1 }));
     window.nativeApi = { orchestration: { dispatchCommand } } as never;
     __resetNativeApiForTests();
-    const persist = () =>
-      persistThreadSettingsForNextTurn({
-        threadId,
-        createdAt: "2026-08-01T00:00:01.000Z",
-        modelSelection: { provider: "claudeAgent", model: "sonnet" },
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        serverThread: {
-          modelSelection: { provider: "codex", model: "model-a" },
-          runtimeMode: "full-access",
-          interactionMode: "default",
-        },
-      });
-    await render(<Harness onError={() => {}} persistSettingsBeforeRelease={persist} />);
+    await render(<Harness onError={() => {}} settings />);
     await page.getByRole("button", { name: "Send now" }).click();
-    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledTimes(2));
-    expect(dispatchCommand.mock.calls.map((call) => (call[0] as { type: string }).type)).toEqual([
-      "thread.meta.update",
-      "thread.queued-prompt.flush",
-    ]);
+    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledOnce());
+    expect(dispatchCommand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "thread.queued-prompt.flush",
+        releaseSettings: expect.objectContaining({
+          modelSelection: { provider: "claudeAgent", model: "sonnet" },
+        }),
+      }),
+    );
+  });
+  it("shows a factual info status for a known refusal while retaining the projected queue", async () => {
+    const toast = vi.spyOn(toastManager, "add").mockReturnValue("queue-status");
+    const onError = vi.fn();
+    window.nativeApi = {
+      orchestration: {
+        dispatchCommand: vi.fn(async () => {
+          throw Object.assign(new Error("Your prompts remain queued."), {
+            code: "queue_pending_start",
+          });
+        }),
+      },
+    } as never;
+    __resetNativeApiForTests();
+    await render(<Harness onError={onError} />);
+    await page.getByRole("button", { name: "Send now" }).click();
+    await vi.waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "info", description: "Your prompts remain queued." }),
+      ),
+    );
+    expect(onError).not.toHaveBeenCalled();
+    expect(document.querySelector("output")?.textContent).toBe("Projected prompt");
+    toast.mockRestore();
   });
 });

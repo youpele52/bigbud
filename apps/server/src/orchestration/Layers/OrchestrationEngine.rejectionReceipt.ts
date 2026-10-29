@@ -1,3 +1,4 @@
+import type { OrchestrationCommandRejectionReason } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 import type { CommandId, ProjectId, ThreadId } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 
@@ -18,7 +19,7 @@ export function persistRejectedCommandReceipt(input: {
   readonly aggregateKind: "project" | "thread";
   readonly aggregateId: ProjectId | ThreadId;
   readonly resultSequence: number;
-  readonly rejectionReason: "thread_already_exists" | "other";
+  readonly rejectionReason: OrchestrationCommandRejectionReason;
   readonly error: string;
   readonly payloadDigestVersion: string;
   readonly payloadDigest: string;

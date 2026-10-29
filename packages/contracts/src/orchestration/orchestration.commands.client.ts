@@ -178,6 +178,21 @@ export const ThreadQueuedPromptFlushCommand = Schema.Struct({
   threadId: ThreadId,
   messageIds: Schema.Array(MessageId),
   messageId: MessageId,
+  /** Captured incarnation fences redelivery under a reused message ID. */
+  promptVersions: Schema.optional(
+    Schema.Array(
+      Schema.Struct({ id: MessageId, createdAt: IsoDateTime, alreadySent: Schema.Boolean }),
+    ),
+  ),
+  expectedTurnId: Schema.optional(Schema.NullOr(TurnId)),
+  expectedSessionEpoch: Schema.optional(NonNegativeInt),
+  releaseSettings: Schema.optional(
+    Schema.Struct({
+      modelSelection: Schema.optional(ModelSelection),
+      runtimeMode: RuntimeMode,
+      interactionMode: ProviderInteractionMode,
+    }),
+  ),
   acknowledged: Schema.optional(Schema.Boolean),
   /** The user's "Send now": releases a held queue (`queueHold`). The server never sets it. */
   userRelease: Schema.optional(Schema.Boolean),

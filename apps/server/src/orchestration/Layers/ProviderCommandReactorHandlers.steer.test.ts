@@ -24,8 +24,21 @@ import {
 
 function harness(overrides: Partial<OrchestrationThread> = {}, options = { nativeSteer: true }) {
   const op = operation();
-  const value = thread({ pendingTurnControlOperation: op, ...overrides });
-  const dispatch = vi.fn((_command: OrchestrationCommand) => Effect.succeed({}));
+  let value = thread({ pendingTurnControlOperation: op, ...overrides });
+  const dispatch = vi.fn((command: OrchestrationCommand) =>
+    Effect.sync(() => {
+      if (command.type === "thread.turn-control.set")
+        value = { ...value, pendingTurnControlOperation: command.operation };
+      if (command.type === "thread.queued-prompt.flush")
+        value = {
+          ...value,
+          queuedPrompts: value.queuedPrompts?.filter(
+            (prompt) => !command.messageIds.includes(prompt.id),
+          ),
+        };
+      return { sequence: 1 };
+    }),
+  );
   const steerTurn = vi.fn(() => Effect.void);
   const interruptTurn = vi.fn(() => Effect.void);
   const appendProviderFailureActivity = vi.fn(

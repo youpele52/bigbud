@@ -1,9 +1,5 @@
-import {
-  CommandId,
-  MessageId,
-  type OrchestrationReadModel,
-  type ProviderSession,
-} from "@bigbud/contracts";
+import { makeReservedQueuedPromptFlushCommand } from "../QueuedPromptFlush.control.ts";
+import { type OrchestrationReadModel, type ProviderSession } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
@@ -11,7 +7,7 @@ import {
   completeTurnControlIfConsumed,
   setTurnControlOperation,
 } from "./ProviderCommandReactorHandlers.steer.ts";
-import { consumableQueuedPrefix, terminalTurnControlStates } from "../QueuedPromptPolicy.logic.ts";
+import { terminalTurnControlStates } from "../QueuedPromptPolicy.logic.ts";
 
 /** Recovers incomplete operations without retrying ambiguous provider delivery. */
 export function recoverTurnControlOperations(input: {
@@ -104,34 +100,22 @@ export function recoverTurnControlOperations(input: {
 function flushReservedPrefix(
   input: Pick<
     Parameters<typeof recoverTurnControlOperations>[0],
-    "orchestrationEngine" | "occurredAt"
+    "orchestrationEngine" | "occurredAt" | "readModel"
   >,
   thread: import("@bigbud/contracts").OrchestrationThread,
   operation: import("@bigbud/contracts").OrchestrationTurnControlOperation,
   consumeOnly: boolean,
 ) {
-  if (
-    consumableQueuedPrefix({
-      thread,
-      messageIds: operation.reservedPromptIds,
-      controlOperationId: operation.operationId,
-      consumeOnly,
-    }).length === 0
-  )
-    return Effect.void;
+  const command = makeReservedQueuedPromptFlushCommand({
+    thread,
+    operation,
+    consumeOnly,
+    revision: input.readModel.snapshotSequence,
+  });
+  if (!command) return Effect.void;
   const threadId = thread.id;
   return input.orchestrationEngine
-    .dispatch({
-      type: "thread.queued-prompt.flush",
-      commandId: CommandId.makeUnsafe(`server:turn-control:${operation.operationId}:flush`),
-      threadId,
-      messageIds: operation.reservedPromptIds,
-      messageId: MessageId.makeUnsafe(`turn-control:${operation.operationId}`),
-      acknowledged: true,
-      ...(consumeOnly ? { consumeOnly: true } : {}),
-      controlOperationId: operation.operationId,
-      createdAt: input.occurredAt,
-    })
+    .dispatch(command)
     .pipe(Effect.andThen(completeOperation(input, threadId, operation)), Effect.asVoid);
 }
 

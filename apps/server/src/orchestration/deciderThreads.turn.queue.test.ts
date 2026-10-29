@@ -231,7 +231,7 @@ describe("thread queued prompt decider", () => {
 
   it("does not flush a stale or running prefix", async () => {
     const queuedPrompts = [{ id: MessageId.makeUnsafe("one"), text: "one", createdAt: now }];
-    const events = await Effect.runPromise(
+    const events = Effect.runPromise(
       decideThreadQueueCommand({
         command: {
           type: "thread.queued-prompt.flush",
@@ -244,12 +244,12 @@ describe("thread queued prompt decider", () => {
         readModel: readModel({ queuedPrompts }),
       }),
     );
-    expect(events).toEqual([]);
+    await expect(events).rejects.toMatchObject({ code: "queue_stale_selection" });
   });
 
   it("does not flush when the observed prefix has shortened", async () => {
     const queuedPrompts = [{ id: MessageId.makeUnsafe("one"), text: "one", createdAt: now }];
-    const events = await Effect.runPromise(
+    const events = Effect.runPromise(
       decideThreadQueueCommand({
         command: {
           type: "thread.queued-prompt.flush",
@@ -262,7 +262,7 @@ describe("thread queued prompt decider", () => {
         readModel: readModel({ queuedPrompts }),
       }),
     );
-    expect(events).toEqual([]);
+    await expect(events).rejects.toMatchObject({ code: "queue_stale_selection" });
   });
 
   it("cancels a pending interrupt flush without consuming prompts", async () => {

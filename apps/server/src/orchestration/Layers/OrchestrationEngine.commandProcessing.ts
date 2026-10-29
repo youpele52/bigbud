@@ -1,3 +1,4 @@
+import { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
 import type {
   OrchestrationCommand,
   OrchestrationEvent,
@@ -146,6 +147,9 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
           return yield* new OrchestrationCommandPreviouslyRejectedError({
             commandId: envelope.command.commandId,
             detail: receiptClaim.receipt.error ?? "Previously rejected.",
+            ...(Schema.is(QueueDecisionReason)(receiptClaim.receipt.rejectionReason)
+              ? { queueReason: receiptClaim.receipt.rejectionReason }
+              : {}),
           });
         }
         const currentReadModel = input.readModel();
@@ -154,6 +158,11 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
           readModel: currentReadModel,
         });
         const eventBases = Array.isArray(eventBase) ? eventBase : [eventBase];
+        if (envelope.command.type === "thread.queued-prompt.flush" && eventBases.length === 0)
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: envelope.command.type,
+            detail: "Queue decision returned no action or refusal.",
+          });
         const committedCommand = yield* sql
           .withTransaction(
             Effect.gen(function* () {
@@ -190,27 +199,18 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                 committedEvents.push(savedEvent);
               }
               const lastSavedEvent = committedEvents.at(-1) ?? null;
-              // A lifecycle flush can race with a new turn between command
-              // creation and processing. An empty decision is retryable, not
-              // successful work; receipt-caching it would poison the stable
-              // flush command ID forever.
-              if (
-                envelope.command.type !== "thread.queued-prompt.flush" ||
-                committedEvents.length > 0
-              ) {
-                yield* commandReceiptRepository.upsert({
-                  commandId: envelope.command.commandId,
-                  aggregateKind: lastSavedEvent?.aggregateKind ?? aggregateRef.aggregateKind,
-                  aggregateId: lastSavedEvent?.aggregateId ?? aggregateRef.aggregateId,
-                  acceptedAt: lastSavedEvent?.occurredAt ?? new Date().toISOString(),
-                  resultSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
-                  status: "accepted",
-                  rejectionReason: null,
-                  error: null,
-                  payloadDigestVersion: envelope.payloadDigest.version,
-                  payloadDigest: envelope.payloadDigest.digest,
-                });
-              }
+              yield* commandReceiptRepository.upsert({
+                commandId: envelope.command.commandId,
+                aggregateKind: lastSavedEvent?.aggregateKind ?? aggregateRef.aggregateKind,
+                aggregateId: lastSavedEvent?.aggregateId ?? aggregateRef.aggregateId,
+                acceptedAt: lastSavedEvent?.occurredAt ?? new Date().toISOString(),
+                resultSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
+                status: "accepted",
+                rejectionReason: null,
+                error: null,
+                payloadDigestVersion: envelope.payloadDigest.version,
+                payloadDigest: envelope.payloadDigest.digest,
+              });
               return {
                 committedEvents,
                 lastSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
@@ -258,17 +258,11 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
     ).pipe(
       Effect.flatMap((exit) =>
         Effect.gen(function* () {
-          const staleFlush =
-            Exit.isSuccess(exit) &&
-            envelope.command.type === "thread.queued-prompt.flush" &&
-            exit.value.committedEventCount === 0;
-          const outcome = staleFlush
-            ? "failure"
-            : Exit.isSuccess(exit)
-              ? "success"
-              : Cause.hasInterruptsOnly(exit.cause)
-                ? "interrupt"
-                : "failure";
+          const outcome = Exit.isSuccess(exit)
+            ? "success"
+            : Cause.hasInterruptsOnly(exit.cause)
+              ? "interrupt"
+              : "failure";
           yield* Metric.update(
             Metric.withAttributes(
               orchestrationCommandDuration,
@@ -285,16 +279,12 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
           );
           if (Exit.isSuccess(exit)) {
             const dispatchResult = exit.value.dispatchResult;
-            if (staleFlush || dispatchResult === undefined) {
-              // A stale lifecycle flush is retryable. It must remain unknown
-              // instead of being reported as committed without a receipt.
+            if (dispatchResult === undefined) {
               yield* Deferred.fail(
                 envelope.result,
                 new OrchestrationCommandInvariantError({
                   commandType: envelope.command.type,
-                  detail: staleFlush
-                    ? "Queued prompt flush produced no canonical event."
-                    : "Command completed without a dispatch result.",
+                  detail: "Command completed without a dispatch result.",
                 }),
               );
               return false;
@@ -335,6 +325,17 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
             return true;
           }
           const error = Cause.squash(exit.cause) as OrchestrationDispatchError;
+          if (
+            Schema.is(OrchestrationCommandInvariantError)(error) &&
+            Schema.is(QueueDecisionReason)(error.code)
+          ) {
+            yield* Effect.logInfo("Queue attempt not applied", {
+              commandId: envelope.command.commandId,
+              aggregateId: aggregateRef.aggregateId,
+              reason: error.code,
+              revision: input.readModel().snapshotSequence,
+            });
+          }
           let reportedError = error;
           let acceptedRaceSequence: number | null = null;
           if (!Schema.is(OrchestrationCommandPreviouslyRejectedError)(error)) {
@@ -359,7 +360,10 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                   aggregateId: aggregateRef.aggregateId,
                   resultSequence: input.readModel().snapshotSequence,
                   rejectionReason:
-                    error.code === "thread_already_exists" ? "thread_already_exists" : "other",
+                    error.code === "thread_already_exists" ||
+                    Schema.is(QueueDecisionReason)(error.code)
+                      ? error.code
+                      : "other",
                   error: error.message,
                   payloadDigestVersion: envelope.payloadDigest.version,
                   payloadDigest: envelope.payloadDigest.digest,

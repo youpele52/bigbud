@@ -302,15 +302,18 @@ export class OrchestrationDispatchCommandError extends Schema.TaggedErrorClass<O
   {
     message: TrimmedNonEmptyString,
     code: Schema.optional(
-      Schema.Literals([
-        "automation_owned_thread",
-        "thread_already_exists",
-        "overloaded",
-        "deadline_exceeded",
-        "command_id_conflict",
-        "unauthorized",
-        "prompt_queue_full",
-        "prompt_not_queueable",
+      Schema.Union([
+        QueueDecisionReason,
+        Schema.Literals([
+          "automation_owned_thread",
+          "thread_already_exists",
+          "overloaded",
+          "deadline_exceeded",
+          "command_id_conflict",
+          "unauthorized",
+          "prompt_queue_full",
+          "prompt_not_queueable",
+        ]),
       ]),
     ),
     retryAfterMs: Schema.optional(NonNegativeInt),

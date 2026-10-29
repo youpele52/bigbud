@@ -4,6 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./queueDecision": {
+      "types": "./src/queueDecision.ts",
+      "import": "./src/queueDecision.ts"
+    },
     "./backendOwnership.paths": {
       "types": "./src/backendOwnership.paths.ts",
       "import": "./src/backendOwnership.paths.ts"

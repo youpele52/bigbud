@@ -76,14 +76,14 @@ describe("queued control prefix ownership", () => {
     }),
     operation({ state: "completed", strategy: "native-steer" }),
   ])("does not consume invalid control state %#", async (pendingTurnControlOperation) => {
-    expect(
-      await Effect.runPromise(
+    await expect(
+      Effect.runPromise(
         decideThreadQueueCommand({
           command: flush,
           readModel: model(thread({ pendingTurnControlOperation })),
         }),
       ),
-    ).toEqual([]);
+    ).rejects.toMatchObject({ code: "queue_invalid_owner" });
   });
 
   it("consumes exactly an acknowledged native reservation", async () => {
@@ -108,8 +108,8 @@ describe("queued control prefix ownership", () => {
   });
 
   it("does not allow interrupt acknowledgement to start over an active turn", async () => {
-    expect(
-      await Effect.runPromise(
+    await expect(
+      Effect.runPromise(
         decideThreadQueueCommand({
           command: { ...flush, consumeOnly: false },
           readModel: model(
@@ -122,7 +122,7 @@ describe("queued control prefix ownership", () => {
           ),
         }),
       ),
-    ).toEqual([]);
+    ).rejects.toMatchObject({ code: "queue_busy" });
   });
 
   it("keeps the five-prompt cap including reserved prompts", async () => {
