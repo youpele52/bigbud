@@ -14,7 +14,7 @@ import { normalizeModelSlug } from "@bigbud/shared/model";
 
 import type { MobileDraftThread } from "../lib/mobileDraftThread";
 
-const SUB_PROVIDER_PROVIDERS = new Set<ProviderKind>(["pi", "opencode", "opencodeV2"]);
+const SUB_PROVIDER_PROVIDERS = new Set<ProviderKind>(["pi", "opencode", "opencodeV2", "muse"]);
 
 export interface MobileModelSelectionContext {
   readonly thread: OrchestrationThread | null;
@@ -30,6 +30,11 @@ function isProviderUsable(provider: ServerProvider | undefined): boolean {
     provider.provider === "opencodeV2" &&
     (provider.status !== "ready" || provider.models.length === 0)
   )
+    return false;
+  // Muse readiness requires a verified ready snapshot with a nonempty
+  // catalog; warning snapshots (e.g. platform qualification pending) keep
+  // saved selections visible but never runnable.
+  if (provider.provider === "muse" && (provider.status !== "ready" || provider.models.length === 0))
     return false;
   if (!provider.enabled) return false;
   if (!provider.installed) return false;
@@ -61,7 +66,20 @@ function defaultModelSelectionFor(providers: ReadonlyArray<ServerProvider>): Mod
   const ready = findReadyProvider(providers);
   const candidate = ready ?? firstUsableProvider(providers);
   if (candidate) {
-    const firstModel = candidate.models[0];
+    // Never silently default to a Contributor (training) Muse model or to
+    // the app-only 'default' sentinel; both require explicit selection.
+    const firstModel =
+      candidate.provider === "muse"
+        ? candidate.models.find((model) => !model.contributorTraining)
+        : candidate.models[0];
+    if (candidate.provider === "muse" && !firstModel) {
+      const fallbackProvider = PROVIDER_KINDS[0];
+      return buildSelection(
+        fallbackProvider,
+        DEFAULT_MODEL_BY_PROVIDER[fallbackProvider],
+        undefined,
+      );
+    }
     const model = firstModel?.slug ?? DEFAULT_MODEL_BY_PROVIDER[candidate.provider];
     return buildSelection(candidate.provider, model, firstModel?.subProviderID);
   }

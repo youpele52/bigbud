@@ -82,14 +82,12 @@ export function makeRequestAutomaticFork(input: {
         });
       }
       if (!isRoutableProviderSelection(source.modelSelection)) return;
-      // An automatic fork keeps the provider, so an unavailable provider cannot continue either.
-      const available = yield* input.providerService
+      // Providers that declare conversation fork unsupported (e.g. Muse)
+      // must never gain an automatic fork side effect after failed recovery.
+      const capabilities = yield* input.providerService
         .getCapabilities(source.modelSelection.provider)
-        .pipe(
-          Effect.as(true),
-          Effect.orElseSucceed(() => false),
-        );
-      if (!available) return;
+        .pipe(Effect.orElseSucceed(() => undefined));
+      if (!capabilities || capabilities.conversationFork === "unsupported") return;
       yield* input.orchestrationEngine.dispatch({
         type: "thread.fork",
         commandId: CommandId.makeUnsafe(`server:thread-fork:${request.failureEventId}`),

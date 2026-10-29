@@ -24,6 +24,7 @@ import { getComposerProviderState } from "../../provider/composerProviderRegistr
 import { getProviderDescriptor, PROVIDER_DESCRIPTORS } from "../../provider/providerDescriptors";
 import { getModelSelectionSubProviderID, modelPickerValue } from "../ChatView.modelSelection.logic";
 import { threadHasStarted } from "../ChatView.logic";
+import { resolveInheritedFullAccessDowngrade } from "./chat-view-provider-switch.logic";
 
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 
@@ -143,6 +144,25 @@ export function useComposerProviderState(
     base.setComposerDraftModelSelection(base.activeThread.id, selectedModelSelection);
     base.setStickyComposerModelSelection(selectedModelSelection);
   }, [base, composerProviderFallback, lockedProvider, selectedModelSelection]);
+
+  // Existing, continued and cloned Muse threads never re-pick their provider,
+  // so an inherited global-default full-access mode must downgrade here, on
+  // load, through the same draft setters a manual Access change uses (the
+  // next send persists it via thread.runtime-mode.set). Stricter user-chosen
+  // modes are left untouched and stay explicitly blocked.
+  useEffect(() => {
+    if (!base.activeThread) return;
+    const clamped = resolveInheritedFullAccessDowngrade({
+      supportedRuntimeModes: providerStatuses.find((status) => status.provider === selectedProvider)
+        ?.supportedRuntimeModes,
+      currentRuntimeMode: base.runtimeMode,
+    });
+    if (!clamped) return;
+    base.setComposerDraftRuntimeMode(base.activeThread.id, clamped);
+    if (base.isLocalDraftThread) {
+      base.setDraftThreadContext(base.activeThread.id, { runtimeMode: clamped });
+    }
+  }, [base, providerStatuses, selectedProvider]);
   const modelOptionsByProvider = useMemo<Record<ProviderKind, ReadonlyArray<ServerProviderModel>>>(
     () =>
       Object.fromEntries(

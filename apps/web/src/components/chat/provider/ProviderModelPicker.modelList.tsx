@@ -6,6 +6,7 @@ import { MenuGroup, MenuGroupLabel, MenuRadioGroup, MenuRadioItem } from "../../
 import { Spinner } from "../../ui/spinner";
 import { Button } from "../../ui/button";
 import { OpenCodeSetupMenuItem } from "./ProviderModelPicker.setup";
+import { ContributorTrainingBadge } from "./ProviderModelPicker.contributorTrainingBadge";
 import { cn } from "~/lib/utils";
 import {
   groupModelOptions,
@@ -119,6 +120,7 @@ export function ModelList({
                 {modelOption.availability === "requires-setup" ? (
                   <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                 ) : null}
+                {modelOption.contributorTraining ? <ContributorTrainingBadge /> : null}
               </MenuRadioItem>
             ))}
           </MenuGroup>
@@ -143,6 +145,7 @@ export function ModelList({
                   {modelOption.availability === "requires-setup" ? (
                     <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                   ) : null}
+                  {modelOption.contributorTraining ? <ContributorTrainingBadge /> : null}
                 </MenuRadioItem>
               ))}
             </MenuGroup>
@@ -159,6 +162,7 @@ export function ModelList({
                 {modelOption.availability === "requires-setup" ? (
                   <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                 ) : null}
+                {modelOption.contributorTraining ? <ContributorTrainingBadge /> : null}
               </MenuRadioItem>
             ))}
           </MenuGroup>

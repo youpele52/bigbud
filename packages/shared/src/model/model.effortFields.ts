@@ -28,6 +28,7 @@ export function getProviderEffortField(provider: ProviderKind): ProviderEffortFi
     case "codex":
     case "copilot":
     case "opencode":
+    case "muse":
       return "reasoningEffort";
     case "claudeAgent":
       return "effort";
@@ -104,6 +105,8 @@ export function buildNextProviderOptions(
       return merged as DevinModelOptions;
     case "claudeAgent":
       return merged as ClaudeModelOptions;
+    case "muse":
+      return merged as ProviderModelOptions["muse"];
     case "cliProxy":
       return merged as ProviderModelOptions["cliProxy"];
   }

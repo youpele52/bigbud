@@ -9,6 +9,7 @@ import {
   CopilotModelOptions,
   CursorModelOptions,
   DevinModelOptions,
+  MuseModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
 } from "./model";
@@ -51,6 +52,10 @@ const CursorModelOptionsPatch = Schema.Struct({
   contextWindow: Schema.optionalKey(CursorModelOptions.fields.contextWindow),
   fastMode: Schema.optionalKey(CursorModelOptions.fields.fastMode),
   thinking: Schema.optionalKey(CursorModelOptions.fields.thinking),
+});
+
+const MuseModelOptionsPatch = Schema.Struct({
+  reasoningEffort: Schema.optionalKey(MuseModelOptions.fields.reasoningEffort),
 });
 
 const DevinModelOptionsPatch = Schema.Struct({
@@ -104,6 +109,12 @@ const ModelSelectionPatch = Schema.Union([
     provider: Schema.optionalKey(Schema.Literal("devin")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(DevinModelOptionsPatch),
+  }),
+  Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("muse")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(MuseModelOptionsPatch),
+    subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
   }),
 ]);
 
@@ -190,6 +201,12 @@ export const ServerSettingsPatch = Schema.Struct({
         }),
       ),
       devin: Schema.optionalKey(ProviderSettingsPatch),
+      muse: Schema.optionalKey(
+        Schema.Struct({
+          enabled: Schema.optionalKey(Schema.Boolean),
+          binaryPath: Schema.optionalKey(Schema.String),
+        }),
+      ),
     }),
   ),
 });

@@ -3,7 +3,7 @@ import { Schema } from "effect";
 import { IsoDateTime, NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 import { ModelCapabilities } from "../core/model";
 import { SERVER_DISCOVERY_PROVIDER_LABELS } from "../constants/provider.constant";
-import { ProviderKind } from "../orchestration/orchestration";
+import { ProviderKind, ProviderInteractionMode, RuntimeMode } from "../orchestration/orchestration";
 import { ServerProviderUsageLimits } from "./usageLimits";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
@@ -53,6 +53,12 @@ export const ServerProviderModel = Schema.Struct({
   subProviderID: Schema.optional(TrimmedNonEmptyString),
   /** Catalog browsing is not credential proof; only native discovery establishes selectability. */
   availability: Schema.optional(Schema.Literals(["available", "requires-setup"])),
+  /**
+   * True when selecting this catalog model may send content for provider
+   * training/product improvement (e.g. Muse Contributor models). Clients must
+   * disclose this before project content is sent; never present as non-training.
+   */
+  contributorTraining: Schema.optional(Schema.Boolean),
 });
 export type ServerProviderModel = typeof ServerProviderModel.Type;
 
@@ -201,6 +207,15 @@ export const ServerProvider = Schema.Struct({
   slashCommands: ServerProviderSlashCommands,
   skills: ServerProviderSkills,
   supportsLocalRuntimeRemoteWorkspace: Schema.optional(Schema.Boolean),
+  /**
+   * Access/interaction modes this provider is qualified to run. Absent means
+   * existing-provider behavior (no new restriction). When present, clients and
+   * server admission must reject unlisted modes before native side effects.
+   */
+  supportedRuntimeModes: Schema.optional(Schema.Array(RuntimeMode)),
+  supportedInteractionModes: Schema.optional(Schema.Array(ProviderInteractionMode)),
+  /** Human-readable reason an unlisted mode is unavailable, shown next to the disabled control. */
+  unsupportedModeReason: Schema.optional(TrimmedNonEmptyString),
   supportsSteer: Schema.optional(Schema.Boolean),
   supportsAttachments: Schema.optional(Schema.Boolean),
   /** Per-subagent Stop is available (Stop-all is separate and unchanged). */

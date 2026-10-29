@@ -22,6 +22,7 @@ import {
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
 import { resolveProviderSessionExecutionTargets } from "../provider/providerSessionExecutionTargets.ts";
+import { downgradeMuseInheritedRuntimeMode } from "../provider/Layers/Muse/Provider.permissions.ts";
 import { noteThreadTitleCommand } from "../orchestration-tools/ThreadTitleLock.ts";
 import { seedMessageEvent } from "./deciderThreads.lifecycle.seed.ts";
 import { decideThreadPinCommand } from "./deciderThreads.pin.ts";
@@ -117,7 +118,12 @@ export const decideThreadLifecycleCommand = Effect.fn("decideThreadLifecycleComm
           purpose: command.purpose ?? "standard",
           ...executionTargets,
           modelSelection: command.modelSelection,
-          runtimeMode: command.runtimeMode,
+          // A Muse thread created from the global default must not be born
+          // stuck in unqualified full-access (see Provider.permissions.ts).
+          runtimeMode:
+            command.modelSelection.provider === "muse"
+              ? downgradeMuseInheritedRuntimeMode(command.runtimeMode)
+              : command.runtimeMode,
           interactionMode: command.interactionMode,
           branch: command.branch,
           worktreePath: command.worktreePath,

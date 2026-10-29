@@ -36,6 +36,16 @@ describe("visibleModelOptionsForPicker", () => {
     ]);
   });
 
+  it("hides a recent duplicate in the main list for single-sub-provider catalogs like Muse", () => {
+    const museOptions = [
+      { slug: "muse-wonder-1.0", name: "Muse Wonder", subProviderID: "meta" },
+      { slug: "muse-spark-1.3", name: "Muse Spark 1.3", subProviderID: "meta" },
+    ] as const;
+
+    const result = visibleModelOptionsForPicker("muse", museOptions, [museOptions[0]], "");
+    expect(result.map((option) => option.slug)).toEqual(["muse-spark-1.3"]);
+  });
+
   it("keeps sub-provider-backed recent models in the main list for opencode", () => {
     const opencodeOptions = [
       { slug: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", subProviderID: "anthropic" },

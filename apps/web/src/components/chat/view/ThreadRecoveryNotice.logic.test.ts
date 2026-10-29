@@ -134,6 +134,17 @@ describe("deriveThreadRecoveryNotice", () => {
     expect(notice?.description).toMatch(/model/i);
   });
 
+  it("shows the provider's true reason for a rejected request instead of guessing a retired model", () => {
+    const detail =
+      "Muse Code is qualified only for auto-accept-edits. Switch this thread's Access mode to Auto-accept edits (composer ··· menu → Access), then send again.";
+    const notice = derive(null, 0, {
+      failure: { ...failureOf("invalid-request"), detail },
+    }).notice;
+    expect(notice).toMatchObject({ kind: "failed", tone: "error", canContinueInNewThread: true });
+    expect(notice?.description).toBe(detail);
+    expect(notice?.description).not.toMatch(/no longer offered/i);
+  });
+
   it("a started retry of the failed message replaces the failure notice", () => {
     const options = { settledAfterMs: 800, failure: failureOf("session-dead") };
     expect(derive(request("started"), 1_000, options).notice).toBeNull();

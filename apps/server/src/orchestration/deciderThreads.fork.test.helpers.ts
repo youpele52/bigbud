@@ -63,7 +63,8 @@ export function activity(id: string, kind: string, index: number, payload: unkno
 /** Completed history (`pairs` user/assistant pairs), plus optional extras. */
 export function sourceThread(input: {
   readonly pairs: number;
-  readonly provider?: "codex" | "opencodeV2";
+  readonly provider?: "codex" | "opencodeV2" | "muse";
+  readonly runtimeMode?: "full-access" | "approval-required" | "auto-accept-edits";
   readonly extraMessages?: ReadonlyArray<OrchestrationMessage>;
   readonly activities?: ReadonlyArray<OrchestrationThreadActivity>;
   readonly latestTurn?: OrchestrationThread["latestTurn"];
@@ -86,7 +87,7 @@ export function sourceThread(input: {
     elevatorSummary: null,
     elevatorSummaryMessageCount: 0,
     modelSelection: { provider: input.provider ?? "codex", model: "model-a" },
-    runtimeMode: "full-access",
+    runtimeMode: input.runtimeMode ?? "full-access",
     interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
     branch: "feature/x",
     worktreePath: "/tmp/worktree-x",

@@ -5,6 +5,7 @@ import {
   CopilotModelOptions,
   CursorModelOptions,
   DevinModelOptions,
+  MuseModelOptions,
   OpencodeModelOptions,
   OpencodeV2ModelOptions,
   PiModelOptions,
@@ -108,6 +109,15 @@ export const DevinModelSelection = Schema.Struct({
 });
 export type DevinModelSelection = typeof DevinModelSelection.Type;
 
+export const MuseModelSelection = Schema.Struct({
+  provider: Schema.Literal("muse"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(MuseModelOptions),
+  /** Native MSP catalog provider ID (qualified rows carry "meta"); preserved for routing. */
+  subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type MuseModelSelection = typeof MuseModelSelection.Type;
+
 export const ModelSelection = Schema.Union([
   CodexModelSelection,
   ClaudeModelSelection,
@@ -118,6 +128,7 @@ export const ModelSelection = Schema.Union([
   PiModelSelection,
   CursorModelSelection,
   DevinModelSelection,
+  MuseModelSelection,
 ]);
 export type ModelSelection = typeof ModelSelection.Type;
 

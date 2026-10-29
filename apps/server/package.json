@@ -39,6 +39,7 @@
     "@effect/sql-sqlite-bun": "catalog:",
     "@github/copilot": "1.0.103",
     "@github/copilot-sdk": "1.0.26",
+    "@muse-code/sdk": "1.4.14",
     "@opencode-ai/sdk": "^1.17.13",
     "@opencode/client": "2.1.4",
     "@pierre/diffs": "^1.2.12",

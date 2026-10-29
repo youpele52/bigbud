@@ -27,6 +27,8 @@ export interface AppModelOption {
   /** Sub-provider ID for routing (e.g. "openrouter", "google"). Passed through from the server snapshot. */
   subProviderID?: string | undefined;
   availability?: "available" | "requires-setup" | undefined;
+  /** Contributor catalog models may use sent content for training; disclosed in the picker. */
+  contributorTraining?: boolean | undefined;
 }
 
 export function normalizeCustomModelSlugs(
@@ -65,11 +67,12 @@ export function getAppModelOptions(
   selectedModel?: string | null,
 ): AppModelOption[] {
   const options: AppModelOption[] = getProviderModels(providers, provider).map(
-    ({ slug, name, isCustom, group, subProviderID, availability }) => {
+    ({ slug, name, isCustom, group, subProviderID, availability, contributorTraining }) => {
       const option: AppModelOption = { slug, name, isCustom };
       if (group !== undefined) option.group = group;
       if (subProviderID !== undefined) option.subProviderID = subProviderID;
       if (availability !== undefined) option.availability = availability;
+      if (contributorTraining !== undefined) option.contributorTraining = contributorTraining;
       return option;
     },
   );
@@ -163,6 +166,7 @@ export function getCustomModelOptionsByProvider(
     group?: string | undefined;
     subProviderID?: string | undefined;
     availability?: "available" | "requires-setup" | undefined;
+    contributorTraining?: boolean | undefined;
   }>
 > {
   return Object.fromEntries(

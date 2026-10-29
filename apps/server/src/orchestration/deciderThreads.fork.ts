@@ -43,6 +43,7 @@ import {
   wasPendingDeliveredBefore,
 } from "./deciderThreads.fork.logic.ts";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
+import { downgradeMuseInheritedRuntimeMode } from "../provider/Layers/Muse/Provider.permissions.ts";
 
 type DecidedEvent = Omit<OrchestrationEvent, "sequence">;
 
@@ -69,6 +70,13 @@ export const decideThreadForkCommand = Effect.fn("decideThreadForkCommand")(func
     });
   }
   const modelSelection = command.modelSelection ?? source.modelSelection;
+  // A continued/cloned Muse thread inherits the source mode; the global
+  // default full-access downgrades to the qualified mode, never a stricter
+  // user choice (see Provider.permissions.ts).
+  const forkRuntimeMode =
+    modelSelection.provider === "muse"
+      ? downgradeMuseInheritedRuntimeMode(source.runtimeMode)
+      : source.runtimeMode;
   // Automatic forks keep the provider (D18); only the user's explicit manual choice may switch.
   if (command.reason !== "manual" && modelSelection.provider !== source.modelSelection.provider) {
     return yield* new OrchestrationCommandInvariantError({
@@ -130,7 +138,7 @@ export const decideThreadForkCommand = Effect.fn("decideThreadForkCommand")(func
         ? { executionTargetId: source.executionTargetId }
         : {}),
       modelSelection,
-      runtimeMode: source.runtimeMode,
+      runtimeMode: forkRuntimeMode,
       interactionMode: source.interactionMode,
       branch: source.branch,
       worktreePath: source.worktreePath,
@@ -197,7 +205,7 @@ export const decideThreadForkCommand = Effect.fn("decideThreadForkCommand")(func
           threadId: forkId,
           messageId,
           modelSelection,
-          runtimeMode: source.runtimeMode,
+          runtimeMode: forkRuntimeMode,
           interactionMode: source.interactionMode,
           createdAt: command.createdAt,
         }),

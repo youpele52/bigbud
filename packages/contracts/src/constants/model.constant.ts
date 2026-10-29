@@ -30,6 +30,8 @@ export const DEFAULT_MODEL_BY_PROVIDER = {
   pi: "claude-sonnet-4.6",
   cursor: "claude-sonnet-4-5",
   devin: "default",
+  // App sentinel only: Muse requires a verified catalog selection before execution.
+  muse: "default",
 } as const;
 
 /**
@@ -48,6 +50,7 @@ export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER = {
   pi: "claude-haiku-4.5",
   cursor: "claude-haiku-4-5",
   devin: "default",
+  muse: "default",
 } as const;
 
 /**
@@ -98,4 +101,5 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER = {
   pi: {},
   cursor: {},
   devin: {},
+  muse: {},
 } as const;

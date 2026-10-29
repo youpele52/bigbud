@@ -86,6 +86,12 @@ const PROVIDER_WORKLOAD_SUPPORT = {
     learning: true,
     usageAccounting: false,
   },
+  muse: {
+    interactive: true,
+    unattendedTextGeneration: false,
+    learning: false,
+    usageAccounting: false,
+  },
 } as const satisfies Record<ProviderKind, ProviderWorkloadSupport>;
 
 /** Preferred actual implementations for generic unattended text generation. */

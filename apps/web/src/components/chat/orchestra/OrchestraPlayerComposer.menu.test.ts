@@ -91,6 +91,7 @@ describe("OrchestraPlayerComposer.menu", () => {
         pi: [],
         cursor: [],
         devin: [],
+        muse: [],
       },
       ["codex"],
     );

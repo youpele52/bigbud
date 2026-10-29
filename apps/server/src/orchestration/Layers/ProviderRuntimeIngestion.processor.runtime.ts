@@ -29,6 +29,7 @@ import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.rec
 import { lookupLiveSessionBestEffort } from "./ProviderRuntimeIngestion.processor.runtime.lookup.ts";
 import { providerCommandId } from "./ProviderRuntimeIngestion.processor.runtime.command.ts";
 import { runtimeSessionLastError } from "./ProviderRuntimeIngestion.processor.runtime.error.ts";
+import { shouldDropSettledRecoveryTerminal } from "./ProviderRuntimeIngestion.processor.runtime.recovery.ts";
 import { makePromptSuggestionIngestion } from "./ProviderRuntimeIngestion.promptSuggestion.ts";
 import {
   isSuccessfulModelEvent,
@@ -84,6 +85,7 @@ export function makeRuntimeEventProcessor(
       (entry) => entry.id === event.threadId,
     );
     if (!thread) return;
+    if (yield* shouldDropSettledRecoveryTerminal(event, thread)) return;
     if (event.type === "turn.prompt-suggestion")
       return yield* ingestPromptSuggestion(event, thread);
     const now = event.createdAt;

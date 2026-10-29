@@ -146,6 +146,7 @@ import Migration0136 from "./Migrations/136_ProjectionThreadPendingTurnStart.ts"
 import Migration0137 from "./Migrations/137_ThreadRecoveryIntents.ts";
 import Migration0138 from "./Migrations/138_ProjectionThreadRecovery.ts";
 import Migration0139 from "./Migrations/139_CommandReceiptQueueDecision.ts";
+import Migration0140 from "./Migrations/140_MuseSessionBindings.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -286,6 +287,7 @@ export const migrationEntries = [
   [137, "ThreadRecoveryIntents", Migration0137],
   [138, "ProjectionThreadRecovery", Migration0138],
   [139, "CommandReceiptQueueDecision", Migration0139],
+  [140, "MuseSessionBindings", Migration0140],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

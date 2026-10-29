@@ -19,6 +19,7 @@ import {
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
+import { MuseSettings } from "./settings.muse";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
 import {
@@ -32,6 +33,7 @@ import {
   ThreadEnvMode,
 } from "./settings.serverShared";
 
+export * from "./settings.muse";
 export * from "./settings.serverPatch";
 export * from "./settings.threadRetention";
 export {
@@ -273,6 +275,7 @@ export const ServerSettings = Schema.Struct({
     pi: PiSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     devin: DevinSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    muse: MuseSettings.pipe(Schema.withDecodingDefault(() => ({}))),
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
   mobileRemoteControl: MobileRemoteControlSettings.pipe(Schema.withDecodingDefault(() => ({}))),

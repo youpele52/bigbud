@@ -94,6 +94,22 @@ export const ComposerFooterLeading = forwardRef<HTMLDivElement, ComposerFooterLe
 
         <CompactComposerControlsMenu
           interactionMode={interactionMode}
+          {...(() => {
+            const snapshot = providerStatuses.find(
+              (provider) => provider.provider === selectedProvider,
+            );
+            return {
+              ...(snapshot?.supportedRuntimeModes
+                ? { supportedRuntimeModes: snapshot.supportedRuntimeModes }
+                : {}),
+              ...(snapshot?.supportedInteractionModes
+                ? { supportedInteractionModes: snapshot.supportedInteractionModes }
+                : {}),
+              ...(snapshot?.unsupportedModeReason
+                ? { unsupportedModeReason: snapshot.unsupportedModeReason }
+                : {}),
+            };
+          })()}
           compact={compact}
           planCardOpen={planCardOpen}
           planCardLabel={planCardLabel}

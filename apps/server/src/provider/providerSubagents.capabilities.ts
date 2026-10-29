@@ -166,6 +166,13 @@ export const PROVIDER_SUBAGENT_CAPABILITIES: {
       "provider/Layers/OpencodeV2/Runtime.family.execution.test.ts",
     ],
   },
+  muse: {
+    support: "gated",
+    fields: [],
+    evidence:
+      "Muse MSP exposes native subagent items, but bigbud's first Muse milestone does not project or control them; delegated canonical threads remain the supported delegation path.",
+    tests: ["provider/Layers/Muse/Adapter.lifecycle.test.ts"],
+  },
   pi: {
     support: "native",
     fields: [

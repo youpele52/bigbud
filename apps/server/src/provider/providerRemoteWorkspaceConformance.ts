@@ -73,6 +73,13 @@ const CONFORMANCE: Record<ProviderKind, ProviderRemoteWorkspaceConformance> = {
     reason:
       "Pi's local extension bridge dispatches through the configured remote workspace transport.",
   },
+  muse: {
+    provider: "muse",
+    backend: "unsupported",
+    supportsLocalRuntimeRemoteWorkspace: false,
+    reason:
+      "Muse Code runs only against local workspaces in bigbud's first milestone; remote provider execution and local runtime against a remote workspace are not qualified.",
+  },
 };
 
 export function getProviderRemoteWorkspaceConformance(

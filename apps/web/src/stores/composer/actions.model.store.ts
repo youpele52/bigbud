@@ -84,6 +84,12 @@ function upsertModelSelectionWithOptions(
         ? cloneModelSelection(current, { options: devinOptions })
         : createModelSelection("devin", DEFAULT_MODEL_BY_PROVIDER.devin, devinOptions);
     }
+    case "muse": {
+      const museOptions = options as NonNullable<ProviderModelOptions["muse"]>;
+      return current?.provider === "muse"
+        ? cloneModelSelection(current, { options: museOptions })
+        : createModelSelection("muse", DEFAULT_MODEL_BY_PROVIDER.muse, museOptions);
+    }
   }
 }
 

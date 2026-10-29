@@ -49,6 +49,7 @@ export function createBaseServerConfig(checkedAt: string): ServerConfig {
         pi: { enabled: true, binaryPath: "", customModels: [] },
         cursor: { enabled: true, binaryPath: "agent", customModels: [], apiEndpoint: "" },
         devin: { enabled: true, binaryPath: "devin", customModels: [] },
+        muse: { enabled: false, binaryPath: "muse" },
       },
     },
   };

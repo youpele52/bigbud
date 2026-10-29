@@ -166,6 +166,7 @@ export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
     pi: "",
     cursor: "",
     devin: "",
+    muse: "",
   };
 }
 

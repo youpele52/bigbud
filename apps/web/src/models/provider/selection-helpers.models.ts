@@ -35,6 +35,10 @@ export function getProviderModelOptions(
   options: ProviderModelOptions | null | undefined,
 ): ProviderModelOptions["pi"] | undefined;
 export function getProviderModelOptions(
+  provider: "muse",
+  options: ProviderModelOptions | null | undefined,
+): ProviderModelOptions["muse"] | undefined;
+export function getProviderModelOptions(
   provider: ProviderKind,
   options: ProviderModelOptions | null | undefined,
 ): ProviderModelOptions[ProviderKind] | undefined;
@@ -59,6 +63,8 @@ export function getProviderModelOptions(
       return options?.cursor;
     case "pi":
       return options?.pi;
+    case "muse":
+      return options?.muse;
   }
 }
 
@@ -138,6 +144,10 @@ export function createModelSelection(
     case "devin": {
       const devinOptions = options as ProviderModelOptions["devin"] | undefined;
       return devinOptions ? { provider, model, options: devinOptions } : { provider, model };
+    }
+    case "muse": {
+      const museOptions = options as ProviderModelOptions["muse"] | undefined;
+      return museOptions ? { provider, model, options: museOptions } : { provider, model };
     }
   }
 }

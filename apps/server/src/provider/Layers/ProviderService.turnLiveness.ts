@@ -5,7 +5,11 @@ import type { ProviderTurnLivenessRepositoryShape } from "../../persistence/Serv
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 import type { ProviderAdapterError } from "../Errors.ts";
 import type { ProviderServiceShape } from "../Services/ProviderService.ts";
-import { isMeaningfulProviderProgress, isTerminalProviderEvent } from "../providerTurnLiveness.ts";
+import {
+  isMeaningfulProviderProgress,
+  isRecoveryRedeliveryEvent,
+  isTerminalProviderEvent,
+} from "../providerTurnLiveness.ts";
 
 type LivenessOption = Option.Option<ProviderTurnLivenessRepositoryShape>;
 
@@ -13,13 +17,23 @@ export function observeProviderRuntimeEvent(liveness: LivenessOption, event: Pro
   const observation = !Option.isSome(liveness)
     ? Effect.succeed(true)
     : isTerminalProviderEvent(event) && event.turnId
-      ? liveness.value.claimTerminal({
-          threadId: event.threadId,
-          turnId: event.turnId,
-          provider: event.provider,
-          sessionEpoch: event.sessionEpoch ?? 0,
-          terminalAt: event.createdAt,
-        })
+      ? liveness.value
+          .claimTerminal({
+            threadId: event.threadId,
+            turnId: event.turnId,
+            provider: event.provider,
+            sessionEpoch: event.sessionEpoch ?? 0,
+            terminalAt: event.createdAt,
+          })
+          .pipe(
+            // Recovery-delivery window: the claim already exists, which
+            // today may mean the first delivery crashed after claiming and
+            // before canonical publication. Only an explicitly flagged
+            // recovery redelivery may proceed; canonical ingestion proves
+            // settlement and drops it if the outcome was already applied.
+            // Liveness is never reopened and its outcome never changes.
+            Effect.map((claimed) => claimed || isRecoveryRedeliveryEvent(event)),
+          )
       : liveness.value
           .observeEvent(event, isMeaningfulProviderProgress(event))
           .pipe(Effect.as(true));

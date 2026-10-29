@@ -141,6 +141,31 @@ const make = Effect.gen(function* () {
       );
     return yield* decode(rows[0]);
   });
+  const settleProvenRefusal: ProviderTurnAdmissionsShape["settleProvenRefusal"] = Effect.fn(
+    "ProviderTurnAdmissions.settleProvenRefusal",
+  )(function* (current, updatedAt) {
+    if (current.state !== "dispatch-intent") {
+      return yield* Effect.fail(
+        new ProviderTurnAdmissionConflict({
+          detail: "Proven-refusal settlement requires a dispatch-intent admission.",
+        }),
+      );
+    }
+    const rows = yield* sql<Row>`UPDATE provider_turn_admissions
+        SET state = 'terminal', revision = revision + 1, updated_at = ${updatedAt},
+             final_text = NULL, final_text_encoding = 'plain', terminal_outcome = 'failed'
+        WHERE ${where(current)} AND state = 'dispatch-intent' AND revision = ${current.revision}
+          AND binding_json = ${JSON.stringify(current.binding)} AND fingerprint = ${current.fingerprint}
+           AND native_admission_id = ${current.nativeAdmissionId} AND turn_id = ${current.turnId}
+        RETURNING ${columns}`.pipe(
+      Effect.mapError(toPersistenceSqlError("admissions.settleProvenRefusal")),
+    );
+    if (!rows[0])
+      return yield* Effect.fail(
+        new ProviderTurnAdmissionConflict({ detail: "Stale admission fence." }),
+      );
+    return yield* decode(rows[0]);
+  });
   const listUnresolved: ProviderTurnAdmissionsShape["listUnresolved"] = Effect.fn(
     "ProviderTurnAdmissions.listUnresolved",
   )(function* (limit) {
@@ -238,6 +263,7 @@ const make = Effect.gen(function* () {
     find,
     reserve,
     transition,
+    settleProvenRefusal,
     listUnresolved,
     latestBound,
   } satisfies ProviderTurnAdmissionsShape;

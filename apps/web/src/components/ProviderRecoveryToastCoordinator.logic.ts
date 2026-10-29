@@ -7,6 +7,7 @@ const labels: Record<ServerProvider["provider"], string> = {
   copilot: "Copilot",
   cursor: "Cursor",
   devin: "Devin",
+  muse: "Muse Code",
   opencode: "OpenCode",
   opencodeV2: "OpenCode",
   pi: "Pi",
