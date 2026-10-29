@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas";
+import { TerminalLifecycleStatus } from "./TerminalLifecycleStatus";
 import {
   TerminalViewportToasts,
   type TerminalViewportToastState,
@@ -10,6 +11,7 @@ export function TerminalViewportStatus(
   input: TerminalViewportToastState & {
     threadId: ThreadId;
     terminalId: string;
+    retryClose?: () => void;
   },
 ) {
   const toastsRef = useRef<TerminalViewportToasts | null>(null);
@@ -24,5 +26,12 @@ export function TerminalViewportStatus(
   useEffect(() => {
     toastsRef.current?.update(input);
   }, [input]);
-  return null;
+  return (
+    <TerminalLifecycleStatus
+      threadId={input.threadId}
+      terminalId={input.terminalId}
+      retryClose={() => input.retryClose?.()}
+      retryRestart={() => input.restartDelivery?.()}
+    />
+  );
 }

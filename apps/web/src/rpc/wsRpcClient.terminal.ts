@@ -18,8 +18,15 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
     // that client-side (remote/WSL) agent detection needs, plus every lifecycle event.
     onEvent: (listener, options) =>
       transport.subscribe(
-        (client) => client[WS_METHODS.subscribeTerminalEvents]({ outputScope: "legacyDetection" }),
-        listener,
+        (client) =>
+          client[WS_METHODS.subscribeTerminalEvents]({
+            outputScope: "legacyDetection",
+            ...(options?.onInventory ? { includeInventory: true } : {}),
+          }),
+        (item) => {
+          if (item.type === "inventory") options?.onInventory?.(item);
+          else listener(item);
+        },
         options,
       ),
     subscribeSession: (input, listener, options) =>

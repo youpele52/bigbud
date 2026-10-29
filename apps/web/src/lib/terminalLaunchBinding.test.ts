@@ -3,9 +3,46 @@ import {
   bindTerminalLaunch,
   forgetTerminalLaunch,
   recordTerminalLaunch,
+  readTerminalLaunch,
+  subscribeTerminalLaunch,
 } from "./terminalLaunchBinding";
 
 describe("per-terminal launch bindings", () => {
+  it("rejects a delayed older generation without notifying input queues or rolling back context", () => {
+    const fresh = {
+      threadId: "monotonic",
+      terminalId: "shell",
+      cwd: "/new",
+      worktreePath: null,
+      status: "running" as const,
+      pid: 3,
+      dropPathMode: "powershell" as const,
+      history: "C",
+      exitCode: null,
+      exitSignal: null,
+      updatedAt: "2026-10-29T12:00:02Z",
+      runtimeGeneration: "C",
+    };
+    let notifications = 0;
+    const unsubscribe = subscribeTerminalLaunch(() => notifications++);
+    try {
+      expect(recordTerminalLaunch(fresh)).toBe(true);
+      const binding = readTerminalLaunch(fresh.threadId, fresh.terminalId);
+      expect(
+        recordTerminalLaunch({
+          ...fresh,
+          cwd: "/old",
+          runtimeGeneration: "B",
+          updatedAt: "2026-10-29T12:00:01Z",
+        }),
+      ).toBe(false);
+      expect(readTerminalLaunch(fresh.threadId, fresh.terminalId)).toBe(binding);
+      expect(notifications).toBe(1);
+    } finally {
+      unsubscribe();
+      forgetTerminalLaunch(fresh.threadId, fresh.terminalId);
+    }
+  });
   it("preserves the launch target, folder, and environment across first-send and workspace mutations", () => {
     const first = bindTerminalLaunch("origin", "bottom", {
       cwd: "/origin/worktree",

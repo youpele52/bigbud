@@ -31,6 +31,7 @@ import {
 import { PtyProcess } from "./PTY";
 import { Effect, ServiceMap } from "effect";
 import type { TerminalSnapshotInput } from "@bigbud/contracts/workspace/terminal.ts";
+import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
 
 export {
   TerminalCwdError,
@@ -78,6 +79,8 @@ export interface TerminalStartInput extends TerminalOpenInput {
 export interface TerminalSubscribeOptions {
   /** `legacyDetection` keeps output only for sessions whose agent detection runs in the client. */
   readonly outputScope?: "all" | "legacyDetection";
+  /** Delivered before replay, captured atomically with listener registration. */
+  readonly onInventory?: (inventory: TerminalSessionInventory) => Effect.Effect<void>;
 }
 
 /**

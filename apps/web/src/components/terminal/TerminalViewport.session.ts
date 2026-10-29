@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useTerminalTheme } from "./TerminalViewport.theme";
-import { createTerminalViewportDelivery } from "./TerminalViewport.delivery";
+import {
+  createTerminalViewportDelivery,
+  refreshTerminalViewportDelivery,
+} from "./TerminalViewport.delivery";
 import { createTerminalViewportOutput } from "./TerminalViewport.output";
 import { useTerminalTypography } from "./TerminalViewport.typography";
 import type { TerminalFontController } from "./TerminalFontController";
@@ -12,16 +15,24 @@ import type { TerminalRendererState } from "./TerminalRendererController";
 import { attachTerminalViewportInput } from "./TerminalViewport.input";
 import { createTerminalView, type TerminalView } from "./TerminalViewport.view";
 import { useTerminalViewFind, useTerminalViewSettings } from "./TerminalViewport.viewState";
-import { makeTerminalLinkProvider } from "./TerminalViewport.links";
+import { makeTerminalLinkRegistrar } from "./TerminalViewport.links";
 import { clearSelectionAction, openTerminalSession } from "./TerminalViewport.session.helpers";
 import { attachTerminalSelection } from "./TerminalViewport.selection";
 import { makeTerminalRestartAction } from "./TerminalViewport.restart";
 import { TerminalHistoryUnavailableError } from "./TerminalHistoryUnavailableError";
+import { TerminalSetupCleanup } from "./TerminalSetupCleanup";
+import { makeTerminalStartupRecovery } from "./TerminalViewport.startup";
+import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { subscribeTerminalLifecycleRefresh } from "./terminalLifecycle.recovery";
 import type { UseTerminalViewportSessionInput } from "./TerminalViewport.session.types";
+import {
+  readTerminalLifecycle,
+  useTerminalLifecycle,
+} from "../../stores/terminal/terminalLifecycle.store";
 
 export function useTerminalViewportSession(input: UseTerminalViewportSessionInput) {
-  // Keep callbacks in refs so the session effect does not re-run (and
-  // remount the terminal) when upstream function identities change.
+  const lifecycle = useTerminalLifecycle(input.threadId, input.terminalId);
+  // Callback identity changes must not remount the terminal.
   const readTerminalLabelRef = useRef(input.readTerminalLabel);
   readTerminalLabelRef.current = input.readTerminalLabel;
   const onAddTerminalContextRef = useRef(input.onAddTerminalContext);
@@ -102,218 +113,243 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       return;
     }
 
-    const createDelivery = () => {
-      const next = createTerminalViewportDelivery({
-        terminalRef,
-        hasHandledExitRef: input.hasHandledExitRef,
-        dropPathModeRef: input.dropPathModeRef,
-        clearSelectionAction: clearSelectionActionState,
-        handleSessionExited: () => onSessionExitedRef.current(),
-        onInputState: (enabled) => {
-          if (!disposed) setInputEnabled(enabled);
-        },
-        onFailure: (error) => {
-          // A stopped lane never acknowledges; release the stream so the PTY is not held.
-          output.unsubscribe();
-          if (!disposed) {
-            setDeliveryError(error.message);
-            if (error instanceof TerminalHistoryUnavailableError) setHistoryUnavailable(true);
-          }
-        },
-        observeOutput: instrumentation.observeOutput,
-        batcherOptions: {
-          ...view.pipeline.batcherOptions,
-          isLatencySensitive: instrumentation.isLatencySensitive,
-          onParsed: () => output.parsed(),
-          onStalled: () => {
-            if (!disposed) setViewEpoch((epoch) => epoch + 1);
-          },
-        },
-      });
-      instrumentation.bindWriteBatcher(next.writeBatcher);
-      return next;
-    };
-    const output = createTerminalViewportOutput({
-      threadId: input.threadId,
-      terminalId: input.terminalId,
-      receive: (event) => delivery.intake.receive(event),
-      outstanding: () => delivery.writeBatcher.outstandingCredit,
-      onResync: () => resyncDeliveryRef.current(),
-    });
-    instrumentation.bindStream(output.diagnostics);
-    let delivery = createDelivery();
-    const writeNotice = (target: Terminal, message: string) => {
-      if (!disposed) delivery.writeBatcher.write(target, `\r\n[terminal] ${message}\r\n`);
-    };
-    const registerLinks = (context: {
-      cwd: string;
-      worktreePath?: string | null | undefined;
-      executionTargetId?: string | undefined;
-    }) =>
-      terminal.registerLinkProvider(
-        makeTerminalLinkProvider({
-          terminalRef: input.terminalRef,
-          cwd: context.cwd,
-          workspaceRoot: context.worktreePath ?? context.cwd,
-          executionTargetId: context.executionTargetId,
-          api,
-          writeNotice,
-        }),
-      );
-    let terminalLinksDisposable = registerLinks({
-      cwd: input.cwd,
-      executionTargetId: input.executionTargetId,
-      worktreePath: input.worktreePathRef.current,
-    });
-    const viewInput = attachTerminalViewportInput({
-      terminal,
-      terminalRef: input.terminalRef,
-      threadId: input.threadId,
-      terminalId: input.terminalId,
-      keybindingsRef: input.keybindingsRef,
-      api,
-      acceptsInput: () => !disposed && delivery.intake.acceptsInput,
-      markInput: instrumentation.markInput,
-      writeNotice,
-      tuiWheelMultiplier: view.addons.tuiWheelMultiplier,
-      onFind: () => openFind(),
-    });
-    const disposeSelection = attachTerminalSelection({
-      containerRef: input.containerRef,
-      terminalRef: input.terminalRef,
-      terminalId: input.terminalId,
-      selectionPointerRef: input.selectionPointerRef,
-      selectionActionOpenRef: input.selectionActionOpenRef,
-      selectionActionRequestIdRef: input.selectionActionRequestIdRef,
-      selectionActionTimerRef: input.selectionActionTimerRef,
-      selectionGestureActiveRef: input.selectionGestureActiveRef,
-      terminal,
-      mount,
-      disposed: () => disposed,
-      clearSelectionAction: clearSelectionActionState,
-      onAddTerminalContext,
-      onRequestTerminalAnnotation,
-      readTerminalLabel,
-    });
-
-    const subscribe = () => output.subscribe();
-
-    let openTerminalRetryTimer: number | null = null;
-    let hasRunningSnapshot = false;
-    let lastSnapshot: TerminalSessionSnapshot | null = null;
-    const onSnapshot = (snapshot: TerminalSessionSnapshot) => {
-      lastSnapshot = snapshot;
-      input.dropPathModeRef.current = snapshot.dropPathMode;
-      terminalLinksDisposable.dispose();
-      terminalLinksDisposable = registerLinks(snapshot);
-      hasRunningSnapshot = snapshot.status === "running" && snapshot.pid !== null;
-      setStartupPending(false);
-      setStartupFailed(!hasRunningSnapshot);
-      setHistoryUnavailable(Boolean(snapshot.historyTruncated || snapshot.historyUnavailable));
-      setDirectoryNotice(
-        snapshot.directoryFallback
-          ? `${snapshot.directoryFallback.reason}: ${snapshot.directoryFallback.requestedCwd}. Started in ${snapshot.cwd}.`
-          : null,
-      );
-    };
-    const runOpenTerminal = async (attachOnly = false) => {
-      const owner = delivery;
-      try {
-        const opened = await openTerminalSession({
-          disposed: () => disposed || delivery !== owner,
-          terminalRef: input.terminalRef,
-          fitAddonRef: input.fitAddonRef,
-          intake: owner.intake,
-          attachOnly,
-          beforeOpen: subscribe,
-          threadId: input.threadId,
-          terminalId: input.terminalId,
-          executionTargetId: input.executionTargetId,
-          cwd: input.cwd,
-          runtimeEnv: input.runtimeEnv,
-          worktreePathRef: input.worktreePathRef,
+    // Failed setup never returns effect cleanup; release resources before the boundary reloads.
+    const partialCleanups = new TerminalSetupCleanup();
+    try {
+      const createDelivery = () => {
+        const next = createTerminalViewportDelivery({
+          terminalRef,
+          hasHandledExitRef: input.hasHandledExitRef,
           dropPathModeRef: input.dropPathModeRef,
-          waitForTypography: () => fontController.whenReady(),
-          onSnapshot,
-          autoFocusRef: input.autoFocusRef,
-          containerRef: input.containerRef,
+          clearSelectionAction: clearSelectionActionState,
+          handleSessionExited: () => onSessionExitedRef.current(),
+          onSnapshot: (snapshot) => onSnapshot(snapshot),
+          onInputState: (enabled) => {
+            if (!disposed) setInputEnabled(enabled);
+          },
+          onFailure: (error) => {
+            // A stopped lane never acknowledges; release the stream so the PTY is not held.
+            output.unsubscribe();
+            if (!disposed) {
+              setDeliveryError(error.message);
+              if (error instanceof TerminalHistoryUnavailableError) setHistoryUnavailable(true);
+            }
+          },
+          observeOutput: instrumentation.observeOutput,
+          onCreditReleased: () => output.parsed(),
+          batcherOptions: {
+            ...view.pipeline.batcherOptions,
+            isLatencySensitive: instrumentation.isLatencySensitive,
+            onParsed: () => output.parsed(),
+            onStalled: () => {
+              if (!disposed) setViewEpoch((epoch) => epoch + 1);
+            },
+          },
         });
-        if (!opened) {
-          openTerminalRetryTimer = window.setTimeout(() => {
-            openTerminalRetryTimer = null;
-            void runOpenTerminal(attachOnly);
-          }, 50);
-        }
-      } catch (err) {
-        if (disposed || delivery !== owner) return;
+        instrumentation.bindWriteBatcher(next.writeBatcher);
+        return next;
+      };
+      const output = createTerminalViewportOutput({
+        threadId: input.threadId,
+        terminalId: input.terminalId,
+        receive: (event) => delivery.intake.receive(event),
+        // Output parked during hydration is not parsed yet; counting it keeps the server window shut.
+        outstanding: () =>
+          delivery.writeBatcher.outstandingCredit + delivery.intake.pendingOutputChars,
+        onResync: () => resyncDeliveryRef.current(),
+      });
+      instrumentation.bindStream(output.diagnostics);
+      partialCleanups.add(() => output.unsubscribe());
+      let delivery = createDelivery();
+      partialCleanups.add(() => delivery.dispose());
+      const writeNotice = (target: Terminal, message: string) => {
+        if (!disposed) delivery.writeBatcher.write(target, `\r\n[terminal] ${message}\r\n`);
+      };
+      const registerLinks = makeTerminalLinkRegistrar(terminal, {
+        terminalRef,
+        api,
+        writeNotice,
+      });
+      let terminalLinksDisposable = registerLinks({
+        cwd: input.cwd,
+        executionTargetId: input.executionTargetId,
+        worktreePath: input.worktreePathRef.current,
+      });
+      partialCleanups.add(() => terminalLinksDisposable.dispose());
+      const viewInput = attachTerminalViewportInput({
+        terminal,
+        terminalRef: input.terminalRef,
+        threadId: input.threadId,
+        terminalId: input.terminalId,
+        keybindingsRef: input.keybindingsRef,
+        api,
+        acceptsInput: () =>
+          !disposed &&
+          delivery.intake.acceptsInput &&
+          !readTerminalLifecycle(input.threadId, input.terminalId),
+        markInput: instrumentation.markInput,
+        writeNotice,
+        tuiWheelMultiplier: view.addons.tuiWheelMultiplier,
+        onFind: () => openFind(),
+      });
+      partialCleanups.add(() => viewInput.dispose());
+      const disposeSelection = attachTerminalSelection({
+        containerRef: input.containerRef,
+        terminalRef: input.terminalRef,
+        terminalId: input.terminalId,
+        selectionPointerRef: input.selectionPointerRef,
+        selectionActionOpenRef: input.selectionActionOpenRef,
+        selectionActionRequestIdRef: input.selectionActionRequestIdRef,
+        selectionActionTimerRef: input.selectionActionTimerRef,
+        selectionGestureActiveRef: input.selectionGestureActiveRef,
+        terminal,
+        mount,
+        disposed: () => disposed,
+        clearSelectionAction: clearSelectionActionState,
+        onAddTerminalContext,
+        onRequestTerminalAnnotation,
+        readTerminalLabel,
+      });
+
+      partialCleanups.add(disposeSelection);
+      const subscribe = () => output.subscribe();
+
+      let hasRunningSnapshot = false;
+      let lastSnapshot: TerminalSessionSnapshot | null = null;
+      const onSnapshot = (snapshot: TerminalSessionSnapshot) => {
+        if (!recordTerminalLaunch(snapshot)) return false;
+        lastSnapshot = snapshot;
+        input.dropPathModeRef.current = snapshot.dropPathMode;
+        terminalLinksDisposable.dispose();
+        terminalLinksDisposable = registerLinks(snapshot);
+        hasRunningSnapshot = snapshot.status === "running" && snapshot.pid !== null;
         setStartupPending(false);
         setStartupFailed(!hasRunningSnapshot);
-        owner.intake.pause(err instanceof Error ? err : new Error("Failed to open terminal"));
-      }
-    };
-    const replaceDelivery = () => {
-      if (openTerminalRetryTimer !== null) window.clearTimeout(openTerminalRetryTimer);
-      delivery.dispose();
-      output.unsubscribe();
-      setDeliveryError(null);
-      setStartupPending(!hasRunningSnapshot);
-      setStartupFailed(false);
-      delivery = createDelivery();
-      input.hasHandledExitRef.current = false;
-      return delivery;
-    };
-    retryDeliveryRef.current = () => {
-      if (disposed || !delivery.writeBatcher.isStopped) return;
-      replaceDelivery();
-      void runOpenTerminal(hasRunningSnapshot);
-    };
-    // Reconnect or server overflow: replay the snapshot instead of rendering with a gap.
-    resyncDeliveryRef.current = () => {
-      if (disposed || delivery.writeBatcher.isStopped) return;
-      replaceDelivery();
-      void runOpenTerminal(hasRunningSnapshot);
-    };
-    restartDeliveryRef.current = makeTerminalRestartAction({
-      api,
-      terminal,
-      readSnapshot: () => lastSnapshot,
-      disposed: () => disposed,
-      prepare: async () => {
-        const owner = replaceDelivery();
-        await subscribe();
-        return owner;
-      },
-      isCurrent: (owner) => delivery === owner,
-      onSnapshot,
-      onFailure: (error) => {
-        setHistoryUnavailable(true);
-        setDeliveryError(error.message);
-      },
-    });
+        setHistoryUnavailable(Boolean(snapshot.historyTruncated || snapshot.historyUnavailable));
+        setDirectoryNotice(
+          snapshot.directoryFallback
+            ? `${snapshot.directoryFallback.reason}: ${snapshot.directoryFallback.requestedCwd}. Started in ${snapshot.cwd}.`
+            : null,
+        );
+      };
+      const unsubscribeRefresh = subscribeTerminalLifecycleRefresh(
+        input.threadId,
+        input.terminalId,
+        () => startup.invalidate(),
+        (snapshot) =>
+          refreshTerminalViewportDelivery(
+            lastSnapshot && lastSnapshot.updatedAt > snapshot.updatedAt ? lastSnapshot : snapshot,
+            {
+              disposed: () => disposed,
+              readDelivery: () => delivery,
+              replaceDelivery,
+              subscribe,
+              onSnapshot,
+              refreshSnapshot: () =>
+                api.terminal.snapshot!({ threadId: input.threadId, terminalId: input.terminalId }),
+            },
+          ),
+      );
+      partialCleanups.add(unsubscribeRefresh);
+      const startup = makeTerminalStartupRecovery({
+        open: (superseded, attachOnly) => {
+          const owner = delivery;
+          return openTerminalSession({
+            disposed: () => disposed || superseded() || delivery !== owner,
+            terminalRef: input.terminalRef,
+            fitAddonRef: input.fitAddonRef,
+            intake: owner.intake,
+            attachOnly: () =>
+              attachOnly || Boolean(readTerminalLifecycle(input.threadId, input.terminalId)),
+            beforeOpen: subscribe,
+            threadId: input.threadId,
+            terminalId: input.terminalId,
+            executionTargetId: input.executionTargetId,
+            cwd: input.cwd,
+            runtimeEnv: input.runtimeEnv,
+            worktreePathRef: input.worktreePathRef,
+            dropPathModeRef: input.dropPathModeRef,
+            waitForTypography: () => fontController.whenReady(),
+            onSnapshot,
+            autoFocusRef: input.autoFocusRef,
+            containerRef: input.containerRef,
+          });
+        },
+        onFailure: (err) => {
+          if (disposed) return;
+          setStartupPending(false);
+          setStartupFailed(!hasRunningSnapshot);
+          delivery.intake.pause(err instanceof Error ? err : new Error("Failed to open terminal"));
+        },
+      });
+      const replaceDelivery = () => {
+        startup.invalidate();
+        delivery.dispose();
+        output.unsubscribe();
+        setDeliveryError(null);
+        setStartupPending(!hasRunningSnapshot);
+        setStartupFailed(false);
+        delivery = createDelivery();
+        input.hasHandledExitRef.current = false;
+        return delivery;
+      };
+      retryDeliveryRef.current = () => {
+        if (disposed || !delivery.writeBatcher.isStopped) return;
+        replaceDelivery();
+        void startup.run(hasRunningSnapshot);
+      };
+      // Reconnect or server overflow: replay the snapshot instead of rendering with a gap.
+      resyncDeliveryRef.current = () => {
+        if (disposed || delivery.writeBatcher.isStopped) return;
+        replaceDelivery();
+        void startup.run(hasRunningSnapshot);
+      };
+      restartDeliveryRef.current = makeTerminalRestartAction({
+        api,
+        terminal,
+        readSnapshot: () => lastSnapshot,
+        disposed: () => disposed,
+        prepare: async () => {
+          const owner = replaceDelivery();
+          await subscribe();
+          return owner;
+        },
+        isCurrent: (owner) => delivery === owner,
+        onSnapshot,
+        onFailure: (error) => {
+          setHistoryUnavailable(true);
+          setDeliveryError(error.message);
+        },
+      });
 
-    void runOpenTerminal();
+      void startup.run();
 
-    return () => {
+      return () => {
+        disposed = true;
+        unsubscribeRefresh();
+        clearSelectionActionState();
+        retryDeliveryRef.current = () => undefined;
+        resyncDeliveryRef.current = () => undefined;
+        restartDeliveryRef.current = () => undefined;
+        delivery.dispose();
+        selectionActionOpenRef.current = false;
+        output.unsubscribe();
+        startup.invalidate();
+        viewInput.dispose();
+        disposeSelection();
+        terminalLinksDisposable.dispose();
+        if (selectionActionTimerRef.current !== null) {
+          window.clearTimeout(selectionActionTimerRef.current);
+        }
+        closeFind();
+        releaseView();
+      };
+    } catch (error) {
       disposed = true;
-      clearSelectionActionState();
-      retryDeliveryRef.current = () => undefined;
-      resyncDeliveryRef.current = () => undefined;
-      restartDeliveryRef.current = () => undefined;
-      delivery.dispose();
-      selectionActionOpenRef.current = false;
-      output.unsubscribe();
-      if (openTerminalRetryTimer !== null) {
-        window.clearTimeout(openTerminalRetryTimer);
-      }
-      viewInput.dispose();
-      disposeSelection();
-      terminalLinksDisposable.dispose();
-      if (selectionActionTimerRef.current !== null) {
-        window.clearTimeout(selectionActionTimerRef.current);
-      }
-      closeFind();
+      partialCleanups.dispose();
       releaseView();
-    };
+      throw error;
+    }
   }, [
     input.autoFocusRef,
     input.containerRef,
@@ -342,7 +378,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   useTerminalTheme(input);
   useTerminalViewSettings(viewRef, input);
   return {
-    inputEnabled,
+    inputEnabled: inputEnabled && !lifecycle,
     deliveryError,
     historyUnavailable,
     startupPending,

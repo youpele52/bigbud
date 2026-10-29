@@ -333,6 +333,7 @@ describe("terminal layout integration", () => {
       const onRename = vi.fn();
       const onClose = vi.fn();
       const onExpand = vi.fn();
+      const onMinimize = vi.fn();
       const screen = await render(
         <ThreadTerminalDrawerToolbar
           variant={variant}
@@ -347,6 +348,7 @@ describe("terminal layout integration", () => {
           onNewTerminalAction={onNew}
           onCloseTerminal={onClose}
           onToggleExpanded={panel ? undefined : onExpand}
+          onMinimize={panel ? undefined : onMinimize}
         />,
       );
       try {
@@ -356,7 +358,7 @@ describe("terminal layout integration", () => {
           "Split Terminal (⌘⇧G)",
           "Rename Terminal",
           "Close Terminal (⌘W)",
-          ...(!panel ? ["Expand terminal"] : []),
+          ...(!panel ? ["Minimize terminal", "Expand terminal"] : []),
         ]);
         const dividers = document.querySelectorAll("div.w-px");
         expect(dividers).toHaveLength(panel ? 2 : 3);
@@ -367,8 +369,15 @@ describe("terminal layout integration", () => {
         if (!panel) {
           expect(dividers[2]!.previousElementSibling).toBe(buttons[3]);
           expect(dividers[2]!.nextElementSibling).toBe(buttons[4]);
+          expect(buttons[4]!.nextElementSibling).toBe(buttons[5]);
         }
-        const callbacks = [onNew, onSplit, onRename, onClose, ...(!panel ? [onExpand] : [])];
+        const callbacks = [
+          onNew,
+          onSplit,
+          onRename,
+          onClose,
+          ...(!panel ? [onMinimize, onExpand] : []),
+        ];
         for (const [index, button] of buttons.entries()) {
           expect(button.querySelector("svg")?.classList.contains("size-3.25")).toBe(true);
           await page.getByRole("button", { name: button.ariaLabel!, exact: true }).click();

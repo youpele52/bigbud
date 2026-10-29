@@ -24,10 +24,17 @@ export function makeTerminalOutputHold(
       else holders.delete(key);
       const session = yield* getSession(input.threadId, input.terminalId);
       if (Option.isNone(session) || !session.value.process) return false;
-      const process = session.value.process;
-      if (!process.pause || !process.resume) return false;
-      if (current.size > 0) process.pause();
-      else process.resume();
+      const value = session.value;
+      if (!value.process?.pause || !value.process.resume) return false;
+      value.reconcileOutputHold = () => {
+        const process = value.process;
+        if (!process?.pause || !process.resume) return;
+        // Read current holders after asynchronous lookup or a failed shutdown's temporary drain.
+        // Shutdown must drain reads even if a slow subscriber renews its hold.
+        if (!value.stopPending && (holders.get(key)?.size ?? 0) > 0) process.pause();
+        else process.resume();
+      };
+      value.reconcileOutputHold();
       return true;
     });
 }

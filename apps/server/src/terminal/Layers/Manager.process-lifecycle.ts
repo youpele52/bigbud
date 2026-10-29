@@ -1,4 +1,5 @@
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
+import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { type TerminalAgentDetector } from "./Manager.agentDetection";
 import * as Effect from "effect/Effect";
@@ -58,6 +59,8 @@ export function cleanupProcessHandles(session: TerminalSessionState): void {
   session.unsubscribeData = null;
   session.unsubscribeExit?.();
   session.unsubscribeExit = null;
+  session.unsubscribeError?.();
+  session.unsubscribeError = null;
 }
 
 export function enqueueProcessEvent(
@@ -65,7 +68,11 @@ export function enqueueProcessEvent(
   expectedPid: number,
   event: PendingProcessEvent,
 ): boolean {
-  if (!session.process || session.status !== "running" || session.pid !== expectedPid) {
+  if (
+    !session.process ||
+    (session.status !== "running" && session.status !== "error") ||
+    session.pid !== expectedPid
+  ) {
     return false;
   }
 
@@ -212,11 +219,11 @@ export interface ProcessLifecycleFns {
     threadId: string,
     terminalId: string,
   ) => Effect.Effect<void>;
-  stopProcess: (session: TerminalSessionState) => Effect.Effect<void>;
+  stopProcess: (session: TerminalSessionState) => Effect.Effect<void, TerminalExecutionTargetError>;
   startSession: (
     session: TerminalSessionState,
     input: TerminalStartInput,
     eventType: "started" | "restarted",
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<void, TerminalExecutionTargetError>;
   pollSubprocessActivity: () => Effect.Effect<void>;
 }

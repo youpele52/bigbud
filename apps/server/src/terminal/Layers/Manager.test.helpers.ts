@@ -38,6 +38,10 @@ export class FakePtyProcess implements PtyProcess {
   private readonly exitListeners = new Set<(event: PtyExitEvent) => void>();
   killed = false;
   paused = false;
+  /** Simulates native calls on a descriptor that closed when the process exited. */
+  throwOnWrite = false;
+  throwOnResize = false;
+  exitOnSignal: string | null = "SIGTERM";
 
   constructor(readonly pid: number) {}
 
@@ -50,16 +54,19 @@ export class FakePtyProcess implements PtyProcess {
   };
 
   write(data: string): void {
+    if (this.throwOnWrite) throw new Error("EBADF: bad file descriptor, write");
     this.writes.push(data);
   }
 
   resize(cols: number, rows: number): void {
+    if (this.throwOnResize) throw new Error("ioctl(2) failed, EBADF");
     this.resizeCalls.push({ cols, rows });
   }
 
   kill(signal?: string): void {
     this.killed = true;
     this.killSignals.push(signal);
+    if (signal === this.exitOnSignal) this.emitExit({ exitCode: 0, signal: null });
   }
 
   onData(callback: (data: string) => void): () => void {
@@ -93,12 +100,28 @@ export class FakePtyAdapter implements PtyAdapterShape {
   readonly spawnInputs: PtySpawnInput[] = [];
   readonly processes: FakePtyProcess[] = [];
   readonly spawnFailures: Error[] = [];
+  /** Thrown as defects, like a native spawn that throws synchronously. */
+  readonly spawnDefects: unknown[] = [];
+  /** Thrown from `spawn` itself, before any Effect is returned. */
+  readonly spawnThrows: unknown[] = [];
+  /** When set, spawns wait for it, keeping their sessions in `starting`. */
+  spawnGate: Promise<void> | null = null;
   private nextPid = 9000;
 
   constructor(private readonly mode: "sync" | "async" = "sync") {}
 
   spawn(input: PtySpawnInput): Effect.Effect<PtyProcess, PtySpawnError> {
     this.spawnInputs.push(input);
+    if (this.spawnThrows.length > 0) throw this.spawnThrows.shift();
+    if (this.spawnDefects.length > 0) return Effect.die(this.spawnDefects.shift());
+    const gate = this.spawnGate;
+    if (gate) {
+      return Effect.promise(() => gate).pipe(Effect.andThen(Effect.suspend(() => this.spawnNow())));
+    }
+    return this.spawnNow();
+  }
+
+  private spawnNow(): Effect.Effect<PtyProcess, PtySpawnError> {
     const failure = this.spawnFailures.shift();
     if (failure) {
       return Effect.fail(
@@ -224,6 +247,7 @@ export interface CreateManagerOptions {
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;
   ptyAdapter?: FakePtyAdapter;
+  releaseWorktreeLease?: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
 }
 
 export interface ManagerFixture {
@@ -252,6 +276,9 @@ export const createManager = (
         logsDir,
         historyLineLimit,
         ptyAdapter,
+        ...(options.releaseWorktreeLease
+          ? { releaseWorktreeLease: options.releaseWorktreeLease }
+          : {}),
         ...(options.shellResolver !== undefined ? { shellResolver: options.shellResolver } : {}),
         ...(options.subprocessChecker !== undefined
           ? { subprocessChecker: options.subprocessChecker }

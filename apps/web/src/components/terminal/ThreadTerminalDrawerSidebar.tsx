@@ -7,6 +7,7 @@ import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.
 import { type ThreadTerminalGroup } from "../../models/types";
 import { ThreadTerminalDrawerToolbar } from "./ThreadTerminalDrawerToolbar";
 import { ThreadTerminalDrawerRenameEditor } from "./ThreadTerminalDrawerRenameEditor";
+import { TerminalLifecycleLabel } from "./TerminalLifecycleStatus";
 
 interface ThreadTerminalDrawerSidebarProps {
   threadId?: ThreadId;
@@ -36,6 +37,7 @@ interface ThreadTerminalDrawerSidebarProps {
   onCloseTerminal: (terminalId: string) => void;
   expanded?: boolean;
   onToggleExpanded?: (() => void) | undefined;
+  onMinimize?: (() => void) | undefined;
 }
 
 export function ThreadTerminalDrawerSidebar({
@@ -66,9 +68,12 @@ export function ThreadTerminalDrawerSidebar({
   onCloseTerminal,
   expanded = false,
   onToggleExpanded,
+  onMinimize,
 }: ThreadTerminalDrawerSidebarProps) {
   return (
-    <aside className="flex w-36 min-w-36 flex-col border border-border/70 bg-muted/10">
+    <aside
+      className={`flex flex-col border border-border/70 bg-muted/10 ${onMinimize ? "w-40 min-w-40" : "w-36 min-w-36"}`}
+    >
       <div className="flex h-[22px] items-stretch justify-end border-b border-border/70">
         <ThreadTerminalDrawerToolbar
           threadId={threadId}
@@ -85,6 +90,7 @@ export function ThreadTerminalDrawerSidebar({
           onCloseTerminal={onCloseTerminal}
           expanded={expanded}
           onToggleExpanded={onToggleExpanded}
+          onMinimize={onMinimize}
         />
       </div>
 
@@ -162,6 +168,9 @@ export function ThreadTerminalDrawerSidebar({
                           )}
                           <span className="truncate">
                             {terminalLabelById.get(terminalId) ?? "Terminal"}
+                            {threadId && (
+                              <TerminalLifecycleLabel threadId={threadId} terminalId={terminalId} />
+                            )}
                           </span>
                         </button>
                       )}

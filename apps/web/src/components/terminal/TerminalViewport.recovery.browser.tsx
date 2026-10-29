@@ -1,7 +1,9 @@
 import "../../index.css";
 import { Terminal } from "@xterm/xterm";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { useTerminalLifecycleStore } from "../../stores/terminal/terminalLifecycle.store";
+import { forgetTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { render } from "vitest-browser-react";
 import { TerminalViewport } from "./TerminalViewport";
 import { publishTerminalOutput } from "./TerminalOutputStream";
@@ -53,6 +55,11 @@ vi.mock("@tanstack/react-router", async (original) => ({
   ...(await original<typeof import("@tanstack/react-router")>()),
   useParams: () => "recovery",
 }));
+
+afterEach(() => {
+  useTerminalLifecycleStore.setState({ operations: {} });
+  forgetTerminalLaunch("recovery", "synthetic");
+});
 
 it.each([false, true])(
   "started-before-open (large history=%s) and explicit recovery preserve the emulator and never restart",
@@ -201,7 +208,9 @@ it.each(["historyTruncated", "historyUnavailable"] as const)(
       expect(terminal.options.disableStdin).toBe(true);
       mocks.restart.mockRejectedValueOnce(new Error("Restart transport failed"));
       await provider.getByRole("button", { name: "Restart terminal", exact: true }).click();
-      await expect.element(provider.getByText("Restart transport failed")).toBeVisible();
+      await expect
+        .element(screen.getByRole("alert").getByText("Restart transport failed"))
+        .toBeVisible();
       expect(terminal.options.disableStdin).toBe(true);
       await provider.getByRole("button", { name: "Restart terminal", exact: true }).click();
       await expect.poll(() => terminal.options.disableStdin).toBe(false);

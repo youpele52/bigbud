@@ -1,8 +1,9 @@
 import { Effect, Queue, Stream } from "effect";
 import { randomUUID } from "node:crypto";
-import { DEFAULT_TERMINAL_ID, type TerminalEvent, WS_METHODS } from "@bigbud/contracts";
+import { DEFAULT_TERMINAL_ID, WS_METHODS } from "@bigbud/contracts";
 import {
   type TerminalEventsSubscriptionInput,
+  type TerminalEventsStreamItem,
   type TerminalOutputAckInput,
   TerminalSessionStreamInput,
   type TerminalSessionStreamItem,
@@ -12,6 +13,7 @@ import type { TerminalSearchInput } from "@bigbud/contracts/workspace/terminal.s
 import { observeRpcEffect, observeRpcStream } from "../observability/RpcInstrumentation";
 import { TerminalOutputDelivery } from "../terminal/TerminalOutputDelivery";
 import type { WsRpcContext } from "./wsRpcContext";
+import { makeBoundedTerminalEventOffer } from "./wsRpcHandlers.terminalEvents.ts";
 
 /**
  * Terminal event streams. The global stream feeds sidebar/agent state (and, with
@@ -26,15 +28,16 @@ export function makeWsRpcTerminalSessionHandlers(context: WsRpcContext) {
     [WS_METHODS.subscribeTerminalEvents]: (input: TerminalEventsSubscriptionInput) =>
       observeRpcStream(
         WS_METHODS.subscribeTerminalEvents,
-        Stream.callback<TerminalEvent>((queue) =>
-          Effect.acquireRelease(
-            manager.subscribe(
-              (event) => Queue.offer(queue, event),
-              input.outputScope ? { outputScope: input.outputScope } : undefined,
-            ),
+        Stream.callback<TerminalEventsStreamItem>((queue) => {
+          const offer = makeBoundedTerminalEventOffer(queue);
+          return Effect.acquireRelease(
+            manager.subscribe(offer, {
+              ...(input.outputScope ? { outputScope: input.outputScope } : {}),
+              ...(input.includeInventory ? { onInventory: offer } : {}),
+            }),
             (unsubscribe) => Effect.sync(unsubscribe),
-          ),
-        ),
+          );
+        }),
         { "rpc.aggregate": "terminal" },
       ),
     [WS_METHODS.subscribeTerminalSession]: (input: typeof TerminalSessionStreamInput.Type) =>

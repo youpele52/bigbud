@@ -41,6 +41,8 @@ export interface PtyProcess {
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
   onData(callback: (data: string) => void): () => void;
+  /** Fatal I/O failure is not exit evidence; implementations may replay a latched failure. */
+  readonly onError?: (callback: (error: Error) => void) => () => void;
   onExit(callback: (event: PtyExitEvent) => void): () => void;
 }
 

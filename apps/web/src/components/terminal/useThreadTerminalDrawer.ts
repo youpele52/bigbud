@@ -14,7 +14,7 @@ import {
 import { useServerSettings } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./terminalDisplay";
-import { forgetTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { closeTerminalConfirmed } from "./terminalLifecycle.operations";
 import { resolveManualTerminalTarget } from "../../stores/terminal/terminal.store.wsl";
 
 const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
@@ -216,30 +216,27 @@ export function useThreadTerminalDrawer(
     (terminalId: string) => {
       const api = readNativeApi();
       if (!api) return;
-      const isFinalTerminal = terminalState.terminalIds.length <= 1;
-      const fallbackExitWrite = () =>
-        api.terminal.write({ threadId, terminalId, data: "exit\n" }).catch(() => undefined);
-
-      if ("close" in api.terminal && typeof api.terminal.close === "function") {
-        void (async () => {
-          if (isFinalTerminal) {
-            await api.terminal.clear({ threadId, terminalId }).catch(() => undefined);
-          }
-          await api.terminal.close({
-            threadId,
-            terminalId,
-            deleteHistory: true,
-          });
-        })().catch(() => fallbackExitWrite());
-      } else {
-        void fallbackExitWrite();
-      }
-
-      storeCloseTerminal(threadId, terminalId);
-      forgetTerminalLaunch(threadId, terminalId);
-      bumpFocusRequestId();
+      void closeTerminalConfirmed({
+        api,
+        threadId,
+        terminalId,
+        onPending: () => {
+          const next = terminalState.terminalIds.find((id) => id !== terminalId);
+          if (next && terminalState.activeTerminalId === terminalId)
+            storeSetActiveTerminal(threadId, next);
+          bumpFocusRequestId();
+        },
+        onConfirmed: () => storeCloseTerminal(threadId, terminalId),
+      });
     },
-    [bumpFocusRequestId, storeCloseTerminal, terminalState.terminalIds.length, threadId],
+    [
+      bumpFocusRequestId,
+      storeCloseTerminal,
+      storeSetActiveTerminal,
+      terminalState.terminalIds,
+      terminalState.activeTerminalId,
+      threadId,
+    ],
   );
 
   const setTerminalLabelOverride = useCallback(

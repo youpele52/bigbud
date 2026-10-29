@@ -20,6 +20,10 @@ import type { TerminalViewportIntake } from "./TerminalViewport.intake";
 import { ensureThreadMaterialized } from "../../lib/threadMaterialization";
 import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { preserveTerminalScroll } from "./terminalScrollState";
+import {
+  hasCurrentTerminalBaseline,
+  resolveTerminalViewportSnapshot,
+} from "./TerminalViewport.snapshot";
 
 interface TerminalSelectionActionStateRefs {
   readonly selectionActionRequestIdRef: MutableRefObject<number>;
@@ -63,7 +67,7 @@ interface TerminalOpenSessionInput {
   readonly waitForTypography: () => Promise<void>;
   readonly autoFocusRef: MutableRefObject<boolean>;
   readonly containerRef: RefObject<HTMLDivElement | null>;
-  readonly attachOnly?: boolean;
+  readonly attachOnly?: boolean | (() => boolean);
   /** Subscribes the view; open waits for the server-side registration so no event is missed. */
   readonly beforeOpen?: () => void | Promise<void>;
   readonly onSnapshot?: (
@@ -244,14 +248,18 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
   // Subscribe immediately before the snapshot request, not during font/layout waits.
   await input.beforeOpen?.();
   if (input.disposed()) return true;
-  if (!input.attachOnly) await ensureThreadMaterialized(input.threadId);
+  const attachOnly = () =>
+    typeof input.attachOnly === "function" ? input.attachOnly() : Boolean(input.attachOnly);
+  if (!attachOnly()) await ensureThreadMaterialized(input.threadId);
   if (input.disposed()) return true;
-  if (input.attachOnly && !api.terminal.snapshot) {
+  // Lifecycle ownership can change during font/layout, subscription or materialization waits.
+  const viewOnly = attachOnly();
+  if (viewOnly && !api.terminal.snapshot) {
     throw new Error(
       "View-only recovery is unavailable. Upgrade the server; the running process was not restarted.",
     );
   }
-  const snapshot = input.attachOnly
+  const opened = viewOnly
     ? await api.terminal.snapshot!({ threadId: input.threadId, terminalId: input.terminalId })
     : await api.terminal.open({
         threadId: input.threadId,
@@ -265,9 +273,24 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
         rows: activeTerminal.rows,
         ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
       });
-  if (input.disposed()) return true;
+  const snapshot = await resolveTerminalViewportSnapshot(opened, {
+    localUpdatedAt: () => input.intake.snapshotUpdatedAt,
+    disposed: input.disposed,
+    refresh: api.terminal.snapshot
+      ? () => api.terminal.snapshot!({ threadId: input.threadId, terminalId: input.terminalId })
+      : undefined,
+  });
+  if (!snapshot || input.disposed()) return true;
+  if (!recordTerminalLaunch(snapshot)) {
+    if (!hasCurrentTerminalBaseline(snapshot, input.intake.snapshotUpdatedAt))
+      throw new Error(
+        "Terminal changed while reconnecting. Reload the view to fetch current output.",
+      );
+    // A newer streamed baseline may already be staged; open it without adopting old metadata.
+    await input.intake.hydrate(snapshot);
+    return true;
+  }
   input.onSnapshot?.(snapshot);
-  recordTerminalLaunch(snapshot);
   if (snapshot.status === "error" || snapshot.pid === null) {
     throw new Error(
       "The terminal did not start. Check the target and shell configuration, then retry startup.",

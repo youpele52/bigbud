@@ -162,6 +162,7 @@ export function ChatViewContent({
           keybindings={composer.keybindings}
           onAddTerminalContext={runtime.addTerminalContextToDraft}
           onToggleExpanded={terminalLayout.toggleExpanded}
+          onMinimize={() => terminalLayout.selectLayout("chat-only")}
         />
       ))}
 

@@ -11,6 +11,8 @@ import { reserveTerminalOutput, releaseTerminalOutput } from "./TerminalOutputBu
 export class TerminalViewportIntake {
   private pending: TerminalEvent[] = [];
   private bytes = 0;
+  /** Flow-control credit (output UTF-16 units) parked here, not yet parsed or discarded. */
+  private pendingOutput = 0;
   private live = false;
   private disposed = false;
   private gate = 1;
@@ -23,8 +25,25 @@ export class TerminalViewportIntake {
     private readonly lane: TerminalWriteBatcher,
     private readonly apply: (event: TerminalEvent) => void,
     private readonly onInputState: (enabled: boolean) => void,
+    /** Parked output was discarded without parsing; the stream may acknowledge it now. */
+    private readonly onCreditReleased: () => void = () => undefined,
+    private readonly acceptSnapshot: (snapshot: TerminalSessionSnapshot) => boolean = () => true,
   ) {
     this.updateInput();
+  }
+
+  /** Parked output still counts as outstanding: acknowledging it early refills the server window. */
+  get pendingOutputChars(): number {
+    return this.pendingOutput;
+  }
+
+  private takePending(): TerminalEvent[] {
+    const pending = this.pending;
+    releaseTerminalOutput(this.bytes);
+    this.pending = [];
+    this.bytes = 0;
+    this.pendingOutput = 0;
+    return pending;
   }
 
   get acceptsInput(): boolean {
@@ -38,9 +57,7 @@ export class TerminalViewportIntake {
     this.onInputState(this.acceptsInput);
   }
   pause(error: Error): void {
-    releaseTerminalOutput(this.bytes);
-    this.pending = [];
-    this.bytes = 0;
+    this.takePending();
     this.baseline = null;
     this.lane.pause(error);
     this.updateInput();
@@ -50,6 +67,11 @@ export class TerminalViewportIntake {
     if (this.disposed || this.lane.isStopped) return;
     if (event.type === "activity" || event.type === "agentIdentity") return;
     if (this.cutoff !== null && event.createdAt <= this.cutoff) return;
+    if (
+      (event.type === "started" || event.type === "restarted") &&
+      !this.acceptSnapshot(event.snapshot)
+    )
+      return;
     if (!this.live && (event.type === "started" || event.type === "restarted")) {
       // Open publishes a started snapshot before its RPC response. Keep one
       // authoritative baseline, not a second history-sized live-queue item.
@@ -67,9 +89,6 @@ export class TerminalViewportIntake {
       this.pending.length >= 4096 ||
       !reserveTerminalOutput(bytes)
     ) {
-      releaseTerminalOutput(this.bytes);
-      this.pending = [];
-      this.bytes = 0;
       this.pause(
         new Error(
           "Terminal hydration overflowed. Delivery and input are paused; no exact checkpoint is available.",
@@ -79,6 +98,7 @@ export class TerminalViewportIntake {
     }
     this.pending.push(event);
     this.bytes += bytes;
+    if (event.type === "output") this.pendingOutput += event.data.length;
   };
 
   private eventBytes(event: TerminalEvent): number {
@@ -88,13 +108,22 @@ export class TerminalViewportIntake {
   /** The legacy server timestamps delimit snapshot coverage, not an exact checkpoint. */
   private stage(snapshot: TerminalSessionSnapshot): boolean {
     if (this.cutoff !== null && snapshot.updatedAt <= this.cutoff) return false;
+    if (!this.acceptSnapshot(snapshot)) return false;
     this.cutoff = snapshot.updatedAt;
     this.baseline = snapshot;
     const retained = this.pending.filter((event) => event.createdAt > snapshot.updatedAt);
     const bytes = retained.reduce((sum, event) => sum + this.eventBytes(event), 0);
+    const output = retained.reduce(
+      (sum, event) => sum + (event.type === "output" ? event.data.length : 0),
+      0,
+    );
+    const released = this.pendingOutput - output;
     releaseTerminalOutput(this.bytes - bytes);
     this.pending = retained;
     this.bytes = bytes;
+    this.pendingOutput = output;
+    // The snapshot covers the discarded output, so its credit is settled.
+    if (released > 0) this.onCreditReleased();
     return true;
   }
 
@@ -152,10 +181,8 @@ export class TerminalViewportIntake {
       await this.lane.whenIdle();
       if (this.disposed) return;
       if (this.baseline) continue;
-      const pending = this.pending;
-      releaseTerminalOutput(this.bytes);
-      this.pending = [];
-      this.bytes = 0;
+      // Applied output carries its credit into the write lane until xterm parses it.
+      const pending = this.takePending();
       // History is parsed. Buffered post-snapshot bytes are LIVE, including
       // handshake queries: suppressing their replies can wedge a waiting TUI.
       this.live = true;
@@ -171,9 +198,7 @@ export class TerminalViewportIntake {
 
   dispose(): void {
     this.disposed = true;
-    releaseTerminalOutput(this.bytes);
-    this.pending = [];
-    this.bytes = 0;
+    this.takePending();
     this.baseline = null;
     this.updateInput();
   }

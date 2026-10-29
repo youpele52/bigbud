@@ -1,4 +1,5 @@
 import { type TerminalEvent, type TerminalSessionSnapshot } from "@bigbud/contracts";
+import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
 
@@ -33,12 +34,12 @@ export interface SessionApiContext {
     threadId: string,
     effect: Effect.Effect<A, E, R>,
   ) => Effect.Effect<A, E, R>;
-  stopProcess: (session: TerminalSessionState) => Effect.Effect<void>;
+  stopProcess: (session: TerminalSessionState) => Effect.Effect<void, TerminalExecutionTargetError>;
   startSession: (
     session: TerminalSessionState,
     input: TerminalStartInput,
     eventType: "started" | "restarted",
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<void, TerminalExecutionTargetError>;
   flushPtyOutput: (threadId: string, terminalId: string) => Effect.Effect<void>;
   persistHistory: (threadId: string, terminalId: string, history: string) => Effect.Effect<void>;
   flushPersist: (threadId: string, terminalId: string) => Effect.Effect<void>;

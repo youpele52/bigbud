@@ -174,7 +174,7 @@ export function createWsNativeApi(): NativeApi {
       clear: (input) => rpcClient.terminal.clear(input as never),
       restart: (input) => rpcClient.terminal.restart(input as never),
       close: (input) => rpcClient.terminal.close(input as never),
-      onEvent: (callback) => rpcClient.terminal.onEvent(callback),
+      onEvent: (callback, options) => rpcClient.terminal.onEvent(callback, options),
       subscribeSession: (input, callback, options) =>
         rpcClient.terminal.subscribeSession(input as never, callback, options),
       ackOutput: (input) => rpcClient.terminal.ackOutput(input),

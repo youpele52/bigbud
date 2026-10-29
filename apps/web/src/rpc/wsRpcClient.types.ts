@@ -144,8 +144,8 @@ export interface WsRpcClient {
     readonly restart: RpcUnaryMethod<typeof WS_METHODS.terminalRestart>;
     readonly close: RpcUnaryMethod<typeof WS_METHODS.terminalClose>;
     readonly onEvent: (
-      listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>>[0],
-      options?: StreamSubscriptionOptions,
+      listener: Parameters<NativeApi["terminal"]["onEvent"]>[0],
+      options?: StreamSubscriptionOptions & Parameters<NativeApi["terminal"]["onEvent"]>[1],
     ) => () => void;
     readonly subscribeSession: (
       input: RpcInput<typeof WS_METHODS.subscribeTerminalSession>,

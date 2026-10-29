@@ -6,6 +6,7 @@ import type { FitAddon } from "@xterm/addon-fit";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { TerminalSessionFixture } from "./TerminalViewport.session.fixture";
 import { terminalRendererBudget } from "./TerminalRendererController.policy";
+import { HIDDEN_WEBGL_RELEASE_DELAY_MS } from "./TerminalRendererController";
 
 const mocks = vi.hoisted(() => ({
   open: vi.fn(async () => ({
@@ -27,6 +28,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../rpc/nativeApi", () => ({ readNativeApi: () => ({ terminal: mocks }) }));
 vi.mock("~/config/env", () => ({ isElectron: false }));
 
+function terminalState(container: HTMLElement) {
+  return {
+    input: container.querySelector("[data-terminal-input]")?.textContent,
+    renderer: container.querySelector("[data-terminal-renderer]")?.textContent,
+  };
+}
+
 it("same-geometry CSS-hidden tab parks its GPU context, preserves xterm and resumes it on reveal", async () => {
   let terminal: Terminal | null = null;
   const addonDispose = vi.spyOn(WebglAddon.prototype, "dispose");
@@ -43,7 +51,9 @@ it("same-geometry CSS-hidden tab parks its GPU context, preserves xterm and resu
     />,
   );
   try {
-    await expect.poll(() => screen.container.textContent).toContain("readywebgl");
+    await expect
+      .poll(() => terminalState(screen.container))
+      .toEqual({ input: "ready", renderer: "webgl" });
     const original = terminal!;
     const buffer = original.buffer.active;
     const dispose = vi.spyOn(original, "dispose");
@@ -82,7 +92,9 @@ it("same-geometry CSS-hidden tab parks its GPU context, preserves xterm and resu
         onTerminal={onTerminal}
       />,
     );
-    await expect.poll(() => screen.container.textContent).toContain("readywebgl");
+    await expect
+      .poll(() => terminalState(screen.container))
+      .toEqual({ input: "ready", renderer: "webgl" });
     await expect.poll(() => terminalRendererBudget.count).toBe(1);
     expect(terminalRendererBudget.retainedCount).toBe(0);
     expect(loadAddon).not.toHaveBeenCalled(); // Same context, no atlas rebuild.
@@ -96,6 +108,82 @@ it("same-geometry CSS-hidden tab parks its GPU context, preserves xterm and resu
     vi.restoreAllMocks();
   }
 });
+
+it.each(["none", "visibility"] as const)(
+  "%s hidden GPU expiry preserves the live model, dimensions and view without a PTY resize",
+  async (hiddenLayout) => {
+    let terminal: Terminal | null = null;
+    const onTerminal = (value: Terminal | null) => {
+      terminal = value;
+    };
+    const props = { fontSize: 12, gpu: "on" as const, hiddenLayout, onTerminal };
+    const screen = await render(<TerminalSessionFixture {...props} visible />);
+    try {
+      await expect
+        .poll(() => terminalState(screen.container))
+        .toEqual({ input: "ready", renderer: "webgl" });
+      await expect.poll(() => mocks.resize.mock.calls.length).toBeGreaterThan(0);
+      const original = terminal!;
+      await new Promise<void>((done) => original.write("\x1b[?1049l", done));
+      await new Promise<void>((done) => original.write("line\r\n".repeat(100), done));
+      await new Promise<void>((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => done())),
+      );
+      original.scrollLines(-5);
+      original.select(0, original.buffer.active.viewportY, 4);
+      const buffer = original.buffer.active;
+      const view = [buffer.viewportY, buffer.cursorX, buffer.cursorY, original.getSelection()];
+      const dimensions = [original.cols, original.rows];
+      const canvas = Array.from(original.element!.querySelectorAll("canvas")).find((candidate) =>
+        candidate.getContext("webgl2"),
+      );
+      expect(canvas).toBeDefined();
+      const dispose = vi.spyOn(original, "dispose");
+      const resize = vi.spyOn(original, "resize");
+      const load = vi.spyOn(original, "loadAddon");
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      await screen.rerender(<TerminalSessionFixture {...props} visible={false} />);
+      mocks.resize.mockClear();
+      vi.advanceTimersByTime(HIDDEN_WEBGL_RELEASE_DELAY_MS);
+      vi.useRealTimers();
+      await expect
+        .poll(() => terminalState(screen.container))
+        .toEqual({ input: "ready", renderer: "dom" });
+      expect(canvas!.isConnected).toBe(false);
+      expect(terminalRendererBudget.retainedCount).toBe(0);
+      expect(original.buffer.active).toBe(buffer);
+      expect([buffer.viewportY, buffer.cursorX, buffer.cursorY, original.getSelection()]).toEqual(
+        view,
+      );
+      expect([original.cols, original.rows]).toEqual(dimensions);
+      expect(dispose).not.toHaveBeenCalled();
+      expect(resize).not.toHaveBeenCalled();
+      expect(mocks.resize).not.toHaveBeenCalled();
+      // Output still parses into the original emulator while its GPU resources are absent.
+      await new Promise<void>((done) => original.write("hidden-output", done));
+      const line = buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true);
+      expect(line).toContain("hidden-output");
+      await screen.rerender(<TerminalSessionFixture {...props} visible />);
+      await expect
+        .poll(() => terminalState(screen.container))
+        .toEqual({ input: "ready", renderer: "webgl" });
+      expect(load).toHaveBeenCalledOnce();
+      expect(terminal).toBe(original);
+      expect(original.buffer.active).toBe(buffer);
+      expect([original.cols, original.rows]).toEqual(dimensions);
+      expect(buffer.viewportY).toBe(view[0]);
+      expect(original.getSelection()).toBe(view[3]);
+      expect(buffer.getLine(buffer.baseY + buffer.cursorY)?.translateToString(true)).toBe(line);
+      expect(dispose).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+      await screen.unmount();
+      expect(terminalRendererBudget.count).toBe(0);
+      expect(terminalRendererBudget.retainedCount).toBe(0);
+      vi.restoreAllMocks();
+    }
+  },
+);
 
 it("retained display-none drawer applies fonts in place without hidden reflow/PTY resize, then fits visible geometry", async () => {
   mocks.open.mockClear();

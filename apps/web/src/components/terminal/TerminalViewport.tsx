@@ -376,6 +376,7 @@ export function TerminalViewport({
         retryDelivery={retryDelivery}
         historyUnavailable={historyUnavailable}
         restartDelivery={restartDelivery}
+        retryClose={onSessionExited}
         gpuRequested={settings.terminalGpuAcceleration !== "off"}
       />
       {find.open ? <TerminalFindBar find={find} /> : null}

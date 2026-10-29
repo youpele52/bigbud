@@ -36,6 +36,11 @@ export interface TerminalSessionState {
   remoteShellPid?: number | undefined;
   remoteOwnerRecoveryRequired?: boolean;
   restartPending?: boolean;
+  stopPending?: boolean;
+  reconcileOutputHold?: (() => void) | undefined;
+  lifecyclePending?: boolean;
+  observedExit?: { process: PtyProcess; event: PtyExitEvent } | undefined;
+  lastRestartOperation?: { id: string; fingerprint: string; generation: string };
   restartPreparation?: (() => Promise<void>) | undefined;
   threadId: string;
   terminalId: string;
@@ -67,6 +72,7 @@ export interface TerminalSessionState {
   process: PtyProcess | null;
   unsubscribeData: (() => void) | null;
   unsubscribeExit: (() => void) | null;
+  unsubscribeError?: (() => void) | null;
   hasRunningSubprocess: boolean;
   activeAgentProvider: ProviderKind | null;
   activeAgent?: TerminalAgentIdentity | null;

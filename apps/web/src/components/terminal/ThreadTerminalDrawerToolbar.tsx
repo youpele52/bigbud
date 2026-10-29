@@ -1,4 +1,12 @@
-import { Maximize2, Minimize2, Pencil, Plus, SquareSplitHorizontal, XIcon } from "lucide-react";
+import {
+  Maximize2,
+  Minimize2,
+  Minus,
+  Pencil,
+  Plus,
+  SquareSplitHorizontal,
+  XIcon,
+} from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -20,6 +28,7 @@ export interface ThreadTerminalDrawerToolbarProps {
   onCloseTerminal: (terminalId: string) => void;
   expanded?: boolean;
   onToggleExpanded?: (() => void) | undefined;
+  onMinimize?: (() => void) | undefined;
   variant?: "floating" | "sidebar";
 }
 
@@ -38,6 +47,7 @@ export function ThreadTerminalDrawerToolbar({
   onCloseTerminal,
   expanded = false,
   onToggleExpanded,
+  onMinimize,
   variant = "floating",
 }: ThreadTerminalDrawerToolbarProps) {
   const sidebar = variant === "sidebar";
@@ -91,31 +101,38 @@ export function ThreadTerminalDrawerToolbar({
       >
         <XIcon className="size-3.25" />
       </TerminalActionButton>
+      {(onMinimize || onToggleExpanded) && <div className={dividerClassName} />}
+      {onMinimize && (
+        <TerminalActionButton
+          className={buttonClassName}
+          onClick={onMinimize}
+          label="Minimize terminal"
+        >
+          <Minus className="size-3.25" />
+        </TerminalActionButton>
+      )}
       {onToggleExpanded && (
-        <>
-          <div className={dividerClassName} />
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <button
-                  type="button"
-                  className={buttonClassName}
-                  onClick={onToggleExpanded}
-                  aria-label={expansionLabel}
-                />
-              }
-            >
-              {expanded ? <Minimize2 className="size-3.25" /> : <Maximize2 className="size-3.25" />}
-            </TooltipTrigger>
-            <TooltipPopup
-              side="bottom"
-              className="pointer-events-none"
-              positionerClassName="pointer-events-none"
-            >
-              {expansionLabel}
-            </TooltipPopup>
-          </Tooltip>
-        </>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className={buttonClassName}
+                onClick={onToggleExpanded}
+                aria-label={expansionLabel}
+              />
+            }
+          >
+            {expanded ? <Minimize2 className="size-3.25" /> : <Maximize2 className="size-3.25" />}
+          </TooltipTrigger>
+          <TooltipPopup
+            side="bottom"
+            className="pointer-events-none"
+            positionerClassName="pointer-events-none"
+          >
+            {expansionLabel}
+          </TooltipPopup>
+        </Tooltip>
       )}
     </div>
   );

@@ -15,7 +15,11 @@ export function drainProcessEventsWith(
   return Effect.gen(function* () {
     while (true) {
       const action = yield* Effect.sync(() => {
-        if (session.pid !== expectedPid || !session.process || session.status !== "running") {
+        if (
+          session.pid !== expectedPid ||
+          !session.process ||
+          (session.status !== "running" && session.status !== "error")
+        ) {
           session.pendingProcessEvents = [];
           session.pendingProcessEventIndex = 0;
           session.processEventDrainRunning = false;

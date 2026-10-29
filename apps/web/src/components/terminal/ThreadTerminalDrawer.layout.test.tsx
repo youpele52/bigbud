@@ -28,6 +28,7 @@ const baseProps: ComponentProps<typeof ThreadTerminalDrawer> = {
   onSetTerminalLabelOverride: () => undefined,
   onClearTerminalLabelOverride: () => undefined,
   onToggleExpanded: () => undefined,
+  onMinimize: () => undefined,
 };
 
 function expectToolbar(markup: string, labels: string[]) {
@@ -44,7 +45,8 @@ function expectToolbar(markup: string, labels: string[]) {
     expect(button).toContain("focus-visible:text-foreground");
   }
   const dividers = markup.match(/<div class="[^"]*w-px bg-border\/[^"]+"><\/div>/g) ?? [];
-  const dividerAfterButtonIndices = labels.length === 5 ? [0, 2, 3] : [0, 2];
+  const closeIndex = labels.indexOf("Close Terminal");
+  const dividerAfterButtonIndices = closeIndex < labels.length - 1 ? [0, 2, closeIndex] : [0, 2];
   expect(dividers).toHaveLength(dividerAfterButtonIndices.length);
   for (const [index, buttonIndex] of dividerAfterButtonIndices.entries()) {
     // Identical divider markup needs a forward search to preserve its position.
@@ -75,6 +77,7 @@ describe.each([
         "Split Terminal",
         "Rename Terminal",
         "Close Terminal",
+        "Minimize terminal",
         label,
       ]);
     },
@@ -86,6 +89,7 @@ describe.each([
     );
     expect(markup).not.toContain('aria-label="Expand terminal"');
     expect(markup).not.toContain('aria-label="Restore split view"');
+    expect(markup).not.toContain('aria-label="Minimize terminal"');
     expectToolbar(markup, ["New Terminal", "Split Terminal", "Rename Terminal", "Close Terminal"]);
   });
 });

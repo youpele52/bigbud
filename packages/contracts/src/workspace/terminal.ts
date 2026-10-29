@@ -53,9 +53,15 @@ export const TerminalOpenInput = Schema.Struct({
 });
 export type TerminalOpenInput = Schema.Codec.Encoded<typeof TerminalOpenInput>;
 
+/** Largest `terminal.write` payload, in UTF-16 code units; clients chunk larger input. */
+export const TERMINAL_WRITE_MAX_CODE_UNITS = 65_536;
+
 export const TerminalWriteInput = Schema.Struct({
   ...TerminalSessionInput.fields,
-  data: Schema.String.check(Schema.isNonEmpty()).check(Schema.isMaxLength(65_536)),
+  expectedGeneration: Schema.optional(TrimmedNonEmptyStringSchema),
+  data: Schema.String.check(Schema.isNonEmpty()).check(
+    Schema.isMaxLength(TERMINAL_WRITE_MAX_CODE_UNITS),
+  ),
 });
 export type TerminalWriteInput = Schema.Codec.Encoded<typeof TerminalWriteInput>;
 
@@ -74,6 +80,8 @@ export type TerminalSnapshotInput = Schema.Codec.Encoded<typeof TerminalSnapshot
 
 export const TerminalRestartInput = Schema.Struct({
   ...TerminalSessionInput.fields,
+  expectedGeneration: Schema.optional(TrimmedNonEmptyStringSchema),
+  operationId: Schema.optional(TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(128))),
   executionTargetId: Schema.optional(ExecutionTargetId),
   cwd: TrimmedNonEmptyStringSchema,
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
@@ -87,6 +95,8 @@ export const TerminalCloseInput = Schema.Struct({
   ...TerminalThreadInput.fields,
   terminalId: Schema.optional(TerminalIdSchema),
   deleteHistory: Schema.optional(Schema.Boolean),
+  expectedGeneration: Schema.optional(TrimmedNonEmptyStringSchema),
+  onlyIfNotRunning: Schema.optional(Schema.Boolean),
 });
 export type TerminalCloseInput = typeof TerminalCloseInput.Type;
 
@@ -287,6 +297,7 @@ export class TerminalExecutionTargetError extends Schema.TaggedErrorClass<Termin
     terminalId: Schema.String,
     executionTargetId: ExecutionTargetId,
     detail: Schema.String,
+    reason: Schema.optional(Schema.Literal("staleGeneration")),
     cause: Schema.optional(Schema.Defect),
   },
 ) {

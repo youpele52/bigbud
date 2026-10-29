@@ -38,6 +38,7 @@ import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
 import { createAsyncOperationQueue } from "./-__root.recovery.serial";
+import { subscribeGlobalTerminalState } from "./-__root.terminal-events";
 import {
   restoreStartupContext,
   runCoalescedStartupFreshChat,
@@ -61,6 +62,9 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     (store) => store.removeOrphanedTerminalStates,
   );
   const applyTerminalEvents = useTerminalStateStore((store) => store.applyTerminalEvents);
+  const reconcileTerminalInventory = useTerminalStateStore(
+    (store) => store.reconcileTerminalInventory,
+  );
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { handleNewThread } = useHandleNewThread();
@@ -243,25 +247,6 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     });
     const deliveryApplicationQueue = createAsyncOperationQueue();
 
-    const pendingTerminalEvents: Array<import("@bigbud/contracts").TerminalEvent> = [];
-    let flushPendingTerminalEventsScheduled = false;
-    const flushPendingTerminalEvents = () => {
-      flushPendingTerminalEventsScheduled = false;
-      if (disposed || pendingTerminalEvents.length === 0) {
-        return;
-      }
-      applyTerminalEvents(pendingTerminalEvents.splice(0, pendingTerminalEvents.length));
-    };
-    const schedulePendingTerminalEventsFlush = () => {
-      if (flushPendingTerminalEventsScheduled) {
-        return;
-      }
-      flushPendingTerminalEventsScheduled = true;
-      queueMicrotask(() => {
-        flushPendingTerminalEvents();
-      });
-    };
-
     let selectedThreadId: ThreadId | null = readOwnedThreadId();
     const deliveryBaselineAbort = new AbortController();
     const bootstrapBounded = async (nextSelectedThreadId: ThreadId | null): Promise<void> => {
@@ -323,15 +308,14 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
         onResubscribe: () => undefined,
       },
     );
-    const unsubTerminalEvent = api.terminal.onEvent((event) => {
-      const thread = useStore.getState().threads.find((entry) => entry.id === event.threadId);
-      if (thread && thread.archivedAt !== null) {
-        return;
-      }
-      // Mounted views read their own scoped streams; this feed only updates terminal state.
-      pendingTerminalEvents.push(event);
-      if (pendingTerminalEvents.length >= 128) flushPendingTerminalEvents();
-      schedulePendingTerminalEventsFlush();
+    const unsubTerminalEvent = subscribeGlobalTerminalState({
+      terminal: api.terminal,
+      isArchived: (threadId) => {
+        const thread = useStore.getState().threads.find((entry) => entry.id === threadId);
+        return thread !== undefined && thread.archivedAt !== null;
+      },
+      applyEvents: applyTerminalEvents,
+      reconcileInventory: reconcileTerminalInventory,
     });
     return () => {
       disposed = true;
@@ -339,8 +323,6 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       disposedRef.current = true;
       eventRecovery.cancel();
       setOrchestrationDeliveryLifecycle(null);
-      flushPendingTerminalEventsScheduled = false;
-      pendingTerminalEvents.length = 0;
       unsubDomainEvent();
       unsubTerminalEvent();
     };
@@ -353,6 +335,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     removeTerminalState,
     removeOrphanedTerminalStates,
     applyTerminalEvents,
+    reconcileTerminalInventory,
     clearThreadUi,
     ownsThread,
     syncProjects,

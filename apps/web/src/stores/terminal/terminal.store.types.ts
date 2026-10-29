@@ -10,6 +10,7 @@ import {
   type ThreadTerminalLaunchContext,
   type ThreadTerminalState,
 } from "./helpers.store";
+import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
 import type { TerminalAgentVersion } from "./terminal.store.identity";
 import type { TerminalLayoutMode, TerminalLayoutState } from "./terminal.store.layout";
 
@@ -61,6 +62,7 @@ export interface TerminalStateStoreState extends TerminalLayoutState {
   recordTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvents: (events: ReadonlyArray<TerminalEvent>) => void;
+  reconcileTerminalInventory: (inventory: TerminalSessionInventory) => void;
   hydrateTerminalAgentFromSnapshot: (snapshot: TerminalSessionSnapshot) => void;
   clearTerminalState: (threadId: ThreadId) => void;
   removeTerminalState: (threadId: ThreadId) => void;

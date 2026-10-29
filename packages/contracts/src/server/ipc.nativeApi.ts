@@ -92,7 +92,10 @@ export interface NativeApi {
     ) => Promise<Terminal.TerminalSessionSnapshot>;
     close: (input: typeof Terminal.TerminalCloseInput.Encoded) => Promise<void>;
     /** Sidebar/agent state; output only for sessions whose agent detection runs in the client. */
-    onEvent: (callback: (event: Terminal.TerminalEvent) => void) => () => void;
+    onEvent: (
+      callback: (event: Terminal.TerminalEvent) => void,
+      options?: { onInventory?: (inventory: TerminalStream.TerminalSessionInventory) => void },
+    ) => () => void;
     /** One terminal's events for a mounted view, flow-controlled by `ackOutput`. */
     subscribeSession?: (
       input: TerminalStream.TerminalSessionStreamInput,

@@ -8,6 +8,10 @@ import {
   forgetTerminalLaunch,
   readTerminalLaunch,
 } from "./terminalLaunchBinding";
+import {
+  beginTerminalLifecycle,
+  useTerminalLifecycleStore,
+} from "../stores/terminal/terminalLifecycle.store";
 import { runBoundTerminalCommand } from "./terminalLaunchBinding.command";
 
 const desired: TerminalOpenInput = {
@@ -66,6 +70,7 @@ function bind(input: TerminalOpenInput) {
 }
 
 afterEach(() => {
+  useTerminalLifecycleStore.setState({ operations: {} });
   for (const id of ["retained", "new-command"]) forgetTerminalLaunch(desired.threadId, id);
 });
 
@@ -177,5 +182,44 @@ describe("project command terminal selection and verified writes", () => {
       cwd: "/home/remote",
       executionTargetId: "ssh:project",
     });
+  });
+});
+
+describe("commands during confirmed terminal lifecycle", () => {
+  it.each(["close", "restart"] as const)(
+    "does not open a matching terminal owned by %s",
+    async (kind) => {
+      bind(desired);
+      beginTerminalLifecycle(desired.threadId, desired.terminalId!, kind);
+      const f = fixture();
+      await expect(f.run()).rejects.toThrow("closing or restarting");
+      expect(f.terminal.open).not.toHaveBeenCalled();
+      expect(f.terminal.write).not.toHaveBeenCalled();
+    },
+  );
+  it("does not write when Close starts while open is pending", async () => {
+    bind(desired);
+    let resolve!: (value: TerminalSessionSnapshot) => void;
+    const f = fixture();
+    f.terminal.open.mockImplementation(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const pending = f.run();
+    const rejected = expect(pending).rejects.toThrow("closing or restarting");
+    beginTerminalLifecycle(desired.threadId, desired.terminalId!, "close");
+    resolve(snapshot(desired));
+    await rejected;
+    expect(f.terminal.write).not.toHaveBeenCalled();
+  });
+  it("fences command input to the generation returned by open", async () => {
+    bind(desired);
+    const f = fixture((input) => ({ ...snapshot(input), runtimeGeneration: "verified-shell" }));
+    await f.run();
+    expect(f.terminal.write).toHaveBeenCalledWith(
+      expect.objectContaining({ expectedGeneration: "verified-shell" }),
+    );
   });
 });
