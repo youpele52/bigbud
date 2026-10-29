@@ -5,8 +5,9 @@ import {
   type ServerDiscoveredSkill,
   type ServerProvider,
 } from "@bigbud/contracts";
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useRef, useState } from "react";
-import { MessageSquareTextIcon } from "lucide-react";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -279,7 +280,13 @@ export function OrchestraDialog(props: {
 
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <MessageSquareTextIcon className="size-3.5 text-muted-foreground" />
+              <HugeiconsIcon
+                aria-hidden="true"
+                className="size-3.5 text-muted-foreground"
+                icon={Comment03Icon}
+                size={14}
+                strokeWidth={1.5}
+              />
               <span className="font-medium text-xs">Opened from</span>
             </div>
             <div className="line-clamp-2 pl-5.5 text-xs text-muted-foreground">

@@ -1,5 +1,6 @@
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Link } from "@tanstack/react-router";
-import { MessageSquareIcon } from "lucide-react";
 import type { ThreadId } from "@bigbud/contracts";
 
 export function ThreadOriginLink(props: {
@@ -10,7 +11,13 @@ export function ThreadOriginLink(props: {
 }) {
   const content = (
     <>
-      <MessageSquareIcon className="size-3 shrink-0" />
+      <HugeiconsIcon
+        aria-hidden="true"
+        className="size-3 shrink-0"
+        icon={Comment03Icon}
+        size={12}
+        strokeWidth={1.5}
+      />
       {props.prefix ? <span>{props.prefix}</span> : null}
       <span className="max-w-48 truncate font-medium">{props.title}</span>
     </>
