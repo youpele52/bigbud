@@ -50,8 +50,22 @@ export const ServerUsageTotals = Schema.Struct({
 });
 export type ServerUsageTotals = typeof ServerUsageTotals.Type;
 
+/** Tokens one provider or model used within a single bucket; `id` matches the summary entry. */
+export const ServerUsageBucketShare = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  usedTokens: NonNegativeInt,
+});
+export type ServerUsageBucketShare = typeof ServerUsageBucketShare.Type;
+
+// Additive over-time detail; a malformed or missing split must not hide the bucket totals.
+const OptionalBucketShares = Schema.optional(Schema.Array(ServerUsageBucketShare)).pipe(
+  Schema.catchDecoding(() => Effect.succeed(Option.none())),
+);
+
 export const ServerUsageBucket = Schema.Struct({
   accounting: Schema.optional(UsageSourceMetadata),
+  providers: OptionalBucketShares,
+  models: OptionalBucketShares,
   bucketStart: IsoDateTime,
   usedTokens: NonNegativeInt,
   inputTokens: NonNegativeInt,
