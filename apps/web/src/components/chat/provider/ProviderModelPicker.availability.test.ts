@@ -143,7 +143,7 @@ describe("getProviderModelAvailability", () => {
 
   it("keeps supported providers selectable for remote workspaces", () => {
     const snapshot = provider({
-      provider: "kilocode",
+      provider: "pi",
       status: "ready",
       supportsLocalRuntimeRemoteWorkspace: true,
     });

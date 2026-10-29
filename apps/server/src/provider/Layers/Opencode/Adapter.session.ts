@@ -36,7 +36,7 @@ import { makeStartSession } from "./Adapter.session.start.ts";
 
 // ── Shared dep interfaces (used by sub-modules) ───────────────────────
 
-type NarrowProvider = Extract<ProviderKind, "opencode" | "kilocode">;
+type NarrowProvider = Extract<ProviderKind, "opencode">;
 
 /** Deps required by turn methods. */
 export interface TurnMethodDeps {

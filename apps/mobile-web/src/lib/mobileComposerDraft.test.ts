@@ -59,6 +59,33 @@ describe("mobile composer draft storage", () => {
     expect(storedKey).not.toContain("token");
   });
 
+  it("decodes persisted queue rejection reasons after a reload", async () => {
+    const draft = createMobileComposerDraft({ threadId: ThreadId.makeUnsafe("queue-thread") });
+    const queueIdentity = { ...identity, threadId: "queue-thread" };
+    writeMobileComposerDraft(queueIdentity, {
+      ...draft,
+      submitted: {
+        command: {
+          type: "thread.turn.interrupt",
+          commandId: CommandId.makeUnsafe("queue-command"),
+          threadId: draft.threadId,
+          createdAt: draft.updatedAt,
+        },
+        submittedRevision: 1,
+        submittedAt: draft.updatedAt,
+        deadlineAt: 100,
+        status: "rejected",
+        rejectionReason: "queue_held",
+      },
+    });
+    vi.resetModules();
+    const reloaded = await import("./mobileComposerDraft");
+    expect(reloaded.readMobileComposerDraft(queueIdentity).draft?.submitted).toMatchObject({
+      status: "rejected",
+      rejectionReason: "queue_held",
+    });
+  });
+
   it("quarantines malformed data without throwing", () => {
     const draft = createMobileComposerDraft({ threadId: ThreadId.makeUnsafe("thread-1") });
     writeMobileComposerDraft(identity, draft);

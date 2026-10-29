@@ -261,42 +261,6 @@ export function buildDiscoveryFileDescriptors(input: {
       path: input.path.join(OS.homedir(), ".agents/skills"),
     },
     {
-      provider: "kilocode",
-      kind: "agent",
-      source: "project",
-      path: input.path.join(input.cwd, ".kilocode/agents"),
-    },
-    {
-      provider: "kilocode",
-      kind: "agent",
-      source: "user",
-      path: input.path.join(OS.homedir(), ".config/kilocode/agents"),
-    },
-    {
-      provider: "kilocode",
-      kind: "skill",
-      source: "project",
-      path: input.path.join(input.cwd, ".kilocode/skills"),
-    },
-    {
-      provider: "kilocode",
-      kind: "skill",
-      source: "project",
-      path: input.path.join(input.cwd, ".agents/skills"),
-    },
-    {
-      provider: "kilocode",
-      kind: "skill",
-      source: "user",
-      path: input.path.join(OS.homedir(), ".config/kilocode/skills"),
-    },
-    {
-      provider: "kilocode",
-      kind: "skill",
-      source: "user",
-      path: input.path.join(OS.homedir(), ".agents/skills"),
-    },
-    {
       provider: "devin",
       kind: "agent",
       source: "project",

@@ -19,16 +19,7 @@ const CORE_KEYWORDS = [
   "AI workspace for teams",
 ];
 
-const PROVIDER_KEYWORDS = [
-  "Codex",
-  "Claude",
-  "Copilot",
-  "OpenCode",
-  "KiloCode",
-  "Devin",
-  "Pi",
-  "Cursor",
-];
+const PROVIDER_KEYWORDS = ["Codex", "Claude", "Copilot", "OpenCode", "Devin", "Pi", "Cursor"];
 
 const MODEL_KEYWORDS = [
   "GPT-5.5",

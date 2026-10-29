@@ -1,3 +1,4 @@
+import { isActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import { AutomationId, isBuiltInChatsProject } from "@bigbud/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -104,7 +105,7 @@ export function AutomationDetailPage({ automationId }: AutomationDetailPageProps
   }, [load]);
 
   useEffect(() => {
-    if (!editorThreadId || !thread?.modelSelection) {
+    if (!editorThreadId || !isActiveModelSelection(thread?.modelSelection)) {
       return;
     }
 
@@ -223,7 +224,9 @@ export function AutomationDetailPage({ automationId }: AutomationDetailPageProps
   );
 }
 
-function formatReasoningLabel(options: Record<string, unknown> | null | undefined) {
-  const rawValue = typeof options?.effort === "string" ? options.effort : options?.reasoningEffort;
+function formatReasoningLabel(options: unknown) {
+  if (!options || typeof options !== "object" || Array.isArray(options)) return "Default";
+  const values = options as Record<string, unknown>;
+  const rawValue = typeof values.effort === "string" ? values.effort : values.reasoningEffort;
   return typeof rawValue === "string" ? rawValue[0]?.toUpperCase() + rawValue.slice(1) : "Default";
 }

@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import type {
   ModelSelection,
   OrchestrationThread,
@@ -36,7 +37,7 @@ export function resolveTurnExecutionSettings(
 ): ResolvedTurnExecutionSettings {
   return {
     modelSelectionWasCaptured: captured.modelSelection !== undefined,
-    modelSelection: captured.modelSelection ?? thread.modelSelection,
+    modelSelection: captured.modelSelection ?? requireActiveModelSelection(thread.modelSelection),
     runtimeMode: captured.runtimeMode ?? thread.runtimeMode,
     interactionMode: captured.interactionMode ?? thread.interactionMode,
   };

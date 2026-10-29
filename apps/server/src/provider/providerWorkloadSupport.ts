@@ -62,12 +62,6 @@ const PROVIDER_WORKLOAD_SUPPORT = {
     learning: true,
     usageAccounting: true,
   },
-  kilocode: {
-    interactive: true,
-    unattendedTextGeneration: true,
-    learning: true,
-    usageAccounting: true,
-  },
   opencode: {
     interactive: false,
     unattendedTextGeneration: false,

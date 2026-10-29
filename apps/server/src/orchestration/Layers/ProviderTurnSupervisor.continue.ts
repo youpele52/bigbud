@@ -1,3 +1,7 @@
+import {
+  isReadOnlyProviderThread,
+  requireActiveModelSelection,
+} from "@bigbud/shared/providerLifecycle";
 /**
  * Recovery effects: intent transitions, the visible `thread.recovery` projection, and the
  * linked continuation turn.
@@ -249,7 +253,7 @@ function continuationCommand(input: {
         },
       ],
     },
-    modelSelection: input.thread.modelSelection,
+    modelSelection: requireActiveModelSelection(input.thread.modelSelection),
     runtimeMode: input.thread.runtimeMode ?? DEFAULT_RUNTIME_MODE,
     interactionMode: input.thread.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,
     createdAt: input.createdAt,
@@ -266,7 +270,12 @@ export const sendContinuation = Effect.fn("sendContinuation")(function* (
   options: { readonly userAuthorized: boolean },
 ) {
   const thread = yield* findThread(ctx, intent.threadId);
-  if (!thread || thread.deletedAt != null || thread.archivedAt != null) {
+  if (
+    !thread ||
+    isReadOnlyProviderThread(thread) ||
+    thread.deletedAt != null ||
+    thread.archivedAt != null
+  ) {
     return yield* settleIntent(ctx, intent);
   }
   const continuationId = MessageId.makeUnsafe(crypto.randomUUID());
@@ -304,7 +313,13 @@ export const sendContinuation = Effect.fn("sendContinuation")(function* (
     userAuthorized: options.userAuthorized,
   });
   const dispatched = yield* Effect.exit(
-    ctx.engine.dispatch(continuationCommand({ thread, messageId: continuationId, createdAt })),
+    ctx.engine.dispatch(
+      continuationCommand({
+        thread,
+        messageId: continuationId,
+        createdAt,
+      }),
+    ),
   );
   if (dispatched._tag === "Success") return;
   yield* continuationRejected(ctx, continuing.value, continuationId);

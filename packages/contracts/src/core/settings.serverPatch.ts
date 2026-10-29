@@ -9,7 +9,6 @@ import {
   CopilotModelOptions,
   CursorModelOptions,
   DevinModelOptions,
-  KilocodeModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
 } from "./model";
@@ -41,10 +40,6 @@ const CopilotModelOptionsPatch = Schema.Struct({
 
 const OpencodeModelOptionsPatch = Schema.Struct({
   reasoningEffort: Schema.optionalKey(OpencodeModelOptions.fields.reasoningEffort),
-});
-
-const KilocodeModelOptionsPatch = Schema.Struct({
-  reasoningEffort: Schema.optionalKey(KilocodeModelOptions.fields.reasoningEffort),
 });
 
 const PiModelOptionsPatch = Schema.Struct({
@@ -94,11 +89,6 @@ const ModelSelectionPatch = Schema.Union([
     provider: Schema.optionalKey(Schema.Literal("opencodeV2")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(Schema.Struct({ variant: Schema.optional(TrimmedNonEmptyString) })),
-  }),
-  Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("kilocode")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(KilocodeModelOptionsPatch),
   }),
   Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("pi")),
@@ -180,7 +170,6 @@ export const ServerSettingsPatch = Schema.Struct({
         }),
       ),
       copilot: Schema.optionalKey(ProviderSettingsPatch),
-      kilocode: Schema.optionalKey(ProviderSettingsPatch),
       opencode: Schema.optionalKey(ProviderSettingsPatch),
       opencodeV2: Schema.optionalKey(
         Schema.Struct({

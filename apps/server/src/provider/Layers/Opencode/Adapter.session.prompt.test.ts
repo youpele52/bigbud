@@ -88,7 +88,7 @@ describe("sendPromptAsyncAndWaitForCompletion", () => {
     });
   });
 
-  it("forwards the selected OpenCode or KiloCode variant on promptAsync", async () => {
+  it("forwards the selected OpenCode variant on promptAsync", async () => {
     const promptAsync = vi.fn(async () => ({ data: {}, error: undefined }));
     const client = {
       session: {

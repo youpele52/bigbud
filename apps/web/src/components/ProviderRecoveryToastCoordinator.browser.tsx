@@ -72,7 +72,7 @@ describe("ProviderRecoveryToastCoordinator", () => {
         recovery,
       }),
       provider({
-        provider: "kilocode",
+        provider: "pi",
         status: "error",
         failure: { classification: "retryable", reason: "process-failed" },
         recovery,
@@ -85,7 +85,7 @@ describe("ProviderRecoveryToastCoordinator", () => {
     await vi.waitFor(() => expect(mocks.add).toHaveBeenCalledTimes(1));
     const warning = mocks.add.mock.calls[0]![0];
     expect(warning.title).toBe("Starting providers");
-    expect(warning.description).toContain("OpenCode, KiloCode");
+    expect(warning.description).toContain("OpenCode, Pi");
 
     mocks.providers = [...failing];
     await screen.rerender(<ProviderRecoveryToastCoordinator />);
@@ -95,7 +95,7 @@ describe("ProviderRecoveryToastCoordinator", () => {
     warning.actionProps?.onClick?.();
     expect(mocks.navigate).toHaveBeenCalledWith({
       to: "/settings/providers",
-      search: { providers: ["opencode", "kilocode"] },
+      search: { providers: ["opencode", "pi"] },
     });
 
     mocks.providers = failing.slice(0, 2).map((snapshot) =>

@@ -1,11 +1,15 @@
 import { Link } from "@tanstack/react-router";
-import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
+import {
+  isReadOnlyProviderThread,
+  isActiveModelSelection,
+  getReadOnlyThreadProvider,
+} from "@bigbud/shared/providerLifecycle";
 import { useCallback, useMemo } from "react";
 
 import { useThreadActions } from "~/hooks/useThreadActions";
 import BranchToolbar from "~/components/git/BranchToolbar";
 import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBanner";
-import { LegacyOpencodeNotice } from "../../common/LegacyOpencodeNotice";
+import { RetiredProviderNotice } from "../../common/RetiredProviderNotice";
 import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
@@ -98,7 +102,7 @@ export function ChatViewChatBody({
     [stopSubagentThreadId],
   );
   const onUseHandoffFromBanner = useCallback(() => {
-    if (!base.activeThread) return;
+    if (!base.activeThread || !isActiveModelSelection(base.activeThread.modelSelection)) return;
     void interactions.onCreateHandoffBranch(
       base.activeThread.modelSelection,
       "Continue this work in a fresh branch with the generated handoff.",
@@ -107,8 +111,11 @@ export function ChatViewChatBody({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-chat-body>
-      {base.isServerThread && isLegacyOpencodeThread(base.activeThread) ? (
-        <LegacyOpencodeNotice threadId={base.threadId} />
+      {base.isServerThread && isReadOnlyProviderThread(base.activeThread) ? (
+        <RetiredProviderNotice
+          threadId={base.threadId}
+          provider={getReadOnlyThreadProvider(base.activeThread)}
+        />
       ) : null}
       {openCodeSetup.result?.jobId ? (
         <OpenCodeSetupStatus
@@ -238,7 +245,11 @@ export function ChatViewChatBody({
                   isRevertingCheckpoint={base.isRevertingCheckpoint}
                   onImageExpand={base.setExpandedImage}
                   markdownCwd={composer.gitCwd ?? undefined}
-                  preferredProvider={base.activeThread!.modelSelection.provider}
+                  preferredProvider={
+                    isActiveModelSelection(base.activeThread!.modelSelection)
+                      ? base.activeThread!.modelSelection.provider
+                      : undefined
+                  }
                   resolvedTheme={base.resolvedTheme}
                   timestampFormat={base.timestampFormat}
                   workspaceRoot={workspaceRoot}

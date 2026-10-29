@@ -260,14 +260,14 @@ describe("ProvidersSettingsPanel route expansion", () => {
     await render(
       <QueryClientProvider client={queryClient}>
         <AppAtomRegistryProvider>
-          <ProvidersSettingsPanel expandedProviders={["pi", "kilocode"]} />
+          <ProvidersSettingsPanel expandedProviders={["pi", "copilot"]} />
         </AppAtomRegistryProvider>
       </QueryClientProvider>,
     );
 
     await vi.waitFor(() => {
       expect(document.getElementById("provider-install-pi-binary-path")).not.toBeNull();
-      expect(document.getElementById("provider-install-kilocode-binary-path")).not.toBeNull();
+      expect(document.getElementById("provider-install-copilot-binary-path")).not.toBeNull();
       expect(document.getElementById("provider-install-codex-binary-path")).toBeNull();
     });
   });
@@ -295,7 +295,7 @@ describe("ProvidersSettingsPanel route expansion", () => {
 
       await vi.waitFor(() => {
         expect(document.getElementById("provider-install-pi-binary-path")).not.toBeNull();
-        expect(document.getElementById("provider-install-kilocode-binary-path")).toBeNull();
+        expect(document.getElementById("provider-install-copilot-binary-path")).toBeNull();
       });
     } finally {
       await screen.unmount();

@@ -101,7 +101,7 @@ export function startEventStream(
   let invalidated = false;
   let healthNotificationEmitted = false;
   const childTracker =
-    (provider === "opencode" || provider === "kilocode") && tracksChildSessions(provider)
+    provider === "opencode" && tracksChildSessions(provider)
       ? makeChildSessionTracker(session, provider)
       : undefined;
   const isOwner = () => session.sseAbortController === abortController;

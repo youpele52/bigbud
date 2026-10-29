@@ -1,7 +1,7 @@
 import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
 
 export interface ManagedServerErrorConfig {
-  readonly provider: "opencode" | "kilocode";
+  readonly provider: "opencode";
   readonly displayName: string;
   readonly defaultBinary: string;
 }
@@ -12,10 +12,7 @@ export function formatMissingOpencodeBinaryDetail(input: {
   readonly executionTargetId: string;
   readonly detail: string;
 }): string | null {
-  const config =
-    input.provider === "kilocode"
-      ? { displayName: "KiloCode", defaultBinary: "kilo" }
-      : { displayName: "OpenCode", defaultBinary: "opencode" };
+  const config = { displayName: "OpenCode", defaultBinary: "opencode" };
   const normalizedDetail = input.detail.trim();
   if (
     normalizedDetail.length === 0 ||

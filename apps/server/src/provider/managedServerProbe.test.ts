@@ -40,8 +40,8 @@ describe("withManagedServerProbe", () => {
     const result = await Effect.runPromise(
       Effect.exit(
         withManagedServerProbe({
-          provider: "kilocode",
-          binaryPath: "kilo",
+          provider: "opencode",
+          binaryPath: "opencode",
           run: async () => {
             throw new Error("connection refused");
           },

@@ -1,5 +1,7 @@
+import { isActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import {
   type ModelSelection,
+  type HistoricalModelSelection,
   type ProviderKind,
   type ProviderModelOptions,
 } from "@bigbud/contracts";
@@ -24,10 +26,6 @@ export function getProviderModelOptions(
   provider: "opencode",
   options: ProviderModelOptions | null | undefined,
 ): ProviderModelOptions["opencode"] | undefined;
-export function getProviderModelOptions(
-  provider: "kilocode",
-  options: ProviderModelOptions | null | undefined,
-): ProviderModelOptions["kilocode"] | undefined;
 export function getProviderModelOptions(
   provider: "cursor",
   options: ProviderModelOptions | null | undefined,
@@ -57,8 +55,6 @@ export function getProviderModelOptions(
       return options?.opencode;
     case "opencodeV2":
       return options?.opencodeV2;
-    case "kilocode":
-      return options?.kilocode;
     case "cursor":
       return options?.cursor;
     case "pi":
@@ -91,11 +87,6 @@ export function createModelSelection(
   model: string,
   options?: ProviderModelOptions["opencode"],
 ): Extract<ModelSelection, { provider: "opencode" }>;
-export function createModelSelection(
-  provider: "kilocode",
-  model: string,
-  options?: ProviderModelOptions["kilocode"],
-): Extract<ModelSelection, { provider: "kilocode" }>;
 export function createModelSelection(
   provider: "pi",
   model: string,
@@ -136,10 +127,6 @@ export function createModelSelection(
       const opencodeOptions = options as ProviderModelOptions["opencode"] | undefined;
       return opencodeOptions ? { provider, model, options: opencodeOptions } : { provider, model };
     }
-    case "kilocode": {
-      const kilocodeOptions = options as ProviderModelOptions["kilocode"] | undefined;
-      return kilocodeOptions ? { provider, model, options: kilocodeOptions } : { provider, model };
-    }
     case "pi": {
       const piOptions = options as ProviderModelOptions["pi"] | undefined;
       return piOptions ? { provider, model, options: piOptions } : { provider, model };
@@ -163,4 +150,11 @@ export function cloneModelSelection<T extends ModelSelection>(
     ...selection,
     ...overrides,
   };
+}
+
+/** Composer and action APIs must never reuse a retired provider's stored selection. */
+export function getRoutableModelSelection(
+  selection: HistoricalModelSelection | null | undefined,
+): ModelSelection | null {
+  return isActiveModelSelection(selection) ? selection : null;
 }

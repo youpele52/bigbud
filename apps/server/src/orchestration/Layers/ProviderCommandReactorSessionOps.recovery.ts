@@ -26,7 +26,6 @@ export const isProviderContextLimitError = (error: unknown): boolean =>
 const HIGH_WATER_MARKS: Partial<Record<ProviderKind, number>> = {
   claudeAgent: 0.9,
   codex: 0.92,
-  kilocode: 0.9,
   pi: 0.9,
 };
 

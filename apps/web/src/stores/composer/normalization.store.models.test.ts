@@ -20,13 +20,10 @@ describe("normalizeProviderModelOptions Codex effort", () => {
 });
 
 describe("normalizeProviderModelOptions opaque provider efforts", () => {
-  it("preserves OpenCode, KiloCode, Cursor, and Devin custom identifiers", () => {
+  it("preserves OpenCode, Cursor, and Devin custom identifiers", () => {
     expect(
       normalizeProviderModelOptions({ opencode: { reasoningEffort: " none " } }, "opencode"),
     ).toMatchObject({ opencode: { reasoningEffort: "none" } });
-    expect(
-      normalizeProviderModelOptions({ kilocode: { reasoningEffort: "custom-xhigh" } }, "kilocode"),
-    ).toMatchObject({ kilocode: { reasoningEffort: "custom-xhigh" } });
     expect(normalizeProviderModelOptions({ cursor: { reasoning: "max" } }, "cursor")).toMatchObject(
       { cursor: { reasoning: "max" } },
     );

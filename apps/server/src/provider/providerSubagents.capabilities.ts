@@ -151,7 +151,6 @@ export const PROVIDER_SUBAGENT_CAPABILITIES: {
       "Devin CLI via ACP: the same session/update kinds as every ACP agent and no extension methods. No subagent or child-session data.",
     tests: [],
   },
-  kilocode: OPENCODE_V1_CHILDREN,
   opencode: OPENCODE_V1_CHILDREN,
   opencodeV2: {
     support: "gated",

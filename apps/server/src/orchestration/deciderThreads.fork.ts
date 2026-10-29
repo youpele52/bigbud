@@ -17,8 +17,9 @@ import {
   type ThreadForkOrigin,
 } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import {
-  isLegacyOpencodeThread,
-  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+  isReadOnlyProviderThread,
+  getProviderReadOnlyMessage,
+  getReadOnlyThreadProvider,
 } from "@bigbud/shared/providerLifecycle";
 import { Effect } from "effect";
 
@@ -61,10 +62,10 @@ export const decideThreadForkCommand = Effect.fn("decideThreadForkCommand")(func
   yield* requireThreadReadyForMutation({ thread: source, command });
   yield* requireProjectNotDeleting({ readModel, command, projectId: source.projectId });
   yield* requireThreadAbsent({ readModel, command, threadId: command.threadId });
-  if (isLegacyOpencodeThread(source)) {
+  if (isReadOnlyProviderThread(source)) {
     return yield* new OrchestrationCommandInvariantError({
       commandType: command.type,
-      detail: LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+      detail: getProviderReadOnlyMessage(getReadOnlyThreadProvider(source)),
     });
   }
   const modelSelection = command.modelSelection ?? source.modelSelection;

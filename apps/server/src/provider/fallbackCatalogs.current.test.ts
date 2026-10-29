@@ -46,11 +46,6 @@ describe("fallback catalogs verified 2026-09-30", () => {
         expect.objectContaining({ slug: "claude-sonnet-5-5", subProviderID: "opencode" }),
       ]),
     );
-    expect(managedServerBuiltInModels("kilocode")).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ slug: "anthropic/claude-sonnet-5.5", subProviderID: "kilo" }),
-      ]),
-    );
   });
   it("does not invent a bundled catalog for custom-only ACP providers", () => {
     expect(getCursorFallbackModels({ customModels: [] })).toEqual([]);

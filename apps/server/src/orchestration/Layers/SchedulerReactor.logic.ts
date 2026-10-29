@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import {
   AutomationId,
   AutomationRun,
@@ -112,7 +113,7 @@ export const dispatchAutomationRun = Effect.fn("dispatchAutomationRun")(function
             attachments: [],
           },
           ...(thread?.modelSelection !== undefined
-            ? { modelSelection: thread.modelSelection }
+            ? { modelSelection: requireActiveModelSelection(thread.modelSelection) }
             : {}),
           runtimeMode: thread?.runtimeMode ?? DEFAULT_RUNTIME_MODE,
           interactionMode: thread?.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,

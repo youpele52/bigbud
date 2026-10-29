@@ -1,5 +1,5 @@
 /**
- * ProcessLedger - durable record of long-lived provider children (ACP agents, `kilo serve`) that
+ * ProcessLedger - durable record of long-lived provider children (ACP agents, managed OpenCode servers) that
  * would outlive a crashed backend.
  *
  * ACP agents run in their own process group and do not exit on stdin EOF, so when the backend dies
@@ -19,7 +19,7 @@ export interface ProcessLedgerTrackInput {
   readonly command: string;
   readonly args: ReadonlyArray<string>;
   readonly kill: ProcessLedgerKillMode;
-  /** Diagnostic label, such as `acp-agent` or `kilocode-server`. */
+  /** Diagnostic label, such as `acp-agent` or `opencode-server`. */
   readonly label: string;
 }
 

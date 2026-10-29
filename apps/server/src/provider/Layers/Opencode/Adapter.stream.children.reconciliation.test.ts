@@ -14,7 +14,7 @@ const child = {
 const event = (type: string, extra = {}) =>
   ({ type, properties: { sessionID: "child", ...extra } }) as Event;
 
-for (const provider of ["opencode", "kilocode"] as const) {
+for (const provider of ["opencode"] as const) {
   describe(`${provider} child reconciliation`, () => {
     it("does not replay an in-flight busy snapshot over a live completion", async () => {
       let resolveStatus!: (value: { data: Record<string, { type: "busy" }> }) => void;

@@ -5,11 +5,14 @@ import {
   type OrchestrationCommand,
   type OrchestrationReadModel,
 } from "@bigbud/contracts";
-import { LEGACY_OPENCODE_READ_ONLY_MESSAGE } from "@bigbud/shared/providerLifecycle";
+import {
+  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+  KILOCODE_READ_ONLY_MESSAGE,
+} from "@bigbud/shared/providerLifecycle";
 import { requireActiveOpencodeIntegration } from "./decider.opencodePolicy.ts";
 
 const threadId = ThreadId.makeUnsafe("legacy");
-const readModel = {
+const historicalReadModel = {
   threads: [
     {
       id: threadId,
@@ -21,7 +24,14 @@ const readModel = {
 const command = (type: string, extra = {}): OrchestrationCommand =>
   ({ type, threadId, ...extra }) as OrchestrationCommand;
 
-describe("legacy OpenCode command admission", () => {
+describe.each([
+  ["opencode", LEGACY_OPENCODE_READ_ONLY_MESSAGE],
+  ["kilocode", KILOCODE_READ_ONLY_MESSAGE],
+] as const)("retired %s command admission", (provider, readOnlyMessage) => {
+  const readModel = {
+    ...historicalReadModel,
+    threads: [{ ...historicalReadModel.threads[0]!, modelSelection: { provider, model: "saved" } }],
+  };
   it.each([
     "thread.turn.start",
     "thread.message.submit",
@@ -43,13 +53,13 @@ describe("legacy OpenCode command admission", () => {
     );
     expect(result).toMatchObject({
       _tag: "Failure",
-      failure: { detail: LEGACY_OPENCODE_READ_ONLY_MESSAGE },
+      failure: { detail: readOnlyMessage },
     });
     expect(readModel).toEqual(before);
   });
   it("rejects new legacy selections and attempts to rebind existing history", async () => {
     for (const candidate of [
-      command("thread.create", { modelSelection: { provider: "opencode", model: "saved" } }),
+      command("thread.create", { modelSelection: { provider, model: "saved" } }),
       command("thread.meta.update", { modelSelection: { provider: "opencodeV2", model: "new" } }),
     ]) {
       expect(

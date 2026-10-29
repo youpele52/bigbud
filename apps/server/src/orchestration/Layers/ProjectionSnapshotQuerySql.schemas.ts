@@ -2,7 +2,7 @@ import {
   ChatAttachment,
   IsoDateTime,
   MessageId,
-  ModelSelection,
+  HistoricalModelSelection,
   NonNegativeInt,
   OrchestrationCheckpointFile,
   OrchestrationMessageReply,
@@ -34,7 +34,7 @@ import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.t
 
 export const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
   Struct.assign({
-    defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
+    defaultModelSelection: Schema.NullOr(Schema.fromJsonString(HistoricalModelSelection)),
     scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
   }),
 );
@@ -52,7 +52,7 @@ export const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedP
 
 export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
   Struct.assign({
-    modelSelection: Schema.fromJsonString(ModelSelection),
+    modelSelection: Schema.fromJsonString(HistoricalModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
     // Optional: only the snapshot and operational thread queries select fork lineage.
     forkOrigin: Schema.optional(Schema.NullOr(Schema.fromJsonString(ThreadForkOrigin))),

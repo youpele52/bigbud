@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import {
   PROVIDER_SEND_TURN_MAX_ATTACHMENTS,
   type OrchestrationEvent,
@@ -140,7 +141,7 @@ export async function openSideChat(activeThread: Thread): Promise<void> {
       providerRuntimeExecutionTargetId: activeThread.providerRuntimeExecutionTargetId,
       workspaceExecutionTargetId: activeThread.workspaceExecutionTargetId,
       executionTargetId: activeThread.executionTargetId,
-      modelSelection: activeThread.modelSelection,
+      modelSelection: requireActiveModelSelection(activeThread.modelSelection),
       runtimeMode: activeThread.runtimeMode,
       interactionMode: "default",
       branch: null,

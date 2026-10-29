@@ -21,7 +21,7 @@ export interface OpencodeServerAcquireInput {
   readonly directory?: string;
   readonly executionTargetId?: ExecutionTargetId;
   readonly binaryPath?: string;
-  readonly provider?: Extract<ProviderKind, "opencode" | "kilocode">;
+  readonly provider?: Extract<ProviderKind, "opencode">;
 }
 
 export interface OpencodeServerManagerShape {

@@ -52,6 +52,16 @@ const thread = {
 } as unknown as OrchestrationThread;
 
 describe("dynamic capability catalog", () => {
+  it("keeps global discovery readable for removed-provider history", () => {
+    const catalog = createEffectiveCapabilityCatalog({
+      discovery,
+      thread: { ...thread, modelSelection: { provider: "kilocode", model: "legacy-model" } },
+    });
+    const ids = catalog.tracks.map((track) => track.id);
+    expect(ids).toContain("skill.bigbud.pdf");
+    expect(ids).not.toContain("agent.codex.reviewer");
+    expect(ids).not.toContain("skill.claudeagent.claude-only");
+  });
   it("assembles provider-effective skill, agent, and MCP Tracks", () => {
     const catalog = createEffectiveCapabilityCatalog({ discovery, thread });
     const ids = catalog.tracks.map((track) => track.id);

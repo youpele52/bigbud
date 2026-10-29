@@ -8,7 +8,7 @@ import { makeTokenUsageAccounting } from "../ProviderUsageAccounting.ts";
 import { normalizeOpencodeUsage } from "./Adapter.usage.ts";
 
 export function toPromptTurnEvents(input: {
-  readonly provider?: "opencode" | "kilocode";
+  readonly provider?: "opencode";
   readonly record: ActiveOpencodeSession;
   readonly threadId: import("@bigbud/contracts").ThreadId;
   readonly turnId: TurnId;

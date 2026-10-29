@@ -55,7 +55,6 @@ describe("provider descriptors", () => {
 
   it("centralizes sub-provider support", () => {
     expect(providerSupportsSubProviderID("opencode")).toBe(true);
-    expect(providerSupportsSubProviderID("kilocode")).toBe(true);
     expect(providerSupportsSubProviderID("pi")).toBe(true);
     expect(providerSupportsSubProviderID("cliProxy")).toBe(false);
   });

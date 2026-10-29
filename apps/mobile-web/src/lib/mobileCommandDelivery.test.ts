@@ -83,6 +83,24 @@ describe("mobile command delivery", () => {
     ).resolves.toMatchObject({ status: "rejected", rejectionReason: "other" });
   });
 
+  it("retains queue rejection reasons through reconciliation and restoration", async () => {
+    const controller = createMobileCommandDeliveryController();
+    await controller.submit({
+      command: makeCommand("queue-rejected"),
+      submittedRevision: 1,
+      dispatch: async () => {
+        throw new Error("response lost");
+      },
+    });
+    const state = await controller.reconcile(async () => ({
+      status: "rejected",
+      reason: "queue_held",
+    }));
+    expect(state).toMatchObject({ status: "rejected", rejectionReason: "queue_held" });
+    const restored = createMobileCommandDeliveryController({ initialState: state });
+    expect(restored.getState()).toEqual(state);
+  });
+
   it("retries only the original immutable operation when explicitly requested", async () => {
     vi.useFakeTimers();
     const dispatch = vi.fn(() => Promise.reject(new Error("connection lost")));

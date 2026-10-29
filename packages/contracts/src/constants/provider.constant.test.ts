@@ -18,7 +18,6 @@ describe("sortProviderKindsByDisplayName", () => {
       "copilot",
       "cursor",
       "devin",
-      "kilocode",
       "opencode",
       "opencodeV2",
       "pi",

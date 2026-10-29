@@ -32,10 +32,10 @@ describe.skipIf(process.platform === "win32")("trackManagedServerChild", () => {
       recorder.ledger,
       child,
       { command: "sleep", args: ["30"] },
-      "kilocode-server",
+      "opencode-server",
     );
     expect(recorder.tracked).toEqual([
-      { pid: child.pid, command: "sleep", args: ["30"], kill: "tree", label: "kilocode-server" },
+      { pid: child.pid, command: "sleep", args: ["30"], kill: "tree", label: "opencode-server" },
     ]);
     expect(recorder.released()).toBe(0);
 

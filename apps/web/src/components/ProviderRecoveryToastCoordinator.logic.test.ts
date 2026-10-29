@@ -133,7 +133,7 @@ describe("getProviderToastDecision", () => {
           },
         }),
         provider({
-          provider: "kilocode",
+          provider: "pi",
           status: "error",
           failure: { classification: "retryable", reason: "process-failed" },
           recovery: {
@@ -150,7 +150,7 @@ describe("getProviderToastDecision", () => {
     );
 
     expect(decision.operationId).toBe("manual-2");
-    expect(decision.affected.map((item) => item.provider)).toEqual(["kilocode"]);
+    expect(decision.affected.map((item) => item.provider)).toEqual(["pi"]);
     expect(decision.title).toBe("Retrying providers");
   });
 });

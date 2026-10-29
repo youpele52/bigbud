@@ -61,7 +61,7 @@ export async function stopSpawnedChildAndWait(
 }
 
 export function readManagedServerListeningUrl(line: string): string | null {
-  if (!/^(?:opencode|kilo) server listening\b/.test(line)) {
+  if (!/^opencode server listening\b/.test(line)) {
     return null;
   }
   const match = line.match(/on\s+(https?:\/\/[^\s]+)/);
@@ -83,8 +83,5 @@ export function buildClientOptions(
 ): Parameters<typeof createOpencodeClient>[0] {
   const base: Parameters<typeof createOpencodeClient>[0] = { baseUrl: url };
   if (!directory) return base;
-  if ("directoryHeader" in config) {
-    return { ...base, headers: { [config.directoryHeader]: encodeURIComponent(directory) } };
-  }
   return { ...base, directory };
 }

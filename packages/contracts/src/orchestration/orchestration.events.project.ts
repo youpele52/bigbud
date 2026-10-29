@@ -5,7 +5,7 @@ import {
   ProjectId,
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
-import { ModelSelection } from "./orchestration.provider";
+import { HistoricalModelSelection } from "./orchestration.provider";
 import { ProjectScript } from "./orchestration.project";
 
 export const ProjectCreatedPayload = Schema.Struct({
@@ -15,7 +15,7 @@ export const ProjectCreatedPayload = Schema.Struct({
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),
   workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
-  defaultModelSelection: Schema.NullOr(ModelSelection),
+  defaultModelSelection: Schema.NullOr(HistoricalModelSelection),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
@@ -28,7 +28,7 @@ export const ProjectMetaUpdatedPayload = Schema.Struct({
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),
   workspaceRoot: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
-  defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
+  defaultModelSelection: Schema.optional(Schema.NullOr(HistoricalModelSelection)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
   updatedAt: IsoDateTime,
 });

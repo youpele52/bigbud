@@ -81,10 +81,6 @@ const TERMINAL_PROVIDER_SIGNATURES: ReadonlyArray<{
     provider: "devin",
     patterns: [/\bdevin\b/i],
   },
-  {
-    provider: "kilocode",
-    patterns: [/\bkilocode\b/i, /\bkilo code\b/i],
-  },
 ] as const;
 
 function stripTerminalAnsi(text: string): string {

@@ -57,8 +57,6 @@ describe("managed server catalog fallback", () => {
   it("falls back safely when the provider cache is corrupt", () => {
     assert.deepStrictEqual(modelsFromModelsDevCache("{not-json"), []);
     assert.isAbove(managedServerBuiltInModels("opencode").length, 3);
-    assert.isAbove(managedServerBuiltInModels("kilocode").length, 3);
     assert.strictEqual(managedServerBuiltInModels("opencode")[0]?.subProviderID, "opencode");
-    assert.strictEqual(managedServerBuiltInModels("kilocode")[0]?.subProviderID, "kilo");
   });
 });

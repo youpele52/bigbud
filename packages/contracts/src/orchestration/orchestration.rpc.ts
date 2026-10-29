@@ -1,3 +1,4 @@
+import { QueueDecisionReason } from "./orchestration.queueDecision";
 import { Option, Schema, SchemaIssue, Struct } from "effect";
 import {
   CheckpointRef,
@@ -38,9 +39,9 @@ import {
 export const OrchestrationCommandReceiptStatus = Schema.Literals(["accepted", "rejected"]);
 export type OrchestrationCommandReceiptStatus = typeof OrchestrationCommandReceiptStatus.Type;
 
-export const OrchestrationCommandRejectionReason = Schema.Literals([
-  "thread_already_exists",
-  "other",
+export const OrchestrationCommandRejectionReason = Schema.Union([
+  Schema.Literals(["thread_already_exists", "other"]),
+  QueueDecisionReason,
 ]);
 export type OrchestrationCommandRejectionReason = typeof OrchestrationCommandRejectionReason.Type;
 

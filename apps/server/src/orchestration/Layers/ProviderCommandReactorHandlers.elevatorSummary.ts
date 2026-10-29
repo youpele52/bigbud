@@ -1,3 +1,4 @@
+import { isRoutableProviderSelection } from "../../provider/providerSelectionCompatibility.ts";
 import {
   DEFAULT_SERVER_SETTINGS,
   TextGenerationError,
@@ -114,7 +115,11 @@ export const maybeGenerateThreadElevatorSummary = (services: SessionOpServices) 
     const thread = yield* services.resolveThread(input.threadId);
     if (thread?.archivedAt || thread?.deletingAt || thread?.deletedAt) return;
     if (thread && hasTextGenerationUncertainty(thread.activities, "summary")) return;
-    if (!thread || (!input.force && !shouldRefreshThreadElevatorSummary({ thread }))) {
+    if (
+      !thread ||
+      !isRoutableProviderSelection(thread.modelSelection) ||
+      (!input.force && !shouldRefreshThreadElevatorSummary({ thread }))
+    ) {
       return;
     }
     const previousStatus = thread.activities.findLast(

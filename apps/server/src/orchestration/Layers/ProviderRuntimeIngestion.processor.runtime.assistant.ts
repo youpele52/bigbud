@@ -129,7 +129,6 @@ export const processAssistantRuntimeEvent = Effect.fn("processAssistantRuntimeEv
       event.provider === "copilot" ||
       event.provider === "opencode" ||
       event.provider === "opencodeV2" ||
-      event.provider === "kilocode" ||
       (event.provider === "codex" &&
         typeof (event.payload.data as { item?: { text?: unknown } } | undefined)?.item?.text ===
           "string")) &&

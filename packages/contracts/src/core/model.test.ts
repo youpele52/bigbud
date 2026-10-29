@@ -6,7 +6,6 @@ import {
   CodexReasoningEffort,
   CopilotModelOptions,
   CursorModelOptions,
-  KilocodeModelOptions,
   OpencodeModelOptions,
 } from "./model";
 
@@ -29,13 +28,10 @@ describe("Codex reasoning effort", () => {
     ).toThrow();
   });
 
-  it("accepts opaque OpenCode, KiloCode, and Cursor effort identifiers", () => {
+  it("accepts opaque OpenCode and Cursor effort identifiers", () => {
     expect(Schema.decodeUnknownSync(OpencodeModelOptions)({ reasoningEffort: "  none  " })).toEqual(
       { reasoningEffort: "none" },
     );
-    expect(
-      Schema.decodeUnknownSync(KilocodeModelOptions)({ reasoningEffort: "custom-xhigh" }),
-    ).toEqual({ reasoningEffort: "custom-xhigh" });
     expect(Schema.decodeUnknownSync(CursorModelOptions)({ reasoning: "max" })).toEqual({
       reasoning: "max",
     });

@@ -46,7 +46,6 @@ export function createBaseServerConfig(checkedAt: string): ServerConfig {
         copilot: { enabled: true, binaryPath: "", customModels: [] },
         opencode: { enabled: true, binaryPath: "", customModels: [] },
         opencodeV2: { enabled: false, binaryPath: "", profileRoot: "" },
-        kilocode: { enabled: true, binaryPath: "", customModels: [] },
         pi: { enabled: true, binaryPath: "", customModels: [] },
         cursor: { enabled: true, binaryPath: "agent", customModels: [], apiEndpoint: "" },
         devin: { enabled: true, binaryPath: "devin", customModels: [] },

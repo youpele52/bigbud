@@ -4,7 +4,6 @@ import type {
   CodexModelOptions,
   CursorModelOptions,
   DevinModelOptions,
-  KilocodeModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
   ProviderKind,
@@ -29,7 +28,6 @@ export function getProviderEffortField(provider: ProviderKind): ProviderEffortFi
     case "codex":
     case "copilot":
     case "opencode":
-    case "kilocode":
       return "reasoningEffort";
     case "claudeAgent":
       return "effort";
@@ -98,8 +96,6 @@ export function buildNextProviderOptions(
       return merged as CopilotModelOptions;
     case "opencode":
       return merged as OpencodeModelOptions;
-    case "kilocode":
-      return merged as KilocodeModelOptions;
     case "pi":
       return merged as PiModelOptions;
     case "cursor":

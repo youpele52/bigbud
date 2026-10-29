@@ -50,7 +50,6 @@ export const TERMINAL_AGENTS: ReadonlyArray<TerminalAgentDescriptor> = [
   providerAgent("codex", { executables: ["codex"], scriptPaths: ["/@openai/codex/"] }),
   providerAgent("copilot", { executables: ["copilot"] }),
   providerAgent("devin", { executables: ["devin", "devin-cli"] }),
-  providerAgent("kilocode", { aliases: ["Kilo"], executables: ["kilo", "kilocode"] }),
   { id: "gemini", names: ["Gemini", "Gemini CLI"], executables: ["gemini"] },
   { id: "aider", names: ["Aider"], executables: ["aider"] },
   { id: "goose", names: ["Goose"], executables: ["goose"] },

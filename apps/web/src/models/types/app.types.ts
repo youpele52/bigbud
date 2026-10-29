@@ -1,6 +1,6 @@
 import type {
   ExecutionTargetId,
-  ModelSelection,
+  HistoricalModelSelection,
   OrchestrationLatestTurn,
   OrchestrationQueuedPrompt,
   OrchestrationProposedPlanId,
@@ -156,7 +156,7 @@ export interface Project {
   workspaceExecutionTargetId?: ExecutionTargetId;
   executionTargetId?: ExecutionTargetId;
   cwd: string | null;
-  defaultModelSelection: ModelSelection | null;
+  defaultModelSelection: HistoricalModelSelection | null;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;
   deletingAt?: string | null;
@@ -212,7 +212,7 @@ export interface Thread {
   purpose?: OrchestrationThreadPurpose;
   elevatorSummary?: string | null;
   elevatorSummaryMessageCount?: number;
-  modelSelection: ModelSelection;
+  modelSelection: HistoricalModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
   session: ThreadSession | null;

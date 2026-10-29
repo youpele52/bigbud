@@ -40,7 +40,7 @@ export function UsageDataStatus({ summary }: { readonly summary: ServerUsageSumm
           variant="warning"
           icon={<TriangleAlertIcon />}
           title="Usage unavailable for some providers"
-          description={`${unavailableProviders.map((coverage) => PROVIDER_DISPLAY_NAMES[coverage.provider]).join(", ")} do not expose reliable official token usage. Disclosed observable-content estimates may be used.`}
+          description={`${unavailableProviders.map((coverage) => PROVIDER_DISPLAY_NAMES[coverage.provider as keyof typeof PROVIDER_DISPLAY_NAMES] ?? coverage.provider).join(", ")} do not expose reliable official token usage. Disclosed observable-content estimates may be used.`}
           dismissLabel="Dismiss usage availability warning"
         />
       ) : null}

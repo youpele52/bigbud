@@ -24,20 +24,13 @@ export interface RunningManagedServer {
   close(): void | Promise<void>;
 }
 
-type ManagedServerProvider = "opencode" | "kilocode";
+type ManagedServerProvider = "opencode";
 const SERVER_CONFIGS = {
   opencode: {
     provider: "opencode",
     displayName: "OpenCode",
     defaultBinary: "opencode",
     configContentEnvKey: "OPENCODE_CONFIG_CONTENT",
-  },
-  kilocode: {
-    provider: "kilocode",
-    displayName: "KiloCode",
-    defaultBinary: "kilo",
-    configContentEnvKey: "KILO_CONFIG_CONTENT",
-    directoryHeader: "x-kilo-directory",
   },
 } as const;
 export type ManagedServerConfig = (typeof SERVER_CONFIGS)[ManagedServerProvider];

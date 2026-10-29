@@ -9,7 +9,6 @@ it("restores V2 attachment admission without affecting catalog/provider selectio
   expect(v2.attachments?.unavailableReason).toBeUndefined();
   expect(v2.pickerAvailable).toBe(true);
   expect(getProviderDescriptor("opencode").attachments).toBeUndefined();
-  expect(getProviderDescriptor("kilocode").attachments).toBeUndefined();
 });
 it("accepts genuine Electron paths but falls back for browser/clipboard files or bridge errors", () => {
   const file = {} as File;

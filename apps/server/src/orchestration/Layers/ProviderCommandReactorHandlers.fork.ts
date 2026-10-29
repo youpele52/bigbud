@@ -1,3 +1,4 @@
+import { isRoutableProviderSelection } from "../../provider/providerSelectionCompatibility.ts";
 /**
  * Automatic fork fallback (plan D16): when bounded in-place recovery ends `session-dead`, the
  * thread continues in a server-side fork with the same provider. Deterministic ids make a
@@ -80,6 +81,7 @@ export function makeRequestAutomaticFork(input: {
           forkThreadId: live.forkThreadId,
         });
       }
+      if (!isRoutableProviderSelection(source.modelSelection)) return;
       // An automatic fork keeps the provider, so an unavailable provider cannot continue either.
       const available = yield* input.providerService
         .getCapabilities(source.modelSelection.provider)

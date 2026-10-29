@@ -4,7 +4,7 @@ import {
   ThreadSummary,
   type ThreadSummary as ThreadSummaryType,
 } from "@bigbud/contracts/orchestration/orchestration.catalog.ts";
-import { ModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
+import { HistoricalModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
 import { NonNegativeInt } from "@bigbud/contracts/core/baseSchemas.ts";
 import {
   ThreadDetailPendingApproval,
@@ -31,7 +31,7 @@ export const ProjectThreadCountDbRow = ProjectThreadCount;
 
 export const ThreadSummaryDbRow = ThreadSummary.mapFields(
   Struct.assign({
-    modelSelection: Schema.fromJsonString(ModelSelection),
+    modelSelection: Schema.fromJsonString(HistoricalModelSelection),
     // projection_thread_sessions.retained_family; NULL when the thread has no session row.
     retainedFamily: Schema.NullOr(Schema.Number),
     isWatching: Schema.Number,

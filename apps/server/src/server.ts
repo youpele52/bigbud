@@ -23,9 +23,8 @@ import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadTo
 import { makeCopilotAdapterLive } from "./provider/Layers/Copilot/Adapter";
 import { makeCursorAdapterLive } from "./provider/Layers/Cursor/Adapter";
 import { makeDevinAdapterLive } from "./provider/Layers/Devin/Adapter";
-import { makeKilocodeAdapterLive } from "./provider/Layers/Kilocode/Adapter";
-import { makePiAdapterLive } from "./provider/Layers/Pi/Adapter";
 import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerManager";
+import { makePiAdapterLive } from "./provider/Layers/Pi/Adapter";
 import { makeProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
 import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
 import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEngine";
@@ -207,9 +206,6 @@ const makeProviderLayerLive = (
           ? { remoteAgentPtyResolver: configuredRemoteAgentLayers.ptyResolver }
           : {}),
       });
-      const kilocodeAdapterLayer = makeKilocodeAdapterLive(
-        nativeEventLogger ? { nativeEventLogger } : undefined,
-      );
       const piAdapterLayer = makePiAdapterLive(
         nativeEventLogger ? { nativeEventLogger } : undefined,
       );
@@ -224,7 +220,6 @@ const makeProviderLayerLive = (
         Layer.provide(copilotAdapterLayer),
         Layer.provide(cursorAdapterLayer),
         Layer.provide(devinAdapterLayer),
-        Layer.provide(kilocodeAdapterLayer),
         Layer.provide(piAdapterLayer),
         Layer.provideMerge(providerSessionDirectoryLayer),
       );
@@ -321,7 +316,7 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   ),
   Layer.provideMerge(WorkspaceLayerLive),
   Layer.provideMerge(ProjectFaviconResolverLive),
-  // V1 protocol manager is retained for KiloCode only; OpenCode uses its V2 service.
+  // Retained by the legacy OpenCode text-generation infrastructure.
   Layer.provideMerge(OpencodeServerManagerLive),
   // Misc.
   Layer.provideMerge(AnalyticsServiceLayerLive),

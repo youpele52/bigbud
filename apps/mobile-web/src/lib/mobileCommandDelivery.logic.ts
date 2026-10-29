@@ -1,4 +1,5 @@
 import type { ClientOrchestrationCommand } from "@bigbud/contracts";
+import type { OrchestrationCommandRejectionReason } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 
 export type MobileCommandDeliveryStatus =
   | "idle"
@@ -18,12 +19,12 @@ export interface MobileCommandDeliveryOperation {
 export interface MobileCommandDeliveryState {
   readonly status: MobileCommandDeliveryStatus;
   readonly operation: MobileCommandDeliveryOperation | null;
-  readonly rejectionReason?: "thread_already_exists" | "other";
+  readonly rejectionReason?: OrchestrationCommandRejectionReason;
 }
 
 export type MobileCommandOutcome =
   | { readonly status: "accepted" }
-  | { readonly status: "rejected"; readonly reason: "thread_already_exists" | "other" }
+  | { readonly status: "rejected"; readonly reason: OrchestrationCommandRejectionReason }
   | { readonly status: "unknown" };
 
 export const MOBILE_COMMAND_DEADLINE_MS = 15_000;
@@ -32,7 +33,7 @@ export function createMobileCommandDeliveryState(
   submitted:
     | (MobileCommandDeliveryOperation & {
         readonly status: MobileCommandDeliveryStatus;
-        readonly rejectionReason?: "thread_already_exists" | "other";
+        readonly rejectionReason?: OrchestrationCommandRejectionReason;
       })
     | null,
 ): MobileCommandDeliveryState {
@@ -77,7 +78,7 @@ export function settleMobileCommandAccepted(
 
 export function settleMobileCommandRejected(
   state: MobileCommandDeliveryState,
-  reason: "thread_already_exists" | "other" = "other",
+  reason: OrchestrationCommandRejectionReason = "other",
 ): MobileCommandDeliveryState {
   return { status: "rejected", operation: state.operation, rejectionReason: reason };
 }

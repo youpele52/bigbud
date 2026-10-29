@@ -33,12 +33,12 @@ export { attachmentPreviewRoutePath, toAttachmentPreviewUrl };
 // ── Normalization helpers ─────────────────────────────────────────────
 
 /** Resolves model slug to canonical form while preserving the selection object shape. */
-export function normalizeModelSlug<T extends { provider: ProviderKind; model: string }>(
-  selection: T,
-): T {
+export function normalizeModelSlug<T extends { provider: string; model: string }>(selection: T): T {
   return {
     ...selection,
-    model: resolveModelSlugForProvider(selection.provider, selection.model),
+    model: Schema.is(ProviderKind)(selection.provider)
+      ? resolveModelSlugForProvider(selection.provider, selection.model)
+      : selection.model,
   };
 }
 

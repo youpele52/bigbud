@@ -1,3 +1,4 @@
+import { isRoutableProviderSelection } from "../../provider/providerSelectionCompatibility.ts";
 /**
  * ProviderRuntimeIngestion — thin shell Layer wiring.
  *
@@ -183,8 +184,10 @@ const make = Effect.fn("make")(function* () {
         discoverProviderSessions(),
       ]);
       const liveSessions = discovery.sessions;
-      const reconcilableThreads = readModel.threads.filter((thread) =>
-        discovery.availableProviders.has(thread.modelSelection.provider),
+      const reconcilableThreads = readModel.threads.filter(
+        (thread) =>
+          isRoutableProviderSelection(thread.modelSelection) &&
+          discovery.availableProviders.has(thread.modelSelection.provider),
       );
       const occurredAt = new Date().toISOString();
       const commands = buildStartupReconciliationCommands({
@@ -253,7 +256,11 @@ const make = Effect.fn("make")(function* () {
           periodicReconciliationState,
           observedAt,
         ).flatMap((thread) => {
-          if (!discovery.availableProviders.has(thread.modelSelection.provider)) return [];
+          if (
+            !isRoutableProviderSelection(thread.modelSelection) ||
+            !discovery.availableProviders.has(thread.modelSelection.provider)
+          )
+            return [];
           const liveSession = sessionsByThreadId.get(thread.id);
           if (liveSession !== undefined) {
             periodicReconciliationState.missingSessionObservedAt.delete(thread.id);

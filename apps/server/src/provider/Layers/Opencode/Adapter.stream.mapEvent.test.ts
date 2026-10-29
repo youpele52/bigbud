@@ -40,7 +40,7 @@ function makeSession(): ActiveOpencodeSession {
   };
 }
 
-function makeMapEventUnderTest(provider: "opencode" | "kilocode" = "opencode") {
+function makeMapEventUnderTest(provider: "opencode" = "opencode") {
   let stampIndex = 0;
 
   return makeMapEvent(
@@ -219,32 +219,6 @@ it.effect("maps todo.updated events to canonical turn.plan.updated events", () =
         },
       },
     ]);
-  });
-});
-
-it.effect("reuses todo.updated mapping for kilocode sessions", () => {
-  const session = makeSession();
-  const mapEvent = makeMapEventUnderTest("kilocode");
-
-  return Effect.gen(function* () {
-    const events = yield* mapEvent(session, {
-      id: "sdk-todo-updated-kilo-1",
-      type: "todo.updated",
-      properties: {
-        sessionID: session.opencodeSessionId,
-        todos: [{ content: "Ship KiloCode support", status: "completed" }],
-      },
-    } as OpencodeEvent);
-
-    assert.equal(events.length, 1);
-    const event = events[0];
-    assert.equal(event?.provider, "kilocode");
-    assert.equal(event?.type, "turn.plan.updated");
-    if (event?.type === "turn.plan.updated") {
-      assert.deepEqual(event.payload.plan, [
-        { step: "Ship KiloCode support", status: "completed" },
-      ]);
-    }
   });
 });
 

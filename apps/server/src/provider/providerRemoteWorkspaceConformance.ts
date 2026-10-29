@@ -59,13 +59,6 @@ const CONFORMANCE: Record<ProviderKind, ProviderRemoteWorkspaceConformance> = {
     reason:
       "Devin ACP filesystem and terminal callbacks dispatch through the configured remote workspace transport.",
   },
-  kilocode: {
-    provider: "kilocode",
-    backend: "agent-runtime",
-    supportsLocalRuntimeRemoteWorkspace: true,
-    reason:
-      "KiloCode's local built-in overrides dispatch through the configured remote workspace transport.",
-  },
   opencode: {
     provider: "opencode",
     backend: "agent-runtime",

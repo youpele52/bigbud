@@ -13,10 +13,7 @@ import { decideOrchestrationCommand } from "./decider.ts";
 
 const now = "2026-10-09T00:00:00.000Z";
 const threadId = ThreadId.makeUnsafe("v2-attachment-admission");
-function readModel(
-  provider: "opencodeV2" | "opencode" | "kilocode",
-  busy = false,
-): OrchestrationReadModel {
+function readModel(provider: "opencodeV2" | "opencode", busy = false): OrchestrationReadModel {
   return {
     snapshotSequence: 0,
     updatedAt: now,
@@ -124,8 +121,8 @@ for (const type of ["thread.turn.start", "thread.message.submit"] as const) {
     });
 }
 
-it("does not alter Kilo attachment admission or V2 text queueing", async () => {
-  for (const provider of ["kilocode", "opencodeV2"] as const) {
+it("preserves V2 text queueing", async () => {
+  for (const provider of ["opencodeV2"] as const) {
     const events = await Effect.runPromise(
       decideOrchestrationCommand({
         readModel: readModel(provider),

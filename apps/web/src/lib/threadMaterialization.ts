@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import { type ModelSelection, type NativeApi, type ThreadId } from "@bigbud/contracts";
 import { DEFAULT_THREAD_TITLE } from "@bigbud/shared/String";
 import { useComposerDraftStore, clearPromotedDraftThread } from "../stores/composer";
@@ -79,7 +80,7 @@ async function materializeOwner(
         workspaceExecutionTargetId: project.workspaceExecutionTargetId ?? project.executionTargetId,
         providerRuntimeExecutionTargetId: project.providerRuntimeExecutionTargetId,
       }),
-      modelSelection: selection,
+      modelSelection: requireActiveModelSelection(selection),
       runtimeMode: settings?.runtimeMode ?? draft.runtimeMode,
       interactionMode: settings?.interactionMode ?? draft.interactionMode,
       branch: draft.branch,

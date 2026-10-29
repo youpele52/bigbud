@@ -10,7 +10,11 @@ import {
   TrimmedNonEmptyString,
   TurnId,
 } from "../core/baseSchemas";
-import { ModelSelection, ProviderInteractionMode, RuntimeMode } from "./orchestration.provider";
+import {
+  HistoricalModelSelection,
+  ProviderInteractionMode,
+  RuntimeMode,
+} from "./orchestration.provider";
 import {
   ElevatorSummary,
   OrchestrationLatestTurnState,
@@ -47,7 +51,7 @@ export const ThreadSummary = Schema.Struct({
   title: TrimmedNonEmptyString,
   purpose: OrchestrationThreadPurpose,
   elevatorSummary: Schema.NullOr(ElevatorSummary),
-  modelSelection: ModelSelection,
+  modelSelection: HistoricalModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   providerRuntimeExecutionTargetId: ExecutionTargetId,

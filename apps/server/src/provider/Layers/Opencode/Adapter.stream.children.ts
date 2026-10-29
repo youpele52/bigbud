@@ -45,7 +45,7 @@ function taskCreatedAt(child: Session, observedAt: string) {
 
 export function makeChildSessionTracker(
   session: ActiveOpencodeSession,
-  provider: "opencode" | "kilocode" = "opencode",
+  provider: "opencode" = "opencode",
 ) {
   const children = new Map<string, Session>();
   const statuses = new Map<string, ChildStatus>();

@@ -7,8 +7,8 @@ import { TerminalInteractionSettingsFields } from "./settings.terminal";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedString } from "./baseSchemas";
-import { ModelSelection } from "../orchestration/orchestration";
-import { ProviderKind } from "../orchestration/orchestration.provider";
+import { SettingsHiddenProviders } from "./settings.retiredProviders";
+import { ModelSelection } from "../orchestration/orchestration.provider";
 import {
   TIMESTAMP_FORMATS,
   DEFAULT_TIMESTAMP_FORMAT,
@@ -213,13 +213,6 @@ export const OpencodeSettings = Schema.Struct({
 });
 export type OpencodeSettings = typeof OpencodeSettings.Type;
 
-export const KilocodeSettings = Schema.Struct({
-  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
-  binaryPath: makeBinaryPathSetting("kilo"),
-  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
-});
-export type KilocodeSettings = typeof KilocodeSettings.Type;
-
 export const PiSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   binaryPath: makeBinaryPathSetting("pi"),
@@ -275,7 +268,6 @@ export const ServerSettings = Schema.Struct({
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     cliProxy: CliProxySettings.pipe(Schema.withDecodingDefault(() => ({}))),
     copilot: CopilotSettings.pipe(Schema.withDecodingDefault(() => ({}))),
-    kilocode: KilocodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencodeV2: OpencodeV2DevelopmentSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     pi: PiSettings.pipe(Schema.withDecodingDefault(() => ({}))),
@@ -299,7 +291,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS),
   ),
   /** Server-side so delegation can honor it with no client connected (OD1). */
-  hiddenComposerProviders: Schema.Array(ProviderKind).pipe(Schema.withDecodingDefault(() => [])),
+  hiddenComposerProviders: SettingsHiddenProviders.pipe(Schema.withDecodingDefault(() => [])),
   delegatedThreadModelChoice: DelegatedThreadModelChoice.pipe(
     Schema.withDecodingDefault(() => "agent" as const satisfies DelegatedThreadModelChoice),
   ),

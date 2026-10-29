@@ -36,7 +36,7 @@ function deferredMessages() {
   return { promise, resolve };
 }
 
-function harness(provider: "opencode" | "kilocode") {
+function harness(provider: "opencode") {
   const emitted: ProviderRuntimeEvent[] = [];
   const responses: Array<Promise<Messages> | Messages> = [[]];
   let calls = 0;
@@ -135,7 +135,7 @@ function harness(provider: "opencode" | "kilocode") {
   };
 }
 
-describe.each(["opencode", "kilocode"] as const)("%s memory review stream overlap", (provider) => {
+describe.each(["opencode"] as const)("%s memory review stream overlap", (provider) => {
   it("maps multiple text parts into snapshots that the shared collector reconciles by item ID", async () => {
     const h = harness(provider);
     const first = MEMORY_JSON.slice(0, 20);

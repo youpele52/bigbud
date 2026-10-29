@@ -163,7 +163,6 @@ export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
     copilot: "",
     opencode: "",
     opencodeV2: "",
-    kilocode: "",
     pi: "",
     cursor: "",
     devin: "",
