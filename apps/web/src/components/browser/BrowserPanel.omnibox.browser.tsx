@@ -6,9 +6,15 @@ import { render } from "vitest-browser-react";
 
 import { useBrowserPanelStore } from "~/stores/browser/browser.store";
 
+const searchSettings = vi.hoisted(() => ({ browserSearchEngine: "duckduckgo" }));
 const browserHistoryStorageMock = vi.hoisted(() => ({ set: vi.fn() }));
 const viewportCallbacks = vi.hoisted(() => ({
   onNavigationCommit: undefined as ((url: string) => void) | undefined,
+}));
+
+vi.mock("~/hooks/useSettings", () => ({
+  useSettings: (selector: (settings: { browserSearchEngine: string }) => unknown) =>
+    selector(searchSettings),
 }));
 
 vi.mock("~/hooks/useLocalStorage", () => ({
@@ -49,6 +55,7 @@ import BrowserPanel from "./BrowserPanel";
 
 describe("BrowserPanel omnibox", () => {
   beforeEach(() => {
+    searchSettings.browserSearchEngine = "duckduckgo";
     browserHistoryStorageMock.set.mockClear();
     viewportCallbacks.onNavigationCommit = undefined;
     useBrowserPanelStore.setState({
@@ -88,7 +95,14 @@ describe("BrowserPanel omnibox", () => {
     }
   });
 
-  it("submits encoded searches and records them after navigation commits", async () => {
+  it.each([
+    ["duckduckgo", "https://duckduckgo.com/?q="],
+    ["google", "https://www.google.com/search?q="],
+    ["brave", "https://search.brave.com/search?q="],
+    ["bing", "https://www.bing.com/search?q="],
+    ["startpage", "https://www.startpage.com/sp/search?query="],
+  ])("submits encoded %s searches and records navigation commits", async (engine, prefix) => {
+    searchSettings.browserSearchEngine = engine;
     const host = document.createElement("div");
     document.body.append(host);
     const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} />, {
@@ -96,7 +110,7 @@ describe("BrowserPanel omnibox", () => {
     });
 
     try {
-      const searchUrl = "https://www.google.com/search?q=caf%C3%A9%20%26%20tea";
+      const searchUrl = `${prefix}caf%C3%A9%20%26%20tea`;
       const input = document.querySelector('input[placeholder="Enter a URL or search"]');
       if (!(input instanceof HTMLInputElement)) {
         throw new Error("Unable to find browser omnibox.");

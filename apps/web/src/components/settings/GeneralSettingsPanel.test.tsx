@@ -19,6 +19,7 @@ vi.mock("../../hooks/useSettings", () => ({
   useUpdateSettings: () => ({ updateSettings: mock.updateSettings }),
 }));
 
+import { BrowserSettingsSection } from "./BrowserSettingsSection";
 import { GeneralSettingsPanel } from "./GeneralSettingsPanel";
 import { TerminalSettingsSection } from "./TerminalSettingsSection";
 
@@ -37,7 +38,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     mock.updateSettings.mockClear();
   });
 
-  it("places the terminal settings in their own shared section immediately after Threads", () => {
+  it("places the terminal settings in their own shared section after Browser", () => {
     const markup = renderToStaticMarkup(<GeneralSettingsPanel />);
     const sections = [...markup.matchAll(/<section\b[^>]*>[\s\S]*?<\/section>/g)].map(
       ([section]) => ({
@@ -50,6 +51,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(sections.map(({ title }) => title)).toEqual([
       "General",
       "Threads",
+      "Browser",
       "Terminal",
       expect.stringContaining("Learning projects"),
     ]);
@@ -60,7 +62,8 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Open web links in bigbud",
       "Diff line wrapping",
     ]);
-    expect(sections[2]?.rows).toEqual([
+    expect(sections[2]?.rows).toEqual(["Default agent browser", "Default search engine"]);
+    expect(sections[3]?.rows).toEqual([
       "Terminal font",
       "Terminal font size",
       "Terminal theme (dark appearance)",
@@ -87,6 +90,23 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(markup).toContain('aria-label="Terminal GPU rendering"');
     expect(markup).toContain("JetBrains Mono Nerd Font Mono");
     expect(mock.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("saves valid search engines and resets to DuckDuckGo", () => {
+    const row = (BrowserSettingsSection().props.children as SettingRow[])[1]!;
+    expect(row.props.control.props.value).toBe("duckduckgo");
+    expect(row.props.resetAction).toBeNull();
+    for (const engine of ["duckduckgo", "google", "brave", "bing", "startpage"]) {
+      row.props.control.props.onValueChange(engine);
+      expect(mock.updateSettings).toHaveBeenLastCalledWith({ browserSearchEngine: engine });
+    }
+    mock.updateSettings.mockClear();
+    row.props.control.props.onValueChange("invalid");
+    expect(mock.updateSettings).not.toHaveBeenCalled();
+    mock.settings = { ...mock.settings, browserSearchEngine: "google" };
+    const changedRow = (BrowserSettingsSection().props.children as SettingRow[])[1]!;
+    changedRow.props.resetAction!.props.onClick();
+    expect(mock.updateSettings).toHaveBeenLastCalledWith({ browserSearchEngine: "duckduckgo" });
   });
 
   it("keeps the font defaults, accepted options, validation, and reset behavior", () => {

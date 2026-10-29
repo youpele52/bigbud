@@ -1,4 +1,8 @@
 import { Effect } from "effect";
+import {
+  BROWSER_SEARCH_ENGINES,
+  DEFAULT_BROWSER_SEARCH_ENGINE,
+} from "../constants/browser.constant";
 import { TerminalInteractionSettingsFields } from "./settings.terminal";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
@@ -95,6 +99,9 @@ const ContextWindowWarningThreshold = Schema.Int.check(
 ).check(Schema.isLessThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MAX));
 
 export const ClientSettingsSchema = Schema.Struct({
+  browserSearchEngine: Schema.Literals(BROWSER_SEARCH_ENGINES).pipe(
+    Schema.withDecodingDefault(() => DEFAULT_BROWSER_SEARCH_ENGINE),
+  ),
   openWebLinksInApp: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),

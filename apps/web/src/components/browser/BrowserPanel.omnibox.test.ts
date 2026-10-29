@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildGoogleSearchUrl, resolveBrowserOmniboxInput } from "./BrowserPanel.omnibox";
+import { buildBrowserSearchUrl, resolveBrowserOmniboxInput } from "./BrowserPanel.omnibox";
 
 describe("resolveBrowserOmniboxInput", () => {
   it.each([
@@ -29,7 +29,7 @@ describe("resolveBrowserOmniboxInput", () => {
     "from:alice",
     "hello: world",
   ])("searches query input %s", (input) => {
-    expect(resolveBrowserOmniboxInput(input)).toBe(buildGoogleSearchUrl(input));
+    expect(resolveBrowserOmniboxInput(input)).toBe(buildBrowserSearchUrl(input));
   });
 
   it.each([
@@ -48,7 +48,21 @@ describe("resolveBrowserOmniboxInput", () => {
 
   it("encodes Unicode and ampersands in search queries", () => {
     expect(resolveBrowserOmniboxInput("café & tea")).toBe(
-      "https://www.google.com/search?q=caf%C3%A9%20%26%20tea",
+      "https://duckduckgo.com/?q=caf%C3%A9%20%26%20tea",
     );
+  });
+});
+
+describe("search engine selection", () => {
+  it.each([
+    ["duckduckgo", "https://duckduckgo.com/?q="],
+    ["google", "https://www.google.com/search?q="],
+    ["brave", "https://search.brave.com/search?q="],
+    ["bing", "https://www.bing.com/search?q="],
+    ["startpage", "https://www.startpage.com/sp/search?query="],
+  ] as const)("uses %s for encoded queries while preserving navigation", (engine, prefix) => {
+    expect(resolveBrowserOmniboxInput("café & tea", engine)).toBe(`${prefix}caf%C3%A9%20%26%20tea`);
+    expect(resolveBrowserOmniboxInput("example.com", engine)).toBe("https://example.com/");
+    expect(resolveBrowserOmniboxInput("javascript:alert(1)", engine)).toBeNull();
   });
 });

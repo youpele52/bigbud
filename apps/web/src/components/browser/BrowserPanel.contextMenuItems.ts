@@ -5,11 +5,14 @@ import { copyTextToClipboard } from "~/lib/clipboard/copyText";
 import { useComposerDraftStore } from "~/stores/composer";
 import { toastManager } from "../ui/toast";
 import type { BrowserContextMenuContext } from "./BrowserPanel.contextMenu.hook";
-import { buildGoogleSearchUrl } from "./BrowserPanel.omnibox";
+import { buildBrowserSearchUrl } from "./BrowserPanel.omnibox";
 import type { BrowserViewportRef } from "./BrowserPanel.viewport";
 import type { ContextMenuItem } from "./BrowserPanel.contextMenu";
 
+import type { BrowserSearchEngine } from "@bigbud/contracts/constants/browser.constant.ts";
+
 interface BrowserContextMenuItemsInput {
+  searchEngine?: BrowserSearchEngine;
   canGoBack: boolean;
   canGoForward: boolean;
   context: BrowserContextMenuContext | null;
@@ -93,7 +96,7 @@ export function createBrowserContextMenuItems(
       {
         id: "search-selection",
         label: "Search the web",
-        onClick: () => input.onOpenNewTab(buildGoogleSearchUrl(selection)),
+        onClick: () => input.onOpenNewTab(buildBrowserSearchUrl(selection, input.searchEngine)),
       },
       {
         id: "send-selection",

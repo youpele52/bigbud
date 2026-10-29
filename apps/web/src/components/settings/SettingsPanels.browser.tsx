@@ -11,6 +11,7 @@ import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
+import { BrowserSettingsSection } from "./BrowserSettingsSection";
 import { __resetNativeApiForTests } from "../../rpc/nativeApi";
 import { AppAtomRegistryProvider } from "../../rpc/atomRegistry";
 import { resetServerStateForTests, setServerConfigSnapshot } from "../../rpc/serverState";
@@ -69,14 +70,14 @@ function createBaseServerConfig(): ServerConfig {
   };
 }
 
-function renderAiSettingsPanel() {
+function renderAiSettingsPanel(browserSettings = false) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
       <AppAtomRegistryProvider>
-        <AiSettingsPanel />
+        {browserSettings ? <BrowserSettingsSection /> : <AiSettingsPanel />}
       </AppAtomRegistryProvider>
     </QueryClientProvider>,
   );
@@ -198,7 +199,7 @@ describe("AiSettingsPanel defaults", () => {
     } as unknown as NativeApi;
     setServerConfigSnapshot(createBaseServerConfig());
 
-    await renderAiSettingsPanel();
+    await renderAiSettingsPanel(true);
 
     const trigger = page.getByLabelText("Default agent browser", { exact: true });
     await expect.element(trigger).toHaveTextContent("bigbud browser — Recommended");
@@ -221,7 +222,7 @@ describe("AiSettingsPanel defaults", () => {
     await expect.element(trigger).toHaveTextContent("bigbud browser — Recommended");
   });
 
-  it("places floating assistant settings directly after browser settings", async () => {
+  it("keeps browser settings out of AI settings", async () => {
     window.desktopBridge = {
       getFloatingAssistantEnabled: vi.fn().mockResolvedValue(true),
       setFloatingAssistantEnabled: vi.fn().mockResolvedValue(true),
@@ -233,7 +234,8 @@ describe("AiSettingsPanel defaults", () => {
     const sectionTitles = Array.from(document.querySelectorAll("h2"), (heading) =>
       heading.textContent?.trim(),
     );
-    expect(sectionTitles.indexOf("Floating assistant")).toBe(sectionTitles.indexOf("Browser") + 1);
+    expect(sectionTitles).not.toContain("Browser");
+    expect(document.querySelector('[aria-label="Default agent browser"]')).toBeNull();
     await expect.element(page.getByLabelText("Enable floating assistant")).toBeInTheDocument();
   });
 });
