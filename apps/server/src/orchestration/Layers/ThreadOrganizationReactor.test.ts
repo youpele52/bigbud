@@ -8,9 +8,10 @@ import {
   type OrchestrationCommand,
 } from "@bigbud/contracts";
 import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Layer, Scope } from "effect";
 import { describe, expect, it } from "vitest";
 
+import { ProjectionThreadRepositoryLive } from "../../persistence/Layers/ProjectionThreads.ts";
 import { ThreadOrganizationReactor } from "../Services/ThreadOrganizationReactor.ts";
 import {
   createCommands,
@@ -63,7 +64,12 @@ describe("ThreadOrganizationReactor", () => {
         await runtime.runPromise(
           Effect.gen(function* () {
             yield* (yield* ThreadOrganizationReactor).start();
-          }).pipe(Effect.provide(ThreadOrganizationReactorLive), Scope.provide(scope)),
+          }).pipe(
+            Effect.provide(
+              ThreadOrganizationReactorLive.pipe(Layer.provide(ProjectionThreadRepositoryLive)),
+            ),
+            Scope.provide(scope),
+          ),
         );
         // Let the forked subscriber attach before the first event is published.
         await new Promise((resolve) => setTimeout(resolve, 50));

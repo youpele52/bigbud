@@ -10,7 +10,10 @@ import { resolveProjectionWorktreeIdentity } from "./ProjectionThreads.identity.
 import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
 import { makeListRecentModelSelections } from "./ProjectionThreads.modelChoice.ts";
 import { makeSetThreadRecovery } from "./ProjectionThreads.recovery.ts";
-import { makeSetThreadOrganization } from "./ProjectionThreads.organization.ts";
+import {
+  makeListPendingThreadSnoozes,
+  makeSetThreadOrganization,
+} from "./ProjectionThreads.organization.ts";
 import {
   normalizeProjectionThreadRow,
   ProjectionThreadDbRow,
@@ -322,6 +325,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
     listRecentModelSelections: makeListRecentModelSelections(sql),
     setRecovery: makeSetThreadRecovery(sql),
     setOrganization: makeSetThreadOrganization(sql),
+    listPendingSnoozes: makeListPendingThreadSnoozes(sql),
   } satisfies ProjectionThreadRepositoryShape;
 });
 

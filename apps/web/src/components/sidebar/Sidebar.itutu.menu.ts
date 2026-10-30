@@ -7,18 +7,13 @@ import {
 
 import { ITUTU_SNOOZE_PRESETS, moveThreadsToState, snoozeThread } from "./Sidebar.itutu.actions";
 import { ITUTU_STATE_LABELS } from "./Sidebar.itutu.logic";
+import { formatSnoozeWakeTime, useItutuSnoozePickerStore } from "./Sidebar.itutu.snoozePicker";
 
 const MOVE_PREFIX = "itutu-move:";
 const SNOOZE_PREFIX = "itutu-snooze:";
 const CANCEL_SNOOZE_ID = "itutu-snooze-cancel";
 const SNOOZE_INFO_ID = "itutu-snooze-info";
-
-const formatWakeTime = (until: string) =>
-  new Date(until).toLocaleString(undefined, {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+const SNOOZE_CUSTOM_ID = "itutu-snooze-custom";
 
 /**
  * The Move to submenu. With one thread, the current state is checked and snoozing is offered;
@@ -43,7 +38,7 @@ export function buildItutuMoveMenuItem(
           ? [
               {
                 id: SNOOZE_INFO_ID,
-                label: `Snoozed until ${formatWakeTime(snooze.until)}`,
+                label: `Snoozed until ${formatSnoozeWakeTime(new Date(snooze.until))}`,
                 disabled: true,
               },
               { id: CANCEL_SNOOZE_ID, label: "Cancel snooze" },
@@ -53,6 +48,7 @@ export function buildItutuMoveMenuItem(
           id: `${SNOOZE_PREFIX}${preset.minutes}`,
           label: `${snooze ? "Snooze again" : "Snooze"} ${preset.label}`,
         })),
+        { id: SNOOZE_CUSTOM_ID, label: snooze ? "Snooze again for…" : "Snooze for…" },
       ];
   return { id: "itutu-move-to", label: "Move to", children: [...states, ...snoozeItems] };
 }
@@ -71,6 +67,10 @@ export async function runItutuMenuAction(
   }
   if (clicked === CANCEL_SNOOZE_ID) {
     await moveThreadsToState(threadIds, "present");
+    return true;
+  }
+  if (clicked === SNOOZE_CUSTOM_ID && threadIds.length === 1) {
+    useItutuSnoozePickerStore.getState().open(threadIds[0]!);
     return true;
   }
   if (clicked.startsWith(SNOOZE_PREFIX) && threadIds.length === 1) {

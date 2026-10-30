@@ -6,6 +6,7 @@ import {
   organizationAfterArchive,
   organizationAfterMove,
   organizationAfterSnooze,
+  organizationAfterSnoozeExpiry,
   organizationAfterUnarchive,
 } from "./threadOrganization.logic.ts";
 
@@ -62,5 +63,25 @@ describe("thread organization transitions", () => {
       changedAt: at,
       snooze: null,
     });
+  });
+
+  it("expires only the current snooze, once, and only after its deadline", () => {
+    const due = "2026-10-31T10:00:00.000Z";
+    expect(
+      organizationAfterSnoozeExpiry(snoozed, { snoozeId: "snooze-1", occurredAt: due }),
+    ).toEqual({ state: "needs-you", revision: 2, changedAt: due, snooze: null });
+    expect(
+      organizationAfterSnoozeExpiry(snoozed, {
+        snoozeId: "snooze-1",
+        occurredAt: "2026-10-31T09:59:59.999Z",
+      }),
+    ).toBe(null);
+    expect(organizationAfterSnoozeExpiry(snoozed, { snoozeId: "snooze-0", occurredAt: due })).toBe(
+      null,
+    );
+    const moved = organizationAfterMove(snoozed, "later", at)!;
+    expect(organizationAfterSnoozeExpiry(moved, { snoozeId: "snooze-1", occurredAt: due })).toBe(
+      null,
+    );
   });
 });

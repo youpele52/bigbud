@@ -25,6 +25,7 @@ import {
   organizationAfterArchive,
   organizationAfterMove,
   organizationAfterSnooze,
+  organizationAfterSnoozeExpiry,
   organizationAfterUnarchive,
 } from "./threadOrganization.logic.ts";
 
@@ -32,12 +33,18 @@ type DecidedEvent = Omit<OrchestrationEvent, "sequence">;
 
 export type ThreadOrganizationCommand = Extract<
   OrchestrationCommand,
-  { type: "thread.organization.move" | "thread.organization.snooze" }
+  {
+    type:
+      | "thread.organization.move"
+      | "thread.organization.snooze"
+      | "thread.organization.snooze.expire";
+  }
 >;
 
 export const THREAD_ORGANIZATION_COMMAND_TYPES: ReadonlySet<string> = new Set([
   "thread.organization.move",
   "thread.organization.snooze",
+  "thread.organization.snooze.expire",
 ]);
 
 function organizationUpdatedEvent(input: {
@@ -69,6 +76,28 @@ export const decideThreadOrganizationCommand = Effect.fn("decideThreadOrganizati
     readonly readModel: OrchestrationReadModel;
   }): Effect.fn.Return<ReadonlyArray<DecidedEvent>, OrchestrationCommandInvariantError> {
     const { command, readModel } = input;
+    if (command.type === "thread.organization.snooze.expire") {
+      // A timer that lost its race is a no-op, never an error, so sweeps cannot retry it forever.
+      const thread = readModel.threads.find((entry) => entry.id === command.threadId);
+      if (!thread || thread.deletedAt !== null || thread.archivedAt !== null) return [];
+      if (thread.deletingAt) return [];
+      const occurredAt = nowIso();
+      const organization = organizationAfterSnoozeExpiry(currentThreadOrganization(thread), {
+        snoozeId: command.snoozeId,
+        occurredAt,
+      });
+      if (organization === null) return [];
+      const { commandId, threadId } = command;
+      return [
+        organizationUpdatedEvent({
+          commandId,
+          threadId,
+          organization,
+          occurredAt,
+          reason: "snooze-expired",
+        }),
+      ];
+    }
     yield* requireThreadNotDeleting({ readModel, command, threadId: command.threadId });
     const thread = yield* requireThreadNotArchived({
       readModel,

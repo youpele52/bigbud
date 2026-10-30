@@ -149,6 +149,7 @@ import Migration0139 from "./Migrations/139_CommandReceiptQueueDecision.ts";
 import Migration0140 from "./Migrations/140_MuseSessionBindings.ts";
 import Migration0141 from "./Migrations/141_ProjectionThreadOrganization.ts";
 import Migration0142 from "./Migrations/142_ProjectionThreadOrganizationIndex.ts";
+import Migration0143 from "./Migrations/143_ProjectionThreadSnoozeIndex.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -292,6 +293,7 @@ export const migrationEntries = [
   [140, "MuseSessionBindings", Migration0140],
   [141, "ProjectionThreadOrganization", Migration0141],
   [142, "ProjectionThreadOrganizationIndex", Migration0142],
+  [143, "ProjectionThreadSnoozeIndex", Migration0143],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

@@ -8,7 +8,7 @@ import { useStore } from "../../stores/main";
 import { toastManager } from "../ui/toast";
 import { ITUTU_STATE_LABELS } from "./Sidebar.itutu.logic";
 
-/** Snooze presets offered in Move to. Custom durations come with snooze delivery (Phase 4). */
+/** Snooze presets offered in Move to; "Snooze for…" opens the custom duration picker. */
 export const ITUTU_SNOOZE_PRESETS: ReadonlyArray<{
   readonly minutes: number;
   readonly label: string;

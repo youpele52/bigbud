@@ -155,6 +155,22 @@ export interface ProjectionThreadRepositoryShape {
     readonly threadId: ThreadId;
     readonly organization: ThreadOrganization;
   }) => Effect.Effect<void, ProjectionRepositoryError>;
+  /** Pending Ìtútù snoozes of live threads in deadline order, one keyset page at a time. */
+  readonly listPendingSnoozes: (
+    input: ListPendingThreadSnoozesInput,
+  ) => Effect.Effect<ReadonlyArray<PendingThreadSnooze>, ProjectionRepositoryError>;
+}
+
+export interface PendingThreadSnooze {
+  readonly threadId: ThreadId;
+  readonly snoozeId: string;
+  readonly until: string;
+}
+
+export interface ListPendingThreadSnoozesInput {
+  readonly limit: number;
+  /** Keyset cursor: the last row of the previous page. */
+  readonly after?: { readonly until: string; readonly threadId: ThreadId };
 }
 
 /**

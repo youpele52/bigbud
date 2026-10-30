@@ -48,6 +48,25 @@ export function organizationAfterSnooze(
   };
 }
 
+/**
+ * A snooze deadline brings the thread to Needs you, once. Anything that replaced or cleared that
+ * snooze (a move, a re-snooze, archive, a new request) wins, as does a deadline not yet reached.
+ */
+export function organizationAfterSnoozeExpiry(
+  current: ThreadOrganization,
+  input: { readonly snoozeId: string; readonly occurredAt: string },
+): ThreadOrganization | null {
+  const snooze = current.snooze;
+  if (snooze === null || snooze.id !== input.snoozeId) return null;
+  if (Date.parse(snooze.until) > Date.parse(input.occurredAt)) return null;
+  return {
+    state: "needs-you",
+    revision: current.revision + 1,
+    changedAt: input.occurredAt,
+    snooze: null,
+  };
+}
+
 /** Archiving keeps the state but cancels a pending snooze so it can never fire later. */
 export function organizationAfterArchive(
   current: ThreadOrganization,

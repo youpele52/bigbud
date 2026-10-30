@@ -1,4 +1,8 @@
 import type { ThreadId } from "@bigbud/contracts";
+import type {
+  ListPendingThreadSnoozesInput,
+  PendingThreadSnooze,
+} from "../Services/ProjectionThreads.ts";
 import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -21,6 +25,34 @@ export function makeSetThreadOrganization(sql: SqlClient.SqlClient) {
       Effect.asVoid,
       Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.setOrganization:query")),
     );
+}
+
+/** Pages pending snoozes by deadline through `idx_projection_threads_pending_snooze`. */
+export function makeListPendingThreadSnoozes(sql: SqlClient.SqlClient) {
+  return (input: ListPendingThreadSnoozesInput) => {
+    const afterUntil = input.after?.until ?? null;
+    const afterThreadId = input.after?.threadId ?? null;
+    return sql<PendingThreadSnooze>`
+      SELECT
+        thread_id AS "threadId",
+        organization_snooze_id AS "snoozeId",
+        organization_snooze_until AS "until"
+      FROM projection_threads
+      WHERE organization_snooze_id IS NOT NULL
+        AND deleted_at IS NULL
+        AND archived_at IS NULL
+        AND deleting_at IS NULL
+        AND (
+          ${afterUntil} IS NULL
+          OR organization_snooze_until > ${afterUntil}
+          OR (organization_snooze_until = ${afterUntil} AND thread_id > ${afterThreadId})
+        )
+      ORDER BY organization_snooze_until ASC, thread_id ASC
+      LIMIT ${input.limit}
+    `.pipe(
+      Effect.mapError(toPersistenceSqlError("ProjectionThreadRepository.listPendingSnoozes:query")),
+    );
+  };
 }
 
 /** SQL text selecting a thread's organization as a JSON object matching `ThreadOrganization`. */

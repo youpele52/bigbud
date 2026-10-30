@@ -700,3 +700,28 @@ Implemented here:
   - The acknowledgement fence.
 
 Original checkout since checkpoint 5: unchanged (156 uncommitted files). Phase 3b touches none of its files. Across the whole branch, the only overlap is still the seven pure-insertion registration files and the copied plan and prototype. `feature/computer-use` still has no new commits. Migrations 141 and 142 are still free there.
+
+### Checkpoint 7 — Phase 4, snooze delivery and recovery
+
+Implemented here:
+
+- Internal command `thread.organization.snooze.expire` (thread, snooze id), reason `snooze-expired`. The decider applies it only while that snooze id is still the thread's snooze and its deadline has passed by the server clock, and only for a live thread. Otherwise it is a no-op, never an error. The snooze id is unique per occurrence and every other change replaces or clears it, so it fences stale timers without a separate revision check.
+- Migration 143: partial index `idx_projection_threads_pending_snooze` on (deadline, thread) for snoozed rows only. `ProjectionThreadRepository.listPendingSnoozes` pages live pending snoozes by keyset; tests confirm the index is used.
+- Delivery (`ThreadOrganizationReactor.snooze.ts`), started by the organization reactor and mirroring the delegated model-choice supervision:
+  - one timer per thread, replaced or cleared by every organization change and cleared on delete;
+  - timers re-check the wall clock, so an early-firing timer cannot deliver early;
+  - a sweep at start and every 30 s delivers overdue snoozes after downtime, sleep, clock changes, or a lost timer, and schedules future ones;
+  - a due row cancels its own timer before delivering, so the two do not race;
+  - each delivery is one command whose retries reuse it, and a failure is retried by the next sweep.
+- Design change from the earlier draft: expire command ids are unique per attempt, not per snooze. A per-snooze id would let one early no-op receipt block the real expiry forever, and the snooze-id fence already makes repeats harmless.
+- Web: Move to gains "Snooze for…" / "Snooze again for…", which opens a custom duration dialog. It accepts 45, 90m, 3h, or 1h 30m within 2 minutes to 24 hours and previews the wake time. Cancel snooze (to Present) and the "Snoozed until" line already shipped in Phase 2. Agent snooze tools now really return threads to Needs you.
+- Tests:
+  - The expiry transition.
+  - Delivery with a test clock: on time, not early; replaced timers; start recovery; keyset paging with a failed delivery retried by the next sweep.
+  - A real-engine downtime run: snooze, stop, start after the deadline, one move to Needs you, then duplicate and stale expiries change nothing.
+  - The pending-snooze query and index.
+  - Duration parsing and the picker menu action.
+
+Not done in this phase: no toast or system notification when a snooze ends. The move to Needs you is the reminder. A notification needs replay-safe deduplication across clients and stays a follow-up.
+
+Original checkout since checkpoint 6: unchanged (156 uncommitted files), with no overlap with Phase 4. `feature/computer-use` still has no new commits. Migration 143 is free there.

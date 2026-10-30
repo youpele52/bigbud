@@ -76,9 +76,24 @@ export const ThreadOrganizationSnoozeCommand = Schema.Struct({
 });
 export type ThreadOrganizationSnoozeCommand = typeof ThreadOrganizationSnoozeCommand.Type;
 
+/**
+ * Internal command: a snooze deadline passed. It applies only while `snoozeId` is still the
+ * thread's snooze and its deadline has passed, so a stale or duplicate timer changes nothing.
+ */
+export const ThreadOrganizationSnoozeExpireCommand = Schema.Struct({
+  type: Schema.Literal("thread.organization.snooze.expire"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  snoozeId: TrimmedNonEmptyString,
+  createdAt: IsoDateTime,
+});
+export type ThreadOrganizationSnoozeExpireCommand =
+  typeof ThreadOrganizationSnoozeExpireCommand.Type;
+
 export const ThreadOrganizationChangeReason = Schema.Literals([
   "move",
   "snooze",
+  "snooze-expired",
   "archive",
   "unarchive",
 ]);

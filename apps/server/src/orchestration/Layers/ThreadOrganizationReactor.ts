@@ -10,14 +10,17 @@ import {
   ThreadOrganizationReactor,
   type ThreadOrganizationReactorShape,
 } from "../Services/ThreadOrganizationReactor.ts";
+import { ProjectionThreadRepository } from "../../persistence/Services/ProjectionThreads.ts";
 import { currentThreadOrganization } from "../threadOrganization.logic.ts";
 import {
   isOrganizationReactionNeeded,
   organizationReactionForEvent,
 } from "./ThreadOrganizationReactor.logic.ts";
+import { startThreadSnoozeDelivery } from "./ThreadOrganizationReactor.snooze.ts";
 
 const makeThreadOrganizationReactor = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
+  const threadRepository = yield* ProjectionThreadRepository;
 
   const react = Effect.fn("reactToOrganizationEvent")(function* (
     event: Parameters<typeof organizationReactionForEvent>[0],
@@ -48,6 +51,7 @@ const makeThreadOrganizationReactor = Effect.gen(function* () {
   });
 
   const start: ThreadOrganizationReactorShape["start"] = Effect.fn("start")(function* () {
+    yield* startThreadSnoozeDelivery({ orchestrationEngine, threadRepository });
     yield* Effect.forkScoped(
       Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) =>
         react(event).pipe(
