@@ -24,6 +24,8 @@ export const V2_ORCHESTRATION_ACTIONS = [
   "read_capability_guide",
   "workspace",
   "get_system_resources",
+  "move",
+  "snooze",
 ] as const;
 
 /** Canonical invocation id for a serialized invocation identity (the durable receipt key). */

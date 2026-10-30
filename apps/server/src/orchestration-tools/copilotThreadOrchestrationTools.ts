@@ -37,6 +37,39 @@ import {
 import type { AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
 import { createCopilotAgentWorkspaceTools } from "./copilotAgentWorkspaceTools.ts";
 import { RenameThreadArguments, RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
+import {
+  MOVE_THREAD_TOOL_DESCRIPTION,
+  MOVE_THREAD_TOOL_PARAMETERS,
+  SNOOZE_THREAD_TOOL_DESCRIPTION,
+  SNOOZE_THREAD_TOOL_PARAMETERS,
+} from "./threadOrganizationTool.shared.ts";
+import type { ThreadOrganizationToolName } from "./threadOrganizationTool.run.ts";
+
+function createCopilotOrganizationTools(
+  organizeThread: (
+    name: ThreadOrganizationToolName,
+    args: unknown,
+    invocationId: string,
+  ) => Promise<unknown>,
+): ReadonlyArray<Tool<Record<string, unknown>>> {
+  const specs = [
+    ["move_thread", MOVE_THREAD_TOOL_DESCRIPTION, MOVE_THREAD_TOOL_PARAMETERS],
+    ["snooze_thread", SNOOZE_THREAD_TOOL_DESCRIPTION, SNOOZE_THREAD_TOOL_PARAMETERS],
+  ] as const;
+  return specs.map(([name, description, parameters]) => ({
+    name,
+    description,
+    parameters,
+    handler: async (args, invocation) => {
+      try {
+        const result = await organizeThread(name, args, invocation.toolCallId);
+        return successResult(JSON.stringify(result, null, 2));
+      } catch (error) {
+        return failureResult(error instanceof Error ? error.message : `Failed to run ${name}.`);
+      }
+    },
+  }));
+}
 
 export function createCopilotThreadOrchestrationTools(
   input: CopilotThreadToolsInput & {
@@ -51,6 +84,12 @@ export function createCopilotThreadOrchestrationTools(
       invocationId?: string,
     ) => Promise<{ readonly title: string }>;
     readonly archiveThread: () => Promise<void>;
+    /** Ìtútù `move_thread` / `snooze_thread`; absent until organization is installed. */
+    readonly organizeThread?: (
+      name: ThreadOrganizationToolName,
+      args: unknown,
+      invocationId: string,
+    ) => Promise<unknown>;
     readonly computerUse: (action: ComputerUseActionType) => Promise<Record<string, unknown>>;
     /** v2 desktop requests; absent means they fail closed (`control_unavailable`). */
     readonly computerUseV2?: (
@@ -94,6 +133,7 @@ export function createCopilotThreadOrchestrationTools(
         }
       },
     },
+    ...(input.organizeThread ? createCopilotOrganizationTools(input.organizeThread) : []),
     {
       name: "archive_thread",
       description: ARCHIVE_THREAD_TOOL_DESCRIPTION,

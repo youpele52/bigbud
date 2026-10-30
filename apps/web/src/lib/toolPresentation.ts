@@ -1,5 +1,7 @@
 const TOOL_LABELS: Readonly<Record<string, string>> = {
   rename_thread: "renamer",
+  move_thread: "thread mover",
+  snooze_thread: "thread snoozer",
   create_thread: "thread creator",
   archive_thread: "thread archiver",
   get_thread_status: "thread status reader",

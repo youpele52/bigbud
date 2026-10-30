@@ -26,6 +26,7 @@ import {
 import { findRemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
 import { runRemoteWorkspaceProcess } from "./http.threadTools.remoteWorkspace.ts";
 import { handleRenameThreadAction } from "./http.threadTools.rename.ts";
+import { handleOrganizationThreadAction } from "./http.threadTools.organization.ts";
 import { enterThreadToolInvocation } from "../orchestration-tools/threadToolInvocationFlights.ts";
 import {
   decodeComputerUseToolRequest,
@@ -279,6 +280,14 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
         return yield* handleRenameThreadAction({ dispatcher, callerThreadId: threadId, body });
       }
 
+      if (body.action === "move" || body.action === "snooze") {
+        return yield* handleOrganizationThreadAction({
+          dispatcher,
+          callerThreadId: threadId,
+          body: { ...body, action: body.action },
+        });
+      }
+
       if (body.action === "computer_use") {
         const computerUseRequest = yield* Effect.try({
           try: () => decodeComputerUseToolRequest(body.computerUseAction),
@@ -322,6 +331,13 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
         return yield* HttpServerResponse.json({ ok: true, result });
       }
 
+      // Only an explicit archive request archives; an unmatched action must never fall through.
+      if (body.action !== "archive") {
+        return yield* new ThreadToolRequestError({
+          status: 400,
+          message: `Unsupported thread tool action '${body.action}'.`,
+        });
+      }
       if (body.threadId === undefined || body.threadId !== authRecord.threadId) {
         return yield* new ThreadToolRequestError({
           status: body.threadId === undefined ? 400 : 401,

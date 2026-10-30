@@ -1,5 +1,6 @@
 import { renderPiComputerUseTool } from "./orchestrationComputerUseTool.selected.ts";
 import { renderPiBrowserToolSource } from "./orchestrationBrowserTool.shared.ts";
+import { renderPiOrganizationToolsSource } from "./PiOrchestrationBridge.template.organization.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
@@ -172,6 +173,8 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "  },",
     "});",
     "",
+    renderPiOrganizationToolsSource(),
+    "",
     "const archiveThreadTool = defineTool({",
     '  name: "archive_thread",',
     '  label: "archive_thread",',
@@ -308,6 +311,8 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "  pi.registerTool(createThreadTool);",
     "  pi.registerTool(listAvailableModelsTool);",
     "  pi.registerTool(renameThreadTool);",
+    "  pi.registerTool(moveThreadTool);",
+    "  pi.registerTool(snoozeThreadTool);",
     "  pi.registerTool(archiveThreadTool);",
     "  pi.registerTool(getThreadStatusTool);",
     "  pi.registerTool(sendThreadMessageTool);",

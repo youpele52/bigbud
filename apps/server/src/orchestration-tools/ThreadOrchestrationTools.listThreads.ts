@@ -4,6 +4,7 @@ import { Effect } from "effect";
 
 import type { ProjectionCatalogQueryShape } from "../orchestration/Services/ProjectionCatalogQuery.ts";
 import type { ThreadWorkflowStatusSnapshot } from "../orchestration/ThreadWorkflowStatus.logic.ts";
+import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
 export const LIST_THREADS_DEFAULT_LIMIT = 50;
 export const LIST_THREADS_MAX_LIMIT = 200;
@@ -29,6 +30,8 @@ export interface ListThreadsRow {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly lastAssistantExcerpt?: string | null;
+  /** Ìtútù organization: state, revision, and any snooze deadline. */
+  readonly organization: ThreadOrganization;
 }
 
 /**

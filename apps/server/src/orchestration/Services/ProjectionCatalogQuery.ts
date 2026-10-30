@@ -28,6 +28,7 @@ import type {
   GetOrganizationThreadSummariesInput,
   GetOrganizationThreadSummariesResult,
 } from "@bigbud/contracts/orchestration/orchestration.catalog.organization.ts";
+import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
 export interface ListCatalogThreadsInput {
   readonly callerThreadId: ThreadId;
@@ -55,6 +56,8 @@ export interface CatalogThreadRow {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly lastAssistantExcerpt?: string | null;
+  /** Ìtútù organization: state, revision, and any snooze deadline. */
+  readonly organization: ThreadOrganization;
 }
 
 export interface ListCatalogThreadsResult {

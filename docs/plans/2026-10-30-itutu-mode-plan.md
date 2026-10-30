@@ -636,3 +636,48 @@ Original checkout since checkpoint 2: 154 uncommitted files, adding provider com
 - Overlapping files: `wsNativeApi.ts`, `wsNativeApi.test.helpers.ts`, `wsRpcClient.ts`, `wsRpcClient.types.ts`, `websocket.constant.ts`, `ipc.nativeApi.ts`, `server/rpc.ts`. Both sides only insert registration lines, at different positions (6–30 lines apart), so a merge should apply cleanly or need trivial manual resolution in `wsNativeApi.ts`.
 - No migrations there; 141 and 142 remain free.
 - Pre-existing, unrelated failure observed: `apps/web/src/rpc/client.test.ts` expects server settings without the Muse provider (2 tests). That file is untouched on this branch.
+
+### Checkpoint 4 — before Phase 3
+
+- `feature/computer-use` has no new commits. The original checkout is unchanged since checkpoint 3 (154 files). Its only file near the agent-tool area, the untracked `codexAppServerManager.capabilities.ts`, gates Codex protocol versions and does not touch tool registration.
+- The original checkout is still rewriting `ProviderRuntimeIngestion*`. Phase 3 therefore does not edit ingestion; provider-driven attention consumes accepted domain events in its own reactor instead.
+
+### Phase 3 refined design (from the checkpoint 4 investigation)
+
+Findings that shape the design:
+
+- No single list generates the thread tools; each transport hand-lists them and shares only description strings.
+- `pin_thread` has no target authorization. `rename_thread` is the authorization model (`resolveThreadToolParticipants`, same project or direct delegated child), and `send_thread_message` is the replay model.
+- The HTTP thread-tool route archives the caller's thread for any action without its own branch. A new action without a branch would archive threads.
+- The command payload digest includes `createdAt`, so a retried tool call with a stable command id and a fresh `createdAt` would conflict instead of replaying.
+- `resolveThreadToolParticipants` allows archived targets; send rejects them explicitly.
+- OpenCode V2 has a frozen native action ABI (bootstrap v1, generated manifest) and a generic orchestration passthrough.
+
+Phase 3a — agent tools:
+
+1. Shared definitions in `threadOrganizationTool.shared.ts`: names, descriptions, JSON input schemas, and decoders for `move_thread` (`state`, optional `threadId`) and `snooze_thread` (`minutes` 2–1440, optional `threadId`).
+2. Tool implementation in `ThreadOrchestrationTools.organization.ts`: default target is the caller; explicit targets go through `resolveThreadToolParticipants`; archived and deleting targets are refused; command ids are derived from the invocation; a replay returns the committed outcome, and a command-id conflict from a retried no-op returns the current organization instead of failing. Results carry the target id, resulting organization, and whether it changed.
+3. Dispatcher: optional `move`/`snooze`, so existing mock dispatchers stay valid.
+4. HTTP: explicit `move`/`snooze` branches in a separate handler module, and the fallback archives only for `action: "archive"`; every other unmatched action is a 400. A test proves unknown, move, and snooze actions never archive.
+5. Transports: Codex dynamic tools, the generated MCP server (Claude, Cursor, Devin, Muse, OpenCode v1, Codex MCP), the Claude allowed-tools list (auto-approved like rename, because organizing is reversible and never touches execution), Copilot, Pi (split into its own template module), and the OpenCode V2 generic orchestration passthrough. The OpenCode V2 native ABI stays frozen in this phase; a compatible ABI version bump is recorded as an open gate, not claimed as coverage. The legacy OpenCode v1 file generator has no production importer and is skipped.
+6. Discovery: `get_thread_status` and `list_threads` results include organization; capability tracks `thread.move` and `thread.snooze`, with guides that require an explicit user request or the completion flow and forbid acting on attached history; friendly tool names in the web tool presentation.
+
+Phase 3b — attention:
+
+7. Completion flow: the thread-context instructions tell agents to ask "Done or Later?" only when the requested task is actually complete, inside the existing response, and to call `move_thread` only after the user chooses or already said so. No end-of-turn detection, classifier, or extra model call.
+8. Needs you from blockers: a dedicated reactor consumes accepted approval-requested and user-input-requested activity events and moves the thread to Needs you, deduplicated by request id, without touching ingestion. Each new blocking request cancels an older snooze through the normal move path.
+9. Acknowledgement: a deliberate user open of a Needs you thread (row click, keyboard open, search result) moves it to Present, fenced by the revision the user saw. Route restoration, hydration, hover, and status reads never acknowledge. Opening never answers or approves anything.
+
+Snooze expiry (Phase 4) and idle cleanup (Phase 5) stay disabled.
+
+### Checkpoint 5 — Phase 3a, agent tools
+
+Implemented here:
+
+- `move_thread` and `snooze_thread` share one implementation (`ThreadOrchestrationTools.organization.ts`): caller-default targets, rename's same-project or delegated-child authorization, archived targets refused, invocation-derived command ids, replay from committed events, and a retried no-op returns the current organization instead of a command-id conflict.
+- HTTP: explicit `move`/`snooze` handling in its own module; the route now archives only for `action: "archive"`, and every unmatched action is a 400. Tested.
+- Transports: Codex dynamic tools and Copilot through one shared runner; the generated MCP server (Claude, Cursor, Devin, Muse, OpenCode v1, Codex MCP), with the generated JavaScript executed in tests; the Claude allowed-tools list; Pi through its own template module; the OpenCode V2 generic orchestration passthrough.
+- Discovery: `get_thread_status` and `list_threads` include organization; `thread.move` and `thread.snooze` capability tracks (kept within the 1,200-token overview budget); thread-context instructions for the completion flow ("Done or Later?" only when the requested task is actually complete, and moving only after the user answers); friendly tool names in the web UI.
+- Open gate: OpenCode V2's frozen native action ABI (bootstrap v1) is unchanged. A compatible ABI version for native move and snooze actions needs its own step following `docs/plans/2026-10-12-opencode-v2-canonical-thread-tools-plan.md`; until then V2 reaches the tools only through the generic passthrough.
+
+Original checkout since checkpoint 4: 156 uncommitted files, continuing Codex controls, compaction, and rewind work. No new overlap; the same seven registration files remain. `feature/computer-use` still has no new commits.

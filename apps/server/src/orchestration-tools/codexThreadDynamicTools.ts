@@ -26,6 +26,7 @@ import { BIGBUD_ORCHESTRATION_NAMESPACE } from "./codexThreadDynamicTools.specs.
 import { normalizeListThreadsStatus } from "./ThreadOrchestrationTools.listThreads.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES, type AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
 import { RenameThreadArguments } from "./threadRenameTool.shared.ts";
+import { runThreadOrganizationTool } from "./threadOrganizationTool.run.ts";
 import {
   decodeComputerUseToolRequest,
   dispatchComputerUseToolRequest,
@@ -160,6 +161,17 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
           contentItems: [inputText(`Renamed thread to "${result.title}".`)],
           success: true,
         };
+      }
+      case "move_thread":
+      case "snooze_thread": {
+        const result = await runThreadOrganizationTool({
+          dispatcher,
+          name: tool,
+          args,
+          threadId,
+          invocationId: String(requestId),
+        });
+        return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
       }
       case "archive_thread": {
         await Effect.runPromise(dispatcher.archive({ threadId }));
