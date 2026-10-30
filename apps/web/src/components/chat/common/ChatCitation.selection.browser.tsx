@@ -12,6 +12,8 @@ import {
   selectChatText,
 } from "./ChatCitation.browser.helpers";
 import { nativeDragChatRange } from "./ChatCitation.browser.pointer";
+import { createMessage } from "../messages/MessagesTimeline.virtualization.test.fixtures";
+import { readChatCitationSelection } from "./ChatCitation.selection";
 
 vi.mock("../../../rpc/serverState", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../rpc/serverState")>()),
@@ -25,6 +27,33 @@ beforeEach(() => {
   window.getSelection()?.removeAllRanges();
 });
 afterEach(() => window.getSelection()?.removeAllRanges());
+
+it("cites prose spanning a fenced code block", async () => {
+  const screen = await render(
+    <CitationBrowserHarness
+      messages={[
+        createMessage({
+          id: "code-example",
+          role: "assistant",
+          text: "Before the example.\n\n```ts\nconst value = 1;\n```\n\nAfter the example.",
+          offsetSeconds: 0,
+        }),
+      ]}
+    />,
+  );
+  try {
+    const content = contentFor("code-example");
+    const selection = selectChatText(content, 0, content.textContent!.length);
+    const selectedText = selection.toString();
+    expect(readChatCitationSelection(selection, document.body)).not.toBeNull();
+    await page.getByRole("button", { name: "Cite", exact: true }).click();
+    expect(
+      useComposerDraftStore.getState().draftsByThreadId[CITE_THREAD_ID]?.annotations[0],
+    ).toMatchObject({ selection: { text: selectedText } });
+  } finally {
+    await screen.unmount();
+  }
+});
 
 it.each([
   { messageId: "cite-user", backward: false },

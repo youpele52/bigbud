@@ -15,7 +15,12 @@ export function ChatCitationChip({
   removeLabel?: string;
 }) {
   const actions = useChatCitationActions();
-  const author = citation.source.role === "assistant" ? "AI" : "You";
+  const author =
+    "requestId" in citation.source
+      ? "Question"
+      : citation.source.role === "assistant"
+        ? "AI"
+        : "You";
   return (
     <div className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border/80 bg-background px-1 py-1">
       <button

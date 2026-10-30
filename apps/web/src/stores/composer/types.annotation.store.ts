@@ -1,5 +1,10 @@
 import * as Schema from "effect/Schema";
-import { MessageId, NonNegativeInt, ThreadId } from "@bigbud/contracts/core/baseSchemas";
+import {
+  ApprovalRequestId,
+  MessageId,
+  NonNegativeInt,
+  ThreadId,
+} from "@bigbud/contracts/core/baseSchemas";
 
 export const ComposerAnnotationElement = Schema.Struct({
   selector: Schema.String,
@@ -81,11 +86,21 @@ export const ComposerTerminalAnnotationAttachment = Schema.Struct({
 export type ComposerTerminalAnnotationAttachment = typeof ComposerTerminalAnnotationAttachment.Type;
 
 export const ChatCitationContent = Schema.Struct({
-  source: Schema.Struct({
-    threadId: ThreadId,
-    messageId: MessageId,
-    role: Schema.Literals(["user", "assistant"]),
-  }),
+  source: Schema.Union([
+    // Keep the original message payload backward-compatible.
+    Schema.Struct({
+      threadId: ThreadId,
+      messageId: MessageId,
+      role: Schema.Literals(["user", "assistant"]),
+    }),
+    Schema.Struct({
+      kind: Schema.Literal("question"),
+      threadId: ThreadId,
+      requestId: ApprovalRequestId,
+      questionId: Schema.String.check(Schema.isPattern(/\S/)),
+      region: Schema.Literals(["header", "question", "options", "prompt"]),
+    }),
+  ]),
   selection: Schema.Struct({
     text: Schema.String.check(Schema.isPattern(/\S/)),
     anchorText: Schema.optional(Schema.String),

@@ -28,7 +28,10 @@ export function ChatCitationProvider({
   const [selected, setSelected] = useState<ChatCitationSelection | null>(null);
   const [target, setTarget] = useState<ChatCitationTarget | null>(null);
   const [requestId, setRequestId] = useState(0);
-  useChatCitationHighlight({ rootRef, target, focusMessageId, requestId });
+  const [focusedQuestionToken, onQuestionFocused] = useState<number | null>(null);
+  const highlightTarget =
+    target && "requestId" in target.source && focusedQuestionToken !== requestId ? null : target;
+  useChatCitationHighlight({ rootRef, target: highlightTarget, focusMessageId, requestId });
 
   useEffect(() => {
     setSelected(null);
@@ -105,15 +108,27 @@ export function ChatCitationProvider({
       setSelected(null);
       setTarget(citation);
       setRequestId((current) => current + 1);
-      useSearchStore.getState().requestMessageFocus(threadId, citation.source.messageId);
+      if ("messageId" in citation.source) {
+        useSearchStore.getState().requestMessageFocus(threadId, citation.source.messageId);
+      }
     },
     [threadId],
   );
-  const context = useMemo(() => ({ openCitation }), [openCitation]);
+  const context = useMemo(
+    () => ({
+      openCitation,
+      questionFocus:
+        target && "requestId" in target.source
+          ? { threadId, requestId: target.source.requestId, token: requestId }
+          : null,
+      onQuestionFocused,
+    }),
+    [openCitation, target, requestId, threadId],
+  );
   const cite = () => {
     if (!selected || !rootRef.current) return;
     const current = readChatCitationSelection(window.getSelection(), rootRef.current);
-    if (!current || current.source.messageId !== selected.source.messageId) {
+    if (!current || JSON.stringify(current.source) !== JSON.stringify(selected.source)) {
       setSelected(null);
       return;
     }

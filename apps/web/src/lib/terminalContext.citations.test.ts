@@ -1,4 +1,4 @@
-import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
+import { ApprovalRequestId, MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { describe, expect, it } from "vitest";
 
 import { appendAnnotationsToPrompt } from "../components/chat/view/ChatView.annotations.logic";
@@ -29,6 +29,57 @@ function citation(
 }
 
 describe("chat citations in annotation prompts", () => {
+  it.each(["header", "question", "options", "prompt"] as const)(
+    "round-trips a question %s citation with its real request identity and only the selected quote",
+    (region) => {
+      const quote: ComposerChatCitationAttachment = {
+        ...citation("Dark — Dark"),
+        source: {
+          kind: "question",
+          threadId: ThreadId.makeUnsafe("thread-source"),
+          requestId: ApprovalRequestId.makeUnsafe("theme-request"),
+          questionId: "theme",
+          region,
+        },
+      };
+      const prompt = appendAnnotationsToPrompt("My reason", [quote]);
+      const displayed = deriveDisplayedUserMessageState(prompt);
+      expect(displayed.visibleText).toBe("My reason");
+      expect(displayed.annotations).toEqual([
+        {
+          kind: "chat",
+          text: buildChatCitationPrompt(quote),
+          source: quote.source,
+          selection: quote.selection,
+        },
+      ]);
+      const embedded = JSON.parse(
+        buildChatCitationPrompt(quote).slice(CHAT_CITATION_HEADER.length),
+      );
+      expect(embedded).toEqual({ source: quote.source, selection: quote.selection });
+      expect(embedded.source).not.toHaveProperty("messageId");
+      expect(embedded.source).not.toHaveProperty("role");
+      expect(prompt).not.toContain("Which theme do you prefer?");
+      expect(
+        parseChatCitationEntry(
+          CHAT_CITATION_HEADER +
+            JSON.stringify({
+              ...embedded,
+              source: { ...quote.source, requestId: "" },
+            }),
+        ),
+      ).toBeNull();
+      expect(
+        parseChatCitationEntry(
+          CHAT_CITATION_HEADER +
+            JSON.stringify({
+              ...embedded,
+              source: { ...quote.source, region: "answer" },
+            }),
+        ),
+      ).toBeNull();
+    },
+  );
   it.each(["user", "assistant"] as const)(
     "round-trips an exact %s quote without adding an instruction",
     (role) => {

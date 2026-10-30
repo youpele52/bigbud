@@ -1,10 +1,12 @@
-import { MessageId } from "@bigbud/contracts/core/baseSchemas";
+import { ApprovalRequestId, MessageId } from "@bigbud/contracts/core/baseSchemas";
 
 import type { ComposerChatCitationAttachment } from "../../../stores/composer/types.annotation.store";
 import { normalizeChatCitationRange } from "./ChatCitation.selection.range";
 
+type WithoutThread<T> = T extends unknown ? Omit<T, "threadId"> : never;
+
 export interface ChatCitationSelection {
-  source: Omit<ComposerChatCitationAttachment["source"], "threadId">;
+  source: WithoutThread<ComposerChatCitationAttachment["source"]>;
   selection: ComposerChatCitationAttachment["selection"];
   rect: DOMRect;
 }
@@ -21,7 +23,26 @@ export function readChatCitationSelection(
   const row = content.closest<HTMLElement>("[data-message-id][data-message-role]");
   const role = row?.dataset.messageRole;
   const messageId = row?.dataset.messageId;
-  if (!messageId || (role !== "user" && role !== "assistant")) return null;
+  const requestId = content.closest<HTMLElement>("[data-chat-cite-request-id]")?.dataset
+    .chatCiteRequestId;
+  const questionId = content.closest<HTMLElement>("[data-chat-cite-question-id]")?.dataset
+    .chatCiteQuestionId;
+  const region = content.dataset.chatCiteRegion;
+  let source: ChatCitationSelection["source"];
+  if (
+    requestId &&
+    questionId &&
+    (region === "header" || region === "question" || region === "options" || region === "prompt")
+  ) {
+    source = {
+      kind: "question",
+      requestId: ApprovalRequestId.makeUnsafe(requestId),
+      questionId,
+      region,
+    };
+  } else if (messageId && (role === "user" || role === "assistant")) {
+    source = { messageId: MessageId.makeUnsafe(messageId), role };
+  } else return null;
   for (const excluded of content.querySelectorAll(
     "button,input,textarea,[contenteditable=true],[data-chat-cite-exclude]",
   )) {
@@ -35,7 +56,7 @@ export function readChatCitationSelection(
   const startOffset = prefix.toString().length;
   const anchorText = range.toString();
   return {
-    source: { messageId: MessageId.makeUnsafe(messageId), role },
+    source,
     selection: { text, anchorText, startOffset, endOffset: startOffset + anchorText.length },
     rect: range.getBoundingClientRect(),
   };

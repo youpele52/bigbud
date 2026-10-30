@@ -32,12 +32,17 @@ export function CitationBrowserHarness({
   messages = CITE_MESSAGES,
   threadId = CITE_THREAD_ID,
   focusMessageId,
+  pendingUserInputs,
+  answeredUserInputs,
 }: {
+  pendingUserInputs?: Parameters<typeof createBaseTimelineProps>[0]["pendingUserInputs"];
+  answeredUserInputs?: Parameters<typeof createBaseTimelineProps>[0]["answeredUserInputs"];
   messages?: ChatMessage[];
   threadId?: ThreadId;
   focusMessageId?: MessageId | null;
 }) {
   const [scrollContainer, setScrollContainer] = useState<HTMLDivElement | null>(null);
+  const [openById, setOpenById] = useState<Record<string, boolean>>({});
   const focus = useSearchStore((state) => state.focusRequest);
   const draft = useComposerDraftStore((state) => state.draftsByThreadId[threadId]);
   const annotations = draft?.annotations ?? [];
@@ -46,7 +51,15 @@ export function CitationBrowserHarness({
     <ChatCitationProvider threadId={threadId} focusMessageId={focusedId} onCite={() => {}}>
       <div ref={setScrollContainer} data-chat-cite-scope style={{ height: 260, overflow: "auto" }}>
         <MessagesTimeline
-          {...createBaseTimelineProps({ messages })}
+          {...createBaseTimelineProps({
+            messages,
+            ...(pendingUserInputs ? { pendingUserInputs } : {}),
+            ...(answeredUserInputs ? { answeredUserInputs } : {}),
+          })}
+          activityAccordionOpenById={openById}
+          onSetActivityAccordionOpen={(id, open) =>
+            setOpenById((prev) => ({ ...prev, [id]: open }))
+          }
           scrollContainer={scrollContainer}
           focusMessageId={focusedId}
         />

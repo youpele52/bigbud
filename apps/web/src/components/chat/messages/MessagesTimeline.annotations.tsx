@@ -17,8 +17,7 @@ export function MessagesTimelineAnnotations(props: { annotations: ParsedUserAnno
     .filter((annotation) => annotation.kind === "chat")
     .map((citation) => {
       const sourceKey = JSON.stringify([
-        citation.source.threadId,
-        citation.source.messageId,
+        citation.source,
         citation.selection.startOffset,
         citation.selection.endOffset,
       ]);

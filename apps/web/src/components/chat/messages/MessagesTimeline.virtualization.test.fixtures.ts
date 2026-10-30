@@ -3,6 +3,7 @@ import { type ComponentProps } from "react";
 
 import { deriveTimelineEntries } from "../../../logic/session";
 import { type WorkLogEntry } from "../../../logic/session";
+import { type PendingUserInput } from "../../../logic/session/session.logic";
 import { type AnsweredUserInput } from "../../../logic/session/session.userInputHistory.logic";
 import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../../models/types";
 import { type MessagesTimeline } from "./MessagesTimeline";
@@ -67,6 +68,7 @@ export function createBaseTimelineProps(input: {
   messages?: ChatMessage[];
   proposedPlans?: ProposedPlan[];
   workEntries?: WorkLogEntry[];
+  pendingUserInputs?: PendingUserInput[];
   answeredUserInputs?: AnsweredUserInput[];
   historicalAgents?: OrchestrationTask[];
   isWorking?: boolean;
@@ -85,7 +87,7 @@ export function createBaseTimelineProps(input: {
       input.messages ?? [],
       input.proposedPlans ?? [],
       input.workEntries ?? [],
-      [],
+      input.pendingUserInputs ?? [],
       input.answeredUserInputs ?? [],
     ),
     ...(input.historicalAgents ? { historicalAgents: input.historicalAgents } : {}),

@@ -1,4 +1,4 @@
-import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
+import { ApprovalRequestId, MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { useComposerDraftStore } from "./composer.store";
@@ -49,6 +49,25 @@ describe("composer chat citations", () => {
     const hydrated = toHydratedThreadDraft(drafts[threadId]!);
     expect(hydrated.annotations).toEqual([quote]);
     expect(hydrated.prompt).toBe("");
+  });
+
+  it("persists and hydrates question citations without inventing a message identity", () => {
+    const questionQuote: ComposerChatCitationAttachment = {
+      ...quote,
+      source: {
+        kind: "question",
+        threadId,
+        requestId: ApprovalRequestId.makeUnsafe("theme-request"),
+        questionId: "theme",
+        region: "question",
+      },
+    };
+    useComposerDraftStore.getState().addAnnotation(threadId, questionQuote);
+    const persisted = partializeComposerDraftStoreState(useComposerDraftStore.getState());
+    const drafts = normalizePersistedDraftsByThreadId(
+      JSON.parse(JSON.stringify(persisted.draftsByThreadId)),
+    );
+    expect(toHydratedThreadDraft(drafts[threadId]!).annotations).toEqual([questionQuote]);
   });
 
   it("retains citations when an unrelated screenshot is removed", () => {

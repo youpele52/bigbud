@@ -1,4 +1,4 @@
-import { MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
+import { ApprovalRequestId, MessageId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { deriveDisplayedUserMessageState } from "../../../lib/terminalContext";
@@ -21,65 +21,86 @@ const citation: ComposerChatCitationAttachment = {
   selection: { text: 'exact phrase\n"quoted"', startOffset: 12, endOffset: 33 },
 };
 
+const questionCitation: ComposerChatCitationAttachment = {
+  ...citation,
+  source: {
+    kind: "question",
+    threadId,
+    requestId: ApprovalRequestId.makeUnsafe("theme-request"),
+    questionId: "theme",
+    region: "question",
+  },
+};
+
 beforeEach(resetComposerDraftStore);
 
-it("delivers the exact quote alongside a user-written explanation through shared send preparation", async () => {
-  const prepared = await prepareComposerPrompt({
-    api: {} as never,
-    resetComposerDraft: vi.fn(),
-    sendInput: {
-      activeThread: makeThread({ id: threadId }),
-      activeProject: { id: "project-1", cwd: "/project" },
-      promptRef: { current: "Here is why I cited it." },
-      composerAnnotations: [citation],
+it.each(
+  [citation, questionCitation].flatMap((citation) =>
+    ["", "Here is why I cited it."].map((prompt) => ({ citation, prompt })),
+  ),
+)(
+  "delivers an exact quote with composer text '$prompt' through shared send preparation ($citation.source)",
+  async ({ citation, prompt }) => {
+    const prepared = await prepareComposerPrompt({
+      api: {} as never,
+      resetComposerDraft: vi.fn(),
+      sendInput: {
+        activeThread: makeThread({ id: threadId }),
+        activeProject: { id: "project-1", cwd: "/project" },
+        promptRef: { current: prompt },
+        composerAnnotations: [citation],
+        composerImages: [],
+        composerFiles: [],
+        composerTerminalContexts: [],
+        selectedProvider: "codex",
+        selectedModel: "gpt-5",
+        selectedProviderModels: [],
+        selectedPromptEffort: null,
+        selectedModelSelection: { provider: "codex", model: "gpt-5" },
+      } as unknown as UseOnSendInput,
+    });
+
+    expect(prepared?.annotations).toEqual([citation]);
+    const displayed = deriveDisplayedUserMessageState(prepared!.outgoingMessageText);
+    expect(displayed.visibleText).toBe(prompt);
+    expect(displayed.annotations).toMatchObject([
+      { kind: "chat", source: citation.source, selection: citation.selection },
+    ]);
+  },
+);
+
+it.each([citation, questionCitation])(
+  "restores the quote and user's explanation after a failed send or queue ($source)",
+  (citation) => {
+    const promptRef = { current: "" };
+    const setPrompt = vi.fn();
+    restoreMessageComposerDraftAfterFailure({
+      currentDraftEmpty: true,
+      messageIdForSend: null,
+      promptText: "My own explanation",
+      promptRef,
+      replyTarget: null,
       composerImages: [],
       composerFiles: [],
+      composerAnnotations: [citation],
       composerTerminalContexts: [],
-      selectedProvider: "codex",
-      selectedModel: "gpt-5",
-      selectedProviderModels: [],
-      selectedPromptEffort: null,
-      selectedModelSelection: { provider: "codex", model: "gpt-5" },
-    } as unknown as UseOnSendInput,
-  });
+      setOptimisticUserMessages: vi.fn(),
+      revokeUserMessagePreviewUrls: vi.fn(),
+      setPrompt,
+      setComposerCursor: vi.fn(),
+      addComposerImagesToDraft: vi.fn(),
+      addComposerFilesToDraft: vi.fn(),
+      addComposerAnnotationsToDraft: (annotations) =>
+        useComposerDraftStore.getState().addAnnotations(threadId, annotations),
+      addComposerTerminalContextsToDraft: vi.fn(),
+      setReplyTarget: vi.fn(),
+      setComposerTrigger: vi.fn(),
+    });
 
-  expect(prepared?.annotations).toEqual([citation]);
-  const displayed = deriveDisplayedUserMessageState(prepared!.outgoingMessageText);
-  expect(displayed.visibleText).toBe("Here is why I cited it.");
-  expect(displayed.annotations).toMatchObject([
-    { kind: "chat", source: citation.source, selection: citation.selection },
-  ]);
-});
-
-it("restores the quote and user's explanation after a failed send or queue", () => {
-  const promptRef = { current: "" };
-  const setPrompt = vi.fn();
-  restoreMessageComposerDraftAfterFailure({
-    currentDraftEmpty: true,
-    messageIdForSend: null,
-    promptText: "My own explanation",
-    promptRef,
-    replyTarget: null,
-    composerImages: [],
-    composerFiles: [],
-    composerAnnotations: [citation],
-    composerTerminalContexts: [],
-    setOptimisticUserMessages: vi.fn(),
-    revokeUserMessagePreviewUrls: vi.fn(),
-    setPrompt,
-    setComposerCursor: vi.fn(),
-    addComposerImagesToDraft: vi.fn(),
-    addComposerFilesToDraft: vi.fn(),
-    addComposerAnnotationsToDraft: (annotations) =>
-      useComposerDraftStore.getState().addAnnotations(threadId, annotations),
-    addComposerTerminalContextsToDraft: vi.fn(),
-    setReplyTarget: vi.fn(),
-    setComposerTrigger: vi.fn(),
-  });
-
-  expect(promptRef.current).toBe("My own explanation");
-  expect(setPrompt).toHaveBeenCalledWith("My own explanation");
-  expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.annotations).toEqual([
-    citation,
-  ]);
-});
+    expect(promptRef.current).toBe("My own explanation");
+    expect(setPrompt).toHaveBeenCalledWith("My own explanation");
+    expect(useComposerDraftStore.getState().draftsByThreadId[threadId]?.annotations).toEqual([
+      citation,
+    ]);
+  },
+);

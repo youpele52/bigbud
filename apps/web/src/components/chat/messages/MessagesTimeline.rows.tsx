@@ -80,6 +80,9 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
       data-timeline-row-kind={row.kind}
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
+      data-chat-cite-request-id={
+        row.kind === "user-input-question" ? row.pendingUserInput.requestId : undefined
+      }
     >
       {row.kind === "subagents-history" ? (
         <SubagentsCard agents={row.agents} presentation="accordion" accordion={accordion} />
