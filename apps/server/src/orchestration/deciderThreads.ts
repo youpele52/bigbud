@@ -21,6 +21,12 @@ import { decideThreadForkCommand } from "./deciderThreads.fork.ts";
 import { decideDelegationModelChoiceCommand } from "./deciderThreads.delegationModelChoice.ts";
 import { decideThreadRecoveryCommand } from "./deciderThreads.recovery.ts";
 import {
+  decideThreadOrganizationCommand,
+  THREAD_ORGANIZATION_COMMAND_TYPES,
+  type ThreadOrganizationCommand,
+  withLifecycleOrganizationEvents,
+} from "./deciderThreads.organization.ts";
+import {
   canNameThreadFromTerminal,
   TERMINAL_TITLE_COMMAND_PREFIX,
   threadTitleOwner,
@@ -86,8 +92,17 @@ export const decideThreadCommand = Effect.fn("decideThreadCommand")(function* ({
     }
   }
   if (LIFECYCLE_TYPES.has(command.type)) {
-    return yield* decideThreadLifecycleCommand({
+    const events = yield* decideThreadLifecycleCommand({
       command: command as ThreadLifecycleCommand,
+      readModel,
+    });
+    return command.type === "thread.archive" || command.type === "thread.unarchive"
+      ? withLifecycleOrganizationEvents({ command, readModel, events })
+      : events;
+  }
+  if (THREAD_ORGANIZATION_COMMAND_TYPES.has(command.type)) {
+    return yield* decideThreadOrganizationCommand({
+      command: command as ThreadOrganizationCommand,
       readModel,
     });
   }

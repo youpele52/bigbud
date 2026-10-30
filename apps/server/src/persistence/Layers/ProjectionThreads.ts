@@ -1,99 +1,29 @@
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import {
-  OrchestrationQueuedPrompt,
-  OrchestrationPendingInterruptFlushIntent,
-  OrchestrationTurnControlOperation,
-  ParentThreadReference,
-  PersistedModelSelection,
-  ThreadId,
-} from "@bigbud/contracts";
+import { ThreadId } from "@bigbud/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Schema from "effect/Schema";
-import * as Struct from "effect/Struct";
-import { OrchestrationPendingTurnStart } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import { resolveProjectionWorktreeIdentity } from "./ProjectionThreads.identity.ts";
 import { makeProjectDeletionSql } from "../../deletion/Layers/ProjectDeletion.sql.ts";
 import { makeListRecentModelSelections } from "./ProjectionThreads.modelChoice.ts";
 import { makeSetThreadRecovery } from "./ProjectionThreads.recovery.ts";
+import { makeSetThreadOrganization } from "./ProjectionThreads.organization.ts";
+import {
+  normalizeProjectionThreadRow,
+  ProjectionThreadDbRow,
+  ProjectionThreadWriteRow,
+} from "./ProjectionThreads.rows.ts";
 import {
   DeleteProjectionThreadInput,
   GetProjectionThreadInput,
   ListProjectionThreadsByProjectInput,
-  ProjectionThread,
   ProjectionThreadRepository,
   TouchProjectionThreadActivityInput,
   type ProjectionThreadRepositoryShape,
 } from "../Services/ProjectionThreads.ts";
-
-const ProjectionThreadDbRow = ProjectionThread.mapFields(
-  Struct.assign({
-    // Keep historical provider selections readable after a provider is removed.
-    modelSelection: Schema.fromJsonString(PersistedModelSelection),
-    parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
-    queuedPrompts: Schema.fromJsonString(Schema.Array(OrchestrationQueuedPrompt)),
-    pendingInterruptFlushIntent: Schema.NullOr(
-      Schema.fromJsonString(OrchestrationPendingInterruptFlushIntent),
-    ),
-    pendingTurnControlOperation: Schema.NullOr(
-      Schema.fromJsonString(OrchestrationTurnControlOperation),
-    ),
-    queueHold: Schema.Number,
-    pendingTurnStart: Schema.NullOr(Schema.fromJsonString(OrchestrationPendingTurnStart)),
-  }),
-);
-type ProjectionThreadDbRow = typeof ProjectionThreadDbRow.Type;
-
-const ProjectionThreadWriteRow = ProjectionThread.mapFields(
-  Struct.assign({
-    worktreeIdentity: Schema.NullOr(
-      Schema.Struct({
-        canonicalPath: Schema.String,
-        device: Schema.Number,
-        inode: Schema.Number,
-      }),
-    ),
-  }),
-);
-
-function normalizeProjectionThreadRow(row: ProjectionThreadDbRow): typeof ProjectionThread.Type {
-  return {
-    threadId: row.threadId,
-    projectId: row.projectId,
-    title: row.title,
-    purpose: row.purpose,
-    elevatorSummary: row.elevatorSummary,
-    elevatorSummaryMessageCount: row.elevatorSummaryMessageCount,
-    providerRuntimeExecutionTargetId: row.providerRuntimeExecutionTargetId,
-    workspaceExecutionTargetId: row.workspaceExecutionTargetId,
-    executionTargetId: row.executionTargetId,
-    modelSelection: row.modelSelection as ProjectionThread["modelSelection"],
-    runtimeMode: row.runtimeMode,
-    interactionMode: row.interactionMode,
-    branch: row.branch,
-    worktreePath: row.worktreePath,
-    ...(row.parentThread !== null ? { parentThread: row.parentThread } : {}),
-    latestTurnId: row.latestTurnId,
-    queuedPrompts: row.queuedPrompts,
-    ...(row.pendingInterruptFlushIntent !== undefined
-      ? { pendingInterruptFlushIntent: row.pendingInterruptFlushIntent }
-      : {}),
-    pendingTurnControlOperation: row.pendingTurnControlOperation ?? null,
-    queueHold: row.queueHold === 1,
-    pendingTurnStart: row.pendingTurnStart,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-    lastActivityAt: row.lastActivityAt,
-    archivedAt: row.archivedAt,
-    pinnedAt: row.pinnedAt,
-    deletingAt: row.deletingAt,
-    deletedAt: row.deletedAt,
-  };
-}
 
 const makeProjectionThreadRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -391,6 +321,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
     touchActivity,
     listRecentModelSelections: makeListRecentModelSelections(sql),
     setRecovery: makeSetThreadRecovery(sql),
+    setOrganization: makeSetThreadOrganization(sql),
   } satisfies ProjectionThreadRepositoryShape;
 });
 

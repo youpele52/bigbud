@@ -49,7 +49,9 @@ export type ThreadTurnCommand = Exclude<
       | "thread.delegation.model-choice.expire"
       | "thread.delegation.model-choice.pick"
       | "thread.recovery.set"
-      | "thread.recovery.resolve";
+      | "thread.recovery.resolve"
+      | "thread.organization.move"
+      | "thread.organization.snooze";
   }
 >;
 

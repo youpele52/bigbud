@@ -99,6 +99,7 @@ export {
   ThreadUserInputResponseRequestedPayload,
 } from "./orchestration.events.thread";
 import { ThreadRecoveryUpdatedPayload } from "./orchestration.recovery";
+import { ThreadOrganizationUpdatedPayload } from "./orchestration.organization";
 
 export const OrchestrationEventType = Schema.Literals([
   "project.created",
@@ -142,6 +143,7 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.task-upserted",
   "thread.task-removed",
   "thread.recovery-updated",
+  "thread.organization-updated",
 ]);
 export type OrchestrationEventType = typeof OrchestrationEventType.Type;
 
@@ -373,6 +375,11 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.recovery-updated"),
     payload: ThreadRecoveryUpdatedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.organization-updated"),
+    payload: ThreadOrganizationUpdatedPayload,
   }),
 ]);
 export type OrchestrationEvent = typeof OrchestrationEvent.Type;

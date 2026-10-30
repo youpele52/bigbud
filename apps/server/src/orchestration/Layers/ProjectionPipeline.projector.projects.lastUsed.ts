@@ -4,7 +4,11 @@ type ThreadEvent = Extract<OrchestrationEvent, { readonly type: `thread.${string
 type IgnoredThreadRecencyEvent = Extract<
   ThreadEvent,
   {
-    readonly type: "thread.deletion-requested" | "thread.deletion-failed" | "thread.deleted";
+    readonly type:
+      | "thread.deletion-requested"
+      | "thread.deletion-failed"
+      | "thread.deleted"
+      | "thread.organization-updated";
   }
 >;
 export type ThreadActivityEvent = Exclude<ThreadEvent, IgnoredThreadRecencyEvent>;
@@ -13,6 +17,8 @@ const IGNORED_THREAD_RECENCY_EVENTS = new Set<OrchestrationEvent["type"]>([
   "thread.deletion-requested",
   "thread.deletion-failed",
   "thread.deleted",
+  // Organizing a thread is not activity: it must not refresh retention or project recency.
+  "thread.organization-updated",
 ]);
 
 export function advancesThreadActivityAt(event: OrchestrationEvent): event is ThreadActivityEvent {

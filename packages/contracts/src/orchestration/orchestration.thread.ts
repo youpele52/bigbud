@@ -26,6 +26,7 @@ import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import { ThreadForkOrigin } from "./orchestration.fork";
 import { OrchestrationTask } from "./orchestration.thread.tasks";
 import { ThreadRecovery } from "./orchestration.recovery";
+import { ThreadOrganizationField } from "./orchestration.organization";
 
 export const ELEVATOR_SUMMARY_MAX_CHARS = 150;
 export const ElevatorSummary = TrimmedNonEmptyString.check(
@@ -308,6 +309,8 @@ export const OrchestrationThread = Schema.Struct({
   recovery: Schema.optional(Schema.NullOr(ThreadRecovery)).pipe(
     Schema.withDecodingDefault(() => null),
   ),
+  /** Ìtútù organization. Absent on snapshots written before organization existed. */
+  organization: ThreadOrganizationField,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),

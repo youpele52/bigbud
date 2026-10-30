@@ -20,6 +20,7 @@ import { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestrat
 import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import { OrchestrationPendingTurnStart } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { ThreadRecovery } from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
+import { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import { Schema, Struct } from "effect";
 
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
@@ -67,6 +68,8 @@ export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
     pendingTurnStart: Schema.NullOr(Schema.fromJsonString(OrchestrationPendingTurnStart)),
     // Migration 138; optional so a query that does not select it still decodes.
     recovery: Schema.optional(Schema.NullOr(Schema.fromJsonString(ThreadRecovery))),
+    // Migration 141; optional so a query that does not select it still decodes.
+    organization: Schema.optional(Schema.fromJsonString(ThreadOrganization)),
   }),
 );
 
