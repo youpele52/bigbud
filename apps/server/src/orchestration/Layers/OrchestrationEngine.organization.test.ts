@@ -16,16 +16,17 @@ const projectId = ProjectId.makeUnsafe("project-organization");
 const threadId = ThreadId.makeUnsafe("thread-organization");
 const createdAt = "2026-10-30T00:00:00.000Z";
 
-function command(
-  id: string,
-  body: Omit<
-    Extract<
-      OrchestrationCommand,
-      { type: "thread.organization.move" | "thread.organization.snooze" }
-    >,
-    "commandId" | "threadId" | "createdAt"
-  >,
-): OrchestrationCommand {
+type OrganizationCommand = Extract<
+  OrchestrationCommand,
+  { type: "thread.organization.move" | "thread.organization.snooze" }
+>;
+type OrganizationCommandBody = OrganizationCommand extends infer C
+  ? C extends OrganizationCommand
+    ? Omit<C, "commandId" | "threadId" | "createdAt">
+    : never
+  : never;
+
+function command(id: string, body: OrganizationCommandBody): OrchestrationCommand {
   return {
     ...body,
     commandId: CommandId.makeUnsafe(id),

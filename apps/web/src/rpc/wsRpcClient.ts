@@ -314,6 +314,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getProjectThreadSummaries](input),
         ),
+      getOrganizationThreadSummaries: (input) =>
+        transport.request((client) =>
+          client[ORCHESTRATION_WS_METHODS.getOrganizationThreadSummaries](input),
+        ),
       getSelectedThreadDetail: (input) =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getSelectedThreadDetail](input),

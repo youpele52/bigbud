@@ -6,6 +6,7 @@ import {
 } from "@bigbud/contracts/orchestration/orchestration.catalog.ts";
 import { HistoricalModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
 import { NonNegativeInt } from "@bigbud/contracts/core/baseSchemas.ts";
+import { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import {
   ThreadDetailPendingApproval,
   ThreadDetailCheckpoint,
@@ -32,6 +33,7 @@ export const ProjectThreadCountDbRow = ProjectThreadCount;
 export const ThreadSummaryDbRow = ThreadSummary.mapFields(
   Struct.assign({
     modelSelection: Schema.fromJsonString(HistoricalModelSelection),
+    organization: Schema.fromJsonString(ThreadOrganization),
     // projection_thread_sessions.retained_family; NULL when the thread has no session row.
     retainedFamily: Schema.NullOr(Schema.Number),
     isWatching: Schema.Number,

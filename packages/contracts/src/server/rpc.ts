@@ -10,6 +10,7 @@ import {
 
 import { WS_METHODS } from "../constants/websocket.constant";
 import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
+import { WsOrchestrationGetOrganizationThreadSummariesRpc } from "./rpc.organization";
 import {
   WsSubscribeTerminalSessionRpc,
   WsTerminalOutputAckRpc,
@@ -290,6 +291,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetStartupProjectCatalogRpc,
   WsOrchestrationSearchConversationMessagesRpc,
   WsOrchestrationGetProjectThreadSummariesRpc,
+  WsOrchestrationGetOrganizationThreadSummariesRpc,
   WsOrchestrationGetSelectedThreadDetailRpc,
   WsOrchestrationGetThreadOwnershipRpc,
   WsOrchestrationGetCommandOutcomeRpc,

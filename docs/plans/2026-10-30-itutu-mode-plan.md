@@ -578,3 +578,61 @@ Original checkout since checkpoint 0: 143 uncommitted files. New workstream: pro
 - File overlap with this branch: none.
 - Still no new migrations there; 141 remains free. Recheck before merging.
 - Plan adjustment for Phase 2: add the organization catalog RPC as its own `rpc.*` module and handler file, so the shared `rpc.ts`, `wsNativeApi.ts`, and `wsRpcClient*.ts` edits stay to single registration lines that are easy to merge with the provider-controls work.
+
+### Checkpoint 2 — before Phase 2
+
+- Phase 1 committed as `b5c3792855`. `feature/computer-use` has no new commits since `5ae5cc00ca`, so there is nothing to integrate yet.
+- Original checkout: 145 uncommitted files, still the backend reliability work plus provider session/MCP controls (now with browser and unit tests). It touches no sidebar, context-menu, catalog, store, or migration files.
+- Expected Phase 2 overlap: one-line registrations in `packages/contracts/src/server/rpc.ts` and `constants/websocket.constant.ts`, and possibly `rpc/wsNativeApi.ts` / `rpc/wsRpcClient*.ts`. Keep these to single lines.
+
+### Phase 2 refined design (from the checkpoint 2 investigation)
+
+Findings that shape the design:
+
+- The web client only knows a bounded subset of threads: startup loads built-in Chats recents, pinned threads, two local projects, one remote project, and per-project pages of five. Pinned threads from unloaded projects already appear through summaries that carry no project membership; organization pages follow that precedent.
+- `ThreadSummary`, the web `Thread`/`SidebarThreadSummary` types, and their mappers carry no organization. The web ignores `thread.organization-updated`.
+- Context menus are flat in the contract, the Electron handler, and the browser fallback. The Electron handler strips unknown fields.
+- Thread rows use HTML5 drag with a copy-only thread-context payload for dropping into chat.
+- UI preferences are hand-persisted to `bigbud:ui-state:v1` without per-server namespacing.
+- Navigation order (`Sidebar.renderedProjects.ts`) is chats then project threads.
+
+Server and contracts:
+
+1. Add `organization` to `ThreadSummary` (defaulting field). Move the duplicated thread-summary column list from the sidebar and project-page queries into one shared SQL fragment that also selects organization, so every summary carries it.
+2. New contract module `orchestration.catalog.organization.ts`: `getOrganizationThreadSummaries({ state, limit?, cursor? })` returns `{ projectionSequence, state, threads, nextCursor? }`. Default page 20, maximum 50. Keyset order `updated_at DESC, thread_id ASC`, the same as project pages. It covers active, non-deleting, unarchived standard threads from every project, including Chats.
+3. Migration 142: partial index on `(organization_state, updated_at DESC, thread_id)` for active rows.
+4. RPC in its own `rpc.organization.ts` contract module and `wsRpcHandlers.organization.ts` server module, with single-line registrations in shared files.
+
+Web:
+
+5. Map `organization` into `Thread` and `SidebarThreadSummary`, including the summary-equality check. Apply `thread.organization-updated` to known threads and summaries.
+6. A dedicated organization membership store (ids per state, per-state cursor, load status, projection sequence). Page summaries are upserted into the summary map without project membership, like pinned threads. Live events move ids between states immediately; a page response older than the last applied event cannot restore stale membership. An event for an unknown thread refreshes that state's first page.
+7. Arrangement (`projects` | `itutu`) and collapsed Ìtútù groups persist through the existing UI-state persistence.
+8. Ìtútù layout replaces only the section list inside `SidebarNavigation`: Present at the top, then a `margin-top: auto` block with Needs you, Later, and Done in one scroll viewport. Plain `SidebarSectionLabel` headings without icons, collapsible, each with "Show more" when the state has another page. The arrangement toggle lives in the fixed actions row, not the drag-region header.
+9. Rows reuse `SidebarThreadRow`, adding an optional second line through a prop: location icon plus project name, remote workspace name, or Chat. The location comes from the summary's workspace target and project, with a safe fallback when the project is not loaded.
+10. Context menu contract: optional `checked` and bounded `children` (one submenu level, maximum 16 items each), implemented in the Electron handler (submenu and checkbox) and the browser fallback (nested panel, keyboard and Escape). The thread menu uses the agreed order. Move to has the four states with a check on the current one, a separator, then Snooze (2m, 10m, 30m, 1h, 4h, 24h presets) and Cancel snooze while snoozed. Custom duration input follows in Phase 4 alongside the timers.
+11. Drag between Ìtútù groups uses a separate organization drag MIME added to the existing payload, with `effectAllowed` `copyMove`. Group drop targets dispatch a move only for a known thread id. Drag into chat keeps working.
+12. Multi-select context menu adds Move to for the selection, dispatched per thread with a partial-failure toast.
+13. In Ìtútù, visible order for previous/next and mod+1..9 follows the expanded groups in display order.
+
+Snooze expiry and idle cleanup stay disabled until Phases 4 and 5.
+
+### Checkpoint 3 — Phase 2, catalog and sidebar
+
+Implemented here, following the refined Phase 2 design:
+
+- `ThreadSummary.organization`, with the two duplicated summary column lists replaced by one shared fragment (`ProjectionCatalogQuery.summaryColumns.ts`) that selects organization for every summary.
+- `orchestration.getOrganizationThreadSummaries`: keyset pages per state across all projects (default 20, maximum 50), served by migration 142's partial index (verified with a query-plan test). Contract and server handler live in their own modules.
+- Web: organization mapped into threads and summaries; `thread.organization-updated` applied live; page summaries merged like pinned threads without project membership; a higher organization revision always wins, so a late page cannot undo a live move; moves of threads this client has never loaded mark that state stale so the open view reloads its first page.
+- Groups are derived from known summaries, so a move regroups immediately without a second membership list.
+- Ìtútù UI: Projects | Ìtútù switch above New chat and Search, persisted with collapsed groups under `bigbud:itutu-ui:v1`; Present at the top and Needs you, Later, Done anchored at the bottom; existing rows with a smaller location line (Chat, local project, or remote workspace); Show more per state; drag between groups with a separate payload while drag into chat keeps working; keyboard traversal and mod+1..9 follow the visible groups.
+- Context menus: optional `checked` and one bounded submenu level in the contract, Electron handler, and browser fallback (keyboard: arrows, Enter, Escape, Left; focus restored on close). The thread menu follows the agreed order with Move to. Snooze presets and Cancel snooze sit inside Move to, because menus allow one submenu level; the custom-duration picker moves to Phase 4. The multi-select menu offers Move to for the selection with a partial-failure toast.
+- The Electron handler no longer emits a duplicate separator before Delete when an explicit separator precedes it.
+
+Known limits until later phases: snoozed threads stay in Later because expiry is Phase 4; Needs you is only reached by manual moves until Phase 3; agents cannot move threads until Phase 3.
+
+Original checkout since checkpoint 2: 154 uncommitted files, adding provider compaction and rewind-boundary work (`ProviderCompaction`, `ProviderSessionDirectory.compaction`, `codexAppServerManager.rewind.boundary`) and a provider-controls native API test. `feature/computer-use` still has no new commits.
+
+- Overlapping files: `wsNativeApi.ts`, `wsNativeApi.test.helpers.ts`, `wsRpcClient.ts`, `wsRpcClient.types.ts`, `websocket.constant.ts`, `ipc.nativeApi.ts`, `server/rpc.ts`. Both sides only insert registration lines, at different positions (6–30 lines apart), so a merge should apply cleanly or need trivial manual resolution in `wsNativeApi.ts`.
+- No migrations there; 141 and 142 remain free.
+- Pre-existing, unrelated failure observed: `apps/web/src/rpc/client.test.ts` expects server settings without the Muse provider (2 tests). That file is untouched on this branch.

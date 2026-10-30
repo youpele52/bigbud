@@ -220,6 +220,7 @@ export function mapThread(thread: OrchestrationThread): Thread {
     updatedAt: thread.updatedAt,
     latestTurn: thread.latestTurn,
     recovery: thread.recovery ?? null,
+    ...(thread.organization ? { organization: thread.organization } : {}),
     pendingSourceProposedPlan: thread.latestTurn?.sourceProposedPlan,
     branch: thread.branch,
     worktreePath: thread.worktreePath,
@@ -299,6 +300,7 @@ export function buildSidebarThreadSummary(thread: Thread): SidebarThreadSummary 
     worktreePath: thread.worktreePath,
     latestUserMessageAt: getLatestUserMessageAt(thread.messages),
     recoveryStatus: thread.recovery?.status ?? null,
+    ...(thread.organization ? { organization: thread.organization } : {}),
     hasPendingApprovals: derivePendingApprovals(thread.activities).length > 0,
     hasPendingUserInput: derivePendingUserInputs(thread.activities).length > 0,
     hasActionableProposedPlan: hasActionableProposedPlan(
@@ -335,6 +337,7 @@ export function sidebarThreadSummariesEqual(
     left.hasPendingApprovals === right.hasPendingApprovals &&
     left.hasPendingUserInput === right.hasPendingUserInput &&
     left.hasActionableProposedPlan === right.hasActionableProposedPlan &&
-    (left.recoveryStatus ?? null) === (right.recoveryStatus ?? null)
+    (left.recoveryStatus ?? null) === (right.recoveryStatus ?? null) &&
+    left.organization === right.organization
   );
 }

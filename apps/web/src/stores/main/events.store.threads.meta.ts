@@ -5,6 +5,7 @@ import { type AppState } from "./main.store";
 import { buildLatestTurn, updateThreadState } from "./helpers.store";
 import { prependSidebarPinnedThreadId, removeSidebarThreadId } from "./helpers.sidebar.store";
 import { applyActiveThreadCountTransition } from "./helpers.projectThreadCount.store";
+import { applyThreadOrganizationEvent } from "./helpers.organization.store";
 import {
   clearPendingTurnStartRequest,
   requestTurnStart,
@@ -196,6 +197,9 @@ export function applyThreadMetaEvent(
         updatedAt: event.occurredAt,
       }));
     }
+
+    case "thread.organization-updated":
+      return applyThreadOrganizationEvent(state, event);
 
     case "thread.recovery-updated": {
       return updateThreadState(state, event.payload.threadId, (thread) => ({

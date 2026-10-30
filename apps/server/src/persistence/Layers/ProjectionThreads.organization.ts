@@ -23,13 +23,10 @@ export function makeSetThreadOrganization(sql: SqlClient.SqlClient) {
     );
 }
 
-/**
- * Selects a thread's organization as a JSON object matching `ThreadOrganization`. Decode it with
- * `Schema.fromJsonString(ThreadOrganization)`. `alias` is the `projection_threads` table alias.
- */
-export function threadOrganizationJsonSql(sql: SqlClient.SqlClient, alias?: string) {
+/** SQL text selecting a thread's organization as a JSON object matching `ThreadOrganization`. */
+export function threadOrganizationJsonSqlText(alias?: string): string {
   const column = (name: string) => (alias === undefined ? name : `${alias}.${name}`);
-  return sql.unsafe(`json_object(
+  return `json_object(
     'state', ${column("organization_state")},
     'revision', ${column("organization_revision")},
     'changedAt', ${column("organization_changed_at")},
@@ -38,5 +35,13 @@ export function threadOrganizationJsonSql(sql: SqlClient.SqlClient, alias?: stri
         'id', ${column("organization_snooze_id")},
         'until', ${column("organization_snooze_until")}
       ) END
-  )`);
+  )`;
+}
+
+/**
+ * Selects a thread's organization as a JSON object. Decode it with
+ * `Schema.fromJsonString(ThreadOrganization)`. `alias` is the `projection_threads` table alias.
+ */
+export function threadOrganizationJsonSql(sql: SqlClient.SqlClient, alias?: string) {
+  return sql.unsafe(threadOrganizationJsonSqlText(alias));
 }

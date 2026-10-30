@@ -301,6 +301,7 @@ export function createWsNativeApi(): NativeApi {
       getStartupProjectCatalog: rpcClient.orchestration.getStartupProjectCatalog,
       searchConversationMessages: rpcClient.orchestration.searchConversationMessages,
       getProjectThreadSummaries: rpcClient.orchestration.getProjectThreadSummaries,
+      getOrganizationThreadSummaries: rpcClient.orchestration.getOrganizationThreadSummaries,
       getSelectedThreadDetail: rpcClient.orchestration.getSelectedThreadDetail,
       resolveThreadOwnership: async (input) => {
         try {

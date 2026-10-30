@@ -8,10 +8,14 @@ import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { useSidebarState } from "./Sidebar.state";
+import { useItutuStore } from "../../stores/itutu/itutu.store";
+import { SidebarItutuArrangementSwitch } from "./Sidebar.itutuArrangementSwitch";
+import { SidebarItutuSection } from "./Sidebar.itutuSection";
 import type { SidebarTopLevelHeaderProps } from "./SidebarSectionLabel";
 
 export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSidebarState> }) {
   const navigate = useNavigate();
+  const isItutu = useItutuStore((store) => store.arrangement === "itutu");
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobileSidebar = () => {
     if (isMobile) setOpenMobile(false);
@@ -60,59 +64,62 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
     sharedProjectItemProps: s.sharedProjectItemProps,
   };
 
-  const sections = s.bootstrapComplete
-    ? {
-        pinned: (headerProps: SidebarTopLevelHeaderProps) => (
-          <SidebarFavoritesSection
-            headerProps={headerProps}
-            renderedFavorites={s.renderedFavorites}
-            isExpanded={s.areFavouritesExpanded}
-            onExpandedChange={s.setAreFavouritesExpanded}
-            showAll={s.showAllFavourites}
-            onShowAllChange={s.setShowAllFavourites}
-            sharedProjectItemProps={s.sharedProjectItemProps}
-          />
-        ),
-        chats: (headerProps: SidebarTopLevelHeaderProps) => (
-          <SidebarChatsSection
-            headerProps={headerProps}
-            renderedChats={s.renderedChats}
-            isExpanded={s.areChatsExpanded}
-            onExpandedChange={s.setAreChatsExpanded}
-            showAll={s.showAllChats}
-            onShowAllChange={(showAll) => {
-              s.setShowAllChats(showAll);
-              if (showAll) s.loadMoreChats();
-            }}
-            hasMoreChats={s.hasMoreChats}
-            collapsedHiddenChatCount={s.collapsedHiddenChatCount}
-            unloadedChatCount={s.unloadedChatCount}
-            isLoadingMoreChats={s.isLoadingMoreChats}
-            onLoadMoreChats={s.loadMoreChats}
-            onNewChat={() => {
-              closeMobileSidebar();
-              void s.handleNewChat();
-            }}
-            newThreadShortcutLabel={s.newThreadShortcutLabel}
-            sharedProjectItemProps={s.sharedProjectItemProps}
-            chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
-            onChatsSortOrderChange={(sortOrder) => {
-              s.updateSettings({ sidebarChatsSortOrder: sortOrder });
-            }}
-          />
-        ),
-        projects: (headerProps: SidebarTopLevelHeaderProps) => (
-          <SidebarProjectsSection {...projectProps} scope="local" headerProps={headerProps} />
-        ),
-        "remote-workspaces": (headerProps: SidebarTopLevelHeaderProps) => (
-          <SidebarProjectsSection {...projectProps} scope="remote" headerProps={headerProps} />
-        ),
-      }
-    : {};
+  // Ìtútù replaces only the thread sections; fixed actions and links stay.
+  const sections =
+    s.bootstrapComplete && !isItutu
+      ? {
+          pinned: (headerProps: SidebarTopLevelHeaderProps) => (
+            <SidebarFavoritesSection
+              headerProps={headerProps}
+              renderedFavorites={s.renderedFavorites}
+              isExpanded={s.areFavouritesExpanded}
+              onExpandedChange={s.setAreFavouritesExpanded}
+              showAll={s.showAllFavourites}
+              onShowAllChange={s.setShowAllFavourites}
+              sharedProjectItemProps={s.sharedProjectItemProps}
+            />
+          ),
+          chats: (headerProps: SidebarTopLevelHeaderProps) => (
+            <SidebarChatsSection
+              headerProps={headerProps}
+              renderedChats={s.renderedChats}
+              isExpanded={s.areChatsExpanded}
+              onExpandedChange={s.setAreChatsExpanded}
+              showAll={s.showAllChats}
+              onShowAllChange={(showAll) => {
+                s.setShowAllChats(showAll);
+                if (showAll) s.loadMoreChats();
+              }}
+              hasMoreChats={s.hasMoreChats}
+              collapsedHiddenChatCount={s.collapsedHiddenChatCount}
+              unloadedChatCount={s.unloadedChatCount}
+              isLoadingMoreChats={s.isLoadingMoreChats}
+              onLoadMoreChats={s.loadMoreChats}
+              onNewChat={() => {
+                closeMobileSidebar();
+                void s.handleNewChat();
+              }}
+              newThreadShortcutLabel={s.newThreadShortcutLabel}
+              sharedProjectItemProps={s.sharedProjectItemProps}
+              chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
+              onChatsSortOrderChange={(sortOrder) => {
+                s.updateSettings({ sidebarChatsSortOrder: sortOrder });
+              }}
+            />
+          ),
+          projects: (headerProps: SidebarTopLevelHeaderProps) => (
+            <SidebarProjectsSection {...projectProps} scope="local" headerProps={headerProps} />
+          ),
+          "remote-workspaces": (headerProps: SidebarTopLevelHeaderProps) => (
+            <SidebarProjectsSection {...projectProps} scope="remote" headerProps={headerProps} />
+          ),
+        }
+      : {};
 
   return (
     <>
       <SidebarContent className="min-h-full gap-0">
+        <SidebarItutuArrangementSwitch />
         <SidebarActionsSection
           onNewChat={() => {
             closeMobileSidebar();
@@ -137,6 +144,9 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
           }}
           sections={sections}
         />
+        {s.bootstrapComplete && isItutu ? (
+          <SidebarItutuSection shared={s.sharedProjectItemProps} />
+        ) : null}
         {!s.bootstrapComplete ? (
           <div className="flex flex-1 items-center justify-center">
             <BigbudLogo className="size-4 animate-breathe text-muted-foreground/40 motion-reduce:animate-none" />

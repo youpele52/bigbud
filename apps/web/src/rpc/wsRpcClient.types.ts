@@ -356,6 +356,9 @@ export interface WsRpcClient {
     readonly getProjectThreadSummaries: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getProjectThreadSummaries
     >;
+    readonly getOrganizationThreadSummaries: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.getOrganizationThreadSummaries
+    >;
     readonly getSelectedThreadDetail: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getSelectedThreadDetail
     >;

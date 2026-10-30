@@ -13,6 +13,7 @@ import type {
   SidebarThreadActionsInput,
   SidebarThreadActionsOutput,
 } from "./Sidebar.threadActions.types";
+import { buildItutuMoveMenuItem, runItutuMenuAction } from "./Sidebar.itutu.menu";
 
 function normalizeSummaryText(value: string | null | undefined): string {
   return value?.trim().replace(/\s+/g, " ") ?? "";
@@ -211,22 +212,27 @@ export function useSidebarThreadActions({
         [
           { id: "rename", label: "Rename thread" },
           { id: "branch", label: "Branch thread" },
+          buildItutuMoveMenuItem(thread.organization),
           {
             id: "favorite",
             label: isFavorite ? "Unpin thread" : "Pin thread",
           },
-          { id: "archive", label: "Archive thread" },
+          { id: "separator-actions", label: "", separator: true },
           {
             id: "copy-elevator-summary",
             label: "Elevator summary",
             disabled: !hasElevatorSummary,
           },
-          { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
+          { id: "copy-path", label: "Copy Path" },
+          { id: "archive", label: "Archive thread" },
+          { id: "separator-delete", label: "", separator: true },
           { id: "delete", label: "Delete", destructive: true },
         ],
         position,
       );
+
+      if (await runItutuMenuAction(clicked, [threadId])) return;
 
       if (clicked === "rename") {
         cancelProjectRename();
@@ -309,10 +315,15 @@ export function useSidebarThreadActions({
       const count = ids.length;
 
       const clicked = await api.contextMenu.show(
-        [{ id: "delete", label: `Delete (${count})`, destructive: true }],
+        [
+          buildItutuMoveMenuItem(null),
+          { id: "separator-delete", label: "", separator: true },
+          { id: "delete", label: `Delete (${count})`, destructive: true },
+        ],
         position,
       );
 
+      if (await runItutuMenuAction(clicked, ids)) return;
       if (clicked !== "delete") return;
 
       if (appSettings.confirmThreadDelete) {

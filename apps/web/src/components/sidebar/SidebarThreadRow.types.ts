@@ -42,4 +42,8 @@ export interface SidebarThreadRowProps {
   pr: ThreadPr | null;
   automationThreadIds?: ReadonlySet<ThreadId>;
   hiddenThreadStatusSlot?: ReactNode;
+  /** Ìtútù: a smaller line beneath the title, such as the thread's location. */
+  secondaryLine?: ReactNode;
+  /** Ìtútù: adds a move payload to the drag, alongside the chat-context payload. */
+  addDragData?: (dataTransfer: DataTransfer) => void;
 }

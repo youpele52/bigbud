@@ -37,6 +37,7 @@ import {
   createSidebarCatalogRefresher,
   getHighestSequence,
   shouldRefreshSidebarCatalog,
+  markUnknownItutuMovesStale,
 } from "./-__root.sidebar-catalog";
 
 export const REPLAY_RECOVERY_RETRY_DELAY_MS = 100;
@@ -127,6 +128,7 @@ export function createEventRouterRecovery(input: OrchestrationRecoveryInput) {
     if (refresh && nextEvents.some(shouldRefreshSidebarCatalog)) {
       void sidebarCatalogRefresher.refresh(disposed, getHighestSequence(nextEvents));
     }
+    if (refresh) markUnknownItutuMovesStale(nextEvents);
 
     const draftStore = useComposerDraftStore.getState();
     for (const threadId of batchEffects.clearDeletedThreadIds) {
