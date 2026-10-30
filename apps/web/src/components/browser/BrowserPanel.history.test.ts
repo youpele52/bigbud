@@ -22,6 +22,7 @@ import {
   getBrowserHistory,
   recordBrowserHistoryVisit,
   subscribeBrowserData,
+  updateBrowserHistoryVisitMetadata,
 } from "./BrowserPanel.history";
 
 describe("BrowserPanel history", () => {
@@ -128,5 +129,57 @@ describe("BrowserPanel history", () => {
 
     unsubscribeFirst();
     unsubscribeSecond();
+  });
+
+  it("persists observed icons without counting metadata changes as visits", () => {
+    recordBrowserHistoryVisit({ url: "https://example.com/", title: "" });
+    updateBrowserHistoryVisitMetadata("https://example.com/", {
+      title: "",
+      faviconUrl: "https://example.com/icon.png",
+    });
+    expect(getBrowserHistory()[0]).toMatchObject({
+      title: "",
+      faviconUrl: "https://example.com/icon.png",
+      visitCount: 1,
+    });
+    updateBrowserHistoryVisitMetadata("https://example.com/", {
+      title: "Example",
+      faviconUrl: null,
+    });
+    expect(getBrowserHistory()[0]).toMatchObject({
+      title: "Example",
+      faviconUrl: "https://example.com/icon.png",
+      visitCount: 1,
+    });
+    recordBrowserHistoryVisit({ url: "https://example.com/", title: "" });
+    expect(getBrowserHistory()[0]).toMatchObject({
+      faviconUrl: "https://example.com/icon.png",
+      visitCount: 2,
+    });
+  });
+
+  it("keeps existing v2 records compatible and removes unsafe stored icons", () => {
+    const [visit] = resolveNextBrowserHistory([], {
+      url: "https://example.com/",
+      title: "Example",
+    });
+    expect(migrateBrowserHistory({ version: 2, visits: [visit] })).toEqual([visit]);
+    expect(
+      migrateBrowserHistory({
+        version: 2,
+        visits: [{ ...visit, faviconUrl: "javascript:alert(1)" }],
+      }),
+    ).toEqual([visit]);
+  });
+
+  it("does not write unchanged metadata or create phantom history entries", () => {
+    recordBrowserHistoryVisit({ url: "https://example.com/", title: "Example" });
+    browserStorageMock.set.mockClear();
+    updateBrowserHistoryVisitMetadata("https://example.com/", { title: "", faviconUrl: null });
+    updateBrowserHistoryVisitMetadata("https://not-visited.com/", {
+      title: "Other",
+      faviconUrl: "https://not-visited.com/icon.png",
+    });
+    expect(browserStorageMock.set).not.toHaveBeenCalled();
   });
 });

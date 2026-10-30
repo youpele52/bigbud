@@ -28,7 +28,7 @@ import {
   getBrowserHistory,
   recordBrowserHistoryVisit,
   subscribeBrowserData,
-  updateBrowserHistoryVisitTitle,
+  updateBrowserHistoryVisitMetadata,
 } from "./BrowserPanel.history";
 import { planDesktopBrowserContextMenu, planDesktopBrowserReload } from "./BrowserPanel.menuAction";
 import { reloadBrowserViewport } from "./BrowserPanel.reload";
@@ -70,6 +70,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     title: "",
     faviconUrl: null,
   });
+  const [pageMetadataUrl, setPageMetadataUrl] = useState<string | null>(null);
   const { annotationActive, cancelAnnotation, handleAnnotate } = useBrowserAnnotation({
     activeThreadId: activeThreadId ?? null,
     viewportRef,
@@ -182,8 +183,9 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   const handlePageMetadataChange = useCallback(
     (metadata: BrowserPageMetadata, metadataUrl?: string) => {
       setPageMetadata(metadata);
-      if (metadata.title.trim() && metadataUrl) {
-        setBrowserHistory(updateBrowserHistoryVisitTitle(metadataUrl, metadata.title));
+      setPageMetadataUrl(metadataUrl ?? null);
+      if (metadataUrl) {
+        setBrowserHistory(updateBrowserHistoryVisitMetadata(metadataUrl, metadata));
       }
     },
     [],
@@ -292,6 +294,8 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     <>
       <BrowserToolbar
         inputUrl={inputUrl}
+        pageUrl={url}
+        searchEngine={searchEngine}
         setInputUrl={setInputUrl}
         onNavigate={handleNavigate}
         onSelectHistoryUrl={handleSelectHistoryUrl}
@@ -307,6 +311,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
         onAnnotate={handleAnnotate}
         annotationActive={annotationActive}
         pageMetadata={pageMetadata}
+        pageMetadataUrl={pageMetadataUrl}
         historyUrls={browserHistory}
         annotationDisabled={!isElectron || !url.trim()}
         agentControlled={isAgentControlled}
