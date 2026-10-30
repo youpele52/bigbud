@@ -255,7 +255,7 @@ it.layer(
           const registry = yield* ProviderRegistry;
 
           const initial = yield* registry.getProviders;
-          assert.strictEqual(initial.length, 7);
+          assert.strictEqual(initial.length, 6);
           assert.strictEqual(
             initial.find((provider) => provider.provider === "codex")?.status,
             "warning",

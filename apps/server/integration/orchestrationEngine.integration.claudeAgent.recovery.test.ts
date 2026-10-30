@@ -241,10 +241,13 @@ it.live("reverts claudeAgent turns and rolls back provider conversation state", 
           createdAt: nowIso(),
         });
 
+        // Stale refs are deleted only after the revert is durable, so wait for that too.
         const revertedThread = yield* harness.waitForThread(
           THREAD_ID,
           (entry) =>
-            entry.checkpoints.length === 1 && entry.checkpoints[0]?.checkpointTurnCount === 1,
+            entry.checkpoints.length === 1 &&
+            entry.checkpoints[0]?.checkpointTurnCount === 1 &&
+            !gitRefExists(harness.workspaceDir, checkpointRefForThreadTurn(THREAD_ID, 2)),
         );
         assert.equal(revertedThread.checkpoints[0]?.checkpointTurnCount, 1);
         assert.equal(
