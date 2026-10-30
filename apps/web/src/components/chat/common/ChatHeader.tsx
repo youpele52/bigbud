@@ -22,7 +22,6 @@ import { truncateThreadName } from "../../sidebar/Sidebar.logic";
 import { ContentPanelHeaderBar } from "../../layout/ContentPanelHeaderBar";
 import { ThreadActivityIndicator, threadActivityLabel } from "./threadActivityIndicator";
 import { ChatLayoutMenu } from "./ChatHeader.layoutMenu";
-import { ProviderSessionControls } from "./ProviderSessionControls";
 import type { TerminalLayoutMode } from "../view/chat-view/terminalLayout.logic";
 
 interface ChatHeaderProps {
@@ -154,7 +153,6 @@ export const ChatHeader = memo(function ChatHeader({
             onOpenTerminal={onOpenTerminal}
           />
           <ChatLayoutMenu mode={terminalLayoutMode} onSelectLayout={onSelectTerminalLayout} />
-          <ProviderSessionControls key={activeThreadId} threadId={activeThreadId} />
           <Tooltip>
             <TooltipTrigger
               render={

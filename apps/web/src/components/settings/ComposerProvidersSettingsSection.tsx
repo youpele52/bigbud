@@ -19,10 +19,9 @@ export function ComposerProvidersSettingsSection() {
   }
 
   return (
-    <SettingsSection title="Provider visibility">
+    <SettingsSection title="Visibility">
       <p className="mb-4 px-4 pt-4 text-xs text-muted-foreground sm:px-5">
-        Choose which providers appear in the composer/provider and /model menus. This does not
-        change provider setup or connection status.
+        Choose which providers appear in the composer and /model menu.
       </p>
       {PUBLIC_PROVIDER_DESCRIPTORS.map((descriptor) => {
         const visible = isComposerProviderVisible(descriptor.provider, hiddenComposerProviders);

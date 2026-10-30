@@ -265,6 +265,22 @@ describe("ProvidersSettingsPanel route expansion", () => {
       </QueryClientProvider>,
     );
 
+    await expect
+      .element(page.getByRole("heading", { name: "Configuration", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Set up providers, connections, and available models."))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("heading", { name: "Visibility", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(page.getByText("Choose which providers appear in the composer and /model menu."))
+      .toBeVisible();
+    await expect
+      .element(page.getByRole("heading", { name: "Sessions management", exact: true }))
+      .not.toBeInTheDocument();
+
     await vi.waitFor(() => {
       expect(document.getElementById("provider-install-pi-binary-path")).not.toBeNull();
       expect(document.getElementById("provider-install-copilot-binary-path")).not.toBeNull();

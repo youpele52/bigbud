@@ -89,6 +89,14 @@ describe("ChatHeader", () => {
     expect(markup).toContain('aria-label="Open right panel"');
   });
 
+  it("keeps session management out of the chat header", () => {
+    const markup = renderHeader();
+
+    expect(markup).not.toContain('aria-label="Session controls"');
+    expect(markup).not.toContain("Compact context");
+    expect(markup).not.toContain("Reload all MCP servers");
+  });
+
   it.each(["chat-only", "split", "terminal-only"] as const)(
     "always renders the layout menu before sidebar controls in %s",
     (terminalLayoutMode) => {
