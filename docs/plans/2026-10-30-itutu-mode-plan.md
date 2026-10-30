@@ -761,3 +761,26 @@ Implemented here:
   - The settings section layout and draft rules.
 
 Original checkout since checkpoint 7: unchanged (156 uncommitted files), with no overlap with Phase 5, including the settings contracts. `feature/computer-use` still has no new commits.
+
+### Checkpoint 9 — Phase 6, release validation
+
+Verified here, all scoped to this branch and without full-suite runs:
+
+- **Branch tests:** every test file the branch added or changed passes. Server: 21 files, 63 tests. Web: 6 files, 19 tests. Desktop: 1 file, 4 tests. Contracts: 2 files, 6 tests.
+- **Affected suites:** the existing suites next to every source module the branch modified pass. That is 154 files in batches: contracts 82 tests, web 472, server 375.
+- **Explicit-file checks:** all 159 branch files pass oxfmt check and oxlint, and no code file exceeds 400 lines. Typechecks pass for contracts, server, web, and desktop.
+- **Gate 7 (real data, copied):** a read-only snapshot of the 3 GB development database (664 threads, about 495,000 events, migration level 140) was migrated to 143 and then deleted. Live data was opened read-only only.
+  - Migrations 141–143 took about 27 ms, with no lasting WAL growth.
+  - The Ìtútù page query uses `idx_projection_threads_active_organization_state`, and the snooze query uses `idx_projection_threads_pending_snooze`.
+  - The idle candidate query uses the state index, with every gate subquery on an existing index, and took about 5 ms. Every live thread starts as Present, which is the activation worst case.
+- **Pre-existing failure, not caused by this branch:** `apps/web/src/rpc/client.test.ts` fails 2 tests because its expected settings lack the Muse provider. Muse settings were added in `24ef737239` before the branch point, neither file changed on this branch, and the diff shows only the Muse block.
+
+Not verified (needs a person, another platform, or approval):
+
+- **Visual check:** `bun dev` cannot start the server here. Bun lacks `node:sqlite`, which predates this branch, while the installed app runs the built server under Electron. The UI was therefore checked by component, logic, and layout tests only, not in a running app.
+- **Manual smoke checks** from section 15: packaged macOS native menus and sleep/wake, Windows, Linux, two clients, and remote workspaces.
+- **Full-suite and workspace-wide checks:** these need fresh approval.
+- **OpenCode V2:** the native move/snooze actions still need their ABI version step; V2 reaches the tools through the generic passthrough until then.
+- **Snooze-ended notification:** no toast or system notification exists; it is a follow-up.
+
+Final integration: `feature/computer-use` has no new commits since the branch point. The original checkout is unchanged since checkpoint 5 (156 uncommitted files). The whole-branch overlap is still the seven pure-insertion registration files plus the copied plan and prototype. Migrations 141–143 are free there.
