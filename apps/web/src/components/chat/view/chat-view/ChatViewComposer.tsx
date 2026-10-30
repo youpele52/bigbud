@@ -17,7 +17,7 @@ import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
 import { ComposerReadDialog } from "../../composer/ComposerReadDialog";
 import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { composerSurfaceStyles } from "../../composer/ComposerSurface.styles";
-import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
+import { clearComposerSurfaceAnnotations } from "./ChatViewComposer.annotations";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 import { deriveVisiblePromptSuggestion } from "../../../../logic/promptSuggestion.logic";
 import { describeThreadBackgroundWork } from "../ChatView.subagents.logic";
@@ -197,14 +197,7 @@ export function ChatViewComposer({
                   annotations={base.composerAnnotations}
                   images={base.composerImages}
                   onRemoveAnnotation={base.removeComposerAnnotationFromDraft}
-                  onClearAnnotations={() => {
-                    for (const annotation of base.composerAnnotations) {
-                      if (isBrowserAnnotationAttachment(annotation)) {
-                        base.removeComposerImageFromDraft(annotation.imageId);
-                      }
-                      base.removeComposerAnnotationFromDraft(annotation.id);
-                    }
-                  }}
+                  onClearAnnotations={() => clearComposerSurfaceAnnotations(base)}
                 />
                 <ComposerFilePreviews
                   composerFiles={base.composerFiles}

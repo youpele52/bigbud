@@ -5,12 +5,45 @@ import {
   TerminalIcon,
 } from "lucide-react";
 import type { ParsedUserAnnotationEntry } from "~/lib/terminalContext";
+import { ChatCitationChip } from "../common/ChatCitationChip";
 
 function annotationLabel(count: number): string {
   return count === 1 ? "1 annotation" : `${count} annotations`;
 }
 
 export function MessagesTimelineAnnotations(props: { annotations: ParsedUserAnnotationEntry[] }) {
+  const occurrences = new Map<string, number>();
+  const citations = props.annotations
+    .filter((annotation) => annotation.kind === "chat")
+    .map((citation) => {
+      const sourceKey = JSON.stringify([
+        citation.source.threadId,
+        citation.source.messageId,
+        citation.selection.startOffset,
+        citation.selection.endOffset,
+      ]);
+      const occurrence = occurrences.get(sourceKey) ?? 0;
+      occurrences.set(sourceKey, occurrence + 1);
+      return { citation, key: `${sourceKey}:${occurrence}` };
+    });
+  const annotations = props.annotations.filter((annotation) => annotation.kind !== "chat");
+  return (
+    <>
+      {citations.length > 0 ? (
+        <div className="mb-2 flex flex-wrap gap-2" aria-label="Citations">
+          {citations.map(({ citation, key }) => (
+            <ChatCitationChip key={key} citation={citation} />
+          ))}
+        </div>
+      ) : null}
+      <MessagesTimelineSurfaceAnnotations annotations={annotations} />
+    </>
+  );
+}
+
+function MessagesTimelineSurfaceAnnotations(props: {
+  annotations: Exclude<ParsedUserAnnotationEntry, { kind: "chat" }>[];
+}) {
   const { annotations } = props;
   if (annotations.length === 0) return null;
 

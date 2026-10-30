@@ -22,6 +22,39 @@ describe("annotationPanelTop", () => {
     expect(annotationPanelTop({ ...viewport, selectionTop: 800, selectionBottom: 820 })).toBe(442);
   });
 
+  it("prefers above when requested even if both sides fit", () => {
+    expect(
+      annotationPanelTop({
+        ...viewport,
+        preferredSide: "above",
+        selectionTop: 400,
+        selectionBottom: 420,
+      }),
+    ).toBe(142);
+  });
+
+  it("falls below when there is no room above", () => {
+    expect(
+      annotationPanelTop({
+        ...viewport,
+        preferredSide: "above",
+        selectionTop: 140,
+        selectionBottom: 240,
+      }),
+    ).toBe(248);
+  });
+
+  it("clamps above-first placement when neither side fits", () => {
+    expect(
+      annotationPanelTop({
+        ...viewport,
+        preferredSide: "above",
+        selectionTop: 110,
+        selectionBottom: 600,
+      }),
+    ).toBe(108);
+  });
+
   it("accepts the exact below-fit boundary without flipping", () => {
     expect(annotationPanelTop({ ...viewport, selectionTop: 400, selectionBottom: 434 })).toBe(442);
   });

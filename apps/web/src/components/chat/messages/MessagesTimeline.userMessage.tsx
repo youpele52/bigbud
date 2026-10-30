@@ -75,7 +75,10 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
           );
         }
         return (
-          <div className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground">
+          <div
+            data-chat-cite-content
+            className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground"
+          >
             {inlineNodes}
           </div>
         );
@@ -99,7 +102,10 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
       inlineNodes.push(<UserMessageMentionText key="text" text={props.text} {...mentionProps} />);
     } else if (inlinePrefix.length === 0) return null;
     return (
-      <div className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground">
+      <div
+        data-chat-cite-content
+        className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground"
+      >
         {inlineNodes}
       </div>
     );
@@ -107,7 +113,10 @@ export const UserMessageBody = memo(function UserMessageBody(props: {
 
   if (props.text.length === 0) return null;
   return (
-    <div className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground">
+    <div
+      data-chat-cite-content
+      className="whitespace-pre-wrap wrap-break-word text-sm leading-relaxed text-foreground"
+    >
       <UserMessageMentionText text={props.text} {...mentionProps} />
     </div>
   );

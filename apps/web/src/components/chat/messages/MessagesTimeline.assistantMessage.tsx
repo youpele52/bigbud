@@ -79,6 +79,7 @@ function ShellOutputCard(props: {
         }}
       >
         <pre
+          data-chat-cite-content
           className="m-0 inline-block min-w-full whitespace-pre text-foreground/95"
           style={{
             width: "max-content",
@@ -157,12 +158,14 @@ export function AssistantMessageBody({
           <ShellOutputCard messageText={messageText} terminalTypography={terminalTypography} />
         ) : (
           <>
-            <ChatMarkdown
-              text={renderedMessageText}
-              cwd={markdownCwd}
-              isStreaming={Boolean(row.message.streaming)}
-              onAnchorClick={onMarkdownAnchorClick}
-            />
+            <div data-chat-cite-content>
+              <ChatMarkdown
+                text={renderedMessageText}
+                cwd={markdownCwd}
+                isStreaming={Boolean(row.message.streaming)}
+                onAnchorClick={onMarkdownAnchorClick}
+              />
+            </div>
             {automationDisplay.request ? (
               <MessagesTimelineAutomationRequest
                 messageCreatedAt={row.message.createdAt}
