@@ -159,6 +159,21 @@ export interface ProjectionThreadRepositoryShape {
   readonly listPendingSnoozes: (
     input: ListPendingThreadSnoozesInput,
   ) => Effect.Effect<ReadonlyArray<PendingThreadSnooze>, ProjectionRepositoryError>;
+  /** Quiescent Present threads idle since the cutoff, oldest activity first. */
+  readonly listIdleCandidates: (
+    input: ListIdleThreadCandidatesInput,
+  ) => Effect.Effect<ReadonlyArray<IdleThreadCandidate>, ProjectionRepositoryError>;
+}
+
+export interface IdleThreadCandidate {
+  readonly threadId: ThreadId;
+  readonly revision: number;
+  readonly activityAt: string;
+}
+
+export interface ListIdleThreadCandidatesInput {
+  readonly cutoff: string;
+  readonly limit: number;
 }
 
 export interface PendingThreadSnooze {

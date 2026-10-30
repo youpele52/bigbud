@@ -19,6 +19,7 @@ import {
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
+import { ItutuIdleSettingsFields } from "./settings.itutu";
 import { MuseSettings } from "./settings.muse";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
@@ -36,6 +37,7 @@ import {
 export * from "./settings.muse";
 export * from "./settings.serverPatch";
 export * from "./settings.threadRetention";
+export * from "./settings.itutu";
 export {
   AgentBrowserPreference,
   ClaudeSubagentCap,
@@ -298,6 +300,7 @@ export const ServerSettings = Schema.Struct({
   delegatedThreadModelChoice: DelegatedThreadModelChoice.pipe(
     Schema.withDecodingDefault(() => "agent" as const satisfies DelegatedThreadModelChoice),
   ),
+  ...ItutuIdleSettingsFields,
 });
 export type ServerSettings = typeof ServerSettings.Type;
 

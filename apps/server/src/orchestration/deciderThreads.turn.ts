@@ -52,7 +52,8 @@ export type ThreadTurnCommand = Exclude<
       | "thread.recovery.resolve"
       | "thread.organization.move"
       | "thread.organization.snooze"
-      | "thread.organization.snooze.expire";
+      | "thread.organization.snooze.expire"
+      | "thread.organization.idle";
   }
 >;
 

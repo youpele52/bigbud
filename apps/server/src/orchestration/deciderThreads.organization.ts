@@ -28,6 +28,7 @@ import {
   organizationAfterSnoozeExpiry,
   organizationAfterUnarchive,
 } from "./threadOrganization.logic.ts";
+import { isThreadQuiescent, organizationAfterIdle } from "./threadOrganization.idle.logic.ts";
 
 type DecidedEvent = Omit<OrchestrationEvent, "sequence">;
 
@@ -37,7 +38,8 @@ export type ThreadOrganizationCommand = Extract<
     type:
       | "thread.organization.move"
       | "thread.organization.snooze"
-      | "thread.organization.snooze.expire";
+      | "thread.organization.snooze.expire"
+      | "thread.organization.idle";
   }
 >;
 
@@ -45,6 +47,7 @@ export const THREAD_ORGANIZATION_COMMAND_TYPES: ReadonlySet<string> = new Set([
   "thread.organization.move",
   "thread.organization.snooze",
   "thread.organization.snooze.expire",
+  "thread.organization.idle",
 ]);
 
 function organizationUpdatedEvent(input: {
@@ -76,16 +79,23 @@ export const decideThreadOrganizationCommand = Effect.fn("decideThreadOrganizati
     readonly readModel: OrchestrationReadModel;
   }): Effect.fn.Return<ReadonlyArray<DecidedEvent>, OrchestrationCommandInvariantError> {
     const { command, readModel } = input;
-    if (command.type === "thread.organization.snooze.expire") {
-      // A timer that lost its race is a no-op, never an error, so sweeps cannot retry it forever.
+    if (
+      command.type === "thread.organization.snooze.expire" ||
+      command.type === "thread.organization.idle"
+    ) {
+      // Automation that lost its race is a no-op, never an error, so sweeps cannot retry forever.
       const thread = readModel.threads.find((entry) => entry.id === command.threadId);
       if (!thread || thread.deletedAt !== null || thread.archivedAt !== null) return [];
       if (thread.deletingAt) return [];
       const occurredAt = nowIso();
-      const organization = organizationAfterSnoozeExpiry(currentThreadOrganization(thread), {
-        snoozeId: command.snoozeId,
-        occurredAt,
-      });
+      const current = currentThreadOrganization(thread);
+      // Commands are decided one at a time, so admitted work always blocks a later idle move.
+      const organization =
+        command.type === "thread.organization.idle"
+          ? isThreadQuiescent(thread)
+            ? organizationAfterIdle(current, { ...command, occurredAt })
+            : null
+          : organizationAfterSnoozeExpiry(current, { snoozeId: command.snoozeId, occurredAt });
       if (organization === null) return [];
       const { commandId, threadId } = command;
       return [
@@ -94,7 +104,7 @@ export const decideThreadOrganizationCommand = Effect.fn("decideThreadOrganizati
           threadId,
           organization,
           occurredAt,
-          reason: "snooze-expired",
+          reason: command.type === "thread.organization.idle" ? "idle" : "snooze-expired",
         }),
       ];
     }

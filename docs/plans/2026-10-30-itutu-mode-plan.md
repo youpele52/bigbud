@@ -725,3 +725,39 @@ Implemented here:
 Not done in this phase: no toast or system notification when a snooze ends. The move to Needs you is the reminder. A notification needs replay-safe deduplication across clients and stays a follow-up.
 
 Original checkout since checkpoint 6: unchanged (156 uncommitted files), with no overlap with Phase 4. `feature/computer-use` still has no new commits. Migration 143 is free there.
+
+### Checkpoint 8 — Phase 5, idle policy
+
+Implemented here:
+
+- **Settings** (server-owned, flat keys in `settings.itutu.ts`):
+  - `itutuIdleCleanupEnabled`, default off. Turning it on is the explicit activation; there is no separate onboarding flow.
+  - `itutuIdleTimeoutMinutes`, default 10, whole minutes from 1 to 7 days.
+  - `itutuIdleDestination`, Done (default) or Later only.
+  - They appear under General as an "Idle threads" section after Threads, separate from destructive retention. The UI saves through `persistServerSettings`, so a policy never shows as active before the server accepts it, and write errors show a toast.
+- **Internal command** `thread.organization.idle` (thread, expected revision, destination), reason `idle`. The decider moves the thread only if it is live, still Present at that revision, unsnoozed, and quiescent by the read model. Quiescent means none of these: a session that is starting or running, a running turn, queued prompts, a pending start, pending turn control or interrupt flush, a queue hold, or recovery.
+  - Commands are decided one at a time, so work admitted first always blocks the move. Work after the move returns the thread to Present through the Phase 3b reactor.
+  - A declined command is a no-op.
+- **Candidate query** `listIdleCandidates` (`ProjectionThreads.idle.ts`):
+  - It returns Present threads quiet since the cutoff.
+  - The activity anchor is the later of `last_activity_at` (which only over-counts activity, so it can only delay cleanup) and the last organization change, so a deliberate move to Present restarts the wait.
+  - It applies the same gates as the decider plus the authoritative pending approval, pending question, live delegation, and active watch projections.
+  - It starts from the existing active-state partial index, filtered to Present.
+  - A test proves each gate excludes a thread on its own.
+- **Loop** (`ThreadOrganizationReactor.idle.ts`):
+  - Every 15 s while enabled, at most 50 candidates, concurrency 3.
+  - Timing starts at the latest barrier: server start, any idle policy change (including turning it on), or a loop gap over 75 s (system sleep or a stalled process). Nothing moves on stale clock time.
+  - A candidate is attempted at most once a minute per revision, so a declined row cannot cause a hot loop.
+- **Deliberate gaps:**
+  - Pending provider tasks (todo items) do not block cleanup. Agents often leave them pending after a turn ends, and they cannot progress while the session and turn are idle.
+  - SystemSleepEpochs is not consulted; the loop-gap barrier covers sleep without coupling to it.
+- **Tests:**
+  - Each quiescence gate independently.
+  - The idle fence.
+  - The engine: admitted work blocks the move, a stale revision is declined, and the move happens once.
+  - The candidate query gates.
+  - Loop timing with a test clock: off by default, the full timeout after start, the destination, retry pacing, a policy change restarting the wait, and the sleep-gap rule.
+  - Settings defaults and bounds.
+  - The settings section layout and draft rules.
+
+Original checkout since checkpoint 7: unchanged (156 uncommitted files), with no overlap with Phase 5, including the settings contracts. `feature/computer-use` still has no new commits.

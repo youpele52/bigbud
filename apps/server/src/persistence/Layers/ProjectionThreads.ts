@@ -14,6 +14,7 @@ import {
   makeListPendingThreadSnoozes,
   makeSetThreadOrganization,
 } from "./ProjectionThreads.organization.ts";
+import { makeListIdleThreadCandidates } from "./ProjectionThreads.idle.ts";
 import {
   normalizeProjectionThreadRow,
   ProjectionThreadDbRow,
@@ -326,6 +327,7 @@ const makeProjectionThreadRepository = Effect.gen(function* () {
     setRecovery: makeSetThreadRecovery(sql),
     setOrganization: makeSetThreadOrganization(sql),
     listPendingSnoozes: makeListPendingThreadSnoozes(sql),
+    listIdleCandidates: makeListIdleThreadCandidates(sql),
   } satisfies ProjectionThreadRepositoryShape;
 });
 

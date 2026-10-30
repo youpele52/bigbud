@@ -90,10 +90,25 @@ export const ThreadOrganizationSnoozeExpireCommand = Schema.Struct({
 export type ThreadOrganizationSnoozeExpireCommand =
   typeof ThreadOrganizationSnoozeExpireCommand.Type;
 
+/**
+ * Internal command: idle cleanup of a Present thread. It applies only while the thread is still
+ * Present at `expectedRevision`, unsnoozed, live, and quiescent when the command is decided.
+ */
+export const ThreadOrganizationIdleCommand = Schema.Struct({
+  type: Schema.Literal("thread.organization.idle"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  expectedRevision: NonNegativeInt,
+  destination: Schema.Literals(["done", "later"]),
+  createdAt: IsoDateTime,
+});
+export type ThreadOrganizationIdleCommand = typeof ThreadOrganizationIdleCommand.Type;
+
 export const ThreadOrganizationChangeReason = Schema.Literals([
   "move",
   "snooze",
   "snooze-expired",
+  "idle",
   "archive",
   "unarchive",
 ]);
