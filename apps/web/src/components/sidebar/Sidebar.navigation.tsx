@@ -3,7 +3,7 @@ import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@bigbud/co
 import { isElectron } from "../../config/env";
 import { useSidebar, SidebarContent } from "../ui/sidebar";
 import { BigbudLogo } from "./SidebarProjectItem";
-import { SidebarActionsSection } from "./Sidebar.actionsSection";
+import { SidebarActionsSection, SidebarFixedActions } from "./Sidebar.actionsSection";
 import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
@@ -19,6 +19,10 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobileSidebar = () => {
     if (isMobile) setOpenMobile(false);
+  };
+  const handleNewChat = () => {
+    closeMobileSidebar();
+    void s.handleNewChat();
   };
 
   const projectProps = {
@@ -64,7 +68,7 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
     sharedProjectItemProps: s.sharedProjectItemProps,
   };
 
-  // Ìtútù replaces only the thread sections; fixed actions and links stay.
+  // Both arrangements keep New chat and Search; only Projects shows the other actions and sections.
   const sections =
     s.bootstrapComplete && !isItutu
       ? {
@@ -95,10 +99,7 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
               unloadedChatCount={s.unloadedChatCount}
               isLoadingMoreChats={s.isLoadingMoreChats}
               onLoadMoreChats={s.loadMoreChats}
-              onNewChat={() => {
-                closeMobileSidebar();
-                void s.handleNewChat();
-              }}
+              onNewChat={handleNewChat}
               newThreadShortcutLabel={s.newThreadShortcutLabel}
               sharedProjectItemProps={s.sharedProjectItemProps}
               chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
@@ -120,30 +121,36 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
     <>
       <SidebarContent className="min-h-full gap-0">
         <SidebarItutuArrangementSwitch />
-        <SidebarActionsSection
-          onNewChat={() => {
-            closeMobileSidebar();
-            void s.handleNewChat();
-          }}
-          newThreadShortcutLabel={s.newThreadShortcutLabel}
-          onOpenAutomations={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/automations" });
-          }}
-          onOpenGames={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/games" });
-          }}
-          onOpenUsage={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/usage" });
-          }}
-          onOpenSystemMonitor={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/system-monitor" });
-          }}
-          sections={sections}
-        />
+        {isItutu ? (
+          <div className="py-2">
+            <SidebarFixedActions
+              onNewChat={handleNewChat}
+              newThreadShortcutLabel={s.newThreadShortcutLabel}
+            />
+          </div>
+        ) : (
+          <SidebarActionsSection
+            onNewChat={handleNewChat}
+            newThreadShortcutLabel={s.newThreadShortcutLabel}
+            onOpenAutomations={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/automations" });
+            }}
+            onOpenGames={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/games" });
+            }}
+            onOpenUsage={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/usage" });
+            }}
+            onOpenSystemMonitor={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/system-monitor" });
+            }}
+            sections={sections}
+          />
+        )}
         {s.bootstrapComplete && isItutu ? (
           <SidebarItutuSection shared={s.sharedProjectItemProps} />
         ) : null}

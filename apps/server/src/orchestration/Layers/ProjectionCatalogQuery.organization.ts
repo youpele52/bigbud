@@ -22,6 +22,14 @@ const OrganizationPageRequest = Schema.Struct({
   cursorThreadId: Schema.NullOr(Schema.String),
 });
 
+const activeOrganizationThreadsSql = (sql: SqlClient.SqlClient, state: string) => sql`
+  t.organization_state = ${state}
+  AND t.deleted_at IS NULL
+  AND t.archived_at IS NULL
+  AND t.deleting_at IS NULL
+  AND t.purpose = 'standard'
+`;
+
 /**
  * One keyset page of active threads in an Ìtútù state across every project, served by the
  * partial index from migration 142.
@@ -37,11 +45,7 @@ export function makeGetOrganizationThreadSummaries(
       SELECT ${threadSummaryColumnsSql(sql)}
       FROM projection_threads t
       ${threadSummaryJoinsSql(sql)}
-      WHERE t.organization_state = ${state}
-        AND t.deleted_at IS NULL
-        AND t.archived_at IS NULL
-        AND t.deleting_at IS NULL
-        AND t.purpose = 'standard'
+      WHERE ${activeOrganizationThreadsSql(sql, state)}
         AND (
           ${cursorUpdatedAt} IS NULL
           OR t.updated_at < ${cursorUpdatedAt}
@@ -49,6 +53,15 @@ export function makeGetOrganizationThreadSummaries(
         )
       ORDER BY t.updated_at DESC, t.thread_id ASC
       LIMIT ${limit}
+    `,
+  });
+
+  const readCount = SqlSchema.findOne({
+    Request: Schema.String,
+    Result: Schema.Struct({ totalCount: Schema.Number }),
+    execute: (state) => sql`
+      SELECT COUNT(*) AS totalCount FROM projection_threads t
+      WHERE ${activeOrganizationThreadsSql(sql, state)}
     `,
   });
 
@@ -61,6 +74,7 @@ export function makeGetOrganizationThreadSummaries(
       .withTransaction(
         Effect.all({
           sequence: readProjectionSequence(),
+          count: input.includeTotalCount ? readCount(input.state) : Effect.void,
           rows: readThreads({
             state: input.state,
             limit: limit + 1,
@@ -70,13 +84,14 @@ export function makeGetOrganizationThreadSummaries(
         }),
       )
       .pipe(
-        Effect.map(({ rows, sequence }) => {
+        Effect.map(({ rows, sequence, count }) => {
           const threads = rows.slice(0, limit).map(normalizeThreadSummary);
           const last = threads.at(-1);
           return {
             projectionSequence: sequence,
             state: input.state,
             threads,
+            ...(count ? { totalCount: count.totalCount } : {}),
             ...(rows.length > limit && last
               ? { nextCursor: { updatedAt: last.updatedAt, threadId: last.id } }
               : {}),

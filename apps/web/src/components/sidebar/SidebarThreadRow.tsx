@@ -24,6 +24,7 @@ import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadSt
 import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
 import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
+import { SidebarThreadRowContent } from "./SidebarThreadRow.content";
 import {
   isProviderIconWorking,
   mergeRunningTerminalIds,
@@ -142,16 +143,17 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
       ? normalizedElevatorSummary
       : null;
 
+  const providerIcon = ProviderIcon ? (
+    <SidebarThreadProviderIcon
+      icon={ProviderIcon}
+      colorClass={providerIconColor}
+      animationClass={providerIconAnimationClass}
+    />
+  ) : null;
   const firstLine = (
     <>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-        {ProviderIcon ? (
-          <SidebarThreadProviderIcon
-            icon={ProviderIcon}
-            colorClass={providerIconColor}
-            animationClass={providerIconAnimationClass}
-          />
-        ) : null}
+        {providerIcon}
         <SidebarThreadTerminalProviderIcon threadId={thread.id} />
         {props.renamingThreadId === thread.id ? (
           <input
@@ -333,14 +335,11 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
         }
       }}
     >
-      {props.secondaryLine ? (
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <div className="flex min-w-0 items-center gap-2">{firstLine}</div>
-          {props.secondaryLine}
-        </div>
-      ) : (
-        firstLine
-      )}
+      <SidebarThreadRowContent
+        hasProviderIcon={Boolean(ProviderIcon)}
+        firstLine={firstLine}
+        secondaryLine={props.secondaryLine}
+      />
     </SidebarMenuSubButton>
   );
 

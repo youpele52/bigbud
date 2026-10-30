@@ -10,18 +10,18 @@ export function SidebarItutuArrangementSwitch() {
       <ToggleGroup
         aria-label="Sidebar arrangement"
         className="w-full"
-        variant="outline"
-        size="sm"
+        variant="toolbar"
+        size="xs"
         value={[arrangement]}
         onValueChange={(values) => {
           const next = values[0];
           if (next === "projects" || next === "itutu") setArrangement(next);
         }}
       >
-        <ToggleGroupItem className="flex-1 text-xs" value="projects">
+        <ToggleGroupItem className="flex-1 text-sm sm:text-sm" value="projects">
           Projects
         </ToggleGroupItem>
-        <ToggleGroupItem className="flex-1 text-xs" value="itutu">
+        <ToggleGroupItem className="flex-1 text-sm sm:text-sm" value="itutu">
           Ìtútù
         </ToggleGroupItem>
       </ToggleGroup>

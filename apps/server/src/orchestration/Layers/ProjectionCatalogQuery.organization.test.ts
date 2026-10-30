@@ -46,6 +46,8 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
         { id: "later-b", projectId: "__chats__", state: "later", updatedAt: "2026-01-03" },
         { id: "later-c", projectId: "project-b", state: "later", updatedAt: "2026-01-02" },
         { id: "done-a", projectId: "project-a", state: "done", updatedAt: "2026-01-04" },
+        { id: "later-deleting", projectId: "project-a", state: "later", updatedAt: "2026-01-05" },
+        { id: "later-deleted", projectId: "project-a", state: "later", updatedAt: "2026-01-05" },
         {
           id: "later-archived",
           projectId: "project-a",
@@ -63,6 +65,8 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
       ]) {
         yield* insertThread(sql, row);
       }
+      yield* sql`UPDATE projection_threads SET deleting_at = '2026-01-05' WHERE thread_id = 'later-deleting'`;
+      yield* sql`UPDATE projection_threads SET deleted_at = '2026-01-05' WHERE thread_id = 'later-deleted'`;
       yield* sql`
         UPDATE projection_threads
         SET organization_snooze_id = 'snooze-1', organization_snooze_until = '2026-01-06'
@@ -75,18 +79,28 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
         ["later-a", "later-b"],
       );
       assert.equal(first.state, "later");
+      assert.equal(first.totalCount, undefined);
+      const counted = yield* query.getOrganizationThreadSummaries({
+        state: "later",
+        limit: 1,
+        includeTotalCount: true,
+      });
+      assert.equal(counted.threads.length, 1);
+      assert.equal(counted.totalCount, 3);
       assert.deepEqual(first.nextCursor, { updatedAt: "2026-01-03", threadId: "later-b" });
 
       const second = yield* query.getOrganizationThreadSummaries({
         state: "later",
         limit: 2,
         cursor: first.nextCursor,
+        includeTotalCount: true,
       });
       assert.deepEqual(
         second.threads.map((thread) => thread.id),
         ["later-c"],
       );
       assert.equal(second.nextCursor, undefined);
+      assert.equal(second.totalCount, 3);
       assert.deepEqual(second.threads[0]?.organization, {
         state: "later",
         revision: 1,
@@ -94,8 +108,12 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
         snooze: { id: "snooze-1", until: "2026-01-06" },
       });
 
-      const present = yield* query.getOrganizationThreadSummaries({ state: "present" });
+      const present = yield* query.getOrganizationThreadSummaries({
+        state: "present",
+        includeTotalCount: true,
+      });
       assert.deepEqual(present.threads, []);
+      assert.equal(present.totalCount, 0);
     }),
   );
 
@@ -113,6 +131,18 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
       assert.ok(
         plan.some((row) => row.detail.includes("idx_projection_threads_active_organization_state")),
         JSON.stringify(plan),
+      );
+      const countPlan = yield* sql<{ readonly detail: string }>`
+        EXPLAIN QUERY PLAN
+        SELECT COUNT(*) FROM projection_threads t
+        WHERE t.organization_state = 'later' AND t.purpose = 'standard'
+          AND t.deleted_at IS NULL AND t.archived_at IS NULL AND t.deleting_at IS NULL
+      `;
+      assert.ok(
+        countPlan.some((row) =>
+          row.detail.includes("idx_projection_threads_active_organization_state"),
+        ),
+        JSON.stringify(countPlan),
       );
     }),
   );

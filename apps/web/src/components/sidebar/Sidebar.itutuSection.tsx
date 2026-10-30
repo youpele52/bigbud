@@ -16,7 +16,6 @@ import { useItutuCatalog } from "./Sidebar.itutu.catalog";
 import {
   BIGBUD_ITUTU_THREAD_DRAG_MIME,
   ITUTU_BOTTOM_STATES,
-  ITUTU_STATE_LABELS,
   groupItutuThreadIds,
   organizationStateOf,
   readItutuDragThreadId,
@@ -24,7 +23,7 @@ import {
 } from "./Sidebar.itutu.logic";
 import { SidebarItutuLocationLine } from "./Sidebar.itutuLocation";
 import type { SharedProjectItemProps } from "./Sidebar.types";
-import { SidebarSectionLabel } from "./SidebarSectionLabel";
+import { SidebarItutuGroupLabel } from "./Sidebar.itutuGroupLabel";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 
 const addItutuDragData = (threadId: ThreadId) => (dataTransfer: DataTransfer) =>
@@ -82,14 +81,13 @@ export function SidebarItutuSection({ shared }: { shared: SharedProjectItemProps
           }
         }}
       >
-        <SidebarSectionLabel
+        <SidebarItutuGroupLabel
+          state={state}
           isExpanded={expanded}
           onExpandedChange={(next) => setStateCollapsed(state, !next)}
-        >
-          {ITUTU_STATE_LABELS[state]}
-        </SidebarSectionLabel>
+        />
         {expanded ? (
-          <SidebarMenuSub className="mx-0 my-0 gap-0.5 border-l-0 px-0 py-0">
+          <SidebarMenuSub className="ml-5 mr-0 my-0 translate-x-0 gap-0.5 border-l-0 px-0 py-0">
             {threadIds.map((threadId) => (
               <ItutuThreadRow
                 key={threadId}
@@ -106,7 +104,7 @@ export function SidebarItutuSection({ shared }: { shared: SharedProjectItemProps
                   render={<button type="button" disabled={page.status === "loading"} />}
                   data-thread-selection-safe
                   size="sm"
-                  className="h-6 w-full justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
+                  className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
                   onClick={() => loadMore(state)}
                 >
                   {page.status === "loading"

@@ -15,6 +15,7 @@ export const GetOrganizationThreadSummariesInput = Schema.Struct({
   state: ThreadOrganizationState,
   limit: Schema.optional(PositiveInt),
   cursor: Schema.optional(ThreadSummaryCursor),
+  includeTotalCount: Schema.optional(Schema.Boolean),
 });
 export type GetOrganizationThreadSummariesInput = typeof GetOrganizationThreadSummariesInput.Type;
 
@@ -22,6 +23,7 @@ export const GetOrganizationThreadSummariesResult = Schema.Struct({
   projectionSequence: NonNegativeInt,
   state: ThreadOrganizationState,
   threads: Schema.Array(ThreadSummary),
+  totalCount: Schema.optional(NonNegativeInt),
   nextCursor: Schema.optional(ThreadSummaryCursor),
 });
 export type GetOrganizationThreadSummariesResult = typeof GetOrganizationThreadSummariesResult.Type;
