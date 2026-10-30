@@ -167,11 +167,13 @@ export interface ProjectionThreadRepositoryShape {
 
 export interface IdleThreadCandidate {
   readonly threadId: ThreadId;
+  readonly state: "present" | "later";
   readonly revision: number;
   readonly activityAt: string;
 }
 
 export interface ListIdleThreadCandidatesInput {
+  readonly states: ReadonlyArray<"present" | "later">;
   readonly cutoff: string;
   readonly limit: number;
 }

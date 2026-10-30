@@ -2,24 +2,27 @@ import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import { codexRewindAbsent } from "./ProviderSessionRuntime.rewind.ts";
 import type {
   IdleThreadCandidate,
   ListIdleThreadCandidatesInput,
 } from "../Services/ProjectionThreads.ts";
 
 /**
- * Present threads quiet since `cutoff`, oldest activity first. The activity anchor is the later
+ * Unsnoozed threads in one of `states` quiet since `cutoff`, oldest activity first. The activity anchor is the later
  * of the last thread event (`last_activity_at`, which only ever over-counts activity) and the
  * last organization change, so a deliberate move to Present restarts the wait. Every runtime and
  * attention gate is checked here from authoritative projections, then rechecked by the decider:
  * running or starting sessions and turns, queued or held prompts, pending starts and turn
- * control, recovery, pending approvals and questions, and live delegations and watches.
+ * control, recovery, pending approvals and questions, live delegations and watches, and an
+ * unfinished Codex rewind or unacknowledged inspection (provider runtime, not the read model).
  */
 export function makeListIdleThreadCandidates(sql: SqlClient.SqlClient) {
   return (input: ListIdleThreadCandidatesInput) =>
     sql<IdleThreadCandidate>`
       SELECT
         t.thread_id AS "threadId",
+        t.organization_state AS "state",
         t.organization_revision AS "revision",
         MAX(
           COALESCE(t.last_activity_at, t.created_at),
@@ -29,7 +32,7 @@ export function makeListIdleThreadCandidates(sql: SqlClient.SqlClient) {
       LEFT JOIN projection_thread_sessions s ON s.thread_id = t.thread_id
       LEFT JOIN projection_turns turn
         ON turn.thread_id = t.thread_id AND turn.turn_id = t.latest_turn_id
-      WHERE t.organization_state = 'present'
+      WHERE t.organization_state IN ${sql.in(input.states)}
         AND t.organization_snooze_id IS NULL
         AND t.deleted_at IS NULL
         AND t.archived_at IS NULL
@@ -64,6 +67,10 @@ export function makeListIdleThreadCandidates(sql: SqlClient.SqlClient) {
           SELECT 1 FROM projection_thread_watches w
           WHERE (w.watcher_thread_id = t.thread_id OR w.watched_thread_id = t.thread_id)
             AND w.status = 'active'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM provider_session_runtime r
+          WHERE r.thread_id = t.thread_id AND NOT (${codexRewindAbsent(sql)})
         )
       ORDER BY "activityAt" ASC, t.thread_id ASC
       LIMIT ${input.limit}

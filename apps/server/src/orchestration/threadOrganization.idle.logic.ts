@@ -40,11 +40,13 @@ export function organizationAfterIdle(
   current: ThreadOrganization,
   input: {
     readonly expectedRevision: number;
+    readonly fromState: "present" | "later";
     readonly destination: "done" | "later";
     readonly occurredAt: string;
   },
 ): ThreadOrganization | null {
-  if (current.state !== "present" || current.snooze !== null) return null;
+  if (current.state !== input.fromState || current.snooze !== null) return null;
+  if (input.fromState === input.destination) return null;
   if (current.revision !== input.expectedRevision) return null;
   return {
     state: input.destination,

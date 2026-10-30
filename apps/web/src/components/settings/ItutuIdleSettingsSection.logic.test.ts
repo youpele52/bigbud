@@ -1,17 +1,29 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveIdleTimeoutDraft } from "./ItutuIdleSettingsSection.logic";
+import {
+  IDLE_TIMEOUT_MINUTES_BOUNDS,
+  OLDER_THREADS_DAYS_BOUNDS,
+  resolveWholeNumberDraft,
+} from "./ItutuIdleSettingsSection.logic";
 
-describe("resolveIdleTimeoutDraft", () => {
-  it("saves whole minutes within 1 minute to 7 days", () => {
-    expect(resolveIdleTimeoutDraft("1", 10)).toBe(1);
-    expect(resolveIdleTimeoutDraft(" 45 ", 10)).toBe(45);
-    expect(resolveIdleTimeoutDraft("10080", 10)).toBe(10080);
+describe("resolveWholeNumberDraft", () => {
+  it("saves idle timeouts in whole minutes from 10 minutes to 1 day", () => {
+    expect(resolveWholeNumberDraft("10", 20, IDLE_TIMEOUT_MINUTES_BOUNDS)).toBe(10);
+    expect(resolveWholeNumberDraft(" 45 ", 10, IDLE_TIMEOUT_MINUTES_BOUNDS)).toBe(45);
+    expect(resolveWholeNumberDraft("1440", 10, IDLE_TIMEOUT_MINUTES_BOUNDS)).toBe(1440);
+  });
+
+  it("saves older-thread ages in whole days from 1 to 30", () => {
+    expect(resolveWholeNumberDraft("1", 3, OLDER_THREADS_DAYS_BOUNDS)).toBe(1);
+    expect(resolveWholeNumberDraft("30", 1, OLDER_THREADS_DAYS_BOUNDS)).toBe(30);
   });
 
   it("restores the current value for unchanged, invalid, or out-of-range drafts", () => {
-    for (const draft of ["10", "", "0", "1.5", "-3", "10081", "ten"]) {
-      expect(resolveIdleTimeoutDraft(draft, 10), draft).toBe(null);
+    for (const draft of ["10", "", "9", "1.5", "-3", "1441", "ten"]) {
+      expect(resolveWholeNumberDraft(draft, 10, IDLE_TIMEOUT_MINUTES_BOUNDS), draft).toBe(null);
+    }
+    for (const draft of ["1", "0", "31", "2.5"]) {
+      expect(resolveWholeNumberDraft(draft, 1, OLDER_THREADS_DAYS_BOUNDS), draft).toBe(null);
     }
   });
 });

@@ -784,3 +784,14 @@ Not verified (needs a person, another platform, or approval):
 - **Snooze-ended notification:** no toast or system notification exists; it is a follow-up.
 
 Final integration: `feature/computer-use` has no new commits since the branch point. The original checkout is unchanged since checkpoint 5 (156 uncommitted files). The whole-branch overlap is still the seven pure-insertion registration files plus the copied plan and prototype. Migrations 141–143 are free there.
+
+## 19. Post-merge changes (merged into `feature/computer-use` as `fb07123de6`)
+
+- **Full suite, run twice after the merge:** every failure also fails on the pre-merge commit `7168b8fa34` or is intermittent. Four server integration tests fail on both sides (claudeAgent revert, checkpoint revert, periodic `queued-c` hold, legacy OpenCode registry count). The OpenCode V2 production approval test and the shared `DevPortCoordinator` test each failed once and passed on rerun. The three web Muse expectation failures are fixed.
+- **Two-step idle cleanup** (replaces the single off-by-default rule):
+  - **Idle:** on by default. Present threads quiet for 10 minutes (range 10 minutes–1 day) move to the destination, which now defaults to Later (Done remains an option).
+  - **Older threads:** on by default. Present or unsnoozed Later threads quiet for 1 day (range 1–30 days) move to Done.
+  - Each rule has its own barrier, so changing one restarts only its wait. A tick applies Older threads first. The idle command carries `fromState` (decoded as `present` when absent) and the decider rechecks it.
+  - Saved settings that no longer validate, such as a 5-minute timeout, fall back to the default field by field.
+- **Codex rewind gate:** the idle query skips threads whose provider runtime has an unfinished Codex rewind or an unacknowledged inspection, reusing `codexRewindAbsent`.
+- **A user prompt returns a thread to Present from any group,** including a snoozed Later thread, whose snooze is cancelled. This was already implemented; an end-to-end test now covers Done and snoozed Later.

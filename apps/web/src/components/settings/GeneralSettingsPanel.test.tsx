@@ -68,6 +68,8 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Move idle threads out of Present",
       "Idle timeout",
       "Move idle threads to",
+      "Move older threads to Done",
+      "Older than",
     ]);
     expect(sections[3]?.rows).toEqual(["Default agent browser", "Default search engine"]);
     expect(sections[4]?.rows).toEqual([

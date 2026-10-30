@@ -52,7 +52,7 @@ const thread = (threadId: string, overrides: Record<string, unknown> = {}) =>
   });
 
 layer("Ìtútù idle candidates", (it) => {
-  it.effect("returns only quiet, quiescent Present threads; each gate excludes on its own", () =>
+  it.effect("returns only quiet, quiescent threads in the asked states; each gate excludes", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* runMigrations();
@@ -61,6 +61,8 @@ layer("Ìtútù idle candidates", (it) => {
       yield* thread("watched-elsewhere", { organization_state: "done" });
       yield* thread("idle-a");
       yield* thread("idle-b", { last_activity_at: "2026-10-30T00:10:00.000Z" });
+      // Only the older-threads rule asks for Later; a snoozed Later thread is never a candidate.
+      yield* thread("later-quiet", { organization_state: "later" });
       // Organization and lifecycle gates.
       yield* thread("recent", { last_activity_at: RECENT });
       yield* thread("refreshed", { organization_changed_at: RECENT });
@@ -120,20 +122,46 @@ layer("Ìtútù idle candidates", (it) => {
         status: "active",
       });
 
-      const candidates = yield* makeListIdleThreadCandidates(sql)({ cutoff: CUTOFF, limit: 50 });
+      // Provider runtime gates: an unfinished Codex rewind or unacknowledged inspection blocks;
+      // an ordinary runtime row does not.
+      const runtime = (threadId: string, payload: unknown) =>
+        insertRow("provider_session_runtime", {
+          thread_id: threadId,
+          provider_name: "codex",
+          runtime_payload_json: JSON.stringify(payload),
+        });
+      yield* thread("runtime-clean");
+      yield* runtime("runtime-clean", { sessionEpoch: 1 });
+      yield* thread("rewinding");
+      yield* runtime("rewinding", { "bigbud.codex.rewind": { operationId: "op", stage: "x" } });
+      yield* thread("inspecting");
+      yield* runtime("inspecting", {
+        "bigbud.codex.inspectionTerminal": { version: 1, acknowledgements: { ingestion: true } },
+      });
+
+      const list = makeListIdleThreadCandidates(sql);
+      const present = yield* list({ states: ["present"], cutoff: CUTOFF, limit: 50 });
       assert.deepStrictEqual(
-        candidates.map((candidate) => candidate.threadId),
-        ["idle-a", "idle-b"],
+        present.map((candidate) => candidate.threadId),
+        ["idle-a", "runtime-clean", "idle-b"],
       );
-      assert.deepStrictEqual(candidates[1], {
+      assert.deepStrictEqual(present[2], {
         threadId: "idle-b",
+        state: "present",
         revision: 0,
         activityAt: "2026-10-30T00:10:00.000Z",
       });
-      assert.equal(
-        (yield* makeListIdleThreadCandidates(sql)({ cutoff: CUTOFF, limit: 1 })).length,
-        1,
+      const older = yield* list({ states: ["present", "later"], cutoff: CUTOFF, limit: 50 });
+      assert.deepStrictEqual(
+        older.map((candidate) => [candidate.threadId, candidate.state]),
+        [
+          ["idle-a", "present"],
+          ["later-quiet", "later"],
+          ["runtime-clean", "present"],
+          ["idle-b", "present"],
+        ],
       );
+      assert.equal((yield* list({ states: ["present"], cutoff: CUTOFF, limit: 1 })).length, 1);
     }),
   );
 });

@@ -25,6 +25,7 @@ const idle = (id: string, threadId: ThreadId, expectedRevision: number) =>
     commandId: CommandId.makeUnsafe(id),
     threadId,
     expectedRevision,
+    fromState: "present",
     destination: "done",
     createdAt,
   }) as const;

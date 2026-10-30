@@ -1,7 +1,6 @@
 import {
   DEFAULT_ITUTU_IDLE_TIMEOUT_MINUTES,
-  ITUTU_IDLE_TIMEOUT_MAX_MINUTES,
-  ITUTU_IDLE_TIMEOUT_MIN_MINUTES,
+  DEFAULT_ITUTU_OLDER_THREADS_DAYS,
   type ItutuIdleDestination,
   type ServerSettingsPatch,
 } from "@bigbud/contracts/settings";
@@ -13,23 +12,63 @@ import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import {
+  IDLE_TIMEOUT_MINUTES_BOUNDS,
   ITUTU_IDLE_DESTINATION_LABELS,
-  resolveIdleTimeoutDraft,
+  OLDER_THREADS_DAYS_BOUNDS,
+  resolveWholeNumberDraft,
+  type WholeNumberBounds,
 } from "./ItutuIdleSettingsSection.logic";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 
+/** A whole-number field that saves on blur or Enter and restores invalid drafts. */
+function WholeNumberSettingInput(props: {
+  readonly value: number;
+  readonly bounds: WholeNumberBounds;
+  readonly disabled: boolean;
+  readonly ariaLabel: string;
+  readonly onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState(String(props.value));
+
+  useEffect(() => setDraft(String(props.value)), [props.value]);
+
+  const commit = () => {
+    const next = resolveWholeNumberDraft(draft, props.value, props.bounds);
+    if (next === null) setDraft(String(props.value));
+    else props.onCommit(next);
+  };
+
+  return (
+    <div className="w-full sm:w-[116px]">
+      <Input
+        type="number"
+        min={props.bounds.min}
+        max={props.bounds.max}
+        step={1}
+        value={draft}
+        disabled={props.disabled}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") event.currentTarget.blur();
+        }}
+        aria-label={props.ariaLabel}
+      />
+    </div>
+  );
+}
+
 /**
- * Ìtútù idle cleanup. The server owns the policy, so a change shows only once it is saved.
- * Turning it on or changing it gives every thread a full new timeout.
+ * Ìtútù idle cleanup, in two steps. The server owns the policy, so a change shows only once it is
+ * saved. Turning a step on or changing it gives every thread a full new wait for that step.
  */
 export function ItutuIdleSettingsSection() {
   const enabled = useSettings((settings) => settings.itutuIdleCleanupEnabled);
   const timeoutMinutes = useSettings((settings) => settings.itutuIdleTimeoutMinutes);
   const destination = useSettings((settings) => settings.itutuIdleDestination);
+  const olderEnabled = useSettings((settings) => settings.itutuOlderThreadsEnabled);
+  const olderDays = useSettings((settings) => settings.itutuOlderThreadsDays);
   const [saving, setSaving] = useState(false);
-  const [draft, setDraft] = useState(String(timeoutMinutes));
-
-  useEffect(() => setDraft(String(timeoutMinutes)), [timeoutMinutes]);
 
   const save = async (patch: ServerSettingsPatch) => {
     setSaving(true);
@@ -44,12 +83,6 @@ export function ItutuIdleSettingsSection() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const commitTimeout = () => {
-    const next = resolveIdleTimeoutDraft(draft, timeoutMinutes);
-    if (next === null) setDraft(String(timeoutMinutes));
-    else void save({ itutuIdleTimeoutMinutes: next });
   };
 
   return (
@@ -71,7 +104,7 @@ export function ItutuIdleSettingsSection() {
       <SettingsRow
         title="Idle timeout"
         description="Minutes without activity before a Present thread moves."
-        status={`Minimum ${ITUTU_IDLE_TIMEOUT_MIN_MINUTES} minute, maximum ${ITUTU_IDLE_TIMEOUT_MAX_MINUTES / (24 * 60)} days.`}
+        status={`Minimum ${IDLE_TIMEOUT_MINUTES_BOUNDS.min} minutes, maximum 1 day (${IDLE_TIMEOUT_MINUTES_BOUNDS.max} minutes).`}
         resetAction={
           timeoutMinutes !== DEFAULT_ITUTU_IDLE_TIMEOUT_MINUTES ? (
             <SettingResetButton
@@ -83,22 +116,13 @@ export function ItutuIdleSettingsSection() {
           ) : null
         }
         control={
-          <div className="w-full sm:w-[116px]">
-            <Input
-              type="number"
-              min={ITUTU_IDLE_TIMEOUT_MIN_MINUTES}
-              max={ITUTU_IDLE_TIMEOUT_MAX_MINUTES}
-              step={1}
-              value={draft}
-              disabled={saving}
-              onChange={(event) => setDraft(event.target.value)}
-              onBlur={commitTimeout}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-              aria-label="Idle timeout in minutes"
-            />
-          </div>
+          <WholeNumberSettingInput
+            value={timeoutMinutes}
+            bounds={IDLE_TIMEOUT_MINUTES_BOUNDS}
+            disabled={saving}
+            ariaLabel="Idle timeout in minutes"
+            onCommit={(value) => void save({ itutuIdleTimeoutMinutes: value })}
+          />
         }
       />
       <SettingsRow
@@ -118,13 +142,49 @@ export function ItutuIdleSettingsSection() {
               <SelectValue>{ITUTU_IDLE_DESTINATION_LABELS[destination]}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
-              {(["done", "later"] as const).map((value) => (
+              {(["later", "done"] as const).map((value) => (
                 <SelectItem hideIndicator key={value} value={value}>
                   {ITUTU_IDLE_DESTINATION_LABELS[value]}
                 </SelectItem>
               ))}
             </SelectPopup>
           </Select>
+        }
+      />
+      <SettingsRow
+        title="Move older threads to Done"
+        description="Present or Later threads with no activity for this many days move to Done. Snoozed threads wait for their reminder instead, and threads that are working or waiting for you never move."
+        searchTerms={["itutu", "older", "old", "stale", "later", "done", "cleanup", "automatic"]}
+        control={
+          <Switch
+            tone="success"
+            checked={olderEnabled}
+            disabled={saving}
+            onCheckedChange={(checked) => void save({ itutuOlderThreadsEnabled: checked })}
+            aria-label="Move older threads to Done"
+          />
+        }
+      />
+      <SettingsRow
+        title="Older than"
+        description="Days without activity before a Present or Later thread moves to Done."
+        status={`Minimum ${OLDER_THREADS_DAYS_BOUNDS.min} day, maximum ${OLDER_THREADS_DAYS_BOUNDS.max} days.`}
+        resetAction={
+          olderDays !== DEFAULT_ITUTU_OLDER_THREADS_DAYS ? (
+            <SettingResetButton
+              label="older threads age"
+              onClick={() => void save({ itutuOlderThreadsDays: DEFAULT_ITUTU_OLDER_THREADS_DAYS })}
+            />
+          ) : null
+        }
+        control={
+          <WholeNumberSettingInput
+            value={olderDays}
+            bounds={OLDER_THREADS_DAYS_BOUNDS}
+            disabled={saving}
+            ariaLabel="Older threads age in days"
+            onCommit={(value) => void save({ itutuOlderThreadsDays: value })}
+          />
         }
       />
     </SettingsSection>

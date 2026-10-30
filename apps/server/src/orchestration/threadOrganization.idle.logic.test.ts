@@ -45,12 +45,41 @@ describe("organizationAfterIdle", () => {
 
   it("moves an unchanged Present thread to the destination", () => {
     expect(
-      organizationAfterIdle(present, { expectedRevision: 4, destination: "later", occurredAt }),
+      organizationAfterIdle(present, {
+        expectedRevision: 4,
+        fromState: "present",
+        destination: "later",
+        occurredAt,
+      }),
     ).toEqual({ state: "later", revision: 5, changedAt: occurredAt, snooze: null });
   });
 
+  it("moves an unchanged, unsnoozed Later thread to Done for the older-threads rule", () => {
+    const later = { ...present, state: "later" as const };
+    const input = { expectedRevision: 4, fromState: "later" as const, occurredAt };
+    expect(organizationAfterIdle(later, { ...input, destination: "done" })).toEqual({
+      state: "done",
+      revision: 5,
+      changedAt: occurredAt,
+      snooze: null,
+    });
+    expect(organizationAfterIdle(later, { ...input, destination: "later" })).toBe(null);
+    expect(
+      organizationAfterIdle(
+        { ...later, snooze: { id: "s", until: occurredAt } },
+        { ...input, destination: "done" },
+      ),
+    ).toBe(null);
+  });
+
   it("loses to any change since the candidate was read", () => {
-    const input = { expectedRevision: 4, destination: "done" as const, occurredAt };
+    const input = {
+      expectedRevision: 4,
+      fromState: "present" as const,
+      destination: "done" as const,
+      occurredAt,
+    };
+    expect(organizationAfterIdle({ ...present, state: "later" }, input)).toBe(null);
     expect(organizationAfterIdle({ ...present, revision: 5 }, input)).toBe(null);
     expect(organizationAfterIdle({ ...present, state: "needs-you" }, input)).toBe(null);
     expect(

@@ -112,6 +112,33 @@ describe("ThreadOrganizationReactor", () => {
         // A new blocking request reaches the user again.
         await run(engine.dispatch(approvalRequest("approval-2", "request-2")));
         await waitForState("needs-you", 4);
+
+        // A prompt the user sends returns the thread to Present from any group.
+        await run(
+          engine.dispatch({
+            type: "thread.organization.move",
+            commandId: CommandId.makeUnsafe("move-done-again"),
+            threadId,
+            state: "done",
+            createdAt,
+          }),
+        );
+        await run(engine.dispatch(userMessage("message-from-done")));
+        await waitForState("present", 6);
+
+        // From a snoozed Later thread too, and the snooze is cancelled.
+        await run(
+          engine.dispatch({
+            type: "thread.organization.snooze",
+            commandId: CommandId.makeUnsafe("snooze-later"),
+            threadId,
+            durationMinutes: 60,
+            createdAt,
+          }),
+        );
+        await waitForState("later", 7);
+        await run(engine.dispatch(userMessage("message-from-later")));
+        expect(await waitForState("present", 8)).toMatchObject({ snooze: null });
       } finally {
         await Effect.runPromise(Scope.close(scope, Exit.void));
         await runtime.dispose();
