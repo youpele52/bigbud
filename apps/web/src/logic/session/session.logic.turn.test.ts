@@ -251,6 +251,7 @@ describe("PROVIDER_OPTIONS", () => {
       { value: "copilot", label: "Copilot", available: true },
       { value: "cursor", label: "Cursor", available: true },
       { value: "devin", label: "Devin", available: true },
+      { value: "muse", label: "Muse Code", available: true },
       { value: "opencodeV2", label: "OpenCode", available: true },
       { value: "pi", label: "Pi", available: true },
     ]);
