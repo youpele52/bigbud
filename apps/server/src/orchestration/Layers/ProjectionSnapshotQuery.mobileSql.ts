@@ -15,6 +15,7 @@ import {
   ProjectionThreadWatchDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.ts";
 import { makeMobileHistoryQueries } from "./ProjectionSnapshotQuery.mobileSql.history.ts";
+import { threadOrganizationJsonSql } from "../../persistence/Layers/ProjectionThreads.organization.ts";
 
 export const MobileRecoveryQueryInput = Schema.Struct({
   selectedThreadId: Schema.NullOr(ThreadId),
@@ -67,6 +68,7 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           queue_hold AS "queueHold",
           pending_turn_start_json AS "pendingTurnStart",
           recovery_json AS "recovery",
+          ${threadOrganizationJsonSql(sql)} AS "organization",
           CASE
             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
             ELSE json_object(
@@ -115,6 +117,7 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           queue_hold AS "queueHold",
           pending_turn_start_json AS "pendingTurnStart",
           recovery_json AS "recovery",
+          ${threadOrganizationJsonSql(sql)} AS "organization",
           CASE
             WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
             ELSE json_object(

@@ -330,6 +330,9 @@ export interface NativeApi {
     getProjectThreadSummaries: (
       input: GetProjectThreadSummariesInput,
     ) => Promise<GetProjectThreadSummariesResult>;
+    getOrganizationThreadSummaries: (
+      input: GetOrganizationThreadSummariesInput,
+    ) => Promise<GetOrganizationThreadSummariesResult>;
     getSelectedThreadDetail: (
       input: GetSelectedThreadDetailInput,
     ) => Promise<GetSelectedThreadDetailResult>;
@@ -362,3 +365,7 @@ import type {
   ServerOpencodeV2ThreadToolsSetupInput,
   ServerOpencodeV2ThreadToolsSetupResult,
 } from "./server.opencodeV2ThreadToolsSetup";
+import type {
+  GetOrganizationThreadSummariesInput,
+  GetOrganizationThreadSummariesResult,
+} from "../orchestration/orchestration.catalog.organization";

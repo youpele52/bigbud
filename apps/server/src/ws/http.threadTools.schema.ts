@@ -20,9 +20,15 @@ export const ThreadToolRequest = Schema.Struct({
     "workspace",
     "remote_workspace_process",
     "get_system_resources",
+    "move",
+    "snooze",
   ]),
   threadId: Schema.optional(Schema.String),
   targetThreadId: Schema.optional(Schema.String),
+  /** `move`: destination Ìtútù state (`status` is already the list filter). */
+  organizationState: Schema.optional(Schema.String),
+  /** `snooze`: whole minutes. */
+  durationMinutes: Schema.optional(Schema.Number),
   title: Schema.optional(Schema.String),
   computerUseAction: Schema.optional(Schema.Unknown),
   browserAction: Schema.optional(Schema.Unknown),

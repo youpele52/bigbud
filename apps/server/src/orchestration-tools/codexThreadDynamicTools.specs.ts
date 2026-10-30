@@ -30,6 +30,12 @@ import {
 } from "./threadOrchestrationBridge.shared.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
+import {
+  MOVE_THREAD_TOOL_DESCRIPTION,
+  MOVE_THREAD_TOOL_PARAMETERS,
+  SNOOZE_THREAD_TOOL_DESCRIPTION,
+  SNOOZE_THREAD_TOOL_PARAMETERS,
+} from "./threadOrganizationTool.shared.ts";
 
 export const BIGBUD_ORCHESTRATION_NAMESPACE = "bigbud_orchestration";
 
@@ -118,6 +124,18 @@ export function createCodexThreadOrchestrationDynamicTools(
       name: "rename_thread",
       description: RENAME_THREAD_TOOL_DESCRIPTION,
       inputSchema: RENAME_THREAD_TOOL_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "move_thread",
+      description: MOVE_THREAD_TOOL_DESCRIPTION,
+      inputSchema: MOVE_THREAD_TOOL_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "snooze_thread",
+      description: SNOOZE_THREAD_TOOL_DESCRIPTION,
+      inputSchema: SNOOZE_THREAD_TOOL_PARAMETERS,
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,

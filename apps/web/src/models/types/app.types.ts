@@ -35,6 +35,7 @@ import {
   DEFAULT_THREAD_TERMINAL_HEIGHT as _DEFAULT_THREAD_TERMINAL_HEIGHT,
   MAX_TERMINALS_PER_GROUP as _MAX_TERMINALS_PER_GROUP,
 } from "@bigbud/contracts";
+import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
 export type SessionPhase = "disconnected" | "connecting" | "ready" | "running";
 
@@ -233,6 +234,8 @@ export interface Thread {
   turnStartRequest?: ThreadTurnStartRequest | null | undefined;
   /** Sleep and wake recovery state from the server projection. */
   recovery?: ThreadRecovery | null;
+  /** Ìtútù organization from the server projection. Absent means Present. */
+  organization?: ThreadOrganization | undefined;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
   branch: string | null;
   worktreePath: string | null;
@@ -274,6 +277,8 @@ export interface SidebarThreadSummary {
   providerAgents?: OrchestrationTask[];
   /** `continuing` keeps the pill on Working while bigbud resumes a turn after sleep. */
   recoveryStatus?: ThreadRecoveryStatus | null;
+  /** Ìtútù organization from the server projection. Absent means Present. */
+  organization?: ThreadOrganization | undefined;
 }
 
 export type ThreadSessionProvider = ProviderKind | "unknown";

@@ -8,6 +8,8 @@ import type {
   CatalogThreadRow,
   ProjectionCatalogQueryShape,
 } from "../Services/ProjectionCatalogQuery.ts";
+import { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
+import { threadOrganizationJsonSqlText } from "../../persistence/Layers/ProjectionThreads.organization.ts";
 
 const Request = Schema.Struct({
   callerThreadId: Schema.String,
@@ -43,6 +45,7 @@ const Row = Schema.Struct({
   createdAt: Schema.String,
   updatedAt: Schema.String,
   lastAssistantExcerpt: Schema.NullOr(Schema.String),
+  organization: Schema.fromJsonString(ThreadOrganization),
 });
 
 type Request = typeof Request.Type;
@@ -139,6 +142,7 @@ export function makeListThreads(
         (SELECT COUNT(*) FROM projection_thread_messages m WHERE m.thread_id = t.thread_id)
           AS "messageCount",
         t.created_at AS "createdAt", t.updated_at AS "updatedAt",
+        ${threadOrganizationJsonSqlText("t")} AS "organization",
         CASE WHEN ? THEN (SELECT CASE WHEN length(trim(m.text)) > 240
           THEN substr(trim(m.text), 1, 237) || '...' ELSE trim(m.text) END
           FROM projection_thread_messages m WHERE m.thread_id = t.thread_id

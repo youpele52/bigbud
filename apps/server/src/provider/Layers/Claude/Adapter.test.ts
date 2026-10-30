@@ -85,6 +85,8 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_orchestration__browser",
         "mcp__bigbud_orchestration__computer_use",
         "mcp__bigbud_orchestration__rename_thread",
+        "mcp__bigbud_orchestration__move_thread",
+        "mcp__bigbud_orchestration__snooze_thread",
         "mcp__bigbud_orchestration__archive_thread",
         "mcp__bigbud_orchestration__send_thread_message",
         "mcp__bigbud_orchestration__get_thread_status",

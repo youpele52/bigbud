@@ -19,6 +19,8 @@ import {
   useThreadJumpHintVisibility,
 } from "./Sidebar.logic";
 import { useSidebarKeyboardNav } from "./Sidebar.keyboardNav.logic";
+import { useItutuStore } from "../../stores/itutu/itutu.store";
+import { groupItutuThreadIds, visibleItutuThreadIds } from "./Sidebar.itutu.logic";
 import type { SidebarThreadSummary } from "../../models/types";
 import {
   getRemainingSidebarThreadCount,
@@ -188,9 +190,15 @@ export function useSidebarRenderedProjects({
     ],
   );
 
+  const arrangement = useItutuStore((store) => store.arrangement);
+  const collapsedItutuStates = useItutuStore((store) => store.collapsedStates);
+  // Ìtútù replaces the thread arrangement, so traversal and jump shortcuts follow its groups.
   const visibleSidebarThreadIds = useMemo(
-    () => [...visibleChatThreadIds, ...getVisibleSidebarThreadIds(renderedProjects)],
-    [renderedProjects, visibleChatThreadIds],
+    () =>
+      arrangement === "itutu"
+        ? visibleItutuThreadIds(groupItutuThreadIds(sidebarThreadsById), collapsedItutuStates)
+        : [...visibleChatThreadIds, ...getVisibleSidebarThreadIds(renderedProjects)],
+    [arrangement, collapsedItutuStates, renderedProjects, sidebarThreadsById, visibleChatThreadIds],
   );
 
   const threadJumpCommandById = useMemo(() => {

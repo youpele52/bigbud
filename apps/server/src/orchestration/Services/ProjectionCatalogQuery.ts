@@ -24,6 +24,11 @@ import type {
   SearchConversationMessagesInput,
   SearchConversationMessagesResult,
 } from "@bigbud/contracts/orchestration/orchestration.search.ts";
+import type {
+  GetOrganizationThreadSummariesInput,
+  GetOrganizationThreadSummariesResult,
+} from "@bigbud/contracts/orchestration/orchestration.catalog.organization.ts";
+import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
 export interface ListCatalogThreadsInput {
   readonly callerThreadId: ThreadId;
@@ -51,6 +56,8 @@ export interface CatalogThreadRow {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly lastAssistantExcerpt?: string | null;
+  /** Ìtútù organization: state, revision, and any snooze deadline. */
+  readonly organization: ThreadOrganization;
 }
 
 export interface ListCatalogThreadsResult {
@@ -87,6 +94,10 @@ export interface ProjectionCatalogQueryShape {
   readonly getProjectThreadSummaries: (
     input: GetProjectThreadSummariesInput,
   ) => Effect.Effect<GetProjectThreadSummariesResult, ProjectionRepositoryError>;
+  /** One keyset page of active threads in an Ìtútù state, across every project. */
+  readonly getOrganizationThreadSummaries: (
+    input: GetOrganizationThreadSummariesInput,
+  ) => Effect.Effect<GetOrganizationThreadSummariesResult, ProjectionRepositoryError>;
   readonly getSelectedThreadDetail: (
     input: GetSelectedThreadDetailInput,
   ) => Effect.Effect<GetSelectedThreadDetailResult, ProjectionCatalogQueryError>;

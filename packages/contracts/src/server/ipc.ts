@@ -33,6 +33,10 @@ export interface ContextMenuItem<T extends string = string> {
   separator?: boolean;
   destructive?: boolean;
   disabled?: boolean;
+  /** Shows a check mark when true; omit for items that are not toggles or choices. */
+  checked?: boolean;
+  /** One level of submenu items. A parent item is never returned as the clicked id. */
+  children?: readonly ContextMenuItem<T>[];
 }
 
 export type DesktopTheme = "light" | "dark" | "system";

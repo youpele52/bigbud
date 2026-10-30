@@ -3,6 +3,11 @@ import type { MenuItemConstructorOptions } from "electron";
 import type { ContextMenuItem } from "@bigbud/contracts";
 import { getDestructiveMenuIcon } from "../env/pathResolver";
 import { authorizedHandle, BROAD_RENDERER_ROLES } from "./ipcAuthorization";
+import {
+  buildContextMenuTemplate,
+  normalizeContextMenuItems,
+  type ContextMenuTemplateItem,
+} from "./ipcHandlers.contextMenu.items";
 
 export function registerContextMenuIpcHandler(
   channel: string,
@@ -12,15 +17,7 @@ export function registerContextMenuIpcHandler(
     channel,
     BROAD_RENDERER_ROLES,
     async (event, items: ContextMenuItem[], position?: { x: number; y: number }) => {
-      const normalizedItems = items
-        .filter((item) => typeof item.id === "string" && typeof item.label === "string")
-        .map((item) => ({
-          id: item.id,
-          label: item.label,
-          separator: item.separator === true,
-          destructive: item.destructive === true,
-          disabled: item.disabled === true,
-        }));
+      const normalizedItems = normalizeContextMenuItems(items);
       if (normalizedItems.length === 0) return null;
 
       const popupPosition =
@@ -36,29 +33,21 @@ export function registerContextMenuIpcHandler(
       if (!window) return null;
 
       return new Promise<string | null>((resolve) => {
-        const template: MenuItemConstructorOptions[] = [];
-        let hasInsertedDestructiveSeparator = false;
-        for (const item of normalizedItems) {
-          if (item.separator) {
-            template.push({ type: "separator" });
-            continue;
-          }
-          if (item.destructive && !hasInsertedDestructiveSeparator && template.length > 0) {
-            template.push({ type: "separator" });
-            hasInsertedDestructiveSeparator = true;
-          }
-          const itemOption: MenuItemConstructorOptions = {
-            label: item.label,
-            enabled: !item.disabled,
-            click: () => resolve(item.id),
+        const toElectron = (item: ContextMenuTemplateItem): MenuItemConstructorOptions => {
+          if (item.type === "separator") return { type: "separator" };
+          const destructiveIcon = item.destructive ? getDestructiveMenuIcon() : null;
+          return {
+            ...(item.type === "checkbox"
+              ? { type: "checkbox", checked: item.checked === true }
+              : {}),
+            label: item.label ?? "",
+            enabled: item.enabled !== false,
+            ...(item.submenu ? { submenu: item.submenu.map(toElectron) } : {}),
+            ...(item.id !== undefined ? { click: () => resolve(item.id!) } : {}),
+            ...(destructiveIcon ? { icon: destructiveIcon } : {}),
           };
-          if (item.destructive) {
-            const destructiveIcon = getDestructiveMenuIcon();
-            if (destructiveIcon) itemOption.icon = destructiveIcon;
-          }
-          template.push(itemOption);
-        }
-
+        };
+        const template = buildContextMenuTemplate(normalizedItems).map(toElectron);
         const menu = Menu.buildFromTemplate(template);
         menu.popup({ window, ...popupPosition, callback: () => resolve(null) });
       });

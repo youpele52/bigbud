@@ -37,6 +37,8 @@ export function prependThreadContextToProviderInput(input: {
     : [];
   const mcpToolNames = [
     "rename_thread",
+    "move_thread",
+    "snooze_thread",
     "archive_thread",
     "create_thread",
     ...(modelChoice ? ["list_available_models"] : []),
@@ -78,6 +80,8 @@ export function prependThreadContextToProviderInput(input: {
     "",
     "To rename the current thread, call the `rename_thread` tool with the new title.",
     "To rename another canonical bigbud thread, only when the current user explicitly requests it, pass its ID as `targetThreadId` to `rename_thread`. Only current-project threads and your directly delegated children are eligible; native provider session rename is not a substitute.",
+    "To organize threads in Ìtútù, call `move_thread` with `state` present, needs-you, later, or done, or `snooze_thread` with whole `minutes` (2-1440) to set a thread aside in Later until it returns to Needs you. Omit `targetThreadId` for the current thread; move other eligible threads only when the current user explicitly asks.",
+    "When the task the user asked for is actually complete, ask in that same reply whether to move this thread to Done or Later, and call `move_thread` only after they answer; if they already said which, move it without asking. Do not ask after every reply. Done is not archive.",
     "To archive the current thread, call the `archive_thread` tool.",
     "To create a standalone bigbud thread, call the `create_thread` tool with a title and a self-contained task that includes all necessary context.",
     "Omit `projectId` to target the current project; only provide an explicitly authorized `projectId` for another project.",

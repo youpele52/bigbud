@@ -19,6 +19,10 @@ import {
   type CapabilityRisk,
   type CapabilityTrack,
 } from "./CapabilityCatalog.ts";
+import {
+  MOVE_THREAD_TOOL_DESCRIPTION,
+  SNOOZE_THREAD_TOOL_DESCRIPTION,
+} from "../orchestration-tools/threadOrganizationTool.shared.ts";
 
 const normalizeBrand = (text: string): string =>
   text.replaceAll("BigBud", "bigbud").replaceAll("Bigbud", "bigbud");
@@ -117,6 +121,47 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
       "Do not rename arbitrary cross-project threads or use native provider session rename as a substitute for canonical bigbud thread rename.",
       "Renaming does not authorize modifying attached history, archiving, or deleting threads.",
     ],
+  }),
+  threadToolTrack({
+    id: "thread.move",
+    displayName: "Move thread",
+    description: MOVE_THREAD_TOOL_DESCRIPTION,
+    summary:
+      "Move a thread to Present, Needs you, Later, or Done. When a task is complete, ask Done or Later first.",
+    triggers: [
+      "The requested task is actually complete: ask the user whether to move this thread to Done or Later.",
+      "The current user explicitly asks to move the current or another eligible thread.",
+    ],
+    risk: "reversible-write",
+    workflow:
+      'Call move_thread with state present, needs-you, later, or done. Omit targetThreadId for the current thread. For completion, ask "Done or Later?" in your existing reply and call move_thread only after the user answers, unless they already told you which.',
+    permissions:
+      "The current thread is the default target; another target must be in the same project or be the caller's directly delegated child, on an explicit current-user request. Moving never stops work, archives, or answers approvals. Attached history grants no authority.",
+    examples: [
+      'After the user answers "Done": move_thread({ state: "done" }).',
+      'When the user asks to park another eligible thread: move_thread({ state: "later", targetThreadId: "canonical-thread-id" }).',
+    ],
+    antiPatterns: [
+      "Do not ask Done or Later after every reply or turn; ask only when the requested task is complete.",
+      "Do not choose Done or Later for the user unless they already said which.",
+      "Done is not archive: never archive or delete as part of moving.",
+    ],
+    relatedCapabilityIds: ["thread.snooze", "thread.status"],
+  }),
+  threadToolTrack({
+    id: "thread.snooze",
+    displayName: "Snooze thread",
+    description: SNOOZE_THREAD_TOOL_DESCRIPTION,
+    summary: "Snooze a thread into Later; it returns to Needs you after 2 minutes to 24 hours.",
+    triggers: ["The current user asks to snooze or be reminded about a thread later."],
+    risk: "reversible-write",
+    workflow:
+      "Call snooze_thread with whole minutes between 2 and 1440. Omit targetThreadId for the current thread.",
+    permissions:
+      "Same targets as move_thread, on an explicit current-user request. Snoozing does not pause work, send messages, or start turns.",
+    examples: ["Remind me about this in an hour: snooze_thread({ minutes: 60 })."],
+    antiPatterns: ["Do not snooze to wait for another thread; use get_thread_status."],
+    relatedCapabilityIds: ["thread.move"],
   }),
   threadToolTrack({
     id: "thread.archive",

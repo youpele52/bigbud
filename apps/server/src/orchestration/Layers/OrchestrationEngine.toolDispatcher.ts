@@ -38,6 +38,10 @@ import type { ServerSettingsShape } from "../../ws/serverSettings.ts";
 import type { ProjectionCatalogQueryShape } from "../Services/ProjectionCatalogQuery.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { executeBrowserAction } from "./OrchestrationEngine.browser.ts";
+import {
+  moveThreadViaOrchestration,
+  snoozeThreadViaOrchestration,
+} from "../../orchestration-tools/ThreadOrchestrationTools.organization.ts";
 
 export function installOrchestrationEngineToolDispatchers(input: {
   readonly browser: BrowserManagerShape;
@@ -69,6 +73,18 @@ export function installOrchestrationEngineToolDispatchers(input: {
       : {}),
     rename: (request) =>
       renameThreadViaOrchestration({
+        orchestrationEngine: input.engine,
+        threadDelegationRepository: input.threadDelegationRepository,
+        ...request,
+      }),
+    move: (request) =>
+      moveThreadViaOrchestration({
+        orchestrationEngine: input.engine,
+        threadDelegationRepository: input.threadDelegationRepository,
+        ...request,
+      }),
+    snooze: (request) =>
+      snoozeThreadViaOrchestration({
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,

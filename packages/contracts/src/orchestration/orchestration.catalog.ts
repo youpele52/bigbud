@@ -21,6 +21,7 @@ import {
   OrchestrationSessionStatus,
   OrchestrationThreadPurpose,
 } from "./orchestration.thread";
+import { ThreadOrganizationField } from "./orchestration.organization";
 
 export const STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT = 1;
 export const STARTUP_PROJECT_CATALOG_MAX_LIMIT = 20;
@@ -63,6 +64,7 @@ export const ThreadSummary = Schema.Struct({
   updatedAt: IsoDateTime,
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
   pinnedAt: Schema.NullOr(IsoDateTime),
+  organization: ThreadOrganizationField,
   sessionStatus: Schema.NullOr(OrchestrationSessionStatus),
   providerName: Schema.NullOr(TrimmedNonEmptyString),
   activeTurnId: Schema.NullOr(TurnId),

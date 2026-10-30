@@ -17,6 +17,7 @@ vi.mock("../../hooks/useSettings", () => ({
   useSettings: (selector?: (settings: UnifiedSettings) => unknown) =>
     selector ? selector(mock.settings) : mock.settings,
   useUpdateSettings: () => ({ updateSettings: mock.updateSettings }),
+  persistServerSettings: vi.fn(),
 }));
 
 import { BrowserSettingsSection } from "./BrowserSettingsSection";
@@ -51,6 +52,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(sections.map(({ title }) => title)).toEqual([
       "General",
       "Threads",
+      "Idle threads",
       "Browser",
       "Terminal",
       expect.stringContaining("Learning projects"),
@@ -62,8 +64,13 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Open web links in bigbud",
       "Diff line wrapping",
     ]);
-    expect(sections[2]?.rows).toEqual(["Default agent browser", "Default search engine"]);
-    expect(sections[3]?.rows).toEqual([
+    expect(sections[2]?.rows).toEqual([
+      "Move idle threads out of Present",
+      "Idle timeout",
+      "Move idle threads to",
+    ]);
+    expect(sections[3]?.rows).toEqual(["Default agent browser", "Default search engine"]);
+    expect(sections[4]?.rows).toEqual([
       "Terminal font",
       "Terminal font size",
       "Terminal theme (dark appearance)",

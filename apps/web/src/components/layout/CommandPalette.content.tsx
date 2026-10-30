@@ -20,6 +20,7 @@ import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { useStore } from "../../stores/main";
 import { useCommandPaletteStore } from "../../stores/ui";
+import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 import {
   Command,
   CommandDialog,
@@ -181,6 +182,7 @@ export function CommandPaletteDialogContent() {
         keywords: `${thread.title} chats`.toLowerCase(),
         icon: <MessageSquareIcon className="size-4" />,
         onSelect: async () => {
+          acknowledgeThreadOpen(thread.id);
           await navigate({ to: "/$threadId", params: { threadId: thread.id } });
         },
       }));
@@ -209,6 +211,7 @@ export function CommandPaletteDialogContent() {
           keywords: `${thread.title} ${projectName} ${thread.branch ?? ""}`.toLowerCase(),
           icon: <MessageSquareIcon className="size-4" />,
           onSelect: async () => {
+            acknowledgeThreadOpen(thread.id);
             await navigate({ to: "/$threadId", params: { threadId: thread.id } });
           },
         };

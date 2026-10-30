@@ -1,5 +1,11 @@
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 import {
+  MOVE_THREAD_TOOL_DESCRIPTION,
+  MOVE_THREAD_TOOL_PARAMETERS,
+  SNOOZE_THREAD_TOOL_DESCRIPTION,
+  SNOOZE_THREAD_TOOL_PARAMETERS,
+} from "./threadOrganizationTool.shared.ts";
+import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_PARAMETERS,
@@ -64,6 +70,16 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   '    name: "rename_thread",',
   `    description: ${JSON.stringify(RENAME_THREAD_TOOL_DESCRIPTION)},`,
   `    inputSchema: ${JSON.stringify(RENAME_THREAD_TOOL_PARAMETERS)},`,
+  "  },",
+  "  {",
+  '    name: "move_thread",',
+  `    description: ${JSON.stringify(MOVE_THREAD_TOOL_DESCRIPTION)},`,
+  `    inputSchema: ${JSON.stringify(MOVE_THREAD_TOOL_PARAMETERS)},`,
+  "  },",
+  "  {",
+  '    name: "snooze_thread",',
+  `    description: ${JSON.stringify(SNOOZE_THREAD_TOOL_DESCRIPTION)},`,
+  `    inputSchema: ${JSON.stringify(SNOOZE_THREAD_TOOL_PARAMETERS)},`,
   "  },",
   ...renderMcpComputerUseToolLines(),
   "  {",

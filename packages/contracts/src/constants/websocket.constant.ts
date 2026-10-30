@@ -155,6 +155,7 @@ export const ORCHESTRATION_WS_METHODS = {
   getStartupProjectCatalog: "orchestration.getStartupProjectCatalog",
   searchConversationMessages: "orchestration.searchConversationMessages",
   getProjectThreadSummaries: "orchestration.getProjectThreadSummaries",
+  getOrganizationThreadSummaries: "orchestration.getOrganizationThreadSummaries",
   getSelectedThreadDetail: "orchestration.getSelectedThreadDetail",
   getThreadOwnership: "orchestration.getThreadOwnership",
   getCommandOutcome: "orchestration.getCommandOutcome",

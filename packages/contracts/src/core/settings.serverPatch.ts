@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas";
 import { GreetingName } from "./settings.greeting";
+import { ItutuIdleSettingsPatchFields } from "./settings.itutu";
 import { OpencodeV2NativeServiceTrust, OpencodeV2PluginConfigRoot } from "./settings.opencodeV2";
 import {
   ClaudeModelOptions,
@@ -149,6 +150,7 @@ export const ServerSettingsPatch = Schema.Struct({
   computerUseActionTimeoutMs: Schema.optionalKey(ComputerUseActionTimeoutMs),
   hiddenComposerProviders: Schema.optionalKey(Schema.Array(ProviderKind)),
   delegatedThreadModelChoice: Schema.optionalKey(DelegatedThreadModelChoice),
+  ...ItutuIdleSettingsPatchFields,
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(
