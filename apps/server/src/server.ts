@@ -54,6 +54,7 @@ import { ProviderRuntimeIngestionLive } from "./orchestration/Layers/ProviderRun
 import { ProviderCommandReactorLive } from "./orchestration/Layers/ProviderCommandReactor";
 import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor";
 import { ThreadWatchReactorLive } from "./orchestration/Layers/ThreadWatchReactor";
+import { ThreadOrganizationReactorLive } from "./orchestration/Layers/ThreadOrganizationReactor.ts";
 import { ThreadToolModelSourcesLive } from "./orchestration-tools/ThreadOrchestrationTools.modelSources.ts";
 import { makeProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
 import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
@@ -110,7 +111,12 @@ const PtyAdapterLive = Layer.unwrap(
 );
 
 const ReactorLayerLive = Layer.empty.pipe(
-  Layer.provideMerge(OrchestrationReactorLive.pipe(Layer.provide(LearningReactorLive))),
+  Layer.provideMerge(
+    OrchestrationReactorLive.pipe(
+      Layer.provide(LearningReactorLive),
+      Layer.provide(ThreadOrganizationReactorLive),
+    ),
+  ),
   Layer.provideMerge(ProviderRuntimeIngestionLive),
   Layer.provideMerge(Recovery.ProviderTurnSupervisorLive),
   Layer.provideMerge(ProviderCommandReactorLive),

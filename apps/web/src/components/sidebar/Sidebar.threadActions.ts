@@ -14,6 +14,7 @@ import type {
   SidebarThreadActionsOutput,
 } from "./Sidebar.threadActions.types";
 import { buildItutuMoveMenuItem, runItutuMenuAction } from "./Sidebar.itutu.menu";
+import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 
 function normalizeSummaryText(value: string | null | undefined): string {
   return value?.trim().replace(/\s+/g, " ") ?? "";
@@ -150,6 +151,7 @@ export function useSidebarThreadActions({
       }
       setSelectionAnchor(threadId);
       closeMobileSidebar();
+      acknowledgeThreadOpen(threadId);
       navigateToThreadRoute(threadId);
     },
     [

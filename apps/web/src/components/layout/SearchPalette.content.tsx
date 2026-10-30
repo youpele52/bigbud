@@ -20,6 +20,7 @@ import { useDefaultChatCwd } from "~/rpc/serverState";
 import { useProjectById, useStore, useThreadById } from "../../stores/main";
 import { openPathFromChat } from "../../stores/files/filesPanel.open";
 import { useSearchStore, useUiStateStore } from "../../stores/ui";
+import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 import {
   Command,
   CommandDialog,
@@ -192,12 +193,14 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
 
   const handleSelectThread = (threadId: ThreadId) => {
     setOpen(false);
+    acknowledgeThreadOpen(threadId);
     void navigate({ to: "/$threadId", params: { threadId } });
   };
 
   const handleSelectMessage = (threadId: ThreadId, messageId: MessageId) => {
     setOpen(false);
     requestMessageFocus(threadId, messageId);
+    acknowledgeThreadOpen(threadId);
     if (threadId !== activeThreadId) {
       void navigate({ to: "/$threadId", params: { threadId } });
     }

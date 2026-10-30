@@ -681,3 +681,22 @@ Implemented here:
 - Open gate: OpenCode V2's frozen native action ABI (bootstrap v1) is unchanged. A compatible ABI version for native move and snooze actions needs its own step following `docs/plans/2026-10-12-opencode-v2-canonical-thread-tools-plan.md`; until then V2 reaches the tools only through the generic passthrough.
 
 Original checkout since checkpoint 4: 156 uncommitted files, continuing Codex controls, compaction, and rewind work. No new overlap; the same seven registration files remain. `feature/computer-use` still has no new commits.
+
+### Checkpoint 6 — Phase 3b, attention
+
+Implemented here:
+
+- `ThreadOrganizationReactor` consumes accepted domain events, started with the other orchestration reactors. Ingestion is untouched. Its pure rules live in `ThreadOrganizationReactor.logic.ts`:
+  - Approval-requested, user-input-requested, and delegated model-choice-requested activities move the thread to Needs you. Delegated model choices were added after checking that a model-choice hold also waits on the user.
+  - The user's own approval or user-input response returns the thread to Present. Only the web UI dispatches those commands.
+  - The user's own message returns the thread to Present: complete, not a replace, and every origin segment authored by the user. Agent, automation, and recovery text never moves a thread.
+  - A prompt the user queued behind a pending request also counts. Without this, a message sent while an approval was open would never return the thread to Present. The prompt shares its key with the message sent when the queue flushes, so the flush cannot undo a later move.
+- Each causing fact gets one command id derived from its key, with `createdAt` set to the event time. A repeated request id therefore never moves the thread twice, and an explicit Done survives a replayed request. A move is skipped when the thread already rests in the target state with no snooze; a pending snooze is cancelled by the move.
+- Acknowledgement (`lib/threadOrganizationAcknowledge.ts`) runs on deliberate opens only: sidebar row click, keyboard thread navigation, search thread and message results, and command-palette thread items. It is fenced by the revision the user saw, deduplicated per revision, and silent on a stale revision. Route restoration, hydration, hover, and status reads do not call it.
+- Tests:
+  - The reaction rules.
+  - An end-to-end reactor run on a real engine and SQLite: Needs you, then Present after the user's queued message, then Done surviving a replayed request, then Needs you again on a new request.
+  - The reactor start order.
+  - The acknowledgement fence.
+
+Original checkout since checkpoint 5: unchanged (156 uncommitted files). Phase 3b touches none of its files. Across the whole branch, the only overlap is still the seven pure-insertion registration files and the copied plan and prototype. `feature/computer-use` still has no new commits. Migrations 141 and 142 are still free there.
