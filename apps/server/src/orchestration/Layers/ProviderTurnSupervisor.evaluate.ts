@@ -178,7 +178,9 @@ export const evaluateIntent = Effect.fn("evaluateRecoveryIntent")(function* (
     waitingForUser: isThreadWaitingForUser(thread),
     // Muse declares turn-control continuation unsupported; automated sleep
     // continuation must not issue fresh input for it (plan Phase 3.13).
-    continuationUnsupported: intent.provider === "muse",
+    continuationUnsupported:
+      intent.provider === "muse" ||
+      (intent.provider === "codex" && inspection.outcome !== "failed"),
   });
   switch (decision.type) {
     case "settle":

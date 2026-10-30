@@ -56,6 +56,7 @@ import {
   WsServerReportWsConnectionDiagnosticsRpc,
 } from "./rpc.connectionDiagnostics";
 import { WsProviderStopSubagentRpc } from "./rpc.subagents";
+import { WsProviderControlsRpc } from "./rpc.providerControls";
 import {
   WsServerPreviewThreadRetentionRpc,
   WsServerSetThreadRetentionPolicyRpc,
@@ -222,6 +223,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetUsageSummaryRpc,
   WsServerRefreshUsageLimitsRpc,
   WsProviderStopSubagentRpc,
+  WsProviderControlsRpc,
   WsComputerUseStopRpc,
   WsSubscribeComputerUseActivityRpc,
   WsProjectsSearchEntriesRpc,

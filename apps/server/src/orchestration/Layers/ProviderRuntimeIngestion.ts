@@ -8,7 +8,7 @@ import { isRoutableProviderSelection } from "../../provider/providerSelectionCom
  *
  * @module ProviderRuntimeIngestion
  */
-import { Clock, Effect, Layer, Schedule, Scope, Stream } from "effect";
+import { Clock, Effect, Layer, Schedule, Scope, Semaphore, Stream } from "effect";
 import { Cause } from "effect";
 import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
 import type { OrchestrationCommand } from "@bigbud/contracts/orchestration/orchestration.commands.ts";
@@ -31,10 +31,7 @@ import {
   type ProviderRuntimeIngestionShape,
 } from "../Services/ProviderRuntimeIngestion.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
-import {
-  type RuntimeIngestionInput,
-  type TurnStartRequestedDomainEvent,
-} from "./ProviderRuntimeIngestion.helpers.ts";
+import { type TurnStartRequestedDomainEvent } from "./ProviderRuntimeIngestion.helpers.ts";
 import {
   makeRuntimeEventProcessor,
   type RuntimeProcessorServices,
@@ -52,6 +49,11 @@ import {
   selectPeriodicReconciliationThreads,
 } from "./ProviderRuntimeIngestion.periodic.ts";
 import { recoverTurnControlOperations } from "./ProviderRuntimeIngestion.turnControlRecovery.ts";
+import {
+  makeReconcileInspection,
+  processInspectionItems,
+  type RuntimeIngestionQueueInput,
+} from "./ProviderRuntimeIngestion.inspection.ts";
 
 const RECONCILIATION_RUNTIME_EVENT_TYPES = new Set([
   "session.started",
@@ -95,10 +97,26 @@ const make = Effect.fn("make")(function* () {
 
   const processDomainEvent = (_event: TurnStartRequestedDomainEvent) => Effect.void;
 
-  const processInput = (input: RuntimeIngestionInput) =>
-    input.source === "runtime" ? processRuntimeEvent(input.event) : processDomainEvent(input.event);
+  const processInput = (input: RuntimeIngestionQueueInput) =>
+    input.source === "inspection"
+      ? processInspectionItems(input, orchestrationEngine, processRuntimeEvent)
+      : input.source === "runtime"
+        ? Effect.gen(function* () {
+            if (
+              !(yield* (
+                providerService.inspectionTerminalReady?.(input.event) ?? Effect.succeed(true)
+              ))
+            )
+              return;
+            yield* processRuntimeEvent(input.event);
+            yield* (
+              providerService.acknowledgeInspectionTerminal?.(input.event, "ingestion") ??
+                Effect.void
+            );
+          })
+        : processDomainEvent(input.event);
 
-  const processInputSafely = (input: RuntimeIngestionInput) =>
+  const processInputSafely = (input: RuntimeIngestionQueueInput) =>
     processInput(input).pipe(
       Effect.catchCause((cause) => {
         if (Cause.hasInterruptsOnly(cause)) {
@@ -106,13 +124,14 @@ const make = Effect.fn("make")(function* () {
         }
         return Effect.logWarning("provider runtime ingestion failed to process event", {
           source: input.source,
-          eventId: input.event.eventId,
-          eventType: input.event.type,
+          eventId: input.source === "inspection" ? "inspection" : input.event.eventId,
+          eventType: input.source === "inspection" ? "inspection" : input.event.type,
           cause: Cause.pretty(cause),
         });
       }),
     );
-  const threadWorkers = new Map<string, DrainableWorker<RuntimeIngestionInput>>();
+  const threadWorkers = new Map<string, DrainableWorker<RuntimeIngestionQueueInput>>();
+  const workerCreation = yield* Semaphore.make(1);
   const outerScope = yield* Effect.scope;
   let reconciliationPassRunning = false;
   const discoveryCacheTtlMs = 15_000;
@@ -166,16 +185,19 @@ const make = Effect.fn("make")(function* () {
     return discovery;
   });
 
-  const getOrCreateThreadWorker = (threadId: string) => {
-    const existing = threadWorkers.get(threadId);
-    if (existing !== undefined) {
-      return Effect.succeed(existing);
-    }
-    return makeDrainableWorker(processInputSafely).pipe(
-      Effect.provideService(Scope.Scope, outerScope),
-      Effect.tap((worker) => Effect.sync(() => threadWorkers.set(threadId, worker))),
+  const getOrCreateThreadWorker = (threadId: string) =>
+    workerCreation.withPermits(1)(
+      Effect.suspend(() => {
+        const existing = threadWorkers.get(threadId);
+        if (existing !== undefined) {
+          return Effect.succeed(existing);
+        }
+        return makeDrainableWorker(processInputSafely).pipe(
+          Effect.provideService(Scope.Scope, outerScope),
+          Effect.tap((worker) => Effect.sync(() => threadWorkers.set(threadId, worker))),
+        );
+      }),
     );
-  };
 
   const reconcileThreadSessionsAtStartup = Effect.fn("reconcileThreadSessionsAtStartup")(
     function* () {
@@ -359,6 +381,7 @@ const make = Effect.fn("make")(function* () {
 
   return {
     start,
+    reconcileInspection: makeReconcileInspection(getOrCreateThreadWorker),
     drain: Effect.suspend(() =>
       Effect.forEach(Array.from(threadWorkers.values()), (worker) => worker.drain, {
         concurrency: "unbounded",

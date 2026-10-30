@@ -337,6 +337,7 @@ export interface WsRpcClient {
       input: ServerGetUsageSummaryInput,
     ) => Promise<ServerUsageSummaryResult>;
     readonly stopSubagent: (input: ProviderStopSubagentInput) => Promise<void>;
+    readonly providerControls: RpcUnaryMethod<typeof WS_METHODS.providerControls>;
     readonly getWsConnectionDiagnostics: RpcUnaryMethod<
       typeof WS_METHODS.serverGetWsConnectionDiagnostics
     >;

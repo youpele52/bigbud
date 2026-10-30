@@ -126,6 +126,7 @@ export const WS_METHODS = {
   serverListAutomationRuns: "server.listAutomationRuns",
   serverGetUsageSummary: "server.getUsageSummary",
   providerStopSubagent: "provider.stopSubagent",
+  providerControls: "provider.controls",
   computerUseStop: "computerUse.stop",
 
   // Streaming subscriptions

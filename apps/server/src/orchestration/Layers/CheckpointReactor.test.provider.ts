@@ -3,6 +3,7 @@ import { EventId, ThreadId } from "@bigbud/contracts";
 import { Effect, PubSub, Stream } from "effect";
 import { vi } from "vitest";
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
+import type { ProviderExactRewindInput } from "../../provider/Services/ProviderRewind.ts";
 
 export type LegacyProviderRuntimeEvent = {
   readonly type: string;
@@ -28,6 +29,17 @@ export function createProviderServiceHarness(
   const rollbackConversation = vi.fn(
     (_input: { readonly threadId: ThreadId; readonly numTurns: number }) => Effect.void,
   );
+  const rewindInputs: ProviderExactRewindInput[] = [];
+  const rewindConversation: NonNullable<ProviderServiceShape["rewindConversation"]> = (
+    input,
+    completion,
+  ) =>
+    Effect.gen(function* () {
+      yield* completion.preflight;
+      rewindInputs.push(input);
+      yield* completion.restoreFiles;
+      yield* completion.completeCanonical;
+    });
 
   const unsupported = <A>() =>
     Effect.die(new Error("Unsupported provider call in test")) as Effect.Effect<A, never>;
@@ -77,6 +89,7 @@ export function createProviderServiceHarness(
         ...(providerName === "claudeAgent" ? { conversationRewind: "unsupported" } : {}),
       }),
     rollbackConversation,
+    rewindConversation,
     get streamEvents() {
       return Stream.fromPubSub(runtimeEventPubSub);
     },
@@ -89,6 +102,7 @@ export function createProviderServiceHarness(
   return {
     service,
     rollbackConversation,
+    rewindInputs,
     emit,
   };
 }

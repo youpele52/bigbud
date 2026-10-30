@@ -15,7 +15,9 @@ describe("thread checkpoint control", () => {
         turns: [
           {
             id: "turn_1",
-            items: [{ type: "userMessage", content: [{ type: "text", text: "hello" }] }],
+            items: [
+              { id: "item_1", type: "userMessage", content: [{ type: "text", text: "hello" }] },
+            ],
           },
         ],
       },
@@ -31,14 +33,16 @@ describe("thread checkpoint control", () => {
         threadId: "thread_1",
         includeTurns: true,
       },
-      undefined,
+      expect.any(Number),
     );
     expect(result).toEqual({
       threadId: "thread_1",
       turns: [
         {
           id: "turn_1",
-          items: [{ type: "userMessage", content: [{ type: "text", text: "hello" }] }],
+          items: [
+            { id: "item_1", type: "userMessage", content: [{ type: "text", text: "hello" }] },
+          ],
         },
       ],
     });
@@ -51,7 +55,9 @@ describe("thread checkpoint control", () => {
       turns: [
         {
           id: "turn_1",
-          items: [{ type: "userMessage", content: [{ type: "text", text: "hello" }] }],
+          items: [
+            { id: "item_1", type: "userMessage", content: [{ type: "text", text: "hello" }] },
+          ],
         },
       ],
     });
@@ -65,47 +71,28 @@ describe("thread checkpoint control", () => {
         threadId: "thread_1",
         includeTurns: true,
       },
-      undefined,
+      expect.any(Number),
     );
     expect(result).toEqual({
       threadId: "thread_1",
       turns: [
         {
           id: "turn_1",
-          items: [{ type: "userMessage", content: [{ type: "text", text: "hello" }] }],
+          items: [
+            { id: "item_1", type: "userMessage", content: [{ type: "text", text: "hello" }] },
+          ],
         },
       ],
     });
   });
 
-  it("rolls back turns via thread/rollback and resets session running state", async () => {
-    const { manager, context, sendRequest, updateSession } = createThreadControlHarness();
-    sendRequest.mockResolvedValue({
-      thread: {
-        id: "thread_1",
-        turns: [],
-      },
+  it("refuses count-based rewind without dispatch or a premature ready state", async () => {
+    const { manager, sendRequest, updateSession } = createThreadControlHarness();
+    await expect(manager.rollbackThread(asThreadId("thread_1"), 2)).rejects.toMatchObject({
+      delivery: "not-dispatched",
     });
-
-    const result = await manager.rollbackThread(asThreadId("thread_1"), 2);
-
-    expect(sendRequest).toHaveBeenCalledWith(
-      context,
-      "thread/rollback",
-      {
-        threadId: "thread_1",
-        numTurns: 2,
-      },
-      undefined,
-    );
-    expect(updateSession).toHaveBeenCalledWith(context, {
-      status: "ready",
-      activeTurnId: undefined,
-    });
-    expect(result).toEqual({
-      threadId: "thread_1",
-      turns: [],
-    });
+    expect(sendRequest).not.toHaveBeenCalled();
+    expect(updateSession).not.toHaveBeenCalled();
   });
 
   it("steers the fenced active turn with the provider thread id and client message id", async () => {

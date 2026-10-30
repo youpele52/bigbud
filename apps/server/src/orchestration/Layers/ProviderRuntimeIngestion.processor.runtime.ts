@@ -5,7 +5,6 @@ import { RuntimeActivityGovernor } from "./ProviderRuntimeIngestion.activityGove
 import { processAssistantRuntimeEvent } from "./ProviderRuntimeIngestion.processor.runtime.assistant.ts";
 import {
   STRICT_PROVIDER_LIFECYCLE_GUARD,
-  proposedPlanIdForTurn,
   proposedPlanIdFromEvent,
   runtimeEventToActivities,
   sameId,
@@ -15,6 +14,7 @@ import {
   isProviderLifecycleEvent,
   lifecycleSessionStatus,
   resolveProviderLifecycleGuard,
+  isProvenSettledRecoveryTerminal,
 } from "./ProviderRuntimeIngestion.lifecycle.ts";
 import { makeProcessorHelpers } from "./ProviderRuntimeIngestion.processor.helpers.ts";
 import { makeThinkingProcessorHelpers } from "./ProviderRuntimeIngestion.processor.thinking.ts";
@@ -30,6 +30,8 @@ import { lookupLiveSessionBestEffort } from "./ProviderRuntimeIngestion.processo
 import { providerCommandId } from "./ProviderRuntimeIngestion.processor.runtime.command.ts";
 import { runtimeSessionLastError } from "./ProviderRuntimeIngestion.processor.runtime.error.ts";
 import { shouldDropSettledRecoveryTerminal } from "./ProviderRuntimeIngestion.processor.runtime.recovery.ts";
+import { isInspectedTerminal } from "../../provider/Services/ProviderInspectionTerminal.ts";
+import { finalizeRuntimeTurn } from "./ProviderRuntimeIngestion.processor.runtime.completion.ts";
 import { makePromptSuggestionIngestion } from "./ProviderRuntimeIngestion.promptSuggestion.ts";
 import {
   isSuccessfulModelEvent,
@@ -85,7 +87,11 @@ export function makeRuntimeEventProcessor(
       (entry) => entry.id === event.threadId,
     );
     if (!thread) return;
-    if (yield* shouldDropSettledRecoveryTerminal(event, thread)) return;
+    const resumedTerminal =
+      isInspectedTerminal(event) &&
+      (isProvenSettledRecoveryTerminal(event, thread) ||
+        (thread.session?.status === "stopped" && thread.session.activeTurnId === null));
+    if (!resumedTerminal && (yield* shouldDropSettledRecoveryTerminal(event, thread))) return;
     if (event.type === "turn.prompt-suggestion")
       return yield* ingestPromptSuggestion(event, thread);
     const now = event.createdAt;
@@ -119,13 +125,14 @@ export function makeRuntimeEventProcessor(
         : null;
 
     if (
-      event.type === "session.started" ||
-      event.type === "session.state.changed" ||
-      event.type === "session.exited" ||
-      event.type === "thread.started" ||
-      event.type === "turn.started" ||
-      event.type === "turn.completed" ||
-      event.type === "turn.aborted"
+      !resumedTerminal &&
+      (event.type === "session.started" ||
+        event.type === "session.state.changed" ||
+        event.type === "session.exited" ||
+        event.type === "thread.started" ||
+        event.type === "turn.started" ||
+        event.type === "turn.completed" ||
+        event.type === "turn.aborted")
     ) {
       const nextActiveTurnId =
         event.type === "turn.started"
@@ -276,37 +283,13 @@ export function makeRuntimeEventProcessor(
       });
     }
 
-    if (event.type === "turn.completed") {
-      const turnId = toTurnId(event.turnId);
-      if (turnId) {
-        yield* finalizeThinkingForTurn(event, thread.id, turnId);
-        const assistantMessageIds = yield* getAssistantMessageIdsForTurn(thread.id, turnId);
-        yield* Effect.forEach(
-          assistantMessageIds,
-          (assistantMessageId) =>
-            finalizeAssistantMessage({
-              event,
-              threadId: thread.id,
-              messageId: assistantMessageId,
-              turnId,
-              createdAt: now,
-              commandTag: "assistant-complete-finalize",
-              finalDeltaCommandTag: "assistant-delta-finalize-fallback",
-            }),
-          { concurrency: 1 },
-        ).pipe(Effect.asVoid);
-        yield* clearAssistantMessageIdsForTurn(thread.id, turnId);
-
-        yield* finalizeBufferedProposedPlan({
-          event,
-          threadId: thread.id,
-          threadProposedPlans: thread.proposedPlans,
-          planId: proposedPlanIdForTurn(thread.id, turnId),
-          turnId,
-          updatedAt: now,
-        });
-      }
-    }
+    yield* finalizeRuntimeTurn(event, thread.id, thread.proposedPlans, {
+      finalizeThinkingForTurn,
+      getAssistantMessageIdsForTurn,
+      finalizeAssistantMessage,
+      clearAssistantMessageIdsForTurn,
+      finalizeBufferedProposedPlan,
+    });
 
     if (event.type === "session.exited") {
       yield* finalizeThinkingForThread(event, thread.id);

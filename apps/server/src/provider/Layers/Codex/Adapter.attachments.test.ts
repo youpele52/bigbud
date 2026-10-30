@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -9,6 +9,7 @@ import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { writeProviderAttachmentFixtures } from "../../../attachments/providerAttachments.test.helpers.ts";
 import { CodexAdapter } from "../../Services/Codex/Adapter.ts";
 import { makeCodexAdapterLive } from "./Adapter.ts";
+import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import {
   FakeCodexManager,
   asThreadId,
@@ -16,7 +17,7 @@ import {
 } from "./Adapter.test.helpers.ts";
 
 it.effect(
-  "delivers managed document context once alongside native images/PDFs, failing before dispatch on changed bytes",
+  "delivers document extraction/readable paths alongside native images, failing before dispatch on changed bytes",
   () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "codex-shared-attachments-"));
     const manager = new FakeCodexManager();
@@ -45,13 +46,43 @@ it.effect(
       expect(sent.input).not.toContain(fixture.document.sourcePath);
       expect(sent.attachments).toEqual([
         { type: "image", url: `data:image/png;base64,${fixture.imageBytes.toString("base64")}` },
-        { type: "file", url: `data:application/pdf;base64,${fixture.pdfBytes.toString("base64")}` },
       ]);
+      expect(sent.input).toContain(fixture.pdf.name);
       const result = yield* adapter
         .sendTurn({ threadId, attachments: [{ ...fixture.document, sizeBytes: 1 }] })
         .pipe(Effect.result);
       expect(result._tag).toBe("Failure");
       expect(manager.sendTurnImpl).toHaveBeenCalledOnce();
+
+      manager.setSession({
+        provider: "codex",
+        threadId,
+        status: "ready",
+        runtimeMode: "full-access",
+        providerRuntimeExecutionTargetId: "remote",
+        workspaceExecutionTargetId: "remote",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      yield* adapter.sendTurn({ threadId, attachments: [fixture.document] });
+      expect(manager.sendTurnImpl.mock.calls[1]![0].input).toContain(fixture.text);
+      expect(manager.sendTurnImpl.mock.calls[1]![0].attachments).toBeUndefined();
+      const corruptPdf = Buffer.from("not a PDF document");
+      writeFileSync(
+        resolveAttachmentPath({ attachmentsDir: config.attachmentsDir, attachment: fixture.pdf })!,
+        corruptPdf,
+      );
+      const unreachable = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "read",
+          attachments: [{ ...fixture.pdf, sizeBytes: corruptPdf.length }],
+        })
+        .pipe(Effect.result);
+      expect(unreachable._tag).toBe("Failure");
+      if (unreachable._tag === "Failure")
+        expect(unreachable.failure.message).toContain("no usable text");
+      expect(manager.sendTurnImpl).toHaveBeenCalledTimes(2);
     }).pipe(Effect.provide(layer));
   },
 );

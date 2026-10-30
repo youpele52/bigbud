@@ -5,6 +5,12 @@ import { Data, Effect, Layer, Option, Schema, Struct } from "effect";
 
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { captureLocalRuntimePathIdentity } from "../../retention/worktreeRuntimeLease.ts";
+import { inspectionStore } from "./ProviderSessionRuntime.inspection.ts";
+import {
+  codexRewindAbsent,
+  codexMaintenanceStore,
+  preserveCodexRewindPayload,
+} from "./ProviderSessionRuntime.rewind.ts";
 
 import {
   toPersistenceDecodeError,
@@ -152,7 +158,7 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
           status = excluded.status,
           last_seen_at = excluded.last_seen_at,
           resume_cursor_json = excluded.resume_cursor_json,
-          runtime_payload_json = excluded.runtime_payload_json
+          runtime_payload_json = ${preserveCodexRewindPayload(sql)}
       `,
   });
 
@@ -256,7 +262,7 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
     execute: ({ threadId }) =>
       sql`
         DELETE FROM provider_session_runtime
-        WHERE thread_id = ${threadId}
+        WHERE thread_id = ${threadId} AND ${codexRewindAbsent(sql)}
       `,
   });
 
@@ -378,7 +384,9 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
       );
 
   return {
+    ...inspectionStore(sql),
     upsert,
+    ...codexMaintenanceStore(sql),
     getByThreadId,
     list,
     deleteByThreadId,

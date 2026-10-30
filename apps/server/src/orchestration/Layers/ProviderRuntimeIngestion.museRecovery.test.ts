@@ -61,8 +61,12 @@ describe("Muse recovery terminal delivery (Phase 3.15 crash windows)", () => {
     harness.emit(assistantItem("evt-item-1", "turn-1", "item-1", "recovered answer"));
     harness.emit(completed("muse-recovery-terminal-turn-1", "turn-1", "completed", true));
 
-    const thread = await waitForThread(harness.engine, (entry) =>
-      entry.messages.some((message) => message.id === "assistant:item-1" && !message.streaming),
+    const thread = await waitForThread(
+      harness.engine,
+      (entry) =>
+        entry.messages.some((message) => message.id === "assistant:item-1" && !message.streaming) &&
+        entry.session?.status === "ready" &&
+        entry.session?.activeTurnId === null,
     );
     expect(thread.messages.find((message) => message.id === "assistant:item-1")?.text).toBe(
       "recovered answer",
@@ -76,8 +80,12 @@ describe("Muse recovery terminal delivery (Phase 3.15 crash windows)", () => {
     harness.emit(started("evt-started-1", "turn-1"));
     harness.emit(assistantItem("evt-item-1", "turn-1", "item-1", "final answer"));
     harness.emit(completed("evt-completed-1", "turn-1", "completed"));
-    const applied = await waitForThread(harness.engine, (entry) =>
-      entry.messages.some((message) => message.id === "assistant:item-1" && !message.streaming),
+    const applied = await waitForThread(
+      harness.engine,
+      (entry) =>
+        entry.messages.some((message) => message.id === "assistant:item-1" && !message.streaming) &&
+        entry.session?.status === "ready" &&
+        entry.session?.activeTurnId === null,
     );
     const messageCount = applied.messages.length;
 

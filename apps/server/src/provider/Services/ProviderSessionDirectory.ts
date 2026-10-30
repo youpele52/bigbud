@@ -13,6 +13,11 @@ import type {
   ProviderValidationError,
 } from "../Errors.ts";
 import type { ProviderSessionRuntimeListInput } from "../../persistence/Services/ProviderSessionRuntime.ts";
+import type { CodexRewindMarker } from "./ProviderRewind.ts";
+import type {
+  InspectionTerminal,
+  InspectionTerminalConsumer,
+} from "./ProviderInspectionTerminal.ts";
 
 export interface ProviderRuntimeBinding {
   readonly threadId: ThreadId;
@@ -35,6 +40,26 @@ export type ProviderSessionDirectoryWriteError =
   | ProviderSessionDirectoryPersistenceError;
 
 export interface ProviderSessionDirectoryShape {
+  readonly recordCodexCompaction?: (
+    input: import("./ProviderCompaction.ts").CodexCompactionConfirmation,
+  ) => Effect.Effect<void, ProviderSessionDirectoryWriteError>;
+  readonly storeInspectionTerminal?: (
+    record: InspectionTerminal,
+  ) => Effect.Effect<void, ProviderSessionDirectoryWriteError>;
+  readonly acknowledgeInspectionTerminal?: (
+    threadId: ThreadId,
+    eventId: string,
+    consumer: InspectionTerminalConsumer,
+  ) => Effect.Effect<void, ProviderSessionDirectoryWriteError>;
+  readonly listInspectionTerminals?: (
+    after?: string,
+  ) => Effect.Effect<ReadonlyArray<InspectionTerminal>, ProviderSessionDirectoryReadError>;
+  /** Only this operation may change the reserved rewind marker. Clear is operation-fenced. */
+  readonly setCodexRewind?: (
+    threadId: ThreadId,
+    marker: CodexRewindMarker | null,
+    operationId: string,
+  ) => Effect.Effect<void, ProviderSessionDirectoryWriteError>;
   readonly upsert: (
     binding: ProviderRuntimeBinding,
   ) => Effect.Effect<void, ProviderSessionDirectoryWriteError>;

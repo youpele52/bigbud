@@ -16,6 +16,7 @@ function makeContext() {
       threadId: "bigbud-thread",
       sessionEpoch: 1,
       activeTurnId: TurnId.makeUnsafe("parent-turn"),
+      resumeCursor: { threadId: PARENT },
     },
     collabReceiverTurns: new Map(),
     collabChildTurns: new Map(),
@@ -81,6 +82,26 @@ describe("Codex child agent threads", () => {
       item: { id: "item-2", type: "collabAgentToolCall", receiverThreadIds: [CHILD, "other"] },
     });
     expect([...context.collabChildTurns.keys()]).toEqual([CHILD, "other"]);
+  });
+
+  it("keeps child and unrelated-thread errors out of parent terminal handling", () => {
+    const context = makeContext();
+    notify(context, "item/started", spawnActivity);
+    const childError = notify(context, "error", {
+      threadId: CHILD,
+      turnId: "child-turn",
+      error: { message: "child failed" },
+      willRetry: false,
+    });
+    expect(childError.emitted.map((event) => event.method)).toEqual(["subagent/error"]);
+    expect(childError.updateSession).not.toHaveBeenCalled();
+    const foreignError = notify(context, "error", {
+      threadId: "unrelated",
+      turnId: "other",
+      error: { message: "other failed" },
+    });
+    expect(foreignError.emitted).toHaveLength(0);
+    expect(foreignError.updateSession).not.toHaveBeenCalled();
   });
 });
 

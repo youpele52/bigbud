@@ -311,6 +311,9 @@ export interface NativeApi {
     ) => Promise<Usage.ServerUsageSummaryResult>;
     /** Stop one running provider subagent; Stop-all is unchanged. */
     stopSubagent: (input: Subagents.ProviderStopSubagentInput) => Promise<void>;
+    providerControls?: (
+      input: import("./providerControls").ProviderControlsInput,
+    ) => Promise<import("./providerControls").ProviderControlsSnapshot>;
     /** Recent connection reports and server stalls; optional until every transport wires it. */
     getWsConnectionDiagnostics?: (
       input: ConnectionDiagnostics.ServerGetWsConnectionDiagnosticsInput,

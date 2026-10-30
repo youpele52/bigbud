@@ -11,10 +11,8 @@ import { Effect } from "effect";
 import { isLocalExecutionTarget } from "../executionTargets.ts";
 import { readCodexAccountSnapshot, resolveCodexModelForAccount } from "../provider/codexAccount";
 import { buildCodexInitializeParams } from "../provider/codexAppServer";
-import {
-  includeConfiguredCodexModels,
-  parseCodexModelsResult,
-} from "../provider/codexAppServer.models";
+import { includeConfiguredCodexModels } from "../provider/codexAppServer.models";
+import { listCodexModels } from "../provider/codexAppServer.models.pagination.ts";
 import {
   isCodexModelSelectionError,
   resolveCodexModelSelection,
@@ -22,6 +20,8 @@ import {
 import { normalizeCodexModelSlug } from "./codexModeInstructions";
 import { isRecoverableThreadResumeError } from "./codexStderrClassifier";
 import { startCodexAppServerProcessAsync } from "./codexAppServerManager.process";
+import { readCodexProcessVersion } from "./codexAppServerManager.process.version.ts";
+import { hasQualifiedCodexModernProtocol } from "./codexAppServerManager.capabilities.ts";
 import { hasReadyMcpServers, sleep } from "./codexAppServerManager.mcp";
 import { createCodexMcpReadinessTracker } from "./codexAppServerManager.mcpReadiness.ts";
 import type { CodexPendingStarts } from "./codexAppServerManager.pendingStarts.ts";
@@ -43,7 +43,7 @@ export interface StartSessionOps {
     params: unknown,
     timeoutMs?: number,
   ) => Promise<T>;
-  readonly writeMessage: (ctx: CodexSessionContext, message: unknown) => void;
+  readonly writeMessage: (ctx: CodexSessionContext, message: unknown) => void | Promise<void>;
   readonly attachProcessListeners: (ctx: CodexSessionContext) => void;
   readonly updateSession: (ctx: CodexSessionContext, updates: Partial<ProviderSession>) => void;
   readonly emitEvent: (event: ProviderEvent) => void;
@@ -54,7 +54,6 @@ export interface StartSessionOps {
 
 const MCP_SERVER_STATUS_RETRY_DELAY_MS = 150;
 const MCP_SERVER_STATUS_TIMEOUT_MS = 4_000;
-const MODEL_CATALOG_TIMEOUT_MS = 5_000;
 
 export async function waitForMcpServersReady(
   context: CodexSessionContext,
@@ -160,6 +159,7 @@ export async function startSession(
       activeModelCatalog: undefined,
       effectiveModelSelection: undefined,
       nextRequestId: 1,
+      runtimeVersion: readCodexProcessVersion(child),
       ...(input.dynamicToolCallHandler
         ? { dynamicToolCallHandler: input.dynamicToolCallHandler }
         : {}),
@@ -178,20 +178,16 @@ export async function startSession(
     ops.emitLifecycleEvent(context, "session/connecting", "Starting codex app-server");
 
     await ops.sendRequest(context, "initialize", buildCodexInitializeParams());
-    ops.writeMessage(context, { method: "initialized" });
+    await ops.writeMessage(context, { method: "initialized" });
     await waitForMcpServersReady(context, ops, input.expectedMcpServerNames ?? []);
     try {
-      const modelListResponse = await ops.sendRequest(
-        context,
-        "model/list",
-        {},
-        MODEL_CATALOG_TIMEOUT_MS,
+      const modelListResponse = await listCodexModels((params, timeoutMs) =>
+        ops.sendRequest(context!, "model/list", params, timeoutMs),
       );
-      const parsedModels = parseCodexModelsResult(modelListResponse);
-      context.activeModelCatalog =
-        parsedModels === undefined
-          ? undefined
-          : includeConfiguredCodexModels(parsedModels, input.customModels ?? []);
+      context.activeModelCatalog = includeConfiguredCodexModels(
+        modelListResponse,
+        input.customModels ?? [],
+      );
       console.log("codex model/list response", modelListResponse);
     } catch (error) {
       context.activeModelCatalog = undefined;
@@ -223,7 +219,7 @@ export async function startSession(
     });
     const sessionOverrides = {
       model: modelSelection.model ?? null,
-      ...(input.serviceTier !== undefined ? { serviceTier: input.serviceTier } : {}),
+      ...(input.serviceTier != null ? { serviceTier: input.serviceTier } : {}),
       ...(modelSelection.effort !== undefined
         ? { config: { model_reasoning_effort: modelSelection.effort } }
         : {}),
@@ -266,6 +262,9 @@ export async function startSession(
         threadOpenResponse = await ops.sendRequest(context, "thread/resume", {
           ...sessionOverrides,
           threadId: resumeThreadId,
+          ...(hasQualifiedCodexModernProtocol(context.runtimeVersion)
+            ? { excludeTurns: true }
+            : {}),
         });
       } catch (error) {
         if (!isRecoverableThreadResumeError(error)) {

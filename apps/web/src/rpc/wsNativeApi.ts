@@ -295,6 +295,7 @@ export function createWsNativeApi(): NativeApi {
       getUsageSummary: rpcClient.server.getUsageSummary,
       getWsConnectionDiagnostics: rpcClient.server.getWsConnectionDiagnostics,
       stopSubagent: rpcClient.server.stopSubagent,
+      providerControls: rpcClient.server.providerControls,
     },
     orchestration: {
       getSidebarThreadCatalog: () => rpcClient.orchestration.getSidebarThreadCatalog({}),

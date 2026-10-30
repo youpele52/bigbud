@@ -284,6 +284,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getWsConnectionDiagnostics: (input) => requestWsConnectionDiagnostics(transport, input),
       stopSubagent: (input) =>
         transport.request((client) => client[WS_METHODS.providerStopSubagent](input)),
+      providerControls: (input) =>
+        transport.request((client) => client[WS_METHODS.providerControls](input)),
       subscribeConfig: (listener, options) =>
         subscribeEmptyInput(
           transport,

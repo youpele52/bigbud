@@ -7,6 +7,7 @@
 import { type ProviderEvent, type ProviderRuntimeEvent, ThreadId } from "@bigbud/contracts";
 
 import { mapItemLifecycle, runtimeEventBase } from "./Adapter.stream.base.ts";
+import { CODEX_COMPACTION_COMPLETED } from "../../Services/ProviderCompaction.ts";
 
 import {
   handleSessionConnecting,
@@ -73,6 +74,14 @@ export function mapToRuntimeEvents(
   event: ProviderEvent,
   canonicalThreadId: ThreadId,
 ): ReadonlyArray<ProviderRuntimeEvent> {
+  if (event.method === CODEX_COMPACTION_COMPLETED)
+    return [
+      {
+        ...runtimeEventBase(event, canonicalThreadId),
+        type: "thread.state.changed",
+        payload: { state: "compacted" },
+      },
+    ];
   if (event.kind === "error") {
     if (!event.message) {
       return [];
@@ -92,6 +101,29 @@ export function mapToRuntimeEvents(
 
   if (event.kind === "request") {
     return handleRequestOpened(event, canonicalThreadId);
+  }
+  if (event.method === "session/deliveryUncertain") {
+    return [
+      {
+        ...runtimeEventBase(event, canonicalThreadId),
+        type: "runtime.warning",
+        payload: { message: event.message ?? "Codex event delivery is uncertain." },
+      },
+      {
+        ...runtimeEventBase(event, canonicalThreadId),
+        type: "session.state.changed",
+        payload: { state: "error", reason: event.message ?? "Codex event delivery is uncertain." },
+      },
+    ];
+  }
+  if (event.method === "session/unsupportedRequest") {
+    return [
+      {
+        ...runtimeEventBase(event, canonicalThreadId),
+        type: "runtime.warning",
+        payload: { message: event.message ?? "Unsupported Codex request was denied." },
+      },
+    ];
   }
 
   if (event.method === "item/requestApproval/decision" && event.requestId) {

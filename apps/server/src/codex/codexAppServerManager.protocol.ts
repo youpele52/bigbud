@@ -240,15 +240,30 @@ export function parseThreadSnapshot(method: string, response: unknown): CodexThr
   if (!threadIdRaw) {
     throw new Error(`${method} response did not include a thread id.`);
   }
-  const turnsRaw = readArray(thread, "turns") ?? readArray(responseRecord, "turns") ?? [];
-  const turns = turnsRaw.map((turnValue, index) => {
+  const turnsRaw = readArray(thread, "turns") ?? readArray(responseRecord, "turns");
+  if (!turnsRaw) throw new Error(`${method} response did not include complete turns.`);
+  const seen = new Set<string>();
+  const itemIds = new Set<string>();
+  const turns = turnsRaw.map((turnValue) => {
     const turn = readObject(turnValue);
-    const turnIdRaw = readString(turn, "id") ?? `${threadIdRaw}:turn:${index + 1}`;
+    const turnIdRaw = readString(turn, "id");
+    if (!turnIdRaw || seen.has(turnIdRaw))
+      throw new Error(`${method} returned a malformed or duplicate turn id.`);
+    seen.add(turnIdRaw);
     const turnId = TurnId.makeUnsafe(turnIdRaw);
-    const items = readArray(turn, "items") ?? [];
+    const items = readArray(turn, "items");
+    if (!items) throw new Error(`${method} response did not include complete turn items.`);
+    for (const item of items) {
+      const id = readString(item, "id");
+      if (!id || itemIds.has(id))
+        throw new Error(`${method} returned a malformed or duplicate item id.`);
+      itemIds.add(id);
+    }
     return {
       id: turnId,
       items,
+      status: readString(turn, "status"),
+      error: turn?.error,
     };
   });
 

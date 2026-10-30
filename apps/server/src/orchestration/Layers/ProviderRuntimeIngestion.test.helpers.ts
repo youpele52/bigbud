@@ -298,6 +298,7 @@ export async function createHarness(options?: {
 
   return {
     engine,
+    reconcileInspection: ingestion.reconcileInspection!,
     emit: provider.emit,
     setProviderSession: provider.setSession,
     getPersistedSnapshot: () => Effect.runPromise(snapshots.getSnapshot()),

@@ -14,6 +14,7 @@ import { makeWsRpcNotesHandlers } from "./wsRpcHandlers.notes";
 import { makeWsRpcTeachHandlers } from "./wsRpcHandlers.teach";
 import { makeWsRpcUsageHandlers } from "./wsRpcHandlers.usage";
 import { makeWsRpcSubagentHandlers } from "./wsRpcHandlers.subagents";
+import { makeWsRpcProviderControlsHandlers } from "./wsRpcHandlers.providerControls";
 import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrationServer";
 import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
 import { makeWsRpcConnectionDiagnosticsHandlers } from "./wsRpcHandlers.connectionDiagnostics.ts";
@@ -44,6 +45,7 @@ const makeWsRpcLayer = (
         ...makeWsRpcTeachHandlers(context),
         ...makeWsRpcUsageHandlers(context),
         ...makeWsRpcSubagentHandlers(context),
+        ...makeWsRpcProviderControlsHandlers(context),
         ...makeWsRpcGitTerminalHandlers(context, worktreeScope),
         ...makeWsRpcTerminalSessionHandlers(context),
         ...makeWsRpcWorktreeHandlers(context, worktreeScope),
