@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useRightPanelCloseTabShortcut } from "~/stores/rightPanel/useRightPanelCloseTabShortcut";
+import { isElectron } from "~/config/env";
 import { useStore } from "~/stores/main";
 
 import ThreadSidebar from "../sidebar/Sidebar";
@@ -11,6 +12,8 @@ import {
 } from "./chatLayout.shared";
 import { Sidebar, SidebarProvider, SidebarRail } from "../ui/sidebar";
 import { isThreadNavigationAvailable, parseOpenThreadAction } from "./AppSidebarLayout.logic";
+import { WindowSidebarToggle } from "./WindowSidebarToggle";
+import { useWindowZoomCssVariable } from "./useWindowZoomCssVariable";
 
 const THREAD_SIDEBAR_WIDTH_STORAGE_KEY = "chat_thread_sidebar_width";
 const THREAD_SIDEBAR_MIN_WIDTH = 13 * 16;
@@ -23,6 +26,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const sidebarThreadsById = useStore((state) => state.sidebarThreadsById);
   const [pendingThreadId, setPendingThreadId] = useState<string | null>(null);
   useRightPanelCloseTabShortcut();
+  useWindowZoomCssVariable();
 
   useEffect(() => {
     const onMenuAction = window.desktopBridge?.onMenuAction;
@@ -76,6 +80,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
         <SidebarRail />
       </Sidebar>
       {children}
+      {/* After the page content: Chromium lets a later drag region override an earlier no-drag
+          one, so rendered first, a closed sidebar's page header would swallow the toggle's clicks. */}
+      {isElectron && <WindowSidebarToggle />}
     </SidebarProvider>
   );
 }

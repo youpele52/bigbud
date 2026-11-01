@@ -80,6 +80,10 @@ export interface DesktopBridge
     DesktopScreenshotBridge,
     DesktopSystemMonitorBridge {
   getWindowRole?: () => DesktopWindowRole | null;
+  /** This window's page zoom factor; 1 is actual size. */
+  getWindowZoomFactor?: () => number;
+  /** Calls `listener` with the new page zoom factor whenever this window is zoomed. */
+  onWindowZoomFactorChange?: (listener: (zoomFactor: number) => void) => () => void;
   getTerminalRenderingPolicy?: () => Promise<TerminalRenderingPolicy>;
   openMainWindow?: (threadId?: string) => Promise<boolean>;
   openCompactChat?: () => Promise<boolean>;

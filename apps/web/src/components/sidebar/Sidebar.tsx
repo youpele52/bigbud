@@ -1,20 +1,10 @@
 import { projectDeleteConfirmationCopy } from "./Sidebar.projectActions.delete.copy";
-import { useNavigate } from "@tanstack/react-router";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { SettingsSidebarNav } from "../settings/SettingsSidebarNav";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
-import {
-  SidebarFooter,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarSeparator,
-} from "../ui/sidebar";
-import { SettingsIcon } from "lucide-react";
-import { SidebarUpdatePill } from "./SidebarUpdatePill";
-import { SidebarHelpMenu } from "./SidebarHelpMenu";
+import { SidebarSeparator } from "../ui/sidebar";
 import { SidebarAppHeader } from "./SidebarHeader";
-import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { SidebarFooterBar } from "./Sidebar.footer";
 import { SidebarNavigation } from "./Sidebar.navigation";
 import { SidebarRemoteWorkspaceDialog } from "./SidebarRemoteWorkspaceDialog";
 import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
@@ -24,7 +14,6 @@ import { useSidebarState } from "./Sidebar.state";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 
 export default function Sidebar() {
-  const navigate = useNavigate();
   const s = useSidebarState();
   const remoteExecutionAccess = useRemoteExecutionAccessGate();
 
@@ -39,24 +28,7 @@ export default function Sidebar() {
           <SidebarNavigation state={s} />
 
           <SidebarSeparator />
-          <SidebarFooter className="p-2">
-            <SidebarUpdatePill />
-            <div className="flex items-center gap-1">
-              <SidebarMenu className="min-w-0 flex-1">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="sm"
-                    className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                    onClick={() => void navigate({ to: "/settings" })}
-                  >
-                    <SettingsIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
-                    <span className="text-xs">Settings</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-              <SidebarHelpMenu />
-            </div>
-          </SidebarFooter>
+          <SidebarFooterBar />
 
           <AlertDialog
             open={s.pendingReconnect !== null}

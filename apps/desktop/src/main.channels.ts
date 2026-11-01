@@ -58,4 +58,5 @@ export const desktopIpcChannels = {
   floatingAssistantCallerChanged: "desktop:floating-assistant-caller-changed",
   setMascotComputerUseActive: "desktop:set-mascot-computer-use-active",
   stopComputerUseRequested: "desktop:stop-computer-use-requested",
+  windowZoomChanged: "desktop:window-zoom-changed",
 } as const;

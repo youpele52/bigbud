@@ -69,6 +69,7 @@ vi.mock("electron", () => {
           this.willAttachWebviewHandler = handler;
         }
       }),
+      ipc: { on: vi.fn() },
       setWindowOpenHandler: vi.fn(),
       openDevTools: vi.fn(),
       loadURL: vi.fn(),
