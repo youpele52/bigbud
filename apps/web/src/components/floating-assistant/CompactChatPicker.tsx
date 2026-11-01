@@ -1,4 +1,5 @@
-import { CheckIcon, ChevronDownIcon, SquarePenIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { NewChatIcon } from "../common/NewChatIcon";
 import { BUILT_IN_CHATS_PROJECT_ID, type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { useMemo } from "react";
 
@@ -143,7 +144,7 @@ export function CompactChatPicker({
                       )}
                       onClick={() => void compactChat.newChat(project.id)}
                     >
-                      <SquarePenIcon className="size-3 opacity-60" />
+                      <NewChatIcon className="size-3 opacity-60" />
                       New thread
                     </MenuItem>
                     <MenuSeparator />

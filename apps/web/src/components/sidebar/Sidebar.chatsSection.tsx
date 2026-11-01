@@ -1,6 +1,6 @@
 import { Chatting01Icon, Comment03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { SquarePenIcon } from "lucide-react";
+import { NewChatIcon } from "../common/NewChatIcon";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { type SidebarThreadSortOrder } from "@bigbud/contracts/settings";
 import { SidebarThreadRow } from "./SidebarThreadRow";
@@ -107,7 +107,7 @@ export function SidebarChatsSection({
                   />
                 }
               >
-                <SquarePenIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
+                <NewChatIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
               </TooltipTrigger>
               <TooltipPopup side="right">
                 {newThreadShortcutLabel ? `New chat (${newThreadShortcutLabel})` : "New chat"}

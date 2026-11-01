@@ -1,10 +1,5 @@
-import {
-  FolderIcon,
-  FolderOpenIcon,
-  GripVerticalIcon,
-  SquarePenIcon,
-  Trash2Icon,
-} from "lucide-react";
+import { FolderIcon, FolderOpenIcon, GripVerticalIcon, Trash2Icon } from "lucide-react";
+import { NewChatIcon } from "../common/NewChatIcon";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { useCallback, type MouseEvent } from "react";
 
@@ -324,7 +319,7 @@ export function SidebarRenderedProjectItem({
                     });
                   }}
                 >
-                  <SquarePenIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
+                  <NewChatIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                 </SidebarMenuAction>
               }
             />

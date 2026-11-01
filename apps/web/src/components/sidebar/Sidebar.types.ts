@@ -282,6 +282,7 @@ export interface SidebarState {
   ) => Promise<void>;
   openPrLink: (event: MouseEvent<HTMLElement>, prUrl: string) => void;
   handleNewChat: () => Promise<void>;
+  handleNewChats: () => Promise<void>;
   handleNewThread: ReturnType<typeof useHandleNewThread>["handleNewThread"];
   // Thread list expand/collapse
   expandThreadListForProject: (projectId: ProjectId) => void;
@@ -293,6 +294,7 @@ export interface SidebarState {
   // Settings
   updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
   newThreadShortcutLabel: string | null | undefined;
+  newChatShortcutLabel: string | null | undefined;
   showThreadJumpHints: boolean;
   threadJumpLabelById: Map<ThreadId, string>;
 }

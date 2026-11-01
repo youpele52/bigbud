@@ -2,17 +2,13 @@ import { useSidebarProjectGitStatus } from "./Sidebar.state.gitStatus";
 import { useSidebarUiState } from "./Sidebar.state.ui";
 import { useSidebarChatPagination } from "./Sidebar.state.chatPagination";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  BUILT_IN_CHATS_PROJECT_ID,
-  isBuiltInChatsProject,
-  type ProjectId,
-  ThreadId,
-} from "@bigbud/contracts";
+import { isBuiltInChatsProject, type ProjectId, ThreadId } from "@bigbud/contracts";
+import { BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts/constants/project.constant";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { isElectron } from "../../config/env";
 import { useStore } from "../../stores/main";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
-import { resolveNewChatOptions, useHandleNewThread } from "../../hooks/useHandleNewThread";
+import { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useServerProviders } from "../../rpc/serverState";
@@ -33,6 +29,7 @@ import { useSidebarProjectActions } from "./Sidebar.projectActions";
 import { useSidebarRemoteThreadActivation } from "./Sidebar.remoteThreadActivation";
 import { buildSidebarProjectSnapshots } from "./Sidebar.state.projectSnapshots";
 import { buildSharedProjectItemProps } from "./Sidebar.state.sharedProjectItemProps";
+import { useSidebarNewChatActions } from "./Sidebar.state.newChat";
 import { useSidebarVisibleThreads } from "./Sidebar.state.visibleThreads";
 import { useSidebarThreadActions } from "./Sidebar.threadActions";
 import { useSidebarRenderedProjects } from "./Sidebar.renderedProjects";
@@ -178,10 +175,12 @@ export function useSidebarState(): SidebarState {
     [navigate],
   );
 
-  const handleNewChat = useCallback(() => {
-    const projectId = chatsProjectId ?? BUILT_IN_CHATS_PROJECT_ID;
-    return handleNewThread(projectId, resolveNewChatOptions());
-  }, [chatsProjectId, handleNewThread]);
+  const { handleNewChat, handleNewChats } = useSidebarNewChatActions({
+    activeThread: activeThreadFull,
+    activeDraftThread,
+    chatsProjectId,
+    handleNewThread,
+  });
 
   const remoteThreadActivation = useSidebarRemoteThreadActivation({
     sidebarThreadsById,
@@ -390,6 +389,7 @@ export function useSidebarState(): SidebarState {
     projectActions,
     threadActions,
     handleNewChat,
+    handleNewChats,
     handleNewThread,
     sharedProjectItemProps,
     updateSettings,

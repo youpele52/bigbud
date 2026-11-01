@@ -8,7 +8,10 @@ const preferences = vi.hoisted(() => ({
   isMobile: false,
   setOpenMobile: vi.fn(),
   handleNewChat: vi.fn(),
+  handleNewChats: vi.fn(),
   fixedActions: null as null | { onNewChat: () => void },
+  mainAction: null as null | { onNewChat: () => void; newThreadShortcutLabel: string },
+  chatsAction: null as null | { onNewChat: () => void; newThreadShortcutLabel: string },
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
@@ -32,16 +35,29 @@ vi.mock("./Sidebar.actionsSection", () => ({
       </div>
     );
   },
-  SidebarActionsSection: () => (
-    <nav>
-      {["New chat", "Search", "Scheduled", "Games", "System Monitor", "Usage"].map((label) => (
-        <button key={label}>{label}</button>
-      ))}
-    </nav>
-  ),
+  SidebarActionsSection: (props: {
+    onNewChat: () => void;
+    newThreadShortcutLabel: string;
+    sections: { chats?: (headerProps: object) => ReactNode };
+  }) => {
+    preferences.mainAction = props;
+    return (
+      <nav>
+        {["New chat", "Search", "Scheduled", "Games", "System Monitor", "Usage"].map((label) => (
+          <button key={label}>{label}</button>
+        ))}
+        {props.sections.chats?.({})}
+      </nav>
+    );
+  },
 }));
 vi.mock("./Sidebar.favoritesSection", () => ({ SidebarFavoritesSection: () => null }));
-vi.mock("./Sidebar.chatsSection", () => ({ SidebarChatsSection: () => null }));
+vi.mock("./Sidebar.chatsSection", () => ({
+  SidebarChatsSection: (props: { onNewChat: () => void; newThreadShortcutLabel: string }) => {
+    preferences.chatsAction = props;
+    return null;
+  },
+}));
 vi.mock("./Sidebar.projectsSection", () => ({ SidebarProjectsSection: () => null }));
 vi.mock("./Sidebar.itutuArrangementSwitch", () => ({
   SidebarItutuArrangementSwitch: () => <div>Arrangement switch</div>,
@@ -60,7 +76,12 @@ function renderNavigation(bootstrapComplete = true) {
       preferences.handleNewChat();
       return Promise.resolve();
     },
-    newThreadShortcutLabel: "⌘N",
+    handleNewChats: () => {
+      preferences.handleNewChats();
+      return Promise.resolve();
+    },
+    newChatShortcutLabel: "⌘N",
+    newThreadShortcutLabel: "⌥⌘N",
   } as ReturnType<typeof useSidebarState>;
   return renderToStaticMarkup(<SidebarNavigation state={state} />);
 }
@@ -72,6 +93,8 @@ describe("SidebarNavigation arrangement", () => {
     preferences.arrangement = "projects";
     preferences.isMobile = false;
     preferences.fixedActions = null;
+    preferences.mainAction = null;
+    preferences.chatsAction = null;
     vi.clearAllMocks();
   });
 
@@ -80,6 +103,15 @@ describe("SidebarNavigation arrangement", () => {
     for (const label of actionLabels) expect(html).toContain(label);
     expect(html).toContain("Arrangement switch");
     expect(html).not.toContain("Ìtútù thread groups");
+  });
+  it("routes the main action to the current project and the Chats action to base Chats", () => {
+    renderNavigation();
+    expect(preferences.mainAction?.newThreadShortcutLabel).toBe("⌘N");
+    expect(preferences.chatsAction?.newThreadShortcutLabel).toBe("⌥⌘N");
+    preferences.mainAction?.onNewChat();
+    preferences.chatsAction?.onNewChat();
+    expect(preferences.handleNewChat).toHaveBeenCalledOnce();
+    expect(preferences.handleNewChats).toHaveBeenCalledOnce();
   });
 
   it("keeps only New chat and Search in Ìtútù mode alongside the switch and threads", () => {

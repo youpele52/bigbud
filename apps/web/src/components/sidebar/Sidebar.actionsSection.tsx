@@ -1,4 +1,4 @@
-import { ClockIcon, Gamepad2, SearchIcon, SquarePenIcon, ActivityIcon } from "lucide-react";
+import { ClockIcon, Gamepad2, SearchIcon, ActivityIcon } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -18,6 +18,7 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useSearchStore } from "../../stores/ui/search.store";
 import { useUiStateStore } from "../../stores/ui/ui.store";
+import { NewChatIcon } from "../common/NewChatIcon";
 import { UsageIcon } from "../usage/UsageIcon";
 import { Kbd } from "../ui/kbd";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -64,7 +65,7 @@ function ActionRow({
   dragHandleProps,
 }: {
   label: string;
-  icon: typeof SearchIcon;
+  icon: (props: { className?: string }) => ReactNode;
   onClick: () => void;
   onContextMenu?: React.MouseEventHandler<HTMLButtonElement> | undefined;
   shortcut?: string | null | undefined;
@@ -136,7 +137,7 @@ export function SidebarFixedActions({
     <div className="flex flex-col gap-0.5 px-2 pt-2">
       <ActionRow
         label="New chat"
-        icon={SquarePenIcon}
+        icon={NewChatIcon}
         onClick={onNewChat}
         shortcut={newThreadShortcutLabel}
         onContextMenu={onContextMenu}

@@ -24,6 +24,10 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
     closeMobileSidebar();
     void s.handleNewChat();
   };
+  const handleNewChats = () => {
+    closeMobileSidebar();
+    void s.handleNewChats();
+  };
 
   const projectProps = {
     showArm64IntelBuildWarning: s.showArm64IntelBuildWarning,
@@ -99,7 +103,7 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
               unloadedChatCount={s.unloadedChatCount}
               isLoadingMoreChats={s.isLoadingMoreChats}
               onLoadMoreChats={s.loadMoreChats}
-              onNewChat={handleNewChat}
+              onNewChat={handleNewChats}
               newThreadShortcutLabel={s.newThreadShortcutLabel}
               sharedProjectItemProps={s.sharedProjectItemProps}
               chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
@@ -125,13 +129,13 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
           <div className="py-2">
             <SidebarFixedActions
               onNewChat={handleNewChat}
-              newThreadShortcutLabel={s.newThreadShortcutLabel}
+              newThreadShortcutLabel={s.newChatShortcutLabel}
             />
           </div>
         ) : (
           <SidebarActionsSection
             onNewChat={handleNewChat}
-            newThreadShortcutLabel={s.newThreadShortcutLabel}
+            newThreadShortcutLabel={s.newChatShortcutLabel}
             onOpenAutomations={() => {
               closeMobileSidebar();
               void navigate({ to: "/automations" });

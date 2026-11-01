@@ -1,25 +1,20 @@
-import { BUILT_IN_CHATS_PROJECT_ID, isBuiltInChatsProject } from "@bigbud/contracts";
+import { isBuiltInChatsProject } from "@bigbud/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  FolderIcon,
-  MessageSquareIcon,
-  SearchIcon,
-  SettingsIcon,
-  SquarePenIcon,
-} from "lucide-react";
+import { FolderIcon, MessageSquareIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { NewChatIcon } from "../common/NewChatIcon";
 import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { cn } from "~/lib/utils";
 import { useHandleNewThread } from "../../hooks/useHandleNewThread";
-import { resolveNewChatOptions } from "../../hooks/useHandleNewThread";
+import { resolveNewThreadShortcutTarget } from "../../hooks/useHandleNewThread.shortcuts";
 import { useSettings } from "../../hooks/useSettings";
 import { useResolvedWorkspace } from "../../hooks/useResolvedWorkspace";
 import { isVisibleThread } from "../../logic/thread/threadVisibility.logic";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { useStore } from "../../stores/main";
-import { useCommandPaletteStore } from "../../stores/ui";
+import { useCommandPaletteStore, useUiStateStore } from "../../stores/ui";
 import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 import {
   Command,
@@ -56,8 +51,8 @@ export function CommandPaletteDialogContent() {
   const setOpen = useCommandPaletteStore((store) => store.setOpen);
   const keybindings = useServerKeybindings();
   const settings = useSettings();
-  const { activeDraftThread, activeThread, defaultProjectId, handleNewThread, routeThreadId } =
-    useHandleNewThread();
+  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
+  const { activeDraftThread, activeThread, handleNewThread, routeThreadId } = useHandleNewThread();
   const projects = useStore(useShallow((store) => store.projects));
   const threads = useStore(useShallow((store) => store.threads.filter(isVisibleThread)));
   const { cwd: workspaceRoot, executionTargetId: workspaceExecutionTargetId } =
@@ -72,8 +67,12 @@ export function CommandPaletteDialogContent() {
 
   const items = useMemo<PaletteItem[]>(() => {
     const actionItems: PaletteItem[] = [];
-    const effectiveProjectId =
-      activeThread?.projectId ?? activeDraftThread?.projectId ?? defaultProjectId;
+    const contextualTarget = resolveNewThreadShortcutTarget({
+      command: "chat.new",
+      activeThread,
+      activeDraftThread,
+      selectedProjectId,
+    });
     const chatsProject = projects.find((project) => isBuiltInChatsProject(project.id)) ?? null;
     const visibleProjects = projects.filter((project) => !isBuiltInChatsProject(project.id));
     const recentChatThreads = threads.filter(
@@ -84,36 +83,37 @@ export function CommandPaletteDialogContent() {
     );
     const paletteShortcut = shortcutLabelForCommand(keybindings, "commandPalette.toggle");
 
-    if (effectiveProjectId) {
-      actionItems.push({
-        id: "action:new-thread",
-        label: "New chat",
-        description: "Create a fresh chat in the Chats section",
-        group: "actions",
-        keywords: "new chat create chats",
-        shortcut: shortcutLabelForCommand(keybindings, "chat.new"),
-        icon: <SquarePenIcon className="size-4" />,
-        onSelect: async () => {
-          await handleNewThread(BUILT_IN_CHATS_PROJECT_ID, resolveNewChatOptions());
-        },
-      });
-      if (!isBuiltInChatsProject(effectiveProjectId)) {
-        actionItems.push({
-          id: "action:new-thread-local",
-          label: "New local thread",
-          description: "Create a new thread using the default environment mode",
-          group: "actions",
-          keywords: "new local thread chat create default environment",
-          shortcut: shortcutLabelForCommand(keybindings, "chat.newLocal"),
-          icon: <SquarePenIcon className="size-4" />,
-          onSelect: async () => {
-            await handleNewThread(effectiveProjectId, {
-              envMode: settings.defaultThreadEnvMode,
-            });
-          },
+    actionItems.push({
+      id: "action:new-thread",
+      label: "New chat",
+      description:
+        "Create a chat in the current project and directory, or Chats if none is selected",
+      group: "actions",
+      keywords: "new chat create chats",
+      shortcut: shortcutLabelForCommand(keybindings, "chat.new"),
+      icon: <NewChatIcon className="size-4" />,
+      onSelect: async () => {
+        await handleNewThread(contextualTarget.projectId, contextualTarget.options);
+      },
+    });
+    actionItems.push({
+      id: "action:new-thread-local",
+      label: "New chat in Chats",
+      description: "Create a chat in the configured default chat directory",
+      group: "actions",
+      keywords: "new local thread chat create chats default directory",
+      shortcut: shortcutLabelForCommand(keybindings, "chat.newLocal"),
+      icon: <NewChatIcon className="size-4" />,
+      onSelect: async () => {
+        const target = resolveNewThreadShortcutTarget({
+          command: "chat.newLocal",
+          activeThread,
+          activeDraftThread,
+          selectedProjectId,
         });
-      }
-    }
+        await handleNewThread(target.projectId, target.options);
+      },
+    });
 
     actionItems.push({
       id: "action:settings",
@@ -221,7 +221,7 @@ export function CommandPaletteDialogContent() {
   }, [
     activeDraftThread,
     activeThread,
-    defaultProjectId,
+    selectedProjectId,
     handleNewThread,
     keybindings,
     navigate,

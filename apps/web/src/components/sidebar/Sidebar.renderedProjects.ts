@@ -46,6 +46,7 @@ export interface SidebarRenderedProjectsOutput {
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   showThreadJumpHints: boolean;
   threadJumpLabelById: Map<ThreadId, string>;
+  newChatShortcutLabel: string | null | undefined;
   newThreadShortcutLabel: string | null | undefined;
   loadMoreThreadsForProject: (projectId: ProjectId) => void;
 }
@@ -229,9 +230,16 @@ export function useSidebarRenderedProjects({
     return mapping;
   }, [keybindings, sidebarShortcutLabelOptions, threadJumpCommandById]);
 
-  const newThreadShortcutLabel =
-    shortcutLabelForCommand(keybindings, "chat.newLocal", sidebarShortcutLabelOptions) ??
-    shortcutLabelForCommand(keybindings, "chat.new", sidebarShortcutLabelOptions);
+  const newChatShortcutLabel = shortcutLabelForCommand(
+    keybindings,
+    "chat.new",
+    sidebarShortcutLabelOptions,
+  );
+  const newThreadShortcutLabel = shortcutLabelForCommand(
+    keybindings,
+    "chat.newLocal",
+    sidebarShortcutLabelOptions,
+  );
 
   const orderedSidebarThreadIds = visibleSidebarThreadIds;
 
@@ -316,6 +324,7 @@ export function useSidebarRenderedProjects({
     showThreadJumpHints,
     threadJumpLabelById,
     newThreadShortcutLabel,
+    newChatShortcutLabel,
     loadMoreThreadsForProject,
   };
 }
