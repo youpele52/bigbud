@@ -26,8 +26,17 @@ vi.mock("../../config/env", async () => {
 });
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => () => undefined,
-  Link: ({ children, ...props }: { children: React.ReactNode; "aria-label"?: string }) => (
-    <a aria-label={props["aria-label"]}>{children}</a>
+  Link: ({
+    children,
+    ...props
+  }: {
+    children: React.ReactNode;
+    "aria-label"?: string;
+    className?: string;
+  }) => (
+    <a aria-label={props["aria-label"]} className={props.className}>
+      {children}
+    </a>
   ),
 }));
 vi.mock("./SidebarUpdatePill", () => ({ SidebarUpdatePill: () => null }));
@@ -57,6 +66,7 @@ describe("SidebarFooterBar", () => {
     expect(brand).toBeLessThan(markup.indexOf('aria-label="Help"'));
     expect(markup).toContain("grid-cols-[minmax(max-content,1fr)_auto_minmax(max-content,1fr)]");
     expect(markup).toContain("w-auto shrink-0 h-3");
+    expect(markup).toContain("scale-80 px-1 py-1");
   });
 
   it("shows neither wordmark nor badge in a stable desktop release", () => {

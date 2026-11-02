@@ -41,7 +41,7 @@ export function SidebarFooterBar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        {showBrand && <SidebarBrandLink className="px-1 py-1" logoClassName="h-3" />}
+        {showBrand && <SidebarBrandLink className="scale-80 px-1 py-1" logoClassName="h-3" />}
         <div className="flex justify-end">
           <SidebarHelpMenu />
         </div>
