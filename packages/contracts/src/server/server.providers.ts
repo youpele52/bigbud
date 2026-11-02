@@ -174,6 +174,16 @@ export const CliProxyDiagnostic = Schema.Struct({
 });
 export type CliProxyDiagnostic = typeof CliProxyDiagnostic.Type;
 
+/** Installed PATH evidence must never be presented as the connected server's version. */
+export const CliProxyVersion = Schema.Struct({
+  recommendedVersion: TrimmedNonEmptyString,
+  runtimeVersion: Schema.NullOr(TrimmedNonEmptyString),
+  installedVersion: Schema.NullOr(TrimmedNonEmptyString),
+  installation: Schema.Literals(["homebrew", "unknown"]),
+  updateSource: Schema.optional(Schema.Literals(["runtime", "installed"])),
+});
+export type CliProxyVersion = typeof CliProxyVersion.Type;
+
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
   /** Explicit isolated development composition, never a public-release availability flag. */
@@ -201,6 +211,7 @@ export const ServerProvider = Schema.Struct({
   modelRecovery: Schema.optional(ServerProviderRecovery),
   failure: Schema.optional(ServerProviderFailure),
   cliProxyDiagnostic: Schema.optional(CliProxyDiagnostic),
+  cliProxyVersion: Schema.optional(CliProxyVersion),
   models: Schema.Array(ServerProviderModel),
   modelDiscovery: Schema.optional(ServerProviderModelDiscovery),
   usageLimits: Schema.optional(ServerProviderUsageLimits),

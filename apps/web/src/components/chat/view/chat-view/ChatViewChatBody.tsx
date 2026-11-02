@@ -12,6 +12,7 @@ import { ContextWindowWarningBanner } from "../../common/ContextWindowWarningBan
 import { RetiredProviderNotice } from "../../common/RetiredProviderNotice";
 import { ProviderSwitchBranchModal } from "./ProviderSwitchBranchModal";
 import { ProviderStatusBanner } from "../../provider/ProviderStatusBanner";
+import { CliProxyVersionNotice } from "../../../provider/CliProxyVersionNotice";
 import { ThreadErrorBanner } from "../../common/ThreadErrorBanner";
 import { AccessModeInfoBanner } from "../../common/AccessModeInfoBanner";
 import { MessagesTimeline } from "../../messages/MessagesTimeline";
@@ -142,6 +143,13 @@ export function ChatViewChatBody({
           />
         ) : null}
         <ProviderStatusBanner status={composer.activeProviderStatus} threadId={base.threadId} />
+        {composer.activeProviderStatus?.provider === "cliProxy" &&
+        composer.activeProviderStatus.enabled ? (
+          <CliProxyVersionNotice
+            version={composer.activeProviderStatus.cliProxyVersion}
+            placement="chat"
+          />
+        ) : null}
         {retainedHistory ? (
           <OpencodeV2RetainedHistoryNotice threadId={base.threadId} message={retainedHistory} />
         ) : null}

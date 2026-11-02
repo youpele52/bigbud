@@ -50,7 +50,9 @@ describe("checkCliProxyProvider", () => {
         ),
     );
     const snapshot = await Effect.runPromise(
-      checkCliProxyProvider().pipe(
+      checkCliProxyProvider({
+        inspectInstallation: async () => ({ version: null, installation: "unknown" }),
+      }).pipe(
         Effect.provide(
           Layer.mergeAll(
             ServerSettingsService.layerTest({ providers: { cliProxy: { configPath } } }),

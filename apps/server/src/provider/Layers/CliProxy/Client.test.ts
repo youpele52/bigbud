@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { decodeModels, inspectCliProxy, validateCliProxyModel } from "./Client.ts";
+import {
+  decodeModels,
+  inspectCliProxy,
+  inspectCliProxyDetails,
+  validateCliProxyModel,
+} from "./Client.ts";
 import type { CliProxyConfig } from "./config.ts";
 
 const config: CliProxyConfig = {
@@ -103,6 +108,48 @@ describe("decodeModels", () => {
 });
 
 describe("inspectCliProxy", () => {
+  it.each([
+    [undefined, undefined, null],
+    ["8.0.30", undefined, "8.0.30"],
+    [undefined, "v8.0.51", "8.0.51"],
+    ["8.0.30", "8.0.51", null],
+    ["dev", "8.0.51-rc1", null],
+  ] as const)(
+    "reads optional version headers without extra probes",
+    async (root, catalog, expected) => {
+      const request = vi.fn(async (_config: CliProxyConfig, pathname: string) =>
+        pathname === "/"
+          ? new Response("CLI Proxy API Server", { headers: root ? { "X-CPA-VERSION": root } : {} })
+          : new Response(JSON.stringify({ data: [{ id: "model" }] }), {
+              headers: catalog ? { "X-CPA-VERSION": catalog } : {},
+            }),
+      );
+      await expect(inspectCliProxyDetails(config, { request })).resolves.toEqual({
+        models: [{ id: "model", name: "model" }],
+        runtimeVersion: expected,
+      });
+      expect(request.mock.calls.map((args) => args[1])).toEqual([
+        "/",
+        "/v1/models?client_version=0.1.0",
+      ]);
+    },
+  );
+
+  it("shares one inspection between models-only runtime and provider detail callers", async () => {
+    const request = vi.fn(async (_config: CliProxyConfig, pathname: string) =>
+      pathname === "/"
+        ? new Response("CLI Proxy API Server")
+        : new Response(JSON.stringify({ data: [] })),
+    );
+    await expect(
+      Promise.all([
+        inspectCliProxy(config, { request }),
+        inspectCliProxyDetails(config, { request }),
+      ]),
+    ).resolves.toEqual([[], { models: [], runtimeVersion: null }]);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
   it("uses the bounded client-profile endpoints through an injectable request", async () => {
     const request = vi
       .fn()

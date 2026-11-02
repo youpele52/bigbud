@@ -272,6 +272,8 @@ export function ProvidersSettingsSection({
               card.provider === "cliProxy" ? () => void activateCliProxy() : undefined
             }
             isActivatingCliProxy={card.provider === "cliProxy" ? isActivatingCliProxy : false}
+            onRefreshProviders={refreshProviders}
+            isRefreshingProviders={isRefreshingProviders}
             onToggleEnabled={(checked) => {
               if (
                 card.provider === "opencodeV2" &&
