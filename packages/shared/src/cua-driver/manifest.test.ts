@@ -15,7 +15,36 @@ describe("parseCuaDriverManifest", () => {
     ).toBe(CUA_DRIVER_VERSION);
   });
 
-  it("rejects mismatched versions and invocations", () => {
+  it.each(["0.38.1", "0.39.0", "1.0.0", "0.38.1-nightly.20261102"])(
+    "accepts compatible release %s",
+    (version) => {
+      expect(
+        parseCuaDriverManifest({
+          schema_version: "1",
+          binary_version: version,
+          binary_path: "/runtime/cua-driver",
+          mcp_invocation: { command: "/runtime/cua-driver", args: ["mcp"] },
+        }).binary_version,
+      ).toBe(version);
+    },
+  );
+
+  it.each([{ schema_version: "2" }, { binary_version: "" }, { binary_version: null }])(
+    "rejects incompatible manifest %j",
+    (override) => {
+      expect(() =>
+        parseCuaDriverManifest({
+          schema_version: "1",
+          binary_version: "0.39.0",
+          binary_path: "/runtime/cua-driver",
+          mcp_invocation: { command: "/runtime/cua-driver", args: ["mcp"] },
+          ...override,
+        }),
+      ).toThrow("supported schema 1 contract");
+    },
+  );
+
+  it("rejects incompatible invocations regardless of version", () => {
     expect(() =>
       parseCuaDriverManifest({
         schema_version: "1",
@@ -23,6 +52,6 @@ describe("parseCuaDriverManifest", () => {
         binary_path: "/runtime/cua-driver",
         mcp_invocation: { command: "/runtime/cua-driver", args: ["serve"] },
       }),
-    ).toThrow(`pinned ${CUA_DRIVER_VERSION} contract`);
+    ).toThrow("invalid MCP invocation");
   });
 });

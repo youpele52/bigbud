@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
+import * as FS from "node:fs";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CUA_DRIVER_REQUIRED_TOOLS } from "@bigbud/shared/cua-driver/policy";
@@ -21,6 +22,8 @@ const mockedSpawn = vi.mocked(ChildProcess.spawn);
 const HOST_ENV = { BIGBUD_CUA_HOST_BUNDLE_ID: "ai.bigbud.desktop.dev" };
 
 interface FakeDriver {
+  readonly protocolVersion?: string;
+  readonly toolDefinitions?: unknown[];
   readonly tools?: ReadonlyArray<string>;
   readonly callResult?: unknown;
 }
@@ -69,10 +72,14 @@ function makeMcpChild(failOnMethod?: string, autoExit = true, driver: FakeDriver
       }
       const result =
         request.method === "tools/list"
-          ? { tools: (driver.tools ?? CUA_DRIVER_REQUIRED_TOOLS).map((name) => ({ name })) }
+          ? {
+              tools:
+                driver.toolDefinitions ??
+                (driver.tools ?? CUA_DRIVER_REQUIRED_TOOLS).map((name) => ({ name })),
+            }
           : request.method === "tools/call"
             ? (driver.callResult ?? { structuredContent: { overall: "ready" } })
-            : {};
+            : { protocolVersion: driver.protocolVersion ?? "2025-06-18" };
       child.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id, result })}\n`);
     }
   });
@@ -120,6 +127,45 @@ describe("callCuaDriverTool", () => {
     ).rejects.toThrow("Permission denied: user policy: tool 'kill_app' is explicitly denied");
     expect(written.join("")).toContain('"method":"tools/call"');
   });
+
+  it.each(["protocol", "schema", "compatible"])(
+    "checks unfamiliar runtime %s before calling tools",
+    async (mode) => {
+      const fixture = JSON.parse(
+        FS.readFileSync(
+          new URL(
+            "../../../../scripts/fixtures/cua-driver/0.38.0/live-schema.darwin.json",
+            import.meta.url,
+          ),
+          "utf8",
+        ),
+      );
+      if (mode === "schema") fixture.tools.click.inputSchema.properties.x.type = "string";
+      const child = makeMcpChild(undefined, true, {
+        protocolVersion: mode === "protocol" ? "future" : "2025-06-18",
+        toolDefinitions: Object.entries(fixture.tools).map(([name, tool]) =>
+          Object.assign({ name }, tool),
+        ),
+      });
+      const writes: string[] = [];
+      child.stdin.on("data", (chunk) => writes.push(chunk.toString()));
+      mockedSpawn.mockReturnValue(child as never);
+      const call = callCuaDriverTool(
+        "/driver",
+        "health_report",
+        {},
+        {
+          socketPath: "/strict.sock",
+          environment: { ...HOST_ENV, BIGBUD_CUA_VALIDATE_MCP: "1" },
+        },
+      );
+      if (mode === "compatible") await expect(call).resolves.toBeDefined();
+      else {
+        await expect(call).rejects.toThrow(mode === "protocol" ? "protocol" : "input schema");
+        expect(writes.join("")).not.toContain('"tools/call"');
+      }
+    },
+  );
 
   it("allows an unadvertised probe on the one-shot path but still requires every tool", async () => {
     const denied = { isError: true, content: [{ type: "text", text: "Permission denied: x" }] };

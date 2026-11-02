@@ -66,10 +66,18 @@ vi.mock("./cuaDriver.cursorTheme", () => ({
 vi.mock("./cuaDriver.runtime", () => ({
   resolveComputerUseRuntime: mocks.resolveRuntime,
 }));
-vi.mock("./cuaDriver.mcpClient", () => ({
-  callCuaDriverTool: vi.fn(async () => ({
-    structuredContent: { checks: [], overall: "ok" },
+vi.mock("./cuaDriver.compatibility", () => ({
+  inspectCuaDriverCompatibility: vi.fn(async () => ({
+    version: mocks.resolveRuntime().version,
+    honoursPidFile: mocks.resolveRuntime().version === "0.38.0",
   })),
+}));
+vi.mock("./cuaDriver.mcpClient", () => ({
+  callCuaDriverTool: vi.fn(async (_path: string, tool: string) => {
+    if (tool === "kill_app")
+      throw new Error("Permission denied: tool 'kill_app' is explicitly denied");
+    return { structuredContent: { checks: [], overall: "ok" } };
+  }),
   stopCuaDriverMcpClientAndWait: vi.fn(async () => {
     mocks.stopMcpClient();
   }),
@@ -113,6 +121,108 @@ describe("cua-driver daemon shutdown", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("does not spawn an incompatible runtime", async () => {
+    const { inspectCuaDriverCompatibility } = await import("./cuaDriver.compatibility");
+    vi.mocked(inspectCuaDriverCompatibility).mockRejectedValueOnce(
+      new Error("unsupported manifest"),
+    );
+    const daemon = await import("./cuaDriver.daemon");
+    await expect(daemon.startCuaDriverDaemon("/base", "host-id")).rejects.toThrow(
+      "unsupported manifest",
+    );
+    expect(mocks.spawn).not.toHaveBeenCalled();
+    const { cuaDriverRuntimeKey, getCuaDriverStartupFailure } =
+      await import("./cuaDriver.startupFailure");
+    expect(getCuaDriverStartupFailure(cuaDriverRuntimeKey("/base", "/cua-driver", null))).toContain(
+      "unsupported manifest",
+    );
+    await daemon.startCuaDriverDaemon("/base", "host-id");
+    expect(
+      getCuaDriverStartupFailure(cuaDriverRuntimeKey("/base", "/cua-driver", null)),
+    ).toBeNull();
+  });
+
+  it("propagates delayed preflight success through backend startup instead of orphaning it", async () => {
+    const { inspectCuaDriverCompatibility } = await import("./cuaDriver.compatibility");
+    vi.mocked(inspectCuaDriverCompatibility).mockImplementationOnce(
+      () =>
+        new Promise((resolve) =>
+          setTimeout(() => resolve({ version: "0.39.0", honoursPidFile: true }), 13_000),
+        ),
+    );
+    const backend = await import("./backendRuntimeEnv");
+    const start = backend.resolveComputerUseRuntimeEnv("/base", "host-id");
+    let settled = false;
+    void start.then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(settled).toBe(false);
+    expect(mocks.spawn).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_000);
+    await expect(start).resolves.toMatchObject({
+      BIGBUD_CUA_DRIVER_PATH: "/cua-driver",
+      BIGBUD_CUA_VALIDATE_MCP: "1",
+    });
+  });
+
+  it("does not hand off an environment when policy is ignored", async () => {
+    const { callCuaDriverTool } = await import("./cuaDriver.mcpClient");
+    vi.mocked(callCuaDriverTool).mockResolvedValue({ structuredContent: { overall: "ok" } });
+    const daemon = await import("./cuaDriver.daemon");
+    const start = daemon.startCuaDriverDaemon("/base", "host-id");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(daemon.getCuaDriverDaemonEnvironment()).toBeUndefined();
+    emitExit(mocks.spawned[0]!);
+    await expect(start).resolves.toEqual({});
+    expect(daemon.getCuaDriverDaemonStatus().state).toBe("stopped");
+    vi.mocked(callCuaDriverTool).mockImplementation(async (_path, tool) => {
+      if (tool === "kill_app")
+        throw new Error("Permission denied: tool 'kill_app' is explicitly denied");
+      return { structuredContent: { checks: [], overall: "ok" } };
+    });
+  });
+
+  it("does not spawn after shutdown during compatibility inspection", async () => {
+    const { inspectCuaDriverCompatibility } = await import("./cuaDriver.compatibility");
+    let complete!: (value: { version: string; honoursPidFile: boolean }) => void;
+    vi.mocked(inspectCuaDriverCompatibility).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    const daemon = await import("./cuaDriver.daemon");
+    const start = daemon.startCuaDriverDaemon("/base", "host-id");
+    await daemon.stopCuaDriverDaemonAndWait();
+    complete({ version: "0.39.0", honoursPidFile: true });
+    await expect(start).resolves.toEqual({});
+    expect(mocks.spawn).not.toHaveBeenCalled();
+  });
+
+  it("does not read health or hand off env after shutdown during the policy probe", async () => {
+    const { callCuaDriverTool } = await import("./cuaDriver.mcpClient");
+    let deny!: (error: Error) => void;
+    vi.mocked(callCuaDriverTool).mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          deny = reject;
+        }),
+    );
+    const daemon = await import("./cuaDriver.daemon");
+    const start = daemon.startCuaDriverDaemon("/base", "host-id");
+    await vi.advanceTimersByTimeAsync(0);
+    const stopping = daemon.stopCuaDriverDaemonAndWait();
+    emitExit(mocks.spawned[0]!);
+    await stopping;
+    vi.mocked(callCuaDriverTool).mockClear();
+    deny(new Error("Permission denied: tool 'kill_app' is explicitly denied"));
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(start).resolves.toEqual({});
+    expect(callCuaDriverTool).not.toHaveBeenCalled();
+    expect(daemon.getCuaDriverDaemonEnvironment()).toBeUndefined();
   });
 
   it("waits for exit and coalesces concurrent and repeated stops", async () => {

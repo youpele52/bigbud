@@ -8,7 +8,8 @@ import { CUA_DRIVER_0_9_1_ARTIFACTS } from "./release.v0_9_1.ts";
 import { CUA_DRIVER_0_38_0_ARTIFACTS } from "./release.v0_38_0.ts";
 
 /**
- * The pin. Flipping it selects that release's table only: the public contract
+ * The bundled/download default, not a runtime compatibility requirement.
+ * Flipping it selects that release's table only: the public contract
  * profile stays `legacy` (`@bigbud/shared/computer-use/selection`) and the
  * supervised gate stays closed.
  */

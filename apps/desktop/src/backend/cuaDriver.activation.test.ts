@@ -84,7 +84,7 @@ describe("Computer Use activation endpoint", () => {
     mockedRunCommand.mockResolvedValue({ code: 0, stdout: "", stderr: "" });
     mockedCallCuaDriverTool
       .mockResolvedValueOnce({ structuredContent: { overall: "degraded" } })
-      .mockRejectedValueOnce(new Error("Permission denied: policy blocked kill_app"));
+      .mockRejectedValueOnce(new Error("Permission denied: tool 'kill_app' is explicitly denied"));
 
     await expect(
       validateCuaDriverActivation({
@@ -120,7 +120,7 @@ describe("Computer Use activation endpoint", () => {
   });
 
   it.each([
-    ["0.9.1 JSON-RPC denial", "Permission denied: policy blocked kill_app"],
+    ["0.9.1 JSON-RPC denial", "Permission denied: tool 'kill_app' is explicitly denied"],
     [
       "0.38 tool-error denial",
       "Permission denied: user policy: tool 'kill_app' is explicitly denied",
@@ -137,7 +137,7 @@ describe("Computer Use activation endpoint", () => {
       expect(mockedCallCuaDriverTool).toHaveBeenLastCalledWith(
         "/tmp/cua-driver",
         "kill_app",
-        { name: "bigbud-policy-probe" },
+        {},
         expect.objectContaining({ allowUnadvertisedTool: true }),
       );
       // Only the probe may bypass the advertise check.
@@ -175,7 +175,7 @@ describe("Computer Use activation isolation", () => {
     mockedRunCommand.mockResolvedValue({ code: 0, stdout: "", stderr: "" });
     mockedCallCuaDriverTool
       .mockResolvedValueOnce({ structuredContent: { overall: "ready" } })
-      .mockRejectedValueOnce(new Error("Permission denied: policy blocked kill_app"));
+      .mockRejectedValueOnce(new Error("Permission denied: tool 'kill_app' is explicitly denied"));
     await expect(validateCuaDriverActivation(probeInput)).resolves.toBeUndefined();
 
     const [, args, options] = mockedSpawn.mock.calls[0]! as unknown as [

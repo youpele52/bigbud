@@ -5,6 +5,10 @@ import {
   cuaDriverMcpArguments,
 } from "@bigbud/shared/cua-driver/invocation";
 import { CUA_DRIVER_REQUIRED_TOOLS } from "@bigbud/shared/cua-driver/policy";
+import {
+  validateCuaDriverMcpProtocol,
+  validateCuaDriverMcpTools,
+} from "@bigbud/shared/cua-driver/mcpCompatibility";
 
 import {
   assertCuaDriverMcpStartAllowed,
@@ -146,6 +150,7 @@ async function requestResponse(
 }
 
 interface PersistentMcpSession {
+  readonly strictCompatibility: boolean;
   readonly key: string;
   readonly child: ChildProcess.ChildProcessWithoutNullStreams;
   availableTools: ReadonlySet<string> | null;
@@ -217,6 +222,7 @@ function getPersistentSession(
   }
   if (persistentSession) stopSession(persistentSession);
   persistentSession = {
+    strictCompatibility: environment.BIGBUD_CUA_VALIDATE_MCP === "1",
     key,
     child: createMcpChild(binaryPath, socketPath, environment),
     availableTools: null,
@@ -232,7 +238,8 @@ async function initializeSession(
 ): Promise<ReadonlySet<string>> {
   if (session.availableTools) return session.availableTools;
   const initializeId = session.nextRequestId++;
-  await requestResponse(
+  const deadline = Date.now() + (timeoutMs ?? CUA_DRIVER_REQUEST_TIMEOUT_MS);
+  const initialized = await requestResponse(
     session.child,
     initializeId,
     "initialize",
@@ -243,14 +250,21 @@ async function initializeSession(
     },
     timeoutMs,
   );
+  if (session.strictCompatibility) validateCuaDriverMcpProtocol(initialized);
   await writeMessage(session.child, {
     jsonrpc: JSONRPC_VERSION,
     method: "notifications/initialized",
   });
   const toolsId = session.nextRequestId++;
-  session.availableTools = parseToolNames(
-    await requestResponse(session.child, toolsId, "tools/list", undefined, timeoutMs),
+  const tools = await requestResponse(
+    session.child,
+    toolsId,
+    "tools/list",
+    undefined,
+    Math.max(1, deadline - Date.now()),
   );
+  if (session.strictCompatibility) validateCuaDriverMcpTools(tools);
+  session.availableTools = parseToolNames(tools);
   return session.availableTools;
 }
 
@@ -298,6 +312,7 @@ async function callPersistentSessionTool(
     release = resolve;
   });
   await previous;
+  const deadline = Date.now() + (timeoutMs ?? CUA_DRIVER_REQUEST_TIMEOUT_MS);
   try {
     validateAvailableTool(
       await initializeSession(session, timeoutMs),
@@ -311,7 +326,7 @@ async function callPersistentSessionTool(
         requestId,
         "tools/call",
         { name: toolName, arguments: args },
-        timeoutMs,
+        Math.max(1, deadline - Date.now()),
       ),
     );
   } catch (error) {

@@ -16,6 +16,7 @@ import {
 import { CUA_DRIVER_VERSION } from "@bigbud/shared/cua-driver/release";
 
 import { callCuaDriverTool } from "./cuaDriver.mcpClient";
+import { validateCuaDriverPolicyEnforcement } from "./cuaDriver.policyProbe";
 import { runCommand } from "./cuaDriver.process";
 import {
   assertCuaDriverProcessStartAllowed,
@@ -123,23 +124,11 @@ export async function validateCuaDriverActivation(input: {
         environment: makeCuaDriverChildEnvironment(process.env, environment),
       },
     );
-    try {
-      await callCuaDriverTool(
-        input.binaryPath,
-        "kill_app",
-        { name: "bigbud-policy-probe" },
-        {
-          socketPath: endpoint,
-          environment: makeCuaDriverChildEnvironment(process.env, environment),
-          // 0.38 hides denied tools from tools/list; the call is still denied.
-          allowUnadvertisedTool: true,
-        },
-      );
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith("Permission denied:")) return;
-      throw error;
-    }
-    throw new Error("Computer Use runtime policy did not deny the activation probe.");
+    await validateCuaDriverPolicyEnforcement(input.binaryPath, {
+      socketPath: endpoint,
+      environment: makeCuaDriverChildEnvironment(process.env, environment),
+      timeoutMs: ACTIVATION_TIMEOUT_MS,
+    });
   } finally {
     stopTrackedCuaDriverProcess(child);
     FS.rmSync(cleanupDirectory, { recursive: true, force: true });

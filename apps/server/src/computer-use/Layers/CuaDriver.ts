@@ -7,6 +7,10 @@ import {
   cuaDriverMcpArguments,
 } from "@bigbud/shared/cua-driver/invocation";
 import { CUA_DRIVER_REQUIRED_TOOLS } from "@bigbud/shared/cua-driver/policy";
+import {
+  validateCuaDriverMcpProtocol,
+  validateCuaDriverMcpTools,
+} from "@bigbud/shared/cua-driver/mcpCompatibility";
 
 import {
   CuaDriver,
@@ -94,16 +98,19 @@ async function createSession(): Promise<CuaDriverSession> {
     );
   });
   try {
-    await requestResponse(child, 1, "initialize", {
+    const initialized = await requestResponse(child, 1, "initialize", {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: { name: "bigbud", version: "1.0.0" },
     });
+    if (process.env.BIGBUD_CUA_VALIDATE_MCP === "1") validateCuaDriverMcpProtocol(initialized);
     await writeMessage(child, {
       jsonrpc: JSONRPC_VERSION,
       method: "notifications/initialized",
     });
-    const availableTools = parseAvailableTools(await requestResponse(child, 2, "tools/list"));
+    const tools = await requestResponse(child, 2, "tools/list");
+    if (process.env.BIGBUD_CUA_VALIDATE_MCP === "1") validateCuaDriverMcpTools(tools);
+    const availableTools = parseAvailableTools(tools);
     const missingTools = CUA_DRIVER_REQUIRED_TOOLS.filter((name) => !availableTools.has(name));
     if (missingTools.length > 0) {
       throw new Error(`cua-driver is missing required tools: ${missingTools.join(", ")}.`);

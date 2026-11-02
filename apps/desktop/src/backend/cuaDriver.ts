@@ -1,7 +1,4 @@
-import {
-  cuaDriverStateEnvironment,
-  makeCuaDriverChildEnvironment,
-} from "@bigbud/shared/cua-driver/childEnvironment";
+import type { CuaDriverManifest } from "@bigbud/shared/cua-driver/manifest";
 import {
   CUA_DRIVER_POLICY_SHA256,
   CUA_DRIVER_POLICY_VERSION,
@@ -25,24 +22,8 @@ import {
 } from "./cuaDriver.daemon";
 import { resolvePrivateStateHome } from "./cuaDriver.paths";
 import { resolveComputerUseRuntime } from "./cuaDriver.runtime";
-import { runCommand } from "./cuaDriver.process";
-
-async function readVersion(baseDir: string, binaryPath: string): Promise<string | null> {
-  try {
-    const result = await runCommand(
-      binaryPath,
-      ["--version"],
-      makeCuaDriverChildEnvironment(
-        process.env,
-        cuaDriverStateEnvironment(resolvePrivateStateHome(baseDir)),
-      ),
-    );
-    const output = [result.stdout, result.stderr].filter(Boolean).join(" ").trim();
-    return output.length > 0 ? output : null;
-  } catch {
-    return null;
-  }
-}
+import { validateCuaDriverRuntime } from "./cuaDriver.manifest";
+import { cuaDriverRuntimeKey, getCuaDriverStartupFailure } from "./cuaDriver.startupFailure";
 
 function missingStatus(): DesktopComputerUseRuntimeStatus {
   const daemon = getCuaDriverDaemonStatus();
@@ -82,10 +63,22 @@ export async function getComputerUseRuntimeStatus(
     return missingStatus();
   }
 
-  const version = await readVersion(baseDir, runtime.binaryPath);
+  let manifest: CuaDriverManifest | null = null;
+  let compatibilityError = getCuaDriverStartupFailure(
+    cuaDriverRuntimeKey(baseDir, runtime.binaryPath, runtime.policyPath),
+  );
+  try {
+    manifest = await validateCuaDriverRuntime(
+      runtime.binaryPath,
+      runtime.policyPath ?? undefined,
+      resolvePrivateStateHome(baseDir),
+    );
+  } catch (error) {
+    compatibilityError = error instanceof Error ? error.message : String(error);
+  }
   const daemon = getCuaDriverDaemonStatus();
-  const versionMatches = version?.includes(CUA_DRIVER_VERSION) === true;
-  const runtimeValidated = versionMatches && runtime.policyPath !== null;
+  const runtimeValidated =
+    manifest !== null && runtime.policyPath !== null && compatibilityError === null;
   const ready =
     daemon.state === "ready" && daemon.binaryPath === runtime.binaryPath && runtimeValidated;
   const repairRequired =
@@ -98,7 +91,7 @@ export async function getComputerUseRuntimeStatus(
     repairRequired,
     state: ready
       ? "ready"
-      : !versionMatches
+      : !runtimeValidated
         ? "incompatible"
         : daemon.state === "starting" || daemon.state === "restarting"
           ? "starting"
@@ -107,9 +100,9 @@ export async function getComputerUseRuntimeStatus(
             : "installed-unvalidated",
     source: runtime.source,
     binaryPath: runtime.binaryPath,
-    version,
+    version: manifest?.binary_version ?? runtime.version,
     expectedVersion: CUA_DRIVER_VERSION,
-    manifestSchema: "1",
+    manifestSchema: manifest?.schema_version ?? null,
     policyVersion: runtime.policyPath ? CUA_DRIVER_POLICY_VERSION : null,
     policySha256: runtime.policyPath ? CUA_DRIVER_POLICY_SHA256 : null,
     daemonState: daemon.state,
@@ -117,8 +110,10 @@ export async function getComputerUseRuntimeStatus(
     architecture: process.arch,
     platformHealth: daemon.healthSummary === "ok" ? "ready" : "degraded",
     healthSummary: daemon.healthSummary,
-    lastError: daemon.lastError,
-    message: versionMatches ? null : `Expected cua-driver ${CUA_DRIVER_VERSION}.`,
+    lastError:
+      compatibilityError ?? (daemon.binaryPath === runtime.binaryPath ? daemon.lastError : null),
+    message:
+      compatibilityError ?? (runtime.policyPath ? null : "Computer Use runtime policy is missing."),
     diagnostics: null,
   };
 }
@@ -161,6 +156,15 @@ export async function runComputerUseDoctor(
     return missingStatus();
   }
 
+  const failure = getCuaDriverStartupFailure(
+    cuaDriverRuntimeKey(baseDir, runtime.binaryPath, runtime.policyPath),
+  );
+  if (failure)
+    return {
+      ...(await getComputerUseRuntimeStatus(baseDir)),
+      message: failure,
+      diagnostics: failure,
+    };
   const health = await refreshCuaDriverDaemonHealth();
   const status = await getComputerUseRuntimeStatus(baseDir);
   return {

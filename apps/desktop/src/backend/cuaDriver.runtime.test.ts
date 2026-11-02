@@ -15,7 +15,7 @@ import { writeManagedPolicy } from "./cuaDriver.install";
 import { resolveManagedPaths, resolveManagedVersionPaths } from "./cuaDriver.paths";
 import { readPointerRuntimeVersion, resolveComputerUseRuntime } from "./cuaDriver.runtime";
 
-const OTHER_VERSION = CUA_DRIVER_VERSION === "0.9.1" ? "0.38.0" : "0.9.1";
+const OTHER_VERSION = "0.39.0";
 const directories: string[] = [];
 let savedPath: string | undefined;
 
@@ -74,7 +74,7 @@ afterEach(() => {
 });
 
 describe("version-aware runtime selection", () => {
-  it("skips an active generation of another Driver version and uses the retained previous one", () => {
+  it("selects a newer active generation ahead of the retained pinned release", () => {
     const base = baseDir();
     const active = generation(base, "a", { pointerVersion: OTHER_VERSION });
     const previous = generation(base, "p", { pointerVersion: CUA_DRIVER_VERSION });
@@ -82,8 +82,8 @@ describe("version-aware runtime selection", () => {
     point(base, "previousPath", previous.pointer);
     expect(resolveComputerUseRuntime(base)).toMatchObject({
       source: "managed",
-      binaryPath: previous.binaryPath,
-      version: CUA_DRIVER_VERSION,
+      binaryPath: active.binaryPath,
+      version: OTHER_VERSION,
     });
   });
 
@@ -101,11 +101,10 @@ describe("version-aware runtime selection", () => {
     const active = generation(base, "a", { manifestVersion: OTHER_VERSION });
     point(base, "activePath", active.pointer);
     expect(readPointerRuntimeVersion(active.pointer)).toBe(OTHER_VERSION);
-    expect(resolveComputerUseRuntime(base)).toEqual({
-      source: "missing",
-      binaryPath: null,
-      policyPath: null,
-      version: null,
+    expect(resolveComputerUseRuntime(base)).toMatchObject({
+      source: "managed",
+      binaryPath: active.binaryPath,
+      version: OTHER_VERSION,
     });
   });
 
@@ -120,11 +119,16 @@ describe("version-aware runtime selection", () => {
     });
   });
 
-  it("falls through to missing when both generations are another version", () => {
+  it("falls back to a newer previous generation when the active policy is invalid", () => {
     const base = baseDir();
-    point(base, "activePath", generation(base, "a", { pointerVersion: OTHER_VERSION }).pointer);
-    point(base, "previousPath", generation(base, "p", { manifestVersion: OTHER_VERSION }).pointer);
-    expect(resolveComputerUseRuntime(base).source).toBe("missing");
+    point(
+      base,
+      "activePath",
+      generation(base, "a", { pointerVersion: OTHER_VERSION, policySha256: "invalid" }).pointer,
+    );
+    const previous = generation(base, "p", { manifestVersion: OTHER_VERSION });
+    point(base, "previousPath", previous.pointer);
+    expect(resolveComputerUseRuntime(base).binaryPath).toBe(previous.binaryPath);
   });
 
   it("still enforces the policy digest for a matching version", () => {

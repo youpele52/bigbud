@@ -304,6 +304,10 @@
       "types": "./src/cua-driver/manifest.ts",
       "import": "./src/cua-driver/manifest.ts"
     },
+    "./cua-driver/mcpCompatibility": {
+      "types": "./src/cua-driver/mcpCompatibility.ts",
+      "import": "./src/cua-driver/mcpCompatibility.ts"
+    },
     "./cua-driver/policy": {
       "types": "./src/cua-driver/policy.ts",
       "import": "./src/cua-driver/policy.ts"

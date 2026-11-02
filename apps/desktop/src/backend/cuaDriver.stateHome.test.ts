@@ -23,7 +23,7 @@ vi.mock("./cuaDriver.runtime", () => ({
   resolveComputerUseRuntime: vi.fn(() => ({
     source: "managed",
     binaryPath: "/managed/cua-driver",
-    policyPath: "/managed/bigbud.yaml",
+    policyPath: null,
     version: null,
   })),
 }));
@@ -74,13 +74,13 @@ describe("private Driver state home", () => {
     },
   );
 
-  it("runs the status `--version` poll with the private state home", async () => {
+  it("runs the status manifest probe with the private state home", async () => {
     const base = baseDir();
     await getComputerUseRuntimeStatus(base);
 
     const [, args, env] = mocks.runCommand.mock.calls[0]!;
     const homeDir = resolveManagedPaths(base).homeDir;
-    expect(args).toEqual(["--version"]);
+    expect(args).toEqual(["manifest"]);
     expect(env).toMatchObject({
       BIGBUD_CUA_STATE_HOME: homeDir,
       CUA_DRIVER_RS_HOME: homeDir,

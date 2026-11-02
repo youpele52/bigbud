@@ -102,16 +102,13 @@ export function readPointerRuntimeVersion(pointer: Record<string, unknown>): str
 }
 
 /**
- * A pointer whose version is KNOWN and differs from the pin is skipped, so a
- * pin flip falls back to the retained generation (`previous.json`) without a
- * download. An unknown version keeps the previous behaviour (status still
- * checks `--version` against the pin).
+ * Select by installation integrity, not release number. Manifest and live MCP
+ * compatibility are checked before the selected runtime becomes ready.
  */
 function readActivatedRuntime(pointerPath: string): ResolvedComputerUseRuntime | null {
   try {
     const active = JSON.parse(FS.readFileSync(pointerPath, "utf8")) as Record<string, unknown>;
     const runtimeVersion = readPointerRuntimeVersion(active);
-    if (runtimeVersion !== null && runtimeVersion !== CUA_DRIVER_VERSION) return null;
     if (
       typeof active.binaryPath !== "string" ||
       typeof active.policyPath !== "string" ||
