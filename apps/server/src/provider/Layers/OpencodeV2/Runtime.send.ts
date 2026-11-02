@@ -30,6 +30,11 @@ export async function sendV2Turn(runtime: OpencodeV2Runtime, input: ProviderSend
   const attachmentIssue = providerAttachmentIssue("opencodeV2", input.attachments);
   if (attachmentIssue) throw new Error(attachmentIssue);
   const session = runtime.get(input.threadId);
+  if (session.transportDetached) throw new Error(session.executionBlocked);
+  if (session.transportRecovering)
+    throw new Error(
+      "V2 generation recovery retains the existing admission; new execution awaits readiness.",
+    );
   const remoteGeneration = session.resources?.remoteCommands?.captureGeneration();
   const assertRemoteGeneration = () => {
     if (remoteGeneration !== undefined)

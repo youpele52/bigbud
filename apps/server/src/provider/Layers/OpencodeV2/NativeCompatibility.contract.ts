@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { V2_SHARED_REQUIRED_OPERATIONS } from "./SharedService.capabilities.ts";
 import { V2_SHARED_REQUEST_FIELDS, V2_SHARED_RESPONSES } from "./SharedService.protocol.ts";
+import { V2_NATIVE_POLICY_PROJECTION } from "./NativeCompatibility.policy.actions.ts";
 
 export const V2_CANONICAL_NATIVE_OPERATIONS = [
   ["get", "/api/config", "config.get"],
@@ -28,7 +29,7 @@ const descriptor = {
       "document.path?",
       "document.info.plugins?",
       "document.info.permissions?",
-      "document.info.policies?:provider.use|tool.use|integration.use:allow|deny",
+      `document.info.${V2_NATIVE_POLICY_PROJECTION.replace("policies:", "policies?:")}`,
     ],
     plugin: [
       "location.directory",

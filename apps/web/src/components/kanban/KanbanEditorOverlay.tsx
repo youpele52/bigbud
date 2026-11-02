@@ -1,5 +1,6 @@
 import { type KanbanStatus } from "@bigbud/contracts";
-import { Maximize2Icon, Minimize2Icon } from "lucide-react";
+import { CollapseIcon, ExpandIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
 
 import { BaseMarkdown } from "~/components/common/BaseMarkdown";
@@ -90,7 +91,11 @@ export function KanbanEditorOverlay({
               aria-pressed={isExpanded}
               onClick={() => setIsExpanded((current) => !current)}
             >
-              {isExpanded ? <Minimize2Icon /> : <Maximize2Icon />}
+              {isExpanded ? (
+                <HugeiconsIcon aria-hidden="true" icon={CollapseIcon} />
+              ) : (
+                <HugeiconsIcon aria-hidden="true" icon={ExpandIcon} />
+              )}
             </Button>
           </div>
           {error ? <div className="mb-3 text-sm text-destructive">{error}</div> : null}

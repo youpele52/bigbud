@@ -1,10 +1,5 @@
 import { V2DiagnosticError } from "./PluginSetup.diagnostics.ts";
-
-export interface V2ConfigPolicy {
-  readonly action: "provider.use" | "tool.use" | "integration.use";
-  readonly resource: string;
-  readonly effect: "allow" | "deny";
-}
+import { V2_NATIVE_POLICY_ACTIONS } from "./NativeCompatibility.policy.actions.ts";
 const text = (v: unknown) => typeof v === "string" && v.length > 0 && Buffer.byteLength(v) <= 4096;
 
 /** Consumed controls only. Unknown account/provider fields remain opaque and are not carried. */
@@ -49,8 +44,7 @@ export function validateV2ConfigControls(
           r.effect as string,
         ) ||
         Object.keys(r).some((key) => !["action", "resource", "effect"].includes(key)) ||
-        (field === "policies" &&
-          !["provider.use", "tool.use", "integration.use"].includes(r.action as string))
+        (field === "policies" && !V2_NATIVE_POLICY_ACTIONS.some((action) => action === r.action))
       )
         fail(code);
     }

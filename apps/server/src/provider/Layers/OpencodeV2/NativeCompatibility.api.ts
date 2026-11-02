@@ -5,6 +5,10 @@ import { verifyV2ConsumedRequest } from "./SharedService.protocol.requests.ts";
 import { V2_CANONICAL_NATIVE_OPERATIONS } from "./NativeCompatibility.contract.ts";
 import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
 import { verifyV2NativeSecurityProjections } from "./NativeCompatibility.api.security.ts";
+import {
+  V2_NATIVE_POLICY_ACTIONS,
+  V2_NATIVE_POLICY_PROJECTION,
+} from "./NativeCompatibility.policy.actions.ts";
 
 type Reader = ReturnType<typeof makeV2SchemaReader>;
 type Shape = Record<string, unknown>;
@@ -74,7 +78,7 @@ function configProjection(response: Shape, read: Reader) {
   exactValues(read.field(rule, "effect"), ["allow", "ask", "deny"]);
   const policy = read.resolve(read.field(info, "policies", "array").items);
   for (const field of ["action", "resource", "effect"]) read.requiredField(policy, field, "string");
-  exactValues(read.field(policy, "action"), ["provider.use", "tool.use", "integration.use"]);
+  exactValues(read.field(policy, "action"), V2_NATIVE_POLICY_ACTIONS);
   exactValues(read.field(policy, "effect"), ["allow", "deny"]);
 }
 
@@ -162,9 +166,7 @@ export function assertV2CanonicalNativeApi(value: unknown, nativeVersion: string
         route,
         id,
         id === "rpc.call" ? "output" : response.type,
-        ...(id === "config.get"
-          ? ["policies:provider.use|tool.use|integration.use:allow|deny"]
-          : []),
+        ...(id === "config.get" ? [V2_NATIVE_POLICY_PROJECTION] : []),
       ]);
     }
     // Canonical equivalent consumed projections have the same identity, independent of upstream ref names.

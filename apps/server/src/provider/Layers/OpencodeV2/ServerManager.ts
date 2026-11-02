@@ -10,6 +10,7 @@ import { OpencodeV2EventHub, validateV2EventHubBounds } from "./EventHub.ts";
 import type { OwnedV2Process, V2ProcessConfig } from "./ServerManager.types.ts";
 
 interface Entry {
+  readonly borrowed: boolean;
   readonly storageKey: string;
   readonly generation: number;
   readonly started: Promise<OwnedV2Process>;
@@ -21,6 +22,8 @@ interface Entry {
   exclusive?: boolean;
   unsubscribe?: () => void;
   releaseStream?: (() => void) | undefined;
+  retirement?: Promise<void>;
+  disposal?: Promise<void>;
 }
 
 export interface V2ProcessLease {
@@ -65,6 +68,10 @@ export class OpencodeV2ServerManager {
       void entry.hub?.close();
     });
     const unavailable = process.onUnavailable?.(() => {
+      if (entry.borrowed) {
+        void this.retireBorrowedEntry(key, entry).catch(() => {});
+        return;
+      }
       entry.closing = true;
       entry.hub?.markGap();
       void entry.hub?.close();
@@ -74,6 +81,49 @@ export class OpencodeV2ServerManager {
       unavailable?.();
     };
     if (v2ProcessExited(process)) entry.unsubscribe();
+  }
+
+  /** Retire only our exact borrowed generation; old leases cannot dispose its replacement. */
+  private retireBorrowedEntry(key: string, entry: Entry): Promise<void> {
+    if (!entry.borrowed) throw new Error("V2 owned processes cannot be borrowed-retired.");
+    if (entry.retirement) return entry.retirement;
+    entry.closing = true;
+    entry.unsubscribe?.();
+    entry.hub?.markGap();
+    if (this.entries.get(key) === entry) this.entries.delete(key);
+    entry.retirement = Promise.resolve().then(async () => {
+      try {
+        await entry.hub?.close();
+      } finally {
+        entry.releaseStream?.();
+        // Do not bound the physical promise: even a late startup must release its local client.
+        await entry.started.catch(() => undefined);
+        await this.disposeBorrowedEntry(entry);
+      }
+    });
+    return entry.retirement;
+  }
+
+  private disposeBorrowedEntry(entry: Entry): Promise<void> | undefined {
+    const process = entry.process;
+    if (!process) return;
+    if (process.ownership !== "borrowed")
+      throw new Error("V2 borrowed factory returned an owned process; retirement rejected.");
+    return (entry.disposal ??= Promise.resolve().then(() => process.close()));
+  }
+
+  async retireBorrowedGeneration(
+    connection: NonNullable<V2ProcessConfig["sharedService"]>,
+  ): Promise<void> {
+    const key = JSON.stringify(["shared", connection.registrationFile, connection.generation]);
+    const entry = this.entries.get(key);
+    if (!entry) return;
+    const retirement = this.retireBorrowedEntry(key, entry);
+    await runWithAbortableDeadline({
+      operation: "OpenCode v2 borrowed generation retirement",
+      timeoutMs: 5000,
+      run: () => retirement,
+    });
   }
 
   private forgetSettled(key: string, entry: Entry) {
@@ -134,6 +184,7 @@ export class OpencodeV2ServerManager {
         return this.options.start(config);
       });
       entry = {
+        borrowed: Boolean(config.sharedService),
         storageKey,
         generation: ++this.nextGeneration,
         references: 0,
@@ -149,6 +200,11 @@ export class OpencodeV2ServerManager {
           async (process) => {
             pending.startupSettled = true;
             this.remember(key, pending, process);
+            if (pending.retirement) {
+              pending.unsubscribe?.();
+              await this.disposeBorrowedEntry(pending);
+              return;
+            }
             if (this.closed || pending.closing || this.entries.get(key) !== pending) {
               try {
                 await process.close();
@@ -182,7 +238,7 @@ export class OpencodeV2ServerManager {
       owned.references--;
       owned.closing = true;
       if (owned.references === 0 && owned.process?.ownership === "borrowed")
-        await owned.process.close();
+        await this.retireBorrowedEntry(key, owned);
       this.forgetSettled(key, owned);
       if (
         error instanceof Error &&
@@ -192,12 +248,13 @@ export class OpencodeV2ServerManager {
         throw error;
       throw v2AcquisitionFailure(error);
     }
-    if (this.closed || this.entries.get(key) !== owned || !process.isRunning()) {
+    if (this.closed || owned.closing || this.entries.get(key) !== owned || !process.isRunning()) {
       owned.references--;
       owned.closing = true;
       this.remember(key, owned, process);
       try {
-        await process.close();
+        if (owned.borrowed) await this.retireBorrowedEntry(key, owned);
+        else await process.close();
       } finally {
         this.forgetSettled(key, owned);
       }
@@ -251,7 +308,9 @@ export class OpencodeV2ServerManager {
         if (released) return;
         released = true;
         owned.references--;
+        if (owned.retirement) return owned.retirement;
         if (owned.references === 0) {
+          if (owned.borrowed) return this.retireBorrowedEntry(key, owned);
           owned.closing = true;
           try {
             await owned.hub?.close();
@@ -269,6 +328,15 @@ export class OpencodeV2ServerManager {
     this.closed = true;
     await Promise.all(
       [...this.entries.entries()].map(async ([key, entry]) => {
+        if (entry.borrowed) {
+          const retirement = this.retireBorrowedEntry(key, entry);
+          await runWithAbortableDeadline({
+            operation: "OpenCode v2 borrowed shutdown",
+            timeoutMs: 5000,
+            run: () => retirement,
+          }).catch(() => {});
+          return;
+        }
         entry.closing = true;
         await entry.hub?.close();
         entry.releaseStream?.();

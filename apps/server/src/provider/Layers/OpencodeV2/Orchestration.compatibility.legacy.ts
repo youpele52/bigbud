@@ -76,3 +76,18 @@ export const V2_N4_BOOTSTRAP_COMPATIBILITY = Object.freeze({
 });
 export const V2_N4_COMPATIBILITY_DIGEST =
   "d992b9c514082e59f91d877d954048e62a4a5025836b295097cdb64719d7b7db";
+
+/** Exact three-action policy descriptor retained before the 2.2.5 consumed policy expansion. */
+export const V2_N5_BOOTSTRAP_COMPATIBILITY = Object.freeze({
+  format: "bigbud.thread.compatibility.v2",
+  bootstrapAbi: "bigbud.thread.bootstrap.v3",
+  registration: "bigbud.thread.registration.issuer.v1",
+  enrollmentProtocol: "bigbud.thread.enrollment.v2",
+  callbackProtocol: "bigbud.thread.callback.v1",
+  schemaDigest: "614c41c704bc33dd72c7b0b0dde50bc0cd8e9d474a40542ae2ba3f411a49d853",
+  canonicalRequestAbi: "bigbud.thread.canonical.v1",
+  resultEncoding: "bigbud.thread.final-json.v1",
+  nativeContractDigest: "7a2a95336e310d230d50982e48bfe26773cfa99dc05916b8fc295664f70cba88",
+});
+export const V2_N5_COMPATIBILITY_DIGEST =
+  "769689fa33b2614d475fa5d61b0f6202bea9c27f489f6767d046a45071e81d73";

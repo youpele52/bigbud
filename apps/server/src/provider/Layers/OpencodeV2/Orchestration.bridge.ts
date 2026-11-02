@@ -30,6 +30,7 @@ import {
 import type { V2DeadBackendContext } from "./Orchestration.enrollment.deadBackend.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 import { settleWithinShutdown } from "./Runtime.shutdown.ts";
+import { suspendV2ThreadOwner, reconnectV2ThreadOwner } from "./Orchestration.bridge.transport.ts";
 
 export interface Owner {
   readonly runtime: OpencodeV2Runtime;
@@ -76,6 +77,12 @@ export interface V2ThreadBridgeOptions {
 export class V2ThreadBridge {
   private readonly owners = new Map<string, Owner>();
   private readonly implementations: V2ThreadImplementationRegistry;
+  suspend(session: V2RuntimeSession) {
+    suspendV2ThreadOwner(this.owners.get(session.native.id));
+  }
+  reconnect(session: V2RuntimeSession, runtime: OpencodeV2Runtime) {
+    return reconnectV2ThreadOwner(this, this.owners, session, runtime);
+  }
   constructor(private readonly options: V2ThreadBridgeOptions) {
     this.implementations = options.implementations ?? new V2ThreadImplementationRegistry();
   }
@@ -215,9 +222,10 @@ export class V2ThreadBridge {
         return owner.active.cancel();
       },
     };
-    const abort = () => revoke();
-    session.consentPermit.signal.addEventListener("abort", abort, { once: true });
-    owner.releaseListener = () => session.consentPermit!.signal.removeEventListener("abort", abort);
+    const abort = () => suspendV2ThreadOwner(owner);
+    const permit = session.consentPermit;
+    permit.signal.addEventListener("abort", abort, { once: true });
+    owner.releaseListener = () => permit.signal.removeEventListener("abort", abort);
     const retire = async (signal?: AbortSignal) => {
       revoke();
       await owner.active.cancel();
@@ -282,6 +290,16 @@ export class V2ThreadBridge {
       item.enrollment.matches(token, request.ownerDigest, request.enrollmentNonce),
     );
     if (!owner) throw new Error("V2 thread-tools callback owner rejected.");
+    if (
+      owner.session.transportDetached ||
+      (owner.session.transportRecovering &&
+        !(
+          request.kind === "proof" &&
+          owner.enrollment.options.owner.transportGeneration ===
+            owner.runtime.options.config.sharedService?.generation
+        ))
+    )
+      throw new Error("V2 stale-generation canonical callback rejected.");
     const bounded = AbortSignal.any([
       signal,
       owner.enrollment.controller.signal,

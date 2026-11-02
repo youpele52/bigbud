@@ -1,8 +1,9 @@
 import { V2DiagnosticError } from "./PluginSetup.diagnostics.ts";
+import { validateV2ConfigControls } from "./NativeCompatibility.sources.controls.ts";
 import {
-  validateV2ConfigControls,
+  normalizeV2NativePolicy,
   type V2ConfigPolicy,
-} from "./NativeCompatibility.sources.controls.ts";
+} from "./NativeCompatibility.policy.actions.ts";
 
 /** Tagged native Wildcard.match: whole value, slash normalization, dotAll, Windows folding,
  * and the optional trailing command arguments rule. Kept separate from permission matching. */
@@ -131,7 +132,10 @@ export function assertV2RawPolicyProjection(
   if (
     start < 0 ||
     projected.slice(0, start).some((policy) => policy.action !== "provider.use") ||
-    explicit.some((policy, i) => !samePolicy(policy, projected[start + i]!))
+    (explicit.some((policy, i) => !samePolicy(policy, projected[start + i]!)) &&
+      explicit.some(
+        (policy, i) => !samePolicy(normalizeV2NativePolicy(policy), projected[start + i]!),
+      ))
   )
     throw new V2DiagnosticError("config-controls", "policy-unsupported");
 }

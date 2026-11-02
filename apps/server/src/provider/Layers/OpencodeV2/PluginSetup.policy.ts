@@ -2,7 +2,11 @@ import path from "node:path";
 import {
   assertV2RequiredToolPolicies,
   assertV2RawPolicyProjection,
+  v2NativePolicyStatements,
+  v2NativePolicyDecision,
 } from "./PluginSetup.policy.native.ts";
+import { normalizeV2NativePolicy } from "./NativeCompatibility.policy.actions.ts";
+import { V2_MANAGED_PLUGIN_FILENAME } from "./PluginSetup.record.ts";
 import { V2DiagnosticError } from "./PluginSetup.diagnostics.ts";
 import { Schema } from "effect";
 import type { OpencodeV2Client } from "./Client.ts";
@@ -47,6 +51,19 @@ export async function inspectV2PluginControls(
     ),
     names,
   );
+  const policies = v2NativePolicyStatements(
+    entries.flatMap((entry) =>
+      entry.type === "document" ? [entry.info as unknown as Record<string, unknown>] : [],
+    ),
+  ).map(normalizeV2NativePolicy);
+  if (
+    v2NativePolicyDecision(
+      policies,
+      "plugin.use",
+      path.join(root, "plugins", registration?.filename ?? V2_MANAGED_PLUGIN_FILENAME),
+    ) === "deny"
+  )
+    throw new V2DiagnosticError("config-controls", "policy-denied");
   const documents: Array<{ info: Record<string, unknown>; filename?: string }> = [];
   const filenames = new Set([path.join(root, "opencode.json"), path.join(root, "opencode.jsonc")]);
   for (const entry of entries)

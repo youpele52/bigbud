@@ -49,6 +49,9 @@ export function assertV2OperationCurrent() {
 }
 export const runV2RequestContext = <T>(context: V2RequestContext, run: () => T): T =>
   contexts.run(context, run);
+/** External callbacks establish their own authenticated owner, never a listener's startup permit. */
+export const runDetachedV2RequestContext = <T>(run: () => T): T =>
+  contexts.exit(() => runDetachedV2Caller(run));
 /** Validate after registration awaits at the last synchronous point before fetch. Rejections
  * inside settlement reads are logged with pathname and intent only; behavior is unchanged. */
 export function assertV2RequestContext(transport: string, url: URL, method: string) {

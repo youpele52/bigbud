@@ -1,6 +1,6 @@
-import { QuillWrite01Icon } from "@hugeicons/core-free-icons";
+import { CollapseIcon, ExpandIcon, QuillWrite01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Maximize2, Minimize2, Minus, Plus, SquareSplitHorizontal, XIcon } from "lucide-react";
+import { Minus, Plus, SquareSplitHorizontal, XIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -117,7 +117,11 @@ export function ThreadTerminalDrawerToolbar({
               />
             }
           >
-            {expanded ? <Minimize2 className="size-3.25" /> : <Maximize2 className="size-3.25" />}
+            {expanded ? (
+              <HugeiconsIcon aria-hidden="true" icon={CollapseIcon} className="size-3.25" />
+            ) : (
+              <HugeiconsIcon aria-hidden="true" icon={ExpandIcon} className="size-3.25" />
+            )}
           </TooltipTrigger>
           <TooltipPopup
             side="bottom"

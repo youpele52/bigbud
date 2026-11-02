@@ -1,4 +1,6 @@
-import { CheckIcon, CopyIcon, Maximize2Icon } from "lucide-react";
+import { ExpandIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import {
   Children,
   isValidElement,
@@ -96,7 +98,7 @@ function MarkdownTableActions({
         title="Open table"
         aria-label="Open table"
       >
-        <Maximize2Icon />
+        <HugeiconsIcon aria-hidden="true" icon={ExpandIcon} />
       </Button>
       <Button
         variant="ghost"

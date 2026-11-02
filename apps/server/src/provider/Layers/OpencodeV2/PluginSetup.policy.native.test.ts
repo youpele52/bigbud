@@ -6,7 +6,7 @@ import {
   v2NativePolicyMatches,
   v2NativePolicyStatements,
 } from "./PluginSetup.policy.native.ts";
-import type { V2ConfigPolicy } from "./NativeCompatibility.sources.controls.ts";
+import type { V2ConfigPolicy } from "./NativeCompatibility.policy.actions.ts";
 
 const name = "bb2_fixture_list_threads";
 const rule = (

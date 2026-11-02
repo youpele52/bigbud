@@ -4,6 +4,7 @@ import { makeOwnedClient } from "./Client.ts";
 import { V2RuntimeMutations } from "./Runtime.mutations.ts";
 import { FixtureEvents, deferred } from "./Test.fixtures.ts";
 import type { OwnedV2Process } from "./ServerManager.child.ts";
+import { v2SharedGeneration } from "./SharedService.registration.ts";
 
 const config = {
   runtimeTargetId: "local",
@@ -13,6 +14,26 @@ const config = {
     generation: "registered",
   },
 };
+
+it("includes authentication rotation in an opaque transport generation, not storage identity", () => {
+  const registration = {
+    id: "native",
+    pid: 123,
+    version: "2.2.5",
+    endpoint: { url: "http://127.0.0.1:4000" },
+  };
+  const first = v2SharedGeneration(registration);
+  const rotated = v2SharedGeneration({
+    ...registration,
+    endpoint: {
+      ...registration.endpoint,
+      auth: { type: "basic", username: "opencode", password: "synthetic-private" },
+    },
+  });
+  expect(rotated).not.toBe(first);
+  expect(rotated).toMatch(/^[a-f0-9]{64}$/);
+  expect(rotated).not.toContain("synthetic-private");
+});
 const bounds = {
   maxProcesses: 4,
   maxOwners: 32,
@@ -93,4 +114,52 @@ it("late shared acquisition is detached after close without retaining a phantom 
   await rejection;
   await closing;
   expect(process.hasExited?.()).toBe(false);
+});
+
+it("retires exact borrowed generations while old leases cannot close their replacement", async () => {
+  const first = borrowed(),
+    second = borrowed();
+  const start = vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+  const manager = new OpencodeV2ServerManager({ ...bounds, start });
+  const old = await manager.acquire(config);
+  await Promise.all([
+    manager.retireBorrowedGeneration(config.sharedService),
+    manager.retireBorrowedGeneration(config.sharedService),
+  ]);
+  expect(first.close).toHaveBeenCalledTimes(1);
+  const next = await manager.acquire({
+    ...config,
+    sharedService: { ...config.sharedService, generation: "upgraded" },
+  });
+  await old.release();
+  expect(second.close).not.toHaveBeenCalled();
+  expect(next.process.isRunning()).toBe(true);
+  await manager.retireBorrowedGeneration(config.sharedService);
+  expect(next.process.isRunning()).toBe(true);
+  await next.release();
+  await manager.close();
+});
+
+it("retired late startup cannot publish a lease or close a replacement", async () => {
+  const pending = deferred<OwnedV2Process>();
+  const old = borrowed(),
+    next = borrowed();
+  const start = vi
+    .fn()
+    .mockImplementationOnce(() => pending.promise)
+    .mockResolvedValueOnce(next);
+  const manager = new OpencodeV2ServerManager({ ...bounds, start });
+  const acquiring = manager.acquire(config);
+  const rejected = expect(acquiring).rejects.toThrow("unavailable");
+  const retiring = manager.retireBorrowedGeneration(config.sharedService);
+  const replacement = await manager.acquire({
+    ...config,
+    sharedService: { ...config.sharedService, generation: "upgraded" },
+  });
+  pending.resolve(old);
+  await Promise.all([rejected, retiring]);
+  expect(old.close).toHaveBeenCalledTimes(1);
+  expect(next.close).not.toHaveBeenCalled();
+  await replacement.release();
+  await manager.close();
 });

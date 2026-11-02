@@ -37,7 +37,7 @@ export interface V2RuntimeSession {
     token?: import("./PluginSetup.activation.gate.ts").V2ExecutionReservation | undefined;
     phase: "startup" | "turn" | "uncertain" | "settled";
   };
-  readonly consentPermit?: import("./Application.consent.ts").V2ConsentPermit | undefined;
+  consentPermit?: import("./Application.consent.ts").V2ConsentPermit | undefined;
   readonly sharedTransport?: string;
   readonly resources?: V2SessionResources;
   threadToolsReady?: boolean;
@@ -53,15 +53,20 @@ export interface V2RuntimeSession {
   interruptAcknowledgedSequence?: number;
   readonly threadId: ThreadId;
   readonly native: SessionInfo;
-  readonly lease: V2ProcessLease;
+  lease: V2ProcessLease;
   model: ModelRef;
-  readonly epoch: number;
+  epoch: number;
   readonly storageIdentity: string;
-  readonly unregister: () => void;
-  readonly unsubscribeDeath: () => void;
+  unregister: () => void;
+  unsubscribeDeath: () => void;
   session: ProviderSession;
   row?: ProviderTurnAdmission | undefined;
   stopped: boolean;
+  /** Borrowed transport loss is reversible and is not terminal native/process-loss proof. */
+  transportDetached?: boolean;
+  transportRevision?: number;
+  transportRecovering?: boolean;
+  detachFamilyTransport?: (() => void) | undefined;
   executionBlocked?: string | undefined;
   readonly localTools?: boolean;
   readonly toolPolicy?: import("@opencode/client").PermissionRuleset;
@@ -172,7 +177,8 @@ export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessC
   readonly threadBridge?: Pick<
     import("./Orchestration.bridge.ts").V2ThreadBridge,
     "attach" | "ensure" | "reply" | "close"
-  >;
+  > &
+    Partial<Pick<import("./Orchestration.bridge.ts").V2ThreadBridge, "suspend" | "reconnect">>;
   readonly threadToolsPreflight?: (
     client: import("./Client.ts").OpencodeV2Client,
     directory: string,

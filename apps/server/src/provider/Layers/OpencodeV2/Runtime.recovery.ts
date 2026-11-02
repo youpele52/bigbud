@@ -22,9 +22,14 @@ import { recoverV2FamilyStop } from "./Runtime.family.stop.ts";
 import { verifyV2BackgroundProjection, V2BackgroundContractError } from "./Runtime.background.ts";
 import { retainV2FamilyOnProcessLoss } from "./Runtime.family.loss.ts";
 import { isV2CancelledReservation } from "./Admission.cancelled.ts";
+import { suspendV2BorrowedOwner } from "./Runtime.transport.ts";
 
 /** Invalidate pending interaction and output ownership immediately on owned process exit. */
 export async function v2RuntimeProcessLost(runtime: OpencodeV2Runtime, session: V2RuntimeSession) {
+  if (session.lease.process.ownership === "borrowed") {
+    suspendV2BorrowedOwner(session);
+    return;
+  }
   session.lossPending = true;
   session.stopped = true;
   session.coding?.revoke();
@@ -85,6 +90,7 @@ export async function v2RuntimeProcessLost(runtime: OpencodeV2Runtime, session: 
 
 /** Repair output before the durable terminal claim; unknown state never dispatches. */
 export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2RuntimeSession) {
+  if (session.transportDetached && !session.stopped) return;
   if (session.stopped) {
     if (session.lossPending) await v2RuntimeProcessLost(runtime, session);
     if (await runtime.teardown.repair(session)) return;
@@ -102,6 +108,7 @@ export async function reconcileV2Runtime(runtime: OpencodeV2Runtime, session: V2
     if (background) arrivalFence?.();
     if (
       session.stopped ||
+      session.transportDetached ||
       runtime.sessions.get(session.threadId) !== session ||
       epoch !== session.epoch ||
       session.dirtyGeneration !== dirtyGeneration ||

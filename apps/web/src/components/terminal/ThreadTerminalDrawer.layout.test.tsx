@@ -1,4 +1,4 @@
-import { QuillWrite01Icon } from "@hugeicons/core-free-icons";
+import { CollapseIcon, ExpandIcon, QuillWrite01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -80,6 +80,17 @@ describe.each([
       );
       const label = fillAvailableSpace ? "Restore split view" : "Expand terminal";
       expect(markup).toContain(`aria-label="${label}"`);
+      expect(markup).toContain(
+        renderToStaticMarkup(
+          <HugeiconsIcon
+            aria-hidden="true"
+            icon={fillAvailableSpace ? CollapseIcon : ExpandIcon}
+            className="size-3.25"
+          />,
+        ),
+      );
+      expect(markup).not.toContain("lucide-maximize");
+      expect(markup).not.toContain("lucide-minimize");
       expectToolbar(markup, [
         "New Terminal",
         "Split Terminal",

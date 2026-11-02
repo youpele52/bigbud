@@ -1,5 +1,6 @@
+import { ExpandIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type { ReactNode } from "react";
-import { Maximize2Icon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "../ui/dialog";
 
@@ -23,7 +24,7 @@ export function ResourceDetailDialog({
           title={`Expand ${title}`}
           aria-label={`Expand ${title}`}
         >
-          <Maximize2Icon />
+          <HugeiconsIcon aria-hidden="true" icon={ExpandIcon} />
         </DialogTrigger>,
       )}
       <DialogContent

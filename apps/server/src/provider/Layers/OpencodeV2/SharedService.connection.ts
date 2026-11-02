@@ -28,27 +28,34 @@ export async function borrowV2SharedService(expected: V2SharedConnection): Promi
     );
   let closed = false,
     unavailable = false;
+  const controller = new AbortController();
   const listeners = new Set<() => void>();
+  const detach = () => {
+    if (unavailable) return;
+    unavailable = true;
+    controller.abort();
+    for (const listener of listeners) listener();
+  };
   const validate = async () => {
     if (closed || unavailable) throw new Error("V2 shared connection is detached.");
-    if (
-      !sameV2SharedRegistration(
-        registration,
-        await readV2SharedRegistration(expected.registrationFile),
-      )
-    ) {
-      unavailable = true;
-      for (const listener of listeners) listener();
-      throw new V2SharedServiceError(
-        "generation",
-        "V2 shared service generation changed; no automatic resend.",
-      );
+    try {
+      const current = await readV2SharedRegistration(expected.registrationFile);
+      if (closed || unavailable || !sameV2SharedRegistration(registration, current))
+        throw new V2SharedServiceError(
+          "generation",
+          "V2 shared service generation changed; no automatic resend.",
+        );
+    } catch (error) {
+      detach();
+      throw error;
     }
   };
   const client = makeV2Client({
     endpoint: registration.endpoint.url,
     headers: Service.headers(registration.endpoint),
     beforeRequest: validate,
+    afterResponse: validate,
+    signal: controller.signal,
     sharedTransport: expected.registrationFile,
   });
   bindV2NativeCompatibility(client, {
@@ -71,6 +78,7 @@ export async function borrowV2SharedService(expected: V2SharedConnection): Promi
     },
     close: async () => {
       closed = true;
+      detach();
       listeners.clear();
     },
   };

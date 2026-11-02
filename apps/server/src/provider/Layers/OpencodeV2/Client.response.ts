@@ -24,6 +24,7 @@ export function isV2ResponseSizeError(error: unknown): boolean {
 export function boundV2Response(
   response: Response,
   maxBytes = V2_DEVELOPMENT_RESPONSE_BYTES,
+  validate?: () => Promise<void>,
 ): Response {
   if (!response.body) return response;
   const eventStream = response.headers.get("content-type")?.includes("text/event-stream") ?? false;
@@ -31,7 +32,8 @@ export function boundV2Response(
   let lineBytes = 0;
   const body = response.body.pipeThrough(
     new TransformStream<Uint8Array, Uint8Array>({
-      transform(chunk, controller) {
+      async transform(chunk, controller) {
+        await validate?.();
         for (const byte of chunk) {
           bytes++;
           if (bytes > maxBytes) {
@@ -44,6 +46,9 @@ export function boundV2Response(
           } else if (byte !== 13) lineBytes++;
         }
         controller.enqueue(chunk);
+      },
+      async flush() {
+        await validate?.();
       },
     }),
   );
