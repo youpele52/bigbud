@@ -125,8 +125,8 @@ export function TerminalSettingsSection() {
       />
 
       <TerminalThemeSettings />
-      <TerminalRenderingSettings />
       <TerminalInteractionSettings />
+      <TerminalRenderingSettings />
     </SettingsSection>
   );
 }

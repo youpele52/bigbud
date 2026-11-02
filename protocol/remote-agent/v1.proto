@@ -9,6 +9,8 @@ import "remote-agent/resource_cleanup.proto";
 import "remote-agent/workspace.proto";
 
 message Frame {
+  // Retired experimental terminal-backend payloads must never be reused.
+  reserved 58, 59;
   oneof payload {
     ClientHello client_hello = 1;
     AgentHello agent_hello = 2;
