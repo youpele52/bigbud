@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTerminalRecoveryModel, type TerminalRecoveryModel } from "./TerminalRecoveryModel";
-import { TerminalRecoveryQueries } from "./TerminalRecoveryModel.queries";
-import { Terminal } from "@xterm/headless";
+import {
+  RECOVERY_QUERY_ABANDON_MS,
+  TerminalRecoveryQueries,
+} from "./TerminalRecoveryModel.queries";
 
 const models: TerminalRecoveryModel[] = [];
 beforeEach(() => vi.stubEnv("BIGBUD_TERMINAL_RECOVERY_SHADOW", "1"));
@@ -54,7 +56,7 @@ it("uses the renderer version rather than requiring the headless build's version
   expect((await mirror.capture()).type).toBe("candidate");
 });
 
-it("does not acknowledge two queries from one reply and refuses an overflowing ledger", () => {
+it("does not acknowledge two queries from one reply and drops the oldest on overflow", () => {
   const queries = new TerminalRecoveryQueries();
   queries.expect("\x1b[0n", 1);
   queries.expect("\x1b[0n", 2);
@@ -63,8 +65,11 @@ it("does not acknowledge two queries from one reply and refuses an overflowing l
   queries.observe("\x1b[0n", 2);
   expect(queries.pending).toBe(false);
   for (let i = 0; i < 65; i++) queries.expect("\x1b[0n", 3);
-  queries.observe("\x1b[0n".repeat(65), 3);
+  queries.observe("\x1b[0n".repeat(63), 3);
   expect(queries.pending).toBe(true);
+  // 64 entries are kept; an overflow is never a permanent refusal.
+  queries.observe("\x1b[0n", 3);
+  expect(queries.pending).toBe(false);
 });
 
 it("keeps snapshots available beyond 8 MiB of ordinary redraws", async () => {
@@ -85,24 +90,6 @@ it("keeps snapshots available beyond 8 MiB of ordinary redraws", async () => {
   ]);
   expect(mirror.unavailableReason).toBeNull();
 });
-
-it.each(["\u0301", "\u1161", "\u200d", "\u{1f3fb}"])(
-  "refuses excessive combination contributions before xterm allocation (%s)",
-  async (mark) => {
-    const mirror = model();
-    const writes = vi.spyOn(Terminal.prototype, "write");
-    mirror.write("x" + mark.repeat(32768));
-    expect(await mirror.capture()).toEqual({
-      type: "unavailable",
-      reason: "unicode-combination-budget",
-    });
-    expect(writes).not.toHaveBeenCalled();
-    const cut = mirror.records.cursor;
-    mirror.write("still-live");
-    await mirror.capture();
-    expect(mirror.records.after(cut).type).toBe("suffix");
-  },
-);
 
 it("preserves ordered delivery when a resize retires snapshot admission", async () => {
   const mirror = model();
@@ -133,28 +120,30 @@ it("preserves raw delivery when an oversized partial control retires capture", a
   expect(mirror.unavailableReason).toBeNull();
 });
 
-it("keeps answered query traffic eligible, but never ages out an unanswered query", () => {
-  const queries = new TerminalRecoveryQueries();
+it("keeps answered query traffic eligible and abandons an unanswered query after its window", () => {
+  let now = 0;
+  const queries = new TerminalRecoveryQueries(() => now);
   for (let sequence = 1; sequence <= 1000; sequence++) {
     queries.expect("\x1b[0n", sequence);
     queries.observe("\x1b[0n", sequence);
     expect(queries.pending).toBe(false);
   }
   queries.expect("\x1b[1;1R", 1001);
-  for (let sequence = 1002; sequence < 1100; sequence++) {
-    queries.expect("\x1b[0n", sequence);
-    queries.observe("\x1b[0n", sequence);
-  }
+  now = RECOVERY_QUERY_ABANDON_MS - 1;
+  expect(queries.pending).toBe(true);
+  now = RECOVERY_QUERY_ABANDON_MS;
+  expect(queries.pending).toBe(false);
+  // A newer query is judged on its own age, not the abandoned one's.
+  queries.expect("\x1b[0n", 1002);
   expect(queries.pending).toBe(true);
 });
 
-it("documents the remaining Unicode admission blocker even when old cells are erased", async () => {
+it("admits a capture once an unanswered query is abandoned", async () => {
+  let now = 1000;
+  vi.spyOn(performance, "now").mockImplementation(() => now);
   const mirror = model();
-  mirror.write("\x1b[2J\x1b[Hx\u0301".repeat(1024));
+  mirror.write("abc\x1b[6n");
+  expect(await mirror.capture()).toEqual({ type: "unavailable", reason: "pending-renderer-query" });
+  now += RECOVERY_QUERY_ABANDON_MS;
   expect((await mirror.capture()).type).toBe("candidate");
-  mirror.write("\x1b[2J\x1b[Hx\u0301");
-  expect(await mirror.capture()).toEqual({
-    type: "unavailable",
-    reason: "unicode-combination-budget",
-  });
 });

@@ -4,11 +4,16 @@ import { TERMINAL_RECOVERY_ANSI_MAX_CHARS } from "@bigbud/contracts/workspace/te
 export const RECOVERY_SCROLLBACK_ROWS = 1000;
 export const RECOVERY_PENDING_BYTES = 2 * 1024 * 1024;
 export const RECOVERY_SNAPSHOT_BYTES = TERMINAL_RECOVERY_ANSI_MAX_CHARS * 2;
+/** Audited ceiling for strings retained by combined cells in both buffers. */
+export const RECOVERY_COMBINED_BYTES = 4 * 1024 * 1024;
 const SESSION_BYTES = 96 * 1024 * 1024;
 const TOTAL_BYTES = 256 * 1024 * 1024;
 let reserved = 0;
 
-/** A reservation covers both buffers and headroom for parser/line metadata; never evict a PTY. */
+/**
+ * A reservation covers both buffers, the combined-cell budget and headroom for parser/line
+ * metadata. Never evict a PTY.
+ */
 export function reserveRecoveryModel(cols: number, rows: number): (() => void) | null {
   if (
     !Number.isInteger(cols) ||
@@ -19,7 +24,8 @@ export function reserveRecoveryModel(cols: number, rows: number): (() => void) |
     rows > 500
   )
     return null;
-  const bytes = cols * (RECOVERY_SCROLLBACK_ROWS + rows * 2) * 64 + 32 * 1024 * 1024;
+  const bytes =
+    cols * (RECOVERY_SCROLLBACK_ROWS + rows * 2) * 64 + RECOVERY_COMBINED_BYTES + 32 * 1024 * 1024;
   if (bytes > SESSION_BYTES || reserved + bytes > TOTAL_BYTES) return null;
   reserved += bytes;
   let released = false;

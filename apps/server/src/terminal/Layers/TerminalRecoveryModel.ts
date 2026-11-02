@@ -4,7 +4,7 @@ import { activateTerminalUnicodeProvider } from "@bigbud/shared/terminalUnicodeP
 import { attachRecoverySupplements } from "./TerminalRecoveryModel.supplements";
 import { serializeRecoverySavedCursor } from "./TerminalRecoveryModel.savedCursor";
 import { TerminalRecoveryQueries } from "./TerminalRecoveryModel.queries";
-import { makeRecoveryCombinationAdmission } from "./TerminalRecoveryModel.combinations";
+import { TerminalRecoveryUnicodeAdmission } from "./TerminalRecoveryModel.combinations";
 import {
   hasRecoveryImageState,
   hasPendingRecoveryImageCommand,
@@ -52,7 +52,7 @@ export class TerminalRecoveryModel {
   private ingressSequence = 0;
   private parsingSequence = 0;
   private readonly queryListener: { dispose(): void };
-  private readonly admitCombinations: (data: string) => boolean;
+  private readonly unicode: TerminalRecoveryUnicodeAdmission;
   private pendingCapture: Promise<TerminalRecoveryCapture> | null = null;
   private producerHeld = false;
   private cancelWrite: (() => void) | null = null;
@@ -77,7 +77,7 @@ export class TerminalRecoveryModel {
       this.terminal.loadAddon(this.serializer);
       this.terminal.loadAddon(new Unicode11Addon());
       activateTerminalUnicodeProvider(this.terminal);
-      this.admitCombinations = makeRecoveryCombinationAdmission(this.terminal);
+      this.unicode = new TerminalRecoveryUnicodeAdmission(this.terminal);
       this.supplements = attachRecoverySupplements(this.terminal, (prefix) =>
         this.queries.expect(prefix, this.parsingSequence, true),
       );
@@ -204,13 +204,10 @@ export class TerminalRecoveryModel {
         continue;
       }
       const operation = work.operation;
-      // Grid and journal admission bound ordinary redraws independently of session lifetime.
-      // Combining admission remains conservative and is NOT qualified for default-on rollout.
+      // Grid, journal and Unicode admission bound redraws independently of session lifetime.
       const retirement =
-        operation.type === "output" &&
-        !this.retiredMirrorReason &&
-        !this.admitCombinations(operation.data)
-          ? "unicode-combination-budget"
+        operation.type === "output" && !this.retiredMirrorReason
+          ? this.unicode.admit(operation.data)
           : null;
       if (!this.retiredMirrorReason && retirement) {
         this.retireCapture(retirement);
@@ -235,9 +232,13 @@ export class TerminalRecoveryModel {
           this.parsingSequence = this.records.cursor.sequence + 1;
           await this.parse(operation.data);
           if (this.reason) return;
-          this.pendingEscapeTail = tail;
-          const last = operation.data.charCodeAt(operation.data.length - 1);
-          this.pendingUnicodeContinuation = last === 0x200d || (last >= 0xd800 && last <= 0xdbff);
+          const retained = this.unicode.auditIfDue();
+          if (retained) this.retireCapture(retained);
+          else {
+            this.pendingEscapeTail = tail;
+            const last = operation.data.charCodeAt(operation.data.length - 1);
+            this.pendingUnicodeContinuation = last === 0x200d || (last >= 0xd800 && last <= 0xdbff);
+          }
         }
       } else if (operation.cols !== this.terminal.cols || operation.rows !== this.terminal.rows) {
         const reservation = reserveRecoveryModel(operation.cols, operation.rows);
@@ -333,7 +334,7 @@ export class TerminalRecoveryModel {
   }
 }
 
-/** Explicit experimental opt-in until sustained Unicode/resource admission is qualified. */
+/** Explicit opt-in: the mirror costs a second parse of every byte and a bounded grid. */
 export function createTerminalRecoveryModel(
   generation: string,
   cols: number,

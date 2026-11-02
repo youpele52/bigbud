@@ -1,7 +1,16 @@
+/**
+ * A query unanswered this long after the mirror parsed it is treated as abandoned. Terminals are
+ * not obliged to reply, so programs time out far sooner, and a view attaching without the mirror
+ * cannot answer a pre-cut query either. Refusing past this point only costs recovery fidelity.
+ */
+export const RECOVERY_QUERY_ABANDON_MS = 2000;
+const MAX_EXPECTED = 64;
+
 interface Expected {
   sequence: number;
   value: string;
   terminated: boolean;
+  at: number;
 }
 interface Received {
   sequence: number;
@@ -12,14 +21,14 @@ interface Received {
 export class TerminalRecoveryQueries {
   private expected: Expected[] = [];
   private received: Received[] = [];
-  private overflow = false;
+
+  constructor(private readonly now: () => number = () => performance.now()) {}
 
   expect(value: string, sequence: number, terminated = false): void {
-    if (this.expected.length >= 64) {
-      this.overflow = true;
-      return;
-    }
-    this.expected.push({ value, sequence, terminated });
+    this.abandon();
+    // The oldest entry is the closest to abandonment; a full ledger never refuses for good.
+    if (this.expected.length >= MAX_EXPECTED) this.expected.shift();
+    this.expected.push({ value, sequence, terminated, at: this.now() });
     this.match();
   }
 
@@ -53,7 +62,15 @@ export class TerminalRecoveryQueries {
     });
   }
 
+  /** Only queries young enough that a reply may still be in flight block a capture. */
   get pending(): boolean {
-    return this.overflow || this.expected.length > 0;
+    const cutoff = this.now() - RECOVERY_QUERY_ABANDON_MS;
+    return this.expected.some((expected) => expected.at > cutoff);
+  }
+
+  private abandon(): void {
+    const cutoff = this.now() - RECOVERY_QUERY_ABANDON_MS;
+    if (this.expected[0] && this.expected[0].at <= cutoff)
+      this.expected = this.expected.filter((expected) => expected.at > cutoff);
   }
 }

@@ -7,11 +7,15 @@
   input modes, attaches live, and asks the program to repaint. Nothing is restarted. See
   "Resolution: live reattach" below for limits.
 - **Headless recovery mirror.** Still behind `BIGBUD_TERMINAL_RECOVERY=1` (or the legacy shadow
-  flag) and default-off. When enabled it is tried first; any refusal or failure now falls back
-  to live reattach instead of pausing the view.
-- **Open blockers for enabling the mirror by default.** Cumulative Unicode admission, indefinite
-  pending-query refusal, remote-adapter backpressure and long-running multi-view load
-  qualification. These no longer block terminal usability.
+  flag) and default-off. When enabled it is tried first; any refusal or failure falls back to
+  live reattach instead of pausing the view.
+- **Unicode and query blockers: resolved.** The lifetime Unicode counter is replaced by a
+  per-run cluster cap, a pre-parse REP allocation check and an audited budget for retained
+  combined-cell strings. Unanswered queries are abandoned after two seconds and a full ledger
+  drops its oldest entry. See "Mirror admission redesign" below.
+- **Still open before default-on.** Adapters without pause/resume still retire the mirror under
+  fast output (the view then reattaches live). Hours-long multi-view load has not been run.
+  Enabling it by default is a product decision on cost, measured below; it was not flipped.
 
 Section order: issue and decision first, then the newest implementation status, then plan and
 references. Superseded milestones are kept verbatim in the appendix at the end.
@@ -120,8 +124,8 @@ not the trigger; resync was.
   A resynced view keeps its previous cells.
 - The repaint relies on the program honouring SIGWINCH. A program blocked for longer than the
   probe window may miss the intermediate size. ConPTY on Windows repaints from its own buffer
-  on resize. Only macOS was exercised in this session; Linux uses the same SIGWINCH path but
-  was not run, and Windows was not run.
+  on resize. macOS ran the full suites. Linux ran a standalone node-pty probe only (see the
+  next section). Windows was not run.
 - Queries sent while no view was attached remain unanswered, as before. The program's own
   timeout handles them; no reply is invented.
 - Kitty keyboard and win32 input modes are not tracked because the web renderer does not
@@ -153,11 +157,116 @@ bun run --cwd apps/web vitest run src/components/terminal/TerminalViewport.liveA
 bun run --cwd apps/web test:browser src/components/terminal/TerminalViewport.recovery.browser.tsx src/components/terminal/TerminalViewport.navigationDiagnostics.browser.tsx
 ```
 
-**Not done.** The mirror's Unicode guard and query-ledger redesign, which would let the mirror
-become default-on, were not changed. No repository-wide checks were run, and nothing was
-committed.
+**Follow-up.** Committed as `375ea2d7b7`. The mirror's Unicode and query blockers are addressed
+in the next section. No repository-wide checks were run.
+
+## Mirror admission redesign (2026-11-02)
+
+Both blockers that kept the mirror experimental were rechecked against the pinned
+`@xterm/headless` 6.1.0-beta.304 source map, not against prose or upstream.
+
+### Unicode: bounded per run, per REP and in total
+
+**What the pinned source shows.**
+
+- A cell's string grows only through `addCodepointToCell`, called from `print()` when the
+  provider says a codepoint joins. Unicode 11 joins only zero-width codepoints after a non-zero
+  preceding state; bigbud's provider also joins anything after a ZWJ.
+- The parser resets that join state on every C0 execute and every CSI, ESC and DCS dispatch.
+  Writing a base character uses `setCellFromCodepoint`, which clears the combined flag, so the
+  next join replaces the stale string rather than appending to it.
+- So one cell's string can only grow within one contiguous printed run. Stale entries survive,
+  at most one per column per line, until `fill`, `copyFrom` or a shrinking resize drops them.
+- REP (`CSI Ps b`) allocates `Uint32Array(text.length * Ps)` before printing, with `Ps` clamped
+  only at 2^31 - 1. Skin-tone modifiers are width 2 in this build and never join.
+
+**Change.**
+
+1. `TerminalControlScanner` is the mode tracker's control-sequence state machine, extracted so
+   both consumers share one implementation. The tracker's behaviour is unchanged and its xterm
+   comparison tests still pass.
+2. `TerminalRecoveryUnicodeAdmission` scans each chunk in parse order before xterm sees it:
+   - **Cluster cap.** A run of joining codepoints longer than 32 retires capture
+     (`unicode-cluster-budget`). Stream-safe Unicode text needs at most 30; the longest emoji
+     ZWJ and tag-flag sequences are far shorter. The run never resets on controls, so it can
+     only over-count xterm's joins. Surrogate pairs split across writes are followed.
+   - **REP.** If `(run + 1) * 2 * 4 * Ps` exceeds 1 MiB, capture retires before parsing
+     (`rep-expansion-budget`). A REP after a ZWJ stacks onto one cell and counts against the
+     cluster cap. Private-prefixed and intermediate `CSI b` forms are not REP.
+   - **Retained total.** Cheap counters estimate possible growth. Every 256 KiB of it triggers an
+     exact inventory of `_combined` entries in both buffers, scrollback and stale entries
+     included. Above 4 MiB, capture retires (`unicode-retained-budget`). That budget is now part
+     of each model's memory reservation.
+3. Plain ASCII is skipped with one regex jump while no run is open, cheaper than the old
+   per-character loop.
+
+Retirement only stops snapshots. Ordered delivery to already-recovered views continues, and a
+fresh view falls back to live reattach.
+
+### Queries: abandon after two seconds, never refuse permanently
+
+A pre-cut query is not answered by a mirror-restored view, a live-reattached view or a legacy
+history replay alike. Refusing the mirror for it bought no correctness, only a less faithful
+fallback. The ledger now treats a query unanswered two seconds after the mirror parsed it as
+abandoned, and a full 64-entry ledger drops its oldest entry. Young queries still refuse
+capture, since a reply may be in flight; that view then reattaches live. One residual: a late
+reply to an abandoned query can acknowledge a newer identical one. Both outcomes match the
+live-reattach path, so no reply is invented or duplicated.
+
+No repaint nudge was added after a mirror restore. The restored screen is already current,
+and a repaint would not make a program re-ask a query.
+
+### Linux check of the repaint probe
+
+A standalone script ran in Docker (`node:22-bookworm`, Linux 7.2 arm64 under OrbStack, Node
+22.23.4, node-pty from the server's `^1.1.0` range). It spawned a Node program that repaints on
+`resize` inside a real PTY, then repeated the view's sequence: shrink one row, wait for output
+(150–750 ms), restore.
+
+| Sequence                    | Repaints observed | Same PID |
+| --------------------------- | ----------------- | -------- |
+| Shrink, wait, restore       | `80x23`, `80x24`  | yes      |
+| Shrink and restore, no wait | none (coalesced)  | yes      |
+
+This confirms SIGWINCH delivery and the need for the wait on Linux. It is not the repository
+suite on Linux, which still has not run there. Windows has not run.
+
+### Cost of enabling the mirror by default
+
+Measured on macOS (Node 25) with a 200×50 model parsing 32 MiB of TUI-like frames: SGR colours,
+absolute cursor moves, box drawing, VS16 emoji and synchronized-output markers. A capture ran
+every 50 frames. It took about **2.6 s of CPU, roughly 80 ms per MiB** including those
+captures, and the final capture was a candidate. A program printing 100 KB/s would cost under
+1% of a core per terminal. The reservation is about 41 MB per 80×24 model, 50 MB at 200×50,
+under a 256 MB total cap; terminals beyond the cap get no mirror and reattach live. Default-on
+remains a decision for the user.
+
+### Validation
+
+Focused, macOS unless stated. oxfmt and oxlint (zero warnings) passed on the eight changed
+files, each at most 400 lines. Server typecheck passed.
+
+| Selection                                                                     | Result              |
+| ----------------------------------------------------------------------------- | ------------------- |
+| Unicode admission, query ledger and mode tracker                              | 3 files, 26 tests   |
+| Terminal recovery selection with real-PTY pi/OpenCode probes on, listed below | 26 files, 114 tests |
+
+Two mutations were run to check the tests have teeth. Disabling the inventory audit failed the
+retained-budget test. Never resetting the run failed both the soak and budget tests. A probe
+showed the shifted-redraw soak grows retained entries from 400 to 741 on its second frame,
+then stays exactly flat for the remaining frames.
+
+```sh
+cd apps/server
+bun run vitest run src/terminal/Layers/TerminalRecoveryModel.unicode.test.ts src/terminal/Layers/TerminalRecoveryModel.queries.test.ts src/terminal/Layers/TerminalModeTracker.test.ts
+BIGBUD_TERMINAL_TUI_PROBE=1 bun run vitest run src/terminal/Layers/TerminalModeTracker.test.ts src/terminal/Layers/TerminalRecoveryModel.unicode.test.ts src/terminal/Layers/TerminalRecoveryModel.retainedUnicode.test.ts src/terminal/Layers/TerminalRecoveryModel.queries.test.ts src/terminal/Layers/TerminalRecoveryModel.savedCursor.test.ts src/terminal/Layers/TerminalRecoveryModel.savedCursor.browser.test.ts src/terminal/Layers/TerminalRecoveryModel.tui.test.ts src/terminal/Layers/TerminalRecoveryModel.test.ts src/terminal/Layers/TerminalRecoveryModel.pressure.test.ts src/terminal/Layers/TerminalRecoveryRecords.test.ts src/terminal/Layers/Manager.recoveryModel.test.ts src/terminal/Layers/Manager.recoveryModel.browser.test.ts src/terminal/Layers/Manager.recoveryRpc.test.ts src/terminal/Layers/Manager.recoveryPressure.test.ts src/terminal/Layers/Manager.navigationRecovery.test.ts src/terminal/Layers/Manager.subscriptionRecovery.test.ts src/terminal/Layers/Manager.lifecycle.test.ts src/terminal/Layers/Manager.startup.test.ts src/terminal/Layers/Manager.hardening.test.ts src/terminal/Layers/Manager.remote.test.ts src/terminal/Layers/Manager.session.outputHold.test.ts src/terminal/Layers/Manager.outputDelivery.test.ts src/terminal/Layers/Manager.confirmedLifecycle.test.ts src/terminal/Layers/Manager.confirmedLifecycle.races.test.ts src/ws/wsRpcHandlers.terminalRecovery.test.ts src/ws/wsRpcHandlers.terminalAnsiRecovery.browser.test.ts
+bun run typecheck
+```
 
 ## 2026-11-02 continuation: native backpressure fixed; Unicode/query qualification still blocked
+
+> Its Unicode and query conclusions are superseded by "Mirror admission redesign" above. The
+> producer-hold work below is current.
 
 **Current rollout remains default-off.** This continuation supersedes the fast-ingress failure
 status below for the tested local NodePTY profile, not the remaining Unicode/query blockers or

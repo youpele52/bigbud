@@ -1,11 +1,7 @@
 import type { TerminalLiveModes } from "@bigbud/contracts/workspace/terminal.ts";
+import { TerminalControlScanner } from "./TerminalControlScanner";
 
-const MAX_CONTROL_CHARS = 64;
-// ESC plus the C1 introducers xterm parses (DCS, SOS, CSI, OSC, PM, APC).
-// oxlint-disable-next-line no-control-regex -- Matching control introducers is the purpose.
-const INTRODUCER = /[\u001b\u0090\u0098\u009b\u009d-\u009f]/g;
 const mode = (value: number, on: boolean) => `\x1b[?${value}${on ? "h" : "l"}`;
-type Parser = "ground" | "escape" | "escapeIntermediate" | "csi" | "string" | "stringEscape";
 
 /**
  * Mirrors the renderer's input-affecting modes from process output, independently of history
@@ -13,9 +9,16 @@ type Parser = "ground" | "escape" | "escapeIntermediate" | "csi" | "string" | "s
  * mouse, paste, cursor-key and alternate-screen state match the running program.
  */
 export class TerminalModeTracker {
-  private parser: Parser = "ground";
-  private control = "";
-  private controlOverflow = false;
+  private readonly scanner = new TerminalControlScanner({
+    csi: (body, final, overflow) => {
+      if (!overflow) this.apply(body, final);
+    },
+    esc: (final) => {
+      if (final === 0x3d) this.applicationKeypad = true;
+      else if (final === 0x3e) this.applicationKeypad = false;
+      else if (final === 0x63) this.reset(true);
+    },
+  });
   private applicationCursor = false;
   private wraparound = true;
   private cursorVisible = true;
@@ -29,70 +32,7 @@ export class TerminalModeTracker {
   private cursorStyle = 0;
 
   receive(data: string): void {
-    let index = 0;
-    while (index < data.length) {
-      if (this.parser === "ground") {
-        INTRODUCER.lastIndex = index;
-        const match = INTRODUCER.exec(data);
-        if (!match) return;
-        index = match.index;
-      }
-      this.step(data.charCodeAt(index));
-      index++;
-    }
-  }
-
-  private step(code: number): void {
-    if (code === 0x18 || code === 0x1a) {
-      this.parser = "ground"; // CAN/SUB abort any sequence.
-      return;
-    }
-    if (this.parser === "string") {
-      if (code === 0x1b) this.parser = "stringEscape";
-      else if (code === 0x07 || code === 0x9c) this.parser = "ground";
-      return;
-    }
-    if (this.parser === "stringEscape") {
-      // ESC \ is ST; any other byte follows an ESC that opened a new sequence, as in xterm.
-      this.parser = code === 0x5c ? "ground" : "escape";
-      if (code === 0x5c) return;
-    } else if (code === 0x1b) {
-      this.parser = "escape";
-      return;
-    } else if (code === 0x9b) {
-      this.beginControl();
-      return;
-    } else if (code === 0x90 || code === 0x98 || (code >= 0x9d && code <= 0x9f)) {
-      this.parser = "string";
-      return;
-    }
-    if (this.parser === "csi") {
-      if (code < 0x20) return; // C0 controls execute inside CSI without ending it.
-      if (code >= 0x40 && code <= 0x7e) {
-        if (!this.controlOverflow) this.apply(this.control, code);
-        this.parser = "ground";
-      } else if (this.control.length < MAX_CONTROL_CHARS) this.control += String.fromCharCode(code);
-      else this.controlOverflow = true;
-    } else if (this.parser === "escapeIntermediate") {
-      if (code >= 0x30) this.parser = "ground";
-    } else if (this.parser === "escape") {
-      if (code === 0x5b) this.beginControl();
-      else if (code === 0x5d || code === 0x50 || code === 0x58 || code === 0x5e || code === 0x5f)
-        this.parser = "string";
-      else if (code >= 0x20 && code <= 0x2f) this.parser = "escapeIntermediate";
-      else if (code >= 0x30) {
-        if (code === 0x3d) this.applicationKeypad = true;
-        else if (code === 0x3e) this.applicationKeypad = false;
-        else if (code === 0x63) this.reset(true);
-        this.parser = "ground";
-      }
-    }
-  }
-
-  private beginControl(): void {
-    this.parser = "csi";
-    this.control = "";
-    this.controlOverflow = false;
+    this.scanner.receive(data);
   }
 
   private apply(body: string, final: number): void {
@@ -150,10 +90,12 @@ export class TerminalModeTracker {
       mode(2031, this.colorSchemeUpdates) +
       `\x1b[${this.cursorStyle} q`;
     // Re-open a sequence split by the snapshot cut, so its live tail is not printed as text.
-    if (this.parser === "csi" && !this.controlOverflow) sequence += `\x1b[${this.control}`;
-    else if (this.parser === "escape") sequence += "\x1b";
-    else if (this.parser === "string") sequence += "\x1b]";
-    else if (this.parser === "stringEscape") sequence += "\x1b]\x1b";
+    const state = this.scanner.state;
+    const control = this.scanner.partialControl;
+    if (state === "csi" && control !== null) sequence += `\x1b[${control}`;
+    else if (state === "escape") sequence += "\x1b";
+    else if (state === "string") sequence += "\x1b]";
+    else if (state === "stringEscape") sequence += "\x1b]\x1b";
     return { sequence, alternateScreen: this.alternateScreen };
   }
 }
