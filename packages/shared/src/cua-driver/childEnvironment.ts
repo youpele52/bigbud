@@ -83,5 +83,8 @@ export function makeCuaDriverChildEnvironment(
       environment[key] = value;
     }
   }
+  // Background drag must never escalate because of inherited/user configuration.
+  // Explicit delivery_mode: foreground remains available through Computer Use settings.
+  environment.CUA_DRIVER_ALLOW_BRIEF_FOREGROUND = "false";
   return environment;
 }

@@ -66,22 +66,9 @@ function normalizeWindowEntry(value: unknown): WindowRef | null {
  * stacking and forbids inferring order from array position).
  */
 export function pickFrontmostWindow(structuredContent: unknown): WindowRef | null {
-  if (!structuredContent || typeof structuredContent !== "object") return null;
-  const windows = (structuredContent as Record<string, unknown>).windows;
-  if (!Array.isArray(windows)) return null;
-  const normalized = windows
-    .map(normalizeWindowEntry)
-    .filter(
-      (entry): entry is WindowRef =>
-        entry !== null &&
-        entry.bounds !== undefined &&
-        entry.pid !== undefined &&
-        entry.pid > 0 &&
-        entry.windowId !== undefined &&
-        entry.windowId > 0 &&
-        entry.isOnScreen !== false &&
-        entry.onCurrentSpace !== false,
-    );
+  const normalized = desktopWindows(structuredContent).filter(
+    (entry) => entry.isOnScreen !== false && entry.onCurrentSpace !== false,
+  );
   normalized.sort(
     (left, right) =>
       (right.zIndex ?? Number.NEGATIVE_INFINITY) - (left.zIndex ?? Number.NEGATIVE_INFINITY),
@@ -95,6 +82,25 @@ export function pickFrontmostWindow(structuredContent: unknown): WindowRef | nul
     return null;
   }
   return normalized[0] ?? null;
+}
+
+/** Normalize live identities for both foreground discovery and background targeting. */
+export function desktopWindows(structuredContent: unknown): WindowRef[] {
+  if (!structuredContent || typeof structuredContent !== "object") return [];
+  const windows = (structuredContent as Record<string, unknown>).windows;
+  return Array.isArray(windows)
+    ? windows
+        .map(normalizeWindowEntry)
+        .filter(
+          (entry): entry is WindowRef =>
+            entry !== null &&
+            entry.pid !== undefined &&
+            entry.pid > 0 &&
+            entry.windowId !== undefined &&
+            entry.windowId > 0 &&
+            entry.bounds !== undefined,
+        )
+    : [];
 }
 
 export function findRunningDesktopApp(driver: CuaDriverShape, requestedName: string) {

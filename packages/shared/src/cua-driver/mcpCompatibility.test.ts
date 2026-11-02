@@ -26,6 +26,19 @@ function fixture() {
 }
 
 describe("unfamiliar CUA MCP contract", () => {
+  it.each(["click", "drag", "scroll", "type_text", "press_key", "hotkey"])(
+    "requires explicit background and foreground support for %s",
+    (name) => {
+      const result = fixture();
+      const schema = result.tools.find((tool) => tool.name === name)!.inputSchema;
+      schema.required = [...(schema.required ?? []), "delivery_mode"];
+      expect(() => validateCuaDriverMcpTools(result)).not.toThrow();
+      schema.properties.delivery_mode!.enum = ["foreground"];
+      expect(() => validateCuaDriverMcpTools(result)).toThrow(
+        `incompatible input schema for ${name}`,
+      );
+    },
+  );
   it.each([
     ["start_session", ["session", "capture_scope"]],
     ["end_session", ["session"]],

@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import { CuaDriverError, type CuaDriverShape } from "../Services/CuaDriver.ts";
-import { executeDesktopComputerUse } from "./ComputerUse.desktop.ts";
+import { executeForegroundDesktopComputerUse as executeDesktopComputerUse } from "./ComputerUse.desktop.testHelpers.ts";
 
 const THREAD_ID = ThreadId.makeUnsafe("thread-11111111-1111-4111-8111-111111111111");
 
@@ -117,6 +117,7 @@ describe("executeDesktopComputerUse", () => {
         x: 100,
         y: 200,
         button: "left",
+        delivery_mode: "foreground",
         session: expect.stringMatching(/^bigbud-/),
       }),
     );

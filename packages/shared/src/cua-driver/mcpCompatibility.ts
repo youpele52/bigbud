@@ -7,11 +7,12 @@ const string = { type: "string" };
 const integer = { type: "integer" };
 const number = { type: "number" };
 const target = { pid: integer, window_id: integer };
+const delivery = { delivery_mode: { type: "string", enum: ["background", "foreground"] } };
 
 // Only arguments emitted by ComputerUse.desktop.actions/session/observation and
 // desktop permission checks. This is not a general JSON Schema compatibility engine.
 const argumentsByTool: Record<string, Record<string, Schema>> = {
-  start_session: { capture_scope: { type: "string", enum: ["auto"] } },
+  start_session: { capture_scope: { type: "string", enum: ["auto", "window"] } },
   get_session_state: {},
   end_session: {},
   health_report: {},
@@ -24,26 +25,29 @@ const argumentsByTool: Record<string, Record<string, Schema>> = {
   bring_to_front: target,
   click: {
     ...target,
+    ...delivery,
     x: number,
     y: number,
     button: { type: "string", enum: ["left", "right", "middle"] },
   },
-  drag: { ...target, from_x: number, from_y: number, to_x: number, to_y: number },
+  drag: { ...target, ...delivery, from_x: number, from_y: number, to_x: number, to_y: number },
   scroll: {
     ...target,
+    ...delivery,
     x: number,
     y: number,
     direction: { type: "string", enum: ["up", "down", "left", "right"] },
     amount: { type: "integer", minimum: 1, maximum: 50 },
   },
-  type_text: { ...target, text: string },
-  press_key: { ...target, key: string },
-  hotkey: { ...target, keys: { type: "array", items: string, minItems: 2 } },
+  type_text: { ...target, ...delivery, text: string },
+  press_key: { ...target, ...delivery, key: string },
+  hotkey: { ...target, ...delivery, keys: { type: "array", items: string, minItems: 2 } },
 };
 // Intersection of emitted keys across production call variants, not the pinned
 // schema's required list. desktop.session supplies session for action calls;
 // desktop.target filters out windows without pid/window_id before capture/input.
 const scopedTarget = ["session", "pid", "window_id"];
+const scopedInput = [...scopedTarget, "delivery_mode"];
 const requiredByTool: Record<(typeof CUA_DRIVER_REQUIRED_TOOLS)[number], readonly string[]> = {
   start_session: ["session", "capture_scope"],
   end_session: ["session"],
@@ -56,12 +60,12 @@ const requiredByTool: Record<(typeof CUA_DRIVER_REQUIRED_TOOLS)[number], readonl
   launch_app: ["session", "name"],
   bring_to_front: ["session", "pid"], // Name-based focus omits window_id.
   get_window_state: scopedTarget,
-  click: [...scopedTarget, "x", "y", "button"],
-  drag: [...scopedTarget, "from_x", "from_y", "to_x", "to_y"],
-  scroll: [...scopedTarget, "direction", "amount"], // x/y are optional.
-  type_text: [...scopedTarget, "text"],
-  press_key: [...scopedTarget, "key"],
-  hotkey: [...scopedTarget, "keys"],
+  click: [...scopedInput, "x", "y", "button"],
+  drag: [...scopedInput, "from_x", "from_y", "to_x", "to_y"],
+  scroll: [...scopedInput, "direction", "amount"], // x/y are optional.
+  type_text: [...scopedInput, "text"],
+  press_key: [...scopedInput, "key"],
+  hotkey: [...scopedInput, "keys"],
 };
 const annotations = new Set([
   "description",

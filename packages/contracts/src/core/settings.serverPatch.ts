@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas";
 import { GreetingName } from "./settings.greeting";
+import { ComputerUseDeliveryMode } from "./settings.computerUsePolicy";
 import { InyosiraIdleSettingsPatchFields } from "./settings.inyosira";
 import { OpencodeV2NativeServiceTrust, OpencodeV2PluginConfigRoot } from "./settings.opencodeV2";
 import {
@@ -145,6 +146,7 @@ export const ServerSettingsPatch = Schema.Struct({
   ),
   agentBrowserPreference: Schema.optionalKey(AgentBrowserPreference),
   computerUseEnabled: Schema.optionalKey(Schema.Boolean),
+  computerUseDeliveryMode: Schema.optionalKey(ComputerUseDeliveryMode),
   hasSeenComputerUsePrompt: Schema.optionalKey(Schema.Boolean),
   computerUseCheckInIntervalMs: Schema.optionalKey(ComputerUseCheckInIntervalMs),
   computerUseActionTimeoutMs: Schema.optionalKey(ComputerUseActionTimeoutMs),

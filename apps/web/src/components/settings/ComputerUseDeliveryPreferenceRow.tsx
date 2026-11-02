@@ -13,15 +13,17 @@ export function ComputerUseDeliveryPreferenceRow({
   value,
   disabled,
   onChange,
+  description = "How agents interact with apps when an action does not ask for a specific mode.",
 }: {
   value: ComputerUseDeliveryMode;
   disabled: boolean;
   onChange: (value: ComputerUseDeliveryMode) => void;
+  description?: string;
 }) {
   return (
     <SettingsRow
       title="Interaction preference"
-      description="How agents interact with apps when an action does not ask for a specific mode."
+      description={description}
       control={
         <Select
           value={value}

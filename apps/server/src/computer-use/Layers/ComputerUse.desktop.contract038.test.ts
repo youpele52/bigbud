@@ -12,7 +12,9 @@ import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
 import type { CuaDriverShape } from "../Services/CuaDriver.ts";
-import { executeDesktopComputerUse } from "./ComputerUse.desktop.ts";
+import { executeForegroundDesktopComputerUse as executeDesktopComputerUse } from "./ComputerUse.desktop.testHelpers.ts";
+import { executeDesktopComputerUse as executeBackgroundComputerUse } from "./ComputerUse.desktop.ts";
+import { createDesktopTargets } from "./ComputerUse.desktop.interaction.ts";
 
 interface ToolSchema {
   readonly inputSchema: {
@@ -111,6 +113,36 @@ function assertDeclaredArguments(calls: ReadonlyArray<RecordedCall>): void {
 }
 
 describe("desktop arguments conform to the Driver 0.38 input schemas", () => {
+  it.each(
+    ACTIONS.filter(
+      (action) =>
+        !(action.action === "check_permissions" && action.prompt === true) &&
+        !(action.action === "launch_app" && process.platform !== "darwin"),
+    ).map((action) => [JSON.stringify(action), action] as const),
+  )("background %s", async (_label, action) => {
+    const calls: RecordedCall[] = [];
+    const driver = recordingDriver(calls);
+    const interaction = { deliveryMode: "background" as const, targets: createDesktopTargets() };
+    await Effect.runPromise(
+      executeBackgroundComputerUse(
+        THREAD_ID,
+        driver,
+        { action: "capture", surface: "desktop" },
+        undefined,
+        interaction,
+      ),
+    );
+    await Effect.runPromise(
+      executeBackgroundComputerUse(THREAD_ID, driver, action, undefined, interaction),
+    );
+    assertDeclaredArguments(calls);
+    for (const call of calls.filter((call) =>
+      ["click", "drag", "scroll", "type_text", "press_key", "hotkey"].includes(call.name),
+    )) {
+      expect(call.args.delivery_mode).toBe("background");
+    }
+    expect(calls.some((call) => call.name === "bring_to_front")).toBe(false);
+  });
   it("rejects an undeclared argument injected into a recorded call", async () => {
     const calls: RecordedCall[] = [];
     await Effect.runPromise(

@@ -21,13 +21,32 @@ import {
   toDesktopTarget,
 } from "./ComputerUse.desktop.target.ts";
 import { captureWindow } from "./ComputerUse.desktop.observation.ts";
+import {
+  resolveDesktopTarget,
+  backgroundUnavailable,
+  type DesktopInteraction,
+} from "./ComputerUse.desktop.interaction.ts";
+import { selectBackgroundTarget, launchBackgroundApp } from "./ComputerUse.desktop.background.ts";
 
 export const executeDesktopAction = (
-  _threadId: ThreadId,
+  threadId: ThreadId,
   driver: CuaDriverShape,
   action: ComputerUseAction,
+  interaction: DesktopInteraction,
 ): Effect.Effect<ComputerUseResult, ComputerUseError> =>
   Effect.gen(function* () {
+    if (interaction.deliveryMode === "background" && action.action === "launch_app") {
+      return yield* launchBackgroundApp(threadId, driver, action.name, interaction);
+    }
+    if (interaction.deliveryMode === "background" && action.action === "focus_app") {
+      const window = yield* selectBackgroundTarget(threadId, driver, action, interaction);
+      return {
+        surface: "desktop",
+        action: action.action,
+        summary: `Selected ${JSON.stringify(window.appName ?? window.title ?? "the app")} for background interaction without changing focus.`,
+        desktopTarget: toDesktopTarget(window),
+      } satisfies ComputerUseResult;
+    }
     switch (action.action) {
       case "list_windows": {
         const result = yield* driver
@@ -75,10 +94,19 @@ export const executeDesktopAction = (
         } satisfies ComputerUseResult;
       }
       case "check_permissions": {
+        if (interaction.deliveryMode === "background" && action.prompt === true) {
+          return yield* backgroundUnavailable(
+            "Permission prompts can interrupt your foreground app. Grant access from Computer Use settings.",
+          );
+        }
         const result = yield* driver
           .callTool(
             "check_permissions",
-            action.prompt === undefined ? {} : { prompt: action.prompt },
+            interaction.deliveryMode === "background"
+              ? { prompt: false }
+              : action.prompt === undefined
+                ? {}
+                : { prompt: action.prompt },
           )
           .pipe(Effect.mapError((cause) => toError(cause, "Failed to check desktop permissions.")));
         return {
@@ -142,6 +170,22 @@ export const executeDesktopAction = (
         });
       }
       case "get_accessibility_tree": {
+        if (interaction.deliveryMode === "background") {
+          const window =
+            action.pid !== undefined || action.windowId !== undefined
+              ? yield* selectBackgroundTarget(threadId, driver, action, interaction)
+              : yield* resolveDesktopTarget(threadId, driver, interaction, true);
+          if (!window) return yield* backgroundUnavailable("No desktop window could be resolved.");
+          const captured = yield* captureWindow(driver, window);
+          return {
+            surface: "desktop",
+            action: action.action,
+            summary: "Read the selected background window's accessibility state.",
+            desktopTarget: toDesktopTarget(window),
+            ...(captured.text ? { treeText: captured.text } : {}),
+            ...(captured.detailsJson ? { detailsJson: captured.detailsJson } : {}),
+          } satisfies ComputerUseResult;
+        }
         const baseWindow =
           action.pid !== undefined || action.windowId !== undefined
             ? {
@@ -163,7 +207,12 @@ export const executeDesktopAction = (
         break;
     }
 
-    const windowRef = yield* currentDesktopWindow(driver);
+    const windowRef = yield* resolveDesktopTarget(
+      threadId,
+      driver,
+      interaction,
+      action.action === "capture" || action.action === "get_page_info",
+    );
     if (!windowRef) {
       return yield* new ComputerUseError({
         message: "No active desktop window could be resolved.",
@@ -197,6 +246,16 @@ export const executeDesktopAction = (
     }
 
     let mutationResult: DesktopToolResult | undefined;
+    if (interaction.deliveryMode === "background" && action.action !== "wait") {
+      // Each call has its own Driver session. Establish its window-coordinate context
+      // before pixel input; a failed capture must never fall through to desktop input.
+      const grounded = yield* captureWindow(driver, windowRef);
+      if (!grounded.screenshot) {
+        return yield* backgroundUnavailable(
+          "The selected background window could not be captured.",
+        );
+      }
+    }
     if (action.action === "wait") {
       yield* Effect.sleep(`${action.durationMs} millis`);
     } else if (action.action === "click") {

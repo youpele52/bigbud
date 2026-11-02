@@ -23,6 +23,7 @@ import { InyosiraIdleSettingsFields } from "./settings.inyosira";
 import { MuseSettings } from "./settings.muse";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
+import { ComputerUseDeliveryMode } from "./settings.computerUsePolicy";
 import {
   AgentBrowserPreference,
   ClaudeSubagentCap,
@@ -288,6 +289,9 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "bigbud" as const satisfies AgentBrowserPreference),
   ),
   computerUseEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  computerUseDeliveryMode: ComputerUseDeliveryMode.pipe(
+    Schema.withDecodingDefault(() => "background" as const),
+  ),
   hasSeenComputerUsePrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   computerUseCheckInIntervalMs: ComputerUseCheckInIntervalMs.pipe(
     Schema.withDecodingDefault(() => DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS),

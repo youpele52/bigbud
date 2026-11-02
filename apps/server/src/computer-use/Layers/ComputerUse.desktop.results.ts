@@ -6,6 +6,7 @@ import { ComputerUseError } from "../Services/ComputerUse.ts";
 import { actionOutcome, refusedActionMessage } from "./ComputerUse.desktop.outcome.ts";
 
 export interface DesktopToolResult {
+  readonly structuredContent?: unknown;
   readonly screenshot?: ComputerUseResult["screenshot"];
   readonly text?: string;
   readonly detailsJson?: string;
@@ -77,6 +78,7 @@ export function callDesktopTool(
       const detailsJson = stringify(result.structuredContent);
       const outcome = actionOutcome(result.structuredContent);
       return {
+        structuredContent: result.structuredContent,
         ...(screenshot ? { screenshot } : {}),
         ...(text ? { text } : {}),
         ...(detailsJson ? { detailsJson } : {}),

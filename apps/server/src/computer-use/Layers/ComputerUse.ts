@@ -9,6 +9,8 @@ import { executeBrowserComputerUse } from "./ComputerUse.browser.ts";
 import { executeDesktopComputerUse } from "./ComputerUse.desktop.ts";
 import { CuaDriver } from "../Services/CuaDriver.ts";
 import { ComputerUse, ComputerUseError, type ComputerUseShape } from "../Services/ComputerUse.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { createDesktopTargets } from "./ComputerUse.desktop.interaction.ts";
 
 function resolveSurface(action: ComputerUseAction): "browser" | "desktop" {
   return resolveComputerUseSurface(action.action, "surface" in action ? action.surface : undefined);
@@ -25,6 +27,8 @@ export const ComputerUseLive = Layer.effect(
     const cuaDriver = yield* CuaDriver;
     const { openBrowser } = yield* Open;
     const sql = yield* SqlClient.SqlClient;
+    const settingsService = yield* ServerSettingsService;
+    const targets = createDesktopTargets();
     const activeThreadActions = new Map<string, number>();
 
     const beginAction = (threadId: string) =>
@@ -68,7 +72,21 @@ export const ComputerUseLive = Layer.effect(
       withThreadLease(
         threadId,
         resolveSurface(action) === "desktop"
-          ? executeDesktopComputerUse(threadId, cuaDriver, action, openBrowser)
+          ? settingsService.getSettings.pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ComputerUseError({
+                    message: "Could not read Computer Use interaction settings.",
+                    cause,
+                  }),
+              ),
+              Effect.flatMap((settings) =>
+                executeDesktopComputerUse(threadId, cuaDriver, action, openBrowser, {
+                  deliveryMode: settings.computerUseDeliveryMode,
+                  targets,
+                }),
+              ),
+            )
           : executeBrowserComputerUse(browser, threadId, action),
       );
 
@@ -76,7 +94,7 @@ export const ComputerUseLive = Layer.effect(
       execute,
       withThreadLease,
       isActive: (threadId) => Effect.sync(() => activeThreadActions.has(threadId)),
-      dispose: cuaDriver.dispose,
+      dispose: cuaDriver.dispose.pipe(Effect.ensuring(Effect.sync(() => targets.clear()))),
     };
   }),
 );

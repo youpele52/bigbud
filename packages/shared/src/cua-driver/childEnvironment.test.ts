@@ -21,6 +21,7 @@ describe("makeCuaDriverChildEnvironment", () => {
       DISPLAY: ":0",
       CUA_DRIVER_RS_TELEMETRY_ENABLED: "false",
       CUA_DRIVER_RS_UPDATE_CHECK: "false",
+      CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "false",
     });
   });
 
@@ -55,6 +56,7 @@ describe("makeCuaDriverChildEnvironment", () => {
       CUA_DRIVER_CURSOR_THEME_DIR: cuaDriverCursorThemeDirectory(stateHome),
       CUA_DRIVER_RS_TELEMETRY_ENABLED: "false",
       CUA_DRIVER_RS_UPDATE_CHECK: "false",
+      CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "false",
     });
   });
 
@@ -63,6 +65,15 @@ describe("makeCuaDriverChildEnvironment", () => {
       HOME: "/home/user",
       CUA_DRIVER_RS_TELEMETRY_ENABLED: "false",
       CUA_DRIVER_RS_UPDATE_CHECK: "false",
+      CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "false",
     });
+  });
+  it("never lets an inherited or overridden flag enable automatic foreground fallback", () => {
+    expect(
+      makeCuaDriverChildEnvironment(
+        { CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "true" },
+        { CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "true" },
+      ).CUA_DRIVER_ALLOW_BRIEF_FOREGROUND,
+    ).toBe("false");
   });
 });
