@@ -139,7 +139,7 @@ function anchorOffset(host: HTMLElement, scrollContainer: HTMLElement) {
 }
 
 describe("terminal layout with the real historical timeline", () => {
-  it.each(["Chat + terminal", "Chat only"])(
+  it.each(["Chat x terminal", "Chat"])(
     "preserves the measured reader anchor when restoring %s",
     async (restoredLayout) => {
       await setViewport({ width: 900, height: 800 });
@@ -242,7 +242,7 @@ describe("terminal layout with the real historical timeline", () => {
         };
 
         for (let cycle = 0; cycle < 2; cycle += 1) {
-          await selectLayout("Terminal only");
+          await selectLayout("Terminal");
           expect(host.querySelector<HTMLElement>("[data-chat-body-region]")!.hidden).toBe(true);
           expect(
             host.querySelector<HTMLElement>('[data-timeline-root="true"]')!.getBoundingClientRect()
@@ -250,9 +250,9 @@ describe("terminal layout with the real historical timeline", () => {
           ).toBe(0);
           await selectLayout(restoredLayout);
           await waitForMeasuredRows(host);
-          assertReaderPreserved(restoredLayout === "Chat + terminal");
-          if (restoredLayout === "Chat only") {
-            await selectLayout("Chat + terminal");
+          assertReaderPreserved(restoredLayout === "Chat x terminal");
+          if (restoredLayout === "Chat") {
+            await selectLayout("Chat x terminal");
             await waitForMeasuredRows(host);
             assertReaderPreserved(true);
           }

@@ -139,10 +139,10 @@ describe("terminal layout integration", () => {
     document.body.innerHTML = "";
   });
 
-  it("leaves a closed terminal untouched when selecting Chat only", async () => {
+  it("leaves a closed terminal untouched when selecting Chat", async () => {
     const screen = await render(<TerminalLayoutHarness />);
     try {
-      await selectLayout("Chat only", "Chat only");
+      await selectLayout("Chat", "Chat");
       expect(openRequests).not.toHaveBeenCalled();
       expect(terminalRegion().dataset.terminalOpen).toBe("false");
       expect(terminalRegion().hidden).toBe(true);
@@ -151,25 +151,25 @@ describe("terminal layout integration", () => {
     }
   });
 
-  it.each(["Chat + terminal", "Terminal only"])(
+  it.each(["Chat x terminal", "Terminal"])(
     "opens a closed terminal directly into %s without spawning on menu open",
     async (label) => {
       const screen = await render(<TerminalLayoutHarness />);
       try {
         expect(terminalRegion().hidden).toBe(true);
-        await showMenu("Chat only");
+        await showMenu("Chat");
         expect(openRequests).not.toHaveBeenCalled();
         await page.getByRole("menuitemradio", { name: label, exact: true }).click();
         await vi.waitFor(() =>
           expect(terminalRegion().dataset.terminalRegion).toBe(
-            label === "Terminal only" ? "fill" : "split",
+            label === "Terminal" ? "fill" : "split",
           ),
         );
         expect(openRequests).toHaveBeenCalledExactlyOnceWith(true);
-        await selectLayout("Chat only", label);
+        await selectLayout("Chat", label);
         expect(terminalRegion().hidden).toBe(true);
         expect(terminalRegion().dataset.terminalOpen).toBe("true");
-        await selectLayout(label, "Chat only");
+        await selectLayout(label, "Chat");
         expect(openRequests).toHaveBeenCalledTimes(1);
       } finally {
         await screen.unmount();
@@ -185,7 +185,7 @@ describe("terminal layout integration", () => {
         const scroll = document.querySelector<HTMLElement>("[data-chat-scroll]")!;
         const draft = document.querySelector<HTMLTextAreaElement>("textarea")!;
         scroll.scrollTop = 120;
-        await selectLayout("Chat + terminal", "Chat only");
+        await selectLayout("Chat x terminal", "Chat");
         expect(terminalRegion().style.maxHeight).toBe(`${SPLIT_HEIGHT}px`);
         const expand = document.querySelector<HTMLButtonElement>(
           'button[aria-label="Expand terminal"]',
@@ -200,7 +200,7 @@ describe("terminal layout integration", () => {
           expect(expand.ariaLabel).toBe("Restore split view");
           expect(document.activeElement).toBe(expand);
         });
-        await showMenu("Terminal only");
+        await showMenu("Terminal");
         await userEvent.keyboard("{Escape}");
         await page.getByRole("button", { name: "Restore split view", exact: true }).click();
         await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("split"));
@@ -208,11 +208,11 @@ describe("terminal layout integration", () => {
         expect(terminalRegion().querySelector("[data-resize-handle]")).toBeTruthy();
         expect(scroll.scrollTop).toBe(120);
         expect(draft.value).toBe("Unsent message");
-        await selectLayout("Terminal only", "Chat + terminal");
+        await selectLayout("Terminal", "Chat x terminal");
         await expect
           .element(page.getByRole("button", { name: "Restore split view", exact: true }))
           .toBeVisible();
-        await selectLayout("Chat only", "Terminal only");
+        await selectLayout("Chat", "Terminal");
         expect(scroll.scrollTop).toBe(120);
         expect(draft.value).toBe("Unsent message");
         expect(terminalRegion().inert).toBe(true);
@@ -226,17 +226,17 @@ describe("terminal layout integration", () => {
   it("resets on idempotent open and close/reopen, but remembers each thread", async () => {
     const screen = await render(<TerminalLayoutHarness />);
     try {
-      await selectLayout("Terminal only", "Chat only");
+      await selectLayout("Terminal", "Chat");
       await page.getByRole("button", { name: "Open terminal", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("split"));
-      await selectLayout("Chat only", "Chat + terminal");
+      await selectLayout("Chat", "Chat x terminal");
       await page.getByRole("button", { name: "Toggle terminal", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalOpen).toBe("false"));
-      await showMenu("Chat only");
+      await showMenu("Chat");
       await userEvent.keyboard("{Escape}");
       await page.getByRole("button", { name: "Toggle terminal", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("split"));
-      await selectLayout("Terminal only", "Chat + terminal");
+      await selectLayout("Terminal", "Chat x terminal");
       await page.getByRole("button", { name: "Change thread", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalOpen).toBe("false"));
       await page.getByRole("button", { name: "Change thread", exact: true }).click();
@@ -244,34 +244,34 @@ describe("terminal layout integration", () => {
       await page.getByRole("button", { name: "Change thread", exact: true }).click();
       await page.getByRole("button", { name: "Open terminal", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("split"));
-      await selectLayout("Chat only", "Chat + terminal");
+      await selectLayout("Chat", "Chat x terminal");
       await page.getByRole("button", { name: "Change thread", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalRegion).toBe("fill"));
       await page.getByRole("button", { name: "Change thread", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().hidden).toBe(true));
-      await showMenu("Chat only");
+      await showMenu("Chat");
       await userEvent.keyboard("{Escape}");
       await page.getByRole("button", { name: "Toggle terminal", exact: true }).click();
       await vi.waitFor(() => expect(terminalRegion().dataset.terminalOpen).toBe("false"));
-      await selectLayout("Terminal only", "Chat only");
+      await selectLayout("Terminal", "Chat");
       expect(terminalRegion().dataset.terminalRegion).toBe("fill");
     } finally {
       await screen.unmount();
     }
   });
 
-  it.each(["Terminal only", "Chat only", "Chat + terminal"])(
+  it.each(["Terminal", "Chat", "Chat x terminal"])(
     "remembers %s after the view unmounts and remounts",
     async (label) => {
       const screen = await render(<TerminalLayoutHarness initiallyOpen />);
-      await selectLayout(label, "Chat + terminal");
+      await selectLayout(label, "Chat x terminal");
       await screen.unmount();
       const remounted = await render(<TerminalLayoutHarness initiallyOpen />);
       try {
         await showMenu(label);
         await userEvent.keyboard("{Escape}");
         expect(terminalRegion().dataset.terminalRegion).toBe(
-          label === "Terminal only" ? "fill" : label === "Chat only" ? "hidden" : "split",
+          label === "Terminal" ? "fill" : label === "Chat" ? "hidden" : "split",
         );
         expect(openRequests).not.toHaveBeenCalled();
       } finally {
@@ -305,7 +305,7 @@ describe("terminal layout integration", () => {
     async ({ variant, panel }) => {
       const screen = await render(<TerminalLayoutHarness variant={variant} panel={panel} />);
       try {
-        await selectLayout("Chat + terminal", "Chat only");
+        await selectLayout("Chat x terminal", "Chat");
         const buttons = Array.from(terminalRegion().querySelectorAll<HTMLButtonElement>("button"));
         const colors = buttons.map((button) => getComputedStyle(button).color);
         for (const [index, button] of buttons.entries()) {
