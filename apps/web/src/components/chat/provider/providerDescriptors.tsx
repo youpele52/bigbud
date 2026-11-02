@@ -150,7 +150,7 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
       setupUrl: "https://help.router-for.me/introduction/quick-start.html",
     },
     customModels: null,
-    traitsEnabled: false,
+    traitsEnabled: true,
   },
   copilot: {
     provider: "copilot",

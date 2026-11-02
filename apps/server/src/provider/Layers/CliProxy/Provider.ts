@@ -1,9 +1,4 @@
-import type {
-  ModelCapabilities,
-  ServerProvider,
-  ServerProviderModel,
-  ServerSettingsError,
-} from "@bigbud/contracts";
+import type { ServerProvider, ServerProviderModel, ServerSettingsError } from "@bigbud/contracts";
 import { Effect, Equal, Layer, Stream } from "effect";
 
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
@@ -11,7 +6,8 @@ import { makeManagedServerProvider } from "../../makeManagedServerProvider.ts";
 import { buildServerProvider } from "../../providerSnapshot.ts";
 import { CliProxyProvider } from "../../Services/CliProxy/Provider.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
-import { CliProxyClientError, inspectCliProxy } from "./Client.ts";
+import { CliProxyClientError, inspectCliProxy, type CliProxyModel } from "./Client.ts";
+import { UNKNOWN_CLIPROXY_CAPABILITIES } from "./Capabilities.ts";
 import {
   cliProxyDiagnostic,
   diagnosticForClientError,
@@ -21,24 +17,13 @@ import {
 import { CliProxyConfigError, resolveCliProxyConfig } from "./config.ts";
 
 const PROVIDER = "cliProxy" as const;
-// The current CLIProxy catalog exposes model IDs and names only. Do not infer
-// effort support from names or mutate persisted IDs until native metadata exists.
-const CAPABILITIES: ModelCapabilities = {
-  reasoningEffortLevels: [],
-  supportsFastMode: false,
-  supportsThinkingToggle: false,
-  contextWindowOptions: [],
-  promptInjectedEffortLevels: [],
-};
 
-function toModels(
-  models: ReadonlyArray<{ readonly id: string; readonly name: string }>,
-): ReadonlyArray<ServerProviderModel> {
+function toModels(models: ReadonlyArray<CliProxyModel>): ReadonlyArray<ServerProviderModel> {
   return models.map((model) => ({
     slug: model.id,
     name: model.name,
     isCustom: false,
-    capabilities: CAPABILITIES,
+    capabilities: model.capabilities ?? UNKNOWN_CLIPROXY_CAPABILITIES,
   }));
 }
 

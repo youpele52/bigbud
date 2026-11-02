@@ -22,6 +22,7 @@ export function buildClaudeSessionRolloutOptions(
       harness?.forwardSubagentText ?? (harness ? false : settings.rollout.forwardedSubagentText),
     ...(harness?.settingSources ? { settingSources: harness.settingSources } : {}),
     ...(harness?.environment ? { environment: harness.environment } : {}),
+    ...(harness?.modelCapabilities ? { modelCapabilities: harness.modelCapabilities } : {}),
     ...(harness
       ? {}
       : {

@@ -36,6 +36,11 @@ export const ClaudeModelOptions = Schema.Struct({
 });
 export type ClaudeModelOptions = typeof ClaudeModelOptions.Type;
 
+export const CliProxyModelOptions = Schema.Struct({
+  effort: Schema.optional(TrimmedNonEmptyString),
+});
+export type CliProxyModelOptions = typeof CliProxyModelOptions.Type;
+
 export const CopilotModelOptions = Schema.Struct({
   reasoningEffort: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
 });
@@ -90,7 +95,7 @@ export type MuseModelOptions = typeof MuseModelOptions.Type;
 export const ProviderModelOptions = Schema.Struct({
   codex: Schema.optional(CodexModelOptions),
   claudeAgent: Schema.optional(ClaudeModelOptions),
-  cliProxy: Schema.optional(Schema.Record(Schema.String, Schema.Never)),
+  cliProxy: Schema.optional(CliProxyModelOptions),
   copilot: Schema.optional(CopilotModelOptions),
   opencode: Schema.optional(OpencodeModelOptions),
   opencodeV2: Schema.optional(OpencodeV2ModelOptions),

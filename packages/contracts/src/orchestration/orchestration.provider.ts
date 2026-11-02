@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import {
   ClaudeModelOptions,
+  CliProxyModelOptions,
   CodexModelOptions,
   CopilotModelOptions,
   CursorModelOptions,
@@ -58,7 +59,7 @@ export type ClaudeModelSelection = typeof ClaudeModelSelection.Type;
 export const CliProxyModelSelection = Schema.Struct({
   provider: Schema.Literal("cliProxy"),
   model: TrimmedNonEmptyString,
-  options: Schema.optionalKey(Schema.Record(Schema.String, Schema.Never)),
+  options: Schema.optionalKey(CliProxyModelOptions),
 });
 export type CliProxyModelSelection = typeof CliProxyModelSelection.Type;
 

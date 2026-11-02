@@ -1,11 +1,14 @@
 import { createHmac, randomBytes } from "node:crypto";
 import path from "node:path";
+import type { ModelCapabilities } from "@bigbud/contracts/core/model";
 
 import type { CliProxyConfig } from "./config.ts";
+import { decodeCliProxyCapabilities } from "./Capabilities.ts";
 
 export interface CliProxyModel {
   readonly id: string;
   readonly name: string;
+  readonly capabilities?: ModelCapabilities;
 }
 
 export type CliProxyClientErrorTag =
@@ -90,6 +93,8 @@ export function decodeModels(value: unknown): ReadonlyArray<CliProxyModel> {
       name?: unknown;
       display_name?: unknown;
       visibility?: unknown;
+      supported_reasoning_levels?: unknown;
+      default_reasoning_level?: unknown;
     };
     if (entry.visibility !== undefined && typeof entry.visibility !== "string") {
       throw new CliProxyClientError(
@@ -130,7 +135,13 @@ export function decodeModels(value: unknown): ReadonlyArray<CliProxyModel> {
         : typeof entry.name === "string" && entry.name.trim()
           ? entry.name.trim()
           : id;
-    return [{ id, name }];
+    const capabilities = decodeCliProxyCapabilities(
+      entry.supported_reasoning_levels,
+      entry.default_reasoning_level,
+    );
+    // Catalog labels may include a redundant minor version; wire IDs remain authoritative.
+    const displayName = name.replace(/^(GPT[ -]\d+)\.0(?=\s|$)/i, "$1");
+    return [{ id, name: displayName, ...(capabilities ? { capabilities } : {}) }];
   });
 }
 

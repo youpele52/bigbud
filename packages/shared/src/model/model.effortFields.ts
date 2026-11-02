@@ -31,14 +31,13 @@ export function getProviderEffortField(provider: ProviderKind): ProviderEffortFi
     case "muse":
       return "reasoningEffort";
     case "claudeAgent":
+    case "cliProxy":
       return "effort";
     case "cursor":
     case "devin":
       return "reasoning";
     case "pi":
       return "thinkingLevel";
-    case "cliProxy":
-      return null;
   }
 }
 

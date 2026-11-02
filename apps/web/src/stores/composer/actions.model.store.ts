@@ -21,7 +21,6 @@ import { type ComposerDraftStoreState, type ComposerThreadDraftState } from "./t
 
 type SetFn = StoreApi<ComposerDraftStoreState>["setState"];
 type GetFn = StoreApi<ComposerDraftStoreState>["getState"];
-
 function isRuntimeMode(value: unknown): value is RuntimeMode {
   return value === "approval-required" || value === "auto-accept-edits" || value === "full-access";
 }
@@ -50,10 +49,12 @@ function upsertModelSelectionWithOptions(
         ? cloneModelSelection(current, { options: claudeOptions })
         : createModelSelection("claudeAgent", DEFAULT_MODEL_BY_PROVIDER.claudeAgent, claudeOptions);
     }
-    case "cliProxy":
+    case "cliProxy": {
+      const cliProxyOptions = options as NonNullable<ProviderModelOptions["cliProxy"]>;
       return current?.provider === "cliProxy"
-        ? cloneModelSelection(current, { options: {} })
-        : createModelSelection("cliProxy", DEFAULT_MODEL_BY_PROVIDER.cliProxy, {});
+        ? cloneModelSelection(current, { options: cliProxyOptions })
+        : createModelSelection("cliProxy", DEFAULT_MODEL_BY_PROVIDER.cliProxy, cliProxyOptions);
+    }
     case "copilot": {
       const copilotOptions = options as NonNullable<ProviderModelOptions["copilot"]>;
       return current?.provider === "copilot"

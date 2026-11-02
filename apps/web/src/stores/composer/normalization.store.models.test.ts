@@ -1,6 +1,28 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizeProviderModelOptions } from "./normalization.store.models";
+import {
+  normalizeModelSelection,
+  normalizeProviderModelOptions,
+} from "./normalization.store.models";
+
+describe("CLIProxyAPI persisted effort", () => {
+  it.each(["low", "medium", "high", "xhigh", "max"])("preserves %s during hydration", (effort) => {
+    expect(normalizeProviderModelOptions({ cliProxy: { effort: ` ${effort} ` } })).toEqual({
+      cliProxy: { effort },
+    });
+    expect(
+      normalizeModelSelection({
+        provider: "cliProxy",
+        model: "gpt-6-astra",
+        options: { effort },
+      }),
+    ).toEqual({ provider: "cliProxy", model: "gpt-6-astra", options: { effort } });
+  });
+
+  it.each(["", "   ", null, 1])("drops invalid effort %s", (effort) => {
+    expect(normalizeProviderModelOptions({ cliProxy: { effort } })).toBeNull();
+  });
+});
 
 describe("normalizeProviderModelOptions Codex effort", () => {
   it("preserves trimmed dynamic effort values", () => {
