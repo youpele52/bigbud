@@ -3,39 +3,39 @@ import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/or
 import { create } from "zustand";
 
 import {
-  persistItutuState,
-  readPersistedItutuState,
+  persistInyosiraState,
+  readPersistedInyosiraState,
   type SidebarArrangement,
-} from "./itutu.store.persistence";
+} from "./inyosira.store.persistence";
 
-export type { SidebarArrangement } from "./itutu.store.persistence";
+export type { SidebarArrangement } from "./inyosira.store.persistence";
 
-/** Paging of one Ìtútù state. Group membership itself is derived from known thread summaries. */
-export interface ItutuStatePage {
+/** Paging of one Inyosira state. Group membership itself is derived from known thread summaries. */
+export interface InyosiraStatePage {
   readonly status: "idle" | "loading" | "loaded" | "error";
   readonly nextCursor: ThreadSummaryCursor | null;
   /** Bumped when a live move lands in this state, so an open view reloads its first page. */
   readonly staleVersion: number;
 }
 
-const IDLE_PAGE: ItutuStatePage = { status: "idle", nextCursor: null, staleVersion: 0 };
+const IDLE_PAGE: InyosiraStatePage = { status: "idle", nextCursor: null, staleVersion: 0 };
 
-interface ItutuStore {
+interface InyosiraStore {
   readonly arrangement: SidebarArrangement;
   readonly collapsedStates: readonly ThreadOrganizationState[];
-  readonly pages: Readonly<Record<ThreadOrganizationState, ItutuStatePage>>;
+  readonly pages: Readonly<Record<ThreadOrganizationState, InyosiraStatePage>>;
   setArrangement: (arrangement: SidebarArrangement) => void;
   setStateCollapsed: (state: ThreadOrganizationState, collapsed: boolean) => void;
-  setPage: (state: ThreadOrganizationState, page: Partial<ItutuStatePage>) => void;
+  setPage: (state: ThreadOrganizationState, page: Partial<InyosiraStatePage>) => void;
   markStale: (state: ThreadOrganizationState) => void;
 }
 
-const persisted = readPersistedItutuState();
+const persisted = readPersistedInyosiraState();
 
-export const useItutuStore = create<ItutuStore>((set, get) => {
+export const useInyosiraStore = create<InyosiraStore>((set, get) => {
   const persist = () => {
     const { arrangement, collapsedStates } = get();
-    persistItutuState({ arrangement, collapsedStates });
+    persistInyosiraState({ arrangement, collapsedStates });
   };
   return {
     arrangement: persisted.arrangement,

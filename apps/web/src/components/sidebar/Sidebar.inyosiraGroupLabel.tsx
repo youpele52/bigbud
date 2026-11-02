@@ -1,11 +1,11 @@
 import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
-import { useItutuThreadCount } from "./Sidebar.itutu.count";
-import { ITUTU_STATE_LABELS } from "./Sidebar.itutu.logic";
+import { useInyosiraThreadCount } from "./Sidebar.inyosira.count";
+import { INYOSIRA_STATE_LABELS } from "./Sidebar.inyosira.logic";
 import { SidebarSectionLabel } from "./SidebarSectionLabel";
 
-export function SidebarItutuGroupLabel({
+export function SidebarInyosiraGroupLabel({
   state,
   isExpanded,
   onExpandedChange,
@@ -14,7 +14,7 @@ export function SidebarItutuGroupLabel({
   isExpanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
 }) {
-  const result = useItutuThreadCount(state);
+  const result = useInyosiraThreadCount(state);
   const count =
     result.status === "loaded"
       ? result.count.toLocaleString()
@@ -32,9 +32,9 @@ export function SidebarItutuGroupLabel({
     <SidebarSectionLabel isExpanded={isExpanded} onExpandedChange={onExpandedChange}>
       <span className="inline-flex items-center gap-2">
         <span aria-hidden="true" className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0`} />
-        <span>{ITUTU_STATE_LABELS[state]}</span>
+        <span>{INYOSIRA_STATE_LABELS[state]}</span>
         <span
-          data-slot="itutu-thread-count"
+          data-slot="inyosira-thread-count"
           className="tabular-nums opacity-0 transition-opacity group-hover/project-header:opacity-100 group-focus-within/project-header:opacity-100"
           aria-label={countLabel}
         >

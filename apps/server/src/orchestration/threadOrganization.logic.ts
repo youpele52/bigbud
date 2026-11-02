@@ -1,5 +1,5 @@
 /**
- * Pure Ìtútù organization transitions. The decider records their results in
+ * Pure Inyosira organization transitions. The decider records their results in
  * `thread.organization-updated`; projectors only apply recorded values.
  */
 import type { OrchestrationThread } from "@bigbud/contracts";

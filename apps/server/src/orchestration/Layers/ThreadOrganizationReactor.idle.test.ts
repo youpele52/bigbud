@@ -19,8 +19,8 @@ const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
 const off: ServerSettings = {
   ...DEFAULT_SERVER_SETTINGS,
-  itutuIdleCleanupEnabled: false,
-  itutuOlderThreadsEnabled: false,
+  inyosiraIdleCleanupEnabled: false,
+  inyosiraOlderThreadsEnabled: false,
 };
 const candidate = (state: IdleThreadCandidate["state"]): IdleThreadCandidate => ({
   threadId: threadA,
@@ -114,8 +114,8 @@ it.effect("an idle-rule change restarts its wait and uses the new destination", 
       yield* advance(8 * MINUTE);
       yield* change({
         ...DEFAULT_SERVER_SETTINGS,
-        itutuIdleDestination: "done",
-        itutuIdleTimeoutMinutes: 12,
+        inyosiraIdleDestination: "done",
+        inyosiraIdleTimeoutMinutes: 12,
       });
       yield* advance(11 * MINUTE + 45_000);
       assert.deepEqual(yield* Ref.get(dispatched), []);
@@ -145,7 +145,7 @@ it.effect("changing one rule restarts only that rule's wait", () =>
     Effect.gen(function* () {
       const { dispatched, change, advance } = yield* harness(DEFAULT_SERVER_SETTINGS, "later");
       yield* advance(DAY - 15 * MINUTE);
-      yield* change({ ...DEFAULT_SERVER_SETTINGS, itutuIdleTimeoutMinutes: 20 });
+      yield* change({ ...DEFAULT_SERVER_SETTINGS, inyosiraIdleTimeoutMinutes: 20 });
       yield* advance(15 * MINUTE);
       assert.deepEqual(moves(yield* Ref.get(dispatched)), [[threadA, 3, "later", "done"]]);
     }),
@@ -157,7 +157,7 @@ it.effect("turning the older-threads rule on gives every thread a full new wait"
     Effect.gen(function* () {
       const { dispatched, change, advance } = yield* harness(off, "later");
       yield* advance(2 * MINUTE);
-      yield* change({ ...off, itutuOlderThreadsEnabled: true, itutuOlderThreadsDays: 2 });
+      yield* change({ ...off, inyosiraOlderThreadsEnabled: true, inyosiraOlderThreadsDays: 2 });
       yield* advance(2 * DAY - 15_000);
       assert.deepEqual(yield* Ref.get(dispatched), []);
       yield* advance(15_000);

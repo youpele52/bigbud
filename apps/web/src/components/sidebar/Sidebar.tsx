@@ -9,7 +9,7 @@ import { SidebarNavigation } from "./Sidebar.navigation";
 import { SidebarRemoteWorkspaceDialog } from "./SidebarRemoteWorkspaceDialog";
 import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
-import { SidebarItutuSnoozeDialog } from "./Sidebar.itutuSnoozeDialog";
+import { SidebarInyosiraSnoozeDialog } from "./Sidebar.inyosiraSnoozeDialog";
 import { useSidebarState } from "./Sidebar.state";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 
@@ -126,7 +126,7 @@ export default function Sidebar() {
             }}
           />
 
-          <SidebarItutuSnoozeDialog />
+          <SidebarInyosiraSnoozeDialog />
 
           <SidebarRemoteAgentInstallDialog
             request={s.remoteAgentInstallRequest}

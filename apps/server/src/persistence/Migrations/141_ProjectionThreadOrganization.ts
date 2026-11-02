@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 /**
- * Ìtútù organization of a thread. Defaults make every existing thread Present at revision 0
+ * Inyosira organization of a thread. Defaults make every existing thread Present at revision 0
  * without a backfill; only `thread.organization-updated` and unarchive change these columns.
  */
 const COLUMNS: ReadonlyArray<readonly [name: string, definition: string]> = [

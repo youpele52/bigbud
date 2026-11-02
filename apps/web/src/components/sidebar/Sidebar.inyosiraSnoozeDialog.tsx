@@ -11,20 +11,20 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Input } from "../ui/input";
-import { snoozeThread } from "./Sidebar.itutu.actions";
+import { snoozeThread } from "./Sidebar.inyosira.actions";
 import {
   formatSnoozeWakeTime,
   parseSnoozeDuration,
-  useItutuSnoozePickerStore,
-} from "./Sidebar.itutu.snoozePicker";
+  useInyosiraSnoozePickerStore,
+} from "./Sidebar.inyosira.snoozePicker";
 
 const inputClassName =
   "mt-1.5 flex border-border bg-card font-sans has-focus-visible:border-ring/45 has-focus-visible:ring-0";
 
 /** Custom snooze duration for one thread. The server calculates the actual deadline. */
-export function SidebarItutuSnoozeDialog() {
-  const threadId = useItutuSnoozePickerStore((state) => state.threadId);
-  const close = useItutuSnoozePickerStore((state) => state.close);
+export function SidebarInyosiraSnoozeDialog() {
+  const threadId = useInyosiraSnoozePickerStore((state) => state.threadId);
+  const close = useInyosiraSnoozePickerStore((state) => state.close);
   const [value, setValue] = useState("");
   const [touched, setTouched] = useState(false);
 
@@ -53,10 +53,10 @@ export function SidebarItutuSnoozeDialog() {
           </DialogDescription>
         </DialogHeader>
         <DialogPanel>
-          <label htmlFor="itutu-snooze-duration" className="block">
+          <label htmlFor="inyosira-snooze-duration" className="block">
             <span className="text-xs font-medium text-foreground">Duration</span>
             <Input
-              id="itutu-snooze-duration"
+              id="inyosira-snooze-duration"
               autoFocus
               className={inputClassName}
               aria-invalid={error ? true : undefined}

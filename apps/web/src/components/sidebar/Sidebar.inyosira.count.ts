@@ -2,15 +2,15 @@ import { useEffect, useState } from "react";
 import type { OrchestrationDeliveryStreamItem } from "@bigbud/contracts/orchestration/orchestration.delivery.ts";
 import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
-import { ITUTU_COUNT_REFRESH_DELAY_MS } from "../../constants/sidebar";
+import { INYOSIRA_COUNT_REFRESH_DELAY_MS } from "../../constants/sidebar";
 import { readNativeApi } from "../../rpc/nativeApi";
 
-export type ItutuCountResult =
+export type InyosiraCountResult =
   | { status: "loading" }
   | { status: "loaded"; count: number }
   | { status: "error" };
 
-export function shouldRefreshItutuThreadCounts(item: OrchestrationDeliveryStreamItem): boolean {
+export function shouldRefreshInyosiraThreadCounts(item: OrchestrationDeliveryStreamItem): boolean {
   if (item.type === "recovery") return true;
   if (item.type === "lifecycle") return item.state === "live" || item.state === "fallback";
   return item.events.some((event) => {
@@ -31,8 +31,8 @@ export function shouldRefreshItutuThreadCounts(item: OrchestrationDeliveryStream
 }
 
 /** Exact totals, including collapsed/unloaded threads; refreshes never hold up event delivery. */
-export function useItutuThreadCount(state: ThreadOrganizationState): ItutuCountResult {
-  const [result, setResult] = useState<ItutuCountResult>({ status: "loading" });
+export function useInyosiraThreadCount(state: ThreadOrganizationState): InyosiraCountResult {
+  const [result, setResult] = useState<InyosiraCountResult>({ status: "loading" });
 
   useEffect(() => {
     let disposed = false;
@@ -73,11 +73,11 @@ export function useItutuThreadCount(state: ThreadOrganizationState): ItutuCountR
       timer = setTimeout(() => {
         timer = undefined;
         void refresh();
-      }, ITUTU_COUNT_REFRESH_DELAY_MS);
+      }, INYOSIRA_COUNT_REFRESH_DELAY_MS);
     };
     const unsubscribe = api?.orchestration.onDomainEvent(
       (item) => {
-        if (shouldRefreshItutuThreadCounts(item)) scheduleRefresh();
+        if (shouldRefreshInyosiraThreadCounts(item)) scheduleRefresh();
       },
       { onResubscribe: scheduleRefresh },
     );

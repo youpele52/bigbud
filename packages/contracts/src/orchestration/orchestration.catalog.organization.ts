@@ -8,7 +8,7 @@ export const ORGANIZATION_THREAD_SUMMARY_DEFAULT_LIMIT = 20;
 export const ORGANIZATION_THREAD_SUMMARY_MAX_LIMIT = 50;
 
 /**
- * One keyset page of active threads in an Ìtútù state, across every project. Pages are ordered by
+ * One keyset page of active threads in an Inyosira state, across every project. Pages are ordered by
  * `updatedAt` descending, then thread id, like project thread pages.
  */
 export const GetOrganizationThreadSummariesInput = Schema.Struct({

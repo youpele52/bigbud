@@ -8,14 +8,14 @@ import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { useSidebarState } from "./Sidebar.state";
-import { useItutuStore } from "../../stores/itutu/itutu.store";
-import { SidebarItutuArrangementSwitch } from "./Sidebar.itutuArrangementSwitch";
-import { SidebarItutuSection } from "./Sidebar.itutuSection";
+import { useInyosiraStore } from "../../stores/inyosira/inyosira.store";
+import { SidebarInyosiraArrangementSwitch } from "./Sidebar.inyosiraArrangementSwitch";
+import { SidebarInyosiraSection } from "./Sidebar.inyosiraSection";
 import type { SidebarTopLevelHeaderProps } from "./SidebarSectionLabel";
 
 export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSidebarState> }) {
   const navigate = useNavigate();
-  const isItutu = useItutuStore((store) => store.arrangement === "itutu");
+  const isInyosira = useInyosiraStore((store) => store.arrangement === "inyosira");
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobileSidebar = () => {
     if (isMobile) setOpenMobile(false);
@@ -74,7 +74,7 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
 
   // Both arrangements keep New chat and Search; only Projects shows the other actions and sections.
   const sections =
-    s.bootstrapComplete && !isItutu
+    s.bootstrapComplete && !isInyosira
       ? {
           pinned: (headerProps: SidebarTopLevelHeaderProps) => (
             <SidebarFavoritesSection
@@ -124,8 +124,8 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
   return (
     <>
       <SidebarContent className="min-h-full gap-0">
-        <SidebarItutuArrangementSwitch />
-        {isItutu ? (
+        <SidebarInyosiraArrangementSwitch />
+        {isInyosira ? (
           <div className="py-2">
             <SidebarFixedActions
               onNewChat={handleNewChat}
@@ -155,8 +155,8 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
             sections={sections}
           />
         )}
-        {s.bootstrapComplete && isItutu ? (
-          <SidebarItutuSection shared={s.sharedProjectItemProps} />
+        {s.bootstrapComplete && isInyosira ? (
+          <SidebarInyosiraSection shared={s.sharedProjectItemProps} />
         ) : null}
         {!s.bootstrapComplete ? (
           <div className="flex flex-1 items-center justify-center">

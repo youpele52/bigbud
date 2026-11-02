@@ -1,5 +1,5 @@
 /**
- * Ìtútù idle cleanup, in two rules checked every 15 s:
+ * Inyosira idle cleanup, in two rules checked every 15 s:
  * - idle: quiescent Present threads quiet for the timeout move to the destination (Later);
  * - older threads: quiescent Present or Later threads quiet for the age move to Done.
  * Each rule's timing starts no earlier than its latest barrier: server start, a change to that
@@ -27,11 +27,11 @@ export const IDLE_RETRY_AFTER_MS = 60_000;
 
 type IdlePolicy = Pick<
   ServerSettings,
-  | "itutuIdleCleanupEnabled"
-  | "itutuIdleTimeoutMinutes"
-  | "itutuIdleDestination"
-  | "itutuOlderThreadsEnabled"
-  | "itutuOlderThreadsDays"
+  | "inyosiraIdleCleanupEnabled"
+  | "inyosiraIdleTimeoutMinutes"
+  | "inyosiraIdleDestination"
+  | "inyosiraOlderThreadsEnabled"
+  | "inyosiraOlderThreadsDays"
 >;
 
 export interface IdleRule {
@@ -47,15 +47,15 @@ export function idleRulesFor(settings: IdlePolicy): ReadonlyArray<IdleRule> {
   return [
     {
       name: "idle",
-      enabled: settings.itutuIdleCleanupEnabled,
-      timeoutMs: settings.itutuIdleTimeoutMinutes * 60_000,
+      enabled: settings.inyosiraIdleCleanupEnabled,
+      timeoutMs: settings.inyosiraIdleTimeoutMinutes * 60_000,
       fromStates: ["present"],
-      destination: settings.itutuIdleDestination,
+      destination: settings.inyosiraIdleDestination,
     },
     {
       name: "older",
-      enabled: settings.itutuOlderThreadsEnabled,
-      timeoutMs: settings.itutuOlderThreadsDays * 24 * 60 * 60_000,
+      enabled: settings.inyosiraOlderThreadsEnabled,
+      timeoutMs: settings.inyosiraOlderThreadsDays * 24 * 60 * 60_000,
       fromStates: ["present", "later"],
       destination: "done",
     },
@@ -126,7 +126,7 @@ export const startThreadIdleCleanup = Effect.fn("startThreadIdleCleanup")(functi
               type: "thread.organization.idle",
               commandId: CommandId.makeUnsafe(
                 stableThreadToolId(
-                  "itutu-idle",
+                  "inyosira-idle",
                   JSON.stringify([candidate.threadId, candidate.revision, createdAt]),
                 ),
               ),

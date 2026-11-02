@@ -51,7 +51,7 @@ const thread = (threadId: string, overrides: Record<string, unknown> = {}) =>
     ...overrides,
   });
 
-layer("Ìtútù idle candidates", (it) => {
+layer("Inyosira idle candidates", (it) => {
   it.effect("returns only quiet, quiescent threads in the asked states; each gate excludes", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

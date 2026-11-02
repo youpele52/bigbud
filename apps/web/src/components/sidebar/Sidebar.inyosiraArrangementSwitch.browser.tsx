@@ -1,18 +1,18 @@
 import "~/index.css";
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { render } from "vitest-browser-react";
-import { useItutuStore } from "../../stores/itutu/itutu.store";
-import { SidebarItutuArrangementSwitch } from "./Sidebar.itutuArrangementSwitch";
+import { useInyosiraStore } from "../../stores/inyosira/inyosira.store";
+import { SidebarInyosiraArrangementSwitch } from "./Sidebar.inyosiraArrangementSwitch";
 
-const originalArrangement = useItutuStore.getState().arrangement;
+const originalArrangement = useInyosiraStore.getState().arrangement;
 const originalDark = document.documentElement.classList.contains("dark");
 
 beforeEach(() => {
-  useItutuStore.setState({ arrangement: "projects" });
+  useInyosiraStore.setState({ arrangement: "projects" });
 });
 
 afterEach(() => {
-  useItutuStore.getState().setArrangement(originalArrangement);
+  useInyosiraStore.getState().setArrangement(originalArrangement);
   document.documentElement.classList.toggle("dark", originalDark);
 });
 
@@ -22,45 +22,45 @@ it.each(["light", "dark"])(
     document.documentElement.classList.toggle("dark", theme === "dark");
     const screen = await render(
       <div style={{ width: 280 }}>
-        <SidebarItutuArrangementSwitch />
+        <SidebarInyosiraArrangementSwitch />
       </div>,
     );
     const group = screen.getByRole("group", { name: "Sidebar arrangement" });
     const projects = screen.getByRole("button", { name: "Projects", exact: true });
-    const itutu = screen.getByRole("button", { name: "Ìtútù", exact: true });
+    const inyosira = screen.getByRole("button", { name: "Inyosira", exact: true });
 
     await expect.element(group).toHaveAttribute("data-variant", "toolbar");
     await expect.element(group).toHaveAttribute("data-size", "xs");
     await expect.element(projects).toHaveAttribute("aria-pressed", "true");
-    await expect.element(itutu).toHaveAttribute("aria-pressed", "false");
+    await expect.element(inyosira).toHaveAttribute("aria-pressed", "false");
     const wrapper = group.element().parentElement!;
     expect(getComputedStyle(wrapper).paddingBottom).toBe("0px");
 
-    for (const button of [projects.element(), itutu.element()]) {
+    for (const button of [projects.element(), inyosira.element()]) {
       const style = getComputedStyle(button);
       expect(style.fontSize).toBe("14px");
       expect(style.borderColor).toBe("rgba(0, 0, 0, 0)");
       expect(button.getBoundingClientRect().height).toBeLessThanOrEqual(28);
     }
     expect(getComputedStyle(projects.element()).backgroundColor).not.toBe(
-      getComputedStyle(itutu.element()).backgroundColor,
+      getComputedStyle(inyosira.element()).backgroundColor,
     );
 
-    await itutu.click();
-    await expect.element(itutu).toHaveAttribute("aria-pressed", "true");
+    await inyosira.click();
+    await expect.element(inyosira).toHaveAttribute("aria-pressed", "true");
     await expect.element(projects).toHaveAttribute("aria-pressed", "false");
-    expect(useItutuStore.getState().arrangement).toBe("itutu");
+    expect(useInyosiraStore.getState().arrangement).toBe("inyosira");
     // Both arrangements now share the New chat / Search block and its spacing.
     expect(getComputedStyle(wrapper).paddingBottom).toBe("0px");
 
     // Clicking the selected option must not leave the sidebar without an arrangement.
-    await itutu.click();
-    await expect.element(itutu).toHaveAttribute("aria-pressed", "true");
-    expect(useItutuStore.getState().arrangement).toBe("itutu");
+    await inyosira.click();
+    await expect.element(inyosira).toHaveAttribute("aria-pressed", "true");
+    expect(useInyosiraStore.getState().arrangement).toBe("inyosira");
 
     await projects.click();
     await expect.element(projects).toHaveAttribute("aria-pressed", "true");
-    expect(useItutuStore.getState().arrangement).toBe("projects");
+    expect(useInyosiraStore.getState().arrangement).toBe("projects");
     expect(getComputedStyle(wrapper).paddingBottom).toBe("0px");
   },
 );

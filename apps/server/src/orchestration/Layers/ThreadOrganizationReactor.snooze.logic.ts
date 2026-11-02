@@ -54,7 +54,7 @@ export function expireSnoozeCommand(
   return {
     type: "thread.organization.snooze.expire",
     commandId: CommandId.makeUnsafe(
-      stableThreadToolId("itutu-snooze-expire", JSON.stringify([snooze.snoozeId, createdAt])),
+      stableThreadToolId("inyosira-snooze-expire", JSON.stringify([snooze.snoozeId, createdAt])),
     ),
     threadId: snooze.threadId,
     snoozeId: snooze.snoozeId,

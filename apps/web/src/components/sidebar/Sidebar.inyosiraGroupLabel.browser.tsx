@@ -5,8 +5,8 @@ import { render } from "vitest-browser-react";
 import type { OrchestrationDeliveryStreamItem } from "@bigbud/contracts/orchestration/orchestration.delivery.ts";
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 
-import { ITUTU_COUNT_REFRESH_DELAY_MS } from "../../constants/sidebar";
-import { SidebarItutuGroupLabel } from "./Sidebar.itutuGroupLabel";
+import { INYOSIRA_COUNT_REFRESH_DELAY_MS } from "../../constants/sidebar";
+import { SidebarInyosiraGroupLabel } from "./Sidebar.inyosiraGroupLabel";
 
 type Listener = (item: OrchestrationDeliveryStreamItem) => void | Promise<void>;
 const api = vi.hoisted(() => ({
@@ -50,7 +50,7 @@ function emit(...types: OrchestrationEvent["type"][]) {
   for (const callback of api.listeners) void callback(item);
 }
 const settleRefresh = () =>
-  new Promise((resolve) => setTimeout(resolve, ITUTU_COUNT_REFRESH_DELAY_MS + 30));
+  new Promise((resolve) => setTimeout(resolve, INYOSIRA_COUNT_REFRESH_DELAY_MS + 30));
 
 beforeEach(() => {
   api.available = true;
@@ -71,7 +71,7 @@ it.each([
     api.request.mockResolvedValue({ totalCount: total, threads: [] });
     const onExpandedChange = vi.fn();
     const screen = await render(
-      <SidebarItutuGroupLabel
+      <SidebarInyosiraGroupLabel
         state={state}
         isExpanded={false}
         onExpandedChange={onExpandedChange}
@@ -95,7 +95,7 @@ it.each([
 it("reveals the count only on hover or click/focus without shifting the heading", async () => {
   const screen = await render(
     <>
-      <SidebarItutuGroupLabel state="present" isExpanded onExpandedChange={vi.fn()} />
+      <SidebarInyosiraGroupLabel state="present" isExpanded onExpandedChange={vi.fn()} />
       <button>Elsewhere</button>
     </>,
   );
@@ -123,7 +123,7 @@ it("reveals the count only on hover or click/focus without shifting the heading"
 it("reveals counts for keyboard focus and preserves expansion without refetching", async () => {
   const onExpandedChange = vi.fn();
   const screen = await render(
-    <SidebarItutuGroupLabel state="later" isExpanded onExpandedChange={onExpandedChange} />,
+    <SidebarInyosiraGroupLabel state="later" isExpanded onExpandedChange={onExpandedChange} />,
   );
   const count = screen.getByText("(75)");
   await expect.element(count).toBeInTheDocument();
@@ -131,7 +131,11 @@ it("reveals counts for keyboard focus and preserves expansion without refetching
   await expect.poll(() => getComputedStyle(count.element()).opacity).toBe("1");
   expect(onExpandedChange).toHaveBeenCalledWith(false);
   await screen.rerender(
-    <SidebarItutuGroupLabel state="later" isExpanded={false} onExpandedChange={onExpandedChange} />,
+    <SidebarInyosiraGroupLabel
+      state="later"
+      isExpanded={false}
+      onExpandedChange={onExpandedChange}
+    />,
   );
   await expect.element(count).toBeInTheDocument();
   expect(api.request).toHaveBeenCalledTimes(1);
@@ -139,7 +143,7 @@ it("reveals counts for keyboard focus and preserves expansion without refetching
 
 it("coalesces live membership changes and ignores streamed text", async () => {
   const screen = await render(
-    <SidebarItutuGroupLabel state="later" isExpanded={false} onExpandedChange={vi.fn()} />,
+    <SidebarInyosiraGroupLabel state="later" isExpanded={false} onExpandedChange={vi.fn()} />,
   );
   await expect.element(screen.getByText("(75)")).toBeInTheDocument();
   emit("thread.message-sent", "thread.activity-appended");
@@ -154,7 +158,7 @@ it("coalesces live membership changes and ignores streamed text", async () => {
 
 it("refreshes after reconnect and removes the subscription on unmount", async () => {
   const screen = await render(
-    <SidebarItutuGroupLabel state="done" isExpanded onExpandedChange={vi.fn()} />,
+    <SidebarInyosiraGroupLabel state="done" isExpanded onExpandedChange={vi.fn()} />,
   );
   await expect.element(screen.getByText("(75)")).toBeInTheDocument();
   api.request.mockResolvedValue({ totalCount: 80 });
@@ -175,7 +179,7 @@ it.each(["offline", "legacy response", "request failure"])(
     if (failure === "legacy response") api.request.mockResolvedValue({ threads: [] });
     if (failure === "request failure") api.request.mockRejectedValue(new Error("Disconnected"));
     const screen = await render(
-      <SidebarItutuGroupLabel state="done" isExpanded onExpandedChange={vi.fn()} />,
+      <SidebarInyosiraGroupLabel state="done" isExpanded onExpandedChange={vi.fn()} />,
     );
     await expect.element(screen.getByText("(—)")).toBeInTheDocument();
     await expect.element(screen.getByLabelText("Thread count unavailable")).toBeInTheDocument();
@@ -190,7 +194,7 @@ it("serializes updates arriving during a pending count and ignores its stale res
     }),
   );
   const screen = await render(
-    <SidebarItutuGroupLabel state="present" isExpanded onExpandedChange={vi.fn()} />,
+    <SidebarInyosiraGroupLabel state="present" isExpanded onExpandedChange={vi.fn()} />,
   );
   await expect.element(screen.getByText("(…)")).toBeInTheDocument();
   emit("thread.organization-updated");
@@ -211,11 +215,11 @@ it("ignores a pending response after the displayed group changes", async () => {
     }),
   );
   const screen = await render(
-    <SidebarItutuGroupLabel state="later" isExpanded onExpandedChange={vi.fn()} />,
+    <SidebarInyosiraGroupLabel state="later" isExpanded onExpandedChange={vi.fn()} />,
   );
   await expect.element(screen.getByText("(…)")).toBeInTheDocument();
   await screen.rerender(
-    <SidebarItutuGroupLabel state="done" isExpanded onExpandedChange={vi.fn()} />,
+    <SidebarInyosiraGroupLabel state="done" isExpanded onExpandedChange={vi.fn()} />,
   );
   await expect.element(screen.getByText("(75)")).toBeInTheDocument();
   resolveOld({ totalCount: 99 });

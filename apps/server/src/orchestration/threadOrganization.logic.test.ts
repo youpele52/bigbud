@@ -18,7 +18,7 @@ const snoozed = organizationAfterSnooze(DEFAULT_THREAD_ORGANIZATION, {
 });
 
 describe("thread organization transitions", () => {
-  it("treats threads from before Ìtútù as Present", () => {
+  it("treats threads from before Inyosira as Present", () => {
     expect(currentThreadOrganization({})).toEqual(DEFAULT_THREAD_ORGANIZATION);
   });
 

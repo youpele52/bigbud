@@ -30,7 +30,7 @@ export interface ListThreadsRow {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly lastAssistantExcerpt?: string | null;
-  /** Ìtútù organization: state, revision, and any snooze deadline. */
+  /** Inyosira organization: state, revision, and any snooze deadline. */
   readonly organization: ThreadOrganization;
 }
 

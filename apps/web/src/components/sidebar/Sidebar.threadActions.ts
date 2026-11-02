@@ -13,7 +13,7 @@ import type {
   SidebarThreadActionsInput,
   SidebarThreadActionsOutput,
 } from "./Sidebar.threadActions.types";
-import { buildItutuMoveMenuItem, runItutuMenuAction } from "./Sidebar.itutu.menu";
+import { buildInyosiraMoveMenuItem, runInyosiraMenuAction } from "./Sidebar.inyosira.menu";
 import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 
 function normalizeSummaryText(value: string | null | undefined): string {
@@ -214,7 +214,7 @@ export function useSidebarThreadActions({
         [
           { id: "rename", label: "Rename thread" },
           { id: "branch", label: "Branch thread" },
-          buildItutuMoveMenuItem(thread.organization),
+          buildInyosiraMoveMenuItem(thread.organization),
           {
             id: "favorite",
             label: isFavorite ? "Unpin thread" : "Pin thread",
@@ -234,7 +234,7 @@ export function useSidebarThreadActions({
         position,
       );
 
-      if (await runItutuMenuAction(clicked, [threadId])) return;
+      if (await runInyosiraMenuAction(clicked, [threadId])) return;
 
       if (clicked === "rename") {
         cancelProjectRename();
@@ -318,14 +318,14 @@ export function useSidebarThreadActions({
 
       const clicked = await api.contextMenu.show(
         [
-          buildItutuMoveMenuItem(null),
+          buildInyosiraMoveMenuItem(null),
           { id: "separator-delete", label: "", separator: true },
           { id: "delete", label: `Delete (${count})`, destructive: true },
         ],
         position,
       );
 
-      if (await runItutuMenuAction(clicked, ids)) return;
+      if (await runInyosiraMenuAction(clicked, ids)) return;
       if (clicked !== "delete") return;
 
       if (appSettings.confirmThreadDelete) {

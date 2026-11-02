@@ -14,9 +14,9 @@ import {
   withDatabase,
 } from "./OrchestrationEngine.test.runtime.ts";
 
-const projectId = ProjectId.makeUnsafe("itutu-idle");
-const quietThread = ThreadId.makeUnsafe("itutu-idle-quiet");
-const busyThread = ThreadId.makeUnsafe("itutu-idle-busy");
+const projectId = ProjectId.makeUnsafe("inyosira-idle");
+const quietThread = ThreadId.makeUnsafe("inyosira-idle-quiet");
+const busyThread = ThreadId.makeUnsafe("inyosira-idle-busy");
 const createdAt = "2026-10-30T00:00:00.000Z";
 
 const idle = (id: string, threadId: ThreadId, expectedRevision: number) =>
@@ -30,9 +30,9 @@ const idle = (id: string, threadId: ThreadId, expectedRevision: number) =>
     createdAt,
   }) as const;
 
-describe("Ìtútù idle cleanup in the engine", () => {
+describe("Inyosira idle cleanup in the engine", () => {
   it("moves a quiet thread once and never a thread with admitted work", () =>
-    withDatabase("itutu-idle-", async (dbPath) => {
+    withDatabase("inyosira-idle-", async (dbPath) => {
       const runtime = createRuntime(dbPath);
       try {
         const engine = await engineFor(runtime);

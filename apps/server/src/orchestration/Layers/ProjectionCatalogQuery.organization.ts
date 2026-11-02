@@ -31,7 +31,7 @@ const activeOrganizationThreadsSql = (sql: SqlClient.SqlClient, state: string) =
 `;
 
 /**
- * One keyset page of active threads in an Ìtútù state across every project, served by the
+ * One keyset page of active threads in an Inyosira state across every project, served by the
  * partial index from migration 142.
  */
 export function makeGetOrganizationThreadSummaries(

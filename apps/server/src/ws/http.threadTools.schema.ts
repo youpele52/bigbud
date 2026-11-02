@@ -25,7 +25,7 @@ export const ThreadToolRequest = Schema.Struct({
   ]),
   threadId: Schema.optional(Schema.String),
   targetThreadId: Schema.optional(Schema.String),
-  /** `move`: destination Ìtútù state (`status` is already the list filter). */
+  /** `move`: destination Inyosira state (`status` is already the list filter). */
   organizationState: Schema.optional(Schema.String),
   /** `snooze`: whole minutes. */
   durationMinutes: Schema.optional(Schema.Number),

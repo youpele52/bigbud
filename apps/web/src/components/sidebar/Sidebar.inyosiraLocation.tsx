@@ -3,12 +3,12 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { LaptopMinimalIcon } from "lucide-react";
 
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
-import type { ItutuLocation } from "./Sidebar.itutu.logic";
+import type { InyosiraLocation } from "./Sidebar.inyosira.logic";
 
 const ICON_CLASS = `${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0 text-muted-foreground/60`;
 
-/** The smaller second line of an Ìtútù row: Chat, a local project, or a remote workspace. */
-export function SidebarItutuLocationLine({ location }: { location: ItutuLocation }) {
+/** The smaller second line of an Inyosira row: Chat, a local project, or a remote workspace. */
+export function SidebarInyosiraLocationLine({ location }: { location: InyosiraLocation }) {
   return (
     <span className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground/70">
       {location.kind === "local" ? (

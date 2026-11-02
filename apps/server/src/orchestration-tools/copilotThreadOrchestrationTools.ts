@@ -84,7 +84,7 @@ export function createCopilotThreadOrchestrationTools(
       invocationId?: string,
     ) => Promise<{ readonly title: string }>;
     readonly archiveThread: () => Promise<void>;
-    /** Ìtútù `move_thread` / `snooze_thread`; absent until organization is installed. */
+    /** Inyosira `move_thread` / `snooze_thread`; absent until organization is installed. */
     readonly organizeThread?: (
       name: ThreadOrganizationToolName,
       args: unknown,

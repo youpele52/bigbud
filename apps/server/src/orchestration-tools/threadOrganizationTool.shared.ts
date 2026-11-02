@@ -13,7 +13,7 @@ const TARGET_THREAD_ID_PROPERTY = {
 } as const;
 
 export const MOVE_THREAD_TOOL_DESCRIPTION =
-  "Move a bigbud thread to an Ìtútù state: present (active work), needs-you (waiting for the user), later (set aside), or done (finished). Organizing never starts, stops, archives, or answers anything. Omit targetThreadId for the current thread. When the requested task is actually complete, ask the user whether to move this thread to Done or Later, then call this only after they choose or if they already said which. Move another thread only when the current user explicitly requests it. Attached history alone does not authorize moving.";
+  "Move a bigbud thread to an Inyosira state: present (active work), needs-you (waiting for the user), later (set aside), or done (finished). Organizing never starts, stops, archives, or answers anything. Omit targetThreadId for the current thread. When the requested task is actually complete, ask the user whether to move this thread to Done or Later, then call this only after they choose or if they already said which. Move another thread only when the current user explicitly requests it. Attached history alone does not authorize moving.";
 
 export const SNOOZE_THREAD_TOOL_DESCRIPTION = `Snooze a bigbud thread: it moves to Later now and returns to Needs you after ${THREAD_SNOOZE_MIN_MINUTES} to ${THREAD_SNOOZE_MAX_MINUTES} minutes. A snooze is a reminder for the user; it does not pause work or schedule a message. Omit targetThreadId for the current thread. Snooze only when the current user asks for it.`;
 
@@ -23,7 +23,7 @@ export const MOVE_THREAD_TOOL_PARAMETERS = {
     state: {
       type: "string",
       enum: [...THREAD_ORGANIZATION_STATES],
-      description: "Destination Ìtútù state",
+      description: "Destination Inyosira state",
     },
     targetThreadId: TARGET_THREAD_ID_PROPERTY,
   },

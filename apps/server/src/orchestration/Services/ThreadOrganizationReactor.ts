@@ -5,7 +5,7 @@ export interface ThreadOrganizationReactorShape {
   readonly start: () => Effect.Effect<void, never, Scope.Scope>;
 }
 
-/** Applies Ìtútù organization reactions to accepted domain events. */
+/** Applies Inyosira organization reactions to accepted domain events. */
 export class ThreadOrganizationReactor extends ServiceMap.Service<
   ThreadOrganizationReactor,
   ThreadOrganizationReactorShape

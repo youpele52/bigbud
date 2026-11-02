@@ -1,7 +1,7 @@
 import {
-  DEFAULT_ITUTU_IDLE_TIMEOUT_MINUTES,
-  DEFAULT_ITUTU_OLDER_THREADS_DAYS,
-  type ItutuIdleDestination,
+  DEFAULT_INYOSIRA_IDLE_TIMEOUT_MINUTES,
+  DEFAULT_INYOSIRA_OLDER_THREADS_DAYS,
+  type InyosiraIdleDestination,
   type ServerSettingsPatch,
 } from "@bigbud/contracts/settings";
 import { useEffect, useState } from "react";
@@ -13,11 +13,11 @@ import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import {
   IDLE_TIMEOUT_MINUTES_BOUNDS,
-  ITUTU_IDLE_DESTINATION_LABELS,
+  INYOSIRA_IDLE_DESTINATION_LABELS,
   OLDER_THREADS_DAYS_BOUNDS,
   resolveWholeNumberDraft,
   type WholeNumberBounds,
-} from "./ItutuIdleSettingsSection.logic";
+} from "./InyosiraIdleSettingsSection.logic";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 
 /** A whole-number field that saves on blur or Enter and restores invalid drafts. */
@@ -59,15 +59,15 @@ function WholeNumberSettingInput(props: {
 }
 
 /**
- * Ìtútù idle cleanup, in two steps. The server owns the policy, so a change shows only once it is
+ * Inyosira idle cleanup, in two steps. The server owns the policy, so a change shows only once it is
  * saved. Turning a step on or changing it gives every thread a full new wait for that step.
  */
-export function ItutuIdleSettingsSection() {
-  const enabled = useSettings((settings) => settings.itutuIdleCleanupEnabled);
-  const timeoutMinutes = useSettings((settings) => settings.itutuIdleTimeoutMinutes);
-  const destination = useSettings((settings) => settings.itutuIdleDestination);
-  const olderEnabled = useSettings((settings) => settings.itutuOlderThreadsEnabled);
-  const olderDays = useSettings((settings) => settings.itutuOlderThreadsDays);
+export function InyosiraIdleSettingsSection() {
+  const enabled = useSettings((settings) => settings.inyosiraIdleCleanupEnabled);
+  const timeoutMinutes = useSettings((settings) => settings.inyosiraIdleTimeoutMinutes);
+  const destination = useSettings((settings) => settings.inyosiraIdleDestination);
+  const olderEnabled = useSettings((settings) => settings.inyosiraOlderThreadsEnabled);
+  const olderDays = useSettings((settings) => settings.inyosiraOlderThreadsDays);
   const [saving, setSaving] = useState(false);
 
   const save = async (patch: ServerSettingsPatch) => {
@@ -89,14 +89,14 @@ export function ItutuIdleSettingsSection() {
     <SettingsSection title="Idle threads">
       <SettingsRow
         title="Move idle threads out of Present"
-        description="In Ìtútù, Present threads with no activity for the timeout move automatically. Threads that are working, waiting for you, or have queued messages never move. Turning this on or changing it starts a full new wait."
-        searchTerms={["itutu", "idle", "present", "done", "later", "cleanup", "automatic"]}
+        description="In Inyosira, Present threads with no activity for the timeout move automatically. Threads that are working, waiting for you, or have queued messages never move. Turning this on or changing it starts a full new wait."
+        searchTerms={["inyosira", "idle", "present", "done", "later", "cleanup", "automatic"]}
         control={
           <Switch
             tone="success"
             checked={enabled}
             disabled={saving}
-            onCheckedChange={(checked) => void save({ itutuIdleCleanupEnabled: checked })}
+            onCheckedChange={(checked) => void save({ inyosiraIdleCleanupEnabled: checked })}
             aria-label="Move idle threads out of Present"
           />
         }
@@ -106,11 +106,11 @@ export function ItutuIdleSettingsSection() {
         description="Minutes without activity before a Present thread moves."
         status={`Minimum ${IDLE_TIMEOUT_MINUTES_BOUNDS.min} minutes, maximum 1 day (${IDLE_TIMEOUT_MINUTES_BOUNDS.max} minutes).`}
         resetAction={
-          timeoutMinutes !== DEFAULT_ITUTU_IDLE_TIMEOUT_MINUTES ? (
+          timeoutMinutes !== DEFAULT_INYOSIRA_IDLE_TIMEOUT_MINUTES ? (
             <SettingResetButton
               label="idle timeout"
               onClick={() =>
-                void save({ itutuIdleTimeoutMinutes: DEFAULT_ITUTU_IDLE_TIMEOUT_MINUTES })
+                void save({ inyosiraIdleTimeoutMinutes: DEFAULT_INYOSIRA_IDLE_TIMEOUT_MINUTES })
               }
             />
           ) : null
@@ -121,7 +121,7 @@ export function ItutuIdleSettingsSection() {
             bounds={IDLE_TIMEOUT_MINUTES_BOUNDS}
             disabled={saving}
             ariaLabel="Idle timeout in minutes"
-            onCommit={(value) => void save({ itutuIdleTimeoutMinutes: value })}
+            onCommit={(value) => void save({ inyosiraIdleTimeoutMinutes: value })}
           />
         }
       />
@@ -134,17 +134,17 @@ export function ItutuIdleSettingsSection() {
             disabled={saving}
             onValueChange={(value) => {
               if (value === "done" || value === "later") {
-                void save({ itutuIdleDestination: value satisfies ItutuIdleDestination });
+                void save({ inyosiraIdleDestination: value satisfies InyosiraIdleDestination });
               }
             }}
           >
             <SelectTrigger variant="muted-outline" className="w-full" aria-label="Idle destination">
-              <SelectValue>{ITUTU_IDLE_DESTINATION_LABELS[destination]}</SelectValue>
+              <SelectValue>{INYOSIRA_IDLE_DESTINATION_LABELS[destination]}</SelectValue>
             </SelectTrigger>
             <SelectPopup align="end" alignItemWithTrigger={false}>
               {(["later", "done"] as const).map((value) => (
                 <SelectItem hideIndicator key={value} value={value}>
-                  {ITUTU_IDLE_DESTINATION_LABELS[value]}
+                  {INYOSIRA_IDLE_DESTINATION_LABELS[value]}
                 </SelectItem>
               ))}
             </SelectPopup>
@@ -154,13 +154,13 @@ export function ItutuIdleSettingsSection() {
       <SettingsRow
         title="Move older threads to Done"
         description="Present or Later threads with no activity for this many days move to Done. Snoozed threads wait for their reminder instead, and threads that are working or waiting for you never move."
-        searchTerms={["itutu", "older", "old", "stale", "later", "done", "cleanup", "automatic"]}
+        searchTerms={["inyosira", "older", "old", "stale", "later", "done", "cleanup", "automatic"]}
         control={
           <Switch
             tone="success"
             checked={olderEnabled}
             disabled={saving}
-            onCheckedChange={(checked) => void save({ itutuOlderThreadsEnabled: checked })}
+            onCheckedChange={(checked) => void save({ inyosiraOlderThreadsEnabled: checked })}
             aria-label="Move older threads to Done"
           />
         }
@@ -170,10 +170,12 @@ export function ItutuIdleSettingsSection() {
         description="Days without activity before a Present or Later thread moves to Done."
         status={`Minimum ${OLDER_THREADS_DAYS_BOUNDS.min} day, maximum ${OLDER_THREADS_DAYS_BOUNDS.max} days.`}
         resetAction={
-          olderDays !== DEFAULT_ITUTU_OLDER_THREADS_DAYS ? (
+          olderDays !== DEFAULT_INYOSIRA_OLDER_THREADS_DAYS ? (
             <SettingResetButton
               label="older threads age"
-              onClick={() => void save({ itutuOlderThreadsDays: DEFAULT_ITUTU_OLDER_THREADS_DAYS })}
+              onClick={() =>
+                void save({ inyosiraOlderThreadsDays: DEFAULT_INYOSIRA_OLDER_THREADS_DAYS })
+              }
             />
           ) : null
         }
@@ -183,7 +185,7 @@ export function ItutuIdleSettingsSection() {
             bounds={OLDER_THREADS_DAYS_BOUNDS}
             disabled={saving}
             ariaLabel="Older threads age in days"
-            onCommit={(value) => void save({ itutuOlderThreadsDays: value })}
+            onCommit={(value) => void save({ inyosiraOlderThreadsDays: value })}
           />
         }
       />

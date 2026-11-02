@@ -56,7 +56,7 @@ export interface CatalogThreadRow {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly lastAssistantExcerpt?: string | null;
-  /** Ìtútù organization: state, revision, and any snooze deadline. */
+  /** Inyosira organization: state, revision, and any snooze deadline. */
   readonly organization: ThreadOrganization;
 }
 
@@ -94,7 +94,7 @@ export interface ProjectionCatalogQueryShape {
   readonly getProjectThreadSummaries: (
     input: GetProjectThreadSummariesInput,
   ) => Effect.Effect<GetProjectThreadSummariesResult, ProjectionRepositoryError>;
-  /** One keyset page of active threads in an Ìtútù state, across every project. */
+  /** One keyset page of active threads in an Inyosira state, across every project. */
   readonly getOrganizationThreadSummaries: (
     input: GetOrganizationThreadSummariesInput,
   ) => Effect.Effect<GetOrganizationThreadSummariesResult, ProjectionRepositoryError>;

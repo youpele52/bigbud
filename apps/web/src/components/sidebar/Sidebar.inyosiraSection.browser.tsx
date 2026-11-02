@@ -2,11 +2,11 @@ import "~/index.css";
 import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
-import { useItutuStore } from "../../stores/itutu/itutu.store";
+import { useInyosiraStore } from "../../stores/inyosira/inyosira.store";
 import type { SidebarThreadSummary } from "../../models/types/app.types";
 import type { SharedProjectItemProps } from "./Sidebar.types";
 import { SidebarFixedActions } from "./Sidebar.actionsSection";
-import { SidebarItutuSection } from "./Sidebar.itutuSection";
+import { SidebarInyosiraSection } from "./Sidebar.inyosiraSection";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 
 vi.mock("../../rpc/serverState", () => ({ useServerKeybindings: () => [] }));
@@ -38,10 +38,10 @@ vi.mock("./SidebarThreadTerminalProviderIcon", () => ({
       </span>
     ) : null,
 }));
-vi.mock("./Sidebar.itutu.catalog", () => ({
-  useItutuCatalog: () => ({ pages: useItutuStore.getState().pages, loadMore: vi.fn() }),
+vi.mock("./Sidebar.inyosira.catalog", () => ({
+  useInyosiraCatalog: () => ({ pages: useInyosiraStore.getState().pages, loadMore: vi.fn() }),
 }));
-vi.mock("./Sidebar.itutu.actions", () => ({ moveThreadsToState: vi.fn() }));
+vi.mock("./Sidebar.inyosira.actions", () => ({ moveThreadsToState: vi.fn() }));
 
 const states = ["present", "needs-you", "later", "done"] as const;
 const shared = {
@@ -80,28 +80,28 @@ function makeThread(state: (typeof states)[number]): SidebarThreadSummary {
   };
 }
 
-const originalCollapsed = useItutuStore.getState().collapsedStates;
+const originalCollapsed = useInyosiraStore.getState().collapsedStates;
 const originalDark = document.documentElement.classList.contains("dark");
 
 beforeEach(() => {
   fixtures.terminalProvider = false;
-  useItutuStore.setState({ collapsedStates: [] });
+  useInyosiraStore.setState({ collapsedStates: [] });
   fixtures.threads = Object.fromEntries(states.map((state) => [state, makeThread(state)]));
 });
 
 afterEach(() => {
-  useItutuStore.setState({ collapsedStates: originalCollapsed });
+  useInyosiraStore.setState({ collapsedStates: originalCollapsed });
   document.documentElement.classList.toggle("dark", originalDark);
 });
 
 it.each(["light", "dark"])(
-  "aligns every Ìtútù group with the standard sidebar text column in %s mode",
+  "aligns every Inyosira group with the standard sidebar text column in %s mode",
   async (theme) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     const screen = await render(
       <div style={{ width: 280 }}>
         <SidebarFixedActions onNewChat={vi.fn()} newThreadShortcutLabel={null} />
-        <SidebarItutuSection shared={shared} />
+        <SidebarInyosiraSection shared={shared} />
       </div>,
     );
     const reference = screen.getByText("New chat", { exact: true }).element();
@@ -182,7 +182,7 @@ it.each([true, false])(
     }
     const screen = await render(
       <div style={{ width: 280 }}>
-        <SidebarItutuSection shared={shared} />
+        <SidebarInyosiraSection shared={shared} />
       </div>,
     );
     const row = screen.getByTestId("thread-row-present");
@@ -204,7 +204,7 @@ it.each(["unknown", null] as const)(
     };
     const screen = await render(
       <div style={{ width: 280 }}>
-        <SidebarItutuSection shared={shared} />
+        <SidebarInyosiraSection shared={shared} />
       </div>,
     );
     const row = screen.getByTestId("thread-row-present");

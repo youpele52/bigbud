@@ -9,7 +9,7 @@ import {
 } from "../core/baseSchemas";
 
 /**
- * Ìtútù organization of a thread. It is independent of the provider's runtime status: moving a
+ * Inyosira organization of a thread. It is independent of the provider's runtime status: moving a
  * thread never starts, stops, archives, or answers anything.
  */
 export const THREAD_ORGANIZATION_STATES = ["present", "needs-you", "later", "done"] as const;
@@ -49,7 +49,7 @@ export const DEFAULT_THREAD_ORGANIZATION: ThreadOrganization = {
   snooze: null,
 };
 
-/** Read-model field: absent on snapshots and rows written before Ìtútù existed. */
+/** Read-model field: absent on snapshots and rows written before Inyosira existed. */
 export const ThreadOrganizationField = Schema.optional(ThreadOrganization).pipe(
   Schema.withDecodingDefault(() => DEFAULT_THREAD_ORGANIZATION),
 );

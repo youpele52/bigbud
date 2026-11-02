@@ -2,14 +2,14 @@ import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
 import type { SidebarThreadSummary } from "../../models/types/app.types";
-import { buildItutuMoveMenuItem } from "./Sidebar.itutu.menu";
+import { buildInyosiraMoveMenuItem } from "./Sidebar.inyosira.menu";
 import {
-  BIGBUD_ITUTU_THREAD_DRAG_MIME,
-  groupItutuThreadIds,
-  readItutuDragThreadId,
-  resolveItutuLocation,
-  visibleItutuThreadIds,
-} from "./Sidebar.itutu.logic";
+  BIGBUD_INYOSIRA_THREAD_DRAG_MIME,
+  groupInyosiraThreadIds,
+  readInyosiraDragThreadId,
+  resolveInyosiraLocation,
+  visibleInyosiraThreadIds,
+} from "./Sidebar.inyosira.logic";
 
 const summary = (
   id: string,
@@ -41,9 +41,9 @@ const org = (state: "present" | "needs-you" | "later" | "done") => ({
   snooze: null,
 });
 
-describe("Ìtútù grouping", () => {
+describe("Inyosira grouping", () => {
   it("groups active threads by state, newest first, defaulting to Present", () => {
-    const groups = groupItutuThreadIds({
+    const groups = groupInyosiraThreadIds({
       a: summary("a", { updatedAt: "2026-10-30T01:00:00.000Z" }),
       b: summary("b", { updatedAt: "2026-10-30T02:00:00.000Z" }),
       c: summary("c", { organization: org("done") }),
@@ -51,14 +51,14 @@ describe("Ìtútù grouping", () => {
       e: summary("e", { organization: org("needs-you"), deletingAt: "2026-10-30T00:00:00.000Z" }),
     });
     expect(groups).toEqual({ present: ["b", "a"], "needs-you": [], later: [], done: ["c"] });
-    expect(visibleItutuThreadIds(groups, ["present"])).toEqual(["c"]);
+    expect(visibleInyosiraThreadIds(groups, ["present"])).toEqual(["c"]);
   });
 });
 
-describe("Ìtútù location", () => {
+describe("Inyosira location", () => {
   it("names Chat, local projects, and remote workspaces", () => {
     expect(
-      resolveItutuLocation(
+      resolveInyosiraLocation(
         summary("a", { projectId: ProjectId.makeUnsafe("__chats__") }),
         undefined,
       ),
@@ -66,33 +66,33 @@ describe("Ìtútù location", () => {
       kind: "chat",
       label: "Chat",
     });
-    expect(resolveItutuLocation(summary("a"), { name: "bigbud" })).toEqual({
+    expect(resolveInyosiraLocation(summary("a"), { name: "bigbud" })).toEqual({
       kind: "local",
       label: "bigbud",
     });
     expect(
-      resolveItutuLocation(summary("a", { workspaceExecutionTargetId: "ssh:me@vps.example" }), {
+      resolveInyosiraLocation(summary("a", { workspaceExecutionTargetId: "ssh:me@vps.example" }), {
         name: "VPS app",
       }),
     ).toEqual({ kind: "remote", label: "VPS app" });
-    expect(resolveItutuLocation(summary("a"), undefined)).toEqual({
+    expect(resolveInyosiraLocation(summary("a"), undefined)).toEqual({
       kind: "local",
       label: "Project",
     });
   });
 });
 
-describe("Ìtútù drag and menu", () => {
-  it("accepts only known thread ids from the Ìtútù drag payload", () => {
+describe("Inyosira drag and menu", () => {
+  it("accepts only known thread ids from the Inyosira drag payload", () => {
     const data = (value: string) => ({
-      getData: (type: string) => (type === BIGBUD_ITUTU_THREAD_DRAG_MIME ? value : ""),
+      getData: (type: string) => (type === BIGBUD_INYOSIRA_THREAD_DRAG_MIME ? value : ""),
     });
-    expect(readItutuDragThreadId(data("a"), new Set(["a"]))).toBe("a");
-    expect(readItutuDragThreadId(data("forged"), new Set(["a"]))).toBeNull();
+    expect(readInyosiraDragThreadId(data("a"), new Set(["a"]))).toBe("a");
+    expect(readInyosiraDragThreadId(data("forged"), new Set(["a"]))).toBeNull();
   });
 
   it("checks the current state and offers snoozing only for one thread", () => {
-    const single = buildItutuMoveMenuItem(org("later"));
+    const single = buildInyosiraMoveMenuItem(org("later"));
     expect(single.children?.slice(0, 4).map((item) => [item.label, item.checked])).toEqual([
       ["Present", false],
       ["Needs you", false],
@@ -100,7 +100,7 @@ describe("Ìtútù drag and menu", () => {
       ["Done", false],
     ]);
     expect(single.children?.some((item) => item.label.startsWith("Snooze"))).toBe(true);
-    const many = buildItutuMoveMenuItem(null);
+    const many = buildInyosiraMoveMenuItem(null);
     expect(many.children?.map((item) => item.label)).toEqual([
       "Present",
       "Needs you",

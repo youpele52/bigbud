@@ -21,7 +21,7 @@ import {
 } from "./OrchestrationEngine.test.runtime.ts";
 import { ThreadOrganizationReactorLive } from "./ThreadOrganizationReactor.ts";
 
-const threadId = ThreadId.makeUnsafe("thread-itutu-reactor");
+const threadId = ThreadId.makeUnsafe("thread-inyosira-reactor");
 const createdAt = "2026-10-30T00:00:00.000Z";
 
 const approvalRequest = (id: string, requestId: string): OrchestrationCommand => ({
@@ -52,13 +52,15 @@ const userMessage = (id: string): OrchestrationCommand => ({
 
 describe("ThreadOrganizationReactor", () => {
   it("moves blocked threads to Needs you once per request and back to Present on user work", () =>
-    withDatabase("itutu-reactor-", async (dbPath) => {
+    withDatabase("inyosira-reactor-", async (dbPath) => {
       const runtime = createRuntime(dbPath);
       const scope = await Effect.runPromise(Scope.make("sequential"));
       try {
         const engine = await engineFor(runtime);
         const run = <A, E>(effect: Effect.Effect<A, E>) => runtime.runPromise(effect);
-        for (const command of createCommands(ProjectId.makeUnsafe("itutu-reactor"), [threadId])) {
+        for (const command of createCommands(ProjectId.makeUnsafe("inyosira-reactor"), [
+          threadId,
+        ])) {
           await run(engine.dispatch(command));
         }
         await runtime.runPromise(

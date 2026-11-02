@@ -19,26 +19,26 @@ import {
 
 afterEach(() => setThreadOrchestrationToolDispatcher(null));
 
-it.layer(serverTestLayer)("authenticated Ìtútù organization HTTP", (it) => {
+it.layer(serverTestLayer)("authenticated Inyosira organization HTTP", (it) => {
   it.effect(
     "moves and snoozes authorized targets, replays invocations, and never archives on unmatched actions",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "itutu-tools-" });
+        const baseDir = yield* fs.makeTempDirectoryScoped({ prefix: "inyosira-tools-" });
         const { stateDir } = yield* deriveServerPaths(baseDir, undefined);
-        const runtime = createRuntime(join(baseDir, "itutu.sqlite"));
+        const runtime = createRuntime(join(baseDir, "inyosira.sqlite"));
         yield* Effect.addFinalizer(() => Effect.promise(() => runtime.dispose()));
         const engine = yield* Effect.promise(() => engineFor(runtime));
-        const caller = ThreadId.makeUnsafe("itutu-caller");
-        const target = ThreadId.makeUnsafe("itutu-target");
-        const foreign = ThreadId.makeUnsafe("itutu-foreign");
+        const caller = ThreadId.makeUnsafe("inyosira-caller");
+        const target = ThreadId.makeUnsafe("inyosira-target");
+        const foreign = ThreadId.makeUnsafe("inyosira-foreign");
         for (const command of [
-          ...createCommands(ProjectId.makeUnsafe("itutu-project"), [caller, target]),
-          ...createCommands(ProjectId.makeUnsafe("itutu-foreign-project"), [foreign]),
+          ...createCommands(ProjectId.makeUnsafe("inyosira-project"), [caller, target]),
+          ...createCommands(ProjectId.makeUnsafe("inyosira-foreign-project"), [foreign]),
         ])
           yield* engine.dispatch(command);
-        const token = "itutu-fixture-token";
+        const token = "inyosira-fixture-token";
         yield* Effect.promise(() =>
           writeThreadOrchestrationToolAuth({ stateDir, threadId: caller, token }),
         );

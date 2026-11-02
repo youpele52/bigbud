@@ -113,7 +113,7 @@ const applyOrganizationCommand = Effect.fn("applyThreadOrganizationToolCommand")
   };
 });
 
-/** Moves a thread between Ìtútù states. Organizing never touches execution or approvals. */
+/** Moves a thread between Inyosira states. Organizing never touches execution or approvals. */
 export const moveThreadViaOrchestration = Effect.fn("moveThreadViaOrchestration")(function* (
   input: OrganizationToolInput & { readonly state: string },
 ) {

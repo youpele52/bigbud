@@ -1,5 +1,5 @@
 /**
- * Ìtútù idle cleanup rules. Idle only moves a thread whose execution is confirmed quiescent;
+ * Inyosira idle cleanup rules. Idle only moves a thread whose execution is confirmed quiescent;
  * anything running, queued, held, starting, or recovering keeps it in Present.
  */
 import type { OrchestrationThread } from "@bigbud/contracts";

@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 /**
- * Serves Ìtútù state pages: active threads of one organization state in `updated_at` order.
+ * Serves Inyosira state pages: active threads of one organization state in `updated_at` order.
  * Creating it reads `projection_threads` once; it never touches messages or events.
  */
 export default Effect.gen(function* () {

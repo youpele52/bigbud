@@ -1,5 +1,5 @@
 /**
- * Ìtútù snooze delivery. Each pending snooze gets a timer keyed by thread, replaced or cleared
+ * Inyosira snooze delivery. Each pending snooze gets a timer keyed by thread, replaced or cleared
  * by every organization change. A sweep at start and every 30 s delivers snoozes whose timer was
  * lost (restart, sleep, clock change). Delivery only dispatches the expire command; the decider
  * applies it once, and only while that snooze is still the thread's current one.

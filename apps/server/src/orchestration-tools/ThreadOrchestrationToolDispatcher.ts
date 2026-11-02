@@ -45,7 +45,7 @@ export interface ThreadOrchestrationToolDispatcherShape {
     { readonly title: string; readonly threadId?: ThreadId; readonly commandId?: string },
     Error
   >;
-  /** Ìtútù organization. Optional so transports report "not ready" until it is installed. */
+  /** Inyosira organization. Optional so transports report "not ready" until it is installed. */
   readonly move?: (input: {
     readonly threadId: ThreadId;
     readonly targetThreadId?: ThreadId;

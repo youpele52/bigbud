@@ -8,7 +8,7 @@ import { Effect } from "effect";
 import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
 import type { WsRpcContext } from "./wsRpcContext.ts";
 
-/** Read-only Ìtútù catalog pages. Moves go through the normal command dispatch. */
+/** Read-only Inyosira catalog pages. Moves go through the normal command dispatch. */
 export function makeOrganizationWsRpcHandlers(context: WsRpcContext) {
   return {
     [ORCHESTRATION_WS_METHODS.getOrganizationThreadSummaries]: (
@@ -20,7 +20,7 @@ export function makeOrganizationWsRpcHandlers(context: WsRpcContext) {
           Effect.mapError(
             (cause) =>
               new OrchestrationGetOrganizationThreadSummariesError({
-                message: "Failed to load Ìtútù thread summaries",
+                message: "Failed to load Inyosira thread summaries",
                 cause,
               }),
           ),

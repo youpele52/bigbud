@@ -1,9 +1,9 @@
 /* Preview data only. No real thread metadata or provider state is changed. */
 (() => {
   const states = ["Present", "Needs you", "Later", "Done"];
-  const storageKey = "bigbud.itutu-sidebar-preview.v1";
+  const storageKey = "bigbud.inyosira-sidebar-preview.v1";
   const samples = [
-    ["itutu", "Build Ìtútù mode", "claude", "local", "bigbud", "Present", "Working", "2m"],
+    ["inyosira", "Build Inyosira mode", "claude", "local", "bigbud", "Present", "Working", "2m"],
     [
       "tiles",
       "Optimise tile caching",
@@ -61,8 +61,8 @@
     status,
     time,
   }));
-  let mode = "itutu";
-  let selectedId = "itutu";
+  let mode = "inyosira";
+  let selectedId = "inyosira";
   let collapsed = [];
   let theme = "dark";
   let draggedId = null;
@@ -78,7 +78,7 @@
       for (const thread of threads) {
         if (states.includes(saved.states?.[thread.id])) thread.state = saved.states[thread.id];
       }
-      if (["itutu", "projects"].includes(saved.mode)) mode = saved.mode;
+      if (["inyosira", "projects"].includes(saved.mode)) mode = saved.mode;
       if (threads.some((thread) => thread.id === saved.selectedId)) selectedId = saved.selectedId;
       if (Array.isArray(saved.collapsed))
         collapsed = saved.collapsed.filter((key) => typeof key === "string");
@@ -136,7 +136,7 @@
     const thread = threads.find((item) => item.id === id);
     if (!thread || !states.includes(state)) return false;
     thread.state = state;
-    collapsed = collapsed.filter((key) => key !== `itutu:${state}`);
+    collapsed = collapsed.filter((key) => key !== `inyosira:${state}`);
     closeMenu();
     save();
     render();
@@ -202,7 +202,7 @@
     }
     top.append(element("span", "thread-time", thread.time));
     row.append(top);
-    if (mode === "itutu") {
+    if (mode === "inyosira") {
       const location = element("span", "thread-location");
       location.append(
         icon(
@@ -256,10 +256,10 @@
       `${thread.title} ${thread.project} ${thread.provider}`.toLocaleLowerCase().includes(query),
     );
     const groupNames =
-      mode === "itutu" ? states : [...new Set(threads.map((thread) => thread.project))];
+      mode === "inyosira" ? states : [...new Set(threads.map((thread) => thread.project))];
     for (const name of groupNames) {
       const members = visible.filter(
-        (thread) => (mode === "itutu" ? thread.state : thread.project) === name,
+        (thread) => (mode === "inyosira" ? thread.state : thread.project) === name,
       );
       if (mode === "projects" && !members.length) continue;
       const key = `${mode}:${name}`;
@@ -291,7 +291,7 @@
           );
         section.append(list);
       }
-      if (mode === "itutu") {
+      if (mode === "inyosira") {
         section.addEventListener("dragover", (event) => {
           if (!draggedId) return;
           event.preventDefault();
@@ -353,6 +353,6 @@
   groups.addEventListener("scroll", () => closeMenu(), { passive: true });
   window.addEventListener("resize", () => closeMenu());
   // Demonstrates a shared movement path; this is not an agent integration.
-  window.itutuPreview = Object.freeze({ moveThread });
+  window.inyosiraPreview = Object.freeze({ moveThread });
   render();
 })();

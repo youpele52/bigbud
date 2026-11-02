@@ -4,7 +4,7 @@ import {
   IDLE_TIMEOUT_MINUTES_BOUNDS,
   OLDER_THREADS_DAYS_BOUNDS,
   resolveWholeNumberDraft,
-} from "./ItutuIdleSettingsSection.logic";
+} from "./InyosiraIdleSettingsSection.logic";
 
 describe("resolveWholeNumberDraft", () => {
   it("saves idle timeouts in whole minutes from 10 minutes to 1 day", () => {

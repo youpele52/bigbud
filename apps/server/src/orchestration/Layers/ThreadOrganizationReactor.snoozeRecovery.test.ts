@@ -13,7 +13,7 @@ import {
 } from "./OrchestrationEngine.test.runtime.ts";
 import { ThreadOrganizationReactorLive } from "./ThreadOrganizationReactor.ts";
 
-const projectId = ProjectId.makeUnsafe("itutu-snooze-recovery");
+const projectId = ProjectId.makeUnsafe("inyosira-snooze-recovery");
 const threadId = ThreadId.makeUnsafe("thread-snooze-recovery");
 const createdAt = "2026-10-30T00:00:00.000Z";
 
@@ -27,9 +27,9 @@ const expire = (id: string, snoozeId: string): OrchestrationCommand => ({
 
 afterEach(() => vi.useRealTimers());
 
-describe("Ìtútù snooze delivery", () => {
+describe("Inyosira snooze delivery", () => {
   it("delivers an overdue snooze once after downtime, and stale timers change nothing", () =>
-    withDatabase("itutu-snooze-recovery-", async (dbPath) => {
+    withDatabase("inyosira-snooze-recovery-", async (dbPath) => {
       const first = createRuntime(dbPath);
       const firstEngine = await engineFor(first);
       for (const setup of createCommands(projectId, [threadId])) {

@@ -13,7 +13,7 @@ import {
   organizationReactionForEvent,
 } from "./ThreadOrganizationReactor.logic.ts";
 
-const threadId = ThreadId.makeUnsafe("thread-itutu");
+const threadId = ThreadId.makeUnsafe("thread-inyosira");
 const event = (type: string, payload: Record<string, unknown>) =>
   ({ type, payload: { threadId, ...payload } }) as unknown as OrchestrationEvent;
 const activity = (kind: string, payload: unknown, id = `${kind}-activity`) =>

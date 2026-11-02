@@ -2,7 +2,7 @@ import * as Effect from "effect/Effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 /**
- * Serves Ìtútù snooze delivery: pending snoozes in deadline order. Only snoozed threads are
+ * Serves Inyosira snooze delivery: pending snoozes in deadline order. Only snoozed threads are
  * indexed, so startup recovery and the periodic sweep never scan the whole thread table.
  */
 export default Effect.gen(function* () {

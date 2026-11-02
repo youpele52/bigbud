@@ -5,21 +5,28 @@ import {
   type ThreadOrganizationState,
 } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
-import { ITUTU_SNOOZE_PRESETS, moveThreadsToState, snoozeThread } from "./Sidebar.itutu.actions";
-import { ITUTU_STATE_LABELS } from "./Sidebar.itutu.logic";
-import { formatSnoozeWakeTime, useItutuSnoozePickerStore } from "./Sidebar.itutu.snoozePicker";
+import {
+  INYOSIRA_SNOOZE_PRESETS,
+  moveThreadsToState,
+  snoozeThread,
+} from "./Sidebar.inyosira.actions";
+import { INYOSIRA_STATE_LABELS } from "./Sidebar.inyosira.logic";
+import {
+  formatSnoozeWakeTime,
+  useInyosiraSnoozePickerStore,
+} from "./Sidebar.inyosira.snoozePicker";
 
-const MOVE_PREFIX = "itutu-move:";
-const SNOOZE_PREFIX = "itutu-snooze:";
-const CANCEL_SNOOZE_ID = "itutu-snooze-cancel";
-const SNOOZE_INFO_ID = "itutu-snooze-info";
-const SNOOZE_CUSTOM_ID = "itutu-snooze-custom";
+const MOVE_PREFIX = "inyosira-move:";
+const SNOOZE_PREFIX = "inyosira-snooze:";
+const CANCEL_SNOOZE_ID = "inyosira-snooze-cancel";
+const SNOOZE_INFO_ID = "inyosira-snooze-info";
+const SNOOZE_CUSTOM_ID = "inyosira-snooze-custom";
 
 /**
  * The Move to submenu. With one thread, the current state is checked and snoozing is offered;
  * a multi-selection only offers the four states.
  */
-export function buildItutuMoveMenuItem(
+export function buildInyosiraMoveMenuItem(
   organization: ThreadOrganization | undefined | null,
 ): ContextMenuItem {
   const single = organization !== null;
@@ -27,13 +34,13 @@ export function buildItutuMoveMenuItem(
   const snooze = organization?.snooze ?? null;
   const states: ContextMenuItem[] = THREAD_ORGANIZATION_STATES.map((state) => ({
     id: `${MOVE_PREFIX}${state}`,
-    label: ITUTU_STATE_LABELS[state],
+    label: INYOSIRA_STATE_LABELS[state],
     ...(single ? { checked: state === current } : {}),
   }));
   const snoozeItems: ContextMenuItem[] = !single
     ? []
     : [
-        { id: "itutu-separator", label: "", separator: true },
+        { id: "inyosira-separator", label: "", separator: true },
         ...(snooze
           ? [
               {
@@ -44,17 +51,17 @@ export function buildItutuMoveMenuItem(
               { id: CANCEL_SNOOZE_ID, label: "Cancel snooze" },
             ]
           : []),
-        ...ITUTU_SNOOZE_PRESETS.map((preset) => ({
+        ...INYOSIRA_SNOOZE_PRESETS.map((preset) => ({
           id: `${SNOOZE_PREFIX}${preset.minutes}`,
           label: `${snooze ? "Snooze again" : "Snooze"} ${preset.label}`,
         })),
         { id: SNOOZE_CUSTOM_ID, label: snooze ? "Snooze again for…" : "Snooze for…" },
       ];
-  return { id: "itutu-move-to", label: "Move to", children: [...states, ...snoozeItems] };
+  return { id: "inyosira-move-to", label: "Move to", children: [...states, ...snoozeItems] };
 }
 
-/** Runs a Move to choice. Returns false when the clicked id is not an Ìtútù action. */
-export async function runItutuMenuAction(
+/** Runs a Move to choice. Returns false when the clicked id is not an Inyosira action. */
+export async function runInyosiraMenuAction(
   clicked: string | null,
   threadIds: readonly ThreadId[],
 ): Promise<boolean> {
@@ -70,12 +77,12 @@ export async function runItutuMenuAction(
     return true;
   }
   if (clicked === SNOOZE_CUSTOM_ID && threadIds.length === 1) {
-    useItutuSnoozePickerStore.getState().open(threadIds[0]!);
+    useInyosiraSnoozePickerStore.getState().open(threadIds[0]!);
     return true;
   }
   if (clicked.startsWith(SNOOZE_PREFIX) && threadIds.length === 1) {
     const minutes = Number(clicked.slice(SNOOZE_PREFIX.length));
-    if (!ITUTU_SNOOZE_PRESETS.some((preset) => preset.minutes === minutes)) return false;
+    if (!INYOSIRA_SNOOZE_PRESETS.some((preset) => preset.minutes === minutes)) return false;
     await snoozeThread(threadIds[0]!, minutes);
     return true;
   }

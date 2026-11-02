@@ -6,7 +6,7 @@ import {
 import { create } from "zustand";
 
 /** Which thread the custom snooze picker is open for, if any. */
-export const useItutuSnoozePickerStore = create<{
+export const useInyosiraSnoozePickerStore = create<{
   readonly threadId: ThreadId | null;
   readonly open: (threadId: ThreadId) => void;
   readonly close: () => void;

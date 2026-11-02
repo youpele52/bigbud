@@ -1,14 +1,14 @@
 import { ThreadId } from "@bigbud/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("./Sidebar.itutu.actions", () => ({
-  ITUTU_SNOOZE_PRESETS: [{ minutes: 10, label: "10 minutes" }],
+vi.mock("./Sidebar.inyosira.actions", () => ({
+  INYOSIRA_SNOOZE_PRESETS: [{ minutes: 10, label: "10 minutes" }],
   moveThreadsToState: vi.fn(),
   snoozeThread: vi.fn(),
 }));
 
-import { buildItutuMoveMenuItem, runItutuMenuAction } from "./Sidebar.itutu.menu";
-import { parseSnoozeDuration, useItutuSnoozePickerStore } from "./Sidebar.itutu.snoozePicker";
+import { buildInyosiraMoveMenuItem, runInyosiraMenuAction } from "./Sidebar.inyosira.menu";
+import { parseSnoozeDuration, useInyosiraSnoozePickerStore } from "./Sidebar.inyosira.snoozePicker";
 
 describe("parseSnoozeDuration", () => {
   it("reads minutes and hours within 2 minutes to 24 hours", () => {
@@ -37,7 +37,7 @@ describe("custom snooze in Move to", () => {
   const threadId = ThreadId.makeUnsafe("thread-picker");
 
   it("offers the picker for one thread only, after the presets", () => {
-    const single = buildItutuMoveMenuItem({
+    const single = buildInyosiraMoveMenuItem({
       state: "present",
       revision: 0,
       changedAt: null,
@@ -45,16 +45,16 @@ describe("custom snooze in Move to", () => {
     });
     expect(single.children?.at(-1)).toMatchObject({ label: "Snooze for…" });
     expect(
-      buildItutuMoveMenuItem(null).children?.some((item) => item.label === "Snooze for…"),
+      buildInyosiraMoveMenuItem(null).children?.some((item) => item.label === "Snooze for…"),
     ).toBe(false);
   });
 
   it("opens the picker for the clicked thread", async () => {
-    const id = buildItutuMoveMenuItem(undefined).children!.at(-1)!.id;
-    expect(await runItutuMenuAction(id, [threadId])).toBe(true);
-    expect(useItutuSnoozePickerStore.getState().threadId).toBe(threadId);
-    useItutuSnoozePickerStore.getState().close();
-    expect(await runItutuMenuAction(id, [threadId, ThreadId.makeUnsafe("other")])).toBe(false);
-    expect(useItutuSnoozePickerStore.getState().threadId).toBe(null);
+    const id = buildInyosiraMoveMenuItem(undefined).children!.at(-1)!.id;
+    expect(await runInyosiraMenuAction(id, [threadId])).toBe(true);
+    expect(useInyosiraSnoozePickerStore.getState().threadId).toBe(threadId);
+    useInyosiraSnoozePickerStore.getState().close();
+    expect(await runInyosiraMenuAction(id, [threadId, ThreadId.makeUnsafe("other")])).toBe(false);
+    expect(useInyosiraSnoozePickerStore.getState().threadId).toBe(null);
   });
 });

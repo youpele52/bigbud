@@ -12,7 +12,7 @@ import {
   isRemoteExecutionTargetId,
 } from "./Sidebar.remoteWorkspaces.logic";
 
-export const ITUTU_STATE_LABELS: Record<ThreadOrganizationState, string> = {
+export const INYOSIRA_STATE_LABELS: Record<ThreadOrganizationState, string> = {
   present: "Present",
   "needs-you": "Needs you",
   later: "Later",
@@ -20,13 +20,13 @@ export const ITUTU_STATE_LABELS: Record<ThreadOrganizationState, string> = {
 };
 
 /** Needs you, Later, and Done sit together at the bottom of the sidebar. */
-export const ITUTU_BOTTOM_STATES: readonly ThreadOrganizationState[] = [
+export const INYOSIRA_BOTTOM_STATES: readonly ThreadOrganizationState[] = [
   "needs-you",
   "later",
   "done",
 ];
 
-export type ItutuGroups = Record<ThreadOrganizationState, ThreadId[]>;
+export type InyosiraGroups = Record<ThreadOrganizationState, ThreadId[]>;
 
 const recency = (summary: SidebarThreadSummary) => summary.updatedAt ?? summary.createdAt;
 
@@ -38,9 +38,9 @@ export function organizationStateOf(summary: Pick<SidebarThreadSummary, "organiz
  * Groups every known active thread by its organization state, newest activity first with a
  * stable id tie-breaker, matching the server's state pages.
  */
-export function groupItutuThreadIds(
+export function groupInyosiraThreadIds(
   summaries: Readonly<Record<string, SidebarThreadSummary>>,
-): ItutuGroups {
+): InyosiraGroups {
   const groups: Record<ThreadOrganizationState, SidebarThreadSummary[]> = {
     present: [],
     "needs-you": [],
@@ -51,7 +51,7 @@ export function groupItutuThreadIds(
     if (summary.archivedAt !== null || (summary.deletingAt ?? null) !== null) continue;
     groups[organizationStateOf(summary)].push(summary);
   }
-  const result = {} as ItutuGroups;
+  const result = {} as InyosiraGroups;
   for (const state of THREAD_ORGANIZATION_STATES) {
     result[state] = groups[state]
       .toSorted(
@@ -64,8 +64,8 @@ export function groupItutuThreadIds(
 }
 
 /** Thread ids in display order, skipping collapsed groups, for keyboard navigation. */
-export function visibleItutuThreadIds(
-  groups: ItutuGroups,
+export function visibleInyosiraThreadIds(
+  groups: InyosiraGroups,
   collapsedStates: readonly ThreadOrganizationState[],
 ): ThreadId[] {
   return THREAD_ORGANIZATION_STATES.filter((state) => !collapsedStates.includes(state)).flatMap(
@@ -73,19 +73,19 @@ export function visibleItutuThreadIds(
   );
 }
 
-export type ItutuLocation =
+export type InyosiraLocation =
   | { readonly kind: "chat"; readonly label: string }
   | { readonly kind: "local"; readonly label: string }
   | { readonly kind: "remote"; readonly label: string };
 
 /** Where the thread's workspace lives: Chat, a local project, or a remote workspace. */
-export function resolveItutuLocation(
+export function resolveInyosiraLocation(
   summary: Pick<
     SidebarThreadSummary,
     "projectId" | "workspaceExecutionTargetId" | "executionTargetId"
   >,
   project: Pick<Project, "name"> | undefined,
-): ItutuLocation {
+): InyosiraLocation {
   if (isBuiltInChatsProject(summary.projectId)) return { kind: "chat", label: "Chat" };
   const targetId = resolveWorkspaceExecutionTargetId(summary);
   if (isRemoteExecutionTargetId(targetId)) {
@@ -97,13 +97,13 @@ export function resolveItutuLocation(
   return { kind: "local", label: project?.name ?? "Project" };
 }
 
-/** Drag payload for moving threads between Ìtútù groups; chat drops keep their own payload. */
-export const BIGBUD_ITUTU_THREAD_DRAG_MIME = "application/x-bigbud-itutu-thread";
+/** Drag payload for moving threads between Inyosira groups; chat drops keep their own payload. */
+export const BIGBUD_INYOSIRA_THREAD_DRAG_MIME = "application/x-bigbud-inyosira-thread";
 
-export function readItutuDragThreadId(
+export function readInyosiraDragThreadId(
   dataTransfer: Pick<DataTransfer, "getData">,
   knownThreadIds: ReadonlySet<string>,
 ): ThreadId | null {
-  const threadId = dataTransfer.getData(BIGBUD_ITUTU_THREAD_DRAG_MIME);
+  const threadId = dataTransfer.getData(BIGBUD_INYOSIRA_THREAD_DRAG_MIME);
   return threadId && knownThreadIds.has(threadId) ? (threadId as ThreadId) : null;
 }

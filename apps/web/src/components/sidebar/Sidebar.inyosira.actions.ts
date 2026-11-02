@@ -6,10 +6,10 @@ import { newCommandId } from "../../lib/utils";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useStore } from "../../stores/main";
 import { toastManager } from "../ui/toast";
-import { ITUTU_STATE_LABELS } from "./Sidebar.itutu.logic";
+import { INYOSIRA_STATE_LABELS } from "./Sidebar.inyosira.logic";
 
 /** Snooze presets offered in Move to; "Snooze for…" opens the custom duration picker. */
-export const ITUTU_SNOOZE_PRESETS: ReadonlyArray<{
+export const INYOSIRA_SNOOZE_PRESETS: ReadonlyArray<{
   readonly minutes: number;
   readonly label: string;
 }> = [
@@ -54,8 +54,8 @@ export async function moveThreadsToState(
     type: "error",
     title:
       threadIds.length === 1
-        ? `Couldn't move thread to ${ITUTU_STATE_LABELS[state]}`
-        : `Couldn't move ${failures.length} of ${threadIds.length} threads to ${ITUTU_STATE_LABELS[state]}`,
+        ? `Couldn't move thread to ${INYOSIRA_STATE_LABELS[state]}`
+        : `Couldn't move ${failures.length} of ${threadIds.length} threads to ${INYOSIRA_STATE_LABELS[state]}`,
     description: errorMessage(failures[0]?.reason),
   });
 }

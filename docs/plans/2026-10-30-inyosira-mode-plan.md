@@ -1,11 +1,11 @@
-# Ìtútù mode: implementation plan
+# Inyosira mode: implementation plan
 
 Date: 2026-10-30
 Status: proposed implementation plan, ready for implementation approval. Planning and repository investigation are complete; production implementation and its validation have not started.
 
 ## 1. Goal and agreed experience
 
-Offer two arrangements of the same threads: the existing Projects arrangement and Ìtútù. Switching arrangements must not create, move between projects, duplicate, restart, archive, or delete threads.
+Offer two arrangements of the same threads: the existing Projects arrangement and Inyosira. Switching arrangements must not create, move between projects, duplicate, restart, archive, or delete threads.
 
 ### Sidebar layout
 
@@ -19,7 +19,7 @@ Offer two arrangements of the same threads: the existing Projects arrangement an
 - Reuse existing provider/status semantics and all existing thread behavior. An organizational state is not a provider execution status.
 - Remember the chosen arrangement, collapsed groups, per-thread state, and snooze across application starts.
 
-Visual reference: `../prototypes/2026-10-30-itutu-sidebar.html`. Its sample data and browser-only persistence are not production implementation patterns.
+Visual reference: `../prototypes/2026-10-30-inyosira-sidebar.html`. Its sample data and browser-only persistence are not production implementation patterns.
 
 ### Context menu
 
@@ -340,16 +340,16 @@ No owner process means no timer execution. On recovery, overdue snoozes move onc
 
 Add a focused Threads subsection in General, separated from destructive retention settings:
 
-| Control                | Proposed behavior                                                                             |
-| ---------------------- | --------------------------------------------------------------------------------------------- |
-| Automatic idle cleanup | User-controlled on/off; enabled for the Ìtútù experience after explicit first-use activation. |
-| Idle timeout           | Default 10 minutes; integer minutes; minimum 1.                                               |
-| Idle destination       | Done by default; only Done or Later accepted.                                                 |
-| Layout preference      | Projects or Ìtútù; persisted separately from automation.                                      |
+| Control                | Proposed behavior                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------ |
+| Automatic idle cleanup | User-controlled on/off; enabled for the Inyosira experience after explicit first-use activation. |
+| Idle timeout           | Default 10 minutes; integer minutes; minimum 1.                                                  |
+| Idle destination       | Done by default; only Done or Later accepted.                                                    |
+| Layout preference      | Projects or Inyosira; persisted separately from automation.                                      |
 
 Do not start moving existing users' threads merely because an upgrade installed new columns. First-use activation is explicit and starts a full grace period; after activation, changing the visible arrangement does not implicitly toggle the server's automation policy. Clearly describe this in the settings/help text.
 
-This reconciles the requested automatic behavior with a safe upgrade: existing installations remain unactivated until the user opts into Ìtútù. The first-use mechanism and existing settings persistence scope must be verified before UI wiring; do not add a new onboarding flow if a simple explicit enablement in existing settings suffices.
+This reconciles the requested automatic behavior with a safe upgrade: existing installations remain unactivated until the user opts into Inyosira. The first-use mechanism and existing settings persistence scope must be verified before UI wiring; do not add a new onboarding flow if a simple explicit enablement in existing settings suffices.
 
 The server owns idle policy and per-thread organization. Reuse existing client preference persistence for arrangement/collapse state, respecting server/profile scoping. Handle settings write errors; do not show a policy as active before persistence succeeds.
 
@@ -441,7 +441,7 @@ Extend shared menu items with bounded recursive children and checked/radio state
 
 Add an organization payload while retaining existing thread-context/text payloads. State drops dispatch authorized moves; conversation drops continue to attach context. Do not trust arbitrary dropped IDs.
 
-For multi-select movement/snooze, bound batches, dispatch per-thread operations, and surface partial/stale failures rather than pretending the entire batch succeeded. Use current visible arrangement order for range selection, previous/next navigation, and mod+1…9; do not keep project-only ordering in Ìtútù.
+For multi-select movement/snooze, bound batches, dispatch per-thread operations, and surface partial/stale failures rather than pretending the entire batch succeeded. Use current visible arrangement order for range selection, previous/next navigation, and mod+1…9; do not keep project-only ordering in Inyosira.
 
 ## 14. Proposed module boundaries and phases
 
@@ -553,11 +553,11 @@ Implementation should follow the phase checkpoints above, preserve all unrelated
 
 ## 18. Worktree integration log
 
-Implementation runs on branch `feature/itutu-mode` in the worktree `../bigbud-itutu`, created from `feature/computer-use` at `5ae5cc00ca`. The original checkout keeps its uncommitted backend work. At every phase checkpoint, compare the original checkout's working tree with the previous checkpoint snapshot (stored outside the repository in the worktree's git directory), record overlap and behavioral dependencies here, and integrate committed upstream work into this branch before starting work that depends on it.
+Implementation originally ran in a dedicated feature branch and worktree, created from `feature/computer-use` at `5ae5cc00ca`. The original checkout keeps its uncommitted backend work. At every phase checkpoint, compare the original checkout's working tree with the previous checkpoint snapshot (stored outside the repository in the worktree's git directory), record overlap and behavioral dependencies here, and integrate committed upstream work into this branch before starting work that depends on it.
 
 ### Checkpoint 0 — worktree creation
 
-- Original checkout: 111 uncommitted files (106 backend source/test files: Codex reliability, provider inspection/recovery, checkpointing, rewind; plus the Ìtútù plan and prototype, copied here).
+- Original checkout: 111 uncommitted files (106 backend source/test files: Codex reliability, provider inspection/recovery, checkpointing, rewind; plus the Inyosira plan and prototype, copied here).
 - No migrations among them; the next free migration number was 141.
 
 ### Checkpoint 1 — Phase 1, durable manual organization
@@ -607,13 +607,13 @@ Web:
 
 5. Map `organization` into `Thread` and `SidebarThreadSummary`, including the summary-equality check. Apply `thread.organization-updated` to known threads and summaries.
 6. A dedicated organization membership store (ids per state, per-state cursor, load status, projection sequence). Page summaries are upserted into the summary map without project membership, like pinned threads. Live events move ids between states immediately; a page response older than the last applied event cannot restore stale membership. An event for an unknown thread refreshes that state's first page.
-7. Arrangement (`projects` | `itutu`) and collapsed Ìtútù groups persist through the existing UI-state persistence.
-8. Ìtútù layout replaces only the section list inside `SidebarNavigation`: Present at the top, then a `margin-top: auto` block with Needs you, Later, and Done in one scroll viewport. Plain `SidebarSectionLabel` headings without icons, collapsible, each with "Show more" when the state has another page. The arrangement toggle lives in the fixed actions row, not the drag-region header.
+7. Arrangement (`projects` | `inyosira`) and collapsed Inyosira groups persist through the existing UI-state persistence.
+8. Inyosira layout replaces only the section list inside `SidebarNavigation`: Present at the top, then a `margin-top: auto` block with Needs you, Later, and Done in one scroll viewport. Plain `SidebarSectionLabel` headings without icons, collapsible, each with "Show more" when the state has another page. The arrangement toggle lives in the fixed actions row, not the drag-region header.
 9. Rows reuse `SidebarThreadRow`, adding an optional second line through a prop: location icon plus project name, remote workspace name, or Chat. The location comes from the summary's workspace target and project, with a safe fallback when the project is not loaded.
 10. Context menu contract: optional `checked` and bounded `children` (one submenu level, maximum 16 items each), implemented in the Electron handler (submenu and checkbox) and the browser fallback (nested panel, keyboard and Escape). The thread menu uses the agreed order. Move to has the four states with a check on the current one, a separator, then Snooze (2m, 10m, 30m, 1h, 4h, 24h presets) and Cancel snooze while snoozed. Custom duration input follows in Phase 4 alongside the timers.
-11. Drag between Ìtútù groups uses a separate organization drag MIME added to the existing payload, with `effectAllowed` `copyMove`. Group drop targets dispatch a move only for a known thread id. Drag into chat keeps working.
+11. Drag between Inyosira groups uses a separate organization drag MIME added to the existing payload, with `effectAllowed` `copyMove`. Group drop targets dispatch a move only for a known thread id. Drag into chat keeps working.
 12. Multi-select context menu adds Move to for the selection, dispatched per thread with a partial-failure toast.
-13. In Ìtútù, visible order for previous/next and mod+1..9 follows the expanded groups in display order.
+13. In Inyosira, visible order for previous/next and mod+1..9 follows the expanded groups in display order.
 
 Snooze expiry and idle cleanup stay disabled until Phases 4 and 5.
 
@@ -625,7 +625,7 @@ Implemented here, following the refined Phase 2 design:
 - `orchestration.getOrganizationThreadSummaries`: keyset pages per state across all projects (default 20, maximum 50), served by migration 142's partial index (verified with a query-plan test). Contract and server handler live in their own modules.
 - Web: organization mapped into threads and summaries; `thread.organization-updated` applied live; page summaries merged like pinned threads without project membership; a higher organization revision always wins, so a late page cannot undo a live move; moves of threads this client has never loaded mark that state stale so the open view reloads its first page.
 - Groups are derived from known summaries, so a move regroups immediately without a second membership list.
-- Ìtútù UI: Projects | Ìtútù switch above New chat and Search, persisted with collapsed groups under `bigbud:itutu-ui:v1`; Present at the top and Needs you, Later, Done anchored at the bottom; existing rows with a smaller location line (Chat, local project, or remote workspace); Show more per state; drag between groups with a separate payload while drag into chat keeps working; keyboard traversal and mod+1..9 follow the visible groups.
+- Inyosira UI: Projects | Inyosira switch above New chat and Search, persisted with collapsed groups under `bigbud:inyosira-ui:v1`; Present at the top and Needs you, Later, Done anchored at the bottom; existing rows with a smaller location line (Chat, local project, or remote workspace); Show more per state; drag between groups with a separate payload while drag into chat keeps working; keyboard traversal and mod+1..9 follow the visible groups.
 - Context menus: optional `checked` and one bounded submenu level in the contract, Electron handler, and browser fallback (keyboard: arrows, Enter, Escape, Left; focus restored on close). The thread menu follows the agreed order with Move to. Snooze presets and Cancel snooze sit inside Move to, because menus allow one submenu level; the custom-duration picker moves to Phase 4. The multi-select menu offers Move to for the selection with a partial-failure toast.
 - The Electron handler no longer emits a duplicate separator before Delete when an explicit separator precedes it.
 
@@ -730,10 +730,10 @@ Original checkout since checkpoint 6: unchanged (156 uncommitted files), with no
 
 Implemented here:
 
-- **Settings** (server-owned, flat keys in `settings.itutu.ts`):
-  - `itutuIdleCleanupEnabled`, default off. Turning it on is the explicit activation; there is no separate onboarding flow.
-  - `itutuIdleTimeoutMinutes`, default 10, whole minutes from 1 to 7 days.
-  - `itutuIdleDestination`, Done (default) or Later only.
+- **Settings** (server-owned, flat keys in `settings.inyosira.ts`):
+  - `inyosiraIdleCleanupEnabled`, default off. Turning it on is the explicit activation; there is no separate onboarding flow.
+  - `inyosiraIdleTimeoutMinutes`, default 10, whole minutes from 1 to 7 days.
+  - `inyosiraIdleDestination`, Done (default) or Later only.
   - They appear under General as an "Idle threads" section after Threads, separate from destructive retention. The UI saves through `persistServerSettings`, so a policy never shows as active before the server accepts it, and write errors show a toast.
 - **Internal command** `thread.organization.idle` (thread, expected revision, destination), reason `idle`. The decider moves the thread only if it is live, still Present at that revision, unsnoozed, and quiescent by the read model. Quiescent means none of these: a session that is starting or running, a running turn, queued prompts, a pending start, pending turn control or interrupt flush, a queue hold, or recovery.
   - Commands are decided one at a time, so work admitted first always blocks the move. Work after the move returns the thread to Present through the Phase 3b reactor.
@@ -771,7 +771,7 @@ Verified here, all scoped to this branch and without full-suite runs:
 - **Explicit-file checks:** all 159 branch files pass oxfmt check and oxlint, and no code file exceeds 400 lines. Typechecks pass for contracts, server, web, and desktop.
 - **Gate 7 (real data, copied):** a read-only snapshot of the 3 GB development database (664 threads, about 495,000 events, migration level 140) was migrated to 143 and then deleted. Live data was opened read-only only.
   - Migrations 141–143 took about 27 ms, with no lasting WAL growth.
-  - The Ìtútù page query uses `idx_projection_threads_active_organization_state`, and the snooze query uses `idx_projection_threads_pending_snooze`.
+  - The Inyosira page query uses `idx_projection_threads_active_organization_state`, and the snooze query uses `idx_projection_threads_pending_snooze`.
   - The idle candidate query uses the state index, with every gate subquery on an existing index, and took about 5 ms. Every live thread starts as Present, which is the activation worst case.
 - **Pre-existing failure, not caused by this branch:** `apps/web/src/rpc/client.test.ts` fails 2 tests because its expected settings lack the Muse provider. Muse settings were added in `24ef737239` before the branch point, neither file changed on this branch, and the diff shows only the Muse block.
 

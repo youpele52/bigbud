@@ -8,7 +8,7 @@ import { updateThreadState } from "./helpers.store";
 import { newerOrganization } from "./helpers.organization.logic.store";
 
 /**
- * Adds one Ìtútù state page to the known threads. Like pinned threads, page threads get summaries
+ * Adds one Inyosira state page to the known threads. Like pinned threads, page threads get summaries
  * without project membership, so project lists and their cursors are unaffected.
  */
 export function appendOrganizationPage(

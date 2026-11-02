@@ -309,7 +309,7 @@ export const OrchestrationThread = Schema.Struct({
   recovery: Schema.optional(Schema.NullOr(ThreadRecovery)).pipe(
     Schema.withDecodingDefault(() => null),
   ),
-  /** Ìtútù organization. Absent on snapshots written before organization existed. */
+  /** Inyosira organization. Absent on snapshots written before organization existed. */
   organization: ThreadOrganizationField,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,

@@ -234,7 +234,7 @@ export interface Thread {
   turnStartRequest?: ThreadTurnStartRequest | null | undefined;
   /** Sleep and wake recovery state from the server projection. */
   recovery?: ThreadRecovery | null;
-  /** Ìtútù organization from the server projection. Absent means Present. */
+  /** Inyosira organization from the server projection. Absent means Present. */
   organization?: ThreadOrganization | undefined;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
   branch: string | null;
@@ -277,7 +277,7 @@ export interface SidebarThreadSummary {
   providerAgents?: OrchestrationTask[];
   /** `continuing` keeps the pill on Working while bigbud resumes a turn after sleep. */
   recoveryStatus?: ThreadRecoveryStatus | null;
-  /** Ìtútù organization from the server projection. Absent means Present. */
+  /** Inyosira organization from the server projection. Absent means Present. */
   organization?: ThreadOrganization | undefined;
 }
 

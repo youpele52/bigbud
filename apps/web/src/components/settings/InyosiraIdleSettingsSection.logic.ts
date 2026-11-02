@@ -1,8 +1,8 @@
 import {
-  ITUTU_IDLE_TIMEOUT_MAX_MINUTES,
-  ITUTU_IDLE_TIMEOUT_MIN_MINUTES,
-  ITUTU_OLDER_THREADS_MAX_DAYS,
-  ITUTU_OLDER_THREADS_MIN_DAYS,
+  INYOSIRA_IDLE_TIMEOUT_MAX_MINUTES,
+  INYOSIRA_IDLE_TIMEOUT_MIN_MINUTES,
+  INYOSIRA_OLDER_THREADS_MAX_DAYS,
+  INYOSIRA_OLDER_THREADS_MIN_DAYS,
 } from "@bigbud/contracts/settings";
 
 export interface WholeNumberBounds {
@@ -11,13 +11,13 @@ export interface WholeNumberBounds {
 }
 
 export const IDLE_TIMEOUT_MINUTES_BOUNDS: WholeNumberBounds = {
-  min: ITUTU_IDLE_TIMEOUT_MIN_MINUTES,
-  max: ITUTU_IDLE_TIMEOUT_MAX_MINUTES,
+  min: INYOSIRA_IDLE_TIMEOUT_MIN_MINUTES,
+  max: INYOSIRA_IDLE_TIMEOUT_MAX_MINUTES,
 };
 
 export const OLDER_THREADS_DAYS_BOUNDS: WholeNumberBounds = {
-  min: ITUTU_OLDER_THREADS_MIN_DAYS,
-  max: ITUTU_OLDER_THREADS_MAX_DAYS,
+  min: INYOSIRA_OLDER_THREADS_MIN_DAYS,
+  max: INYOSIRA_OLDER_THREADS_MAX_DAYS,
 };
 
 /** The whole number to save for a typed draft, or null to restore the current value. */
@@ -33,4 +33,4 @@ export function resolveWholeNumberDraft(
   return value === current ? null : value;
 }
 
-export const ITUTU_IDLE_DESTINATION_LABELS = { done: "Done", later: "Later" } as const;
+export const INYOSIRA_IDLE_DESTINATION_LABELS = { done: "Done", later: "Later" } as const;

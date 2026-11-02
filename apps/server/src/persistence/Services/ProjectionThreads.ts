@@ -150,12 +150,12 @@ export interface ProjectionThreadRepositoryShape {
     readonly threadId: ThreadId;
     readonly recovery: ThreadRecovery | null;
   }) => Effect.Effect<void, ProjectionRepositoryError>;
-  /** Sets the thread's Ìtútù organization (`organization_*` columns). */
+  /** Sets the thread's Inyosira organization (`organization_*` columns). */
   readonly setOrganization: (input: {
     readonly threadId: ThreadId;
     readonly organization: ThreadOrganization;
   }) => Effect.Effect<void, ProjectionRepositoryError>;
-  /** Pending Ìtútù snoozes of live threads in deadline order, one keyset page at a time. */
+  /** Pending Inyosira snoozes of live threads in deadline order, one keyset page at a time. */
   readonly listPendingSnoozes: (
     input: ListPendingThreadSnoozesInput,
   ) => Effect.Effect<ReadonlyArray<PendingThreadSnooze>, ProjectionRepositoryError>;

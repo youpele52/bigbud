@@ -2,7 +2,7 @@ import { SettingsPageContainer } from "./settingsLayout";
 import { GeneralSettingsSection } from "./GeneralSettingsSection";
 import { LearningProjectsSettingsSection } from "./LearningProjectsSettingsSection";
 import { ThreadRetentionSettingsSection } from "./ThreadRetentionSettingsSection";
-import { ItutuIdleSettingsSection } from "./ItutuIdleSettingsSection";
+import { InyosiraIdleSettingsSection } from "./InyosiraIdleSettingsSection";
 import { BrowserSettingsSection } from "./BrowserSettingsSection";
 import { TerminalSettingsSection } from "./TerminalSettingsSection";
 
@@ -11,7 +11,7 @@ export function GeneralSettingsPanel() {
     <SettingsPageContainer>
       <GeneralSettingsSection />
       <ThreadRetentionSettingsSection />
-      <ItutuIdleSettingsSection />
+      <InyosiraIdleSettingsSection />
       <BrowserSettingsSection />
       <TerminalSettingsSection />
       <LearningProjectsSettingsSection />

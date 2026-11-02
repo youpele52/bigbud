@@ -3,7 +3,7 @@ import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/or
 import { useMemo, useState, type DragEvent } from "react";
 
 import type { Project, SidebarThreadSummary } from "../../models/types/app.types";
-import { useItutuStore } from "../../stores/itutu/itutu.store";
+import { useInyosiraStore } from "../../stores/inyosira/inyosira.store";
 import { useStore } from "../../stores/main";
 import {
   SidebarGroup,
@@ -11,35 +11,35 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "../ui/sidebar";
-import { moveThreadsToState } from "./Sidebar.itutu.actions";
-import { useItutuCatalog } from "./Sidebar.itutu.catalog";
+import { moveThreadsToState } from "./Sidebar.inyosira.actions";
+import { useInyosiraCatalog } from "./Sidebar.inyosira.catalog";
 import {
-  BIGBUD_ITUTU_THREAD_DRAG_MIME,
-  ITUTU_BOTTOM_STATES,
-  groupItutuThreadIds,
+  BIGBUD_INYOSIRA_THREAD_DRAG_MIME,
+  INYOSIRA_BOTTOM_STATES,
+  groupInyosiraThreadIds,
   organizationStateOf,
-  readItutuDragThreadId,
-  resolveItutuLocation,
-} from "./Sidebar.itutu.logic";
-import { SidebarItutuLocationLine } from "./Sidebar.itutuLocation";
+  readInyosiraDragThreadId,
+  resolveInyosiraLocation,
+} from "./Sidebar.inyosira.logic";
+import { SidebarInyosiraLocationLine } from "./Sidebar.inyosiraLocation";
 import type { SharedProjectItemProps } from "./Sidebar.types";
-import { SidebarItutuGroupLabel } from "./Sidebar.itutuGroupLabel";
+import { SidebarInyosiraGroupLabel } from "./Sidebar.inyosiraGroupLabel";
 import { SidebarThreadRow } from "./SidebarThreadRow";
 
-const addItutuDragData = (threadId: ThreadId) => (dataTransfer: DataTransfer) =>
-  dataTransfer.setData(BIGBUD_ITUTU_THREAD_DRAG_MIME, threadId);
+const addInyosiraDragData = (threadId: ThreadId) => (dataTransfer: DataTransfer) =>
+  dataTransfer.setData(BIGBUD_INYOSIRA_THREAD_DRAG_MIME, threadId);
 
 /**
- * Ìtútù arrangement: Present at the top; Needs you, Later, and Done anchored together at the
+ * Inyosira arrangement: Present at the top; Needs you, Later, and Done anchored together at the
  * bottom. Groups are derived from known thread summaries and filled by bounded state pages.
  */
-export function SidebarItutuSection({ shared }: { shared: SharedProjectItemProps }) {
+export function SidebarInyosiraSection({ shared }: { shared: SharedProjectItemProps }) {
   const summaries = useStore((store) => store.sidebarThreadsById);
   const projects = useStore((store) => store.projects);
-  const collapsedStates = useItutuStore((store) => store.collapsedStates);
-  const setStateCollapsed = useItutuStore((store) => store.setStateCollapsed);
-  const { pages, loadMore } = useItutuCatalog(true);
-  const groups = useMemo(() => groupItutuThreadIds(summaries), [summaries]);
+  const collapsedStates = useInyosiraStore((store) => store.collapsedStates);
+  const setStateCollapsed = useInyosiraStore((store) => store.setStateCollapsed);
+  const { pages, loadMore } = useInyosiraCatalog(true);
+  const groups = useMemo(() => groupInyosiraThreadIds(summaries), [summaries]);
   const projectById = useMemo(
     () => new Map(projects.map((project) => [project.id, project])),
     [projects],
@@ -51,11 +51,11 @@ export function SidebarItutuSection({ shared }: { shared: SharedProjectItemProps
     const expanded = !collapsedStates.includes(state);
     const page = pages[state];
     const acceptsDrag = (event: DragEvent) =>
-      event.dataTransfer.types.includes(BIGBUD_ITUTU_THREAD_DRAG_MIME);
+      event.dataTransfer.types.includes(BIGBUD_INYOSIRA_THREAD_DRAG_MIME);
     return (
       <SidebarGroup
         key={state}
-        data-itutu-state={state}
+        data-inyosira-state={state}
         className={`rounded-lg px-2 py-0 ${dropTarget === state ? "bg-accent/40" : ""}`}
         onDragOver={(event) => {
           if (!acceptsDrag(event)) return;
@@ -69,7 +69,7 @@ export function SidebarItutuSection({ shared }: { shared: SharedProjectItemProps
         }}
         onDrop={(event) => {
           setDropTarget(null);
-          const threadId = readItutuDragThreadId(
+          const threadId = readInyosiraDragThreadId(
             event.dataTransfer,
             new Set(Object.keys(summaries)),
           );
@@ -81,7 +81,7 @@ export function SidebarItutuSection({ shared }: { shared: SharedProjectItemProps
           }
         }}
       >
-        <SidebarItutuGroupLabel
+        <SidebarInyosiraGroupLabel
           state={state}
           isExpanded={expanded}
           onExpandedChange={(next) => setStateCollapsed(state, !next)}
@@ -89,7 +89,7 @@ export function SidebarItutuSection({ shared }: { shared: SharedProjectItemProps
         {expanded ? (
           <SidebarMenuSub className="ml-5 mr-0 my-0 translate-x-0 gap-0.5 border-l-0 px-0 py-0">
             {threadIds.map((threadId) => (
-              <ItutuThreadRow
+              <InyosiraThreadRow
                 key={threadId}
                 threadId={threadId}
                 orderedThreadIds={threadIds}
@@ -122,14 +122,16 @@ export function SidebarItutuSection({ shared }: { shared: SharedProjectItemProps
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col pb-2" data-testid="itutu-section">
+    <div className="flex min-h-0 flex-1 flex-col pb-2" data-testid="inyosira-section">
       {renderGroup("present")}
-      <div className="mt-auto flex flex-col gap-1 pt-4">{ITUTU_BOTTOM_STATES.map(renderGroup)}</div>
+      <div className="mt-auto flex flex-col gap-1 pt-4">
+        {INYOSIRA_BOTTOM_STATES.map(renderGroup)}
+      </div>
     </div>
   );
 }
 
-function ItutuThreadRow(props: {
+function InyosiraThreadRow(props: {
   threadId: ThreadId;
   orderedThreadIds: readonly ThreadId[];
   summary: SidebarThreadSummary | undefined;
@@ -138,7 +140,7 @@ function ItutuThreadRow(props: {
 }) {
   const { shared, threadId, summary } = props;
   const location = summary
-    ? resolveItutuLocation(summary, props.projectById.get(summary.projectId))
+    ? resolveInyosiraLocation(summary, props.projectById.get(summary.projectId))
     : null;
   return (
     <SidebarThreadRow
@@ -168,8 +170,8 @@ function ItutuThreadRow(props: {
       favoriteThreadIds={shared.favoriteThreadIds}
       automationThreadIds={shared.automationThreadIds}
       toggleFavoriteThread={shared.toggleFavoriteThread}
-      {...(location ? { secondaryLine: <SidebarItutuLocationLine location={location} /> } : {})}
-      addDragData={addItutuDragData(threadId)}
+      {...(location ? { secondaryLine: <SidebarInyosiraLocationLine location={location} /> } : {})}
+      addDragData={addInyosiraDragData(threadId)}
     />
   );
 }

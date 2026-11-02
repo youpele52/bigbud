@@ -16,8 +16,8 @@ const preferences = vi.hoisted(() => ({
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../../config/env", () => ({ isElectron: false }));
-vi.mock("../../stores/itutu/itutu.store", () => ({
-  useItutuStore: (selector: (state: typeof preferences) => unknown) => selector(preferences),
+vi.mock("../../stores/inyosira/inyosira.store", () => ({
+  useInyosiraStore: (selector: (state: typeof preferences) => unknown) => selector(preferences),
 }));
 vi.mock("../ui/sidebar", () => ({
   useSidebar: () => ({ isMobile: preferences.isMobile, setOpenMobile: preferences.setOpenMobile }),
@@ -59,11 +59,11 @@ vi.mock("./Sidebar.chatsSection", () => ({
   },
 }));
 vi.mock("./Sidebar.projectsSection", () => ({ SidebarProjectsSection: () => null }));
-vi.mock("./Sidebar.itutuArrangementSwitch", () => ({
-  SidebarItutuArrangementSwitch: () => <div>Arrangement switch</div>,
+vi.mock("./Sidebar.inyosiraArrangementSwitch", () => ({
+  SidebarInyosiraArrangementSwitch: () => <div>Arrangement switch</div>,
 }));
-vi.mock("./Sidebar.itutuSection", () => ({
-  SidebarItutuSection: () => <div>Ìtútù thread groups</div>,
+vi.mock("./Sidebar.inyosiraSection", () => ({
+  SidebarInyosiraSection: () => <div>Inyosira thread groups</div>,
 }));
 
 import { SidebarNavigation } from "./Sidebar.navigation";
@@ -102,7 +102,7 @@ describe("SidebarNavigation arrangement", () => {
     const html = renderNavigation();
     for (const label of actionLabels) expect(html).toContain(label);
     expect(html).toContain("Arrangement switch");
-    expect(html).not.toContain("Ìtútù thread groups");
+    expect(html).not.toContain("Inyosira thread groups");
   });
   it("routes the main action to the current project and the Chats action to base Chats", () => {
     renderNavigation();
@@ -114,8 +114,8 @@ describe("SidebarNavigation arrangement", () => {
     expect(preferences.handleNewChats).toHaveBeenCalledOnce();
   });
 
-  it("keeps only New chat and Search in Ìtútù mode alongside the switch and threads", () => {
-    preferences.arrangement = "itutu";
+  it("keeps only New chat and Search in Inyosira mode alongside the switch and threads", () => {
+    preferences.arrangement = "inyosira";
     const html = renderNavigation();
     expect(html).toContain("New chat");
     expect(html).toContain("Search");
@@ -123,24 +123,24 @@ describe("SidebarNavigation arrangement", () => {
     for (const label of actionLabels.slice(2)) expect(html).not.toContain(label);
     expect(html).not.toContain("<nav>");
     expect(html).toContain("Arrangement switch");
-    expect(html).toContain("Ìtútù thread groups");
+    expect(html).toContain("Inyosira thread groups");
   });
 
-  it("keeps New chat and Search available while Ìtútù is loading without showing other links", () => {
-    preferences.arrangement = "itutu";
+  it("keeps New chat and Search available while Inyosira is loading without showing other links", () => {
+    preferences.arrangement = "inyosira";
     const html = renderNavigation(false);
     expect(html).toContain("New chat");
     expect(html).toContain("Search");
     for (const label of actionLabels.slice(2)) expect(html).not.toContain(label);
     expect(html).toContain("Arrangement switch");
     expect(html).toContain("Loading threads");
-    expect(html).not.toContain("Ìtútù thread groups");
+    expect(html).not.toContain("Inyosira thread groups");
   });
 
   it.each([false, true])(
     "starts a chat with the shared mobile behavior (mobile=%s)",
     (isMobile) => {
-      preferences.arrangement = "itutu";
+      preferences.arrangement = "inyosira";
       preferences.isMobile = isMobile;
       renderNavigation();
       expect(preferences.fixedActions).not.toBeNull();

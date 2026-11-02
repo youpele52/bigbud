@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** Ìtútù aligns its location beneath the title; Projects keeps its single-line layout. */
+/** Inyosira aligns its location beneath the title; Projects keeps its single-line layout. */
 export function SidebarThreadRowContent({
   hasProviderIcon,
   firstLine,

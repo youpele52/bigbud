@@ -44,7 +44,7 @@ const makeThreadOrganizationReactor = Effect.gen(function* () {
       .dispatch({
         type: "thread.organization.move",
         commandId: CommandId.makeUnsafe(
-          stableThreadToolId("itutu", JSON.stringify([reaction.threadId, reaction.key])),
+          stableThreadToolId("inyosira", JSON.stringify([reaction.threadId, reaction.key])),
         ),
         threadId: reaction.threadId,
         state: reaction.state,

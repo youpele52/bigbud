@@ -23,7 +23,7 @@ export function renderPiOrganizationToolsSource(): string {
     '  label: "move_thread",',
     `  description: ${JSON.stringify(MOVE_THREAD_TOOL_DESCRIPTION)},`,
     "  parameters: Type.Object({",
-    `    state: Type.Union([${states.join(", ")}], { description: "Destination Ìtútù state" }),`,
+    `    state: Type.Union([${states.join(", ")}], { description: "Destination Inyosira state" }),`,
     '    targetThreadId: Type.Optional(Type.String({ description: "Canonical target thread ID; omit for the current thread" })),',
     "  }),",
     "  async execute(toolCallId, { state, targetThreadId }) {",

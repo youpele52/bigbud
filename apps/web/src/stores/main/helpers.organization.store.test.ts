@@ -53,7 +53,7 @@ const page = (threads: ThreadSummary[]) => ({
   threads,
 });
 
-describe("Ìtútù store helpers", () => {
+describe("Inyosira store helpers", () => {
   it("adds page threads without giving them project membership", () => {
     const state = makeState(makeThread());
     const next = appendOrganizationPage(

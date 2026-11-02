@@ -1,5 +1,5 @@
 /**
- * Decider cases for Ìtútù organization commands.
+ * Decider cases for Inyosira organization commands.
  *
  * Organization is independent of execution: these commands never start, stop, archive, or answer
  * anything. Archive and unarchive also record an organization update here, so every change to a

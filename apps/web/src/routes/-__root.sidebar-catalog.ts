@@ -3,7 +3,7 @@ import type { OrchestrationEvent } from "@bigbud/contracts";
 import type { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
 import { retryTransportRecoveryOperation } from "../logic/orchestration";
-import { useItutuStore } from "../stores/itutu/itutu.store";
+import { useInyosiraStore } from "../stores/inyosira/inyosira.store";
 
 type Api = NonNullable<ReturnType<typeof readNativeApi>>;
 
@@ -27,14 +27,14 @@ export function shouldRefreshSidebarCatalog(event: OrchestrationEvent): boolean 
 }
 
 /**
- * A thread moved into an Ìtútù state that this client has never loaded cannot be grouped from
- * the event alone, so the open Ìtútù view reloads that state's first page.
+ * A thread moved into an Inyosira state that this client has never loaded cannot be grouped from
+ * the event alone, so the open Inyosira view reloads that state's first page.
  */
-export function markUnknownItutuMovesStale(events: ReadonlyArray<OrchestrationEvent>): void {
+export function markUnknownInyosiraMovesStale(events: ReadonlyArray<OrchestrationEvent>): void {
   const known = useStore.getState().sidebarThreadsById;
   for (const event of events) {
     if (event.type === "thread.organization-updated" && !known[event.payload.threadId]) {
-      useItutuStore.getState().markStale(event.payload.organization.state);
+      useInyosiraStore.getState().markStale(event.payload.organization.state);
     }
   }
 }
