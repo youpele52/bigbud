@@ -5,6 +5,9 @@
   "type": "module",
   "exports": {
     "./terminalUnicodeProvider": "./src/terminalUnicodeProvider.ts",
+    "./copilotRuntime.paths": "./src/copilotRuntime.paths.ts",
+    "./copilotRuntime.storage": "./src/copilotRuntime.storage.ts",
+    "./copilotRuntime.bridge": "./src/copilotRuntime.bridge.ts",
     "./queueDecision": {
       "types": "./src/queueDecision.ts",
       "import": "./src/queueDecision.ts"

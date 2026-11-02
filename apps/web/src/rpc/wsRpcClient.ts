@@ -249,6 +249,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) =>
           client[WS_METHODS.serverGetOpencodeV2ThreadToolsSetup](input),
         ),
+      copilotRuntime: (input) =>
+        transport.request((client) => client[WS_METHODS.serverCopilotRuntime](input)),
       createMobileRemotePairing: (input) =>
         transport.request((client) => client[WS_METHODS.serverCreateMobileRemotePairing](input)),
       listMobileRemoteSessions: () =>

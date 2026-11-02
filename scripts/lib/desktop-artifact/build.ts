@@ -52,6 +52,11 @@ import { sanitizeUnsignedSigningEnvironment } from "../windows-signing-mode.ts";
 import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
 import { stageDesktopNativeSidecars } from "./nativeSidecars.ts";
 import { copyDesktopArtifacts } from "./build.copy.ts";
+import {
+  resolveCopilotPackagingMode,
+  copilotPackagingTargets,
+} from "../../../apps/desktop/scripts/copilotRuntimePackaging.cjs";
+import { stageCopilotRuntimePackaging } from "./copilotRuntime.ts";
 
 export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
   options: ResolvedBuildOptions,
@@ -59,6 +64,8 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   const repoRoot = yield* RepoRoot;
   const path = yield* Path.Path;
   const fs = yield* FileSystem.FileSystem;
+  const copilotMode = resolveCopilotPackagingMode();
+  const copilotTargets = copilotPackagingTargets(options.platform, options.arch);
 
   const platformConfig = PLATFORM_CONFIG[options.platform];
   if (!platformConfig) {
@@ -190,7 +197,10 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
   // The server bundle is self-contained (all JS dependencies inlined by tsdown).
   // Only packages that cannot be bundled (native addons, runtime require.resolve)
   // need to be installed in the staged server directory.
-  const serverExternalDependencies = pickExternalDependencies(resolvedServerDependencies);
+  const serverExternalDependencies = pickExternalDependencies(
+    resolvedServerDependencies,
+    copilotMode,
+  );
   const stagePackageJson: StagePackageJson = {
     name: releaseIdentity.packageName,
     version: appVersion,
@@ -251,6 +261,9 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     stageServerDir,
     platform: options.platform,
     verbose: options.verbose,
+    copilotMode,
+    copilotTargets,
+    copilotVersion: serverPackageJson.dependencies["@github/copilot"],
   });
 
   if (options.platform === "mac") {
@@ -261,6 +274,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     path.join(stageServerDir, "node_modules"),
     "server runtime dependencies",
   );
+  yield* stageCopilotRuntimePackaging(stageServerDir, copilotMode, copilotTargets);
 
   // electron-builder silently strips node_modules from extraResources copies.
   // Rename to _modules so the directory survives into the packaged app.

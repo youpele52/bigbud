@@ -19,6 +19,7 @@ import { ProviderThreadToolsSetup } from "./ProviderThreadToolsSetup";
 import { ProviderNativeStatus } from "./ProviderCard.nativeStatus";
 import { ClaudeSubagentCapsSettings } from "./ProviderCard.claudeSubagentCaps";
 import type { OpenCodeSettingsStatus } from "./ProvidersSettingsSection.opencode";
+import { CopilotRuntimeSettings } from "./CopilotRuntimeSettings";
 
 export type ProviderCardData = {
   provider: ProviderKind;
@@ -190,6 +191,12 @@ export function ProviderCard({
         <CollapsibleContent>
           <div className="space-y-0">
             {card.nativeStatus ? <ProviderNativeStatus status={card.nativeStatus} /> : null}
+            {card.provider === "copilot" ? (
+              <CopilotRuntimeSettings
+                customPath={card.binaryPathValue}
+                onClearPath={() => onBinaryPathChange("copilot")}
+              />
+            ) : null}
             {card.provider === "opencodeV2" && connectionMode === "isolated" ? (
               <div className="space-y-2 border-t border-border/60 px-4 py-3 text-sm sm:px-5">
                 <p className="text-warning">

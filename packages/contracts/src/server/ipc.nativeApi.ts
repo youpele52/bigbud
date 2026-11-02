@@ -273,6 +273,9 @@ export interface NativeApi {
     getOpencodeV2ThreadToolsSetup: (
       input: ServerOpencodeV2ThreadToolsSetupInput,
     ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
+    copilotRuntime?: (
+      input: import("./copilotRuntime").CopilotRuntimeInput,
+    ) => Promise<import("./copilotRuntime").CopilotRuntimeState>;
     createMobileRemotePairing: (
       input: Mobile.ServerCreateMobileRemotePairingInput,
     ) => Promise<Mobile.ServerMobileRemotePairing>;

@@ -2,6 +2,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { SIDEBAR_ICON_SIZE_CLASS } from "../sidebar/Sidebar.iconSizes";
+import { SidebarDownloads } from "../sidebar/SidebarDownloads";
 import { SETTINGS_NAV_ITEMS } from "./SettingsSidebarNav.items";
 import {
   SidebarContent,
@@ -54,6 +55,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
 
       <SidebarSeparator />
       <SidebarFooter className="p-2">
+        <SidebarDownloads />
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton

@@ -1,4 +1,5 @@
 import * as Crypto from "node:crypto";
+import { preservePackagedCopilotRuntime } from "./backend/copilotRuntimeMigration";
 import { registerSystemMonitorIpc } from "./system-monitor/ipc";
 import { makeMainOwnershipRecovery } from "./backend/ownershipRecovery.main";
 import { registerOwnershipRecoveryIpc } from "./window/ipcHandlers.ownershipRecovery";
@@ -299,8 +300,11 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     isDevelopment,
     getIsQuitting,
     setIsQuitting,
-    beginUpdatePreparation: beginInstalledProcessQuiescence,
+    // Preserve first: a failed copy must not fence CUA/backend process starts in the running app.
+    beginUpdatePreparation: () => undefined,
     prepareForUpdateInstall: async () => {
+      await preservePackagedCopilotRuntime(isPackaged, resourcesPath);
+      beginInstalledProcessQuiescence();
       const errors: unknown[] = [];
       let sweepError: unknown = null;
       try {
@@ -375,6 +379,12 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   logHeader("bootstrap login shell hydration started");
   await syncShellEnvironmentAsync();
   logHeader("bootstrap login shell hydration completed");
+  await preservePackagedCopilotRuntime(isPackaged, resourcesPath).catch((error) =>
+    console.error(
+      "[copilot-runtime] Bundle preservation failed; the bundled runtime remains usable.",
+      error,
+    ),
+  );
   await startBackend();
   logHeader("bootstrap backend start requested");
 }

@@ -111,6 +111,7 @@ export const WS_METHODS = {
   serverRetryTextGeneration: "server.retryTextGeneration",
   serverGetHandoffJob: "server.getHandoffJob",
   serverGetOpencodeV2ThreadToolsSetup: "server.getOpencodeV2ThreadToolsSetup",
+  serverCopilotRuntime: "server.copilotRuntime",
   serverCreateMobileRemotePairing: "server.createMobileRemotePairing",
   serverListMobileRemoteSessions: "server.listMobileRemoteSessions",
   serverRevokeMobileRemoteSession: "server.revokeMobileRemoteSession",

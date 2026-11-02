@@ -7,7 +7,7 @@ import { SidebarFooter, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import { SidebarBrandLink } from "./SidebarHeader";
-import { SidebarUpdatePill } from "./SidebarUpdatePill";
+import { SidebarDownloads } from "./SidebarDownloads";
 
 /**
  * The sidebar footer: the update notice, then Settings and Help. Desktop builds with a stage
@@ -21,7 +21,7 @@ export function SidebarFooterBar() {
 
   return (
     <SidebarFooter className="p-2">
-      <SidebarUpdatePill />
+      <SidebarDownloads />
       <div
         className={
           showBrand

@@ -31,6 +31,7 @@ vi.mock("@tanstack/react-router", () => ({
   ),
 }));
 vi.mock("./SidebarUpdatePill", () => ({ SidebarUpdatePill: () => null }));
+vi.mock("./SidebarCopilotRuntime", () => ({ SidebarCopilotRuntime: () => null }));
 vi.mock("./SidebarHelpMenu", () => ({ SidebarHelpMenu: () => <button aria-label="Help" /> }));
 
 import { SidebarProvider } from "../ui/sidebar";

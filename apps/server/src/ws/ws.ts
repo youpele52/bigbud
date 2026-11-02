@@ -19,6 +19,7 @@ import { makeWsRpcOrchestrationServerHandlers } from "./wsRpcHandlers.orchestrat
 import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
 import { makeWsRpcConnectionDiagnosticsHandlers } from "./wsRpcHandlers.connectionDiagnostics.ts";
 import { makeWsRpcComputerUseHandlers } from "./wsRpcHandlers.computerUse.ts";
+import { makeWsRpcCopilotRuntimeHandlers } from "./wsRpcHandlers.copilotRuntime.ts";
 import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
@@ -37,6 +38,7 @@ const makeWsRpcLayer = (
       const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
 
       return WsRpcGroup.of({
+        ...makeWsRpcCopilotRuntimeHandlers(context),
         ...makeWsRpcAutomationHandlers(context),
         ...makeWsRpcOrchestrationServerHandlers(context),
         ...makeWsRpcBrowserHandlers(),

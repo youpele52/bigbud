@@ -7,7 +7,6 @@ import {
   TurnId,
 } from "@bigbud/contracts";
 import {
-  CopilotClient,
   type ResumeSessionConfig,
   type SessionConfig,
   type SessionEvent,
@@ -34,9 +33,9 @@ import {
   type CopilotAdapterLiveOptions,
   type PendingApprovalRequest,
   type PendingUserInputRequest,
-  makeCopilotClientOptions,
   toMessage,
 } from "./Adapter.types.ts";
+import { createLeasedCopilotClient } from "./Runtime.client.ts";
 
 export interface SessionOpsDeps {
   readonly sessions: Map<ThreadId, ActiveCopilotSession>;
@@ -173,21 +172,42 @@ export const makeStartSession =
           : undefined;
       const runtimeCwd = remoteWorkspaceBridge?.runtimeCwd ?? input.cwd;
       const sessionWorkingDirectory = runtimeCwd;
-      const clientOptions = makeCopilotClientOptions({
-        binaryPath: copilotSettings.binaryPath,
-        ...(runtimeCwd ? { workingDirectory: runtimeCwd } : {}),
-        ...(remoteWorkspaceBridge?.clientSessionFsConfig
-          ? { sessionFs: remoteWorkspaceBridge.clientSessionFsConfig }
-          : {}),
-      });
-      const client =
-        deps.options?.clientFactory?.(clientOptions) ?? new CopilotClient(clientOptions);
+      const client = yield* Effect.tryPromise({
+        try: () =>
+          createLeasedCopilotClient(
+            {
+              binaryPath: copilotSettings.binaryPath,
+              ...(runtimeCwd ? { workingDirectory: runtimeCwd } : {}),
+              ...(remoteWorkspaceBridge?.clientSessionFsConfig
+                ? { sessionFs: remoteWorkspaceBridge.clientSessionFsConfig }
+                : {}),
+            },
+            deps.options?.clientFactory,
+          ),
+        catch: (cause) =>
+          new ProviderAdapterProcessError({
+            provider: PROVIDER,
+            threadId: input.threadId,
+            detail: toMessage(cause, "Failed to resolve GitHub Copilot runtime."),
+            cause,
+          }),
+      }).pipe(
+        Effect.tapError(() =>
+          Effect.promise(async () => {
+            await remoteWorkspaceBridge?.cleanup().catch(() => undefined);
+          }),
+        ),
+      );
       const pendingApprovals = new Map<string, PendingApprovalRequest>();
       const pendingUserInputs = new Map<string, PendingUserInputRequest>();
       let activeTurn: TurnId | undefined;
       const stoppedRef = { stopped: false };
       const dispatcher = getThreadOrchestrationToolDispatcher();
       if (!dispatcher) {
+        yield* Effect.promise(async () => {
+          await client.stop().catch(() => []);
+          await remoteWorkspaceBridge?.cleanup().catch(() => undefined);
+        });
         return yield* new ProviderAdapterProcessError({
           provider: PROVIDER,
           threadId: input.threadId,
@@ -238,8 +258,9 @@ export const makeStartSession =
           }),
       }).pipe(
         Effect.tapError(() =>
-          Effect.sync(() => {
-            void remoteWorkspaceBridge?.cleanup().catch(() => undefined);
+          Effect.promise(async () => {
+            await client.stop().catch(() => []);
+            await remoteWorkspaceBridge?.cleanup().catch(() => undefined);
           }),
         ),
       );

@@ -278,6 +278,7 @@ export function createWsNativeApi(): NativeApi {
       startHandoffJob: rpcClient.server.startHandoffJob,
       getHandoffJob: rpcClient.server.getHandoffJob,
       getOpencodeV2ThreadToolsSetup: rpcClient.server.getOpencodeV2ThreadToolsSetup,
+      copilotRuntime: rpcClient.server.copilotRuntime,
       createMobileRemotePairing: rpcClient.server.createMobileRemotePairing,
       listMobileRemoteSessions: rpcClient.server.listMobileRemoteSessions,
       revokeMobileRemoteSession: rpcClient.server.revokeMobileRemoteSession,
