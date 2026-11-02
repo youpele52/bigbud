@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { installCopilotRuntime } from "./Runtime.install.ts";
+import { COPILOT_RUNTIME_VERSION } from "./Runtime.release.ts";
 import { readManagedCopilotRuntime } from "@bigbud/shared/copilotRuntime.paths";
 import { archiveFetch, runtimeFixture } from "./Runtime.test.helpers.ts";
 
@@ -83,13 +84,13 @@ describe("managed Copilot runtime installer", () => {
       [0, 1].map(() => promisify(execFile)(process.execPath, [worker, root], { timeout: 15_000 })),
     );
     expect(await readFile(Path.join(root, "downloads"), "utf8")).toBe("download\n");
-    expect(readManagedCopilotRuntime(root)?.version).toBe("1.0.103");
+    expect(readManagedCopilotRuntime(root)?.version).toBe(COPILOT_RUNTIME_VERSION);
     expect(await readdir(Path.join(root, ".staging"))).toEqual([]);
   });
 
   it("publishes updates side by side, preserving the old executable and rollback version", async () => {
     const root = await storage();
-    const old = runtimeFixture({ version: "1.0.102" });
+    const old = runtimeFixture({ version: "1.0.103" });
     const next = runtimeFixture();
     const previous = await installCopilotRuntime({
       root,
@@ -103,13 +104,16 @@ describe("managed Copilot runtime installer", () => {
       fetch: archiveFetch(next.bytes),
     });
     expect(readManagedCopilotRuntime(root)?.path).toBe(current.path);
+    expect(previous.version).toBe("1.0.103");
+    expect(current.version).toBe(COPILOT_RUNTIME_VERSION);
+    expect(readManagedCopilotRuntime(root)?.version).toBe(COPILOT_RUNTIME_VERSION);
     expect(await readFile(previous.path)).toEqual(before);
     expect(previous.directory).not.toBe(current.directory);
   });
 
   it("preserves current runtime, auth, settings, and chats on verification failure", async () => {
     const root = await storage();
-    const old = runtimeFixture({ version: "1.0.102" });
+    const old = runtimeFixture({ version: "1.0.103" });
     const previous = await installCopilotRuntime({
       root,
       release: old.release,

@@ -1,47 +1,47 @@
-/** Official npm metadata captured 2026-11-01; SDK 1.0.26 declares CLI 1.0.103. */
-export const COPILOT_RUNTIME_VERSION = "1.0.103";
-export const COPILOT_RUNTIME_SDK_VERSION = "1.0.26";
+/** Official npm metadata captured 2026-11-02; SDK 1.0.28 declares CLI 1.0.105. */
+export const COPILOT_RUNTIME_VERSION = "1.0.105";
+export const COPILOT_RUNTIME_SDK_VERSION = "1.0.28";
 
 const RELEASES = {
   "darwin-arm64": [
-    "5upfa7UdJJQbRRfyrYqaZ81xy0SSXba8HNRNwJYVw1NuONFFt3u7FzPBQJ/XpB/1m/YGPmmK4XRgITAF4oAu+A==",
-    181811714,
-    120249222,
+    "cB4CplzVs+k5dlK3/ukr8M5yNI2i8O+lpA8dpMrh4znxW2lknOS+5ZfA++b9jOSz0PmRvK47Ruvq/FrjP33bNw==",
+    181877378,
+    120320932,
   ],
   "darwin-x64": [
-    "E0gt0Q4UyndutyT5bcEn8gBv7RiBJPkY2oOy4vvbF6nHZ8/+/FS0p7baIfOc6xTjJnS+3rfQ8ts9yCRKiSZa9Q==",
-    190246566,
-    126834367,
+    "DkqgEvvQxoYbvS55xciNGGo6V18K8gltcqXespReXRa4eBxSYeBeDPO3d0GM1GhBIrjpxHmXtTulCP5YQOItaw==",
+    190324998,
+    126913270,
   ],
   "linux-arm64": [
-    "QK+rSoLxGD79qWpPGZBhV/9KB/yAOnfTkWsAAcRBdFRO3loSFO/bkKDb88aVrSMY/gue167gTOSpR2BWdFObjg==",
-    194517689,
-    131317972,
+    "L7/4Sq1ibeUdD8aE++cubBjr2oWfAFGe0yKjuY5oe0HDZw8QHYAPrZhB2p79Nkg2lIB88REncsf+qWuVVDVPjA==",
+    194648761,
+    131398559,
   ],
   "linux-x64": [
-    "9qNrzrecDTL4N94tPsxocXC1BJ+CykXGiwKQOdVYzpy26Jd43qLtGfYNIrrr4iQi9lAhQPp64Q5UDAkQ3JZgVw==",
-    198449901,
-    130078031,
+    "3trlyisQQAnlNy3CvYVRDVWC/WK+0CfDId7dDwNbxTFJ9IgM3aoCPyg+QbGPBUeuYNs4sjgtTqFn5l5yfyHVDg==",
+    198515437,
+    130166621,
   ],
   "linuxmusl-arm64": [
-    "p73LRoSDABSPXX8EeiI/ZC9B30d0Zjp1lEEnG9+I19wh7uMq/V0H8Bi9ZISeAzSve49Bij9likpwGScgy2nw2w==",
-    189405196,
-    121925970,
+    "p4iMcOLQ/sp0eOwR56/BByuCkfnQUjywAcrMLrOVLDFYjQdxKBfZGP5wGDPqp3J0XF5Gy+rj6VSzQfz7x6B4lQ==",
+    189482156,
+    122004723,
   ],
   "linuxmusl-x64": [
-    "bLP+ZMIZwXCAPZZ6TlwsazG8aVteD6hw9YXX023gz5BpjffbBfYCvkm7IEFHqhBL4ZeboA+WJ20OBA6qheEH/w==",
-    197262464,
-    125442864,
+    "Ie875DDpje0rwtKgT7k0AMlSuetsGO6hZ3Ry/JoyGYJyZx5ZL5QzTOmngDxato8MchcwcBJf38jk1undPEwe0w==",
+    197344976,
+    125523042,
   ],
   "win32-arm64": [
-    "l7K5K6RDgPmdbaeQl2XjoByGYvvKgk2NPGlLxJOXsaCHLuiulbQbXUFa3c71Pty8e3J64viTqlokB+aLmMGkyw==",
-    164708552,
-    113492663,
+    "lfpsYgZLBSqNXnDemKv4g0ofjWBvIlQIJVZjJXEYmLXbP+zZAKJ7L+ebqQlvs/elnxv0naY7a7+gQJ1lMBXNIg==",
+    164790472,
+    113575126,
   ],
   "win32-x64": [
-    "4UVN1vkK36ztFAynNtPKOSpeNUDe3m5LnsD0gTlmPZOayTA8a+/Mek3hf8xCpCrDpFs+GqmbhXeFgbXF61Glgg==",
-    172572860,
-    113485450,
+    "Yiy3loRnNICCzmyTQLMs5KnVg1sQUTDkP5JBHu+YrFvzyWVtHIr4nfuLScx5e34qtxcuq/YOHHf0gk4fnxlHcg==",
+    172641980,
+    113558624,
   ],
 } as const;
 

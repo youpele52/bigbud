@@ -90,13 +90,13 @@ describe("deliberate bridge/slim Copilot packaging", () => {
     expect(await readFile(f.pi, "utf8")).toBe("Pi must remain");
     expect(await readFile(f.cua, "utf8")).toBe("cua-driver must remain");
     const dependencies = {
-      "@github/copilot": "1.0.103",
-      "@github/copilot-sdk": "1.0.26",
+      "@github/copilot": "1.0.105",
+      "@github/copilot-sdk": "1.0.28",
       "@earendil-works/pi-coding-agent": "1.4.0",
       "node-pty": "1.1.0",
     };
     expect(pickExternalDependencies(dependencies, "slim")).toEqual({
-      "@github/copilot-sdk": "1.0.26",
+      "@github/copilot-sdk": "1.0.28",
       "@earendil-works/pi-coding-agent": "1.4.0",
       "node-pty": "1.1.0",
     });

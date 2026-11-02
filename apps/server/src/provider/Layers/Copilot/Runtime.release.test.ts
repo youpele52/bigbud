@@ -12,14 +12,14 @@ import {
 
 describe("pinned Copilot runtime release", () => {
   it.each([
-    ["darwin", "arm64", false, 120249222, 181811714],
-    ["darwin", "x64", false, 126834367, 190246566],
-    ["linux", "arm64", false, 131317972, 194517689],
-    ["linux", "x64", false, 130078031, 198449901],
-    ["linux", "arm64", true, 121925970, 189405196],
-    ["linux", "x64", true, 125442864, 197262464],
-    ["win32", "arm64", false, 113492663, 164708552],
-    ["win32", "x64", false, 113485450, 172572860],
+    ["darwin", "arm64", false, 120320932, 181877378],
+    ["darwin", "x64", false, 126913270, 190324998],
+    ["linux", "arm64", false, 131398559, 194648761],
+    ["linux", "x64", false, 130166621, 198515437],
+    ["linux", "arm64", true, 122004723, 189482156],
+    ["linux", "x64", true, 125523042, 197344976],
+    ["win32", "arm64", false, 113575126, 164790472],
+    ["win32", "x64", false, 113558624, 172641980],
   ] as const)("pins %s/%s musl=%s", (platform, arch, isMusl, archiveBytes, unpackedBytes) => {
     const release = resolveCopilotRuntimeRelease({ platform, arch, isMusl });
     expect(release.version).toBe(COPILOT_RUNTIME_VERSION);
