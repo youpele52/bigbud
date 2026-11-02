@@ -2,6 +2,7 @@ import { type TerminalSessionSnapshot } from "@bigbud/contracts";
 import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { type TerminalAgentDetector } from "./Manager.agentDetection";
+import { TerminalModeTracker } from "./TerminalModeTracker";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
@@ -55,6 +56,7 @@ export interface ProcessLifecycleContext {
 // ---------------------------------------------------------------------------
 
 export function cleanupProcessHandles(session: TerminalSessionState): void {
+  session.recoveryModel?.dispose("process-retired");
   session.unsubscribeData?.();
   session.unsubscribeData = null;
   session.unsubscribeExit?.();
@@ -108,6 +110,9 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     history: session.history + session.pendingHistoryControlSequence,
     ...(session.historyTruncated ? { historyTruncated: true } : {}),
     ...(session.historyUnavailable ? { historyUnavailable: true } : {}),
+    ...(session.historyTruncated || session.historyUnavailable
+      ? { liveModes: (session.modeTracker ?? new TerminalModeTracker()).snapshot() }
+      : {}),
     exitCode: session.exitCode,
     exitSignal: session.exitSignal,
     updatedAt: session.updatedAt,

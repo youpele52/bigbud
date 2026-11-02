@@ -168,6 +168,7 @@ export function createWsNativeApi(): NativeApi {
     terminal: {
       wslDistributions: () => rpcClient.terminal.wslDistributions(),
       snapshot: (input) => rpcClient.terminal.snapshot(input as never),
+      recovery: (input) => rpcClient.terminal.recovery(input),
       open: (input) => rpcClient.terminal.open(input as never),
       write: (input) => rpcClient.terminal.write(input as never),
       resize: (input) => rpcClient.terminal.resize(input as never),

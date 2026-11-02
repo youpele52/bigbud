@@ -3,11 +3,14 @@ import type {
   TerminalDropPathMode,
   TerminalSessionSnapshot,
 } from "@bigbud/contracts/workspace/terminal.ts";
-import { TerminalViewportIntake } from "./TerminalViewport.intake";
+import { TerminalViewportIntake, type TerminalLiveAttachTarget } from "./TerminalViewport.intake";
+import { TerminalRedrawNudge } from "./TerminalViewport.liveAttach";
+import { terminalResizeGeometry } from "./terminalRecoveryGeometry";
 import { TerminalWriteBatcher, type TerminalWriteBatcherOptions } from "./TerminalWriteBatcher";
 import { makeApplyTerminalEvent } from "./TerminalViewport.events";
 import { withTerminalViewDeadline } from "./terminalLifecycle.operations";
 import { isCurrentTerminalSnapshot } from "../../lib/terminalLaunchBinding";
+import { readNativeApi } from "../../rpc/nativeApi";
 import {
   hasCurrentTerminalBaseline,
   resolveTerminalViewportSnapshot,
@@ -76,6 +79,8 @@ export function createTerminalViewportDelivery(input: {
   onCreditReleased?: () => void;
   /** Sees every output chunk the view receives (frame metrics); must not retain the text. */
   observeOutput?: (data: string) => void;
+  /** The view attached live without a history baseline and asked its program to repaint. */
+  onLiveAttach?: () => void;
   batcherOptions?: TerminalWriteBatcherOptions;
 }) {
   let disposed = false;
@@ -95,13 +100,22 @@ export function createTerminalViewportDelivery(input: {
     },
     isDisposed: () => disposed,
   });
+  const api = readNativeApi();
+  let target: TerminalLiveAttachTarget | null = null;
+  const redraw = new TerminalRedrawNudge(
+    async (geometry) => {
+      if (target) await api?.terminal.resize({ ...target, ...geometry });
+    },
+    () => terminalResizeGeometry(terminal),
+  );
   const observeOutput = input.observeOutput;
-  const apply: typeof applyEvent = observeOutput
-    ? (event) => {
-        if (event.type === "output") observeOutput(event.data);
-        applyEvent(event);
-      }
-    : applyEvent;
+  const apply: typeof applyEvent = (event) => {
+    if (event.type === "output") {
+      observeOutput?.(event.data);
+      redraw.observeOutput();
+    }
+    applyEvent(event);
+  };
   const intake = new TerminalViewportIntake(
     terminal,
     writeBatcher,
@@ -113,6 +127,13 @@ export function createTerminalViewportDelivery(input: {
       if (!disposed) input.onCreditReleased?.();
     },
     isCurrentTerminalSnapshot,
+    api?.terminal.recovery,
+    (attached) => {
+      if (disposed) return;
+      target = { threadId: attached.threadId, terminalId: attached.terminalId };
+      void redraw.request();
+      input.onLiveAttach?.();
+    },
   );
   return {
     intake,

@@ -8,6 +8,7 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
     wslDistributions: () =>
       transport.request((client) => client[WS_METHODS.terminalWslDistributions]({})),
     snapshot: (input) => transport.request((client) => client[WS_METHODS.terminalSnapshot](input)),
+    recovery: (input) => transport.request((client) => client[WS_METHODS.terminalRecovery](input)),
     open: (input) => transport.request((client) => client[WS_METHODS.terminalOpen](input)),
     write: (input) => transport.request((client) => client[WS_METHODS.terminalWrite](input)),
     resize: (input) => transport.request((client) => client[WS_METHODS.terminalResize](input)),

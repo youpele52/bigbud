@@ -62,6 +62,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   terminal: {
     wslDistributions: vi.fn(),
     snapshot: vi.fn(),
+    recovery: vi.fn(),
     open: vi.fn(),
     write: vi.fn(),
     resize: vi.fn(),

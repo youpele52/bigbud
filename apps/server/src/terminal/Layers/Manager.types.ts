@@ -1,5 +1,7 @@
 import type * as Effect from "effect/Effect";
 import type * as Fiber from "effect/Fiber";
+import type { TerminalRecoveryModel } from "./TerminalRecoveryModel";
+import type { TerminalModeTracker } from "./TerminalModeTracker";
 
 import type {
   TerminalCwdError,
@@ -32,6 +34,12 @@ export const DEFAULT_OPEN_ROWS = 30;
 // ---------------------------------------------------------------------------
 
 export interface TerminalSessionState {
+  recoveryModel?: TerminalRecoveryModel | undefined;
+  /** Input-affecting modes since process birth; survives history truncation. */
+  modeTracker?: TerminalModeTracker | undefined;
+  recoveryOutputHeld?: boolean;
+  hasDeliveryOutputHold?: (() => boolean) | undefined;
+  recoveryResizeOutput?: { bytes: number; chunks: string[] } | undefined;
   wslIdentity?: TerminalWslIdentity | undefined;
   remoteShellPid?: number | undefined;
   remoteOwnerRecoveryRequired?: boolean;

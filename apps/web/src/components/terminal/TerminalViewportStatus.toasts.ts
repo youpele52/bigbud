@@ -9,6 +9,8 @@ export interface TerminalViewportToastState {
   retryGpu: () => void;
   retryDelivery?: () => void;
   historyUnavailable?: boolean;
+  /** Increments each time the view attached live without earlier output. */
+  liveAttachCount?: number;
   restartDelivery?: () => void;
   gpuRequested: boolean;
   terminalLabel: string;
@@ -26,6 +28,7 @@ export class TerminalViewportToasts {
   private readonly input: ToastLane = { id: null, key: null };
   private readonly gpu: ToastLane = { id: null, key: null };
   private readonly folder: ToastLane = { id: null, key: null };
+  private readonly history: ToastLane = { id: null, key: null };
   private latest: TerminalViewportToastState | null = null;
   private disposed = false;
 
@@ -39,6 +42,7 @@ export class TerminalViewportToasts {
       this.input.key = null;
       this.close(this.gpu);
       this.close(this.folder);
+      this.close(this.history);
       return;
     }
     if (state.inputEnabled) {
@@ -88,6 +92,15 @@ export class TerminalViewportToasts {
         type: "warning",
         title: `${state.terminalLabel}: started in Home`,
         description: state.directoryNotice,
+        timeout: 10000,
+      });
+    }
+    if (state.inputEnabled && state.liveAttachCount) {
+      this.show(this.history, `${state.terminalLabel}:live:${state.liveAttachCount}`, {
+        type: "warning",
+        title: `${state.terminalLabel}: reconnected to the running terminal`,
+        description:
+          "Earlier output couldn't be restored, so the program was asked to redraw. Nothing was restarted.",
         timeout: 10000,
       });
     }
@@ -155,5 +168,6 @@ export class TerminalViewportToasts {
     this.close(this.input);
     this.close(this.gpu);
     this.close(this.folder);
+    this.close(this.history);
   }
 }

@@ -31,6 +31,10 @@ import {
 import { PtyProcess } from "./PTY";
 import { Effect, ServiceMap } from "effect";
 import type { TerminalSnapshotInput } from "@bigbud/contracts/workspace/terminal.ts";
+import type {
+  TerminalRecoveryInput,
+  TerminalRecoveryResult,
+} from "@bigbud/contracts/workspace/terminal.recovery.ts";
 import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
 
 export {
@@ -87,6 +91,9 @@ export interface TerminalSubscribeOptions {
  * TerminalManagerShape - Service API for terminal session lifecycle operations.
  */
 export interface TerminalManagerShape {
+  readonly recovery?: (
+    input: TerminalRecoveryInput,
+  ) => Effect.Effect<TerminalRecoveryResult, TerminalError>;
   readonly hasActiveThread?: (threadId: string) => Effect.Effect<boolean>;
   /**
    * Open or attach to a terminal session.

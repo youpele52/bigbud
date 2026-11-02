@@ -36,6 +36,7 @@ import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
 import type * as TerminalStream from "../workspace/terminal.stream";
 import type * as TerminalSearch from "../workspace/terminal.search";
+import type * as TerminalRecovery from "../workspace/terminal.recovery";
 import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
 import type * as Automation from "./automation";
 import type * as ConnectionDiagnostics from "./connectionDiagnostics";
@@ -77,6 +78,9 @@ export interface NativeApi {
     ) => Promise<{ success: boolean; granted: string[]; denied: string[] }>;
   };
   terminal: {
+    recovery?: (
+      input: TerminalRecovery.TerminalRecoveryInput,
+    ) => Promise<TerminalRecovery.TerminalRecoveryResult>;
     wslDistributions?: () => Promise<TerminalWslDistributions>;
     snapshot?: (
       input: typeof Terminal.TerminalSnapshotInput.Encoded,

@@ -15,6 +15,8 @@ import { makeTerminalClose } from "./Manager.session.close";
 import { prepareTerminalRestart } from "./Manager.session.restart";
 import { makeTerminalOutputHold } from "./Manager.session.outputHold";
 import { TerminalSearchIndex } from "./Manager.search";
+import { resizeWithRecovery } from "./Manager.recovery";
+import { captureTerminalRecovery } from "./Manager.recoveryRpc";
 
 export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
   const {
@@ -64,7 +66,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             // Reattach must not fail on a resize race with a process that is exiting.
             const resizeError = yield* Effect.sync(() => {
               try {
-                process.resize(cols, rows);
+                resizeWithRecovery(session, process, cols, rows);
                 return null;
               } catch (cause) {
                 return cause instanceof Error ? cause.message : String(cause);
@@ -266,6 +268,10 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     snapshot: (input) =>
       requireSession(input.threadId, input.terminalId ?? DEFAULT_TERMINAL_ID).pipe(
         Effect.map(snapshot),
+      ),
+    recovery: (input) =>
+      requireSession(input.threadId, input.terminalId).pipe(
+        Effect.flatMap((session) => captureTerminalRecovery(session, input)),
       ),
     write,
     resize,

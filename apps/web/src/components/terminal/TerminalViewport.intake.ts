@@ -4,8 +4,15 @@ import type {
 } from "@bigbud/contracts/workspace/terminal.ts";
 import type { Terminal } from "@xterm/xterm";
 import { TerminalWriteBatcher } from "./TerminalWriteBatcher";
-import { TerminalHistoryUnavailableError } from "./TerminalHistoryUnavailableError";
+import { liveModeSequence } from "./TerminalViewport.liveAttach";
 import { reserveTerminalOutput, releaseTerminalOutput } from "./TerminalOutputBudget";
+import { terminalLifecycleDiagnostics } from "./TerminalLifecycleDiagnostics";
+import {
+  TerminalViewportRecovery,
+  type TerminalRecoveryRequest,
+} from "./TerminalViewport.recovery";
+
+export type TerminalLiveAttachTarget = Pick<TerminalSessionSnapshot, "threadId" | "terminalId">;
 
 /** Bounded legacy hydration handoff, not a sequenced or exact checkpoint protocol. */
 export class TerminalViewportIntake {
@@ -20,6 +27,9 @@ export class TerminalViewportIntake {
   private cutoff: string | null = null;
   private baseline: TerminalSessionSnapshot | null = null;
   private hydration: Promise<void> | null = null;
+  private inputEnabled: boolean | undefined;
+  private recovery: TerminalViewportRecovery | undefined;
+  private initializedGeneration: string | undefined;
   constructor(
     private readonly terminal: Terminal,
     private readonly lane: TerminalWriteBatcher,
@@ -28,6 +38,9 @@ export class TerminalViewportIntake {
     /** Parked output was discarded without parsing; the stream may acknowledge it now. */
     private readonly onCreditReleased: () => void = () => undefined,
     private readonly acceptSnapshot: (snapshot: TerminalSessionSnapshot) => boolean = () => true,
+    private readonly requestRecovery?: TerminalRecoveryRequest,
+    /** Attached live without a baseline: the program should repaint and the user be told. */
+    private readonly onLiveAttach: (target: TerminalLiveAttachTarget) => void = () => undefined,
   ) {
     this.updateInput();
   }
@@ -53,10 +66,19 @@ export class TerminalViewportIntake {
     return this.cutoff;
   }
   private updateInput(): void {
+    if (this.inputEnabled !== this.acceptsInput) {
+      this.inputEnabled = this.acceptsInput;
+      terminalLifecycleDiagnostics(this.terminal)?.record({
+        type: "input",
+        enabled: this.inputEnabled,
+      });
+    }
     this.terminal.options.disableStdin = !this.acceptsInput;
     this.onInputState(this.acceptsInput);
   }
   pause(error: Error): void {
+    this.recovery?.dispose();
+    terminalLifecycleDiagnostics(this.terminal)?.record({ type: "hydration", state: "paused" });
     this.takePending();
     this.baseline = null;
     this.lane.pause(error);
@@ -65,7 +87,16 @@ export class TerminalViewportIntake {
 
   receive = (event: TerminalEvent): void => {
     if (this.disposed || this.lane.isStopped) return;
-    if (event.type === "activity" || event.type === "agentIdentity") return;
+    if (event.type === "activity") {
+      this.recovery?.notify();
+      return;
+    }
+    if (event.type === "agentIdentity") return;
+    if (this.recovery && event.type === "output") {
+      this.recovery.notify();
+      this.onCreditReleased();
+      return;
+    }
     if (this.cutoff !== null && event.createdAt <= this.cutoff) return;
     if (
       (event.type === "started" || event.type === "restarted") &&
@@ -109,6 +140,7 @@ export class TerminalViewportIntake {
   private stage(snapshot: TerminalSessionSnapshot): boolean {
     if (this.cutoff !== null && snapshot.updatedAt <= this.cutoff) return false;
     if (!this.acceptSnapshot(snapshot)) return false;
+    terminalLifecycleDiagnostics(this.terminal)?.snapshot(snapshot);
     this.cutoff = snapshot.updatedAt;
     this.baseline = snapshot;
     const retained = this.pending.filter((event) => event.createdAt > snapshot.updatedAt);
@@ -138,6 +170,14 @@ export class TerminalViewportIntake {
 
   hydrate(snapshot: TerminalSessionSnapshot): Promise<void> {
     if (this.disposed) return Promise.resolve();
+    if (
+      this.live &&
+      !this.lane.isStopped &&
+      snapshot.runtimeGeneration !== undefined &&
+      snapshot.runtimeGeneration === this.initializedGeneration &&
+      (snapshot.historyTruncated || snapshot.historyUnavailable)
+    )
+      return Promise.resolve();
     this.opened = true;
     this.stage(snapshot);
     return this.startHydration();
@@ -157,26 +197,41 @@ export class TerminalViewportIntake {
     while (this.baseline && !this.disposed) {
       const snapshot = this.baseline;
       this.baseline = null;
-      if (snapshot.historyTruncated || snapshot.historyUnavailable) {
-        this.pause(new TerminalHistoryUnavailableError());
-        return;
+      // No baseline means attach live, never pause: the process is healthy and must stay usable.
+      const baselineless = Boolean(snapshot.historyTruncated || snapshot.historyUnavailable);
+      if (baselineless && this.requestRecovery) {
+        const outcome = await this.tryRecovery(snapshot);
+        if (outcome === "recovered" || this.disposed) return;
+        if (outcome === "superseded" || this.baseline) continue;
       }
       this.live = false;
+      this.recovery?.dispose();
+      this.recovery = undefined;
+      terminalLifecycleDiagnostics(this.terminal)?.record({ type: "hydration", state: "started" });
       // Already-queued live output may still contain valid protocol queries.
       this.lane.barrier(() => {
         this.gate = 1;
         this.updateInput();
       });
-      this.lane.write(this.terminal, "\x1bc");
-      for (let offset = 0; offset < snapshot.history.length; ) {
-        let end = Math.min(offset + 8192, snapshot.history.length);
-        const last = snapshot.history.charCodeAt(end - 1);
-        if (end < snapshot.history.length && last >= 0xd800 && last <= 0xdbff) end--;
-        this.lane.write(this.terminal, snapshot.history.slice(offset, end));
+      if (baselineless) {
+        // Keep existing cells: a resynced view is closer to the truth than a blank one.
         await this.lane.whenIdle();
         if (this.disposed) return;
-        if (this.baseline) break; // A newer baseline covers this replay and its older events.
-        offset = end;
+        if (this.baseline) continue;
+        const modes = liveModeSequence(this.terminal, snapshot.liveModes);
+        if (modes) this.lane.write(this.terminal, modes);
+      } else {
+        this.lane.write(this.terminal, "\x1bc");
+        for (let offset = 0; offset < snapshot.history.length; ) {
+          let end = Math.min(offset + 8192, snapshot.history.length);
+          const last = snapshot.history.charCodeAt(end - 1);
+          if (end < snapshot.history.length && last >= 0xd800 && last <= 0xdbff) end--;
+          this.lane.write(this.terminal, snapshot.history.slice(offset, end));
+          await this.lane.whenIdle();
+          if (this.disposed) return;
+          if (this.baseline) break; // A newer baseline covers this replay and its older events.
+          offset = end;
+        }
       }
       await this.lane.whenIdle();
       if (this.disposed) return;
@@ -186,6 +241,7 @@ export class TerminalViewportIntake {
       // History is parsed. Buffered post-snapshot bytes are LIVE, including
       // handshake queries: suppressing their replies can wedge a waiting TUI.
       this.live = true;
+      this.initializedGeneration = snapshot.runtimeGeneration;
       this.lane.barrier(() => {
         this.gate = 0;
         this.updateInput();
@@ -193,10 +249,70 @@ export class TerminalViewportIntake {
       for (const event of pending) this.apply(event);
       // A fixed FIFO fence, not an empty-queue poll: continuous output cannot starve it.
       await this.lane.whenIdle();
+      if (this.disposed || this.lane.isStopped || this.baseline) continue;
+      terminalLifecycleDiagnostics(this.terminal)?.record({
+        type: "hydration",
+        state: baselineless ? "reattached" : "ready",
+      });
+      if (baselineless) this.onLiveAttach(snapshot);
     }
   }
 
+  /** The mirror is optional fidelity: any refusal or transport failure falls back to live attach. */
+  private async tryRecovery(
+    snapshot: TerminalSessionSnapshot,
+  ): Promise<"recovered" | "superseded" | "unavailable"> {
+    this.recovery?.dispose();
+    const recovery: TerminalViewportRecovery = new TerminalViewportRecovery(
+      this.terminal,
+      this.lane,
+      this.requestRecovery!,
+      () =>
+        !this.disposed &&
+        this.recovery === recovery &&
+        this.acceptSnapshot(snapshot) &&
+        !this.baseline,
+      (enabled) => {
+        this.gate = enabled ? 0 : 1;
+        this.updateInput();
+      },
+      () => this.degradeRecovery(recovery, snapshot),
+    );
+    this.recovery = recovery;
+    this.takePending();
+    this.onCreditReleased();
+    try {
+      await recovery.start(snapshot);
+    } catch {
+      recovery.dispose();
+      if (this.recovery === recovery) this.recovery = undefined;
+      return this.baseline ? "superseded" : "unavailable";
+    }
+    if (this.disposed) return "recovered";
+    if (this.baseline) return "superseded";
+    this.initializedGeneration = snapshot.runtimeGeneration;
+    this.live = true;
+    return "recovered";
+  }
+
+  /** A recovered view whose mirror stops serving it keeps its cells and stays live. */
+  private degradeRecovery(recovery: TerminalViewportRecovery, target: TerminalLiveAttachTarget) {
+    if (this.disposed || this.recovery !== recovery || this.lane.isStopped) return;
+    recovery.dispose();
+    this.recovery = undefined;
+    this.lane.barrier(() => {
+      this.gate = 0;
+      this.updateInput();
+    });
+    terminalLifecycleDiagnostics(this.terminal)?.record({
+      type: "hydration",
+      state: "reattached",
+    });
+    this.onLiveAttach(target);
+  }
+
   dispose(): void {
+    this.recovery?.dispose();
     this.disposed = true;
     this.takePending();
     this.baseline = null;

@@ -106,6 +106,13 @@ export type TerminalSessionStatus = typeof TerminalSessionStatus.Type;
 export const TerminalDropPathMode = Schema.Literals(["posix", "powershell", "cmd", "wsl", "msys"]);
 export type TerminalDropPathMode = typeof TerminalDropPathMode.Type;
 
+/** Input/cursor modes a baseline-less view must re-assert; never screen content. */
+export const TerminalLiveModes = Schema.Struct({
+  sequence: Schema.String.check(Schema.isMaxLength(512)),
+  alternateScreen: Schema.Boolean,
+});
+export type TerminalLiveModes = typeof TerminalLiveModes.Type;
+
 export const TerminalSessionSnapshot = Schema.Struct({
   wslIdentity: Schema.optional(TerminalWslIdentity),
   threadId: Schema.String.check(Schema.isNonEmpty()),
@@ -129,6 +136,8 @@ export const TerminalSessionSnapshot = Schema.Struct({
   historyTruncated: Schema.optional(Schema.Boolean),
   // An attached surviving process has no baseline at its persisted output cut.
   historyUnavailable: Schema.optional(Schema.Boolean),
+  // Present only without a baseline: lets a view reattach live with the process's input modes.
+  liveModes: Schema.optional(TerminalLiveModes),
   exitCode: Schema.NullOr(Schema.Int),
   exitSignal: Schema.NullOr(Schema.Int),
   updatedAt: Schema.String,

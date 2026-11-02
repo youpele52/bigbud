@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 
 import { retainTerminalHistory } from "./Manager.history.retention";
+import { TerminalModeTracker } from "./TerminalModeTracker";
 import { cleanupProcessHandles, type ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import type { PtyProcess } from "../Services/PTY";
 import type { TerminalSessionState } from "./Manager.types";
@@ -55,6 +56,8 @@ export function drainProcessEventsWith(
             session.pendingProcessEventIndex = 0;
           }
 
+          // Same cut as history: a snapshot's modes must match the output it covers.
+          (session.modeTracker ??= new TerminalModeTracker()).receive(combinedData);
           const historyChanged = retainTerminalHistory(session, combinedData, ctx.historyLineLimit);
           session.updatedAt = nextTerminalTimestamp(session.updatedAt);
 

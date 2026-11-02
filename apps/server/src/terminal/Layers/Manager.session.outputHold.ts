@@ -4,6 +4,7 @@ import * as Option from "effect/Option";
 import { toSessionKey } from "./Manager.shell";
 import type { SessionApiContext } from "./Manager.session.types.ts";
 import type { TerminalManagerShape } from "../Services/Manager";
+import { reconcileTerminalOutputPressure } from "./Manager.outputPressure";
 
 /**
  * Producer flow control. A terminal's PTY stops being read while any delivery subscriber holds
@@ -26,14 +27,9 @@ export function makeTerminalOutputHold(
       if (Option.isNone(session) || !session.value.process) return false;
       const value = session.value;
       if (!value.process?.pause || !value.process.resume) return false;
-      value.reconcileOutputHold = () => {
-        const process = value.process;
-        if (!process?.pause || !process.resume) return;
-        // Read current holders after asynchronous lookup or a failed shutdown's temporary drain.
-        // Shutdown must drain reads even if a slow subscriber renews its hold.
-        if (!value.stopPending && (holders.get(key)?.size ?? 0) > 0) process.pause();
-        else process.resume();
-      };
+      // Read current holders, not this asynchronous request's stale input/set.
+      value.hasDeliveryOutputHold = () => (holders.get(key)?.size ?? 0) > 0;
+      value.reconcileOutputHold = () => reconcileTerminalOutputPressure(value);
       value.reconcileOutputHold();
       return true;
     });

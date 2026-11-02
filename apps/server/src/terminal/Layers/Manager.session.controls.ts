@@ -4,6 +4,7 @@ import { TerminalNotRunningError } from "../Services/Manager.ts";
 import type { SessionApiContext, TerminalManagerShape } from "./Manager.session.types.ts";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import { assertTerminalGeneration } from "./Manager.session.generation";
+import { resizeWithRecovery } from "./Manager.recovery";
 
 export function makeTerminalSessionControls(requireSession: SessionApiContext["requireSession"]) {
   const write: TerminalManagerShape["write"] = Effect.fn("terminal.write")(function* (input) {
@@ -18,7 +19,12 @@ export function makeTerminalSessionControls(requireSession: SessionApiContext["r
       return yield* new TerminalNotRunningError({ threadId: input.threadId, terminalId });
     }
     yield* Effect.try({
-      try: () => proc.write(input.data),
+      try: () => {
+        const model = session.recoveryModel;
+        const cut = model?.inputCut;
+        proc.write(input.data);
+        model?.observeInput(input.data, cut);
+      },
       // The process can exit between the status check and the native write.
       catch: () => new TerminalNotRunningError({ threadId: input.threadId, terminalId }),
     });
@@ -33,7 +39,9 @@ export function makeTerminalSessionControls(requireSession: SessionApiContext["r
     session.rows = input.rows;
     session.updatedAt = nextTerminalTimestamp(session.updatedAt);
     yield* Effect.try({
-      try: () => proc.resize(input.cols, input.rows),
+      try: () => {
+        resizeWithRecovery(session, proc, input.cols, input.rows);
+      },
       // Resizing a PTY whose descriptor closed on exit throws natively.
       catch: () => new TerminalNotRunningError({ threadId: input.threadId, terminalId }),
     });

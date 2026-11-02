@@ -1,7 +1,6 @@
 import type { Terminal } from "@xterm/xterm";
 import type { TerminalSessionSnapshot } from "@bigbud/contracts/workspace/terminal.ts";
 import { useEffect, useRef, useState } from "react";
-import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useTerminalTheme } from "./TerminalViewport.theme";
 import {
@@ -44,6 +43,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   const [inputEnabled, setInputEnabled] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [historyUnavailable, setHistoryUnavailable] = useState(false);
+  const [liveAttachCount, setLiveAttachCount] = useState(0);
   const [startupPending, setStartupPending] = useState(true);
   const [startupFailed, setStartupFailed] = useState(false);
   const [directoryNotice, setDirectoryNotice] = useState<string | null>(null);
@@ -65,13 +65,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     if (!mount) return;
 
     const readTerminalLabel = () => readTerminalLabelRef.current();
-    const onAddTerminalContext = (selection: TerminalContextSelection) =>
+    const onAddTerminalContext: typeof input.onAddTerminalContext = (selection) =>
       onAddTerminalContextRef.current(selection);
-    const onRequestTerminalAnnotation = (input: {
-      selection: TerminalContextSelection;
-      position: { x: number; y: number };
-      selectionRect: { left: number; top: number; right: number; bottom: number } | null;
-    }) => onRequestTerminalAnnotationRef.current(input);
+    const onRequestTerminalAnnotation: typeof input.onRequestTerminalAnnotation = (request) =>
+      onRequestTerminalAnnotationRef.current(request);
     const selectionActionTimerRef = input.selectionActionTimerRef;
     const selectionActionOpenRef = input.selectionActionOpenRef;
     const terminalRef = input.terminalRef;
@@ -125,7 +122,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           handleSessionExited: () => onSessionExitedRef.current(),
           onSnapshot: (snapshot) => onSnapshot(snapshot),
           onInputState: (enabled) => {
-            if (!disposed) setInputEnabled(enabled);
+            if (!disposed) {
+              setInputEnabled(enabled);
+              if (enabled) setHistoryUnavailable(false);
+            }
           },
           onFailure: (error) => {
             // A stopped lane never acknowledges; release the stream so the PTY is not held.
@@ -136,6 +136,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
             }
           },
           observeOutput: instrumentation.observeOutput,
+          onLiveAttach: () => setLiveAttachCount((count) => count + 1),
           onCreditReleased: () => output.parsed(),
           batcherOptions: {
             ...view.pipeline.batcherOptions,
@@ -150,6 +151,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
         return next;
       };
       const output = createTerminalViewportOutput({
+        lifecycle: instrumentation.lifecycle,
         threadId: input.threadId,
         terminalId: input.terminalId,
         receive: (event) => delivery.intake.receive(event),
@@ -225,7 +227,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
         hasRunningSnapshot = snapshot.status === "running" && snapshot.pid !== null;
         setStartupPending(false);
         setStartupFailed(!hasRunningSnapshot);
-        setHistoryUnavailable(Boolean(snapshot.historyTruncated || snapshot.historyUnavailable));
+        setHistoryUnavailable(
+          !delivery.intake.acceptsInput &&
+            Boolean(snapshot.historyTruncated || snapshot.historyUnavailable),
+        );
         setDirectoryNotice(
           snapshot.directoryFallback
             ? `${snapshot.directoryFallback.reason}: ${snapshot.directoryFallback.requestedCwd}. Started in ${snapshot.cwd}.`
@@ -381,6 +386,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     inputEnabled: inputEnabled && !lifecycle,
     deliveryError,
     historyUnavailable,
+    liveAttachCount,
     startupPending,
     startupFailed,
     directoryNotice,

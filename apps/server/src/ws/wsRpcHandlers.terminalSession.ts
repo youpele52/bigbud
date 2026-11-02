@@ -9,6 +9,7 @@ import {
   type TerminalSessionStreamItem,
 } from "@bigbud/contracts/workspace/terminal.stream.ts";
 import type { TerminalSearchInput } from "@bigbud/contracts/workspace/terminal.search.ts";
+import type { TerminalRecoveryInput } from "@bigbud/contracts/workspace/terminal.recovery.ts";
 
 import { observeRpcEffect, observeRpcStream } from "../observability/RpcInstrumentation";
 import { TerminalOutputDelivery } from "../terminal/TerminalOutputDelivery";
@@ -25,6 +26,13 @@ export function makeWsRpcTerminalSessionHandlers(context: WsRpcContext) {
   const manager = context.terminalManager;
 
   return {
+    [WS_METHODS.terminalRecovery]: (input: TerminalRecoveryInput) =>
+      observeRpcEffect(
+        WS_METHODS.terminalRecovery,
+        manager.recovery?.(input) ??
+          Effect.succeed({ type: "unavailable" as const, reason: "recovery-unavailable" }),
+        { "rpc.aggregate": "terminal" },
+      ),
     [WS_METHODS.subscribeTerminalEvents]: (input: TerminalEventsSubscriptionInput) =>
       observeRpcStream(
         WS_METHODS.subscribeTerminalEvents,

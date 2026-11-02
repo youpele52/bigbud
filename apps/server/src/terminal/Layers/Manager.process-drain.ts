@@ -30,6 +30,7 @@ import { TerminalDeviceQueries } from "./TerminalDeviceQueries";
 import { observeTerminalProcessError } from "./Manager.process.error";
 import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
+import { startRecoveryModel, feedRecoveryModel } from "./Manager.recovery";
 export { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
 export {
   pollSubprocessActivityWith,
@@ -219,6 +220,7 @@ export function startSessionWith(
       session.remoteShellPid = undefined;
       session.runtimeEpoch += 1;
       session.runtimeGeneration = randomUUID();
+      session.modeTracker = undefined; // Modes belong to one process generation.
       session.updatedAt = nextTerminalTimestamp(session.updatedAt);
       return [undefined, state] as const;
     });
@@ -247,6 +249,7 @@ export function startSessionWith(
             // A durable remote owner resumes after its acknowledged output cut,
             // not from process birth. Empty local history is not a valid baseline.
             session.historyUnavailable = ptyProcess.recovered === true;
+            startRecoveryModel(session, ptyProcess.recovered === true, ptyProcess);
             startedShell = spawnResult.shellLabel;
             startedDropPathMode = spawnResult.dropPathMode;
 
@@ -280,12 +283,14 @@ export function startSessionWith(
               }
               const visible = readRemotePid(data);
               const output = queries ? queries.receive(visible) : visible;
+              feedRecoveryModel(session, output);
               if (output) ctx.runFork(ctx.queuePtyOutput(session, processPid, output));
             });
             const unsubscribeExit = ptyProcess.onExit((event) => {
               if (session.runtimeEpoch !== runtimeEpoch) return;
               session.observedExit = { process: queryProcess, event };
               const tail = queries?.finish();
+              if (tail) feedRecoveryModel(session, tail);
               if (tail) ctx.runFork(ctx.queuePtyOutput(session, processPid, tail));
               // Explicit restart owns the exit while awaiting durable remote release.
               if (
@@ -347,6 +352,7 @@ export function startSessionWith(
 
     {
       const error = startResult.failure;
+      session.recoveryModel?.dispose("launch-failed");
       if (ptyProcess) {
         yield* startKillEscalation(ptyProcess, session.threadId, session.terminalId);
       }

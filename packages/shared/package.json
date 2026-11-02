@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./terminalUnicodeProvider": "./src/terminalUnicodeProvider.ts",
     "./queueDecision": {
       "types": "./src/queueDecision.ts",
       "import": "./src/queueDecision.ts"

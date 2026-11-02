@@ -20,6 +20,7 @@ import type { TerminalViewportIntake } from "./TerminalViewport.intake";
 import { ensureThreadMaterialized } from "../../lib/threadMaterialization";
 import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { preserveTerminalScroll } from "./terminalScrollState";
+import { deferRecoveryFit, terminalResizeGeometry } from "./terminalRecoveryGeometry";
 import {
   hasCurrentTerminalBaseline,
   resolveTerminalViewportSnapshot,
@@ -187,7 +188,8 @@ export function fitTerminalViewport(input: {
   const activeFitAddon = input.fitAddonRef.current;
   if (!activeTerminal || !activeFitAddon || !hasUsableTerminalViewportSize(input.containerRef))
     return false;
-  preserveTerminalScroll(activeTerminal, () => activeFitAddon.fit());
+  if (!deferRecoveryFit(activeTerminal, activeFitAddon))
+    preserveTerminalScroll(activeTerminal, () => activeFitAddon.fit());
   return true;
 }
 
@@ -204,8 +206,7 @@ export function resizeServerTerminal(input: {
     .resize({
       threadId: input.threadId,
       terminalId: input.terminalId,
-      cols: activeTerminal.cols,
-      rows: activeTerminal.rows,
+      ...terminalResizeGeometry(activeTerminal),
     })
     .catch(() => undefined);
 }
