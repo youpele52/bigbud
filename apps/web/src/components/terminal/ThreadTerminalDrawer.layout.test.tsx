@@ -1,3 +1,5 @@
+import { QuillWrite01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -38,6 +40,12 @@ function expectToolbar(markup: string, labels: string[]) {
   );
   expect(buttons.map((button) => button.match(/aria-label="([^"]+)"/)?.[1])).toEqual(labels);
   expect(markup).toContain("lucide-x");
+  expect(markup).toContain(
+    renderToStaticMarkup(
+      <HugeiconsIcon aria-hidden="true" icon={QuillWrite01Icon} className="size-3.25" />,
+    ),
+  );
+  expect(markup).not.toContain("lucide-pencil");
   expect(markup).not.toContain("lucide-trash");
   for (const button of buttons) {
     expect(button).toContain("text-muted-foreground");

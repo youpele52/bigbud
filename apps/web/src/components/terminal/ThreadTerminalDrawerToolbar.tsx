@@ -1,12 +1,6 @@
-import {
-  Maximize2,
-  Minimize2,
-  Minus,
-  Pencil,
-  Plus,
-  SquareSplitHorizontal,
-  XIcon,
-} from "lucide-react";
+import { QuillWrite01Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Maximize2, Minimize2, Minus, Plus, SquareSplitHorizontal, XIcon } from "lucide-react";
 
 import { cn } from "~/lib/utils";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -91,7 +85,7 @@ export function ThreadTerminalDrawerToolbar({
         onClick={onRenameTerminalAction}
         label={renameTerminalActionLabel}
       >
-        <Pencil className="size-3.25" />
+        <HugeiconsIcon aria-hidden="true" icon={QuillWrite01Icon} className="size-3.25" />
       </TerminalActionButton>
       <div className={dividerClassName} />
       <TerminalActionButton
