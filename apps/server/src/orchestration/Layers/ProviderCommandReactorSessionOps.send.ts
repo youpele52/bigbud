@@ -11,7 +11,12 @@ import {
   resolveAndExportThreadContextPath,
 } from "./ProviderCommandReactorSessionOps.threadContext.ts";
 import { shouldRebuildProviderContextFromTranscript } from "./ProviderCommandReactorSessionOps.context.ts";
-import { prependCapabilityContextToProviderInput } from "./ProviderCommandReactorSessionOps.capabilityContext.ts";
+import {
+  prependCapabilityContextToProviderInput,
+  createProviderCapabilityContextState,
+} from "./ProviderCommandReactorSessionOps.capabilityContext.ts";
+import { prepareResourceContext } from "./ProviderCommandReactorSessionOps.resourceContext.ts";
+import { getSystemResources } from "../../orchestration-tools/ThreadSystemResourcesTool.ts";
 import { rolloverProviderSessionAtHighWater } from "./ProviderCommandReactorSessionOps.recovery.ts";
 import type { ensureSessionForThread } from "./ProviderCommandReactorSessionOps.ts";
 import {
@@ -179,7 +184,25 @@ export const sendTurnAttempt = (
       attachments: normalizedAttachments,
       resolveThread,
     });
-    const normalizedInput = toNonEmptyProviderInput(providerInputWithReferencedThreads);
+    const resources = yield* getSystemResources({}, true);
+    const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
+    const resourceState =
+      services.capabilityContextStates.get(thread.id) ?? createProviderCapabilityContextState();
+    services.capabilityContextStates.set(thread.id, resourceState);
+    const resourceContext = prepareResourceContext(
+      resources,
+      resourceState.resourceContext,
+      JSON.stringify([
+        sessionBeforeTurn?.sessionEpoch ?? 0,
+        thread.activities.findLast((activity) => activity.kind === "context-compaction")?.id ??
+          null,
+      ]),
+    );
+    const normalizedInput = toNonEmptyProviderInput(
+      resourceContext.block
+        ? `${resourceContext.block}\n\n${providerInputWithReferencedThreads}`
+        : providerInputWithReferencedThreads,
+    );
 
     const providerAttachments = normalizedAttachments.filter(
       (attachment) =>
@@ -187,7 +210,6 @@ export const sendTurnAttempt = (
         attachment.type === "image" ||
         (modelForTurn.provider === "opencodeV2" && attachment.type === "path"),
     );
-    const sessionBeforeTurn = (yield* resolveThread(input.threadId))?.session ?? null;
     if (input.dispatch) input.dispatch.dispatched = true;
     const turn = yield* providerService.sendTurn({
       threadId: input.threadId,
@@ -199,6 +221,7 @@ export const sendTurnAttempt = (
       sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
     });
 
+    resourceState.resourceContext = resourceContext.next;
     const sessionAfterTurn = (yield* resolveThread(input.threadId))?.session ?? null;
     const liveSession = yield* providerService
       .listSessions()

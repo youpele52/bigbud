@@ -1,9 +1,8 @@
 import * as Crypto from "node:crypto";
 import { preservePackagedCopilotRuntime } from "./backend/copilotRuntimeMigration";
-import { registerSystemMonitorIpc } from "./system-monitor/ipc";
+import { startDesktopResourceAwareness } from "./main.systemMonitor";
 import { makeMainOwnershipRecovery } from "./backend/ownershipRecovery.main";
 import { registerOwnershipRecoveryIpc } from "./window/ipcHandlers.ownershipRecovery";
-import { startSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
 import type { SystemMonitorBridge } from "./system-monitor/bridge";
 
 import type { BrowserWindow, WebContents } from "electron";
@@ -259,10 +258,12 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
       return status;
     },
   });
-  registerSystemMonitorIpc(
+  await startDesktopResourceAwareness(
     systemMonitor,
     (sender) => windowRegistry.get("main")?.webContents.id === sender.id,
-  );
+  ).catch(() => {
+    logHeader("system monitor agent bridge unavailable");
+  });
   registerTerminalRenderingIpc((sender) => {
     const role = windowRegistry.getRole(sender);
     return role === "main" || role === "compact-chat";
@@ -271,9 +272,6 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     const contents = getMainWindow()?.webContents;
     return contents && windowRegistry.isTrusted(contents) ? contents : undefined;
   }, makeMainOwnershipRecovery(getIsQuitting));
-  await startSystemMonitorAgentBridge(systemMonitor).catch(() => {
-    logHeader("system monitor agent bridge unavailable");
-  });
   registerFloatingAssistantIpc();
   registerComputerUseSafetySurface({
     registry: windowRegistry,

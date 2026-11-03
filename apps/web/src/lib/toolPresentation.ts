@@ -12,6 +12,7 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
   unpin_thread: "thread unpinner",
   list_available_models: "model lister",
   get_system_resources: "system resource reader",
+  configure_system_resource_rules: "resource monitoring settings",
   search_capabilities: "capability finder",
   read_capability_guide: "capability guide reader",
   browser: "browser",

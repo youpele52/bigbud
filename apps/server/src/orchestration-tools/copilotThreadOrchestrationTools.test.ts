@@ -36,6 +36,7 @@ describe("createCopilotThreadOrchestrationTools", () => {
 
     expect(tools.map((tool) => tool.name)).toEqual([
       "get_system_resources",
+      "configure_system_resource_rules",
       "rename_thread",
       "archive_thread",
       "create_thread",

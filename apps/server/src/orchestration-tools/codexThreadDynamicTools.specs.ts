@@ -1,5 +1,10 @@
 import type { CodexDynamicToolSpec } from "../codex/codexAppServerManager.types.ts";
 import {
+  SYSTEM_RESOURCE_READ_PARAMETERS,
+  SYSTEM_RESOURCE_RULE_PARAMETERS,
+  CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
+} from "./systemResourceTools.shared.ts";
+import {
   READ_CAPABILITY_GUIDE_PARAMETERS,
   READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
   SEARCH_CAPABILITIES_PARAMETERS,
@@ -111,7 +116,13 @@ export function createCodexThreadOrchestrationDynamicTools(
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "get_system_resources",
       description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
-      inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+      inputSchema: SYSTEM_RESOURCE_READ_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "configure_system_resource_rules",
+      description: CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
+      inputSchema: SYSTEM_RESOURCE_RULE_PARAMETERS,
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,

@@ -94,9 +94,15 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     }
 
     switch (tool) {
+      case "configure_system_resource_rules": {
+        if (!dispatcher.configureSystemResourceRules)
+          throw new Error("monitor settings unavailable");
+        const result = await Effect.runPromise(dispatcher.configureSystemResourceRules(args));
+        return { contentItems: [inputText(JSON.stringify(result))], success: true };
+      }
       case "get_system_resources": {
         const result = dispatcher.getSystemResources
-          ? await Effect.runPromise(dispatcher.getSystemResources())
+          ? await Effect.runPromise(dispatcher.getSystemResources(args ?? {}))
           : { available: false, reason: "desktop monitor unavailable" };
         return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
       }

@@ -24,7 +24,10 @@ import { renameThreadViaOrchestration } from "../../orchestration-tools/ThreadOr
 import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listThreads.ts";
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
 import { makeAgentWorkspaceTool } from "../../orchestration-tools/AgentWorkspaceTools.ts";
-import { getSystemResources } from "../../orchestration-tools/ThreadSystemResourcesTool.ts";
+import {
+  getSystemResources,
+  configureSystemResourceRules,
+} from "../../orchestration-tools/ThreadSystemResourcesTool.ts";
 import {
   getThreadToolModelSources,
   setThreadOrchestrationToolDispatcher,
@@ -62,6 +65,7 @@ export function installOrchestrationEngineToolDispatchers(input: {
 }) {
   setThreadOrchestrationToolDispatcher({
     getSystemResources,
+    configureSystemResourceRules,
     ...(Option.isSome(input.notes) && Option.isSome(input.kanban)
       ? {
           workspace: makeAgentWorkspaceTool({

@@ -25,9 +25,13 @@ export function createCopilotOrchestrationToolSurface(input: {
   const workspaceDispatch = dispatcher.workspace;
   const listAvailableModelsDispatch = dispatcher.listAvailableModels;
   return createCopilotThreadOrchestrationTools({
-    getSystemResources: () =>
+    configureSystemResourceRules: (args) =>
+      dispatcher.configureSystemResourceRules
+        ? asRecord(dispatcher.configureSystemResourceRules(args))
+        : Promise.reject(new Error("monitor settings unavailable")),
+    getSystemResources: (args) =>
       dispatcher.getSystemResources
-        ? asRecord(dispatcher.getSystemResources())
+        ? asRecord(dispatcher.getSystemResources(args))
         : Promise.resolve({ available: false, reason: "desktop monitor unavailable" }),
     ...(workspaceDispatch
       ? {

@@ -1,8 +1,17 @@
 import type { MonitorMetric } from "@bigbud/contracts/system-monitor/types";
-import { Effect } from "effect";
+import { Data, Effect, Schema } from "effect";
+import { ResourceRead, ResourceRuleMutation } from "@bigbud/contracts/system-monitor/awareness.ts";
+import { requestDesktopResources } from "./ThreadSystemResourcesTool.client.ts";
+export { setSystemMonitorAgentAccess } from "./ThreadSystemResourcesTool.client.ts";
 
 const UNAVAILABLE = { available: false, reason: "desktop monitor unavailable" } as const;
-const MAX_BYTES = 32 * 1024;
+class SystemResourcesError extends Data.TaggedError("SystemResourcesError")<{
+  readonly message: string;
+}> {}
+const resourceError = (error: unknown) =>
+  new SystemResourcesError({
+    message: error instanceof Error ? error.message.slice(0, 256) : UNAVAILABLE.reason,
+  });
 const STATUSES = new Set(["ready", "warming", "unsupported", "denied", "unavailable", "stale"]);
 type AgentMetric = {
   readonly value: number | null;
@@ -13,6 +22,7 @@ type AgentMetric = {
 export type SystemResourcesResult =
   | { readonly available: false; readonly reason: string }
   | {
+      readonly [key: string]: unknown;
       readonly available: true;
       readonly host: {
         readonly hostname: string;
@@ -36,26 +46,6 @@ export type SystemResourcesResult =
       readonly diskCapacityBytes: AgentMetric;
     };
 
-let access: { readonly endpoint: string; readonly token: string } | undefined;
-export function setSystemMonitorAgentAccess(next: typeof access): void {
-  access = next;
-}
-
-const parseEndpoint = (value: string): URL | undefined => {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" &&
-      url.hostname === "127.0.0.1" &&
-      url.pathname === "/snapshot" &&
-      !url.username &&
-      !url.password
-      ? url
-      : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
 const metric = (value: unknown, sampledAtMs: number): AgentMetric => {
   const unavailable: AgentMetric = { value: null, status: "unavailable", sampledAtMs };
   if (!value || typeof value !== "object") return unavailable;
@@ -71,7 +61,11 @@ const metric = (value: unknown, sampledAtMs: number): AgentMetric => {
     return unavailable;
   return {
     value: item.value,
-    status: item.status as MonitorMetric["status"],
+    status:
+      item.status === "ready" &&
+      (Date.now() - item.sampledAtMs > 5000 || item.sampledAtMs > Date.now() + 2000)
+        ? "stale"
+        : (item.status as MonitorMetric["status"]),
     sampledAtMs: item.sampledAtMs,
   };
 };
@@ -90,7 +84,7 @@ function parseSummary(parsed: unknown): SystemResourcesResult {
     typeof host.architecture !== "string" ||
     typeof result.sampledAtMs !== "number" ||
     !Number.isFinite(result.sampledAtMs) ||
-    Date.now() - result.sampledAtMs > 10_000 ||
+    Date.now() - result.sampledAtMs > 5_000 ||
     result.sampledAtMs > Date.now() + 2_000 ||
     typeof result.epoch !== "number" ||
     typeof result.sequence !== "number" ||
@@ -111,7 +105,44 @@ function parseSummary(parsed: unknown): SystemResourcesResult {
   const metrics = Object.fromEntries(
     fields.map((key) => [key, metric(result[key], result.sampledAtMs as number)]),
   ) as Record<(typeof fields)[number], AgentMetric>;
+  const extensions = Object.fromEntries(
+    [
+      "scope",
+      "resourceSignals",
+      "health",
+      "monitoringEnabled",
+      "ruleRevision",
+      "alerts",
+      "alertsTruncated",
+      "collectionTruncated",
+      "appResources",
+      "baseline",
+      "perCorePercent",
+      "perCoreTruncated",
+      "disks",
+      "disksTruncated",
+      "temperaturesCelsius",
+      "criticalTemperaturesCelsius",
+      "sensorsTruncated",
+      "interfaces",
+      "interfacesTruncated",
+      "processes",
+      "processStatus",
+      "generation",
+      "nextCursor",
+      "truncatedInventory",
+      "cursorNotice",
+      "trends",
+      "observedSamples",
+      "selectedSamples",
+      "sampling",
+      "omissions",
+    ]
+      .filter((key) => key in result)
+      .map((key) => [key, result[key]]),
+  );
   return {
+    ...extensions,
     available: true,
     host: {
       hostname: host.hostname,
@@ -128,33 +159,40 @@ function parseSummary(parsed: unknown): SystemResourcesResult {
   };
 }
 
-export const getSystemResources = Effect.fn("getSystemResources")(function* () {
-  const endpoint = access?.endpoint;
-  const token = access?.token;
-  if (!endpoint || !token) return UNAVAILABLE;
-  const url = parseEndpoint(endpoint);
-  if (!url) return UNAVAILABLE;
+export const getSystemResources = Effect.fn("getSystemResources")(function* (
+  input: unknown = {},
+  cacheOnly = false,
+) {
   return yield* Effect.tryPromise({
     try: async (): Promise<SystemResourcesResult> => {
-      const response = await fetch(url, {
-        headers: { authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(7_000),
-      });
-      if (Number(response.headers.get("content-length") ?? 0) > MAX_BYTES || !response.body)
-        return UNAVAILABLE;
-      const chunks: Uint8Array[] = [];
-      let bytes = 0;
-      for await (const chunk of response.body) {
-        bytes += chunk.byteLength;
-        if (bytes > MAX_BYTES) {
-          await response.body.cancel().catch(() => undefined);
-          return UNAVAILABLE;
-        }
-        chunks.push(chunk);
-      }
-      if (!response.ok) return UNAVAILABLE;
-      return parseSummary(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      const decoded = Schema.decodeUnknownSync(ResourceRead)(input);
+      const result = await requestDesktopResources(
+        cacheOnly ? "/context" : "/read",
+        cacheOnly ? undefined : decoded,
+      );
+      if (decoded.view === "rules" && result && typeof result === "object")
+        return result as SystemResourcesResult;
+      return parseSummary(result);
     },
-    catch: () => "desktop monitor unavailable" as const,
-  }).pipe(Effect.catch(() => Effect.succeed(UNAVAILABLE)));
+    catch: resourceError,
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.succeed({
+        available: false as const,
+        reason: error instanceof Error ? error.message.slice(0, 256) : UNAVAILABLE.reason,
+      }),
+    ),
+  );
+});
+
+export const configureSystemResourceRules = Effect.fn("configureSystemResourceRules")(function* (
+  input: unknown,
+) {
+  return yield* Effect.tryPromise({
+    try: async () => {
+      const decoded = Schema.decodeUnknownSync(ResourceRuleMutation)(input);
+      return (await requestDesktopResources("/rules", decoded)) as Record<string, unknown>;
+    },
+    catch: resourceError,
+  });
 });

@@ -68,18 +68,37 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     id: "system.resources",
     displayName: "Desktop system resources",
     description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
-    summary:
-      "Read current desktop CPU, memory, network, and disk usage with host identity, freshness, and metric availability from the Rust monitor.",
+    summary: "Inspect desktop host/app CPU, RAM, disks, supported sensors, processes and trends.",
     triggers: [
       "A task needs current CPU, memory, network, or disk status of the desktop app's computer.",
     ],
     risk: "read-only",
     workflow:
-      "Call get_system_resources when current desktop system state is relevant; inspect sampledAtMs and each metric status before interpreting values.",
+      "Call get_system_resources with view summary, details, processes, trends or rules. Inspect source timestamps, status, incomplete attribution and truncation. Core excludes tools; inclusive includes attributed tool descendants. A stale process cursor must be explicitly restarted. Automatic context is bounded and refreshed only on user turns; background monitoring never invokes an AI turn.",
     permissions:
-      "Read-only. Available only while the desktop app and Rust monitor can answer. No process list, control actions, or proactive alerts.",
+      "Read-only. Available while the desktop app and Rust monitor run. Desktop-owned alerts continue with the monitor page closed, not after the app quits. Temperatures depend on hardware support. No process control.",
     examples: ["Check current memory pressure on the desktop computer."],
     antiPatterns: ["Do not treat unavailable or stale metrics as current observations."],
+  }),
+  threadToolTrack({
+    id: "system.resources.rules",
+    displayName: "Resource monitoring rules",
+    description: "Configure persisted desktop monitoring rules only at the user's request.",
+    summary: "Persist user-requested resource alert rules.",
+    triggers: ["The user asks to change resource alerts, budgets, snooze or monitoring."],
+    risk: "reversible-write",
+    workflow:
+      "Read get_system_resources(view: rules), then configure_system_resource_rules with expectedRevision. On conflict reload, do not overwrite another change. Thresholds use percent, bytes for appMemory, Celsius for temperature. Select app core/inclusive explicitly. Reset restores conservative defaults.",
+    permissions:
+      "Explicit user request required. Persists locally on the desktop; does not control processes. Native notifications and monitoring after quit are not provided.",
+    examples: [
+      "Snooze resource alerts for ten minutes.",
+      "Warn if bigbud core RSS stays over 4 GiB for a minute.",
+    ],
+    antiPatterns: [
+      "Never invent a universal critical temperature.",
+      "Never silently enable background monitoring or modify budgets.",
+    ],
   }),
   ...AGENT_WORKSPACE_TOOL_SPECS.map((spec) =>
     threadToolTrack({

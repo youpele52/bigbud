@@ -1,13 +1,16 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
-import { createServer, type Server } from "node:http";
-import type { SystemMonitorBridge } from "./bridge";
+import { createServer, type Server, type IncomingMessage } from "node:http";
+import { Schema } from "effect";
+import { ResourceRead } from "@bigbud/contracts/system-monitor/awareness.ts";
+import type { ResourceAwareness } from "./awareness";
+import { boundedResourceResponse, readResourceView } from "./awareness.response";
 
-const MAX_RESPONSE_BYTES = 32 * 1024;
 let server: Server | null = null;
 let endpoint = "";
 let token = "";
-let busy = false;
-
+let owner: ResourceAwareness | undefined;
+let busy = 0;
+let generation = 0;
 const authorized = (received: string | undefined): boolean => {
   if (!received || !token) return false;
   const expected = Buffer.from(`Bearer ${token}`);
@@ -15,75 +18,68 @@ const authorized = (received: string | undefined): boolean => {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 };
 
-export async function startSystemMonitorAgentBridge(monitor: SystemMonitorBridge): Promise<void> {
+async function body(request: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  let bytes = 0;
+  for await (const chunk of request) {
+    bytes += chunk.length;
+    if (bytes > 16384) throw new Error("monitor request too large");
+    chunks.push(chunk);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+export async function startSystemMonitorAgentBridge(monitor: ResourceAwareness): Promise<void> {
   if (server) return;
+  const startingGeneration = ++generation;
+  owner = monitor;
   const candidate = createServer((request, response) => {
-    if (
-      request.method !== "GET" ||
-      request.url !== "/snapshot" ||
-      !authorized(request.headers.authorization)
-    ) {
+    const route = request.url;
+    const valid =
+      (request.method === "GET" && (route === "/snapshot" || route === "/context")) ||
+      (request.method === "POST" && (route === "/read" || route === "/rules"));
+    if (!valid || !authorized(request.headers.authorization)) {
       response.writeHead(404).end();
       return;
     }
-    if (busy) {
+    if (busy >= 4) {
       response.writeHead(503).end(JSON.stringify({ available: false, reason: "monitor busy" }));
       return;
     }
-    busy = true;
+    busy++;
     const requestToken = token;
-    void monitor
-      .readSnapshot()
-      .then(
-        (snapshot) => {
-          if (!token || token !== requestToken) {
-            response
-              .writeHead(503)
-              .end(JSON.stringify({ available: false, reason: "desktop monitor unavailable" }));
-            return;
-          }
-          const result = {
-            available: true,
-            host: {
-              hostname: snapshot.hostname,
-              osName: snapshot.osName,
-              osVersion: snapshot.osVersion,
-              architecture: snapshot.architecture,
-            },
-            sampledAtMs: snapshot.sampledAtMs,
-            ageMs: Math.max(0, Date.now() - snapshot.sampledAtMs),
-            epoch: snapshot.epoch,
-            sequence: snapshot.sequence,
-            summaryStatus: snapshot.summaryStatus,
-            cpuPercent: snapshot.cpuPercent,
-            memoryTotalBytes: snapshot.memoryTotalBytes,
-            memoryUsedBytes: snapshot.memoryUsedBytes,
-            memoryAvailableBytes: snapshot.memoryAvailableBytes,
-            swapTotalBytes: snapshot.swapTotalBytes,
-            swapUsedBytes: snapshot.swapUsedBytes,
-            networkReceivedBytesPerSecond: snapshot.networkReceivedBytesPerSecond,
-            networkTransmittedBytesPerSecond: snapshot.networkTransmittedBytesPerSecond,
-            diskCapacityBytes: snapshot.diskCapacityBytes,
-          };
-          const body = JSON.stringify(result);
-          if (Buffer.byteLength(body) > MAX_RESPONSE_BYTES)
-            response
-              .writeHead(503)
-              .end(JSON.stringify({ available: false, reason: "monitor response too large" }));
-          else
-            response
-              .writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
-              .end(body);
-        },
-        () =>
-          response
-            .writeHead(503, { "content-type": "application/json" })
-            .end(JSON.stringify({ available: false, reason: "desktop monitor unavailable" })),
-      )
+    const stillAuthorized = () => !!token && token === requestToken;
+    request.setTimeout(5000, () => request.destroy());
+    void (async () => {
+      const input = request.method === "POST" ? await body(request) : {};
+      const result =
+        route === "/rules"
+          ? { available: true, ...(await monitor.mutate(input, stillAuthorized)) }
+          : await readResourceView(
+              monitor,
+              Schema.decodeUnknownSync(ResourceRead)(input),
+              route === "/context",
+            );
+      if (!stillAuthorized()) throw new Error("monitor authorization revoked");
+      response
+        .writeHead(200, { "content-type": "application/json", "cache-control": "no-store" })
+        .end(boundedResourceResponse(result));
+    })()
+      .catch((error: unknown) => {
+        response.writeHead(503, { "content-type": "application/json" }).end(
+          JSON.stringify({
+            available: false,
+            reason:
+              error instanceof Error ? error.message.slice(0, 256) : "desktop monitor unavailable",
+          }),
+        );
+      })
       .finally(() => {
-        busy = false;
+        busy--;
       });
   });
+  candidate.headersTimeout = 5000;
+  candidate.requestTimeout = 5000;
   try {
     await new Promise<void>((resolve, reject) => {
       candidate.once("error", reject);
@@ -92,6 +88,10 @@ export async function startSystemMonitorAgentBridge(monitor: SystemMonitorBridge
   } catch (error) {
     candidate.close();
     throw error;
+  }
+  if (startingGeneration !== generation) {
+    candidate.close();
+    return;
   }
   server = candidate;
   const address = candidate.address();
@@ -105,13 +105,14 @@ export function rotateSystemMonitorAgentToken(): { endpoint: string; token: stri
   token = randomBytes(32).toString("hex");
   return { endpoint, token };
 }
-
 export function revokeSystemMonitorAgentToken(): void {
   token = "";
 }
-
 export function stopSystemMonitorAgentBridge(): void {
+  generation++;
   revokeSystemMonitorAgentToken();
+  owner?.stop();
+  owner = undefined;
   server?.close();
   server = null;
   endpoint = "";

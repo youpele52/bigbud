@@ -1,5 +1,10 @@
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 import {
+  SYSTEM_RESOURCE_READ_PARAMETERS,
+  SYSTEM_RESOURCE_RULE_PARAMETERS,
+  CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
+} from "./systemResourceTools.shared.ts";
+import {
   MOVE_THREAD_TOOL_DESCRIPTION,
   MOVE_THREAD_TOOL_PARAMETERS,
   SNOOZE_THREAD_TOOL_DESCRIPTION,
@@ -54,7 +59,12 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "  {",
   '    name: "get_system_resources",',
   `    description: ${JSON.stringify(GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION)},`,
-  '    inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },',
+  `    inputSchema: ${JSON.stringify(SYSTEM_RESOURCE_READ_PARAMETERS)},`,
+  "  },",
+  "  {",
+  '    name: "configure_system_resource_rules",',
+  `    description: ${JSON.stringify(CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION)},`,
+  `    inputSchema: ${JSON.stringify(SYSTEM_RESOURCE_RULE_PARAMETERS)},`,
   "  },",
   "  {",
   '    name: "read_capability_guide",',

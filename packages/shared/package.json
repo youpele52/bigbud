@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./resourceAwareness.preferences": "./src/resourceAwareness.preferences.ts",
+    "./resourceAwareness.metrics": "./src/resourceAwareness.metrics.ts",
+    "./resourceAwareness.rules": "./src/resourceAwareness.rules.ts",
     "./terminalUnicodeProvider": "./src/terminalUnicodeProvider.ts",
     "./copilotRuntime.paths": "./src/copilotRuntime.paths.ts",
     "./copilotRuntime.storage": "./src/copilotRuntime.storage.ts",

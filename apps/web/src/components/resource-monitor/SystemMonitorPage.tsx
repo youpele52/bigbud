@@ -1,4 +1,5 @@
 import { usePageTitle } from "~/hooks/usePageTitle";
+import { ResourceAwarenessSettings } from "./ResourceAwarenessSettings";
 import { StandaloneChatPageHeader } from "../standalone/StandaloneChatPageHeader";
 import { StandaloneChatPageShell } from "../standalone/StandaloneChatPageShell";
 import { StandalonePageContent } from "../standalone/StandalonePageContent";
@@ -21,6 +22,7 @@ export function SystemMonitorPage({
     <StandaloneChatPageShell header={<StandaloneChatPageHeader title="System Monitor" />}>
       <StandalonePageContent contentClassName="flex min-h-full flex-col gap-5 pb-10">
         <MonitorScopeToggle scope={scope} onScopeChange={onScopeChange} />
+        <ResourceAwarenessSettings />
         <StandalonePageLoading
           loading={loading}
           label={scope === "system" ? "Loading system resources" : "Loading bigbud resources"}

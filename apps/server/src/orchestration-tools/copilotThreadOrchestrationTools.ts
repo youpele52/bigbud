@@ -1,5 +1,10 @@
 import type { Tool } from "@github/copilot-sdk";
 import {
+  SYSTEM_RESOURCE_READ_PARAMETERS,
+  SYSTEM_RESOURCE_RULE_PARAMETERS,
+  CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
+} from "./systemResourceTools.shared.ts";
+import {
   BrowserAction,
   type BrowserAction as BrowserActionType,
   type ComputerUseAction as ComputerUseActionType,
@@ -73,7 +78,8 @@ function createCopilotOrganizationTools(
 
 export function createCopilotThreadOrchestrationTools(
   input: CopilotThreadToolsInput & {
-    readonly getSystemResources?: () => Promise<Record<string, unknown>>;
+    readonly getSystemResources?: (input?: unknown) => Promise<Record<string, unknown>>;
+    readonly configureSystemResourceRules?: (input: unknown) => Promise<Record<string, unknown>>;
     readonly workspace?: (
       tool: AgentWorkspaceToolName,
       args: Record<string, unknown>,
@@ -104,16 +110,31 @@ export function createCopilotThreadOrchestrationTools(
     {
       name: "get_system_resources",
       description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
-      parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
-      handler: async () => {
+      parameters: SYSTEM_RESOURCE_READ_PARAMETERS,
+      handler: async (args) => {
         try {
           const result = input.getSystemResources
-            ? await input.getSystemResources()
+            ? await input.getSystemResources(args ?? {})
             : { available: false, reason: "desktop monitor unavailable" };
           return successResult(JSON.stringify(result, null, 2));
         } catch {
           return successResult(
             JSON.stringify({ available: false, reason: "desktop monitor unavailable" }),
+          );
+        }
+      },
+    },
+    {
+      name: "configure_system_resource_rules",
+      description: CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
+      parameters: SYSTEM_RESOURCE_RULE_PARAMETERS,
+      handler: async (args) => {
+        try {
+          if (!input.configureSystemResourceRules) throw new Error("monitor settings unavailable");
+          return successResult(JSON.stringify(await input.configureSystemResourceRules(args)));
+        } catch (error) {
+          return failureResult(
+            error instanceof Error ? error.message : "monitor settings unavailable",
           );
         }
       },

@@ -1,4 +1,8 @@
 export const desktopIpcChannels = {
+  resourceAwarenessGet: "desktop:resource-awareness-get",
+  resourceAwarenessAcknowledge: "desktop:resource-awareness-acknowledge",
+  resourceAwarenessMutate: "desktop:resource-awareness-mutate",
+  resourceAwarenessState: "desktop:resource-awareness-state",
   recoverBackendOwnership: "desktop:recover-backend-ownership",
   checkBackendOwnership: "desktop:check-backend-ownership",
   systemMonitorSubscribe: "desktop:system-monitor-subscribe",

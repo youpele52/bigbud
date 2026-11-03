@@ -1,7 +1,7 @@
 import * as Crypto from "node:crypto";
 import { SystemMonitorBridge } from "./system-monitor/bridge";
 import { getDesktopMonitorRoots } from "./system-monitor/ownership";
-import { stopSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
+import { stopDesktopResourceAwareness } from "./main.systemMonitor";
 
 import { app, BrowserWindow, dialog } from "electron";
 
@@ -275,7 +275,7 @@ function prepareForAppQuit(reason: string): void {
   isQuitting = true;
   systemMonitor.stop();
   stopDesktopConnectivitySignals();
-  stopSystemMonitorAgentBridge();
+  stopDesktopResourceAwareness();
   floatingAssistantWindows.destroyForQuit();
   logHeader(`${reason} received`);
   clearUpdatePollTimer();

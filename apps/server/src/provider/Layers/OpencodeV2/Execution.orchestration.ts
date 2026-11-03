@@ -24,6 +24,7 @@ export const V2_ORCHESTRATION_ACTIONS = [
   "read_capability_guide",
   "workspace",
   "get_system_resources",
+  "configure_system_resource_rules",
   "move",
   "snooze",
 ] as const;

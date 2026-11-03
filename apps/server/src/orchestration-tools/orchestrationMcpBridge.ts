@@ -163,6 +163,7 @@ export function buildClaudeOrchestrationBridgeConfig(
       `mcp__${bridge.serverName}__send_thread_message`,
       `mcp__${bridge.serverName}__get_thread_status`,
       `mcp__${bridge.serverName}__get_system_resources`,
+      `mcp__${bridge.serverName}__configure_system_resource_rules`,
       `mcp__${bridge.serverName}__list_threads`,
       `mcp__${bridge.serverName}__list_available_models`,
       `mcp__${bridge.serverName}__list_pinned_threads`,

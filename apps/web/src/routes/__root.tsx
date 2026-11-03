@@ -1,4 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
+import { ResourceAwarenessToastCoordinator } from "../components/resource-monitor/ResourceAwarenessToastCoordinator";
 import {
   Outlet,
   createRootRouteWithContext,
@@ -126,6 +127,7 @@ export function RootRouteView() {
         <EventRouter />
         <WebSocketConnectionCoordinator />
         <SlowRpcAckToastCoordinator />
+        <ResourceAwarenessToastCoordinator />
         <DesktopBackendStartupCoordinator />
         <GamesWorkToastCoordinator />
         <ProviderRecoveryToastCoordinator />

@@ -20,10 +20,12 @@ export const ThreadToolRequest = Schema.Struct({
     "workspace",
     "remote_workspace_process",
     "get_system_resources",
+    "configure_system_resource_rules",
     "move",
     "snooze",
   ]),
   threadId: Schema.optional(Schema.String),
+  resourceArguments: Schema.optional(Schema.Unknown),
   targetThreadId: Schema.optional(Schema.String),
   /** `move`: destination Inyosira state (`status` is already the list filter). */
   organizationState: Schema.optional(Schema.String),

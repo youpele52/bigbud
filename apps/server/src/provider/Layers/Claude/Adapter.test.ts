@@ -91,6 +91,7 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_orchestration__send_thread_message",
         "mcp__bigbud_orchestration__get_thread_status",
         "mcp__bigbud_orchestration__get_system_resources",
+        "mcp__bigbud_orchestration__configure_system_resource_rules",
         "mcp__bigbud_orchestration__list_threads",
         "mcp__bigbud_orchestration__list_available_models",
         "mcp__bigbud_orchestration__list_pinned_threads",

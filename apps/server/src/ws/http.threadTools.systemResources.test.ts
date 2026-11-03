@@ -31,8 +31,15 @@ describe("thread system resources route", () => {
         yield* Effect.promise(() =>
           writeThreadOrchestrationToolAuth({ stateDir, threadId: "resource-thread", token: TOKEN }),
         );
-        const getSystemResources = vi.fn(() => Effect.succeed(snapshot));
-        setThreadOrchestrationToolDispatcher({ ...dispatcher, getSystemResources });
+        const getSystemResources = vi.fn((_input?: unknown) => Effect.succeed(snapshot));
+        const configureSystemResourceRules = vi.fn((_input: unknown) =>
+          Effect.succeed({ revision: 1 }),
+        );
+        setThreadOrchestrationToolDispatcher({
+          ...dispatcher,
+          getSystemResources,
+          configureSystemResourceRules,
+        });
         yield* buildAppUnderTest({ config: { baseDir: tempBaseDir } });
         const url = yield* getHttpServerUrl("/api/internal/thread-tools");
         const denied = yield* Effect.promise(() =>
@@ -55,6 +62,25 @@ describe("thread system resources route", () => {
         assert.equal(getSystemResources.mock.calls.length, 1);
         const body = (yield* Effect.promise(() => response.json())) as { result: unknown };
         assert.deepEqual(body.result, snapshot);
+        const resourceArguments = { expectedRevision: 0, operation: "snooze", snoozeSeconds: 60 };
+        const mutate = yield* Effect.promise(() =>
+          fetch(url, {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-bigbud-thread-tool-token": TOKEN },
+            body: JSON.stringify({ action: "configure_system_resource_rules", resourceArguments }),
+          }),
+        );
+        assert.equal(mutate.status, 200);
+        assert.deepEqual(configureSystemResourceRules.mock.calls[0]?.[0], resourceArguments);
+        const deniedMutation = yield* Effect.promise(() =>
+          fetch(url, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ action: "configure_system_resource_rules", resourceArguments }),
+          }),
+        );
+        assert.equal(deniedMutation.status, 401);
+        assert.equal(configureSystemResourceRules.mock.calls.length, 1);
       }).pipe(Effect.provide(serverHttpTestLayer)),
     );
   });

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ProviderResourceContextState } from "./ProviderCommandReactorSessionOps.resourceContext.ts";
 
 import type { OrchestrationThread, RuntimeMode } from "@bigbud/contracts";
 import type { AgentBrowserPreference } from "@bigbud/contracts/settings";
@@ -13,6 +14,7 @@ import {
 export const CAPABILITY_SKIT_PROMPT_INTERVAL = 5;
 
 export interface ProviderCapabilityContextState {
+  resourceContext?: ProviderResourceContextState;
   finalizedHumanPromptCount: number;
   hasObservedMcpStatus: boolean;
   lastCatalogRevision: string | null;

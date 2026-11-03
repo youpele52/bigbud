@@ -61,6 +61,17 @@ const allowDevelopmentDiagnostics = process.defaultApp === true;
 const windowZoom = createWindowZoomObserver(desktopIpcChannels.windowZoomChanged);
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  resourceAwarenessGet: () => ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessGet),
+  resourceAwarenessAcknowledge: (ids) =>
+    ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessAcknowledge, ids),
+  resourceAwarenessMutate: (mutation) =>
+    ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessMutate, mutation),
+  onResourceAwarenessState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) =>
+      listener(state);
+    ipcRenderer.on(desktopIpcChannels.resourceAwarenessState, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.resourceAwarenessState, handler);
+  },
   checkBackendOwnership: (generation) =>
     ipcRenderer.invoke(desktopIpcChannels.checkBackendOwnership, generation),
   recoverBackendOwnership: (generation) =>
