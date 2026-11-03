@@ -100,7 +100,7 @@ export function MobileSessionGate({
   return (
     <div className="grid gap-2">
       {authorizationMessage ? (
-        <Alert variant="error" className="px-3 py-2 text-xs" role="status">
+        <Alert variant="error" className="px-3 py-2" role="status">
           <AlertDescription>{authorizationMessage}</AlertDescription>
         </Alert>
       ) : null}

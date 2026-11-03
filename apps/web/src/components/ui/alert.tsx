@@ -1,3 +1,4 @@
+import "./notificationTypography.css";
 import type * as React from "react";
 import { LoaderCircleIcon } from "lucide-react";
 

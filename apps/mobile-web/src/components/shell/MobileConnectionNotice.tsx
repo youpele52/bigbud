@@ -27,18 +27,12 @@ export function MobileConnectionNotice({
         })}.`;
 
   return (
-    <Alert
-      variant={tone}
-      className="px-3 py-2 text-xs"
-      aria-atomic="true"
-      aria-live="polite"
-      role="status"
-    >
+    <Alert variant={tone} className="px-3 py-2" aria-atomic="true" aria-live="polite" role="status">
       <AlertTitle>{notice.title}</AlertTitle>
       <AlertDescription>
         <p>{notice.description}</p>
         {state.freshness === "stale" || state.freshness === "legacy" ? (
-          <p className="mt-0.5 text-[11px] text-muted-foreground/70">{evidence}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground/70">{evidence}</p>
         ) : null}
       </AlertDescription>
       {onRetry && notice.showRetry ? (

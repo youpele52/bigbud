@@ -94,7 +94,7 @@ export function ToastTitleAndDescription({
           data-slot="toast-title"
         />
         <Toast.Description
-          className="min-w-0 shrink-0 select-text wrap-break-word whitespace-pre-line text-muted-foreground"
+          className="min-w-0 shrink-0 select-text wrap-break-word whitespace-pre-line font-normal text-muted-foreground"
           data-slot="toast-description"
         />
         {typeof description === "string" && !hideCopyButton ? (

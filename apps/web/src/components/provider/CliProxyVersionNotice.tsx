@@ -33,8 +33,8 @@ export function CliProxyVersionNotice({
         <div className="space-y-2 text-sm">
           <p>{message}</p>
           <details>
-            <summary className="cursor-pointer text-xs">Manual update guidance</summary>
-            <div className="mt-2 space-y-2 text-xs">
+            <summary className="cursor-pointer">Manual update guidance</summary>
+            <div className="mt-2 space-y-2">
               {version.installation === "homebrew" ? (
                 <p>
                   A Homebrew installation was detected. To update that binary manually, run{" "}

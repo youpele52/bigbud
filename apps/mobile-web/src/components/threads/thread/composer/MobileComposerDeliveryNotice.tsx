@@ -17,7 +17,7 @@ export function MobileComposerDeliveryNotice({
   return (
     <Alert
       variant={storageWarning || deliveryState === "uncertain" ? "warning" : "loading"}
-      className="mb-2 px-3 py-2 text-xs"
+      className="mb-2 px-3 py-2"
       role="status"
     >
       <AlertDescription>
@@ -27,7 +27,7 @@ export function MobileComposerDeliveryNotice({
             <p className="text-warning-foreground">Delivery is uncertain; no duplicate was sent.</p>
             {onCheckDelivery ? (
               <button
-                className="min-h-11 rounded-md border border-border px-2 text-xs text-foreground"
+                className="min-h-11 rounded-md border border-border px-2 text-sm text-foreground"
                 onClick={onCheckDelivery}
                 type="button"
               >

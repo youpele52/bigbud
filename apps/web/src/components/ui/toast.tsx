@@ -1,5 +1,6 @@
 "use client";
 
+import "./notificationTypography.css";
 import { Toast } from "@base-ui/react/toast";
 import { createContext, useContext, type CSSProperties } from "react";
 import { useParams } from "@tanstack/react-router";
