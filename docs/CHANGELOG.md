@@ -11,6 +11,106 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **[Remote projects without the guesswork](#easier-remote-project-setup):** Pick a saved SSH host, browse its folders, and confirm a new server’s identity before connecting.
 - **[Know how much AI allowance you have left](#subscription-limits-across-supported-providers):** Check subscription limits, reset times, and extra-usage details across supported providers, including model-specific limits where available.
 
+## v0.3.2 (3 November, 2026)
+
+### Organize Your Work With Inyosira
+
+Inyosira means **breathe**. Be fully present with what truly matters in this moment. Your attention is finite; it does not have to belong to everything at once. Some things need you now, others can wait, and finished work deserves to rest. Inyosira is an invitation to make those distinctions—to choose what deserves your attention, and let the rest step back.
+
+- **See what matters across your projects:** Switch from **Projects** to **Inyosira** to group chats into **Present**, **Needs you**, **Later**, and **Done**, with their project or workspace shown beneath. Your arrangement and groups are remembered, counts include unloaded chats, and loaded chats follow recent user-message activity. Switching views does not restart chats or change their projects.
+- **Put chats where they belong:** Drag chats between groups, use **Move to** for one or several chats, or ask a supported agent to move or snooze them. Agents wait for your choice before moving completed work to Done or Later. Organizing does not stop running work, archive chats, or claim that a task succeeded.
+- **Find the work waiting for you:** New approvals, questions, and delegated model choices move chats to Needs you. Deliberately opening one returns it to Present without answering or approving anything; sending a new message also brings a chat back to Present.
+- **Come back to a chat later:** Right-click a chat and choose **Snooze…**, starting at 10 minutes and adjustable from 2 minutes to 24 hours. Presets remain under **Move to**. A clock beside the provider icon marks snoozed chats, which wait in Later and return to Needs you when due, including after restart or wake. Snooze is a reminder—not a scheduled agent run—and does not send a notification.
+- **Keep your active list manageable:** Two rules are on by default: idle Present chats move to Later after 10 minutes, and older Present or unsnoozed Later chats move to Done after a day without activity. Adjust the timeouts, choose Done for idle chats, or disable either rule in Settings → General → Idle threads. Working chats, queued work, unanswered requests, and active snoozes are protected.
+
+### More Control Over Desktop Computer Use
+
+- **Keep desktop work in the background where supported:** When desktop computer use is enabled, **Background** is now the default interaction mode. Choose **Foreground** in Settings → AI → Computer Use when the task needs visible desktop interaction. Background actions are refused when the runtime cannot deliver them without taking focus; bigbud does not silently switch to foreground input.
+- **Keep automation on the intended window:** Each chat keeps its own temporary window target instead of following whichever app happens to have focus. An expired, missing, ambiguous, or resized target requires a fresh selection or capture rather than sending input to an uncertain window.
+- **Avoid unexpected app switches:** Background app selection does not activate the app, and actions that would open a browser or system permission prompt are refused in that mode. Background app launching is supported on macOS; on Windows and Linux, open the app yourself before selecting it.
+- **Get clearer runtime readiness checks:** Updated the default Cua Driver to 0.38.0 and added compatibility checks for installed runtimes, with clearer setup and diagnostic failures. Desktop control still requires explicit enablement and operating-system permissions, with **Full access** required for input-changing actions.
+- These changes are implemented, but live background-automation checks and full packaged-app checks across macOS, Windows, and Linux are still outstanding. Additional supervised controls and app restrictions remain hidden and are not presented as released capabilities.
+
+### Meta Muse Integration
+
+- **Work with Meta Muse directly in bigbud:** Added an opt-in Muse Code provider with model discovery, native approval and question handling, usage information, and retained-session recovery. It is off by default and uses your installed Muse CLI and its native browser sign-in.
+- **Choose Muse models with clearer information:** Pick from the models Muse reports. Contributor models are labeled **content may be used for training**, so you can see the disclosure before selecting one rather than having it chosen silently.
+- **Keep Muse's access limits explicit:** Muse currently supports **Auto-accept edits** only: workspace edits can apply automatically, while shell commands and restricted actions use native approval. Approval required, Full access, and Plan mode are not supported. Opt-in is available on macOS, Windows, and Linux, but live Windows and Linux qualification is still outstanding.
+
+### Easier Copilot Setup and Management
+
+- **Set up Copilot without a separate manual runtime installation:** bigbud reuses a working Copilot installation and offers a managed installation when one is needed, with download progress, cancellation, and retry controls.
+- **Manage Copilot without deleting your work:** Inspect, update, or uninstall bigbud-managed runtime files from provider settings. Chats, authentication, settings, and external installations are preserved, and uninstall waits for active Copilot work to stop.
+- **A leaner desktop app:** Removed redundant bundled Copilot runtime components while preserving working installations.
+
+### Cite the Exact Part of a Conversation
+
+- **Point your agent at the words you mean:** Select text in your message or an assistant reply, then choose **Cite** to attach that exact passage to your next message without copying the whole exchange.
+- **Keep several references together:** Citations appear as separate, removable chips in the composer and stay with saved drafts and sent messages, including after switching chats. Clicking a sent citation returns to its source and highlights the original passage when it is still available.
+- **Refer directly to an agent's question:** Cite question headings, prompts, or answer options, including while composing a structured answer. Quotes are preserved through submission, and changed or unavailable sources are not highlighted as if they still matched.
+
+### A Clearer View of Your AI Usage
+
+- **See the essentials at a glance:** A redesigned overview brings total tokens, your top provider and model, and your activity streak to the Usage page and side panel. A full bigbud loader handles first load; refreshes keep your numbers visible, with shared explanations distinguishing estimates from provider reports.
+- **Understand a busy hour, day, or month:** Select an Activity bar to inspect its usage share, rank, turns, tokens per turn, reporting source, and leading provider and model. Arrow keys move between periods; Escape restores the token-type breakdown. Empty periods stay on the timeline instead of being skipped or showing misleading source warnings.
+- **Compare providers and models over time:** Switch between **Trend** gradient area charts and **Split** donut charts to see changing usage or each provider's and model's share. Older servers without period-by-period breakdowns keep the supported Split view.
+
+### More Dependable Follow-Ups and Supporting Agents
+
+- **Send queued follow-ups more safely:** **Send now** rechecks the messages, settings, and turn you saw before acting, protecting newer work from delayed requests. Queue decisions survive lost responses without duplicating messages, and a missing-reservation fix prevents compatible follow-ups from being incorrectly rejected.
+- **Keep helpers with the right work:** Supporting-agent updates stay with their launching turn, and late events no longer restore removed entries. Codex correctly distinguishes its main session from helpers, so child completion, failure, or interruption neither leaves the parent stuck working nor prematurely finishes its response.
+- **Keep control and unanswered questions visible:** Stop remains available until the active turn actually ends, including through intermediate commentary. Independent amber question bubbles identify every chat awaiting an answer, including unloaded chats, and clear as each request resolves.
+
+### Terminals That Recover Without Starting Over
+
+- **Recover without restarting the shell:** Terminals reattach to running processes when earlier output is no longer retained, request a redraw where supported, and explain missing history without promising full scrollback restoration. A crashed view can also reload independently without restarting the shell or taking down chat.
+- **Close and restart with fewer surprises:** Improved ownership and shutdown checks prevent overlapping replacements and preserve failure details and history when an exit cannot be confirmed. Retained data from the retired experimental backend remains compatible without introducing a new default backend.
+- **Put the terminal away without stopping it:** **Minimize terminal** returns to Chat while keeping the session available. Rename and expand controls have clearer icons, and advanced rendering settings sit below everyday interaction options.
+- **Recognize running tools more easily:** Terminal and sidebar indicators recognize Muse launchers and the terminal-only herdr identity, with reduced-motion support. Terminal-only tools do not become selectable chat providers.
+- **Keep additional recovery opt-in:** The recovery mirror handles emoji output and unanswered terminal queries more reliably. It remains off by default and does not promise complete screen restoration.
+
+### More Reliable Codex, OpenCode, and CLIProxy Sessions
+
+- **Rewind Codex more carefully:** Rewind uses exact native turn boundaries, with stricter checks before changing history or files and explicit handling when the outcome is uncertain, rather than relying on message counts. Updated compatibility and pagination handling also improve recovery with supported Codex versions.
+- **Keep OpenCode history and model choices intact:** Recovery retains native sessions and history without replaying the conversation, while isolating unhealthy sessions. Effort updates preserve the correct provider identity, and compatibility changes cover OpenCode 2.2.0 and later 2.2.5 policy handling without rewriting compatible thread-tool setup.
+- **Use CLIProxy with clearer choices and update guidance:** Effort controls follow advertised model capabilities and retain your selection; cleaner GPT names leave model identifiers unchanged. Dismissible notices recommend CLIProxyAPI 8.0.51, distinguish connected-server and installed-binary versions, and leave older versions usable. Updates remain manual.
+- **Find provider controls more easily:** Provider settings now separate **Configuration** from **Visibility**, with clearer descriptions of connections, models, and which providers appear. Removed the misleading live-session management entry point without changing session recovery.
+
+### Search Your Way in the Built-In Browser
+
+- **Choose your preferred search engine:** Pick DuckDuckGo, Google, Brave Search, Bing, or Startpage in Settings → General → Browser, alongside your preserved default agent-browser preference. DuckDuckGo is the new search default; your choice applies to address-bar queries and **Search the web** on selected text.
+- **Find pages faster as you type:** The address bar offers search, direct-address, and browsing-history suggestions with keyboard and pointer selection. Suggestions are assembled locally; your unfinished query is not sent to a search-suggestion service.
+- **Recognize destinations more easily:** Pages and history suggestions can show learned site icons, with a globe fallback when an icon is unavailable.
+
+### More Reliable Remote Workspaces
+
+- **Keep OpenCode V2's remote work on its selected target:** Added a guarded path for a local shared native service to use bigbud's remote-workspace tools. Native local file, shell, plugin, and helper-agent tools are denied for that remote session instead of acting on your local machine. Live VPS qualification of this path is still outstanding.
+- **Find and open files on the right machine:** Search and previews preserve the worktree folder and its local or remote destination. Remote-agent filename search uses case-insensitive matching and path-aware ranking before limiting results, while respecting workspace boundaries and avoiding discovered links.
+- **Recover temporary file-loading failures more clearly:** Remote browsing and search coordinate retries within a 30-second window, retain cached content, and provide actionable guidance instead of retrying indefinitely.
+- **Recognize remote locations consistently:** Remote projects are now called **remote workspaces** across navigation, search, settings, and setup. Existing connections, saved expansion preferences, and local project terminology are preserved.
+
+### Smoother Desktop Navigation and Feedback
+
+- **Navigate without losing your context:** New chat and Cmd/Ctrl+N preserve your project and worktree; the Chats action and Cmd/Ctrl+Alt+N use the built-in Chats location. Terminal-focused shortcuts stay unchanged. The desktop sidebar toggle remains beside native window controls across pages, with zoom-aware header spacing on macOS.
+- **Read and dismiss notifications more comfortably:** Banners and toasts share consistent status styling. Toasts keep equal widths, scrollable messages, accessible actions, and reliable keyboard focus without accidental swipe dismissal. Hidden-chat notices do not occupy visible slots, and dismiss-all protects newly arriving notices. Confirmed title and summary failures offer retry; unconfirmed generation notices stay out of the way.
+- **Follow activity with less visual noise:** A liquid working indicator respects reduced motion and pauses when hidden or off-screen, settling green where appropriate. Layouts use **Chat**, **Chat x terminal**, and **Terminal** labels, with more consistent activity headings and icons, tighter thinking sections, and simpler gauge endpoints that preserve precise live readings.
+
+### More Predictable Startup and Cleanup
+
+- **Reconnect to the replacement desktop backend:** Each reconnect waits for backend readiness and uses its current address and authentication, avoiding repeated attempts against an old endpoint during restart. Cancelling or replacing the connection can interrupt that wait.
+- **Leave fewer provider processes behind:** Provider startup and shutdown now track owned child processes more carefully. After a backend crash, startup can clean up verified orphaned processes while leaving processes with uncertain identity alone, and desktop shutdown gives cleanup more time to finish.
+
+### Retired Integrations Without Deleting Your History
+
+- **Keep old KiloCode chats readable:** The KiloCode integration has been removed. Retained chats, session records, preferences, events, and usage remain readable, but KiloCode chats cannot restart or silently switch providers. Start a new chat with an available provider to continue new work.
+- **Keep your existing plugin files:** The built-in plugin marketplace, its navigation, installation, update checks, and automatic discovery of marketplace-installed packages have been removed. Existing installed packages and saved marketplace data are not deleted, but bigbud no longer activates them through the retired marketplace.
+- **Keep using agents and skills directly:** Direct agent and skill selection remains available in regular chats and orchestration. Historical plugin mentions remain readable but inactive, and old marketplace links return to the home screen without being mistaken for chats.
+
+### Games and Long-Task Reminders
+
+- **Find Lagos Run in Arcade:** Added the browser game about driving a danfo through Lagos traffic and delivering passengers to the shared Games catalog.
+- **Keep longer-task reminders varied:** Reminder messages keep rotating even when browser storage is unavailable, and older saved rotation preferences carry forward.
+
 ## v0.3.1 (25 October, 2026)
 
 ### More Reliable Connections and Startup
