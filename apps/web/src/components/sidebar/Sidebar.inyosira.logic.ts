@@ -11,6 +11,7 @@ import {
   getRemoteWorkspaceTargetLabel,
   isRemoteExecutionTargetId,
 } from "./Sidebar.remoteWorkspaces.logic";
+import { sortThreadsForSidebar } from "./Sidebar.sort.logic";
 
 export const INYOSIRA_STATE_LABELS: Record<ThreadOrganizationState, string> = {
   present: "Present",
@@ -28,15 +29,13 @@ export const INYOSIRA_BOTTOM_STATES: readonly ThreadOrganizationState[] = [
 
 export type InyosiraGroups = Record<ThreadOrganizationState, ThreadId[]>;
 
-const recency = (summary: SidebarThreadSummary) => summary.updatedAt ?? summary.createdAt;
-
 export function organizationStateOf(summary: Pick<SidebarThreadSummary, "organization">) {
   return summary.organization?.state ?? "present";
 }
 
 /**
- * Groups every known active thread by its organization state, newest activity first with a
- * stable id tie-breaker, matching the server's state pages.
+ * Groups known active threads by state, newest displayed activity first (latest user message,
+ * falling back to creation), with a stable id tie-breaker. Pins never override activity order.
  */
 export function groupInyosiraThreadIds(
   summaries: Readonly<Record<string, SidebarThreadSummary>>,
@@ -53,12 +52,7 @@ export function groupInyosiraThreadIds(
   }
   const result = {} as InyosiraGroups;
   for (const state of THREAD_ORGANIZATION_STATES) {
-    result[state] = groups[state]
-      .toSorted(
-        (left, right) =>
-          recency(right).localeCompare(recency(left)) || left.id.localeCompare(right.id),
-      )
-      .map((summary) => summary.id);
+    result[state] = sortThreadsForSidebar(groups[state], "updated_at").map((summary) => summary.id);
   }
   return result;
 }

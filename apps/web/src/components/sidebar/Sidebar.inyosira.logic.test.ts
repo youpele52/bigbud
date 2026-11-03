@@ -44,14 +44,63 @@ const org = (state: "present" | "needs-you" | "later" | "done") => ({
 describe("Inyosira grouping", () => {
   it("groups active threads by state, newest first, defaulting to Present", () => {
     const groups = groupInyosiraThreadIds({
-      a: summary("a", { updatedAt: "2026-10-30T01:00:00.000Z" }),
-      b: summary("b", { updatedAt: "2026-10-30T02:00:00.000Z" }),
+      a: summary("a", { latestUserMessageAt: "2026-10-30T01:00:00.000Z" }),
+      b: summary("b", { latestUserMessageAt: "2026-10-30T02:00:00.000Z" }),
       c: summary("c", { organization: org("done") }),
       d: summary("d", { organization: org("done"), archivedAt: "2026-10-30T00:00:00.000Z" }),
       e: summary("e", { organization: org("needs-you"), deletingAt: "2026-10-30T00:00:00.000Z" }),
     });
     expect(groups).toEqual({ present: ["b", "a"], "needs-you": [], later: [], done: ["c"] });
     expect(visibleInyosiraThreadIds(groups, ["present"])).toEqual(["c"]);
+  });
+
+  it.each(["present", "needs-you", "later", "done"] as const)(
+    "sorts %s by displayed activity, ignoring metadata updates and pins",
+    (state) => {
+      const groups = groupInyosiraThreadIds({
+        oldPinned: summary("old-pinned", {
+          organization: org(state),
+          latestUserMessageAt: "2026-10-30T01:00:00.000Z",
+          updatedAt: "2026-10-31T00:00:00.000Z",
+          pinnedAt: "2026-10-31T00:00:00.000Z",
+        }),
+        recent: summary("recent", {
+          organization: org(state),
+          latestUserMessageAt: "2026-10-30T22:00:00.000Z",
+          updatedAt: "2026-10-30T22:00:00.000Z",
+        }),
+        middle: summary("middle", {
+          organization: org(state),
+          latestUserMessageAt: "2026-10-30T11:00:00.000Z",
+          updatedAt: "2026-10-30T23:00:00.000Z",
+        }),
+        newEmpty: summary("new-empty", {
+          organization: org(state),
+          createdAt: "2026-10-30T23:00:00.000Z",
+          updatedAt: undefined,
+        }),
+      });
+
+      expect(groups[state]).toEqual(["new-empty", "recent", "middle", "old-pinned"]);
+      expect(visibleInyosiraThreadIds(groups, [])).toEqual(groups[state]);
+    },
+  );
+
+  it("uses a deterministic id tie-breaker for equal displayed activity", () => {
+    const a = summary("a", { updatedAt: "2026-10-31T00:00:00.000Z" });
+    const b = summary("b", { pinnedAt: "2026-10-31T00:00:00.000Z" });
+
+    expect(groupInyosiraThreadIds({ a, b }).present).toEqual(["b", "a"]);
+    expect(groupInyosiraThreadIds({ b, a }).present).toEqual(["b", "a"]);
+  });
+
+  it("compares activity timestamps chronologically across timezone offsets", () => {
+    const groups = groupInyosiraThreadIds({
+      a: summary("a", { latestUserMessageAt: "2026-10-30T23:00:00.000+02:00" }),
+      b: summary("b", { latestUserMessageAt: "2026-10-30T22:00:00.000Z" }),
+    });
+
+    expect(groups.present).toEqual(["b", "a"]);
   });
 });
 
