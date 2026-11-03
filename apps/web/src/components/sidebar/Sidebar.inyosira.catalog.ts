@@ -80,7 +80,9 @@ export function useInyosiraCatalog(enabled: boolean) {
   }, [enabled, staleKey]);
 
   const loadMore = useCallback((state: ThreadOrganizationState) => {
-    void loadInyosiraPage(state, false);
+    const page = useInyosiraStore.getState().pages[state];
+    // A failed first page has no cursor yet; retry it rather than silently doing nothing.
+    void loadInyosiraPage(state, page.status === "error" && page.nextCursor === null);
   }, []);
 
   return { pages, loadMore };

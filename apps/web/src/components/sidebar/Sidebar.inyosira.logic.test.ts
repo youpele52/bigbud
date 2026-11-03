@@ -6,6 +6,7 @@ import { buildInyosiraMoveMenuItem } from "./Sidebar.inyosira.menu";
 import {
   BIGBUD_INYOSIRA_THREAD_DRAG_MIME,
   groupInyosiraThreadIds,
+  previewInyosiraThreadIds,
   readInyosiraDragThreadId,
   resolveInyosiraLocation,
   visibleInyosiraThreadIds,
@@ -104,6 +105,55 @@ describe("Inyosira grouping", () => {
   });
 });
 
+describe("Inyosira thread previews and navigation", () => {
+  const ids = Array.from({ length: 8 }, (_, index) => ThreadId.makeUnsafe(`thread-${index}`));
+
+  it("limits the default preview to four rows and expands only on demand", () => {
+    expect(previewInyosiraThreadIds(ids, false)).toEqual({
+      visibleItems: ids.slice(0, 4),
+      hiddenCount: 4,
+      totalCount: 8,
+    });
+    expect(previewInyosiraThreadIds(ids, true).visibleItems).toEqual(ids);
+  });
+
+  it("keeps the active row outside the preview in its sorted position", () => {
+    const preview = previewInyosiraThreadIds(ids, false, ids[7]);
+    expect(preview.visibleItems).toEqual([...ids.slice(0, 4), ids[7]]);
+    expect(preview.hiddenCount).toBe(3);
+    expect(previewInyosiraThreadIds(ids, false, ids[0]).visibleItems).toEqual(ids.slice(0, 4));
+  });
+
+  it("does not add missing active threads or duplicate IDs", () => {
+    expect(
+      previewInyosiraThreadIds([...ids, ids[0]!], false, ThreadId.makeUnsafe("other")),
+    ).toEqual({
+      visibleItems: ids.slice(0, 4),
+      hiddenCount: 4,
+      totalCount: 8,
+    });
+    expect(previewInyosiraThreadIds([], false).visibleItems).toEqual([]);
+  });
+
+  it("keeps traversal and numbered jumps aligned with mounted rows in every group", () => {
+    const groups = {
+      present: ids,
+      "needs-you": [],
+      later: ids.map((id) => ThreadId.makeUnsafe(`later-${id}`)),
+      done: [ThreadId.makeUnsafe("done")],
+    };
+    expect(visibleInyosiraThreadIds(groups, ["done"], [], ids[7])).toEqual([
+      ...ids.slice(0, 4),
+      ids[7],
+      ...groups.later.slice(0, 4),
+    ]);
+    expect(visibleInyosiraThreadIds(groups, ["present", "done"], ["later"], ids[7])).toEqual(
+      groups.later,
+    );
+    expect(visibleInyosiraThreadIds(groups, ["later", "done"], ["present"])).toEqual(ids);
+  });
+});
+
 describe("Inyosira location", () => {
   it("names Chat, local projects, and remote workspaces", () => {
     expect(
@@ -140,15 +190,15 @@ describe("Inyosira drag and menu", () => {
     expect(readInyosiraDragThreadId(data("forged"), new Set(["a"]))).toBeNull();
   });
 
-  it("checks the current state and offers snoozing only for one thread", () => {
+  it("offers only destinations and checks the current state only for one thread", () => {
     const single = buildInyosiraMoveMenuItem(org("later"));
-    expect(single.children?.slice(0, 4).map((item) => [item.label, item.checked])).toEqual([
+    expect(single.children?.map((item) => [item.label, item.checked])).toEqual([
       ["Present", false],
       ["Needs you", false],
       ["Later", true],
       ["Done", false],
     ]);
-    expect(single.children?.some((item) => item.label.startsWith("Snooze"))).toBe(true);
+    expect(single.children).toHaveLength(4);
     const many = buildInyosiraMoveMenuItem(null);
     expect(many.children?.map((item) => item.label)).toEqual([
       "Present",

@@ -21,57 +21,55 @@ const SNOOZE_PREFIX = "inyosira-snooze:";
 const CANCEL_SNOOZE_ID = "inyosira-snooze-cancel";
 const SNOOZE_INFO_ID = "inyosira-snooze-info";
 const SNOOZE_CUSTOM_ID = "inyosira-snooze-custom";
-const SNOOZE_PICKER_ID = "inyosira-snooze-picker";
+const SNOOZE_MENU_ID = "inyosira-snooze-menu";
 
-/** Direct access to the duration picker, also available under Move to. */
+/** All snooze controls for one thread, including presets and the custom duration picker. */
 export function buildInyosiraSnoozeMenuItem(
   organization: ThreadOrganization | undefined,
 ): ContextMenuItem {
+  const snooze = organization?.snooze ?? null;
   return {
-    id: SNOOZE_PICKER_ID,
-    label: organization?.snooze ? "Snooze again…" : "Snooze…",
+    id: SNOOZE_MENU_ID,
+    label: "Snooze for…",
+    children: [
+      ...(snooze
+        ? [
+            {
+              id: SNOOZE_INFO_ID,
+              label: `Snoozed until ${formatSnoozeWakeTime(new Date(snooze.until))}`,
+              disabled: true,
+            },
+            { id: CANCEL_SNOOZE_ID, label: "Cancel snooze" },
+            { id: "inyosira-snooze-separator", label: "", separator: true },
+          ]
+        : []),
+      ...INYOSIRA_SNOOZE_PRESETS.map((preset) => ({
+        id: `${SNOOZE_PREFIX}${preset.minutes}`,
+        label: preset.label,
+      })),
+      { id: SNOOZE_CUSTOM_ID, label: "Custom duration…" },
+    ],
   };
 }
 
-/**
- * The Move to submenu. With one thread, the current state is checked and snoozing is offered;
- * a multi-selection only offers the four states.
- */
+/** Only organization destinations; checks the current state for a single thread. */
 export function buildInyosiraMoveMenuItem(
   organization: ThreadOrganization | undefined | null,
 ): ContextMenuItem {
   const single = organization !== null;
   const current = organization?.state ?? "present";
-  const snooze = organization?.snooze ?? null;
-  const states: ContextMenuItem[] = THREAD_ORGANIZATION_STATES.map((state) => ({
-    id: `${MOVE_PREFIX}${state}`,
-    label: INYOSIRA_STATE_LABELS[state],
-    ...(single ? { checked: state === current } : {}),
-  }));
-  const snoozeItems: ContextMenuItem[] = !single
-    ? []
-    : [
-        { id: "inyosira-separator", label: "", separator: true },
-        ...(snooze
-          ? [
-              {
-                id: SNOOZE_INFO_ID,
-                label: `Snoozed until ${formatSnoozeWakeTime(new Date(snooze.until))}`,
-                disabled: true,
-              },
-              { id: CANCEL_SNOOZE_ID, label: "Cancel snooze" },
-            ]
-          : []),
-        ...INYOSIRA_SNOOZE_PRESETS.map((preset) => ({
-          id: `${SNOOZE_PREFIX}${preset.minutes}`,
-          label: `${snooze ? "Snooze again" : "Snooze"} ${preset.label}`,
-        })),
-        { id: SNOOZE_CUSTOM_ID, label: snooze ? "Snooze again for…" : "Snooze for…" },
-      ];
-  return { id: "inyosira-move-to", label: "Move to", children: [...states, ...snoozeItems] };
+  return {
+    id: "inyosira-move-to",
+    label: "Move to",
+    children: THREAD_ORGANIZATION_STATES.map((state) => ({
+      id: `${MOVE_PREFIX}${state}`,
+      label: INYOSIRA_STATE_LABELS[state],
+      ...(single ? { checked: state === current } : {}),
+    })),
+  };
 }
 
-/** Runs a Move to choice. Returns false when the clicked id is not an Inyosira action. */
+/** Runs a Move to or Snooze choice. Returns false for unrelated menu actions. */
 export async function runInyosiraMenuAction(
   clicked: string | null,
   threadIds: readonly ThreadId[],
@@ -87,7 +85,7 @@ export async function runInyosiraMenuAction(
     await moveThreadsToState(threadIds, "present");
     return true;
   }
-  if ((clicked === SNOOZE_CUSTOM_ID || clicked === SNOOZE_PICKER_ID) && threadIds.length === 1) {
+  if (clicked === SNOOZE_CUSTOM_ID && threadIds.length === 1) {
     useInyosiraSnoozePickerStore.getState().open(threadIds[0]!);
     return true;
   }

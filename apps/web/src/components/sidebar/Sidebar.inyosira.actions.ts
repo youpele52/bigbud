@@ -8,14 +8,14 @@ import { useStore } from "../../stores/main";
 import { toastManager } from "../ui/toast";
 import { INYOSIRA_STATE_LABELS } from "./Sidebar.inyosira.logic";
 
-/** Snooze presets offered in Move to; "Snooze for…" opens the custom duration picker. */
+/** Presets in the Snooze for… submenu; "Custom duration…" opens the duration picker. */
 export const INYOSIRA_SNOOZE_PRESETS: ReadonlyArray<{
   readonly minutes: number;
   readonly label: string;
 }> = [
-  { minutes: 2, label: "2 minutes" },
-  { minutes: 10, label: "10 minutes" },
-  { minutes: 30, label: "30 minutes" },
+  { minutes: 2, label: "2 mins" },
+  { minutes: 10, label: "10 mins" },
+  { minutes: 30, label: "30 mins" },
   { minutes: 60, label: "1 hour" },
   { minutes: 4 * 60, label: "4 hours" },
   { minutes: 24 * 60, label: "24 hours" },

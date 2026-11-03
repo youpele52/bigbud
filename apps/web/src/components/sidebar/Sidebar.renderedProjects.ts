@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { useShallow } from "zustand/react/shallow";
+import { SIDEBAR_THREAD_PREVIEW_LIMIT } from "../../constants/sidebar";
 import { useStore } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { useTerminalStateStore } from "../../stores/terminal";
@@ -27,8 +28,6 @@ import {
   indexActiveSidebarThreadIdsByProject,
 } from "../../logic/thread/sidebarThreadCount.logic";
 import type { RenderedProjectEntry, SidebarProjectSnapshot } from "./Sidebar.types";
-
-const THREAD_PREVIEW_LIMIT = 4;
 
 export interface SidebarRenderedProjectsInput {
   sortedProjects: SidebarProjectSnapshot[];
@@ -130,7 +129,7 @@ export function useSidebarRenderedProjects({
           threads: projectThreads,
           activeThreadId,
           isThreadListExpanded: false,
-          previewLimit: THREAD_PREVIEW_LIMIT,
+          previewLimit: SIDEBAR_THREAD_PREVIEW_LIMIT,
         });
         const visibleProjectThreads = isThreadListExpanded
           ? projectThreads
@@ -193,6 +192,7 @@ export function useSidebarRenderedProjects({
 
   const arrangement = useInyosiraStore((store) => store.arrangement);
   const collapsedInyosiraStates = useInyosiraStore((store) => store.collapsedStates);
+  const expandedInyosiraThreadLists = useInyosiraStore((store) => store.expandedThreadLists);
   // Inyosira replaces the thread arrangement, so traversal and jump shortcuts follow its groups.
   const visibleSidebarThreadIds = useMemo(
     () =>
@@ -200,11 +200,15 @@ export function useSidebarRenderedProjects({
         ? visibleInyosiraThreadIds(
             groupInyosiraThreadIds(sidebarThreadsById),
             collapsedInyosiraStates,
+            expandedInyosiraThreadLists,
+            routeThreadId,
           )
         : [...visibleChatThreadIds, ...getVisibleSidebarThreadIds(renderedProjects)],
     [
       arrangement,
       collapsedInyosiraStates,
+      expandedInyosiraThreadLists,
+      routeThreadId,
       renderedProjects,
       sidebarThreadsById,
       visibleChatThreadIds,

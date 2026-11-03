@@ -1,125 +1,34 @@
-import type { ThreadId } from "@bigbud/contracts";
 import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
-import { useMemo, useState, type DragEvent } from "react";
+import { useMemo } from "react";
 
-import type { Project, SidebarThreadSummary } from "../../models/types/app.types";
-import { useInyosiraStore } from "../../stores/inyosira/inyosira.store";
 import { useStore } from "../../stores/main";
-import {
-  SidebarGroup,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-} from "../ui/sidebar";
-import { moveThreadsToState } from "./Sidebar.inyosira.actions";
 import { useInyosiraCatalog } from "./Sidebar.inyosira.catalog";
-import {
-  BIGBUD_INYOSIRA_THREAD_DRAG_MIME,
-  INYOSIRA_BOTTOM_STATES,
-  groupInyosiraThreadIds,
-  organizationStateOf,
-  readInyosiraDragThreadId,
-  resolveInyosiraLocation,
-} from "./Sidebar.inyosira.logic";
-import { SidebarInyosiraLocationLine } from "./Sidebar.inyosiraLocation";
+import { INYOSIRA_BOTTOM_STATES, groupInyosiraThreadIds } from "./Sidebar.inyosira.logic";
+import { SidebarInyosiraGroup } from "./Sidebar.inyosiraGroup";
 import type { SharedProjectItemProps } from "./Sidebar.types";
-import { SidebarInyosiraGroupLabel } from "./Sidebar.inyosiraGroupLabel";
-import { SidebarThreadRow } from "./SidebarThreadRow";
 
-const addInyosiraDragData = (threadId: ThreadId) => (dataTransfer: DataTransfer) =>
-  dataTransfer.setData(BIGBUD_INYOSIRA_THREAD_DRAG_MIME, threadId);
-
-/**
- * Inyosira arrangement: Present at the top; Needs you, Later, and Done anchored together at the
- * bottom. Groups are derived from known thread summaries and filled by bounded state pages.
- */
+/** Present at the top; Needs you, Later, and Done anchored together at the bottom. */
 export function SidebarInyosiraSection({ shared }: { shared: SharedProjectItemProps }) {
   const summaries = useStore((store) => store.sidebarThreadsById);
   const projects = useStore((store) => store.projects);
-  const collapsedStates = useInyosiraStore((store) => store.collapsedStates);
-  const setStateCollapsed = useInyosiraStore((store) => store.setStateCollapsed);
   const { pages, loadMore } = useInyosiraCatalog(true);
   const groups = useMemo(() => groupInyosiraThreadIds(summaries), [summaries]);
   const projectById = useMemo(
     () => new Map(projects.map((project) => [project.id, project])),
     [projects],
   );
-  const [dropTarget, setDropTarget] = useState<ThreadOrganizationState | null>(null);
-
-  const renderGroup = (state: ThreadOrganizationState) => {
-    const threadIds = groups[state];
-    const expanded = !collapsedStates.includes(state);
-    const page = pages[state];
-    const acceptsDrag = (event: DragEvent) =>
-      event.dataTransfer.types.includes(BIGBUD_INYOSIRA_THREAD_DRAG_MIME);
-    return (
-      <SidebarGroup
-        key={state}
-        data-inyosira-state={state}
-        className={`rounded-lg px-2 py-0 ${dropTarget === state ? "bg-accent/40" : ""}`}
-        onDragOver={(event) => {
-          if (!acceptsDrag(event)) return;
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "move";
-          setDropTarget(state);
-        }}
-        onDragLeave={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null))
-            setDropTarget(null);
-        }}
-        onDrop={(event) => {
-          setDropTarget(null);
-          const threadId = readInyosiraDragThreadId(
-            event.dataTransfer,
-            new Set(Object.keys(summaries)),
-          );
-          if (!threadId) return;
-          event.preventDefault();
-          const summary = summaries[threadId];
-          if (summary && organizationStateOf(summary) !== state) {
-            void moveThreadsToState([threadId], state);
-          }
-        }}
-      >
-        <SidebarInyosiraGroupLabel
-          state={state}
-          isExpanded={expanded}
-          onExpandedChange={(next) => setStateCollapsed(state, !next)}
-        />
-        {expanded ? (
-          <SidebarMenuSub className="ml-5 mr-0 my-0 translate-x-0 gap-0.5 border-l-0 px-0 py-0">
-            {threadIds.map((threadId) => (
-              <InyosiraThreadRow
-                key={threadId}
-                threadId={threadId}
-                orderedThreadIds={threadIds}
-                summary={summaries[threadId]}
-                projectById={projectById}
-                shared={shared}
-              />
-            ))}
-            {page.nextCursor !== null || page.status === "error" ? (
-              <SidebarMenuSubItem className="w-full">
-                <SidebarMenuSubButton
-                  render={<button type="button" disabled={page.status === "loading"} />}
-                  data-thread-selection-safe
-                  size="sm"
-                  className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                  onClick={() => loadMore(state)}
-                >
-                  {page.status === "loading"
-                    ? "Loading…"
-                    : page.status === "error"
-                      ? "Couldn't load threads. Try again"
-                      : "Show more"}
-                </SidebarMenuSubButton>
-              </SidebarMenuSubItem>
-            ) : null}
-          </SidebarMenuSub>
-        ) : null}
-      </SidebarGroup>
-    );
-  };
+  const renderGroup = (state: ThreadOrganizationState) => (
+    <SidebarInyosiraGroup
+      key={state}
+      state={state}
+      threadIds={groups[state]}
+      summaries={summaries}
+      projectById={projectById}
+      page={pages[state]}
+      loadMore={loadMore}
+      shared={shared}
+    />
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-2" data-testid="inyosira-section">
@@ -128,50 +37,5 @@ export function SidebarInyosiraSection({ shared }: { shared: SharedProjectItemPr
         {INYOSIRA_BOTTOM_STATES.map(renderGroup)}
       </div>
     </div>
-  );
-}
-
-function InyosiraThreadRow(props: {
-  threadId: ThreadId;
-  orderedThreadIds: readonly ThreadId[];
-  summary: SidebarThreadSummary | undefined;
-  projectById: ReadonlyMap<string, Project>;
-  shared: SharedProjectItemProps;
-}) {
-  const { shared, threadId, summary } = props;
-  const location = summary
-    ? resolveInyosiraLocation(summary, props.projectById.get(summary.projectId))
-    : null;
-  return (
-    <SidebarThreadRow
-      threadId={threadId}
-      orderedProjectThreadIds={props.orderedThreadIds}
-      routeThreadId={shared.routeThreadId}
-      selectedThreadIds={shared.selectedThreadIds}
-      showThreadJumpHints={shared.showThreadJumpHints}
-      jumpLabel={shared.threadJumpLabelById.get(threadId) ?? null}
-      renamingThreadId={shared.renamingThreadId}
-      renamingTitle={shared.renamingTitle}
-      setRenamingTitle={shared.setRenamingTitle}
-      onRenamingInputMount={shared.onRenamingInputMount}
-      hasRenameCommitted={shared.hasRenameCommitted}
-      markRenameCommitted={shared.markRenameCommitted}
-      handleThreadClick={shared.handleThreadClick}
-      navigateToThread={shared.navigateToThread}
-      handleMultiSelectContextMenu={shared.handleMultiSelectContextMenu}
-      handleThreadContextMenu={shared.handleThreadContextMenu}
-      clearSelection={shared.clearSelection}
-      commitRename={shared.commitRename}
-      cancelRename={shared.cancelRename}
-      branchThread={shared.branchThread}
-      requestThreadDelete={shared.requestThreadDelete}
-      openPrLink={shared.openPrLink}
-      pr={shared.prByThreadId.get(threadId) ?? null}
-      favoriteThreadIds={shared.favoriteThreadIds}
-      automationThreadIds={shared.automationThreadIds}
-      toggleFavoriteThread={shared.toggleFavoriteThread}
-      {...(location ? { secondaryLine: <SidebarInyosiraLocationLine location={location} /> } : {})}
-      addDragData={addInyosiraDragData(threadId)}
-    />
   );
 }

@@ -23,9 +23,12 @@ const IDLE_PAGE: InyosiraStatePage = { status: "idle", nextCursor: null, staleVe
 interface InyosiraStore {
   readonly arrangement: SidebarArrangement;
   readonly collapsedStates: readonly ThreadOrganizationState[];
+  /** Session-only expansion of the thread preview, independent of the section accordion. */
+  readonly expandedThreadLists: readonly ThreadOrganizationState[];
   readonly pages: Readonly<Record<ThreadOrganizationState, InyosiraStatePage>>;
   setArrangement: (arrangement: SidebarArrangement) => void;
   setStateCollapsed: (state: ThreadOrganizationState, collapsed: boolean) => void;
+  setThreadListExpanded: (state: ThreadOrganizationState, expanded: boolean) => void;
   setPage: (state: ThreadOrganizationState, page: Partial<InyosiraStatePage>) => void;
   markStale: (state: ThreadOrganizationState) => void;
 }
@@ -40,6 +43,7 @@ export const useInyosiraStore = create<InyosiraStore>((set, get) => {
   return {
     arrangement: persisted.arrangement,
     collapsedStates: persisted.collapsedStates,
+    expandedThreadLists: [],
     pages: { present: IDLE_PAGE, "needs-you": IDLE_PAGE, later: IDLE_PAGE, done: IDLE_PAGE },
     setArrangement: (arrangement) => {
       set({ arrangement });
@@ -54,6 +58,15 @@ export const useInyosiraStore = create<InyosiraStore>((set, get) => {
           : current.filter((entry) => entry !== state),
       });
       persist();
+    },
+    setThreadListExpanded: (state, expanded) => {
+      const current = get().expandedThreadLists;
+      if (current.includes(state) === expanded) return;
+      set({
+        expandedThreadLists: expanded
+          ? [...current, state]
+          : current.filter((entry) => entry !== state),
+      });
     },
     setPage: (state, page) =>
       set((current) => ({

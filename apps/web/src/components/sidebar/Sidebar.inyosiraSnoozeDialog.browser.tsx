@@ -10,12 +10,17 @@ import { useInyosiraSnoozePickerStore } from "./Sidebar.inyosira.snoozePicker";
 import { SidebarInyosiraSnoozeDialog } from "./Sidebar.inyosiraSnoozeDialog";
 
 vi.mock("./Sidebar.inyosira.actions", () => ({
-  INYOSIRA_SNOOZE_PRESETS: [{ minutes: 10, label: "10 minutes" }],
+  INYOSIRA_SNOOZE_PRESETS: [{ minutes: 10, label: "10 mins" }],
   moveThreadsToState: vi.fn(),
   snoozeThread: vi.fn(),
 }));
 
 const threadId = ThreadId.makeUnsafe("snooze-dialog");
+
+function openCustomSnooze() {
+  const custom = buildInyosiraSnoozeMenuItem(undefined).children!.at(-1)!;
+  return runInyosiraMenuAction(custom.id, [threadId]);
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,7 +50,7 @@ it("replaces the default when typing immediately after opening", async () => {
 it("selects the default when opening an initially closed mounted dialog", async () => {
   useInyosiraSnoozePickerStore.getState().close();
   const screen = await render(<SidebarInyosiraSnoozeDialog />);
-  await runInyosiraMenuAction(buildInyosiraSnoozeMenuItem(undefined).id, [threadId]);
+  await openCustomSnooze();
   await expect.element(screen.getByRole("textbox")).toHaveFocus();
   await userEvent.keyboard("20{Enter}");
   expect(snoozeThread).toHaveBeenCalledWith(threadId, 20);
@@ -74,7 +79,7 @@ it("selects the reset default when reopening the mounted dialog", async () => {
   const screen = await render(<SidebarInyosiraSnoozeDialog />);
   await screen.getByRole("textbox").fill("3h");
   await screen.getByRole("button", { name: "Cancel", exact: true }).click();
-  await runInyosiraMenuAction(buildInyosiraSnoozeMenuItem(undefined).id, [threadId]);
+  await openCustomSnooze();
   await expect.element(screen.getByRole("textbox")).toHaveValue("10");
   await expect.element(screen.getByRole("textbox")).toHaveFocus();
   await userEvent.keyboard("45");
@@ -108,7 +113,7 @@ it("cancels without snoozing and resets to 10 minutes when reopened from the men
   expect(snoozeThread).not.toHaveBeenCalled();
   expect(useInyosiraSnoozePickerStore.getState().threadId).toBeNull();
 
-  await runInyosiraMenuAction(buildInyosiraSnoozeMenuItem(undefined).id, [threadId]);
+  await openCustomSnooze();
   await expect.element(screen.getByRole("textbox")).toHaveValue("10");
   await screen.getByRole("button", { name: "Snooze", exact: true }).click();
   expect(snoozeThread).toHaveBeenCalledWith(threadId, 10);

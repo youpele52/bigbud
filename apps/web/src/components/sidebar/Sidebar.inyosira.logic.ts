@@ -5,6 +5,7 @@ import {
   type ThreadOrganizationState,
 } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
+import { SIDEBAR_THREAD_PREVIEW_LIMIT } from "../../constants/sidebar";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import type { Project, SidebarThreadSummary } from "../../models/types/app.types";
 import {
@@ -12,6 +13,7 @@ import {
   isRemoteExecutionTargetId,
 } from "./Sidebar.remoteWorkspaces.logic";
 import { sortThreadsForSidebar } from "./Sidebar.sort.logic";
+import { getPreviewItemsIncludingActive } from "./Sidebar.logic";
 
 export const INYOSIRA_STATE_LABELS: Record<ThreadOrganizationState, string> = {
   present: "Present",
@@ -57,13 +59,32 @@ export function groupInyosiraThreadIds(
   return result;
 }
 
-/** Thread ids in display order, skipping collapsed groups, for keyboard navigation. */
+/** Same compact preview as projects, keeping the active thread visible in its sorted position. */
+export function previewInyosiraThreadIds(
+  threadIds: readonly ThreadId[],
+  showAll: boolean,
+  activeThreadId?: ThreadId | null,
+) {
+  return getPreviewItemsIncludingActive({
+    items: threadIds,
+    activeId: activeThreadId,
+    showAll,
+    previewLimit: SIDEBAR_THREAD_PREVIEW_LIMIT,
+    getId: (id) => id,
+  });
+}
+
+/** Only mounted thread rows, in display order, for navigation and numbered jump shortcuts. */
 export function visibleInyosiraThreadIds(
   groups: InyosiraGroups,
   collapsedStates: readonly ThreadOrganizationState[],
+  expandedThreadLists: readonly ThreadOrganizationState[] = [],
+  activeThreadId?: ThreadId | null,
 ): ThreadId[] {
   return THREAD_ORGANIZATION_STATES.filter((state) => !collapsedStates.includes(state)).flatMap(
-    (state) => groups[state],
+    (state) =>
+      previewInyosiraThreadIds(groups[state], expandedThreadLists.includes(state), activeThreadId)
+        .visibleItems,
   );
 }
 

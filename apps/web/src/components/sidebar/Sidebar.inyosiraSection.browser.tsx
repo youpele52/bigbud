@@ -81,21 +81,27 @@ function makeThread(state: (typeof states)[number]): SidebarThreadSummary {
 }
 
 const originalCollapsed = useInyosiraStore.getState().collapsedStates;
+const originalExpanded = useInyosiraStore.getState().expandedThreadLists;
+const originalPages = useInyosiraStore.getState().pages;
 const originalDark = document.documentElement.classList.contains("dark");
 
 beforeEach(() => {
   fixtures.terminalProvider = false;
-  useInyosiraStore.setState({ collapsedStates: [] });
+  useInyosiraStore.setState({ collapsedStates: [], expandedThreadLists: [] });
   fixtures.threads = Object.fromEntries(states.map((state) => [state, makeThread(state)]));
 });
 
 afterEach(() => {
-  useInyosiraStore.setState({ collapsedStates: originalCollapsed });
+  useInyosiraStore.setState({
+    collapsedStates: originalCollapsed,
+    expandedThreadLists: originalExpanded,
+    pages: originalPages,
+  });
   document.documentElement.classList.toggle("dark", originalDark);
 });
 
 it.each(["light", "dark"])(
-  "aligns every Inyosira group with the standard sidebar text column in %s mode",
+  "keeps headings aligned and insets Inyosira thread lists in %s mode",
   async (theme) => {
     document.documentElement.classList.toggle("dark", theme === "dark");
     const screen = await render(
@@ -120,7 +126,7 @@ it.each(["light", "dark"])(
       const provider = row.element().querySelector('[data-slot="thread-provider-icon"]')!;
       const location = row.element().querySelector(".text-muted-foreground\\/70 > svg")!;
       const title = screen.getByText(`Thread in ${state}`, { exact: true });
-      expect(provider.getBoundingClientRect().left).toBe(textLeft);
+      expect(provider.getBoundingClientRect().left).toBeCloseTo(textLeft + 8, 1);
       const titleBox = title.element().getBoundingClientRect();
       const providerBox = provider.getBoundingClientRect();
       expect(location.getBoundingClientRect().left).toBe(titleBox.left);
@@ -129,8 +135,9 @@ it.each(["light", "dark"])(
         titleBox.top + titleBox.height / 2,
         1,
       );
-      expect(row.element().getBoundingClientRect().right).toBe(
-        reference.closest("button")!.getBoundingClientRect().right,
+      expect(row.element().getBoundingClientRect().right).toBeCloseTo(
+        reference.closest("button")!.getBoundingClientRect().right - 8,
+        1,
       );
       const locationText = location.nextElementSibling!;
       expect(locationText.getBoundingClientRect().left).toBeGreaterThan(titleBox.left);
@@ -145,6 +152,39 @@ it.each(["light", "dark"])(
     }
   },
 );
+
+it("keeps preview and paging controls outside the thread-only horizontal inset", async () => {
+  useInyosiraStore.getState().setPage("present", {
+    status: "loaded",
+    nextCursor: { updatedAt: "2026-11-03T12:00:00.000Z", threadId: ThreadId.makeUnsafe("cursor") },
+  });
+  const screen = await render(
+    <div style={{ width: 280 }}>
+      <SidebarInyosiraSection shared={shared} />
+    </div>,
+  );
+  const row = screen.getByTestId("thread-row-present").element();
+  const provider = row.querySelector('[data-slot="thread-provider-icon"]')!;
+  const list = row.closest('[data-slot="sidebar-menu-sub"]')!;
+  expect(getComputedStyle(list).paddingLeft).toBe("0px");
+  expect(getComputedStyle(list).paddingRight).toBe("0px");
+  const threadItem = row.closest("[data-thread-item]")!;
+  expect(getComputedStyle(threadItem).paddingLeft).toBe("8px");
+  expect(getComputedStyle(threadItem).paddingRight).toBe("8px");
+  const checkControl = (button: Element) => {
+    expect(button.getBoundingClientRect().left).toBe(row.getBoundingClientRect().left - 8);
+    expect(button.getBoundingClientRect().right).toBe(row.getBoundingClientRect().right + 8);
+    expect(button.querySelector("span")!.getBoundingClientRect().left).toBe(
+      provider.getBoundingClientRect().left - 8,
+    );
+  };
+  const seeMore = screen.getByRole("button", { name: "See more", exact: true });
+  await expect.element(seeMore).toBeVisible();
+  checkControl(seeMore.element());
+  await seeMore.click();
+  checkControl(screen.getByRole("button", { name: "Show less", exact: true }).element());
+  checkControl(screen.getByRole("button", { name: "Load more", exact: true }).element());
+});
 
 it.each(["light", "dark"])(
   "keeps Projects provider icons aligned with the title in %s mode",

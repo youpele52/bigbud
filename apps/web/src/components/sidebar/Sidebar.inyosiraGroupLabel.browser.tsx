@@ -6,7 +6,15 @@ import type { OrchestrationDeliveryStreamItem } from "@bigbud/contracts/orchestr
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 
 import { INYOSIRA_COUNT_REFRESH_DELAY_MS } from "../../constants/sidebar";
-import { SidebarInyosiraGroupLabel } from "./Sidebar.inyosiraGroupLabel";
+import type { ComponentProps } from "react";
+import { useInyosiraThreadCount } from "./Sidebar.inyosira.count";
+import { SidebarInyosiraGroupLabel as GroupLabel } from "./Sidebar.inyosiraGroupLabel";
+
+/** Exercise the heading with its live count source, as used by each Inyosira group. */
+function SidebarInyosiraGroupLabel(props: Omit<ComponentProps<typeof GroupLabel>, "result">) {
+  const result = useInyosiraThreadCount(props.state);
+  return <GroupLabel {...props} result={result} />;
+}
 
 type Listener = (item: OrchestrationDeliveryStreamItem) => void | Promise<void>;
 const api = vi.hoisted(() => ({
@@ -92,10 +100,57 @@ it.each([
   },
 );
 
-it("reveals the count only on hover or click/focus without shifting the heading", async () => {
+it.each(["present", "needs-you", "later", "done"] as const)(
+  "keeps the expanded %s count visible without hover or focus, including zero",
+  async (state) => {
+    api.request.mockResolvedValue({ totalCount: 0, threads: [] });
+    const screen = await render(
+      <>
+        <SidebarInyosiraGroupLabel state={state} isExpanded onExpandedChange={vi.fn()} />
+        <button>Elsewhere</button>
+      </>,
+    );
+    const elsewhere = screen.getByRole("button", { name: "Elsewhere", exact: true });
+    await elsewhere.click();
+    const emptyCount = screen.getByLabelText("0 threads");
+    await expect.element(emptyCount).toHaveTextContent("(0)");
+    await expect.poll(() => getComputedStyle(emptyCount.element()).opacity).toBe("1");
+    api.request.mockResolvedValue({ totalCount: 75, threads: [] });
+    emit("thread.organization-updated");
+    const count = screen.getByLabelText("75 threads");
+    await expect.element(count).toHaveTextContent("(75)");
+    await expect.poll(() => getComputedStyle(count.element()).opacity).toBe("1");
+  },
+);
+
+it("updates count visibility when expanded or collapsed without refetching", async () => {
+  const onExpandedChange = vi.fn();
+  const content = (isExpanded: boolean) => (
+    <>
+      <SidebarInyosiraGroupLabel
+        state="present"
+        isExpanded={isExpanded}
+        onExpandedChange={onExpandedChange}
+      />
+      <button>Elsewhere</button>
+    </>
+  );
+  const screen = await render(content(false));
+  const count = screen.getByText("(75)");
+  await expect.element(count).toBeInTheDocument();
+  await screen.getByRole("button", { name: "Elsewhere", exact: true }).click();
+  await expect.poll(() => getComputedStyle(count.element()).opacity).toBe("0");
+  await screen.rerender(content(true));
+  await expect.poll(() => getComputedStyle(count.element()).opacity).toBe("1");
+  await screen.rerender(content(false));
+  await expect.poll(() => getComputedStyle(count.element()).opacity).toBe("0");
+  expect(api.request).toHaveBeenCalledTimes(1);
+});
+
+it("reveals the collapsed count only on hover or click/focus without shifting the heading", async () => {
   const screen = await render(
     <>
-      <SidebarInyosiraGroupLabel state="present" isExpanded onExpandedChange={vi.fn()} />
+      <SidebarInyosiraGroupLabel state="present" isExpanded={false} onExpandedChange={vi.fn()} />
       <button>Elsewhere</button>
     </>,
   );

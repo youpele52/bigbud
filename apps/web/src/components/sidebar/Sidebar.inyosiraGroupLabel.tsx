@@ -1,20 +1,21 @@
 import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
-import { useInyosiraThreadCount } from "./Sidebar.inyosira.count";
+import type { InyosiraCountResult } from "./Sidebar.inyosira.count";
 import { INYOSIRA_STATE_LABELS } from "./Sidebar.inyosira.logic";
 import { SidebarSectionLabel } from "./SidebarSectionLabel";
 
 export function SidebarInyosiraGroupLabel({
   state,
+  result,
   isExpanded,
   onExpandedChange,
 }: {
   state: ThreadOrganizationState;
+  result: InyosiraCountResult;
   isExpanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
 }) {
-  const result = useInyosiraThreadCount(state);
   const count =
     result.status === "loaded"
       ? result.count.toLocaleString()
@@ -35,7 +36,7 @@ export function SidebarInyosiraGroupLabel({
         <span>{INYOSIRA_STATE_LABELS[state]}</span>
         <span
           data-slot="inyosira-thread-count"
-          className="tabular-nums opacity-0 transition-opacity group-hover/project-header:opacity-100 group-focus-within/project-header:opacity-100"
+          className={`tabular-nums transition-opacity group-hover/project-header:opacity-100 group-focus-within/project-header:opacity-100 ${isExpanded ? "opacity-100" : "opacity-0"}`}
           aria-label={countLabel}
         >
           ({count})
