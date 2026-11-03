@@ -9,6 +9,7 @@ import { formatContextWindowTokens } from "../../lib/contextWindow";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
+import { ResourceAwarenessSettings } from "../resource-monitor/ResourceAwarenessSettings";
 
 export function NotificationsSettingsSection() {
   const settings = useSettings();
@@ -142,6 +143,8 @@ export function NotificationsSettingsSection() {
           }
         />
       </SettingsSection>
+
+      <ResourceAwarenessSettings />
     </>
   );
 }

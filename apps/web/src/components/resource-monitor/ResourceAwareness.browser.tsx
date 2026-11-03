@@ -91,7 +91,7 @@ it("shows and acknowledges alerts without the monitor page, deduplicates live sa
   api.emit(initial);
   expect(mocks.add).toHaveBeenCalledOnce();
   mocks.add.mock.calls[0]?.[0].actionProps?.onClick?.();
-  expect(mocks.navigate).toHaveBeenCalledWith({ to: "/system-monitor" });
+  expect(mocks.navigate).toHaveBeenCalledWith({ to: "/settings/notifications" });
   api.emit({
     ...initial,
     preferences: { ...initial.preferences, snoozedUntilMs: Date.now() + 60000 },
@@ -123,15 +123,38 @@ it("does not replay a stale hydration result after newer live state", async () =
 it("edits persisted monitoring using the current revision and renders unsupported-data guidance", async () => {
   const api = bridge({ ...state(), alerts: [] });
   screen = await render(<ResourceAwarenessSettings />);
-  await screen.getByText("Background resource alerts", { exact: false }).click();
-  await screen.getByRole("checkbox", { name: "Enable background monitoring" }).click();
+  await expect.element(screen.getByText("Background resource alerts")).toBeVisible();
+  expect(
+    document.querySelector<HTMLDetailsElement>('details[data-slot="activity-accordion"]')?.open,
+  ).toBe(false);
+  // This browser fixture does not load app CSS; the styled switch is not pointer-visible.
+  document.querySelector<HTMLElement>('[aria-label="Enable background monitoring"]')?.click();
   await expect.poll(() => api.mutate.mock.calls.length).toBe(1);
   expect(api.mutate).toHaveBeenCalledWith({
     expectedRevision: 0,
     operation: "enable",
     enabled: false,
   });
+  await screen.getByText("Edit alert rules").click();
+  expect(
+    document.querySelector<HTMLDetailsElement>('details[data-slot="activity-accordion"]')?.open,
+  ).toBe(true);
+  await expect.element(screen.getByRole("heading", { name: "System CPU" })).toBeVisible();
+});
+
+it("uses settings selects and saves memory limits in GiB", async () => {
+  const api = bridge({ ...state(), alerts: [] });
+  screen = await render(<ResourceAwarenessSettings />);
+  await screen.getByText("Edit alert rules").click();
+  await screen.getByRole("combobox", { name: "Metric for host-cpu" }).click();
+  await screen.getByRole("option", { name: "bigbud memory" }).click();
   await expect
-    .element(screen.getByText("No monitoring after quit", { exact: false }))
-    .toBeVisible();
+    .element(screen.getByRole("combobox", { name: "Scope for host-cpu" }))
+    .toHaveTextContent("bigbud core");
+  await screen.getByRole("button", { name: "Save rule" }).first().click();
+  await expect.poll(() => api.mutate.mock.calls.length).toBe(1);
+  expect(api.mutate.mock.calls[0]?.[0]).toMatchObject({
+    operation: "upsert",
+    rule: { id: "host-cpu", metric: "appMemory", scope: "core", threshold: 4 * 1024 ** 3 },
+  });
 });

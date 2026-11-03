@@ -59,9 +59,9 @@ export function ResourceAwarenessToastCoordinator() {
           </span>
         ),
         actionProps: {
-          children: "Open monitor",
+          children: "Alert settings",
           onClick: () => {
-            void navigate({ to: "/system-monitor" });
+            void navigate({ to: "/settings/notifications" });
           },
         },
       });
