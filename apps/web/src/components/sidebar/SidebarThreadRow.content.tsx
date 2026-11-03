@@ -23,7 +23,9 @@ export function SidebarThreadRowContent({
             : "min-w-0 group-has-[[data-slot=thread-terminal-provider-icon]]/thread-row-content:pl-4.5"
         }
       >
-        {secondaryLine}
+        <div className="group-has-[[data-slot=thread-snooze-icon]]/thread-row-content:pl-4.5">
+          {secondaryLine}
+        </div>
       </div>
     </div>
   );

@@ -19,6 +19,7 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
 import { SidebarThreadConnectingIndicator } from "./SidebarThreadConnectingIndicator";
 import { SidebarThreadProviderIcon } from "./SidebarThreadProviderIcon";
+import { SidebarThreadSnoozeIcon } from "./SidebarThreadSnoozeIcon";
 import { SidebarThreadTerminalProviderIcon } from "./SidebarThreadTerminalProviderIcon";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
 import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
@@ -154,6 +155,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     <>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
         {providerIcon}
+        <SidebarThreadSnoozeIcon snooze={thread.organization?.snooze} />
         <SidebarThreadTerminalProviderIcon threadId={thread.id} />
         {props.renamingThreadId === thread.id ? (
           <input

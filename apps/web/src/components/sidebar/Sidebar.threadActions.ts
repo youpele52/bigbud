@@ -13,7 +13,11 @@ import type {
   SidebarThreadActionsInput,
   SidebarThreadActionsOutput,
 } from "./Sidebar.threadActions.types";
-import { buildInyosiraMoveMenuItem, runInyosiraMenuAction } from "./Sidebar.inyosira.menu";
+import {
+  buildInyosiraMoveMenuItem,
+  buildInyosiraSnoozeMenuItem,
+  runInyosiraMenuAction,
+} from "./Sidebar.inyosira.menu";
 import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 
 function normalizeSummaryText(value: string | null | undefined): string {
@@ -215,6 +219,7 @@ export function useSidebarThreadActions({
           { id: "rename", label: "Rename thread" },
           { id: "branch", label: "Branch thread" },
           buildInyosiraMoveMenuItem(thread.organization),
+          buildInyosiraSnoozeMenuItem(thread.organization),
           {
             id: "favorite",
             label: isFavorite ? "Unpin thread" : "Pin thread",

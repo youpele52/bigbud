@@ -194,6 +194,56 @@ it.each([true, false])(
   },
 );
 
+it.each([
+  [true, false],
+  [true, true],
+  [false, false],
+  [false, true],
+])("aligns snoozed rows (provider=%s, terminal=%s)", async (hasProvider, hasTerminal) => {
+  fixtures.terminalProvider = hasTerminal;
+  const thread = fixtures.threads.later!;
+  fixtures.threads.later = {
+    ...thread,
+    session: hasProvider ? thread.session : null,
+    organization: {
+      ...thread.organization!,
+      snooze: { id: "snooze-1", until: "2026-11-03T12:00:00.000Z" },
+    },
+  };
+  const screen = await render(
+    <div style={{ width: 280 }}>
+      <SidebarInyosiraSection shared={shared} />
+    </div>,
+  );
+  const row = screen.getByTestId("thread-row-later");
+  const clock = row.getByRole("img", { name: /^Snoozed until / });
+  await expect.element(clock).toBeVisible();
+  const provider = row.element().querySelector('[data-slot="thread-provider-icon"]');
+  if (hasProvider) expect(provider?.nextElementSibling).toBe(clock.element());
+  const titleBox = screen
+    .getByText("Thread in later", { exact: true })
+    .element()
+    .getBoundingClientRect();
+  const clockBox = clock.element().getBoundingClientRect();
+  expect(clockBox.top + clockBox.height / 2).toBeCloseTo(titleBox.top + titleBox.height / 2, 1);
+  const location = row.element().querySelector(".text-muted-foreground\\/70 > svg")!;
+  expect(location.getBoundingClientRect().left).toBe(titleBox.left);
+  expect(
+    screen
+      .getByTestId("thread-row-present")
+      .element()
+      .querySelector('[data-slot="thread-snooze-icon"]'),
+  ).toBeNull();
+
+  fixtures.threads.later = thread;
+  await screen.rerender(
+    <div style={{ width: 280 }}>
+      <SidebarInyosiraSection shared={shared} />
+    </div>,
+  );
+  await expect.element(clock).not.toBeInTheDocument();
+});
+
 it.each(["unknown", null] as const)(
   "does not leave a provider gap when the provider is %s",
   async (provider) => {

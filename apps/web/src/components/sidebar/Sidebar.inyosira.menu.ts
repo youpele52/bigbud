@@ -21,6 +21,17 @@ const SNOOZE_PREFIX = "inyosira-snooze:";
 const CANCEL_SNOOZE_ID = "inyosira-snooze-cancel";
 const SNOOZE_INFO_ID = "inyosira-snooze-info";
 const SNOOZE_CUSTOM_ID = "inyosira-snooze-custom";
+const SNOOZE_PICKER_ID = "inyosira-snooze-picker";
+
+/** Direct access to the duration picker, also available under Move to. */
+export function buildInyosiraSnoozeMenuItem(
+  organization: ThreadOrganization | undefined,
+): ContextMenuItem {
+  return {
+    id: SNOOZE_PICKER_ID,
+    label: organization?.snooze ? "Snooze again…" : "Snooze…",
+  };
+}
 
 /**
  * The Move to submenu. With one thread, the current state is checked and snoozing is offered;
@@ -76,7 +87,7 @@ export async function runInyosiraMenuAction(
     await moveThreadsToState(threadIds, "present");
     return true;
   }
-  if (clicked === SNOOZE_CUSTOM_ID && threadIds.length === 1) {
+  if ((clicked === SNOOZE_CUSTOM_ID || clicked === SNOOZE_PICKER_ID) && threadIds.length === 1) {
     useInyosiraSnoozePickerStore.getState().open(threadIds[0]!);
     return true;
   }

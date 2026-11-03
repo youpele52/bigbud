@@ -7,7 +7,11 @@ vi.mock("./Sidebar.inyosira.actions", () => ({
   snoozeThread: vi.fn(),
 }));
 
-import { buildInyosiraMoveMenuItem, runInyosiraMenuAction } from "./Sidebar.inyosira.menu";
+import {
+  buildInyosiraMoveMenuItem,
+  buildInyosiraSnoozeMenuItem,
+  runInyosiraMenuAction,
+} from "./Sidebar.inyosira.menu";
 import { parseSnoozeDuration, useInyosiraSnoozePickerStore } from "./Sidebar.inyosira.snoozePicker";
 
 describe("parseSnoozeDuration", () => {
@@ -47,6 +51,44 @@ describe("custom snooze in Move to", () => {
     expect(
       buildInyosiraMoveMenuItem(null).children?.some((item) => item.label === "Snooze for…"),
     ).toBe(false);
+  });
+
+  it.each([false, true])("keeps menu IDs unique across all levels (snoozed=%s)", (snoozed) => {
+    const organization = {
+      state: "later" as const,
+      revision: 1,
+      changedAt: null,
+      snooze: snoozed ? { id: "snooze-1", until: "2026-11-03T12:00:00.000Z" } : null,
+    };
+    const move = buildInyosiraMoveMenuItem(organization);
+    const direct = buildInyosiraSnoozeMenuItem(organization);
+    // Native menus deduplicate clickable IDs across the root and submenu levels.
+    const ids = [move, ...(move.children ?? []), direct]
+      .filter((item) => !item.separator)
+      .map((item) => item.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("opens the same picker from the top-level Snooze action", async () => {
+    const item = buildInyosiraSnoozeMenuItem(undefined);
+    expect(item.label).toBe("Snooze…");
+    expect(await runInyosiraMenuAction(item.id, [threadId])).toBe(true);
+    expect(useInyosiraSnoozePickerStore.getState().threadId).toBe(threadId);
+    useInyosiraSnoozePickerStore.getState().close();
+    expect(await runInyosiraMenuAction(item.id, [])).toBe(false);
+    expect(await runInyosiraMenuAction(item.id, [threadId, threadId])).toBe(false);
+    expect(useInyosiraSnoozePickerStore.getState().threadId).toBeNull();
+  });
+
+  it("labels an existing snooze as snoozing again", () => {
+    expect(
+      buildInyosiraSnoozeMenuItem({
+        state: "later",
+        revision: 1,
+        changedAt: null,
+        snooze: { id: "snooze-1", until: "2026-11-03T12:00:00.000Z" },
+      }).label,
+    ).toBe("Snooze again…");
   });
 
   it("opens the picker for the clicked thread", async () => {

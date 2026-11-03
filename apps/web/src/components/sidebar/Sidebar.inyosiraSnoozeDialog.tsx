@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
+import { INYOSIRA_DEFAULT_SNOOZE_MINUTES } from "../../constants/sidebar";
 import { Button } from "../ui/button";
 import {
   Dialog,
@@ -25,12 +26,14 @@ const inputClassName =
 export function SidebarInyosiraSnoozeDialog() {
   const threadId = useInyosiraSnoozePickerStore((state) => state.threadId);
   const close = useInyosiraSnoozePickerStore((state) => state.close);
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(String(INYOSIRA_DEFAULT_SNOOZE_MINUTES));
   const [touched, setTouched] = useState(false);
+  const durationInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  // Reset before the popup's opening-focus microtask selects the default text.
+  useLayoutEffect(() => {
     if (threadId === null) return;
-    setValue("");
+    setValue(String(INYOSIRA_DEFAULT_SNOOZE_MINUTES));
     setTouched(false);
   }, [threadId]);
 
@@ -45,7 +48,15 @@ export function SidebarInyosiraSnoozeDialog() {
 
   return (
     <Dialog open={threadId !== null} onOpenChange={(open) => (open ? undefined : close())}>
-      <DialogPopup className="max-w-sm">
+      <DialogPopup
+        className="max-w-sm"
+        initialFocus={() => {
+          const input = durationInputRef.current;
+          input?.focus();
+          input?.select();
+          return input;
+        }}
+      >
         <DialogHeader>
           <DialogTitle>Snooze thread</DialogTitle>
           <DialogDescription>
@@ -54,10 +65,10 @@ export function SidebarInyosiraSnoozeDialog() {
         </DialogHeader>
         <DialogPanel>
           <label htmlFor="inyosira-snooze-duration" className="block">
-            <span className="text-xs font-medium text-foreground">Duration</span>
+            <span className="text-xs font-medium text-foreground">Duration (minutes or hours)</span>
             <Input
               id="inyosira-snooze-duration"
-              autoFocus
+              ref={durationInputRef}
               className={inputClassName}
               aria-invalid={error ? true : undefined}
               placeholder="45, 90m, 3h, or 1h 30m"
@@ -79,7 +90,7 @@ export function SidebarInyosiraSnoozeDialog() {
             ) : (
               <p className="mt-1.5 text-muted-foreground text-xs leading-4">
                 {parsed.ok
-                  ? `Wakes around ${formatSnoozeWakeTime(new Date(Date.now() + parsed.minutes * 60_000))}`
+                  ? `2 minutes to 24 hours. Wakes around ${formatSnoozeWakeTime(new Date(Date.now() + parsed.minutes * 60_000))}`
                   : "2 minutes to 24 hours."}
               </p>
             )}
