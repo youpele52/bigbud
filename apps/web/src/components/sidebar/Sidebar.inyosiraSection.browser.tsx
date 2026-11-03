@@ -219,7 +219,14 @@ it.each([
   const clock = row.getByRole("img", { name: /^Snoozed until / });
   await expect.element(clock).toBeVisible();
   const provider = row.element().querySelector('[data-slot="thread-provider-icon"]');
-  if (hasProvider) expect(provider?.nextElementSibling).toBe(clock.element());
+  const terminalProvider = row
+    .element()
+    .querySelector('[data-slot="thread-terminal-provider-icon"]');
+  expect(clock.element().parentElement?.firstElementChild).toBe(clock.element());
+  if (hasProvider) expect(clock.element().nextElementSibling).toBe(provider);
+  if (hasTerminal) {
+    expect((provider ?? clock.element()).nextElementSibling).toBe(terminalProvider);
+  }
   const titleBox = screen
     .getByText("Thread in later", { exact: true })
     .element()

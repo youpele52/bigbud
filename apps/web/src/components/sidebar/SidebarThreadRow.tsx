@@ -154,8 +154,8 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   const firstLine = (
     <>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-        {providerIcon}
         <SidebarThreadSnoozeIcon snooze={thread.organization?.snooze} />
+        {providerIcon}
         <SidebarThreadTerminalProviderIcon threadId={thread.id} />
         {props.renamingThreadId === thread.id ? (
           <input
