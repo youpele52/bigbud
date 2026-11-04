@@ -10,6 +10,21 @@ const common = ["Orchestration.implementation.types.ts", "Orchestration.plugin.s
 const closures = {
   v1: [...common, "Orchestration.implementation.v1.ts"],
   v2: [...common, "Orchestration.implementation.v1.ts", "Orchestration.implementation.v2.ts"],
+  v3: [
+    ...common,
+    "Orchestration.implementation.v1.ts",
+    "Orchestration.implementation.types.v3.ts",
+    "Orchestration.implementation.v3.ts",
+    "Orchestration.plugin.specs.v4.ts",
+  ],
+  v4: [
+    ...common,
+    "Orchestration.implementation.v1.ts",
+    "Orchestration.implementation.types.v3.ts",
+    "Orchestration.implementation.v3.ts",
+    "Orchestration.implementation.v4.ts",
+    "Orchestration.plugin.specs.v4.ts",
+  ],
 } as const;
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
 const schemaDigest = sha(await readFile(path.join(root, "Orchestration.plugin.specs.ts"), "utf8"));
@@ -22,6 +37,20 @@ const descriptor = {
 };
 const entries: Record<string, unknown> = {};
 for (const [version, modules] of Object.entries(closures)) {
+  const versionDescriptor =
+    version === "v3" || version === "v4"
+      ? {
+          ...descriptor,
+          bootstrapAbi: "bigbud.thread.bootstrap.v4",
+          canonicalRequestAbi: "bigbud.thread.canonical.v2",
+          schemaDigest: sha(
+            JSON.stringify([
+              schemaDigest,
+              sha(await readFile(path.join(root, "Orchestration.plugin.specs.v4.ts"), "utf8")),
+            ]),
+          ),
+        }
+      : descriptor;
   const sources = await Promise.all(
     [...modules].toSorted().map(async (name) => {
       const content = await readFile(path.join(root, name), "utf8");
@@ -44,8 +73,8 @@ for (const [version, modules] of Object.entries(closures)) {
     }),
   );
   entries[version] = {
-    ...descriptor,
-    implementationDigest: sha(JSON.stringify([descriptor, sources])),
+    ...versionDescriptor,
+    implementationDigest: sha(JSON.stringify([versionDescriptor, sources])),
     sources,
   };
 }

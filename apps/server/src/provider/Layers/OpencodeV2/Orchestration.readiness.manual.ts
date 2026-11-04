@@ -82,6 +82,14 @@ export async function readV2CompatibleManualBootstrap(
   const artifact = managed ?? (await readV2RetainedArtifact(preferred, path.basename(source)));
   if (v2ThreadRegistration(artifact).id !== registration.id)
     throw new Error("V2 retained registration family mismatch; no cross-family adoption.");
+  // A verified managed v3 entry can use the ordinary breaking-update activation/retirement gates.
+  // Manual entries still require an explicit update; never create an autoload alias for them.
+  if (
+    managed &&
+    artifact.bootstrapAbi === "bigbud.thread.bootstrap.v3" &&
+    preferred.bootstrapAbi === "bigbud.thread.bootstrap.v4"
+  )
+    return undefined;
   if (artifact.bootstrapAbi !== preferred.bootstrapAbi)
     throw new Error(
       "V2 manual bootstrap namespace ABI requires an explicit update; no compact-session downgrade, autoload alias or history mutation.",

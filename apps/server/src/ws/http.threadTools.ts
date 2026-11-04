@@ -4,6 +4,7 @@ import { Schema } from "effect";
 import { BrowserAction, ThreadId } from "@bigbud/contracts";
 
 import { ServerConfig } from "../startup/config.ts";
+import { handleHtmlRenderAction } from "./http.threadTools.htmlRender.ts";
 import {
   isThreadOrchestrationToolAuthorized,
   readThreadOrchestrationToolAuthByToken,
@@ -104,6 +105,8 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       }
       const threadId = ThreadId.makeUnsafe(authRecord.threadId);
       const capabilityCatalog = getEffectiveCapabilityCatalog(threadId);
+      if (body.action === "render_html")
+        return yield* handleHtmlRenderAction({ dispatcher, threadId, body });
 
       if (body.action === "configure_system_resource_rules") {
         if (!dispatcher.configureSystemResourceRules)

@@ -11,6 +11,7 @@ import {
 import { assertV2PluginUpgradeIdle } from "./PluginSetup.upgrade.ts";
 import { syntheticV2QualificationRecord } from "./NativeCompatibility.qualification.fixture.ts";
 import { createHash } from "node:crypto";
+import { readV2CompatibleManualBootstrap } from "./Orchestration.readiness.manual.ts";
 import {
   V2_N4_BOOTSTRAP_COMPATIBILITY,
   V2_N4_COMPATIBILITY_DIGEST,
@@ -61,6 +62,19 @@ it("adopts the unchanged active signed same-issuer managed entry despite unsettl
       publications = await f.installations.inventory();
     // Expiry is not retirement: the same old owner still blocks preferred-byte replacement.
     await expect(assertV2PluginUpgradeIdle(f.preferred)).rejects.toThrow();
+    // ABI 4 is a real breaking upgrade, not compatible adoption of the old five-tool surface.
+    expect(
+      await f.run(() =>
+        readV2CompatibleManualBootstrap(
+          f.app.artifact,
+          f.client,
+          f.root,
+          undefined,
+          f.eligibility,
+          f.root,
+        ),
+      ),
+    ).toBeUndefined();
     const ready = await f.ready();
     expect(ready.stamp.bootstrapDigest).toBe(f.installed.artifactDigest);
     expect(f.installed.artifactDigest).not.toBe(f.preferred.artifactDigest);

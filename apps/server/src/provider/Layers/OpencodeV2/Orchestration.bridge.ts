@@ -10,8 +10,11 @@ import { decodeV2ThreadCallback } from "./Orchestration.callback.ts";
 import { V2ThreadApprovals } from "./Orchestration.approval.ts";
 import { assertV2ThreadPolicy } from "./Orchestration.admission.ts";
 import { V2ActiveExecutions } from "./Execution.owners.ts";
-import { V2ThreadImplementationRegistry } from "./Orchestration.implementation.ts";
-import type { V2ThreadImplementation } from "./Orchestration.implementation.types.ts";
+import {
+  V2ThreadImplementationRegistry,
+  v2ImplementationForBootstrap,
+} from "./Orchestration.implementation.ts";
+import type { V2ThreadImplementation } from "./Orchestration.implementation.types.v3.ts";
 import type { V2NativeRuntimeProof } from "./NativeCompatibility.types.ts";
 import { invokeV2ThreadOwner } from "./Orchestration.bridge.invoke.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
@@ -30,7 +33,11 @@ import {
 import type { V2DeadBackendContext } from "./Orchestration.enrollment.deadBackend.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 import { settleWithinShutdown } from "./Runtime.shutdown.ts";
-import { suspendV2ThreadOwner, reconnectV2ThreadOwner } from "./Orchestration.bridge.transport.ts";
+import {
+  suspendV2ThreadOwner,
+  reconnectV2ThreadOwner,
+  v2ThreadResponseLease,
+} from "./Orchestration.bridge.transport.ts";
 
 export interface Owner {
   readonly runtime: OpencodeV2Runtime;
@@ -117,8 +124,9 @@ export class V2ThreadBridge {
     };
     if (this.owners.has(session.native.id))
       throw new Error("V2 canonical enrollment already owned.");
-    const selected =
+    const requested =
       (await this.options.selectImplementation?.()) ?? this.implementations.current();
+    const selected = v2ImplementationForBootstrap(requested, verified?.bootstrapAbi);
     assertCurrent();
     if (this.owners.has(session.native.id))
       throw new Error(
@@ -222,7 +230,11 @@ export class V2ThreadBridge {
         return owner.active.cancel();
       },
     };
-    const abort = () => suspendV2ThreadOwner(owner);
+    const abort = () => {
+      // Pending approval has no physical effect; settle it without cancelling dispatched work.
+      approvals.cancel();
+      suspendV2ThreadOwner(owner);
+    };
     const permit = session.consentPermit;
     permit.signal.addEventListener("abort", abort, { once: true });
     owner.releaseListener = () => permit.signal.removeEventListener("abort", abort);
@@ -367,18 +379,7 @@ export class V2ThreadBridge {
   }
 
   responseLease(value: unknown) {
-    const request = decodeV2ThreadCallback(value);
-    const owner = [...this.owners.values()].find(
-      (item) =>
-        item.enrollment.digest === request.ownerDigest &&
-        item.enrollment.options.owner.enrollmentNonce === request.enrollmentNonce,
-    );
-    if (!owner) throw new Error("V2 callback response owner unavailable.");
-    if (request.kind === "proof") {
-      owner.enrollment.assertPendingLease(request.leaseRevision, request.leaseExpiresAt);
-      return { revision: request.leaseRevision, expiry: request.leaseExpiresAt };
-    }
-    return owner.enrollment.acknowledgedLease();
+    return v2ThreadResponseLease(this.owners.values(), value);
   }
 
   async reply(

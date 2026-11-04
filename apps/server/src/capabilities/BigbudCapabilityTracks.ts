@@ -65,6 +65,24 @@ const threadToolTrack = (input: {
 
 export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
   threadToolTrack({
+    id: "chat.render.html",
+    displayName: "Inline visual replies",
+    description: "Publish durable HTML visual replies in the current thread using render_html.",
+    summary:
+      "render_html publishes themed inline visual replies; prefer HTML/CSS, sandboxed JS supported.",
+    availability: [
+      "Available through provider orchestration bridges. OpenCode V2 requires bootstrap ABI 4; retained earlier bootstraps keep their original tool surface.",
+    ],
+    triggers: ["A chart, diagram, table or interactive visual would explain the answer better."],
+    risk: "reversible-write",
+    workflow:
+      "Call render_html with title and a self-contained HTML fragment (up to 24000 characters). bigbud supplies theme variables and 14px typography. Prefer inherited fonts and var(--background), var(--foreground), var(--primary), var(--border), var(--muted) and var(--muted-foreground). Prefer HTML/CSS; inline JavaScript is supported. Publication is immediate, not a preview.",
+    permissions:
+      "Only the authenticated current thread and active turn. Sandbox has no host access, popups or forms. External navigation and ordinary external resources are blocked, but this is not zero-network isolation: browser APIs such as WebRTC remain available. Do not include credentials. Images must be embedded data URLs.",
+    examples: ["Publish a comparison table or a self-contained interactive chart."],
+    antiPatterns: ["Do not use external scripts, remote assets, filesystem paths or host APIs."],
+  }),
+  threadToolTrack({
     id: "system.resources",
     displayName: "Desktop system resources",
     description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,

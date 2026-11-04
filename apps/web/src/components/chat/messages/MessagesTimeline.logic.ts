@@ -12,6 +12,12 @@ export interface TimelineDurationMessage {
 
 export type MessagesTimelineRow =
   | {
+      kind: "html-render";
+      id: string;
+      createdAt: string;
+      content: import("@bigbud/contracts/orchestration/htmlRender.ts").HtmlRenderInput;
+    }
+  | {
       kind: "work";
       id: string;
       createdAt: string;
@@ -126,11 +132,20 @@ export function deriveMessagesTimelineRows(input: {
     }
 
     if (timelineEntry.kind === "work") {
+      if (timelineEntry.entry.htmlRender) {
+        nextRows.push({
+          kind: "html-render",
+          id: timelineEntry.id,
+          createdAt: timelineEntry.createdAt,
+          content: timelineEntry.entry.htmlRender,
+        });
+        continue;
+      }
       const groupedEntries = [timelineEntry.entry];
       let cursor = index + 1;
       while (cursor < input.timelineEntries.length) {
         const nextEntry = input.timelineEntries[cursor];
-        if (!nextEntry || nextEntry.kind !== "work") break;
+        if (!nextEntry || nextEntry.kind !== "work" || nextEntry.entry.htmlRender) break;
         groupedEntries.push(nextEntry.entry);
         cursor += 1;
       }

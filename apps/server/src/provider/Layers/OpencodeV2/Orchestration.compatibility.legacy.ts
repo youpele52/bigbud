@@ -91,3 +91,18 @@ export const V2_N5_BOOTSTRAP_COMPATIBILITY = Object.freeze({
 });
 export const V2_N5_COMPATIBILITY_DIGEST =
   "769689fa33b2614d475fa5d61b0f6202bea9c27f489f6767d046a45071e81d73";
+
+/** Exact last five-tool descriptor. HTML publication never rewrites retained signed evidence. */
+export const V2_N6_BOOTSTRAP_COMPATIBILITY = Object.freeze({
+  format: "bigbud.thread.compatibility.v2",
+  bootstrapAbi: "bigbud.thread.bootstrap.v3",
+  registration: "bigbud.thread.registration.issuer.v1",
+  enrollmentProtocol: "bigbud.thread.enrollment.v2",
+  callbackProtocol: "bigbud.thread.callback.v1",
+  schemaDigest: "614c41c704bc33dd72c7b0b0dde50bc0cd8e9d474a40542ae2ba3f411a49d853",
+  canonicalRequestAbi: "bigbud.thread.canonical.v1",
+  resultEncoding: "bigbud.thread.final-json.v1",
+  nativeContractDigest: "5c42274135e27b62dfbb7b7c98c51de81f2d116ff3b636ab4a7947b9fd546e7b",
+});
+export const V2_N6_COMPATIBILITY_DIGEST =
+  "cbdafa7b78bad47c57546591aff8aa529beac9c802b5f1a66333529902d01a91";

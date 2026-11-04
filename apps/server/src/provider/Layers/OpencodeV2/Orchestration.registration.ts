@@ -1,6 +1,6 @@
 import { V2_THREAD_ACTIONS, V2_THREAD_RPC } from "./Orchestration.protocol.ts";
 
-export const V2_SCOPED_BOOTSTRAP_ABI = "bigbud.thread.bootstrap.v3";
+export const V2_SCOPED_BOOTSTRAP_ABI = "bigbud.thread.bootstrap.v4";
 export const V2_SCOPED_REGISTRATION = "bigbud.thread.registration.issuer.v1";
 export type V2RegistrationFamily = "legacy" | "scoped";
 
@@ -14,6 +14,7 @@ export function v2ThreadRegistration(artifact: {
   if (
     abi !== "bigbud.thread.bootstrap.v1" &&
     abi !== "bigbud.thread.bootstrap.v2" &&
+    abi !== "bigbud.thread.bootstrap.v3" &&
     abi !== V2_SCOPED_BOOTSTRAP_ABI
   )
     throw new Error("V2 registration ABI rejected.");
@@ -28,7 +29,11 @@ export function v2ThreadRegistration(artifact: {
       family === "scoped"
         ? `bigbud-thread-tools-${artifact.issuer}.js`
         : "bigbud-thread-tools-managed.js",
-    tools: Object.freeze(V2_THREAD_ACTIONS.map((action) => `${prefix}${action}`)),
+    tools: Object.freeze(
+      V2_THREAD_ACTIONS.filter(
+        (action) => abi === V2_SCOPED_BOOTSTRAP_ABI || action !== "render_html",
+      ).map((action) => `${prefix}${action}`),
+    ),
     tool: (action: (typeof V2_THREAD_ACTIONS)[number]) => `${prefix}${action}`,
   });
 }

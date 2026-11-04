@@ -9,6 +9,7 @@ import { createThreadOrchestrationBridge } from "../../../orchestration-tools/or
 import { beginThreadToolDispatch } from "../../../orchestration-tools/threadToolInvocationFlights.ts";
 
 export const V2_ORCHESTRATION_ACTIONS = [
+  "render_html",
   "rename",
   "archive",
   "get_status",

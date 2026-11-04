@@ -5,7 +5,7 @@ import { callV2ThreadRpc } from "./Client.guard.orchestration.ts";
 import { V2_ENROLLMENT_PROTOCOL } from "./Orchestration.protocol.ts";
 import { assertV2ImplementationCompatible } from "./Orchestration.compatibility.ts";
 import { v2ThreadImplementation } from "./Orchestration.implementation.ts";
-import type { V2ThreadImplementation } from "./Orchestration.implementation.types.ts";
+import type { V2ThreadImplementation } from "./Orchestration.implementation.types.v3.ts";
 import { assertV2NativeThreadSource } from "./Orchestration.readiness.source.ts";
 import type { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
 import {
@@ -37,7 +37,9 @@ export async function verifyV2ThreadTools(
   client: OpencodeV2Client,
   directory: string,
   signal?: AbortSignal,
-  implementation: V2ThreadImplementation = v2ThreadImplementation(),
+  implementation: V2ThreadImplementation = v2ThreadImplementation(
+    artifact.bootstrapAbi === "bigbud.thread.bootstrap.v4" ? "v3" : "v1",
+  ),
   eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
   root: string = resolveV2PluginConfigRoot(),
 ) {

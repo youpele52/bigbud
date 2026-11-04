@@ -63,6 +63,8 @@ export function estimateMessagesTimelineRowHeight(
 ): number {
   const accordionOpen = isTimelineRowAccordionOpen(row, input.activityAccordionOpenById);
   switch (row.kind) {
+    case "html-render":
+      return 420;
     case "work":
       return estimateWorkRowHeight(row, accordionOpen, input);
     case "thinking":

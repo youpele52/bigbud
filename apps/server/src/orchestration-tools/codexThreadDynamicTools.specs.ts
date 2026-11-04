@@ -1,5 +1,9 @@
 import type { CodexDynamicToolSpec } from "../codex/codexAppServerManager.types.ts";
 import {
+  HTML_RENDER_TOOL_DESCRIPTION,
+  HTML_RENDER_TOOL_PARAMETERS,
+} from "./htmlRenderTool.shared.ts";
+import {
   SYSTEM_RESOURCE_READ_PARAMETERS,
   SYSTEM_RESOURCE_RULE_PARAMETERS,
   CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
@@ -100,6 +104,12 @@ export function createCodexThreadOrchestrationDynamicTools(
       description: spec.description,
       inputSchema: spec.inputSchema,
     })),
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "render_html",
+      description: HTML_RENDER_TOOL_DESCRIPTION,
+      inputSchema: HTML_RENDER_TOOL_PARAMETERS,
+    },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "search_capabilities",

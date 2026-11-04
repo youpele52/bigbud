@@ -6,7 +6,7 @@ import type {
 import { EventId } from "@bigbud/contracts";
 
 import type { Project, SidebarThreadSummary, Thread } from "../../models/types";
-import { isUserInputHistoryActivity } from "./userInputHistory.store";
+import { isTranscriptHistoryActivity } from "./userInputHistory.store";
 import {
   mapMessage,
   mapProposedPlan,
@@ -205,7 +205,7 @@ export function mergeThreadDetail(
         })
       : thread.latestTurn;
   const detailActivities = mergePendingActivities(detail).filter(
-    (activity) => !loadingOlder || isUserInputHistoryActivity(activity),
+    (activity) => !loadingOlder || isTranscriptHistoryActivity(activity),
   );
   const activities = [...thread.activities, ...detailActivities]
     .filter((activity, index, all) => all.findIndex((entry) => entry.id === activity.id) === index)

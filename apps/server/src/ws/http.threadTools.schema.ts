@@ -4,6 +4,7 @@ import { AGENT_WORKSPACE_TOOL_NAMES } from "../orchestration-tools/AgentWorkspac
 export const ThreadToolRequest = Schema.Struct({
   action: Schema.Literals([
     "rename",
+    "render_html",
     "archive",
     "get_status",
     "list_pinned",
@@ -26,6 +27,8 @@ export const ThreadToolRequest = Schema.Struct({
   ]),
   threadId: Schema.optional(Schema.String),
   resourceArguments: Schema.optional(Schema.Unknown),
+  htmlArguments: Schema.optional(Schema.Unknown),
+  htmlExpectedTurnId: Schema.optional(Schema.String),
   targetThreadId: Schema.optional(Schema.String),
   /** `move`: destination Inyosira state (`status` is already the list filter). */
   organizationState: Schema.optional(Schema.String),

@@ -1,6 +1,23 @@
 import type { Owner, V2ThreadBridge } from "./Orchestration.bridge.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
+import { decodeV2ThreadCallback } from "./Orchestration.callback.ts";
+
+/** Reply signing uses the exact pending or acknowledged lease of the captured owner. */
+export function v2ThreadResponseLease(owners: Iterable<Owner>, value: unknown) {
+  const request = decodeV2ThreadCallback(value);
+  const owner = [...owners].find(
+    (item) =>
+      item.enrollment.digest === request.ownerDigest &&
+      item.enrollment.options.owner.enrollmentNonce === request.enrollmentNonce,
+  );
+  if (!owner) throw new Error("V2 callback response owner unavailable.");
+  if (request.kind === "proof") {
+    owner.enrollment.assertPendingLease(request.leaseRevision, request.leaseExpiresAt);
+    return { revision: request.leaseRevision, expiry: request.leaseExpiresAt };
+  }
+  return owner.enrollment.acknowledgedLease();
+}
 
 /** Suspend callback admission/renewal, not the physical work tracked by this enrollment. */
 export function suspendV2ThreadOwner(owner: Owner | undefined) {

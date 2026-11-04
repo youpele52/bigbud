@@ -25,6 +25,10 @@ export function createCopilotOrchestrationToolSurface(input: {
   const workspaceDispatch = dispatcher.workspace;
   const listAvailableModelsDispatch = dispatcher.listAvailableModels;
   return createCopilotThreadOrchestrationTools({
+    renderHtml: (args, invocationId) =>
+      dispatcher.renderHtml
+        ? Effect.runPromise(dispatcher.renderHtml({ threadId, invocationId, arguments: args }))
+        : Promise.reject(new Error("HTML rendering is not ready.")),
     configureSystemResourceRules: (args) =>
       dispatcher.configureSystemResourceRules
         ? asRecord(dispatcher.configureSystemResourceRules(args))

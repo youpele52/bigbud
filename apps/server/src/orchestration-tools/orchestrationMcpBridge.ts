@@ -153,6 +153,7 @@ export function buildClaudeOrchestrationBridgeConfig(
       },
     },
     allowedTools: [
+      `mcp__${bridge.serverName}__render_html`,
       ...AGENT_WORKSPACE_TOOL_NAMES.map((name) => `mcp__${bridge.serverName}__${name}`),
       `mcp__${bridge.serverName}__browser`,
       `mcp__${bridge.serverName}__computer_use`,

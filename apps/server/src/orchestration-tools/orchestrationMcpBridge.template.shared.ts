@@ -1,5 +1,9 @@
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 import {
+  HTML_RENDER_TOOL_DESCRIPTION,
+  HTML_RENDER_TOOL_PARAMETERS,
+} from "./htmlRenderTool.shared.ts";
+import {
   SYSTEM_RESOURCE_READ_PARAMETERS,
   SYSTEM_RESOURCE_RULE_PARAMETERS,
   CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
@@ -43,6 +47,7 @@ export const DEFAULT_ORCHESTRATION_MCP_SERVER_NAME = "bigbud_orchestration";
 
 export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "const TOOLS = [",
+  `  ${JSON.stringify({ name: "render_html", description: HTML_RENDER_TOOL_DESCRIPTION, inputSchema: HTML_RENDER_TOOL_PARAMETERS })},`,
   ...AGENT_WORKSPACE_TOOL_SPECS.map(
     (spec) =>
       `  ${JSON.stringify({

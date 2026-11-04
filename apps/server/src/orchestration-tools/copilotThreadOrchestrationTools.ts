@@ -1,5 +1,9 @@
 import type { Tool } from "@github/copilot-sdk";
 import {
+  HTML_RENDER_TOOL_DESCRIPTION,
+  HTML_RENDER_TOOL_PARAMETERS,
+} from "./htmlRenderTool.shared.ts";
+import {
   SYSTEM_RESOURCE_READ_PARAMETERS,
   SYSTEM_RESOURCE_RULE_PARAMETERS,
   CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
@@ -78,6 +82,7 @@ function createCopilotOrganizationTools(
 
 export function createCopilotThreadOrchestrationTools(
   input: CopilotThreadToolsInput & {
+    readonly renderHtml?: (args: unknown, invocationId: string) => Promise<unknown>;
     readonly getSystemResources?: (input?: unknown) => Promise<Record<string, unknown>>;
     readonly configureSystemResourceRules?: (input: unknown) => Promise<Record<string, unknown>>;
     readonly workspace?: (
@@ -106,6 +111,19 @@ export function createCopilotThreadOrchestrationTools(
 ): ReadonlyArray<Tool<{ title?: string; threadId?: string } & Record<string, unknown>>> {
   const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
   return [
+    {
+      name: "render_html",
+      description: HTML_RENDER_TOOL_DESCRIPTION,
+      parameters: HTML_RENDER_TOOL_PARAMETERS,
+      handler: async (args, invocation) => {
+        try {
+          if (!input.renderHtml) throw new Error("HTML rendering is not ready.");
+          return successResult(JSON.stringify(await input.renderHtml(args, invocation.toolCallId)));
+        } catch (error) {
+          return failureResult(error instanceof Error ? error.message : "HTML publication failed.");
+        }
+      },
+    },
     ...(input.workspace ? createCopilotAgentWorkspaceTools(input.workspace) : []),
     {
       name: "get_system_resources",

@@ -31,6 +31,15 @@ import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchest
 import type { ThreadOrganizationToolResult } from "./ThreadOrchestrationTools.organization.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
+  readonly renderHtml?: (input: {
+    readonly threadId: ThreadId;
+    readonly invocationId: string;
+    readonly expectedTurnId?: string;
+    readonly arguments: unknown;
+  }) => Effect.Effect<
+    { readonly artifactId: string; readonly turnId: string | null; readonly published: boolean },
+    Error
+  >;
   readonly getSystemResources?: (input?: unknown) => Effect.Effect<Record<string, unknown>, Error>;
   readonly configureSystemResourceRules?: (
     input: unknown,

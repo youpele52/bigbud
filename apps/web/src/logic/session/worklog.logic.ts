@@ -7,6 +7,11 @@
  */
 
 import type { OrchestrationThreadActivity, TurnId } from "@bigbud/contracts";
+import { Schema } from "effect";
+import {
+  HTML_RENDER_ACTIVITY_KIND,
+  HtmlRenderInput,
+} from "@bigbud/contracts/orchestration/htmlRender.ts";
 import {
   deriveWorkLogEntries as deriveSharedWorkLogEntries,
   type WorkLogEntry as SharedWorkLogEntry,
@@ -17,6 +22,7 @@ import {
 } from "../../lib/toolPresentation.payload";
 
 export interface WorkLogEntry extends SharedWorkLogEntry {
+  readonly htmlRender?: HtmlRenderInput;
   readonly toolPresentation?: ToolPresentationIdentity;
 }
 
@@ -25,7 +31,23 @@ export function deriveWorkLogEntries(
   activities: ReadonlyArray<OrchestrationThreadActivity>,
   latestTurnId: TurnId | undefined,
 ): WorkLogEntry[] {
-  const entries = deriveSharedWorkLogEntries(activities, latestTurnId);
+  const entries: WorkLogEntry[] = deriveSharedWorkLogEntries(
+    activities.filter((activity) => activity.kind !== HTML_RENDER_ACTIVITY_KIND),
+    latestTurnId,
+  );
+  // Visual replies are transcript content, not transient latest-turn work logs.
+  for (const activity of activities) {
+    if (activity.kind !== HTML_RENDER_ACTIVITY_KIND) continue;
+    const parsed = Schema.decodeUnknownOption(HtmlRenderInput)(activity.payload);
+    if (parsed._tag === "Some")
+      entries.push({
+        id: activity.id,
+        createdAt: activity.createdAt,
+        label: activity.summary,
+        tone: "info",
+        htmlRender: parsed.value,
+      });
+  }
   const identities = new Map<string, ToolPresentationIdentity>();
   for (const activity of activities) {
     if (activity.kind !== "tool.updated" && activity.kind !== "tool.completed") continue;

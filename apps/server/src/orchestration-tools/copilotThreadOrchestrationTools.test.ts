@@ -35,6 +35,7 @@ describe("createCopilotThreadOrchestrationTools", () => {
     const tools = makeTools();
 
     expect(tools.map((tool) => tool.name)).toEqual([
+      "render_html",
       "get_system_resources",
       "configure_system_resource_rules",
       "rename_thread",

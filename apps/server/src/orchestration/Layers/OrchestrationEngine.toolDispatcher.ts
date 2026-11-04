@@ -1,4 +1,5 @@
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
+import { publishHtmlRender } from "../../orchestration-tools/HtmlRenderTool.ts";
 import type { OrchestrationReadModel } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { Effect, Option } from "effect";
 import type { FileSystem, Path } from "effect";
@@ -64,6 +65,7 @@ export function installOrchestrationEngineToolDispatchers(input: {
   readonly visibleBrowser: VisibleBrowserControlShape;
 }) {
   setThreadOrchestrationToolDispatcher({
+    renderHtml: (request) => publishHtmlRender({ engine: input.engine, ...request }),
     getSystemResources,
     configureSystemResourceRules,
     ...(Option.isSome(input.notes) && Option.isSome(input.kanban)

@@ -73,6 +73,7 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     arguments: args,
     requestId,
     sourceMessageId: requestSource,
+    turnId,
   }) => {
     if (namespace !== BIGBUD_ORCHESTRATION_NAMESPACE) {
       throw new Error(`Unsupported dynamic tool namespace: ${namespace ?? "<none>"}`);
@@ -94,6 +95,18 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     }
 
     switch (tool) {
+      case "render_html": {
+        if (!dispatcher.renderHtml) throw new Error("HTML rendering is not ready.");
+        const result = await Effect.runPromise(
+          dispatcher.renderHtml({
+            threadId,
+            ...(turnId ? { expectedTurnId: turnId } : {}),
+            invocationId: JSON.stringify([turnId ?? requestSource ?? sourceMessageId, requestId]),
+            arguments: args,
+          }),
+        );
+        return { contentItems: [inputText(JSON.stringify(result))], success: true };
+      }
       case "configure_system_resource_rules": {
         if (!dispatcher.configureSystemResourceRules)
           throw new Error("monitor settings unavailable");

@@ -1,4 +1,8 @@
 import { renderPiComputerUseTool } from "./orchestrationComputerUseTool.selected.ts";
+import {
+  HTML_RENDER_TOOL_DESCRIPTION,
+  HTML_RENDER_TOOL_PARAMETERS,
+} from "./htmlRenderTool.shared.ts";
 import { renderPiBrowserToolSource } from "./orchestrationBrowserTool.shared.ts";
 import { renderPiOrganizationToolsSource } from "./PiOrchestrationBridge.template.organization.ts";
 import {
@@ -305,6 +309,13 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     renderPiBrowserToolSource(),
     "",
     "export default function bigbudOrchestrationBridge(pi) {",
+    "  pi.registerTool(defineTool({",
+    `    name: 'render_html', label: 'render_html', description: ${JSON.stringify(HTML_RENDER_TOOL_DESCRIPTION)}, parameters: ${JSON.stringify(HTML_RENDER_TOOL_PARAMETERS)},`,
+    "    async execute(toolCallId, args) {",
+    "      const result = await callOrchestrationTool({ action: 'render_html', htmlArguments: args, invocationId: toolCallId });",
+    "      return textResult(JSON.stringify(result.result));",
+    "    },",
+    "  }));",
     "  for (const tool of workspaceTools) pi.registerTool(tool);",
     "  pi.registerTool(searchCapabilitiesTool);",
     "  pi.registerTool(readCapabilityGuideTool);",

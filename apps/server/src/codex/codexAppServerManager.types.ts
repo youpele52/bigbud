@@ -78,6 +78,7 @@ export interface CodexDynamicToolSpec {
 }
 
 export interface CodexDynamicToolCallInput {
+  readonly turnId?: string;
   readonly namespace?: string;
   readonly tool: string;
   readonly arguments: unknown;

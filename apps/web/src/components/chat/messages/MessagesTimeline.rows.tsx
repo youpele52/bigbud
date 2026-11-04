@@ -1,4 +1,5 @@
 import { buildExpandedImagePreview } from "../common/ExpandedImagePreview";
+import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { Button } from "../../ui/button";
 import type {
   ChatFileAttachment,
@@ -87,6 +88,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
       {row.kind === "subagents-history" ? (
         <SubagentsCard agents={row.agents} presentation="accordion" accordion={accordion} />
       ) : null}
+      {row.kind === "html-render" && <HtmlRenderFrame content={row.content} />}
       {row.kind === "work" && (
         <MessagesTimelineWorkGroup
           row={row}

@@ -4,6 +4,8 @@ import { Effect } from "effect";
 import { vi } from "vitest";
 import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 import { makeV2PreviousBootstrapFixture } from "./Orchestration.bootstrap.previous.fixture.ts";
+import { makeV2PreHtmlRegistrationFixture } from "./Orchestration.registration.legacy.fixture.ts";
+import { v2ThreadImplementation } from "./Orchestration.implementation.ts";
 import { makeV2ThreadPluginHost } from "./Orchestration.plugin.host.fixture.ts";
 import { makeV2ActivationJobsFixture } from "./PluginSetup.activation.jobs.fixture.ts";
 import { makeV2SyntheticNativeEligibility } from "./NativeCompatibility.runtime.fixture.ts";
@@ -21,11 +23,11 @@ import { readV2NativePluginFile, v2NativePluginDirectory } from "./PluginSetup.f
 import { runV2RequestContext } from "./Client.guard.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 
-/** Signed real previous-current modules/publication; only the native host/transport are synthetic. */
+/** Real retained bytes with a synthetic same-ABI v3 successor; not native qualification evidence. */
 export async function makeV2RetainedActivationFixture(nativeVersion = "2.2.0") {
   const app = await makeV2ThreadPluginFixture();
   const f = await makeV2ActivationJobsFixture();
-  const preferred = app.artifact;
+  const preferred = await makeV2PreHtmlRegistrationFixture(app.artifact);
   const installed = await makeV2PreviousBootstrapFixture(preferred);
   const root = path.join(app.root, "native-config");
   await mkdir(path.join(root, "plugins"), { recursive: true, mode: 0o700 });
@@ -37,6 +39,7 @@ export async function makeV2RetainedActivationFixture(nativeVersion = "2.2.0") {
     bootstrapDigest: installed.artifactDigest,
     bootstrapAbi: installed.bootstrapAbi,
     compatibilityDigest: installed.compatibilityDigest,
+    implementationDigest: v2ThreadImplementation("v1").implementationDigest,
   };
   const enrollments = await V2ThreadRecords.open(
     installed.root,
@@ -150,7 +153,8 @@ export async function makeV2RetainedActivationFixture(nativeVersion = "2.2.0") {
     descriptor,
     permit,
     run,
-    ready: () => run(() => coordinator.awaitReady(preferred, descriptor, client, root)),
+    ready: (desired = preferred) =>
+      run(() => coordinator.awaitReady(desired, descriptor, client, root)),
     async close() {
       permit.release();
       await coordinator.close();

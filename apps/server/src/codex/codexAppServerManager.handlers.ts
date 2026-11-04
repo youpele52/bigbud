@@ -226,6 +226,7 @@ export function handleServerRequest(
     const sourceMessageId = readString(params, "sourceMessageId");
     void context
       .dynamicToolCallHandler({
+        ...(effectiveTurnId ? { turnId: effectiveTurnId } : {}),
         requestId: request.id,
         tool: readString(params, "tool") ?? "",
         arguments: params?.arguments,
