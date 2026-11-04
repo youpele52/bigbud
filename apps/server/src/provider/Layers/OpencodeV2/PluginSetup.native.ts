@@ -112,7 +112,15 @@ export function makeV2AutomaticPluginSetup(
       ];
       const source = matches[0]?.source;
       const retainedManual = await atV2SetupStage("manual-bootstrap", () =>
-        readV2CompatibleManualBootstrap(artifact, client, directory, signal, eligibility, root),
+        readV2CompatibleManualBootstrap(
+          artifact,
+          client,
+          directory,
+          signal,
+          eligibility,
+          root,
+          authority,
+        ),
       );
       if (retainedManual) {
         authority.assertCurrent();

@@ -11,6 +11,7 @@ import { readV2CompatibleManualBootstrap } from "./Orchestration.readiness.manua
 import { readV2RetainedArtifact } from "./Orchestration.artifact.retained.ts";
 import { currentV2CallerSignal } from "./Runtime.caller.ts";
 import { V2ActivationDeferred } from "./PluginSetup.activation.errors.ts";
+import { V2RetainedInstallationIdentityChanged } from "./PluginSetup.revalidation.retained.ts";
 
 /** Verify unchanged native readiness before creating any setup job or observing global activity. */
 export async function awaitV2ThreadToolsReady(
@@ -64,14 +65,21 @@ export async function awaitV2ThreadToolsReady(
     throw new Error(
       "V2 retained legacy bootstrap is unavailable; history remains read-only. Restore its exact original installation; no cross-family migration or replacement was attempted.",
     );
-  const retained = await readV2CompatibleManualBootstrap(
-    artifact,
-    client,
-    directory,
-    signal,
-    coordinator.nativeEligibility,
-    owned.scope.root,
-  );
+  let retained;
+  try {
+    retained = await readV2CompatibleManualBootstrap(
+      artifact,
+      client,
+      directory,
+      signal,
+      coordinator.nativeEligibility,
+      owned.scope.root,
+    );
+  } catch (error) {
+    if (!(error instanceof V2RetainedInstallationIdentityChanged)) throw error;
+    // Only the setup job owns identity-maintenance admission; passive reads never adopt metadata.
+    failure = v2ReadinessFailure(error);
+  }
   if (retained) {
     const info = await verify(retained);
     owned.gate.adoptRetained(retained.artifactDigest);

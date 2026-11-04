@@ -22,7 +22,7 @@ import { runV2RequestContext } from "./Client.guard.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 
 /** Signed real previous-current modules/publication; only the native host/transport are synthetic. */
-export async function makeV2RetainedActivationFixture() {
+export async function makeV2RetainedActivationFixture(nativeVersion = "2.2.0") {
   const app = await makeV2ThreadPluginFixture();
   const f = await makeV2ActivationJobsFixture();
   const preferred = app.artifact;
@@ -75,7 +75,7 @@ export async function makeV2RetainedActivationFixture() {
   };
   await installations.replace(key, undefined, publication);
   const host = makeV2ThreadPluginHost(owner);
-  host.context.app.version = "2.2.0";
+  host.context.app.version = nativeVersion;
   const dispose = await (
     await import(/* @vite-ignore */ installed.entryUri)
   ).default.setup(host.context);
@@ -104,7 +104,7 @@ export async function makeV2RetainedActivationFixture() {
     client,
     preferred,
     root,
-    "2.2.0",
+    nativeVersion,
     "v2-system-global-config-v1",
   );
   const eligibility = vi.fn(async (...args: Parameters<typeof synthetic>) => {

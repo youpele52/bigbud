@@ -11,7 +11,8 @@ import {
   v2PublicationProtocol,
 } from "./PluginSetup.record.ts";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
-import { readV2NativePluginFile, v2NativePluginDirectory } from "./PluginSetup.fs.ts";
+import { readV2NativePluginFile } from "./PluginSetup.fs.ts";
+import { assertV2RetainedInstallationIdentity } from "./PluginSetup.revalidation.retained.ts";
 import { readV2RetainedArtifact } from "./Orchestration.artifact.retained.ts";
 import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 
@@ -87,8 +88,7 @@ export async function readV2ManagedThreadSource(
       record.next.hash !== entry.hash
     )
       break;
-    await v2NativePluginDirectory(record.root, record.rootIdentity);
-    await v2NativePluginDirectory(path.join(record.root, "plugins"), record.pluginsIdentity);
+    await assertV2RetainedInstallationIdentity(record, artifact);
     const file = await readV2NativePluginFile(source, true, 16384);
     if (
       file &&

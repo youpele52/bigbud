@@ -1,13 +1,36 @@
 # OpenCode V2 installation identity revalidation
 
-This is explicit maintenance adoption after POSIX `st_dev` renumbering, not a claim that
+Normal consent-gated setup automatically adopts verified POSIX `st_dev` renumbering,
+without a new backup or manual approval on every boot. This is not a claim that
 device numbers persist across boots or that inode/byte equality identifies a volume.
 It requires an existing signed, same-host reboot recovery seal from an earlier boot,
 the existing signer, exact canonical root/plugin inodes, safe UID/permissions, exact
 managed bytes, and one consistent old-to-current device transition. Real replacements,
 mixed devices, foreign signers, and changed bytes remain blocked. Windows is not adopted.
 
-## Approval boundary
+## Automatic recovery boundary
+
+Passive readiness remains read-only: a uniform device transition requests normal setup.
+Setup reuses current expanded trust, native qualification, the metadata-only admission
+gate, and the exact-root publication lock. It archives the original signed installation
+in a signed recovery audit before conditional replacement, rechecking reboot evidence,
+native identities and bytes, consent, and the record revision across that boundary.
+It does not rewrite/reload the plugin, retire owners, change epochs, or replay history.
+A prior automatic or manual adoption of the same installation requires a strictly later
+same-host boot; an old seal cannot authorize a second transition in that same boot.
+Retries after an interrupted audit are safe, and successful setup is idempotent.
+
+Missing/invalid/foreign reboot evidence, replacement inodes, changed bytes, unsafe
+ownership/permissions, mixed devices, revoked consent, and concurrent successors remain
+blocked. Existing records attest safe ownership/permissions, not exact historical mode
+bits or a persistent volume UUID. The signed same-host reboot seal is mandatory;
+inode and byte equality alone never authorize recovery. Windows is not adopted.
+
+## Exceptional manual maintenance approval boundary
+
+The following runbook remains available for explicitly approved maintenance; it is not
+required for the automatically verified same-artifact case. It cannot bypass invalid
+evidence or authorize arbitrary replacements.
 
 Do not run this against live user state without separate approval and a verified backup.
 Do not delete installation records, edit their device fields, reset the profile, or
@@ -81,11 +104,12 @@ approval, checkpoint, native conversation, or service registration records.
 An approval cannot authorize a changed installation, a later boot, a successor
 record, or revoked Settings consent. Preparation is retryable before application;
 after a crash before replacement, the original evidence and approval remain.
-After successful replacement normal same-artifact setup is idempotent. A new
-backup/approval is required for another device transition.
+After successful replacement normal same-artifact setup is idempotent. Manual approvals
+remain boot-scoped; subsequent verified transitions use automatic recovery instead of
+requiring recurring manual backup/approval.
 
 ## Validation scope
 
-`PluginSetup.revalidation.test.ts` uses disposable private signed records and
+`PluginSetup.revalidation.test.ts` and `PluginSetup.revalidation.retained.test.ts` use disposable private signed records and
 synthetic OS boot observations; it is not native qualification evidence. No live
 user data repair, service restart, or provider request is part of these tests.

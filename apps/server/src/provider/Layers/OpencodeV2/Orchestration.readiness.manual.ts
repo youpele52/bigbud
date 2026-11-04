@@ -10,8 +10,12 @@ import {
   verifyV2NativeReadOnlyEligibility,
   type V2NativeEligibilityVerifier,
 } from "./NativeCompatibility.runtime.ts";
-import { resolveV2PluginConfigRoot } from "./PluginSetup.paths.ts";
+import { resolveV2PluginConfigRoot, type V2PluginSetupAuthority } from "./PluginSetup.paths.ts";
 import { readV2ManagedThreadSource } from "./Orchestration.readiness.source.ts";
+import {
+  V2RetainedInstallationIdentityChanged,
+  revalidateV2RetainedInstallation,
+} from "./PluginSetup.revalidation.retained.ts";
 
 /** A unique active manual or exact managed source may retain signed N bytes; L is remediation-only. */
 export async function readV2CompatibleManualBootstrap(
@@ -21,6 +25,7 @@ export async function readV2CompatibleManualBootstrap(
   signal?: AbortSignal,
   eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
   root: string = resolveV2PluginConfigRoot(),
+  authority?: V2PluginSetupAuthority,
 ) {
   await verifyV2NativeReadOnlyEligibility(preferred, client, directory, root, signal, eligibility);
   const inventory = await v2Request(
@@ -35,7 +40,16 @@ export async function readV2CompatibleManualBootstrap(
   const plugin = matches[0];
   if (!plugin || plugin.source.type !== "local" || plugin.state.status !== "active")
     return undefined;
-  const managed = await readV2ManagedThreadSource(preferred, plugin.source.path, root);
+  let managed;
+  try {
+    managed = await readV2ManagedThreadSource(preferred, plugin.source.path, root);
+  } catch (error) {
+    if (!(error instanceof V2RetainedInstallationIdentityChanged) || !authority) throw error;
+    const retained = await readV2RetainedArtifact(preferred, error.artifactDigest);
+    await eligibility(retained, client, directory, root, authority.signal);
+    await revalidateV2RetainedInstallation(error, retained, root, authority);
+    managed = await readV2ManagedThreadSource(preferred, plugin.source.path, root);
+  }
   let source = managed?.directory ?? plugin.source.path;
   if (["index.mjs", "server.js"].includes(path.basename(source))) source = path.dirname(source);
   if (
