@@ -77,12 +77,12 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Terminal font size",
       "Terminal theme (dark appearance)",
       "Terminal theme (light appearance)",
-      "Terminal GPU rendering",
       "Terminal scroll speed",
       "Terminal fast scroll speed",
       "Full-screen app scroll speed",
       "Terminal ligatures",
       "Terminal inline images",
+      "Terminal GPU rendering",
     ]);
     const sectionClasses = sections.map(
       ({ markup: section }) => section.match(/^<section class="([^"]+)"/)?.[1],

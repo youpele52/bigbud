@@ -66,8 +66,8 @@ it("the release compiler bundles genuine A/B handlers and the canonical HTTP/SQL
       pinnedB: true,
       completedDuplicates: true,
       bootstrapBytesAndInodesUnchanged: true,
-      aDigest: v2ThreadImplementation("v1").implementationDigest,
-      bDigest: v2ThreadImplementation("v2").implementationDigest,
+      aDigest: v2ThreadImplementation("v3").implementationDigest,
+      bDigest: v2ThreadImplementation("v4").implementationDigest,
     });
     expect(report.upgrade).toMatchObject({
       nativeQualified: false,

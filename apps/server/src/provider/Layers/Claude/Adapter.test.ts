@@ -81,6 +81,7 @@ describe("ClaudeAdapterLive", () => {
         "mcp__bigbud_remote_workspace__glob",
         "mcp__bigbud_remote_workspace__list",
         "mcp__bigbud_remote_workspace__apply_patch",
+        "mcp__bigbud_orchestration__render_html",
         ...AGENT_WORKSPACE_TOOL_NAMES.map((name) => `mcp__bigbud_orchestration__${name}`),
         "mcp__bigbud_orchestration__browser",
         "mcp__bigbud_orchestration__computer_use",

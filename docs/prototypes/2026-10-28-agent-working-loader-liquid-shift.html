@@ -66,7 +66,13 @@
         min-height: 100dvh;
         background: var(--background);
         color: var(--foreground);
-        font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        font-family:
+          "DM Sans",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          system-ui,
+          sans-serif;
         font-size: 14px;
         display: grid;
         place-items: center;
@@ -317,7 +323,9 @@
       <header>
         <div>
           <h1>Agent working loader · liquid shift</h1>
-          <div class="caption">Quietly shifts between metal and blue while working · glowing green drop when done</div>
+          <div class="caption">
+            Quietly shifts between metal and blue while working · glowing green drop when done
+          </div>
         </div>
         <div class="controls">
           <button id="toggle-done" type="button">Finish</button>
@@ -331,7 +339,10 @@
           <div class="agent-loader lg" data-loader role="status" aria-live="polite">
             <svg class="liquid" data-size="72" aria-hidden="true"></svg>
             <span class="label">
-              <span class="word"><span class="verb-slot"><span class="verb">Thinking</span></span><span class="dots" aria-hidden="true"></span></span>
+              <span class="word"
+                ><span class="verb-slot"><span class="verb">Thinking</span></span
+                ><span class="dots" aria-hidden="true"></span
+              ></span>
               <span class="elapsed">0s</span>
             </span>
           </div>
@@ -341,13 +352,18 @@
       <section class="card">
         <div class="caption">In the timeline</div>
         <div class="divider"></div>
-        <div class="row"><div class="bubble">Refactor the files panel loader and add retry on reconnect.</div></div>
+        <div class="row">
+          <div class="bubble">Refactor the files panel loader and add retry on reconnect.</div>
+        </div>
         <div class="divider"></div>
         <div class="row">
           <div class="agent-loader" data-loader role="status" aria-live="polite">
             <svg class="liquid" data-size="26" aria-hidden="true"></svg>
             <span class="label">
-              <span class="word"><span class="verb-slot"><span class="verb">Thinking</span></span><span class="dots" aria-hidden="true"></span></span>
+              <span class="word"
+                ><span class="verb-slot"><span class="verb">Thinking</span></span
+                ><span class="dots" aria-hidden="true"></span
+              ></span>
               <span class="elapsed">0s</span>
             </span>
           </div>
@@ -364,7 +380,8 @@
       const TAU = Math.PI * 2;
       const NS = "http://www.w3.org/2000/svg";
       const rand = (min, max) => min + Math.random() * (max - min);
-      const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(TAU * Math.random());
+      const gauss = () =>
+        Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(TAU * Math.random());
 
       // Blur + alpha threshold ("goo") on a mask, so one shared metal gradient fills the merged shape.
       function buildSvg(svg, id) {
@@ -442,7 +459,9 @@
         liquid.sheen.setAttribute("cy", 36 + 4 * Math.cos(t * 0.9));
       }
 
-      const liquids = [...document.querySelectorAll("svg.liquid")].map((svg, i) => buildSvg(svg, i));
+      const liquids = [...document.querySelectorAll("svg.liquid")].map((svg, i) =>
+        buildSvg(svg, i),
+      );
       const SHIFT_PERIOD = 10; // seconds for blue → metal → blue
       const smoothstep = (x) => x * x * (3 - 2 * x);
 
@@ -465,7 +484,14 @@
       })(last);
 
       /* ---------- Label: rotating verbs + elapsed time ---------- */
-      const VERBS = ["Thinking", "Reading files", "Planning", "Editing", "Running checks", "Reviewing"];
+      const VERBS = [
+        "Thinking",
+        "Reading files",
+        "Planning",
+        "Editing",
+        "Running checks",
+        "Reviewing",
+      ];
       let start = performance.now();
       let index = 0;
       let done = false;
@@ -477,7 +503,8 @@
 
       function measure(slot, text) {
         const probe = document.createElement("span");
-        probe.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;font:inherit;font-weight:500";
+        probe.style.cssText =
+          "position:absolute;visibility:hidden;white-space:nowrap;font:inherit;font-weight:500";
         probe.textContent = text;
         slot.appendChild(probe);
         const width = probe.offsetWidth;

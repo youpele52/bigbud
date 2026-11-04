@@ -7,11 +7,11 @@ import { V2ThreadOwner } from "./Orchestration.protocol.ts";
 import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { renderV2ThreadIdentity } from "./Orchestration.plugin.identity.ts";
 
-it("preserves installed native identity bytes when adding app-side remote workspaces", () => {
-  // Fixed placeholder avoids private keys/user state. Changes require a separately designed
-  // native bootstrap migration, not merely updating this expected digest.
+it("pins current native identity bytes after the v4 bootstrap migration", () => {
+  // Fixed placeholder avoids private keys/user state. Future changes require a separately
+  // designed native bootstrap migration, not merely updating this expected digest.
   expect(createHash("sha256").update(renderV2ThreadIdentity("public-key")).digest("hex")).toBe(
-    "779d02f4db6adf42fadc98510e33e554b08a82d7b1536d75a57dcc37c7e1b9eb",
+    "f875f97767f1d6ebf87ebdc7f7e6fb9a7c46dfe5c968d69f2c944569bd4f449e",
   );
 });
 
@@ -31,7 +31,7 @@ it("enrolls a synthetic local Location and dispatches canonical thread tools wit
       await expect(
         host.call("enroll", app.envelope("enroll", 1, Date.now() + 40000)),
       ).resolves.toMatchObject({ state: "active", revision: 1 });
-      expect(Object.keys((await host.request(owner.nativeSessionId)).tools)).toHaveLength(5);
+      expect(Object.keys((await host.request(owner.nativeSessionId)).tools)).toHaveLength(6);
       expect(Object.keys((await host.request("ses_other_workspace")).tools)).toHaveLength(0);
       const tool = host.tools.get(v2ThreadRegistration(app.artifact).tool("list_threads"))!;
       await tool.execute(

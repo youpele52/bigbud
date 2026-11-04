@@ -15,6 +15,7 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
   configure_system_resource_rules: "resource monitoring settings",
   search_capabilities: "capability finder",
   read_capability_guide: "capability guide reader",
+  render_html: "html renderer",
   browser: "browser",
   computer_use: "computer controller",
   list_notes: "note lister",
