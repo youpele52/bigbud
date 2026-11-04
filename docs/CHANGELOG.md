@@ -11,7 +11,7 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **[Remote projects without the guesswork](#easier-remote-project-setup):** Pick a saved SSH host, browse its folders, and confirm a new server’s identity before connecting.
 - **[Know how much AI allowance you have left](#subscription-limits-across-supported-providers):** Check subscription limits, reset times, and extra-usage details across supported providers, including model-specific limits where available.
 
-## v0.3.2 (3 November, 2026)
+## v0.3.2 (4 November, 2026)
 
 ### Organize Your Work With Inyosira
 
