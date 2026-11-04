@@ -117,6 +117,12 @@ Inyosira means **breathe**. Be fully present with what truly matters in this mom
 - **Find Lagos Run in Arcade:** Added the browser game about driving a danfo through Lagos traffic and delivering passengers to the shared Games catalog.
 - **Keep longer-task reminders varied:** Reminder messages keep rotating even when browser storage is unavailable, and older saved rotation preferences carry forward.
 
+### Visual Replies Right in Chat
+
+- **Ask for a visual answer:** Added a built-in `render_html` tool so supported agents can present dashboards, diagrams, tables, and interactive explanations directly in the conversation instead of returning code to copy elsewhere.
+- **Keep visuals feeling at home:** Replies use bigbud's theme colors, fonts, and text sizing by default, and follow light and dark theme changes. Agents favor HTML and CSS, with JavaScript available for interactive details.
+- **Return to your visual answers:** Rendered replies stay with the chat when you reload or reopen it. Interactive controls run separately from the app, with external navigation and ordinary resource requests blocked.
+
 ## v0.3.1 (25 October, 2026)
 
 ### More Reliable Connections and Startup
