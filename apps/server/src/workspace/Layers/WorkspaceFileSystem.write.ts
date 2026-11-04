@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto";
-import { readFile as readFileBytes } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  readFile as readFileBytes,
+  realpath,
+  rename,
+  stat,
+  unlink,
+  writeFile as writeFileBytes,
+} from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 
-import { Effect, FileSystem, Path } from "effect";
+import { Effect, FileSystem, Path, Schema, Semaphore } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { withWorktreeAccess } from "../../git/Layers/WorktreeAccess.ts";
 import { resolveExecutionTargetId } from "@bigbud/contracts/core/baseSchemas.ts";
@@ -27,6 +37,38 @@ async function currentSha256(absolutePath: string): Promise<string | undefined> 
   }
 }
 
+async function replaceConditionalFile(
+  workspaceRoot: string,
+  absolutePath: string,
+  contents: string,
+): Promise<void> {
+  const root = await realpath(workspaceRoot);
+  const resolved = await realpath(absolutePath);
+  const withinRoot = relative(root, resolved);
+  if (
+    !withinRoot ||
+    withinRoot === ".." ||
+    withinRoot.startsWith(`..${sep}`) ||
+    isAbsolute(withinRoot)
+  ) {
+    throw new Error("Conditional editing is limited to files inside the workspace root.");
+  }
+  if ((await lstat(absolutePath)).isSymbolicLink()) {
+    throw new Error("Conditional editing of symbolic links is not supported.");
+  }
+  const temporaryPath = join(dirname(absolutePath), `.bigbud-edit-${crypto.randomUUID()}`);
+  const original = await stat(absolutePath);
+  try {
+    await writeFileBytes(temporaryPath, contents, { flag: "wx", mode: original.mode & 0o777 });
+    await chmod(temporaryPath, original.mode & 0o777);
+    await rename(temporaryPath, absolutePath);
+  } finally {
+    await unlink(temporaryPath).catch((cause: unknown) => {
+      if (!(cause instanceof Error && "code" in cause && cause.code === "ENOENT")) throw cause;
+    });
+  }
+}
+
 export function makeWorkspaceWriteFile(input: {
   readonly fileSystem: FileSystem.FileSystem;
   readonly path: Path.Path;
@@ -34,6 +76,8 @@ export function makeWorkspaceWriteFile(input: {
   readonly workspaceEntries: WorkspaceEntriesShape;
   readonly sql?: SqlClient.SqlClient;
 }): WorkspaceFileSystemShape["writeFile"] {
+  // Serialize cooperating local writes across the hash check and mutation.
+  const localLocks = new Map<string, { lock: Semaphore.Semaphore; users: number }>();
   const writeFile: WorkspaceFileSystemShape["writeFile"] = Effect.fn(
     "WorkspaceFileSystem.writeFile",
   )(function* (value) {
@@ -126,38 +170,75 @@ export function makeWorkspaceWriteFile(input: {
             }),
         ),
       );
-    yield* input.fileSystem.writeFileString(target.absolutePath, value.contents).pipe(
-      Effect.mapError(
-        (cause) =>
-          new WorkspaceFileSystemError({
-            cwd: value.cwd,
-            relativePath: value.relativePath,
-            operation: "workspaceFileSystem.writeFile",
-            detail: cause.message,
-            cause,
-          }),
-      ),
-    );
-    yield* input.workspaceEntries.invalidate(value.cwd);
-    return { relativePath: target.relativePath };
-  });
-  return (value) =>
-    input.sql && isLocalExecutionTarget(value.executionTargetId)
-      ? withWorktreeAccess(
-          input.sql,
-          { cwd: value.cwd, repository: value.cwd },
-          writeFile(value),
-        ).pipe(
+    yield* value.expectedSha256 !== undefined
+      ? Effect.tryPromise({
+          try: () => replaceConditionalFile(value.cwd, target.absolutePath, value.contents),
+          catch: (cause) =>
+            new WorkspaceFileSystemError({
+              cwd: value.cwd,
+              relativePath: value.relativePath,
+              operation: "workspaceFileSystem.writeFile",
+              detail: cause instanceof Error ? cause.message : String(cause),
+              cause,
+            }),
+        })
+      : input.fileSystem.writeFileString(target.absolutePath, value.contents).pipe(
           Effect.mapError(
             (cause) =>
               new WorkspaceFileSystemError({
                 cwd: value.cwd,
                 relativePath: value.relativePath,
                 operation: "workspaceFileSystem.writeFile",
-                detail: String(cause),
+                detail: cause.message,
                 cause,
               }),
           ),
-        )
-      : writeFile(value);
+        );
+    yield* input.workspaceEntries.invalidate(value.cwd);
+    return { relativePath: target.relativePath };
+  });
+  return (value) => {
+    const local = isLocalExecutionTarget(value.executionTargetId);
+    const operation =
+      input.sql && local
+        ? withWorktreeAccess(
+            input.sql,
+            { cwd: value.cwd, repository: value.cwd },
+            writeFile(value),
+          ).pipe(
+            Effect.mapError((cause) =>
+              Schema.is(WorkspaceFileSystemError)(cause)
+                ? cause
+                : new WorkspaceFileSystemError({
+                    cwd: value.cwd,
+                    relativePath: value.relativePath,
+                    operation: "workspaceFileSystem.writeFile",
+                    detail: String(cause),
+                    cause,
+                  }),
+            ),
+          )
+        : writeFile(value);
+    if (!local) return operation;
+    return Effect.gen(function* () {
+      const key = input.path.join(value.cwd, value.relativePath);
+      let reservation = localLocks.get(key);
+      if (!reservation) {
+        reservation = { lock: yield* Semaphore.make(1), users: 0 };
+        localLocks.set(key, reservation);
+      }
+      reservation.users++;
+      const current = reservation;
+      return yield* current.lock
+        .withPermits(1)(operation)
+        .pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              current.users--;
+              if (current.users === 0) localLocks.delete(key);
+            }),
+          ),
+        );
+    });
+  };
 }

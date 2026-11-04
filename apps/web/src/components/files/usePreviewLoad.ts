@@ -7,7 +7,10 @@ interface PreviewState {
   loaded: boolean;
   contents: string;
   truncated: boolean;
+  sizeBytes: number | null;
+  sha256: string | null;
   error: string | null;
+  refreshError: string | null;
 }
 
 interface UsePreviewLoadInput {
@@ -23,7 +26,10 @@ const INITIAL_STATE: PreviewState = {
   loaded: false,
   contents: "",
   truncated: false,
+  sizeBytes: null,
+  sha256: null,
   error: null,
+  refreshError: null,
 };
 
 export function usePreviewLoad({
@@ -46,6 +52,7 @@ export function usePreviewLoad({
           ? {
               ...current,
               loading: true,
+              refreshError: null,
             }
           : { ...INITIAL_STATE, fileKey },
       );
@@ -61,6 +68,7 @@ export function usePreviewLoad({
             return {
               ...current,
               loading: false,
+              refreshError: "Native API not found.",
             };
           }
 
@@ -70,7 +78,10 @@ export function usePreviewLoad({
             loaded: false,
             contents: "",
             truncated: false,
+            sizeBytes: null,
+            sha256: null,
             error: "Native API not found.",
+            refreshError: null,
           };
         });
         return Promise.resolve();
@@ -94,7 +105,10 @@ export function usePreviewLoad({
               loaded: true,
               contents: result.contents,
               truncated: result.truncated,
+              sizeBytes: result.sizeBytes ?? null,
+              sha256: result.sha256 ?? null,
               error: null,
+              refreshError: null,
             };
           });
         })
@@ -112,6 +126,7 @@ export function usePreviewLoad({
               return {
                 ...current,
                 loading: false,
+                refreshError: message,
               };
             }
 
@@ -121,7 +136,10 @@ export function usePreviewLoad({
               loaded: false,
               contents: "",
               truncated: false,
+              sizeBytes: null,
+              sha256: null,
               error: message,
+              refreshError: null,
             };
           });
         });

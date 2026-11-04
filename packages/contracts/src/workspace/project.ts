@@ -177,6 +177,8 @@ export const ProjectReadFilePreviewResult = Schema.Struct({
   contents: Schema.String,
   sizeBytes: Schema.Number,
   truncated: Schema.Boolean,
+  /** Hash of the exact bytes decoded into contents (absent on older servers). */
+  sha256: Schema.optional(Schema.String),
 });
 export type ProjectReadFilePreviewResult = typeof ProjectReadFilePreviewResult.Type;
 
@@ -209,6 +211,7 @@ export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteF
   "ProjectWriteFileError",
   {
     message: TrimmedNonEmptyString,
+    conflict: Schema.optional(Schema.Boolean),
     cause: Schema.optional(Schema.Defect),
   },
 ) {}

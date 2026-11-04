@@ -191,6 +191,7 @@ export function makeRemoteWorkspaceRuntime(
       contents,
       sizeBytes: response.totalBytes,
       truncated: false,
+      sha256: createHash("sha256").update(response.bytes).digest("hex"),
     };
   });
 

@@ -2,6 +2,7 @@ import { Cause, Effect, Exit, FileSystem, Layer, Path, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { open, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
 
 import {
   WorkspaceFileSystem,
@@ -30,7 +31,7 @@ const DEFAULT_FILE_PREVIEW_MAX_BYTES = 5 * 1024 * 1024;
 
 async function readTextFilePreview(
   absolutePath: string,
-): Promise<{ contents: string; sizeBytes: number; truncated: boolean }> {
+): Promise<{ contents: string; sizeBytes: number; truncated: boolean; sha256: string }> {
   const fileStat = await stat(absolutePath);
   if (!fileStat.isFile()) {
     throw new Error("Workspace preview target is not a file.");
@@ -43,6 +44,7 @@ async function readTextFilePreview(
   const fileHandle = await open(absolutePath, "r");
   try {
     const { bytesRead } = await fileHandle.read(buffer, 0, fileStat.size, 0);
+    if (bytesRead !== fileStat.size) throw new Error("File changed while reading preview.");
     const bytes = buffer.subarray(0, bytesRead);
     if (bytes.includes(0)) {
       throw new Error("File is not valid UTF-8 text and cannot be previewed.");
@@ -57,6 +59,7 @@ async function readTextFilePreview(
       contents,
       sizeBytes: fileStat.size,
       truncated: false,
+      sha256: createHash("sha256").update(bytes).digest("hex"),
     };
   } finally {
     await fileHandle.close();

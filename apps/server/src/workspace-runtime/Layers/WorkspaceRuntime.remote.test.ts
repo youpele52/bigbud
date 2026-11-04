@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 import type { RemoteAgentWorkspaceClient } from "../../remote-agent/remoteAgentWorkspaceClient.ts";
@@ -63,6 +64,7 @@ describe("remote workspace runtime adapter", () => {
     );
     expect(read.contents).toBe("remote contents");
     expect(read.sizeBytes).toBe(15);
+    expect(read.sha256).toBe(createHash("sha256").update("remote contents").digest("hex"));
 
     const written = await Effect.runPromise(
       runtime.files.writeFile({

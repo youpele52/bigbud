@@ -14,6 +14,7 @@ interface FilePreviewHeaderProps {
   readonly onNavigateForward: () => void;
   readonly onClose?: (() => void) | undefined;
   readonly onContextMenu?: ((event: React.MouseEvent<HTMLDivElement>) => void) | undefined;
+  readonly leadingActions?: React.ReactNode;
   readonly actions?: React.ReactNode;
 }
 
@@ -26,6 +27,7 @@ export function FilePreviewHeader({
   onNavigateForward,
   onClose,
   onContextMenu,
+  leadingActions,
   actions,
 }: FilePreviewHeaderProps) {
   const shortBreadcrumb = breadcrumb.length > 1 ? breadcrumb.slice(-2) : breadcrumb;
@@ -60,6 +62,9 @@ export function FilePreviewHeader({
         >
           <ArrowRightIcon />
         </Button>
+        {leadingActions ? (
+          <div className="ml-1 flex items-center gap-1">{leadingActions}</div>
+        ) : null}
       </div>
       <div className="min-w-0" aria-label={absolutePath} data-file-preview-identity>
         <div className="flex min-w-0 items-center gap-1 overflow-hidden text-xs">
