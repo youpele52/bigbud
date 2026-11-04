@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { CenteredStatus } from "../common/CenteredStatus";
 import { isLoadingStatus } from "../common/CenteredStatus.logic";
@@ -22,6 +23,13 @@ export interface ProcessQueryControls {
   sort: "cpu" | "memory" | "name" | "pid";
   descending: boolean;
 }
+
+const SORT_OPTIONS = [
+  { value: "cpu", label: "CPU" },
+  { value: "memory", label: "Memory" },
+  { value: "name", label: "Name" },
+  { value: "pid", label: "PID" },
+] as const;
 
 export function ProcessTable({
   rows,
@@ -62,22 +70,38 @@ export function ProcessTable({
             onChange={(event) => onControlsChange({ ...controls, search: event.target.value })}
             className="w-48 max-w-full"
           />
-          <select
-            aria-label="Sort processes"
-            className="h-9 rounded-md border bg-background pl-2 pr-2.5 text-sm"
+          <Select
             value={controls.sort}
-            onChange={(event) =>
+            onValueChange={(value) => {
+              if (!SORT_OPTIONS.some((option) => option.value === value)) return;
               onControlsChange({
                 ...controls,
-                sort: event.target.value as ProcessQueryControls["sort"],
-              })
-            }
+                sort: value as ProcessQueryControls["sort"],
+              });
+            }}
           >
-            <option value="cpu">CPU</option>
-            <option value="memory">Memory</option>
-            <option value="name">Name</option>
-            <option value="pid">PID</option>
-          </select>
+            <SelectTrigger
+              variant="muted-outline"
+              className="w-32 text-sm"
+              aria-label="Sort processes"
+            >
+              <SelectValue>
+                {SORT_OPTIONS.find((option) => option.value === controls.sort)?.label}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectPopup alignItemWithTrigger={false}>
+              {SORT_OPTIONS.map((option) => (
+                <SelectItem
+                  hideIndicator
+                  className="text-sm"
+                  key={option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
           <Button
             variant="ghost"
             size="icon"
@@ -101,7 +125,7 @@ export function ProcessTable({
         ) : null}
         {truncated ? (
           <p className="text-xs text-amber-600">
-            Process inventory was capped. Refine the search to narrow results.
+            Process inventory was capped; search and sorting apply only to captured rows.
           </p>
         ) : null}
         <div className="max-h-80 overflow-auto rounded-md border">
