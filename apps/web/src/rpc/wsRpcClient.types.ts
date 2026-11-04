@@ -92,6 +92,7 @@ import type {
 import type { WsRpcProtocolClient } from "./protocol";
 import type { SubscriptionRetryDelay } from "./wsTransport.retry";
 import type { WsInitialApplicationDeadline } from "./wsTransport.initialValue";
+import type { WsRpcMonitorMethods } from "./wsRpcClient.monitor.types";
 
 export type RpcTag = keyof WsRpcProtocolClient & string;
 type RpcMethod<TTag extends RpcTag> = WsRpcProtocolClient[TTag];
@@ -345,7 +346,7 @@ export interface WsRpcClient {
     >;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
-  };
+  } & WsRpcMonitorMethods;
   readonly orchestration: {
     readonly getSidebarThreadCatalog: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog

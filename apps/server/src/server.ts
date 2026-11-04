@@ -75,6 +75,7 @@ import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
 import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
 import { ProjectionThreadRepositoryLive } from "./persistence/Layers/ProjectionThreads";
+import { ProjectionProjectRepositoryLive } from "./persistence/Layers/ProjectionProjects.ts";
 import { ProjectionThreadWatchRepositoryLive } from "./persistence/Layers/ProjectionThreadWatches";
 import { LearningJobRepositoryLive } from "./persistence/Layers/LearningJobs";
 import { SkillChangeProposalRepositoryLive } from "./persistence/Layers/SkillChangeProposals";
@@ -266,7 +267,10 @@ const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersisten
 
 const NotesPersistenceLayerLive = ProjectionNoteRepositoryLive;
 const KanbanPersistenceLayerLive = ProjectionKanbanRepositoryLive;
-const ThreadProjectionPersistenceLayerLive = ProjectionThreadRepositoryLive;
+const ThreadProjectionPersistenceLayerLive = Layer.mergeAll(
+  ProjectionThreadRepositoryLive,
+  ProjectionProjectRepositoryLive,
+);
 const ProjectionPersistenceLayerLive = Layer.mergeAll(
   KanbanPersistenceLayerLive,
   NotesPersistenceLayerLive,

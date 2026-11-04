@@ -1,7 +1,8 @@
-import { Effect, Layer, Option, type Scope } from "effect";
+import { Effect, Layer, Option, Scope } from "effect";
+import { randomUUID } from "node:crypto";
 import { WsRpcGroup } from "@bigbud/contracts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
-import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import { RpcSerialization } from "effect/unstable/rpc";
 
 import { ServerConfig } from "../startup/config";
 import { makeWsRpcContext } from "./wsRpcContext";
@@ -25,16 +26,19 @@ import {
   makeRetentionMutationAuthorization,
 } from "./wsRetentionMutationAuthorization.ts";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
+import { makeWsRpcHttpEffectWithSshMonitorCleanup } from "./wsSshMonitor.protocol.ts";
+import { forgetSshMonitorInstance } from "../ssh/sshMonitor.connections.ts";
 
 const retentionMutationAuthorization = makeRetentionMutationAuthorization();
 
 const makeWsRpcLayer = (
   withBootstrapCommandLock: BootstrapCommandLock,
   worktreeScope: Scope.Scope,
+  monitorInstanceId: string,
 ) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
-      const context = yield* makeWsRpcContext(withBootstrapCommandLock);
+      const context = yield* makeWsRpcContext(withBootstrapCommandLock, monitorInstanceId);
       const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
 
       return WsRpcGroup.of({
@@ -62,19 +66,19 @@ export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCo
     Effect.gen(function* () {
       // Own accepted mutations for the HTTP server's lifetime, not the temporary RPC layer build.
       const worktreeScope = yield* Effect.scope;
+      const monitorInstanceId = randomUUID();
+      yield* Scope.addFinalizer(
+        worktreeScope,
+        Effect.sync(() => forgetSshMonitorInstance(monitorInstanceId)),
+      );
       const wsRpcRuntimeLayer = Layer.mergeAll(
-        makeWsRpcLayer(withBootstrapCommandLock, worktreeScope),
+        makeWsRpcLayer(withBootstrapCommandLock, worktreeScope, monitorInstanceId),
         RpcSerialization.layerJson,
         retentionMutationAuthorization.layer,
       );
-      const rpcWebSocketHttpEffect = yield* RpcServer.toHttpEffectWebsocket(WsRpcGroup, {
-        disableFatalDefects: true,
-        spanPrefix: "ws.rpc",
-        spanAttributes: {
-          "rpc.transport": "websocket",
-          "rpc.system": "effect-rpc",
-        },
-      }).pipe(Effect.provide(wsRpcRuntimeLayer));
+      const rpcWebSocketHttpEffect = yield* makeWsRpcHttpEffectWithSshMonitorCleanup(
+        monitorInstanceId,
+      ).pipe(Effect.provide(wsRpcRuntimeLayer));
 
       return HttpRouter.add(
         "GET",

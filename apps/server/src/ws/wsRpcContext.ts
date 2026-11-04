@@ -1,4 +1,5 @@
 import { Effect, FileSystem, Option, Layer } from "effect";
+import { randomUUID } from "node:crypto";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { GitCommandError } from "@bigbud/contracts";
 import { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention.ts";
@@ -52,6 +53,7 @@ import { ProjectionNoteRepository } from "../persistence/Services/ProjectionNote
 import { ProjectionKanbanRepository } from "../persistence/Services/ProjectionKanban.ts";
 import { AutomationScheduleRepository } from "../persistence/Services/AutomationScheduleRepository.ts";
 import { ProjectionThreadRepository } from "../persistence/Services/ProjectionThreads.ts";
+import { ProjectionProjectRepository } from "../persistence/Services/ProjectionProjects.ts";
 import { OrchestrationBootstrapRecipeRepository } from "../persistence/Services/OrchestrationBootstrapRecipes.ts";
 import { SchedulerReactor } from "../orchestration/Services/SchedulerReactor.ts";
 import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl.ts";
@@ -74,7 +76,10 @@ import {
 
 export { makeCoalescedPromiseEffect } from "./wsRpcContext.helpers";
 
-export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock) =>
+export const makeWsRpcContext = (
+  withBootstrapCommandLock: BootstrapCommandLock,
+  monitorInstanceId: string = randomUUID(),
+) =>
   Effect.gen(function* () {
     const projectionSnapshotQuery = yield* ProjectionSnapshotQuery;
     const projectionCatalogQuery = yield* ProjectionCatalogQuery;
@@ -112,6 +117,7 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
     const projectionNotes = yield* ProjectionNoteRepository;
     const projectionKanban = yield* ProjectionKanbanRepository;
     const projectionThreadRepository = yield* ProjectionThreadRepository;
+    const projectionProjectRepository = yield* Effect.serviceOption(ProjectionProjectRepository);
     const bootstrapRecipes = yield* OrchestrationBootstrapRecipeRepository;
     const automationScheduleRepository = yield* AutomationScheduleRepository;
     const schedulerReactor = yield* SchedulerReactor;
@@ -317,6 +323,8 @@ export const makeWsRpcContext = (withBootstrapCommandLock: BootstrapCommandLock)
       projectionNotes,
       projectionKanban,
       projectionThreadRepository,
+      projectionProjectRepository,
+      monitorInstanceId,
       projectionSnapshotQuery,
       projectionCatalogQuery,
       projectionOperationalStateQuery,

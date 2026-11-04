@@ -123,6 +123,7 @@ import {
   WsServerGetRemoteAgentRestartStatusRpc,
 } from "./rpc.remoteAgent";
 import { WsServerListSshConfigHostsRpc } from "./rpc.sshConfig";
+import { WsServerSampleSshMonitorRpc, WsServerListConnectedSshMonitorsRpc } from "./rpc.sshMonitor";
 import { WsServerListRemoteFoldersRpc } from "./rpc.remoteFolders";
 import { WsServerTrustSshHostRpc } from "./rpc.sshHostTrust";
 import {
@@ -187,6 +188,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerActivateCliProxyRpc,
   WsServerVerifyExecutionTargetRpc,
   WsServerListSshConfigHostsRpc,
+  WsServerSampleSshMonitorRpc,
+  WsServerListConnectedSshMonitorsRpc,
   WsServerListRemoteFoldersRpc,
   WsServerInstallRemoteAgentRpc,
   WsServerConnectRemoteAgentRpc,

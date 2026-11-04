@@ -73,6 +73,10 @@ export interface MonitorNetworkInterface {
   mtuBytes?: MonitorMetric;
 }
 export interface MonitorSnapshot {
+  /** Bounded, read-only SSH process inventory when the remote OS exposes it. */
+  processRows?: MonitorProcessRow[];
+  /** The read-only SSH process inventory has more entries than the bounded capture. */
+  processRowsTruncated?: boolean;
   appResources?: MonitorAppResources;
   subscriptionId: number;
   epoch: number;
@@ -135,8 +139,8 @@ export interface MonitorProcessRow {
   cpuPercent?: MonitorMetric;
   residentBytes: number;
   virtualBytes: number;
-  diskReadBytes: number;
-  diskWrittenBytes: number;
+  diskReadBytes?: number;
+  diskWrittenBytes?: number;
 }
 export interface MonitorProcessPage {
   requestId: number;

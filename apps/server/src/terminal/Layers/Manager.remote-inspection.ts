@@ -4,6 +4,7 @@ import { runProcess } from "../../utils/processRunner.ts";
 import { buildSshTransportArgs } from "../../ssh/sshCommand.ts";
 import { buildPasswordSessionControlPath } from "../../ssh/sshSession.ts";
 import { formatSshDestination, parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
+import { validSshMonitorTarget } from "../../ssh/sshMonitor.target.ts";
 import {
   parsePosixAgentProcesses,
   TerminalAgentInspectionError,
@@ -19,6 +20,15 @@ export type RemoteTerminalProcessInspector = (
 
 /** No readiness, unlock, agent admission or reconnect: inspection must never start a service. */
 export function remoteInspectionInvocation(executionTargetId: string) {
+  return remoteReadOnlyInvocation(
+    executionTargetId,
+    `sh -c 'printf "${START}\\n"; LC_ALL=C ps -e -ww -o pid=,ppid=,pgid=,tpgid=,command= && printf "${END}\\n"'`,
+  );
+}
+
+/** Noninteractive SSH transport shared by read-only inspections; never triggers agent admission. */
+export function remoteReadOnlyInvocation(executionTargetId: string, command: string) {
+  if (!validSshMonitorTarget(executionTargetId)) throw new Error("Invalid SSH inspection target.");
   const target = parseSshExecutionTarget(executionTargetId);
   if (!target) throw new Error("Remote process inspection requires an SSH target.");
   const transport =
@@ -49,8 +59,7 @@ export function remoteInspectionInvocation(executionTargetId: string) {
       "-o",
       "ServerAliveCountMax=1",
       formatSshDestination(target),
-      // Do not replace the terminal environment or source extra login profiles for inspection.
-      `sh -c 'printf "${START}\\n"; LC_ALL=C ps -e -ww -o pid=,ppid=,pgid=,tpgid=,command= && printf "${END}\\n"'`,
+      command,
     ],
   };
 }

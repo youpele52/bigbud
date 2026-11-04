@@ -86,6 +86,8 @@ export const WS_METHODS = {
   serverActivateCliProxy: "server.activateCliProxy",
   serverVerifyExecutionTarget: "server.verifyExecutionTarget",
   serverListSshConfigHosts: "server.listSshConfigHosts",
+  serverSampleSshMonitor: "server.sampleSshMonitor",
+  serverListConnectedSshMonitors: "server.listConnectedSshMonitors",
   serverListRemoteFolders: "server.listRemoteFolders",
   serverInstallRemoteAgent: "server.installRemoteAgent",
   serverConnectRemoteAgent: "server.connectRemoteAgent",

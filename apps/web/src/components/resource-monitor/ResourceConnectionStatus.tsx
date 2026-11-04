@@ -8,17 +8,24 @@ export function ResourceConnectionStatus({
   scope = "host",
   connecting,
   reason,
+  remoteName,
 }: {
   scope?: "host" | "app";
   connecting: boolean;
   reason: string | null | undefined;
+  remoteName?: string;
 }) {
-  const subject = scope === "app" ? "bigbud’s resource monitor" : "this computer’s System Monitor";
-  const unavailable =
-    scope === "app" ? "bigbud monitoring unavailable" : "System Monitor unavailable";
+  const subject =
+    remoteName ??
+    (scope === "app" ? "bigbud’s resource monitor" : "this computer’s System Monitor");
+  const unavailable = remoteName
+    ? `${remoteName} monitoring unavailable`
+    : scope === "app"
+      ? "bigbud monitoring unavailable"
+      : "System Monitor unavailable";
   return (
     <StatusBanner
-      dismissalKey={["resource-monitor", scope, "connection"]}
+      dismissalKey={["resource-monitor", remoteName ?? scope, "connection"]}
       dismissLabel="Dismiss resource monitor connection status"
       role="status"
       variant={connecting ? "loading" : "warning"}
@@ -29,7 +36,7 @@ export function ResourceConnectionStatus({
               ? `Connecting to ${subject}`
               : `${unavailable}${reason ? `: ${reason}` : ""}`}
           </p>
-          {!connecting ? (
+          {!connecting && !remoteName ? (
             <Button
               size="xs"
               variant="outline"

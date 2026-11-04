@@ -55,6 +55,13 @@ describe("Disk resource widget", () => {
     expect(volumes[0]?.name).toBe("External");
   });
 
+  it("labels a non-root SSH disk as an alternative volume when primary capacity is unavailable", () => {
+    expect(display([disk("Data", "/data")], metric(0, "unavailable"))).toMatchObject({
+      label: "Disk volume",
+      detail: "500.00 GiB total · Data (/data)",
+    });
+  });
+
   it.each(["warming", "stale", "denied", "unavailable"] as const)(
     "does not display %s free space as current",
     (status) => {
