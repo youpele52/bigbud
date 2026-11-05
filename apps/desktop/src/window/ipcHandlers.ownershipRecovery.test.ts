@@ -12,9 +12,15 @@ vi.mock("electron", () => ({
 }));
 import { registerOwnershipRecoveryIpc } from "./ipcHandlers.ownershipRecovery";
 import { desktopIpcChannels } from "../main.channels";
+import { authorizeFakeSenders, fakeIpcSender } from "./ipcAuthorization.testSupport";
 beforeEach(() => handlers.clear());
 it("requires the main window's main frame and a valid generation for both actions", async () => {
-  const main = { mainFrame: {} } as WebContents;
+  const main = fakeIpcSender(1) as unknown as WebContents;
+  const other = fakeIpcSender(2);
+  authorizeFakeSenders([
+    [main, "main"],
+    [other, "main"],
+  ]);
   const recover = Object.assign(
     vi.fn(async () => {}),
     { check: vi.fn(async () => {}) },
@@ -25,10 +31,13 @@ it("requires the main window's main frame and a valid generation for both action
     desktopIpcChannels.checkBackendOwnership,
   ]) {
     const handler = handlers.get(channel)!;
-    await expect(handler({ sender: {}, senderFrame: main.mainFrame }, 1)).rejects.toThrow(
+    // Unregistered sender and subframe: bounded denial before any effect.
+    expect(await handler({ sender: {}, senderFrame: main.mainFrame }, 1)).toBeNull();
+    expect(await handler({ sender: main, senderFrame: {} }, 1)).toBeNull();
+    // A registered main-role sender that is not the current main window.
+    await expect(handler({ sender: other, senderFrame: other.mainFrame }, 1)).rejects.toThrow(
       "Untrusted",
     );
-    await expect(handler({ sender: main, senderFrame: {} }, 1)).rejects.toThrow("Untrusted");
     await expect(
       handler({ sender: main, senderFrame: main.mainFrame }, { pid: 123 }),
     ).rejects.toThrow("Invalid");

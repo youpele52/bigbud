@@ -3,6 +3,7 @@ import type { SidebarActionId } from "../../components/sidebar/Sidebar.actions.l
 
 export interface PersistedUiState {
   sidebarActionOrder?: string[];
+  sidebarPrimaryGroupSize?: number;
   hiddenSidebarActions?: string[];
   chatsExpanded?: boolean;
   collapsedProjectCwds?: string[];
@@ -11,6 +12,8 @@ export interface PersistedUiState {
   lastActiveThreadId?: string;
   projectOrderCwds?: string[];
   projectsExpanded?: boolean;
+  remoteWorkspacesExpanded?: boolean;
+  /** Pre-rename persisted state; only read during hydration. */
   remoteProjectsExpanded?: boolean;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   threadLastVisitedAtById?: Record<string, string>;
@@ -18,11 +21,12 @@ export interface PersistedUiState {
 
 export interface UiSidebarState {
   sidebarActionOrder: SidebarActionId[];
+  sidebarPrimaryGroupSize: number;
   hiddenSidebarActions: SidebarActionId[];
   chatsExpanded: boolean;
   favouritesExpanded: boolean;
   projectsExpanded: boolean;
-  remoteProjectsExpanded: boolean;
+  remoteWorkspacesExpanded: boolean;
 }
 
 export interface UiProjectState {
@@ -50,8 +54,8 @@ export interface SyncThreadInput {
 }
 
 export const initialState: UiState = {
+  sidebarPrimaryGroupSize: 4,
   sidebarActionOrder: [
-    "plugins",
     "scheduled",
     "games",
     "usage",
@@ -59,7 +63,7 @@ export const initialState: UiState = {
     "pinned",
     "chats",
     "projects",
-    "remote-projects",
+    "remote-workspaces",
   ],
   hiddenSidebarActions: [],
   chatsExpanded: true,
@@ -68,7 +72,7 @@ export const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
   projectsExpanded: true,
-  remoteProjectsExpanded: false,
+  remoteWorkspacesExpanded: false,
   selectedProjectId: null,
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},

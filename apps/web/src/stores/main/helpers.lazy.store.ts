@@ -13,8 +13,9 @@ import { mapSidebarThreadSummary, mapThreadSummary, mergeThreadDetail } from "./
 import { sidebarMembershipFromCatalog } from "./helpers.sidebar.store";
 import { applyAuthoritativeProjectThreadCounts } from "./helpers.projectThreadCount.store";
 import { mergeProjectCatalog } from "./helpers.lazy.projects.store";
+import { newerOrganization } from "./helpers.organization.logic.store";
 
-function mergeThreadSummary(
+export function mergeThreadSummary(
   thread: AppState["threads"][number],
   summary: Parameters<typeof mapThreadSummary>[0],
 ): AppState["threads"][number] {
@@ -22,6 +23,7 @@ function mergeThreadSummary(
   return {
     ...thread,
     ...mapped,
+    organization: newerOrganization(thread.organization, mapped.organization),
     session: thread.session ?? mapped.session,
     latestTurn: thread.latestTurn ?? mapped.latestTurn,
     error: thread.error ?? mapped.error,
@@ -39,7 +41,7 @@ function mergeThreadSummary(
   };
 }
 
-function mergeSidebarThreadSummary(
+export function mergeSidebarThreadSummary(
   previous: AppState["sidebarThreadsById"][string] | undefined,
   summary: Parameters<typeof mapSidebarThreadSummary>[0],
 ): AppState["sidebarThreadsById"][string] {
@@ -47,6 +49,7 @@ function mergeSidebarThreadSummary(
   if (!previous) return mapped;
   return {
     ...mapped,
+    organization: newerOrganization(previous.organization, mapped.organization),
     session: previous.session ?? mapped.session,
     latestTurn: previous.latestTurn ?? mapped.latestTurn,
     elevatorSummaryMessageCount:

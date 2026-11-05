@@ -7,6 +7,7 @@ import {
   startRemoteCodexAppServerProcessAsync,
 } from "./codexAppServerManager.process.remote.ts";
 import { recordEarlySpawnError } from "./codexAppServerManager.process.spawnError.ts";
+import { bindCodexProcessVersion } from "./codexAppServerManager.process.version.ts";
 import type { CodexAppServerStartSessionInput } from "./codexAppServerManager.types.ts";
 
 function resolveProviderRuntimeExecutionTargetId(input: CodexAppServerStartSessionInput): string {
@@ -24,22 +25,25 @@ export function startCodexAppServerProcess(
     });
   }
 
-  assertSupportedCodexCliVersion({
+  const version = assertSupportedCodexCliVersion({
     binaryPath: input.binaryPath,
     cwd,
     ...(input.homePath ? { homePath: input.homePath } : {}),
   });
 
-  return recordEarlySpawnError(
-    spawn(input.binaryPath, ["app-server", ...(input.configArgs ?? [])], {
-      cwd,
-      env: {
-        ...process.env,
-        ...(input.homePath ? { CODEX_HOME: input.homePath } : {}),
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-      shell: process.platform === "win32",
-    }),
+  return bindCodexProcessVersion(
+    recordEarlySpawnError(
+      spawn(input.binaryPath, ["app-server", ...(input.configArgs ?? [])], {
+        cwd,
+        env: {
+          ...process.env,
+          ...(input.homePath ? { CODEX_HOME: input.homePath } : {}),
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+        shell: process.platform === "win32",
+      }),
+    ),
+    version,
   );
 }
 

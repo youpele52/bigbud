@@ -8,6 +8,8 @@ import { Effect } from "effect";
 
 import { createCopilotThreadOrchestrationTools } from "../../../orchestration-tools/copilotThreadOrchestrationTools.ts";
 import type { ThreadOrchestrationToolDispatcherShape } from "../../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
+import { dispatchComputerUseToolRequest } from "../../../orchestration-tools/computerUseToolRequest.ts";
+import { runThreadOrganizationTool } from "../../../orchestration-tools/threadOrganizationTool.run.ts";
 
 const asRecord = <A>(effect: Effect.Effect<A, Error>) =>
   Effect.runPromise(
@@ -23,9 +25,17 @@ export function createCopilotOrchestrationToolSurface(input: {
   const workspaceDispatch = dispatcher.workspace;
   const listAvailableModelsDispatch = dispatcher.listAvailableModels;
   return createCopilotThreadOrchestrationTools({
-    getSystemResources: () =>
+    renderHtml: (args, invocationId) =>
+      dispatcher.renderHtml
+        ? Effect.runPromise(dispatcher.renderHtml({ threadId, invocationId, arguments: args }))
+        : Promise.reject(new Error("HTML rendering is not ready.")),
+    configureSystemResourceRules: (args) =>
+      dispatcher.configureSystemResourceRules
+        ? asRecord(dispatcher.configureSystemResourceRules(args))
+        : Promise.reject(new Error("monitor settings unavailable")),
+    getSystemResources: (args) =>
       dispatcher.getSystemResources
-        ? asRecord(dispatcher.getSystemResources())
+        ? asRecord(dispatcher.getSystemResources(args))
         : Promise.resolve({ available: false, reason: "desktop monitor unavailable" }),
     ...(workspaceDispatch
       ? {
@@ -47,6 +57,8 @@ export function createCopilotOrchestrationToolSurface(input: {
         }),
       ),
     archiveThread: () => Effect.runPromise(dispatcher.archive({ threadId }).pipe(Effect.asVoid)),
+    organizeThread: (name, args, invocationId) =>
+      runThreadOrganizationTool({ dispatcher, name, args, threadId, invocationId }),
     getThreadStatus: (targetThreadId) =>
       asRecord(
         dispatcher.getStatus({
@@ -85,6 +97,8 @@ export function createCopilotOrchestrationToolSurface(input: {
         }),
       ),
     computerUse: (action) => asRecord(dispatcher.computerUse({ threadId, action })),
+    computerUseV2: (request) =>
+      asRecord(dispatchComputerUseToolRequest(dispatcher, threadId, request)),
     browser: (action) => asRecord(dispatcher.browser({ threadId, action })),
     createThread: ({
       invocationId,

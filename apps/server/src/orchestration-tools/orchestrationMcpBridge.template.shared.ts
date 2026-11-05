@@ -1,19 +1,21 @@
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 import {
-  COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH,
-  COMPUTER_USE_APP_NAME_MAX_CHARS,
-  COMPUTER_USE_COORDINATE_MAX,
-  COMPUTER_USE_COORDINATE_MIN,
-  COMPUTER_USE_KEY_MAX_CHARS,
-  COMPUTER_USE_SCROLL_DELTA_MAX,
-  COMPUTER_USE_SCROLL_DELTA_MIN,
-  COMPUTER_USE_TEXT_MAX_CHARS,
-  COMPUTER_USE_URL_MAX_CHARS,
-  COMPUTER_USE_WAIT_DURATION_MS_MAX,
-} from "@bigbud/contracts/orchestration/computerUse.ts";
+  HTML_RENDER_TOOL_DESCRIPTION,
+  HTML_RENDER_TOOL_PARAMETERS,
+} from "./htmlRenderTool.shared.ts";
+import {
+  SYSTEM_RESOURCE_READ_PARAMETERS,
+  SYSTEM_RESOURCE_RULE_PARAMETERS,
+  CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
+} from "./systemResourceTools.shared.ts";
+import {
+  MOVE_THREAD_TOOL_DESCRIPTION,
+  MOVE_THREAD_TOOL_PARAMETERS,
+  SNOOZE_THREAD_TOOL_DESCRIPTION,
+  SNOOZE_THREAD_TOOL_PARAMETERS,
+} from "./threadOrganizationTool.shared.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
-  COMPUTER_USE_TOOL_DESCRIPTION,
   CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_PARAMETERS,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
@@ -33,6 +35,7 @@ import {
 import { LIST_THREADS_MAX_LIMIT } from "./ThreadOrchestrationTools.listThreads.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
+import { renderMcpComputerUseToolLines } from "./orchestrationComputerUseTool.selected.ts";
 import {
   READ_CAPABILITY_GUIDE_PARAMETERS,
   READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
@@ -44,6 +47,7 @@ export const DEFAULT_ORCHESTRATION_MCP_SERVER_NAME = "bigbud_orchestration";
 
 export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "const TOOLS = [",
+  `  ${JSON.stringify({ name: "render_html", description: HTML_RENDER_TOOL_DESCRIPTION, inputSchema: HTML_RENDER_TOOL_PARAMETERS })},`,
   ...AGENT_WORKSPACE_TOOL_SPECS.map(
     (spec) =>
       `  ${JSON.stringify({
@@ -60,7 +64,12 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "  {",
   '    name: "get_system_resources",',
   `    description: ${JSON.stringify(GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION)},`,
-  '    inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },',
+  `    inputSchema: ${JSON.stringify(SYSTEM_RESOURCE_READ_PARAMETERS)},`,
+  "  },",
+  "  {",
+  '    name: "configure_system_resource_rules",',
+  `    description: ${JSON.stringify(CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION)},`,
+  `    inputSchema: ${JSON.stringify(SYSTEM_RESOURCE_RULE_PARAMETERS)},`,
   "  },",
   "  {",
   '    name: "read_capability_guide",',
@@ -78,40 +87,16 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   `    inputSchema: ${JSON.stringify(RENAME_THREAD_TOOL_PARAMETERS)},`,
   "  },",
   "  {",
-  '    name: "computer_use",',
-  `    description: ${JSON.stringify(COMPUTER_USE_TOOL_DESCRIPTION)},`,
-  "    inputSchema: {",
-  '      type: "object",',
-  "      properties: {",
-  "        action: {",
-  '          type: "string",',
-  '          enum: ["capture", "navigate", "click", "drag", "scroll", "type", "key", "wait", "get_page_info", "list_windows", "list_apps", "check_permissions", "doctor", "launch_app", "focus_app", "get_accessibility_tree"],',
-  "        },",
-  '        surface: { type: "string", enum: ["browser", "desktop"] },',
-  `        url: { type: "string", maxLength: ${COMPUTER_USE_URL_MAX_CHARS}, pattern: "^https?://" },`,
-  `        x: { type: "number", minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} },`,
-  `        y: { type: "number", minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} },`,
-  '        button: { type: "string", enum: ["left", "middle", "right"] },',
-  `        startX: { type: "number", minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} },`,
-  `        startY: { type: "number", minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} },`,
-  `        endX: { type: "number", minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} },`,
-  `        endY: { type: "number", minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} },`,
-  `        deltaX: { type: "number", minimum: ${COMPUTER_USE_SCROLL_DELTA_MIN}, maximum: ${COMPUTER_USE_SCROLL_DELTA_MAX} },`,
-  `        deltaY: { type: "number", minimum: ${COMPUTER_USE_SCROLL_DELTA_MIN}, maximum: ${COMPUTER_USE_SCROLL_DELTA_MAX} },`,
-  `        text: { type: "string", maxLength: ${COMPUTER_USE_TEXT_MAX_CHARS} },`,
-  `        key: { type: "string", maxLength: ${COMPUTER_USE_KEY_MAX_CHARS} },`,
-  `        durationMs: { type: "integer", minimum: 1, maximum: ${COMPUTER_USE_WAIT_DURATION_MS_MAX} },`,
-  '        prompt: { type: "boolean" },',
-  `        name: { type: "string", maxLength: ${COMPUTER_USE_APP_NAME_MAX_CHARS} },`,
-  '        pid: { type: "integer", minimum: 1 },',
-  '        windowId: { type: "integer", minimum: 1 },',
-  `        maxDepth: { type: "integer", minimum: 1, maximum: ${COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH} },`,
-  '        captureAfter: { type: "boolean" },',
-  "      },",
-  '      required: ["action"],',
-  "      additionalProperties: false,",
-  "    },",
+  '    name: "move_thread",',
+  `    description: ${JSON.stringify(MOVE_THREAD_TOOL_DESCRIPTION)},`,
+  `    inputSchema: ${JSON.stringify(MOVE_THREAD_TOOL_PARAMETERS)},`,
   "  },",
+  "  {",
+  '    name: "snooze_thread",',
+  `    description: ${JSON.stringify(SNOOZE_THREAD_TOOL_DESCRIPTION)},`,
+  `    inputSchema: ${JSON.stringify(SNOOZE_THREAD_TOOL_PARAMETERS)},`,
+  "  },",
+  ...renderMcpComputerUseToolLines(),
   "  {",
   '    name: "archive_thread",',
   `    description: ${JSON.stringify(ARCHIVE_THREAD_TOOL_DESCRIPTION)},`,

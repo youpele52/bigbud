@@ -92,6 +92,7 @@ import type {
 import type { WsRpcProtocolClient } from "./protocol";
 import type { SubscriptionRetryDelay } from "./wsTransport.retry";
 import type { WsInitialApplicationDeadline } from "./wsTransport.initialValue";
+import type { WsRpcMonitorMethods } from "./wsRpcClient.monitor.types";
 
 export type RpcTag = keyof WsRpcProtocolClient & string;
 type RpcMethod<TTag extends RpcTag> = WsRpcProtocolClient[TTag];
@@ -130,9 +131,14 @@ export interface WsRpcClient {
   readonly reconnect: () => Promise<void>;
   /** Skips the current reconnect backoff wait; returns whether a wait was cut short. */
   readonly reconnectNow: () => boolean;
+  readonly computerUse: {
+    readonly subscribeActivity: RpcStreamMethod<typeof WS_METHODS.subscribeComputerUseActivity>;
+    readonly stop: RpcUnaryNoArgMethod<typeof WS_METHODS.computerUseStop>;
+  };
   readonly terminal: {
     readonly wslDistributions: RpcUnaryNoArgMethod<typeof WS_METHODS.terminalWslDistributions>;
     readonly snapshot: RpcUnaryMethod<typeof WS_METHODS.terminalSnapshot>;
+    readonly recovery: RpcUnaryMethod<typeof WS_METHODS.terminalRecovery>;
     readonly open: RpcUnaryMethod<typeof WS_METHODS.terminalOpen>;
     readonly write: RpcUnaryMethod<typeof WS_METHODS.terminalWrite>;
     readonly resize: RpcUnaryMethod<typeof WS_METHODS.terminalResize>;
@@ -140,8 +146,8 @@ export interface WsRpcClient {
     readonly restart: RpcUnaryMethod<typeof WS_METHODS.terminalRestart>;
     readonly close: RpcUnaryMethod<typeof WS_METHODS.terminalClose>;
     readonly onEvent: (
-      listener: Parameters<RpcStreamMethod<typeof WS_METHODS.subscribeTerminalEvents>>[0],
-      options?: StreamSubscriptionOptions,
+      listener: Parameters<NativeApi["terminal"]["onEvent"]>[0],
+      options?: StreamSubscriptionOptions & Parameters<NativeApi["terminal"]["onEvent"]>[1],
     ) => () => void;
     readonly subscribeSession: (
       input: RpcInput<typeof WS_METHODS.subscribeTerminalSession>,
@@ -294,6 +300,7 @@ export interface WsRpcClient {
     readonly getOpencodeV2ThreadToolsSetup: (
       input: ServerOpencodeV2ThreadToolsSetupInput,
     ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
+    readonly copilotRuntime: RpcUnaryMethod<typeof WS_METHODS.serverCopilotRuntime>;
     readonly createMobileRemotePairing: (
       input: ServerCreateMobileRemotePairingInput,
     ) => Promise<ServerMobileRemotePairing>;
@@ -333,12 +340,13 @@ export interface WsRpcClient {
       input: ServerGetUsageSummaryInput,
     ) => Promise<ServerUsageSummaryResult>;
     readonly stopSubagent: (input: ProviderStopSubagentInput) => Promise<void>;
+    readonly providerControls: RpcUnaryMethod<typeof WS_METHODS.providerControls>;
     readonly getWsConnectionDiagnostics: RpcUnaryMethod<
       typeof WS_METHODS.serverGetWsConnectionDiagnostics
     >;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
-  };
+  } & WsRpcMonitorMethods;
   readonly orchestration: {
     readonly getSidebarThreadCatalog: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog
@@ -351,6 +359,9 @@ export interface WsRpcClient {
     >;
     readonly getProjectThreadSummaries: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getProjectThreadSummaries
+    >;
+    readonly getOrganizationThreadSummaries: RpcUnaryMethod<
+      typeof ORCHESTRATION_WS_METHODS.getOrganizationThreadSummaries
     >;
     readonly getSelectedThreadDetail: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getSelectedThreadDetail

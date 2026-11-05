@@ -138,6 +138,12 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
     session: ActiveCopilotSession,
     event: SessionEvent,
   ) {
+    // Child frames share the SDK subscription, but never own root lifecycle state.
+    if (event.agentId) {
+      yield* logNativeEvent(session.threadId, event);
+      yield* emit(yield* mapEvent(mapEventDeps, session, event));
+      return;
+    }
     session.updatedAt = event.timestamp;
 
     if (event.type === "assistant.turn_start") {

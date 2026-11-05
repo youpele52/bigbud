@@ -42,7 +42,8 @@ describe("ActivityStatusIndicator reconnect status", () => {
     expect(reconnectingShimmer && getComputedStyle(reconnectingShimmer).animationName).toBe(
       "tw-shimmer",
     );
-    expect(document.querySelector(".animate-pulse")).not.toBeNull();
+    expect(document.querySelector(".agent-working-ellipsis")).not.toBeNull();
+    expect(document.querySelector("[data-agent-working-blob]")).toBeNull();
     mocks.status = { ...mocks.status, reconnectPhase: "attempting", reconnectAttemptCount: 5 };
     await screen.rerender(indicator());
     await expect.element(screen.getByRole("status")).toHaveTextContent("Reconnecting 5/8");
@@ -50,7 +51,10 @@ describe("ActivityStatusIndicator reconnect status", () => {
     await screen.rerender(indicator());
     await expect.element(screen.getByRole("status")).toHaveTextContent("Thinking");
     expect(document.querySelector(".lucide-wifi")).toBeNull();
-    expect(document.querySelector(".animate-pulse")).not.toBeNull();
+    expect(document.querySelector(".agent-working-ellipsis")).not.toBeNull();
+    expect(document.querySelector("[data-agent-working-blob]")?.getAttribute("data-state")).toBe(
+      "working",
+    );
   });
 
   it.each([

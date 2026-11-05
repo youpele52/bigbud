@@ -52,6 +52,7 @@ function parseMentionToken(rawValue: string): {
     };
   }
   if (rawValue.startsWith("plugin:") || rawValue.startsWith("plugin::")) {
+    // Read-only compatibility for historical messages and existing serialized drafts.
     return {
       rawValue,
       displayLabel: rawValue.replace(/^plugin::?/, ""),

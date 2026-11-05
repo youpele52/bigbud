@@ -33,6 +33,9 @@ function readModel(overrides: Partial<OrchestrationReadModel["threads"][number]>
         worktreePath: null,
         latestTurn: null,
         queuedPrompts: [],
+        pendingInterruptFlushIntent: null,
+        pendingTurnControlOperation: null,
+        pendingTurnStart: null,
         createdAt: now,
         updatedAt: now,
         archivedAt: null,
@@ -254,46 +257,50 @@ describe("thread queued prompt metadata", () => {
     );
   });
 
-  it("flushes the compatible prefix across incompatible settings", async () => {
-    const prompts = [
-      { id: MessageId.makeUnsafe("legacy"), text: "legacy", createdAt: now },
-      {
-        id: MessageId.makeUnsafe("explicit"),
-        text: "explicit",
-        createdAt: now,
-        runtimeMode: "full-access" as const,
-      },
-    ];
-    const events = await Effect.runPromise(
-      decideThreadQueueCommand({
-        command: {
-          type: "thread.queued-prompt.flush",
-          commandId: CommandId.makeUnsafe("flush"),
-          threadId,
-          messageIds: prompts.map((p) => p.id),
-          messageId: MessageId.makeUnsafe("combined"),
+  it.each([null, undefined])(
+    "flushes the compatible prefix across incompatible settings with interrupt intent %s",
+    async (pendingInterruptFlushIntent) => {
+      const prompts = [
+        { id: MessageId.makeUnsafe("legacy"), text: "legacy", createdAt: now },
+        {
+          id: MessageId.makeUnsafe("explicit"),
+          text: "explicit",
           createdAt: now,
+          runtimeMode: "full-access" as const,
         },
-        readModel: readModel({ queuedPrompts: prompts }),
-      }),
-    );
-    expect(events).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "thread.queued-prompts-flushed",
-          payload: { threadId, messageIds: [prompts[0]!.id] },
+      ];
+      const events = await Effect.runPromise(
+        decideThreadQueueCommand({
+          command: {
+            type: "thread.queued-prompt.flush",
+            commandId: CommandId.makeUnsafe("flush"),
+            threadId,
+            messageIds: prompts.map((p) => p.id),
+            userRelease: true,
+            messageId: MessageId.makeUnsafe("combined"),
+            createdAt: now,
+          },
+          readModel: readModel({ queuedPrompts: prompts, pendingInterruptFlushIntent }),
         }),
-      ]),
-    );
-    expect(events).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: "thread.queued-prompts-flushed",
-          payload: { threadId, messageIds: prompts.map((prompt) => prompt.id) },
-        }),
-      ]),
-    );
-  });
+      );
+      expect(events).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "thread.queued-prompts-flushed",
+            payload: { threadId, messageIds: [prompts[0]!.id] },
+          }),
+        ]),
+      );
+      expect(events).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "thread.queued-prompts-flushed",
+            payload: { threadId, messageIds: prompts.map((prompt) => prompt.id) },
+          }),
+        ]),
+      );
+    },
+  );
 
   it("preserves metadata when the server can start immediately", async () => {
     const command = submit();

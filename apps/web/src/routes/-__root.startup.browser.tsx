@@ -84,9 +84,6 @@ vi.mock("../components/floating-assistant/FloatingAssistantShell", () => ({
   MascotShell: () => <div data-testid="mascot-shell" />,
   CompactChatShell: () => <div data-testid="compact-chat-shell" />,
 }));
-vi.mock("../components/plugins/PluginUpdateToastCoordinator", () => ({
-  PluginUpdateToastCoordinator: () => null,
-}));
 vi.mock("../notifications/pendingApprovalCoordinator", () => ({
   PendingApprovalCoordinator: () => null,
 }));

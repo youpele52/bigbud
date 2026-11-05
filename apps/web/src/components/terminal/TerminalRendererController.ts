@@ -6,6 +6,8 @@ import {
   terminalRendererBudget,
 } from "./TerminalRendererController.policy";
 
+export const HIDDEN_WEBGL_RELEASE_DELAY_MS = 30_000;
+
 export interface TerminalWebglAddon extends ITerminalAddon {
   onContextLoss: (listener: () => void) => IDisposable;
 }
@@ -24,6 +26,8 @@ export class TerminalRendererController {
   private listener: IDisposable | undefined;
   private release: (() => void) | undefined;
   private unretain: (() => void) | undefined;
+  private hiddenRelease: ReturnType<typeof setTimeout> | undefined;
+  private createAddon: (() => TerminalWebglAddon) | undefined;
   private generation = 0;
   private disposed = false;
   private loading = false;
@@ -48,6 +52,8 @@ export class TerminalRendererController {
     visible: boolean,
     policy: TerminalRenderingPolicy | null,
   ): void {
+    if (this.disposed) return;
+    if (visible) this.clearHiddenRelease();
     const previous = this.request;
     this.request = { setting, visible, policy };
     if (setting === "off") {
@@ -81,6 +87,18 @@ export class TerminalRendererController {
       this.unretain = undefined;
       this.fallback("Hidden GPU context released for other terminals; terminal uses DOM.");
     });
+    // Use xterm's supported addon lifecycle rather than changing private canvas dimensions.
+    // Repeated hidden updates must not postpone release indefinitely.
+    this.hiddenRelease = setTimeout(() => {
+      this.hiddenRelease = undefined;
+      if (!this.disposed && !this.request?.visible)
+        this.fallback("Hidden GPU resources released after inactivity; terminal uses DOM.");
+    }, HIDDEN_WEBGL_RELEASE_DELAY_MS);
+  }
+
+  private clearHiddenRelease(): void {
+    if (this.hiddenRelease !== undefined) clearTimeout(this.hiddenRelease);
+    this.hiddenRelease = undefined;
   }
 
   private resume(): void {
@@ -133,8 +151,11 @@ export class TerminalRendererController {
     const generation = ++this.generation;
     let addon: TerminalWebglAddon | undefined;
     try {
-      const createAddon = await this.load();
+      // After idle release, restore synchronously before the next paint when policy allows.
+      // Only the constructor is cached; every attachment gets a fresh disposable addon.
+      const createAddon = this.createAddon ?? (await this.load());
       if (this.disposed || generation !== this.generation) return;
+      this.createAddon = createAddon;
       addon = createAddon();
       this.addon = addon;
       this.listener = addon.onContextLoss(() => {
@@ -182,6 +203,7 @@ export class TerminalRendererController {
     }
   }
   private fallback(reason: string | null): void {
+    this.clearHiddenRelease();
     this.generation++;
     this.loading = false;
     const addon = this.addon;

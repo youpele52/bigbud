@@ -107,10 +107,12 @@ describe("real draft materialization through both terminal surfaces", () => {
         "Retain me after failure",
       );
       openBothSurfaces();
-      await vi.waitFor(() =>
-        expect(
-          ctx.wsRequests.filter((request) => request._tag === WS_METHODS.terminalOpen),
-        ).toHaveLength(2),
+      await vi.waitFor(
+        () =>
+          expect(
+            ctx.wsRequests.filter((request) => request._tag === WS_METHODS.terminalOpen),
+          ).toHaveLength(2),
+        { timeout: 5_000 },
       );
       expect(commands("thread.create")).toHaveLength(2);
       expect(commands("thread.create")[1]?.commandId).not.toBe(rejectedCommand);

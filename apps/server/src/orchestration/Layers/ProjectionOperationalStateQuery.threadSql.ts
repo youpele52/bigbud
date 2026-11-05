@@ -16,6 +16,7 @@ import {
   ProjectionThreadTaskDbRowSchema,
   ProjectionThreadWatchDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
+import { threadOrganizationJsonSql } from "../../persistence/Layers/ProjectionThreads.organization.ts";
 
 const ThreadRequest = Schema.Struct({ threadId: Schema.String });
 const ThreadWindowRequest = Schema.Struct({ threadId: Schema.String, limit: Schema.Number });
@@ -65,6 +66,7 @@ export function makeThreadOperationalStateSql(sql: SqlClient.SqlClient) {
         queue_hold AS "queueHold",
         pending_turn_start_json AS "pendingTurnStart",
         recovery_json AS "recovery",
+        ${threadOrganizationJsonSql(sql)} AS "organization",
         archived_at AS "archivedAt", pinned_at AS "pinnedAt", deleting_at AS "deletingAt",
         deleted_at AS "deletedAt"
       FROM projection_threads

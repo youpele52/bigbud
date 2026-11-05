@@ -12,6 +12,11 @@ import { usageProviderCoverage } from "../orchestration/usageAccountingSupport.t
 import type { WsRpcContext } from "./wsRpcContext";
 import { computeCurrentStreakDays } from "./wsRpcHandlers.usage.streak.ts";
 import { summarizeUsageAccounting } from "./wsRpcHandlers.usage.accounting.ts";
+import {
+  tallyUsageBucketShare,
+  type UsageBucketShareTally,
+  usageBucketShares,
+} from "./wsRpcHandlers.usage.bucketShares.ts";
 import type { UsageSourceMetadata, UsageTokenMix } from "@bigbud/contracts/server/usage.ts";
 
 type UsageAccumulator = {
@@ -136,6 +141,8 @@ function buildUsageSummary(
   const bucketMap = new Map<string, UsageGroup>();
   const providerMap = new Map<string, UsageGroup>();
   const modelMap = new Map<string, UsageGroup>();
+  const bucketProviders: UsageBucketShareTally = new Map();
+  const bucketModels: UsageBucketShareTally = new Map();
   const modeMap = new Map<string, Set<string>>();
 
   for (const entry of entries) {
@@ -145,6 +152,8 @@ function buildUsageSummary(
     const bucket = bucketMap.get(bucketStart) ?? emptyUsageGroup();
     addUsage(bucket, entry);
     bucketMap.set(bucketStart, bucket);
+    tallyUsageBucketShare(bucketProviders, bucketStart, entry.provider, entry.usedTokens);
+    tallyUsageBucketShare(bucketModels, bucketStart, entry.model, entry.usedTokens);
 
     const provider = providerMap.get(entry.provider) ?? emptyUsageGroup();
     addUsage(provider, entry);
@@ -176,6 +185,8 @@ function buildUsageSummary(
   const buckets = Array.from(bucketMap.entries(), ([bucketStart, group]) => ({
     bucketStart,
     ...completeUsageGroup(group),
+    providers: usageBucketShares(bucketProviders, bucketStart),
+    models: usageBucketShares(bucketModels, bucketStart),
   })).toSorted((left, right) => left.bucketStart.localeCompare(right.bucketStart));
 
   const favoriteMode =

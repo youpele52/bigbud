@@ -2,7 +2,7 @@ import type { CopilotSettings, ModelCapabilities, ServerProviderModel } from "@b
 import { CODEX_REASONING_EFFORT_OPTIONS } from "@bigbud/contracts";
 import { withEffortProvenance } from "@bigbud/shared/model";
 import { Effect, Equal, FileSystem, Layer, Path, Result, Stream } from "effect";
-import { CopilotClient, type ModelInfo } from "@github/copilot-sdk";
+import type { CopilotClient, ModelInfo } from "@github/copilot-sdk";
 
 import {
   buildServerProvider,
@@ -15,7 +15,7 @@ import { CopilotProvider } from "../../Services/Copilot/Provider";
 import { ServerSettingsService } from "../../../ws/serverSettings";
 import { ServerConfig } from "../../../startup/config.ts";
 import { ProviderAdapterProcessError } from "../../Errors";
-import { makeCopilotClientOptions } from "./Adapter.types";
+import { createLeasedCopilotClient } from "./Runtime.client.ts";
 
 const PROVIDER = "copilot" as const;
 const EMPTY_MODEL_CAPABILITIES: ModelCapabilities = withEffortProvenance(
@@ -185,7 +185,7 @@ function formatCopilotAuthLabel(authType: string | undefined): string | undefine
 }
 
 function makeClient(binaryPath: string) {
-  return new CopilotClient(makeCopilotClientOptions({ binaryPath }));
+  return createLeasedCopilotClient({ binaryPath });
 }
 
 const withClient = <A>(
@@ -193,7 +193,16 @@ const withClient = <A>(
   f: (client: CopilotClient) => Promise<A>,
 ): Effect.Effect<A, ProviderAdapterProcessError> =>
   Effect.acquireUseRelease(
-    Effect.sync(() => makeClient(binaryPath)),
+    Effect.tryPromise({
+      try: () => makeClient(binaryPath),
+      catch: (cause) =>
+        new ProviderAdapterProcessError({
+          provider: PROVIDER,
+          threadId: "provider-check",
+          detail: cause instanceof Error ? cause.message : String(cause),
+          cause,
+        }),
+    }),
     (client) =>
       Effect.tryPromise({
         try: () => f(client),
@@ -282,7 +291,9 @@ export const checkCopilotProviderStatus = Effect.fn("checkCopilotProviderStatus"
   if (Result.isFailure(statusResult)) {
     const message = statusResult.failure.message;
     const missing =
-      message.toLowerCase().includes("enoent") || message.toLowerCase().includes("not found");
+      message.toLowerCase().includes("enoent") ||
+      message.toLowerCase().includes("not found") ||
+      message.toLowerCase().includes("cannot find module");
     return buildServerProvider({
       provider: PROVIDER,
       enabled: copilotSettings.enabled,

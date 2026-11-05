@@ -164,7 +164,14 @@ function resolveMacLauncherIcon(isDevelopment, runtimeDir) {
 
   const developmentIconSource = resolve(desktopDir, "../../assets/dev/blueprint-macos-1024.png");
   const generatedDevelopmentIconPath = join(runtimeDir, "icon-dev.icns");
-  generateMacIconSetFromPng(developmentIconSource, generatedDevelopmentIconPath, runtimeDir);
+  // Regenerate only when the source changes: a fresh icon mtime invalidates the launcher
+  // metadata, which re-signs the ad-hoc dev bundle and drops its macOS TCC grants.
+  if (
+    !existsSync(generatedDevelopmentIconPath) ||
+    statSync(developmentIconSource).mtimeMs > statSync(generatedDevelopmentIconPath).mtimeMs
+  ) {
+    generateMacIconSetFromPng(developmentIconSource, generatedDevelopmentIconPath, runtimeDir);
+  }
   return generatedDevelopmentIconPath;
 }
 

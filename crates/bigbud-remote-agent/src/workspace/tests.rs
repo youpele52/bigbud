@@ -1,4 +1,6 @@
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use super::*;
@@ -52,6 +54,53 @@ fn writes_atomically_with_created_parent_directories() {
     assert_eq!(
         fs::read(root.0.join("nested/file.txt")).unwrap(),
         b"new contents"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn writes_preserve_existing_unix_permission_bits() {
+    use sha2::{Digest, Sha256};
+
+    let root = TestRoot::new();
+    let workspace = WorkspaceRoot::open(&root.0).unwrap();
+    let expected_sha256 = format!("{:x}", Sha256::digest(b"replacement"));
+    for mode in [0o755, 0o751, 0o640, 0o444, 0o2750, 0o4750, 0o1700] {
+        let name = format!("file-{mode:o}");
+        let path = root.0.join(&name);
+        fs::write(&path, b"original").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+
+        for (bytes, expected) in [
+            (b"replacement".as_slice(), None),
+            (b"autosaved".as_slice(), Some(expected_sha256.as_str())),
+        ] {
+            assert_eq!(
+                workspace.write_file(&name, bytes, expected).unwrap(),
+                bytes.len() as u64
+            );
+            assert_eq!(fs::read(&path).unwrap(), bytes);
+            assert_eq!(
+                fs::metadata(&path).unwrap().permissions().mode() & 0o7777,
+                mode
+            );
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn writes_create_new_files_with_private_unix_permissions() {
+    let root = TestRoot::new();
+    let workspace = WorkspaceRoot::open(&root.0).unwrap();
+    workspace.write_file("new.txt", b"private", None).unwrap();
+    assert_eq!(
+        fs::metadata(root.0.join("new.txt"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o7777,
+        0o600
     );
 }
 

@@ -47,7 +47,14 @@ export function makeV2RequiredOrchestration(
       });
     return initialized;
   };
-  const bridge: Pick<V2ThreadBridge, "attach" | "ensure" | "reply" | "close"> = {
+  const bridge: Pick<
+    V2ThreadBridge,
+    "attach" | "ensure" | "reply" | "close" | "suspend" | "reconnect"
+  > = {
+    suspend: (session) => {
+      void initialized?.then((value) => value.bridge.suspend(session)).catch(() => {});
+    },
+    reconnect: async (session, runtime) => (await acquire()).bridge.reconnect(session, runtime),
     attach: async (session, runtime) => (await acquire()).bridge.attach(session, runtime),
     ensure: async (session) => (await acquire()).bridge.ensure(session),
     reply: async (runtime, session, id, decision) =>
@@ -58,6 +65,9 @@ export function makeV2RequiredOrchestration(
     },
   };
   return {
+    replaceDescriptor: (next: typeof descriptor) => {
+      descriptor = next;
+    },
     bridge,
     issuer: async () => (await acquire()).artifact.issuer,
     activation: {

@@ -3,7 +3,7 @@ import type {
   OnElicitation,
   Options as ClaudeQueryOptions,
 } from "@anthropic-ai/claude-agent-sdk";
-import { type ProviderSessionStartInput } from "@bigbud/contracts";
+import { type ModelCapabilities, type ProviderSessionStartInput } from "@bigbud/contracts";
 import { resolveApiModelId, resolveEffort, trimOrNull } from "@bigbud/shared/model";
 
 import { getClaudeModelCapabilities } from "./Provider.ts";
@@ -12,6 +12,7 @@ import { resolveBasePermissionMode } from "./Adapter.session.permissions.ts";
 import { BIGBUD_CAPABILITY_CATALOG_PROTOCOL } from "../../../capabilities/CapabilityCatalog.serialize.ts";
 
 interface BuildClaudeQueryOptionsInput {
+  readonly modelCapabilities?: ModelCapabilities;
   readonly input: ProviderSessionStartInput;
   readonly claudeBinaryPath: string;
   readonly orchestrationConfig: {
@@ -78,9 +79,10 @@ type ClaudeNativeEffort = NonNullable<ClaudeModelInfo["supportedEffortLevels"]>[
 
 export function resolveClaudeRuntimeTraits(
   modelSelection: ProviderSessionStartInput["modelSelection"],
+  modelCapabilities?: ModelCapabilities,
 ) {
   const selection = modelSelection?.provider === "claudeAgent" ? modelSelection : undefined;
-  const caps = getClaudeModelCapabilities(selection?.model);
+  const caps = modelCapabilities ?? getClaudeModelCapabilities(selection?.model);
   const rawEffort = trimOrNull(selection?.options?.effort);
   const promptInjectedEffort =
     rawEffort !== null && caps.promptInjectedEffortLevels.includes(rawEffort);
@@ -112,8 +114,10 @@ export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
   const modelSelection =
     input.input.modelSelection?.provider === "claudeAgent" ? input.input.modelSelection : undefined;
   const apiModelId = modelSelection ? resolveApiModelId(modelSelection) : undefined;
-  const { effectiveEffort, fastMode, thinking, ultracode } =
-    resolveClaudeRuntimeTraits(modelSelection);
+  const { effectiveEffort, fastMode, thinking, ultracode } = resolveClaudeRuntimeTraits(
+    modelSelection,
+    input.modelCapabilities,
+  );
   const permissionMode = resolveBasePermissionMode(input.input.runtimeMode);
   const settings = {
     ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),

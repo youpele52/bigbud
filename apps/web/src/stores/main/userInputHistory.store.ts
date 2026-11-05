@@ -1,4 +1,10 @@
 import type { OrchestrationThreadActivity } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
+import { HTML_RENDER_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/htmlRender.ts";
+
+/** Durable visual replies share message-window retention with answered questions. */
+export function isTranscriptHistoryActivity(activity: OrchestrationThreadActivity): boolean {
+  return activity.kind === HTML_RENDER_ACTIVITY_KIND || isUserInputHistoryActivity(activity);
+}
 
 export function isUserInputHistoryActivity(activity: OrchestrationThreadActivity): boolean {
   return (
@@ -15,6 +21,6 @@ export function retainUserInputHistoryActivities(
 ): OrchestrationThreadActivity[] {
   const cutoff = orderedActivities.length - workLogLimit;
   return orderedActivities.filter(
-    (activity, index) => index >= cutoff || isUserInputHistoryActivity(activity),
+    (activity, index) => index >= cutoff || isTranscriptHistoryActivity(activity),
   );
 }

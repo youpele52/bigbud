@@ -105,6 +105,60 @@ describe("wsRpcHandlers.usage", () => {
     );
   });
 
+  it("splits each bucket by provider and model, ranked and reconciled to the bucket total", async () => {
+    const [first, second, other] = makeEntries([
+      "2026-07-08T12:00:00.000Z",
+      "2026-07-08T13:00:00.000Z",
+      "2026-08-02T09:00:00.000Z",
+    ]);
+    if (!first || !second || !other) throw new Error("Expected usage entries");
+    const handlers = makeWsRpcUsageHandlers(
+      makeContext([
+        first,
+        { ...second, provider: "claudeAgent", model: "claude-opus-5-5", usedTokens: 500 },
+        other,
+      ]),
+    );
+
+    const result = await Effect.runPromise(handlers["server.getUsageSummary"]({ range: "all" }));
+    const summary = Schema.decodeUnknownSync(ServerUsageSummaryResult)(
+      JSON.parse(JSON.stringify(result)),
+    );
+
+    expect(summary.buckets[0]).toMatchObject({
+      usedTokens: 600,
+      providers: [
+        { id: "claudeAgent", usedTokens: 500 },
+        { id: "codex", usedTokens: 100 },
+      ],
+      models: [
+        { id: "claude-opus-5-5", usedTokens: 500 },
+        { id: "gpt-5.5", usedTokens: 100 },
+      ],
+    });
+    expect(summary.buckets[1]).toMatchObject({
+      providers: [{ id: "codex", usedTokens: 102 }],
+      models: [{ id: "gpt-5.5", usedTokens: 102 }],
+    });
+  });
+
+  it("keeps bucket totals when an older or malformed split fails to decode", () => {
+    const bucket = {
+      bucketStart: "2026-07-01T00:00:00.000Z",
+      usedTokens: 10,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      reasoningOutputTokens: 0,
+      turnCount: 1,
+    };
+    const decode = Schema.decodeUnknownSync(ServerUsageSummaryResult.fields.buckets);
+    expect(decode([bucket])[0]).not.toHaveProperty("providers");
+    const [malformed] = decode([{ ...bucket, providers: [{ id: "", usedTokens: -1 }] }]);
+    expect(malformed).toMatchObject({ usedTokens: 10 });
+    expect(malformed?.providers).toBeUndefined();
+  });
+
   it("sums item contributions while counting their turn once", async () => {
     const createdAt = new Date().toISOString();
     const [entry] = makeEntries([createdAt]);

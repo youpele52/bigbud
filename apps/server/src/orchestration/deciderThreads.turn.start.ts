@@ -5,6 +5,7 @@ import type {
   OrchestrationThread,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
+import { HTML_RENDER_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/htmlRender.ts";
 
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThread } from "./commandInvariants.ts";
@@ -198,6 +199,17 @@ export const decideThreadActivityAppendCommand = Effect.fn("decideThreadActivity
       yield* requireThreadReadyForMutation({ thread, command });
     }
     const previousActivity = thread.activities.at(-1);
+    if (
+      command.activity.kind === HTML_RENDER_ACTIVITY_KIND &&
+      (!command.activity.turnId ||
+        command.activity.turnId !== thread.latestTurn?.turnId ||
+        thread.latestTurn.completedAt !== null)
+    ) {
+      return yield* new OrchestrationCommandInvariantError({
+        commandType: command.type,
+        detail: "HTML publication no longer owns the active turn.",
+      });
+    }
     if (
       command.activity.kind === "context-window.updated" &&
       previousActivity?.kind === command.activity.kind &&

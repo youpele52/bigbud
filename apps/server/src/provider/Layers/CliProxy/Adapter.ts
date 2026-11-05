@@ -5,7 +5,8 @@ import type {
   ProviderSessionStartInput,
   ThreadId,
 } from "@bigbud/contracts";
-import { Effect, Layer, Stream } from "effect";
+import { CliProxyModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider";
+import { Effect, Layer, Schema, Stream } from "effect";
 
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { makeClaudeAdapter, type ClaudeAdapterLiveOptions } from "../Claude/Adapter.ts";
@@ -22,6 +23,7 @@ import { CliProxyAdapter, type CliProxyAdapterShape } from "../../Services/CliPr
 import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
 import { resolveCliProxyRuntimeConfig } from "./RuntimeConfig.ts";
+import { isCliProxyNativeEffort } from "./Capabilities.ts";
 
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 const PROVIDER = "cliProxy" as const;
@@ -34,7 +36,7 @@ export function toClaudeSessionStartInput(
     provider: input.provider === PROVIDER ? "claudeAgent" : input.provider,
     modelSelection:
       input.modelSelection?.provider === PROVIDER
-        ? { provider: "claudeAgent", model: input.modelSelection.model }
+        ? { ...input.modelSelection, provider: "claudeAgent" }
         : input.modelSelection,
   };
 }
@@ -45,7 +47,13 @@ function toCliProxySessionStartInput(input: ProviderSessionStartInput): Provider
     provider: PROVIDER,
     modelSelection:
       input.modelSelection?.provider === "claudeAgent"
-        ? { provider: PROVIDER, model: input.modelSelection.model }
+        ? {
+            provider: PROVIDER,
+            model: input.modelSelection.model,
+            ...(input.modelSelection.options?.effort
+              ? { options: { effort: input.modelSelection.options.effort } }
+              : {}),
+          }
         : input.modelSelection,
   };
 }
@@ -55,10 +63,7 @@ function requireCliProxyModelSelection(
     readonly modelSelection?: unknown;
   },
   operation: "startSession" | "sendTurn",
-): Effect.Effect<
-  { readonly provider: "cliProxy"; readonly model: string },
-  ProviderAdapterValidationError
-> {
+): Effect.Effect<CliProxyModelSelection, ProviderAdapterValidationError> {
   const selection = input.modelSelection;
   const candidate =
     selection && typeof selection === "object" && !Array.isArray(selection)
@@ -82,7 +87,23 @@ function requireCliProxyModelSelection(
       }),
     );
   }
-  return Effect.succeed({ provider: PROVIDER, model: candidate.model.trim() });
+  return Effect.try({
+    try: () => {
+      const decoded = Schema.decodeUnknownSync(CliProxyModelSelection)(selection, {
+        onExcessProperty: "error",
+      });
+      if (decoded.options?.effort && !isCliProxyNativeEffort(decoded.options.effort)) {
+        throw new Error("Unsupported Claude transport effort.");
+      }
+      return decoded;
+    },
+    catch: () =>
+      new ProviderAdapterValidationError({
+        provider: PROVIDER,
+        operation,
+        issue: "CLIProxyAPI model selection contains invalid options.",
+      }),
+  });
 }
 
 export function requireCliProxySession(
@@ -103,7 +124,7 @@ export function toClaudeSendTurnInput(input: ProviderSendTurnInput): ProviderSen
     ...input,
     modelSelection:
       input.modelSelection?.provider === PROVIDER
-        ? { provider: "claudeAgent", model: input.modelSelection.model }
+        ? { ...input.modelSelection, provider: "claudeAgent" }
         : input.modelSelection,
   };
 }
@@ -228,7 +249,8 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
               return claude.sendTurn(
                 toClaudeSendTurnInput({
                   ...input,
-                  modelSelection: selection,
+                  // A model-only selection resets effort to the catalog default in Claude.
+                  modelSelection: input.modelSelection === undefined ? undefined : selection,
                 }),
               );
             }),

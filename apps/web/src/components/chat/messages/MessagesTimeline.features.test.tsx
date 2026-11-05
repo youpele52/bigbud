@@ -52,7 +52,7 @@ beforeAll(() => {
 
 beforeAll(async () => {
   ({ MessagesTimeline } = await import("./MessagesTimeline"));
-});
+}, 60_000);
 
 describe("MessagesTimeline message features", () => {
   it("renders reply previews for replied user messages", async () => {

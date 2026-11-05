@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { decodeModels, inspectCliProxy, validateCliProxyModel } from "./Client.ts";
+import {
+  decodeModels,
+  inspectCliProxy,
+  inspectCliProxyDetails,
+  validateCliProxyModel,
+} from "./Client.ts";
 import type { CliProxyConfig } from "./config.ts";
 
 const config: CliProxyConfig = {
@@ -10,6 +15,58 @@ const config: CliProxyConfig = {
 };
 
 describe("decodeModels", () => {
+  it.each([
+    ["gpt-6-astra", "GPT 6.0 Astra", "GPT 6 Astra"],
+    ["gpt-6-sol", "GPT 6.0 Sol", "GPT 6 Sol"],
+    ["gpt-6-luna", "GPT 6.0 Luna", "GPT 6 Luna"],
+    ["gpt-6.1-sol", "GPT 6.1 Sol", "GPT 6.1 Sol"],
+    ["gpt-5.6-luna", "GPT 5.6 Luna", "GPT 5.6 Luna"],
+    ["gpt-6.0-custom", "GPT 6.0 Custom", "GPT 6 Custom"],
+    ["custom", "Custom 6.0", "Custom 6.0"],
+  ])("normalizes display name %s without changing the wire id", (id, name, expected) => {
+    expect(decodeModels({ models: [{ slug: id, display_name: name }] })).toEqual([
+      { id, name: expected },
+    ]);
+    expect(decodeModels({ data: [{ id, name }] })).toEqual([{ id, name: expected }]);
+  });
+
+  it("preserves only live effort levels supported by the Claude transport", () => {
+    const [model] = decodeModels({
+      models: [
+        {
+          slug: "arbitrary-proxy-model",
+          supported_reasoning_levels: [
+            { effort: "none" },
+            { effort: "low" },
+            { effort: "xhigh" },
+            { effort: "xhigh" },
+            { effort: "future-depth" },
+          ],
+          default_reasoning_level: "xhigh",
+        },
+      ],
+    });
+    expect(model?.capabilities?.reasoningEffortLevels).toEqual([
+      { value: "low", label: "Low" },
+      { value: "xhigh", label: "Extra High", isDefault: true },
+    ]);
+    expect(model?.capabilities?.effortMetadataOrigin).toBe("live");
+  });
+
+  it("never invents effort for missing or malformed metadata", () => {
+    for (const levels of [undefined, null, "high", [{ effort: 1 }], [null]]) {
+      const [model] = decodeModels({
+        data: [{ id: "gpt-6.1-sol", supported_reasoning_levels: levels }],
+      });
+      expect(model?.capabilities).toBeUndefined();
+    }
+    const [unsupported] = decodeModels({
+      data: [{ id: "no-effort", supported_reasoning_levels: [] }],
+    });
+    expect(unsupported?.capabilities?.reasoningEffortLevels).toEqual([]);
+    expect(unsupported?.capabilities?.effortMetadataStatus).toBe("verified-unsupported");
+  });
+
   it("decodes client-visible catalog models using their slugs", () => {
     expect(
       decodeModels({
@@ -51,6 +108,48 @@ describe("decodeModels", () => {
 });
 
 describe("inspectCliProxy", () => {
+  it.each([
+    [undefined, undefined, null],
+    ["8.0.30", undefined, "8.0.30"],
+    [undefined, "v8.0.51", "8.0.51"],
+    ["8.0.30", "8.0.51", null],
+    ["dev", "8.0.51-rc1", null],
+  ] as const)(
+    "reads optional version headers without extra probes",
+    async (root, catalog, expected) => {
+      const request = vi.fn(async (_config: CliProxyConfig, pathname: string) =>
+        pathname === "/"
+          ? new Response("CLI Proxy API Server", { headers: root ? { "X-CPA-VERSION": root } : {} })
+          : new Response(JSON.stringify({ data: [{ id: "model" }] }), {
+              headers: catalog ? { "X-CPA-VERSION": catalog } : {},
+            }),
+      );
+      await expect(inspectCliProxyDetails(config, { request })).resolves.toEqual({
+        models: [{ id: "model", name: "model" }],
+        runtimeVersion: expected,
+      });
+      expect(request.mock.calls.map((args) => args[1])).toEqual([
+        "/",
+        "/v1/models?client_version=0.1.0",
+      ]);
+    },
+  );
+
+  it("shares one inspection between models-only runtime and provider detail callers", async () => {
+    const request = vi.fn(async (_config: CliProxyConfig, pathname: string) =>
+      pathname === "/"
+        ? new Response("CLI Proxy API Server")
+        : new Response(JSON.stringify({ data: [] })),
+    );
+    await expect(
+      Promise.all([
+        inspectCliProxy(config, { request }),
+        inspectCliProxyDetails(config, { request }),
+      ]),
+    ).resolves.toEqual([[], { models: [], runtimeVersion: null }]);
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
   it("uses the bounded client-profile endpoints through an injectable request", async () => {
     const request = vi
       .fn()

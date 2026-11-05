@@ -14,6 +14,30 @@ import { WorkspaceFileSystemError } from "../workspace/Services/WorkspaceFileSys
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import type { WsRpcContext } from "./wsRpcContext";
 
+export function projectWriteFileError(
+  cause: WorkspaceFileSystemError | WorkspacePathOutsideRootError,
+): ProjectWriteFileError {
+  const conflict =
+    Schema.is(WorkspaceFileSystemError)(cause) &&
+    ((cause.operation === "workspaceFileSystem.writeFileExpectedHash" &&
+      cause.detail.startsWith("Workspace file changed since it was read")) ||
+      (cause.operation === "remoteWorkspace.writeFile" &&
+        /workspace file changed since it was read/i.test(cause.detail)));
+  const message = Schema.is(WorkspacePathOutsideRootError)(cause)
+    ? "Workspace file path must stay within the project root."
+    : conflict
+      ? "Workspace file changed since it was read."
+      : "Failed to write workspace file";
+  return new ProjectWriteFileError({
+    message,
+    ...(conflict ? { conflict: true } : {}),
+    writeDisposition: Schema.is(WorkspacePathOutsideRootError)(cause)
+      ? "not-dispatched"
+      : cause.writeDisposition,
+    cause,
+  });
+}
+
 export function makeWorkspaceWsRpcHandlers(
   context: WsRpcContext,
   toProjectDirectoryWatchError: (cause: any) => ProjectDirectoryWatchError,
@@ -114,14 +138,9 @@ export function makeWorkspaceWsRpcHandlers(
     ) =>
       observeRpcEffect(
         WS_METHODS.projectsWriteFile,
-        context.workspaceRuntime.files.writeFile(input).pipe(
-          Effect.mapError((cause) => {
-            const message = Schema.is(WorkspacePathOutsideRootError)(cause)
-              ? "Workspace file path must stay within the project root."
-              : "Failed to write workspace file";
-            return new ProjectWriteFileError({ message, cause });
-          }),
-        ),
+        context.workspaceRuntime.files
+          .writeFile(input)
+          .pipe(Effect.mapError(projectWriteFileError)),
         { "rpc.aggregate": "workspace" },
       ),
     [WS_METHODS.shellOpenInEditor]: (input: Parameters<WsRpcContext["open"]["openInEditor"]>[0]) =>

@@ -111,6 +111,13 @@ export type TurnStartedPayload = typeof TurnStartedPayload.Type;
 
 export const TurnCompletedPayload = Schema.Struct({
   state: RuntimeTurnState,
+  /**
+   * Opt-in recovery redelivery: this terminal outcome was already settled
+   * natively and is being republished after a crash so a missing canonical
+   * outcome can be delivered exactly once. Canonical ingestion drops it when
+   * the turn is already proven settled. Only Muse recovery emits this today.
+   */
+  recoveryRedelivery: Schema.optional(Schema.Boolean),
   actualModelSelection: Schema.optional(ModelSelection),
   stopReason: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
   usageAvailable: Schema.optional(Schema.Boolean),

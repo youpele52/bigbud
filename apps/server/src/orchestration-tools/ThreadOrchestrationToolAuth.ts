@@ -14,10 +14,17 @@ async function withAuthOwner<T>(filename: string, run: () => Promise<T>): Promis
 }
 export const THREAD_ORCHESTRATION_TOOL_AUTH_TTL_MS = 24 * 60 * 60_000;
 
+export interface ThreadToolWorkspaceBinding {
+  readonly executionTargetId: string;
+  readonly cwd: string;
+}
+
 export interface ThreadOrchestrationToolAuthRecord {
   readonly threadId: string;
   readonly token: string;
   readonly createdAt: string;
+  /** Server-issued workspace identity; never taken from a tool request. */
+  readonly workspaceBinding?: ThreadToolWorkspaceBinding;
 }
 
 export function createThreadOrchestrationToolToken(): string {
@@ -39,6 +46,7 @@ export async function writeThreadOrchestrationToolAuth(input: {
   readonly stateDir: string;
   readonly threadId: string;
   readonly token: string;
+  readonly workspaceBinding?: ThreadToolWorkspaceBinding;
 }): Promise<void> {
   const filePath = resolveThreadOrchestrationToolAuthPath({
     stateDir: input.stateDir,
@@ -52,6 +60,7 @@ export async function writeThreadOrchestrationToolAuth(input: {
     threadId: input.threadId,
     token: input.token,
     createdAt: new Date().toISOString(),
+    ...(input.workspaceBinding ? { workspaceBinding: { ...input.workspaceBinding } } : {}),
   };
   await withAuthOwner(filePath, () =>
     writeFile(filePath, JSON.stringify(record), { encoding: "utf8", mode: 0o600 }),
@@ -119,7 +128,18 @@ export async function readThreadOrchestrationToolAuth(input: {
     ) {
       return null;
     }
+    // Invalid binding evidence must not become a legacy, unbound capability.
+    if (
+      parsed.workspaceBinding !== undefined &&
+      (!parsed.workspaceBinding ||
+        typeof parsed.workspaceBinding.executionTargetId !== "string" ||
+        !parsed.workspaceBinding.executionTargetId.trim() ||
+        typeof parsed.workspaceBinding.cwd !== "string" ||
+        !parsed.workspaceBinding.cwd.trim())
+    )
+      return null;
     return {
+      ...(parsed.workspaceBinding ? { workspaceBinding: parsed.workspaceBinding } : {}),
       threadId: parsed.threadId,
       token: parsed.token,
       createdAt: typeof parsed.createdAt === "string" ? parsed.createdAt : new Date().toISOString(),

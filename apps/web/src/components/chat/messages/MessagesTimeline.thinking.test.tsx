@@ -147,7 +147,8 @@ describe("MessagesTimeline work and thinking entries", () => {
     expect(markup).toContain("Checking the current thread state");
     expect(markup).toContain("thinking-markdown");
     expect(markup).toContain("text-xs");
-    expect(markup).toContain("text-muted-foreground/68");
+    expect(markup).toContain("leading-5");
+    expect(markup).toContain("text-foreground/80");
     expect(markup).not.toContain("Work log");
   });
 

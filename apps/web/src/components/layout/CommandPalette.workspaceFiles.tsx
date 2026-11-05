@@ -1,9 +1,11 @@
 import type { ExecutionTargetId } from "@bigbud/contracts";
-import { useQuery } from "@tanstack/react-query";
+import { isRemoteExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import { FileIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { projectSearchEntriesQueryOptions } from "~/lib/projectReactQuery";
+import { workspaceErrorMessage } from "../../lib/workspaceRequestRecovery.errors";
+import { WorkspaceRequestStatus } from "../common/WorkspaceRequestStatus";
+import { useWorkspaceFileSearch } from "./useWorkspaceFileSearch";
 import { CommandGroup, CommandGroupLabel, CommandItem } from "../ui/command";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar.menu";
 import { openPathFromChat } from "../../stores/files/filesPanel.open";
@@ -33,17 +35,15 @@ export function CommandPaletteWorkspaceFiles({
 
   useEffect(() => {
     setVisibleCount(INITIAL_VISIBLE_FILE_COUNT);
-  }, [normalizedQuery, open, workspaceRoot]);
+  }, [normalizedQuery, open, workspaceRoot, workspaceExecutionTargetId]);
 
-  const workspaceEntriesQuery = useQuery(
-    projectSearchEntriesQueryOptions({
-      cwd: workspaceRoot,
-      executionTargetId: workspaceExecutionTargetId,
-      query: normalizedQuery,
-      enabled: open && normalizedQuery.length > 0,
-      limit: FILE_SEARCH_RESULT_LIMIT,
-    }),
-  );
+  const workspaceEntriesQuery = useWorkspaceFileSearch({
+    cwd: workspaceRoot,
+    executionTargetId: workspaceExecutionTargetId,
+    query: normalizedQuery,
+    enabled: open && normalizedQuery.length > 0,
+    limit: FILE_SEARCH_RESULT_LIMIT,
+  });
 
   const fileEntries = useMemo(
     () => (workspaceEntriesQuery.data?.entries ?? []).filter((entry) => entry.kind === "file"),
@@ -53,7 +53,23 @@ export function CommandPaletteWorkspaceFiles({
   const visibleEntries = fileEntries.slice(0, visibleCount);
   const hasMore = fileEntries.length > visibleCount;
 
-  if (normalizedQuery.length === 0 || fileEntries.length === 0 || !workspaceRoot) {
+  const loading = workspaceEntriesQuery.isFetching;
+  const error =
+    !loading && workspaceEntriesQuery.isError
+      ? workspaceErrorMessage(workspaceEntriesQuery.error)
+      : null;
+  const remote = isRemoteExecutionTargetId(workspaceExecutionTargetId);
+  const openFile = (path: string) => {
+    onBeforeOpenFile();
+    void openPathFromChat(
+      joinWorkspaceEntryPath(workspaceRoot!, path),
+      workspaceRoot!,
+      "file",
+      workspaceExecutionTargetId ?? undefined,
+    ).catch((cause) => console.error("Failed to open file:", cause));
+  };
+
+  if (!open || normalizedQuery.length === 0 || !workspaceRoot) {
     return null;
   }
 
@@ -62,29 +78,25 @@ export function CommandPaletteWorkspaceFiles({
       <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
         Files
       </CommandGroupLabel>
+      {loading || error ? (
+        <WorkspaceRequestStatus
+          error={error}
+          recovering={remote && workspaceEntriesQuery.recovering}
+          pending={workspaceEntriesQuery.requestPending}
+          onRetry={() => void workspaceEntriesQuery.refetch()}
+        />
+      ) : fileEntries.length === 0 ? (
+        <div className="px-2 py-3 text-xs text-muted-foreground" role="status">
+          No matching files.
+        </div>
+      ) : null}
       {visibleEntries.map((entry) => (
         <CommandItem
           key={entry.path}
           value={entry.path.toLowerCase()}
           className="min-h-11 rounded-xl px-3 py-2"
-          onSelect={() => {
-            onBeforeOpenFile();
-            void openPathFromChat(
-              joinWorkspaceEntryPath(workspaceRoot, entry.path),
-              workspaceRoot,
-            ).catch((error) => {
-              console.error("Failed to open file:", error);
-            });
-          }}
-          onClick={() => {
-            onBeforeOpenFile();
-            void openPathFromChat(
-              joinWorkspaceEntryPath(workspaceRoot, entry.path),
-              workspaceRoot,
-            ).catch((error) => {
-              console.error("Failed to open file:", error);
-            });
-          }}
+          onSelect={() => openFile(entry.path)}
+          onClick={() => openFile(entry.path)}
         >
           <div className="mr-3 text-muted-foreground/70">
             <FileIcon className="size-4" />

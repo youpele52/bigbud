@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
-import type { SidebarRemoteAgentInstallRequest } from "./Sidebar.projectAddActions.remote.types";
+import type { SidebarRemoteAgentInstallRequest } from "./Sidebar.remoteWorkspaceAddActions.types";
 
 const api = vi.hoisted(() => ({ current: null as never }));
 const toast = vi.hoisted(() => ({ add: vi.fn() }));

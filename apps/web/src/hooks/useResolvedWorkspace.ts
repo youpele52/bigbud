@@ -1,4 +1,4 @@
-import type { ProjectId, ThreadId } from "@bigbud/contracts";
+import type { ExecutionTargetId, ProjectId, ThreadId } from "@bigbud/contracts";
 
 import type { Project } from "~/models/types";
 import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
@@ -10,6 +10,8 @@ import { useUiStateStore } from "~/stores/ui";
 interface WorkspaceThreadContext {
   readonly projectId: ProjectId;
   readonly worktreePath: string | null;
+  readonly workspaceExecutionTargetId?: ExecutionTargetId | null | undefined;
+  readonly executionTargetId?: ExecutionTargetId | null | undefined;
 }
 
 interface ResolveWorkspaceContextInput {
@@ -29,6 +31,11 @@ export function resolveWorkspaceContext(input: ResolveWorkspaceContextInput) {
       input.draftThread?.worktreePath ??
       input.project?.cwd ??
       input.defaultChatCwd,
+    executionTargetId: input.serverThread
+      ? resolveWorkspaceExecutionTargetId(input.serverThread)
+      : input.project
+        ? resolveWorkspaceExecutionTargetId(input.project)
+        : undefined,
   };
 }
 
@@ -41,19 +48,13 @@ export function useResolvedWorkspace(activeThreadId?: ThreadId | null) {
   const projectId = thread?.projectId ?? draftThread?.projectId ?? selectedProjectId ?? null;
   const project = useProjectById(projectId);
   const defaultChatCwd = useDefaultChatCwd();
-  const { cwd } = resolveWorkspaceContext({
+  const { cwd, executionTargetId } = resolveWorkspaceContext({
     serverThread: thread,
     draftThread,
     selectedProjectId,
     project,
     defaultChatCwd,
   });
-  const executionTargetId = thread
-    ? resolveWorkspaceExecutionTargetId(thread)
-    : project
-      ? resolveWorkspaceExecutionTargetId(project)
-      : undefined;
-
   return {
     thread,
     draftThread,

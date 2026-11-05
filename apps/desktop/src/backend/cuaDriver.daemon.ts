@@ -1,19 +1,26 @@
 import * as ChildProcess from "node:child_process";
-import * as Crypto from "node:crypto";
 import * as FS from "node:fs";
-import * as Path from "node:path";
 
-import { makeCuaDriverChildEnvironment } from "@bigbud/shared/cua-driver/childEnvironment";
+import {
+  cuaDriverStateEnvironment,
+  makeCuaDriverChildEnvironment,
+} from "@bigbud/shared/cua-driver/childEnvironment";
 import {
   cuaDriverEmbeddedEnvironment,
   cuaDriverServeArguments,
 } from "@bigbud/shared/cua-driver/invocation";
 
-import { resolveComputerUseRuntime } from "./cuaDriver";
+import { prepareCuaCursorTheme } from "./cuaDriver.cursorTheme";
+import { inspectCuaDriverCompatibility } from "./cuaDriver.compatibility";
+import { validateCuaDriverPolicyEnforcement } from "./cuaDriver.policyProbe";
+import { cuaDriverRuntimeKey, setCuaDriverStartupFailure } from "./cuaDriver.startupFailure";
+import { resolveComputerUseRuntime } from "./cuaDriver.runtime";
 import { stopChildProcessTreeAndWait } from "./backendShutdown";
+import { removeStaleDaemonSocket } from "./cuaDriver.daemon.endpoint";
+import { resolvePrivateEndpoint } from "./cuaDriver.daemon.paths";
 import { parseCuaDriverHealthReport, type CuaDriverHealthReport } from "./cuaDriver.health";
 import { callCuaDriverTool, stopCuaDriverMcpClientAndWait } from "./cuaDriver.mcpClient";
-import { resolveManagedPaths } from "./cuaDriver.paths";
+import { resolvePrivateStateHome } from "./cuaDriver.paths";
 import { runCommand } from "./cuaDriver.process";
 import { isInstalledProcessQuiescing } from "./installedProcessQuiescence";
 
@@ -24,6 +31,12 @@ interface DaemonState {
   readonly baseDir: string;
   readonly binaryPath: string;
   readonly endpoint: string;
+  /** Private run directory holding the socket (Unix) and the PID file. */
+  readonly runDir: string;
+  /** `--pid-file` inside `runDir`; `null` when the Driver version does not honour it. */
+  readonly pidFile: string | null;
+  /** Installed `--cursor-theme` id; `null` keeps the Driver's default cursor. */
+  readonly cursorTheme: string | null;
   readonly hostBundleId: string;
   readonly environment: NodeJS.ProcessEnv;
   child: ChildProcess.ChildProcess | null;
@@ -32,6 +45,7 @@ interface DaemonState {
   stopping: boolean;
   reachable: boolean;
   ready: boolean;
+  validated: boolean;
   lastError: string | null;
   healthReport: CuaDriverHealthReport | null;
 }
@@ -50,24 +64,19 @@ let stopPromise: Promise<void> | null = null;
 let runtimeGeneration = 0;
 let startGeneration = 0;
 
-function resolvePrivateEndpoint(baseDir: string): string {
-  const suffix = Crypto.randomUUID();
-  if (process.platform === "win32") {
-    return `\\\\.\\pipe\\bigbud-cua-${suffix}`;
-  }
-  const runDir = Path.join(resolveManagedPaths(baseDir).rootDir, "run", suffix);
-  FS.mkdirSync(runDir, { recursive: true, mode: 0o700 });
-  FS.chmodSync(runDir, 0o700);
-  return Path.join(runDir, "cua.sock");
-}
-
 function spawnDaemon(state: DaemonState): void {
   if (state.stopping || isInstalledProcessQuiescing()) return;
   state.reachable = false;
   state.ready = false;
+  state.validated = false;
   const child = ChildProcess.spawn(
     state.binaryPath,
-    [...cuaDriverServeArguments(state.endpoint, state.hostBundleId)],
+    [
+      ...cuaDriverServeArguments(state.endpoint, state.hostBundleId, {
+        ...(state.pidFile ? { pidFile: state.pidFile } : {}),
+        ...(state.cursorTheme ? { cursorTheme: state.cursorTheme } : {}),
+      }),
+    ],
     {
       env: makeCuaDriverChildEnvironment(process.env, state.environment),
       stdio: ["ignore", "pipe", "pipe"],
@@ -99,6 +108,11 @@ function spawnDaemon(state: DaemonState): void {
     state.restartTimer = setTimeout(() => {
       state.restartTimer = null;
       if (!state.stopping && !isInstalledProcessQuiescing()) {
+        if (removeStaleDaemonSocket(state.endpoint, state.runDir) === "blocked") {
+          state.lastError = `cua-driver endpoint ${state.endpoint} exists and is not a removable socket; not restarting.`;
+          console.error(`[desktop] ${state.lastError}`);
+          return;
+        }
         spawnDaemon(state);
         void waitUntilReady(state).then((health) => {
           if (health && !state.stopping) {
@@ -125,6 +139,18 @@ async function readDaemonHealth(
   state: DaemonState,
   timeoutMs: number,
 ): Promise<CuaDriverHealthReport> {
+  const child = state.child;
+  if (state.stopping) throw new Error("Computer Use startup was stopped.");
+  if (!state.validated) {
+    await validateCuaDriverPolicyEnforcement(state.binaryPath, {
+      socketPath: state.endpoint,
+      environment: makeCuaDriverChildEnvironment(process.env, state.environment),
+      timeoutMs: Math.max(1, Math.floor(timeoutMs / 2)),
+    });
+    if (state.stopping || state.child !== child)
+      throw new Error("Computer Use startup was stopped.");
+    state.validated = true;
+  }
   const result = await callCuaDriverTool(
     state.binaryPath,
     "health_report",
@@ -132,9 +158,10 @@ async function readDaemonHealth(
     {
       socketPath: state.endpoint,
       environment: makeCuaDriverChildEnvironment(process.env, state.environment),
-      timeoutMs,
+      timeoutMs: Math.max(1, Math.floor(timeoutMs / 2)),
     },
   );
+  if (state.stopping || state.child !== child) throw new Error("Computer Use startup was stopped.");
   return parseCuaDriverHealthReport(result);
 }
 
@@ -152,7 +179,8 @@ async function waitUntilReady(state: DaemonState): Promise<CuaDriverHealthReport
         if (status.code === 0) {
           return await readDaemonHealth(state, Math.max(1, deadline - Date.now()));
         }
-      } catch {
+      } catch (error) {
+        state.lastError = error instanceof Error ? error.message : String(error);
         // The daemon is still starting; retry within the bounded deadline.
       }
     }
@@ -170,25 +198,45 @@ export async function startCuaDriverDaemon(
   if (isInstalledProcessQuiescing()) return {};
   if (daemonState?.stopping) await stopCuaDriverDaemonAndWait();
   if (isInstalledProcessQuiescing()) return {};
-  if (daemonState && !daemonState.stopping) return daemonState.environment;
   if (startPromise) return startPromise;
+  if (daemonState && !daemonState.stopping)
+    return daemonState.validated && daemonState.reachable ? daemonState.environment : {};
 
   const generation = ++startGeneration;
   const request = (async () => {
     const runtime = resolveComputerUseRuntime(baseDir);
     if (!runtime.binaryPath) return {};
-    const endpoint = resolvePrivateEndpoint(baseDir);
+    const key = cuaDriverRuntimeKey(baseDir, runtime.binaryPath, runtime.policyPath);
+    setCuaDriverStartupFailure(key, null);
+    const stateHome = resolvePrivateStateHome(baseDir);
+    const compatibility = await inspectCuaDriverCompatibility(
+      runtime.binaryPath,
+      runtime.policyPath ?? undefined,
+      stateHome,
+    ).catch((error: unknown) => {
+      if (generation === startGeneration) setCuaDriverStartupFailure(key, String(error));
+      throw error;
+    });
+    if (generation !== startGeneration || isInstalledProcessQuiescing()) return {};
+    const { endpoint, runDir, pidFile } = resolvePrivateEndpoint(baseDir);
     runtimeGeneration += 1;
     const environment = {
       BIGBUD_CUA_DRIVER_PATH: runtime.binaryPath,
       BIGBUD_CUA_RUNTIME_GENERATION: String(runtimeGeneration),
+      ...(compatibility.version !== "0.9.1" && compatibility.version !== "0.38.0"
+        ? { BIGBUD_CUA_VALIDATE_MCP: "1" }
+        : {}),
       ...(runtime.policyPath ? { CUA_DRIVER_POLICY_FILE: runtime.policyPath } : {}),
+      ...cuaDriverStateEnvironment(stateHome),
       ...cuaDriverEmbeddedEnvironment(endpoint, hostBundleId),
     };
     const state: DaemonState = {
       baseDir,
       binaryPath: runtime.binaryPath,
       endpoint,
+      runDir,
+      pidFile: compatibility.honoursPidFile ? pidFile : null,
+      cursorTheme: prepareCuaCursorTheme(stateHome, compatibility.version),
       hostBundleId,
       environment,
       child: null,
@@ -197,6 +245,7 @@ export async function startCuaDriverDaemon(
       stopping: false,
       reachable: false,
       ready: false,
+      validated: false,
       lastError: null,
       healthReport: null,
     };
@@ -208,10 +257,14 @@ export async function startCuaDriverDaemon(
       applyHealthReport(state, health);
       state.restartAttempt = 0;
     } else {
-      state.lastError = "Daemon did not become ready before the startup deadline.";
+      state.lastError ??= "Daemon did not become ready before the startup deadline.";
+      if (generation === startGeneration) {
+        setCuaDriverStartupFailure(key, state.lastError);
+        await stopCuaDriverDaemonAndWait();
+      }
       console.error("[desktop] cua-driver daemon did not become ready before the startup deadline");
     }
-    return state.stopping || generation !== startGeneration ? {} : environment;
+    return state.stopping || generation !== startGeneration || !health ? {} : environment;
   })();
   startPromise = request;
   const clearRequest = () => {
@@ -280,7 +333,9 @@ export function getCuaDriverDaemonStatus(): CuaDriverDaemonStatus {
 }
 
 export function getCuaDriverDaemonEnvironment(): NodeJS.ProcessEnv | undefined {
-  return daemonState?.stopping ? undefined : daemonState?.environment;
+  return daemonState?.stopping || !daemonState?.validated || !daemonState.reachable
+    ? undefined
+    : daemonState.environment;
 }
 
 export async function refreshCuaDriverDaemonHealth(): Promise<CuaDriverHealthReport> {
@@ -319,9 +374,7 @@ export function stopCuaDriverDaemonAndWait(timeoutMs = 5_000): Promise<void> {
     }
     if (state.child === child) state.child = null;
     if (daemonState === state) daemonState = null;
-    if (process.platform !== "win32") {
-      FS.rmSync(Path.dirname(state.endpoint), { recursive: true, force: true });
-    }
+    FS.rmSync(state.runDir, { recursive: true, force: true });
   })();
   stopPromise = request;
   const clearRequest = () => {

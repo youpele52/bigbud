@@ -78,7 +78,8 @@ describe("compact Subagents presentation", () => {
     expect(subagents.match(/text-xs/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(subagents).toContain("text-[9px]");
     expect(subagents).toContain("sm:text-[9px]");
-    expect(subagents).toContain("bg-blue-500");
+    expect(subagents).toContain("data-agent-working-blob");
+    expect(subagents).toContain("--agent-blob-working:var(--subagent)");
     expect(subagents).toContain("text-blue-600 dark:text-blue-400");
     expect(subagents).toContain(">working<");
   });

@@ -1,3 +1,4 @@
+import { getRoutableModelSelection } from "../../../../models/provider/selection-helpers.models";
 import { useCallback } from "react";
 import {
   collapseExpandedComposerCursor,
@@ -93,8 +94,10 @@ export function useChatViewComposerActions(input: UseChatViewComposerActionsInpu
     if (!activeThread) {
       return;
     }
+    const selection = getRoutableModelSelection(activeThread.modelSelection);
+    if (!selection) return;
     void input.interactions.onCreateHandoffBranch(
-      activeThread.modelSelection,
+      selection,
       "Continue this work in a fresh branch with the generated handoff.",
     );
   }, [input.base.activeThread, input.interactions]);

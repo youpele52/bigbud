@@ -1,7 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-const gitStatus = vi.hoisted(() => ({ value: "available" as "available" | "missing" }));
 const sidebarPreferences = vi.hoisted(() => ({ hidden: [] as string[] }));
 
 vi.mock("../../stores/ui/search.store", () => ({
@@ -13,16 +12,11 @@ vi.mock("../../rpc/serverState", () => ({
   useServerKeybindings: () => [],
 }));
 
-vi.mock("./Sidebar.actions.git", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./Sidebar.actions.git")>()),
-  usePluginGitAvailability: () => ({ status: gitStatus.value, check: vi.fn() }),
-}));
-
 vi.mock("../../stores/ui/ui.store", () => ({
   useUiStateStore: (selector: (state: unknown) => unknown) =>
     selector({
+      sidebarPrimaryGroupSize: 4,
       sidebarActionOrder: [
-        "plugins",
         "scheduled",
         "games",
         "usage",
@@ -30,7 +24,7 @@ vi.mock("../../stores/ui/ui.store", () => ({
         "pinned",
         "chats",
         "projects",
-        "remote-projects",
+        "remote-workspaces",
       ],
       hiddenSidebarActions: sidebarPreferences.hidden,
       setSidebarActionHidden: vi.fn(),
@@ -76,7 +70,7 @@ function renderActions(newThreadShortcutLabel: string | null = null) {
         pinned: () => <div>Pinned section</div>,
         chats: () => <div>Chats section</div>,
         projects: () => <div>Projects section</div>,
-        "remote-projects": () => <div>Remote Projects section</div>,
+        "remote-workspaces": () => <div>Remote Workspaces section</div>,
       }}
     />,
   );
@@ -97,14 +91,14 @@ describe("SidebarActionsSection", () => {
   });
   it("hides every configurable section while New chat and Search remain fixed", () => {
     sidebarPreferences.hidden = [
-      "plugins",
       "scheduled",
       "games",
       "usage",
+      "resource-monitor",
       "pinned",
       "chats",
       "projects",
-      "remote-projects",
+      "remote-workspaces",
     ];
     try {
       const html = renderActions();
@@ -112,23 +106,18 @@ describe("SidebarActionsSection", () => {
       expect(html).toContain('aria-label="Open search"');
       expect(html).not.toContain("Hidden items");
       expect(html).not.toContain("Pinned section");
-      expect(html).not.toContain("Remote Projects section");
+      expect(html).not.toContain("Remote Workspaces section");
       expect(html).not.toContain('aria-label="Open usage"');
     } finally {
       sidebarPreferences.hidden = [];
     }
   });
-  it("keeps fixed actions visible without a hidden-items row when Git is missing", () => {
-    gitStatus.value = "missing";
-    try {
-      const html = renderActions();
-      expect(html).toContain('aria-label="New chat"');
-      expect(html).toContain('aria-label="Open search"');
-      expect(html).not.toContain('aria-label="Open plugins"');
-      expect(html).not.toContain("Hidden items");
-    } finally {
-      gitStatus.value = "available";
-    }
+  it("has no marketplace action or Git prerequisite prompt", () => {
+    const html = renderActions();
+    expect(html).toContain('aria-label="New chat"');
+    expect(html).toContain('aria-label="Open search"');
+    expect(html).not.toContain('aria-label="Open plugins"');
+    expect(html).not.toContain("Install Git");
   });
   it("renders the New chat, Search, Scheduled, and Usage actions with icons", () => {
     const html = renderActions();
@@ -194,6 +183,6 @@ describe("SidebarActionsSection", () => {
     const html = renderActions();
 
     expect(html).toContain('class="group flex h-7 w-full items-center');
-    expect(html.match(/class="group flex h-7 w-full items-center/g)).toHaveLength(7);
+    expect(html.match(/class="group flex h-7 w-full items-center/g)).toHaveLength(6);
   });
 });

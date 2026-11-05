@@ -6,7 +6,7 @@ import type {
 import { EventId } from "@bigbud/contracts";
 
 import type { Project, SidebarThreadSummary, Thread } from "../../models/types";
-import { isUserInputHistoryActivity } from "./userInputHistory.store";
+import { isTranscriptHistoryActivity } from "./userInputHistory.store";
 import {
   mapMessage,
   mapProposedPlan,
@@ -88,6 +88,7 @@ export function mapThreadSummary(summary: ThreadSummary): Thread {
     createdAt: summary.createdAt,
     archivedAt: null,
     pinnedAt: summary.pinnedAt,
+    organization: summary.organization,
     deletingAt: null,
     updatedAt: summary.updatedAt,
     latestTurn: mapSummaryLatestTurn(summary),
@@ -114,6 +115,7 @@ export function mapSidebarThreadSummary(summary: ThreadSummary): SidebarThreadSu
     createdAt: summary.createdAt,
     archivedAt: null,
     pinnedAt: summary.pinnedAt,
+    organization: summary.organization,
     deletingAt: null,
     updatedAt: summary.updatedAt,
     latestTurn: thread.latestTurn,
@@ -121,7 +123,7 @@ export function mapSidebarThreadSummary(summary: ThreadSummary): SidebarThreadSu
     worktreePath: summary.worktreePath,
     latestUserMessageAt: summary.latestUserMessageAt,
     hasPendingApprovals: summary.isAwaitingApproval,
-    hasPendingUserInput: false,
+    hasPendingUserInput: summary.isAwaitingUserInput ?? false,
     hasActionableProposedPlan: false,
   };
 }
@@ -203,7 +205,7 @@ export function mergeThreadDetail(
         })
       : thread.latestTurn;
   const detailActivities = mergePendingActivities(detail).filter(
-    (activity) => !loadingOlder || isUserInputHistoryActivity(activity),
+    (activity) => !loadingOlder || isTranscriptHistoryActivity(activity),
   );
   const activities = [...thread.activities, ...detailActivities]
     .filter((activity, index, all) => all.findIndex((entry) => entry.id === activity.id) === index)

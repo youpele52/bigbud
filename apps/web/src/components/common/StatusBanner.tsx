@@ -63,38 +63,19 @@ export function StatusBanner({
   return (
     <Alert
       {...alertProps}
-      className={cn(className, centered && "pt-4")}
+      className={cn(centered && "pt-4", className)}
       variant={variant}
       role={role}
     >
-      {centered ? (
-        <div className="col-span-full flex min-w-0 flex-col items-center gap-2 text-center">
-          {icon || (title !== undefined && title !== null) ? (
-            <div
-              data-slot="alert-heading"
-              className="flex min-w-0 items-center justify-center gap-3"
-            >
-              {icon ? <span className="shrink-0 [&>svg]:size-4">{icon}</span> : null}
-              {title !== undefined && title !== null ? <AlertTitle>{title}</AlertTitle> : null}
-            </div>
-          ) : null}
-          <AlertDescription {...descriptionProps}>{description}</AlertDescription>
-        </div>
-      ) : (
-        <>
-          {icon}
-          {title !== undefined && title !== null ? <AlertTitle>{title}</AlertTitle> : null}
-          <AlertDescription {...descriptionProps}>{description}</AlertDescription>
-        </>
-      )}
+      {variant === "loading" ? null : icon}
+      {title !== undefined && title !== null ? <AlertTitle>{title}</AlertTitle> : null}
+      <AlertDescription {...descriptionProps}>{description}</AlertDescription>
       {(action !== undefined && action !== null) || dismissPlacement === "inline" ? (
         <AlertAction
           className={
-            centered
-              ? "absolute right-2 top-2"
-              : dismissPlacement === "corner"
-                ? "col-span-full col-start-1! row-auto! mt-2 flex-wrap"
-                : undefined
+            dismissPlacement === "corner"
+              ? "col-span-full col-start-1! row-auto! row-span-1! mt-2 flex-wrap"
+              : undefined
           }
         >
           {action}

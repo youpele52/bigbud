@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { OpencodeV2SharedBindingConflict } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
+import { V2SharedServiceError } from "./SharedService.errors.ts";
 import { v2ExecutionIssue } from "./Adapter.execution.errors.ts";
 import { makeOwnedClient, v2Request } from "./Client.ts";
 import { V2ResponseSizeError } from "./Client.response.ts";
@@ -52,4 +53,16 @@ it("rejects forged classifications and sensitive arbitrary SDK errors with a mod
       "OpenCode v2 operation failed or remains unconfirmed; no automatic resend or provider fallback.",
     );
   }
+});
+
+it("direct discovery failures also preserve finite stages without versions, messages or causes", () => {
+  const error = new V2SharedServiceError(
+    "registration",
+    "V2 private /path authorization password",
+    "private-version",
+  );
+  Object.assign(error, { cause: new Error("private") });
+  const issue = v2ExecutionIssue(error);
+  expect(issue).toContain("registration-unverified");
+  expect(issue).not.toMatch(/private|password|authorization|\/path/);
 });

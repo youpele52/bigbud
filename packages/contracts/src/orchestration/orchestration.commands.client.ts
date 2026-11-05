@@ -33,6 +33,10 @@ import {
   ThreadMessageSubmitCommand,
 } from "./orchestration.commands.client.messageSubmit";
 import { ThreadRecoveryResolveCommand } from "./orchestration.recovery";
+import {
+  ThreadOrganizationMoveCommand,
+  ThreadOrganizationSnoozeCommand,
+} from "./orchestration.organization";
 
 export const ProjectCreateCommand = Schema.Struct({
   type: Schema.Literal("project.create"),
@@ -178,6 +182,21 @@ export const ThreadQueuedPromptFlushCommand = Schema.Struct({
   threadId: ThreadId,
   messageIds: Schema.Array(MessageId),
   messageId: MessageId,
+  /** Captured incarnation fences redelivery under a reused message ID. */
+  promptVersions: Schema.optional(
+    Schema.Array(
+      Schema.Struct({ id: MessageId, createdAt: IsoDateTime, alreadySent: Schema.Boolean }),
+    ),
+  ),
+  expectedTurnId: Schema.optional(Schema.NullOr(TurnId)),
+  expectedSessionEpoch: Schema.optional(NonNegativeInt),
+  releaseSettings: Schema.optional(
+    Schema.Struct({
+      modelSelection: Schema.optional(ModelSelection),
+      runtimeMode: RuntimeMode,
+      interactionMode: ProviderInteractionMode,
+    }),
+  ),
   acknowledged: Schema.optional(Schema.Boolean),
   /** The user's "Send now": releases a held queue (`queueHold`). The server never sets it. */
   userRelease: Schema.optional(Schema.Boolean),
@@ -338,6 +357,8 @@ export const DispatchableClientOrchestrationCommand = Schema.Union([
   ThreadPathCheckpointRestoreCommand,
   ThreadSessionStopCommand,
   ThreadRecoveryResolveCommand,
+  ThreadOrganizationMoveCommand,
+  ThreadOrganizationSnoozeCommand,
 ]);
 export type DispatchableClientOrchestrationCommand =
   typeof DispatchableClientOrchestrationCommand.Type;
@@ -372,5 +393,7 @@ export const ClientOrchestrationCommand = Schema.Union([
   ThreadPathCheckpointRestoreCommand,
   ThreadSessionStopCommand,
   ThreadRecoveryResolveCommand,
+  ThreadOrganizationMoveCommand,
+  ThreadOrganizationSnoozeCommand,
 ]);
 export type ClientOrchestrationCommand = typeof ClientOrchestrationCommand.Type;

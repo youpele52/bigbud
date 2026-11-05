@@ -1,12 +1,8 @@
-import { BUILT_IN_CHATS_PROJECT_ID, isBuiltInChatsProject } from "@bigbud/contracts";
 import { Outlet, createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEffect, useCallback } from "react";
 
-import {
-  resolveContextualNewThreadOptions,
-  resolveNewChatOptions,
-  useHandleNewThread,
-} from "../hooks/useHandleNewThread";
+import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { resolveNewThreadShortcutTarget } from "../hooks/useHandleNewThread.shortcuts";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { newCommandId, newProjectId } from "../lib/utils";
 import { dispatchCommandWithOutcomeRecovery } from "../lib/orchestrationCommandRecovery";
@@ -18,7 +14,7 @@ import { useServerProviders } from "../rpc/serverState";
 import { selectThreadTerminalState } from "../stores/terminal";
 import { useTerminalStateStore } from "../stores/terminal";
 import { useThreadSelectionStore } from "../stores/thread";
-import { useCommandPaletteStore, useSearchStore } from "../stores/ui";
+import { useCommandPaletteStore, useSearchStore, useUiStateStore } from "../stores/ui";
 import { closeBrowserPanel, toggleBrowserPanel } from "~/stores/browser/browserPanel.actions";
 import { closeFilesPanel, toggleFilesPanel } from "~/stores/files/filesPanel.coordinator";
 import { toggleGitPanel } from "~/stores/git/gitPanel.coordinator";
@@ -27,7 +23,6 @@ import { toggleSideChat } from "~/components/chat/side-chat/sideChat.actions";
 import { closeTerminalPanel } from "~/stores/terminal/terminalPanel.coordinator";
 import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
 import { toastManager } from "~/components/ui/toast";
-import { resolveSidebarNewThreadEnvMode } from "~/components/sidebar/Sidebar.logic";
 import { useSidebar } from "~/components/ui/sidebar";
 import { useSettings } from "~/hooks/useSettings";
 import { useServerKeybindings } from "~/rpc/serverState";
@@ -55,8 +50,8 @@ function ChatRouteGlobalShortcuts({
 }: ChatRouteGlobalShortcutsProps) {
   const clearSelection = useThreadSelectionStore((state) => state.clearSelection);
   const selectedThreadIdsSize = useThreadSelectionStore((state) => state.selectedThreadIds.size);
-  const { activeDraftThread, activeThread, defaultProjectId, handleNewThread, routeThreadId } =
-    useHandleNewThread();
+  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
+  const { activeDraftThread, activeThread, handleNewThread, routeThreadId } = useHandleNewThread();
   const keybindings = useServerKeybindings();
   const terminalOpen = useTerminalStateStore((state) =>
     routeThreadId
@@ -108,35 +103,16 @@ function ChatRouteGlobalShortcuts({
         return;
       }
 
-      if (command === "chat.newLocal") {
-        const projectId =
-          activeThread?.projectId ?? activeDraftThread?.projectId ?? defaultProjectId ?? null;
-        if (!projectId) return;
+      if (command === "chat.new" || command === "chat.newLocal") {
         event.preventDefault();
         event.stopPropagation();
-        void handleNewThread(projectId, {
-          envMode: resolveSidebarNewThreadEnvMode({
-            defaultEnvMode: appSettings.defaultThreadEnvMode,
-          }),
+        const target = resolveNewThreadShortcutTarget({
+          command,
+          activeThread,
+          activeDraftThread,
+          selectedProjectId,
         });
-        return;
-      }
-
-      if (command === "chat.new") {
-        event.preventDefault();
-        event.stopPropagation();
-        const projectId =
-          activeThread?.projectId ?? activeDraftThread?.projectId ?? defaultProjectId ?? null;
-        const targetProjectId =
-          projectId && !isBuiltInChatsProject(projectId)
-            ? BUILT_IN_CHATS_PROJECT_ID
-            : (projectId ?? BUILT_IN_CHATS_PROJECT_ID);
-        void handleNewThread(
-          targetProjectId,
-          isBuiltInChatsProject(targetProjectId)
-            ? resolveNewChatOptions()
-            : resolveContextualNewThreadOptions({ activeDraftThread, activeThread }),
-        );
+        void handleNewThread(target.projectId, target.options);
         return;
       }
 
@@ -267,7 +243,7 @@ function ChatRouteGlobalShortcuts({
     clearSelection,
     handleNewThread,
     keybindings,
-    defaultProjectId,
+    selectedProjectId,
     selectedThreadIdsSize,
     terminalOpen,
     appSettings.defaultThreadEnvMode,

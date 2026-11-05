@@ -26,6 +26,7 @@ import {
 } from "../ChatView.logic";
 
 import { useServerProviders } from "../../../../rpc/serverState";
+import { getRoutableModelSelection } from "../../../../models/provider/selection-helpers.models";
 import { getDefaultModelSelection } from "../../../../models/provider/provider.models";
 import { useChatViewComposerDraftActions } from "./chat-view-base-state.actions.hooks";
 import { useChatViewBaseEphemeralState } from "./chat-view-base-state.ephemeral.hooks";
@@ -195,7 +196,7 @@ export function useChatViewBaseState({ threadId }: ChatViewBaseStateInput) {
         ? buildLocalDraftThread(
             threadId,
             draftThread,
-            fallbackDraftProject?.defaultModelSelection ??
+            getRoutableModelSelection(fallbackDraftProject?.defaultModelSelection) ??
               getDefaultModelSelection(serverProviders),
             localDraftError,
           )

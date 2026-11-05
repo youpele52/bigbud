@@ -48,4 +48,76 @@ export const V2_IMPLEMENTATION_MANIFEST = {
       ],
     ],
   },
+  v3: {
+    format: "bigbud.thread.implementation.sources.v1",
+    bootstrapAbi: "bigbud.thread.bootstrap.v4",
+    canonicalRequestAbi: "bigbud.thread.canonical.v2",
+    resultEncoding: "bigbud.thread.final-json.v1",
+    schemaDigest: "024e26ee0ac62d411a2715fd2a91d52b45666bf4169b629f2bb857d1ed1db2e6",
+    implementationDigest: "8d41357ee670717a89ea00fe72154162efe0f10b6e62f0b3509d4b7cd5828fed",
+    sources: [
+      [
+        "Orchestration.implementation.types.ts",
+        "a7bfc4bcd9ecf4853d149cb3a4f4a77b116a04f7e5adad671d15cf1bae613707",
+      ],
+      [
+        "Orchestration.implementation.types.v3.ts",
+        "36afbb472ee93dc1e55813a5738e15b368859a4fa338e5e94f68c4f3e4df23eb",
+      ],
+      [
+        "Orchestration.implementation.v1.ts",
+        "07ad4d0c58e00679cb0777524f608b3f571f96d0d0c4157a23cb4c86483611dd",
+      ],
+      [
+        "Orchestration.implementation.v3.ts",
+        "0f4698c87d349434d7c69c5d14ac287f4612b7d00e3dab55a21cf597f409ee8b",
+      ],
+      [
+        "Orchestration.plugin.specs.ts",
+        "614c41c704bc33dd72c7b0b0dde50bc0cd8e9d474a40542ae2ba3f411a49d853",
+      ],
+      [
+        "Orchestration.plugin.specs.v4.ts",
+        "4ed68206a2f2792ce1c48b2d68a280bf50963f2af2a3a18a665c8c14a790afec",
+      ],
+    ],
+  },
+  v4: {
+    format: "bigbud.thread.implementation.sources.v1",
+    bootstrapAbi: "bigbud.thread.bootstrap.v4",
+    canonicalRequestAbi: "bigbud.thread.canonical.v2",
+    resultEncoding: "bigbud.thread.final-json.v1",
+    schemaDigest: "024e26ee0ac62d411a2715fd2a91d52b45666bf4169b629f2bb857d1ed1db2e6",
+    implementationDigest: "baba1b9196320f7843df5a3db981e4616a5a511f662ae0253c1aabfe996719b3",
+    sources: [
+      [
+        "Orchestration.implementation.types.ts",
+        "a7bfc4bcd9ecf4853d149cb3a4f4a77b116a04f7e5adad671d15cf1bae613707",
+      ],
+      [
+        "Orchestration.implementation.types.v3.ts",
+        "36afbb472ee93dc1e55813a5738e15b368859a4fa338e5e94f68c4f3e4df23eb",
+      ],
+      [
+        "Orchestration.implementation.v1.ts",
+        "07ad4d0c58e00679cb0777524f608b3f571f96d0d0c4157a23cb4c86483611dd",
+      ],
+      [
+        "Orchestration.implementation.v3.ts",
+        "0f4698c87d349434d7c69c5d14ac287f4612b7d00e3dab55a21cf597f409ee8b",
+      ],
+      [
+        "Orchestration.implementation.v4.ts",
+        "6b0da66f864285bf150de133786aebf28c502aa5ded731cc79ce18b1430fc236",
+      ],
+      [
+        "Orchestration.plugin.specs.ts",
+        "614c41c704bc33dd72c7b0b0dde50bc0cd8e9d474a40542ae2ba3f411a49d853",
+      ],
+      [
+        "Orchestration.plugin.specs.v4.ts",
+        "4ed68206a2f2792ce1c48b2d68a280bf50963f2af2a3a18a665c8c14a790afec",
+      ],
+    ],
+  },
 } as const;

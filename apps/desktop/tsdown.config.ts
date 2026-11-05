@@ -18,4 +18,9 @@ export default defineConfig([
     ...shared,
     entry: ["src/preload.ts"],
   },
+  {
+    // Restricted computer-use safety preload; never the broad preload.
+    ...shared,
+    entry: { "computerUseSafety.preload": "src/computer-use/safetyPreload.ts" },
+  },
 ]);

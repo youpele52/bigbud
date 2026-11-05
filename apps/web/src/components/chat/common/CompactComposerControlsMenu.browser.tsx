@@ -58,7 +58,7 @@ async function mountMenu(props?: {
     provider === "claudeAgent"
       ? [
           {
-            slug: "claude-opus-4-6",
+            slug: "opus",
             name: "Claude Opus 4.6",
             isCustom: false,
             capabilities: {
@@ -76,7 +76,7 @@ async function mountMenu(props?: {
             },
           },
           {
-            slug: "claude-haiku-4-5",
+            slug: "haiku",
             name: "Claude Haiku 4.5",
             isCustom: false,
             capabilities: {
@@ -88,7 +88,7 @@ async function mountMenu(props?: {
             },
           },
           {
-            slug: "claude-sonnet-4-6",
+            slug: "default",
             name: "Claude Sonnet 4.6",
             isCustom: false,
             capabilities: {

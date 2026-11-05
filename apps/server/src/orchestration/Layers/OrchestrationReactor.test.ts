@@ -8,6 +8,7 @@ import { OrchestrationReactor } from "../Services/OrchestrationReactor.ts";
 import { SchedulerReactor } from "../Services/SchedulerReactor.ts";
 import { ThreadWatchReactor } from "../Services/ThreadWatchReactor.ts";
 import { LearningReactor } from "../Services/LearningReactor.ts";
+import { ThreadOrganizationReactor } from "../Services/ThreadOrganizationReactor.ts";
 import { ProviderTurnSupervisor } from "../Services/ProviderTurnSupervisor.ts";
 import { makeOrchestrationReactor } from "./OrchestrationReactor.ts";
 
@@ -71,6 +72,14 @@ describe("OrchestrationReactor", () => {
           }),
         ),
         Layer.provideMerge(
+          Layer.succeed(ThreadOrganizationReactor, {
+            start: () => {
+              started.push("thread-organization-reactor");
+              return Effect.void;
+            },
+          }),
+        ),
+        Layer.provideMerge(
           Layer.succeed(LearningReactor, {
             start: () => {
               started.push("learning-reactor");
@@ -102,6 +111,7 @@ describe("OrchestrationReactor", () => {
       "scheduler-reactor",
       "thread-watch-reactor",
       "learning-reactor",
+      "thread-organization-reactor",
     ]);
 
     await Effect.runPromise(Scope.close(scope, Exit.void));

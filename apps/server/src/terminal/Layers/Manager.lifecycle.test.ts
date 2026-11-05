@@ -154,6 +154,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       expect(process).toBeDefined();
       if (!process) return;
 
+      process.exitOnSignal = "SIGKILL";
       const closeFiber = yield* manager.close({ threadId: "thread-1" }).pipe(Effect.forkScoped);
       yield* Effect.yieldNow;
       yield* TestClock.adjust("10 millis");

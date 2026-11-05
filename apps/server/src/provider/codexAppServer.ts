@@ -5,7 +5,7 @@ import type {
   ServerProviderSkill,
 } from "@bigbud/contracts/server/server.providers.ts";
 import { readCodexAccountSnapshot, type CodexAccountSnapshot } from "./codexAccount";
-import { parseCodexModelsResult } from "./codexAppServer.models";
+import { CodexModelPages } from "./codexAppServer.models.pagination.ts";
 import { nonEmptyTrimmed, readArray, readObject } from "./codexAppServer.parse";
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { normalizeCodexUsageLimits } from "./Layers/Codex/Provider.usageLimits.ts";
@@ -113,13 +113,16 @@ export async function probeCodexDiscovery(input: {
     let account: CodexAccountSnapshot | undefined;
     let skills: ReadonlyArray<ServerProviderSkill> | undefined = input.usageOnly ? [] : undefined;
     let models: ReadonlyArray<ServerProviderModel> | undefined = input.usageOnly ? [] : undefined;
+    const modelPages = new CodexModelPages();
     let enrichmentTimer: ReturnType<typeof setTimeout> | undefined;
+    let modelTimer: ReturnType<typeof setTimeout> | undefined;
     let usageTimer: ReturnType<typeof setTimeout> | undefined;
     let usageComplete = !input.includeUsageLimits;
     let usageLimits: ServerProviderUsageLimits | undefined;
 
     const cleanup = () => {
       clearTimeout(enrichmentTimer);
+      clearTimeout(modelTimer);
       clearTimeout(usageTimer);
       input.signal?.removeEventListener("abort", onAbort);
       output.removeAllListeners();
@@ -193,7 +196,9 @@ export async function probeCodexDiscovery(input: {
         return;
       }
 
-      child.stdin.write(`${JSON.stringify(message)}\n`);
+      child.stdin.write(`${JSON.stringify(message)}\n`, (error) => {
+        if (error) fail(error);
+      });
     };
 
     output.on("line", (line) => {
@@ -219,7 +224,11 @@ export async function probeCodexDiscovery(input: {
 
         writeMessage({ method: "initialized" });
         if (!input.usageOnly) {
-          writeMessage({ id: 2, method: "model/list", params: {} });
+          modelTimer = setTimeout(
+            () => fail(new Error("Codex model/list exceeded its total deadline.")),
+            5000,
+          );
+          writeMessage({ id: 2, method: "model/list", params: { cursor: null, limit: 100 } });
           writeMessage({ id: 3, method: "skills/list", params: { cwds: [input.cwd] } });
         }
         writeMessage({ id: 4, method: "account/read", params: {} });
@@ -233,9 +242,20 @@ export async function probeCodexDiscovery(input: {
           return;
         }
 
-        models = parseCodexModelsResult(response.result);
-        if (models === undefined) {
-          fail(new Error("model/list returned malformed data."));
+        try {
+          const page = modelPages.append(response.result);
+          if (page.nextCursor !== null) {
+            writeMessage({
+              id: 2,
+              method: "model/list",
+              params: { cursor: page.nextCursor, limit: 100 },
+            });
+            return;
+          }
+          models = page.models;
+          clearTimeout(modelTimer);
+        } catch (error) {
+          fail(error);
           return;
         }
         maybeResolve();
@@ -308,6 +328,7 @@ export async function probeCodexDiscovery(input: {
     });
 
     child.once("error", fail);
+    child.stdin.on("error", fail);
     child.once("exit", (code, signal) => {
       if (completed) return;
       if (models !== undefined) {

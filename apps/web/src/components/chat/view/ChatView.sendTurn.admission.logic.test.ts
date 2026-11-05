@@ -51,7 +51,7 @@ describe("canQueueComposerPrompt", () => {
 
 describe("changedQueuedPromptSettings", () => {
   const unchanged = {
-    selectedModelSelection: thread.modelSelection,
+    selectedModelSelection: { provider: "codex" as const, model: "gpt-5" },
     runtimeMode: thread.runtimeMode,
     interactionMode: thread.interactionMode,
   };

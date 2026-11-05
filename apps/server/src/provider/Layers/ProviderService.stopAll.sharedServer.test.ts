@@ -13,7 +13,7 @@ import { makeRunStopAll } from "./ProviderService.operations.ts";
 
 const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** One shared OpenCode server, reference-counted, as OpenCode and Kilo use in production. */
+/** One shared OpenCode server, reference-counted, for the retained V1 protocol tests. */
 function sharedServer(timeline: string[]) {
   const state = { references: 0, releases: 0 };
   const client = makeMockOpencodeClient() as { session: Record<string, unknown> };
@@ -41,7 +41,7 @@ function sharedServer(timeline: string[]) {
   return { manager, state };
 }
 
-const adapterOn = (provider: "opencode" | "kilocode", serverManager: OpencodeServerManagerShape) =>
+const adapterOn = (provider: "opencode", serverManager: OpencodeServerManagerShape) =>
   Effect.gen(function* () {
     const methods = makeSessionMethods({
       provider,
@@ -76,23 +76,18 @@ const adapterOn = (provider: "opencode" | "kilocode", serverManager: OpencodeSer
   });
 
 describe("provider stop-all on the shared OpenCode server", () => {
-  it.effect("stops OpenCode and Kilo concurrently, releasing every shared handle once", () =>
+  it.effect("stops concurrent OpenCode sessions, releasing every shared handle once", () =>
     Effect.gen(function* () {
       const timeline: string[] = [];
       const { manager, state } = sharedServer(timeline);
-      const adapters = [
-        yield* adapterOn("opencode", manager),
-        yield* adapterOn("kilocode", manager),
-      ];
-      assert.strictEqual(state.references, 4);
+      const adapters = [yield* adapterOn("opencode", manager)];
+      assert.strictEqual(state.references, 2);
 
       const providerOf = (threadId: ThreadId) => threadId.split("-thread-")[0] as ProviderKind;
       const directory = {
         listThreadIds: () =>
           Effect.succeed(
-            ["opencode", "kilocode"].flatMap((p) =>
-              [1, 2].map((i) => ThreadId.makeUnsafe(`${p}-thread-${i}`)),
-            ),
+            ["opencode"].flatMap((p) => [1, 2].map((i) => ThreadId.makeUnsafe(`${p}-thread-${i}`))),
           ),
         getProvider: (threadId: ThreadId) => Effect.succeed(providerOf(threadId)),
         upsert: (binding: { threadId: ThreadId }) =>
@@ -104,30 +99,24 @@ describe("provider stop-all on the shared OpenCode server", () => {
 
       yield* makeRunStopAll(adapters as never, directory, upsertSessionBinding, analytics);
 
-      assert.deepStrictEqual(state, { references: 0, releases: 4 });
+      assert.deepStrictEqual(state, { references: 0, releases: 2 });
       const firstStop = timeline.findIndex((entry) => entry.startsWith("server:"));
-      const lastStop = timeline.findLastIndex((entry) => entry.startsWith("server:"));
-      const firstUpsert = timeline.findIndex((entry) => entry.startsWith("directory:"));
+
       // OpenCode v1 is retired: its sessions are stopped, but its bindings are left untouched.
       assert.deepStrictEqual(
         timeline.filter((entry) => !entry.startsWith("server:")),
-        [
-          "binding:kilocode-thread-1",
-          "binding:kilocode-thread-2",
-          "directory:stopped:kilocode-thread-1",
-          "directory:stopped:kilocode-thread-2",
-        ],
+        [],
       );
       assert.ok(timeline.slice(0, firstStop).every((entry) => entry.startsWith("binding:")));
-      assert.ok(firstUpsert > lastStop);
-      // Both providers' session deletes are in flight on the shared server at the same time.
+      // Both session deletes are in flight on the shared server at the same time.
       const starts = timeline.filter((entry) => entry === "server:delete:start").length;
       const firstEnd = timeline.indexOf("server:delete:end");
-      assert.strictEqual(starts, 4);
-      assert.ok(timeline.slice(0, firstEnd).filter((e) => e === "server:delete:start").length > 2);
+      assert.strictEqual(starts, 2);
+      assert.ok(
+        timeline.slice(0, firstEnd).filter((e) => e === "server:delete:start").length === 2,
+      );
       // Each adapter released its own handles; neither released the other's.
       assert.strictEqual(timeline.filter((e) => e === "server:release:opencode").length, 2);
-      assert.strictEqual(timeline.filter((e) => e === "server:release:kilocode").length, 2);
     }),
   );
 });

@@ -150,6 +150,15 @@ describe("OrchestrationEngine queued prompt recovery", () => {
         await second.runPromise(engine.getReadModel())
       ).threads[0]!.queuedPrompts!.map((prompt) => prompt.id);
       await second.runPromise(engine.dispatch(queueCommand(threadId, "suffix-c", "Gamma")));
+      // Hold automatic release so this test exercises the explicitly captured prefix.
+      await second.runPromise(
+        engine.dispatch({
+          type: "thread.session.stop",
+          commandId: CommandId.makeUnsafe("hold-prefix"),
+          threadId,
+          createdAt,
+        }),
+      );
       await second.runPromise(
         engine.dispatch(gateCommand(threadId, "approval.resolved", "approval-prefix")),
       );
@@ -157,6 +166,7 @@ describe("OrchestrationEngine queued prompt recovery", () => {
         engine.dispatch({
           type: "thread.queued-prompt.flush",
           commandId: CommandId.makeUnsafe("cmd-prefix-flush"),
+          userRelease: true,
           threadId,
           messageIds: observed,
           messageId: MessageId.makeUnsafe("message-prefix-flush"),

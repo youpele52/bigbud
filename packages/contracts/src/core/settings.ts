@@ -1,10 +1,14 @@
 import { Effect } from "effect";
+import {
+  BROWSER_SEARCH_ENGINES,
+  DEFAULT_BROWSER_SEARCH_ENGINE,
+} from "../constants/browser.constant";
 import { TerminalInteractionSettingsFields } from "./settings.terminal";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedString } from "./baseSchemas";
-import { ModelSelection } from "../orchestration/orchestration";
-import { ProviderKind } from "../orchestration/orchestration.provider";
+import { SettingsHiddenProviders } from "./settings.retiredProviders";
+import { ModelSelection } from "../orchestration/orchestration.provider";
 import {
   TIMESTAMP_FORMATS,
   DEFAULT_TIMESTAMP_FORMAT,
@@ -15,8 +19,11 @@ import {
   THREAD_ENV_MODES,
 } from "../constants/settings.constant";
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
+import { InyosiraIdleSettingsFields } from "./settings.inyosira";
+import { MuseSettings } from "./settings.muse";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
+import { ComputerUseDeliveryMode } from "./settings.computerUsePolicy";
 import {
   AgentBrowserPreference,
   ClaudeSubagentCap,
@@ -28,8 +35,10 @@ import {
   ThreadEnvMode,
 } from "./settings.serverShared";
 
+export * from "./settings.muse";
 export * from "./settings.serverPatch";
 export * from "./settings.threadRetention";
+export * from "./settings.inyosira";
 export {
   AgentBrowserPreference,
   ClaudeSubagentCap,
@@ -95,6 +104,9 @@ const ContextWindowWarningThreshold = Schema.Int.check(
 ).check(Schema.isLessThanOrEqualTo(CONTEXT_WINDOW_WARNING_THRESHOLD_MAX));
 
 export const ClientSettingsSchema = Schema.Struct({
+  browserSearchEngine: Schema.Literals(BROWSER_SEARCH_ENGINES).pipe(
+    Schema.withDecodingDefault(() => DEFAULT_BROWSER_SEARCH_ENGINE),
+  ),
   openWebLinksInApp: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   confirmThreadArchive: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   confirmThreadDelete: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
@@ -206,13 +218,6 @@ export const OpencodeSettings = Schema.Struct({
 });
 export type OpencodeSettings = typeof OpencodeSettings.Type;
 
-export const KilocodeSettings = Schema.Struct({
-  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
-  binaryPath: makeBinaryPathSetting("kilo"),
-  customModels: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(() => [])),
-});
-export type KilocodeSettings = typeof KilocodeSettings.Type;
-
 export const PiSettings = Schema.Struct({
   enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   binaryPath: makeBinaryPathSetting("pi"),
@@ -268,12 +273,12 @@ export const ServerSettings = Schema.Struct({
     claudeAgent: ClaudeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     cliProxy: CliProxySettings.pipe(Schema.withDecodingDefault(() => ({}))),
     copilot: CopilotSettings.pipe(Schema.withDecodingDefault(() => ({}))),
-    kilocode: KilocodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencode: OpencodeSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     opencodeV2: OpencodeV2DevelopmentSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     pi: PiSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     cursor: CursorSettings.pipe(Schema.withDecodingDefault(() => ({}))),
     devin: DevinSettings.pipe(Schema.withDecodingDefault(() => ({}))),
+    muse: MuseSettings.pipe(Schema.withDecodingDefault(() => ({}))),
   }).pipe(Schema.withDecodingDefault(() => ({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(() => ({}))),
   mobileRemoteControl: MobileRemoteControlSettings.pipe(Schema.withDecodingDefault(() => ({}))),
@@ -284,6 +289,9 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "bigbud" as const satisfies AgentBrowserPreference),
   ),
   computerUseEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  computerUseDeliveryMode: ComputerUseDeliveryMode.pipe(
+    Schema.withDecodingDefault(() => "background" as const),
+  ),
   hasSeenComputerUsePrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   computerUseCheckInIntervalMs: ComputerUseCheckInIntervalMs.pipe(
     Schema.withDecodingDefault(() => DEFAULT_COMPUTER_USE_CHECK_IN_INTERVAL_MS),
@@ -292,10 +300,11 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS),
   ),
   /** Server-side so delegation can honor it with no client connected (OD1). */
-  hiddenComposerProviders: Schema.Array(ProviderKind).pipe(Schema.withDecodingDefault(() => [])),
+  hiddenComposerProviders: SettingsHiddenProviders.pipe(Schema.withDecodingDefault(() => [])),
   delegatedThreadModelChoice: DelegatedThreadModelChoice.pipe(
     Schema.withDecodingDefault(() => "agent" as const satisfies DelegatedThreadModelChoice),
   ),
+  ...InyosiraIdleSettingsFields,
 });
 export type ServerSettings = typeof ServerSettings.Type;
 

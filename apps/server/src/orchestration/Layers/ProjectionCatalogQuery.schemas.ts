@@ -4,8 +4,9 @@ import {
   ThreadSummary,
   type ThreadSummary as ThreadSummaryType,
 } from "@bigbud/contracts/orchestration/orchestration.catalog.ts";
-import { ModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
+import { HistoricalModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
 import { NonNegativeInt } from "@bigbud/contracts/core/baseSchemas.ts";
+import { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import {
   ThreadDetailPendingApproval,
   ThreadDetailCheckpoint,
@@ -31,13 +32,15 @@ export const ProjectThreadCountDbRow = ProjectThreadCount;
 
 export const ThreadSummaryDbRow = ThreadSummary.mapFields(
   Struct.assign({
-    modelSelection: Schema.fromJsonString(ModelSelection),
+    modelSelection: Schema.fromJsonString(HistoricalModelSelection),
+    organization: Schema.fromJsonString(ThreadOrganization),
     // projection_thread_sessions.retained_family; NULL when the thread has no session row.
     retainedFamily: Schema.NullOr(Schema.Number),
     isWatching: Schema.Number,
     isWatched: Schema.Number,
     isDelegated: Schema.Number,
     isAwaitingApproval: Schema.Number,
+    isAwaitingUserInput: Schema.Number,
   }),
 );
 export type ThreadSummaryDbRow = typeof ThreadSummaryDbRow.Type;
@@ -51,6 +54,7 @@ export function normalizeThreadSummary(row: ThreadSummaryDbRow): ThreadSummaryTy
     isWatched: row.isWatched === 1,
     isDelegated: row.isDelegated === 1,
     isAwaitingApproval: row.isAwaitingApproval === 1,
+    isAwaitingUserInput: row.isAwaitingUserInput === 1,
   };
 }
 

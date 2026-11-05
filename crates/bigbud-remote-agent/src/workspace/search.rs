@@ -5,6 +5,12 @@ use std::fs::{self, DirEntry, ReadDir};
 use super::{DirectoryEntry, WorkspaceError, WorkspaceRoot, map_io};
 use super::{MAX_SEARCH_FILES, MAX_SEARCH_RESULTS, MAX_TEXT_PREVIEW_BYTES};
 
+#[path = "search.rank.rs"]
+mod rank;
+#[cfg(test)]
+#[path = "search.tests.rs"]
+mod tests;
+
 const IGNORED_DIRECTORIES: [&str; 4] = [".git", "node_modules", "target", ".bigbud"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,41 +44,83 @@ impl WorkspaceRoot {
         query: &str,
         max_results: usize,
     ) -> Result<Vec<DirectoryEntry>, WorkspaceError> {
+        self.search_entries_bounded(relative_path, query, max_results, MAX_SEARCH_FILES)
+    }
+
+    fn search_entries_bounded(
+        &self,
+        relative_path: &str,
+        query: &str,
+        max_results: usize,
+        entry_limit: usize,
+    ) -> Result<Vec<DirectoryEntry>, WorkspaceError> {
         if query.is_empty() {
             return Err(WorkspaceError::EmptySearchQuery);
         }
-        let start = self.resolve_existing(relative_path)?;
-        let mut queue = VecDeque::from([start]);
-        let mut results = Vec::new();
+        // Validate explicitly requested roots even when no results were requested.
+        self.resolve_name_search_directory(relative_path)?;
         let result_limit = max_results.min(MAX_SEARCH_RESULTS);
         if result_limit == 0 {
-            return Ok(results);
+            return Ok(Vec::new());
         }
-        while let Some(directory) = queue.pop_front() {
+        let query = rank::normalize_query(query);
+        let mut queue = VecDeque::from([relative_path.to_owned()]);
+        let mut results = rank::RankedEntries::new(result_limit);
+        let mut visited_entries = 0;
+        while let Some(relative_directory) = queue.pop_front() {
+            // Revalidate queued directories in case a component became a link.
+            let directory = self.resolve_name_search_directory(&relative_directory)?;
             for entry in read_directory(&directory)? {
                 let entry = entry.map_err(map_io)?;
-                if entry.file_type().map_err(map_io)?.is_symlink() {
-                    return Err(WorkspaceError::SymlinkComponent);
+                // Count all encountered entries, including links and ignored dirs.
+                // This also bounds queued directories and searches with no matches.
+                if visited_entries >= entry_limit {
+                    return Err(WorkspaceError::SearchLimitExceeded);
                 }
-                let name = entry.file_name();
-                if is_ignored_directory(&entry, &name) {
+                visited_entries += 1;
+                let metadata = fs::symlink_metadata(entry.path()).map_err(map_io)?;
+                if is_search_link(&metadata) {
                     continue;
                 }
-                let metadata = entry.metadata().map_err(map_io)?;
-                if metadata.is_dir() {
-                    queue.push_back(entry.path());
+                let name = entry.file_name();
+                // The wire path is UTF-8. An unrepresentable discovered candidate
+                // must not prevent searching its representable siblings.
+                if name.to_str().is_none() {
+                    continue;
                 }
-                if name.to_string_lossy().contains(query) {
-                    results.push(self.directory_entry(&entry, &metadata)?);
-                    if results.len() >= result_limit {
-                        results.sort_by(|left, right| left.path.cmp(&right.path));
-                        return Ok(results);
-                    }
+                if metadata.is_dir() && IGNORED_DIRECTORIES.iter().any(|ignored| name == *ignored) {
+                    continue;
+                }
+                let candidate = self.directory_entry(&entry, &metadata)?;
+                if metadata.is_dir() {
+                    queue.push_back(candidate.path.clone());
+                }
+                if let Some(score) = rank::score_entry(&candidate, &query) {
+                    results.insert(candidate, score);
                 }
             }
         }
-        results.sort_by(|left, right| left.path.cmp(&right.path));
-        Ok(results)
+        Ok(results.into_entries())
+    }
+
+    fn resolve_name_search_directory(
+        &self,
+        relative_path: &str,
+    ) -> Result<std::path::PathBuf, WorkspaceError> {
+        #[cfg(windows)]
+        {
+            // Windows junctions are reparse points but not necessarily symlinks.
+            // Inspect the lexical components before canonicalization hides them.
+            let relative = super::path::validate_relative_path(relative_path)?;
+            let mut current = self.root().to_path_buf();
+            for component in relative.components() {
+                current.push(component);
+                if is_search_link(&fs::symlink_metadata(&current).map_err(map_io)?) {
+                    return Err(WorkspaceError::SymlinkComponent);
+                }
+            }
+        }
+        self.resolve_directory(relative_path)
     }
 
     pub fn search_content(
@@ -169,6 +217,21 @@ impl WorkspaceRoot {
             size_bytes: metadata.len(),
             modified_unix_ms: super::metadata_modified_unix_ms(metadata)?,
         })
+    }
+}
+
+fn is_search_link(metadata: &fs::Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        // Includes symlinks, junctions, and other redirecting reparse points.
+        metadata.file_attributes()
+            & windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT
+            != 0
+    }
+    #[cfg(not(windows))]
+    {
+        metadata.file_type().is_symlink()
     }
 }
 

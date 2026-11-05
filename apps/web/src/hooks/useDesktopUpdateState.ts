@@ -81,7 +81,7 @@ export function useDesktopUpdateState(): UseDesktopUpdateStateResult {
           if (result.completed) {
             if (desktopUpdateState && isUnsignedBuildBlocked(result.state)) {
               toastManager.add({
-                type: "info",
+                type: "warning",
                 title: "Update downloaded",
                 description:
                   "This unsigned build cannot auto-install. Go to Settings → About to install manually.",

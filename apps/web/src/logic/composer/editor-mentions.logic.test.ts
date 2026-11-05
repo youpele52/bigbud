@@ -7,6 +7,15 @@ import {
 import { INLINE_TERMINAL_CONTEXT_PLACEHOLDER } from "../../lib/terminalContext";
 
 describe("splitPromptIntoComposerSegments", () => {
+  it.each(["plugin::example", "plugin:example"])(
+    "recognizes historical %s without falling through to a path",
+    (rawValue) => {
+      expect(splitPromptIntoComposerSegments(`@${rawValue} `)).toEqual([
+        { type: "mention", rawValue, displayLabel: "example", mentionKind: "plugin" },
+        { type: "text", text: " " },
+      ]);
+    },
+  );
   it("splits mention tokens followed by whitespace into mention segments", () => {
     expect(splitPromptIntoComposerSegments("Inspect @AGENTS.md please")).toEqual([
       { type: "text", text: "Inspect " },

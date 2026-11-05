@@ -1,9 +1,10 @@
-import { app, autoUpdater as electronAutoUpdater, BrowserWindow } from "electron";
+import { app, autoUpdater as electronAutoUpdater } from "electron";
 import type { DesktopUpdateState } from "@bigbud/contracts";
 import { autoUpdater } from "electron-updater";
 
 import { formatErrorMessage } from "../logging/logging";
 import { isArm64HostRunningIntelBuild } from "../env/runtimeArch";
+import { broadRendererWindows } from "../window/rendererWindows";
 import { configureUpdaterFeed } from "./autoUpdater.feed";
 import {
   createUpdateInstallCoordinator,
@@ -84,8 +85,7 @@ function resolveUpdaterErrorContext(): DesktopUpdateErrorContext {
 
 export function emitUpdateState(): void {
   if (!_updateState) return;
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (window.isDestroyed()) continue;
+  for (const window of broadRendererWindows()) {
     window.webContents.send(_updateStateChannel, _updateState);
   }
 }

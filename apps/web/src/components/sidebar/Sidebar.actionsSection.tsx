@@ -1,11 +1,4 @@
-import {
-  ClockIcon,
-  Gamepad2,
-  PlugIcon,
-  SearchIcon,
-  SquarePenIcon,
-  ActivityIcon,
-} from "lucide-react";
+import { ClockIcon, Gamepad2, SearchIcon, ActivityIcon } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -20,15 +13,14 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { CSS } from "@dnd-kit/utilities";
 import type { ReactNode } from "react";
-import { openLinkFromClick } from "../../lib/openLink";
 import { useServerKeybindings } from "../../rpc/serverState";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { shortcutLabelForCommand } from "../../models/keybindings";
 import { useSearchStore } from "../../stores/ui/search.store";
 import { useUiStateStore } from "../../stores/ui/ui.store";
+import { NewChatIcon } from "../common/NewChatIcon";
 import { UsageIcon } from "../usage/UsageIcon";
 import { Kbd } from "../ui/kbd";
-import { toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import type { SidebarTopLevelHeaderProps } from "./SidebarSectionLabel";
@@ -38,11 +30,6 @@ import {
   type SidebarActionId,
 } from "./Sidebar.actions.logic";
 import { buildSidebarItemMenuItems } from "./Sidebar.actions.menu";
-import {
-  effectiveHiddenSidebarActions,
-  requestShowPlugins,
-  usePluginGitAvailability,
-} from "./Sidebar.actions.git";
 
 interface SidebarActionsSectionProps {
   onNewChat: () => void;
@@ -50,7 +37,6 @@ interface SidebarActionsSectionProps {
   onOpenAutomations: () => void;
   onOpenUsage: () => void;
   onOpenSystemMonitor: () => void;
-  onOpenPlugins?: () => void;
   onOpenGames: () => void;
   sections: Partial<
     Record<SidebarActionId, (headerProps: SidebarTopLevelHeaderProps) => ReactNode>
@@ -58,7 +44,6 @@ interface SidebarActionsSectionProps {
 }
 
 const ICONS = {
-  plugins: PlugIcon,
   scheduled: ClockIcon,
   games: Gamepad2,
   usage: UsageIcon,
@@ -80,7 +65,7 @@ function ActionRow({
   dragHandleProps,
 }: {
   label: string;
-  icon: typeof SearchIcon;
+  icon: (props: { className?: string }) => ReactNode;
   onClick: () => void;
   onContextMenu?: React.MouseEventHandler<HTMLButtonElement> | undefined;
   shortcut?: string | null | undefined;
@@ -152,7 +137,7 @@ export function SidebarFixedActions({
     <div className="flex flex-col gap-0.5 px-2 pt-2">
       <ActionRow
         label="New chat"
-        icon={SquarePenIcon}
+        icon={NewChatIcon}
         onClick={onNewChat}
         shortcut={newThreadShortcutLabel}
         onContextMenu={onContextMenu}
@@ -174,14 +159,12 @@ export function SidebarActionsSection({
   onOpenAutomations,
   onOpenUsage,
   onOpenSystemMonitor,
-  onOpenPlugins,
   onOpenGames,
   sections,
 }: SidebarActionsSectionProps) {
   const order = useUiStateStore((state) => state.sidebarActionOrder);
+  const primaryGroupSize = useUiStateStore((state) => state.sidebarPrimaryGroupSize);
   const hidden = useUiStateStore((state) => state.hiddenSidebarActions);
-  const git = usePluginGitAvailability();
-  const effectiveHidden = effectiveHiddenSidebarActions(hidden, git.status);
   const setHidden = useUiStateStore((state) => state.setSidebarActionHidden);
   const setAllHidden = useUiStateStore((state) => state.setAllSidebarActionsHidden);
   const reorderAction = useUiStateStore((state) => state.reorderSidebarAction);
@@ -189,52 +172,25 @@ export function SidebarActionsSection({
   const resetOrder = useUiStateStore((state) => state.resetSidebarActionOrder);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const callbacks: Record<keyof typeof ICONS, () => void> = {
-    plugins: () => onOpenPlugins?.(),
     scheduled: onOpenAutomations,
     games: onOpenGames,
     usage: onOpenUsage,
     "resource-monitor": onOpenSystemMonitor,
   };
 
-  const showMissingGitPrompt = () => {
-    toastManager.add({
-      type: "warning",
-      title: "Install Git to show Plugins",
-      description:
-        "Plugins need Git on this computer. Install Git, then try showing Plugins again.",
-      actionProps: {
-        children: "Install Git",
-        onClick: () => openLinkFromClick("https://git-scm.com/install/"),
-      },
-    });
-  };
-  const tryShowPlugins = async () => {
-    await requestShowPlugins({
-      check: git.check,
-      show: () => setHidden("plugins", false),
-      onMissing: showMissingGitPrompt,
-      onUnknown: () =>
-        toastManager.add({
-          type: "warning",
-          title: "Could not check Git",
-          description: "Check the bigbud connection, then try showing Plugins again.",
-        }),
-    });
-  };
-
   const showActionMenu = async (id: SidebarActionId | null, position: { x: number; y: number }) => {
     const api = readNativeApi();
     if (!api) return;
     const shown = order.filter(
-      (entry) =>
-        !effectiveHidden.includes(entry) && (entry in ICONS || sections[entry] !== undefined),
+      (entry) => !hidden.includes(entry) && (entry in ICONS || sections[entry] !== undefined),
     );
     const index = id === null ? -1 : shown.indexOf(id);
     const menuItems = buildSidebarItemMenuItems({
       id,
       order,
       visible: shown,
-      hidden: effectiveHidden,
+      hidden,
+      primaryGroupSize,
     });
     const clicked = await api.contextMenu.show(menuItems, position);
     if (clicked === "hide" && id) setHidden(id, true);
@@ -244,20 +200,17 @@ export function SidebarActionsSection({
     else if (clicked === "move-top" && id && index > 0) moveToEdge(id, "top");
     else if (clicked === "move-bottom" && id && index < shown.length - 1) moveToEdge(id, "bottom");
     else if (clicked === "reset-order") resetOrder();
-    else if (clicked === "show-all") {
-      setAllHidden(false);
-      if (effectiveHidden.includes("plugins")) void tryShowPlugins();
-    } else if (clicked === "hide-all") setAllHidden(true);
+    else if (clicked === "show-all") setAllHidden(false);
+    else if (clicked === "hide-all") setAllHidden(true);
     else if (clicked?.startsWith("show:")) {
-      const hiddenId = effectiveHidden.find((entry) => `show:${entry}` === clicked);
-      if (hiddenId === "plugins") void tryShowPlugins();
-      else if (hiddenId) setHidden(hiddenId, false);
+      const hiddenId = hidden.find((entry) => `show:${entry}` === clicked);
+      if (hiddenId) setHidden(hiddenId, false);
     }
   };
   const visible = order.filter(
-    (id) => !effectiveHidden.includes(id) && (id in ICONS || sections[id] !== undefined),
+    (id) => !hidden.includes(id) && (id in ICONS || sections[id] !== undefined),
   );
-  const groups = sidebarVisualGroups(order, visible);
+  const groups = sidebarVisualGroups(order, visible, primaryGroupSize);
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {

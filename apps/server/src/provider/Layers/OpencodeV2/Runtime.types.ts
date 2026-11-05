@@ -37,7 +37,7 @@ export interface V2RuntimeSession {
     token?: import("./PluginSetup.activation.gate.ts").V2ExecutionReservation | undefined;
     phase: "startup" | "turn" | "uncertain" | "settled";
   };
-  readonly consentPermit?: import("./Application.consent.ts").V2ConsentPermit | undefined;
+  consentPermit?: import("./Application.consent.ts").V2ConsentPermit | undefined;
   readonly sharedTransport?: string;
   readonly resources?: V2SessionResources;
   threadToolsReady?: boolean;
@@ -53,15 +53,20 @@ export interface V2RuntimeSession {
   interruptAcknowledgedSequence?: number;
   readonly threadId: ThreadId;
   readonly native: SessionInfo;
-  readonly lease: V2ProcessLease;
+  lease: V2ProcessLease;
   model: ModelRef;
-  readonly epoch: number;
+  epoch: number;
   readonly storageIdentity: string;
-  readonly unregister: () => void;
-  readonly unsubscribeDeath: () => void;
+  unregister: () => void;
+  unsubscribeDeath: () => void;
   session: ProviderSession;
   row?: ProviderTurnAdmission | undefined;
   stopped: boolean;
+  /** Borrowed transport loss is reversible and is not terminal native/process-loss proof. */
+  transportDetached?: boolean;
+  transportRevision?: number;
+  transportRecovering?: boolean;
+  detachFamilyTransport?: (() => void) | undefined;
   executionBlocked?: string | undefined;
   readonly localTools?: boolean;
   readonly toolPolicy?: import("@opencode/client").PermissionRuleset;
@@ -98,9 +103,17 @@ export interface V2RuntimeSession {
 }
 
 export interface V2SessionResources {
+  readonly remoteCommands?: import("../../../remote-workspace-bridge/remoteWorkspaceExecutions.ts").RemoteWorkspaceExecutions;
+  readonly remoteWorkspace?: import("../../../workspace-target/workspaceTarget.ts").WorkspaceTarget & {
+    readonly serverName: string;
+  };
   readonly renewCanonicalAuth?: () => Promise<void>;
-  readonly activateCanonicalTools?: () => Promise<
-    Pick<V2SessionResources, "orchestration" | "cleanup" | "renewCanonicalAuth">
+  readonly activateCanonicalTools?: (
+    session: Omit<V2RuntimeSession, "unregister" | "unsubscribeDeath">,
+    mutations: import("./Runtime.mutations.ts").V2RuntimeMutations,
+    signal: AbortSignal,
+  ) => Promise<
+    Pick<V2SessionResources, "orchestration" | "cleanup" | "renewCanonicalAuth" | "remoteCommands">
   >;
   /** A shutdown signal bounds the retirement and swallows its failure (records stay recoverable). */
   onThreadToolsCleanup?: (shutdown?: AbortSignal) => Promise<void>;
@@ -164,7 +177,8 @@ export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessC
   readonly threadBridge?: Pick<
     import("./Orchestration.bridge.ts").V2ThreadBridge,
     "attach" | "ensure" | "reply" | "close"
-  >;
+  > &
+    Partial<Pick<import("./Orchestration.bridge.ts").V2ThreadBridge, "suspend" | "reconnect">>;
   readonly threadToolsPreflight?: (
     client: import("./Client.ts").OpencodeV2Client,
     directory: string,
@@ -184,6 +198,12 @@ export interface V2IsolatedRuntimeOptions<C extends V2ProcessConfig = V2ProcessC
   readonly allowLocalWorkspace?: boolean;
   /** Application-only local builtin tools. Hidden learning and isolated harnesses remain deny-all. */
   readonly enableLocalTools?: boolean;
+  /** Production local runtime with target-bound MCP tools at a stable synthetic Location. */
+  readonly sharedRemoteWorkspace?: {
+    readonly directory: string;
+    readonly workspaceTarget: import("../../../workspace-target/workspaceTarget.ts").WorkspaceTarget;
+    readonly serverName: string;
+  };
   /** Development admission fence, rechecked after queued operations acquire ownership. */
   readonly authorizeExecution?: () => Promise<void>;
   /** Disposable loopback MCP fixtures only; never inferred from preview/settings flags. */

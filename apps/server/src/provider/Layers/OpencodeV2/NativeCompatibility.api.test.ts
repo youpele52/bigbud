@@ -36,6 +36,10 @@ it.each([
   "shell-security-state",
   "plugin-security-state",
   "config-unknown-source",
+  "config-policy-missing",
+  "config-policy-action",
+  "config-policy-effect",
+  "config-policy-resource",
   "external-reference",
   "cycle",
   "unknown-idle-outcome",
@@ -89,6 +93,18 @@ it.each([
         required: ["type"],
       },
     ];
+  const configProperties = contract.components.schemas["Config.InfoEncoded"]!.properties;
+  if (scenario === "config-policy-missing") delete configProperties.policies;
+  if (scenario.startsWith("config-policy-") && scenario !== "config-policy-missing") {
+    const properties = schemaObject(
+      schemaObject(schemaObject(configProperties.policies).items).properties,
+    );
+    if (scenario === "config-policy-action")
+      schemaObject(properties.action).enum = ["tool.use", "future.use"];
+    if (scenario === "config-policy-effect")
+      schemaObject(properties.effect).enum = ["allow", "deny", "ask"];
+    if (scenario === "config-policy-resource") schemaObject(properties.resource).type = "object";
+  }
   if (scenario === "external-reference")
     contract.components.schemas["Location.PublicRef"] = {
       properties: {},

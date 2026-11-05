@@ -36,6 +36,7 @@ import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
 import type * as TerminalStream from "../workspace/terminal.stream";
 import type * as TerminalSearch from "../workspace/terminal.search";
+import type * as TerminalRecovery from "../workspace/terminal.recovery";
 import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
 import type * as Automation from "./automation";
 import type * as ConnectionDiagnostics from "./connectionDiagnostics";
@@ -77,6 +78,9 @@ export interface NativeApi {
     ) => Promise<{ success: boolean; granted: string[]; denied: string[] }>;
   };
   terminal: {
+    recovery?: (
+      input: TerminalRecovery.TerminalRecoveryInput,
+    ) => Promise<TerminalRecovery.TerminalRecoveryResult>;
     wslDistributions?: () => Promise<TerminalWslDistributions>;
     snapshot?: (
       input: typeof Terminal.TerminalSnapshotInput.Encoded,
@@ -92,7 +96,10 @@ export interface NativeApi {
     ) => Promise<Terminal.TerminalSessionSnapshot>;
     close: (input: typeof Terminal.TerminalCloseInput.Encoded) => Promise<void>;
     /** Sidebar/agent state; output only for sessions whose agent detection runs in the client. */
-    onEvent: (callback: (event: Terminal.TerminalEvent) => void) => () => void;
+    onEvent: (
+      callback: (event: Terminal.TerminalEvent) => void,
+      options?: { onInventory?: (inventory: TerminalStream.TerminalSessionInventory) => void },
+    ) => () => void;
     /** One terminal's events for a mounted view, flow-controlled by `ackOutput`. */
     subscribeSession?: (
       input: TerminalStream.TerminalSessionStreamInput,
@@ -266,6 +273,9 @@ export interface NativeApi {
     getOpencodeV2ThreadToolsSetup: (
       input: ServerOpencodeV2ThreadToolsSetupInput,
     ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
+    copilotRuntime?: (
+      input: import("./copilotRuntime").CopilotRuntimeInput,
+    ) => Promise<import("./copilotRuntime").CopilotRuntimeState>;
     createMobileRemotePairing: (
       input: Mobile.ServerCreateMobileRemotePairingInput,
     ) => Promise<Mobile.ServerMobileRemotePairing>;
@@ -308,6 +318,9 @@ export interface NativeApi {
     ) => Promise<Usage.ServerUsageSummaryResult>;
     /** Stop one running provider subagent; Stop-all is unchanged. */
     stopSubagent: (input: Subagents.ProviderStopSubagentInput) => Promise<void>;
+    providerControls?: (
+      input: import("./providerControls").ProviderControlsInput,
+    ) => Promise<import("./providerControls").ProviderControlsSnapshot>;
     /** Recent connection reports and server stalls; optional until every transport wires it. */
     getWsConnectionDiagnostics?: (
       input: ConnectionDiagnostics.ServerGetWsConnectionDiagnosticsInput,
@@ -324,6 +337,9 @@ export interface NativeApi {
     getProjectThreadSummaries: (
       input: GetProjectThreadSummariesInput,
     ) => Promise<GetProjectThreadSummariesResult>;
+    getOrganizationThreadSummaries: (
+      input: GetOrganizationThreadSummariesInput,
+    ) => Promise<GetOrganizationThreadSummariesResult>;
     getSelectedThreadDetail: (
       input: GetSelectedThreadDetailInput,
     ) => Promise<GetSelectedThreadDetailResult>;
@@ -356,3 +372,7 @@ import type {
   ServerOpencodeV2ThreadToolsSetupInput,
   ServerOpencodeV2ThreadToolsSetupResult,
 } from "./server.opencodeV2ThreadToolsSetup";
+import type {
+  GetOrganizationThreadSummariesInput,
+  GetOrganizationThreadSummariesResult,
+} from "../orchestration/orchestration.catalog.organization";

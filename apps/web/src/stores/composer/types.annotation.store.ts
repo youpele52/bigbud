@@ -1,4 +1,10 @@
 import * as Schema from "effect/Schema";
+import {
+  ApprovalRequestId,
+  MessageId,
+  NonNegativeInt,
+  ThreadId,
+} from "@bigbud/contracts/core/baseSchemas";
 
 export const ComposerAnnotationElement = Schema.Struct({
   selector: Schema.String,
@@ -79,10 +85,47 @@ export const ComposerTerminalAnnotationAttachment = Schema.Struct({
 });
 export type ComposerTerminalAnnotationAttachment = typeof ComposerTerminalAnnotationAttachment.Type;
 
+export const ChatCitationContent = Schema.Struct({
+  source: Schema.Union([
+    // Keep the original message payload backward-compatible.
+    Schema.Struct({
+      threadId: ThreadId,
+      messageId: MessageId,
+      role: Schema.Literals(["user", "assistant"]),
+    }),
+    Schema.Struct({
+      kind: Schema.Literal("question"),
+      threadId: ThreadId,
+      requestId: ApprovalRequestId,
+      questionId: Schema.String.check(Schema.isPattern(/\S/)),
+      region: Schema.Literals(["header", "question", "options", "prompt"]),
+    }),
+  ]),
+  selection: Schema.Struct({
+    text: Schema.String.check(Schema.isPattern(/\S/)),
+    anchorText: Schema.optional(Schema.String),
+    startOffset: NonNegativeInt,
+    endOffset: NonNegativeInt,
+  }).check(
+    Schema.makeFilter((selection) => selection.endOffset > selection.startOffset, {
+      identifier: "ChatCitationSelectionRange",
+    }),
+  ),
+});
+export type ChatCitationContent = typeof ChatCitationContent.Type;
+
+export const ComposerChatCitationAttachment = Schema.Struct({
+  ...ComposerAnnotationAttachmentBase.fields,
+  ...ChatCitationContent.fields,
+  kind: Schema.Literal("chat"),
+});
+export type ComposerChatCitationAttachment = typeof ComposerChatCitationAttachment.Type;
+
 export const ComposerAnnotationAttachment = Schema.Union([
   ComposerBrowserAnnotationAttachment,
   ComposerCodeAnnotationAttachment,
   ComposerTerminalAnnotationAttachment,
+  ComposerChatCitationAttachment,
 ]);
 export type ComposerAnnotationAttachment = typeof ComposerAnnotationAttachment.Type;
 
@@ -151,7 +194,7 @@ export function normalizeBrowserAnnotationViewport(viewport: unknown): ComposerA
 export function normalizeAnnotationAttachment(
   annotation: ComposerAnnotationAttachment,
 ): ComposerAnnotationAttachment {
-  if (isCodeAnnotationAttachment(annotation) || isTerminalAnnotationAttachment(annotation)) {
+  if (!isBrowserAnnotationAttachment(annotation)) {
     return {
       ...annotation,
       comment: normalizeAnnotationComment(annotation.comment),
@@ -182,5 +225,11 @@ export function isTerminalAnnotationAttachment(
 export function isBrowserAnnotationAttachment(
   annotation: ComposerAnnotationAttachment,
 ): annotation is ComposerBrowserAnnotationAttachment {
-  return !isCodeAnnotationAttachment(annotation) && !isTerminalAnnotationAttachment(annotation);
+  return annotation.kind === undefined || annotation.kind === "browser";
+}
+
+export function isChatCitationAttachment(
+  annotation: ComposerAnnotationAttachment,
+): annotation is ComposerChatCitationAttachment {
+  return annotation.kind === "chat";
 }

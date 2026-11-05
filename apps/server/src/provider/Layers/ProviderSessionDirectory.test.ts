@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { ThreadId } from "@bigbud/contracts";
+import { ThreadId, type ProviderKind } from "@bigbud/contracts";
 import { it, assert } from "@effect/vitest";
 import { assertFailure, assertSome } from "@effect/vitest/utils";
 import { Effect, Layer, Option } from "effect";
@@ -241,7 +241,7 @@ it.layer(makeDirectoryLayer(SqlitePersistenceMemory))("ProviderSessionDirectoryL
       const threadId = ThreadId.makeUnsafe("thread-kilocode");
 
       yield* directory.upsert({
-        provider: "kilocode",
+        provider: "kilocode" as ProviderKind,
         threadId,
       });
 

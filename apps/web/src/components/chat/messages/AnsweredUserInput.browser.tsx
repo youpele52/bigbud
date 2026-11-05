@@ -94,7 +94,7 @@ it("omits the duplicate generic heading and copies the complete exchange below t
       />
     </>,
   );
-  const heading = screen.getByText("Question", { exact: true });
+  const heading = screen.getByText("Question", { exact: true }).first();
   const copy = screen.getByRole("button", { name: "Copy message" });
   const copyActions = copy.element().parentElement!;
   await screen.getByRole("button", { name: "Outside question" }).hover();
@@ -118,5 +118,7 @@ it("omits the duplicate generic heading and copies the complete exchange below t
   expect(details.open).toBe(false);
   await heading.click();
   await expect.element(screen.getByText("Which skill?", { exact: true })).toBeVisible();
-  expect(details.querySelectorAll("p")[0]?.textContent).toBe("Which skill?");
+  expect(details.querySelector('[data-chat-cite-region="question"]')?.textContent).toBe(
+    "Which skill?",
+  );
 });

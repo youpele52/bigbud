@@ -11,10 +11,16 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-const mocks = vi.hoisted(() => ({ random: vi.fn(() => 0.5) }));
+const mocks = vi.hoisted(() => ({ random: vi.fn(() => 0.2) }));
 vi.mock("../../../utils/copy/greeting.logic", async (original) => {
   const actual = await original<typeof import("../../../utils/copy/greeting.logic")>();
-  return { ...actual, greetingForChat: actual.createGreetingSelector({ random: mocks.random }) };
+  return {
+    ...actual,
+    greetingForChat: actual.createGreetingSelector({
+      random: mocks.random,
+      now: () => new Date("2026-10-14T14:00:00"),
+    }),
+  };
 });
 
 import { AppAtomRegistryProvider } from "../../../rpc/atomRegistry";

@@ -31,9 +31,23 @@ export const TerminalOutputAckInput = Schema.Struct({
 });
 export type TerminalOutputAckInput = typeof TerminalOutputAckInput.Type;
 
+/** Authoritative manager membership at subscription registration, before replay/live events. */
+export const TerminalSessionInventory = Schema.Struct({
+  type: Schema.Literal("inventory"),
+  createdAt: Schema.String,
+  sessions: Schema.Array(Schema.Struct({ threadId: Schema.String, terminalId: Schema.String })),
+});
+export type TerminalSessionInventory = typeof TerminalSessionInventory.Type;
+
+/** Inventory is a subscription control item, never a per-terminal lifecycle event. */
+export const TerminalEventsStreamItem = Schema.Union([TerminalSessionInventory, TerminalEvent]);
+export type TerminalEventsStreamItem = typeof TerminalEventsStreamItem.Type;
+
 /** `legacyDetection` omits output except for sessions whose agent detection runs in the client. */
 export const TerminalEventsSubscriptionInput = Schema.Struct({
   outputScope: Schema.optional(Schema.Literals(["all", "legacyDetection"])),
+  /** Opt in so older per-terminal consumers keep receiving only TerminalEvent. */
+  includeInventory: Schema.optional(Schema.Boolean),
 });
 export type TerminalEventsSubscriptionInput = Schema.Codec.Encoded<
   typeof TerminalEventsSubscriptionInput

@@ -9,6 +9,7 @@ export const SUBSCRIPTION_PROVIDER_LABELS: Record<ServerProviderUsageLimits["sou
   "codex-app-server": "Codex",
   "cursor-dashboard": "Cursor",
   "opencode-go-api": "OpenCode Go",
+  "muse-msp": "Muse Code",
 };
 
 /** Provider snapshots store percent used; every allowance display uses its bounded complement. */

@@ -21,18 +21,18 @@ function project(id: string, title: string, deletingAt: string | null = null): P
 }
 
 describe("toProjectSearchResults", () => {
-  it("keeps independent local and remote project matches while excluding deleting projects", () => {
+  it("keeps local projects and remote workspaces distinct while excluding deleting entries", () => {
     const results = toProjectSearchResults({
       localProjects: [project("local-project", "Local project")],
-      remoteProjects: [
-        project("remote-project", "Remote project"),
+      remoteWorkspaces: [
+        project("remote-workspace", "Remote workspace"),
         project("deleting-project", "Deleting project", "2026-01-02T00:00:00.000Z"),
       ],
     });
 
     expect(results.map((result) => [result.project.title, result.scope])).toEqual([
       ["Local project", "local"],
-      ["Remote project", "remote"],
+      ["Remote workspace", "remote"],
     ]);
   });
 });

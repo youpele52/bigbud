@@ -1,5 +1,150 @@
 # Terminal reliability feasibility harness
 
+## Current recovery direction
+
+The exact-private-state experiments below are preserved for comparison, not selected for
+production recovery. The user's current direction is bounded Orca-style ANSI snapshots;
+see [the decision, evidence and implementation status](../../docs/reports/terminal-recovery-2026-11-01.md).
+
+## Production-version qualification and navigation diagnostics
+
+```sh
+python3 scripts/terminal-reliability/checkpoint.production.py
+bun run --cwd apps/web test:browser src/components/terminal/TerminalCheckpoint.themeAuthority.browser.tsx src/components/terminal/TerminalViewport.navigationDiagnostics.browser.tsx
+```
+
+The production probe fetches the pinned **6.1.0-beta.304** headless package into memory,
+verifies its archive and bundle hashes, checks the installed browser version, and uses the
+actual frontend Unicode11/`bigbud-11-zwj` provider. It installs nothing and changes no package
+or production emulator. The runner uses Bun to import the existing TypeScript provider.
+It first verifies stock split ZWJ/parser input, alternate-screen/paste modes and cursor responses,
+then runs the isolated production-pair capture/import experiment described below.
+The older 6.0.0 checkpoint experiment below remains isolated and unqualified for production.
+
+The matching stock headless parser recognizes three OSC color queries but emits no color
+replies. The browser fixture independently demonstrates different replies from two themes,
+changed replies after a live theme update, and application palette overrides. Existing
+`TerminalViewport.theme.ts` intentionally answers from the rendered theme. A single backend
+responder therefore needs an explicit session palette policy. **Approved policy:** the most
+recently focused view supplies effective palette/theme updates; retain its last palette when
+all views detach. Other views may keep their own visual themes, but TUI queries use the elected
+palette. This policy is implemented and tested only in the isolated palette adapter, not in the
+runtime or its stream protocol. Do not silently
+replace those semantics with default black/white replies.
+No backend response authority or exact checkpoint capability is enabled by these probes.
+Full field/handler coverage, hostile-payload qualification, image state and successful
+maximum-state capture/import remain outstanding. Tested malformed imports now leave the target unchanged.
+
+The probe also verifies that the existing selected-state capture cannot read the production
+state: it expects `coreMouseService`, whereas this version exposes `mouseStateService`. Its
+DEC-mode schema additionally lacks `colorSchemeUpdates` and `win32InputMode` (source inspection).
+This is evidence against directly transplanting the 6.0.0 experiment, not proof that renaming
+the service and adding two fields would make it complete. The production source additionally
+contains optional Kitty keyboard state; any future profile enabling it must qualify its normal/
+alternate flag stacks as well. The current frontend does not enable that extension.
+
+### Production-pair selected-state experiment — gate remains closed
+
+`checkpoint.production.{state,values,parser,links,palette}.mjs` is a new version-specific,
+isolated JSON-wire projection, **not** a renamed 6.0.0 codec and **not** a qualified production decoder.
+It uses the pinned headless bundle and separately hash-pins the installed production browser
+ESM bundle. The browser build explicitly resolves xterm from `apps/web`, not the older xterm
+dependency in `scripts`. It uses the real frontend addon attachment with Unicode11/ZWJ and
+search, at synthetic 20×6 geometry, 5000 scrollback, cursor blinking and default text modes.
+The fixture driver uses the already installed Playwright browser and a temporary loopback-only
+HTTP server. The existing owned-process executor bounds runtime/output and cleans up the worker
+process tree on failure. Pinned vendor input is passed through a fresh, owned temporary file
+under the `opencode` temp directory and removed after confirmed cleanup; no terminal journal is
+written. Browser bundle bytes remain in memory. It installs no browser or dependencies.
+
+Selected state and ownership:
+
+| Area         | Selected state                                                                                                                                                                                |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Buffers      | Both normal/alternate line cell words, combined strings, extended attributes/links, wrapping, scrollback, cursor, margins, tabs and active buffer                                             |
+| Saved state  | Saved cursor, attributes, charset set/level, origin and wrap modes (including new 6.1 fields)                                                                                                 |
+| Parser       | CSI parameters/subparameters, parser/Unicode join state, UTF-16/UTF-8 carry, OSC/DCS/APC state and active handler bindings; new `LimitedStringBuilder` payloads restored into target handlers |
+| Modes        | Common/DEC modes, mouse protocol/encoding, cursor state; optional Kitty state is copied but its enabled profile is not qualified                                                              |
+| Hyperlinks   | Link data/IDs and normal/alternate marker positions; subscriptions are rebuilt against target buffer trim/insert/delete events, never copied from source                                      |
+| Colors       | Complete 259-slot effective RGB palette and restore defaults; OSC 4/10/11/12 and reset responses plus color-scheme query/update behavior                                                      |
+| Presentation | Rendering/search caches, fonts, selection, browser focus/IME and view-specific mouse wheel/dedup state are not transferred                                                                    |
+
+**51 deterministic continuation cases pass** through headless→headless, headless→browser and
+browser→browser restore. These cover 32 mixed-stream cuts, all three partial four-byte UTF-8
+cuts, split surrogate/ZWJ, CSI, OSC/DCS/APC tails, saved modes/charsets, alternate buffers, colors,
+existing/partial hyperlinks and hyperlink eviction after 5010 newlines. The browser compares
+an uninterrupted emulator with the restored one, then resizes, exercises ArrowUp and paste,
+and performs a second browser capture/import plus continuation. Historical import emits no
+responses in these fixtures. The oracle is separate from capture helpers and compares buffer
+cells, colors/styles, cursor positions, modes, links, titles, palette and response bytes; it is
+not an exhaustive proof of every private xterm field or native interaction.
+
+The palette policy test elects view B after view A, rejects A's stale update and verifies B's
+last background query response survives detachment. No production focus lease or generation
+fencing is implied. Six local refusal/custody checks cover schema/capability mismatch,
+additional handlers, external markers, unsettled writes and source/snapshot aliasing.
+The actual image addon is loaded in a browser refusal case; its changed profile is
+rejected rather than silently omitting image state.
+
+**Concrete failed qualification gates (intentional negative evidence):**
+
+- Import now accepts strings only, scans resource estimates before JSON parsing, validates
+  selected state and materializes buffers, attributes, parser builders and link subscriptions
+  before commit. Twenty-nine adversarial refusals (including the former handler-limit failure)
+  assert unchanged captured target state, with sentinel hyperlinks and a pending parser tail;
+  raw objects/getters/proxies are refused without caller callbacks. The report's
+  `malformedImportAtomic: true` describes these tests, not arbitrary hostile-input certification.
+  Commit-time callbacks, exhaustive semantic validation and allocation-failure behavior remain
+  unqualified. Do not import these modules into production.
+- The one-million-potential-cell cutoff is removed, without changing product configuration.
+  A fresh owned worker populates all 5500 normal-buffer lines at 1000×500 with independently
+  varying RGB attributes and nonuniform characters. Its 16,500,000 cell words need at least
+  264,000,000 bytes for numeric arrays, minimum wire and materialized cells, exceeding the
+  unchanged 128 MiB staging ceiling. Capture is refused before projection; a cell digest remains
+  unchanged. One local run measured RSS at 46,170,112 bytes before creation, 132,202,496 after
+  population and 136,609,792 after refusal/digest checks. These are process observations, not
+  allocator guarantees or imported-state peaks; hashing also contributes to measurements.
+  Reports retain the runtime's raw high-water counter without asserting its units.
+  Encoded, staging and estimated-state budgets remain 128 MiB each, aggregate 512 MiB.
+  Capture admission uses lower bounds, not a complete live reservation system. Full combined/
+  extended-attribute worst cases, aggregate live targets and maximum import remain unqualified.
+- Handler fingerprints are compatibility observations, not a complete handler-state schema
+  or security authority. Async/custom/image handlers, all terminal options, optional extensions,
+  selection/search-marker reconstruction, IME and real mouse/browser renderer integration still
+  require explicit qualification. This is private-state adaptation, not a maintained upstream
+  source patch or validated production packaging boundary.
+
+Every report and checkpoint remains `exactCapability: false`. Passing these continuations
+does not open the exact-recovery production gate. This private-state experiment enables no
+runtime recovery or PTY response authority. The separate bounded ANSI implementation and its
+guarded production rollout are documented in the canonical report linked above.
+
+After mounting a terminal, opt into content-free lifecycle traces from the browser console:
+
+```js
+window.__bigbudTerminalLifecycleDiagnostics.setEnabled(true);
+// Reproduce navigation/remount/reconnect, then inspect:
+window.__bigbudTerminalLifecycleDiagnostics.read();
+// Disable and clear retained metadata:
+window.__bigbudTerminalLifecycleDiagnostics.setEnabled(false);
+```
+
+The in-memory ring retains at most 256 events, with identifiers capped at 128 characters.
+It contains emulator view IDs, visibility/renderer transitions, subscription requests and
+local unsubscribe/resync, hydration/input transitions, and a projection of accepted snapshots
+(PID, generation, status, history length and availability flags). No terminal text, input,
+paths, environment values or error messages are recorded or transmitted. Enabling starts a
+new trace window; a view mounted before enabling has no synthetic `mounted` event. Snapshot
+PID/generation values are observations, not independent proof of native process continuity.
+Use the existing `__bigbudTerminalDiagnostics()` alongside it for current stream credit,
+queued-byte and renderer diagnostics. No server hold state is inferred from a view trace.
+
+The navigation browser fixture verifies that four hide/show cycles retain one real xterm,
+then an explicit unmount/remount with a truncated mocked snapshot refuses input while reporting
+the same PID/generation. It does **not** reproduce real thread routing, real pi/OpenCode, or
+prove why a user's terminal remounted after two to four switches. Collect a real navigation
+trace before assigning that trigger to view retention or GPU eviction.
+
 Run from the project root:
 
 ```sh

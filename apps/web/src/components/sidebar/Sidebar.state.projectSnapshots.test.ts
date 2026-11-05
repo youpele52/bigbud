@@ -5,20 +5,20 @@ import { ProjectId } from "@bigbud/contracts";
 import { buildSidebarProjectSnapshots } from "./Sidebar.state.projectSnapshots";
 
 describe("buildSidebarProjectSnapshots", () => {
-  it("forces disconnected remote projects closed until verified", () => {
-    const remoteProjectId = ProjectId.makeUnsafe("project-remote");
+  it("forces disconnected remote workspaces closed until verified", () => {
+    const remoteWorkspaceId = ProjectId.makeUnsafe("project-remote");
 
     const snapshots = buildSidebarProjectSnapshots({
       orderedProjects: [
         {
-          id: remoteProjectId,
+          id: remoteWorkspaceId,
           name: "Remote",
           cwd: "/srv/project",
           executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
         } as never,
       ],
       projectExpandedById: {
-        [remoteProjectId]: true,
+        [remoteWorkspaceId]: true,
       },
       verifiedExecutionTargetIds: {},
     });
@@ -26,21 +26,21 @@ describe("buildSidebarProjectSnapshots", () => {
     expect(snapshots[0]?.expanded).toBe(false);
   });
 
-  it("preserves stored expansion for verified remote projects", () => {
-    const remoteProjectId = ProjectId.makeUnsafe("project-remote");
+  it("preserves stored expansion for verified remote workspaces", () => {
+    const remoteWorkspaceId = ProjectId.makeUnsafe("project-remote");
     const executionTargetId = "ssh:host=devbox&user=root&port=22&auth=ssh-key";
 
     const snapshots = buildSidebarProjectSnapshots({
       orderedProjects: [
         {
-          id: remoteProjectId,
+          id: remoteWorkspaceId,
           name: "Remote",
           cwd: "/srv/project",
           executionTargetId,
         } as never,
       ],
       projectExpandedById: {
-        [remoteProjectId]: true,
+        [remoteWorkspaceId]: true,
       },
       verifiedExecutionTargetIds: {
         [executionTargetId]: true,

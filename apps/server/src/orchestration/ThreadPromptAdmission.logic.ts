@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import type { OrchestrationCommand } from "@bigbud/contracts/orchestration/orchestration.commands.ts";
 import type { OrchestrationEvent } from "@bigbud/contracts/orchestration/orchestration.events.ts";
 import type {
@@ -258,7 +259,9 @@ export function queuedPromptToTurnStartCommand(input: {
         ? { originSegments: input.originSegments ?? prompt.originSegments }
         : {}),
     },
-    ...(modelSelection !== undefined ? { modelSelection } : {}),
+    ...(modelSelection !== undefined
+      ? { modelSelection: requireActiveModelSelection(modelSelection) }
+      : {}),
     ...(prompt.titleSeed !== undefined ? { titleSeed: prompt.titleSeed } : {}),
     runtimeMode: prompt.runtimeMode ?? thread.runtimeMode,
     interactionMode: prompt.interactionMode ?? thread.interactionMode,

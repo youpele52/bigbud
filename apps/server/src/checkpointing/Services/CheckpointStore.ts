@@ -25,6 +25,8 @@ export interface RestoreCheckpointInput {
   readonly cwd: string;
   readonly checkpointRef: CheckpointRef;
   readonly fallbackToHead?: boolean;
+  readonly exactRef?: boolean;
+  readonly identity?: CheckpointRepositoryIdentity;
 }
 
 export interface PathCheckpointInput {

@@ -1,3 +1,4 @@
+import { isRoutableProviderSelection } from "../../provider/providerSelectionCompatibility.ts";
 /**
  * Generated prompt suggestions (Phase 7) for providers without native ones. After a turn
  * completes successfully it asks bigbud's text generation, with the thread's model (falling back
@@ -96,7 +97,7 @@ export const startPromptSuggestionReactor = Effect.fn("startPromptSuggestionReac
       const settings = yield* deps.getSettings;
       if (!settings.promptSuggestions || !settings.generatedPromptSuggestions) return;
       const thread = Option.getOrUndefined(yield* settledThread(threadId, turnId));
-      if (!thread) return;
+      if (!thread || !isRoutableProviderSelection(thread.modelSelection)) return;
       if (hasTextGenerationUncertainty(thread.activities, "promptSuggestion", turnId)) return;
       const capabilities = yield* deps
         .getCapabilities(thread.modelSelection.provider)

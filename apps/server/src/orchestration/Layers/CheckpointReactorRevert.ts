@@ -14,9 +14,12 @@ import type { CheckpointStoreError } from "../../checkpointing/Errors.ts";
 import type {
   RestoreCheckpointInput,
   DeleteCheckpointRefsInput,
+  CheckpointRepositoryIdentity,
 } from "../../checkpointing/Services/CheckpointStore.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
+import { ProviderValidationError } from "../../provider/Errors.ts";
+import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
 
 export function makeHandleRevertRequested(
   orchestrationEngine: {
@@ -26,6 +29,7 @@ export function makeHandleRevertRequested(
     ) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError>;
   },
   providerService: {
+    rewindConversation?: ProviderServiceShape["rewindConversation"];
     listSessions: () => Effect.Effect<ReadonlyArray<ProviderSession>>;
     getCapabilities?: (provider: ProviderSession["provider"]) => Effect.Effect<
       {
@@ -39,6 +43,12 @@ export function makeHandleRevertRequested(
     }) => Effect.Effect<void, ProviderServiceError>;
   },
   checkpointStore: {
+    captureRepositoryIdentity: (
+      cwd: string,
+    ) => Effect.Effect<CheckpointRepositoryIdentity, CheckpointStoreError>;
+    hasCheckpointRef: (
+      input: Omit<RestoreCheckpointInput, "fallbackToHead">,
+    ) => Effect.Effect<boolean, CheckpointStoreError>;
     restoreCheckpoint: (
       input: RestoreCheckpointInput,
     ) => Effect.Effect<boolean, CheckpointStoreError>;
@@ -142,7 +152,11 @@ export function makeHandleRevertRequested(
       0,
     );
 
-    if (event.payload.turnCount > currentTurnCount) {
+    if (
+      !Number.isSafeInteger(event.payload.turnCount) ||
+      event.payload.turnCount < 0 ||
+      event.payload.turnCount > currentTurnCount
+    ) {
       yield* appendRevertFailureActivity({
         threadId: event.payload.threadId,
         turnCount: event.payload.turnCount,
@@ -170,42 +184,28 @@ export function makeHandleRevertRequested(
     }
 
     const rolledBackTurns = Math.max(0, currentTurnCount - event.payload.turnCount);
-    if (rolledBackTurns > 0) {
-      yield* providerService.rollbackConversation({
-        threadId: sessionRuntime.value.threadId,
-        numTurns: rolledBackTurns,
-      });
-    }
-
-    const restored = yield* checkpointStore.restoreCheckpoint({
-      cwd: sessionRuntime.value.cwd,
-      checkpointRef: targetCheckpointRef,
-      fallbackToHead: event.payload.turnCount === 0,
-    });
-    if (!restored) {
-      yield* appendRevertFailureActivity({
-        threadId: event.payload.threadId,
-        turnCount: event.payload.turnCount,
-        detail: `Transcript rewind completed, but the filesystem checkpoint is unavailable for turn ${event.payload.turnCount}.`,
-        createdAt: now,
-      }).pipe(Effect.catch(() => Effect.void));
-      return;
-    }
-
-    yield* workspaceEntries.invalidate(sessionRuntime.value.cwd);
-
+    const activeSession = (yield* providerService.listSessions()).find(
+      (session) => session.threadId === sessionRuntime.value.threadId,
+    );
     const staleCheckpointRefs = thread.checkpoints
       .filter((checkpoint) => checkpoint.checkpointTurnCount > event.payload.turnCount)
       .map((checkpoint) => checkpoint.checkpointRef);
-
-    if (staleCheckpointRefs.length > 0) {
-      yield* checkpointStore.deleteCheckpointRefs({
+    let repositoryIdentity: CheckpointRepositoryIdentity | undefined;
+    const restoreFiles = Effect.gen(function* () {
+      const restored = yield* checkpointStore.restoreCheckpoint({
         cwd: sessionRuntime.value.cwd,
-        checkpointRefs: staleCheckpointRefs,
+        checkpointRef: targetCheckpointRef,
+        fallbackToHead: event.payload.turnCount === 0 && activeSession?.provider !== "codex",
+        ...(repositoryIdentity ? { identity: repositoryIdentity, exactRef: true } : {}),
       });
-    }
-
-    yield* orchestrationEngine
+      if (!restored)
+        return yield* new ProviderValidationError({
+          operation: "CheckpointReactor.revert",
+          issue: `Transcript verified, but filesystem checkpoint ${event.payload.turnCount} is unavailable. New work remains blocked.`,
+        });
+      yield* workspaceEntries.invalidate(sessionRuntime.value.cwd);
+    });
+    const completeCanonical = orchestrationEngine
       .dispatch({
         type: "thread.revert.complete",
         commandId: serverCommandId("checkpoint-revert-complete"),
@@ -213,16 +213,96 @@ export function makeHandleRevertRequested(
         turnCount: event.payload.turnCount,
         createdAt: now,
       })
-      .pipe(
-        Effect.catch((error) =>
-          appendRevertFailureActivity({
-            threadId: event.payload.threadId,
-            turnCount: event.payload.turnCount,
-            detail: (error as { message?: string }).message ?? String(error),
-            createdAt: now,
-          }),
-        ),
-        Effect.asVoid,
+      .pipe(Effect.asVoid);
+    if (activeSession?.provider === "codex") {
+      repositoryIdentity = yield* checkpointStore.captureRepositoryIdentity(
+        sessionRuntime.value.cwd,
       );
+      const checkpoints = thread.checkpoints.toSorted(
+        (a, b) => a.checkpointTurnCount - b.checkpointTurnCount,
+      );
+      if (
+        !providerService.rewindConversation ||
+        checkpoints.length !== currentTurnCount ||
+        checkpoints.some((checkpoint, index) => checkpoint.checkpointTurnCount !== index + 1)
+      )
+        return yield* new ProviderValidationError({
+          operation: "CheckpointReactor.revert",
+          issue: "Exact native checkpoint boundaries are unavailable or have gaps.",
+        });
+      const ids = checkpoints.map((checkpoint) => checkpoint.turnId);
+      yield* providerService.rewindConversation<
+        CheckpointStoreError | OrchestrationDispatchError | ProviderServiceError,
+        never
+      >(
+        {
+          threadId: sessionRuntime.value.threadId,
+          operationId: event.eventId,
+          expectedTurnIds: ids,
+          targetTurnCount: event.payload.turnCount,
+          currentTurnCount,
+          retainedTurnId: ids[event.payload.turnCount - 1] ?? null,
+          firstRemovedTurnId: ids[event.payload.turnCount] ?? null,
+          checkpointRef: targetCheckpointRef,
+          sessionEpoch: activeSession.sessionEpoch ?? 0,
+        },
+        {
+          preflight: Effect.gen(function* () {
+            if (
+              !isGitRepository(sessionRuntime.value.cwd) ||
+              !(yield* checkpointStore.hasCheckpointRef({
+                cwd: sessionRuntime.value.cwd,
+                checkpointRef: targetCheckpointRef,
+                exactRef: true,
+                identity: repositoryIdentity!,
+              }))
+            )
+              return yield* new ProviderValidationError({
+                operation: "CheckpointReactor.revert",
+                issue:
+                  "The exact filesystem checkpoint ref is unavailable; no native rewind was dispatched.",
+              });
+            const current = (yield* orchestrationEngine.getReadModel()).threads.find(
+              (entry) => entry.id === thread.id,
+            );
+            if (
+              !current ||
+              current.deletedAt !== null ||
+              current.deletingAt !== null ||
+              current.pendingTurnStart != null ||
+              current.latestTurn?.state === "running" ||
+              current.session?.status === "running" ||
+              (current.session?.sessionEpoch ?? 0) !== (activeSession.sessionEpoch ?? 0) ||
+              JSON.stringify(current.checkpoints) !== JSON.stringify(thread.checkpoints)
+            )
+              return yield* new ProviderValidationError({
+                operation: "CheckpointReactor.revert",
+                issue: "Thread changed or is not idle inside the rewind lease.",
+              });
+          }),
+          restoreFiles,
+          completeCanonical,
+        },
+      );
+    } else {
+      if (rolledBackTurns > 0) {
+        yield* providerService.rollbackConversation({
+          threadId: sessionRuntime.value.threadId,
+          numTurns: rolledBackTurns,
+        });
+      }
+
+      yield* restoreFiles;
+      yield* completeCanonical;
+    }
+
+    if (staleCheckpointRefs.length > 0) {
+      yield* checkpointStore
+        .deleteCheckpointRefs({
+          cwd: sessionRuntime.value.cwd,
+          checkpointRefs: staleCheckpointRefs,
+        })
+        .pipe(Effect.retry({ times: 2 }));
+    }
   });
 }

@@ -1,12 +1,14 @@
-import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
+import { type ThreadId } from "@bigbud/contracts";
 import { TerminalSquare, XIcon } from "lucide-react";
 
 import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
-import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 
 import { type ThreadTerminalGroup } from "../../models/types";
+import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
 import { ThreadTerminalDrawerToolbar } from "./ThreadTerminalDrawerToolbar";
 import { ThreadTerminalDrawerRenameEditor } from "./ThreadTerminalDrawerRenameEditor";
+import { terminalAgentIcon } from "./terminalAgentIcons";
+import { TerminalLifecycleLabel } from "./TerminalLifecycleStatus";
 
 interface ThreadTerminalDrawerSidebarProps {
   threadId?: ThreadId;
@@ -17,7 +19,7 @@ interface ThreadTerminalDrawerSidebarProps {
   editingTerminalId: string | null;
   terminalRenameDraft: string;
   renameInputRef: (element: HTMLInputElement | null) => void;
-  terminalProviderById: Readonly<Record<string, ProviderKind>>;
+  terminalProviderById: Readonly<Record<string, TerminalAgentKind>>;
   showGroupHeaders: boolean;
   hasReachedSplitLimit: boolean;
   renameTerminalActionLabel: string;
@@ -36,6 +38,7 @@ interface ThreadTerminalDrawerSidebarProps {
   onCloseTerminal: (terminalId: string) => void;
   expanded?: boolean;
   onToggleExpanded?: (() => void) | undefined;
+  onMinimize?: (() => void) | undefined;
 }
 
 export function ThreadTerminalDrawerSidebar({
@@ -66,9 +69,12 @@ export function ThreadTerminalDrawerSidebar({
   onCloseTerminal,
   expanded = false,
   onToggleExpanded,
+  onMinimize,
 }: ThreadTerminalDrawerSidebarProps) {
   return (
-    <aside className="flex w-36 min-w-36 flex-col border border-border/70 bg-muted/10">
+    <aside
+      className={`flex flex-col border border-border/70 bg-muted/10 ${onMinimize ? "w-40 min-w-40" : "w-36 min-w-36"}`}
+    >
       <div className="flex h-[22px] items-stretch justify-end border-b border-border/70">
         <ThreadTerminalDrawerToolbar
           threadId={threadId}
@@ -85,6 +91,7 @@ export function ThreadTerminalDrawerSidebar({
           onCloseTerminal={onCloseTerminal}
           expanded={expanded}
           onToggleExpanded={onToggleExpanded}
+          onMinimize={onMinimize}
         />
       </div>
 
@@ -118,7 +125,7 @@ export function ThreadTerminalDrawerSidebar({
                   const isActive = terminalId === resolvedActiveTerminalId;
                   const terminalProvider = terminalProviderById[terminalId] ?? null;
                   const ProviderIcon = terminalProvider
-                    ? PROVIDER_ICON_BY_PROVIDER[terminalProvider]
+                    ? terminalAgentIcon(terminalProvider)
                     : null;
                   const closeTerminalLabel = `Close ${
                     terminalLabelById.get(terminalId) ?? "terminal"
@@ -156,12 +163,15 @@ export function ThreadTerminalDrawerSidebar({
                           onDoubleClick={() => onStartTerminalRename(terminalId)}
                         >
                           {ProviderIcon ? (
-                            <ProviderIcon className="size-3 shrink-0" />
+                            <ProviderIcon className="size-3 shrink-0 animate-breathe motion-reduce:animate-none" />
                           ) : (
                             <TerminalSquare className="size-3 shrink-0" />
                           )}
                           <span className="truncate">
                             {terminalLabelById.get(terminalId) ?? "Terminal"}
+                            {threadId && (
+                              <TerminalLifecycleLabel threadId={threadId} terminalId={terminalId} />
+                            )}
                           </span>
                         </button>
                       )}

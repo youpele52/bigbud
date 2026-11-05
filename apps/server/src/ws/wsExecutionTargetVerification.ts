@@ -70,14 +70,14 @@ export const verifyExecutionTargetEffect = Effect.fn("verifyExecutionTargetEffec
   if (agent.status === "install-required") {
     return {
       ...sshResult,
-      message: `${sshResult.message} The bigbud remote agent must be installed before this remote project can be created.`,
+      message: `${sshResult.message} The bigbud remote agent must be installed before this remote workspace can be created.`,
       remoteAgent: { status: "install-required" },
     };
   }
   if (agent.status === "upgrade-required") {
     return {
       ...sshResult,
-      message: `${sshResult.message} The bigbud remote agent must be upgraded from ${agent.currentVersion} to ${agent.targetVersion} before this remote project can be used.`,
+      message: `${sshResult.message} The bigbud remote agent must be upgraded from ${agent.currentVersion} to ${agent.targetVersion} before this remote workspace can be used.`,
       remoteAgent: {
         status: "upgrade-required",
         currentVersion: agent.currentVersion,
@@ -102,7 +102,8 @@ export const installRemoteAgentEffect = Effect.fn("installRemoteAgentEffect")(fu
 ): Effect.fn.Return<ServerInstallRemoteAgentResult, ServerInstallRemoteAgentError> {
   if (!isRemoteAgentExecutionTarget(input.executionTargetId)) {
     return yield* new ServerInstallRemoteAgentError({
-      message: "This project uses Direct SSH. No bigbud remote agent installation is required.",
+      message:
+        "This remote workspace uses Direct SSH. No bigbud remote agent installation is required.",
     });
   }
   if (!remoteAgentInstaller) {

@@ -1,6 +1,6 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CloudIcon } from "@hugeicons/core-free-icons";
-import { LaptopMinimalIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
+import { LaptopMinimalIcon, PlusIcon } from "lucide-react";
 import { type RefObject } from "react";
 import type { SidebarTopLevelHeaderProps } from "./SidebarSectionLabel";
 import {
@@ -17,7 +17,7 @@ import { SidebarNewProjectFlow } from "./SidebarNewProjectFlow";
 import { SidebarProjectList, type RenderedProject } from "./SidebarProjectList";
 import { SidebarRenderedProjectItem } from "./SidebarRenderedProjectItem";
 import { type RenderedProjectData } from "./SidebarRenderedProjectItem.types";
-import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
+import { isRemoteExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { SidebarSectionLabel } from "./SidebarSectionLabel";
 import type { RenderedProjectEntry, SharedProjectItemProps } from "./Sidebar.types";
@@ -42,7 +42,7 @@ interface SidebarProjectsSectionProps {
   onThreadSortOrderChange: (sortOrder: SidebarThreadSortOrder) => void;
   shouldShowProjectPathEntry: boolean;
   handleStartAddProject: () => void;
-  openRemoteProjectDialog: () => void;
+  openRemoteWorkspaceDialog: () => void;
   onCloseMobileSidebar: () => void;
   // New project flow
   isElectron: boolean;
@@ -60,8 +60,8 @@ interface SidebarProjectsSectionProps {
   renderedProjects: RenderedProjectEntry[];
   isExpanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
-  isRemoteProjectsExpanded: boolean;
-  onRemoteProjectsExpandedChange: (expanded: boolean) => void;
+  isRemoteWorkspacesExpanded: boolean;
+  onRemoteWorkspacesExpandedChange: (expanded: boolean) => void;
   isManualProjectSorting: boolean;
   onDragStart: (event: import("@dnd-kit/core").DragStartEvent) => void;
   onDragEnd: (event: import("@dnd-kit/core").DragEndEvent) => void;
@@ -82,7 +82,7 @@ export function SidebarProjectsSection({
   onThreadSortOrderChange,
   shouldShowProjectPathEntry,
   handleStartAddProject,
-  openRemoteProjectDialog,
+  openRemoteWorkspaceDialog,
   onCloseMobileSidebar,
   isElectron,
   newCwd,
@@ -98,8 +98,8 @@ export function SidebarProjectsSection({
   renderedProjects,
   isExpanded,
   onExpandedChange,
-  isRemoteProjectsExpanded,
-  onRemoteProjectsExpandedChange,
+  isRemoteWorkspacesExpanded,
+  onRemoteWorkspacesExpandedChange,
   isManualProjectSorting,
   onDragStart,
   onDragEnd,
@@ -109,7 +109,7 @@ export function SidebarProjectsSection({
   const localProjects = renderedProjects.filter(
     (entry) => !isRemoteExecutionTargetId(resolveWorkspaceExecutionTargetId(entry.project)),
   );
-  const remoteProjects = renderedProjects.filter((entry) =>
+  const remoteWorkspaces = renderedProjects.filter((entry) =>
     isRemoteExecutionTargetId(resolveWorkspaceExecutionTargetId(entry.project)),
   );
 
@@ -121,8 +121,7 @@ export function SidebarProjectsSection({
             dismissalKey={["desktop", "arm64-intel-build"]}
             dismissLabel="Dismiss Intel build warning"
             variant="warning"
-            icon={<TriangleAlertIcon />}
-            className="rounded-2xl border-warning/40 bg-warning/8"
+            className="rounded-2xl"
             title="Intel build on Apple Silicon"
             description={arm64IntelBuildWarningDescription}
             action={
@@ -236,11 +235,12 @@ export function SidebarProjectsSection({
         <SidebarGroup className="px-2 py-0">
           <SidebarSectionLabel
             {...headerProps}
-            isExpanded={isRemoteProjectsExpanded}
-            onExpandedChange={onRemoteProjectsExpandedChange}
+            isExpanded={isRemoteWorkspacesExpanded}
+            onExpandedChange={onRemoteWorkspacesExpandedChange}
             actions={
               <>
                 <ProjectSortMenu
+                  scope="remote"
                   projectSortOrder={appSettingsSidebarProjectSortOrder}
                   threadSortOrder={appSettingsSidebarThreadSortOrder}
                   onProjectSortOrderChange={onProjectSortOrderChange}
@@ -251,18 +251,18 @@ export function SidebarProjectsSection({
                     render={
                       <button
                         type="button"
-                        aria-label="Add remote project"
+                        aria-label="Add remote workspace"
                         className="inline-flex size-5 items-center justify-center rounded-md text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
                         onClick={() => {
                           onCloseMobileSidebar();
-                          openRemoteProjectDialog();
+                          openRemoteWorkspaceDialog();
                         }}
                       />
                     }
                   >
                     <PlusIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                   </TooltipTrigger>
-                  <TooltipPopup side="right">Add remote project</TooltipPopup>
+                  <TooltipPopup side="right">Add remote workspace</TooltipPopup>
                 </Tooltip>
               </>
             }
@@ -275,16 +275,16 @@ export function SidebarProjectsSection({
                 size={14}
                 strokeWidth={1.5}
               />
-              Remote Projects
+              Remote Workspaces
             </span>
           </SidebarSectionLabel>
 
           <div>
-            {isRemoteProjectsExpanded ? (
+            {isRemoteWorkspacesExpanded ? (
               <SidebarProjectList
-                renderedProjects={remoteProjects as unknown as RenderedProject[]}
+                renderedProjects={remoteWorkspaces as unknown as RenderedProject[]}
                 isManualSorting={isManualProjectSorting}
-                hasProjects={remoteProjects.length > 0}
+                hasProjects={remoteWorkspaces.length > 0}
                 showEmptyState={false}
                 showLoadMore
                 catalogScope="remote"

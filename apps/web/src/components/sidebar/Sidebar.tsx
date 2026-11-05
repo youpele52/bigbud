@@ -1,28 +1,19 @@
-import { useNavigate } from "@tanstack/react-router";
+import { projectDeleteConfirmationCopy } from "./Sidebar.projectActions.delete.copy";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { SettingsSidebarNav } from "../settings/SettingsSidebarNav";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
-import {
-  SidebarFooter,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarSeparator,
-} from "../ui/sidebar";
-import { SettingsIcon } from "lucide-react";
-import { SidebarUpdatePill } from "./SidebarUpdatePill";
-import { SidebarHelpMenu } from "./SidebarHelpMenu";
+import { SidebarSeparator } from "../ui/sidebar";
 import { SidebarAppHeader } from "./SidebarHeader";
-import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { SidebarFooterBar } from "./Sidebar.footer";
 import { SidebarNavigation } from "./Sidebar.navigation";
-import { SidebarRemoteProjectDialog } from "./SidebarRemoteProjectDialog";
+import { SidebarRemoteWorkspaceDialog } from "./SidebarRemoteWorkspaceDialog";
 import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
+import { SidebarInyosiraSnoozeDialog } from "./Sidebar.inyosiraSnoozeDialog";
 import { useSidebarState } from "./Sidebar.state";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 
 export default function Sidebar() {
-  const navigate = useNavigate();
   const s = useSidebarState();
   const remoteExecutionAccess = useRemoteExecutionAccessGate();
 
@@ -37,24 +28,7 @@ export default function Sidebar() {
           <SidebarNavigation state={s} />
 
           <SidebarSeparator />
-          <SidebarFooter className="p-2">
-            <SidebarUpdatePill />
-            <div className="flex items-center gap-1">
-              <SidebarMenu className="min-w-0 flex-1">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    size="sm"
-                    className="gap-2 px-2 py-1.5 text-muted-foreground/70 hover:bg-accent hover:text-foreground"
-                    onClick={() => void navigate({ to: "/settings" })}
-                  >
-                    <SettingsIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
-                    <span className="text-xs">Settings</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-              <SidebarHelpMenu />
-            </div>
-          </SidebarFooter>
+          <SidebarFooterBar />
 
           <AlertDialog
             open={s.pendingReconnect !== null}
@@ -66,7 +40,7 @@ export default function Sidebar() {
               {s.pendingReconnect ? (
                 <ConfirmationPanel
                   title={`Reconnect "${s.pendingReconnect.projectName}"?`}
-                  description="Reconnect restarts the bigbud remote service and interrupts the turns and terminals it manages, including other projects using this service. Saved project settings are kept."
+                  description="Reconnect restarts the bigbud remote service and interrupts the turns and terminals it manages, including other workspaces using this service. Saved workspace settings are kept."
                   cancelLabel="Cancel"
                   confirmLabel="Reconnect"
                   confirmVariant="destructive"
@@ -117,12 +91,7 @@ export default function Sidebar() {
             <AlertDialogPopup className="max-w-sm p-0" bottomStickOnMobile={false}>
               {s.pendingProjectDeleteConfirmation ? (
                 <ConfirmationPanel
-                  title={`Delete project "${s.pendingProjectDeleteConfirmation.projectName}"?`}
-                  description={
-                    s.pendingProjectDeleteConfirmation.threadCount > 0
-                      ? `This project has ${s.pendingProjectDeleteConfirmation.threadCount} ${s.pendingProjectDeleteConfirmation.threadCount === 1 ? "thread" : "threads"} that will also be deleted. This only removes the project from bigbud, not from your system.`
-                      : "This only removes the project from bigbud, not from your system."
-                  }
+                  {...projectDeleteConfirmationCopy(s.pendingProjectDeleteConfirmation)}
                   cancelLabel="Cancel"
                   confirmLabel="Delete"
                   confirmVariant="destructive"
@@ -135,27 +104,29 @@ export default function Sidebar() {
             </AlertDialogPopup>
           </AlertDialog>
 
-          <SidebarRemoteProjectDialog
-            mode={s.remoteProjectDialogMode}
-            open={s.isRemoteProjectDialogOpen}
-            draft={s.remoteProjectDraft}
-            fieldErrors={s.remoteProjectFieldErrors}
-            error={s.remoteProjectError}
-            verificationMessage={s.remoteProjectVerificationMessage}
-            isSubmitting={s.isAddingProject || s.isSavingRemoteProject}
-            isVerifying={s.isVerifyingRemoteProject}
+          <SidebarRemoteWorkspaceDialog
+            mode={s.remoteWorkspaceDialogMode}
+            open={s.isRemoteWorkspaceDialogOpen}
+            draft={s.remoteWorkspaceDraft}
+            fieldErrors={s.remoteWorkspaceFieldErrors}
+            error={s.remoteWorkspaceError}
+            verificationMessage={s.remoteWorkspaceVerificationMessage}
+            isSubmitting={s.isAddingProject || s.isSavingRemoteWorkspace}
+            isVerifying={s.isVerifyingRemoteWorkspace}
             onOpenChange={(open) => {
               if (!open) {
-                s.closeRemoteProjectDialog();
+                s.closeRemoteWorkspaceDialog();
               }
             }}
-            onFieldChange={s.updateRemoteProjectDraft}
-            onAdoptConnectionSource={s.adoptRemoteProjectConnectionSource}
-            onRequestUnlock={s.requestRemoteProjectUnlock}
+            onFieldChange={s.updateRemoteWorkspaceDraft}
+            onAdoptConnectionSource={s.adoptRemoteWorkspaceConnectionSource}
+            onRequestUnlock={s.requestRemoteWorkspaceUnlock}
             onSubmit={() => {
-              void s.submitRemoteProjectDialog();
+              void s.submitRemoteWorkspaceDialog();
             }}
           />
+
+          <SidebarInyosiraSnoozeDialog />
 
           <SidebarRemoteAgentInstallDialog
             request={s.remoteAgentInstallRequest}
@@ -164,52 +135,52 @@ export default function Sidebar() {
           />
 
           <SidebarUnlockSshKeyDialog
-            open={s.isRemoteProjectUnlockDialogOpen}
-            keyPath={s.remoteProjectUnlockKeyPath}
+            open={s.isRemoteWorkspaceUnlockDialogOpen}
+            keyPath={s.remoteWorkspaceUnlockKeyPath}
             title={
-              s.remoteProjectUnlockMode === "password" ? "Enter SSH password" : "Unlock SSH key"
+              s.remoteWorkspaceUnlockMode === "password" ? "Enter SSH password" : "Unlock SSH key"
             }
             fieldLabel={
-              s.remoteProjectUnlockMode === "password" ? "SSH password" : "Key passphrase"
+              s.remoteWorkspaceUnlockMode === "password" ? "SSH password" : "Key passphrase"
             }
             placeholder={
-              s.remoteProjectUnlockMode === "password"
+              s.remoteWorkspaceUnlockMode === "password"
                 ? "Enter the SSH password"
                 : "Enter the SSH key passphrase"
             }
-            submitLabel={s.remoteProjectUnlockMode === "password" ? "Continue" : "Unlock SSH key"}
+            submitLabel={s.remoteWorkspaceUnlockMode === "password" ? "Continue" : "Unlock SSH key"}
             description={
-              s.remoteProjectUnlockMode === "password" ? (
+              s.remoteWorkspaceUnlockMode === "password" ? (
                 <>
                   bigbud needs the SSH password for{" "}
                   <span className="break-all font-light">
-                    &quot;{s.remoteProjectUnlockKeyPath}&quot;
+                    &quot;{s.remoteWorkspaceUnlockKeyPath}&quot;
                   </span>{" "}
-                  before it can verify and {s.remoteProjectDialogMode === "edit" ? "update" : "add"}{" "}
-                  this remote project.
+                  before it can verify and{" "}
+                  {s.remoteWorkspaceDialogMode === "edit" ? "update" : "add"} this remote workspace.
                 </>
               ) : (
                 <>
                   bigbud needs the passphrase for{" "}
                   <span className="break-all font-light">
-                    &quot;{s.remoteProjectUnlockKeyPath}&quot;
+                    &quot;{s.remoteWorkspaceUnlockKeyPath}&quot;
                   </span>{" "}
-                  before it can verify and {s.remoteProjectDialogMode === "edit" ? "update" : "add"}{" "}
-                  this remote project.
+                  before it can verify and{" "}
+                  {s.remoteWorkspaceDialogMode === "edit" ? "update" : "add"} this remote workspace.
                 </>
               )
             }
-            secret={s.remoteProjectUnlockPassphrase}
-            error={s.remoteProjectUnlockError}
-            isSubmitting={s.isUnlockingRemoteProjectKey}
+            secret={s.remoteWorkspaceUnlockPassphrase}
+            error={s.remoteWorkspaceUnlockError}
+            isSubmitting={s.isUnlockingRemoteWorkspaceKey}
             onOpenChange={(open) => {
               if (!open) {
-                s.closeRemoteProjectUnlockDialog();
+                s.closeRemoteWorkspaceUnlockDialog();
               }
             }}
-            onSecretChange={s.setRemoteProjectUnlockPassphrase}
+            onSecretChange={s.setRemoteWorkspaceUnlockPassphrase}
             onSubmit={() => {
-              void s.submitRemoteProjectUnlock();
+              void s.submitRemoteWorkspaceUnlock();
             }}
           />
 
@@ -243,7 +214,7 @@ export default function Sidebar() {
                   <span className="break-all font-light">
                     &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
                   </span>{" "}
-                  before it can access this remote project.
+                  before it can access this remote workspace.
                 </>
               ) : (
                 <>
@@ -251,7 +222,7 @@ export default function Sidebar() {
                   <span className="break-all font-light">
                     &quot;{remoteExecutionAccess.remoteExecutionAuthPromptLabel}&quot;
                   </span>{" "}
-                  before it can access this remote project.
+                  before it can access this remote workspace.
                 </>
               )
             }

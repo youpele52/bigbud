@@ -11,6 +11,14 @@ vi.mock("../../hooks/useSettings", () => ({
 import { ComposerProvidersSettingsSection } from "./ComposerProvidersSettingsSection";
 
 describe("composer provider visibility settings", () => {
+  it("labels the section and explains which menus it controls", () => {
+    const markup = renderToStaticMarkup(<ComposerProvidersSettingsSection />);
+
+    expect(markup).toContain("Visibility</h2>");
+    expect(markup).toContain("Choose which providers appear in the composer and /model menu.");
+    expect(markup).not.toContain("Provider visibility");
+  });
+
   it.each([
     { hidden: [] as ProviderKind[] },
     { hidden: ["opencode"] as ProviderKind[] },

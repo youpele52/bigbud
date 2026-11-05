@@ -11,6 +11,7 @@ import {
   type ThreadId,
 } from "@bigbud/contracts";
 import { Clock, Effect } from "effect";
+import { isTaskFreshnessNewer } from "@bigbud/shared/providerRuntime";
 
 import type { RuntimeProcessorServices } from "./ProviderRuntimeIngestion.processor.ts";
 import { SubagentUpsertThrottle } from "./ProviderRuntimeIngestion.subagentThrottle.ts";
@@ -141,12 +142,27 @@ export function makeRuntimeTaskProcessor(input: {
     threadId: ThreadId,
   ) {
     if (event.type === "task.removed") {
-      throttle.discard(threadId, event.payload.taskId);
+      const currentTasks = yield* readTasks(threadId);
+      // Ordinary tasks retain their adapter ID; subagent native references use the
+      // same thread/epoch normalization as upserts, including the throttle key.
+      const taskId = currentTasks.some((task) => task.id === event.payload.taskId)
+        ? event.payload.taskId
+        : resolveRuntimeTaskIdentity({
+            threadId,
+            provider: event.provider,
+            ...(event.sessionEpoch !== undefined ? { sessionEpoch: event.sessionEpoch } : {}),
+            incomingTaskId: event.payload.taskId,
+            currentTasks,
+          }).id;
+      const previous =
+        throttle.pending(threadId, taskId) ?? currentTasks.find((task) => task.id === taskId);
+      if (previous && !isTaskFreshnessNewer(event.payload.freshness, previous.freshness)) return;
+      throttle.discard(threadId, taskId);
       yield* orchestrationEngine.dispatch({
         type: "thread.task.remove",
         commandId: input.providerCommandId(event, "thread-task-remove"),
         threadId,
-        taskId: event.payload.taskId,
+        taskId,
         source: event.payload.source,
         freshness: event.payload.freshness,
         ...(event.payload.replacement ? { replacement: event.payload.replacement } : {}),

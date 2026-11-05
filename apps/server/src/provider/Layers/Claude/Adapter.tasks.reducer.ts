@@ -133,6 +133,8 @@ function updateRecord(input: {
   const terminal =
     nextStatus === "completed" || nextStatus === "failed" || nextStatus === "stopped";
   const { endedAt, ...rest } = fields;
+  // Progress/settlement may arrive while a different root turn is running.
+  const turnId = existing && transition !== "newer" ? existing.turnId : context.turnId;
   const next: ClaudeTask = {
     id: durableId ?? existing?.id ?? provisionalId,
     sourceToolUseId: existing?.sourceToolUseId ?? context.toolUseId,
@@ -141,11 +143,7 @@ function updateRecord(input: {
     ...(terminal ? { endedAt: endedAt ?? context.updatedAt } : {}),
     status: nextStatus,
     ...(nativeStatus ? { nativeStatus } : {}),
-    ...(context.turnId
-      ? { turnId: context.turnId }
-      : existing?.turnId
-        ? { turnId: existing.turnId }
-        : {}),
+    ...(turnId ? { turnId } : {}),
     order: existing?.order ?? context.state.nextOrder++,
     membership: {
       taskList: input.memberships?.taskListMember ?? existing?.taskListMember ?? false,

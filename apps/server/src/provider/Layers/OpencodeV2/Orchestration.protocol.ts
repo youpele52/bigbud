@@ -9,6 +9,7 @@ export const V2_THREAD_ACTIONS = [
   "get_thread_status",
   "list_threads",
   "rename_thread",
+  "render_html",
 ] as const;
 export const V2_THREAD_OWNER_FIELDS = [
   "protocol",

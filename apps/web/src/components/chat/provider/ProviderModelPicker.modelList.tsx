@@ -6,6 +6,8 @@ import { MenuGroup, MenuGroupLabel, MenuRadioGroup, MenuRadioItem } from "../../
 import { Spinner } from "../../ui/spinner";
 import { Button } from "../../ui/button";
 import { OpenCodeSetupMenuItem } from "./ProviderModelPicker.setup";
+import { CopilotSetupMenuItem } from "./ProviderModelPicker.copilotSetup";
+import { ContributorTrainingBadge } from "./ProviderModelPicker.contributorTrainingBadge";
 import { cn } from "~/lib/utils";
 import {
   groupModelOptions,
@@ -99,6 +101,9 @@ export function ModelList({
         } as ComponentProps<"div">
       }
     >
+      {provider === "copilot" && unavailableMessage ? (
+        <CopilotSetupMenuItem className={itemClassName} />
+      ) : null}
       <MenuRadioGroup value={selectedValue} onValueChange={onSelect}>
         {showLoadingState ? (
           <div className="flex items-center gap-2 px-3 py-4 text-xs text-muted-foreground/70">
@@ -119,6 +124,7 @@ export function ModelList({
                 {modelOption.availability === "requires-setup" ? (
                   <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                 ) : null}
+                {modelOption.contributorTraining ? <ContributorTrainingBadge /> : null}
               </MenuRadioItem>
             ))}
           </MenuGroup>
@@ -143,6 +149,7 @@ export function ModelList({
                   {modelOption.availability === "requires-setup" ? (
                     <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                   ) : null}
+                  {modelOption.contributorTraining ? <ContributorTrainingBadge /> : null}
                 </MenuRadioItem>
               ))}
             </MenuGroup>
@@ -159,6 +166,7 @@ export function ModelList({
                 {modelOption.availability === "requires-setup" ? (
                   <span className="ms-auto text-xs text-muted-foreground">{setupLabel}</span>
                 ) : null}
+                {modelOption.contributorTraining ? <ContributorTrainingBadge /> : null}
               </MenuRadioItem>
             ))}
           </MenuGroup>

@@ -163,6 +163,24 @@ describe("thread.fork decider", () => {
     ).toEqual([]);
   });
 
+  it("downgrades an inherited full-access mode for a continued Muse thread", async () => {
+    const { events, fork } = await forkOf(
+      readModel(sourceThread({ pairs: 1, provider: "muse", runtimeMode: "full-access" })),
+    );
+    expect(fork?.runtimeMode).toBe("auto-accept-edits");
+    const requested = events.find((event) => event.type === "thread.turn-start-requested");
+    expect(requested).toBeUndefined();
+    const created = events.find((event) => event.type === "thread.created");
+    expect(created?.payload).toMatchObject({ runtimeMode: "auto-accept-edits" });
+  });
+
+  it("keeps a user-chosen stricter mode for a continued Muse thread", async () => {
+    const { fork } = await forkOf(
+      readModel(sourceThread({ pairs: 1, provider: "muse", runtimeMode: "approval-required" })),
+    );
+    expect(fork?.runtimeMode).toBe("approval-required");
+  });
+
   it("never switches provider automatically; only an explicit manual choice may", async () => {
     await expect(
       decide(

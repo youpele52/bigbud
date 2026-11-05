@@ -20,8 +20,8 @@ export const ACP_SESSION_CLEANUP_TIMEOUT = Duration.millis(500);
  * How long a repeated stop (the adapter finalizer) waits for one in flight.
  *
  * Worst case for one stop: 3 × 500 ms of capped cleanup, then the scope close's bounded agent
- * release (`ACP_CHILD_FORCE_KILL_AFTER`, 2 s of SIGTERM, plus up to 1 s waiting after SIGKILL),
- * about 4.5 s in all. That exceeds the 3 s per-adapter stop-all timeout
+ * release (`ACP_CHILD_FORCE_KILL_AFTER`, 2 s of SIGTERM, up to 1 s waiting after SIGKILL, and up
+ * to 0.5 s for the SIGKILLed group to clear), about 5 s in all. That exceeds the 3 s per-adapter stop-all timeout
  * (`PROVIDER_STOP_ALL_ADAPTER_TIMEOUT`), which only bounds how long stop-all waits; the stop keeps
  * running in its detached fiber. This wait bounds the finalizer instead and can return just before
  * the last SIGKILL wait ends.

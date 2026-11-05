@@ -8,7 +8,7 @@ import { makeV2LearningReview } from "./Runtime.learning.ts";
 import { v2ExecutionFailureClass, v2ExecutionIssue } from "./Adapter.execution.errors.ts";
 import { V2StartAttempt } from "./Runtime.start.ts";
 import { V2_EXECUTION_CAPABILITIES } from "./Adapter.capabilities.ts";
-import { currentV2RequestContext } from "./Client.guard.ts";
+import { currentV2RequestContext, runDetachedV2RequestContext } from "./Client.guard.ts";
 import { v2Promise, v2TryPromise } from "./Client.guard.async.ts";
 import { guardV2Publication, validV2Publication } from "./Runtime.publication.ts";
 import { runV2Caller } from "./Runtime.caller.ts";
@@ -51,7 +51,9 @@ export const makeV2RuntimeAdapter = Effect.fn("makeV2RuntimeAdapter")(function* 
     v2TryPromise({
       try: (signal) =>
         ["stopSession", "stopAll", "shutdown", "interruptTurn"].includes(operation)
-          ? run()
+          ? ["stopAll", "shutdown"].includes(operation)
+            ? runDetachedV2RequestContext(run)
+            : run()
           : ["startSession", "sendTurn"].includes(operation)
             ? runV2Caller(signal, operation === "sendTurn", () => runtime.authorized(run))
             : runtime.authorized(run),

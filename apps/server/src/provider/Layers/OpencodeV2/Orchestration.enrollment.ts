@@ -40,7 +40,7 @@ const Ack = Schema.Struct({
 export interface V2EnrollmentOptions {
   readonly records: V2ThreadRecords;
   readonly privateKey: string;
-  readonly client: OpencodeV2Client;
+  client: OpencodeV2Client;
   readonly owner: V2ThreadOwner;
   readonly transport: string;
   readonly assertCurrent: () => void;

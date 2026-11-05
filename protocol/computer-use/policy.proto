@@ -1,0 +1,20 @@
+syntax = "proto3";
+package bigbud.computer_use.policy;
+
+// Complete canonical safety projection, not arbitrary field patches. Canonical
+// encoding/digest must be validated before acknowledgement or reopening.
+message ApplyPolicy {
+  string request_id = 1;
+  string authority_id = 2;
+  string revision = 3;
+  bytes digest = 4;
+  bytes canonical_policy = 5;
+  string fence_id = 6;
+}
+message PolicyAcknowledged {
+  string request_id = 1;
+  string authority_id = 2;
+  string revision = 3;
+  bytes digest = 4;
+  string fence_id = 5;
+}

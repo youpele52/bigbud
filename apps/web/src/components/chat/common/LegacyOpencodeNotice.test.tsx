@@ -12,7 +12,7 @@ describe("legacy OpenCode history presentation", () => {
     expect(markup).toContain(LEGACY_OPENCODE_READ_ONLY_MESSAGE);
     expect(markup).toContain('role="status"');
     expect(markup).toContain('data-slot="alert"');
-    expect(markup).toContain("border-warning/32");
+    expect(markup).toContain("border-l-warning");
     expect(markup).toContain("bg-warning/4");
     expect(markup).not.toContain("<form");
     expect(markup.match(/<button/g)).toHaveLength(1);

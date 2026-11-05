@@ -47,7 +47,7 @@ function makeSession(eventClient?: unknown): ActiveOpencodeSession {
   } as unknown as ActiveOpencodeSession;
 }
 
-describe("OpenCode and KiloCode native child routing", () => {
+describe("OpenCode native child routing", () => {
   it.each([created(), assistant(), text()])("reads nested $type identity", (native) => {
     expect(opencodeEventSessionId(native)).toBe("child");
     expect(
@@ -58,7 +58,7 @@ describe("OpenCode and KiloCode native child routing", () => {
     ).toBe("top");
   });
 
-  it.each(["opencode", "kilocode"] as const)(
+  it.each(["opencode"] as const)(
     "routes legacy child events to %s subagent cards, never the parent conversation",
     async (provider) => {
       const native = [

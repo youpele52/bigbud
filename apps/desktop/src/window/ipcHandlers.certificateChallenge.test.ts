@@ -15,6 +15,7 @@ import {
   registerCertificateChallengeHandlers,
   registerCertificateChallengeIpcHandler,
 } from "./ipcHandlers.certificateChallenge";
+import { authorizeFakeSenders, fakeIpcSender } from "./ipcAuthorization.testSupport";
 
 describe("certificate challenge IPC", () => {
   beforeEach(() => {
@@ -28,15 +29,15 @@ describe("certificate challenge IPC", () => {
     const resolve = vi.fn(() => true);
     registerCertificateChallengeIpcHandler({ resolve } as never);
     const handler = handlers.get("desktop:resolve-certificate-challenge");
-    const sender = { id: 1 };
+    const sender = fakeIpcSender(1);
+    authorizeFakeSenders([[sender, "main"]]);
+    const event = { sender, senderFrame: sender.mainFrame };
 
-    expect(handler?.({ sender }, { challengeId: "", guestWebContentsId: 2, allow: true })).toBe(
-      false,
-    );
+    expect(handler?.(event, { challengeId: "", guestWebContentsId: 2, allow: true })).toBe(false);
     expect(resolve).not.toHaveBeenCalled();
 
     expect(
-      handler?.({ sender }, { challengeId: "challenge-1", guestWebContentsId: 2, allow: true }),
+      handler?.(event, { challengeId: "challenge-1", guestWebContentsId: 2, allow: true }),
     ).toBe(true);
     expect(resolve).toHaveBeenCalledWith(sender, {
       challengeId: "challenge-1",

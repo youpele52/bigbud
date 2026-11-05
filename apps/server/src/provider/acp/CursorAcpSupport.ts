@@ -69,6 +69,32 @@ export const makeCursorAcpRuntime = (
     return yield* Effect.service(AcpSessionRuntime).pipe(Effect.provide(acpContext));
   });
 
+/**
+ * One-shot Cursor ACP use: the agent lives only for `use`. However `use` ends (success, failure,
+ * interruption, an outer timeout), its scope is closed, which kills the agent's process group with
+ * the bounded release (`AcpChildProcessRelease`). The close runs in a detached fiber, so the
+ * agent's teardown (up to a few seconds for a worker that ignores SIGTERM) neither delays the
+ * result nor counts against the caller's timeout. Prefer this over `makeCursorAcpRuntime` unless
+ * the runtime must outlive the caller (sessions).
+ */
+export const withCursorAcpRuntime = <A, E, R>(
+  input: CursorAcpRuntimeInput,
+  use: (runtime: AcpSessionRuntimeShape) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | EffectAcpErrors.AcpError, Exclude<R, Scope.Scope>> =>
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const exit = yield* restore(
+        makeCursorAcpRuntime(input).pipe(
+          Effect.flatMap(use),
+          Effect.provideService(Scope.Scope, scope),
+        ),
+      ).pipe(Effect.exit);
+      yield* Effect.forkDetach(Scope.close(scope, exit));
+      return yield* exit;
+    }),
+  );
+
 interface CursorAcpModelSelectionRuntime {
   readonly getConfigOptions: AcpSessionRuntimeShape["getConfigOptions"];
   readonly setConfigOption: (

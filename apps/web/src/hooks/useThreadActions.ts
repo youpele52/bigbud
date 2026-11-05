@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import { ThreadId, type MessageId, type ModelSelection } from "@bigbud/contracts";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useCallback, useRef } from "react";
@@ -235,7 +236,9 @@ export function useThreadActions() {
           projectId: sourceThread.projectId,
           title: branchedThreadTitle,
           ...executionTargets,
-          modelSelection: options?.modelSelection ?? sourceThread.modelSelection,
+          modelSelection: requireActiveModelSelection(
+            options?.modelSelection ?? sourceThread.modelSelection,
+          ),
           runtimeMode: sourceThread.runtimeMode,
           interactionMode: sourceThread.interactionMode,
           branch: sourceThread.branch,

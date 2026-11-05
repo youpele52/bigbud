@@ -3,18 +3,41 @@ import type { ReactNode } from "react";
 import { isElectron } from "~/config/env";
 import { cn } from "~/lib/utils";
 import { useSidebar } from "../ui/sidebar";
+import { WINDOW_COLLAPSED_HEADER_INSET_CLASS } from "./windowChrome";
 
 interface ContentPanelHeaderBarProps {
   readonly actions?: ReactNode;
   readonly center?: ReactNode;
   readonly title: ReactNode;
+  /**
+   * On desktop while the sidebar is closed, lays the header out with this grid (leading spacer,
+   * title, actions) so the title can line up with the page content below it.
+   */
+  readonly collapsedTitleGridClassName?: string;
 }
 
 export const CONTENT_PANEL_HEADER_CENTER_GRID_CLASS =
   "grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2";
 
-export function ContentPanelHeaderBar({ actions, center, title }: ContentPanelHeaderBarProps) {
+export function ContentPanelHeaderBar({
+  actions,
+  center,
+  title,
+  collapsedTitleGridClassName,
+}: ContentPanelHeaderBarProps) {
   const { open: sidebarOpen } = useSidebar();
+
+  if (isElectron && collapsedTitleGridClassName && !sidebarOpen && !center) {
+    return (
+      <div className="@container/header-actions flex min-w-0 flex-1 items-center">
+        <div className={collapsedTitleGridClassName}>
+          <div aria-hidden="true" />
+          <div className="flex min-w-0 items-center overflow-hidden">{title}</div>
+          <div className="flex min-w-0 items-center justify-end gap-2">{actions}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="@container/header-actions flex min-w-0 flex-1 items-center gap-2">
@@ -22,7 +45,7 @@ export function ContentPanelHeaderBar({ actions, center, title }: ContentPanelHe
         <div
           className={cn(
             "hidden shrink-0 md:block",
-            isElectron ? "w-20" : "h-0 w-[calc(3rem+1rem)]",
+            isElectron ? WINDOW_COLLAPSED_HEADER_INSET_CLASS : "h-0 w-[calc(3rem+1rem)]",
           )}
         />
       )}

@@ -1,7 +1,13 @@
 import { Schema } from "effect";
 
-import { CommandId, IsoDateTime, MessageId, NonNegativeInt, ThreadId } from "../core/baseSchemas";
-import { ProviderKind } from "./orchestration.provider";
+import {
+  CommandId,
+  IsoDateTime,
+  MessageId,
+  NonNegativeInt,
+  ThreadId,
+  TrimmedNonEmptyString,
+} from "../core/baseSchemas";
 
 /**
  * Stop disposition of a durable recovery intent (one per accepted turn).
@@ -61,7 +67,7 @@ export const ThreadRecovery = Schema.Struct({
   reason: Schema.NullOr(ThreadRecoveryReason),
   toolSummary: Schema.NullOr(Schema.String),
   attempt: NonNegativeInt,
-  provider: Schema.NullOr(ProviderKind),
+  provider: Schema.NullOr(TrimmedNonEmptyString),
   messageId: MessageId,
   updatedAt: IsoDateTime,
 });

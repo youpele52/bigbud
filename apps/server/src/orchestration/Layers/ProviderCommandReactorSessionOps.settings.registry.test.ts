@@ -9,7 +9,6 @@ import { CodexAdapter } from "../../provider/Services/Codex/Adapter.ts";
 import { CopilotAdapter } from "../../provider/Services/Copilot/Adapter.ts";
 import { CursorAdapter } from "../../provider/Services/Cursor/Adapter.ts";
 import { DevinAdapter } from "../../provider/Services/Devin/Adapter.ts";
-import { KilocodeAdapter } from "../../provider/Services/Kilocode/Adapter.ts";
 import { OpencodeAdapter } from "../../provider/Services/Opencode/Adapter.ts";
 import { PiAdapter } from "../../provider/Services/Pi/Adapter.ts";
 import { ProviderAdapterRegistry } from "../../provider/Services/ProviderAdapterRegistry.ts";
@@ -41,7 +40,6 @@ const registryLayer = makeProviderAdapterRegistryLive({
       Layer.succeed(CopilotAdapter, adapter("copilot")),
       Layer.succeed(CursorAdapter, adapter("cursor")),
       Layer.succeed(DevinAdapter, adapter("devin")),
-      Layer.succeed(KilocodeAdapter, adapter("kilocode")),
       Layer.succeed(OpencodeAdapter, adapter("opencode")),
       Layer.succeed(PiAdapter, adapter("pi")),
     ),

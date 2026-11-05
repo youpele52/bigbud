@@ -10,7 +10,9 @@ import {
 import {
   normalizeAnnotationComment,
   normalizeBrowserAnnotationElement,
+  isChatCitationAttachment,
 } from "../../../stores/composer/types.annotation.store";
+import { ChatCitationChip } from "../common/ChatCitationChip";
 import {
   StructuredAnnotationPreviews,
   type StructuredAnnotationPreviewItem,
@@ -27,12 +29,38 @@ function annotationLabel(count: number): string {
   return count === 1 ? "1 annotation" : `${count} annotations`;
 }
 
-export function ComposerAnnotationPreviews({
+export function ComposerAnnotationPreviews(props: ComposerAnnotationPreviewsProps) {
+  const citations = props.annotations.filter(isChatCitationAttachment);
+  const annotations = props.annotations.filter(
+    (annotation) => !isChatCitationAttachment(annotation),
+  );
+  return (
+    <>
+      {citations.length > 0 ? (
+        <div className="mb-3 flex flex-wrap gap-2" aria-label="Citations">
+          {citations.map((citation, index) => (
+            <ChatCitationChip
+              key={citation.id}
+              citation={citation}
+              onRemove={() => props.onRemoveAnnotation(citation.id)}
+              removeLabel={`Remove citation ${index + 1}`}
+            />
+          ))}
+        </div>
+      ) : null}
+      <ComposerSurfaceAnnotationPreviews {...props} annotations={annotations} />
+    </>
+  );
+}
+
+function ComposerSurfaceAnnotationPreviews({
   annotations,
   images,
   onRemoveAnnotation,
   onClearAnnotations,
-}: ComposerAnnotationPreviewsProps) {
+}: Omit<ComposerAnnotationPreviewsProps, "annotations"> & {
+  annotations: Exclude<ComposerAnnotationAttachment, { kind: "chat" }>[];
+}) {
   if (annotations.length === 0) return null;
   const imageById = new Map(images.map((image) => [image.id, image]));
   const items: StructuredAnnotationPreviewItem[] = annotations.map((annotation, index) => {

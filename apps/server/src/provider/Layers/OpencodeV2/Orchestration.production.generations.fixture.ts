@@ -50,7 +50,7 @@ export async function runV2ProductionGenerationsFixture() {
       };
       const a = (await invoke("list_threads", {}, "completed-list-A")) as Listed;
       assert.equal(a.result.returnedCount, 2);
-      await selectImplementation("v2");
+      await selectImplementation("v4");
       assert.deepEqual(await invoke("create_thread", input, "completed-create-A"), created);
       assert.deepEqual(await invoke("list_threads", {}, "completed-list-A"), a);
       assert.equal(canonical.dispatched.length, 1);
@@ -70,13 +70,13 @@ export async function runV2ProductionGenerationsFixture() {
       });
       const invokeB = invokeFor(runtime.get(childId));
       const b = (await invokeB("list_threads", {}, "completed-list-B")) as BListed;
-      assert.equal(b.implementation, "bounded-list-v2");
+      assert.equal(b.implementation, "bounded-list-v4");
       assert.equal(b.result.result.limit, 1);
       assert.equal(b.result.result.returnedCount, 1);
       assert.deepEqual(await invokeB("list_threads", {}, "completed-list-B"), b);
-      await selectImplementation("v1");
+      await selectImplementation("v3");
       const pinnedB = (await invokeB("list_threads", {}, "new-call-pinned-B")) as BListed;
-      assert.equal(pinnedB.implementation, "bounded-list-v2");
+      assert.equal(pinnedB.implementation, "bounded-list-v4");
       assert.equal(pinnedB.result.result.returnedCount, 1);
       assert.equal((await canonical.run(canonical.engine.getReadModel())).threads.length, 2);
       assert.equal(source.native.id, nativeId);
@@ -89,8 +89,8 @@ export async function runV2ProductionGenerationsFixture() {
       report = {
         fixture: "synthetic-native-production-http-sqlite",
         nativeQualified: false,
-        aDigest: v2ThreadImplementation("v1").implementationDigest,
-        bDigest: v2ThreadImplementation("v2").implementationDigest,
+        aDigest: v2ThreadImplementation("v3").implementationDigest,
+        bDigest: v2ThreadImplementation("v4").implementationDigest,
         bootstrapDigest: artifact.artifactDigest,
         canonicalCreates: canonical.dispatched.length,
         aReturnedCount: a.result.returnedCount,

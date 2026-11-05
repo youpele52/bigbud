@@ -1,16 +1,15 @@
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
-import { PROVIDER_DISPLAY_NAMES } from "@bigbud/contracts/constants/provider.constant.ts";
 
 import { useTerminalStateStore } from "../../stores/terminal/terminal.store";
 import { selectThreadTerminalProvider } from "../../stores/terminal/terminal.store.recentAgent";
-import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
+import { terminalAgentIcon, terminalAgentLabel } from "../terminal/terminalAgentIcons";
 import { SidebarThreadProviderIcon } from "./SidebarThreadProviderIcon";
 
-/** Keep the terminal identity independent of the chat provider and its working animation. */
+/** Keep the terminal identity independent of the chat provider; it only renders for a running terminal agent, so it breathes. */
 export function SidebarThreadTerminalProviderIcon({ threadId }: { threadId: ThreadId }) {
   const provider = useTerminalStateStore((state) => selectThreadTerminalProvider(state, threadId));
   if (!provider) return null;
-  const label = `Terminal provider: ${PROVIDER_DISPLAY_NAMES[provider]}`;
+  const label = terminalAgentLabel(provider);
   return (
     <span
       role="img"
@@ -20,9 +19,9 @@ export function SidebarThreadTerminalProviderIcon({ threadId }: { threadId: Thre
       className="inline-flex shrink-0"
     >
       <SidebarThreadProviderIcon
-        icon={PROVIDER_ICON_BY_PROVIDER[provider]}
+        icon={terminalAgentIcon(provider)}
         colorClass="text-info-foreground"
-        animationClass=""
+        animationClass="animate-breathe motion-reduce:animate-none"
       />
     </span>
   );

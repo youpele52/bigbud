@@ -82,6 +82,7 @@ export function SidebarProjectList({
   const hasMoreProjects =
     retryCatalogHead || (projectCatalogCursor !== null && projectCatalogCursor !== undefined);
   const loadMoreCount = Math.min(5, projectCatalogRemainingCount ?? 5);
+  const itemLabel = catalogScope === "remote" ? "workspace" : "project";
   const attachAutoAnimateRef = useSidebarAutoAnimateRef();
 
   return (
@@ -131,10 +132,10 @@ export function SidebarProjectList({
             }}
           >
             {projectCatalogLoading
-              ? "Loading projects..."
+              ? `Loading ${itemLabel}s...`
               : projectCatalogError
-                ? "Retry loading projects"
-                : `Load ${loadMoreCount} more project${loadMoreCount === 1 ? "" : "s"}`}
+                ? `Retry loading ${itemLabel}s`
+                : `Load ${loadMoreCount} more ${itemLabel}${loadMoreCount === 1 ? "" : "s"}`}
           </button>
           {projectCatalogRemainingCount !== null && projectCatalogRemainingCount > 5 ? (
             <button
@@ -147,7 +148,7 @@ export function SidebarProjectList({
                   void loadAllProjectCatalog({ api, scope: catalogScope }).catch(() => undefined);
               }}
             >
-              {`Load all ${projectCatalogRemainingCount} projects`}
+              {`Load all ${projectCatalogRemainingCount} ${itemLabel}s`}
             </button>
           ) : null}
         </div>
@@ -155,7 +156,7 @@ export function SidebarProjectList({
 
       {!hasProjects && showEmptyState ? (
         <div className="px-2 pt-4 text-center text-xs text-muted-foreground/60">
-          No projects yet
+          No {itemLabel}s yet
         </div>
       ) : null}
     </>

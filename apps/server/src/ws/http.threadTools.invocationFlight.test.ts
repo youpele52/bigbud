@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { afterEach, describe, vi } from "vitest";
@@ -10,6 +9,7 @@ import {
   isThreadToolInvocationInFlight,
 } from "../orchestration-tools/threadToolInvocationFlights.ts";
 import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "../server.test.helpers.ts";
+import { serverHttpTestLayer } from "../server.test.http.ts";
 import { deriveServerPaths } from "../startup/config.ts";
 
 const TOKEN = "thread-invocation-flight-token";
@@ -55,7 +55,7 @@ describe("thread tool invocation flights on the route", () => {
         const refused = yield* Effect.promise(() => post("v2-tool:abandoned"));
         assert.equal(refused.status, 409);
         assert.equal(getSystemResources.mock.calls.length, 0);
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
 
     it.effect("keeps the invocation in flight until the handler has ended", () =>
@@ -78,7 +78,7 @@ describe("thread tool invocation flights on the route", () => {
         yield* Effect.promise(() =>
           vi.waitFor(() => assert.isFalse(isThreadToolInvocationInFlight("v2-tool:running"))),
         );
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
     );
   });
 });

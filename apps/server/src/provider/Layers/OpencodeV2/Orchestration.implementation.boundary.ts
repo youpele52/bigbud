@@ -1,10 +1,7 @@
 import * as Schema from "effect/Schema";
 import { ThreadToolRequest } from "../../../ws/http.threadTools.schema.ts";
-import type {
-  V2CanonicalBody,
-  V2PureAction,
-  V2PureJson,
-} from "./Orchestration.implementation.types.ts";
+import type { V2CanonicalBody, V2PureAction } from "./Orchestration.implementation.types.v3.ts";
+import type { V2PureJson } from "./Orchestration.implementation.types.ts";
 
 /** Own/freeze plain JSON before pure code runs; reject accessors, prototypes and unbounded structures. */
 export function v2ImmutableJson(value: unknown): V2PureJson {
@@ -80,6 +77,7 @@ export function validateV2PreparedBody(
     get_thread_status: ["action", "threadId"],
     list_threads: ["action", "projectId", "status", "limit", "includeExcerpt"],
     rename_thread: ["action", "threadId", "targetThreadId", "title"],
+    render_html: ["action", "htmlArguments"],
   };
   if (
     Object.keys(body).some((key) => !allowed[action].includes(key)) ||

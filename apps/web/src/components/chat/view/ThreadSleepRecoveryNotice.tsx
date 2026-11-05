@@ -1,5 +1,3 @@
-import { InfoIcon, LoaderCircleIcon, TriangleAlertIcon, XCircleIcon } from "lucide-react";
-
 import type { Thread } from "../../../models/types/app.types";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
 import { Button } from "../../ui/button";
@@ -8,17 +6,8 @@ import {
   useResolveThreadRecovery,
   useSleepRecoveryNotice,
 } from "./ThreadSleepRecoveryNotice.hooks";
-import type { SleepRecoveryNotice } from "./ThreadSleepRecoveryNotice.logic";
-
-function NoticeIcon({ notice }: { readonly notice: SleepRecoveryNotice }) {
-  if (notice.kind === "resuming") return <LoaderCircleIcon className="animate-spin" aria-hidden />;
-  if (notice.tone === "info") return <InfoIcon aria-hidden />;
-  if (notice.tone === "warning") return <TriangleAlertIcon aria-hidden />;
-  return <XCircleIcon aria-hidden />;
-}
-
 /**
- * Sleep and wake recovery: blue while bigbud resumes or the provider continued by itself, amber
+ * Sleep and wake recovery: blue while bigbud resumes, green when the provider continued, amber
  * when the outcome is unknown and the user decides, red once automatic attempts are parked.
  * The close button hides one state for this app run; the actions resolve it on the server.
  */
@@ -36,11 +25,16 @@ export function ThreadSleepRecoveryNotice({
   const informational = notice.tone === "info";
   return (
     <ChatBanner
-      variant={notice.tone}
+      variant={
+        notice.kind === "resuming"
+          ? "loading"
+          : notice.kind === "provider-continued"
+            ? "success"
+            : notice.tone
+      }
       role={informational ? "status" : "alert"}
       aria-live={informational ? "polite" : "assertive"}
       data-sleep-recovery-notice={notice.kind}
-      icon={<NoticeIcon notice={notice} />}
       description={notice.description}
       dismissLabel="Dismiss sleep recovery notice"
       onDismiss={dismiss}

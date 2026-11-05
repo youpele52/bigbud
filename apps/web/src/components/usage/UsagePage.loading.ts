@@ -1,15 +1,9 @@
-import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import type { ServerUsageRange, ServerUsageSummaryResult } from "@bigbud/contracts/server/usage.ts";
 import { useEffect, useState } from "react";
 
 import { retryTransportRecoveryOperation } from "~/logic/orchestration/transport-retry.logic";
 import { readNativeApi } from "~/rpc/nativeApi";
 import { toastManager } from "../ui/toast";
-
-/** Retained provider allowances are usable before the independent usage summary arrives. */
-export function hasUsagePageLimits(limits: ReadonlyArray<ServerProviderUsageLimits | undefined>) {
-  return limits.some((limit) => limit?.status === "available" || limit?.status === "stale");
-}
 
 /** Refresh in place and ignore completions belonging to an obsolete range or unmounted page. */
 export function useUsagePageSummary(range: ServerUsageRange) {

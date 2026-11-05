@@ -1,7 +1,6 @@
 import { Effect, Exit, ManagedRuntime, Scope } from "effect";
 import type { RpcClient } from "effect/unstable/rpc";
 
-import { waitForDesktopBackendReady } from "./desktopBackendReady";
 import {
   createWsRpcProtocolLayer,
   makeWsRpcProtocolClient,
@@ -26,12 +25,11 @@ export function createWsTransportSession(
   const runtime = ManagedRuntime.make(createWsRpcProtocolLayer(url, lifecycle, controls));
   const clientScope = Effect.runSync(Scope.make());
   const readinessController = new AbortController();
-  const clientPromise = waitForDesktopBackendReady(
-    typeof window === "undefined" ? undefined : window.desktopBridge,
-    readinessController.signal,
-  ).then(() => {
+  // The protocol gates each socket attempt on desktop readiness. Keep client
+  // creation cancellable too, so closing this session cannot start a late runtime.
+  const clientPromise = Promise.resolve().then(() => {
     if (readinessController.signal.aborted) {
-      throw new Error("WebSocket transport session closed before backend readiness.");
+      throw new Error("WebSocket transport session closed before client creation.");
     }
     return runtime.runPromise(Scope.provide(clientScope)(makeWsRpcProtocolClient));
   });

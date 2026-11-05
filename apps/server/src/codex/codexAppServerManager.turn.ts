@@ -2,34 +2,32 @@
  * Turn and interaction operations for CodexAppServerManager — send turns,
  * interrupt, read, rollback, and respond to requests/user-input.
  */
-import { randomUUID } from "node:crypto";
-
 import {
-  ApprovalRequestId,
-  EventId,
   TurnId,
-  type ProviderApprovalDecision,
   type ProviderEvent,
   type ProviderSession,
   type ProviderTurnStartResult,
-  type ProviderUserInputAnswers,
 } from "@bigbud/contracts";
 
 import { resolveCodexModelForAccount } from "../provider/codexAccount";
 import { buildCodexCollaborationMode, normalizeCodexModelSlug } from "./codexModeInstructions";
 import { resolveCodexModelSelection } from "./codexAppServerManager.modelSelection";
-import { parseThreadSnapshot, readObject, readString } from "./codexAppServerManager.protocol";
+import { readObject, readString } from "./codexAppServerManager.protocol";
+import { readCodexThreadHistory } from "./codexAppServerManager.history.ts";
+import { CodexRpcError } from "./codexAppServerManager.errors.ts";
+import { hasQualifiedCodexModernProtocol } from "./codexAppServerManager.capabilities.ts";
+import { compactBlocksWork } from "./codexAppServerManager.controls.state.ts";
 import {
   type CodexAppServerSendTurnInput,
   type CodexAppServerSteerTurnInput,
   type CodexSessionContext,
   type CodexThreadSnapshot,
+  type CodexWriteOptions,
 } from "./codexAppServerManager.types";
 import {
   mapCodexRuntimeMode,
   mapCodexTurnSandboxPolicy,
   readResumeThreadId,
-  toCodexUserInputAnswers,
 } from "./codexAppServerManager.utils";
 
 export interface TurnOps {
@@ -38,8 +36,13 @@ export interface TurnOps {
     method: string,
     params: unknown,
     timeoutMs?: number,
+    shouldDispatch?: () => boolean,
   ) => Promise<T>;
-  readonly writeMessage: (ctx: CodexSessionContext, message: unknown) => void;
+  readonly writeMessage: (
+    ctx: CodexSessionContext,
+    message: unknown,
+    options?: CodexWriteOptions,
+  ) => void | Promise<void>;
   readonly updateSession: (ctx: CodexSessionContext, updates: Partial<ProviderSession>) => void;
   readonly emitEvent: (event: ProviderEvent) => void;
 }
@@ -49,6 +52,14 @@ export async function sendTurn(
   context: CodexSessionContext,
   ops: TurnOps,
 ): Promise<ProviderTurnStartResult> {
+  if (compactBlocksWork(context))
+    throw new CodexRpcError(
+      "turn/start",
+      context.session.sessionEpoch,
+      "not-dispatched",
+      "Manual compaction is pending or uncertain; no turn was sent.",
+    );
+  context.historyGeneration = (context.historyGeneration ?? 0) + 1;
   context.collabReceiverTurns.clear();
 
   const turnInput: Array<
@@ -62,6 +73,14 @@ export async function sendTurn(
     });
   }
   for (const attachment of input.attachments ?? []) {
+    if (attachment.type === "file") {
+      throw new CodexRpcError(
+        "turn/start",
+        context.session.sessionEpoch,
+        "not-dispatched",
+        "Codex does not support native generic file input. Supply extracted text or a readable provider path.",
+      );
+    }
     if (attachment.type === "image") {
       turnInput.push({
         type: "image",
@@ -126,6 +145,14 @@ export async function sendTurn(
     turnStartParams.model = modelSelection.model;
   }
   if (input.serviceTier !== undefined) {
+    if (input.serviceTier === null && !hasQualifiedCodexModernProtocol(context.runtimeVersion)) {
+      throw new CodexRpcError(
+        "turn/start",
+        context.session.sessionEpoch,
+        "not-dispatched",
+        "Resetting the Codex service tier is unavailable for this unqualified runtime version.",
+      );
+    }
     turnStartParams.serviceTier = input.serviceTier;
   }
   if (modelSelection.effort !== undefined) {
@@ -148,14 +175,21 @@ export async function sendTurn(
   const turn = readObject(readObject(response), "turn");
   const turnIdRaw = readString(turn, "id");
   if (!turnIdRaw) {
-    throw new Error("turn/start response did not include a turn id.");
+    throw new CodexRpcError(
+      "turn/start",
+      context.session.sessionEpoch,
+      "possibly-applied",
+      "turn/start response did not include a turn id.",
+    );
   }
   const turnId = TurnId.makeUnsafe(turnIdRaw);
+  context.ownedTurnId = turnId;
 
   context.effectiveModelSelection = modelSelection;
   ops.updateSession(context, {
-    status: "running",
-    activeTurnId: turnId,
+    ...(context.completedTurnId === turnId
+      ? {}
+      : { status: "running" as const, activeTurnId: turnId }),
     model: modelSelection.model,
     ...(context.session.resumeCursor !== undefined
       ? { resumeCursor: context.session.resumeCursor }
@@ -216,7 +250,12 @@ export async function steerTurn(
   });
   const acknowledgedTurnId = readString(readObject(response), "turnId");
   if (acknowledgedTurnId !== input.expectedTurnId) {
-    throw new Error("turn/steer acknowledgement did not match the expected turn.");
+    throw new CodexRpcError(
+      "turn/steer",
+      context.session.sessionEpoch,
+      "possibly-applied",
+      "turn/steer acknowledgement did not match the expected turn.",
+    );
   }
 }
 
@@ -224,26 +263,13 @@ export async function readThread(
   context: CodexSessionContext,
   ops: TurnOps,
 ): Promise<CodexThreadSnapshot> {
-  const providerThreadId = readResumeThreadId({
-    threadId: context.session.threadId,
-    runtimeMode: context.session.runtimeMode,
-    resumeCursor: context.session.resumeCursor,
-  });
-  if (!providerThreadId) {
-    throw new Error("Session is missing a provider resume thread id.");
-  }
-
-  const response = await ops.sendRequest(context, "thread/read", {
-    threadId: providerThreadId,
-    includeTurns: true,
-  });
-  return parseThreadSnapshot("thread/read", response);
+  return readCodexThreadHistory(context, ops);
 }
 
 export async function rollbackThread(
   context: CodexSessionContext,
   numTurns: number,
-  ops: TurnOps,
+  _ops: TurnOps,
 ): Promise<CodexThreadSnapshot> {
   const providerThreadId = readResumeThreadId({
     threadId: context.session.threadId,
@@ -257,90 +283,10 @@ export async function rollbackThread(
     throw new Error("numTurns must be an integer >= 1.");
   }
 
-  const response = await ops.sendRequest(context, "thread/rollback", {
-    threadId: providerThreadId,
-    numTurns,
-  });
-  ops.updateSession(context, {
-    status: "ready",
-    activeTurnId: undefined,
-  });
-  return parseThreadSnapshot("thread/rollback", response);
-}
-
-export function respondToRequest(
-  context: CodexSessionContext,
-  requestId: ApprovalRequestId,
-  decision: ProviderApprovalDecision,
-  ops: TurnOps,
-): void {
-  const pendingRequest = context.pendingApprovals.get(requestId);
-  if (!pendingRequest) {
-    throw new Error(`Unknown pending approval request: ${requestId}`);
-  }
-
-  context.pendingApprovals.delete(requestId);
-  ops.writeMessage(context, {
-    id: pendingRequest.jsonRpcId,
-    result: {
-      decision,
-    },
-  });
-
-  ops.emitEvent({
-    id: EventId.makeUnsafe(randomUUID()),
-    kind: "notification",
-    provider: "codex",
-    threadId: context.session.threadId,
-    sessionEpoch: context.session.sessionEpoch!,
-    createdAt: new Date().toISOString(),
-    method: "item/requestApproval/decision",
-    turnId: pendingRequest.turnId,
-    itemId: pendingRequest.itemId,
-    requestId: pendingRequest.requestId,
-    requestKind: pendingRequest.requestKind,
-    payload: {
-      requestId: pendingRequest.requestId,
-      requestKind: pendingRequest.requestKind,
-      decision,
-    },
-  });
-}
-
-export function respondToUserInput(
-  context: CodexSessionContext,
-  requestId: ApprovalRequestId,
-  answers: ProviderUserInputAnswers,
-  ops: TurnOps,
-): void {
-  const pendingRequest = context.pendingUserInputs.get(requestId);
-  if (!pendingRequest) {
-    throw new Error(`Unknown pending user input request: ${requestId}`);
-  }
-
-  context.pendingUserInputs.delete(requestId);
-  const codexAnswers = toCodexUserInputAnswers(answers);
-  ops.writeMessage(context, {
-    id: pendingRequest.jsonRpcId,
-    result: {
-      answers: codexAnswers,
-    },
-  });
-
-  ops.emitEvent({
-    id: EventId.makeUnsafe(randomUUID()),
-    kind: "notification",
-    provider: "codex",
-    threadId: context.session.threadId,
-    sessionEpoch: context.session.sessionEpoch!,
-    createdAt: new Date().toISOString(),
-    method: "item/tool/requestUserInput/answered",
-    turnId: pendingRequest.turnId,
-    itemId: pendingRequest.itemId,
-    requestId: pendingRequest.requestId,
-    payload: {
-      requestId: pendingRequest.requestId,
-      answers: codexAnswers,
-    },
-  });
+  throw new CodexRpcError(
+    "thread/rollback",
+    context.session.sessionEpoch,
+    "not-dispatched",
+    "Codex count-based rewind is disabled: exact native boundaries and durable coordinated recovery are required. No native history or files were changed.",
+  );
 }

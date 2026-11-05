@@ -54,16 +54,16 @@ export function parseCodexReasoningEffortLevels(
 
 export function parseCodexModelCapabilities(model: Record<string, unknown>): ModelCapabilities {
   const additionalSpeedTiers = readArray(model.additionalSpeedTiers) ?? [];
-  const serviceTiers = readArray(model.serviceTiers) ?? [];
+  const serviceTiers = readArray(model.serviceTiers);
   const reasoningEffortLevels = parseCodexReasoningEffortLevels(model);
   const advertised = readArray(model.supportedReasoningEfforts);
   return withEffortProvenance(
     {
       ...UNVERIFIED_CODEX_MODEL_CAPABILITIES,
       reasoningEffortLevels,
-      supportsFastMode:
-        additionalSpeedTiers.some((entry) => nonEmptyTrimmed(entry) === "fast") ||
-        serviceTiers.length > 0,
+      supportsFastMode: Object.hasOwn(model, "serviceTiers")
+        ? (serviceTiers ?? []).some((entry) => readObject(entry)?.id === "fast")
+        : additionalSpeedTiers.some((entry) => nonEmptyTrimmed(entry) === "fast"),
     },
     advertised === undefined
       ? "unknown"

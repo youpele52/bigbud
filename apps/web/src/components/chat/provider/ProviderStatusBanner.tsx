@@ -1,5 +1,4 @@
 import { PROVIDER_DISPLAY_NAMES, type ServerProvider } from "@bigbud/contracts";
-import { CircleAlertIcon } from "lucide-react";
 import { memo } from "react";
 import { ChatBanner } from "../common/ChatBanner";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
@@ -33,12 +32,13 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
     visibleStatus.status === "error"
       ? `${providerLabel} provider is unavailable.`
       : `${providerLabel} provider has limited availability.`;
-  const title = `${providerLabel} provider status`;
-  const variant = visibleStatus.status === "error" ? "error" : "warning";
+  const recovering = visibleStatus.recovery?.status === "retrying";
+  const title = `${providerLabel} provider ${recovering ? "reconnecting" : visibleStatus.status === "error" ? "unavailable" : "needs attention"}`;
+  const variant = recovering ? "loading" : visibleStatus.status === "error" ? "error" : "warning";
   return (
     <ChatBanner
       variant={variant}
-      icon={<CircleAlertIcon />}
+      role={recovering ? "status" : "alert"}
       title={title}
       description={
         <span className="line-clamp-3" title={visibleStatus.message ?? defaultMessage}>

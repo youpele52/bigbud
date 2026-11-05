@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import { DEFAULT_SERVER_SETTINGS, type ModelSelection } from "@bigbud/contracts";
 import { buildProviderMessageText } from "@bigbud/shared/history";
 import { Cache, Cause, Duration, Effect, FileSystem, Path, Scope } from "effect";
@@ -252,7 +253,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
         yield* maybeGenerateThreadTitleForFirstTurn(sessionOpServices)({
           threadId: event.payload.threadId,
           cwd: generationCwd,
-          modelSelection: titleModelSelection,
+          modelSelection: requireActiveModelSelection(titleModelSelection),
           ...generationInput,
         }).pipe(Effect.forkScoped);
       }
@@ -294,7 +295,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
       memoryContext,
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined
-        ? { modelSelection: event.payload.modelSelection }
+        ? { modelSelection: requireActiveModelSelection(event.payload.modelSelection) }
         : {}),
       runtimeMode: event.payload.runtimeMode,
       interactionMode: event.payload.interactionMode,

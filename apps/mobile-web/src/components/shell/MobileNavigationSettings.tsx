@@ -7,6 +7,19 @@ import type { StoredMobileSession } from "../../lib/mobileSession";
 import { sanitizeMobileBackendOrigin } from "./MobileNavigationSheet.logic";
 import { useTheme } from "../../theme/useTheme";
 import { Button } from "../ui/button";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+
+const THEME_OPTIONS = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+] as const;
 
 interface MobileNavigationSettingsProps {
   readonly session: StoredMobileSession | null;
@@ -64,19 +77,37 @@ export function MobileNavigationSettings({
     <div className="grid gap-5 px-3 py-2">
       <section className="grid gap-2">
         <h2 className="text-sm font-semibold">Appearance</h2>
-        <label className="grid gap-1 text-xs text-muted-foreground" htmlFor="mobile-theme">
-          Theme
-          <select
-            className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground"
-            id="mobile-theme"
-            onChange={(event) => setTheme(event.target.value as "system" | "light" | "dark")}
+        <div className="grid gap-1 text-xs text-muted-foreground">
+          <label htmlFor="mobile-theme">Theme</label>
+          <Select
+            onValueChange={(value) => {
+              if (value === "system" || value === "light" || value === "dark") setTheme(value);
+            }}
             value={theme}
           >
-            <option value="system">System</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </label>
+            <SelectTrigger
+              id="mobile-theme"
+              variant="muted-outline"
+              className="min-h-11 w-full text-sm"
+            >
+              <SelectValue>
+                {THEME_OPTIONS.find((option) => option.value === theme)?.label}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectPopup alignItemWithTrigger={false}>
+              {THEME_OPTIONS.map((option) => (
+                <SelectItem
+                  hideIndicator
+                  className="min-h-11 text-sm"
+                  key={option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        </div>
       </section>
       <section className="grid gap-2">
         <h2 className="text-sm font-semibold">Connection</h2>

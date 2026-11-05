@@ -77,13 +77,28 @@
   font-size: 0.75rem;
 }
 
+.chat-markdown.thinking-markdown :is(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, table) {
+  margin: 0.25rem 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+.chat-markdown.thinking-markdown > :first-child {
+  margin-top: 0;
+}
+
+.chat-markdown.thinking-markdown > :last-child {
+  margin-bottom: 0;
+}
+
 .chat-markdown.thinking-markdown :not(pre) > code {
   border: none;
   border-radius: 0;
   background: transparent;
   padding: 0;
   color: inherit;
-  font-family: inherit;
   font-size: inherit;
 }
 

@@ -78,20 +78,19 @@ const toolPart = (status: "running" | "completed" | "error") =>
     },
   }) as unknown as Event;
 
-describe("OpenCode V1 and KiloCode child subagent fields", () => {
-  it("is enabled by the subagent declaration for opencode and kilocode only", () => {
+describe("OpenCode V1 child subagent fields", () => {
+  it("is enabled by the subagent declaration for OpenCode V1 only", () => {
     expect(tracksChildSessions("opencode")).toBe(true);
-    expect(tracksChildSessions("kilocode")).toBe(true);
     expect(tracksChildSessions("opencodeV2")).toBe(false);
     expect(tracksChildSessions("cursor")).toBe(false);
   });
 
   it("maps model, summed metrics, tool steps and end time under the adapter's provider", async () => {
-    const tracker = makeChildSessionTracker(session, "kilocode");
+    const tracker = makeChildSessionTracker(session, "opencode");
     const [discovered] = (await tracker.refresh()) as TaskEvent[];
     expect(discovered).toMatchObject({
-      provider: "kilocode",
-      payload: { taskId: "kilocode:thread-1:2:child-1", kind: "providerSubagent" },
+      provider: "opencode",
+      payload: { taskId: "opencode:thread-1:2:child-1", kind: "providerSubagent" },
     });
     const [first] = (await tracker.handle(assistant("assistant-1", 100, 20, 0.01))) as TaskEvent[];
     expect(first?.payload).toMatchObject({

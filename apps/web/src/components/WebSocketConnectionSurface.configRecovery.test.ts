@@ -32,7 +32,7 @@ describe("cached config recovery notice", () => {
     expect(
       syncConfigRecoveryToast(manager, id, { ...readiness, stream: "pending" }, true, retry),
     ).toBe(id);
-    expect(manager.update).toHaveBeenCalledWith(id, expect.objectContaining({ type: "info" }));
+    expect(manager.update).toHaveBeenCalledWith(id, expect.objectContaining({ type: "loading" }));
     expect(manager.close).not.toHaveBeenCalled();
     expect(
       syncConfigRecoveryToast(manager, id, { ...readiness, stream: "live" }, true, retry),

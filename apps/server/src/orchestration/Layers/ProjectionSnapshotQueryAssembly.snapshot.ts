@@ -33,6 +33,7 @@ import {
   ProjectionThreadWatchDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.ts";
 import { ORCHESTRATION_PROJECTOR_NAMES } from "./ProjectionPipeline.ts";
+import { DEFAULT_THREAD_ORGANIZATION } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
 type ProjectionProjectRow = Schema.Schema.Type<typeof ProjectionProjectDbRowSchema>;
 type ProjectionThreadRow = Schema.Schema.Type<typeof ProjectionThreadDbRowSchema>;
@@ -181,6 +182,7 @@ function mapThreadRow(
     queueHold: row.queueHold === 1,
     pendingTurnStart: row.pendingTurnStart ?? null,
     recovery: row.recovery ?? null,
+    organization: row.organization ?? DEFAULT_THREAD_ORGANIZATION,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     archivedAt: row.archivedAt,

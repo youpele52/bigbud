@@ -10,6 +10,7 @@ import { v2ExecutionPolicy } from "./Runtime.policy.fingerprint.ts";
 import { resolveV2RuntimeBinding } from "./Runtime.binding.ts";
 import { assertV2ModelAvailable } from "./Runtime.model.availability.ts";
 import { v2SharedToolPolicy } from "./Runtime.policy.shared.ts";
+import { v2RemoteToolPolicy } from "./Runtime.policy.remote.ts";
 import { v2SharedProtectedResources } from "./Runtime.policy.shared.paths.ts";
 import { decodeV2Cursor } from "./Runtime.cursor.ts";
 import { decodeV2NativeSession } from "./Runtime.session.decode.ts";
@@ -112,21 +113,28 @@ export async function createRuntimeSession(
     ...(selection.options?.variant ? { variant: selection.options.variant } : {}),
   };
   const localTools = options.enableLocalTools === true && !disableTools;
-  let permissions = options.config.sharedService
-    ? v2SharedToolPolicy(
+  let permissions = options.sharedRemoteWorkspace
+    ? v2RemoteToolPolicy(
         input.runtimeMode,
-        undefined,
         localTools,
-        options.config.sharedService.registrationFile,
+        options.sharedRemoteWorkspace.serverName,
+        binding.profileIssuer,
       )
-    : v2LocalToolPolicy(input.runtimeMode, localTools, Boolean(options.codingBridge), {
-        nativeWorkspace: runtimeTarget === workspaceTarget,
-        profileRoot: root,
-        boundedFiles:
-          runtimeTarget !== "local" ||
-          workspaceTarget !== "local" ||
-          Boolean(options.codingBridge?.supportsLocalFiles),
-      });
+    : options.config.sharedService
+      ? v2SharedToolPolicy(
+          input.runtimeMode,
+          undefined,
+          localTools,
+          options.config.sharedService.registrationFile,
+        )
+      : v2LocalToolPolicy(input.runtimeMode, localTools, Boolean(options.codingBridge), {
+          nativeWorkspace: runtimeTarget === workspaceTarget,
+          profileRoot: root,
+          boundedFiles:
+            runtimeTarget !== "local" ||
+            workspaceTarget !== "local" ||
+            Boolean(options.codingBridge?.supportsLocalFiles),
+        });
   cancellation?.throwIfAborted();
   await options.authorizeExecution?.();
   if (options.nativeSubagents)
@@ -348,7 +356,8 @@ export async function createRuntimeSession(
             runtimeMode: input.runtimeMode,
             providerRuntimeExecutionTargetId: runtimeTarget,
             workspaceExecutionTargetId: workspaceTarget,
-            cwd: directory,
+            // Public/persisted cwd is the workspace; native Location remains in the cursor/binding.
+            cwd: options.sharedRemoteWorkspace?.workspaceTarget.cwd ?? directory,
             model: model.id,
             createdAt: now,
             updatedAt: now,

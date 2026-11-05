@@ -19,11 +19,13 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
 import { SidebarThreadConnectingIndicator } from "./SidebarThreadConnectingIndicator";
 import { SidebarThreadProviderIcon } from "./SidebarThreadProviderIcon";
+import { SidebarThreadSnoozeIcon } from "./SidebarThreadSnoozeIcon";
 import { SidebarThreadTerminalProviderIcon } from "./SidebarThreadTerminalProviderIcon";
 import { SidebarThreadStatusLabel as ThreadStatusLabel } from "./SidebarThreadStatusLabel";
 import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
 import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
+import { SidebarThreadRowContent } from "./SidebarThreadRow.content";
 import {
   isProviderIconWorking,
   mergeRunningTerminalIds,
@@ -142,89 +144,18 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
       ? normalizedElevatorSummary
       : null;
 
-  const threadRowContent = (
-    <SidebarMenuSubButton
-      ref={swipeReveal.registerRootElement}
-      render={<div role="button" tabIndex={0} />}
-      draggable
-      size="sm"
-      isActive={isActive}
-      data-testid={`thread-row-${thread.id}`}
-      className={`${resolveThreadRowClassName({
-        isActive,
-        isSelected,
-      })} relative isolate touch-pan-y will-change-transform ${
-        swipeReveal.isDragging
-          ? "transition-none"
-          : "transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
-      }`}
-      style={{ transform: `translateX(${swipeReveal.revealOffset}px)` }}
-      onPointerDown={swipeReveal.handlePointerDown}
-      onPointerMove={swipeReveal.handlePointerMove}
-      onPointerUp={swipeReveal.handlePointerUp}
-      onPointerCancel={swipeReveal.handlePointerCancel}
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = "copy";
-        event.dataTransfer.setData(
-          BIGBUD_THREAD_CONTEXT_DRAG_MIME,
-          serializeThreadContextDragPayload({
-            threadId: thread.id,
-            title: thread.title,
-          }),
-        );
-        event.dataTransfer.setData("text/plain", thread.title);
-      }}
-      onClick={(event) => {
-        if (swipeReveal.consumeGestureClickSuppression()) {
-          event.preventDefault();
-          event.stopPropagation();
-          return;
-        }
-        if (swipeReveal.isRevealed) {
-          event.preventDefault();
-          event.stopPropagation();
-          swipeReveal.resetReveal();
-          return;
-        }
-        props.handleThreadClick(event, thread.id, props.orderedProjectThreadIds);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && swipeReveal.isRevealed) {
-          event.preventDefault();
-          swipeReveal.resetReveal();
-          return;
-        }
-        if (event.key !== "Enter" && event.key !== " ") return;
-        event.preventDefault();
-        props.navigateToThread(thread.id);
-      }}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        swipeReveal.resetReveal();
-        if (props.selectedThreadIds.size > 0 && props.selectedThreadIds.has(thread.id)) {
-          void props.handleMultiSelectContextMenu({
-            x: event.clientX,
-            y: event.clientY,
-          });
-        } else {
-          if (props.selectedThreadIds.size > 0) {
-            props.clearSelection();
-          }
-          void props.handleThreadContextMenu(thread.id, {
-            x: event.clientX,
-            y: event.clientY,
-          });
-        }
-      }}
-    >
+  const providerIcon = ProviderIcon ? (
+    <SidebarThreadProviderIcon
+      icon={ProviderIcon}
+      colorClass={providerIconColor}
+      animationClass={providerIconAnimationClass}
+    />
+  ) : null;
+  const firstLine = (
+    <>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
-        {ProviderIcon ? (
-          <SidebarThreadProviderIcon
-            icon={ProviderIcon}
-            colorClass={providerIconColor}
-            animationClass={providerIconAnimationClass}
-          />
-        ) : null}
+        <SidebarThreadSnoozeIcon snooze={thread.organization?.snooze} />
+        {providerIcon}
         <SidebarThreadTerminalProviderIcon threadId={thread.id} />
         {props.renamingThreadId === thread.id ? (
           <input
@@ -325,6 +256,92 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
           </span>
         </div>
       </div>
+    </>
+  );
+
+  const threadRowContent = (
+    <SidebarMenuSubButton
+      ref={swipeReveal.registerRootElement}
+      render={<div role="button" tabIndex={0} />}
+      draggable
+      size="sm"
+      isActive={isActive}
+      data-testid={`thread-row-${thread.id}`}
+      className={`${resolveThreadRowClassName({
+        isActive,
+        isSelected,
+      })} relative isolate touch-pan-y will-change-transform ${
+        props.secondaryLine ? "h-auto py-1" : ""
+      } ${
+        swipeReveal.isDragging
+          ? "transition-none"
+          : "transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]"
+      }`}
+      style={{ transform: `translateX(${swipeReveal.revealOffset}px)` }}
+      onPointerDown={swipeReveal.handlePointerDown}
+      onPointerMove={swipeReveal.handlePointerMove}
+      onPointerUp={swipeReveal.handlePointerUp}
+      onPointerCancel={swipeReveal.handlePointerCancel}
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = props.addDragData ? "copyMove" : "copy";
+        event.dataTransfer.setData(
+          BIGBUD_THREAD_CONTEXT_DRAG_MIME,
+          serializeThreadContextDragPayload({
+            threadId: thread.id,
+            title: thread.title,
+          }),
+        );
+        event.dataTransfer.setData("text/plain", thread.title);
+        props.addDragData?.(event.dataTransfer);
+      }}
+      onClick={(event) => {
+        if (swipeReveal.consumeGestureClickSuppression()) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        if (swipeReveal.isRevealed) {
+          event.preventDefault();
+          event.stopPropagation();
+          swipeReveal.resetReveal();
+          return;
+        }
+        props.handleThreadClick(event, thread.id, props.orderedProjectThreadIds);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && swipeReveal.isRevealed) {
+          event.preventDefault();
+          swipeReveal.resetReveal();
+          return;
+        }
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        props.navigateToThread(thread.id);
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        swipeReveal.resetReveal();
+        if (props.selectedThreadIds.size > 0 && props.selectedThreadIds.has(thread.id)) {
+          void props.handleMultiSelectContextMenu({
+            x: event.clientX,
+            y: event.clientY,
+          });
+        } else {
+          if (props.selectedThreadIds.size > 0) {
+            props.clearSelection();
+          }
+          void props.handleThreadContextMenu(thread.id, {
+            x: event.clientX,
+            y: event.clientY,
+          });
+        }
+      }}
+    >
+      <SidebarThreadRowContent
+        hasProviderIcon={Boolean(ProviderIcon)}
+        firstLine={firstLine}
+        secondaryLine={props.secondaryLine}
+      />
     </SidebarMenuSubButton>
   );
 

@@ -33,6 +33,7 @@ describe("bigbud tool presentation", () => {
     ["get_system_resources", "system resource reader"],
     ["search_capabilities", "capability finder"],
     ["read_capability_guide", "capability guide reader"],
+    ["render_html", "html renderer"],
     ["browser", "browser"],
     ["computer_use", "computer controller"],
     ["list_notes", "note lister"],

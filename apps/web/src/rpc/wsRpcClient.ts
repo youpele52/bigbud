@@ -11,9 +11,11 @@ import {
 } from "./wsConnectionDiagnosticsReporter";
 import { requestServerConfig } from "./wsRpcClient.config";
 import { requestWsConnectionDiagnostics } from "./wsRpcClient.diagnostics";
+import { requestConnectedSshMonitors, requestSshMonitorSample } from "./wsRpcClient.monitor";
 import { requestRemoteFolders, requestSshConfigHosts } from "./wsRpcClient.remoteSetup";
 import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
+import { createComputerUseRpcClient } from "./wsRpcClient.computerUse";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
 
 let sharedWsRpcClient: WsRpcClient | null = null;
@@ -53,6 +55,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     },
     reconnectNow: () => transport.reconnectNow(),
     terminal: createTerminalRpcClient(transport),
+    computerUse: createComputerUseRpcClient(transport),
     browser: {
       completeCommand: (input) =>
         transport.request((client) => client[WS_METHODS.completeVisibleBrowserCommand](input)),
@@ -198,6 +201,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverActivateCliProxy]({})),
       verifyExecutionTarget: (input) =>
         transport.request((client) => client[WS_METHODS.serverVerifyExecutionTarget](input)),
+      sampleSshMonitor: (input) => requestSshMonitorSample(transport, input),
+      listConnectedSshMonitors: () => requestConnectedSshMonitors(transport),
       listSshConfigHosts: (input) => requestSshConfigHosts(transport, input),
       listRemoteFolders: (input) => requestRemoteFolders(transport, input),
       installRemoteAgent: (input) =>
@@ -247,6 +252,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) =>
           client[WS_METHODS.serverGetOpencodeV2ThreadToolsSetup](input),
         ),
+      copilotRuntime: (input) =>
+        transport.request((client) => client[WS_METHODS.serverCopilotRuntime](input)),
       createMobileRemotePairing: (input) =>
         transport.request((client) => client[WS_METHODS.serverCreateMobileRemotePairing](input)),
       listMobileRemoteSessions: () =>
@@ -282,6 +289,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getWsConnectionDiagnostics: (input) => requestWsConnectionDiagnostics(transport, input),
       stopSubagent: (input) =>
         transport.request((client) => client[WS_METHODS.providerStopSubagent](input)),
+      providerControls: (input) =>
+        transport.request((client) => client[WS_METHODS.providerControls](input)),
       subscribeConfig: (listener, options) =>
         subscribeEmptyInput(
           transport,
@@ -311,6 +320,10 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       getProjectThreadSummaries: (input) =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.getProjectThreadSummaries](input),
+        ),
+      getOrganizationThreadSummaries: (input) =>
+        transport.request((client) =>
+          client[ORCHESTRATION_WS_METHODS.getOrganizationThreadSummaries](input),
         ),
       getSelectedThreadDetail: (input) =>
         transport.request((client) =>

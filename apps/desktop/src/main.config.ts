@@ -2,6 +2,7 @@ import * as OS from "node:os";
 import * as Path from "node:path";
 
 import type { App } from "electron";
+import { ownershipStateDir } from "@bigbud/shared/backendOwnership.paths";
 import {
   desktopReleaseIdentityForChannel,
   resolveDesktopReleaseIdentity,
@@ -24,7 +25,9 @@ export function resolveDesktopMainConfig(app: App, desktopDir: string) {
   const configuredBaseDir = process.env.BIGBUD_HOME?.trim() || process.env.T3CODE_HOME?.trim();
   const baseDir =
     configuredBaseDir ?? Path.join(OS.homedir(), ".bigbud", ...releaseIdentity.baseDirSuffix);
-  const stateDir = Path.join(baseDir, "userdata");
+  // Same rule as the server (`deriveServerPaths`): development state lives in
+  // `<baseDir>/dev`, never in the installed app's `<baseDir>/userdata`.
+  const stateDir = ownershipStateDir(baseDir, isDevelopment);
   const appDisplayName = isDevelopment ? "bigbud (Dev)" : releaseIdentity.productName;
   const userDataDirName = isDevelopment ? "bigbud-dev" : releaseIdentity.userDataDirName;
   const legacyUserDataDirName = isDevelopment
@@ -38,6 +41,17 @@ export function resolveDesktopMainConfig(app: App, desktopDir: string) {
     appDisplayName,
     appUserModelId: releaseIdentity.appUserModelId,
     baseDir,
+    /**
+     * Development-only isolated root for the supervised computer-use guard.
+     * Packaged builds always use the native per-user root (`null` here).
+     */
+    computerUseDevelopmentRoot: isDevelopment ? Path.join(stateDir, "computer-use") : null,
+    /**
+     * Base of the legacy Cua runtime (`<base>/runtime/cua-driver`, `backend/cuaDriver.paths.ts`).
+     * Development uses its own state root, so it never reads or writes the installed app's
+     * runtime (`active.json`, `versions/`); packaged builds keep `baseDir`, unchanged.
+     */
+    cuaDriverBaseDir: isDevelopment ? stateDir : baseDir,
     cuaDriverHostBundleId: resolveCuaDriverHostBundleId(app.isPackaged, releaseIdentity.appId),
     desktopLinuxRuntimeConfig: resolveLinuxDesktopRuntimeConfig({
       gpuFallbackMarkerArmed: readLinuxGpuFallbackMarker(linuxGpuFallbackMarkerPath),

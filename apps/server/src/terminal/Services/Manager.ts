@@ -31,6 +31,11 @@ import {
 import { PtyProcess } from "./PTY";
 import { Effect, ServiceMap } from "effect";
 import type { TerminalSnapshotInput } from "@bigbud/contracts/workspace/terminal.ts";
+import type {
+  TerminalRecoveryInput,
+  TerminalRecoveryResult,
+} from "@bigbud/contracts/workspace/terminal.recovery.ts";
+import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
 
 export {
   TerminalCwdError,
@@ -78,12 +83,17 @@ export interface TerminalStartInput extends TerminalOpenInput {
 export interface TerminalSubscribeOptions {
   /** `legacyDetection` keeps output only for sessions whose agent detection runs in the client. */
   readonly outputScope?: "all" | "legacyDetection";
+  /** Delivered before replay, captured atomically with listener registration. */
+  readonly onInventory?: (inventory: TerminalSessionInventory) => Effect.Effect<void>;
 }
 
 /**
  * TerminalManagerShape - Service API for terminal session lifecycle operations.
  */
 export interface TerminalManagerShape {
+  readonly recovery?: (
+    input: TerminalRecoveryInput,
+  ) => Effect.Effect<TerminalRecoveryResult, TerminalError>;
   readonly hasActiveThread?: (threadId: string) => Effect.Effect<boolean>;
   /**
    * Open or attach to a terminal session.

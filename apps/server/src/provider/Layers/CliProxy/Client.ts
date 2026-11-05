@@ -1,11 +1,15 @@
 import { createHmac, randomBytes } from "node:crypto";
 import path from "node:path";
+import type { ModelCapabilities } from "@bigbud/contracts/core/model";
 
 import type { CliProxyConfig } from "./config.ts";
+import { decodeCliProxyCapabilities } from "./Capabilities.ts";
+import { stableCliProxyVersion } from "./Version.ts";
 
 export interface CliProxyModel {
   readonly id: string;
   readonly name: string;
+  readonly capabilities?: ModelCapabilities;
 }
 
 export type CliProxyClientErrorTag =
@@ -90,6 +94,8 @@ export function decodeModels(value: unknown): ReadonlyArray<CliProxyModel> {
       name?: unknown;
       display_name?: unknown;
       visibility?: unknown;
+      supported_reasoning_levels?: unknown;
+      default_reasoning_level?: unknown;
     };
     if (entry.visibility !== undefined && typeof entry.visibility !== "string") {
       throw new CliProxyClientError(
@@ -130,7 +136,13 @@ export function decodeModels(value: unknown): ReadonlyArray<CliProxyModel> {
         : typeof entry.name === "string" && entry.name.trim()
           ? entry.name.trim()
           : id;
-    return [{ id, name }];
+    const capabilities = decodeCliProxyCapabilities(
+      entry.supported_reasoning_levels,
+      entry.default_reasoning_level,
+    );
+    // Catalog labels may include a redundant minor version; wire IDs remain authoritative.
+    const displayName = name.replace(/^(GPT[ -]\d+)\.0(?=\s|$)/i, "$1");
+    return [{ id, name: displayName, ...(capabilities ? { capabilities } : {}) }];
   });
 }
 
@@ -153,10 +165,15 @@ export function validateCliProxyModel(
   return model;
 }
 
-export async function inspectCliProxy(
+export interface CliProxyInspection {
+  readonly models: ReadonlyArray<CliProxyModel>;
+  readonly runtimeVersion: string | null;
+}
+
+export async function inspectCliProxyDetails(
   config: CliProxyConfig,
   options: { readonly request?: CliProxyHttpRequest } = {},
-): Promise<ReadonlyArray<CliProxyModel>> {
+): Promise<CliProxyInspection> {
   const request = options.request ?? defaultRequest;
   const key = inspectionFlightKey(config);
   const existing = inspectionFlights.get(key);
@@ -168,12 +185,20 @@ export async function inspectCliProxy(
   return flight;
 }
 
-const inspectionFlights = new Map<string, Promise<ReadonlyArray<CliProxyModel>>>();
+const inspectionFlights = new Map<string, Promise<CliProxyInspection>>();
+
+/** Models-only API retained for runtime configuration and activation callers. */
+export async function inspectCliProxy(
+  config: CliProxyConfig,
+  options: { readonly request?: CliProxyHttpRequest } = {},
+): Promise<ReadonlyArray<CliProxyModel>> {
+  return (await inspectCliProxyDetails(config, options)).models;
+}
 
 async function inspectCliProxyUncached(
   config: CliProxyConfig,
   request: CliProxyHttpRequest,
-): Promise<ReadonlyArray<CliProxyModel>> {
+): Promise<CliProxyInspection> {
   let fingerprint: Response;
   try {
     fingerprint = await request(config, "/");
@@ -220,7 +245,15 @@ async function inspectCliProxyUncached(
     );
   }
   try {
-    return decodeModels(await response.json());
+    const models = decodeModels(await response.json());
+    // Stock releases may omit this header. Never probe protected management routes to obtain it.
+    const catalogVersion = stableCliProxyVersion(response.headers.get("X-CPA-VERSION"));
+    const healthVersion = stableCliProxyVersion(fingerprint.headers.get("X-CPA-VERSION"));
+    const runtimeVersion =
+      catalogVersion && healthVersion && catalogVersion !== healthVersion
+        ? null
+        : (catalogVersion ?? healthVersion);
+    return { models, runtimeVersion };
   } catch (cause) {
     if (cause instanceof CliProxyClientError) throw cause;
     throw new CliProxyClientError(

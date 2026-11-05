@@ -1,12 +1,11 @@
-import type { ProviderKind } from "@bigbud/contracts";
-
 import type { TerminalEventEntry } from "./helpers.store";
+import type { TerminalAgentKind } from "./terminal.store.agentKind";
 import type { TerminalAgentVersion } from "./terminal.store.identity";
 
 interface TerminalTransientState {
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
   terminalEventLastIdsByKey: Record<string, number>;
-  terminalAgentProviderByKey: Record<string, ProviderKind | null>;
+  terminalAgentProviderByKey: Record<string, TerminalAgentKind | null>;
   terminalAgentVersionByKey: Record<string, TerminalAgentVersion>;
 }
 

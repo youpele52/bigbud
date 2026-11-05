@@ -6,7 +6,7 @@ import {
 } from "@bigbud/contracts";
 import { memo, useLayoutEffect, useRef } from "react";
 import { type ComposerTriggerKind } from "../../../logic/composer";
-import { BookOpenIcon, FolderOpenIcon, PlugIcon } from "lucide-react";
+import { BookOpenIcon, FolderOpenIcon } from "lucide-react";
 import { AiIcon } from "../../AiIcon";
 import { useIncrementalList } from "~/hooks/useIncrementalList";
 import { cn } from "~/lib/utils";
@@ -59,14 +59,6 @@ export type ComposerCommandItem =
       id: string;
       type: "skill";
       skill: ServerDiscoveredSkill;
-      label: string;
-      description: string;
-    }
-  | {
-      id: string;
-      type: "plugin";
-      pluginId: string;
-      name: string;
       label: string;
       description: string;
     };
@@ -293,19 +285,12 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           skill
         </Badge>
       ) : null}
-      {props.item.type === "plugin" ? <PlugIcon className="size-3.5 shrink-0 opacity-85" /> : null}
-      {props.item.type === "skill" ||
-      props.item.type === "agent" ||
-      props.item.type === "plugin" ? (
+      {props.item.type === "skill" || props.item.type === "agent" ? (
         <>
           <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
             <span className="truncate font-medium">{props.item.label}</span>
             <span className="shrink-0 text-muted-foreground/70 text-xs">
-              {props.item.type === "skill"
-                ? props.item.skill.provider
-                : props.item.type === "agent"
-                  ? props.item.agent.provider
-                  : "plugin"}
+              {props.item.type === "skill" ? props.item.skill.provider : props.item.agent.provider}
             </span>
           </span>
           <span className="max-w-[36%] min-w-0 truncate text-muted-foreground/70 text-xs">
@@ -368,7 +353,7 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
     </CommandItem>
   );
 
-  if (props.item.type !== "skill" && props.item.type !== "agent" && props.item.type !== "plugin") {
+  if (props.item.type !== "skill" && props.item.type !== "agent") {
     return row;
   }
 
@@ -380,11 +365,7 @@ const ComposerCommandMenuItem = memo(function ComposerCommandMenuItem(props: {
           <div className="flex items-center gap-1.5">
             <span className="font-medium text-foreground">{props.item.label}</span>
             <span className="text-muted-foreground text-xs">
-              {props.item.type === "skill"
-                ? props.item.skill.provider
-                : props.item.type === "agent"
-                  ? props.item.agent.provider
-                  : "plugin"}
+              {props.item.type === "skill" ? props.item.skill.provider : props.item.agent.provider}
             </span>
           </div>
           <div className="text-muted-foreground/90 text-xs">

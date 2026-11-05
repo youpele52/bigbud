@@ -1,7 +1,10 @@
 import { ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { textButtonTypography } from "../../ui/button";
 import { cn } from "~/lib/utils";
+
+/** Section headers for work logs, subagents, thinking, and the other activity labels. */
+export const activitySectionLabelTypography =
+  "font-normal text-[10px] uppercase leading-none tracking-[0.14em] text-muted-foreground/55 sm:text-[10px]";
 
 export type ActivityAccordionVariant = "section" | "compact";
 
@@ -40,11 +43,7 @@ const SUMMARY_BASE_CLASS_NAME =
 const VARIANT_CLASS_NAMES = {
   section: {
     details: "border-b border-border/60 pb-2",
-    summary: cn(
-      "gap-1.5 py-2 hover:text-foreground",
-      textButtonTypography,
-      "text-[10px] leading-none tracking-[0.14em] sm:text-[10px]",
-    ),
+    summary: cn("gap-1.5 py-2 hover:text-foreground", activitySectionLabelTypography),
     panel: "pb-2 pt-3",
   },
   compact: {

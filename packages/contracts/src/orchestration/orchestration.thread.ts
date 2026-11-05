@@ -20,12 +20,13 @@ import {
   RuntimeMode,
 } from "./orchestration.provider";
 import { ChatAttachment } from "./orchestration.attachments";
-import { ModelSelection } from "./orchestration.provider";
+import { HistoricalModelSelection } from "./orchestration.provider";
 import { OrchestrationProject } from "./orchestration.project";
 import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import { ThreadForkOrigin } from "./orchestration.fork";
 import { OrchestrationTask } from "./orchestration.thread.tasks";
 import { ThreadRecovery } from "./orchestration.recovery";
+import { ThreadOrganizationField } from "./orchestration.organization";
 
 export const ELEVATOR_SUMMARY_MAX_CHARS = 150;
 export const ElevatorSummary = TrimmedNonEmptyString.check(
@@ -194,7 +195,7 @@ export const OrchestrationQueuedPrompt = Schema.Struct({
   /** Optional fields keep legacy queued-prompt events and snapshots decodable. */
   attachments: Schema.optional(Schema.Array(ChatAttachment)),
   replyTo: Schema.optional(OrchestrationMessageReply),
-  modelSelection: Schema.optional(ModelSelection),
+  modelSelection: Schema.optional(HistoricalModelSelection),
   titleSeed: Schema.optional(TrimmedNonEmptyString),
   runtimeMode: Schema.optional(RuntimeMode),
   interactionMode: Schema.optional(ProviderInteractionMode),
@@ -283,7 +284,7 @@ export const OrchestrationThread = Schema.Struct({
   providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),
-  modelSelection: ModelSelection,
+  modelSelection: HistoricalModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
@@ -308,6 +309,8 @@ export const OrchestrationThread = Schema.Struct({
   recovery: Schema.optional(Schema.NullOr(ThreadRecovery)).pipe(
     Schema.withDecodingDefault(() => null),
   ),
+  /** Inyosira organization. Absent on snapshots written before organization existed. */
+  organization: ThreadOrganizationField,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   archivedAt: Schema.NullOr(IsoDateTime).pipe(Schema.withDecodingDefault(() => null)),

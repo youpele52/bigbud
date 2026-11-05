@@ -19,6 +19,11 @@ export function formatPercent(value: number | null | undefined): string {
   return formatted === "—" ? formatted : `${formatted}%`;
 }
 
+/** Keep percentage gauge scale labels compact without rounding live readings. */
+export function formatPercentEndpoint(value: number): string {
+  return `${value.toFixed(0)}%`;
+}
+
 export function formatTemperature(value: number | null | undefined): string {
   const formatted = formatDecimal(value);
   return formatted === "—" ? formatted : `${formatted} °C`;

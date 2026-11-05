@@ -26,7 +26,12 @@ export type TurnStartRecoveryAttempt =
  * Providers whose "fresh" session is not isolated from the dead one, so a transcript replay would
  * duplicate native history (gate G2a, plan D13). They stop after the revive step.
  */
-export const FRESH_REPLAY_EXCLUDED_PROVIDERS: ReadonlySet<ProviderKind> = new Set(["opencodeV2"]);
+export const FRESH_REPLAY_EXCLUDED_PROVIDERS: ReadonlySet<ProviderKind> = new Set([
+  "opencodeV2",
+  // Muse resumes only its exact owned native session; a fresh session with
+  // transcript replay would duplicate native history and break ownership.
+  "muse",
+]);
 
 export const PROVIDER_SESSION_RECOVERY_ACTIVITY_KIND = "provider.session.recovery";
 type RecoveryStep = "revive" | "fresh-replay";
@@ -181,6 +186,10 @@ export const withTurnStartRecovery = <A, E, R>(input: {
       const error = result.failure;
       if (resendable) return recoverDeadSession(error);
       if (classifyTurnStartFailure(error) !== "context-limit") return Effect.fail(error);
+      // Muse has no qualified automatic context-limit retry: stopping and
+      // retrying its exact session automatically could resend input. Surface
+      // the context-limit failure visibly instead.
+      if (input.provider === "muse") return Effect.fail(error);
       return Effect.gen(function* () {
         yield* Effect.logWarning("recovering provider session after context-limit failure", {
           threadId,

@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { useShallow } from "zustand/react/shallow";
 
-import { isRemoteExecutionTargetId } from "../components/sidebar/Sidebar.projects.logic";
+import { isRemoteExecutionTargetId } from "../components/sidebar/Sidebar.remoteWorkspaces.logic";
 import { toastManager } from "../components/ui/toast";
 import {
   type RemoteExecutionAuthMode,
@@ -176,7 +176,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
         ...(input.unavailableTitle ? { unavailableTitle: input.unavailableTitle } : {}),
         check:
           check ??
-          resolveRemoteExecutionFailureStatus("Failed to reconnect to the remote project."),
+          resolveRemoteExecutionFailureStatus("Failed to reconnect to the remote workspace."),
         retry: () => {
           void beginRemoteExecutionTargetAccessCheck({ ...input, resumeOnUnlockOnly: false });
         },

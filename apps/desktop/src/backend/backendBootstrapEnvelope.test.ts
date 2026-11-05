@@ -5,6 +5,7 @@ import {
   buildBackendBootstrapEnvelope,
   consumeBackendStartReason,
   markNextBackendStartReason,
+  takeComputerUseOwnerAccess,
 } from "./backendBootstrapEnvelope";
 import { BACKEND_LIFECYCLE_HINT_STDIO_INDEX } from "./backendLifecycleHintPipe";
 
@@ -58,5 +59,49 @@ describe("backend bootstrap envelope", () => {
     markNextBackendStartReason("resume-probe-restart");
     expect(consumeBackendStartReason()).toBe("resume-probe-restart");
     expect(consumeBackendStartReason()).toBeNull();
+  });
+
+  it("leaves the envelope byte-identical when no computer-use owner access exists", () => {
+    const full = {
+      ...base,
+      systemMonitorAgentAccess: { endpoint: "http://127.0.0.1:1", token: "agent" },
+      startReason: "resume-probe-restart" as const,
+      lifecycleHintFd: 5,
+      ownershipHandoff: true,
+    };
+    const today = buildBackendBootstrapEnvelope(full);
+    expect(buildBackendBootstrapEnvelope({ ...full, computerUseOwner: null })).toBe(today);
+    expect(today).not.toContain("computerUseOwner");
+  });
+
+  it("carries exactly the four owner access fields when access exists", () => {
+    const access = {
+      endpoint: "/run/owner.sock",
+      capability: "one-use-capability",
+      tupleDigest: "sha256:tuple",
+      ownerGeneration: "7",
+      extra: "must not leak",
+    };
+    const envelope = JSON.parse(
+      buildBackendBootstrapEnvelope({ ...base, computerUseOwner: access }),
+    );
+    expect(envelope.computerUseOwner).toEqual({
+      endpoint: "/run/owner.sock",
+      capability: "one-use-capability",
+      tupleDigest: "sha256:tuple",
+      ownerGeneration: "7",
+    });
+  });
+
+  it("takes owner access from the provider, treating none or a failing provider as null", () => {
+    const access = { endpoint: "e", capability: "c", tupleDigest: "t", ownerGeneration: "g" };
+    expect(takeComputerUseOwnerAccess(undefined)).toBeNull();
+    expect(takeComputerUseOwnerAccess(() => null)).toBeNull();
+    expect(takeComputerUseOwnerAccess(() => access)).toBe(access);
+    expect(
+      takeComputerUseOwnerAccess(() => {
+        throw new Error("owner not ready");
+      }),
+    ).toBeNull();
   });
 });

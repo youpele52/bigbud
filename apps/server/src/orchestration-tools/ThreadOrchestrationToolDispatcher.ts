@@ -26,9 +26,24 @@ import type {
   listThreadsViaOrchestration,
 } from "./ThreadOrchestrationTools.listThreads.ts";
 import type { AgentWorkspaceToolInput } from "./AgentWorkspaceTools.ts";
+import type { ComputerUseV2Dispatch } from "./computerUseToolRequest.ts";
+import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
+import type { ThreadOrganizationToolResult } from "./ThreadOrchestrationTools.organization.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
-  readonly getSystemResources?: () => Effect.Effect<Record<string, unknown>, Error>;
+  readonly renderHtml?: (input: {
+    readonly threadId: ThreadId;
+    readonly invocationId: string;
+    readonly expectedTurnId?: string;
+    readonly arguments: unknown;
+  }) => Effect.Effect<
+    { readonly artifactId: string; readonly turnId: string | null; readonly published: boolean },
+    Error
+  >;
+  readonly getSystemResources?: (input?: unknown) => Effect.Effect<Record<string, unknown>, Error>;
+  readonly configureSystemResourceRules?: (
+    input: unknown,
+  ) => Effect.Effect<Record<string, unknown>, Error>;
   readonly workspace?: (
     input: AgentWorkspaceToolInput,
   ) => Effect.Effect<Record<string, unknown>, Error>;
@@ -42,6 +57,19 @@ export interface ThreadOrchestrationToolDispatcherShape {
     { readonly title: string; readonly threadId?: ThreadId; readonly commandId?: string },
     Error
   >;
+  /** Inyosira organization. Optional so transports report "not ready" until it is installed. */
+  readonly move?: (input: {
+    readonly threadId: ThreadId;
+    readonly targetThreadId?: ThreadId;
+    readonly state: string;
+    readonly invocationId?: string;
+  }) => Effect.Effect<ThreadOrganizationToolResult, Error>;
+  readonly snooze?: (input: {
+    readonly threadId: ThreadId;
+    readonly targetThreadId?: ThreadId;
+    readonly minutes: number;
+    readonly invocationId?: string;
+  }) => Effect.Effect<ThreadOrganizationToolResult, Error>;
   readonly archive: (input: {
     readonly threadId: ThreadId;
   }) => Effect.Effect<{ readonly archived: true }, Error>;
@@ -49,7 +77,10 @@ export interface ThreadOrchestrationToolDispatcherShape {
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
     readonly threadDelegationRepository?: ThreadDelegationRepositoryShape;
-  }) => Effect.Effect<ThreadWorkflowStatusSnapshot, Error>;
+  }) => Effect.Effect<
+    ThreadWorkflowStatusSnapshot & { readonly organization?: ThreadOrganization },
+    Error
+  >;
   readonly listPinned: (input: {
     readonly callerThreadId: ThreadId;
   }) => ReturnType<typeof listPinnedThreadsViaOrchestration>;
@@ -62,6 +93,8 @@ export interface ThreadOrchestrationToolDispatcherShape {
     readonly threadId: ThreadId;
     readonly action: ComputerUseAction;
   }) => Effect.Effect<ComputerUseResult, Error>;
+  /** v2 desktop requests (selected only when the pinned Driver is 0.38.0). */
+  readonly computerUseV2?: ComputerUseV2Dispatch;
   readonly browser: (input: {
     readonly threadId: ThreadId;
     readonly action: BrowserAction;

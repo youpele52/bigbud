@@ -40,6 +40,7 @@ export function createTerminalAgentProcessMatcher(
   agents: ReadonlyArray<TerminalAgentDescriptor> = TERMINAL_AGENTS,
 ) {
   const executables = new Map<string, TerminalAgentDetection>();
+  const prefixes: Array<{ prefix: string; detection: TerminalAgentDetection }> = [];
   const scripts: Array<{ path: string; detection: TerminalAgentDetection }> = [];
   for (const descriptor of agents) {
     if (!descriptor.id.trim() || !descriptor.names.some((name) => name.trim())) continue;
@@ -50,6 +51,9 @@ export function createTerminalAgentProcessMatcher(
     for (const executable of descriptor.executables ?? []) {
       if (executable.trim()) executables.set(executable.toLowerCase(), detection);
     }
+    for (const prefix of descriptor.executablePrefixes ?? []) {
+      if (prefix.trim()) prefixes.push({ prefix: prefix.toLowerCase(), detection });
+    }
     for (const path of descriptor.scriptPaths ?? []) {
       if (path.trim()) scripts.push({ path: path.toLowerCase(), detection });
     }
@@ -58,6 +62,8 @@ export function createTerminalAgentProcessMatcher(
     const executable = commandExecutable(command);
     const direct = executables.get(executable);
     if (direct) return direct;
+    const prefixed = prefixes.find((entry) => executable.startsWith(entry.prefix))?.detection;
+    if (prefixed) return prefixed;
     if (!/^(?:node|bun|deno|python\d*(?:\.\d+)?)$/.test(executable)) return null;
     const normalized = command.replaceAll("\\", "/").toLowerCase();
     return scripts.find((script) => normalized.includes(script.path))?.detection ?? null;

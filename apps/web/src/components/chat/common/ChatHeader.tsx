@@ -8,6 +8,7 @@ import type {
 import { SidebarLeft01Icon, SidebarLeftIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { memo } from "react";
+import { isElectron } from "../../../config/env";
 import GitActionsControl from "../../git/GitActionsControl";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../../ui/tooltip";
 import ProjectScriptsControl, {
@@ -20,8 +21,9 @@ import { RightPanelToggleButton } from "./RightPanelLauncherMenu";
 import { useIsThreadCompacting, useIsThreadRunning } from "../../../stores/main";
 import { truncateThreadName } from "../../sidebar/Sidebar.logic";
 import { ContentPanelHeaderBar } from "../../layout/ContentPanelHeaderBar";
-import { ThreadActivityDots, threadActivityLabel } from "./threadActivityIndicator";
+import { ThreadActivityIndicator, threadActivityLabel } from "./threadActivityIndicator";
 import { ChatLayoutMenu } from "./ChatHeader.layoutMenu";
+import { CHAT_COLUMN_HEADER_TITLE_GRID_CLASS } from "./chatColumn";
 import type { TerminalLayoutMode } from "../view/chat-view/terminalLayout.logic";
 
 interface ChatHeaderProps {
@@ -93,6 +95,7 @@ export const ChatHeader = memo(function ChatHeader({
 
   return (
     <ContentPanelHeaderBar
+      collapsedTitleGridClassName={CHAT_COLUMN_HEADER_TITLE_GRID_CLASS}
       title={
         <h2
           className="min-w-0 shrink truncate text-sm font-medium text-foreground"
@@ -108,7 +111,7 @@ export const ChatHeader = memo(function ChatHeader({
                   title={threadActivityLabel(activityTone)}
                   className="inline-flex items-center gap-[3px] pr-1"
                 >
-                  <ThreadActivityDots tone={activityTone} dotClassName="h-1 w-1" />
+                  <ThreadActivityIndicator tone={activityTone} />
                 </span>
               )}
             </span>
@@ -153,42 +156,45 @@ export const ChatHeader = memo(function ChatHeader({
             onOpenTerminal={onOpenTerminal}
           />
           <ChatLayoutMenu mode={terminalLayoutMode} onSelectLayout={onSelectTerminalLayout} />
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Toggle
-                  className="shrink-0"
-                  pressed={sidebarOpen}
-                  onPressedChange={toggleSidebar}
-                  aria-label="Toggle sidebar"
-                  variant="toolbar"
-                  size="xs"
-                >
-                  {sidebarOpen ? (
-                    <HugeiconsIcon
-                      aria-hidden="true"
-                      className="size-3.5"
-                      icon={SidebarLeft01Icon}
-                      size={14}
-                      strokeWidth={1.5}
-                    />
-                  ) : (
-                    <HugeiconsIcon
-                      aria-hidden="true"
-                      className="size-3.5"
-                      icon={SidebarLeftIcon}
-                      size={14}
-                      strokeWidth={1.5}
-                    />
-                  )}
-                </Toggle>
-              }
-            />
-            <TooltipPopup side="bottom">
-              {sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-              {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
-            </TooltipPopup>
-          </Tooltip>
+          {/* On desktop the sidebar toggle lives beside the traffic lights (WindowSidebarToggle). */}
+          {!isElectron && (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Toggle
+                    className="shrink-0"
+                    pressed={sidebarOpen}
+                    onPressedChange={toggleSidebar}
+                    aria-label="Toggle sidebar"
+                    variant="toolbar"
+                    size="xs"
+                  >
+                    {sidebarOpen ? (
+                      <HugeiconsIcon
+                        aria-hidden="true"
+                        className="size-3.5"
+                        icon={SidebarLeft01Icon}
+                        size={14}
+                        strokeWidth={1.5}
+                      />
+                    ) : (
+                      <HugeiconsIcon
+                        aria-hidden="true"
+                        className="size-3.5"
+                        icon={SidebarLeftIcon}
+                        size={14}
+                        strokeWidth={1.5}
+                      />
+                    )}
+                  </Toggle>
+                }
+              />
+              <TooltipPopup side="bottom">
+                {sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+                {sidebarToggleShortcutLabel && <> ({sidebarToggleShortcutLabel})</>}
+              </TooltipPopup>
+            </Tooltip>
+          )}
           <RightPanelToggleButton
             rightPanelOpen={rightPanelOpen}
             rightPanelToggleShortcutLabel={rightPanelToggleShortcutLabel}

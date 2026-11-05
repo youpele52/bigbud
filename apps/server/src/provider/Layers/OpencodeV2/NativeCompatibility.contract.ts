@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { V2_SHARED_REQUIRED_OPERATIONS } from "./SharedService.capabilities.ts";
 import { V2_SHARED_REQUEST_FIELDS, V2_SHARED_RESPONSES } from "./SharedService.protocol.ts";
+import { V2_NATIVE_POLICY_PROJECTION } from "./NativeCompatibility.policy.actions.ts";
 
 export const V2_CANONICAL_NATIVE_OPERATIONS = [
   ["get", "/api/config", "config.get"],
@@ -28,6 +29,7 @@ const descriptor = {
       "document.path?",
       "document.info.plugins?",
       "document.info.permissions?",
+      `document.info.${V2_NATIVE_POLICY_PROJECTION.replace("policies:", "policies?:")}`,
     ],
     plugin: [
       "location.directory",
@@ -65,6 +67,8 @@ const descriptor = {
     "rpc-cancellation-physical-lifetime",
     "immutable-executable-snapshot",
     "ordered-config-source-policy",
+    "unattributed-virtual-and-managed-split-sources",
+    "reversed-document-native-policy-precedence-and-tool-action-resource",
     "bounded-native-activity",
     "two-location-watcher-lifetime",
     "canonical-once-approval-receipts-history",

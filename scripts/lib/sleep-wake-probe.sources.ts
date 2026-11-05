@@ -258,7 +258,6 @@ const PROVIDER_CLI: Readonly<Record<string, string>> = {
   copilot: "copilot",
   opencodeV2: "opencode",
   opencode: "opencode",
-  kilocode: "kilo",
   pi: "pi",
   cursor: "agent",
   devin: "devin",
@@ -269,7 +268,6 @@ const PROVIDER_SDK: Readonly<Record<string, string>> = {
   claudeAgent: "@anthropic-ai/claude-agent-sdk",
   copilot: "@github/copilot-sdk",
   opencodeV2: "@opencode-ai/sdk",
-  kilocode: "@opencode-ai/sdk",
   pi: "@earendil-works/pi-coding-agent",
 };
 

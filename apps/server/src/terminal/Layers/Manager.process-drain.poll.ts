@@ -1,18 +1,52 @@
 import { Effect, Option } from "effect";
 
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
+import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { pollRemoteProcessesWith } from "./Manager.process-drain.remote.ts";
 import { toSessionKey } from "./Manager.shell";
 import { pollAgentIdentityWith } from "./Manager.process-drain.identity";
 import { nextTerminalTimestamp } from "./Manager.session.timestamp";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle";
 import { type TerminalSessionState } from "./Manager.types";
 
-export function pollSubprocessActivityWith(ctx: ProcessLifecycleContext): Effect.Effect<void> {
+function runningSessionsWith(ctx: ProcessLifecycleContext) {
+  return ctx.readManagerState.pipe(
+    Effect.map((state) =>
+      [...state.sessions.values()].filter(
+        (session): session is TerminalSessionState & { pid: number } =>
+          session.status === "running" && Number.isInteger(session.pid),
+      ),
+    ),
+  );
+}
+
+/** Remote SSH latency must never stall local identity/activity polling. */
+export function startProcessPollingWith(ctx: ProcessLifecycleContext): Effect.Effect<void> {
+  return Effect.forEach(
+    [false, true],
+    (remote) =>
+      Effect.forever(
+        runningSessionsWith(ctx).pipe(
+          Effect.flatMap((sessions) =>
+            sessions.length === 0
+              ? Effect.void
+              : remote
+                ? pollRemoteProcessesWith(ctx, sessions)
+                : pollSubprocessActivityWith(ctx, false),
+          ),
+          Effect.andThen(Effect.sleep(ctx.subprocessPollIntervalMs)),
+        ),
+      ).pipe(Effect.forkIn(ctx.workerScope)),
+    { discard: true },
+  );
+}
+
+export function pollSubprocessActivityWith(
+  ctx: ProcessLifecycleContext,
+  includeRemote = true,
+): Effect.Effect<void> {
   return Effect.gen(function* () {
-    const state = yield* ctx.readManagerState;
-    const runningSessions = [...state.sessions.values()].filter(
-      (session): session is TerminalSessionState & { pid: number } =>
-        session.status === "running" && Number.isInteger(session.pid),
-    );
+    const runningSessions = yield* runningSessionsWith(ctx);
 
     if (runningSessions.length === 0) {
       return;
@@ -23,6 +57,9 @@ export function pollSubprocessActivityWith(ctx: ProcessLifecycleContext): Effect
     ): Effect.Effect<void> =>
       Effect.gen(function* () {
         const terminalPid = session.pid;
+        const runtimeEpoch = session.runtimeEpoch;
+        const runtimeGeneration = session.runtimeGeneration;
+        const executionTargetId = session.executionTargetId;
         const hasRunningSubprocess = yield* ctx.subprocessChecker(terminalPid).pipe(
           Effect.map(Option.some),
           Effect.catch((error) =>
@@ -47,6 +84,9 @@ export function pollSubprocessActivityWith(ctx: ProcessLifecycleContext): Effect
             Option.isNone(liveSession) ||
             liveSession.value.status !== "running" ||
             liveSession.value.pid !== terminalPid ||
+            liveSession.value.runtimeEpoch !== runtimeEpoch ||
+            liveSession.value.runtimeGeneration !== runtimeGeneration ||
+            liveSession.value.executionTargetId !== executionTargetId ||
             liveSession.value.hasRunningSubprocess === hasRunningSubprocess.value
           ) {
             return [Option.none(), managerState] as const;
@@ -75,12 +115,21 @@ export function pollSubprocessActivityWith(ctx: ProcessLifecycleContext): Effect
     yield* Effect.all(
       [
         pollAgentIdentityWith(ctx, runningSessions),
-        Effect.forEach(runningSessions, checkSubprocessActivity, {
-          concurrency: "unbounded",
-          discard: true,
-        }),
+        includeRemote ? pollRemoteProcessesWith(ctx, runningSessions) : Effect.void,
+        Effect.forEach(
+          runningSessions.filter(
+            (session) =>
+              isLocalExecutionTarget(session.executionTargetId) ||
+              isWslTerminalTargetId(session.executionTargetId),
+          ),
+          checkSubprocessActivity,
+          {
+            concurrency: "unbounded",
+            discard: true,
+          },
+        ),
       ],
-      { concurrency: 2, discard: true },
+      { concurrency: 3, discard: true },
     );
   }).pipe(Effect.withSpan("terminal.pollSubprocessActivity"));
 }

@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Effect, Layer } from "effect";
@@ -7,6 +6,7 @@ import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 
 import { ServerConfig } from "../../startup/config.ts";
+import { serverHttpTestLayer } from "../../server.test.http.ts";
 import { getTelemetryIdentifier } from "../Identify.ts";
 import { AnalyticsService } from "../Services/AnalyticsService.ts";
 import { AnalyticsServiceLayerLive } from "./AnalyticsService.ts";
@@ -70,7 +70,7 @@ it.layer(NodeServices.layer)("AnalyticsService test", (it) => {
       );
       const runtimeLayer = telemetryLayer.pipe(
         Layer.provide(configLayer),
-        Layer.provideMerge(NodeHttpServer.layerTest),
+        Layer.provideMerge(serverHttpTestLayer),
       );
 
       yield* Effect.gen(function* () {

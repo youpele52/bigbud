@@ -9,7 +9,7 @@ export interface CanonicalThreadRouteActivation {
   openChats: boolean;
   openFavourites: boolean;
   openProjects: boolean;
-  openRemoteProjects: boolean;
+  openRemoteWorkspaces: boolean;
   projectId: Thread["projectId"];
   projectResolved: boolean;
   scope: "chats" | "local" | "remote";
@@ -48,7 +48,7 @@ export function resolveCanonicalThreadRouteActivation(input: {
     openChats,
     openFavourites: isPinned || thread.pinnedAt != null,
     openProjects: !openChats && !isRemote,
-    openRemoteProjects: !openChats && isRemote,
+    openRemoteWorkspaces: !openChats && isRemote,
     projectId: thread.projectId,
     projectResolved: project !== undefined,
     scope,
@@ -113,7 +113,7 @@ export function useCanonicalThreadRouteActivation(input: {
             openChats: scope === "chats",
             openFavourites: pinned,
             openProjects: scope === "local",
-            openRemoteProjects: scope === "remote",
+            openRemoteWorkspaces: scope === "remote",
             projectId,
             projectResolved,
             scope,
@@ -131,7 +131,7 @@ export function useCanonicalThreadRouteActivation(input: {
     if (!transition.revealContext) return;
     if (currentActivation.openChats) ui.setChatsExpanded(true);
     if (currentActivation.openProjects) ui.setProjectsExpanded(true);
-    if (currentActivation.openRemoteProjects) ui.setRemoteProjectsExpanded(true);
+    if (currentActivation.openRemoteWorkspaces) ui.setRemoteWorkspacesExpanded(true);
     if (!currentActivation.openChats) {
       ui.setProjectExpanded(currentActivation.projectId, true);
       ui.setSelectedProject(currentActivation.projectId);

@@ -93,7 +93,7 @@ describe("full-height files drawer preview edge", () => {
     }
   });
 
-  it("does not put a hit-test layer over native scrollbar clicks/drags or cancel wheel input", async () => {
+  it("does not put a hit-test layer over native scrollbar clicks or cancel wheel input", async () => {
     const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" />);
     try {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -109,7 +109,20 @@ describe("full-height files drawer preview edge", () => {
         .click({ position: { x: bounds.width - 2, y: bounds.height * 0.8 }, force: true });
       // Native scrolling commits asynchronously. Retry without advancing drawer hover timers.
       await vi.waitFor(() => expect(scroll.scrollTop).toBeGreaterThan(0), { interval: 0 });
-      scroll.scrollTop = 0;
+      const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
+      expect(scroll.dispatchEvent(wheel)).toBe(true);
+      expect(wheel.defaultPrevented).toBe(false);
+      expect(treeRegion().inert).toBe(true);
+    } finally {
+      await mounted.unmount();
+    }
+  });
+
+  it("allows dragging the native scrollbar thumb without a hit-test layer", async () => {
+    const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" />);
+    try {
+      const scroll = document.querySelector<HTMLDivElement>("[data-preview-content]")!;
+      const bounds = scroll.getBoundingClientRect();
       const thumbHeight = (scroll.clientHeight * scroll.clientHeight) / scroll.scrollHeight;
       // Playwright's provider uses physical mouse down/move/up for this operation,
       // so the native scrollbar thumb (rather than an HTML draggable row) owns the drag.
@@ -119,10 +132,6 @@ describe("full-height files drawer preview edge", () => {
         targetPosition: { x: bounds.width - 2, y: bounds.height * 0.65 },
       });
       await vi.waitFor(() => expect(scroll.scrollTop).toBeGreaterThan(0), { interval: 0 });
-      const wheel = new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 100 });
-      expect(scroll.dispatchEvent(wheel)).toBe(true);
-      expect(wheel.defaultPrevented).toBe(false);
-      expect(treeRegion().inert).toBe(true);
     } finally {
       await mounted.unmount();
     }

@@ -1,0 +1,38 @@
+syntax = "proto3";
+package bigbud.computer_use.execution;
+
+message AdmitOperation {
+  string operation_id = 1;
+  bytes request_digest = 2;
+  string caller_id = 3;
+  string episode_id = 4;
+  string native_session_id = 5;
+  uint64 expected_pause_epoch = 6;
+  string policy_revision = 7;
+  string owner_generation = 8;
+  string worker_generation = 9;
+  string target_ref = 10;
+  string observation_ref = 11;
+  uint32 timeout_ms = 12;
+  string provider_generation = 13;
+  string runtime_mode_revision = 14;
+  uint64 caller_sequence = 15;
+  bytes canonical_plan = 16;
+}
+message Admission {
+  string operation_id = 1;
+  string ticket = 2;
+  string native_session_id = 3;
+}
+// A ticket is single-operation authority, not arbitrary tool access. Each frame
+// must match the next allowed primitive and be stamped/checked by native owner.
+message MediatedCall {
+  string ticket = 1;
+  uint32 primitive_index = 2;
+  bytes mcp_frame = 3;
+}
+message RevokeCaller {
+  string caller_id = 1;
+  string provider_generation = 2;
+  string runtime_mode_revision = 3;
+}

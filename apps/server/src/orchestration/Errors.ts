@@ -1,3 +1,4 @@
+import { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
 import { SchemaIssue, Schema } from "effect";
 
 import type { ProjectionRepositoryError } from "../persistence/Errors.ts";
@@ -33,12 +34,16 @@ export class OrchestrationCommandInvariantError extends Schema.TaggedErrorClass<
     commandType: Schema.String,
     detail: Schema.String,
     code: Schema.optional(
-      Schema.Literals(["thread_already_exists", "prompt_queue_full", "prompt_not_queueable"]),
+      Schema.Union([
+        Schema.Literals(["thread_already_exists", "prompt_queue_full", "prompt_not_queueable"]),
+        QueueDecisionReason,
+      ]),
     ),
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
+    if (this.code?.startsWith("queue_")) return this.detail;
     return `Orchestration command invariant failed (${this.commandType}): ${this.detail}`;
   }
 }
@@ -46,12 +51,14 @@ export class OrchestrationCommandInvariantError extends Schema.TaggedErrorClass<
 export class OrchestrationCommandPreviouslyRejectedError extends Schema.TaggedErrorClass<OrchestrationCommandPreviouslyRejectedError>()(
   "OrchestrationCommandPreviouslyRejectedError",
   {
+    queueReason: Schema.optional(QueueDecisionReason),
     commandId: Schema.String,
     detail: Schema.String,
     cause: Schema.optional(Schema.Defect),
   },
 ) {
   override get message(): string {
+    if (this.queueReason) return this.detail;
     return `Command previously rejected (${this.commandId}): ${this.detail}`;
   }
 }

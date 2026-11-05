@@ -140,7 +140,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
         </p>
         <p>
           Git uses the project workspace root, not the terminal&apos;s current directory. Edit the
-          remote project and set its workspace root to the repository directory.
+          remote workspace and set its workspace root to the repository directory.
         </p>
       </div>
     );

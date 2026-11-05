@@ -326,6 +326,7 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           pendingTurnControlOperation: null,
           pendingTurnStart: null,
           recovery: null,
+          organization: { state: "present", revision: 0, changedAt: null, snooze: null },
           queueHold: false,
           tasks: [
             {

@@ -1,10 +1,38 @@
 import { spawn } from "node:child_process";
 
 import { createOpencodeClient } from "@opencode-ai/sdk/v2";
+import { Effect } from "effect";
 
 import { killChildTree } from "../../../codex/codexAppServerManager.utils.ts";
+import type { ProcessLedgerShape } from "../../../process-ledger/Services/ProcessLedger.ts";
 
 import type { ManagedServerConfig } from "./ServerManager.ts";
+
+/**
+ * Record a managed `serve` child in the process ledger so a crashed backend's next start can reap
+ * it; the record is dropped when the child exits. Not detached, so it shares a process group with
+ * the backend (and the desktop app): `tree` mode, never a group kill. Never rejects.
+ */
+export async function trackManagedServerChild(
+  ledger: ProcessLedgerShape | undefined,
+  child: ReturnType<typeof spawn>,
+  invocation: { readonly command: string; readonly args: ReadonlyArray<string> },
+  label: string,
+): Promise<void> {
+  if (!ledger || child.pid === undefined) return;
+  const ticket = await Effect.runPromise(
+    ledger.track({
+      pid: child.pid,
+      command: invocation.command,
+      args: invocation.args,
+      kill: "tree",
+      label,
+    }),
+  );
+  const release = () => void Effect.runPromise(ticket.release);
+  if (child.exitCode !== null || child.signalCode !== null) release();
+  else child.once("exit", release);
+}
 
 export function stopSpawnedChild(child: ReturnType<typeof spawn>): void {
   killChildTree(child as Parameters<typeof killChildTree>[0]);
@@ -33,7 +61,7 @@ export async function stopSpawnedChildAndWait(
 }
 
 export function readManagedServerListeningUrl(line: string): string | null {
-  if (!/^(?:opencode|kilo) server listening\b/.test(line)) {
+  if (!/^opencode server listening\b/.test(line)) {
     return null;
   }
   const match = line.match(/on\s+(https?:\/\/[^\s]+)/);
@@ -55,8 +83,5 @@ export function buildClientOptions(
 ): Parameters<typeof createOpencodeClient>[0] {
   const base: Parameters<typeof createOpencodeClient>[0] = { baseUrl: url };
   if (!directory) return base;
-  if ("directoryHeader" in config) {
-    return { ...base, headers: { [config.directoryHeader]: encodeURIComponent(directory) } };
-  }
   return { ...base, directory };
 }

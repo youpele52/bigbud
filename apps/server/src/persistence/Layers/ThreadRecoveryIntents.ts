@@ -1,4 +1,4 @@
-import type { MessageId, ProviderKind, ThreadId, TurnId } from "@bigbud/contracts";
+import type { MessageId, ThreadId, TurnId } from "@bigbud/contracts";
 import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -41,7 +41,7 @@ function toIntent(row: IntentRow): ThreadRecoveryIntent {
   return {
     threadId: row.threadId as ThreadId,
     messageId: row.messageId as MessageId,
-    provider: row.provider as ProviderKind | null,
+    provider: row.provider,
     turnId: row.turnId as TurnId | null,
     disposition: row.disposition,
     recoveryStatus: row.recoveryStatus,

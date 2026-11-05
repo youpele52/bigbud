@@ -55,7 +55,7 @@ export async function prepareMaterializationForSend(
   if (result.status === "already-accepted") {
     await reconcileAcceptedAttempt(input);
     toastManager.add({
-      type: "info",
+      type: "success",
       title: "Your message was sent",
       description: "bigbud confirmed the earlier send and synchronized this chat.",
     });
@@ -79,7 +79,7 @@ export async function prepareMaterializationForSend(
       createdAt: new Date().toISOString(),
     });
     toastManager.add({
-      type: "info",
+      type: "success",
       title: "Saved draft moved to a fresh chat",
       description: "That thread ID already belongs to the server. Your draft is safe to send.",
     });
@@ -124,7 +124,7 @@ export async function reconcileAcceptedMaterializationFailure(
 ): Promise<void> {
   await reconcileAcceptedAttempt(input);
   toastManager.add({
-    type: "info",
+    type: "success",
     title: `Your ${kind} was sent`,
     description: "bigbud confirmed the send after reconnecting.",
   });
@@ -145,7 +145,7 @@ export async function repairRejectedMaterializationDraft(input: {
   });
   if (!replacementThreadId) return;
   toastManager.add({
-    type: "info",
+    type: "success",
     title: "Saved draft moved to a fresh chat",
     description: `That thread ID already belongs to the server. Your ${input.contentKind} is safe to resend.`,
   });

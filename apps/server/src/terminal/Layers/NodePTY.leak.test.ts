@@ -85,7 +85,9 @@ describe.skipIf(SKIP_REASON !== null)("NodePTY pseudo-terminal descriptor lifeti
     expect(await waitForPtyCount(baseline)).toBe(baseline);
   });
 
-  leakCase("returns to the baseline after failed spawns", async () => {
+  // The adapter rejects a missing shell before node-pty allocates a pseudo-terminal, so failed
+  // spawns no longer leak even on the stable release.
+  it("returns to the baseline after failed spawns", async () => {
     const pty = await adapter;
     const baseline = countOpenPtyDescriptors();
 

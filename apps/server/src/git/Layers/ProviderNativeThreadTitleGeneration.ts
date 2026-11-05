@@ -1,5 +1,4 @@
-// TODO: Split by concern when this file is next touched.
-import { CopilotClient, type PermissionRequestResult } from "@github/copilot-sdk";
+import type { PermissionRequestResult } from "@github/copilot-sdk";
 import {
   TextGenerationError,
   type CopilotModelSelection,
@@ -14,8 +13,9 @@ import type {
   ThreadTitleGenerationInput,
 } from "../Services/TextGeneration.ts";
 import { buildThreadElevatorSummaryPrompt, buildThreadTitlePrompt } from "../Prompts.ts";
-import { limitSection, sanitizeElevatorSummary, sanitizeThreadTitle } from "../Utils.ts";
-import { makeCopilotClientOptions } from "../../provider/Layers/Copilot/Adapter.types.ts";
+import { sanitizeElevatorSummary, sanitizeThreadTitle } from "../Utils.ts";
+import { createLeasedCopilotClient } from "../../provider/Layers/Copilot/Runtime.client.ts";
+import { buildCopilotThreadTitlePrompt } from "./ProviderNativeThreadTitleGeneration.copilotPrompt.ts";
 import { resolveProviderIDForModel } from "../../provider/Layers/Opencode/Adapter.session.helpers.ts";
 import type { OpencodeServerManagerShape } from "../../provider/Services/Opencode/ServerManager.ts";
 import {
@@ -53,35 +53,6 @@ const denyAllPermissions = (): PermissionRequestResult => ({
   kind: "reject",
 });
 
-function buildCopilotThreadTitlePrompt(input: {
-  readonly message: string;
-  readonly attachments?: ThreadTitleGenerationInput["attachments"];
-}): string {
-  const attachmentLines = (input.attachments ?? [])
-    .filter((attachment) => attachment.type !== "thread")
-    .map(
-      (attachment) =>
-        `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
-    );
-  const sections = [
-    "Write a concise thread title for a coding conversation.",
-    "Return plain text only.",
-    "Do not return JSON.",
-    "Do not wrap the title in quotes.",
-    "Do not include prefixes or trailing punctuation.",
-    "Keep it short and specific (3-8 words).",
-    "",
-    "User message:",
-    limitSection(input.message, 8_000),
-  ];
-
-  if (attachmentLines.length > 0) {
-    sections.push("", "Attachment metadata:", limitSection(attachmentLines.join("\n"), 4_000));
-  }
-
-  return sections.join("\n");
-}
-
 export const generateCopilotThreadTitleNative = (
   deps: NativeThreadTitleGenerationDeps,
   input: CopilotThreadTitleGenerationInput,
@@ -91,40 +62,40 @@ export const generateCopilotThreadTitleNative = (
       Effect.map((settings) => settings.providers.copilot),
       Effect.catch(() => Effect.void),
     );
-    const clientOptions = makeCopilotClientOptions({
-      binaryPath: copilotSettings?.binaryPath ?? "copilot",
-      workingDirectory: input.cwd,
-    });
-
     const prompt = buildCopilotThreadTitlePrompt({
       message: input.message,
       attachments: input.attachments,
     });
 
-    const client = new CopilotClient(clientOptions);
-
     const response = yield* Effect.tryPromise({
       try: async () => {
-        const session = await client.createSession({
+        const client = await createLeasedCopilotClient({
+          binaryPath: copilotSettings?.binaryPath ?? "copilot",
           workingDirectory: input.cwd,
-          model: input.modelSelection.model,
-          ...(input.modelSelection.options?.reasoningEffort
-            ? { reasoningEffort: input.modelSelection.options.reasoningEffort }
-            : {}),
-          availableTools: [],
-          onPermissionRequest: denyAllPermissions,
-          streaming: false,
-          systemMessage: {
-            mode: "replace",
-            content:
-              "You generate concise thread titles. Never use tools. Return only the title text.",
-          },
         });
-
         try {
-          return await session.sendAndWait({ prompt, mode: "immediate" }, COPILOT_TIMEOUT_MS);
+          const session = await client.createSession({
+            workingDirectory: input.cwd,
+            model: input.modelSelection.model,
+            ...(input.modelSelection.options?.reasoningEffort
+              ? { reasoningEffort: input.modelSelection.options.reasoningEffort }
+              : {}),
+            availableTools: [],
+            onPermissionRequest: denyAllPermissions,
+            streaming: false,
+            systemMessage: {
+              mode: "replace",
+              content:
+                "You generate concise thread titles. Never use tools. Return only the title text.",
+            },
+          });
+
+          try {
+            return await session.sendAndWait({ prompt, mode: "immediate" }, COPILOT_TIMEOUT_MS);
+          } finally {
+            await session.disconnect().catch(() => undefined);
+          }
         } finally {
-          await session.disconnect().catch(() => undefined);
           await client.stop().catch(() => []);
         }
       },

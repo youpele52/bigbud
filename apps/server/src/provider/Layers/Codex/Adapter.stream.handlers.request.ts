@@ -89,6 +89,15 @@ export function handleServerRequestResolved(
   canonicalThreadId: ThreadId,
 ): ReadonlyArray<ProviderRuntimeEvent> {
   const payload = asObject(event.payload);
+  if (payload?.interaction === "user-input") {
+    return [
+      {
+        ...runtimeEventBase(event, canonicalThreadId),
+        type: "user-input.resolved",
+        payload: { answers: toCanonicalUserInputAnswers(undefined) },
+      },
+    ];
+  }
   const requestType =
     toRequestTypeFromResolvedPayload(payload) !== "unknown"
       ? toRequestTypeFromResolvedPayload(payload)

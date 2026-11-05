@@ -10,7 +10,7 @@ import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@bigbud/share
 
 import {
   applyCursorAcpModelSelection,
-  makeCursorAcpRuntime,
+  withCursorAcpRuntime,
 } from "../../provider/acp/CursorAcpSupport.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import {
@@ -42,16 +42,28 @@ import {
 } from "./CursorTextGeneration.helpers.ts";
 import { makeGeneratePromptSuggestion } from "./TextGeneration.promptSuggestion.ts";
 
-const makeCursorTextGeneration = Effect.gen(function* () {
+export interface CursorTextGenerationOptions {
+  /** Bound on one request, agent spawn through output; tests shorten it. */
+  readonly timeoutMs?: number;
+}
+
+const makeCursorTextGeneration = Effect.fn("makeCursorTextGeneration")(function* (
+  options: CursorTextGenerationOptions = {},
+) {
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const serverSettingsService = yield* Effect.service(ServerSettingsService);
+  const timeoutMs = options.timeoutMs ?? CURSOR_TIMEOUT_MS;
 
   const loadCursorSettings = Effect.map(
     serverSettingsService.getSettings,
     (settings) => settings.providers.cursor,
   ).pipe(Effect.catch(() => Effect.succeed(DEFAULT_CURSOR_SETTINGS)));
 
-  const runCursorJson = Effect.fn("runCursorJson")(function* <S extends Schema.Top>({
+  // `DecodingServices: never` keeps the return requirement-free, so a resource that escapes the
+  // agent's scope (such as a `Scope` from the calling fiber) fails to compile instead of leaking.
+  const runCursorJson = Effect.fn("runCursorJson")(function* <
+    S extends Schema.Top & { readonly DecodingServices: never },
+  >({
     operation,
     cwd,
     prompt,
@@ -65,57 +77,67 @@ const makeCursorTextGeneration = Effect.gen(function* () {
     outputSchemaJson: S;
     modelSelection: CursorModelSelection;
     cursorSettings: CursorSettings;
-  }): Effect.fn.Return<S["Type"], TextGenerationError, S["DecodingServices"]> {
-    const outputRef = yield* Ref.make("");
-    const runtime = yield* makeCursorAcpRuntime({
-      cursorSettings,
-      childProcessSpawner: commandSpawner,
-      cwd,
-      clientInfo: { name: "bigbud-git-text", version: "0.0.0" },
-    }).pipe(
+  }): Effect.fn.Return<S["Type"], TextGenerationError> {
+    // The agent lives only inside `withCursorAcpRuntime`: its scope closes (killing the agent's
+    // process group) on success, failure, timeout and interruption.
+    const { promptResult, rawResult } = yield* withCursorAcpRuntime(
+      {
+        cursorSettings,
+        childProcessSpawner: commandSpawner,
+        cwd,
+        clientInfo: { name: "bigbud-git-text", version: "0.0.0" },
+      },
+      (runtime) =>
+        Effect.gen(function* () {
+          const outputRef = yield* Ref.make("");
+          yield* runtime.handleSessionUpdate((notification) => {
+            const update = notification.update;
+            if (update.sessionUpdate !== "agent_message_chunk") {
+              return Effect.void;
+            }
+            const content = update.content;
+            if (content.type !== "text") {
+              return Effect.void;
+            }
+            return Ref.update(outputRef, (current) => current + content.text);
+          });
+
+          yield* runtime.start();
+          yield* Effect.ignore(runtime.setMode("ask"));
+          yield* applyCursorAcpModelSelection({
+            runtime,
+            model: modelSelection.model,
+            modelOptions: modelSelection.options,
+            mapError: ({ cause, configId, step }) =>
+              mapCursorTextGenerationError(
+                operation,
+                step === "set-config-option"
+                  ? `Failed to set Cursor ACP config option "${configId}" for text generation.`
+                  : "Failed to set Cursor ACP base model for text generation.",
+                cause,
+              ),
+          });
+
+          const promptResult = yield* runtime
+            .prompt({ prompt: [{ type: "text", text: prompt }] })
+            .pipe(
+              Effect.mapError((cause) =>
+                mapCursorTextGenerationError(operation, "Cursor ACP request failed.", cause),
+              ),
+            );
+          return { promptResult, rawResult: (yield* Ref.get(outputRef)).trim() };
+        }),
+    ).pipe(
       Effect.mapError((cause) =>
-        mapCursorTextGenerationError(
-          operation,
-          "Failed to start Cursor ACP runtime for text generation.",
-          cause,
-        ),
+        isTextGenerationError(cause)
+          ? cause
+          : mapCursorTextGenerationError(
+              operation,
+              "Failed to start Cursor ACP runtime for text generation.",
+              cause,
+            ),
       ),
-    );
-
-    yield* runtime.handleSessionUpdate((notification) => {
-      const update = notification.update;
-      if (update.sessionUpdate !== "agent_message_chunk") {
-        return Effect.void;
-      }
-      const content = update.content;
-      if (content.type !== "text") {
-        return Effect.void;
-      }
-      return Ref.update(outputRef, (current) => current + content.text);
-    });
-
-    const promptResult = yield* Effect.gen(function* () {
-      yield* runtime.start();
-      yield* Effect.ignore(runtime.setMode("ask"));
-      yield* applyCursorAcpModelSelection({
-        runtime,
-        model: modelSelection.model,
-        modelOptions: modelSelection.options,
-        mapError: ({ cause, configId, step }) =>
-          mapCursorTextGenerationError(
-            operation,
-            step === "set-config-option"
-              ? `Failed to set Cursor ACP config option "${configId}" for text generation.`
-              : "Failed to set Cursor ACP base model for text generation.",
-            cause,
-          ),
-      });
-
-      return yield* runtime.prompt({
-        prompt: [{ type: "text", text: prompt }],
-      });
-    }).pipe(
-      Effect.timeoutOption(CURSOR_TIMEOUT_MS),
+      Effect.timeoutOption(timeoutMs),
       Effect.flatMap(
         Option.match({
           onNone: () =>
@@ -128,14 +150,8 @@ const makeCursorTextGeneration = Effect.gen(function* () {
           onSome: (value) => Effect.succeed(value),
         }),
       ),
-      Effect.mapError((cause) =>
-        isTextGenerationError(cause)
-          ? cause
-          : mapCursorTextGenerationError(operation, "Cursor ACP request failed.", cause),
-      ),
     );
 
-    const rawResult = (yield* Ref.get(outputRef)).trim();
     if (!rawResult) {
       return yield* new TextGenerationError({
         operation,
@@ -163,7 +179,6 @@ const makeCursorTextGeneration = Effect.gen(function* () {
           ? cause
           : mapCursorTextGenerationError(operation, "Cursor ACP text generation failed.", cause),
       ),
-      Effect.scoped,
     );
   });
 
@@ -343,4 +358,7 @@ const makeCursorTextGeneration = Effect.gen(function* () {
   } satisfies TextGenerationShape;
 });
 
-export const CursorTextGenerationLive = Layer.effect(TextGeneration, makeCursorTextGeneration);
+export const makeCursorTextGenerationLive = (options?: CursorTextGenerationOptions) =>
+  Layer.effect(TextGeneration, makeCursorTextGeneration(options));
+
+export const CursorTextGenerationLive = makeCursorTextGenerationLive();

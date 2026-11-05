@@ -1,3 +1,8 @@
+import { queueDecisionError } from "./QueuedPromptDecision.logic.ts";
+import {
+  decideQueuedReleaseInterrupt,
+  queuedReleaseSettingsEvents,
+} from "./deciderThreads.turn.queue.release.ts";
 import type {
   OrchestrationCommand,
   OrchestrationEvent,
@@ -17,7 +22,7 @@ import {
 import {
   canAutoDispatchQueuedPrompts,
   compatibleQueuedPrefix,
-  consumableQueuedPrefix,
+  evaluateQueuedPromptFlush,
   countedQueuedPrompts,
   hasActiveQueueReservation,
   redeliveryQueuePosition,
@@ -116,8 +121,18 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
   Omit<OrchestrationEvent, "sequence"> | ReadonlyArray<Omit<OrchestrationEvent, "sequence">>,
   OrchestrationCommandInvariantError
 > {
-  const { command, readModel } = input;
+  const { readModel } = input;
+  // Immutable retry payload timestamps identify requests; committed actions use execution time.
+  const command =
+    input.command.type === "thread.queued-prompt.flush"
+      ? { ...input.command, createdAt: nowIso() }
+      : input.command;
   const thread = yield* requireThread({ readModel, command, threadId: command.threadId });
+  if (
+    command.type === "thread.queued-prompt.flush" &&
+    (thread.archivedAt != null || thread.deletingAt != null || thread.deletedAt != null)
+  )
+    return yield* queueDecisionError("queue_unavailable");
   yield* requireThreadReadyForMutation({ thread, command });
   if (command.type === "thread.message.submit")
     yield* requireThreadAttachmentsSupported(thread, command);
@@ -242,10 +257,13 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
     return [queuedEvent, flushedEvent, ...startEvents];
   }
 
+  const interrupt = yield* decideQueuedReleaseInterrupt({ command, thread, readModel });
+  if (interrupt !== null) return interrupt;
   // The pending start's `requestedAt` is server time, so the user's release is judged by it too.
   const releasedAt = nowIso();
-  const prefix = consumableQueuedPrefix({ thread, ...command, releasedAt });
-  if (prefix.length === 0) return [];
+  const decision = evaluateQueuedPromptFlush({ thread, ...command, releasedAt });
+  if (decision.status !== "ready") return yield* queueDecisionError(decision.reason);
+  const prefix = decision.prompts;
   const flushedEvent: Omit<OrchestrationEvent, "sequence"> = {
     ...withEventBase({
       aggregateKind: "thread",
@@ -268,7 +286,16 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
         }
       : readModel,
     command: buildQueuedFlushTurnStart({
-      prompt: prefix[0]!,
+      prompt:
+        command.userRelease && command.releaseSettings
+          ? {
+              ...prefix[0]!,
+              modelSelection: prefix[0]!.modelSelection ?? command.releaseSettings.modelSelection,
+              runtimeMode: prefix[0]!.runtimeMode ?? command.releaseSettings.runtimeMode,
+              interactionMode:
+                prefix[0]!.interactionMode ?? command.releaseSettings.interactionMode,
+            }
+          : prefix[0]!,
       thread,
       commandId: command.commandId,
       createdAt: command.createdAt,
@@ -276,5 +303,5 @@ export const decideThreadQueueCommand = Effect.fn("decideThreadQueueCommand")(fu
       prompts: prefix,
     }),
   });
-  return [flushedEvent, ...startEvents];
+  return [...queuedReleaseSettingsEvents(command, thread), flushedEvent, ...startEvents];
 });

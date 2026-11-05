@@ -47,7 +47,7 @@ describe("provider descriptors", () => {
     expect(cliProxy.isVisible([snapshot({ provider: "cliProxy", installed: false })])).toBe(false);
     expect(cliProxy.customModels).toBeNull();
     expect(cliProxy.catalogAuthoritative).toBe(true);
-    expect(cliProxy.traitsEnabled).toBe(false);
+    expect(cliProxy.traitsEnabled).toBe(true);
     expect(cliProxy.settings.setupUrl).toBe(
       "https://help.router-for.me/introduction/quick-start.html",
     );
@@ -55,7 +55,6 @@ describe("provider descriptors", () => {
 
   it("centralizes sub-provider support", () => {
     expect(providerSupportsSubProviderID("opencode")).toBe(true);
-    expect(providerSupportsSubProviderID("kilocode")).toBe(true);
     expect(providerSupportsSubProviderID("pi")).toBe(true);
     expect(providerSupportsSubProviderID("cliProxy")).toBe(false);
   });

@@ -16,14 +16,21 @@ import {
   CUA_DRIVER_REQUIRED_TOOLS,
 } from "@bigbud/shared/cua-driver/policy";
 import {
+  CUA_DRIVER_VERSION,
   cuaDriverReleaseUrl,
   resolveCuaDriverReleaseArtifact,
   type CuaDriverRuntimeArch,
   type CuaDriverRuntimePlatform,
 } from "@bigbud/shared/cua-driver/release";
 
+import {
+  cuaDriverContractFixtureDir,
+  cuaDriverContractReadme,
+  cuaDriverContractReadmeTarget,
+} from "./verify-cua-driver-contract.paths.ts";
+
 const ROOT = Path.resolve(import.meta.dirname, "..");
-const FIXTURE_DIR = Path.join(ROOT, "scripts", "fixtures", "cua-driver", "0.9.1");
+const FIXTURE_DIR = cuaDriverContractFixtureDir(ROOT, CUA_DRIVER_VERSION);
 const REQUEST_TIMEOUT_MS = 30_000;
 const CONTRACT_HOST_BUNDLE_ID = "ai.bigbud.desktop.contract-test";
 
@@ -278,10 +285,13 @@ async function main(): Promise<void> {
       { startSession, sessionState, endSession, denied },
       temporaryDir,
     );
-    await FSP.writeFile(
-      Path.join(FIXTURE_DIR, "README.md"),
-      `# cua-driver 0.9.1 contract\n\nCaptured by \`bun run scripts/verify-cua-driver-contract.ts\` on ${platform}/${arch}. The harness uses production release metadata, child environment, invocation arguments, and policy bytes.\n`,
-    );
+    const readmeTarget = cuaDriverContractReadmeTarget(FIXTURE_DIR, FS.existsSync);
+    if (readmeTarget) {
+      await FSP.writeFile(
+        readmeTarget,
+        cuaDriverContractReadme(CUA_DRIVER_VERSION, platform, arch),
+      );
+    }
   } finally {
     proxy?.kill("SIGTERM");
     daemon?.kill("SIGTERM");

@@ -1,10 +1,9 @@
-import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
-
+import type { TerminalAgentKind } from "./terminal.store.agentKind";
 import type { TerminalAgentIdentityState } from "./terminal.store.identity";
 
 interface RecentTerminalAgent {
   readonly key: string;
-  readonly provider: ProviderKind;
+  readonly provider: TerminalAgentKind;
   readonly lastActiveAt: string;
 }
 
@@ -40,7 +39,7 @@ function recentTerminalAgents(state: TerminalAgentIdentityState) {
 export function selectThreadTerminalProvider(
   state: TerminalAgentIdentityState,
   threadId: string,
-): ProviderKind | null {
+): TerminalAgentKind | null {
   return recentTerminalAgents(state).get(threadId)?.provider ?? null;
 }
 

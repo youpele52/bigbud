@@ -172,13 +172,10 @@ freshRecovery.layer("ProviderServiceLive CLIProxy fresh recovery", (it) => {
 const executionTargets = makeProviderServiceLayer();
 
 executionTargets.layer("ProviderServiceLive provider execution targets", (it) => {
-  it.effect("accepts local runtimes with remote workspaces for cliProxy and kilocode", () =>
+  it.effect("accepts local runtimes with remote workspaces for cliProxy", () =>
     Effect.gen(function* () {
       const provider = yield* ProviderService;
-      for (const [providerKind, adapter] of [
-        ["cliProxy", executionTargets.cliProxy] as const,
-        ["kilocode", executionTargets.kilocode] as const,
-      ]) {
+      for (const [providerKind, adapter] of [["cliProxy", executionTargets.cliProxy] as const]) {
         const threadId = asThreadId(`thread-${providerKind}-remote-workspace`);
         const session = yield* provider.startSession(threadId, {
           provider: providerKind,

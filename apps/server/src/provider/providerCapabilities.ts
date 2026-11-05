@@ -59,15 +59,6 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
     tokenUsageSemantics: "unavailable",
     sessionHistorySemantics: "unknown",
   },
-  kilocode: {
-    supportsRemoteProviderRuntime: true,
-    supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("kilocode"),
-    toolInjectionMode: "builtin-override",
-    needsBuiltinsDisabled: false,
-    compactionBehavior: "signaled",
-    tokenUsageSemantics: "current-context",
-    sessionHistorySemantics: "bounded",
-  },
   pi: {
     supportsRemoteProviderRuntime: true,
     supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("pi"),

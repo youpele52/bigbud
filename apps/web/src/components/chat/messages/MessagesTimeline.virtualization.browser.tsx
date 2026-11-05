@@ -1,9 +1,10 @@
-// TODO: Split by concern when this file is next touched.
 import "../../../index.css";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildStaticScenarios } from "./MessagesTimeline.virtualization.scenarios";
+import { estimateMessagesTimelineRowHeight } from "./MessagesTimeline.estimate";
+import { deriveMessagesTimelineRows } from "./MessagesTimeline.logic";
 import {
   createBaseTimelineProps,
   createChangedFilesSummary,
@@ -32,19 +33,59 @@ describe("MessagesTimeline virtualization harness", () => {
     document.body.innerHTML = "";
   });
 
-  it.each(buildStaticScenarios())("keeps the $name estimate within tolerance", async (scenario) => {
-    const mounted = await mountMessagesTimeline({ props: scenario.props });
+  it.each(buildStaticScenarios().filter(({ name }) => !name.startsWith("expanded grouped work")))(
+    "keeps the $name estimate within tolerance",
+    async (scenario) => {
+      const mounted = await mountMessagesTimeline({ props: scenario.props });
 
+      try {
+        const measurement = await measureTimelineRow({
+          host: mounted.host,
+          props: scenario.props,
+          targetRowId: scenario.targetRowId,
+        });
+
+        expect(
+          Math.abs(measurement.actualHeightPx - measurement.estimatedHeightPx),
+          `estimate delta for ${scenario.name}`,
+        ).toBeLessThanOrEqual(scenario.maxEstimateDeltaPx);
+      } finally {
+        await mounted.cleanup();
+      }
+    },
+  );
+
+  it("estimates expanded work rows kept outside virtualization", async () => {
+    const scenario = buildStaticScenarios().find(({ name }) =>
+      name.startsWith("expanded grouped work"),
+    )!;
+    const mounted = await mountMessagesTimeline({ props: scenario.props });
     try {
-      const measurement = await measureTimelineRow({
+      const row = deriveMessagesTimelineRows({
+        timelineEntries: scenario.props.timelineEntries,
+        completionDividerBeforeEntryId: scenario.props.completionDividerBeforeEntryId,
+        isWorking: scenario.props.isWorking,
+        activeTurnStartedAt: scenario.props.activeTurnStartedAt,
+      }).find(({ id }) => id === scenario.targetRowId)!;
+      const actualHeight = await measureRenderedRowActualHeight({
         host: mounted.host,
-        props: scenario.props,
         targetRowId: scenario.targetRowId,
       });
-
+      const timelineWidthPx = mounted.host
+        .querySelector<HTMLElement>('[data-timeline-root="true"]')!
+        .getBoundingClientRect().width;
       expect(
-        Math.abs(measurement.actualHeightPx - measurement.estimatedHeightPx),
-        `estimate delta for ${scenario.name}`,
+        mounted.host.querySelector(`[data-virtual-row-id="${scenario.targetRowId}"]`),
+      ).toBeNull();
+      expect(
+        Math.abs(
+          actualHeight -
+            estimateMessagesTimelineRowHeight(row, {
+              expandedWorkGroups: scenario.props.expandedWorkGroups,
+              activityAccordionOpenById: scenario.props.activityAccordionOpenById,
+              timelineWidthPx,
+            }),
+        ),
       ).toBeLessThanOrEqual(scenario.maxEstimateDeltaPx);
     } finally {
       await mounted.cleanup();

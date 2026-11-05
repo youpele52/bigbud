@@ -1,6 +1,7 @@
 import { ThreadId, type TerminalEvent } from "@bigbud/contracts";
 
 import { useTerminalStateStore } from "./terminal.store";
+import { forgetTerminalLaunch } from "../../lib/terminalLaunchBinding";
 
 export const THREAD_ID = ThreadId.makeUnsafe("thread-1");
 
@@ -70,6 +71,16 @@ export function makeStartedTerminalEvent(terminalId: string): TerminalEvent {
 }
 
 export function resetTerminalStore(): void {
+  const state = useTerminalStateStore.getState();
+  for (const terminals of [state.terminalStateByThreadId, state.panelTerminalStateByThreadId]) {
+    for (const [threadId, terminal] of Object.entries(terminals)) {
+      for (const terminalId of terminal.terminalIds) forgetTerminalLaunch(threadId, terminalId);
+    }
+  }
+  for (const entries of Object.values(state.terminalEventEntriesByKey)) {
+    const event = entries[0]?.event;
+    if (event) forgetTerminalLaunch(event.threadId, event.terminalId);
+  }
   useTerminalStateStore.persist.clearStorage();
   useTerminalStateStore.setState({
     terminalLayoutByThreadId: {},

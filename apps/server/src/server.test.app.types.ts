@@ -4,7 +4,6 @@ import type { GitCoreShape } from "./git/Services/GitCore.ts";
 import type { GitManagerShape } from "./git/Services/GitManager.ts";
 import type { KeybindingsShape } from "./keybindings/keybindings.ts";
 import type { MobileRemoteControlShape } from "./mobile/Services/MobileRemoteControl.ts";
-import type { PluginRegistryShape } from "./plugins/Services/PluginRegistry.ts";
 import type { OrchestrationEngineShape } from "./orchestration/Services/OrchestrationEngine.ts";
 import type { OrchestrationBootstrapRecipeRepositoryShape } from "./persistence/Services/OrchestrationBootstrapRecipes.ts";
 import type { ProjectionCatalogQueryShape } from "./orchestration/Services/ProjectionCatalogQuery.ts";
@@ -37,7 +36,6 @@ export interface BuildAppUnderTestOptions {
     readonly projectSetupScriptRunner?: Partial<ProjectSetupScriptRunnerShape>;
     readonly threadShellRunner?: Partial<ThreadShellRunnerShape>;
     readonly mobileRemoteControl?: Partial<MobileRemoteControlShape>;
-    readonly pluginRegistry?: Partial<PluginRegistryShape>;
     readonly terminalManager?: Partial<TerminalManagerShape>;
     readonly orchestrationEngine?: Partial<OrchestrationEngineShape>;
     readonly orchestrationBootstrapRecipes?: OrchestrationBootstrapRecipeRepositoryShape;

@@ -39,7 +39,7 @@ export function ThinkingMessageBody({
           cwd={markdownCwd}
           isStreaming={row.streaming}
           onAnchorClick={onMarkdownAnchorClick}
-          className="thinking-markdown text-xs leading-[1.55] text-muted-foreground/68"
+          className="thinking-markdown text-xs leading-5 text-foreground/80"
         />
       </ActivityAccordion>
     </div>

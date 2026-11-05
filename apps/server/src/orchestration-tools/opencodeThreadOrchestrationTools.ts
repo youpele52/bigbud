@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { HTML_RENDER_TOOL_DESCRIPTION } from "./htmlRenderTool.shared.ts";
 
 import { LIST_THREADS_MAX_LIMIT } from "./ThreadOrchestrationTools.listThreads.ts";
 import {
@@ -53,6 +54,18 @@ export function renderOpencodeRenameThreadToolSource(): string {
       "  ...(args.targetThreadId !== undefined ? { targetThreadId: args.targetThreadId } : {}),",
       "});",
       "return result.message;",
+    ],
+  });
+}
+
+export function renderOpencodeHtmlRenderToolSource(): string {
+  return renderOrchestrationToolSource({
+    description: HTML_RENDER_TOOL_DESCRIPTION,
+    argsSource:
+      "title: tool.schema.string().min(1).max(120), html: tool.schema.string().min(1).max(24000),",
+    executeBody: [
+      "if (!context.sessionID || !context.messageID || !context.callID) throw new Error('HTML publication requires provider invocation identity.');",
+      "return runtime.renderHtml(args, JSON.stringify([context.sessionID, context.messageID, context.callID]));",
     ],
   });
 }
@@ -148,6 +161,10 @@ export function renderOpencodeOrchestrationRuntimeSource(
     renderCallOrchestrationToolSource(),
     "",
     renderResolveCurrentThreadIdSource(),
+    "export async function renderHtml(htmlArguments, invocationId) {",
+    "  const result = await callOrchestrationTool({ action: 'render_html', htmlArguments, invocationId });",
+    "  return JSON.stringify(result.result);",
+    "}",
     "",
     "export async function renameThread(input) {",
     "  const title = input.title.trim();",
@@ -238,6 +255,7 @@ export async function writeOpencodeOrchestrationTools(input: {
   await mkdir(toolsDir, { recursive: true });
   await mkdir(runtimeDir, { recursive: true });
   await Promise.all([
+    writeFile(path.join(toolsDir, "render_html.ts"), renderOpencodeHtmlRenderToolSource(), "utf8"),
     writeFile(
       path.join(toolsDir, "rename_thread.ts"),
       renderOpencodeRenameThreadToolSource(),
@@ -282,6 +300,7 @@ export async function writeOpencodeOrchestrationTools(input: {
 }
 
 export const OPENCODE_ORCHESTRATION_TOOL_FILES = {
+  ".opencode/tools/render_html.ts": renderOpencodeHtmlRenderToolSource,
   ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource,
   ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource,
   ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource,
@@ -295,6 +314,7 @@ export function renderOpencodeOrchestrationBridgeFiles(
   input: ThreadOrchestrationHttpConfig,
 ): Record<string, string> {
   return {
+    ".opencode/tools/render_html.ts": renderOpencodeHtmlRenderToolSource(),
     ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource(),
     ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource(),
     ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource(),

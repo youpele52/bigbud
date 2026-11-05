@@ -29,7 +29,7 @@ it("freezes the exact previous descriptor and signed byte closure without downgr
   try {
     const old = await makeV2HexRegistrationFixture(f.artifact);
     expect(old.bootstrapAbi).toBe("bigbud.thread.bootstrap.v2");
-    expect(f.artifact.bootstrapAbi).toBe("bigbud.thread.bootstrap.v3");
+    expect(f.artifact.bootstrapAbi).toBe("bigbud.thread.bootstrap.v4");
     expect(old.artifactDigest).not.toBe(f.artifact.artifactDigest);
     const oldBytes = await readFile(path.join(old.directory, "registry.mjs"), "utf8");
     const newBytes = await readFile(path.join(f.artifact.directory, "registry.mjs"), "utf8");
@@ -43,6 +43,7 @@ it("freezes the exact previous descriptor and signed byte closure without downgr
             {
               id: `bigbud.thread.v2.${f.artifact.issuer}`,
               source: { type: "local", path: old.directory },
+              state: { status: "active" },
             },
           ],
         }),

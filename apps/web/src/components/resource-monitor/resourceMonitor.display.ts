@@ -103,9 +103,15 @@ export function displayWidget(
           },
         };
       }
-      const volume = snapshot.disks.length > 1 ? `${disk.name} (${disk.mount})` : disk.name;
+      const volume =
+        snapshot.disks.length > 1 || disk.mount !== "/"
+          ? `${disk.name} (${disk.mount})`
+          : disk.name;
       return {
-        label: "Disk",
+        label:
+          disk.mount === "/" || snapshot.diskCapacityBytes?.status === "ready"
+            ? "Disk"
+            : "Disk volume",
         value: `${show(disk.freeBytes, formatBytes)} free`,
         status:
           disk.freeBytes?.status === "ready" ? status(disk.totalBytes) : status(disk.freeBytes),

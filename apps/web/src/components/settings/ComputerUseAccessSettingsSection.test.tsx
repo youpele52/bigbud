@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockSettings = vi.hoisted(() => ({
   computerUseEnabled: false,
+  computerUseDeliveryMode: "background" as "background" | "foreground",
   hasSeenComputerUsePrompt: false,
   computerUseCheckInIntervalMs: 10 * 60_000,
   computerUseActionTimeoutMs: 15 * 60_000,
@@ -58,6 +59,7 @@ describe("ComputerUseAccessSettingsSection", () => {
 
   beforeEach(() => {
     mockSettings.computerUseEnabled = false;
+    mockSettings.computerUseDeliveryMode = "background";
     mockNativeApi.present = true;
     mockComputerUse.permissions = null;
   });
@@ -94,6 +96,9 @@ describe("ComputerUseAccessSettingsSection", () => {
 
     expect(markup).toContain("macOS permissions");
     expect(markup).toContain("Check access");
+    expect(markup).toContain("Computer use interaction preference");
+    expect(markup).toContain("Background");
+    expect(markup).toContain("Unsupported actions stop");
   });
 
   it("shows pending host approval and the active bundle identity", () => {

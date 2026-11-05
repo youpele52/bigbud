@@ -23,21 +23,46 @@ import { MonitorScopeToggle, type MonitorScope } from "./MonitorScopeToggle";
 import { BigbudResourceView } from "./BigbudResourceView";
 import { CenteredStatus } from "../common/CenteredStatus";
 import { isLoadingStatus } from "../common/CenteredStatus.logic";
+import { useConnectedSshMonitorProjects } from "./useConnectedSshMonitorProjects";
+import { availableMonitorScope, connectedRemoteMonitorScopes } from "./monitorRemoteScopes";
+import { useRemoteMonitor } from "./useRemoteMonitor";
+import { useEffect } from "react";
 
 export function SystemPanel({ visible }: { visible: boolean }) {
   const [scope, setScope] = useState<MonitorScope>("system");
+  const projects = useConnectedSshMonitorProjects(visible);
+  const remotes = connectedRemoteMonitorScopes(projects);
+  const selected = remotes.find((entry) => entry.scope === scope);
+  const activeScope = availableMonitorScope(scope, remotes);
+  useEffect(() => {
+    if (activeScope !== scope) setScope("system");
+  }, [activeScope, scope]);
+  const remote = useRemoteMonitor(
+    visible ? (selected?.target ?? null) : null,
+    selected?.scope.slice(4) ?? null,
+  );
   const widgets = useResourceWidgetPreferences((state) => state.visible);
   const orderedWidgets = RESOURCE_WIDGETS.filter((widget) => widgets.includes(widget));
   const showIpAddress = useResourceDetailPreferences((state) =>
     state.visible.includes("ipAddress"),
   );
-  const { snapshot, history, connection, reason, collectionStatus } = useResourceMonitor(
-    visible && scope === "system",
+  const local = useResourceMonitor(
+    visible && activeScope === "system",
     false,
     widgets.includes("temperature"),
   );
+  const { snapshot, history, connection, reason, collectionStatus } = selected
+    ? {
+        ...local,
+        snapshot: remote?.snapshot ?? null,
+        history: remote?.history ?? { cpu: [], memory: [], network: [] },
+        connection: remote?.connection ?? "connecting",
+        reason: remote?.reason ?? null,
+        collectionStatus: null,
+      }
+    : local;
   const temperatureSupported = hasTemperature(snapshot);
-  const hostname = snapshot?.hostname || "Desktop computer";
+  const hostname = snapshot?.hostname || selected?.name || "Desktop computer";
 
   return (
     <div className={STANDALONE_PAGE_SCROLL_CLASS}>
@@ -47,7 +72,7 @@ export function SystemPanel({ visible }: { visible: boolean }) {
             <h2 className="text-sm font-semibold">System Monitor</h2>
             {showIpAddress ? (
               <p className="truncate text-xs text-muted-foreground" title={hostname}>
-                {hostname} · desktop host
+                {hostname} · {selected ? "SSH host" : "desktop host"}
               </p>
             ) : null}
             {snapshot?.osName || snapshot?.architecture ? (
@@ -58,17 +83,21 @@ export function SystemPanel({ visible }: { visible: boolean }) {
               </p>
             ) : null}
           </div>
-          {scope === "system" ? <WidgetPreferences /> : null}
+          {activeScope !== "bigbud" ? <WidgetPreferences /> : null}
         </div>
-        <MonitorScopeToggle scope={scope} onScopeChange={setScope} />
-        {scope === "bigbud" ? (
+        <MonitorScopeToggle scope={activeScope} onScopeChange={setScope} remotes={remotes} />
+        {activeScope === "bigbud" ? (
           <BigbudResourceView visible={visible} large />
         ) : (
           <>
             {connection !== "connected" ? (
-              <ResourceConnectionStatus connecting={connection === "connecting"} reason={reason} />
+              <ResourceConnectionStatus
+                connecting={connection === "connecting"}
+                reason={reason}
+                {...(selected ? { remoteName: selected.name } : {})}
+              />
             ) : null}
-            {connection === "connected" ? (
+            {connection === "connected" && !selected ? (
               <ResourceCollectionStatus
                 status={collectionStatus}
                 onRetry={() => void retryResourceMonitor()}
@@ -90,7 +119,9 @@ export function SystemPanel({ visible }: { visible: boolean }) {
                   if (widget === "cpu") metric.history = history.cpu;
                   if (widget === "memory")
                     metric.history =
-                      connection === "connected" && snapshot?.summaryStatus === "ready"
+                      connection === "connected" &&
+                      (snapshot?.summaryStatus === "ready" ||
+                        (Boolean(selected) && snapshot?.summaryStatus === "partial"))
                         ? history.memory
                         : [];
                   if (widget === "network") metric.history = history.network;
@@ -121,10 +152,14 @@ export function SystemPanel({ visible }: { visible: boolean }) {
         )}
         <Link
           to="/system-monitor"
-          search={{ monitorScope: scope }}
+          search={{ monitorScope: activeScope }}
           className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
         >
-          {scope === "system" ? "Open System Monitor" : "Open bigbud Monitor"}{" "}
+          {activeScope === "bigbud"
+            ? "Open bigbud Monitor"
+            : selected
+              ? `Open ${selected.name} Monitor`
+              : "Open System Monitor"}{" "}
           <ArrowRightIcon className="size-3.5" />
         </Link>
       </div>

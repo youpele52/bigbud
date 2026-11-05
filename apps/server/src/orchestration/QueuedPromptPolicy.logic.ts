@@ -5,6 +5,7 @@ import type {
   OrchestrationThread,
 } from "@bigbud/contracts";
 import { Equal } from "effect";
+import type { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
 
 import { canUserReleasePendingTurnStart } from "./PendingTurnStart.logic.ts";
 import { isThreadConfirmedIdleForDispatch } from "./ThreadDispatchSafety.logic.ts";
@@ -159,9 +160,16 @@ export function userReleasesStalePendingTurnStart(input: {
   );
 }
 
-export function consumableQueuedPrefix(input: {
+export interface QueueDecisionInput {
   readonly thread: OrchestrationThread;
   readonly messageIds: ReadonlyArray<MessageId>;
+  readonly promptVersions?:
+    | ReadonlyArray<{
+        readonly id: MessageId;
+        readonly createdAt: string;
+        readonly alreadySent: boolean;
+      }>
+    | undefined;
   readonly controlOperationId?: CommandId | undefined;
   readonly consumeOnly?: boolean | undefined;
   /** The user's explicit "Send now"; only it may release a held queue (`queueHold`). */
@@ -171,10 +179,17 @@ export function consumableQueuedPrefix(input: {
    * command's client-set `createdAt`, so a client clock running ahead cannot release early.
    */
   readonly releasedAt?: string | undefined;
-}) {
+}
+
+export type QueueDecision =
+  | { readonly status: "ready"; readonly prompts: ReadonlyArray<OrchestrationQueuedPrompt> }
+  | { readonly status: "blocked" | "stale" | "invalid"; readonly reason: QueueDecisionReason };
+
+export function evaluateQueuedPromptFlush(input: QueueDecisionInput): QueueDecision {
   const { thread, messageIds, controlOperationId, consumeOnly } = input;
   const userReleasesHold = input.userRelease === true && controlOperationId === undefined;
-  if (thread.archivedAt != null || thread.deletingAt != null || thread.deletedAt != null) return [];
+  if (thread.archivedAt != null || thread.deletingAt != null || thread.deletedAt != null)
+    return { status: "invalid", reason: "queue_unavailable" };
   const operation = thread.pendingTurnControlOperation;
   if (controlOperationId !== undefined) {
     if (
@@ -185,7 +200,7 @@ export function consumableQueuedPrefix(input: {
       operation.sessionEpoch !== (thread.session?.sessionEpoch ?? 0) ||
       !samePromptIds(operation.reservedPromptIds, messageIds)
     )
-      return [];
+      return { status: "invalid", reason: "queue_invalid_owner" };
     if (consumeOnly) {
       if (
         operation.strategy !== "native-steer" ||
@@ -193,33 +208,65 @@ export function consumableQueuedPrefix(input: {
         (thread.session?.activeTurnId != null &&
           thread.session.activeTurnId !== operation.expectedTurnId)
       )
-        return [];
-    } else if (operation.strategy !== "interrupt-continue") return [];
-  } else if (
-    hasActiveQueueReservation(thread) ||
-    (thread.queueHold && !userReleasesHold) ||
-    consumeOnly
+        return { status: "invalid", reason: "queue_invalid_owner" };
+    } else if (operation.strategy !== "interrupt-continue")
+      return { status: "invalid", reason: "queue_invalid_owner" };
+  } else {
+    if (consumeOnly) return { status: "invalid", reason: "queue_invalid_owner" };
+    if (hasActiveQueueReservation(thread)) return { status: "blocked", reason: "queue_reserved" };
+    if (thread.queueHold && !userReleasesHold) return { status: "blocked", reason: "queue_held" };
+  }
+  const prefix = exactQueuedPrefix(thread, messageIds);
+  if (prefix.length === 0) return { status: "stale", reason: "queue_stale_selection" };
+  if (
+    input.promptVersions &&
+    (input.promptVersions.length !== prefix.length ||
+      input.promptVersions.some((version, index) => {
+        const prompt = prefix[index];
+        return (
+          !prompt ||
+          prompt.id !== version.id ||
+          prompt.createdAt !== version.createdAt ||
+          (prompt.alreadySent === true) !== version.alreadySent
+        );
+      }))
   )
-    return [];
+    return { status: "stale", reason: "queue_stale_selection" };
   const dispatchThread = userReleasesStalePendingTurnStart(input)
     ? { ...thread, pendingTurnStart: null }
     : thread;
-  if (!consumeOnly && !isThreadConfirmedIdleForDispatch(dispatchThread)) return [];
+  if (!consumeOnly && !isThreadConfirmedIdleForDispatch(dispatchThread)) {
+    return {
+      status: "blocked",
+      reason:
+        dispatchThread.pendingTurnStart != null
+          ? "queue_pending_start"
+          : dispatchThread.session?.activeTurnId != null ||
+              dispatchThread.session?.status === "running" ||
+              dispatchThread.session?.status === "starting"
+            ? "queue_busy"
+            : "queue_waiting_for_user",
+    };
+  }
   const intent = thread.pendingInterruptFlushIntent;
   if (
     intent &&
     (!samePromptIds(intent.queuedPromptIds, messageIds) ||
       (controlOperationId !== undefined && intent.intentId !== controlOperationId))
   )
-    return [];
-  const prefix = exactQueuedPrefix(thread, messageIds);
+    return { status: "blocked", reason: "queue_reserved" };
   const compatible = compatibleQueuedPrefix(prefix);
   // Ordinary lifecycle/manual flushes may request a longer queue snapshot and
   // should consume its safe compatible head. Control reservations must remain
   // exact so a stale or malformed reservation is never partially consumed.
   const hasControlReservation =
-    controlOperationId !== undefined ||
-    consumeOnly ||
-    thread.pendingInterruptFlushIntent !== undefined;
-  return !hasControlReservation ? compatible : compatible.length === prefix.length ? prefix : [];
+    controlOperationId !== undefined || consumeOnly || thread.pendingInterruptFlushIntent != null;
+  if (hasControlReservation && compatible.length !== prefix.length)
+    return { status: "invalid", reason: "queue_incompatible_reservation" };
+  return { status: "ready", prompts: hasControlReservation ? prefix : compatible };
+}
+
+export function consumableQueuedPrefix(input: QueueDecisionInput) {
+  const decision = evaluateQueuedPromptFlush(input);
+  return decision.status === "ready" ? decision.prompts : [];
 }

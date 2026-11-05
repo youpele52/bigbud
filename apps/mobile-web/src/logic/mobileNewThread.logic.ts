@@ -7,12 +7,13 @@ import {
   type RuntimeMode,
   type ThreadTurnStartBootstrap,
 } from "@bigbud/contracts";
+import { isActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import { DEFAULT_THREAD_TITLE, fallbackThreadTitleFromPrompt } from "@bigbud/shared/String";
 
 import { buildExplicitExecutionTargets } from "~/lib/providerExecutionTargets";
 
 export function resolveMobileModelSelection(project: OrchestrationProject): ModelSelection {
-  if (project.defaultModelSelection) {
+  if (isActiveModelSelection(project.defaultModelSelection)) {
     return project.defaultModelSelection;
   }
   const provider = PROVIDER_KINDS[0];

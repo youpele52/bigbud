@@ -1,4 +1,5 @@
 import { buildExpandedImagePreview } from "../common/ExpandedImagePreview";
+import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { Button } from "../../ui/button";
 import type {
   ChatFileAttachment,
@@ -31,7 +32,7 @@ import { formatTimestamp } from "../../../utils/timestamp";
 import { cn } from "~/lib/utils";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
 import { timelineRowAccordionControl } from "./MessagesTimeline.accordion";
-import { ActivityAccordion } from "../common/ActivityAccordion";
+import { ActivityAccordion, activitySectionLabelTypography } from "../common/ActivityAccordion";
 import {
   UserFileReferenceChips,
   UserFileSourcePaths,
@@ -80,10 +81,14 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
       data-timeline-row-kind={row.kind}
       data-message-id={row.kind === "message" ? row.message.id : undefined}
       data-message-role={row.kind === "message" ? row.message.role : undefined}
+      data-chat-cite-request-id={
+        row.kind === "user-input-question" ? row.pendingUserInput.requestId : undefined
+      }
     >
       {row.kind === "subagents-history" ? (
         <SubagentsCard agents={row.agents} presentation="accordion" accordion={accordion} />
       ) : null}
+      {row.kind === "html-render" && <HtmlRenderFrame content={row.content} />}
       {row.kind === "work" && (
         <MessagesTimelineWorkGroup
           row={row}
@@ -337,9 +342,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
             />
           ) : (
             <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
-              <p className="mb-2.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground/60">
-                Input required
-              </p>
+              <p className={cn("mb-2.5", activitySectionLabelTypography)}>Input required</p>
               <UserInputQuestions questions={row.pendingUserInput.questions} />
               <p className="mt-3 text-[11px] text-muted-foreground/45">
                 Type your answer below and press send to continue.

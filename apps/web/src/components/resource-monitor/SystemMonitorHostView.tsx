@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { retryResourceMonitor } from "~/stores/resource-monitor/resourceMonitor.store";
 import { ResourceConnectionStatus } from "./ResourceConnectionStatus";
@@ -17,14 +17,25 @@ import { ResourceCpuCores } from "./ResourceCpuCores";
 import { ResourceMemorySwap } from "./ResourceMemorySwap";
 import { ResourceTemperatures } from "./ResourceTemperatures";
 import { displayWidget } from "./resourceMonitor.display";
+import { remoteProcessRows } from "./remoteProcessRows";
 import { formatBytes, formatDecimal, formatPercent } from "./resourceMonitor.format";
 import { useProcessPage } from "./useProcessPage";
 import { useResourceMonitor } from "./useResourceMonitor";
 import { useResourceDetailPreferences } from "~/stores/resource-monitor/resourceMonitorDetails.store";
+import type { RemoteMonitorState } from "~/stores/resource-monitor/remoteMonitor.store";
 
-export function SystemMonitorHostView() {
+export function SystemMonitorHostView({
+  remote,
+}: {
+  remote?: { name: string; state?: RemoteMonitorState };
+}) {
   const details = useResourceDetailPreferences((state) => state.visible);
   const show = (detail: (typeof details)[number]) => details.includes(detail);
+  const local = useResourceMonitor(
+    !remote,
+    show("processes") && !remote,
+    show("temperatures") && !remote,
+  );
   const {
     snapshot,
     history,
@@ -34,38 +45,63 @@ export function SystemMonitorHostView() {
     connection,
     reason,
     collectionStatus,
-  } = useResourceMonitor(true, show("processes"), show("temperatures"));
+  } = remote
+    ? {
+        ...local,
+        snapshot: remote.state?.snapshot ?? null,
+        history: remote.state?.history ?? { cpu: [], memory: [], network: [] },
+        connection: remote.state?.connection ?? "connecting",
+        reason: remote.state?.reason ?? null,
+        collectionStatus: null,
+        diskHistory: {},
+        interfaceHistory: {},
+        temperatureHistory: {},
+      }
+    : local;
   const processes = useProcessPage(
-    show("processes") &&
+    !remote &&
+      show("processes") &&
       connection === "connected" &&
       (snapshot?.processStatus === "ready" || snapshot?.processStatus === "warming"),
   );
-  const rows = useMemo<DisplayProcess[]>(
-    () =>
-      (processes.page?.rows ?? []).slice(0, 100).map((row) => ({
-        pid: row.pid,
-        name: row.name,
-        status: row.status,
-        cpu: row.cpuPercent?.status === "ready" ? formatPercent(row.cpuPercent.value) : "—",
-        memory: formatBytes(row.residentBytes),
-        startTime: String(row.startTimeSeconds),
-        details: [
-          ["Started", new Date(row.startTimeSeconds * 1000).toLocaleString()],
-          ["Parent PID", row.parentPid === undefined ? "—" : String(row.parentPid)],
-          ["Runtime", `${formatDecimal(row.runTimeSeconds)} s`],
-          ["Virtual memory", formatBytes(row.virtualBytes)],
-          ["Disk read", formatBytes(row.diskReadBytes)],
-          ["Disk written", formatBytes(row.diskWrittenBytes)],
-        ],
-      })),
-    [processes.page],
+  const [remotePage, setRemotePage] = useState(0);
+  const remoteRows = useMemo(
+    () => remoteProcessRows(snapshot?.processRows ?? [], processes.controls),
+    [snapshot?.processRows, processes.controls],
   );
+  const pageIndex = Math.min(remotePage, Math.max(0, Math.ceil(remoteRows.length / 100) - 1));
+  const rows = useMemo<DisplayProcess[]>(() => {
+    const inventory = remote
+      ? remoteRows.slice(pageIndex * 100, (pageIndex + 1) * 100)
+      : (processes.page?.rows ?? []);
+    return inventory.map((row) => ({
+      pid: row.pid,
+      name: row.name,
+      status: row.status,
+      cpu: row.cpuPercent?.status === "ready" ? formatPercent(row.cpuPercent.value) : "—",
+      memory: formatBytes(row.residentBytes),
+      startTime: String(row.startTimeSeconds),
+      details: [
+        ["Started", new Date(row.startTimeSeconds * 1000).toLocaleString()],
+        ["Parent PID", row.parentPid === undefined ? "—" : String(row.parentPid)],
+        ["Runtime", `${formatDecimal(row.runTimeSeconds)} s`],
+        ["Virtual memory", formatBytes(row.virtualBytes)],
+        ["Disk read", row.diskReadBytes === undefined ? "—" : formatBytes(row.diskReadBytes)],
+        [
+          "Disk written",
+          row.diskWrittenBytes === undefined ? "—" : formatBytes(row.diskWrittenBytes),
+        ],
+      ],
+    }));
+  }, [processes.page, remote, remoteRows, pageIndex]);
 
   const cpu = displayWidget(snapshot, "cpu");
+  const currentSummary =
+    snapshot?.summaryStatus === "ready" ||
+    (Boolean(remote) && snapshot?.summaryStatus === "partial");
   cpu.history = history.cpu;
   const memory = displayWidget(snapshot, "memory");
-  memory.history =
-    connection === "connected" && snapshot?.summaryStatus === "ready" ? history.memory : [];
+  memory.history = connection === "connected" && currentSummary ? history.memory : [];
   const disk = displayWidget(snapshot, "disk");
   const network = displayWidget(snapshot, "network");
   network.history = history.network;
@@ -74,13 +110,16 @@ export function SystemMonitorHostView() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold">System Monitor</h1>
+          <h1 className="text-xl font-semibold">
+            {remote ? `${remote.name} Monitor` : "System Monitor"}
+          </h1>
           {show("ipAddress") ? (
             <p
               className="max-w-full truncate text-sm text-muted-foreground"
               title={snapshot?.hostname || undefined}
             >
-              {snapshot?.hostname || "Desktop computer"} · desktop host
+              {snapshot?.hostname || (remote ? remote.name : "Desktop computer")} ·{" "}
+              {remote ? "SSH host" : "desktop host"}
             </p>
           ) : null}
           <p className="text-xs text-muted-foreground">
@@ -92,9 +131,13 @@ export function SystemMonitorHostView() {
         <ResourceDetailPreferences />
       </div>
       {connection !== "connected" ? (
-        <ResourceConnectionStatus connecting={connection === "connecting"} reason={reason} />
+        <ResourceConnectionStatus
+          connecting={connection === "connecting"}
+          reason={reason}
+          {...(remote ? { remoteName: remote.name } : {})}
+        />
       ) : null}
-      {connection === "connected" ? (
+      {connection === "connected" && !remote ? (
         <ResourceCollectionStatus
           status={collectionStatus}
           onRetry={() => void retryResourceMonitor()}
@@ -163,7 +206,7 @@ export function SystemMonitorHostView() {
             history={diskHistory}
             active={
               connection === "connected" &&
-              snapshot?.summaryStatus === "ready" &&
+              currentSummary &&
               (!collectionStatus || collectionStatus.state === "healthy")
             }
             loading={
@@ -180,7 +223,7 @@ export function SystemMonitorHostView() {
             history={interfaceHistory}
             current={
               connection === "connected" &&
-              snapshot?.summaryStatus === "ready" &&
+              currentSummary &&
               (!collectionStatus || collectionStatus.state === "healthy")
             }
             loading={
@@ -198,7 +241,7 @@ export function SystemMonitorHostView() {
             cores={snapshot?.perCorePercent ?? []}
             active={
               connection === "connected" &&
-              snapshot?.summaryStatus === "ready" &&
+              currentSummary &&
               (!collectionStatus || collectionStatus.state === "healthy")
             }
             loading={
@@ -216,7 +259,7 @@ export function SystemMonitorHostView() {
             snapshot={snapshot}
             current={
               connection === "connected" &&
-              snapshot?.summaryStatus === "ready" &&
+              currentSummary &&
               (!collectionStatus || collectionStatus.state === "healthy")
             }
             loading={
@@ -234,7 +277,7 @@ export function SystemMonitorHostView() {
           history={temperatureHistory}
           current={
             connection === "connected" &&
-            snapshot?.summaryStatus === "ready" &&
+            currentSummary &&
             (!collectionStatus || collectionStatus.state === "healthy")
           }
           loading={
@@ -249,19 +292,30 @@ export function SystemMonitorHostView() {
         <ProcessTable
           rows={rows}
           controls={processes.controls}
-          onControlsChange={processes.setControls}
-          onNextPage={processes.next}
-          onPreviousPage={processes.previous}
-          hasNextPage={processes.hasNextPage}
-          hasPreviousPage={processes.hasPreviousPage}
+          onControlsChange={(next) => {
+            if (remote) setRemotePage(0);
+            processes.setControls(next);
+          }}
+          onNextPage={remote ? () => setRemotePage(pageIndex + 1) : processes.next}
+          onPreviousPage={
+            remote ? () => setRemotePage(Math.max(0, pageIndex - 1)) : processes.previous
+          }
+          hasNextPage={remote ? (pageIndex + 1) * 100 < remoteRows.length : processes.hasNextPage}
+          hasPreviousPage={remote ? pageIndex > 0 : processes.hasPreviousPage}
           status={
             connection === "unavailable" || collectionStatus?.state === "failed"
               ? "unavailable"
               : snapshot?.processStatus && snapshot.processStatus !== "ready"
                 ? snapshot.processStatus
-                : processes.status
+                : remote
+                  ? (snapshot?.processStatus ?? "warming")
+                  : processes.status
           }
-          truncated={processes.page?.truncatedInventory ?? false}
+          truncated={
+            remote
+              ? (snapshot?.processRowsTruncated ?? false)
+              : (processes.page?.truncatedInventory ?? false)
+          }
         />
       ) : null}
       {show("processes") && snapshot?.processStatus && snapshot.processStatus !== "ready" ? (

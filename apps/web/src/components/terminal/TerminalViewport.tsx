@@ -163,6 +163,7 @@ export function TerminalViewport({
     retryGpu,
     retryDelivery,
     historyUnavailable,
+    liveAttachCount,
     restartDelivery,
     startupPending,
     startupFailed,
@@ -375,7 +376,9 @@ export function TerminalViewport({
         retryGpu={retryGpu}
         retryDelivery={retryDelivery}
         historyUnavailable={historyUnavailable}
+        liveAttachCount={liveAttachCount}
         restartDelivery={restartDelivery}
+        retryClose={onSessionExited}
         gpuRequested={settings.terminalGpuAcceleration !== "off"}
       />
       {find.open ? <TerminalFindBar find={find} /> : null}

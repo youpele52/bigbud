@@ -17,7 +17,7 @@ export interface SidebarProjectActionsInput {
   clearSelection: () => void;
   copyPathToClipboard: (text: string, ctx: { path: string }) => void;
   cancelThreadRename: () => void;
-  openRemoteProjectEditDialog: (project: Project) => void;
+  openRemoteWorkspaceEditDialog: (project: Project) => void;
 }
 
 export interface SidebarProjectActionsOutput {
@@ -40,6 +40,7 @@ export interface SidebarProjectActionsOutput {
     projectId: ProjectId;
     projectName: string;
     threadCount: number;
+    isRemoteWorkspace: boolean;
   } | null;
   dismissPendingProjectDeleteConfirmation: () => void;
   confirmPendingProjectDelete: () => Promise<void>;

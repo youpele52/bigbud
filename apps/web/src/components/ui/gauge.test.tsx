@@ -17,9 +17,30 @@ describe("Gauge", () => {
     expect(markup).toContain('aria-valuemax="100"');
     expect(markup).toContain('aria-valuenow="2.98"');
     expect(markup).toContain('aria-valuetext="2.98%"');
+    expect(markup).toContain(">0.00%</text>");
+    expect(markup).toContain(">100.00%</text>");
     expect(markup).toContain("of total host CPU");
     expect(markup).toContain('data-slot="gauge-needle"');
     expect(markup).not.toMatch(/Low|Moderate|High|Warning/);
+  });
+  it("formats endpoints independently without changing the live readout or accessible value", () => {
+    const markup = renderToStaticMarkup(
+      <Gauge
+        label="Temperature"
+        value={2.98}
+        min={-20.5}
+        max={40.5}
+        formatValue={(value) => `${value.toFixed(2)} °C`}
+        formatEndpoint={(value) => `${value.toFixed(0)} °C`}
+      />,
+    );
+    expect(markup).toContain(">-21 °C</text>");
+    expect(markup).toContain(">41 °C</text>");
+    expect(markup).toContain(">2.98 °C</div>");
+    expect(markup).toContain('aria-valuemin="-20.5"');
+    expect(markup).toContain('aria-valuemax="40.5"');
+    expect(markup).toContain('aria-valuenow="2.98"');
+    expect(markup).toContain('aria-valuetext="2.98 °C"');
   });
   it("allows consumer sizing, custom ranges, colors and segment density", () => {
     const markup = renderToStaticMarkup(

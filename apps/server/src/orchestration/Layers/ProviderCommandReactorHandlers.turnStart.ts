@@ -1,3 +1,4 @@
+import { isRoutableProviderSelection } from "../../provider/providerSelectionCompatibility.ts";
 import {
   CommandId,
   EventId,
@@ -9,7 +10,7 @@ import type { TurnStartFailureClass } from "@bigbud/contracts/orchestration/orch
 import { Cause, Effect } from "effect";
 
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
-import type { OrchestrationDispatchError } from "../Errors.ts";
+import { OrchestrationCommandInvariantError, type OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { formatProviderServiceCauseDetail } from "./ProviderCommandReactorHelpers.ts";
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
@@ -48,8 +49,15 @@ function queueTurnStart(input: {
   readonly orchestrationEngine: OrchestrationEngineShape;
   readonly event: TurnStartRequestedEvent;
   readonly message: OrchestrationMessage;
-}) {
+}): Effect.Effect<{ sequence: number }, OrchestrationDispatchError> {
   const { event, message, orchestrationEngine } = input;
+  if (event.payload.modelSelection && !isRoutableProviderSelection(event.payload.modelSelection))
+    return Effect.fail(
+      new OrchestrationCommandInvariantError({
+        commandType: "thread.message.submit",
+        detail: "This historical provider cannot accept queued prompts.",
+      }),
+    );
   return orchestrationEngine.dispatch({
     type: "thread.message.submit",
     commandId: CommandId.makeUnsafe(`server:provider-turn-start-queued:${event.eventId}`),

@@ -5,6 +5,10 @@ import {
   cuaDriverMcpArguments,
 } from "@bigbud/shared/cua-driver/invocation";
 import { CUA_DRIVER_REQUIRED_TOOLS } from "@bigbud/shared/cua-driver/policy";
+import {
+  validateCuaDriverMcpProtocol,
+  validateCuaDriverMcpTools,
+} from "@bigbud/shared/cua-driver/mcpCompatibility";
 
 import {
   assertCuaDriverMcpStartAllowed,
@@ -23,6 +27,13 @@ interface CuaDriverMcpOptions {
   readonly socketPath?: string;
   readonly environment?: NodeJS.ProcessEnv;
   readonly timeoutMs?: number;
+  /**
+   * Call `toolName` even when `tools/list` does not advertise it. All required
+   * tools must still be listed. Only the activation policy probe uses this:
+   * Driver 0.38 hides policy-denied tools (`kill_app`) from `tools/list`, while
+   * 0.9.1 listed them; both deny the call itself.
+   */
+  readonly allowUnadvertisedTool?: boolean;
 }
 
 function parseToolNames(result: unknown): ReadonlySet<string> {
@@ -139,6 +150,7 @@ async function requestResponse(
 }
 
 interface PersistentMcpSession {
+  readonly strictCompatibility: boolean;
   readonly key: string;
   readonly child: ChildProcess.ChildProcessWithoutNullStreams;
   availableTools: ReadonlySet<string> | null;
@@ -210,6 +222,7 @@ function getPersistentSession(
   }
   if (persistentSession) stopSession(persistentSession);
   persistentSession = {
+    strictCompatibility: environment.BIGBUD_CUA_VALIDATE_MCP === "1",
     key,
     child: createMcpChild(binaryPath, socketPath, environment),
     availableTools: null,
@@ -225,7 +238,8 @@ async function initializeSession(
 ): Promise<ReadonlySet<string>> {
   if (session.availableTools) return session.availableTools;
   const initializeId = session.nextRequestId++;
-  await requestResponse(
+  const deadline = Date.now() + (timeoutMs ?? CUA_DRIVER_REQUEST_TIMEOUT_MS);
+  const initialized = await requestResponse(
     session.child,
     initializeId,
     "initialize",
@@ -236,23 +250,34 @@ async function initializeSession(
     },
     timeoutMs,
   );
+  if (session.strictCompatibility) validateCuaDriverMcpProtocol(initialized);
   await writeMessage(session.child, {
     jsonrpc: JSONRPC_VERSION,
     method: "notifications/initialized",
   });
   const toolsId = session.nextRequestId++;
-  session.availableTools = parseToolNames(
-    await requestResponse(session.child, toolsId, "tools/list", undefined, timeoutMs),
+  const tools = await requestResponse(
+    session.child,
+    toolsId,
+    "tools/list",
+    undefined,
+    Math.max(1, deadline - Date.now()),
   );
+  if (session.strictCompatibility) validateCuaDriverMcpTools(tools);
+  session.availableTools = parseToolNames(tools);
   return session.availableTools;
 }
 
-function validateAvailableTool(availableTools: ReadonlySet<string>, toolName: string): void {
+function validateAvailableTool(
+  availableTools: ReadonlySet<string>,
+  toolName: string,
+  allowUnadvertisedTool = false,
+): void {
   const missingTools = CUA_DRIVER_REQUIRED_TOOLS.filter((name) => !availableTools.has(name));
   if (missingTools.length > 0) {
     throw new Error(`cua-driver is missing required tools: ${missingTools.join(", ")}.`);
   }
-  if (!availableTools.has(toolName)) {
+  if (!allowUnadvertisedTool && !availableTools.has(toolName)) {
     throw new Error(`cua-driver did not advertise tool '${toolName}'.`);
   }
 }
@@ -279,6 +304,7 @@ async function callPersistentSessionTool(
   toolName: string,
   args: Record<string, unknown>,
   timeoutMs: number | undefined,
+  allowUnadvertisedTool: boolean | undefined,
 ): Promise<unknown> {
   const previous = session.queue;
   let release!: () => void;
@@ -286,8 +312,13 @@ async function callPersistentSessionTool(
     release = resolve;
   });
   await previous;
+  const deadline = Date.now() + (timeoutMs ?? CUA_DRIVER_REQUEST_TIMEOUT_MS);
   try {
-    validateAvailableTool(await initializeSession(session, timeoutMs), toolName);
+    validateAvailableTool(
+      await initializeSession(session, timeoutMs),
+      toolName,
+      allowUnadvertisedTool,
+    );
     const requestId = session.nextRequestId++;
     return unwrapToolResult(
       await requestResponse(
@@ -295,7 +326,7 @@ async function callPersistentSessionTool(
         requestId,
         "tools/call",
         { name: toolName, arguments: args },
-        timeoutMs,
+        Math.max(1, deadline - Date.now()),
       ),
     );
   } catch (error) {
@@ -327,6 +358,7 @@ export async function callCuaDriverTool(
       toolName,
       args,
       options.timeoutMs,
+      options.allowUnadvertisedTool,
     );
   }
   const child = createMcpChild(binaryPath, undefined, environment);
@@ -342,7 +374,7 @@ export async function callCuaDriverTool(
       method: "notifications/initialized",
     });
     const availableTools = parseToolNames(await requestResponse(child, 2, "tools/list"));
-    validateAvailableTool(availableTools, toolName);
+    validateAvailableTool(availableTools, toolName, options.allowUnadvertisedTool);
     const result = await requestResponse(child, 3, "tools/call", {
       name: toolName,
       arguments: args,

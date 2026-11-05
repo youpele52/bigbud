@@ -18,7 +18,7 @@ export interface ProjectSearchResult {
 
 export function toProjectSearchResults(input: {
   localProjects: readonly ProjectSummary[];
-  remoteProjects: readonly ProjectSummary[];
+  remoteWorkspaces: readonly ProjectSummary[];
 }): ProjectSearchResult[] {
   return [
     ...input.localProjects.map((project) => ({
@@ -27,7 +27,7 @@ export function toProjectSearchResults(input: {
       scope: "local" as const,
       type: "project" as const,
     })),
-    ...input.remoteProjects.map((project) => ({
+    ...input.remoteWorkspaces.map((project) => ({
       id: `project:${project.id}`,
       project,
       scope: "remote" as const,
@@ -58,7 +58,7 @@ export function ProjectSearchResultGroup({
   return (
     <CommandGroup className="mt-2">
       <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
-        Projects
+        Projects and remote workspaces
       </CommandGroupLabel>
       {visibleResults.map((result) => {
         const highlight = highlightMatch(result.project.title, query);
@@ -89,7 +89,7 @@ export function ProjectSearchResultGroup({
               </div>
               <div className="truncate text-muted-foreground text-xs leading-5">
                 {result.project.workspaceRoot ??
-                  (result.scope === "local" ? "Local project" : "Remote project")}
+                  (result.scope === "local" ? "Local project" : "Remote workspace")}
               </div>
             </div>
           </CommandItem>

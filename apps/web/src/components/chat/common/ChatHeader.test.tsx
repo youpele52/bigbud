@@ -4,6 +4,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 let mockIsThreadRunning = false;
 let mockIsThreadCompacting = false;
+let mockIsElectron = false;
+
+vi.mock("../../../config/env", async () => {
+  const actual = await vi.importActual<typeof import("../../../config/env")>("../../../config/env");
+  return {
+    ...actual,
+    get isElectron() {
+      return mockIsElectron;
+    },
+  };
+});
 
 vi.mock("../../../stores/main", async () => {
   const actual =
@@ -24,11 +35,14 @@ import { SidebarProvider } from "../../ui/sidebar";
 import { ChatHeader } from "./ChatHeader";
 
 describe("ChatHeader", () => {
-  function renderHeader(input: Partial<React.ComponentProps<typeof ChatHeader>> = {}) {
+  function renderHeader(
+    input: Partial<React.ComponentProps<typeof ChatHeader>> = {},
+    sidebarOpen = true,
+  ) {
     const queryClient = new QueryClient();
     return renderToStaticMarkup(
       <QueryClientProvider client={queryClient}>
-        <SidebarProvider defaultOpen>
+        <SidebarProvider defaultOpen={sidebarOpen}>
           <ChatHeader activeThreadId={"thread-1" as never} {...baseProps} {...input} />
         </SidebarProvider>
       </QueryClientProvider>,
@@ -39,6 +53,7 @@ describe("ChatHeader", () => {
     vi.restoreAllMocks();
     mockIsThreadRunning = false;
     mockIsThreadCompacting = false;
+    mockIsElectron = false;
     useBrowserPanelStore.setState({ open: false, tabsById: {} });
     useRightPanelTabsStore.setState({
       activeKind: null,
@@ -89,6 +104,32 @@ describe("ChatHeader", () => {
     expect(markup).toContain('aria-label="Open right panel"');
   });
 
+  it("leaves the sidebar toggle to the window beside the traffic lights on desktop", () => {
+    mockIsElectron = true;
+    const markup = renderHeader();
+
+    expect(markup).not.toContain('aria-label="Toggle sidebar"');
+    expect(markup).toContain('aria-label="Open right panel"');
+  });
+
+  it("lines the title up with the conversation column on desktop while the sidebar is closed", () => {
+    mockIsElectron = true;
+    const columnGrid = "calc((100%_-_48rem_-_6px)/2_-_8px)";
+
+    expect(renderHeader({}, false)).toContain(columnGrid);
+    expect(renderHeader({}, true)).not.toContain(columnGrid);
+    mockIsElectron = false;
+    expect(renderHeader({}, false)).not.toContain(columnGrid);
+  });
+
+  it("keeps session management out of the chat header", () => {
+    const markup = renderHeader();
+
+    expect(markup).not.toContain('aria-label="Session controls"');
+    expect(markup).not.toContain("Compact context");
+    expect(markup).not.toContain("Reload all MCP servers");
+  });
+
   it.each(["chat-only", "split", "terminal-only"] as const)(
     "always renders the layout menu before sidebar controls in %s",
     (terminalLayoutMode) => {
@@ -103,7 +144,7 @@ describe("ChatHeader", () => {
     },
   );
 
-  it("shows blue dots while running and orange dots while compacting", () => {
+  it("shows the liquid loader while running and orange dots while compacting", () => {
     mockIsThreadRunning = true;
 
     const runningMarkup = renderHeader({
@@ -117,8 +158,10 @@ describe("ChatHeader", () => {
       activeThreadId: "thread-compacting" as never,
     });
 
-    expect(runningMarkup).toContain("bg-info-foreground");
+    expect(runningMarkup).toContain("data-agent-working-blob");
+    expect(runningMarkup).toContain('data-state="working"');
     expect(compactingMarkup).toContain("bg-warning");
+    expect(compactingMarkup).not.toContain("data-agent-working-blob");
   });
 
   it("renders quick actions when chat has an open folder without a project header", () => {

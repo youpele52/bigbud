@@ -7,7 +7,9 @@ import { useSettingsRestore } from "../components/settings/SettingsPanels";
 import { SettingsSearch } from "../components/settings/SettingsSearch";
 import { SettingsSearchProvider } from "../components/settings/SettingsSearch.context";
 import { Button } from "../components/ui/button";
-import { SidebarInset, SidebarTrigger } from "../components/ui/sidebar";
+import { SidebarInset, SidebarTrigger, useSidebar } from "../components/ui/sidebar";
+import { WINDOW_COLLAPSED_HEADER_INSET_CLASS } from "../components/layout/windowChrome";
+import { cn } from "../lib/utils";
 import { isElectron } from "../config/env";
 
 function SettingsContentLayout() {
@@ -17,6 +19,7 @@ function SettingsContentLayout() {
     setRestoreSignal((value) => value + 1),
   );
   const location = useLocation();
+  const { open: sidebarOpen } = useSidebar();
   const showRestoreDefaults = [
     "/settings/general",
     "/settings/notifications",
@@ -77,6 +80,10 @@ function SettingsContentLayout() {
         {isElectron && (
           <div className="drag-region grid h-[52px] shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 border-b border-border px-5">
             <div className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
+              {/* Keeps the title clear of the traffic lights and the sidebar toggle. */}
+              {!sidebarOpen && (
+                <div className={cn("shrink-0", WINDOW_COLLAPSED_HEADER_INSET_CLASS)} />
+              )}
               <span className="shrink-0 text-foreground">Settings</span>
               <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground/60" />
               <span className="truncate text-muted-foreground">{activeSectionLabel}</span>

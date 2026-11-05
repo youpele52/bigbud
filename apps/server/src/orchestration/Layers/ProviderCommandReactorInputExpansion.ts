@@ -10,7 +10,6 @@ import { resolveDiscoveryEntry } from "@bigbud/shared/discoveryReference";
 import type { DiscoveryRegistryShape } from "../../provider/Services/DiscoveryRegistry.ts";
 import type { WorkspacePathsShape } from "../../workspace/Services/WorkspacePaths.ts";
 import { appendTeachSkillRuntimeContext } from "./ProviderCommandReactorInputExpansion.teach.ts";
-import { buildPluginActivationBlock } from "./ProviderCommandReactorInputExpansion.plugin.ts";
 
 const COMPACT_MENTION_REGEX = /(^|\s)@([^\s@]+)(?=\s|$)/g;
 const SLASH_SKILL_COMMAND_REGEX = /^\/skills?\s+([^\s]+)(?:\s+[\s\S]*)?$/i;
@@ -21,7 +20,7 @@ const MAX_TEXT_BLOCK_CHARS = 16_000;
 type DiscoveryEntry = ServerDiscoveredAgent | ServerDiscoveredSkill;
 type CompactMention =
   | {
-      readonly kind: "agent" | "skill" | "plugin";
+      readonly kind: "agent" | "skill";
       readonly rawValue: string;
       readonly name: string;
     }
@@ -97,8 +96,7 @@ function collectCompactMentions(messageText: string): Array<CompactMention> {
       continue;
     }
     if (rawValue.startsWith("plugin:") || rawValue.startsWith("plugin::")) {
-      const name = trimToUndefined(rawValue.replace(/^plugin::?/, ""));
-      if (name) addMention({ kind: "plugin", rawValue, name });
+      // Retired marketplace references stay literal, never workspace paths or activations.
       continue;
     }
     addMention({ kind: "path", rawValue, path: rawValue });
@@ -290,12 +288,6 @@ export const expandProviderInputMentions = (
           rawPath: mention.path,
           workspaceRoot: input.workspaceRoot,
         });
-      }
-
-      if (mention.kind === "plugin") {
-        return Effect.succeed(
-          buildPluginActivationBlock({ pluginName: mention.name, skills: catalog.skills }),
-        );
       }
 
       const resolution = resolveDiscoveryEntry({

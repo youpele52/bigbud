@@ -3,7 +3,6 @@ import type {
   RuntimeMode,
 } from "@bigbud/contracts/orchestration/orchestration.provider";
 import type { OpencodeV2DevelopmentSettings } from "@bigbud/contracts/core/settings.opencodeV2.ts";
-import { InfoIcon } from "lucide-react";
 import { memo, useEffect, useRef, useState } from "react";
 
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
@@ -89,7 +88,6 @@ export const AccessModeInfoBanner = memo(function AccessModeInfoBanner({
     <ChatBanner
       variant="default"
       role="status"
-      icon={<InfoIcon />}
       title={`Access: ${ACCESS_LABELS[runtimeMode]}`}
       description={
         <span className="text-foreground">

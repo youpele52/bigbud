@@ -1,11 +1,8 @@
-import { Outlet, createFileRoute } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { useRightPanelTabsStore } from "~/stores/rightPanel/rightPanelTabs.store";
-
-function PluginsRouteLayout() {
-  useEffect(() => useRightPanelTabsStore.getState().closeRightPanel(), []);
-  return <Outlet />;
+/** Keep retired marketplace URLs out of the dynamic thread route and restoration. */
+export function redirectRetiredMarketplace(): never {
+  throw redirect({ to: "/", replace: true });
 }
 
-export const Route = createFileRoute("/_chat/plugins")({ component: PluginsRouteLayout });
+export const Route = createFileRoute("/_chat/plugins")({ beforeLoad: redirectRetiredMarketplace });

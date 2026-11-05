@@ -1,3 +1,4 @@
+import type { HistoricalModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider.ts";
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
 import { Effect } from "effect";
 import { describe, expect, it, vi } from "vitest";
@@ -13,7 +14,7 @@ import { listAvailableModelsViaOrchestration } from "./ThreadOrchestrationTools.
 import { provider } from "./ThreadOrchestrationTools.modelChoice.test.helpers.ts";
 import { makeThreadToolModelSources } from "./ThreadOrchestrationTools.modelSources.ts";
 
-function harness(settings = DEFAULT_SERVER_SETTINGS) {
+function harness(settings = DEFAULT_SERVER_SETTINGS, modelSelection?: HistoricalModelSelection) {
   const refresh = vi.fn(() => Effect.succeed([]));
   const registry = {
     getProviders: Effect.succeed([
@@ -43,6 +44,7 @@ function harness(settings = DEFAULT_SERVER_SETTINGS) {
   });
   const system = makeSystem({
     ...callerThread,
+    ...(modelSelection ? { modelSelection } : {}),
     providerRuntimeExecutionTargetId: "local",
     workspaceExecutionTargetId: "local",
     executionTargetId: "local",
@@ -60,6 +62,20 @@ function harness(settings = DEFAULT_SERVER_SETTINGS) {
 }
 
 describe("list_available_models", () => {
+  it("retains a removed parent's identity without offering fallback runtime models", async () => {
+    const { list, refresh } = harness(DEFAULT_SERVER_SETTINGS, {
+      provider: "kilocode",
+      model: "legacy-model",
+      subProviderID: "legacy-gateway",
+    });
+    expect(await list()).toMatchObject({
+      parentModel: { provider: "kilocode", model: "legacy-model", subProviderID: "legacy-gateway" },
+      catalogAvailable: true,
+      models: [],
+      hasMore: false,
+    });
+    expect(refresh).not.toHaveBeenCalled();
+  });
   it("lists usable models only, recently used first, with the parent's model flagged", async () => {
     const { list } = harness();
     const result = await list();

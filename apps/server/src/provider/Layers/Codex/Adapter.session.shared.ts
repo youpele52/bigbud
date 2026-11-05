@@ -4,6 +4,10 @@ import { Effect, FileSystem } from "effect";
 import { resolveAttachmentPath } from "../../../attachments/attachmentStore.ts";
 import { isCodexModelSelectionError } from "../../../codex/codexAppServerManager.modelSelection.ts";
 import {
+  CodexRpcError,
+  CodexSessionUnavailableError,
+} from "../../../codex/codexAppServerManager.errors.ts";
+import {
   ProviderAdapterProcessError,
   ProviderAdapterRequestError,
   ProviderAdapterSessionClosedError,
@@ -14,15 +18,14 @@ import {
 import { PROVIDER, toMessage } from "./Adapter.types.ts";
 
 /**
- * The Codex manager refuses a turn for an unknown or closed session before writing anything (and
- * the app server refuses one it does not know), so the turn never started: `session-dead`.
+ * Only typed local pre-dispatch absence is evidence that the turn never started.
  */
 export function toSessionError(
   threadId: ThreadId,
   cause: unknown,
 ): ProviderAdapterSessionNotFoundError | ProviderAdapterSessionClosedError | undefined {
-  const normalized = toMessage(cause, "").toLowerCase();
-  if (normalized.includes("unknown session") || normalized.includes("unknown provider session")) {
+  if (!(cause instanceof CodexSessionUnavailableError)) return undefined;
+  if (cause.reason === "missing") {
     return new ProviderAdapterSessionNotFoundError({
       provider: PROVIDER,
       threadId,
@@ -30,7 +33,7 @@ export function toSessionError(
       cause,
     });
   }
-  if (normalized.includes("session is closed")) {
+  if (cause.reason === "closed") {
     return new ProviderAdapterSessionClosedError({
       provider: PROVIDER,
       threadId,
@@ -88,6 +91,9 @@ export function toRequestError(
     provider: PROVIDER,
     method,
     detail: toMessage(cause, `${method} failed`),
+    ...(cause instanceof CodexRpcError && cause.delivery === "possibly-applied"
+      ? { failureClass: "unsafe-to-replay" as const }
+      : {}),
     cause,
   });
 }

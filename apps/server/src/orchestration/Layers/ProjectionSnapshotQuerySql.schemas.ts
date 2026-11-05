@@ -2,7 +2,7 @@ import {
   ChatAttachment,
   IsoDateTime,
   MessageId,
-  ModelSelection,
+  HistoricalModelSelection,
   NonNegativeInt,
   OrchestrationCheckpointFile,
   OrchestrationMessageReply,
@@ -20,6 +20,7 @@ import { MessageOriginSegment } from "@bigbud/contracts/orchestration/orchestrat
 import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import { OrchestrationPendingTurnStart } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { ThreadRecovery } from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
+import { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import { Schema, Struct } from "effect";
 
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
@@ -34,7 +35,7 @@ import { ProjectionThread } from "../../persistence/Services/ProjectionThreads.t
 
 export const ProjectionProjectDbRowSchema = ProjectionProject.mapFields(
   Struct.assign({
-    defaultModelSelection: Schema.NullOr(Schema.fromJsonString(ModelSelection)),
+    defaultModelSelection: Schema.NullOr(Schema.fromJsonString(HistoricalModelSelection)),
     scripts: Schema.fromJsonString(Schema.Array(ProjectScript)),
   }),
 );
@@ -52,7 +53,7 @@ export const ProjectionThreadProposedPlanDbRowSchema = ProjectionThreadProposedP
 
 export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
   Struct.assign({
-    modelSelection: Schema.fromJsonString(ModelSelection),
+    modelSelection: Schema.fromJsonString(HistoricalModelSelection),
     parentThread: Schema.NullOr(Schema.fromJsonString(ParentThreadReference)),
     // Optional: only the snapshot and operational thread queries select fork lineage.
     forkOrigin: Schema.optional(Schema.NullOr(Schema.fromJsonString(ThreadForkOrigin))),
@@ -67,6 +68,8 @@ export const ProjectionThreadDbRowSchema = ProjectionThread.mapFields(
     pendingTurnStart: Schema.NullOr(Schema.fromJsonString(OrchestrationPendingTurnStart)),
     // Migration 138; optional so a query that does not select it still decodes.
     recovery: Schema.optional(Schema.NullOr(Schema.fromJsonString(ThreadRecovery))),
+    // Migration 141; optional so a query that does not select it still decodes.
+    organization: Schema.optional(Schema.fromJsonString(ThreadOrganization)),
   }),
 );
 

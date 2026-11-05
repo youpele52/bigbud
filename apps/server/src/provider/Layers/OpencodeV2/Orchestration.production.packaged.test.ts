@@ -66,9 +66,17 @@ it("the release compiler bundles genuine A/B handlers and the canonical HTTP/SQL
       pinnedB: true,
       completedDuplicates: true,
       bootstrapBytesAndInodesUnchanged: true,
-      aDigest: v2ThreadImplementation("v1").implementationDigest,
-      bDigest: v2ThreadImplementation("v2").implementationDigest,
+      aDigest: v2ThreadImplementation("v3").implementationDigest,
+      bDigest: v2ThreadImplementation("v4").implementationDigest,
     });
+    expect(report.upgrade).toMatchObject({
+      nativeQualified: false,
+      supported: ["v2-system-global-config-v1", "v2-system-global-config-v1"],
+    });
+    expect(report.upgrade.policyReviewBlocked).toEqual(Array(4).fill("policy-unsupported"));
+    expect(report.upgrade.denied).toContain("policy-denied");
+    expect(report.upgrade.serialized).toContain("generation-mismatch");
+    expect(report.upgrade.serialized).toContain("unsafe-to-replay");
     expect(digest).toMatch(/^[a-f0-9]{64}$/);
   } finally {
     await rm(root, { recursive: true, force: true });

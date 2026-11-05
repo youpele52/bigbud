@@ -23,7 +23,7 @@ export async function makeV2ThreadPluginFixture(
     readonly stateRoot?: string;
     readonly invoke?: (value: Record<string, unknown>) => Promise<unknown>;
     readonly responseLease?: () => { readonly revision: number; readonly expiry: number };
-    readonly implementationVersion?: "v1" | "v2";
+    readonly implementationVersion?: "v1" | "v2" | "v3";
     readonly legacyRegistration?: boolean;
   } = {},
 ) {
@@ -113,8 +113,9 @@ export async function makeV2ThreadPluginFixture(
       bootstrapDigest: artifact.artifactDigest,
       bootstrapAbi: artifact.bootstrapAbi,
       compatibilityDigest: artifact.compatibilityDigest,
-      implementationDigest: v2ThreadImplementation(options.implementationVersion)
-        .implementationDigest,
+      implementationDigest: v2ThreadImplementation(
+        options.implementationVersion ?? (options.legacyRegistration ? "v1" : "v3"),
+      ).implementationDigest,
       threadId: "disposable-canonical-thread",
       nativeSessionId,
       storageIdentity: "disposable-storage",

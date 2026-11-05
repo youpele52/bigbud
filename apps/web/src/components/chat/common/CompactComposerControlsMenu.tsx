@@ -26,7 +26,16 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
   onToggleInteractionMode: () => void;
   onTogglePlanCard: () => void;
   onRuntimeModeChange: (mode: RuntimeMode) => void;
+  /** Server-published qualified modes; absent retains existing-provider behavior. */
+  supportedRuntimeModes?: ReadonlyArray<RuntimeMode>;
+  supportedInteractionModes?: ReadonlyArray<ProviderInteractionMode>;
+  unsupportedModeReason?: string;
 }) {
+  const runtimeModeDisabled = (mode: RuntimeMode) =>
+    props.supportedRuntimeModes !== undefined && !props.supportedRuntimeModes.includes(mode);
+  const interactionModeDisabled = (mode: ProviderInteractionMode) =>
+    props.supportedInteractionModes !== undefined &&
+    !props.supportedInteractionModes.includes(mode);
   return (
     <Menu>
       <MenuTrigger
@@ -63,8 +72,12 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
             props.onToggleInteractionMode();
           }}
         >
-          <MenuRadioItem value="default">Chat</MenuRadioItem>
-          <MenuRadioItem value="plan">Plan</MenuRadioItem>
+          <MenuRadioItem value="default" disabled={interactionModeDisabled("default")}>
+            Chat
+          </MenuRadioItem>
+          <MenuRadioItem value="plan" disabled={interactionModeDisabled("plan")}>
+            Plan
+          </MenuRadioItem>
         </MenuRadioGroup>
         <MenuDivider />
         {props.onOpenSideChat ? (
@@ -86,10 +99,27 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
             props.onRuntimeModeChange(value as RuntimeMode);
           }}
         >
-          <MenuRadioItem value="approval-required">Supervised</MenuRadioItem>
-          <MenuRadioItem value="auto-accept-edits">Auto-accept edits</MenuRadioItem>
-          <MenuRadioItem value="full-access">Full access</MenuRadioItem>
+          <MenuRadioItem
+            value="approval-required"
+            disabled={runtimeModeDisabled("approval-required")}
+          >
+            Supervised
+          </MenuRadioItem>
+          <MenuRadioItem
+            value="auto-accept-edits"
+            disabled={runtimeModeDisabled("auto-accept-edits")}
+          >
+            Auto-accept edits
+          </MenuRadioItem>
+          <MenuRadioItem value="full-access" disabled={runtimeModeDisabled("full-access")}>
+            Full access
+          </MenuRadioItem>
         </MenuRadioGroup>
+        {props.supportedRuntimeModes !== undefined && props.unsupportedModeReason ? (
+          <div className="max-w-64 px-2 py-1.5 text-xs text-muted-foreground">
+            {props.unsupportedModeReason}
+          </div>
+        ) : null}
         <MenuDivider />
         <MenuItem onClick={props.onTogglePlanCard}>
           <ListTodoIcon className="size-4 shrink-0" />

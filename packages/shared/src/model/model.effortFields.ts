@@ -4,7 +4,6 @@ import type {
   CodexModelOptions,
   CursorModelOptions,
   DevinModelOptions,
-  KilocodeModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
   ProviderKind,
@@ -29,17 +28,16 @@ export function getProviderEffortField(provider: ProviderKind): ProviderEffortFi
     case "codex":
     case "copilot":
     case "opencode":
-    case "kilocode":
+    case "muse":
       return "reasoningEffort";
     case "claudeAgent":
+    case "cliProxy":
       return "effort";
     case "cursor":
     case "devin":
       return "reasoning";
     case "pi":
       return "thinkingLevel";
-    case "cliProxy":
-      return null;
   }
 }
 
@@ -98,8 +96,6 @@ export function buildNextProviderOptions(
       return merged as CopilotModelOptions;
     case "opencode":
       return merged as OpencodeModelOptions;
-    case "kilocode":
-      return merged as KilocodeModelOptions;
     case "pi":
       return merged as PiModelOptions;
     case "cursor":
@@ -108,6 +104,8 @@ export function buildNextProviderOptions(
       return merged as DevinModelOptions;
     case "claudeAgent":
       return merged as ClaudeModelOptions;
+    case "muse":
+      return merged as ProviderModelOptions["muse"];
     case "cliProxy":
       return merged as ProviderModelOptions["cliProxy"];
   }

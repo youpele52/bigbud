@@ -32,7 +32,7 @@ const props: Omit<Parameters<typeof SidebarProjectsSection>[0], "scope"> = {
   onThreadSortOrderChange: vi.fn(),
   shouldShowProjectPathEntry: false,
   handleStartAddProject: vi.fn(),
-  openRemoteProjectDialog: vi.fn(),
+  openRemoteWorkspaceDialog: vi.fn(),
   onCloseMobileSidebar: vi.fn(),
   isElectron: false,
   newCwd: "",
@@ -48,8 +48,8 @@ const props: Omit<Parameters<typeof SidebarProjectsSection>[0], "scope"> = {
   renderedProjects: [],
   isExpanded: false,
   onExpandedChange: vi.fn(),
-  isRemoteProjectsExpanded: false,
-  onRemoteProjectsExpandedChange: vi.fn(),
+  isRemoteWorkspacesExpanded: false,
+  onRemoteWorkspacesExpandedChange: vi.fn(),
   isManualProjectSorting: false,
   onDragStart: vi.fn(),
   onDragEnd: vi.fn(),
@@ -62,8 +62,11 @@ describe("top-level project sections", () => {
     const local = renderToStaticMarkup(<SidebarProjectsSection {...props} scope="local" />);
     const remote = renderToStaticMarkup(<SidebarProjectsSection {...props} scope="remote" />);
     expect(local).toContain("Projects");
-    expect(local).not.toContain("Remote Projects");
-    expect(remote).toContain("Remote Projects");
+    expect(local).not.toContain("Remote Workspaces");
+    expect(remote).toContain("Remote Workspaces");
+    expect(remote).toContain('aria-label="Add remote workspace"');
+    expect(local).toContain('aria-label="New project"');
+    expect(remote).not.toContain("Remote Projects");
     expect(remote).not.toContain("No projects yet");
   });
 });

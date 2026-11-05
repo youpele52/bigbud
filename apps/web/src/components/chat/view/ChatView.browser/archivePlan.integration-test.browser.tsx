@@ -1,9 +1,10 @@
+import type { TurnId } from "@bigbud/contracts/core/baseSchemas";
 import { DEFAULT_CLIENT_SETTINGS } from "@bigbud/contracts/settings";
 import { page } from "vitest/browser";
 import { describe, expect, it, vi } from "vitest";
 
 import { createChatViewBrowserTestContext } from "./context";
-import { DEFAULT_VIEWPORT, THREAD_ID, createSnapshotForTargetUser } from "./fixtures";
+import { DEFAULT_VIEWPORT, NOW_ISO, THREAD_ID, createSnapshotForTargetUser } from "./fixtures";
 import { waitForElement } from "./dom";
 import { createSnapshotWithLongProposedPlan } from "./scenarioFixtures";
 
@@ -12,18 +13,34 @@ ctx.registerLifecycleHooks();
 
 describe("ChatView archive and plan integration", () => {
   it("shows a pointer cursor for the running stop button", async () => {
+    const snapshot = createSnapshotForTargetUser({
+      targetMessageId: "msg-user-stop-button-cursor" as never,
+      targetText: "stop button cursor target",
+      sessionStatus: "running",
+    });
+    const thread = snapshot.threads[0]!;
+    Object.assign(thread, {
+      latestTurn: {
+        turnId: "turn-stop-button" as TurnId,
+        state: "running" as const,
+        requestedAt: NOW_ISO,
+        startedAt: NOW_ISO,
+        completedAt: null,
+        assistantMessageId: null,
+      },
+      session: thread.session && {
+        ...thread.session,
+        activeTurnId: "turn-stop-button" as TurnId,
+      },
+    });
     const mounted = await ctx.mountChatView({
       viewport: DEFAULT_VIEWPORT,
-      snapshot: createSnapshotForTargetUser({
-        targetMessageId: "msg-user-stop-button-cursor" as never,
-        targetText: "stop button cursor target",
-        sessionStatus: "running",
-      }),
+      snapshot,
     });
 
     try {
       const stopButton = await waitForElement(
-        () => document.querySelector<HTMLButtonElement>('button[aria-label="Stop generation"]'),
+        () => document.querySelector<HTMLButtonElement>('button[aria-label^="Stop generation"]'),
         "Unable to find stop generation button.",
       );
       expect(getComputedStyle(stopButton).cursor).toBe("pointer");
@@ -32,7 +49,7 @@ describe("ChatView archive and plan integration", () => {
     }
   });
 
-  it("hides the archive action when the pointer leaves a thread row", async () => {
+  it("hides the pin action when the pointer leaves a thread row", async () => {
     const mounted = await ctx.mountChatView({
       viewport: DEFAULT_VIEWPORT,
       snapshot: createSnapshotForTargetUser({
@@ -44,30 +61,30 @@ describe("ChatView archive and plan integration", () => {
     try {
       const threadRow = page.getByTestId(`thread-row-${THREAD_ID}`);
       await expect.element(threadRow).toBeInTheDocument();
-      const archiveButton = await waitForElement(
+      const pinButton = await waitForElement(
         () =>
-          document.querySelector<HTMLButtonElement>(`[data-testid="thread-archive-${THREAD_ID}"]`),
-        "Unable to find archive button.",
+          document.querySelector<HTMLButtonElement>(`[data-testid="thread-favorite-${THREAD_ID}"]`),
+        "Unable to find pin button.",
       );
-      const archiveAction = archiveButton.parentElement;
-      expect(archiveAction).not.toBeNull();
-      expect(getComputedStyle(archiveAction!).opacity).toBe("0");
+      const pinAction = pinButton.closest("[class*='pointer-events-none'][class*='absolute']");
+      expect(pinAction).not.toBeNull();
+      expect(getComputedStyle(pinAction!).opacity).toBe("0");
 
       await threadRow.hover();
       await vi.waitFor(() => {
-        expect(getComputedStyle(archiveAction!).opacity).toBe("1");
+        expect(getComputedStyle(pinAction!).opacity).toBe("1");
       });
 
       await page.getByTestId("composer-editor").hover();
       await vi.waitFor(() => {
-        expect(getComputedStyle(archiveAction!).opacity).toBe("0");
+        expect(getComputedStyle(pinAction!).opacity).toBe("0");
       });
     } finally {
       await mounted.cleanup();
     }
   });
 
-  it("shows the confirm archive action after clicking the archive button", async () => {
+  it("confirms archive from the thread context menu", async () => {
     localStorage.setItem(
       "bigbud:client-settings:v1",
       JSON.stringify({ ...DEFAULT_CLIENT_SETTINGS, confirmThreadArchive: true }),
@@ -84,14 +101,16 @@ describe("ChatView archive and plan integration", () => {
     try {
       const threadRow = page.getByTestId(`thread-row-${THREAD_ID}`);
       await expect.element(threadRow).toBeInTheDocument();
-      await threadRow.hover();
-      const archiveButton = page.getByTestId(`thread-archive-${THREAD_ID}`);
-      await expect.element(archiveButton).toBeInTheDocument();
-      await archiveButton.click();
-
-      const confirmButton = page.getByTestId(`thread-archive-confirm-${THREAD_ID}`);
-      await expect.element(confirmButton).toBeInTheDocument();
-      await expect.element(confirmButton).toBeVisible();
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      try {
+        threadRow.element().dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+        (page.getByText("Archive thread", { exact: true }).element() as HTMLButtonElement).click();
+        await vi.waitFor(() =>
+          expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Archive thread")),
+        );
+      } finally {
+        confirm.mockRestore();
+      }
     } finally {
       localStorage.removeItem("bigbud:client-settings:v1");
       await mounted.cleanup();

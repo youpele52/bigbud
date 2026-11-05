@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { V2_THREAD_ACTIONS } from "./Orchestration.protocol.ts";
-import { V2_THREAD_HANDLER_V1 } from "./Orchestration.implementation.v1.ts";
+import { V2_THREAD_HANDLER_V3 } from "./Orchestration.implementation.v3.ts";
 import {
   v2ImmutableJson,
   validateV2PreparedBody,
@@ -47,7 +47,7 @@ export type V2ThreadInvocation = Extract<typeof Callback.Type, { kind: "invoke" 
 export function canonicalV2ThreadRequest(invocation: V2ThreadInvocation, callerThreadId: string) {
   return validateV2PreparedBody(
     invocation.action,
-    V2_THREAD_HANDLER_V1.prepare({
+    V2_THREAD_HANDLER_V3.prepare({
       action: invocation.action,
       input: v2ImmutableJson(invocation.input) as Readonly<Record<string, V2PureJson>>,
       callerThreadId,

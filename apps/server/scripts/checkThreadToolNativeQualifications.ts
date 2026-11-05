@@ -10,6 +10,7 @@ import { validateV2NativeQualificationRegistry } from "../src/provider/Layers/Op
 // evidence-only additions cannot change native bytes or this generator identity.
 const modules = [
   "NativeCompatibility.contract.ts",
+  "NativeCompatibility.policy.actions.ts",
   "NativeCompatibility.version.ts",
   "Orchestration.artifact.ts",
   "Orchestration.compatibility.ts",
@@ -29,35 +30,41 @@ const modules = [
 ] as const;
 const base = new URL("../src/provider/Layers/OpencodeV2/", import.meta.url);
 const sha = (value: string) => createHash("sha256").update(value).digest("hex");
-const closure = await Promise.all(
-  [...modules].toSorted().map(async (name) => {
-    const source = await readFile(new URL(name, base), "utf8");
-    if (source.split("\n").length > 401)
-      throw new Error("Native bootstrap generator module exceeds 400 lines.");
-    return [name, sha(source)];
-  }),
-);
-const generatorSourceDigest = sha(
-  JSON.stringify(["bigbud.thread.native-generator.sources.v1", closure]),
-);
-const registry = validateV2NativeQualificationRegistry(
-  V2_NATIVE_RELEASE_QUALIFICATIONS,
-  V2_NATIVE_RELEASE_INCOMPATIBILITIES,
-);
-for (const { record } of registry.qualified.values())
-  if (record.bootstrapGeneratorSourceDigest !== generatorSourceDigest)
-    throw new Error(
-      "Native qualification bootstrap generator/source identity drift; no record was promoted.",
-    );
-if (!process.argv.includes("--check"))
-  throw new Error(
-    "This checker is read-only; use --check. Qualification promotion requires approved native evidence and independent review.",
+/** Hash the explicit bootstrap source closure, including transitive policy action semantics. */
+export async function nativeBootstrapGeneratorSourceDigest(
+  readSource: (name: string) => Promise<string> = (name) => readFile(new URL(name, base), "utf8"),
+) {
+  const closure = await Promise.all(
+    [...modules].toSorted().map(async (name) => {
+      const source = await readSource(name);
+      if (source.split("\n").length > 401)
+        throw new Error("Native bootstrap generator module exceeds 400 lines.");
+      return [name, sha(source)];
+    }),
   );
-console.log(
-  JSON.stringify({
-    qualifiedRecords: registry.qualified.size,
-    incompatibleRecords: registry.incompatible.size,
-    generatorSourceDigest,
-    qualified: registry.qualified.size > 0,
-  }),
-);
+  return sha(JSON.stringify(["bigbud.thread.native-generator.sources.v1", closure]));
+}
+if (import.meta.main) {
+  const generatorSourceDigest = await nativeBootstrapGeneratorSourceDigest();
+  const registry = validateV2NativeQualificationRegistry(
+    V2_NATIVE_RELEASE_QUALIFICATIONS,
+    V2_NATIVE_RELEASE_INCOMPATIBILITIES,
+  );
+  for (const { record } of registry.qualified.values())
+    if (record.bootstrapGeneratorSourceDigest !== generatorSourceDigest)
+      throw new Error(
+        "Native qualification bootstrap generator/source identity drift; no record was promoted.",
+      );
+  if (!process.argv.includes("--check"))
+    throw new Error(
+      "This checker is read-only; use --check. Qualification promotion requires approved native evidence and independent review.",
+    );
+  console.log(
+    JSON.stringify({
+      qualifiedRecords: registry.qualified.size,
+      incompatibleRecords: registry.incompatible.size,
+      generatorSourceDigest,
+      qualified: registry.qualified.size > 0,
+    }),
+  );
+}

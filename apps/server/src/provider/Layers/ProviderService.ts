@@ -58,13 +58,19 @@ import {
   monitorProviderRuntimeEvents,
   observeProviderRuntimeEvent,
 } from "./ProviderService.turnLiveness.ts";
-import { makeInspectActiveTurn } from "./ProviderService.inspection.ts";
+import { makeConfirmInspectedTurn, makeInspectActiveTurn } from "./ProviderService.inspection.ts";
 import { makeInterruptTurn } from "./ProviderService.interrupt.ts";
 import { makeBackgroundReviews } from "./ProviderService.backgroundReview.ts";
 import { makeSteerTurn } from "./ProviderService.steer.ts";
 import { preserveStoppedProviderBinding } from "./ProviderService.stopSession.binding.ts";
 import { makeStopSubagent } from "./ProviderService.subagentStop.ts";
 import { makeStopThreadSubagents } from "./ProviderService.threadSubagentStop.ts";
+import { makeThreadOperations } from "./ProviderService.threadOperations.ts";
+import { makeRewindConversation } from "./ProviderService.rewind.ts";
+import { makeInspectionDelivery } from "./ProviderService.inspection.delivery.ts";
+import { makeProviderControls } from "./ProviderService.controls.ts";
+import { coordinateProviderControls } from "./ProviderService.controls.admission.ts";
+import { makeCompactionDelivery } from "./ProviderService.compaction.ts";
 
 export interface ProviderServiceLiveOptions {
   readonly canonicalEventLogPath?: string;
@@ -89,6 +95,8 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
 
   const registry = yield* ProviderAdapterRegistry;
   const directory = yield* ProviderSessionDirectory;
+  const threadOperation = makeThreadOperations(directory);
+  const rewind = makeRewindConversation(registry, directory);
   const turnLiveness = yield* Effect.serviceOption(ProviderTurnLivenessRepository);
   const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
 
@@ -108,6 +116,14 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     observe: (event) => observeProviderRuntimeEvent(turnLiveness, event),
     publish: makeCanonicalRuntimePublisher(runtimeEventPubSub, canonicalEventLogger),
   });
+  const inspectionDelivery = makeInspectionDelivery(directory, processRuntimeEvent);
+  const controls = makeProviderControls(registry, directory, processRuntimeEvent);
+  const processCompaction = makeCompactionDelivery(
+    registry,
+    directory,
+    threadOperation,
+    processRuntimeEvent,
+  );
 
   yield* monitorProviderRuntimeEvents({
     adapters,
@@ -115,7 +131,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     process: (event) =>
       background.isBackground(event.threadId)
         ? background.process(event)
-        : processRuntimeEvent(event),
+        : processCompaction(event),
   });
 
   // Build session routing helpers
@@ -168,6 +184,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const stopThreadSubagents = makeStopThreadSubagents({ resolveRoutableSession });
 
   const inspectActiveTurn = makeInspectActiveTurn(registry, directory);
+  const confirmInspectedTurn = makeConfirmInspectedTurn(registry, directory);
 
   const respondToRequest: ProviderServiceShape["respondToRequest"] = Effect.fn("respondToRequest")(
     function* (rawInput) {
@@ -306,25 +323,45 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   );
 
   return {
+    providerControls: coordinateProviderControls(controls, threadOperation),
+    ...inspectionDelivery,
+    recordInspectionTerminal: (terminal, items) =>
+      threadOperation(
+        terminal.threadId,
+        inspectionDelivery.recordInspectionTerminal!(terminal, items),
+        true,
+      ),
+    publishInspectionTerminal: (record) =>
+      threadOperation(
+        record.terminal.threadId,
+        inspectionDelivery.publishInspectionTerminal!(record),
+        true,
+      ),
     runBackgroundReview: background.run,
-    startSession,
-    startSessionFresh,
-    sendTurn,
-    interruptTurn,
-    steerTurn,
-    stopSubagent,
-    stopThreadSubagents,
+    startSession: (threadId, input) => threadOperation(threadId, startSession(threadId, input)),
+    startSessionFresh: (threadId, input) =>
+      threadOperation(threadId, startSessionFresh(threadId, input)),
+    sendTurn: (input) => threadOperation(input.threadId, sendTurn(input)),
+    interruptTurn: (input) => threadOperation(input.threadId, interruptTurn(input), true),
+    steerTurn: (input) => threadOperation(input.threadId, steerTurn(input)),
+    stopSubagent: (input) => threadOperation(input.threadId, stopSubagent(input), true),
+    stopThreadSubagents: (input) =>
+      threadOperation(input.threadId, stopThreadSubagents(input), true),
     inspectActiveTurn,
+    confirmInspectedTurn: (input) =>
+      threadOperation(input.threadId, confirmInspectedTurn(input), true),
     listActiveTurnLiveness,
     recordTurnInspection,
     claimTurnTerminal,
-    respondToRequest,
-    respondToUserInput,
-    stopSession,
+    respondToRequest: (input) => threadOperation(input.threadId, respondToRequest(input)),
+    respondToUserInput: (input) => threadOperation(input.threadId, respondToUserInput(input)),
+    stopSession: (input) => threadOperation(input.threadId, stopSession(input), true),
     listSessions,
     listSessionsForReconciliation,
     getCapabilities,
-    rollbackConversation,
+    rollbackConversation: (input) => threadOperation(input.threadId, rollbackConversation(input)),
+    rewindConversation: (input, completion) =>
+      threadOperation(input.threadId, rewind(input, completion)),
     // Each consumer independently receives all canonical runtime events.
     get streamEvents(): ProviderServiceShape["streamEvents"] {
       return canonicalRuntimeStream(runtimeEventPubSub);

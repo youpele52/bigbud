@@ -13,6 +13,12 @@ import type {
   SidebarThreadActionsInput,
   SidebarThreadActionsOutput,
 } from "./Sidebar.threadActions.types";
+import {
+  buildInyosiraMoveMenuItem,
+  buildInyosiraSnoozeMenuItem,
+  runInyosiraMenuAction,
+} from "./Sidebar.inyosira.menu";
+import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 
 function normalizeSummaryText(value: string | null | undefined): string {
   return value?.trim().replace(/\s+/g, " ") ?? "";
@@ -149,6 +155,7 @@ export function useSidebarThreadActions({
       }
       setSelectionAnchor(threadId);
       closeMobileSidebar();
+      acknowledgeThreadOpen(threadId);
       navigateToThreadRoute(threadId);
     },
     [
@@ -211,22 +218,28 @@ export function useSidebarThreadActions({
         [
           { id: "rename", label: "Rename thread" },
           { id: "branch", label: "Branch thread" },
+          buildInyosiraMoveMenuItem(thread.organization),
+          buildInyosiraSnoozeMenuItem(thread.organization),
           {
             id: "favorite",
             label: isFavorite ? "Unpin thread" : "Pin thread",
           },
-          { id: "archive", label: "Archive thread" },
+          { id: "separator-actions", label: "", separator: true },
           {
             id: "copy-elevator-summary",
             label: "Elevator summary",
             disabled: !hasElevatorSummary,
           },
-          { id: "copy-path", label: "Copy Path" },
           { id: "copy-thread-id", label: "Copy Thread ID" },
+          { id: "copy-path", label: "Copy Path" },
+          { id: "archive", label: "Archive thread" },
+          { id: "separator-delete", label: "", separator: true },
           { id: "delete", label: "Delete", destructive: true },
         ],
         position,
       );
+
+      if (await runInyosiraMenuAction(clicked, [threadId])) return;
 
       if (clicked === "rename") {
         cancelProjectRename();
@@ -309,10 +322,15 @@ export function useSidebarThreadActions({
       const count = ids.length;
 
       const clicked = await api.contextMenu.show(
-        [{ id: "delete", label: `Delete (${count})`, destructive: true }],
+        [
+          buildInyosiraMoveMenuItem(null),
+          { id: "separator-delete", label: "", separator: true },
+          { id: "delete", label: `Delete (${count})`, destructive: true },
+        ],
         position,
       );
 
+      if (await runInyosiraMenuAction(clicked, ids)) return;
       if (clicked !== "delete") return;
 
       if (appSettings.confirmThreadDelete) {

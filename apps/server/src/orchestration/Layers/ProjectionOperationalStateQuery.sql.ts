@@ -16,6 +16,7 @@ import {
   ProjectionThreadTaskDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
 import { unresolvedModelChoiceRequestsCtes } from "../../persistence/DelegatedModelChoiceSql.ts";
+import { threadOrganizationJsonSql } from "../../persistence/Layers/ProjectionThreads.organization.ts";
 
 export const STARTUP_OPERATIONAL_MESSAGE_LIMIT = 50;
 export const STARTUP_OPERATIONAL_ACTIVITY_LIMIT = 100;
@@ -87,6 +88,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         t.queue_hold AS "queueHold",
         t.pending_turn_start_json AS "pendingTurnStart",
         t.recovery_json AS "recovery",
+        ${threadOrganizationJsonSql(sql, "t")} AS "organization",
         t.archived_at AS "archivedAt", t.pinned_at AS "pinnedAt", t.deleting_at AS "deletingAt",
         t.deleted_at AS "deletedAt"
       FROM projection_threads t

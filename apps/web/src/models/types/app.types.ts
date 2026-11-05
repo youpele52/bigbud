@@ -1,6 +1,6 @@
 import type {
   ExecutionTargetId,
-  ModelSelection,
+  HistoricalModelSelection,
   OrchestrationLatestTurn,
   OrchestrationQueuedPrompt,
   OrchestrationProposedPlanId,
@@ -35,6 +35,7 @@ import {
   DEFAULT_THREAD_TERMINAL_HEIGHT as _DEFAULT_THREAD_TERMINAL_HEIGHT,
   MAX_TERMINALS_PER_GROUP as _MAX_TERMINALS_PER_GROUP,
 } from "@bigbud/contracts";
+import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
 export type SessionPhase = "disconnected" | "connecting" | "ready" | "running";
 
@@ -156,7 +157,7 @@ export interface Project {
   workspaceExecutionTargetId?: ExecutionTargetId;
   executionTargetId?: ExecutionTargetId;
   cwd: string | null;
-  defaultModelSelection: ModelSelection | null;
+  defaultModelSelection: HistoricalModelSelection | null;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;
   deletingAt?: string | null;
@@ -212,7 +213,7 @@ export interface Thread {
   purpose?: OrchestrationThreadPurpose;
   elevatorSummary?: string | null;
   elevatorSummaryMessageCount?: number;
-  modelSelection: ModelSelection;
+  modelSelection: HistoricalModelSelection;
   runtimeMode: RuntimeMode;
   interactionMode: ProviderInteractionMode;
   session: ThreadSession | null;
@@ -233,6 +234,8 @@ export interface Thread {
   turnStartRequest?: ThreadTurnStartRequest | null | undefined;
   /** Sleep and wake recovery state from the server projection. */
   recovery?: ThreadRecovery | null;
+  /** Inyosira organization from the server projection. Absent means Present. */
+  organization?: ThreadOrganization | undefined;
   pendingSourceProposedPlan?: OrchestrationLatestTurn["sourceProposedPlan"];
   branch: string | null;
   worktreePath: string | null;
@@ -274,6 +277,8 @@ export interface SidebarThreadSummary {
   providerAgents?: OrchestrationTask[];
   /** `continuing` keeps the pill on Working while bigbud resumes a turn after sleep. */
   recoveryStatus?: ThreadRecoveryStatus | null;
+  /** Inyosira organization from the server projection. Absent means Present. */
+  organization?: ThreadOrganization | undefined;
 }
 
 export type ThreadSessionProvider = ProviderKind | "unknown";

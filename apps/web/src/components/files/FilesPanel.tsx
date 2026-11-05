@@ -1,5 +1,6 @@
 import type { ProjectEntry, ThreadId } from "@bigbud/contracts";
 import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
+import { isRemoteExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "../../hooks/useTheme";
 import { useResolvedWorkspace } from "../../hooks/useResolvedWorkspace";
@@ -72,7 +73,7 @@ export const FilesPanelContent = memo(function FilesPanelContent({
   const activeWorkspaceExecutionTargetId =
     workspaceRootOverride === null
       ? (workspaceExecutionTargetIdOverride ?? workspaceExecutionTargetId)
-      : undefined;
+      : (workspaceExecutionTargetIdOverride ?? undefined);
   const activeProjectName = workspaceRootOverride === null ? regularProject?.name : undefined;
   const workspaceKey = createFilesPanelWorkspaceKey({
     ...(regularProject && workspaceRootOverride === null ? { projectId: regularProject.id } : {}),
@@ -276,9 +277,17 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     [setPreviewPosition],
   );
 
+  const handleRetryDirectory = useCallback(
+    (path: string) => void loadDirectory(path, { force: true }),
+    [loadDirectory],
+  );
   const treeBody = useMemo(() => {
     return renderFilesPanelTreeBody({
       showLoading: showRootLoading,
+      remote: isRemoteExecutionTargetId(activeWorkspaceExecutionTargetId),
+      recovering: rootDirectoryState?.recovering,
+      requestPending: rootDirectoryState?.requestPending,
+      onRetryDirectory: handleRetryDirectory,
       error: rootDirectoryState?.error,
       entries: sortedRootEntries,
       workspaceRoot: activeWorkspaceRoot,
@@ -295,6 +304,8 @@ export const FilesPanelContent = memo(function FilesPanelContent({
     expandedDirectories,
     handleOpenFile,
     handleToggleDirectory,
+    handleRetryDirectory,
+    activeWorkspaceExecutionTargetId,
     openContextMenu,
     previewPath,
     resolvedTheme,

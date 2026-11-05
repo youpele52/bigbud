@@ -24,6 +24,12 @@ export interface CuaDriverShape {
   readonly runDoctor: () => Effect.Effect<string, CuaDriverError>;
   readonly resetProxy: Effect.Effect<void, never>;
   readonly resetAfterUncertainAction: (reason: string) => Effect.Effect<void, CuaDriverError>;
+  /**
+   * User Stop: rejects queued calls, settles the call in flight, kills the proxy and restarts a
+   * socket daemon. Concurrent calls share one restart. `idle`: no socket and no live proxy, so
+   * no driver was running. Absent on drivers that predate it.
+   */
+  readonly stopAllActivity?: (reason: string) => Effect.Effect<"reset" | "idle", CuaDriverError>;
   readonly withExclusiveAccess: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
   readonly dispose: Effect.Effect<void, never>;
 }

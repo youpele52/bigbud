@@ -9,7 +9,7 @@
 import {
   ExecutionTargetId,
   IsoDateTime,
-  ModelSelection,
+  HistoricalModelSelection,
   ProjectId,
   ProjectScript,
 } from "@bigbud/contracts";
@@ -25,7 +25,7 @@ export const ProjectionProject = Schema.Struct({
   workspaceExecutionTargetId: ExecutionTargetId,
   executionTargetId: ExecutionTargetId,
   workspaceRoot: Schema.NullOr(Schema.String),
-  defaultModelSelection: Schema.NullOr(ModelSelection),
+  defaultModelSelection: Schema.NullOr(HistoricalModelSelection),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,

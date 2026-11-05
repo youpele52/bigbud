@@ -2,9 +2,17 @@ import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 import { runV2Cleanup } from "./Client.guard.ts";
 import { releaseV2PreparedSession } from "./Runtime.preparation.ts";
+import { suspendV2BorrowedOwner } from "./Runtime.transport.ts";
 
 /** A registered startup failure retires through ordinary exact-owner cancellation, not guard disposal alone. */
 export async function retireV2FailedStart(runtime: OpencodeV2Runtime, owner: V2RuntimeSession) {
+  if (
+    owner.lease.process.ownership === "borrowed" &&
+    (owner.transportDetached || !owner.lease.process.isRunning())
+  ) {
+    suspendV2BorrowedOwner(owner);
+    return;
+  }
   if (runtime.sessions.get(owner.threadId) === owner) {
     // Teardown retains the owner/quarantine when cancellation cannot be proved. Do not
     // remove that record or release a still-required native guard as a startup fallback.

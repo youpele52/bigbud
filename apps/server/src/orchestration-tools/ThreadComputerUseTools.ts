@@ -6,6 +6,7 @@ import {
 import { Cause, Effect, Exit, Option, type FileSystem, type Path } from "effect";
 
 import type { ComputerUseShape } from "../computer-use/Services/ComputerUse.ts";
+import type { ComputerUseActivityShape } from "../computer-use/Services/ComputerUseActivity.ts";
 import { isDesktopSurfaceAction } from "../computer-use/Layers/ComputerUse.ts";
 import { guardComputerUseAction } from "../computer-use/computerUseSafety.ts";
 import { type OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
@@ -54,7 +55,12 @@ function summarizeRequestedAction(action: ComputerUseAction): string {
 }
 
 function isMutatingAction(action: ComputerUseAction): boolean {
-  switch (action.action) {
+  return isMutatingComputerUseActionName(action.action);
+}
+
+/** Shared by the legacy and v2 paths (same action names in both contracts). */
+export function isMutatingComputerUseActionName(action: string): boolean {
+  switch (action) {
     case "capture":
     case "list_windows":
     case "list_apps":
@@ -126,7 +132,7 @@ function firstComputerUseActivityAfter(
   return first;
 }
 
-function hasComputerUseCheckInExpired(input: {
+export function hasComputerUseCheckInExpired(input: {
   readonly thread: {
     readonly messages: ReadonlyArray<{ readonly role: string; readonly createdAt: string }>;
     readonly activities: ReadonlyArray<{
@@ -159,6 +165,8 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     readonly action: ComputerUseAction;
     readonly checkInIntervalMs?: number;
     readonly actionTimeoutMs?: number;
+    /** Registers the action for the mascot's "Stop computer use"; absent in narrow test hosts. */
+    readonly activity?: ComputerUseActivityShape;
   }) {
     const thread = yield* input.orchestrationEngine
       .getReadModel()
@@ -173,7 +181,7 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     if (!input.computerUseEnabled && isDesktopSurfaceAction(input.action)) {
       return yield* Effect.fail(
         new Error(
-          "Desktop computer use is disabled in Bigbud settings. Enable it under Settings → AI → Computer Use to automate native apps such as Calendar and Reminders.",
+          "Desktop computer use is disabled in bigbud settings. Enable it under Settings → AI → Computer Use to automate native apps such as Calendar and Reminders.",
         ),
       );
     }
@@ -187,7 +195,7 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     if (isDesktopSurfaceAction(input.action) && input.serverMode !== "desktop") {
       return yield* Effect.fail(
         new Error(
-          "Desktop computer-use actions are only available when Bigbud is running in desktop mode. The current runtime mode is 'web'.",
+          "Desktop computer-use actions are only available when bigbud is running in desktop mode. The current runtime mode is 'web'.",
         ),
       );
     }
@@ -304,6 +312,16 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
         });
       }),
     );
-    return yield* recordedOperation;
+    // A stopped turn fails here, before its action is recorded or reaches either surface.
+    return yield* input.activity
+      ? input.activity.track(
+          {
+            threadId: input.threadId,
+            turnId: thread.session?.activeTurnId ?? null,
+            surface: isDesktopSurfaceAction(input.action) ? "desktop" : "browser",
+          },
+          recordedOperation,
+        )
+      : recordedOperation;
   },
 );

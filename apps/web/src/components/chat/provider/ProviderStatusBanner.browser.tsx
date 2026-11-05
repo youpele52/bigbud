@@ -30,6 +30,24 @@ describe("ProviderStatusBanner", () => {
     useThreadNoticeDismissalStore.setState({ dismissed: new Set() });
     document.body.innerHTML = "";
   });
+  it("shows active recovery in blue, then a static warning without a severity icon", async () => {
+    const status = provider({
+      recovery: {
+        operationId: "startup-operation",
+        generation: 1,
+        attempt: 1,
+        maxAttempts: 5,
+        trigger: "startup",
+        status: "retrying",
+      },
+    });
+    const screen = await render(<ProviderStatusBanner status={status} />);
+    await expect.element(page.getByRole("status")).toHaveClass("border-l-info-foreground");
+    expect(document.querySelector(".animate-spin")).not.toBeNull();
+    await screen.rerender(<ProviderStatusBanner status={provider({})} />);
+    await expect.element(page.getByRole("alert")).toHaveClass("border-l-warning");
+    expect(document.querySelectorAll("svg")).toHaveLength(1); // Dismissal only.
+  });
   it("keeps a dismissed condition hidden across navigation and routine probes, but not in a different thread", async () => {
     const status = provider({ message: "Provider warning" });
     const first = await render(<ProviderStatusBanner threadId="thread-one" status={status} />);

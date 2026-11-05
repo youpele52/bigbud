@@ -1,3 +1,4 @@
+import * as FS from "node:fs";
 import * as Path from "node:path";
 
 import { CUA_DRIVER_VERSION } from "@bigbud/shared/cua-driver/release";
@@ -21,6 +22,19 @@ export function resolveManagedPaths(baseDir: string) {
     policyPath: Path.join(rootDir, "policy", "bigbud.yaml"),
     legacyBinaryPath: Path.join(rootDir, "bin", binaryName()),
   };
+}
+
+/**
+ * bigbud's private Driver state home (`BIGBUD_CUA_STATE_HOME`), created 0700 on
+ * every use so an earlier default-mode creation is tightened too. Every Driver
+ * child launched for `baseDir` (daemon, status polls, manifest validation,
+ * activation helpers) must carry it.
+ */
+export function resolvePrivateStateHome(baseDir: string): string {
+  const homeDir = resolveManagedPaths(baseDir).homeDir;
+  FS.mkdirSync(homeDir, { recursive: true, mode: 0o700 });
+  FS.chmodSync(homeDir, 0o700);
+  return homeDir;
 }
 
 export function resolveManagedVersionPaths(

@@ -52,3 +52,66 @@ export async function atV2SetupStage<T>(stage: SetupStage, run: () => Promise<T>
     );
   }
 }
+
+export type V2DiagnosticCode =
+  | "source-shape"
+  | "source-bounds"
+  | "source-root"
+  | "source-phase"
+  | "source-duplicate"
+  | "permission-unsupported"
+  | "permission-denied"
+  | "policy-unsupported"
+  | "policy-denied"
+  | "registration-unverified"
+  | "health-unverified"
+  | "contract-unverified"
+  | "generation-mismatch"
+  | "storage-namespace-mismatch"
+  | "acquisition-unverified";
+export type V2DiagnosticStage = "config-sources" | "config-controls" | "acquisition";
+const diagnosticCodes = new Set<string>([
+  "source-shape",
+  "source-bounds",
+  "source-root",
+  "source-phase",
+  "source-duplicate",
+  "permission-unsupported",
+  "permission-denied",
+  "policy-unsupported",
+  "policy-denied",
+  "registration-unverified",
+  "health-unverified",
+  "contract-unverified",
+  "generation-mismatch",
+  "storage-namespace-mismatch",
+  "acquisition-unverified",
+]);
+const bounded = (value: number | undefined): value is number =>
+  Number.isSafeInteger(value) && value! >= 0 && value! <= 256;
+
+/** Runtime allowlist as well as types: never spread arbitrary metadata or retain a cause. */
+export class V2DiagnosticError extends Error {
+  readonly diagnostic: Readonly<{
+    stage: V2DiagnosticStage;
+    code: V2DiagnosticCode;
+    sourceIndex?: number;
+    sourceCount?: number;
+  }>;
+  constructor(stage: V2DiagnosticStage, code: V2DiagnosticCode, index?: number, count?: number) {
+    const safeStage = ["config-sources", "config-controls", "acquisition"].includes(stage)
+      ? stage
+      : "acquisition";
+    const safeCode = diagnosticCodes.has(code) ? code : "acquisition-unverified";
+    const diagnostic = Object.freeze({
+      stage: safeStage,
+      code: safeCode,
+      ...(bounded(index) ? { sourceIndex: index } : {}),
+      ...(bounded(count) ? { sourceCount: count } : {}),
+    });
+    super(
+      `V2 verification blocked (${JSON.stringify(diagnostic)}); no automatic replay or setup override.`,
+    );
+    this.diagnostic = diagnostic;
+  }
+}

@@ -36,6 +36,7 @@ import {
   type OrchestrationEngineShape,
 } from "../Services/OrchestrationEngine.ts";
 import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeIngestion.ts";
+import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
@@ -193,7 +194,7 @@ export async function createHarness(options?: {
   fs.mkdirSync(path.join(workspaceRoot, ".git"));
 
   let runtime: ManagedRuntime.ManagedRuntime<
-    OrchestrationEngineService | ProviderRuntimeIngestionService,
+    OrchestrationEngineService | ProviderRuntimeIngestionService | ProjectionSnapshotQuery,
     unknown
   > | null = null;
   let scope: Scope.Closeable | null = null;
@@ -212,7 +213,7 @@ export async function createHarness(options?: {
   const providerName = options?.provider ?? "codex";
   const provider = createProviderServiceHarness(providerName);
   const orchestrationLayer = OrchestrationEngineLive.pipe(
-    Layer.provide(OrchestrationProjectionSnapshotQueryLive),
+    Layer.provideMerge(OrchestrationProjectionSnapshotQueryLive),
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),
@@ -230,6 +231,7 @@ export async function createHarness(options?: {
   runtime = ManagedRuntime.make(layer);
   const engine = await runtime.runPromise(Effect.service(OrchestrationEngineService));
   const ingestion = await runtime.runPromise(Effect.service(ProviderRuntimeIngestionService));
+  const snapshots = await runtime.runPromise(Effect.service(ProjectionSnapshotQuery));
   scope = await Effect.runPromise(Scope.make("sequential"));
   await Effect.runPromise(ingestion.start().pipe(Scope.provide(scope)));
   const drain = () => Effect.runPromise(ingestion.drain);
@@ -296,8 +298,10 @@ export async function createHarness(options?: {
 
   return {
     engine,
+    reconcileInspection: ingestion.reconcileInspection!,
     emit: provider.emit,
     setProviderSession: provider.setSession,
+    getPersistedSnapshot: () => Effect.runPromise(snapshots.getSnapshot()),
     drain,
   };
 }

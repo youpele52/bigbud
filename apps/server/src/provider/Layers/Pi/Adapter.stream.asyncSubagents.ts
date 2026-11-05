@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { EventId, type ProviderRuntimeEvent } from "@bigbud/contracts";
+import { EventId, RuntimeTaskId, type ProviderRuntimeEvent, type TurnId } from "@bigbud/contracts";
 
 import { providerSubagentEvent, providerSubagentTaskId } from "../../providerSubagents.ts";
 
@@ -19,7 +19,8 @@ const MAX_RUNS = 20;
 const MAX_AGENTS = 64;
 const MAX_DEPTH = 3;
 const lastSnapshotAt = new WeakMap<ActivePiSession, number>();
-const lastNodes = new WeakMap<ActivePiSession, Map<string, string>>();
+type NodeObservation = { fingerprint: string; turnId: TurnId | undefined };
+const lastNodes = new WeakMap<ActivePiSession, Map<string, NodeObservation>>();
 const observedOrdinals = new WeakMap<ActivePiSession, number>();
 
 type AsyncState =
@@ -177,7 +178,7 @@ export function mapPiAsyncSubagentWidget(
   const events: ProviderRuntimeEvent[] = [];
   const seen = new Set<string>();
   let visited = 0;
-  const prior = lastNodes.get(session) ?? new Map<string, string>();
+  const prior = lastNodes.get(session) ?? new Map<string, NodeObservation>();
   lastNodes.set(session, prior);
 
   function visit(node: AsyncNode, identity: ReadonlyArray<string>, parentId?: string) {
@@ -194,8 +195,10 @@ export function mapPiAsyncSubagentWidget(
         node.activity?.turnCount,
       ]);
       seen.add(nativeId);
-      const unchanged = prior.get(nativeId) === fingerprint;
-      prior.set(nativeId, fingerprint);
+      const previous = prior.get(nativeId);
+      const turnId = previous ? previous.turnId : session.activeTurnId;
+      const unchanged = previous?.fingerprint === fingerprint;
+      prior.set(nativeId, { fingerprint, turnId });
       if (prior.size > MAX_AGENTS * 2) prior.delete(prior.keys().next().value!);
       if (!unchanged) {
         const status = taskStatus(node.state);
@@ -217,7 +220,7 @@ export function mapPiAsyncSubagentWidget(
               createdAt,
               threadId: session.threadId,
               sessionEpoch: session.sessionEpoch,
-              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+              ...(turnId ? { turnId } : {}),
               raw: {
                 source: "pi.rpc.event",
                 messageType: "extension_ui_request",
@@ -263,7 +266,7 @@ export function mapPiAsyncSubagentWidget(
                 observedOrdinal,
               },
               createdAt: new Date(node.startedAt ?? generatedAt).toISOString(),
-              ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+              ...(turnId ? { turnId } : {}),
             },
           ),
         );
@@ -285,6 +288,7 @@ export function mapPiAsyncSubagentWidget(
   }
   for (const nativeId of prior.keys()) {
     if (seen.has(nativeId)) continue;
+    const turnId = prior.get(nativeId)?.turnId;
     prior.delete(nativeId);
     forgetPiAsyncSubagentSteps(session, nativeId);
     const observedOrdinal = (observedOrdinals.get(session) ?? 0) + 1;
@@ -295,7 +299,7 @@ export function mapPiAsyncSubagentWidget(
         createdAt,
         threadId: session.threadId,
         sessionEpoch: session.sessionEpoch,
-        ...(session.activeTurnId ? { turnId: session.activeTurnId } : {}),
+        ...(turnId ? { turnId } : {}),
         raw: {
           source: "pi.rpc.event",
           messageType: "extension_ui_request",
@@ -304,7 +308,8 @@ export function mapPiAsyncSubagentWidget(
       }),
       type: "task.removed",
       payload: {
-        taskId: asyncTaskId(session, nativeId),
+        // Ingestion resolves native removal references to the stored thread/epoch ID.
+        taskId: RuntimeTaskId.makeUnsafe(nativeId),
         source: "background",
         replacement: "snapshot",
         freshness: {

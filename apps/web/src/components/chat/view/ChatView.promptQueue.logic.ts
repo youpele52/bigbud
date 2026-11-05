@@ -1,3 +1,7 @@
+import { dispatchCommandWithOutcomeRecovery } from "~/lib/orchestrationCommandRecovery";
+import { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
+import { Schema } from "effect";
+import { toastManager } from "~/components/ui/toast.manager";
 import type {
   CommandId,
   MessageId,
@@ -57,16 +61,15 @@ interface UsePromptQueueInput {
   controlOperation?: OrchestrationTurnControlOperation | null | undefined;
   nativeSteer?: boolean;
   canSteer?: boolean;
-  onInterrupt: (options?: {
-    queuedPromptIdsAfterSettlement?: readonly MessageId[];
-  }) => Promise<void>;
   onError: (message: string) => void;
   newId: () => string;
-  /**
-   * Persists the composer's model and modes on the thread, as a composer send does. "Send now"
-   * runs on the thread's settings, so the user's picker choice must reach the server first.
-   */
-  persistSettingsBeforeRelease?: (() => Promise<void>) | undefined;
+  releaseSettings?:
+    | {
+        readonly modelSelection?: ModelSelection;
+        readonly runtimeMode: RuntimeMode;
+        readonly interactionMode: ProviderInteractionMode;
+      }
+    | undefined;
 }
 
 export function promptQueueErrorMessage(error: unknown) {
@@ -121,6 +124,12 @@ export function buildSendNowFlushCommand(input: {
   readonly messageIds: ReadonlyArray<MessageId>;
   readonly messageId: MessageId;
   readonly createdAt: string;
+  readonly expectedTurnId?: TurnId | null | undefined;
+  readonly expectedSessionEpoch?: number | undefined;
+  readonly promptVersions?:
+    | ReadonlyArray<{ id: MessageId; createdAt: string; alreadySent: boolean }>
+    | undefined;
+  readonly releaseSettings?: UsePromptQueueInput["releaseSettings"];
 }) {
   return {
     type: "thread.queued-prompt.flush" as const,
@@ -129,35 +138,12 @@ export function buildSendNowFlushCommand(input: {
     messageIds: [...input.messageIds],
     messageId: input.messageId,
     userRelease: true,
+    expectedTurnId: input.expectedTurnId ?? null,
+    expectedSessionEpoch: input.expectedSessionEpoch ?? 0,
+    ...(input.promptVersions ? { promptVersions: input.promptVersions } : {}),
+    ...(input.releaseSettings ? { releaseSettings: input.releaseSettings } : {}),
     createdAt: input.createdAt,
   };
-}
-
-/**
- * "Send now": interrupt the running turn (the server flushes the queue on settlement), or persist
- * the composer's settings and then release the idle queue. Settings are never persisted mid-turn:
- * a runtime-mode change restarts the provider session and would race the interrupt. If the
- * settings cannot be saved, nothing is sent and the error is reported.
- */
-export async function sendNowQueuedPrompts(input: {
-  readonly queuedPromptIds: ReadonlyArray<MessageId>;
-  readonly activeTurnInProgress: boolean;
-  readonly persistSettingsBeforeRelease?: (() => Promise<void>) | undefined;
-  readonly interrupt: (queuedPromptIds: ReadonlyArray<MessageId>) => Promise<void>;
-  readonly flush: (queuedPromptIds: ReadonlyArray<MessageId>) => Promise<unknown>;
-  readonly onError: (message: string) => void;
-}): Promise<void> {
-  if (input.queuedPromptIds.length === 0) return;
-  try {
-    if (input.activeTurnInProgress) {
-      await input.interrupt(input.queuedPromptIds);
-      return;
-    }
-    await input.persistSettingsBeforeRelease?.();
-    await input.flush(input.queuedPromptIds);
-  } catch (error) {
-    input.onError(promptQueueErrorMessage(error));
-  }
 }
 
 export function buildComposerFollowUpCommand(input: {
@@ -256,28 +242,45 @@ export function usePromptQueue(input: UsePromptQueueInput) {
     [input],
   );
 
-  const interruptAndFlushQueuedPrompts = useCallback(
-    () =>
-      sendNowQueuedPrompts({
-        queuedPromptIds: allQueuedPrompts.map((prompt) => prompt.id as MessageId),
-        activeTurnInProgress: input.activeTurnInProgress,
-        persistSettingsBeforeRelease: input.persistSettingsBeforeRelease,
-        interrupt: (queuedPromptIds) =>
-          input.onInterrupt({ queuedPromptIdsAfterSettlement: queuedPromptIds }),
-        flush: async (messageIds) =>
-          readNativeApi()?.orchestration.dispatchCommand(
-            buildSendNowFlushCommand({
-              commandId: newCommandId(),
-              threadId: input.threadId,
-              messageIds,
-              messageId: newMessageId(),
-              createdAt: new Date().toISOString(),
-            }),
-          ),
-        onError: input.onError,
-      }),
-    [allQueuedPrompts, input],
-  );
+  const interruptAndFlushQueuedPrompts = useCallback(async () => {
+    if (allQueuedPrompts.length === 0) return;
+    try {
+      const api = readNativeApi();
+      if (!api) throw new Error("The app is not connected.");
+      await dispatchCommandWithOutcomeRecovery(
+        api,
+        buildSendNowFlushCommand({
+          commandId: newCommandId(),
+          threadId: input.threadId,
+          messageIds: allQueuedPrompts.map((prompt) => prompt.id as MessageId),
+          promptVersions: allQueuedPrompts.map((prompt) => ({
+            id: prompt.id as MessageId,
+            createdAt: prompt.createdAt,
+            alreadySent: prompt.alreadySent === true,
+          })),
+          messageId: newMessageId(),
+          createdAt: new Date().toISOString(),
+          expectedTurnId: input.activeTurnId ?? null,
+          expectedSessionEpoch: input.sessionEpoch ?? 0,
+          releaseSettings: input.releaseSettings,
+        }),
+      );
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        Schema.is(QueueDecisionReason)(error.code)
+      ) {
+        toastManager.add({
+          type: "info",
+          title: "Queue status",
+          description: promptQueueErrorMessage(error),
+          data: { threadId: input.threadId },
+        });
+      } else input.onError(promptQueueErrorMessage(error));
+    }
+  }, [allQueuedPrompts, input]);
 
   const steerQueuedPrompts = useCallback(async () => {
     if (

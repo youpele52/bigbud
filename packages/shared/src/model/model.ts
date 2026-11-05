@@ -37,7 +37,6 @@ export {
   normalizeCopilotModelOptionsWithCapabilities,
   normalizeCursorModelOptionsWithCapabilities,
   normalizeDevinModelOptionsWithCapabilities,
-  normalizeKilocodeModelOptionsWithCapabilities,
   normalizeOpencodeModelOptionsWithCapabilities,
   normalizePiModelOptionsWithCapabilities,
 } from "./model.normalize";

@@ -1,8 +1,8 @@
 import * as Crypto from "node:crypto";
-import { registerSystemMonitorIpc } from "./system-monitor/ipc";
+import { preservePackagedCopilotRuntime } from "./backend/copilotRuntimeMigration";
+import { startDesktopResourceAwareness } from "./main.systemMonitor";
 import { makeMainOwnershipRecovery } from "./backend/ownershipRecovery.main";
 import { registerOwnershipRecoveryIpc } from "./window/ipcHandlers.ownershipRecovery";
-import { startSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
 import type { SystemMonitorBridge } from "./system-monitor/bridge";
 
 import type { BrowserWindow, WebContents } from "electron";
@@ -24,9 +24,9 @@ import {
   getComputerUseRuntimeStatus,
   installComputerUseRuntime,
   requestComputerUsePermissions,
-  resolveComputerUseRuntime,
   runComputerUseDoctor,
 } from "./backend/cuaDriver";
+import { resolveComputerUseRuntime } from "./backend/cuaDriver.runtime";
 import { stopCuaDriverDaemon, stopCuaDriverDaemonAndWait } from "./backend/cuaDriver.daemon";
 import {
   makeCuaDriverLifecycle,
@@ -63,12 +63,24 @@ import { assertWindowsFilesReplaceable } from "./backend/windowsFileReplaceabili
 import { resolveWindowsUpdateTargets } from "./updater/windowsUpdateTargets";
 import { registerTerminalRenderingIpc } from "./main.terminalRendering";
 import { startDesktopConnectivitySignals } from "./connectivity/connectivitySignals.main";
+import {
+  registerComputerUseSafetySurface,
+  startComputerUseGuard,
+} from "./computer-use/computerUse.bootstrap";
+import { configureIpcAuthorization } from "./window/ipcAuthorization";
 
 interface BootstrapDesktopOptions {
+  /** Legacy Cua runtime base (`cuaDriverBaseDir` in main config); used only for Cua. */
   readonly baseDir: string;
   readonly systemMonitor: SystemMonitorBridge;
   readonly channels: typeof desktopIpcChannels;
   readonly cuaDriverHostBundleId: string;
+  /** Supervised guard inputs; it starts only when the selection gate is open. */
+  readonly computerUseGuard: {
+    readonly rootDir: string;
+    readonly desktopDir: string;
+    readonly developmentRoot: string | null;
+  };
   readonly desktopPreferences: DesktopPreferencesStore;
   readonly desktopRuntimeInfo: ReturnType<typeof resolveDesktopMainConfig>["desktopRuntimeInfo"];
   readonly floatingAssistantWindows: FloatingAssistantWindows;
@@ -95,6 +107,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     systemMonitor,
     channels,
     cuaDriverHostBundleId,
+    computerUseGuard,
     desktopPreferences,
     desktopRuntimeInfo,
     floatingAssistantWindows,
@@ -114,6 +127,8 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     setMainWindow,
     windowRegistry,
   } = options;
+  // Before any handler registration: every IPC handler authorizes its sender.
+  configureIpcAuthorization(windowRegistry);
   let mobileBackendBaseUrl = "";
   let localMobileBackendBaseUrl = "";
   const cuaDriverLifecycle = makeCuaDriverLifecycle({
@@ -130,6 +145,16 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   initializeBrowserSession();
   logHeader("bootstrap browser session initialized");
   logHeader("bootstrap start");
+  // Lifeline closes on before-quit and, regardless, when this process exits.
+  const computerUseGuardHandle = startComputerUseGuard({
+    ...computerUseGuard,
+    isDevelopment,
+    isPackaged,
+    platform: process.platform,
+    arch: process.arch,
+    env: process.env,
+    log: logHeader,
+  });
   const desktopMobileRemoteNetwork = resolveDesktopMobileRemoteNetwork({
     serverSettingsPath,
     hostOverride: process.env.BIGBUD_HOST ?? process.env.T3CODE_HOST,
@@ -233,10 +258,12 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
       return status;
     },
   });
-  registerSystemMonitorIpc(
+  await startDesktopResourceAwareness(
     systemMonitor,
     (sender) => windowRegistry.get("main")?.webContents.id === sender.id,
-  );
+  ).catch(() => {
+    logHeader("system monitor agent bridge unavailable");
+  });
   registerTerminalRenderingIpc((sender) => {
     const role = windowRegistry.getRole(sender);
     return role === "main" || role === "compact-chat";
@@ -245,10 +272,14 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     const contents = getMainWindow()?.webContents;
     return contents && windowRegistry.isTrusted(contents) ? contents : undefined;
   }, makeMainOwnershipRecovery(getIsQuitting));
-  await startSystemMonitorAgentBridge(systemMonitor).catch(() => {
-    logHeader("system monitor agent bridge unavailable");
-  });
   registerFloatingAssistantIpc();
+  registerComputerUseSafetySurface({
+    registry: windowRegistry,
+    desktopDir: computerUseGuard.desktopDir,
+    guard: computerUseGuardHandle,
+    openMainWindow: () => openMainWindow(),
+    menuActionChannel: channels.menuAction,
+  });
   logHeader("bootstrap ipc handlers registered");
   startDesktopConnectivitySignals({
     channel: channels.connectivitySignal,
@@ -267,8 +298,11 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     isDevelopment,
     getIsQuitting,
     setIsQuitting,
-    beginUpdatePreparation: beginInstalledProcessQuiescence,
+    // Preserve first: a failed copy must not fence CUA/backend process starts in the running app.
+    beginUpdatePreparation: () => undefined,
     prepareForUpdateInstall: async () => {
+      await preservePackagedCopilotRuntime(isPackaged, resourcesPath);
+      beginInstalledProcessQuiescence();
       const errors: unknown[] = [];
       let sweepError: unknown = null;
       try {
@@ -343,6 +377,12 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   logHeader("bootstrap login shell hydration started");
   await syncShellEnvironmentAsync();
   logHeader("bootstrap login shell hydration completed");
+  await preservePackagedCopilotRuntime(isPackaged, resourcesPath).catch((error) =>
+    console.error(
+      "[copilot-runtime] Bundle preservation failed; the bundled runtime remains usable.",
+      error,
+    ),
+  );
   await startBackend();
   logHeader("bootstrap backend start requested");
 }

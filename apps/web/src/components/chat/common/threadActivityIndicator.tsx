@@ -1,4 +1,5 @@
 import { cn } from "~/lib/utils";
+import { AgentWorkingBlob } from "../../ui/agent-working-blob";
 
 export type ThreadActivityIndicatorTone = "running" | "compacting";
 
@@ -31,5 +32,14 @@ export function ThreadActivityDots({
       <span aria-hidden="true" className={cn(baseDotClassName, "[animation-delay:200ms]")} />
       <span aria-hidden="true" className={cn(baseDotClassName, "[animation-delay:400ms]")} />
     </>
+  );
+}
+
+/** Header activity marker: the liquid loader while working, amber dots while compacting. */
+export function ThreadActivityIndicator({ tone }: { tone: ThreadActivityIndicatorTone }) {
+  return tone === "running" ? (
+    <AgentWorkingBlob />
+  ) : (
+    <ThreadActivityDots tone={tone} dotClassName="h-1 w-1" />
   );
 }

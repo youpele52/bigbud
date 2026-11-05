@@ -93,7 +93,7 @@ describe("Opencode session orchestration MCP", () => {
     }),
   );
 
-  it.effect("registers orchestration MCP for KiloCode sessions", () =>
+  it.effect("registers orchestration MCP for OpenCode sessions", () =>
     Effect.gen(function* () {
       const mcpAddCalls: Array<Record<string, unknown>> = [];
       const handle: OpencodeServerHandle = {
@@ -108,7 +108,7 @@ describe("Opencode session orchestration MCP", () => {
       };
 
       const methods = makeSessionMethods({
-        provider: "kilocode",
+        provider: "opencode",
         sessions: new Map(),
         runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
         serverManager: {
@@ -117,8 +117,8 @@ describe("Opencode session orchestration MCP", () => {
         serverSettings: {
           getSettings: Effect.succeed({
             providers: {
-              kilocode: {
-                binaryPath: "kilo",
+              opencode: {
+                binaryPath: "opencode",
               },
             },
           } as never),
@@ -129,10 +129,10 @@ describe("Opencode session orchestration MCP", () => {
           port: 3773,
           host: "127.0.0.1",
         },
-        nextEventId: Effect.succeed(EventId.makeUnsafe("evt-kilo-next")),
+        nextEventId: Effect.succeed(EventId.makeUnsafe("evt-opencode-next")),
         makeEventStamp: () =>
           Effect.succeed({
-            eventId: EventId.makeUnsafe("evt-kilo"),
+            eventId: EventId.makeUnsafe("evt-opencode"),
             createdAt: CREATED_AT,
           }),
         nativeEventLogger: undefined,
@@ -141,7 +141,7 @@ describe("Opencode session orchestration MCP", () => {
 
       yield* methods.startSession({
         threadId: THREAD_ID,
-        provider: "kilocode",
+        provider: "opencode",
         runtimeMode: "approval-required",
       });
 

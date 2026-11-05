@@ -4,6 +4,8 @@ export interface DirectoryState {
   entries: ReadonlyArray<ProjectEntry>;
   loading: boolean;
   error: string | null;
+  recovering?: boolean;
+  requestPending?: boolean;
 }
 
 export const EMPTY_ENTRIES: ReadonlyArray<ProjectEntry> = [];

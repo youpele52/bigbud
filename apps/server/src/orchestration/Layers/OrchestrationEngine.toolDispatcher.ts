@@ -1,4 +1,5 @@
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
+import { publishHtmlRender } from "../../orchestration-tools/HtmlRenderTool.ts";
 import type { OrchestrationReadModel } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { Effect, Option } from "effect";
 import type { FileSystem, Path } from "effect";
@@ -9,7 +10,9 @@ import {
   type VisibleBrowserControlShape,
 } from "../../browser/Services/VisibleBrowserControl.ts";
 import type { ComputerUseShape } from "../../computer-use/Services/ComputerUse.ts";
+import type { ComputerUseActivityShape } from "../../computer-use/Services/ComputerUseActivity.ts";
 import { computerUseViaOrchestration } from "../../orchestration-tools/ThreadComputerUseTools.ts";
+import { computerUseV2ViaOrchestration } from "../../orchestration-tools/ThreadComputerUseTools.v2.ts";
 import {
   archiveThreadViaOrchestration as archiveThreadViaThreadTools,
   getThreadStatusViaOrchestration as getThreadStatusViaThreadTools,
@@ -22,7 +25,10 @@ import { renameThreadViaOrchestration } from "../../orchestration-tools/ThreadOr
 import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listThreads.ts";
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
 import { makeAgentWorkspaceTool } from "../../orchestration-tools/AgentWorkspaceTools.ts";
-import { getSystemResources } from "../../orchestration-tools/ThreadSystemResourcesTool.ts";
+import {
+  getSystemResources,
+  configureSystemResourceRules,
+} from "../../orchestration-tools/ThreadSystemResourcesTool.ts";
 import {
   getThreadToolModelSources,
   setThreadOrchestrationToolDispatcher,
@@ -36,10 +42,15 @@ import type { ServerSettingsShape } from "../../ws/serverSettings.ts";
 import type { ProjectionCatalogQueryShape } from "../Services/ProjectionCatalogQuery.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { executeBrowserAction } from "./OrchestrationEngine.browser.ts";
+import {
+  moveThreadViaOrchestration,
+  snoozeThreadViaOrchestration,
+} from "../../orchestration-tools/ThreadOrchestrationTools.organization.ts";
 
 export function installOrchestrationEngineToolDispatchers(input: {
   readonly browser: BrowserManagerShape;
   readonly computerUse: ComputerUseShape;
+  readonly computerUseActivity: Option.Option<ComputerUseActivityShape>;
   readonly engine: OrchestrationEngineShape;
   readonly fileSystem: FileSystem.FileSystem;
   readonly kanban: Option.Option<ProjectionKanbanRepositoryShape>;
@@ -54,7 +65,9 @@ export function installOrchestrationEngineToolDispatchers(input: {
   readonly visibleBrowser: VisibleBrowserControlShape;
 }) {
   setThreadOrchestrationToolDispatcher({
+    renderHtml: (request) => publishHtmlRender({ engine: input.engine, ...request }),
     getSystemResources,
+    configureSystemResourceRules,
     ...(Option.isSome(input.notes) && Option.isSome(input.kanban)
       ? {
           workspace: makeAgentWorkspaceTool({
@@ -66,6 +79,18 @@ export function installOrchestrationEngineToolDispatchers(input: {
       : {}),
     rename: (request) =>
       renameThreadViaOrchestration({
+        orchestrationEngine: input.engine,
+        threadDelegationRepository: input.threadDelegationRepository,
+        ...request,
+      }),
+    move: (request) =>
+      moveThreadViaOrchestration({
+        orchestrationEngine: input.engine,
+        threadDelegationRepository: input.threadDelegationRepository,
+        ...request,
+      }),
+    snooze: (request) =>
+      snoozeThreadViaOrchestration({
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,
@@ -128,6 +153,26 @@ export function installOrchestrationEngineToolDispatchers(input: {
           serverMode: input.serverConfig.mode,
           threadId: request.threadId,
           action: request.action,
+          checkInIntervalMs: settings.computerUseCheckInIntervalMs,
+          actionTimeoutMs: settings.computerUseActionTimeoutMs,
+          ...(Option.isSome(input.computerUseActivity)
+            ? { activity: input.computerUseActivity.value }
+            : {}),
+        });
+      }),
+    // No supervised port is connected yet (owner transport pending), so v2
+    // desktop requests fail closed with `control_unavailable`.
+    computerUseV2: (request) =>
+      Effect.gen(function* () {
+        const settings = yield* input.serverSettingsService.getSettings.pipe(
+          Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
+        );
+        return yield* computerUseV2ViaOrchestration({
+          orchestrationEngine: input.engine,
+          computerUseEnabled: settings.computerUseEnabled,
+          serverMode: input.serverConfig.mode,
+          threadId: request.threadId,
+          request: request.request,
           checkInIntervalMs: settings.computerUseCheckInIntervalMs,
           actionTimeoutMs: settings.computerUseActionTimeoutMs,
         });

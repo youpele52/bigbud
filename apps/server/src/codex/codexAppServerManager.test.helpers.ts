@@ -5,6 +5,7 @@ import type {
   CodexEffectiveModelSelection,
   CodexModelCatalog,
 } from "./codexAppServerManager.modelSelection";
+import type { CodexWriteOptions } from "./codexAppServerManager.types.ts";
 
 export const asThreadId = (value: string): ThreadId => ThreadId.makeUnsafe(value);
 
@@ -61,6 +62,7 @@ export function createSendTurnHarness(options?: {
 export function createThreadControlHarness() {
   const manager = new CodexAppServerManager();
   const context = {
+    runtimeVersion: "0.100.0",
     session: {
       provider: "codex",
       status: "ready",
@@ -131,7 +133,9 @@ export function createPendingUserInputHarness() {
     .mockReturnValue(context);
   const writeMessage = vi
     .spyOn(manager as unknown as { writeMessage: (...args: unknown[]) => void }, "writeMessage")
-    .mockImplementation(() => {});
+    .mockImplementation((_context, _message, options) => {
+      (options as CodexWriteOptions | undefined)?.onDispatch();
+    });
   const emitEvent = vi
     .spyOn(manager as unknown as { emitEvent: (...args: unknown[]) => void }, "emitEvent")
     .mockImplementation(() => {});

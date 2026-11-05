@@ -33,6 +33,8 @@ export function pollAgentIdentityWith(
         terminalId: session.terminalId,
         pid: session.pid,
         runtimeEpoch: session.runtimeEpoch,
+        runtimeGeneration: session.runtimeGeneration,
+        executionTargetId: session.executionTargetId,
       }));
     if (localSessions.length === 0) return;
 
@@ -55,9 +57,27 @@ export function pollAgentIdentityWith(
     );
     if (Option.isNone(result)) return;
 
-    for (const session of localSessions) {
-      if (!result.value.has(session.pid)) continue;
-      const detection = normalizeTerminalAgentDetection(result.value.get(session.pid) ?? null);
+    yield* applyAgentIdentitiesWith(ctx, localSessions, result.value);
+  }).pipe(Effect.withSpan("terminal.pollAgentIdentity"));
+}
+
+export type IdentitySession = Pick<
+  TerminalSessionState,
+  "threadId" | "terminalId" | "runtimeEpoch" | "runtimeGeneration" | "executionTargetId"
+> & { pid: number };
+
+export function applyAgentIdentitiesWith(
+  ctx: ProcessLifecycleContext,
+  sessions: ReadonlyArray<IdentitySession>,
+  detections: ReadonlyMap<
+    number,
+    TerminalAgentDetection | TerminalSessionState["activeAgentProvider"]
+  >,
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (const session of sessions) {
+      if (!detections.has(session.pid)) continue;
+      const detection = normalizeTerminalAgentDetection(detections.get(session.pid) ?? null);
       const detectedProvider = detection?.provider ?? null;
       const detectedAgent = detection?.agent ?? null;
       const event = yield* ctx.modifyManagerState((managerState) => {
@@ -68,7 +88,9 @@ export function pollAgentIdentityWith(
           !current ||
           current.status !== "running" ||
           current.pid !== session.pid ||
-          current.runtimeEpoch !== session.runtimeEpoch
+          current.runtimeEpoch !== session.runtimeEpoch ||
+          current.runtimeGeneration !== session.runtimeGeneration ||
+          current.executionTargetId !== session.executionTargetId
         ) {
           return [null, managerState] as const;
         }
@@ -106,5 +128,5 @@ export function pollAgentIdentityWith(
       });
       if (event) yield* ctx.publishEvent(event);
     }
-  }).pipe(Effect.withSpan("terminal.pollAgentIdentity"));
+  });
 }

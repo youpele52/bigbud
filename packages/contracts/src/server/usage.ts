@@ -1,7 +1,6 @@
 import { Effect, Option, Schema } from "effect";
 
 import { IsoDateTime, NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
-import { ProviderKind } from "../orchestration/orchestration.provider";
 
 export const ServerUsageRange = Schema.Literals(["24h", "7d", "30d", "all"]);
 export type ServerUsageRange = typeof ServerUsageRange.Type;
@@ -50,8 +49,22 @@ export const ServerUsageTotals = Schema.Struct({
 });
 export type ServerUsageTotals = typeof ServerUsageTotals.Type;
 
+/** Tokens one provider or model used within a single bucket; `id` matches the summary entry. */
+export const ServerUsageBucketShare = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  usedTokens: NonNegativeInt,
+});
+export type ServerUsageBucketShare = typeof ServerUsageBucketShare.Type;
+
+// Additive over-time detail; a malformed or missing split must not hide the bucket totals.
+const OptionalBucketShares = Schema.optional(Schema.Array(ServerUsageBucketShare)).pipe(
+  Schema.catchDecoding(() => Effect.succeed(Option.none())),
+);
+
 export const ServerUsageBucket = Schema.Struct({
   accounting: Schema.optional(UsageSourceMetadata),
+  providers: OptionalBucketShares,
+  models: OptionalBucketShares,
   bucketStart: IsoDateTime,
   usedTokens: NonNegativeInt,
   inputTokens: NonNegativeInt,
@@ -72,7 +85,7 @@ export const ServerUsageBreakdownEntry = Schema.Struct({
 export type ServerUsageBreakdownEntry = typeof ServerUsageBreakdownEntry.Type;
 
 export const ServerUsageProviderCoverage = Schema.Struct({
-  provider: ProviderKind,
+  provider: TrimmedNonEmptyString,
   status: Schema.Literals(["available", "unavailable"]),
   reason: Schema.NullOr(TrimmedNonEmptyString),
 });

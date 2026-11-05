@@ -5,8 +5,15 @@
  *
  * @module ThreadOrchestrationTools.createThread
  */
-import { CommandId, MessageId, ProjectId, ThreadId, TurnId } from "@bigbud/contracts";
-import { Effect, Option } from "effect";
+import {
+  CommandId,
+  MessageId,
+  ModelSelection,
+  ProjectId,
+  ThreadId,
+  TurnId,
+} from "@bigbud/contracts";
+import { Effect, Option, Schema } from "effect";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
@@ -66,6 +73,12 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     }
     if (callerThread.deletingAt) {
       return yield* Effect.fail(new Error("Caller thread is being deleted."));
+    }
+    const callerModelSelection = callerThread.modelSelection;
+    if (!Schema.is(ModelSelection)(callerModelSelection)) {
+      return yield* Effect.fail(
+        new Error("The caller's provider is no longer available for delegation."),
+      );
     }
     const targetProjectId = input.projectId ?? callerThread.projectId;
     const targetProject = readModel.projects.find((project) => project.id === targetProjectId);
@@ -167,7 +180,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
           identity,
           request: input.modelSelection,
           sources: input.modelSources,
-          trunk: callerThread.modelSelection,
+          trunk: callerModelSelection,
           target:
             targetProjectId === callerThread.projectId
               ? callerExecutionTargets
@@ -188,7 +201,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
         purpose: "standard",
         ...callerExecutionTargets,
         modelSelection:
-          decision === undefined ? callerThread.modelSelection : decisionThreadModel(decision),
+          decision === undefined ? callerModelSelection : decisionThreadModel(decision),
         runtimeMode: callerThread.runtimeMode,
         interactionMode: callerThread.interactionMode,
         branch: null,
@@ -224,7 +237,7 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
               commandId: CommandId.makeUnsafe(stableThreadToolId("command", `${identity}:turn`)),
               threadId: delegation.childThreadId,
               message: { ...prompt, role: "user", attachments: [] },
-              modelSelection: callerThread.modelSelection,
+              modelSelection: callerModelSelection,
               runtimeMode: callerThread.runtimeMode,
               interactionMode: callerThread.interactionMode,
               createdAt,

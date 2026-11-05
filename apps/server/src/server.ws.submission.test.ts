@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import {
   CommandId,
   MessageId,
@@ -16,6 +15,7 @@ import {
   engineFor,
 } from "./orchestration/Layers/OrchestrationEngine.test.runtime.ts";
 import { buildAppUnderTest } from "./server.test.app.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 import { getWsServerUrl, serverTestLayer, withRetriedWsRpcClient } from "./server.test.rpc.ts";
 import { toDispatchCommandError } from "./ws/wsDispatchCommandError.ts";
 
@@ -125,6 +125,6 @@ it.layer(serverTestLayer)("authenticated server-owned submission", (it) => {
           5,
         );
         assert.isAtLeast(dispatchCalls, 9);
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

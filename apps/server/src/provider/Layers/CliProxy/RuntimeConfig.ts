@@ -21,6 +21,7 @@ import {
 } from "./Client.ts";
 import { diagnosticForActivationResult, diagnosticForCommandResult } from "./Diagnostic.ts";
 import { resolveCliProxyConfig, type CliProxyConfig } from "./config.ts";
+import { cliProxyModelEnvironment, UNKNOWN_CLIPROXY_CAPABILITIES } from "./Capabilities.ts";
 
 const ACTIVATION_RETRY_ATTEMPTS = 5;
 const ACTIVATION_RETRY_DELAY_MS = 1_000;
@@ -202,7 +203,7 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
       });
     }
 
-    yield* Effect.try({
+    const selectedModel = yield* Effect.try({
       try: () => validateCliProxyModel(models, requestedModel),
       catch: () =>
         new ProviderAdapterValidationError({
@@ -213,12 +214,14 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
     });
 
     const electronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
+    const modelCapabilities = selectedModel.capabilities ?? UNKNOWN_CLIPROXY_CAPABILITIES;
     return Object.freeze({
       config,
       models,
       ...(requestedModel ? { selectedModel: requestedModel } : {}),
       harness: Object.freeze({
         binaryPath: settings.providers.claudeAgent.binaryPath,
+        modelCapabilities,
         settingSources: [],
         boundedHookProgress: false,
         forwardSubagentText: false,
@@ -228,6 +231,7 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
           ...(electronRunAsNode === undefined ? {} : { ELECTRON_RUN_AS_NODE: electronRunAsNode }),
           ANTHROPIC_BASE_URL: config.baseUrl.toString().replace(/\/$/u, ""),
           ANTHROPIC_AUTH_TOKEN: config.apiKey,
+          ...cliProxyModelEnvironment(requestedModel, modelCapabilities),
         }),
       }),
     });

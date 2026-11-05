@@ -54,7 +54,7 @@ describe("provider stop-all", () => {
   it.effect("stops adapters concurrently instead of one after another", () =>
     Effect.gen(function* () {
       const timeline: string[] = [];
-      const adapters = ["cursor", "kilocode", "codex"].map((provider) =>
+      const adapters = ["cursor", "pi", "codex"].map((provider) =>
         timedAdapter(provider, timeline, Effect.sleep("1 second")),
       );
       const fiber = yield* Effect.forkChild(stopAdaptersWithin(adapters as unknown as Adapters));
@@ -62,7 +62,7 @@ describe("provider stop-all", () => {
       yield* Fiber.join(fiber);
       assert.deepStrictEqual(timeline.slice(0, 3), [
         "stop:start:cursor",
-        "stop:start:kilocode",
+        "stop:start:pi",
         "stop:start:codex",
       ]);
       assert.strictEqual(timeline.length, 6);

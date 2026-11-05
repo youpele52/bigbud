@@ -3,7 +3,7 @@ import { Schema } from "effect";
 import { IsoDateTime, NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 import { ModelCapabilities } from "../core/model";
 import { SERVER_DISCOVERY_PROVIDER_LABELS } from "../constants/provider.constant";
-import { ProviderKind } from "../orchestration/orchestration";
+import { ProviderKind, ProviderInteractionMode, RuntimeMode } from "../orchestration/orchestration";
 import { ServerProviderUsageLimits } from "./usageLimits";
 
 const KeybindingsMalformedConfigIssue = Schema.Struct({
@@ -53,6 +53,12 @@ export const ServerProviderModel = Schema.Struct({
   subProviderID: Schema.optional(TrimmedNonEmptyString),
   /** Catalog browsing is not credential proof; only native discovery establishes selectability. */
   availability: Schema.optional(Schema.Literals(["available", "requires-setup"])),
+  /**
+   * True when selecting this catalog model may send content for provider
+   * training/product improvement (e.g. Muse Contributor models). Clients must
+   * disclose this before project content is sent; never present as non-training.
+   */
+  contributorTraining: Schema.optional(Schema.Boolean),
 });
 export type ServerProviderModel = typeof ServerProviderModel.Type;
 
@@ -168,6 +174,16 @@ export const CliProxyDiagnostic = Schema.Struct({
 });
 export type CliProxyDiagnostic = typeof CliProxyDiagnostic.Type;
 
+/** Installed PATH evidence must never be presented as the connected server's version. */
+export const CliProxyVersion = Schema.Struct({
+  recommendedVersion: TrimmedNonEmptyString,
+  runtimeVersion: Schema.NullOr(TrimmedNonEmptyString),
+  installedVersion: Schema.NullOr(TrimmedNonEmptyString),
+  installation: Schema.Literals(["homebrew", "unknown"]),
+  updateSource: Schema.optional(Schema.Literals(["runtime", "installed"])),
+});
+export type CliProxyVersion = typeof CliProxyVersion.Type;
+
 export const ServerProvider = Schema.Struct({
   provider: ProviderKind,
   /** Explicit isolated development composition, never a public-release availability flag. */
@@ -195,12 +211,22 @@ export const ServerProvider = Schema.Struct({
   modelRecovery: Schema.optional(ServerProviderRecovery),
   failure: Schema.optional(ServerProviderFailure),
   cliProxyDiagnostic: Schema.optional(CliProxyDiagnostic),
+  cliProxyVersion: Schema.optional(CliProxyVersion),
   models: Schema.Array(ServerProviderModel),
   modelDiscovery: Schema.optional(ServerProviderModelDiscovery),
   usageLimits: Schema.optional(ServerProviderUsageLimits),
   slashCommands: ServerProviderSlashCommands,
   skills: ServerProviderSkills,
   supportsLocalRuntimeRemoteWorkspace: Schema.optional(Schema.Boolean),
+  /**
+   * Access/interaction modes this provider is qualified to run. Absent means
+   * existing-provider behavior (no new restriction). When present, clients and
+   * server admission must reject unlisted modes before native side effects.
+   */
+  supportedRuntimeModes: Schema.optional(Schema.Array(RuntimeMode)),
+  supportedInteractionModes: Schema.optional(Schema.Array(ProviderInteractionMode)),
+  /** Human-readable reason an unlisted mode is unavailable, shown next to the disabled control. */
+  unsupportedModeReason: Schema.optional(TrimmedNonEmptyString),
   supportsSteer: Schema.optional(Schema.Boolean),
   supportsAttachments: Schema.optional(Schema.Boolean),
   /** Per-subagent Stop is available (Stop-all is separate and unchanged). */
@@ -219,13 +245,7 @@ export type ServerProvider = typeof ServerProvider.Type;
 export const ServerProviders = Schema.Array(ServerProvider);
 export type ServerProviders = typeof ServerProviders.Type;
 
-export const ServerDiscoverySource = Schema.Literals([
-  "project",
-  "user",
-  "system",
-  "plugin",
-  "config",
-]);
+export const ServerDiscoverySource = Schema.Literals(["project", "user", "system", "config"]);
 export type ServerDiscoverySource = typeof ServerDiscoverySource.Type;
 
 export const ServerDiscoveryProviderLabel = Schema.Literals(SERVER_DISCOVERY_PROVIDER_LABELS);
@@ -249,8 +269,6 @@ export type ServerDiscoveredAgents = typeof ServerDiscoveredAgents.Type;
 export const ServerDiscoveredSkill = Schema.Struct({
   ...ServerDiscoveredEntryBase.fields,
   displayName: Schema.optional(TrimmedNonEmptyString),
-  pluginId: Schema.optional(TrimmedNonEmptyString),
-  pluginRevision: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerDiscoveredSkill = typeof ServerDiscoveredSkill.Type;
 

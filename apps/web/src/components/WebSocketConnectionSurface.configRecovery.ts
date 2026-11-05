@@ -10,7 +10,7 @@ import type { WsConnectionStatus } from "../rpc/wsConnectionState";
 import { toastManager } from "./ui/toast";
 
 export interface ConfigRecoveryToast {
-  readonly type: "warning" | "info";
+  readonly type: "warning" | "loading";
   readonly title: string;
   readonly description: string;
   readonly timeout: 0;
@@ -49,7 +49,7 @@ export function syncConfigRecoveryToast<TToastId>(
   const exhausted = readiness.stream === "exhausted";
   if (!exhausted && id === null) return null;
   const toast: ConfigRecoveryToast = {
-    type: exhausted ? "warning" : "info",
+    type: exhausted ? "warning" : "loading",
     title: exhausted ? "Configuration updates paused" : "Restoring configuration updates",
     description: exhausted
       ? "The last valid configuration is still available. Retry to resume provider and settings updates."
