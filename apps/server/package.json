@@ -27,6 +27,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:groups": "bun scripts/updateServerTestGroups.ts",
+    "test:browser:install": "playwright install --with-deps --only-shell chromium",
     "benchmark:startup-catalog": "BIGBUD_STARTUP_CATALOG_BENCHMARK=1 vitest run src/orchestration/Layers/ProjectionCatalogQuery.scale.test.ts",
     "benchmark:mobile-recovery-memory": "bun scripts/mobileRecoveryMemoryBenchmark.ts"
   },
