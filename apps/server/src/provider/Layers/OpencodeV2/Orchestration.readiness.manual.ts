@@ -10,9 +10,14 @@ import {
   verifyV2NativeReadOnlyEligibility,
   type V2NativeEligibilityVerifier,
 } from "./NativeCompatibility.runtime.ts";
-import { resolveV2PluginConfigRoot } from "./PluginSetup.paths.ts";
+import { resolveV2PluginConfigRoot, type V2PluginSetupAuthority } from "./PluginSetup.paths.ts";
+import { readV2ManagedThreadSource } from "./Orchestration.readiness.source.ts";
+import {
+  V2RetainedInstallationIdentityChanged,
+  revalidateV2RetainedInstallation,
+} from "./PluginSetup.revalidation.retained.ts";
 
-/** A unique app-private manual source may retain a signed compatible N artifact; L is remediation-only. */
+/** A unique active manual or exact managed source may retain signed N bytes; L is remediation-only. */
 export async function readV2CompatibleManualBootstrap(
   preferred: V2PluginSetupArtifact,
   client: OpencodeV2Client,
@@ -20,6 +25,7 @@ export async function readV2CompatibleManualBootstrap(
   signal?: AbortSignal,
   eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
   root: string = resolveV2PluginConfigRoot(),
+  authority?: V2PluginSetupAuthority,
 ) {
   await verifyV2NativeReadOnlyEligibility(preferred, client, directory, root, signal, eligibility);
   const inventory = await v2Request(
@@ -32,8 +38,19 @@ export async function readV2CompatibleManualBootstrap(
   if (inventory.data.length > 1000 || matches.length > 1)
     throw new Error("V2 required manual bootstrap namespace is colliding.");
   const plugin = matches[0];
-  if (!plugin || plugin.source.type !== "local") return undefined;
-  let source = plugin.source.path;
+  if (!plugin || plugin.source.type !== "local" || plugin.state.status !== "active")
+    return undefined;
+  let managed;
+  try {
+    managed = await readV2ManagedThreadSource(preferred, plugin.source.path, root);
+  } catch (error) {
+    if (!(error instanceof V2RetainedInstallationIdentityChanged) || !authority) throw error;
+    const retained = await readV2RetainedArtifact(preferred, error.artifactDigest);
+    await eligibility(retained, client, directory, root, authority.signal);
+    await revalidateV2RetainedInstallation(error, retained, root, authority);
+    managed = await readV2ManagedThreadSource(preferred, plugin.source.path, root);
+  }
+  let source = managed?.directory ?? plugin.source.path;
   if (["index.mjs", "server.js"].includes(path.basename(source))) source = path.dirname(source);
   if (
     path.dirname(source) !== path.dirname(preferred.directory) ||
@@ -62,9 +79,17 @@ export async function readV2CompatibleManualBootstrap(
     throw new Error(
       "V2 legacy-manual-bootstrap-update-required: this manual L entry is cleanup-only for the new app. Update that entry explicitly; native config/history was not rewritten and no autoload alias was added.",
     );
-  const artifact = await readV2RetainedArtifact(preferred, path.basename(source));
+  const artifact = managed ?? (await readV2RetainedArtifact(preferred, path.basename(source)));
   if (v2ThreadRegistration(artifact).id !== registration.id)
     throw new Error("V2 retained registration family mismatch; no cross-family adoption.");
+  // A verified managed v3 entry can use the ordinary breaking-update activation/retirement gates.
+  // Manual entries still require an explicit update; never create an autoload alias for them.
+  if (
+    managed &&
+    artifact.bootstrapAbi === "bigbud.thread.bootstrap.v3" &&
+    preferred.bootstrapAbi === "bigbud.thread.bootstrap.v4"
+  )
+    return undefined;
   if (artifact.bootstrapAbi !== preferred.bootstrapAbi)
     throw new Error(
       "V2 manual bootstrap namespace ABI requires an explicit update; no compact-session downgrade, autoload alias or history mutation.",

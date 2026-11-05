@@ -7,10 +7,12 @@ import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
 import { buildSshCommandInvocation } from "../../../ssh/sshCommand.ts";
 import { assertSshExecutionTargetReadyAsync } from "../../../ssh/sshVerification.ts";
 import { normalizeManagedServerStartError } from "./ServerManager.errors.ts";
+import type { ProcessLedgerShape } from "../../../process-ledger/Services/ProcessLedger.ts";
 import {
   readManagedServerListeningUrl,
   stopSpawnedChild,
   stopSpawnedChildAndWait,
+  trackManagedServerChild,
 } from "./ServerManager.helpers.ts";
 import type { ManagedServerConfig, RunningManagedServer } from "./ServerManager.ts";
 
@@ -117,6 +119,7 @@ async function startChild(input: {
   readonly config: ManagedServerConfig;
   readonly executionTargetId: string;
   readonly binaryPath: string;
+  readonly ledger?: ProcessLedgerShape | undefined;
 }): Promise<RunningManagedServer> {
   const isLocal = input.executionTargetId === LOCAL_EXECUTION_TARGET_ID;
   const localPort = isLocal ? undefined : await allocateLocalPort();
@@ -140,6 +143,7 @@ async function startChild(input: {
     stdio: ["pipe", "pipe", "pipe"],
     shell: process.platform === "win32",
   });
+  void trackManagedServerChild(input.ledger, child, invocation, `${input.config.provider}-server`);
   let stopping = false;
   const onUnexpectedDeath = watchChild(child, () => stopping);
   const url = await waitForServer(

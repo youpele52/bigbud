@@ -78,17 +78,23 @@ const notice = (kind: ThreadRecoveryNoticeKind, description: string): ThreadReco
   canContinueInNewThread: kind === "reconnecting" || kind === "failed",
 });
 
-const failedNotice = (failureClass: string): ThreadRecoveryNoticeDerivation => ({
+const failedNotice = (failure: {
+  readonly failureClass: string;
+  readonly detail?: string | undefined;
+}): ThreadRecoveryNoticeDerivation => ({
   notice: notice(
     "failed",
-    failureClass === "provider-unavailable"
+    failure.failureClass === "provider-unavailable"
       ? "The provider is not available (not installed, not executable, or disabled). Fix it in Settings, or continue in a new thread."
-      : failureClass === "unsafe-to-replay"
+      : failure.failureClass === "unsafe-to-replay"
         ? "This turn could not be safely resumed automatically. Review and resolve the error above before sending again or continuing in a new thread."
-        : isForkOnlyFailureClass(failureClass)
+        : isForkOnlyFailureClass(failure.failureClass)
           ? "This thread's provider session cannot be resumed. Continue in a new thread to keep working."
-          : failureClass === "invalid-request"
-            ? "The provider rejected this request (for example, the model is no longer offered). See the error above, or continue in a new thread and pick another model."
+          : failure.failureClass === "invalid-request"
+            ? // A classified rejection carries the provider's own reason (e.g. an
+              // unsupported access mode); never guess it was a retired model.
+              (failure.detail ??
+              "The provider rejected this request (for example, the model is no longer offered). See the error above, or continue in a new thread and pick another model.")
             : "The turn did not start. See the error above for details.",
   ),
   nextChangeInMs: null,
@@ -129,7 +135,9 @@ export function deriveThreadRecoveryNotice(input: {
     const failureClass = retried ? "" : (failure?.failureClass ?? "");
     const shown =
       MANUAL_CONTINUE_FAILURE_CLASSES.has(failureClass) || (request?.outcome === "failed" && slow);
-    return shown ? failedNotice(failureClass) : { notice: null, nextChangeInMs: null };
+    return shown
+      ? failedNotice({ failureClass, detail: retried ? undefined : failure?.detail })
+      : { notice: null, nextChangeInMs: null };
   }
   if (!request || !slow) return { notice: null, nextChangeInMs: null };
   const remainingMs = settledAtMs + RECOVERED_NOTICE_VISIBLE_MS - nowMs;

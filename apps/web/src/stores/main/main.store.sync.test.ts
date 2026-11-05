@@ -388,11 +388,12 @@ describe("store read model sync", () => {
       completedAt: "2026-08-16T10:00:05.000Z",
       assistantMessageId,
     });
+    // Detail carries no session: a completed message is not turn end, the session-set event is.
     expect(
       isSessionActivelyRunningTurn(
         next.threads[0]?.latestTurn ?? null,
         next.threads[0]?.session ?? null,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 });

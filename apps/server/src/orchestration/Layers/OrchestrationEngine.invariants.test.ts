@@ -107,10 +107,11 @@ describe("OrchestrationEngine", () => {
           createdAt,
         }),
       ),
-    ).rejects.toThrow("Queued prompt flush produced no canonical event");
+    ).rejects.toThrow("selected queue has changed");
     await expect(system.run(engine.getCommandOutcome!(commandId))).resolves.toMatchObject({
       commandId,
-      status: "unknown",
+      status: "rejected",
+      reason: "queue_stale_selection",
     });
 
     await system.dispose();

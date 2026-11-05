@@ -1,6 +1,6 @@
+import { makeReservedQueuedPromptFlushCommand } from "../QueuedPromptFlush.control.ts";
 import {
   DEFAULT_RUNTIME_MODE,
-  MessageId,
   type OrchestrationSession,
   ThreadId,
   type TurnId,
@@ -20,11 +20,7 @@ import {
   completeTurnControlIfConsumed,
   setTurnControlOperation,
 } from "./ProviderCommandReactorHandlers.steer.ts";
-import {
-  consumableQueuedPrefix,
-  exactQueuedPrefix,
-  samePromptIds,
-} from "../QueuedPromptPolicy.logic.ts";
+import { exactQueuedPrefix, samePromptIds } from "../QueuedPromptPolicy.logic.ts";
 
 type ProviderIntentEvent = Extract<
   import("@bigbud/contracts").OrchestrationEvent,
@@ -93,26 +89,16 @@ export const makeProcessSessionHandlers = ({
     const operation = event.payload.operation;
     if (!operation) return;
     if (operation.reservedPromptIds.length > 0) {
-      const current = yield* resolveThread(event.payload.threadId);
-      if (
-        !current ||
-        consumableQueuedPrefix({
-          thread: current,
-          messageIds: operation.reservedPromptIds,
-          controlOperationId: operation.operationId,
-        }).length === 0
-      )
-        return;
-      yield* orchestrationEngine.dispatch({
-        type: "thread.queued-prompt.flush",
-        commandId: serverCommandId("interrupt-continue-flush"),
-        threadId: event.payload.threadId,
-        messageIds: operation.reservedPromptIds,
-        messageId: MessageId.makeUnsafe(`continued:${operation.operationId}`),
-        acknowledged: true,
-        controlOperationId: operation.operationId,
-        createdAt: event.payload.createdAt,
+      const snapshot = yield* orchestrationEngine.getReadModel();
+      const current = snapshot.threads.find((entry) => entry.id === event.payload.threadId);
+      if (!current) return;
+      const command = makeReservedQueuedPromptFlushCommand({
+        thread: current,
+        operation,
+        revision: snapshot.snapshotSequence,
       });
+      if (!command) return;
+      yield* orchestrationEngine.dispatch(command);
     }
     yield* completeTurnControlIfConsumed({
       orchestrationEngine,

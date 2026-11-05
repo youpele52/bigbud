@@ -33,14 +33,26 @@ describe("SidebarThreadTerminalProviderIcon", () => {
     expect(render()).toBe("");
   });
 
-  it("uses the chat working blue whenever an agent is open, without a working animation", () => {
+  it("uses the chat working blue with the breathing animation whenever an agent is open", () => {
     useTerminalStateStore
       .getState()
       .applyTerminalEvent(makeTerminalEvent("agentIdentity", { provider: "pi" }));
     const markup = render();
     expect(markup).toContain("text-info-foreground");
     expect(markup).not.toContain("text-muted-foreground");
-    expect(markup).not.toContain("animate-breathe");
+    expect(markup).toContain("animate-breathe");
+    expect(markup).toContain("motion-reduce:animate-none");
+  });
+
+  it("renders the Meta icon for a muse terminal agent in the thread title row", () => {
+    useTerminalStateStore
+      .getState()
+      .applyTerminalEvent(makeTerminalEvent("agentIdentity", { provider: "muse" }));
+    const markup = render();
+    expect(markup).toContain('aria-label="Terminal provider: Muse Code"');
+    expect(markup).toContain('data-slot="thread-terminal-provider-icon"');
+    expect(markup).toContain("<svg");
+    expect(markup).toContain("text-info-foreground");
   });
 
   it("labels the terminal provider and follows provider switches and exits", () => {
@@ -62,5 +74,20 @@ describe("SidebarThreadTerminalProviderIcon", () => {
       }),
     );
     expect(render()).toBe("");
+  });
+
+  it("renders herdr as a terminal-only identity with the same running styling", () => {
+    useTerminalStateStore.getState().applyTerminalEvent(
+      makeTerminalEvent("agentIdentity", {
+        provider: null,
+        agent: { id: "herdr", names: ["herdr"] },
+      }),
+    );
+    const markup = render();
+    expect(markup).toContain('aria-label="Terminal: herdr"');
+    expect(markup).not.toContain("Terminal provider");
+    expect(markup).toContain('viewBox="0 0 408 373"');
+    expect(markup).toContain("text-info-foreground");
+    expect(markup).toContain("animate-breathe");
   });
 });

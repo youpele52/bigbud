@@ -14,7 +14,7 @@ import {
   type TransportSession,
 } from "./wsTransport.session";
 import { waitForWsRetry } from "./wsTransport.wait";
-import { scopedWsFiniteRequest, withWsRequestDeadline } from "./wsTransport.request";
+import { requestWsUnary, scopedWsFiniteRequest } from "./wsTransport.request";
 import type { WsInitialApplicationDeadline } from "./wsTransport.initialValue";
 import {
   createWsConnectionControls,
@@ -101,18 +101,10 @@ export class WsTransport {
     }
 
     this.assertConnectedOrConnecting();
-    await this.reconnectOperation;
-    this.assertConnectedOrConnecting();
-
-    const session = this.session;
-    return await session.runtime.runPromise(
-      withWsRequestDeadline(
-        Effect.promise(() => session.clientPromise).pipe(
-          Effect.flatMap((client) => Effect.suspend(() => execute(client))),
-        ),
-        options?.timeout,
-      ),
-    );
+    return requestWsUnary(execute, options?.timeout, this.reconnectOperation, () => {
+      this.assertConnectedOrConnecting();
+      return this.session;
+    });
   }
 
   async requestStream<TValue>(

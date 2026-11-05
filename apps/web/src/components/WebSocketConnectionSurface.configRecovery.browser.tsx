@@ -108,7 +108,7 @@ describe("real cached config recovery coordinator", () => {
     notice.actionProps?.onClick?.();
     expect(retry).toHaveBeenCalledOnce();
     await vi.waitFor(() =>
-      expect(mocks.update).toHaveBeenCalledWith(id, expect.objectContaining({ type: "info" })),
+      expect(mocks.update).toHaveBeenCalledWith(id, expect.objectContaining({ type: "loading" })),
     );
     expect(mocks.close).not.toHaveBeenCalled();
     expect(getServerConfig()).toEqual(serverConfigFixture);

@@ -99,7 +99,9 @@ impl WorkspaceRoot {
             .map_err(|_| WorkspaceError::InvalidPath(relative_path.to_owned()))?;
         let _target_lock = lock_target_at(parent_directory.as_raw_fd(), relative_path)?;
 
+        // SAFETY: libc::stat is a C data structure for which all-zero bytes are valid.
         let mut metadata = unsafe { std::mem::zeroed::<libc::stat>() };
+        // SAFETY: The directory descriptor, C string, and writable stat buffer remain valid.
         let metadata_result = unsafe {
             libc::fstatat(
                 parent_directory.as_raw_fd(),
@@ -108,11 +110,12 @@ impl WorkspaceRoot {
                 libc::AT_SYMLINK_NOFOLLOW,
             )
         };
-        if metadata_result < 0 {
+        let target_mode = if metadata_result < 0 {
             let error = std::io::Error::last_os_error();
             if error.kind() != std::io::ErrorKind::NotFound {
                 return Err(map_io(error));
             }
+            None
         } else {
             let file_type = metadata.st_mode & libc::S_IFMT;
             if file_type == libc::S_IFLNK {
@@ -121,7 +124,8 @@ impl WorkspaceRoot {
             if file_type != libc::S_IFREG {
                 return Err(WorkspaceError::NotRegularFile);
             }
-        }
+            Some(metadata.st_mode & 0o7777)
+        };
         if let Some(expected) = expected_sha256.filter(|value| !value.is_empty()) {
             let actual = match self.open_file(relative_path) {
                 Ok(mut current) => Some(reader_sha256(&mut current)?),
@@ -142,6 +146,7 @@ impl WorkspaceRoot {
             .as_nanos();
         let temporary_name = CString::new(format!(".bigbud-write-{}-{suffix}", std::process::id()))
             .map_err(|_| WorkspaceError::InvalidPath(relative_path.to_owned()))?;
+        // SAFETY: The directory descriptor and C string remain valid; O_EXCL creates a new file.
         let temporary_descriptor = unsafe {
             libc::openat(
                 parent_directory.as_raw_fd(),
@@ -153,17 +158,32 @@ impl WorkspaceRoot {
         if temporary_descriptor < 0 {
             return Err(map_io(std::io::Error::last_os_error()));
         }
+        // SAFETY: openat returned a valid descriptor whose ownership is transferred exactly once.
         let mut temporary_file = unsafe { File::from_raw_fd(temporary_descriptor) };
         if let Err(error) = temporary_file
             .write_all(bytes)
+            .and_then(|_| {
+                if let Some(mode) = target_mode {
+                    // Apply permissions after writing, which can clear set-user/group-ID bits.
+                    // SAFETY: The temporary file owns a valid descriptor; mode contains only permission bits.
+                    if unsafe { libc::fchmod(temporary_file.as_raw_fd(), mode) } < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                Ok(())
+            })
             .and_then(|_| temporary_file.sync_all())
         {
-            unsafe {
-                libc::unlinkat(parent_directory.as_raw_fd(), temporary_name.as_ptr(), 0);
+            // SAFETY: The directory descriptor and temporary filename remain valid.
+            if unsafe { libc::unlinkat(parent_directory.as_raw_fd(), temporary_name.as_ptr(), 0) }
+                < 0
+            {
+                return Err(map_io(std::io::Error::last_os_error()));
             }
             return Err(WorkspaceError::Io(error));
         }
         drop(temporary_file);
+        // SAFETY: Both names are valid C strings relative to the live parent directory descriptor.
         let rename_result = unsafe {
             libc::renameat(
                 parent_directory.as_raw_fd(),
@@ -174,8 +194,11 @@ impl WorkspaceRoot {
         };
         if rename_result < 0 {
             let error = std::io::Error::last_os_error();
-            unsafe {
-                libc::unlinkat(parent_directory.as_raw_fd(), temporary_name.as_ptr(), 0);
+            // SAFETY: The directory descriptor and temporary filename remain valid.
+            if unsafe { libc::unlinkat(parent_directory.as_raw_fd(), temporary_name.as_ptr(), 0) }
+                < 0
+            {
+                return Err(map_io(std::io::Error::last_os_error()));
             }
             return Err(WorkspaceError::Io(error));
         }
@@ -278,6 +301,7 @@ fn lock_target_at(
         hex_sha256(relative_path.as_bytes())
     ))
     .map_err(|_| WorkspaceError::InvalidPath(relative_path.to_owned()))?;
+    // SAFETY: The caller keeps the parent descriptor valid, and name is a valid C string.
     let descriptor = unsafe {
         libc::openat(
             parent_fd,
@@ -289,7 +313,9 @@ fn lock_target_at(
     if descriptor < 0 {
         return Err(map_io(std::io::Error::last_os_error()));
     }
+    // SAFETY: openat returned a valid descriptor whose ownership is transferred exactly once.
     let lock = unsafe { File::from_raw_fd(descriptor) };
+    // SAFETY: The lock file owns a valid descriptor for the duration of flock.
     let result = unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) };
     if result == -1 {
         return Err(map_io(std::io::Error::last_os_error()));
@@ -313,6 +339,7 @@ fn lock_target(parent: &Path, target: &Path) -> Result<File, WorkspaceError> {
         .map_err(map_io)?;
     #[cfg(unix)]
     {
+        // SAFETY: The lock file owns a valid descriptor for the duration of flock.
         let result = unsafe { libc::flock(lock.as_raw_fd(), libc::LOCK_EX) };
         if result == -1 {
             return Err(map_io(std::io::Error::last_os_error()));

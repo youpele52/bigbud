@@ -1,4 +1,5 @@
-import { MessageId, ProviderKind, type OrchestrationTurnControlOperation } from "@bigbud/contracts";
+import { makeReservedQueuedPromptFlushCommand } from "../QueuedPromptFlush.control.ts";
+import { ProviderKind, type OrchestrationTurnControlOperation } from "@bigbud/contracts";
 import { Effect, Exit, Schema } from "effect";
 
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
@@ -194,17 +195,18 @@ export function makeProcessTurnSteerRequested(input: {
       state: "provider-acknowledged",
       createdAt: event.payload.createdAt,
     });
-    yield* input.orchestrationEngine.dispatch({
-      type: "thread.queued-prompt.flush",
-      commandId: serverCommandId(`steer-flush-${event.eventId}`),
-      threadId: thread.id,
-      messageIds: operation.reservedPromptIds,
-      messageId: MessageId.makeUnsafe(`steer-message-${event.eventId}`),
-      acknowledged: true,
-      consumeOnly: true,
-      controlOperationId: operation.operationId,
-      createdAt: event.payload.createdAt,
-    });
+    const acknowledgedSnapshot = yield* input.resolveThread();
+    const acknowledgedThread = acknowledgedSnapshot.threads.find((entry) => entry.id === thread.id);
+    const flush =
+      acknowledgedThread &&
+      makeReservedQueuedPromptFlushCommand({
+        thread: acknowledgedThread,
+        operation,
+        revision: acknowledgedSnapshot.snapshotSequence,
+        consumeOnly: true,
+      });
+    if (!flush) return;
+    yield* input.orchestrationEngine.dispatch(flush);
     yield* completeTurnControlIfConsumed({
       ...input,
       threadId: thread.id,

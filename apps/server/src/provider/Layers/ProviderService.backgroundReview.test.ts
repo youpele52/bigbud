@@ -24,7 +24,6 @@ const harness = makeProviderServiceLayer({
       cursor: { enabled: true },
       devin: { enabled: true },
       opencode: { enabled: true },
-      kilocode: { enabled: true },
       pi: { enabled: true },
     },
   },
@@ -45,7 +44,6 @@ harness.layer("background provider reviews", (it) => {
     ["copilot", harness.copilot],
     ["cursor", harness.cursor],
     ["devin", harness.devin],
-    ["kilocode", harness.kilocode],
     ["pi", harness.pi],
   ] as const) {
     it.effect(`reconciles ${providerKind} review snapshots without duplicating streamed text`, () =>

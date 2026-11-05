@@ -10,8 +10,6 @@ function sourceRank(source: DiscoveryEntry["source"]): number {
       return 1;
     case "config":
       return 2;
-    case "plugin":
-      return 3;
     case "system":
       return 4;
   }

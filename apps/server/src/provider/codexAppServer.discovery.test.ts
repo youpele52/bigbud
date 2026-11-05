@@ -27,6 +27,18 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("Codex optional discovery enrichment", () => {
+  it("does not publish a partial model catalog while discovery pagination is pending", async () => {
+    const { child, send } = childProcess();
+    const result = probeCodexDiscovery({ binaryPath: "codex", cwd: "/workspace" });
+    send(1, {});
+    send(4, { account: { type: "apiKey" } });
+    send(3, { data: [] });
+    send(2, { data: [{ id: "one" }], nextCursor: "next" });
+    expect(child.kill).not.toHaveBeenCalled();
+    expect(child.stdin.read()?.toString()).toContain('"cursor":"next"');
+    send(2, { data: [{ id: "two" }], nextCursor: null });
+    expect((await result).models.map((model) => model.slug)).toEqual(["one", "two"]);
+  });
   it("quota-only probes skip catalog and skill discovery, allow detailed grants latency and clean up", async () => {
     vi.useFakeTimers();
     const { child, send } = childProcess();

@@ -3,6 +3,19 @@ import { describe, expect, it } from "vitest";
 import { ResourceCapacityGauge } from "./ResourceCapacityGauge";
 
 describe("CPU capacity gauge", () => {
+  it.each(["cpu", "memory"] as const)(
+    "uses whole-number endpoints without changing the live %s percentage",
+    (kind) => {
+      const markup = renderToStaticMarkup(
+        <ResourceCapacityGauge kind={kind} usage={{ used: 2.98, total: 100 }} />,
+      );
+      expect(markup).toContain(">0%</text>");
+      expect(markup).toContain(">100%</text>");
+      expect(markup).toContain(">2.98%</div>");
+      expect(markup).not.toContain(">0.00%</text>");
+      expect(markup).not.toContain(">100.00%</text>");
+    },
+  );
   it("displays measured usage on the total-host CPU scale", () => {
     const markup = renderToStaticMarkup(
       <ResourceCapacityGauge kind="cpu" usage={{ used: 2.98, total: 100 }} />,

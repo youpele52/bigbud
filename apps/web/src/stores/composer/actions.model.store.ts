@@ -21,7 +21,6 @@ import { type ComposerDraftStoreState, type ComposerThreadDraftState } from "./t
 
 type SetFn = StoreApi<ComposerDraftStoreState>["setState"];
 type GetFn = StoreApi<ComposerDraftStoreState>["getState"];
-
 function isRuntimeMode(value: unknown): value is RuntimeMode {
   return value === "approval-required" || value === "auto-accept-edits" || value === "full-access";
 }
@@ -32,12 +31,12 @@ function upsertModelSelectionWithOptions(
   options: ProviderModelOptions[ProviderKind],
 ): ModelSelection {
   switch (provider) {
-    case "opencodeV2":
-      return createModelSelection(
-        provider,
-        current?.provider === provider ? current.model : DEFAULT_MODEL_BY_PROVIDER[provider],
-        options,
-      );
+    case "opencodeV2": {
+      const v2Options = options as NonNullable<ProviderModelOptions["opencodeV2"]>;
+      return current?.provider === "opencodeV2"
+        ? cloneModelSelection(current, { options: v2Options })
+        : createModelSelection("opencodeV2", DEFAULT_MODEL_BY_PROVIDER.opencodeV2, v2Options);
+    }
     case "codex": {
       const codexOptions = options as NonNullable<ProviderModelOptions["codex"]>;
       return current?.provider === "codex"
@@ -50,10 +49,12 @@ function upsertModelSelectionWithOptions(
         ? cloneModelSelection(current, { options: claudeOptions })
         : createModelSelection("claudeAgent", DEFAULT_MODEL_BY_PROVIDER.claudeAgent, claudeOptions);
     }
-    case "cliProxy":
+    case "cliProxy": {
+      const cliProxyOptions = options as NonNullable<ProviderModelOptions["cliProxy"]>;
       return current?.provider === "cliProxy"
-        ? cloneModelSelection(current, { options: {} })
-        : createModelSelection("cliProxy", DEFAULT_MODEL_BY_PROVIDER.cliProxy, {});
+        ? cloneModelSelection(current, { options: cliProxyOptions })
+        : createModelSelection("cliProxy", DEFAULT_MODEL_BY_PROVIDER.cliProxy, cliProxyOptions);
+    }
     case "copilot": {
       const copilotOptions = options as NonNullable<ProviderModelOptions["copilot"]>;
       return current?.provider === "copilot"
@@ -65,12 +66,6 @@ function upsertModelSelectionWithOptions(
       return current?.provider === "opencode"
         ? cloneModelSelection(current, { options: opencodeOptions })
         : createModelSelection("opencode", DEFAULT_MODEL_BY_PROVIDER.opencode, opencodeOptions);
-    }
-    case "kilocode": {
-      const kilocodeOptions = options as NonNullable<ProviderModelOptions["kilocode"]>;
-      return current?.provider === "kilocode"
-        ? cloneModelSelection(current, { options: kilocodeOptions })
-        : createModelSelection("kilocode", DEFAULT_MODEL_BY_PROVIDER.kilocode, kilocodeOptions);
     }
     case "pi": {
       const piOptions = options as NonNullable<ProviderModelOptions["pi"]>;
@@ -89,6 +84,12 @@ function upsertModelSelectionWithOptions(
       return current?.provider === "devin"
         ? cloneModelSelection(current, { options: devinOptions })
         : createModelSelection("devin", DEFAULT_MODEL_BY_PROVIDER.devin, devinOptions);
+    }
+    case "muse": {
+      const museOptions = options as NonNullable<ProviderModelOptions["muse"]>;
+      return current?.provider === "muse"
+        ? cloneModelSelection(current, { options: museOptions })
+        : createModelSelection("muse", DEFAULT_MODEL_BY_PROVIDER.muse, museOptions);
     }
   }
 }

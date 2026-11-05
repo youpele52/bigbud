@@ -7,7 +7,7 @@
  *
  * @module ThreadRecoveryIntentRepository
  */
-import type { MessageId, ProviderKind, ThreadId, TurnId } from "@bigbud/contracts";
+import type { MessageId, ThreadId, TurnId } from "@bigbud/contracts";
 import type {
   ThreadRecoveryDisposition,
   ThreadRecoveryReason,
@@ -39,7 +39,7 @@ export interface ThreadRecoveryDetail {
 export interface ThreadRecoveryIntent {
   readonly threadId: ThreadId;
   readonly messageId: MessageId;
-  readonly provider: ProviderKind | null;
+  readonly provider: string | null;
   readonly turnId: TurnId | null;
   readonly disposition: ThreadRecoveryDisposition;
   readonly recoveryStatus: ThreadRecoveryStatus;
@@ -78,7 +78,7 @@ export interface ThreadRecoveryIntentRepositoryShape {
   readonly recordAccepted: (input: {
     readonly threadId: ThreadId;
     readonly messageId: MessageId;
-    readonly provider: ProviderKind | null;
+    readonly provider: string | null;
     readonly createdAt: string;
     readonly detail?: ThreadRecoveryDetail;
     readonly attemptCount?: number;

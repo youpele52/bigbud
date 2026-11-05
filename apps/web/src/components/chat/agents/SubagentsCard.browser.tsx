@@ -78,15 +78,16 @@ describe("SubagentsCard", () => {
       for (const [label, tone] of labelTones) {
         await expect.element(page.getByText(label, { exact: true }).first()).toHaveClass(tone);
       }
-      expect(statusDot("root")?.classList).toContain("bg-blue-500");
-      expect(statusDot("root")?.classList).toContain("animate-breathe");
-      expect(statusDot("root")?.classList).toContain("motion-reduce:animate-none");
-      expect(statusDot("done")?.classList).toContain("bg-emerald-500");
-      expect(statusDot("done")?.classList).not.toContain("animate-breathe");
+      expect(statusDot("root")?.dataset.agentWorkingBlob).toBe("");
+      expect(statusDot("root")?.dataset.state).toBe("working");
+      expect(statusDot("root")?.style.getPropertyValue("--agent-blob-working")).toBe(
+        "var(--subagent)",
+      );
+      expect(statusDot("done")?.dataset.state).toBe("done");
       expect(statusDot("failed")?.classList).toContain("bg-red-500");
-      expect(statusDot("failed")?.classList).not.toContain("animate-breathe");
+      expect(statusDot("failed")?.dataset.agentWorkingBlob).toBeUndefined();
       expect(statusDot("stale")?.classList).toContain("bg-amber-500");
-      expect(statusDot("stale")?.classList).not.toContain("animate-breathe");
+      expect(statusDot("stale")?.dataset.agentWorkingBlob).toBeUndefined();
       await expect
         .element(page.getByTitle(/claude-sonnet-4-5-20250929/))
         .toHaveTextContent(/· high$/);
@@ -106,12 +107,11 @@ describe("SubagentsCard", () => {
     });
   }
 
-  it("animates the status dot while a subagent is starting", async () => {
+  it("shows the liquid loader while a subagent is starting", async () => {
     await page.viewport(375, 800);
     await render(<SubagentsCard agents={[agent("pending", { status: "pending" })]} />);
     await expect.element(page.getByText("starting", { exact: true })).toHaveClass(/text-blue-600/);
-    expect(statusDot("pending")?.classList).toContain("animate-breathe");
-    expect(statusDot("pending")?.classList).toContain("motion-reduce:animate-none");
+    expect(statusDot("pending")?.dataset.state).toBe("working");
   });
 
   it("nests a child under its parent task with indentation", async () => {

@@ -1,4 +1,4 @@
-import { QuillWrite02Icon, SaveIcon } from "@hugeicons/core-free-icons";
+import { QuillWrite01Icon, SaveIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useEffect, useState } from "react";
 
@@ -52,23 +52,6 @@ export function FilePreviewEditActions({
     (draft.status === "saved" || draft.status === "saving" || draft.status === "pending");
   return (
     <>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              aria-label={editing ? "Preview file" : "Edit file"}
-              aria-pressed={editing}
-              onClick={onToggle}
-            >
-              <HugeiconsIcon aria-hidden="true" icon={QuillWrite02Icon} />
-            </Button>
-          }
-        />
-        <TooltipPopup side="bottom">{editing ? "Preview file" : "Edit file"}</TooltipPopup>
-      </Tooltip>
       <span
         role="status"
         className={
@@ -107,6 +90,27 @@ export function FilePreviewEditActions({
           status
         )}
       </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              size="icon-xs"
+              variant="ghost"
+              aria-label={editing ? "Preview file" : "Edit file"}
+              aria-pressed={editing}
+              onClick={onToggle}
+            >
+              <HugeiconsIcon
+                aria-hidden="true"
+                icon={QuillWrite01Icon}
+                className={editing ? "text-info" : "text-muted-foreground"}
+              />
+            </Button>
+          }
+        />
+        <TooltipPopup side="bottom">{editing ? "Preview file" : "Edit file"}</TooltipPopup>
+      </Tooltip>
     </>
   );
 }

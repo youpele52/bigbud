@@ -1,5 +1,7 @@
+import { isRetiredProvider } from "@bigbud/shared/providerLifecycle";
 import {
   type ModelSelection,
+  type HistoricalModelSelection,
   type ProviderInteractionMode,
   type RuntimeMode,
   type ThreadId,
@@ -18,14 +20,14 @@ export async function persistThreadSettingsForNextTurn(input: {
   interactionMode: ProviderInteractionMode;
   serverThread:
     | {
-        modelSelection: ModelSelection;
+        modelSelection: HistoricalModelSelection;
         runtimeMode: RuntimeMode;
         interactionMode: ProviderInteractionMode;
       }
     | null
     | undefined;
 }) {
-  if (!input.serverThread) {
+  if (!input.serverThread || isRetiredProvider(input.serverThread.modelSelection.provider)) {
     return;
   }
   const api = readNativeApi();

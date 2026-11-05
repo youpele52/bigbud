@@ -1,3 +1,4 @@
+import { isRoutableProviderSelection } from "../../provider/providerSelectionCompatibility.ts";
 import {
   DEFAULT_SERVER_SETTINGS,
   ProviderKind,
@@ -7,11 +8,13 @@ import {
 import { Effect, Equal, Schema } from "effect";
 import { providerAttachmentIssue } from "@bigbud/shared/providerAttachments";
 import {
-  isLegacyOpencodeThread,
-  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+  isReadOnlyProviderThread,
+  getProviderReadOnlyMessage,
+  getReadOnlyThreadProvider,
 } from "@bigbud/shared/providerLifecycle";
 
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
+import { resolveProviderSessionExecutionTargets } from "../../provider/providerSessionExecutionTargets.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
 import { mapProviderSessionStatusToOrchestrationStatus } from "./ProviderCommandReactorHelpers.ts";
@@ -49,10 +52,16 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
     if (!thread) {
       return yield* Effect.die(new Error(`Thread '${threadId}' was not found in read model.`));
     }
-    if (isLegacyOpencodeThread(thread)) {
+    if (isReadOnlyProviderThread(thread)) {
       return yield* new ProviderValidationError({
         operation: "ProviderCommandReactor.ensureSessionForThread",
-        issue: LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+        issue: getProviderReadOnlyMessage(getReadOnlyThreadProvider(thread)),
+      });
+    }
+    if (!isRoutableProviderSelection(thread.modelSelection)) {
+      return yield* new ProviderValidationError({
+        operation: "ProviderCommandReactor.ensureSessionForThread",
+        issue: `Provider '${thread.modelSelection.provider}' is unavailable in this bigbud build.`,
       });
     }
     const desiredRuntimeMode = options?.runtimeMode ?? thread.runtimeMode;
@@ -145,7 +154,10 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       });
 
     const activeSession = yield* resolveActiveSession(threadId);
-    yield* assertActiveV2SessionLocation(activeSession, effectiveCwd);
+    yield* assertActiveV2SessionLocation(activeSession, effectiveCwd, {
+      ...resolveProviderSessionExecutionTargets(thread),
+      stateDir: services.serverConfig.stateDir,
+    });
     // Per-turn callers always supply their resolved runtime. Preserve existing
     // explicit session-reconfiguration behavior when no turn override is given.
     const ongoingWorkError =
@@ -249,6 +261,12 @@ export const sendTurnForThread = (services: SessionOpServices) =>
   Effect.fn("sendTurnForThread")(function* (input: SendTurnForThreadInput) {
     const thread = yield* services.resolveThread(input.threadId);
     if (!thread) return;
+    if (isReadOnlyProviderThread(thread)) {
+      return yield* new ProviderValidationError({
+        operation: "ProviderCommandReactor.sendTurnForThread",
+        issue: getProviderReadOnlyMessage(getReadOnlyThreadProvider(thread)),
+      });
+    }
     const effectiveInput = { ...input, ...resolveTurnExecutionSettings(thread, input) };
     const attachmentIssue =
       providerAttachmentIssue(

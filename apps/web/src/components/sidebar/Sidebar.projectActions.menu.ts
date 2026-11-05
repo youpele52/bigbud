@@ -1,25 +1,35 @@
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import type { Project } from "../../models/types";
-import { isSshExecutionTargetId } from "./Sidebar.projects.logic";
+import {
+  isRemoteExecutionTargetId,
+  isSshExecutionTargetId,
+} from "./Sidebar.remoteWorkspaces.logic";
 
 export function buildProjectContextMenuItems(input: {
   readonly project: Project;
   readonly reconnectDisabled: boolean;
 }) {
-  const isSshProject = isSshExecutionTargetId(resolveWorkspaceExecutionTargetId(input.project));
+  const target = resolveWorkspaceExecutionTargetId(input.project);
+  const isSshWorkspace = isSshExecutionTargetId(target);
+  const isRemoteWorkspace = isRemoteExecutionTargetId(target);
   return [
-    ...(isSshProject
-      ? ([
-          {
-            id: "reconnect",
-            label: "Reconnect",
-            disabled: input.reconnectDisabled,
-          },
-        ] as const)
+    ...(isSshWorkspace
+      ? [{ id: "reconnect", label: "Reconnect", disabled: input.reconnectDisabled }]
       : []),
-    { id: "rename", label: "Rename project" },
-    ...(isSshProject ? ([{ id: "edit-ssh", label: "Edit SSH configuration" }] as const) : []),
-    ...(input.project.cwd ? ([{ id: "copy-path", label: "Copy Project Path" }] as const) : []),
-    { id: "delete", label: "Remove project", destructive: true },
+    { id: "rename", label: isRemoteWorkspace ? "Rename remote workspace" : "Rename project" },
+    ...(isSshWorkspace ? [{ id: "edit-ssh", label: "Edit remote workspace" }] : []),
+    ...(input.project.cwd
+      ? [
+          {
+            id: "copy-path",
+            label: isRemoteWorkspace ? "Copy Workspace Path" : "Copy Project Path",
+          },
+        ]
+      : []),
+    {
+      id: "delete",
+      label: isRemoteWorkspace ? "Remove remote workspace" : "Remove project",
+      destructive: true,
+    },
   ];
 }

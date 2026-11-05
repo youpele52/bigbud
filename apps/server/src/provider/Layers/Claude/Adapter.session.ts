@@ -297,6 +297,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       effectivePermissionMode: permissionMode,
       currentApiModelId: apiModelId,
       currentEffort: effectiveEffort ?? undefined,
+      ...(harness?.modelCapabilities ? { modelCapabilities: harness.modelCapabilities } : {}),
       currentFastMode: fastMode,
       currentThinking: thinking,
       currentUltracode: ultracode,

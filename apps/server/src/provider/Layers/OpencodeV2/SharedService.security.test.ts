@@ -48,7 +48,7 @@ it("real HTTP redirect cannot forward native transport auth to another origin", 
   }
 });
 
-it("auth rotation changes handshake but never invents a new storage/generation identity", async () => {
+it("auth rotation changes the logical transport generation without inventing storage identity", async () => {
   const fixture = await sharedServiceTestRegistration();
   const calls: string[] = [];
   const local = createServer((request, response) => {
@@ -70,7 +70,8 @@ it("auth rotation changes handshake but never invents a new storage/generation i
       JSON.stringify({ ...fixture.value, url: origin, password: "rotated-fixture-password" }),
     );
     const second = await discoverV2SharedService({ file: fixture.file });
-    expect(first.generation).toBe(second.generation);
+    expect(first.generation).not.toBe(second.generation);
+    expect(second.generation).not.toContain("rotated-fixture-password");
     expect(calls).toEqual(["GET", "GET", "GET", "GET"]);
     expect(first).not.toHaveProperty("storageIdentity");
   } finally {

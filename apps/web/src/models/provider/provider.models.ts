@@ -154,10 +154,7 @@ function buildModelSelection(
   subProviderID: string | undefined,
 ): ModelSelection {
   if (
-    (provider === "pi" ||
-      provider === "opencode" ||
-      provider === "opencodeV2" ||
-      provider === "kilocode") &&
+    (provider === "pi" || provider === "opencode" || provider === "opencodeV2") &&
     subProviderID
   ) {
     return { provider, model, subProviderID } as ModelSelection;

@@ -1,22 +1,17 @@
+import { useSidebarProjectGitStatus } from "./Sidebar.state.gitStatus";
+import { useSidebarUiState } from "./Sidebar.state.ui";
+import { useSidebarChatPagination } from "./Sidebar.state.chatPagination";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
-import {
-  BUILT_IN_CHATS_PROJECT_ID,
-  isBuiltInChatsProject,
-  type ProjectId,
-  ThreadId,
-} from "@bigbud/contracts";
+import { isBuiltInChatsProject, type ProjectId, ThreadId } from "@bigbud/contracts";
+import { BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts/constants/project.constant";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { isElectron } from "../../config/env";
 import { useStore } from "../../stores/main";
-import { useUiStateStore } from "../../stores/ui";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
-import { useSidebarGitStatus } from "../../hooks/useSidebarGitStatus";
-import { resolveNewChatOptions, useHandleNewThread } from "../../hooks/useHandleNewThread";
+import { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { useServerProviders } from "../../rpc/serverState";
-import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import {
   shouldClearThreadSelectionOnMouseDown,
   sortProjectsForSidebar,
@@ -34,6 +29,7 @@ import { useSidebarProjectActions } from "./Sidebar.projectActions";
 import { useSidebarRemoteThreadActivation } from "./Sidebar.remoteThreadActivation";
 import { buildSidebarProjectSnapshots } from "./Sidebar.state.projectSnapshots";
 import { buildSharedProjectItemProps } from "./Sidebar.state.sharedProjectItemProps";
+import { useSidebarNewChatActions } from "./Sidebar.state.newChat";
 import { useSidebarVisibleThreads } from "./Sidebar.state.visibleThreads";
 import { useSidebarThreadActions } from "./Sidebar.threadActions";
 import { useSidebarRenderedProjects } from "./Sidebar.renderedProjects";
@@ -41,8 +37,6 @@ import { registerSidebarAddProjectHandlers } from "./SidebarAddProjectBridge";
 import { buildSidebarStateResult } from "./Sidebar.state.result";
 import { useSidebarRecentSections } from "./Sidebar.state.sections";
 import { useAutomationThreadIds } from "../automation/useAutomationThreadIds";
-import { readNativeApi } from "../../rpc/nativeApi";
-import { loadMoreProjectThreadSummaries } from "../../routes/-__root.bounded-bootstrap";
 import type { SharedProjectItemProps, SidebarProjectSnapshot, SidebarState } from "./Sidebar.types";
 
 export function useSidebarState(): SidebarState {
@@ -62,25 +56,12 @@ export function useSidebarState(): SidebarState {
     projectExpandedById,
     projectOrder,
     projectsExpanded,
-    remoteProjectsExpanded,
+    remoteWorkspacesExpanded,
     setChatsExpanded,
     setFavouritesExpanded,
     setProjectsExpanded,
-    setRemoteProjectsExpanded,
-  } = useUiStateStore(
-    useShallow((store) => ({
-      chatsExpanded: store.chatsExpanded,
-      favouritesExpanded: store.favouritesExpanded,
-      projectExpandedById: store.projectExpandedById,
-      projectOrder: store.projectOrder,
-      projectsExpanded: store.projectsExpanded,
-      remoteProjectsExpanded: store.remoteProjectsExpanded,
-      setChatsExpanded: store.setChatsExpanded,
-      setFavouritesExpanded: store.setFavouritesExpanded,
-      setProjectsExpanded: store.setProjectsExpanded,
-      setRemoteProjectsExpanded: store.setRemoteProjectsExpanded,
-    })),
-  );
+    setRemoteWorkspacesExpanded,
+  } = useSidebarUiState();
   const verifiedExecutionTargetIds = useRemoteAccessStore(
     (store) => store.verifiedExecutionTargetIds,
   );
@@ -155,30 +136,7 @@ export function useSidebarState(): SidebarState {
     () => new Map(projects.map((project) => [project.id, project.cwd] as const)),
     [projects],
   );
-  const projectExecutionTargetIdById = useMemo(
-    () =>
-      new Map(
-        projects.map(
-          (project) => [project.id, resolveWorkspaceExecutionTargetId(project)] as const,
-        ),
-      ),
-    [projects],
-  );
-
-  const threadGitTargets = useMemo(
-    () =>
-      sidebarThreads.map((thread) => ({
-        threadId: thread.id,
-        branch: thread.branch,
-        cwd: thread.worktreePath ?? projectCwdById.get(thread.projectId) ?? null,
-        executionTargetId:
-          thread.workspaceExecutionTargetId !== undefined || thread.executionTargetId !== undefined
-            ? resolveWorkspaceExecutionTargetId(thread)
-            : projectExecutionTargetIdById.get(thread.projectId),
-      })),
-    [projectCwdById, projectExecutionTargetIdById, sidebarThreads],
-  );
-  const prByThreadId = useSidebarGitStatus(threadGitTargets);
+  const prByThreadId = useSidebarProjectGitStatus(projects, sidebarThreads, projectCwdById);
 
   const dragInProgressRef = useRef(false);
   const suppressProjectClickAfterDragRef = useRef(false);
@@ -217,10 +175,12 @@ export function useSidebarState(): SidebarState {
     [navigate],
   );
 
-  const handleNewChat = useCallback(() => {
-    const projectId = chatsProjectId ?? BUILT_IN_CHATS_PROJECT_ID;
-    return handleNewThread(projectId, resolveNewChatOptions());
-  }, [chatsProjectId, handleNewThread]);
+  const { handleNewChat, handleNewChats } = useSidebarNewChatActions({
+    activeThread: activeThreadFull,
+    activeDraftThread,
+    chatsProjectId,
+    handleNewThread,
+  });
 
   const remoteThreadActivation = useSidebarRemoteThreadActivation({
     sidebarThreadsById,
@@ -288,7 +248,7 @@ export function useSidebarState(): SidebarState {
     clearSelection: threadActions.clearSelection,
     copyPathToClipboard,
     cancelThreadRename: forwardCancelThreadRename,
-    openRemoteProjectEditDialog: projectAddActions.openRemoteProjectEditDialog,
+    openRemoteWorkspaceEditDialog: projectAddActions.openRemoteWorkspaceEditDialog,
   });
 
   useEffect(
@@ -305,30 +265,12 @@ export function useSidebarState(): SidebarState {
 
   const [showAllFavourites, setShowAllFavourites] = useState(false);
   const [showAllChats, setShowAllChats] = useState(false);
-  const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
   const chatThreadCount = projectThreadCountsById?.[BUILT_IN_CHATS_PROJECT_ID];
-  const chatThreadCursor = threadSummaryCursorByProjectId[BUILT_IN_CHATS_PROJECT_ID];
-  const hasMoreChats =
-    chatThreadCursor === undefined
-      ? (chatThreadCount ?? 0) > sidebarRecentThreadIds.length
-      : chatThreadCursor !== null;
-  const loadMoreChats = useCallback(() => {
-    const api = readNativeApi();
-    if (!api || isLoadingMoreChats || !hasMoreChats) return;
-    setIsLoadingMoreChats(true);
-    void loadMoreProjectThreadSummaries({
-      api,
-      projectId: BUILT_IN_CHATS_PROJECT_ID,
-    })
-      .catch((error: unknown) => {
-        toastManager.add({
-          type: "error",
-          title: "Failed to load chats",
-          description: error instanceof Error ? error.message : "Unable to load more chats.",
-        });
-      })
-      .finally(() => setIsLoadingMoreChats(false));
-  }, [hasMoreChats, isLoadingMoreChats]);
+  const { isLoadingMoreChats, hasMoreChats, loadMoreChats } = useSidebarChatPagination(
+    chatThreadCount,
+    threadSummaryCursorByProjectId[BUILT_IN_CHATS_PROJECT_ID],
+    sidebarRecentThreadIds.length,
+  );
   const { favoriteThreadIds, renderedFavorites, renderedChats, visibleChatThreadIdsForJumpHints } =
     useSidebarRecentSections({
       favoriteThreadIds: sidebarPinnedThreadIds,
@@ -338,15 +280,11 @@ export function useSidebarState(): SidebarState {
       areChatsExpanded: chatsExpanded,
       showAllChats,
     });
-  const authoritativeChatCount = chatThreadCount;
   const collapsedHiddenChatCount =
-    authoritativeChatCount === undefined ? null : Math.max(0, authoritativeChatCount - 4);
+    chatThreadCount === undefined ? null : Math.max(0, chatThreadCount - 4);
   const unloadedChatCount =
-    authoritativeChatCount === undefined
-      ? null
-      : Math.max(0, authoritativeChatCount - renderedChats.length);
+    chatThreadCount === undefined ? null : Math.max(0, chatThreadCount - renderedChats.length);
 
-  // ── Rendered projects + jump hints + keyboard nav sub-hook ────────────────
   const renderedProjectsState = useSidebarRenderedProjects({
     sortedProjects,
     visibleChatThreadIds: visibleChatThreadIdsForJumpHints,
@@ -425,8 +363,8 @@ export function useSidebarState(): SidebarState {
     setAreChatsExpanded: setChatsExpanded,
     areProjectsExpanded: projectsExpanded,
     setAreProjectsExpanded: setProjectsExpanded,
-    areRemoteProjectsExpanded: remoteProjectsExpanded,
-    setAreRemoteProjectsExpanded: setRemoteProjectsExpanded,
+    areRemoteWorkspacesExpanded: remoteWorkspacesExpanded,
+    setAreRemoteWorkspacesExpanded: setRemoteWorkspacesExpanded,
     showAllChats,
     setShowAllChats,
     hasMoreChats,
@@ -451,6 +389,7 @@ export function useSidebarState(): SidebarState {
     projectActions,
     threadActions,
     handleNewChat,
+    handleNewChats,
     handleNewThread,
     sharedProjectItemProps,
     updateSettings,

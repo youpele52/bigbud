@@ -23,6 +23,8 @@ export interface PtyExitEvent {
 }
 
 export interface PtyProcess {
+  /** pid belongs to the remote host, never to the local ssh transport. */
+  readonly pidDomain?: "remote";
   /** Attached to an existing process whose earlier output is not replayed by this adapter. */
   readonly recovered?: boolean;
   /** Explicit replacement must wait for definitive exit and durable ownership release. */
@@ -39,6 +41,8 @@ export interface PtyProcess {
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
   onData(callback: (data: string) => void): () => void;
+  /** Fatal I/O failure is not exit evidence; implementations may replay a latched failure. */
+  readonly onError?: (callback: (error: Error) => void) => () => void;
   onExit(callback: (event: PtyExitEvent) => void): () => void;
 }
 

@@ -1,0 +1,2769 @@
+{
+  "profile": "cua-driver 0.38.0 darwin live tool schemas (static source transcription)",
+  "upstream": {
+    "repository": "https://github.com/trycua/cua",
+    "commit": "85e2b1318bd77ccf3cfa88ccdf875a4bb7eaed19",
+    "release": "cua-driver-rs-v0.38.0"
+  },
+  "method": "Text transcription of each ToolDef input_schema json! literal plus the advertising rules of cua-driver-core tool.rs advertised_runtime_input_schema (closed schemas gain `session`; typed-target tools gain the portable contract `target`) and cua-driver-contract advertised_tool_output_schema. Nothing was built or executed. Tool descriptions, capabilities and risk metadata are not transcribed.",
+  "resolutions": [
+    {
+      "tool": "list_windows",
+      "path": "$.properties.app.description",
+      "expr": "cua_driver_core::tool_args::LIST_WINDOWS_APP_FILTER_DESCRIPTION",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_args.rs"
+    },
+    {
+      "tool": "click",
+      "path": "$.properties.element_token",
+      "expr": "cua_driver_core::tool_schema::element_token_schema()",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "drag",
+      "path": "$.properties.delivery_mode",
+      "expr": "cua_driver_core::tool_schema::delivery_mode_schema_with(DELIVERY_MODE_DESCRIPTION)",
+      "source": "libs/cua-driver/rust/crates/platform-macos/src/tools/drag.rs"
+    },
+    {
+      "tool": "scroll",
+      "path": "$.properties.amount.minimum",
+      "expr": "AMOUNT_MIN",
+      "source": "libs/cua-driver/rust/crates/platform-macos/src/tools/scroll.rs"
+    },
+    {
+      "tool": "scroll",
+      "path": "$.properties.amount.maximum",
+      "expr": "AMOUNT_MAX",
+      "source": "libs/cua-driver/rust/crates/platform-macos/src/tools/scroll.rs"
+    },
+    {
+      "tool": "scroll",
+      "path": "$.properties.element_token",
+      "expr": "cua_driver_core::tool_schema::element_token_schema()",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "scroll",
+      "path": "$.properties.delivery_mode",
+      "expr": "cua_driver_core::tool_schema::delivery_mode_schema_with(\"Default \\\"background\\\": no fronting or focus steal. \\\"foreground\\\": briefly front the window, act, restore the prior app; last resort when background did not land.\")",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "type_text",
+      "path": "$.properties.element_token",
+      "expr": "cua_driver_core::tool_schema::element_token_schema()",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "press_key",
+      "path": "$.properties.element_token",
+      "expr": "cua_driver_core::tool_schema::element_token_schema()",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "press_key",
+      "path": "$.properties.delivery_mode",
+      "expr": "cua_driver_core::tool_schema::delivery_mode_schema_with(\"Default \\\"background\\\": no fronting or focus steal. \\\"foreground\\\": briefly front the window, act, restore the prior app; last resort when background did not land.\")",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "hotkey",
+      "path": "$.properties.element_token",
+      "expr": "cua_driver_core::tool_schema::element_token_schema()",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "hotkey",
+      "path": "$.properties.delivery_mode",
+      "expr": "cua_driver_core::tool_schema::delivery_mode_schema()",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "get_window_state",
+      "path": "$.properties.capture_mode",
+      "expr": "cua_driver_core::capture_mode::capture_mode_schema()",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/capture_mode.rs"
+    },
+    {
+      "tool": "get_window_state",
+      "path": "$.properties.timeout_ms",
+      "expr": "cua_driver_core::tool_schema::timeout_ms_schema()",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "get_window_state",
+      "path": "$.properties.timeout_ms.minimum",
+      "expr": "TIMEOUT_MS_MIN",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "get_window_state",
+      "path": "$.properties.timeout_ms.maximum",
+      "expr": "TIMEOUT_MS_MAX",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "get_window_state",
+      "path": "$.properties.timeout_ms.default",
+      "expr": "TIMEOUT_MS_DEFAULT",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "get_window_state",
+      "path": "$.properties.timeout_ms.description",
+      "expr": "format!(\n            \"Wall-clock budget in milliseconds for the accessibility-tree walk \\\n             (default {TIMEOUT_MS_DEFAULT}, min {TIMEOUT_MS_MIN}, max {TIMEOUT_MS_MAX}). \\\n             Bounds the WHOLE walk. When the budget runs out the tool returns the PARTIAL tree \\\n             it has, flagged with `truncated: true`, `truncation_reason`, `nodes_visited`, \\\n             `nodes_pending` and `elements_complete: false`; retry with a larger value \\\n             (e.g. 5000) or narrow with `query` / `max_depth`.\"\n        )",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/tool_schema.rs"
+    },
+    {
+      "tool": "get_window_state",
+      "path": "$.properties.display_only.description",
+      "expr": "DISPLAY_ONLY_DESCRIPTION",
+      "source": "libs/cua-driver/rust/crates/cua-driver-core/src/window_state_view.rs"
+    }
+  ],
+  "tools": {
+    "bring_to_front": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/bring_to_front.rs",
+        "blob": "8ba36c09a8d7da8f3c3e23d109778aa3816bb8e3",
+        "line": 47
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": ["pid"],
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "description": "Process ID of the app to activate."
+          },
+          "window_id": {
+            "type": "integer",
+            "description": "CGWindowID to verify as the focused, frontmost window. Omit to activate the app only."
+          },
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it. Omit it to use the authenticated transport's implicit lifecycle session."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": null
+    },
+    "check_permissions": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/check_permissions.rs",
+        "blob": "b7617427f1c885bec562ee164e15d02eb7f0c51c",
+        "line": 333
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "boolean",
+            "description": "Raise the system permission prompts for missing grants. Default false; only a trusted host setup route may set true.",
+            "default": false
+          },
+          "probe_direct_capture": {
+            "type": "boolean",
+            "description": "When prompting and Screen Recording is granted, also run the live ScreenCaptureKit probe that may raise Tahoe's direct-capture consent. Default true. Set false for a staged Accessibility/Screen Recording request."
+          },
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it. Omit it to use the authenticated transport's implicit lifecycle session."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": null
+    },
+    "click": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/click.rs",
+        "blob": "8503db326faa42687789ae42b39aa64a8e542d1b",
+        "line": 324
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it."
+          },
+          "pid": {
+            "type": "integer",
+            "description": "Target process ID. Optional with element_token (it carries the pid)."
+          },
+          "window_id": {
+            "type": "integer",
+            "description": "Target window ID. Omit with element_token."
+          },
+          "element_token": {
+            "type": "string",
+            "pattern": "^s[0-9a-f]{8}:[0-9]+$",
+            "description": "Element handle `<snapshot_id>:<row>` from get_window_state: row `[11]` of a read whose snapshot_id is s0000002a is \"s0000002a:11\" (also in `structuredContent.elements[].element_token`). Returns an explicit stale error naming the current snapshots once a newer read supersedes it."
+          },
+          "capture_id": {
+            "type": "string",
+            "description": "Optional capture ID from get_window_state or get_desktop_state. With x,y it is consumed atomically; stale or mismatched captures are refused."
+          },
+          "x": {
+            "type": "number",
+            "description": "X in screenshot pixels (get_window_state PNG, or get_desktop_state PNG for a desktop target)."
+          },
+          "y": {
+            "type": "number",
+            "description": "Y in screenshot pixels from the image selected by target."
+          },
+          "action": {
+            "type": "string",
+            "description": "AX action: press (default), show_menu, pick, confirm, cancel, open, show_alternate_ui, show_default_ui. show_alternate_ui reveals hover-only controls on an element that lists it, without the pointer."
+          },
+          "button": {
+            "type": "string",
+            "enum": ["left", "right", "middle"],
+            "description": "Mouse button. Default left."
+          },
+          "count": {
+            "type": "integer",
+            "description": "Click count (pixel path only). Default 1."
+          },
+          "modifier": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Modifier keys: cmd, shift, option/alt, ctrl."
+          },
+          "from_zoom": {
+            "type": "boolean",
+            "description": "x and y are in the last zoom image for this pid."
+          },
+          "debug_image_out": {
+            "type": "string",
+            "description": "Write a screenshot with a crosshair at (x, y) to this path. Needs window_id; not with from_zoom."
+          },
+          "delivery_mode": {
+            "type": "string",
+            "enum": ["background", "foreground"],
+            "description": "Default \"background\" (no fronting). \"foreground\" briefly fronts the window, acts, then restores the prior app; needs window_id and is required for modified clicks. Escalate in order: AX element_token, background pixel, foreground, checking state between rungs; a click has no read-back except list-row selection."
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["window", "desktop"],
+            "description": "Default \"window\". \"desktop\": x,y with no pid/window_id are true screen pixels from get_desktop_state."
+          },
+          "target": {
+            "additionalProperties": true,
+            "description": "Exact window (kind \"window\", with pid and window_id) or desktop (kind \"desktop\", with display_id). \"primary\" is the portable desktop target.",
+            "properties": {
+              "display_id": {
+                "description": "Display id. Required when kind is desktop; use \"primary\".",
+                "type": "string"
+              },
+              "kind": {
+                "description": "window requires pid and window_id; desktop requires display_id.",
+                "enum": ["window", "desktop"],
+                "type": "string"
+              },
+              "pid": {
+                "description": "Process id. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "window_id": {
+                "description": "Window id from list_windows. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": ["kind"],
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "delivery": {
+                "additionalProperties": false,
+                "properties": {
+                  "delivered_count": {
+                    "minimum": 0,
+                    "type": ["integer", "null"]
+                  },
+                  "mode": {
+                    "enum": ["background", "foreground", "not_applicable", "unknown"],
+                    "type": "string"
+                  }
+                },
+                "required": ["mode"],
+                "type": ["object", "null"]
+              },
+              "effect": {
+                "enum": ["confirmed", "partial", "unverifiable", "suspected_noop", "refused"],
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "hint": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["code"],
+                "type": ["object", "null"]
+              },
+              "escalation": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "route_unavailable",
+                      "delivery_failed",
+                      "effect_unconfirmed",
+                      "suspected_noop",
+                      "permission_required"
+                    ],
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": ["pixel", "foreground", "page", "session"],
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "reason"],
+                "type": ["object", "null"]
+              },
+              "evidence": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "detail": {
+                      "type": ["string", "null"]
+                    },
+                    "kind": {
+                      "enum": ["value_readback", "window_change"],
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind"],
+                  "type": "object"
+                },
+                "type": ["array", "null"]
+              },
+              "hint": {
+                "type": ["string", "null"]
+              },
+              "next_call": {
+                "additionalProperties": false,
+                "properties": {
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "tool": {
+                    "type": "string"
+                  }
+                },
+                "required": ["tool", "arguments"],
+                "type": ["object", "null"]
+              },
+              "route": {
+                "enum": [
+                  "accessibility",
+                  "synthetic_events",
+                  "global_input",
+                  "system_api",
+                  "dom",
+                  "trusted_input"
+                ],
+                "type": "string"
+              },
+              "summary": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["effect", "route"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "drag": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/drag.rs",
+        "blob": "8e8d8a2a7e88b1ab6f194e5322e44c4ce0b7f40a",
+        "line": 78
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": ["from_x", "from_y", "to_x", "to_y"],
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it. Omit it to use the authenticated transport's implicit lifecycle session."
+          },
+          "pid": {
+            "type": "integer",
+            "description": "Target process ID."
+          },
+          "window_id": {
+            "type": "integer",
+            "description": "CGWindowID for the window the pixel coordinates were measured against. Optional only when pid owns exactly one eligible top-level window; otherwise the action refuses with ambiguous_window_target."
+          },
+          "from_x": {
+            "type": "number",
+            "description": "Drag-start X in window-local screenshot pixels. Top-left origin."
+          },
+          "from_y": {
+            "type": "number",
+            "description": "Drag-start Y in window-local screenshot pixels. Top-left origin."
+          },
+          "to_x": {
+            "type": "number",
+            "description": "Drag-end X in window-local screenshot pixels."
+          },
+          "to_y": {
+            "type": "number",
+            "description": "Drag-end Y in window-local screenshot pixels."
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "Wall-clock duration of the drag path between mouseDown and mouseUp. Default: 500."
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "description": "Number of intermediate mouseDragged events linearly interpolated along the path. Default: 20."
+          },
+          "modifier": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Modifier keys held across the entire gesture: cmd/shift/option/ctrl."
+          },
+          "button": {
+            "type": "string",
+            "enum": ["left", "right", "middle"],
+            "description": "Mouse button used for the drag. Default: left."
+          },
+          "from_zoom": {
+            "type": "boolean",
+            "description": "When true, coordinates are in the last zoom image for this pid; driver maps back to window coordinates."
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["window", "desktop"],
+            "default": "window",
+            "description": "Use desktop with no pid/window_id for native get_desktop_state screenshot coordinates."
+          },
+          "delivery_mode": {
+            "type": "string",
+            "enum": ["background", "foreground"],
+            "description": "Window-scoped drag on macOS: \"background\" (default) posts the press, drag and release to the exact window (window_id required) without moving the pointer, raising the window or taking the user's focus. \"foreground\" briefly fronts the window, drives the physical pointer through the gesture, then restores the prior frontmost app; use it only when a background drag had no effect. Desktop scope ignores this field."
+          },
+          "target": {
+            "additionalProperties": true,
+            "description": "Preferred per-call target: an exact window (`kind=\"window\"`, `pid`, `window_id`) or the\nprimary desktop (`kind=\"desktop\"`, `display_id=\"primary\"`).",
+            "properties": {
+              "display_id": {
+                "description": "Display id. Required when kind is desktop; use \"primary\".",
+                "type": "string"
+              },
+              "kind": {
+                "description": "window requires pid and window_id; desktop requires display_id.",
+                "enum": ["window", "desktop"],
+                "type": "string"
+              },
+              "pid": {
+                "description": "Process id. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "window_id": {
+                "description": "Window id from list_windows. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": ["kind"],
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "delivery": {
+                "additionalProperties": false,
+                "properties": {
+                  "delivered_count": {
+                    "minimum": 0,
+                    "type": ["integer", "null"]
+                  },
+                  "mode": {
+                    "enum": ["background", "foreground", "not_applicable", "unknown"],
+                    "type": "string"
+                  }
+                },
+                "required": ["mode"],
+                "type": ["object", "null"]
+              },
+              "effect": {
+                "enum": ["confirmed", "partial", "unverifiable", "suspected_noop", "refused"],
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "hint": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["code"],
+                "type": ["object", "null"]
+              },
+              "escalation": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "route_unavailable",
+                      "delivery_failed",
+                      "effect_unconfirmed",
+                      "suspected_noop",
+                      "permission_required"
+                    ],
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": ["pixel", "foreground", "page", "session"],
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "reason"],
+                "type": ["object", "null"]
+              },
+              "evidence": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "detail": {
+                      "type": ["string", "null"]
+                    },
+                    "kind": {
+                      "enum": ["value_readback", "window_change"],
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind"],
+                  "type": "object"
+                },
+                "type": ["array", "null"]
+              },
+              "hint": {
+                "type": ["string", "null"]
+              },
+              "next_call": {
+                "additionalProperties": false,
+                "properties": {
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "tool": {
+                    "type": "string"
+                  }
+                },
+                "required": ["tool", "arguments"],
+                "type": ["object", "null"]
+              },
+              "route": {
+                "enum": [
+                  "accessibility",
+                  "synthetic_events",
+                  "global_input",
+                  "system_api",
+                  "dom",
+                  "trusted_input"
+                ],
+                "type": "string"
+              },
+              "summary": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["effect", "route"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "end_session": {
+      "source": {
+        "path": "libs/cua-driver/contract/manifest.json",
+        "via": "libs/cua-driver/rust/crates/cua-driver-core/src/session_tools.rs (ToolDef::from_contract)"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "additionalProperties": true,
+        "properties": {
+          "session": {
+            "description": "Optional public label to end. When omitted, end the caller's attached\nimplicit session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "properties": {
+              "active": {
+                "const": false
+              },
+              "session": {
+                "type": "string"
+              }
+            },
+            "required": ["session", "active"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "get_accessibility_tree": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/get_accessibility_tree.rs",
+        "blob": "c66c8d8cf124861696a44aad0fbef00b16d3b41a",
+        "line": 38
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it. Omit it to use the authenticated transport's implicit lifecycle session."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": null
+    },
+    "get_session": {
+      "source": {
+        "path": "libs/cua-driver/contract/manifest.json",
+        "via": "libs/cua-driver/rust/crates/cua-driver-core/src/session_tools.rs (ToolDef::from_contract)"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "additionalProperties": true,
+        "properties": {
+          "session": {
+            "description": "Optional public label. When omitted, inspect the caller's attached\nimplicit session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "properties": {
+              "client_kind": {
+                "enum": ["cli", "direct", "mcp", "python_sdk", "typescript_sdk"],
+                "type": "string"
+              },
+              "cursor_visible": {
+                "type": "boolean"
+              },
+              "expires_in_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "idle_seconds": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "implicit": {
+                "type": "boolean"
+              },
+              "recording_active": {
+                "type": "boolean"
+              },
+              "session": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "state": {
+                "enum": ["active", "ending"],
+                "type": "string"
+              },
+              "transport": {
+                "enum": ["cli", "daemon", "mcp_stdio", "mcp_http"],
+                "type": "string"
+              }
+            },
+            "required": [
+              "session",
+              "implicit",
+              "state",
+              "client_kind",
+              "transport",
+              "cursor_visible",
+              "recording_active",
+              "idle_seconds",
+              "expires_in_seconds"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "get_session_state": {
+      "source": {
+        "path": "libs/cua-driver/contract/manifest.json",
+        "via": "libs/cua-driver/rust/crates/cua-driver-core/src/session_tools.rs (ToolDef::from_contract)"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "additionalProperties": true,
+        "properties": {
+          "session": {
+            "description": "Optional public label. When omitted, inspect the caller's attached\nimplicit session.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "properties": {
+              "capture_scope": {
+                "enum": ["auto", "window", "desktop"],
+                "type": "string"
+              },
+              "desktop_capture_authorized": {
+                "type": "boolean"
+              },
+              "desktop_unlocked": {
+                "type": "boolean"
+              },
+              "effective_scope": {
+                "enum": ["window", "desktop"],
+                "type": "string"
+              },
+              "escalation_detail": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "escalation_reason": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "ax_tree_pixel_mismatch",
+                      "background_delivery_failed",
+                      "foreground_ineffective",
+                      "no_window_target",
+                      "other"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "session": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "session",
+              "capture_scope",
+              "effective_scope",
+              "desktop_capture_authorized",
+              "desktop_unlocked",
+              "escalation_reason",
+              "escalation_detail"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "get_window_state": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/get_window_state.rs",
+        "blob": "133dff936368456b065e81f72daf6ee63c338e7a",
+        "line": 39,
+        "extended_by": "libs/cua-driver/rust/crates/cua-driver-core/src/window_state_view.rs",
+        "extended_by_blob": "8505c3d1c9a04a8fad2b51620c9235624eca0bbd"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": ["pid", "window_id"],
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it."
+          },
+          "pid": {
+            "type": "integer",
+            "description": "Target process ID."
+          },
+          "window_id": {
+            "type": "integer",
+            "description": "Target window ID from list_windows."
+          },
+          "query": {
+            "type": "string",
+            "description": "Case-insensitive substring filter: returns matching rows plus ancestors; element_index values are not renumbered. Try this before a full read."
+          },
+          "capture_mode": {
+            "type": "string",
+            "enum": ["ax", "vision"],
+            "description": "DEPRECATED and ignored. get_window_state always returns BOTH the element tree and a screenshot — ground on both. The modality is chosen at action time by how you address the target: an element ax action (element_token) or an element px action (x,y). Any value (including the old \"som\"/\"screenshot\" aliases) is accepted but has no effect."
+          },
+          "include_accessibility_tree": {
+            "type": "boolean",
+            "description": "Default true. False skips the AX walk and returns the screenshot plus window metadata. Both this and include_screenshot false is an error."
+          },
+          "include_screenshot": {
+            "type": "boolean",
+            "description": "Default true. False returns the tree only (saves image tokens and latency); screenshot_out_file still forces a capture."
+          },
+          "screenshot_out_file": {
+            "type": "string",
+            "description": "When set, write the PNG to this file path (~ expanded) instead of embedding base64 in the response. The structured output will contain screenshot_file_path instead."
+          },
+          "max_elements": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Cap on AX nodes walked (depth-first; markdown and elements truncate together). Default 250 (2 000 with full_output:true); the response states when the tree was cut."
+          },
+          "max_depth": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Cap on walk depth. Default 25."
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 120000,
+            "default": 1000,
+            "description": "Wall-clock budget in milliseconds for the accessibility-tree walk (default 1000, min 100, max 120000). Bounds the WHOLE walk. When the budget runs out the tool returns the PARTIAL tree it has, flagged with `truncated: true`, `truncation_reason`, `nodes_visited`, `nodes_pending` and `elements_complete: false`; retry with a larger value (e.g. 5000) or narrow with `query` / `max_depth`."
+          },
+          "max_dimension": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional cap on the returned screenshot's long edge, in pixels (aspect ratio preserved) — the cheap path for a small preview / thumbnail. Applied on top of the session/global max_image_dimension ceiling; the tighter of the two wins. Omit for the configured default."
+          },
+          "max_image_dimension": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Per-call override for the returned screenshot's long edge in pixels. An explicit value wins over the session/global setting; 0 returns native resolution. Omit to preserve configured behavior."
+          },
+          "tree_format": {
+            "type": "string",
+            "enum": ["markdown", "elements", "both"],
+            "description": "Which tree representation to return. Default \"markdown\": the compact `tree_markdown` only, where a row `[N]` is addressed with element_token `<snapshot_id>:N`. \"elements\": the structured `elements` array only (per-element element_token, frame, parent_index, value). \"both\": the two together, as before; roughly doubles the size."
+          },
+          "since": {
+            "type": "string",
+            "description": "A `snapshot_id` from an earlier get_window_state of the same window, or \"latest\" for this window's most recent read with the same query/max_elements/max_depth. Use it on every re-read after acting. Returns only what changed against that snapshot: `+` added rows, `~` changed rows, `-` removed rows (removed ids are the old snapshot's), or `no change`. Falls back to a full read when the snapshot is unknown, expired, belongs to another window, or was read with a different query/max_elements/max_depth; `since_status` says which. The response still carries a NEW snapshot_id and its element_tokens; rows not listed keep their previous [N] unless a `reindexed:` line says otherwise."
+          },
+          "verbose": {
+            "type": "boolean",
+            "description": "Default false. Set true to include the `_note` string and the full `background_input` capability report (macOS), which are omitted by default to save context."
+          },
+          "full_output": {
+            "type": "boolean",
+            "description": "Default false. Set true to restore the previous full response: both `elements` and `tree_markdown`, all metadata, and the platform's own walk limits unless max_elements / max_depth are passed. Does not combine with `since`."
+          },
+          "display_only": {
+            "type": "boolean",
+            "description": "Default false. With include_accessibility_tree:false, returns pixels for display without registering an action capture or replacing the agent snapshot. The image cannot ground input actions."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "properties": {
+              "app_name": {
+                "type": ["string", "null"]
+              },
+              "degraded": {
+                "type": ["boolean", "null"]
+              },
+              "degraded_reason": {
+                "type": ["string", "null"]
+              },
+              "element_count": {
+                "minimum": 0,
+                "type": ["integer", "null"]
+              },
+              "elements": {
+                "items": {
+                  "properties": {
+                    "actions": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": ["array", "null"]
+                    },
+                    "depth": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "element_index": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "element_token": {
+                      "type": ["string", "null"]
+                    },
+                    "enabled": {
+                      "type": ["boolean", "null"]
+                    },
+                    "frame": {
+                      "properties": {
+                        "h": {
+                          "type": "number"
+                        },
+                        "w": {
+                          "type": "number"
+                        },
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y", "w", "h"],
+                      "type": ["object", "null"]
+                    },
+                    "in_web_content": {
+                      "type": ["boolean", "null"]
+                    },
+                    "label": {
+                      "type": ["string", "null"]
+                    },
+                    "max": {
+                      "type": ["number", "null"]
+                    },
+                    "min": {
+                      "type": ["number", "null"]
+                    },
+                    "parent_index": {
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "role": {
+                      "type": "string"
+                    },
+                    "selected": {
+                      "type": ["boolean", "null"]
+                    },
+                    "value": {
+                      "type": ["string", "null"]
+                    },
+                    "value_description": {
+                      "type": ["string", "null"]
+                    }
+                  },
+                  "required": ["element_index", "role", "depth"],
+                  "type": "object"
+                },
+                "type": ["array", "null"]
+              },
+              "elements_complete": {
+                "type": ["boolean", "null"]
+              },
+              "filtered_element_count": {
+                "minimum": 0,
+                "type": ["integer", "null"]
+              },
+              "pid": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "returned_element_count": {
+                "minimum": 0,
+                "type": ["integer", "null"]
+              },
+              "screenshot_file_path": {
+                "type": ["string", "null"]
+              },
+              "screenshot_frame_valid": {
+                "type": ["boolean", "null"]
+              },
+              "screenshot_height": {
+                "minimum": 0,
+                "type": ["integer", "null"]
+              },
+              "screenshot_mime_type": {
+                "type": ["string", "null"]
+              },
+              "screenshot_scale": {
+                "type": ["number", "null"]
+              },
+              "screenshot_width": {
+                "minimum": 0,
+                "type": ["integer", "null"]
+              },
+              "since": {
+                "type": ["string", "null"]
+              },
+              "since_status": {
+                "type": ["string", "null"]
+              },
+              "snapshot_id": {
+                "type": ["string", "null"]
+              },
+              "total_element_count": {
+                "minimum": 0,
+                "type": ["integer", "null"]
+              },
+              "tree_diff": {
+                "type": ["string", "null"]
+              },
+              "tree_format": {
+                "type": ["string", "null"]
+              },
+              "tree_markdown": {
+                "type": ["string", "null"]
+              },
+              "truncated": {
+                "type": ["boolean", "null"]
+              },
+              "truncation_hint": {
+                "type": ["string", "null"]
+              },
+              "truncation_reason": {
+                "type": ["string", "null"]
+              },
+              "window_bounds": {
+                "properties": {
+                  "height": {
+                    "type": "number"
+                  },
+                  "width": {
+                    "type": "number"
+                  },
+                  "x": {
+                    "type": "number"
+                  },
+                  "y": {
+                    "type": "number"
+                  }
+                },
+                "required": ["x", "y", "width", "height"],
+                "type": ["object", "null"]
+              },
+              "window_id": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "window_title": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["pid", "window_id"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "health_report": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/cua-driver-core/src/health_report.rs",
+        "blob": "81f7d2738d74d3ecb902c7d2c86f25ae0962e2f3",
+        "line": 419
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "include": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Only run these checks (canonical names). Wins over `skip`."
+          },
+          "skip": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Skip these checks (canonical names). Ignored when `include` is set."
+          },
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it. Omit it to use the authenticated transport's implicit lifecycle session."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": null
+    },
+    "hotkey": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/hotkey.rs",
+        "blob": "2bf28e058205325f5d088e816b6b680852cf96ae",
+        "line": 67
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": ["keys"],
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it. Omit it to use the authenticated transport's implicit lifecycle session."
+          },
+          "pid": {
+            "type": "integer",
+            "description": "Target process ID. Required with x, y; optional with element_token (the token carries the pid)."
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 2,
+            "description": "Modifier(s) and one non-modifier key, e.g. [\"cmd\", \"c\"]."
+          },
+          "x": {
+            "type": "number",
+            "description": "Screenshot-pixel X — the element px action form: pixel-click there to focus, then send the combo (so e.g. Cmd+V pastes into that field). Pass with y. Use for Chromium/Electron surfaces the background combo can't reach."
+          },
+          "y": {
+            "type": "number",
+            "description": "Screenshot-pixel Y (see x)."
+          },
+          "window_id": {
+            "type": "integer",
+            "description": "Target window. Required for delivery_mode:\"foreground\" (the NSMenu activation needs a window). Does NOT itself raise the window — raising is gated on delivery_mode."
+          },
+          "element_token": {
+            "type": "string",
+            "pattern": "^s[0-9a-f]{8}:[0-9]+$",
+            "description": "Element handle `<snapshot_id>:<row>` from get_window_state: row `[11]` of a read whose snapshot_id is s0000002a is \"s0000002a:11\" (also in `structuredContent.elements[].element_token`). Returns an explicit stale error naming the current snapshots once a newer read supersedes it."
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["window", "desktop"],
+            "default": "window",
+            "description": "Use desktop with no pid/window_id to send the chord to the frontmost application."
+          },
+          "delivery_mode": {
+            "type": "string",
+            "enum": ["background", "foreground"],
+            "description": "Best-effort-background ladder rung (default \"background\"). \"background\": inject without fronting or raising the target — no focus steal. \"foreground\": briefly front the target, act, then restore the prior frontmost — the explicit last resort when a background attempt didn't land. Re-call with \"foreground\" only for the action that needs it."
+          },
+          "target": {
+            "additionalProperties": true,
+            "description": "Preferred per-call target: an exact window (`kind=\"window\"`, `pid`, `window_id`) or the\nprimary desktop (`kind=\"desktop\"`, `display_id=\"primary\"`).",
+            "properties": {
+              "display_id": {
+                "description": "Display id. Required when kind is desktop; use \"primary\".",
+                "type": "string"
+              },
+              "kind": {
+                "description": "window requires pid and window_id; desktop requires display_id.",
+                "enum": ["window", "desktop"],
+                "type": "string"
+              },
+              "pid": {
+                "description": "Process id. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "window_id": {
+                "description": "Window id from list_windows. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": ["kind"],
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "delivery": {
+                "additionalProperties": false,
+                "properties": {
+                  "delivered_count": {
+                    "minimum": 0,
+                    "type": ["integer", "null"]
+                  },
+                  "mode": {
+                    "enum": ["background", "foreground", "not_applicable", "unknown"],
+                    "type": "string"
+                  }
+                },
+                "required": ["mode"],
+                "type": ["object", "null"]
+              },
+              "effect": {
+                "enum": ["confirmed", "partial", "unverifiable", "suspected_noop", "refused"],
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "hint": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["code"],
+                "type": ["object", "null"]
+              },
+              "escalation": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "route_unavailable",
+                      "delivery_failed",
+                      "effect_unconfirmed",
+                      "suspected_noop",
+                      "permission_required"
+                    ],
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": ["pixel", "foreground", "page", "session"],
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "reason"],
+                "type": ["object", "null"]
+              },
+              "evidence": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "detail": {
+                      "type": ["string", "null"]
+                    },
+                    "kind": {
+                      "enum": ["value_readback", "window_change"],
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind"],
+                  "type": "object"
+                },
+                "type": ["array", "null"]
+              },
+              "hint": {
+                "type": ["string", "null"]
+              },
+              "next_call": {
+                "additionalProperties": false,
+                "properties": {
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "tool": {
+                    "type": "string"
+                  }
+                },
+                "required": ["tool", "arguments"],
+                "type": ["object", "null"]
+              },
+              "route": {
+                "enum": [
+                  "accessibility",
+                  "synthetic_events",
+                  "global_input",
+                  "system_api",
+                  "dom",
+                  "trusted_input"
+                ],
+                "type": "string"
+              },
+              "summary": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["effect", "route"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "launch_app": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/launch_app.rs",
+        "blob": "be0d3ea9a5d9143280ee8432420875c737a8a45b",
+        "line": 44
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "bundle_id": {
+            "type": "string",
+            "description": "App bundle identifier, e.g. com.apple.calculator. Preferred over name."
+          },
+          "name": {
+            "type": "string",
+            "description": "App display name, or absolute path to a .app bundle (e.g. launch_path from list_apps). Used only when bundle_id is absent."
+          },
+          "urls": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Optional file paths or URLs to open with the app (e.g. a folder path for Finder)."
+          },
+          "webkit_inspector_port": {
+            "type": "integer",
+            "description": "Open a WebKit inspector server on this port (sets WEBKIT_INSPECTOR_SERVER env var)."
+          },
+          "creates_new_application_instance": {
+            "type": "boolean",
+            "description": "When true, force a new app instance even if already running (open -n). Use for concurrent multi-agent/multi-session work so each session gets an isolated instance + window instead of sharing one — on single-instance apps (e.g. Calculator) every caller otherwise gets the same window and the sessions clobber each other."
+          },
+          "additional_arguments": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Extra arguments appended after --args when launching."
+          },
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it. Omit it to use the authenticated transport's implicit lifecycle session."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": null
+    },
+    "list_apps": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/list_apps.rs",
+        "blob": "c56eed97404e4228af95202015ab190cccb4dc08",
+        "line": 43
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it. Omit it to use the authenticated transport's implicit lifecycle session."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "properties": {
+              "apps": {
+                "items": {
+                  "properties": {
+                    "active": {
+                      "type": "boolean"
+                    },
+                    "bundle_id": {
+                      "type": ["string", "null"]
+                    },
+                    "kind": {
+                      "type": ["string", "null"]
+                    },
+                    "last_used": {
+                      "type": ["string", "null"]
+                    },
+                    "launch_path": {
+                      "type": ["string", "null"]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "pid": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "running": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": ["pid", "name", "running", "active"],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["apps"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "list_windows": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/list_windows.rs",
+        "blob": "1c7449e4798fdc642e97ddcd3df3f9874cc444bd",
+        "line": 18
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pid": {
+            "type": "integer",
+            "description": "Only this pid's windows, on every layer."
+          },
+          "app": {
+            "type": "string",
+            "description": "Only windows of apps whose name contains this text (case-insensitive), or whose bundle id equals it. Prefer this or `pid` over an unfiltered call, which returns every window on the host."
+          },
+          "on_screen_only": {
+            "type": "boolean",
+            "description": "Drop windows not on the current Space."
+          },
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it. Omit it to use the authenticated transport's implicit lifecycle session."
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "properties": {
+              "current_space_id": {
+                "minimum": 0,
+                "type": ["integer", "null"]
+              },
+              "windows": {
+                "items": {
+                  "properties": {
+                    "app_name": {
+                      "type": "string"
+                    },
+                    "bounds": {
+                      "properties": {
+                        "height": {
+                          "type": "number"
+                        },
+                        "width": {
+                          "type": "number"
+                        },
+                        "x": {
+                          "type": "number"
+                        },
+                        "y": {
+                          "type": "number"
+                        }
+                      },
+                      "required": ["x", "y", "width", "height"],
+                      "type": "object"
+                    },
+                    "current_space_id": {
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "is_on_screen": {
+                      "type": "boolean"
+                    },
+                    "layer": {
+                      "format": "int32",
+                      "type": ["integer", "null"]
+                    },
+                    "minimized": {
+                      "type": ["boolean", "null"]
+                    },
+                    "on_current_space": {
+                      "type": ["boolean", "null"]
+                    },
+                    "pid": {
+                      "maximum": 4294967295,
+                      "minimum": 0,
+                      "type": ["integer", "null"]
+                    },
+                    "space_ids": {
+                      "items": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "type": ["array", "null"]
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "window_id": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "z_index": {
+                      "description": "Higher values are closer to the front. Null means the provider cannot observe stacking order; callers must not infer an order from array position or treat null as zero.",
+                      "type": ["integer", "null"]
+                    }
+                  },
+                  "required": [
+                    "window_id",
+                    "pid",
+                    "app_name",
+                    "title",
+                    "bounds",
+                    "is_on_screen",
+                    "z_index"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            },
+            "required": ["windows"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "press_key": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/press_key.rs",
+        "blob": "e4d007f0bcd963cc82b12cfda6b09bf970948695",
+        "line": 222
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": ["key"],
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it."
+          },
+          "pid": {
+            "type": "integer",
+            "description": "Target process ID."
+          },
+          "key": {
+            "type": "string",
+            "description": "Key name."
+          },
+          "modifiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "cmd, shift, option/alt, ctrl, fn."
+          },
+          "window_id": {
+            "type": "integer",
+            "description": "Target window; required for foreground. Does not raise by itself."
+          },
+          "element_token": {
+            "type": "string",
+            "pattern": "^s[0-9a-f]{8}:[0-9]+$",
+            "description": "Element handle `<snapshot_id>:<row>` from get_window_state: row `[11]` of a read whose snapshot_id is s0000002a is \"s0000002a:11\" (also in `structuredContent.elements[].element_token`). Returns an explicit stale error naming the current snapshots once a newer read supersedes it."
+          },
+          "x": {
+            "type": "number",
+            "description": "Screenshot-pixel X: pixel-click to focus, then send the key. With y, no element_token."
+          },
+          "y": {
+            "type": "number",
+            "description": "Screenshot-pixel Y (see x)."
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["window", "desktop"],
+            "default": "window",
+            "description": "\"desktop\" with no pid/window_id sends to the frontmost app."
+          },
+          "delivery_mode": {
+            "type": "string",
+            "enum": ["background", "foreground"],
+            "description": "Default \"background\": no fronting or focus steal. \"foreground\": briefly front the window, act, restore the prior app; last resort when background did not land."
+          },
+          "target": {
+            "additionalProperties": true,
+            "description": "Preferred per-call target: an exact window (`kind=\"window\"`, `pid`, `window_id`) or the\nprimary desktop (`kind=\"desktop\"`, `display_id=\"primary\"`).",
+            "properties": {
+              "display_id": {
+                "description": "Display id. Required when kind is desktop; use \"primary\".",
+                "type": "string"
+              },
+              "kind": {
+                "description": "window requires pid and window_id; desktop requires display_id.",
+                "enum": ["window", "desktop"],
+                "type": "string"
+              },
+              "pid": {
+                "description": "Process id. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "window_id": {
+                "description": "Window id from list_windows. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": ["kind"],
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "delivery": {
+                "additionalProperties": false,
+                "properties": {
+                  "delivered_count": {
+                    "minimum": 0,
+                    "type": ["integer", "null"]
+                  },
+                  "mode": {
+                    "enum": ["background", "foreground", "not_applicable", "unknown"],
+                    "type": "string"
+                  }
+                },
+                "required": ["mode"],
+                "type": ["object", "null"]
+              },
+              "effect": {
+                "enum": ["confirmed", "partial", "unverifiable", "suspected_noop", "refused"],
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "hint": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["code"],
+                "type": ["object", "null"]
+              },
+              "escalation": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "route_unavailable",
+                      "delivery_failed",
+                      "effect_unconfirmed",
+                      "suspected_noop",
+                      "permission_required"
+                    ],
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": ["pixel", "foreground", "page", "session"],
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "reason"],
+                "type": ["object", "null"]
+              },
+              "evidence": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "detail": {
+                      "type": ["string", "null"]
+                    },
+                    "kind": {
+                      "enum": ["value_readback", "window_change"],
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind"],
+                  "type": "object"
+                },
+                "type": ["array", "null"]
+              },
+              "hint": {
+                "type": ["string", "null"]
+              },
+              "next_call": {
+                "additionalProperties": false,
+                "properties": {
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "tool": {
+                    "type": "string"
+                  }
+                },
+                "required": ["tool", "arguments"],
+                "type": ["object", "null"]
+              },
+              "route": {
+                "enum": [
+                  "accessibility",
+                  "synthetic_events",
+                  "global_input",
+                  "system_api",
+                  "dom",
+                  "trusted_input"
+                ],
+                "type": "string"
+              },
+              "summary": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["effect", "route"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "scroll": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/scroll.rs",
+        "blob": "aa7a814deac5858541854241e5d888277d7b73c7",
+        "line": 77
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": ["direction"],
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it."
+          },
+          "pid": {
+            "type": "integer",
+            "description": "Target process ID. Required unless scope is \"desktop\" or element_token is supplied."
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["up", "down", "left", "right"],
+            "description": "Scroll direction."
+          },
+          "by": {
+            "type": "string",
+            "enum": ["line", "page"],
+            "description": "Scroll granularity. Default: line."
+          },
+          "amount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Wheel notches or key repetitions, clamped to the maximum. Default 3."
+          },
+          "window_id": {
+            "type": "integer",
+            "description": "Window ID. Required with x/y; optional with element_token."
+          },
+          "element_token": {
+            "type": "string",
+            "pattern": "^s[0-9a-f]{8}:[0-9]+$",
+            "description": "Element handle `<snapshot_id>:<row>` from get_window_state: row `[11]` of a read whose snapshot_id is s0000002a is \"s0000002a:11\" (also in `structuredContent.elements[].element_token`). Returns an explicit stale error naming the current snapshots once a newer read supersedes it."
+          },
+          "x": {
+            "type": "number",
+            "description": "Window-local screenshot X (get_window_state PNG). With y, wheel-scrolls at that point; needs window_id."
+          },
+          "y": {
+            "type": "number",
+            "description": "Window-local screenshot Y."
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["window", "desktop"],
+            "default": "window",
+            "description": "\"desktop\" with x,y and no pid/window_id uses get_desktop_state coordinates."
+          },
+          "delivery_mode": {
+            "type": "string",
+            "enum": ["background", "foreground"],
+            "description": "Default \"background\": no fronting or focus steal. \"foreground\": briefly front the window, act, restore the prior app; last resort when background did not land."
+          },
+          "target": {
+            "additionalProperties": true,
+            "description": "Preferred per-call target: an exact window (`kind=\"window\"`, `pid`, `window_id`) or the\nprimary desktop (`kind=\"desktop\"`, `display_id=\"primary\"`).",
+            "properties": {
+              "display_id": {
+                "description": "Display id. Required when kind is desktop; use \"primary\".",
+                "type": "string"
+              },
+              "kind": {
+                "description": "window requires pid and window_id; desktop requires display_id.",
+                "enum": ["window", "desktop"],
+                "type": "string"
+              },
+              "pid": {
+                "description": "Process id. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "window_id": {
+                "description": "Window id from list_windows. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": ["kind"],
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "delivery": {
+                "additionalProperties": false,
+                "properties": {
+                  "delivered_count": {
+                    "minimum": 0,
+                    "type": ["integer", "null"]
+                  },
+                  "mode": {
+                    "enum": ["background", "foreground", "not_applicable", "unknown"],
+                    "type": "string"
+                  }
+                },
+                "required": ["mode"],
+                "type": ["object", "null"]
+              },
+              "effect": {
+                "enum": ["confirmed", "partial", "unverifiable", "suspected_noop", "refused"],
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "hint": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["code"],
+                "type": ["object", "null"]
+              },
+              "escalation": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "route_unavailable",
+                      "delivery_failed",
+                      "effect_unconfirmed",
+                      "suspected_noop",
+                      "permission_required"
+                    ],
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": ["pixel", "foreground", "page", "session"],
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "reason"],
+                "type": ["object", "null"]
+              },
+              "evidence": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "detail": {
+                      "type": ["string", "null"]
+                    },
+                    "kind": {
+                      "enum": ["value_readback", "window_change"],
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind"],
+                  "type": "object"
+                },
+                "type": ["array", "null"]
+              },
+              "hint": {
+                "type": ["string", "null"]
+              },
+              "next_call": {
+                "additionalProperties": false,
+                "properties": {
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "tool": {
+                    "type": "string"
+                  }
+                },
+                "required": ["tool", "arguments"],
+                "type": ["object", "null"]
+              },
+              "route": {
+                "enum": [
+                  "accessibility",
+                  "synthetic_events",
+                  "global_input",
+                  "system_api",
+                  "dom",
+                  "trusted_input"
+                ],
+                "type": "string"
+              },
+              "summary": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["effect", "route"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "start_session": {
+      "source": {
+        "path": "libs/cua-driver/contract/manifest.json",
+        "via": "libs/cua-driver/rust/crates/cua-driver-core/src/session_tools.rs (ToolDef::from_contract)"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "additionalProperties": true,
+        "properties": {
+          "capture_scope": {
+            "description": "Deprecated compatibility policy. New callers select window or desktop\nmodality on each action instead of storing it on the session.",
+            "enum": ["auto", "window", "desktop"],
+            "type": "string"
+          },
+          "cursor_motion": {
+            "additionalProperties": false,
+            "description": "Optional initial cursor motion (style, timing, effects and tuning). The host applies it\nbefore the cursor is first made visible. A later `set_agent_cursor_motion` call wins;\nthis wins over the saved default (`cursor.motion.*` in the driver config) and the\nbuilt-in `signature_arc`. Reduced motion always wins.",
+            "properties": {
+              "arc_flow": {
+                "description": "Added to the arc asymmetry of `signature_arc`, `spring_settle` and `comet_swoop`:\npositive moves the apex toward the destination. Clamped to -1..1 (default 0).",
+                "type": "number"
+              },
+              "arc_size": {
+                "description": "Scales the arc of `signature_arc`, `spring_settle` and `comet_swoop`: 0.25 (default)\nkeeps the style's arc, 0 is a straight line, 0.5 doubles it. Clamped to 0..1.",
+                "type": "number"
+              },
+              "dwell_after_click_ms": {
+                "description": "Pause after a click animation, in milliseconds. Clamped to 0..5000 (default 80).",
+                "type": "number"
+              },
+              "effects": {
+                "additionalProperties": false,
+                "description": "Turn effects on or off. Omit a field to keep it; `\"default\"` restores the style default.",
+                "properties": {
+                  "glow": {
+                    "description": "Soft glow around the cursor that grows with speed.",
+                    "enum": ["on", "off", "default"],
+                    "type": "string"
+                  },
+                  "magnet": {
+                    "description": "Target glow when the `magnetic` style locks on.",
+                    "enum": ["on", "off", "default"],
+                    "type": "string"
+                  },
+                  "ripple": {
+                    "description": "Ring that expands from the hotspot on click.",
+                    "enum": ["on", "off", "default"],
+                    "type": "string"
+                  },
+                  "squish": {
+                    "description": "Brief scale-down of the cursor on click.",
+                    "enum": ["on", "off", "default"],
+                    "type": "string"
+                  },
+                  "trail": {
+                    "description": "Short fading trail behind the cursor.",
+                    "enum": ["on", "off", "default"],
+                    "type": "string"
+                  }
+                },
+                "required": [],
+                "type": "object"
+              },
+              "end_handle": {
+                "description": "Arc control-point offset from the end, as a fraction of the distance, for\n`signature_arc`, `spring_settle` and `comet_swoop`. Clamped to 0..1 (default 0.3).",
+                "type": "number"
+              },
+              "glide_duration_ms": {
+                "description": "Move duration in milliseconds for `fixed` timing (1430 ms when 0, the default). A\nnonzero value with `native` or the default `steady` timing also fixes the duration.\nClamped to 0..5000.",
+                "type": "number"
+              },
+              "idle_hide_ms": {
+                "description": "Hide the cursor after this many idle milliseconds; 0 never hides it. Clamped to\n0..60000 (default 15000).",
+                "type": "number"
+              },
+              "spring": {
+                "description": "Arrival spring damping for `classic`: 1 is critically damped, 0.3 is bouncy. Clamped\nto 0.3..1 (default 0.72).",
+                "type": "number"
+              },
+              "start_handle": {
+                "description": "Arc control-point offset from the start, as a fraction of the distance, for\n`signature_arc`, `spring_settle` and `comet_swoop`. Clamped to 0..1 (default 0.3).",
+                "type": "number"
+              },
+              "style": {
+                "description": "Trajectory style. `signature_arc` (default) is one arc with a small follow-through;\n`spring_settle` lands with one soft bounce; `magnetic` is pulled into the target;\n`comet_swoop` is a wide arc with a short trail; `adaptive` picks a careful approach for\nsmall targets and a swoop for long moves; `classic` is the previous Dubins glide. When\nthe theme's reduced motion is on, every move is a short straight glide with no effects.",
+                "enum": [
+                  "signature_arc",
+                  "spring_settle",
+                  "magnetic",
+                  "comet_swoop",
+                  "adaptive",
+                  "classic"
+                ],
+                "type": "string"
+              },
+              "timing": {
+                "description": "`steady` (default) keeps the style's timing but makes every move take at least 600 ms,\nwith a gentler ease; `relaxed` and `calm` do the same with a 450 or 750 ms floor.\n`native` uses the style's own timing; `fitts` scales the move time with distance and\ntarget size; `deliberate` is a slower Fitts curve (450..1300 ms); `fixed` uses\nglide_duration_ms (1430 ms when 0).",
+                "enum": ["native", "fitts", "fixed", "relaxed", "steady", "calm", "deliberate"],
+                "type": "string"
+              },
+              "turn_radius": {
+                "description": "Minimum turning radius of the `classic` glide path, in points; smaller turns tighter.\nClamped to 1..1000 (default 80).",
+                "type": "number"
+              }
+            },
+            "required": [],
+            "type": "object"
+          },
+          "cursor_theme": {
+            "additionalProperties": true,
+            "description": "Optional initial cursor theme. The host applies it before the cursor is\nfirst made visible, avoiding a flash of the default theme.",
+            "properties": {
+              "reduced_motion": {
+                "default": "auto",
+                "enum": ["auto", "on", "off"],
+                "type": "string"
+              },
+              "theme_id": {
+                "type": "string"
+              }
+            },
+            "required": ["theme_id"],
+            "type": "object"
+          },
+          "session": {
+            "description": "Optional stable public label for this run (e.g. \"research-run-1\").\nWhen omitted, the authenticated transport lease's implicit session is\ncreated or returned.",
+            "type": "string"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": true,
+            "properties": {
+              "active": {
+                "type": "boolean"
+              },
+              "capture_scope": {
+                "enum": ["auto", "window", "desktop"],
+                "type": "string"
+              },
+              "cursor_motion": {
+                "additionalProperties": false,
+                "properties": {
+                  "arc_flow": {
+                    "type": ["number", "null"]
+                  },
+                  "arc_size": {
+                    "type": ["number", "null"]
+                  },
+                  "dwell_after_click_ms": {
+                    "type": ["number", "null"]
+                  },
+                  "effects": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "glow": {
+                        "enum": ["on", "off", "default"],
+                        "type": "string"
+                      },
+                      "magnet": {
+                        "enum": ["on", "off", "default"],
+                        "type": "string"
+                      },
+                      "ripple": {
+                        "enum": ["on", "off", "default"],
+                        "type": "string"
+                      },
+                      "squish": {
+                        "enum": ["on", "off", "default"],
+                        "type": "string"
+                      },
+                      "trail": {
+                        "enum": ["on", "off", "default"],
+                        "type": "string"
+                      }
+                    },
+                    "type": ["object", "null"]
+                  },
+                  "end_handle": {
+                    "type": ["number", "null"]
+                  },
+                  "glide_duration_ms": {
+                    "type": ["number", "null"]
+                  },
+                  "idle_hide_ms": {
+                    "type": ["number", "null"]
+                  },
+                  "spring": {
+                    "type": ["number", "null"]
+                  },
+                  "start_handle": {
+                    "type": ["number", "null"]
+                  },
+                  "style": {
+                    "enum": [
+                      "signature_arc",
+                      "spring_settle",
+                      "magnetic",
+                      "comet_swoop",
+                      "adaptive",
+                      "classic"
+                    ],
+                    "type": "string"
+                  },
+                  "timing": {
+                    "enum": ["native", "fitts", "fixed", "relaxed", "steady", "calm", "deliberate"],
+                    "type": "string"
+                  },
+                  "turn_radius": {
+                    "type": ["number", "null"]
+                  }
+                },
+                "type": ["object", "null"]
+              },
+              "desktop_capture_authorized": {
+                "type": "boolean"
+              },
+              "desktop_unlocked": {
+                "type": "boolean"
+              },
+              "effective_scope": {
+                "enum": ["window", "desktop"],
+                "type": "string"
+              },
+              "escalation_detail": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "escalation_reason": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "ax_tree_pixel_mismatch",
+                      "background_delivery_failed",
+                      "foreground_ineffective",
+                      "no_window_target",
+                      "other"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "revived": {
+                "type": "boolean"
+              },
+              "session": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "session",
+              "capture_scope",
+              "effective_scope",
+              "desktop_capture_authorized",
+              "desktop_unlocked",
+              "escalation_reason",
+              "escalation_detail",
+              "active",
+              "revived"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "type_text": {
+      "source": {
+        "path": "libs/cua-driver/rust/crates/platform-macos/src/tools/type_text.rs",
+        "blob": "acbc73b0968abc0266a920e0b9a0250029306152",
+        "line": 63
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "session": {
+            "type": "string",
+            "description": "For multi-call work, prefer a short public session label and repeat it on every call that accepts it."
+          },
+          "pid": {
+            "type": "integer",
+            "description": "Target process ID."
+          },
+          "text": {
+            "type": "string",
+            "description": "Text to insert."
+          },
+          "window_id": {
+            "type": "integer",
+            "description": "Window ID. Omit with element_token."
+          },
+          "element_token": {
+            "type": "string",
+            "pattern": "^s[0-9a-f]{8}:[0-9]+$",
+            "description": "Element handle `<snapshot_id>:<row>` from get_window_state: row `[11]` of a read whose snapshot_id is s0000002a is \"s0000002a:11\" (also in `structuredContent.elements[].element_token`). Returns an explicit stale error naming the current snapshots once a newer read supersedes it."
+          },
+          "x": {
+            "type": "number",
+            "description": "Screenshot-pixel X of the field (get_window_state PNG, as in click). With y and no element_token, pixel-clicks to focus, then types."
+          },
+          "y": {
+            "type": "number",
+            "description": "Screenshot-pixel Y (see x)."
+          },
+          "delay_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 200,
+            "description": "Ms between characters in the CGEvent fallback. Default 30."
+          },
+          "scope": {
+            "type": "string",
+            "enum": ["window", "desktop"],
+            "default": "window",
+            "description": "\"desktop\" with no pid/window_id types into the frontmost app."
+          },
+          "delivery_mode": {
+            "type": "string",
+            "enum": ["background", "foreground"],
+            "description": "Default \"background\": AX insert, then CGEvent keys, no focus steal. \"foreground\": front the window, type, restore; last resort for surfaces (WhatsApp/Catalyst) where background keys do not land."
+          },
+          "target": {
+            "additionalProperties": true,
+            "description": "Preferred per-call target: an exact window (`kind=\"window\"`, `pid`, `window_id`) or the\nprimary desktop (`kind=\"desktop\"`, `display_id=\"primary\"`).",
+            "properties": {
+              "display_id": {
+                "description": "Display id. Required when kind is desktop; use \"primary\".",
+                "type": "string"
+              },
+              "kind": {
+                "description": "window requires pid and window_id; desktop requires display_id.",
+                "enum": ["window", "desktop"],
+                "type": "string"
+              },
+              "pid": {
+                "description": "Process id. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "window_id": {
+                "description": "Window id from list_windows. Required when kind is window.",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": ["kind"],
+            "type": "object"
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "delivery": {
+                "additionalProperties": false,
+                "properties": {
+                  "delivered_count": {
+                    "minimum": 0,
+                    "type": ["integer", "null"]
+                  },
+                  "mode": {
+                    "enum": ["background", "foreground", "not_applicable", "unknown"],
+                    "type": "string"
+                  }
+                },
+                "required": ["mode"],
+                "type": ["object", "null"]
+              },
+              "effect": {
+                "enum": ["confirmed", "partial", "unverifiable", "suspected_noop", "refused"],
+                "type": "string"
+              },
+              "error": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  },
+                  "hint": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["code"],
+                "type": ["object", "null"]
+              },
+              "escalation": {
+                "additionalProperties": false,
+                "properties": {
+                  "reason": {
+                    "enum": [
+                      "route_unavailable",
+                      "delivery_failed",
+                      "effect_unconfirmed",
+                      "suspected_noop",
+                      "permission_required"
+                    ],
+                    "type": "string"
+                  },
+                  "target": {
+                    "enum": ["pixel", "foreground", "page", "session"],
+                    "type": "string"
+                  }
+                },
+                "required": ["target", "reason"],
+                "type": ["object", "null"]
+              },
+              "evidence": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "detail": {
+                      "type": ["string", "null"]
+                    },
+                    "kind": {
+                      "enum": ["value_readback", "window_change"],
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind"],
+                  "type": "object"
+                },
+                "type": ["array", "null"]
+              },
+              "hint": {
+                "type": ["string", "null"]
+              },
+              "next_call": {
+                "additionalProperties": false,
+                "properties": {
+                  "arguments": {
+                    "type": "object"
+                  },
+                  "tool": {
+                    "type": "string"
+                  }
+                },
+                "required": ["tool", "arguments"],
+                "type": ["object", "null"]
+              },
+              "route": {
+                "enum": [
+                  "accessibility",
+                  "synthetic_events",
+                  "global_input",
+                  "system_api",
+                  "dom",
+                  "trusted_input"
+                ],
+                "type": "string"
+              },
+              "summary": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["effect", "route"],
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "anyOf": [
+              {
+                "required": ["refusal"]
+              },
+              {
+                "required": ["status"]
+              },
+              {
+                "required": ["code"]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

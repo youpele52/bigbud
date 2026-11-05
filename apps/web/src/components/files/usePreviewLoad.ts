@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { getFileEditReadEpoch } from "./fileEditDrafts.state";
 
 interface PreviewState {
   fileKey: string | null;
@@ -11,6 +12,8 @@ interface PreviewState {
   sha256: string | null;
   error: string | null;
   refreshError: string | null;
+  readVersion: number;
+  readEpoch: number;
 }
 
 interface UsePreviewLoadInput {
@@ -30,6 +33,8 @@ const INITIAL_STATE: PreviewState = {
   sha256: null,
   error: null,
   refreshError: null,
+  readVersion: 0,
+  readEpoch: 0,
 };
 
 export function usePreviewLoad({
@@ -45,6 +50,7 @@ export function usePreviewLoad({
   const loadPreview = useCallback(
     (options?: { readonly preserveContents?: boolean }): Promise<void> => {
       const requestId = ++previewRequestIdRef.current;
+      const readEpoch = getFileEditReadEpoch(fileKey);
       const preserveContents = options?.preserveContents ?? false;
 
       setState((current) =>
@@ -82,6 +88,8 @@ export function usePreviewLoad({
             sha256: null,
             error: "Native API not found.",
             refreshError: null,
+            readVersion: 0,
+            readEpoch,
           };
         });
         return Promise.resolve();
@@ -109,6 +117,8 @@ export function usePreviewLoad({
               sha256: result.sha256 ?? null,
               error: null,
               refreshError: null,
+              readVersion: requestId,
+              readEpoch,
             };
           });
         })
@@ -140,6 +150,8 @@ export function usePreviewLoad({
               sha256: null,
               error: message,
               refreshError: null,
+              readVersion: 0,
+              readEpoch,
             };
           });
         });

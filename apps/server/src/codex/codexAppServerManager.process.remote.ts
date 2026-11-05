@@ -16,9 +16,9 @@ import {
   assertSshExecutionTargetReadyAsync,
 } from "../ssh/sshVerification.ts";
 import { recordEarlySpawnError } from "./codexAppServerManager.process.spawnError.ts";
+import { bindCodexProcessVersion } from "./codexAppServerManager.process.version.ts";
 import type { CodexAppServerStartSessionInput } from "./codexAppServerManager.types.ts";
 
-const remoteVersionCheckCache = new Set<string>();
 const SSH_VERSION_CHECK_TIMEOUT_MS = 8_000;
 /** Overall deadline for the async check: readiness probes plus `codex --version` over SSH. */
 const SSH_VERSION_CHECK_DEADLINE_MS = 20_000;
@@ -49,14 +49,6 @@ export function buildRemoteCodexSshInvocation(
   });
 }
 
-function readRemoteVersionCacheKey(input: CodexAppServerStartSessionInput): string {
-  return [
-    input.providerRuntimeExecutionTargetId ?? input.executionTargetId ?? "",
-    input.binaryPath,
-    input.homePath ?? "",
-  ].join("::");
-}
-
 interface VersionCheckOutcome {
   readonly status: number | null;
   readonly stdout: string;
@@ -65,7 +57,7 @@ interface VersionCheckOutcome {
   readonly timedOut?: boolean;
 }
 
-function acceptRemoteVersionCheck(cacheKey: string, result: VersionCheckOutcome): void {
+function acceptRemoteVersionCheck(result: VersionCheckOutcome): string | undefined {
   if (result.timedOut) {
     throw new Error("Remote Codex CLI version check timed out. Check the SSH connection.");
   }
@@ -89,7 +81,7 @@ function acceptRemoteVersionCheck(cacheKey: string, result: VersionCheckOutcome)
     throw new Error(formatCodexCliUpgradeMessage(parsedVersion));
   }
 
-  remoteVersionCheckCache.add(cacheKey);
+  return parsedVersion ?? undefined;
 }
 
 /**
@@ -97,12 +89,9 @@ function acceptRemoteVersionCheck(cacheKey: string, result: VersionCheckOutcome)
  * `startCodexAppServerProcessAsync`); it can block the event loop for up to
  * `SSH_VERSION_CHECK_TIMEOUT_MS` plus the readiness probes.
  */
-export function assertSupportedRemoteCodexCliVersion(input: CodexAppServerStartSessionInput): void {
-  const cacheKey = readRemoteVersionCacheKey(input);
-  if (remoteVersionCheckCache.has(cacheKey)) {
-    return;
-  }
-
+export function assertSupportedRemoteCodexCliVersion(
+  input: CodexAppServerStartSessionInput,
+): string | undefined {
   assertSshExecutionTargetReady(input.providerRuntimeExecutionTargetId ?? input.executionTargetId);
   const invocation = buildRemoteCodexSshInvocation(
     input,
@@ -116,7 +105,7 @@ export function assertSupportedRemoteCodexCliVersion(input: CodexAppServerStartS
     timeout: SSH_VERSION_CHECK_TIMEOUT_MS,
     maxBuffer: 1024 * 1024,
   });
-  acceptRemoteVersionCheck(cacheKey, {
+  return acceptRemoteVersionCheck({
     status: result.status,
     stdout: result.stdout ?? "",
     stderr: result.stderr ?? "",
@@ -127,12 +116,7 @@ export function assertSupportedRemoteCodexCliVersion(input: CodexAppServerStartS
 /** Version check that never blocks the event loop, bounded by one overall deadline. */
 export async function assertSupportedRemoteCodexCliVersionAsync(
   input: CodexAppServerStartSessionInput,
-): Promise<void> {
-  const cacheKey = readRemoteVersionCacheKey(input);
-  if (remoteVersionCheckCache.has(cacheKey)) {
-    return;
-  }
-
+): Promise<string | undefined> {
   const deadline = createSshDeadline(SSH_VERSION_CHECK_DEADLINE_MS);
   await assertSshExecutionTargetReadyAsync(
     input.providerRuntimeExecutionTargetId ?? input.executionTargetId,
@@ -146,7 +130,7 @@ export async function assertSupportedRemoteCodexCliVersionAsync(
   const result = await runSshLocalCommand(invocation.command, invocation.args, {
     timeoutMs: deadline.remainingMs(),
   });
-  acceptRemoteVersionCheck(cacheKey, result);
+  return acceptRemoteVersionCheck(result);
 }
 
 function spawnRemoteCodexAppServer(
@@ -170,14 +154,14 @@ export async function startRemoteCodexAppServerProcessAsync(
   input: CodexAppServerStartSessionInput,
   signal?: AbortSignal,
 ): Promise<ChildProcessWithoutNullStreams> {
-  await assertSupportedRemoteCodexCliVersionAsync(input);
+  const version = await assertSupportedRemoteCodexCliVersionAsync(input);
   signal?.throwIfAborted();
-  return spawnRemoteCodexAppServer(input);
+  return bindCodexProcessVersion(spawnRemoteCodexAppServer(input), version);
 }
 
 export function startRemoteCodexAppServerProcess(
   input: CodexAppServerStartSessionInput,
 ): ChildProcessWithoutNullStreams {
-  assertSupportedRemoteCodexCliVersion(input);
-  return spawnRemoteCodexAppServer(input);
+  const version = assertSupportedRemoteCodexCliVersion(input);
+  return bindCodexProcessVersion(spawnRemoteCodexAppServer(input), version);
 }

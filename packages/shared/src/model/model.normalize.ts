@@ -4,7 +4,6 @@ import type {
   CodexModelOptions,
   CursorModelOptions,
   DevinModelOptions,
-  KilocodeModelOptions,
   ModelCapabilities,
   OpencodeModelOptions,
   PiModelOptions,
@@ -68,14 +67,6 @@ export function normalizeOpencodeModelOptionsWithCapabilities(
   caps: ModelCapabilities,
   modelOptions: OpencodeModelOptions | null | undefined,
 ): OpencodeModelOptions | undefined {
-  const reasoningEffort = resolveEffort(caps, modelOptions?.reasoningEffort);
-  return reasoningEffort ? { reasoningEffort } : undefined;
-}
-
-export function normalizeKilocodeModelOptionsWithCapabilities(
-  caps: ModelCapabilities,
-  modelOptions: KilocodeModelOptions | null | undefined,
-): KilocodeModelOptions | undefined {
   const reasoningEffort = resolveEffort(caps, modelOptions?.reasoningEffort);
   return reasoningEffort ? { reasoningEffort } : undefined;
 }

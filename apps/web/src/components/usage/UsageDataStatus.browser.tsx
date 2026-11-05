@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { UsageDataStatus } from "./UsageDataStatus";
-import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 
 const SUMMARY = {
   range: "7d",
@@ -48,13 +47,18 @@ describe("UsageDataStatus", () => {
     document.body.innerHTML = "";
   });
 
-  it("centers historical indexing with a breathing logo", async () => {
+  it("shows blue historical indexing progress with aligned text and a spinner", async () => {
     const screen = await render(
       <UsageDataStatus summary={{ ...SUMMARY, historyStatus: "building", providerCoverage: [] }} />,
     );
     try {
       await expect.element(page.getByText("Indexing historical usage")).toBeVisible();
-      expectCenteredStatuses(document.body);
+      const banner = page.getByRole("status").element();
+      expect(banner.classList.contains("border-l-info-foreground")).toBe(true);
+      expect(banner.querySelector(".animate-spin")).not.toBeNull();
+      const title = banner.querySelector('[data-slot="alert-title"]')!;
+      const description = banner.querySelector('[data-slot="alert-description"]')!;
+      expect(title.getBoundingClientRect().left).toBe(description.getBoundingClientRect().left);
     } finally {
       await screen.unmount();
     }

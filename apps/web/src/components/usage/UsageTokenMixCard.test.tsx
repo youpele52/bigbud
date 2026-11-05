@@ -25,7 +25,7 @@ it("renders four categories and leaves reasoning inside output", () => {
     expect(html).toContain(`>${label}</span>`);
   expect(html).not.toContain(">Reasoning</span>");
   expect(html).not.toContain(">Unsplit usage</span>");
-  expect(html).toContain("Input may include unseparated cache usage");
+  expect(html).not.toContain("Input may include unseparated cache usage");
   expect(html).toContain(">100</div>");
 });
 
@@ -34,7 +34,7 @@ it("renders the safe fallback for old-server and mismatched metadata, not numeri
   for (const value of [oldTotals, { ...totals, usedTokens: 101 }]) {
     const html = renderToStaticMarkup(<UsageTokenMixCard totals={value} />);
     expect(html).toContain(">Unsplit usage</span>");
-    expect(html).toContain("Unsplit usage has no reliable category breakdown");
+    expect(html).not.toContain("Unsplit usage has no reliable category breakdown");
     expect(html).not.toContain(">Input</span>");
     expect(html).toContain(`>${value.usedTokens}</div>`);
   }

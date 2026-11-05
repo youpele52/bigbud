@@ -1,12 +1,12 @@
 import {
   type ExecutionTargetId,
-  type ProviderKind,
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@bigbud/contracts";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { cn } from "~/lib/utils";
+import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
 import {
   DEFAULT_THREAD_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
@@ -53,10 +53,11 @@ interface ThreadTerminalDrawerProps {
   keybindings: ResolvedKeybindingsConfig;
   terminalBaseLabel: string;
   terminalLabelOverrides: Readonly<Record<string, string>>;
-  terminalProviderById: Readonly<Record<string, ProviderKind>>;
+  terminalProviderById: Readonly<Record<string, TerminalAgentKind>>;
   mode?: "drawer" | "panel";
   fillAvailableSpace?: boolean;
   onToggleExpanded?: (() => void) | undefined;
+  onMinimize?: (() => void) | undefined;
   onSetTerminalLabelOverride: (terminalId: string, label: string) => void;
   onClearTerminalLabelOverride: (terminalId: string) => void;
 }
@@ -90,6 +91,7 @@ export default function ThreadTerminalDrawer({
   mode = "drawer",
   fillAvailableSpace = false,
   onToggleExpanded,
+  onMinimize,
   onSetTerminalLabelOverride,
   onClearTerminalLabelOverride,
 }: ThreadTerminalDrawerProps) {
@@ -305,6 +307,7 @@ export default function ThreadTerminalDrawer({
           threadId={threadId}
           expanded={fillAvailableSpace}
           onToggleExpanded={mode === "drawer" ? onToggleExpanded : undefined}
+          onMinimize={mode === "drawer" ? onMinimize : undefined}
           hasReachedSplitLimit={hasReachedSplitLimit}
           renameTerminalActionLabel={renameTerminalActionLabel}
           splitTerminalActionLabel={splitTerminalActionLabel}
@@ -362,6 +365,7 @@ export default function ThreadTerminalDrawer({
               threadId={threadId}
               expanded={fillAvailableSpace}
               onToggleExpanded={mode === "drawer" ? onToggleExpanded : undefined}
+              onMinimize={mode === "drawer" ? onMinimize : undefined}
               resolvedTerminalGroups={resolvedTerminalGroups}
               resolvedActiveTerminalId={resolvedActiveTerminalId}
               normalizedTerminalIds={normalizedTerminalIds}

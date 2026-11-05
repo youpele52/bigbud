@@ -61,6 +61,27 @@ const baseInput = {
 } as const;
 
 describe("buildComposerMenuItems", () => {
+  it("does not offer the retired marketplace command, including provider echoes", () => {
+    const input = { ...baseInput, activeProviderSlashCommands: [{ name: "plugins" }] };
+    const items = buildComposerMenuItems({
+      ...input,
+      composerTrigger: { kind: "slash-command", query: "", rangeStart: 0, rangeEnd: 1 },
+    });
+    expect(items.some((item) => item.label === "/plugins")).toBe(false);
+    expect(items.some((item) => item.label === "/skills")).toBe(true);
+    expect(items.some((item) => item.label === "/agents")).toBe(true);
+    expect(
+      buildComposerMenuItems({
+        ...input,
+        composerTrigger: {
+          kind: "slash-command",
+          query: "plugins example",
+          rangeStart: 0,
+          rangeEnd: 16,
+        },
+      }),
+    ).toEqual([]);
+  });
   it("returns agents before workspace paths for @ triggers", () => {
     const items = buildComposerMenuItems({
       ...baseInput,

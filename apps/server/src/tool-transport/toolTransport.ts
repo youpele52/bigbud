@@ -20,6 +20,7 @@ export interface ToolTransportTarget {
 
 export interface RunToolCommandInput {
   readonly invocationId?: string;
+  readonly signal?: AbortSignal;
   readonly target: ToolTransportTarget;
   readonly command: string;
   readonly args?: ReadonlyArray<string>;
@@ -49,6 +50,7 @@ export function runToolCommand(input: RunToolCommandInput): Promise<ProcessRunRe
   if (input.target.transport === "local") {
     return runLocalToolCommand({
       command: input.command,
+      ...(input.signal ? { signal: input.signal } : {}),
       ...(input.args !== undefined ? { args: input.args } : {}),
       ...(input.target.cwd !== undefined ? { cwd: input.target.cwd } : {}),
       ...(input.env !== undefined ? { env: input.env } : {}),
@@ -71,6 +73,7 @@ export function runToolCommand(input: RunToolCommandInput): Promise<ProcessRunRe
     return composition.toolRunner({
       ...(input.invocationId !== undefined ? { invocationId: input.invocationId } : {}),
       executionTargetId: input.target.executionTargetId,
+      ...(input.signal ? { signal: input.signal } : {}),
       cwd: input.target.cwd,
       command: input.command,
       ...(input.args !== undefined ? { args: input.args } : {}),
@@ -85,6 +88,7 @@ export function runToolCommand(input: RunToolCommandInput): Promise<ProcessRunRe
 
   return runSshToolCommand({
     executionTargetId: input.target.executionTargetId,
+    ...(input.signal ? { signal: input.signal } : {}),
     command: input.command,
     ...(input.args !== undefined ? { args: input.args } : {}),
     ...(input.target.cwd !== undefined ? { cwd: input.target.cwd } : {}),

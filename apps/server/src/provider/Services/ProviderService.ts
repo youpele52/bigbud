@@ -15,7 +15,6 @@ import type {
   ExecutionTargetId,
   ModelSelection,
   ProviderInterruptTurnInput,
-  ProviderActiveTurnInspection,
   ProviderKind,
   ProviderRespondToRequestInput,
   ProviderRespondToUserInputInput,
@@ -41,6 +40,12 @@ import type {
   ProviderSessionRuntimeListCursor,
   ProviderSessionRuntimeListInput,
 } from "../../persistence/Services/ProviderSessionRuntime.ts";
+import type { ProviderExactRewindInput, ProviderTurnInspection } from "./ProviderRewind.ts";
+import type {
+  InspectionTerminal,
+  InspectionTerminalConsumer,
+  InspectionConfirmation,
+} from "./ProviderInspectionTerminal.ts";
 
 export interface ProviderSessionDiscoveryDiagnostic {
   readonly provider: ProviderKind | null;
@@ -73,6 +78,30 @@ export type ProviderSessionReconciliationOptions = Pick<
  * ProviderServiceShape - Service API for provider session and turn orchestration.
  */
 export interface ProviderServiceShape {
+  readonly providerControls?: (
+    input: import("@bigbud/contracts/server/providerControls").ProviderControlsInput,
+  ) => Effect.Effect<
+    import("@bigbud/contracts/server/providerControls").ProviderControlsSnapshot,
+    ProviderServiceError
+  >;
+  readonly recordInspectionTerminal?: (
+    terminal: ProviderRuntimeEvent,
+    items: ReadonlyArray<ProviderRuntimeEvent>,
+  ) => Effect.Effect<void, ProviderServiceError>;
+  readonly listInspectionTerminals?: () => Effect.Effect<
+    ReadonlyArray<InspectionTerminal>,
+    ProviderServiceError
+  >;
+  readonly publishInspectionTerminal?: (
+    record: InspectionTerminal,
+  ) => Effect.Effect<void, ProviderServiceError>;
+  readonly acknowledgeInspectionTerminal?: (
+    event: ProviderRuntimeEvent,
+    consumer: InspectionTerminalConsumer,
+  ) => Effect.Effect<void, ProviderServiceError>;
+  readonly inspectionTerminalReady?: (
+    event: ProviderRuntimeEvent,
+  ) => Effect.Effect<boolean, ProviderServiceError>;
   /** Isolated, non-interactive review. Its owner holds the durable activity lease. */
   readonly runBackgroundReview: (input: {
     readonly ownerThreadId: ThreadId;
@@ -139,7 +168,14 @@ export interface ProviderServiceShape {
     readonly threadId: ThreadId;
     readonly turnId: import("@bigbud/contracts").TurnId;
     readonly sessionEpoch: number;
-  }) => Effect.Effect<ProviderActiveTurnInspection, ProviderServiceError>;
+  }) => Effect.Effect<ProviderTurnInspection, ProviderServiceError>;
+  readonly confirmInspectedTurn?: (input: {
+    readonly threadId: ThreadId;
+    readonly turnId: import("@bigbud/contracts").TurnId;
+    readonly sessionEpoch: number;
+    readonly status: "completed" | "failed";
+    readonly publication?: ProviderRuntimeEvent;
+  }) => Effect.Effect<InspectionConfirmation, ProviderServiceError>;
 
   readonly listActiveTurnLiveness: () => Effect.Effect<ReadonlyArray<ProviderTurnLiveness>>;
 
@@ -207,6 +243,16 @@ export interface ProviderServiceShape {
     readonly threadId: ThreadId;
     readonly numTurns: number;
   }) => Effect.Effect<void, ProviderServiceError>;
+
+  /** The lease covers native mutation, files, and confirmed canonical publication. */
+  readonly rewindConversation?: <E, R>(
+    input: ProviderExactRewindInput,
+    completion: {
+      readonly preflight: Effect.Effect<void, E, R>;
+      readonly restoreFiles: Effect.Effect<void, E, R>;
+      readonly completeCanonical: Effect.Effect<void, E, R>;
+    },
+  ) => Effect.Effect<void, ProviderServiceError | E, R>;
 
   /**
    * Canonical provider runtime event stream.

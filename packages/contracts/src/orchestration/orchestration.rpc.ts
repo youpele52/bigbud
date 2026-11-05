@@ -1,3 +1,4 @@
+import { QueueDecisionReason } from "./orchestration.queueDecision";
 import { Option, Schema, SchemaIssue, Struct } from "effect";
 import {
   CheckpointRef,
@@ -38,9 +39,9 @@ import {
 export const OrchestrationCommandReceiptStatus = Schema.Literals(["accepted", "rejected"]);
 export type OrchestrationCommandReceiptStatus = typeof OrchestrationCommandReceiptStatus.Type;
 
-export const OrchestrationCommandRejectionReason = Schema.Literals([
-  "thread_already_exists",
-  "other",
+export const OrchestrationCommandRejectionReason = Schema.Union([
+  Schema.Literals(["thread_already_exists", "other"]),
+  QueueDecisionReason,
 ]);
 export type OrchestrationCommandRejectionReason = typeof OrchestrationCommandRejectionReason.Type;
 
@@ -301,15 +302,18 @@ export class OrchestrationDispatchCommandError extends Schema.TaggedErrorClass<O
   {
     message: TrimmedNonEmptyString,
     code: Schema.optional(
-      Schema.Literals([
-        "automation_owned_thread",
-        "thread_already_exists",
-        "overloaded",
-        "deadline_exceeded",
-        "command_id_conflict",
-        "unauthorized",
-        "prompt_queue_full",
-        "prompt_not_queueable",
+      Schema.Union([
+        QueueDecisionReason,
+        Schema.Literals([
+          "automation_owned_thread",
+          "thread_already_exists",
+          "overloaded",
+          "deadline_exceeded",
+          "command_id_conflict",
+          "unauthorized",
+          "prompt_queue_full",
+          "prompt_not_queueable",
+        ]),
       ]),
     ),
     retryAfterMs: Schema.optional(NonNegativeInt),

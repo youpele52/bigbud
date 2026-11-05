@@ -252,16 +252,20 @@ export async function openPathFromChat(
   targetPath: string,
   workspaceRoot: string | undefined,
   kind: "file" | "directory" = "file",
+  executionTargetId?: ExecutionTargetId | undefined,
 ): Promise<void> {
-  if (kind === "directory" && openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot)) {
+  if (
+    kind === "directory" &&
+    openDirectoryInFilesPanelIfSupported(targetPath, workspaceRoot, executionTargetId)
+  ) {
     return;
   }
 
-  if (openPathInBrowserPanelIfSupported(targetPath, workspaceRoot)) {
+  if (openPathInBrowserPanelIfSupported(targetPath, workspaceRoot, executionTargetId)) {
     return;
   }
 
-  if (openPathInFilesPanelIfSupported(targetPath, workspaceRoot)) {
+  if (openPathInFilesPanelIfSupported(targetPath, workspaceRoot, executionTargetId)) {
     return;
   }
 

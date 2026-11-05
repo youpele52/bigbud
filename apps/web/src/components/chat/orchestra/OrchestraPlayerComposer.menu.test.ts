@@ -88,10 +88,10 @@ describe("OrchestraPlayerComposer.menu", () => {
         cliProxy: [],
         copilot: [],
         opencode: [],
-        kilocode: [],
         pi: [],
         cursor: [],
         devin: [],
+        muse: [],
       },
       ["codex"],
     );

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createBrowserContextMenuItems } from "./BrowserPanel.contextMenuItems";
-import { buildGoogleSearchUrl } from "./BrowserPanel.omnibox";
+import { buildBrowserSearchUrl } from "./BrowserPanel.omnibox";
 
 const viewportRef = { current: null } as never;
 
@@ -59,11 +59,12 @@ describe("createBrowserContextMenuItems", () => {
     );
   });
 
-  it("uses the shared Google search URL builder for selected text", () => {
+  it("uses the selected search engine for selected text", () => {
     const openedUrls: string[] = [];
     const items = createBrowserContextMenuItems({
       canGoBack: true,
       canGoForward: false,
+      searchEngine: "brave",
       context: { x: 4, y: 5, selectionText: "selected text" },
       currentUrl: "https://example.com/docs",
       activeThreadId: "thread-1" as never,
@@ -73,7 +74,7 @@ describe("createBrowserContextMenuItems", () => {
 
     items.find((item) => item.id === "search-selection")?.onClick();
 
-    expect(openedUrls).toEqual([buildGoogleSearchUrl("selected text")]);
+    expect(openedUrls).toEqual([buildBrowserSearchUrl("selected text", "brave")]);
   });
 
   it("adds edit actions with Electron capability flags", () => {

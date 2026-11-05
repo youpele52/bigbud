@@ -133,7 +133,7 @@ describe.skipIf(process.platform === "win32")("Codex local start", () => {
     expect(methods.at(-1)).toBe("session/closed");
   }, 20_000);
 
-  it("fails a start cleanly when the app-server spawn errors, without an uncaught exception", async () => {
+  it("rechecks a removed binary on future starts instead of trusting a path-only version cache", async () => {
     const { manager } = createManager();
     const binaryPath = binaries.localCodexPath();
     const first = localStartInput("thread-local-moved", binaryPath, binaries.directory);
@@ -141,11 +141,11 @@ describe.skipIf(process.platform === "win32")("Codex local start", () => {
     manager.stopAll();
     rmSync(binaryPath);
 
-    // From a macrotask, Node delivers the spawn error before any await resumes.
+    // A fresh preflight rejects the changed binary before an app-server can be spawned.
     const startup = await new Promise<{ readonly result: Promise<unknown> }>((resolve) =>
       setTimeout(() => resolve({ result: manager.startSession(first) }), 0),
     );
-    await expect(startup.result).rejects.toThrow(/ENOENT/);
+    await expect(startup.result).rejects.toThrow(/not installed or not executable/);
     expect(manager.hasSession(first.threadId)).toBe(false);
   }, 20_000);
 

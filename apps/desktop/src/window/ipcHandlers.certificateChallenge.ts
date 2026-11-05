@@ -1,4 +1,4 @@
-import { app, ipcMain } from "electron";
+import { app } from "electron";
 import type { DesktopCertificateChallengeResolution } from "@bigbud/contracts/server/ipc.desktopCertificate.ts";
 import {
   certificateChallengeManager,
@@ -6,6 +6,7 @@ import {
   registerCertificateErrorHandler,
 } from "./certificateChallengeManager";
 import { RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL } from "./certificateChallenge.channels";
+import { authorizedHandle, BROAD_RENDERER_ROLES } from "./ipcAuthorization";
 
 function getSafeResolution(raw: unknown): DesktopCertificateChallengeResolution | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -29,11 +30,14 @@ function getSafeResolution(raw: unknown): DesktopCertificateChallengeResolution 
 }
 
 export function registerCertificateChallengeIpcHandler(manager: CertificateChallengeManager): void {
-  ipcMain.removeHandler(RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL);
-  ipcMain.handle(RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL, (event, raw: unknown) => {
-    const resolution = getSafeResolution(raw);
-    return resolution ? manager.resolve(event.sender, resolution) : false;
-  });
+  authorizedHandle(
+    RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL,
+    BROAD_RENDERER_ROLES,
+    (event, raw: unknown) => {
+      const resolution = getSafeResolution(raw);
+      return resolution ? manager.resolve(event.sender, resolution) : false;
+    },
+  );
 }
 
 let certificateErrorHandlerRegistered = false;

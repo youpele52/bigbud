@@ -58,7 +58,9 @@ describe("Send now releases a held queue (queueHold: the user sends)", () => {
   });
 
   it("without the user's release a held queue still never sends", async () => {
-    expect(await decide(flush(), { queueHold: true })).toEqual([]);
+    await expect(decide(flush(), { queueHold: true })).rejects.toMatchObject({
+      code: "queue_held",
+    });
   });
 
   it("keeps every other guard: a reservation or a non-idle thread still blocks", async () => {
@@ -74,7 +76,7 @@ describe("Send now releases a held queue (queueHold: the user sends)", () => {
         state: "requested",
       },
     };
-    expect(await decide(flush(true), reserved)).toEqual([]);
+    await expect(decide(flush(true), reserved)).rejects.toMatchObject({ code: "queue_reserved" });
     const running = {
       queueHold: true,
       session: {
@@ -89,6 +91,6 @@ describe("Send now releases a held queue (queueHold: the user sends)", () => {
         updatedAt: now,
       },
     };
-    expect(await decide(flush(true), running)).toEqual([]);
+    await expect(decide(flush(true), running)).rejects.toMatchObject({ code: "queue_busy" });
   });
 });

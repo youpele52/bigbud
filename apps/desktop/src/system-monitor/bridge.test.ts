@@ -56,6 +56,25 @@ function fakeChild(minor = 2) {
 }
 
 describe("SystemMonitorBridge", () => {
+  it("keeps the collector usable when a renderer disappears during delivery", async () => {
+    const child = fakeChild();
+    mocks.spawn.mockReturnValue(child);
+    const bridge = new SystemMonitorBridge(true);
+    bridge.addRenderer({
+      isDestroyed: () => false,
+      once: vi.fn(),
+      send: () => {
+        throw new Error("renderer gone");
+      },
+    } as never);
+    try {
+      await expect(
+        bridge.subscribe({ processes: false, disks: false, sensors: false }),
+      ).resolves.toBe(1);
+    } finally {
+      bridge.stop();
+    }
+  });
   it("keeps legacy System monitoring usable but explicitly rejects app demand", async () => {
     const child = fakeChild(2);
     mocks.spawn.mockReturnValue(child);

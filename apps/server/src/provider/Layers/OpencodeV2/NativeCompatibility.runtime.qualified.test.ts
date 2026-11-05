@@ -93,8 +93,8 @@ it.each([
   await withV2RuntimeWarningFixture("2.0.28", async (f) => {
     if (scenario === "wrong-source-profile")
       f.config.mockResolvedValue([
-        { type: "directory", path: v2ConfigSourcePaths().systemRoot },
         { type: "directory", path: f.root },
+        { type: "directory", path: v2ConfigSourcePaths().systemRoot },
       ]);
     await expect(
       verifyV2NativeEligibility(f.artifact, f.client, f.directory, f.root),

@@ -1,5 +1,3 @@
-import { CUA_DRIVER_VERSION } from "./release";
-
 export interface CuaDriverManifest {
   readonly schema_version: "1";
   readonly binary_version: string;
@@ -18,12 +16,15 @@ export function parseCuaDriverManifest(value: unknown): CuaDriverManifest {
   const invocation = record.mcp_invocation;
   if (
     record.schema_version !== "1" ||
-    record.binary_version !== CUA_DRIVER_VERSION ||
+    typeof record.binary_version !== "string" ||
+    record.binary_version.trim().length === 0 ||
     typeof record.binary_path !== "string" ||
     !invocation ||
     typeof invocation !== "object"
   ) {
-    throw new Error("Computer Use runtime manifest does not match the pinned 0.9.1 contract.");
+    throw new Error(
+      "Computer Use runtime manifest does not match the supported schema 1 contract.",
+    );
   }
   const invocationRecord = invocation as Record<string, unknown>;
   if (

@@ -27,6 +27,7 @@ export function TerminalContextInlineChip(props: TerminalContextInlineChipProps)
               expired && "border-destructive/35 bg-destructive/8 text-destructive",
             )}
             data-terminal-context-expired={expired ? "true" : undefined}
+            data-chat-cite-exclude
           >
             <TerminalIcon
               className={cn(

@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 
 import {
+  ModelSelection as RoutableModelSelection,
   PersistedModelSelection as ContractsPersistedModelSelection,
   PROVIDER_KINDS,
   TrimmedNonEmptyString,
@@ -137,9 +138,12 @@ export function inventoryLearningJobSelection(input: {
 
 export function isRoutableProviderSelection(
   selection: ModelSelection | PersistedModelSelection,
-  currentProviders: ReadonlyArray<ProviderKind | string> | ReadonlySet<string>,
+  currentProviders: ReadonlyArray<ProviderKind | string> | ReadonlySet<string> = PROVIDER_KINDS,
 ): selection is ModelSelection {
-  return currentProviderSet(currentProviders).has(selection.provider);
+  return (
+    Schema.is(RoutableModelSelection)(selection) &&
+    currentProviderSet(currentProviders).has(selection.provider)
+  );
 }
 
 export function requiresProviderReselection(

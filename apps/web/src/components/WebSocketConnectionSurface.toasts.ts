@@ -60,7 +60,6 @@ export function buildReconnectingToast(
     title: `Disconnected from ${APP_SERVER_NAME}`,
     type: "loading" as const,
     data: {
-      icon: "wifi" as const,
       hideCopyButton: true,
     },
   };

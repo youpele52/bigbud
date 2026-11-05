@@ -3,9 +3,9 @@ import type { TerminalLayoutMode } from "~/stores/terminal/terminal.store.layout
 export type { TerminalLayoutMode };
 
 export const TERMINAL_LAYOUT_LABELS: Record<TerminalLayoutMode, string> = {
-  "chat-only": "Chat only",
-  split: "Chat + terminal",
-  "terminal-only": "Terminal only",
+  "chat-only": "Chat",
+  split: "Chat x terminal",
+  "terminal-only": "Terminal",
 };
 
 export function resolveEffectiveTerminalLayoutMode(input: {

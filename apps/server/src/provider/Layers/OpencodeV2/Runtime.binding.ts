@@ -37,9 +37,19 @@ export async function resolveV2RuntimeBinding(
     input.workspaceExecutionTargetId ?? input.executionTargetId ?? runtimeTarget;
   const remote = runtimeTarget !== "local" || workspaceTarget !== "local";
   const authorization = options.remoteSessionConformance;
+  const sharedRemote = options.sharedRemoteWorkspace;
+  const preparedSharedRemote = Boolean(
+    options.config.sharedService &&
+    sharedRemote &&
+    runtimeTarget === "local" &&
+    workspaceTarget !== "local" &&
+    workspaceTarget === sharedRemote.workspaceTarget.executionTargetId &&
+    input.cwd === sharedRemote.directory,
+  );
   if (
     runtimeTarget !== options.config.runtimeTargetId ||
     (remote &&
+      !preparedSharedRemote &&
       (!authorization ||
         authorization.providerRuntimeTargetId !== runtimeTarget ||
         authorization.workspaceTargetId !== workspaceTarget ||

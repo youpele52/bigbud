@@ -1,4 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
+import { ResourceAwarenessToastCoordinator } from "../components/resource-monitor/ResourceAwarenessToastCoordinator";
 import {
   Outlet,
   createRootRouteWithContext,
@@ -24,7 +25,6 @@ import { ServerStateBootstrap } from "./-__root.bootstrap";
 import { EventRouter } from "./-__root.logic";
 import { FileAccessPermissionDialog } from "../components/file-access/FileAccessPermissionDialog";
 import { ComputerUseStartupRepairCoordinator } from "../components/computer-use/ComputerUseStartupRepairCoordinator";
-import { PluginUpdateToastCoordinator } from "../components/plugins/PluginUpdateToastCoordinator";
 import { GamesWorkToastCoordinator } from "../components/games/GamesWorkToastCoordinator";
 import { ProviderRecoveryToastCoordinator } from "../components/ProviderRecoveryToastCoordinator";
 import { useSettings } from "../hooks/useSettings";
@@ -36,6 +36,7 @@ import {
   MascotShell,
 } from "../components/floating-assistant/FloatingAssistantShell";
 import { MascotStateCoordinator } from "../components/floating-assistant/MascotStateCoordinator";
+import { MascotComputerUseStopBridge } from "../components/floating-assistant/MascotComputerUseStopBridge";
 import { useCompactChatThread } from "../hooks/useCompactChatThread";
 import { CompactLinkHandoffCoordinator } from "../components/CompactLinkHandoffCoordinator";
 import { DesktopRendererReadyCoordinator } from "../components/DesktopRendererReadyCoordinator";
@@ -61,6 +62,7 @@ export function RootRouteView() {
     return (
       <>
         <MascotStateCoordinator />
+        <MascotComputerUseStopBridge />
         <WebSocketConnectionCoordinator />
         <DesktopBackendStartupCoordinator />
         <MascotShell />
@@ -125,8 +127,8 @@ export function RootRouteView() {
         <EventRouter />
         <WebSocketConnectionCoordinator />
         <SlowRpcAckToastCoordinator />
+        <ResourceAwarenessToastCoordinator />
         <DesktopBackendStartupCoordinator />
-        <PluginUpdateToastCoordinator />
         <GamesWorkToastCoordinator />
         <ProviderRecoveryToastCoordinator />
         <PendingApprovalCoordinator />

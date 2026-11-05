@@ -28,7 +28,7 @@ describe("model discovery toast", () => {
   it("shows blue progress with actual retry counts and a stable replay key", () => {
     const value = snapshot("retrying", 2);
     expect(getModelDiscoveryToast(value)).toMatchObject({
-      type: "info",
+      type: "loading",
       timeout: 0,
       description: expect.stringContaining("2 of 3"),
     });

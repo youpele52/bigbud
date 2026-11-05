@@ -58,6 +58,33 @@ export interface ProviderSessionRuntimeListInput {
  * ProviderSessionRuntimeRepositoryShape - Service API for provider runtime records.
  */
 export interface ProviderSessionRuntimeRepositoryShape {
+  readonly recordCodexCompaction?: (
+    input: import("../../provider/Services/ProviderCompaction.ts").CodexCompactionConfirmation,
+  ) => Effect.Effect<boolean, ProviderSessionRuntimeRepositoryError>;
+  readonly storeInspectionTerminal?: (
+    threadId: ThreadId,
+    record: unknown,
+    eventId: string,
+    epoch: number,
+    nativeThreadId: string,
+  ) => Effect.Effect<boolean, ProviderSessionRuntimeRepositoryError>;
+  readonly acknowledgeInspectionTerminal?: (
+    threadId: ThreadId,
+    eventId: string,
+    consumer: string,
+  ) => Effect.Effect<void, ProviderSessionRuntimeRepositoryError>;
+  readonly listInspectionTerminals?: (
+    after?: string,
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly threadId: ThreadId; readonly record: unknown }>,
+    ProviderSessionRuntimeRepositoryError
+  >;
+  /** Atomically changes only the reserved Codex rewind marker, fenced by operation identity. */
+  readonly setCodexRewind?: (
+    threadId: ThreadId,
+    marker: unknown | null,
+    operationId: string,
+  ) => Effect.Effect<boolean, ProviderSessionRuntimeRepositoryError>;
   /**
    * Insert or replace a provider runtime row.
    *

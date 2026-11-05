@@ -117,12 +117,24 @@ try {
 
   await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page.getByRole("heading", { name: "Settings", exact: true }).waitFor();
-  await page.getByRole("combobox", { name: /Theme/ }).selectOption("dark");
+  const themeSelect = page.getByRole("combobox", { name: "Theme", exact: true });
+  assert.equal(await themeSelect.getAttribute("data-slot"), "select-trigger");
+  await themeSelect.click();
+  const darkTheme = page.getByRole("option", { name: "Dark", exact: true });
+  await darkTheme.waitFor();
+  assert.equal(await darkTheme.getAttribute("data-slot"), "select-item");
+  await darkTheme.click();
+  assert.equal(await themeSelect.textContent(), "Dark");
+  assert.equal(await page.evaluate(() => localStorage.getItem("bigbud:theme")), "dark");
   assert.equal(
     await page.locator("html").evaluate((element) => element.classList.contains("dark")),
     true,
   );
   assert.equal(await textarea.inputValue(), "draft remains mounted");
+
+  await themeSelect.click();
+  await page.getByRole("option", { name: "System", exact: true }).click();
+  assert.equal(await page.evaluate(() => localStorage.getItem("bigbud:theme")), "system");
 
   await page.getByRole("button", { name: "Back to Chats", exact: true }).click();
   await page.getByRole("heading", { name: "Chats", exact: true }).waitFor();

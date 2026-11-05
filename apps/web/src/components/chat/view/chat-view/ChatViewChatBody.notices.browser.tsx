@@ -83,7 +83,7 @@ it("hides retained-history presentation without restoring the composer or cleari
   expect(state.retained).toBe("This transcript is retained read-only history.");
 });
 
-it("wires setup dismissal to the active thread and the actual setup revision", async () => {
+it("keeps setup dismissal scoped to the active thread, not setup revisions", async () => {
   state.setupError =
     "V2 selected thread has no supported local native Location; no local/private fallback.";
   const props = makeProps();
@@ -98,5 +98,5 @@ it("wires setup dismissal to the active thread and the actual setup revision", a
   await expect.element(page.getByText(state.setupError)).toBeVisible();
   state.revision = "two";
   await reopened.rerender(<ChatViewChatBody {...props} />);
-  await expect.element(page.getByText(state.setupError)).toBeVisible();
+  await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
 });

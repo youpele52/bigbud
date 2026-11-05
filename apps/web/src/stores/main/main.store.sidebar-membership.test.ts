@@ -2,12 +2,13 @@ import { BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts/constants/project.c
 import { FAVORITE_THREAD_LIMIT } from "@bigbud/contracts/constants/settings.constant";
 import { SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS } from "@bigbud/contracts/orchestration/orchestration.catalog";
 import type { ThreadSummary } from "@bigbud/contracts/orchestration/orchestration.catalog";
-import { ProjectId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
+import { EventId, ProjectId, ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { describe, expect, it } from "vitest";
 
 import { applyOrchestrationEvent } from "./events.store";
 import { syncSidebarCatalog as reconcileSidebarCatalog } from "./helpers.lazy.store";
 import { buildSidebarThreadSummary } from "./mappers.store";
+import { resolveThreadStatusPill } from "../../components/sidebar/Sidebar.logic.status";
 import { makeEvent, makeState, makeThread } from "./main.store.test.helpers";
 
 function makeSummary(
@@ -46,6 +47,72 @@ function makeSummary(
 }
 
 describe("bounded sidebar membership", () => {
+  it("keeps multiple threads awaiting answers across catalog refreshes and independent resolution", () => {
+    const summaries = ["question-a", "question-b"].map((id) =>
+      makeSummary(ThreadId.makeUnsafe(id), BUILT_IN_CHATS_PROJECT_ID, {
+        isAwaitingUserInput: true,
+      }),
+    );
+    const catalog = {
+      projectionSequence: 12,
+      threads: summaries,
+      recentThreadIds: summaries.map((summary) => summary.id),
+      pinnedThreadIds: [],
+    };
+    const initial = reconcileSidebarCatalog(makeState(makeThread()), catalog);
+    const refreshed = reconcileSidebarCatalog(initial, catalog);
+    for (const summary of summaries) {
+      expect(
+        resolveThreadStatusPill({ thread: refreshed.sidebarThreadsById[summary.id]! })?.label,
+      ).toBe("Awaiting Input");
+    }
+
+    const working = applyOrchestrationEvent(
+      refreshed,
+      makeEvent("thread.activity-appended", {
+        threadId: summaries[1]!.id,
+        activity: {
+          id: EventId.makeUnsafe("background-work"),
+          kind: "tool.started",
+          tone: "info",
+          summary: "Background work continues",
+          payload: {},
+          turnId: null,
+          createdAt: "2026-07-02T00:00:00.000Z",
+        },
+      }),
+    );
+    expect(working.sidebarThreadsById[summaries[1]!.id]?.hasPendingUserInput).toBe(true);
+    const answered = applyOrchestrationEvent(
+      working,
+      makeEvent("thread.activity-appended", {
+        threadId: summaries[0]!.id,
+        activity: {
+          id: EventId.makeUnsafe("answer-a"),
+          kind: "user-input.resolved",
+          tone: "info",
+          summary: "Answer received",
+          payload: { requestId: "request-a" },
+          turnId: null,
+          createdAt: "2026-07-02T00:00:01.000Z",
+        },
+      }),
+    );
+    expect(answered.sidebarThreadsById[summaries[0]!.id]?.hasPendingUserInput).toBe(false);
+    expect(answered.sidebarThreadsById[summaries[1]!.id]?.hasPendingUserInput).toBe(true);
+
+    const resolved = reconcileSidebarCatalog(answered, {
+      ...catalog,
+      projectionSequence: 13,
+      threads: summaries.map((summary, index) => ({
+        ...summary,
+        isAwaitingUserInput: index !== 0,
+      })),
+    });
+    expect(resolved.sidebarThreadsById[summaries[0]!.id]?.hasPendingUserInput).toBe(false);
+    expect(resolved.sidebarThreadsById[summaries[1]!.id]?.hasPendingUserInput).toBe(true);
+  });
+
   it("bounds chat creates and user-message promotions", () => {
     const existing = makeThread({
       id: ThreadId.makeUnsafe("existing"),

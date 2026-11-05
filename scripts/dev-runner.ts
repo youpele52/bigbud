@@ -22,6 +22,10 @@ import {
   resolveOffset,
 } from "./dev-runner.lib.ts";
 import { reserveRunnerPorts } from "./dev-runner.coordination.ts";
+import {
+  COMPUTER_USE_GUARD_BUILD_ARGS,
+  devModeRequiresComputerUseGuard,
+} from "./dev-runner.computerUse.ts";
 
 export {
   DEFAULT_BIGBUD_HOME,
@@ -136,25 +140,38 @@ export function runDevRunnerWithInput(input: DevRunnerCliInput) {
       logWebSocketEvents: readOptionalBooleanEnv("BIGBUD_LOG_WS_EVENTS", "T3CODE_LOG_WS_EVENTS"),
     };
 
-    if (!input.dryRun && devModeRequiresWorkspaceAgent(input.mode)) {
-      yield* Effect.logInfo("[dev-runner] Building the local workspace watcher agent...");
-      const agentBuild = yield* ChildProcess.make(
-        "cargo",
-        ["build", "--locked", "--package", "bigbud-remote-agent"],
-        {
-          stdin: "inherit",
-          stdout: "inherit",
-          stderr: "inherit",
-          detached: false,
-          forceKillAfter: "1500 millis",
-        },
-      );
-      const agentBuildExitCode = yield* agentBuild.exitCode;
-      if (agentBuildExitCode !== 0) {
+    const cargoBuild = Effect.fn("cargoBuild")(function* (
+      args: ReadonlyArray<string>,
+      label: { readonly building: string; readonly failed: string },
+    ) {
+      yield* Effect.logInfo(`[dev-runner] Building the local ${label.building}...`);
+      const build = yield* ChildProcess.make("cargo", [...args], {
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+        detached: false,
+        forceKillAfter: "1500 millis",
+      });
+      const exitCode = yield* build.exitCode;
+      if (exitCode !== 0) {
         return yield* new DevRunnerError({
-          message: `workspace agent build exited with code ${agentBuildExitCode}`,
+          message: `${label.failed} build exited with code ${exitCode}`,
         });
       }
+    });
+
+    if (!input.dryRun && devModeRequiresWorkspaceAgent(input.mode)) {
+      yield* cargoBuild(["build", "--locked", "--package", "bigbud-remote-agent"], {
+        building: "workspace watcher agent",
+        failed: "workspace agent",
+      });
+    }
+    // Closed while Driver 0.9.1 is pinned; see dev-runner.computerUse.ts.
+    if (!input.dryRun && devModeRequiresComputerUseGuard(input.mode, process.env)) {
+      yield* cargoBuild(COMPUTER_USE_GUARD_BUILD_ARGS, {
+        building: "computer-use guard",
+        failed: "computer-use guard",
+      });
     }
 
     const { serverOffset, webOffset, repoRoot, webReservation } = yield* reserveRunnerPorts({

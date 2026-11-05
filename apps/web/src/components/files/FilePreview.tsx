@@ -105,6 +105,8 @@ export const FilePreview = memo(function FilePreview({
     relativePath,
     executionTargetId,
     preview: state,
+    editing,
+    refreshPreview,
   });
   const fileKey = draftKey;
   useEffect(() => setEditing(false), [fileKey]);

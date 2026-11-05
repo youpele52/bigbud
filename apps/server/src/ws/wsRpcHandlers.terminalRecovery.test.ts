@@ -21,7 +21,7 @@ it.skipIf(process.platform === "win32")(
           const shell = path.join(dir, "synthetic-tui");
           yield* fs.writeFileString(
             shell,
-            `#!${process.execPath}\nprocess.stdin.setRawMode(true);\nconst report=()=>console.log('SIZE:'+process.stdout.columns+'x'+process.stdout.rows);\nprocess.stdout.on('resize',report);report();process.stdin.on('data',d=>console.log(d.toString()==='overflow'?'x'.repeat(1048577):'INPUT:'+d));\n`,
+            `#!${process.execPath}\nprocess.stdin.setRawMode(true);\nconst report=()=>console.log('SIZE:'+process.stdout.columns+'x'+process.stdout.rows);\nprocess.stdout.on('resize',report);report();process.stdin.on('data',d=>console.log(d.toString()==='overflow'?'x'.repeat(1048577):d.toString()==='modes'?'\\x1b[?1049h\\x1b[?2004h':'INPUT:'+d));\n`,
           );
           yield* fs.chmod(shell, 0o755);
           const adapter = yield* PtyAdapter;
@@ -94,6 +94,8 @@ it.skipIf(process.platform === "win32")(
             data: "fixture-only",
           });
           yield* Effect.promise(() => expect.poll(output).toContain("INPUT:fixture-only"));
+          yield* handlers[WS_METHODS.terminalWrite]({ ...input, data: "modes" });
+          yield* Effect.promise(() => expect.poll(output).toContain("\x1b[?2004h"));
           yield* handlers[WS_METHODS.terminalWrite]({ ...input, data: "overflow" });
           yield* waitFor(
             handlers[WS_METHODS.terminalSnapshot](input).pipe(
@@ -101,6 +103,18 @@ it.skipIf(process.platform === "win32")(
             ),
             "5 seconds",
           );
+          // A baseline-less view reattaches live with the program's modes, then probes a repaint.
+          const truncated = yield* handlers[WS_METHODS.terminalSnapshot](input);
+          expect(truncated.pid).toBe(opened.pid);
+          expect(truncated.liveModes?.alternateScreen).toBe(true);
+          expect(truncated.liveModes?.sequence).toContain("\x1b[?2004h");
+          const sized = () => output().split("SIZE:96x24").length - 1;
+          const before = sized();
+          yield* handlers[WS_METHODS.terminalResize]({ ...input, cols: 96, rows: 23 });
+          yield* Effect.promise(() => expect.poll(output).toContain("SIZE:96x23"));
+          yield* handlers[WS_METHODS.terminalResize]({ ...input, cols: 96, rows: 24 });
+          yield* Effect.promise(() => expect.poll(sized).toBe(before + 1));
+          expect(spawn).toHaveBeenCalledOnce();
           const restarted = yield* handlers[WS_METHODS.terminalRestart](input);
           expect(restarted.pid).not.toBe(opened.pid);
           expect(restarted.runtimeGeneration).not.toBe(opened.runtimeGeneration);

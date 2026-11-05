@@ -1,7 +1,6 @@
 import type {
   McpServerStatusEntry,
   OrchestrationThread,
-  ProviderKind,
   ServerDiscoveredAgent,
   ServerDiscoveredSkill,
   ServerDiscoveryCatalog,
@@ -30,7 +29,7 @@ const summary = (value: string | undefined, fallback: string): string =>
 
 const isAvailableForProvider = (
   entry: ServerDiscoveredAgent | ServerDiscoveredSkill,
-  provider: ProviderKind,
+  provider: string,
 ): boolean => entry.provider === "bigbud" || entry.provider === provider;
 
 const discoveryTrack = (

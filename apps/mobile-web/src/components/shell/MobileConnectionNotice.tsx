@@ -1,7 +1,7 @@
 import { Button } from "../ui/button";
 import type { MobileConnectionState } from "../../logic/mobileConnection.logic";
 import type { MobileRecoveryState } from "../../logic/mobileRecovery.types";
-import { cn } from "../../lib/cn";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { resolveMobileConnectionNotice } from "./MobileConnectionNotice.logic";
 
 export function MobileConnectionNotice({
@@ -16,11 +16,7 @@ export function MobileConnectionNotice({
   const notice = resolveMobileConnectionNotice(state, connection);
   if (!notice) return null;
   const tone =
-    notice.tone === "info"
-      ? "border-info/30 bg-info/8"
-      : notice.tone === "warning"
-        ? "border-warning/30 bg-warning/8"
-        : "border-destructive/30 bg-destructive/8";
+    notice.tone === "info" ? "loading" : notice.tone === "destructive" ? "error" : "warning";
   const evidenceTimestamp = state.lastRefreshedAt ?? state.lastSynchronizedAt;
   const evidence =
     evidenceTimestamp === null
@@ -31,24 +27,21 @@ export function MobileConnectionNotice({
         })}.`;
 
   return (
-    <div
-      className={cn("flex items-start justify-between gap-3 rounded-lg border px-3 py-2", tone)}
-      aria-atomic="true"
-      aria-live="polite"
-      role="status"
-    >
-      <div className="min-w-0">
-        <p className="text-xs font-medium text-foreground">{notice.title}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">{notice.description}</p>
+    <Alert variant={tone} className="px-3 py-2" aria-atomic="true" aria-live="polite" role="status">
+      <AlertTitle>{notice.title}</AlertTitle>
+      <AlertDescription>
+        <p>{notice.description}</p>
         {state.freshness === "stale" || state.freshness === "legacy" ? (
-          <p className="mt-0.5 text-[11px] text-muted-foreground/70">{evidence}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground/70">{evidence}</p>
         ) : null}
-      </div>
+      </AlertDescription>
       {onRetry && notice.showRetry ? (
-        <Button className="shrink-0" onClick={onRetry} size="sm" variant="outline">
-          Retry
-        </Button>
+        <AlertAction>
+          <Button className="shrink-0" onClick={onRetry} size="sm" variant="outline">
+            Retry
+          </Button>
+        </AlertAction>
       ) : null}
-    </div>
+    </Alert>
   );
 }

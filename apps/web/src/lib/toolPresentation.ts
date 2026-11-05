@@ -1,5 +1,7 @@
 const TOOL_LABELS: Readonly<Record<string, string>> = {
   rename_thread: "renamer",
+  move_thread: "thread mover",
+  snooze_thread: "thread snoozer",
   create_thread: "thread creator",
   archive_thread: "thread archiver",
   get_thread_status: "thread status reader",
@@ -10,8 +12,10 @@ const TOOL_LABELS: Readonly<Record<string, string>> = {
   unpin_thread: "thread unpinner",
   list_available_models: "model lister",
   get_system_resources: "system resource reader",
+  configure_system_resource_rules: "resource monitoring settings",
   search_capabilities: "capability finder",
   read_capability_guide: "capability guide reader",
+  render_html: "html renderer",
   browser: "browser",
   computer_use: "computer controller",
   list_notes: "note lister",

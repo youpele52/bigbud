@@ -332,7 +332,8 @@ export async function withV2RuntimeFixture(
     maxQueuedEvents: 128,
     maxEventBytes: 100000,
     consumerTimeoutMs: 10000,
-    start: async () => ({
+    start: async (config) => ({
+      ...(config.sharedService ? { ownership: "borrowed" as const } : {}),
       client: http.client,
       isRunning: () => http.running,
       hasExited: () => !http.running,

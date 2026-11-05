@@ -1,0 +1,38 @@
+syntax = "proto3";
+package bigbud.computer_use.control;
+
+message Stop {
+  string operation_id = 1;
+  string desktop_scope = 2;
+}
+// Admission revoked is NOT proof of physical retirement or input release.
+message Revoked {
+  string operation_id = 1;
+  uint64 pause_epoch = 2;
+  string settlement_id = 3;
+}
+message Resume {
+  string request_id = 1;
+  uint64 expected_pause_epoch = 2;
+  string challenge = 3;
+  string authority_id = 4;
+  string policy_revision = 5;
+  string episode_id = 6;
+}
+message Status {
+  string request_id = 1;
+  string state = 2;
+  uint64 pause_epoch = 3;
+  string applied_revision = 4;
+  string episode_id = 5;
+  string notice_id = 6;
+  string notice_state = 7;
+  string retirement = 8;
+  string input_state = 9;
+  uint32 queued_operations = 10;
+}
+message Settlement {
+  string settlement_id = 1;
+  string retirement = 2;
+  string input_state = 3;
+}

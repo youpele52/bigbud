@@ -23,15 +23,22 @@ describe("respondToUserInput", () => {
     );
 
     expect(requireSession).toHaveBeenCalledWith("thread_1");
-    expect(writeMessage).toHaveBeenCalledWith(context, {
-      id: 42,
-      result: {
-        answers: {
-          scope: { answers: ["All request methods"] },
-          compat: { answers: ["Keep current envelope"] },
+    expect(writeMessage).toHaveBeenCalledWith(
+      context,
+      {
+        id: 42,
+        result: {
+          answers: {
+            scope: { answers: ["All request methods"] },
+            compat: { answers: ["Keep current envelope"] },
+          },
         },
       },
-    });
+      expect.objectContaining({
+        shouldDispatch: expect.any(Function),
+        onDispatch: expect.any(Function),
+      }),
+    );
     expect(emitEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         method: "item/tool/requestUserInput/answered",
@@ -59,14 +66,21 @@ describe("respondToUserInput", () => {
     );
 
     expect(requireSession).toHaveBeenCalledWith("thread_1");
-    expect(writeMessage).toHaveBeenCalledWith(context, {
-      id: 42,
-      result: {
-        answers: {
-          scope: { answers: [] },
+    expect(writeMessage).toHaveBeenCalledWith(
+      context,
+      {
+        id: 42,
+        result: {
+          answers: {
+            scope: { answers: [] },
+          },
         },
       },
-    });
+      expect.objectContaining({
+        shouldDispatch: expect.any(Function),
+        onDispatch: expect.any(Function),
+      }),
+    );
     expect(emitEvent).toHaveBeenCalledWith(
       expect.objectContaining({
         method: "item/tool/requestUserInput/answered",

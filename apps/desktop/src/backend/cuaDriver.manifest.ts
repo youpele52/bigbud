@@ -1,8 +1,11 @@
 import * as Crypto from "node:crypto";
 import * as FS from "node:fs";
 
-import { makeCuaDriverChildEnvironment } from "@bigbud/shared/cua-driver/childEnvironment";
-import { parseCuaDriverManifest } from "@bigbud/shared/cua-driver/manifest";
+import {
+  cuaDriverStateEnvironment,
+  makeCuaDriverChildEnvironment,
+} from "@bigbud/shared/cua-driver/childEnvironment";
+import { parseCuaDriverManifest, type CuaDriverManifest } from "@bigbud/shared/cua-driver/manifest";
 import { CUA_DRIVER_POLICY_SHA256 } from "@bigbud/shared/cua-driver/policy";
 
 import { runCommand } from "./cuaDriver.process";
@@ -17,12 +20,18 @@ export function validateCuaDriverPolicy(policyPath: string): void {
 export async function validateCuaDriverRuntime(
   binaryPath: string,
   policyPath?: string,
-): Promise<void> {
+  stateHome?: string,
+  timeoutMs?: number,
+): Promise<CuaDriverManifest> {
   if (policyPath) validateCuaDriverPolicy(policyPath);
   const result = await runCommand(
     binaryPath,
     ["manifest"],
-    makeCuaDriverChildEnvironment(process.env),
+    makeCuaDriverChildEnvironment(
+      process.env,
+      stateHome ? cuaDriverStateEnvironment(stateHome) : {},
+    ),
+    ...(timeoutMs === undefined ? [] : [timeoutMs]),
   );
   if (result.code !== 0) {
     throw new Error(result.stderr || "Computer Use runtime manifest command failed.");
@@ -31,4 +40,5 @@ export async function validateCuaDriverRuntime(
   if (FS.realpathSync(manifest.binary_path) !== FS.realpathSync(binaryPath)) {
     throw new Error("Computer Use runtime manifest resolved a different executable.");
   }
+  return manifest;
 }

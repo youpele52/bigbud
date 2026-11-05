@@ -10,7 +10,7 @@ export const applyClaudeRuntimeTraits = Effect.fn("applyClaudeRuntimeTraits")(fu
   readonly modelSelection: ProviderSessionStartInput["modelSelection"];
   readonly threadId: ThreadId;
 }) {
-  const traits = resolveClaudeRuntimeTraits(input.modelSelection);
+  const traits = resolveClaudeRuntimeTraits(input.modelSelection, input.context.modelCapabilities);
   const flagSettings: Parameters<ClaudeSessionContext["query"]["applyFlagSettings"]>[0] = {};
   if (input.context.currentEffort !== (traits.effectiveEffort ?? undefined)) {
     flagSettings.effortLevel = traits.effectiveEffort ?? null;

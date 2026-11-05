@@ -3,6 +3,7 @@ import { registerTerminalDiagnostics, type TerminalStreamDiagnostics } from "./T
 import { TerminalFrameMetrics } from "./TerminalFrameMetrics";
 import type { TerminalRendererState } from "./TerminalRendererController";
 import type { TerminalWriteBatcher } from "./TerminalWriteBatcher";
+import { attachTerminalLifecycleDiagnostics } from "./TerminalLifecycleDiagnostics";
 
 /** Output within this window after a keystroke is treated as an interactive echo (orca: 100 ms). */
 export const INTERACTIVE_INPUT_WINDOW_MS = 100;
@@ -18,6 +19,7 @@ export function attachTerminalViewportInstrumentation(input: {
   readonly now?: () => number;
 }) {
   const now = input.now ?? (() => performance.now());
+  const lifecycle = attachTerminalLifecycleDiagnostics({ ...input, now });
   const metrics = new TerminalFrameMetrics(now);
   let renderer: TerminalRendererState = { mode: "dom", reason: null };
   let batcher: TerminalWriteBatcher | null = null;
@@ -52,6 +54,7 @@ export function attachTerminalViewportInstrumentation(input: {
   }));
 
   return {
+    lifecycle,
     observeOutput: (data: string) => metrics.observe(data),
     markInput: () => {
       lastInputAt = now();
@@ -60,10 +63,12 @@ export function attachTerminalViewportInstrumentation(input: {
     lastInputAt: () => lastInputAt,
     isWebgl: () => renderer.mode === "webgl",
     setRenderer: (state: TerminalRendererState) => {
+      if (renderer.mode !== state.mode) lifecycle.record({ type: "renderer", mode: state.mode });
       renderer = state;
     },
     /** Painted on screen: visible output is written immediately, hidden output is paced. */
     setForeground: (next: boolean) => {
+      if (foreground !== next) lifecycle.record({ type: "visibility", foreground: next });
       foreground = next;
       batcher?.setForeground(next);
     },
@@ -77,6 +82,7 @@ export function attachTerminalViewportInstrumentation(input: {
       stream = read;
     },
     dispose: () => {
+      lifecycle.dispose();
       textarea?.removeEventListener("focus", onFocus);
       textarea?.removeEventListener("blur", onBlur);
       renderDisposable.dispose();

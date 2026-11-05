@@ -3,6 +3,7 @@ import { ChildProcess } from "effect/unstable/process";
 
 import { BuildPlatform, commandOutputOptions, runCommand } from "./shared.ts";
 import { shellOptionForPlatform } from "./platform.ts";
+import type { CopilotPackagingMode } from "../../../apps/desktop/scripts/copilotRuntimePackaging.cjs";
 
 // Local shims for deprecated transitive dependencies of the staged server
 // runtime. They live in the staged server directory only while npm installs and
@@ -56,6 +57,9 @@ export const installStagedServerDependencies = Effect.fn("installStagedServerDep
     readonly stageServerDir: string;
     readonly platform: typeof BuildPlatform.Type;
     readonly verbose: boolean;
+    readonly copilotMode: CopilotPackagingMode;
+    readonly copilotTargets: readonly string[];
+    readonly copilotVersion: string;
   }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
@@ -64,10 +68,8 @@ export const installStagedServerDependencies = Effect.fn("installStagedServerDep
     // Use npm (not bun) for the server directory so node_modules follows the
     // standard flat layout that Node.js expects. Bun's symlink-based hoisting
     // does not survive electron-builder's file copy to extraResources.
-    // Do NOT use --no-optional: @github/copilot declares platform-specific
-    // CLI binaries (@github/copilot-darwin-arm64, etc.) as optionalDependencies.
-    // Without them the Copilot SDK has no CLI to spawn and listModels() returns
-    // incomplete model shapes that crash at runtime.
+    // Keep optional dependencies for Pi and other providers. Copilot-only native
+    // pruning happens after install, according to the persisted bridge/slim mode.
     // --install-links copies the file: shims into node_modules instead of
     // symlinking them, for the same electron-builder reason.
     yield* runCommand(
@@ -77,6 +79,51 @@ export const installStagedServerDependencies = Effect.fn("installStagedServerDep
         shell: shellOptionForPlatform(input.platform),
       })`npm install --omit=dev --install-links`,
     );
+    if (input.copilotMode === "bridge") {
+      // Explicit target packages also cover cross-host and universal staging. Never use latest.
+      if (!/^\d+\.\d+\.\d+$/.test(input.copilotVersion))
+        throw new Error("Copilot bridge version must be pinned.");
+      const isolated = path.join(input.stageServerDir, ".copilot-bridge-install");
+      yield* fs.makeDirectory(isolated, { recursive: true });
+      yield* fs.writeFileString(
+        path.join(isolated, "package.json"),
+        JSON.stringify({ name: "bigbud-copilot-bridge", private: true }),
+      );
+      yield* runCommand(
+        ChildProcess.make(
+          "npm",
+          [
+            "install",
+            "--no-save",
+            "--ignore-scripts",
+            "--force",
+            ...input.copilotTargets.map(
+              (target) => `@github/copilot-${target}@${input.copilotVersion}`,
+            ),
+          ],
+          {
+            // Isolate --force: applying it to the full tree can pull every OS's optional binaries.
+            cwd: isolated,
+            ...commandOutputOptions(input.verbose),
+            shell: shellOptionForPlatform(input.platform),
+          },
+        ),
+      );
+      for (const target of input.copilotTargets) {
+        const destination = path.join(
+          input.stageServerDir,
+          "node_modules",
+          "@github",
+          `copilot-${target}`,
+        );
+        yield* fs.remove(destination, { recursive: true, force: true });
+        yield* fs.copy(
+          path.join(isolated, "node_modules", "@github", `copilot-${target}`),
+          destination,
+        );
+      }
+      yield* fs.remove(isolated, { recursive: true });
+    }
     yield* fs.remove(path.join(input.stageServerDir, SHIMS_DIR_NAME), { recursive: true });
   },
 );

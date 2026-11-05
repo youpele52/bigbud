@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { makeCuaDriverChildEnvironment } from "./childEnvironment";
+import {
+  CUA_DRIVER_STATE_HOME_KEY,
+  cuaDriverStateEnvironment,
+  makeCuaDriverChildEnvironment,
+} from "./childEnvironment";
+import { cuaDriverCursorThemeDirectory } from "./cursorTheme";
 
 describe("makeCuaDriverChildEnvironment", () => {
   it("keeps required desktop variables and strips credentials", () => {
@@ -16,6 +21,59 @@ describe("makeCuaDriverChildEnvironment", () => {
       DISPLAY: ":0",
       CUA_DRIVER_RS_TELEMETRY_ENABLED: "false",
       CUA_DRIVER_RS_UPDATE_CHECK: "false",
+      CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "false",
     });
+  });
+
+  it("keeps the real HOME and moves Driver-owned state into the private state home", () => {
+    const stateHome = "/base/runtime/cua-driver/home";
+    // Only the carrier key is forwarded; the Driver overrides are derived at spawn.
+    expect(cuaDriverStateEnvironment(stateHome)).toEqual({
+      [CUA_DRIVER_STATE_HOME_KEY]: stateHome,
+    });
+    expect(
+      makeCuaDriverChildEnvironment({ PATH: "/bin" }, cuaDriverStateEnvironment(stateHome)),
+    ).toMatchObject({
+      CUA_DRIVER_RS_HOME: stateHome,
+      CUA_DRIVER_TELEMETRY_HOME: stateHome,
+      CUA_DRIVER_CURSOR_THEME_DIR: cuaDriverCursorThemeDirectory(stateHome),
+    });
+    // Forwarded through the backend env: the server's MCP proxy and reset
+    // commands derive the same overrides from the carried key alone.
+    expect(
+      makeCuaDriverChildEnvironment({
+        PATH: "/bin",
+        HOME: "/home/user",
+        [CUA_DRIVER_STATE_HOME_KEY]: stateHome,
+        CUA_DRIVER_RS_HOME: "/elsewhere",
+      }),
+    ).toEqual({
+      PATH: "/bin",
+      HOME: "/home/user",
+      [CUA_DRIVER_STATE_HOME_KEY]: stateHome,
+      CUA_DRIVER_RS_HOME: stateHome,
+      CUA_DRIVER_TELEMETRY_HOME: stateHome,
+      CUA_DRIVER_CURSOR_THEME_DIR: cuaDriverCursorThemeDirectory(stateHome),
+      CUA_DRIVER_RS_TELEMETRY_ENABLED: "false",
+      CUA_DRIVER_RS_UPDATE_CHECK: "false",
+      CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "false",
+    });
+  });
+
+  it("leaves the environment unchanged without a state home", () => {
+    expect(makeCuaDriverChildEnvironment({ HOME: "/home/user" })).toEqual({
+      HOME: "/home/user",
+      CUA_DRIVER_RS_TELEMETRY_ENABLED: "false",
+      CUA_DRIVER_RS_UPDATE_CHECK: "false",
+      CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "false",
+    });
+  });
+  it("never lets an inherited or overridden flag enable automatic foreground fallback", () => {
+    expect(
+      makeCuaDriverChildEnvironment(
+        { CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "true" },
+        { CUA_DRIVER_ALLOW_BRIEF_FOREGROUND: "true" },
+      ).CUA_DRIVER_ALLOW_BRIEF_FOREGROUND,
+    ).toBe("false");
   });
 });

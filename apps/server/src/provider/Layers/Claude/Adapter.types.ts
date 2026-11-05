@@ -13,6 +13,7 @@ import type {
   ApprovalRequestId,
   CanonicalItemType,
   CanonicalRequestType,
+  ModelCapabilities,
   ProviderApprovalDecision,
   ProviderRuntimeEvent,
   ProviderSession,
@@ -131,6 +132,7 @@ export interface ClaudeSessionContext {
   effectivePermissionMode: PermissionMode | undefined;
   currentApiModelId: string | undefined;
   currentEffort: ClaudeQueryOptions["effort"] | undefined;
+  readonly modelCapabilities?: ModelCapabilities;
   currentFastMode: boolean;
   currentThinking: boolean | undefined;
   currentUltracode: boolean;
@@ -193,6 +195,8 @@ export interface ClaudeAdapterLiveOptions {
 
 export interface ClaudeHarnessConfig {
   readonly binaryPath: string;
+  /** Fixed-model harness capabilities, isolated from the native Claude catalog. */
+  readonly modelCapabilities?: ModelCapabilities;
   readonly environment?: Readonly<Record<string, string | undefined>>;
   readonly settingSources?: ReadonlyArray<"user" | "project" | "local">;
   /** Harness-local rollout controls; native Claude settings must not leak into adapters. */

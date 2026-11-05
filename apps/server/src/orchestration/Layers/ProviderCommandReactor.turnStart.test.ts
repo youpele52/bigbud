@@ -329,7 +329,7 @@ describe("ProviderCommandReactor", () => {
     expect(sendInput?.input).toContain("bigbud://capabilities/thread.rename");
     expect(sendInput?.input).toContain("bigbud://capabilities/thread.archive");
     expect(sendInput?.input).toContain("bigbud://capabilities/thread.create");
-    expect(sendInput?.input).toContain("Standalone delegated threads");
+    expect(sendInput?.input).toContain("Delegated threads do not inherit history");
     expect(sendInput?.input).not.toContain("Current thread context:");
     expect(sendInput?.input).toContain("hello reactor");
   });

@@ -1,10 +1,9 @@
 import { CommandId, MessageId, ThreadId, TurnId } from "@bigbud/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import {
   buildSendNowFlushCommand,
   buildSendNowInterruptCommand,
-  sendNowQueuedPrompts,
 } from "./ChatView.promptQueue.logic";
 
 describe("Send now interrupt intent", () => {
@@ -45,53 +44,33 @@ describe("Send now on an idle thread", () => {
       messageIds: ["held"],
       messageId: "combined",
       userRelease: true,
+      expectedTurnId: null,
+      expectedSessionEpoch: 0,
       createdAt: "2026-08-11T00:00:00.000Z",
     });
   });
 });
 
-describe("Send now persists the composer's settings before an idle release", () => {
-  const ids = [MessageId.makeUnsafe("held")];
-  const run = (overrides: Partial<Parameters<typeof sendNowQueuedPrompts>[0]>) => {
-    const order: string[] = [];
-    const calls = {
-      interrupt: vi.fn(async () => void order.push("interrupt")),
-      flush: vi.fn(async () => void order.push("flush")),
-      onError: vi.fn(),
-    };
-    const done = sendNowQueuedPrompts({
-      queuedPromptIds: ids,
-      activeTurnInProgress: false,
-      persistSettingsBeforeRelease: async () => {
-        await Promise.resolve();
-        order.push("persist");
+it("captures observed turn, queue incarnation, and settings in one immutable request", () => {
+  const input = {
+    threadId: ThreadId.makeUnsafe("thread"),
+    commandId: CommandId.makeUnsafe("release"),
+    messageId: MessageId.makeUnsafe("combined"),
+    messageIds: [MessageId.makeUnsafe("one")],
+    createdAt: "2026-10-28T12:00:00.000Z",
+    expectedTurnId: TurnId.makeUnsafe("turn"),
+    expectedSessionEpoch: 4,
+    promptVersions: [
+      {
+        id: MessageId.makeUnsafe("one"),
+        createdAt: "2026-10-28T11:00:00.000Z",
+        alreadySent: false,
       },
-      ...calls,
-      ...overrides,
-    });
-    return { done, order, calls };
+    ],
+    releaseSettings: { runtimeMode: "full-access" as const, interactionMode: "default" as const },
   };
-
-  it("awaits the persist before the release flush", async () => {
-    const { done, order, calls } = run({});
-    await done;
-    expect(order).toEqual(["persist", "flush"]);
-    expect(calls.flush).toHaveBeenCalledWith(ids);
-  });
-
-  it("never persists mid-turn: a runtime-mode change would restart the session under the interrupt", async () => {
-    const { done, order } = run({ activeTurnInProgress: true });
-    await done;
-    expect(order).toEqual(["interrupt"]);
-  });
-
-  it("sends nothing and reports the error when persisting fails", async () => {
-    const { done, calls } = run({
-      persistSettingsBeforeRelease: () => Promise.reject(new Error("model update rejected")),
-    });
-    await done;
-    expect(calls.flush).not.toHaveBeenCalled();
-    expect(calls.interrupt).not.toHaveBeenCalled();
-    expect(calls.onError).toHaveBeenCalledWith("model update rejected");
-  });
+  expect(buildSendNowFlushCommand(input)).toMatchObject(input);
+  const captured = buildSendNowFlushCommand(input);
+  input.messageIds.push(MessageId.makeUnsafe("later"));
+  expect(captured.messageIds).toEqual(["one"]);
 });

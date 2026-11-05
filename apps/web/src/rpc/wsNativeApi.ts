@@ -168,13 +168,14 @@ export function createWsNativeApi(): NativeApi {
     terminal: {
       wslDistributions: () => rpcClient.terminal.wslDistributions(),
       snapshot: (input) => rpcClient.terminal.snapshot(input as never),
+      recovery: (input) => rpcClient.terminal.recovery(input),
       open: (input) => rpcClient.terminal.open(input as never),
       write: (input) => rpcClient.terminal.write(input as never),
       resize: (input) => rpcClient.terminal.resize(input as never),
       clear: (input) => rpcClient.terminal.clear(input as never),
       restart: (input) => rpcClient.terminal.restart(input as never),
       close: (input) => rpcClient.terminal.close(input as never),
-      onEvent: (callback) => rpcClient.terminal.onEvent(callback),
+      onEvent: (callback, options) => rpcClient.terminal.onEvent(callback, options),
       subscribeSession: (input, callback, options) =>
         rpcClient.terminal.subscribeSession(input as never, callback, options),
       ackOutput: (input) => rpcClient.terminal.ackOutput(input),
@@ -277,6 +278,7 @@ export function createWsNativeApi(): NativeApi {
       startHandoffJob: rpcClient.server.startHandoffJob,
       getHandoffJob: rpcClient.server.getHandoffJob,
       getOpencodeV2ThreadToolsSetup: rpcClient.server.getOpencodeV2ThreadToolsSetup,
+      copilotRuntime: rpcClient.server.copilotRuntime,
       createMobileRemotePairing: rpcClient.server.createMobileRemotePairing,
       listMobileRemoteSessions: rpcClient.server.listMobileRemoteSessions,
       revokeMobileRemoteSession: rpcClient.server.revokeMobileRemoteSession,
@@ -295,12 +297,14 @@ export function createWsNativeApi(): NativeApi {
       getUsageSummary: rpcClient.server.getUsageSummary,
       getWsConnectionDiagnostics: rpcClient.server.getWsConnectionDiagnostics,
       stopSubagent: rpcClient.server.stopSubagent,
+      providerControls: rpcClient.server.providerControls,
     },
     orchestration: {
       getSidebarThreadCatalog: () => rpcClient.orchestration.getSidebarThreadCatalog({}),
       getStartupProjectCatalog: rpcClient.orchestration.getStartupProjectCatalog,
       searchConversationMessages: rpcClient.orchestration.searchConversationMessages,
       getProjectThreadSummaries: rpcClient.orchestration.getProjectThreadSummaries,
+      getOrganizationThreadSummaries: rpcClient.orchestration.getOrganizationThreadSummaries,
       getSelectedThreadDetail: rpcClient.orchestration.getSelectedThreadDetail,
       resolveThreadOwnership: async (input) => {
         try {

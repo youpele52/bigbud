@@ -23,7 +23,7 @@ import { buildMobileCreateThreadBootstrap } from "../logic/mobileNewThread.logic
 import type { MobileRecoveryController } from "../logic/mobileRecovery.controller";
 import type { MobileRpcClient } from "../lib/mobileRpc";
 import type { MobileCommandDeliveryController } from "../lib/mobileCommandDelivery";
-import { isLegacyOpencodeThread, isRetiredProvider } from "@bigbud/shared/providerLifecycle";
+import { isReadOnlyProviderThread, isRetiredProvider } from "@bigbud/shared/providerLifecycle";
 
 function newCommandId() {
   return CommandId.makeUnsafe(crypto.randomUUID());
@@ -91,7 +91,7 @@ export function buildMobileExistingThreadMessageSubmitCommand(input: {
 
 export function createMobileThreadCommands(input: MobileThreadCommandInput) {
   const readOnly =
-    isLegacyOpencodeThread(input.thread) ||
+    isReadOnlyProviderThread(input.thread) ||
     isRetiredProvider(input.selectedModelSelection.provider);
   const refreshAfterCommand = async () => {
     if (input.recovery) {

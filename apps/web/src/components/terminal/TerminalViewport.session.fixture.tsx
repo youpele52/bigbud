@@ -82,8 +82,9 @@ export function TerminalSessionFixture(input: {
       }}
     >
       <div ref={containerRef} style={{ width: 600, height: 300 }} />
-      <span>{state.inputEnabled ? "ready" : "paused"}</span>
-      <span>{state.rendering.mode}</span>
+      <span data-terminal-input>{state.inputEnabled ? "ready" : "paused"}</span>
+      <button onClick={state.restartDelivery}>Restart fixture</button>
+      <span data-terminal-renderer>{state.rendering.mode}</span>
     </div>
   );
 }

@@ -1,17 +1,28 @@
 import type { CodexDynamicToolSpec } from "../codex/codexAppServerManager.types.ts";
 import {
+  HTML_RENDER_TOOL_DESCRIPTION,
+  HTML_RENDER_TOOL_PARAMETERS,
+} from "./htmlRenderTool.shared.ts";
+import {
+  SYSTEM_RESOURCE_READ_PARAMETERS,
+  SYSTEM_RESOURCE_RULE_PARAMETERS,
+  CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
+} from "./systemResourceTools.shared.ts";
+import {
   READ_CAPABILITY_GUIDE_PARAMETERS,
   READ_CAPABILITY_GUIDE_TOOL_DESCRIPTION,
   SEARCH_CAPABILITIES_PARAMETERS,
   SEARCH_CAPABILITIES_TOOL_DESCRIPTION,
 } from "./capabilityCatalogTool.shared.ts";
 import { BROWSER_TOOL_PARAMETERS } from "./orchestrationBrowserTool.shared.ts";
-import { COPILOT_COMPUTER_USE_PARAMETERS } from "./orchestrationComputerUseTool.shared.ts";
+import {
+  computerUseToolDescription,
+  computerUseToolParameters,
+} from "./orchestrationComputerUseTool.selected.ts";
 import { LIST_THREADS_MAX_LIMIT } from "./ThreadOrchestrationTools.listThreads.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   BROWSER_TOOL_DESCRIPTION,
-  COMPUTER_USE_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_PARAMETERS,
   CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
@@ -28,6 +39,12 @@ import {
 } from "./threadOrchestrationBridge.shared.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
+import {
+  MOVE_THREAD_TOOL_DESCRIPTION,
+  MOVE_THREAD_TOOL_PARAMETERS,
+  SNOOZE_THREAD_TOOL_DESCRIPTION,
+  SNOOZE_THREAD_TOOL_PARAMETERS,
+} from "./threadOrganizationTool.shared.ts";
 
 export const BIGBUD_ORCHESTRATION_NAMESPACE = "bigbud_orchestration";
 
@@ -89,6 +106,12 @@ export function createCodexThreadOrchestrationDynamicTools(
     })),
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "render_html",
+      description: HTML_RENDER_TOOL_DESCRIPTION,
+      inputSchema: HTML_RENDER_TOOL_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "search_capabilities",
       description: SEARCH_CAPABILITIES_TOOL_DESCRIPTION,
       inputSchema: SEARCH_CAPABILITIES_PARAMETERS,
@@ -103,7 +126,13 @@ export function createCodexThreadOrchestrationDynamicTools(
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "get_system_resources",
       description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
-      inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+      inputSchema: SYSTEM_RESOURCE_READ_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "configure_system_resource_rules",
+      description: CONFIGURE_SYSTEM_RESOURCE_RULES_DESCRIPTION,
+      inputSchema: SYSTEM_RESOURCE_RULE_PARAMETERS,
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
@@ -116,6 +145,18 @@ export function createCodexThreadOrchestrationDynamicTools(
       name: "rename_thread",
       description: RENAME_THREAD_TOOL_DESCRIPTION,
       inputSchema: RENAME_THREAD_TOOL_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "move_thread",
+      description: MOVE_THREAD_TOOL_DESCRIPTION,
+      inputSchema: MOVE_THREAD_TOOL_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "snooze_thread",
+      description: SNOOZE_THREAD_TOOL_DESCRIPTION,
+      inputSchema: SNOOZE_THREAD_TOOL_PARAMETERS,
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
@@ -216,8 +257,8 @@ export function createCodexThreadOrchestrationDynamicTools(
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "computer_use",
-      description: COMPUTER_USE_TOOL_DESCRIPTION,
-      inputSchema: COPILOT_COMPUTER_USE_PARAMETERS,
+      description: computerUseToolDescription(),
+      inputSchema: computerUseToolParameters(),
     },
   ];
 }

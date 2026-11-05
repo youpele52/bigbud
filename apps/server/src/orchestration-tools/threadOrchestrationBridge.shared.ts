@@ -1,6 +1,7 @@
 import {
   createThreadOrchestrationToolToken,
   writeThreadOrchestrationToolAuth,
+  type ThreadToolWorkspaceBinding,
 } from "./ThreadOrchestrationToolAuth.ts";
 export { renderMcpInvocationIdentitySource } from "./threadOrchestrationBridge.invocationIdentity.ts";
 
@@ -125,10 +126,10 @@ export const BROWSER_TOOL_DESCRIPTION =
   'Control bigbud\'s built-in browsers. Use it by default when capability context says the bigbud browser is preferred, or whenever the user explicitly requests the bigbud/in-app browser. Decide whether the visible browser or background browser is better for each task: use target "visible" when the user wants to see or interact with the page in the bigbud desktop app, and target "background" for unattended research or parallel browsing. target "auto" reuses an existing visible agent tab when one exists, otherwise uses the background browser. Use get_page_text to read page content; do not attempt script execution or unsupported actions. Use close_tab only when the user explicitly asks to close that tab; it may interrupt another agent currently using the tab. Normal task completion must release control instead of closing tabs. This capability is part of bigbud and does not require desktop automation permission. Use computer_use for an external/system browser when explicitly requested or preferred by capability context.';
 
 export const COMPUTER_USE_TOOL_DESCRIPTION =
-  'Automate native desktop apps via the `computer_use` tool. Use `surface: "desktop"` for native macOS automation such as launching or focusing apps, reading Calendar or Reminders, capturing screens, and interacting through the accessibility tree. Desktop `navigate` opens the URL in the OS default browser; use it when the user explicitly requests an external/system browser or capability context says that browser is preferred. Opening does not by itself confirm that the browser is controllable. Use the separate `browser` tool for bigbud\'s built-in browser. Do not assume CLI tools or direct app APIs are unavailable before trying this tool. Read-only actions (capture, list_windows, list_apps, check_permissions, doctor, get_accessibility_tree) work in any runtime mode. Mutating actions require full-access runtime mode.';
+  'Automate native desktop apps via the `computer_use` tool with `surface: "desktop"`. Desktop interaction defaults to Background; only the user can enable Foreground in Settings → Computer Use. In Background, use list_windows then focus_app with an exact pid/windowId to select a running window without bringing it forward, or capture to bind the current window. Capture the selected window before using its pixel coordinates. Later actions stay on that window even if the user switches apps. An unavailable target or unsupported background action must not trigger a foreground retry; ask the user to change settings if needed. macOS launch_app launches in the background and selects its window when unambiguous. Desktop navigate opens the OS default browser only in Foreground mode; opening does not confirm browser control. Use the separate browser tool for bigbud\'s built-in background browser. Do not assume CLI tools or direct app APIs are unavailable before trying this tool. Read-only actions (capture, list_windows, list_apps, check_permissions, doctor, get_accessibility_tree) work in any runtime mode. Mutating actions require full-access runtime mode.';
 
 export const GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION =
-  "Read a current, bounded snapshot of the desktop app's machine resources from bigbud's Rust monitor. Returns host identity, sample time, freshness, metric availability, CPU, memory, network, and disk summary. Returns unavailable when the desktop monitor is absent. Read-only; call when system state is relevant.";
+  "Read desktop-host resources (not a remote workspace) from bigbud's shared monitor. No arguments returns a bounded CPU/RAM/app summary with source timestamps, health, rule revision and alerts. Optional view: details (per-core, disks, network, supported temperatures, app core/inclusive attribution), processes (default 20, max 100; stale cursors must be explicitly restarted), trends (30–300 seconds, max 60 observed samples), or rules. Optional categories limit details. Missing/stale/unsupported is not zero. Explicit reads work while background monitoring is disabled. Read-only; never controls processes.";
 
 export function resolveOrchestrationBridgeHost(host: string | undefined): string {
   if (!host || host === "0.0.0.0" || host === "::" || host === "[::]") {
@@ -138,13 +139,16 @@ export function resolveOrchestrationBridgeHost(host: string | undefined): string
 }
 
 export async function prepareThreadOrchestrationSessionAuth(
-  input: Pick<ThreadOrchestrationSessionBridgeInput, "stateDir" | "threadId">,
+  input: Pick<ThreadOrchestrationSessionBridgeInput, "stateDir" | "threadId"> & {
+    readonly workspaceBinding?: ThreadToolWorkspaceBinding;
+  },
 ): Promise<{ readonly token: string }> {
   const token = createThreadOrchestrationToolToken();
   await writeThreadOrchestrationToolAuth({
     stateDir: input.stateDir,
     threadId: input.threadId,
     token,
+    ...(input.workspaceBinding ? { workspaceBinding: input.workspaceBinding } : {}),
   });
   return { token };
 }

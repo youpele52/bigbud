@@ -1,0 +1,34 @@
+syntax = "proto3";
+package bigbud.computer_use.v1;
+
+import "computer-use/common.proto";
+import "computer-use/policy.proto";
+import "computer-use/episode.proto";
+import "computer-use/control.proto";
+import "computer-use/execution.proto";
+import "computer-use/outcome.proto";
+
+// Control and data use DIFFERENT authenticated transports and buffer budgets.
+// Parsing a data frame on control, or control on data, is a protocol error.
+message Frame {
+  oneof payload {
+    common.Hello hello = 1;
+    policy.ApplyPolicy apply_policy = 2;
+    policy.PolicyAcknowledged policy_acknowledged = 3;
+    episode.BeginEpisode begin_episode = 4;
+    execution.AdmitOperation admit_operation = 5;
+    execution.Admission admission = 6;
+    execution.MediatedCall mediated_call = 7;
+    control.Stop stop = 8;
+    control.Revoked revoked = 9;
+    control.Resume resume = 10;
+    episode.SurfaceLease surface_lease = 11;
+    episode.WarningPresented warning_presented = 12;
+    control.Status status = 13;
+    outcome.OperationResult operation_result = 14;
+    outcome.LookupOperation lookup_operation = 15;
+    execution.RevokeCaller revoke_caller = 16;
+    control.Settlement settlement = 17;
+    common.ProtocolError protocol_error = 18;
+  }
+}

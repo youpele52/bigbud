@@ -21,15 +21,15 @@ import {
 
 function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
+    sidebarPrimaryGroupSize: 4,
     sidebarActionOrder: [
-      "plugins",
       "scheduled",
       "games",
       "usage",
       "pinned",
       "chats",
       "projects",
-      "remote-projects",
+      "remote-workspaces",
     ],
     hiddenSidebarActions: [],
     chatsExpanded: true,
@@ -38,7 +38,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     projectExpandedById: {},
     projectOrder: [],
     projectsExpanded: true,
-    remoteProjectsExpanded: false,
+    remoteWorkspacesExpanded: false,
     selectedProjectId: null,
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
@@ -263,16 +263,16 @@ describe("uiStateStore pure functions", () => {
 
     const chatsCollapsed = setSidebarSectionExpanded(initialState, "chatsExpanded", false);
     const projectsExpanded = setSidebarSectionExpanded(chatsCollapsed, "projectsExpanded", true);
-    const remoteProjectsExpanded = setSidebarSectionExpanded(
+    const remoteWorkspacesExpanded = setSidebarSectionExpanded(
       projectsExpanded,
-      "remoteProjectsExpanded",
+      "remoteWorkspacesExpanded",
       true,
     );
 
-    expect(remoteProjectsExpanded).toMatchObject({
+    expect(remoteWorkspacesExpanded).toMatchObject({
       chatsExpanded: false,
       projectsExpanded: true,
-      remoteProjectsExpanded: true,
+      remoteWorkspacesExpanded: true,
     });
   });
 
@@ -291,19 +291,19 @@ describe("uiStateStore pure functions", () => {
         makeUiState({
           chatsExpanded: false,
           projectsExpanded: true,
-          remoteProjectsExpanded: true,
+          remoteWorkspacesExpanded: true,
         }),
       );
 
       expect(JSON.parse(values.get(PERSISTED_STATE_KEY)!)).toMatchObject({
         chatsExpanded: false,
         projectsExpanded: true,
-        remoteProjectsExpanded: true,
+        remoteWorkspacesExpanded: true,
       });
       expect(readPersistedState()).toMatchObject({
         chatsExpanded: false,
         projectsExpanded: true,
-        remoteProjectsExpanded: true,
+        remoteWorkspacesExpanded: true,
       });
     } finally {
       vi.unstubAllGlobals();

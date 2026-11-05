@@ -1,18 +1,20 @@
 export const ANNOTATION_PANEL_GAP = 8;
 
-/** Prefer the last selected line, flip above the selection, then clamp to the viewport. */
+/** Prefer the requested side, flip when needed, then clamp to the viewport. */
 export function annotationPanelTop({
   selectionTop,
   selectionBottom,
   panelHeight,
   viewportTop,
   viewportHeight,
+  preferredSide = "below",
 }: {
   selectionTop: number;
   selectionBottom: number;
   panelHeight: number;
   viewportTop: number;
   viewportHeight: number;
+  preferredSide?: "above" | "below";
 }): number {
   const minTop = viewportTop + ANNOTATION_PANEL_GAP;
   const maxTop = Math.max(
@@ -20,10 +22,12 @@ export function annotationPanelTop({
     viewportTop + viewportHeight - panelHeight - ANNOTATION_PANEL_GAP,
   );
   const belowTop = selectionBottom + ANNOTATION_PANEL_GAP;
-  if (belowTop >= minTop && belowTop <= maxTop) return belowTop;
   const aboveTop = selectionTop - panelHeight - ANNOTATION_PANEL_GAP;
-  if (aboveTop >= minTop && aboveTop <= maxTop) return aboveTop;
-  return Math.min(Math.max(belowTop, minTop), maxTop);
+  const preferredTop = preferredSide === "above" ? aboveTop : belowTop;
+  const fallbackTop = preferredSide === "above" ? belowTop : aboveTop;
+  if (preferredTop >= minTop && preferredTop <= maxTop) return preferredTop;
+  if (fallbackTop >= minTop && fallbackTop <= maxTop) return fallbackTop;
+  return Math.min(Math.max(preferredTop, minTop), maxTop);
 }
 
 /** Measure text endpoints rather than block boxes, which can span many wrapped lines. */

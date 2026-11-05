@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import { CheckCircle2Icon, Clock3Icon, Loader2Icon, XCircleIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -87,7 +88,7 @@ export function MessagesTimelineAutomationRequest(props: {
         api,
         allProjects,
         defaultChatCwd,
-        modelSelection: sourceThread.modelSelection,
+        modelSelection: requireActiveModelSelection(sourceThread.modelSelection),
         projectOptions,
         providers: serverProviders,
         request: normalizedRequest,

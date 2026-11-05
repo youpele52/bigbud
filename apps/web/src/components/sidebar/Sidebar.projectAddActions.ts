@@ -12,10 +12,13 @@ import { getDefaultModelSelection } from "../../models/provider/provider.models"
 import { readNativeApi } from "../../rpc/nativeApi";
 import type { useServerProviders } from "../../rpc/serverState";
 import { toastManager } from "../ui/toast";
-import { deriveProjectTitleFromCwd } from "./Sidebar.projects.logic";
+import {
+  deriveProjectTitleFromCwd,
+  isRemoteExecutionTargetId,
+} from "./Sidebar.remoteWorkspaces.logic";
 import type { CreateProjectInput, CreateProjectResult } from "./Sidebar.projectAddActions.helpers";
-import { useSidebarRemoteProjectAddActions } from "./Sidebar.projectAddActions.remote";
-import type { SidebarRemoteProjectAddActionsOutput } from "./Sidebar.projectAddActions.remote.types";
+import { useSidebarRemoteWorkspaceAddActions } from "./Sidebar.remoteWorkspaceAddActions";
+import type { SidebarRemoteWorkspaceAddActionsOutput } from "./Sidebar.remoteWorkspaceAddActions.types";
 
 interface UseSidebarProjectAddActionsInput {
   projects: Project[];
@@ -39,33 +42,33 @@ export interface SidebarProjectAddActionsOutput {
   handleAddProject: () => void;
   handlePickFolder: () => Promise<void>;
   cancelAddProject: () => void;
-  isRemoteProjectDialogOpen: SidebarRemoteProjectAddActionsOutput["isRemoteProjectDialogOpen"];
-  remoteProjectDialogMode: SidebarRemoteProjectAddActionsOutput["remoteProjectDialogMode"];
-  remoteProjectDraft: SidebarRemoteProjectAddActionsOutput["remoteProjectDraft"];
-  remoteProjectFieldErrors: SidebarRemoteProjectAddActionsOutput["remoteProjectFieldErrors"];
-  remoteProjectError: SidebarRemoteProjectAddActionsOutput["remoteProjectError"];
-  remoteProjectVerificationMessage: SidebarRemoteProjectAddActionsOutput["remoteProjectVerificationMessage"];
-  isVerifyingRemoteProject: SidebarRemoteProjectAddActionsOutput["isVerifyingRemoteProject"];
-  isSavingRemoteProject: SidebarRemoteProjectAddActionsOutput["isSavingRemoteProject"];
-  openRemoteProjectDialog: SidebarRemoteProjectAddActionsOutput["openRemoteProjectDialog"];
-  openRemoteProjectEditDialog: SidebarRemoteProjectAddActionsOutput["openRemoteProjectEditDialog"];
-  closeRemoteProjectDialog: SidebarRemoteProjectAddActionsOutput["closeRemoteProjectDialog"];
-  updateRemoteProjectDraft: SidebarRemoteProjectAddActionsOutput["updateRemoteProjectDraft"];
-  adoptRemoteProjectConnectionSource: SidebarRemoteProjectAddActionsOutput["adoptRemoteProjectConnectionSource"];
-  submitRemoteProjectDialog: SidebarRemoteProjectAddActionsOutput["submitRemoteProjectDialog"];
-  requestRemoteProjectUnlock: SidebarRemoteProjectAddActionsOutput["requestRemoteProjectUnlock"];
-  remoteAgentInstallRequest: SidebarRemoteProjectAddActionsOutput["remoteAgentInstallRequest"];
-  declineRemoteAgentInstall: SidebarRemoteProjectAddActionsOutput["declineRemoteAgentInstall"];
-  completeRemoteAgentInstall: SidebarRemoteProjectAddActionsOutput["completeRemoteAgentInstall"];
-  isRemoteProjectUnlockDialogOpen: SidebarRemoteProjectAddActionsOutput["isRemoteProjectUnlockDialogOpen"];
-  remoteProjectUnlockMode: SidebarRemoteProjectAddActionsOutput["remoteProjectUnlockMode"];
-  remoteProjectUnlockKeyPath: SidebarRemoteProjectAddActionsOutput["remoteProjectUnlockKeyPath"];
-  remoteProjectUnlockPassphrase: SidebarRemoteProjectAddActionsOutput["remoteProjectUnlockPassphrase"];
-  remoteProjectUnlockError: SidebarRemoteProjectAddActionsOutput["remoteProjectUnlockError"];
-  isUnlockingRemoteProjectKey: SidebarRemoteProjectAddActionsOutput["isUnlockingRemoteProjectKey"];
-  closeRemoteProjectUnlockDialog: SidebarRemoteProjectAddActionsOutput["closeRemoteProjectUnlockDialog"];
-  setRemoteProjectUnlockPassphrase: SidebarRemoteProjectAddActionsOutput["setRemoteProjectUnlockPassphrase"];
-  submitRemoteProjectUnlock: SidebarRemoteProjectAddActionsOutput["submitRemoteProjectUnlock"];
+  isRemoteWorkspaceDialogOpen: SidebarRemoteWorkspaceAddActionsOutput["isRemoteWorkspaceDialogOpen"];
+  remoteWorkspaceDialogMode: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceDialogMode"];
+  remoteWorkspaceDraft: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceDraft"];
+  remoteWorkspaceFieldErrors: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceFieldErrors"];
+  remoteWorkspaceError: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceError"];
+  remoteWorkspaceVerificationMessage: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceVerificationMessage"];
+  isVerifyingRemoteWorkspace: SidebarRemoteWorkspaceAddActionsOutput["isVerifyingRemoteWorkspace"];
+  isSavingRemoteWorkspace: SidebarRemoteWorkspaceAddActionsOutput["isSavingRemoteWorkspace"];
+  openRemoteWorkspaceDialog: SidebarRemoteWorkspaceAddActionsOutput["openRemoteWorkspaceDialog"];
+  openRemoteWorkspaceEditDialog: SidebarRemoteWorkspaceAddActionsOutput["openRemoteWorkspaceEditDialog"];
+  closeRemoteWorkspaceDialog: SidebarRemoteWorkspaceAddActionsOutput["closeRemoteWorkspaceDialog"];
+  updateRemoteWorkspaceDraft: SidebarRemoteWorkspaceAddActionsOutput["updateRemoteWorkspaceDraft"];
+  adoptRemoteWorkspaceConnectionSource: SidebarRemoteWorkspaceAddActionsOutput["adoptRemoteWorkspaceConnectionSource"];
+  submitRemoteWorkspaceDialog: SidebarRemoteWorkspaceAddActionsOutput["submitRemoteWorkspaceDialog"];
+  requestRemoteWorkspaceUnlock: SidebarRemoteWorkspaceAddActionsOutput["requestRemoteWorkspaceUnlock"];
+  remoteAgentInstallRequest: SidebarRemoteWorkspaceAddActionsOutput["remoteAgentInstallRequest"];
+  declineRemoteAgentInstall: SidebarRemoteWorkspaceAddActionsOutput["declineRemoteAgentInstall"];
+  completeRemoteAgentInstall: SidebarRemoteWorkspaceAddActionsOutput["completeRemoteAgentInstall"];
+  isRemoteWorkspaceUnlockDialogOpen: SidebarRemoteWorkspaceAddActionsOutput["isRemoteWorkspaceUnlockDialogOpen"];
+  remoteWorkspaceUnlockMode: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceUnlockMode"];
+  remoteWorkspaceUnlockKeyPath: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceUnlockKeyPath"];
+  remoteWorkspaceUnlockPassphrase: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceUnlockPassphrase"];
+  remoteWorkspaceUnlockError: SidebarRemoteWorkspaceAddActionsOutput["remoteWorkspaceUnlockError"];
+  isUnlockingRemoteWorkspaceKey: SidebarRemoteWorkspaceAddActionsOutput["isUnlockingRemoteWorkspaceKey"];
+  closeRemoteWorkspaceUnlockDialog: SidebarRemoteWorkspaceAddActionsOutput["closeRemoteWorkspaceUnlockDialog"];
+  setRemoteWorkspaceUnlockPassphrase: SidebarRemoteWorkspaceAddActionsOutput["setRemoteWorkspaceUnlockPassphrase"];
+  submitRemoteWorkspaceUnlock: SidebarRemoteWorkspaceAddActionsOutput["submitRemoteWorkspaceUnlock"];
 }
 
 export function useSidebarProjectAddActions({
@@ -96,8 +99,11 @@ export function useSidebarProjectAddActions({
       title,
     }: CreateProjectInput): Promise<CreateProjectResult> => {
       const cwd = rawCwd.trim();
+      const itemLabel = isRemoteExecutionTargetId(workspaceExecutionTargetId)
+        ? "Remote workspace"
+        : "Project";
       if (!cwd || isAddingProject) {
-        return { ok: false, error: "Project path is required." };
+        return { ok: false, error: `${itemLabel} path is required.` };
       }
 
       const executionTargets = buildExplicitExecutionTargets({
@@ -145,7 +151,9 @@ export function useSidebarProjectAddActions({
         return {
           ok: false,
           error:
-            error instanceof Error ? error.message : "An error occurred while adding the project.",
+            error instanceof Error
+              ? error.message
+              : `An error occurred while adding the ${itemLabel.toLowerCase()}.`,
         };
       } finally {
         setIsAddingProject(false);
@@ -232,7 +240,7 @@ export function useSidebarProjectAddActions({
     resetLocalProjectFlow();
   }, [resetLocalProjectFlow]);
 
-  const remoteProjectActions = useSidebarRemoteProjectAddActions({
+  const remoteWorkspaceActions = useSidebarRemoteWorkspaceAddActions({
     createProject,
     isAddingProject,
   });
@@ -253,6 +261,6 @@ export function useSidebarProjectAddActions({
     },
     handlePickFolder,
     cancelAddProject,
-    ...remoteProjectActions,
+    ...remoteWorkspaceActions,
   };
 }

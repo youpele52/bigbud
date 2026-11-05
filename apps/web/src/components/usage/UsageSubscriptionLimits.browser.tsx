@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { UsageSubscriptionLimits } from "./UsageSubscriptionLimits";
-import { expectCenteredStatuses } from "../common/CenteredStatus.browser.utils";
 
 const api = vi.hoisted(() => ({ refreshUsageLimits: vi.fn() }));
 vi.mock("../../rpc/nativeApi", () => ({ ensureNativeApi: () => ({ server: api }) }));
@@ -146,11 +145,14 @@ describe("UsageSubscriptionLimits", () => {
   ] as const)("renders the %s state", async (state, text) => {
     await renderLimits(status(state));
     await expect.element(page.getByText(text)).toBeInTheDocument();
-    if (state === "pending") expectCenteredStatuses(document.body);
-    else {
-      expect(getComputedStyle(page.getByText(text).element()).textAlign).toBe("center");
-      expect(document.querySelector(".animate-breathe")).toBeNull();
-    }
+    const banner = page.getByText(text).element().closest('[data-slot="alert"]')!;
+    expect(
+      banner.classList.contains(
+        state === "pending" ? "border-l-info-foreground" : "border-l-destructive",
+      ),
+    ).toBe(true);
+    expect(banner.querySelectorAll(".animate-spin")).toHaveLength(state === "pending" ? 1 : 0);
+    expect(getComputedStyle(page.getByText(text).element()).textAlign).not.toBe("center");
   });
 
   it("renders retained bars and the last-success timestamp while stale", async () => {

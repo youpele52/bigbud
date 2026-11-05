@@ -28,6 +28,13 @@ export function providerSwitchTargetLabel(provider: ProviderKind): string {
   return PROVIDER_DISPLAY_NAMES[provider];
 }
 
+import { resolveProviderSwitchRuntimeMode } from "./chat-view-provider-switch.logic";
+
+export {
+  resolveProviderSwitchRuntimeMode,
+  resolveInheritedFullAccessDowngrade,
+} from "./chat-view-provider-switch.logic";
+
 export function useChatViewProviderSwitch({
   base,
   composer,
@@ -88,7 +95,7 @@ export function useChatViewProviderSwitch({
         }
         const sourceThreadId = base.activeThread.id;
         progressToastId = toastManager.add({
-          type: "info",
+          type: "loading",
           title: "Preparing handoff",
           description: "bigbud is generating a handoff document in the background.",
         });
@@ -175,6 +182,18 @@ export function useChatViewProviderSwitch({
       setPendingProviderSwitchConfirmation(null);
       base.setComposerDraftModelSelection(base.activeThread.id, nextModelSelection);
       base.setStickyComposerModelSelection(nextModelSelection);
+      const nextRuntimeMode = resolveProviderSwitchRuntimeMode({
+        supportedRuntimeModes: composer.providerStatuses.find(
+          (status) => status.provider === resolvedProvider,
+        )?.supportedRuntimeModes,
+        currentRuntimeMode: base.runtimeMode,
+      });
+      if (nextRuntimeMode) {
+        base.setComposerDraftRuntimeMode(base.activeThread.id, nextRuntimeMode);
+        if (base.isLocalDraftThread) {
+          base.setDraftThreadContext(base.activeThread.id, { runtimeMode: nextRuntimeMode });
+        }
+      }
       runtime.scheduleComposerFocus();
     },
     [base, composer, runtime],

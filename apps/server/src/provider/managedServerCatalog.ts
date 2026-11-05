@@ -24,7 +24,7 @@ interface ManagedCatalogProvider {
 }
 
 export function resolveManagedServerCatalog(input: {
-  readonly provider: Extract<ProviderKind, "kilocode" | "opencode">;
+  readonly provider: Extract<ProviderKind, "opencode">;
   readonly providers: ReadonlyArray<ManagedCatalogProvider>;
   readonly customModels: ReadonlyArray<string>;
   readonly builtInModels: ReadonlyArray<ServerProviderModel>;
@@ -77,7 +77,7 @@ export const discoverManagedServerCatalog = Effect.fn("discoverManagedServerCata
   E,
   R,
 >(input: {
-  readonly provider: Extract<ProviderKind, "kilocode" | "opencode">;
+  readonly provider: Extract<ProviderKind, "opencode">;
   readonly baseSnapshot: ServerProvider;
   readonly catalogSnapshot: Effect.Effect<ServerProvider, E, R>;
   readonly publishSnapshot: (snapshot: ServerProvider) => Effect.Effect<void>;
@@ -86,7 +86,7 @@ export const discoverManagedServerCatalog = Effect.fn("discoverManagedServerCata
     input.publishSnapshot({
       ...input.baseSnapshot,
       checkedAt,
-      message: `${input.provider === "opencode" ? "OpenCode" : "KiloCode"} is ready. Its full model catalog is temporarily unavailable; bigbud will retry in the background.`,
+      message: `OpenCode is ready. Its full model catalog is temporarily unavailable; bigbud will retry in the background.`,
       modelDiscovery: {
         status: "unavailable",
         source: `${input.provider}-provider-catalog`,

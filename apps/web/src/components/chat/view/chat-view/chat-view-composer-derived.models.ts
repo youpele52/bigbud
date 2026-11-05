@@ -7,7 +7,7 @@ import {
 import { useEffect, useMemo } from "react";
 
 import { normalizeModelSlug } from "@bigbud/shared/model";
-import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
+import { isReadOnlyProviderThread, isActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import {
   createModelSelection,
   getProviderModels,
@@ -24,6 +24,7 @@ import { getComposerProviderState } from "../../provider/composerProviderRegistr
 import { getProviderDescriptor, PROVIDER_DESCRIPTORS } from "../../provider/providerDescriptors";
 import { getModelSelectionSubProviderID, modelPickerValue } from "../ChatView.modelSelection.logic";
 import { threadHasStarted } from "../ChatView.logic";
+import { resolveInheritedFullAccessDowngrade } from "./chat-view-provider-switch.logic";
 
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 
@@ -33,10 +34,13 @@ export function useComposerProviderState(
 ) {
   const sessionProvider = base.activeThread?.session?.provider ?? null;
   const selectedProviderByThreadId = base.composerDraft.activeProvider ?? null;
-  const threadProvider =
-    base.activeThread?.modelSelection.provider ??
-    base.activeProject?.defaultModelSelection?.provider ??
-    null;
+  const threadSelection = isActiveModelSelection(base.activeThread?.modelSelection)
+    ? base.activeThread.modelSelection
+    : undefined;
+  const projectSelection = isActiveModelSelection(base.activeProject?.defaultModelSelection)
+    ? base.activeProject.defaultModelSelection
+    : undefined;
+  const threadProvider = threadSelection?.provider ?? projectSelection?.provider ?? null;
   const hasThreadStarted = threadHasStarted(base.activeThread);
   const lockedProvider: ProviderKind | null =
     hasThreadStarted && !base.providerUnlocked
@@ -64,8 +68,8 @@ export function useComposerProviderState(
     threadId: base.threadId,
     providers: providerStatuses,
     selectedProvider,
-    threadModelSelection: base.activeThread?.modelSelection,
-    projectModelSelection: base.activeProject?.defaultModelSelection,
+    threadModelSelection: threadSelection,
+    projectModelSelection: projectSelection,
     settings: base.settings,
   });
 
@@ -135,11 +139,30 @@ export function useComposerProviderState(
   const selectedModelForPicker = modelPickerValue(selectedModelSelection);
 
   useEffect(() => {
-    if (base.isServerThread && isLegacyOpencodeThread(base.activeThread)) return;
+    if (base.isServerThread && isReadOnlyProviderThread(base.activeThread)) return;
     if (!composerProviderFallback || !base.activeThread || lockedProvider !== null) return;
     base.setComposerDraftModelSelection(base.activeThread.id, selectedModelSelection);
     base.setStickyComposerModelSelection(selectedModelSelection);
   }, [base, composerProviderFallback, lockedProvider, selectedModelSelection]);
+
+  // Existing, continued and cloned Muse threads never re-pick their provider,
+  // so an inherited global-default full-access mode must downgrade here, on
+  // load, through the same draft setters a manual Access change uses (the
+  // next send persists it via thread.runtime-mode.set). Stricter user-chosen
+  // modes are left untouched and stay explicitly blocked.
+  useEffect(() => {
+    if (!base.activeThread) return;
+    const clamped = resolveInheritedFullAccessDowngrade({
+      supportedRuntimeModes: providerStatuses.find((status) => status.provider === selectedProvider)
+        ?.supportedRuntimeModes,
+      currentRuntimeMode: base.runtimeMode,
+    });
+    if (!clamped) return;
+    base.setComposerDraftRuntimeMode(base.activeThread.id, clamped);
+    if (base.isLocalDraftThread) {
+      base.setDraftThreadContext(base.activeThread.id, { runtimeMode: clamped });
+    }
+  }, [base, providerStatuses, selectedProvider]);
   const modelOptionsByProvider = useMemo<Record<ProviderKind, ReadonlyArray<ServerProviderModel>>>(
     () =>
       Object.fromEntries(

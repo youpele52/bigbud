@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 
 import {
   BrowserAction,
-  ComputerUseAction,
   MessageId,
   ProjectId,
   ThreadId,
@@ -27,10 +26,14 @@ import { BIGBUD_ORCHESTRATION_NAMESPACE } from "./codexThreadDynamicTools.specs.
 import { normalizeListThreadsStatus } from "./ThreadOrchestrationTools.listThreads.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES, type AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
 import { RenameThreadArguments } from "./threadRenameTool.shared.ts";
+import { runThreadOrganizationTool } from "./threadOrganizationTool.run.ts";
+import {
+  decodeComputerUseToolRequest,
+  dispatchComputerUseToolRequest,
+} from "./computerUseToolRequest.ts";
 
 export { createCodexThreadOrchestrationDynamicTools } from "./codexThreadDynamicTools.specs.ts";
 
-const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
 const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
 
 function inputText(text: string): CodexDynamicToolCallResult["contentItems"][number] {
@@ -70,6 +73,7 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     arguments: args,
     requestId,
     sourceMessageId: requestSource,
+    turnId,
   }) => {
     if (namespace !== BIGBUD_ORCHESTRATION_NAMESPACE) {
       throw new Error(`Unsupported dynamic tool namespace: ${namespace ?? "<none>"}`);
@@ -91,9 +95,27 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     }
 
     switch (tool) {
+      case "render_html": {
+        if (!dispatcher.renderHtml) throw new Error("HTML rendering is not ready.");
+        const result = await Effect.runPromise(
+          dispatcher.renderHtml({
+            threadId,
+            ...(turnId ? { expectedTurnId: turnId } : {}),
+            invocationId: JSON.stringify([turnId ?? requestSource ?? sourceMessageId, requestId]),
+            arguments: args,
+          }),
+        );
+        return { contentItems: [inputText(JSON.stringify(result))], success: true };
+      }
+      case "configure_system_resource_rules": {
+        if (!dispatcher.configureSystemResourceRules)
+          throw new Error("monitor settings unavailable");
+        const result = await Effect.runPromise(dispatcher.configureSystemResourceRules(args));
+        return { contentItems: [inputText(JSON.stringify(result))], success: true };
+      }
       case "get_system_resources": {
         const result = dispatcher.getSystemResources
-          ? await Effect.runPromise(dispatcher.getSystemResources())
+          ? await Effect.runPromise(dispatcher.getSystemResources(args ?? {}))
           : { available: false, reason: "desktop monitor unavailable" };
         return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
       }
@@ -158,6 +180,17 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
           contentItems: [inputText(`Renamed thread to "${result.title}".`)],
           success: true,
         };
+      }
+      case "move_thread":
+      case "snooze_thread": {
+        const result = await runThreadOrganizationTool({
+          dispatcher,
+          name: tool,
+          args,
+          threadId,
+          invocationId: String(requestId),
+        });
+        return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
       }
       case "archive_thread": {
         await Effect.runPromise(dispatcher.archive({ threadId }));
@@ -301,12 +334,16 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
         };
       }
       case "computer_use": {
-        const action = decodeComputerUseAction(args);
-        const result = await Effect.runPromise(dispatcher.computerUse({ threadId, action }));
+        const request = decodeComputerUseToolRequest(args);
+        const result = await Effect.runPromise(
+          dispatchComputerUseToolRequest(dispatcher, threadId, request),
+        );
         return {
           contentItems: [
             inputText(JSON.stringify(result, null, 2)),
-            ...[inputImage(result)].flatMap((item) => (item ? [item] : [])),
+            ...["screenshot" in result ? inputImage(result) : null].flatMap((item) =>
+              item ? [item] : [],
+            ),
           ],
           success: true,
         };

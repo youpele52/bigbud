@@ -19,6 +19,12 @@ export const GAMES = [
     description: "Arrange falling blocks.",
   },
   {
+    name: "Lagos Run",
+    url: "https://lagosrun.org/",
+    category: "Arcade",
+    description: "Drive a danfo through Lagos traffic and deliver passengers.",
+  },
+  {
     name: "Cookie Clicker",
     url: "https://orteil.dashnet.org/cookieclicker/",
     category: "Idle & strategy",

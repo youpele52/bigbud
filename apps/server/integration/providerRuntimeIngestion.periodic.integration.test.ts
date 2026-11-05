@@ -318,7 +318,7 @@ it.live("keeps queued-c held while the continuation session start outlasts a per
       const held = (yield* harness.engine.getReadModel()).threads.find(
         (entry) => entry.id === THREAD_ID,
       )!;
-      assert.equal(held.pendingTurnStart?.messageId, "continued:interrupt-held");
+      assert.equal(held.pendingTurnStart?.messageId, "turn-control:interrupt-held");
       assert.equal(held.session?.status, "starting");
       assert.deepEqual(
         (held.queuedPrompts ?? []).map((prompt) => prompt.id),

@@ -1,12 +1,6 @@
-import {
-  ChevronRightIcon,
-  FolderIcon,
-  FolderOpenIcon,
-  GripVerticalIcon,
-  SquarePenIcon,
-  Trash2Icon,
-} from "lucide-react";
-import { SIDEBAR_COMPACT_ICON_SIZE_CLASS, SIDEBAR_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
+import { FolderIcon, FolderOpenIcon, GripVerticalIcon, Trash2Icon } from "lucide-react";
+import { NewChatIcon } from "../common/NewChatIcon";
+import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { useCallback, type MouseEvent } from "react";
 
 import {
@@ -14,7 +8,10 @@ import {
   resolveSidebarNewThreadSeedContext,
 } from "./Sidebar.logic";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
-import { getProjectRemoteTargetLabel, isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
+import {
+  getRemoteWorkspaceTargetLabel,
+  isRemoteExecutionTargetId,
+} from "./Sidebar.remoteWorkspaces.logic";
 import { SidebarMenuButton, SidebarMenuAction } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
@@ -23,8 +20,9 @@ import {
   isChatsSidebarProject,
   type SidebarRenderedProjectItemProps,
 } from "./SidebarRenderedProjectItem.types";
-import { SidebarRemoteProjectStatusIcon } from "./SidebarRemoteProjectStatusIcon";
+import { SidebarRemoteWorkspaceStatusIcon } from "./SidebarRemoteWorkspaceStatusIcon";
 import { SidebarProjectChevron } from "./SidebarProjectChevron";
+import { SidebarProjectStatusIndicator } from "./SidebarProjectStatusIndicator";
 
 export function SidebarRenderedProjectItem({
   dragHandleProps,
@@ -90,8 +88,9 @@ export function SidebarRenderedProjectItem({
 }: SidebarRenderedProjectItemProps) {
   const isChatsProject = isChatsSidebarProject(project.id);
   const workspaceExecutionTargetId = resolveWorkspaceExecutionTargetId(project);
-  const isRemoteProject = isRemoteExecutionTargetId(workspaceExecutionTargetId);
-  const remoteTargetLabel = getProjectRemoteTargetLabel(workspaceExecutionTargetId);
+  const isRemoteWorkspace = isRemoteExecutionTargetId(workspaceExecutionTargetId);
+  const remoteTargetLabel = getRemoteWorkspaceTargetLabel(workspaceExecutionTargetId);
+  const itemLabel = isRemoteWorkspace ? "remote workspace" : "project";
   const swipeReveal = useSwipeRevealAction<HTMLButtonElement>({
     itemId: project.id,
     disabled: renamingProjectId === project.id || isChatsProject,
@@ -126,7 +125,7 @@ export function SidebarRenderedProjectItem({
             <button
               type="button"
               data-thread-selection-safe
-              aria-label={`Remove project ${project.name}`}
+              aria-label={`Remove ${itemLabel} ${project.name}`}
               aria-hidden={!swipeReveal.isActionVisible}
               tabIndex={swipeReveal.isActionVisible ? 0 : -1}
               className="inline-flex size-8 items-center justify-center rounded-md text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-destructive/40"
@@ -152,7 +151,7 @@ export function SidebarRenderedProjectItem({
               <button
                 ref={dragHandleProps.setActivatorNodeRef}
                 type="button"
-                aria-label={`Reorder project ${project.name}`}
+                aria-label={`Reorder ${itemLabel} ${project.name}`}
                 className="inline-flex size-3.5 shrink-0 cursor-grab items-center justify-center rounded-sm text-muted-foreground/60 transition-colors hover:text-foreground active:cursor-grabbing"
                 onPointerDown={(event) => {
                   event.stopPropagation();
@@ -213,8 +212,8 @@ export function SidebarRenderedProjectItem({
                 });
               }}
             >
-              {isRemoteProject && workspaceExecutionTargetId ? (
-                <SidebarRemoteProjectStatusIcon
+              {isRemoteWorkspace && workspaceExecutionTargetId ? (
+                <SidebarRemoteWorkspaceStatusIcon
                   executionTargetId={workspaceExecutionTargetId}
                   remoteTargetLabel={remoteTargetLabel}
                 />
@@ -262,22 +261,7 @@ export function SidebarRenderedProjectItem({
                   {project.expanded ? (
                     <SidebarProjectChevron expanded />
                   ) : projectStatus ? (
-                    <span
-                      aria-hidden="true"
-                      title={projectStatus.label}
-                      className={`relative inline-flex size-3.5 shrink-0 items-center justify-center ${projectStatus.colorClass}`}
-                    >
-                      <span className="absolute inset-0 flex items-center justify-center transition-opacity duration-150 group-hover/project-header:opacity-0">
-                        <span
-                          className={`size-[9px] rounded-full ${projectStatus.dotClass} ${
-                            projectStatus.pulse ? "animate-pulse" : ""
-                          }`}
-                        />
-                      </span>
-                      <ChevronRightIcon
-                        className={`absolute inset-0 m-auto ${SIDEBAR_ICON_SIZE_CLASS} translate-x-1 text-muted-foreground/70 opacity-0 transition-all duration-150 group-hover/project-header:translate-x-0 group-hover/project-header:opacity-100`}
-                      />
-                    </span>
+                    <SidebarProjectStatusIndicator status={projectStatus} />
                   ) : (
                     <SidebarProjectChevron expanded={false} />
                   )}
@@ -335,7 +319,7 @@ export function SidebarRenderedProjectItem({
                     });
                   }}
                 >
-                  <SquarePenIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
+                  <NewChatIcon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
                 </SidebarMenuAction>
               }
             />

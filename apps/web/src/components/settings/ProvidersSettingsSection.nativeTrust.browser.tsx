@@ -28,6 +28,7 @@ vi.mock("../../hooks/useSettings", () => ({
     },
   }),
   useUpdateSettings: () => ({ updateSettings: mocks.update }),
+  updateServerSettings: mocks.persist,
 }));
 vi.mock("../../rpc/serverState", () => ({ useServerProviders: () => [] }));
 vi.mock("../../rpc/nativeApi", () => ({

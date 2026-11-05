@@ -2,7 +2,7 @@ import type {
   CompactChatLinkHandoff,
   FloatingAssistantCaller,
 } from "@bigbud/contracts/server/ipc.ts";
-import { PlusIcon, SquareArrowOutUpRightIcon, XIcon } from "lucide-react";
+import { SquareArrowOutUpRightIcon, XIcon } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { CompactThreadConversation } from "~/components/chat/side-chat/FloatingSideChat";
@@ -11,6 +11,7 @@ import { BigbudLoader } from "~/components/layout/BigbudLoader";
 import { BigbudLogo } from "~/components/sidebar/SidebarProjectItem";
 import { Button } from "~/components/ui/button";
 import { StatusBanner } from "../common/StatusBanner";
+import { NewChatIcon } from "../common/NewChatIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
 
@@ -219,7 +220,7 @@ export function CompactChatShell({
           />
           <CompactChatHeaderAction
             label="New chat"
-            icon={<PlusIcon className="size-3.5" />}
+            icon={<NewChatIcon className="size-3.5" />}
             onClick={() => void newChat()}
           />
           <CompactChatHeaderAction

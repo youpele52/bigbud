@@ -62,14 +62,14 @@ describe("remote-agent PTY adapter", () => {
         ({
           create: async (input: Parameters<NonNullable<RemoteAgentPtyClient["create"]>>[0]) => {
             created.push(input as unknown as Record<string, unknown>);
-            return fakeProcess;
+            return { ...fakeProcess };
           },
         }) as never,
     };
     const base: PtyAdapterShape = { spawn: () => Effect.succeed(fakeProcess) };
     const adapter = makeRemoteAgentPtyAdapter(base, resolver);
 
-    await Effect.runPromise(
+    const remote = await Effect.runPromise(
       adapter.spawn({
         shell: "ssh",
         args: ["ignored"],
@@ -88,6 +88,7 @@ describe("remote-agent PTY adapter", () => {
       }),
     );
 
+    expect(remote.pidDomain).toBe("remote");
     expect(opened).toHaveLength(1);
     expect(opened[0]?.root).toBe("/srv/project");
     expect(created[0]?.environment).toEqual([
@@ -129,5 +130,6 @@ describe("remote-agent PTY adapter", () => {
     );
 
     expect(calls).toEqual(["ssh"]);
+    expect(fakeProcess.pidDomain).toBeUndefined();
   });
 });

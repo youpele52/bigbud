@@ -35,7 +35,8 @@ export function buildSharedProjectItemProps(
 ): SharedProjectItemProps {
   return {
     isManualProjectSorting: input.isManualProjectSorting,
-    newThreadShortcutLabel: input.newThreadShortcutLabel,
+    // Project buttons use the default environment, unlike either global chat command.
+    newThreadShortcutLabel: null,
     showThreadJumpHints: input.showThreadJumpHints,
     threadJumpLabelById: input.threadJumpLabelById,
     appSettingsDefaultThreadEnvMode: input.appSettingsDefaultThreadEnvMode,

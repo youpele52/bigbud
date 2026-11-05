@@ -56,7 +56,7 @@ describe("file edit drafts", () => {
     expect(getFileEditDraft(input.key)?.savedAt).toBeGreaterThan(0);
   });
 
-  it("retains uncertain writes without automatic retry and reconciles by reading matching bytes", async () => {
+  it("retains uncertain writes without automatic retry even after reading the disk", async () => {
     write.mockRejectedValueOnce(new Error("Connection lost"));
     const input = fixture();
     changeFileEditDraft(input.key, "draft");
@@ -68,7 +68,7 @@ describe("file edit drafts", () => {
     await new Promise((resolve) => setTimeout(resolve, 800));
     expect(write).toHaveBeenCalledTimes(1);
     observeFileEditRead({ ...input, contents: "other", sha256: "b".repeat(64) });
-    expect(getFileEditDraft(input.key)?.status).toBe("conflict");
+    expect(getFileEditDraft(input.key)?.status).toBe("error");
   });
 
   it("does not replace a conflicted draft on further edits or refreshes", () => {
@@ -96,7 +96,10 @@ describe("file edit drafts", () => {
 
   it("classifies server write conflicts and only permits discarding after reading the disk version", async () => {
     write.mockRejectedValueOnce(
-      Object.assign(new Error("Workspace file changed since it was read."), { conflict: true }),
+      Object.assign(new Error("Workspace file changed since it was read."), {
+        conflict: true,
+        writeDisposition: "terminal",
+      }),
     );
     const input = fixture();
     changeFileEditDraft(input.key, "draft");
@@ -113,7 +116,11 @@ describe("file edit drafts", () => {
   });
 
   it("only retries explicitly after a failed write", async () => {
-    write.mockRejectedValueOnce(new Error("Timeout")).mockResolvedValue(undefined);
+    write
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Not connected"), { writeDisposition: "not-dispatched" }),
+      )
+      .mockResolvedValue(undefined);
     const input = fixture();
     changeFileEditDraft(input.key, "draft");
     await vi.waitFor(() => expect(getFileEditDraft(input.key)?.status).toBe("error"), {
@@ -121,7 +128,7 @@ describe("file edit drafts", () => {
     });
     retryFileEditDraft(input.key);
     await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2), { timeout: 5000 });
-    expect(write.mock.calls[1]![0].operationId).toBe(write.mock.calls[0]![0].operationId);
+    expect(write.mock.calls[1]![0].operationId).not.toBe(write.mock.calls[0]![0].operationId);
     await vi.waitFor(() => expect(getFileEditDraft(input.key)?.status).toBe("saved"));
   });
 });

@@ -10,6 +10,8 @@ export function shouldHideCollapsedToastContent(
 
 type ToastWithHeight = {
   height?: number | null | undefined;
+  transitionStatus?: string | undefined;
+  limited?: boolean | undefined;
 };
 
 type VisibleToastLayoutItem<TToast extends object> = {
@@ -25,20 +27,29 @@ export function buildVisibleToastLayout<TToast extends object>(
   items: VisibleToastLayoutItem<TToast & ToastWithHeight>[];
 } {
   let offsetY = 0;
-
+  let visibleIndex = 0;
   return {
-    frontmostHeight: normalizeToastHeight(visibleToasts[0]?.height),
-    items: visibleToasts.map((toast, visibleIndex) => {
+    frontmostHeight: normalizeToastHeight(visibleToasts.find(occupiesSlot)?.height),
+    items: visibleToasts.map((toast) => {
       const item = {
         toast,
         visibleIndex,
         offsetY,
       };
 
-      offsetY += normalizeToastHeight(toast.height);
+      // Retain exiting/limited roots for Base UI lifecycle and queue handling,
+      // but never reserve space for them in the visible stack.
+      if (occupiesSlot(toast)) {
+        offsetY += normalizeToastHeight(toast.height);
+        visibleIndex += 1;
+      }
       return item;
     }),
   };
+}
+
+function occupiesSlot(toast: ToastWithHeight): boolean {
+  return toast.transitionStatus !== "ending" && !toast.limited;
 }
 
 function normalizeToastHeight(height: number | null | undefined): number {

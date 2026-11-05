@@ -192,7 +192,7 @@ export class ProjectReadFilePreviewError extends Schema.TaggedErrorClass<Project
 
 export const ProjectWriteFileInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  /** Stable caller identity reused when an ambiguous write is retried. */
+  /** Stable caller identity for this write; ambiguous operations must not be replayed. */
   operationId: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(128))),
   cwd: TrimmedNonEmptyString,
   relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
@@ -207,11 +207,20 @@ export const ProjectWriteFileResult = Schema.Struct({
 });
 export type ProjectWriteFileResult = typeof ProjectWriteFileResult.Type;
 
+/** Terminal means settled, not necessarily unchanged; unknown writes must not be replayed. */
+export const ProjectWriteFileDisposition = Schema.Literals([
+  "not-dispatched",
+  "terminal",
+  "unknown",
+]);
+export type ProjectWriteFileDisposition = typeof ProjectWriteFileDisposition.Type;
+
 export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteFileError>()(
   "ProjectWriteFileError",
   {
     message: TrimmedNonEmptyString,
     conflict: Schema.optional(Schema.Boolean),
+    writeDisposition: Schema.optional(ProjectWriteFileDisposition),
     cause: Schema.optional(Schema.Defect),
   },
 ) {}

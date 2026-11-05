@@ -87,7 +87,11 @@ it.each([false, true])(
               expect(result.ok).toBe(false);
               expect(survivor.ok).toBe(false);
               expect(timerResult[0]?.status).toBe("rejected");
-              expect(enrollment.controller.signal.aborted).toBe(true);
+              // Consent fences new work immediately, but transport retirement must not cancel
+              // physical native callbacks. Explicit user stop retains its separate revoke path.
+              expect(enrollment.controller.signal.aborted).toBe(false);
+              expect(enrollment.renewalPaused()).toBe(true);
+              expect(() => enrollment.assertLive()).toThrow();
               expect(http.calls.filter((call) => call.pathname.endsWith("/prompt"))).toHaveLength(
                 beforePrompts,
               );

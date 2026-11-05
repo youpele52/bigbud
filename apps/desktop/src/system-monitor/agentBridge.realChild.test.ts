@@ -1,5 +1,7 @@
 import * as FS from "node:fs";
 import * as Path from "node:path";
+import { tmpdir } from "node:os";
+import { ResourceAwareness } from "./awareness";
 import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("../env/pathResolver", () => ({
@@ -27,15 +29,25 @@ it.skipIf(!FS.existsSync(binary))(
   async () => {
     process.env.BIGBUD_SYSTEM_MONITOR_BINARY = binary;
     const monitor = new SystemMonitorBridge(false);
+    const events: unknown[] = [];
+    monitor.onEventInternal((event) =>
+      events.push(event.type === "snapshot" ? { type: event.type } : event),
+    );
+    const dir = FS.mkdtempSync(Path.join(tmpdir(), "bigbud-resource-real-"));
+    const owner = new ResourceAwareness(monitor, Path.join(dir, "preferences.json"));
     try {
-      await startSystemMonitorAgentBridge(monitor);
+      await owner.start();
+      await startSystemMonitorAgentBridge(owner);
       const access = rotateSystemMonitorAgentToken()!;
       const response = await fetch(access.endpoint, {
         headers: { authorization: `Bearer ${access.token}` },
         signal: AbortSignal.timeout(8_000),
       });
-      expect(response.status).toBe(200);
       const body = await response.json();
+      expect(
+        response.status,
+        JSON.stringify({ body, events, state: owner.state(), snapshot: owner.snapshot }),
+      ).toBe(200);
       expect(body).toMatchObject({
         available: true,
         host: { hostname: expect.any(String), osName: expect.any(String) },
@@ -43,7 +55,9 @@ it.skipIf(!FS.existsSync(binary))(
       });
       expect(Math.abs(Date.now() - body.sampledAtMs)).toBeLessThan(10_000);
     } finally {
+      owner.stop();
       monitor.stop();
+      FS.rmSync(dir, { recursive: true, force: true });
     }
   },
 );

@@ -53,6 +53,7 @@ it
     "signer",
     "cancelled",
     "metadata-retained-owners",
+    "metadata-no-approval",
     "metadata-changed-artifact",
     "metadata-qualification",
     "metadata-local-busy",
@@ -143,7 +144,7 @@ it
       expect(await records.read(key)).toEqual(signed);
       return;
     }
-    if (scenario !== "missing-consent") {
+    if (scenario !== "missing-consent" && scenario !== "metadata-no-approval") {
       await prepare();
       await prepare(); // Crash/retry preparation is idempotent.
     }
@@ -166,7 +167,7 @@ it
       expect(await records.read(key)).toEqual(signed);
       return;
     }
-    const candidate = await recover();
+    const candidate = scenario.startsWith("metadata-") ? undefined : await recover();
     expect(await records.read(key)).toEqual(signed);
     const owned = authority();
     if (scenario.startsWith("metadata-")) {
@@ -195,6 +196,8 @@ it
         await readV2ActivationIdle(job, proposal);
       });
       const eligibility = vi.fn(async () => {
+        if (scenario === "metadata-successor" && eligibility.mock.calls.length === 1)
+          await records.replace(key, signed.revision, record);
         if (scenario === "metadata-qualification") throw new Error("qualification changed");
         if (scenario === "metadata-revoked-during" && eligibility.mock.calls.length === 2)
           owned.assertCurrent = () => {
@@ -227,9 +230,8 @@ it
         owned.assertCurrent = () => {
           throw new Error("revoked");
         };
-      if (scenario === "metadata-successor") await records.replace(key, signed.revision, record);
       try {
-        if (scenario === "metadata-retained-owners") {
+        if (scenario === "metadata-retained-owners" || scenario === "metadata-no-approval") {
           await publishV2ManagedPlugin(proposed, root, granted);
           expect((await records.read(key))?.value).toMatchObject({
             rootIdentity,
@@ -285,13 +287,13 @@ it
       owned.publication.beforeMutation = async () => {
         throw new Error("crash before replacement");
       };
-      await expect(candidate.archive(owned)).rejects.toThrow("crash");
+      await expect(candidate!.archive(owned)).rejects.toThrow("crash");
       expect(await records.read(key)).toEqual(signed);
-      await candidate.archive(authority());
+      await candidate!.archive(authority());
     } else if (
       ["revoked", "busy", "successor", "cancelled", "changed-after-consent"].includes(scenario)
     ) {
-      await expect(candidate.archive(owned)).rejects.toThrow();
+      await expect(candidate!.archive(owned)).rejects.toThrow();
       if (scenario !== "successor") expect(await records.read(key)).toEqual(signed);
       return;
     } else {

@@ -1,11 +1,7 @@
-import {
-  ThreadId,
-  type ProviderKind,
-  type TerminalEvent,
-  type TerminalSessionSnapshot,
-} from "@bigbud/contracts";
+import { ThreadId, type TerminalEvent, type TerminalSessionSnapshot } from "@bigbud/contracts";
 
 import { selectTerminalEventEntries, terminalEventBufferKey } from "./helpers.store";
+import { resolveTerminalAgentKind, type TerminalAgentKind } from "./terminal.store.agentKind";
 
 export interface TerminalAgentVersion {
   readonly updatedAt: string;
@@ -17,14 +13,15 @@ export interface TerminalAgentVersion {
 }
 
 export interface TerminalAgentIdentityState {
-  terminalAgentProviderByKey: Record<string, ProviderKind | null>;
+  /** Logo identity per pane: a native provider or a terminal-only kind such as herdr. */
+  terminalAgentProviderByKey: Record<string, TerminalAgentKind | null>;
   terminalAgentVersionByKey: Record<string, TerminalAgentVersion>;
 }
 
 interface AgentCandidate {
   readonly updatedAt: string;
   readonly runtimeGeneration: string | null;
-  readonly provider: ProviderKind | null | undefined;
+  readonly provider: TerminalAgentKind | null | undefined;
   readonly kind: "start" | "identity" | "end";
 }
 
@@ -39,7 +36,10 @@ function candidateFromSnapshot(snapshot: TerminalSessionSnapshot): AgentCandidat
   return {
     updatedAt: snapshot.updatedAt,
     runtimeGeneration: snapshot.runtimeGeneration ?? null,
-    provider: snapshot.status === "running" ? snapshot.activeAgentProvider : null,
+    provider:
+      snapshot.status === "running"
+        ? resolveTerminalAgentKind(snapshot.activeAgentProvider, snapshot.activeAgent)
+        : null,
     kind: snapshot.status === "running" ? "start" : "end",
   };
 }
@@ -52,7 +52,7 @@ function candidateFromEvent(event: TerminalEvent): AgentCandidate | null {
     return {
       updatedAt: event.createdAt,
       runtimeGeneration: event.runtimeGeneration ?? null,
-      provider: event.provider,
+      provider: resolveTerminalAgentKind(event.provider, event.agent) ?? null,
       kind: "identity",
     };
   }

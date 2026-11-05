@@ -68,7 +68,12 @@ describe("runComputerUseDoctor", () => {
     );
     mockedRunCommand.mockResolvedValue({
       code: 0,
-      stdout: `cua-driver ${CUA_DRIVER_VERSION}`,
+      stdout: JSON.stringify({
+        schema_version: "1",
+        binary_version: CUA_DRIVER_VERSION,
+        binary_path: binaryPath,
+        mcp_invocation: { command: binaryPath, args: ["mcp"] },
+      }),
       stderr: "",
     });
     mockedRefreshDaemonHealth.mockResolvedValue({
@@ -94,7 +99,7 @@ describe("runComputerUseDoctor", () => {
     });
 
     expect(mockedRefreshDaemonHealth).toHaveBeenCalledOnce();
-    expect(mockedRunCommand).toHaveBeenCalledWith(binaryPath, ["--version"], expect.any(Object));
+    expect(mockedRunCommand).toHaveBeenCalledWith(binaryPath, ["manifest"], expect.any(Object));
     expect(mockedRunCommand).not.toHaveBeenCalledWith(
       binaryPath,
       expect.arrayContaining(["doctor"]),

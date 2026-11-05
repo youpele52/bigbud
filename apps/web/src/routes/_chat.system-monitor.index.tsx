@@ -18,7 +18,11 @@ function SystemMonitorRoute() {
 
 export const Route = createFileRoute("/_chat/system-monitor/")({
   validateSearch: (search: Record<string, unknown>): { monitorScope?: MonitorScope } => ({
-    monitorScope: search.monitorScope === "bigbud" ? "bigbud" : "system",
+    monitorScope:
+      search.monitorScope === "bigbud" ||
+      (typeof search.monitorScope === "string" && /^vps:[\w-]+$/.test(search.monitorScope))
+        ? (search.monitorScope as MonitorScope)
+        : "system",
   }),
   component: SystemMonitorRoute,
 });

@@ -1,4 +1,8 @@
-const GOOGLE_SEARCH_URL = "https://www.google.com/search?q=";
+import {
+  DEFAULT_BROWSER_SEARCH_ENGINE,
+  type BrowserSearchEngine,
+} from "@bigbud/contracts/constants/browser.constant.ts";
+import { BROWSER_SEARCH_OPTIONS } from "~/constants/browserSearch";
 const HTTP_PROTOCOLS = new Set(["http:", "https:"]);
 const UNSAFE_PROTOCOLS = new Set([
   "about:",
@@ -14,8 +18,11 @@ const UNSAFE_PROTOCOLS = new Set([
 const EXPLICIT_SCHEME = /^([a-z][a-z\d+.-]*):/i;
 const IPV4_HOSTNAME = /^(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
 
-export function buildGoogleSearchUrl(query: string): string {
-  return `${GOOGLE_SEARCH_URL}${encodeURIComponent(query)}`;
+export function buildBrowserSearchUrl(
+  query: string,
+  engine: BrowserSearchEngine = DEFAULT_BROWSER_SEARCH_ENGINE,
+): string {
+  return `${BROWSER_SEARCH_OPTIONS[engine].url}${encodeURIComponent(query)}`;
 }
 
 export function getUnsupportedBrowserOmniboxScheme(input: string): string | null {
@@ -46,7 +53,10 @@ function hasExplicitPort(input: string): boolean {
   return /(?:\]|[^:]+):\d+$/.test(authority);
 }
 
-export function resolveBrowserOmniboxInput(input: string): string | null {
+export function resolveBrowserOmniboxInput(
+  input: string,
+  engine: BrowserSearchEngine = DEFAULT_BROWSER_SEARCH_ENGINE,
+): string | null {
   const value = input.trim();
   if (!value) return null;
 
@@ -69,5 +79,5 @@ export function resolveBrowserOmniboxInput(input: string): string | null {
     if (url) return url;
   }
 
-  return buildGoogleSearchUrl(value);
+  return buildBrowserSearchUrl(value, engine);
 }

@@ -15,6 +15,7 @@ export interface RunSshCommandInput {
   readonly args?: ReadonlyArray<string>;
   readonly allocateTty?: boolean;
   readonly stdin?: string;
+  readonly signal?: AbortSignal | undefined;
   readonly allowNonZeroExit?: boolean;
   readonly timeoutMs?: number;
   readonly maxBufferBytes?: number;
@@ -23,10 +24,13 @@ export interface RunSshCommandInput {
 }
 
 export async function runSshCommand(input: RunSshCommandInput): Promise<ProcessRunResult> {
+  input.signal?.throwIfAborted();
   await assertSshExecutionTargetReadyAsync(input.executionTargetId);
+  input.signal?.throwIfAborted();
   const invocation = buildSshCommandInvocation(input);
   const result = await runProcess(invocation.command, invocation.args, {
     ...(input.stdin !== undefined ? { stdin: input.stdin } : {}),
+    ...(input.signal ? { signal: input.signal } : {}),
     ...(input.allowNonZeroExit !== undefined ? { allowNonZeroExit: input.allowNonZeroExit } : {}),
     ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
     ...(input.maxBufferBytes !== undefined ? { maxBufferBytes: input.maxBufferBytes } : {}),

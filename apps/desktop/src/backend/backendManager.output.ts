@@ -1,3 +1,4 @@
+import type { ChildProcess } from "node:child_process";
 import type { Readable } from "node:stream";
 import { recordBackendStartupDevelopmentDiagnostics } from "./backendStartupState";
 import { createDevelopmentBackendDiagnostics } from "./backendStartupDiagnostics";
@@ -21,4 +22,22 @@ export function captureBackendStderr(
     });
   }
   return () => tail;
+}
+
+/** Logs stdout/stderr pipe errors of a backend child instead of letting them throw. */
+export function logBackendOutputPipeErrors(
+  child: Pick<ChildProcess, "stdout" | "stderr">,
+  generation: number,
+  log: (event: string, detail: string) => void,
+  onPipeError: () => void,
+): void {
+  for (const [stream, event] of [
+    [child.stdout, "stdout_error"],
+    [child.stderr, "stderr_error"],
+  ] as const) {
+    stream?.on("error", (error) => {
+      log(event, `generation=${generation} error=${error.message}`);
+      onPipeError();
+    });
+  }
 }

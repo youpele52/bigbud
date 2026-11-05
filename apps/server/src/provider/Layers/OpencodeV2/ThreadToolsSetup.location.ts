@@ -6,12 +6,14 @@ import {
 } from "../../../orchestration/Services/OrchestrationEngine.ts";
 import { resolveThreadWorkspaceCwd } from "../../../checkpointing/Utils.ts";
 import { resolveProviderSessionExecutionTargets } from "../../providerSessionExecutionTargets.ts";
+import { resolveV2RemoteLocation } from "./Application.remoteLocation.ts";
 
 /** Setup context uses the real thread worktree/project; a native config-root override never enters cwd resolution. */
 export async function inferredV2SetupLocation(
   input: typeof ServerOpencodeV2ThreadToolsSetupRequest.Type,
   fallback: string,
   engine?: OrchestrationEngineShape,
+  stateDir?: string,
 ) {
   // Historical read-only projections may supply their retained Location; installation never uses it.
   if (!input.refresh && input.directory) return input.directory;
@@ -40,7 +42,6 @@ export async function inferredV2SetupLocation(
       !project ||
       thread.deletedAt ||
       project.deletedAt ||
-      targets.workspaceExecutionTargetId !== "local" ||
       targets.providerRuntimeExecutionTargetId !== "local"
     )
       throw new Error(
@@ -55,6 +56,18 @@ export async function inferredV2SetupLocation(
       throw new Error(
         "V2 selected thread has no canonical native Location; no local/private fallback.",
       );
+    if (targets.workspaceExecutionTargetId !== "local") {
+      if (!stateDir)
+        throw new Error(
+          "V2 remote workspace Location storage is unavailable; no local/private fallback.",
+        );
+      return resolveV2RemoteLocation(
+        stateDir,
+        input.threadId,
+        targets.workspaceExecutionTargetId,
+        directory,
+      );
+    }
     return directory;
   }
   return fallback;

@@ -8,7 +8,10 @@ import { signV2ThreadCallbackResponse } from "./Orchestration.response.ts";
 import { decodeV2ThreadCallback } from "./Orchestration.callback.ts";
 import { openV2ThreadEncryptedRequest } from "./Orchestration.crypto.ts";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
-import { V2ThreadImplementationRegistry } from "./Orchestration.implementation.ts";
+import {
+  V2ThreadImplementationRegistry,
+  v2ThreadImplementation,
+} from "./Orchestration.implementation.ts";
 import { V2ImplementationSelection } from "./Orchestration.implementation.selection.ts";
 import { readV2RetainedArtifact } from "./Orchestration.artifact.retained.ts";
 import { assertV2SessionBootstrap } from "./Orchestration.selection.ts";
@@ -91,7 +94,9 @@ export async function makeV2ApplicationOrchestration(
         session.lease.process.client,
         session.native.location.directory,
         undefined,
-        implementationSelection ? await implementationSelection.refresh() : undefined,
+        installed.bootstrapAbi !== "bigbud.thread.bootstrap.v4"
+          ? v2ThreadImplementation("v1")
+          : await implementationSelection.refresh(),
         eligibility,
         session.activation?.stamp.nativeProof?.root ?? configRoot,
       );

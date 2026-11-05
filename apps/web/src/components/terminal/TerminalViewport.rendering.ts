@@ -118,6 +118,9 @@ export function attachTerminalRenderer(
         policyRetryAttempt = 0;
       }
       setting = next;
+      // A display:none view's last intersection entry is stale on reveal. Restore before
+      // the first fit/paint; bounds still gate allocation and the observer rechecks clipping.
+      if (visible && !ownerVisible) intersecting = true;
       ownerVisible = visible;
       refresh();
     },

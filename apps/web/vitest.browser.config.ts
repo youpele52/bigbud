@@ -3,6 +3,7 @@ import { playwright } from "@vitest/browser-playwright";
 import { defineConfig, mergeConfig } from "vitest/config";
 
 import viteConfig from "./vite.config";
+import { checkHtmlRenderNavigation } from "./src/components/chat/messages/HtmlRenderFrame.browser.commands";
 
 const srcPath = fileURLToPath(new URL("./src", import.meta.url));
 
@@ -18,6 +19,7 @@ export default mergeConfig(
       include: ["src/components/**/*.browser.tsx", "src/routes/**/*.browser.tsx"],
       browser: {
         enabled: true,
+        commands: { checkHtmlRenderNavigation },
         provider: playwright({
           // Keep native scrollbars hittable for preview-edge track and thumb tests.
           launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] },

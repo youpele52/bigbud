@@ -1,3 +1,6 @@
+import { BubbleChatQuestionIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { type resolveThreadStatusPill } from "./Sidebar.logic";
 
@@ -10,6 +13,24 @@ export function SidebarThreadStatusLabel({
   compact?: boolean;
   hideDot?: boolean;
 }) {
+  if (status.label === "Awaiting Input") {
+    return (
+      <span
+        role="img"
+        aria-label={status.label}
+        title={status.label}
+        className="inline-flex shrink-0 items-center justify-center text-warning"
+      >
+        <HugeiconsIcon
+          aria-hidden="true"
+          icon={BubbleChatQuestionIcon}
+          size={12}
+          className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} animate-breathe motion-reduce:animate-none`}
+        />
+      </span>
+    );
+  }
+
   if (compact) {
     return (
       <span

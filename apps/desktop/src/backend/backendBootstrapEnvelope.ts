@@ -1,11 +1,24 @@
 import type { DesktopBackendStartReason } from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 
+/**
+ * One-use access to the supervised computer-use owner, delivered to the server only through this
+ * fd 3 envelope (never env, argv or logs). The desktop applies no gate of its own: main decides
+ * whether access exists at all, and every backend start must take a fresh one.
+ */
+export interface ComputerUseOwnerAccess {
+  readonly endpoint: string;
+  readonly capability: string;
+  readonly tupleDigest: string;
+  readonly ownerGeneration: string;
+}
+
 export interface BackendBootstrapEnvelopeInput {
   readonly port: number;
   readonly host: string;
   readonly t3Home: string;
   readonly authToken: string;
   readonly systemMonitorAgentAccess?: { readonly endpoint: string; readonly token: string } | null;
+  readonly computerUseOwner?: ComputerUseOwnerAccess | null;
   readonly otlpTracesUrl?: string | undefined;
   readonly otlpMetricsUrl?: string | undefined;
   readonly startReason?: DesktopBackendStartReason | null;
@@ -26,6 +39,17 @@ export function buildBackendBootstrapEnvelope(input: BackendBootstrapEnvelopeInp
     authToken: input.authToken,
     ...(input.systemMonitorAgentAccess
       ? { systemMonitorAgentAccess: input.systemMonitorAgentAccess }
+      : {}),
+    // Exactly the four fields, so nothing else a provider attached can leak into the envelope.
+    ...(input.computerUseOwner
+      ? {
+          computerUseOwner: {
+            endpoint: input.computerUseOwner.endpoint,
+            capability: input.computerUseOwner.capability,
+            tupleDigest: input.computerUseOwner.tupleDigest,
+            ownerGeneration: input.computerUseOwner.ownerGeneration,
+          },
+        }
       : {}),
     ...(input.otlpTracesUrl ? { otlpTracesUrl: input.otlpTracesUrl } : {}),
     ...(input.otlpMetricsUrl ? { otlpMetricsUrl: input.otlpMetricsUrl } : {}),
@@ -49,4 +73,21 @@ export function consumeBackendStartReason(): DesktopBackendStartReason | null {
   const reason = pendingStartReason;
   pendingStartReason = null;
   return reason;
+}
+
+/**
+ * Takes this start's owner access, if main provides any. Called once per backend start, right
+ * before the envelope is written, so a one-use capability is never taken for a start that cannot
+ * deliver it and never reused. A failing provider means no access, never a failed backend start;
+ * its error is not logged because it may describe the capability.
+ */
+export function takeComputerUseOwnerAccess(
+  provider: (() => ComputerUseOwnerAccess | null) | undefined,
+): ComputerUseOwnerAccess | null {
+  if (!provider) return null;
+  try {
+    return provider();
+  } catch {
+    return null;
+  }
 }

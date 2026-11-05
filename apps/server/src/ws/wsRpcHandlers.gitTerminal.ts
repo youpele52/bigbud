@@ -26,13 +26,14 @@ import {
   installRemoteAgentEffect,
   unlockSshKeyEffect,
   unlockSshPasswordEffect,
-  verifyExecutionTargetEffect,
 } from "./wsExecutionTargetVerification.ts";
 import {
   getRemoteAgentRestartStatusEffect,
   restartRemoteAgentEffect,
 } from "./wsRemoteAgentRestart.ts";
 import { listSshConfigHostsEffect } from "./wsSshConfigHosts.ts";
+import { makeSshMonitorHandlers } from "./wsSshMonitor.handlers.ts";
+import { verifyAndAdmitSshMonitorTarget } from "./wsSshMonitor.verify.ts";
 import { listRemoteFoldersEffect } from "./wsRemoteFolders.ts";
 import { trustSshHostEffect } from "./wsSshHostTrust.ts";
 
@@ -58,6 +59,7 @@ function withGitMutationOperationId<
 
 export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScope?: Scope.Scope) {
   return {
+    ...makeSshMonitorHandlers(context),
     [WS_METHODS.serverTrustSshHost]: (input: Parameters<typeof trustSshHostEffect>[0]) =>
       observeRpcEffect(WS_METHODS.serverTrustSshHost, trustSshHostEffect(input), {
         "rpc.aggregate": "server",
@@ -85,15 +87,12 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
         },
       ),
     [WS_METHODS.serverVerifyExecutionTarget]: (
-      input: Parameters<typeof verifyExecutionTargetEffect>[0],
+      input: Parameters<typeof verifyAndAdmitSshMonitorTarget>[0],
+      options?: { readonly clientId: number },
     ) =>
       observeRpcEffect(
         WS_METHODS.serverVerifyExecutionTarget,
-        verifyExecutionTargetEffect(
-          input,
-          context.remoteAgentHealth,
-          context.remoteAgentUpdateCoordinator,
-        ),
+        verifyAndAdmitSshMonitorTarget(input, context, options?.clientId),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverListSshConfigHosts]: () =>

@@ -9,7 +9,7 @@ import { ModelSelection } from "../orchestration/orchestration.provider";
 describe("independent OpenCode settings and identity", () => {
   it("fresh schema defaults enable V2 without altering paths or global default", () => {
     const decoded = Schema.decodeUnknownSync(ServerSettings)({
-      providers: { opencode: { binaryPath: "/v1" }, kilocode: { binaryPath: "/kilo" } },
+      providers: { opencode: { binaryPath: "/v1" } },
     });
     expect(decoded.providers.opencodeV2).toEqual({
       enabled: true,
@@ -18,7 +18,6 @@ describe("independent OpenCode settings and identity", () => {
     });
     expect(decoded.providers.opencode.binaryPath).toBe("/v1");
     expect(decoded.providers.opencode.enabled).toBe(false);
-    expect(decoded.providers.kilocode.binaryPath).toBe("/kilo");
     expect(DEFAULT_PROVIDER_KIND).toBe("codex");
   });
   it("V2 settings and provider/model/variant identities encode independently", () => {
@@ -33,7 +32,7 @@ describe("independent OpenCode settings and identity", () => {
       Schema.encodeSync(ServerSettings)(settings),
     );
     expect(decoded.providers.opencodeV2).toEqual(settings.providers.opencodeV2);
-    for (const provider of ["opencode", "opencodeV2", "kilocode"] as const) {
+    for (const provider of ["opencode", "opencodeV2"] as const) {
       const selection = {
         provider,
         model: "native-model",

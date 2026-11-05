@@ -1,9 +1,9 @@
-import { LOCAL_EXECUTION_TARGET_ID, type ProviderEvent } from "@bigbud/contracts";
+import { LOCAL_EXECUTION_TARGET_ID } from "@bigbud/contracts";
 import { Effect, Queue, Stream } from "effect";
 
 import { ProviderAdapterProcessError, ProviderAdapterValidationError } from "../../Errors.ts";
 import type { CodexAdapterShape } from "../../Services/Codex/Adapter.ts";
-import { unavailableActiveTurnInspection } from "../../providerActiveTurnInspection.ts";
+import { makeCodexInspectActiveTurn } from "./Adapter.inspection.ts";
 import type { CodexAppServerStartSessionInput } from "../../../codex/codexAppServerManager.ts";
 import {
   buildCodexSessionOrchestrationConfig,
@@ -25,8 +25,7 @@ import { isLocalProviderRuntimeTarget } from "../../../provider-runtime/provider
 import { isRemoteWorkspaceTarget } from "../../../workspace-target/workspaceTarget.ts";
 import { getProviderCapabilities } from "../../providerCapabilities.ts";
 import { resolveProviderExecutionContext } from "../../providerExecutionContext.ts";
-import { mapToRuntimeEvents } from "./Adapter.stream.ts";
-import { makeCodexSubagentTracker } from "./Adapter.stream.subagents.ts";
+import { registerCodexEventDelivery } from "./Adapter.stream.delivery.ts";
 import { toCodexManagerModelSelection } from "./Adapter.session.modelSelection.ts";
 import { toRequestError, toStartSessionError } from "./Adapter.session.shared.ts";
 import { PROVIDER, toMessage, type CodexAdapterLiveOptions } from "./Adapter.types.ts";
@@ -34,6 +33,7 @@ import { acquireCodexManager, resolveCodexNativeEventLogger } from "./Adapter.se
 import { prepareCodexRemoteWorkspaceBridge } from "./Adapter.session.remoteWorkspace.ts";
 import { REMOTE_WORKSPACE_MCP_SERVER_NAME } from "../../../remote-workspace-bridge/remoteWorkspaceTools.ts";
 import { makeCodexTurnControl } from "./Adapter.session.turnControl.ts";
+import { makeCodexControls } from "./Adapter.controls.ts";
 
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 /** Builds the full Codex adapter shape given a manager and supporting services. */
@@ -52,9 +52,12 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     }),
   );
   const serverSettingsService = yield* ServerSettingsService;
+  let eventDeliveryFailure: unknown;
 
   const startSession: CodexAdapterShape["startSession"] = Effect.fn("startSession")(
     function* (input) {
+      if (eventDeliveryFailure)
+        return yield* toStartSessionError(input.threadId, eventDeliveryFailure);
       if (input.provider !== undefined && input.provider !== PROVIDER) {
         return yield* new ProviderAdapterValidationError({
           provider: PROVIDER,
@@ -161,7 +164,10 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       };
 
       return yield* Effect.tryPromise({
-        try: () => manager.startSession(managerInput),
+        try: () => {
+          if (eventDeliveryFailure) throw eventDeliveryFailure;
+          return manager.startSession(managerInput);
+        },
         catch: (cause) => toStartSessionError(input.threadId, cause),
       }).pipe(
         Effect.tapError(() =>
@@ -174,6 +180,8 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   );
 
   const sendTurn: CodexAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
+    if (eventDeliveryFailure)
+      return yield* toRequestError(input.threadId, "turn/start", eventDeliveryFailure);
     const session = manager.listSessions().find((session) => session.threadId === input.threadId);
     const prepared = yield* Effect.tryPromise({
       try: () =>
@@ -186,17 +194,28 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       catch: (cause) => toRequestError(input.threadId, "turn/start", cause),
     });
     const codexAttachments = prepared.attachments
-      .filter(
-        ({ attachment }) =>
-          attachment.type === "image" || attachment.mimeType === "application/pdf",
-      )
+      .filter(({ attachment }) => attachment.type === "image")
       .map(({ attachment, bytes }) => ({
-        type: attachment.type === "image" ? ("image" as const) : ("file" as const),
+        type: "image" as const,
         url: `data:${attachment.mimeType};base64,${bytes.toString("base64")}`,
       }));
+    const unsupported = prepared.attachments.find(
+      ({ attachment, path }) =>
+        attachment.type !== "image" && !path && prepared.unextractableIds.includes(attachment.id),
+    );
+    if (unsupported) {
+      return yield* toRequestError(
+        input.threadId,
+        "turn/start",
+        new Error(
+          `Codex cannot read attachment '${unsupported.attachment.name}' on this execution target and no usable text was extracted. Reattach a text-readable version.`,
+        ),
+      );
+    }
 
     return yield* Effect.tryPromise({
       try: () => {
+        if (eventDeliveryFailure) throw eventDeliveryFailure;
         const managerModelSelection = toCodexManagerModelSelection(input.modelSelection);
         const managerInput = {
           threadId: input.threadId,
@@ -286,59 +305,27 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     });
 
   const runtimeEventQueue =
-    yield* Queue.unbounded<import("@bigbud/contracts").ProviderRuntimeEvent>();
-
-  const writeNativeEvent = Effect.fn("writeNativeEvent")(function* (event: ProviderEvent) {
-    if (!nativeEventLogger) {
-      return;
-    }
-    yield* nativeEventLogger.write(event, event.threadId);
-  });
-
-  const registerListener = Effect.fn("registerListener")(function* () {
-    const services = yield* Effect.services<never>();
-    const subagents = makeCodexSubagentTracker();
-    const listenerEffect = Effect.fn("listener")(function* (event: ProviderEvent) {
-      yield* writeNativeEvent(event);
-      const runtimeEvents = [...mapToRuntimeEvents(event, event.threadId), ...subagents.map(event)];
-      if (runtimeEvents.length === 0) {
-        yield* Effect.logDebug("ignoring unhandled Codex provider event", {
-          method: event.method,
-          threadId: event.threadId,
-          turnId: event.turnId,
-          itemId: event.itemId,
-        });
-        return;
-      }
-      yield* Queue.offerAll(runtimeEventQueue, runtimeEvents);
-    });
-    const listener = (event: ProviderEvent) =>
-      listenerEffect(event).pipe(Effect.runPromiseWith(services));
-    manager.on("event", listener);
-    return listener;
-  });
-
-  const unregisterListener = Effect.fn("unregisterListener")(function* (
-    listener: (event: ProviderEvent) => Promise<void>,
-  ) {
-    yield* Effect.sync(() => {
-      manager.off("event", listener);
-    });
-    yield* Queue.shutdown(runtimeEventQueue);
-  });
-
-  yield* Effect.acquireRelease(registerListener(), unregisterListener);
+    yield* Queue.bounded<import("@bigbud/contracts").ProviderRuntimeEvent>(256);
+  yield* Effect.acquireRelease(
+    registerCodexEventDelivery(manager, runtimeEventQueue, nativeEventLogger, (cause) => {
+      eventDeliveryFailure =
+        cause instanceof Error ? cause : new Error("Codex event delivery stopped.");
+    }),
+    (unregister) => Effect.sync(unregister).pipe(Effect.andThen(Queue.shutdown(runtimeEventQueue))),
+  );
 
   return {
+    ...makeCodexControls(manager, () => eventDeliveryFailure),
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      conversationRewind: "transcript-and-files",
       subagents: PROVIDER_SUBAGENT_CAPABILITIES.codex,
       supportsSteer: true,
       turnControl: {
         nativeSteer: true,
         interruptTarget: "exact-turn",
-        activeTurnInspection: "unavailable",
+        activeTurnInspection: "authoritative",
         continuation: true,
       },
     },
@@ -347,9 +334,26 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     interruptTurn,
     steerTurn,
     stopThreadSubagents,
-    inspectActiveTurn: unavailableActiveTurnInspection("codex"),
+    inspectActiveTurn: makeCodexInspectActiveTurn(manager),
+    confirmInspectedTurn: (threadId, turnId, epoch, status, publication) =>
+      Effect.sync(() => manager.confirmInspectedTurn(threadId, turnId, epoch, status, publication)),
     readThread,
     rollbackThread,
+    prepareRewind: (input) =>
+      Effect.tryPromise({
+        try: () => manager.prepareRewind(input),
+        catch: (cause) => toRequestError(input.threadId, "thread/revert.preflight", cause),
+      }),
+    revertThread: (input) =>
+      Effect.tryPromise({
+        try: () => manager.revertThread(input),
+        catch: (cause) => toRequestError(input.threadId, "thread/revert", cause),
+      }).pipe(Effect.asVoid),
+    verifyRewind: (input) =>
+      Effect.tryPromise({
+        try: () => manager.verifyRewind(input),
+        catch: (cause) => toRequestError(input.threadId, "thread/revert.verify", cause),
+      }).pipe(Effect.asVoid),
     respondToRequest,
     respondToUserInput,
     stopSession,

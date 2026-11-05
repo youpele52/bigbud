@@ -115,6 +115,8 @@ export type ModelOption = {
   group?: string | undefined;
   subProviderID?: string | undefined;
   availability?: "available" | "requires-setup" | undefined;
+  /** Contributor catalog models may use sent content for training; always disclosed, never silent. */
+  contributorTraining?: boolean | undefined;
 };
 
 /**
@@ -156,8 +158,16 @@ export function visibleModelOptionsForPicker(
     return options.toSorted(
       (a, b) => Number(b.availability === "available") - Number(a.availability === "available"),
     );
-  if (query.trim() || !recentOptions?.length || providerSupportsSubProviderID(provider)) {
+  if (query.trim() || !recentOptions?.length) {
     return options;
+  }
+  if (providerSupportsSubProviderID(provider)) {
+    // A sub-provider only distinguishes models when the same slug repeats
+    // across sub-providers (e.g. OpenCode). A single-sub-provider catalog
+    // (Muse's constant "meta") identifies models by slug alone, so a recent
+    // entry repeated in the main list is a duplicate, not another choice.
+    const slugs = options.map((option) => option.slug);
+    if (new Set(slugs).size !== slugs.length) return options;
   }
 
   const recentValues = new Set(recentOptions.map(modelOptionValue));

@@ -61,6 +61,7 @@ export const ServerProviderUsageLimits = Schema.Struct({
     "codex-app-server",
     "cursor-dashboard",
     "opencode-go-api",
+    "muse-msp",
   ]),
   checkedAt: IsoDateTime,
   lastSuccessfulAt: Schema.optional(IsoDateTime),

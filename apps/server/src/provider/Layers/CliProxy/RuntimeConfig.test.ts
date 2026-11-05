@@ -7,7 +7,7 @@ import { Effect, Layer } from "effect";
 
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { CliProxyLifecycle } from "../../Services/CliProxy/Lifecycle.ts";
-import { CliProxyClientError } from "./Client.ts";
+import { CliProxyClientError, decodeModels } from "./Client.ts";
 import { activateCliProxyRuntime, makeResolveCliProxyRuntimeConfig } from "./RuntimeConfig.ts";
 
 const tempDirectories: string[] = [];
@@ -101,6 +101,37 @@ describe("activateCliProxyRuntime", () => {
 });
 
 describe("resolveCliProxyRuntimeConfig", () => {
+  it("pins the wire model and enables only its discovered effort capabilities", async () => {
+    const configPath = configFile("token");
+    const models = decodeModels({
+      models: [
+        {
+          slug: "gpt-5-codex",
+          supported_reasoning_levels: [{ effort: "high" }, { effort: "xhigh" }],
+          default_reasoning_level: "high",
+        },
+      ],
+    });
+    const runtime = await Effect.runPromise(
+      makeResolveCliProxyRuntimeConfig({ inspect: async () => models })(input()).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            ServerSettingsService.layerTest({ providers: { cliProxy: { configPath } } }),
+            Layer.succeed(CliProxyLifecycle, {
+              isClaudeRunnable: async () => ({ _tag: "available" }) as const,
+              activate: async () => ({ _tag: "started", reused: false }) as const,
+            }),
+          ),
+        ),
+      ),
+    );
+    expect(runtime.harness.modelCapabilities).toEqual(models[0]?.capabilities);
+    expect(runtime.harness.environment).toMatchObject({
+      ANTHROPIC_CUSTOM_MODEL_OPTION: "gpt-5-codex",
+      ANTHROPIC_CUSTOM_MODEL_OPTION_SUPPORTED_CAPABILITIES: "effort,xhigh_effort",
+    });
+  });
+
   it("reads fresh settings for each session and returns an isolated frozen harness", async () => {
     const firstPath = configFile("first-token");
     const secondPath = configFile("second-token");
@@ -146,11 +177,15 @@ describe("resolveCliProxyRuntimeConfig", () => {
       ELECTRON_RUN_AS_NODE: "1",
       ANTHROPIC_AUTH_TOKEN: "first-token",
       ANTHROPIC_BASE_URL: "http://127.0.0.1:8317",
+      ANTHROPIC_CUSTOM_MODEL_OPTION: "gpt-5-codex",
+      ANTHROPIC_CUSTOM_MODEL_OPTION_SUPPORTED_CAPABILITIES: "",
     });
     expect(result.second.harness.environment).toEqual({
       PATH: process.env.PATH,
       HOME: process.env.HOME,
       ANTHROPIC_AUTH_TOKEN: "second-token",
+      ANTHROPIC_CUSTOM_MODEL_OPTION: "gpt-5-codex",
+      ANTHROPIC_CUSTOM_MODEL_OPTION_SUPPORTED_CAPABILITIES: "",
       ANTHROPIC_BASE_URL: "http://127.0.0.1:8317",
     });
     expect(result.second.harness.settingSources).toEqual([]);

@@ -5,7 +5,7 @@ import {
   ProjectId,
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
-import { ModelSelection } from "./orchestration.provider";
+import { HistoricalModelSelection } from "./orchestration.provider";
 
 export const ProjectScriptIcon = Schema.Literals([
   "play",
@@ -33,7 +33,7 @@ export const OrchestrationProject = Schema.Struct({
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),
   workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
-  defaultModelSelection: Schema.NullOr(ModelSelection),
+  defaultModelSelection: Schema.NullOr(HistoricalModelSelection),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,

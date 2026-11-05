@@ -98,6 +98,7 @@ export function makeWorkspaceWriteFile(input: {
         relativePath: value.relativePath,
         operation: "workspaceFileSystem.writeFile",
         detail: "expectedSha256 must be a lowercase SHA-256 digest.",
+        writeDisposition: "not-dispatched",
       });
     }
 
@@ -108,6 +109,7 @@ export function makeWorkspaceWriteFile(input: {
           relativePath: value.relativePath,
           operation: "workspaceFileSystem.writeFileExpectedHashRemote",
           detail: "Conditional remote writes require the remote agent backend.",
+          writeDisposition: "not-dispatched",
         });
       }
       yield* Effect.tryPromise({
@@ -143,6 +145,7 @@ export function makeWorkspaceWriteFile(input: {
             relativePath: value.relativePath,
             operation: "workspaceFileSystem.writeFileExpectedHash",
             detail: cause instanceof Error ? cause.message : String(cause),
+            writeDisposition: "not-dispatched",
             cause,
           }),
       });
@@ -152,6 +155,7 @@ export function makeWorkspaceWriteFile(input: {
           relativePath: value.relativePath,
           operation: "workspaceFileSystem.writeFileExpectedHash",
           detail: `Workspace file changed since it was read (expected ${value.expectedSha256}, actual ${actualSha256 ?? "missing"}).`,
+          writeDisposition: "not-dispatched",
         });
       }
     }
@@ -166,21 +170,34 @@ export function makeWorkspaceWriteFile(input: {
               relativePath: value.relativePath,
               operation: "workspaceFileSystem.makeDirectory",
               detail: cause.message,
+              writeDisposition: "not-dispatched",
               cause,
             }),
         ),
       );
+    const localWriteError = (
+      cause: unknown,
+      writeDisposition: "terminal" | "unknown" = "unknown",
+    ) =>
+      new WorkspaceFileSystemError({
+        cwd: value.cwd,
+        relativePath: value.relativePath,
+        operation: "workspaceFileSystem.writeFile",
+        detail: cause instanceof Error ? cause.message : String(cause),
+        writeDisposition,
+        cause,
+      });
     yield* value.expectedSha256 !== undefined
       ? Effect.tryPromise({
-          try: () => replaceConditionalFile(value.cwd, target.absolutePath, value.contents),
+          // Only an actual rejection of the filesystem promise proves the local write settled.
+          try: () =>
+            replaceConditionalFile(value.cwd, target.absolutePath, value.contents).catch(
+              (cause: unknown) => {
+                throw localWriteError(cause, "terminal");
+              },
+            ),
           catch: (cause) =>
-            new WorkspaceFileSystemError({
-              cwd: value.cwd,
-              relativePath: value.relativePath,
-              operation: "workspaceFileSystem.writeFile",
-              detail: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
+            Schema.is(WorkspaceFileSystemError)(cause) ? cause : localWriteError(cause),
         })
       : input.fileSystem.writeFileString(target.absolutePath, value.contents).pipe(
           Effect.mapError(

@@ -16,10 +16,7 @@ describe("SkillMutationPolicy", () => {
     expect(mayApplySkillMutation({ policy, explicitlyApproved: true })).toBe(true);
   });
 
-  it("forbids changes to plugin and system skills", () => {
-    expect(resolveSkillMutationPolicy({ provider: "opencode", source: "plugin" })).toBe(
-      "forbidden",
-    );
+  it("forbids changes to system skills", () => {
     expect(resolveSkillMutationPolicy({ provider: "claudeAgent", source: "system" })).toBe(
       "forbidden",
     );

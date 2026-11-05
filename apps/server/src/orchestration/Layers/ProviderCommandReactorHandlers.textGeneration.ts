@@ -1,3 +1,4 @@
+import { isRoutableProviderSelection } from "../../provider/providerSelectionCompatibility.ts";
 import type { OrchestrationEvent } from "@bigbud/contracts";
 import { Cause, Effect, Semaphore } from "effect";
 import { hasTextGenerationUncertainty } from "@bigbud/shared/internalTextGeneration";
@@ -45,7 +46,14 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
           ? activity.payload.operation
           : null;
       const thread = yield* services.resolveThread(threadId);
-      if (!thread || thread.archivedAt || thread.deletingAt || thread.deletedAt) return;
+      if (
+        !thread ||
+        !isRoutableProviderSelection(thread.modelSelection) ||
+        thread.archivedAt ||
+        thread.deletingAt ||
+        thread.deletedAt
+      )
+        return;
       const request = retry ? readTextGenerationRequest(activity) : null;
       if (retry && !request) {
         yield* Effect.logWarning("unscoped legacy text generation request cannot be recovered", {

@@ -1,26 +1,31 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRightIcon, CpuIcon, FlameIcon, SigmaIcon } from "lucide-react";
-import { AiIcon } from "../AiIcon";
+import { ArrowRightIcon } from "lucide-react";
 
 import { useServerProviders } from "~/rpc/serverState";
 import { cn } from "~/lib/utils";
+import { BigbudLoader } from "../layout/BigbudLoader";
 import {
   STANDALONE_PAGE_SCROLL_CLASS,
   STANDALONE_PAGE_WIDTH_CLASS,
 } from "../standalone/StandalonePageContent";
 import { UsageDataStatus } from "./UsageDataStatus";
 import { applyUsageDisplayLabels } from "./UsagePage.labels";
-import { UsageStatCard } from "./UsagePage.stat";
+import { UsageOverviewCard } from "./UsageOverviewCard";
 import { UsageSubscriptionLimits } from "./UsageSubscriptionLimits";
 import { useUsagePanelSummary } from "./useUsagePanelSummary";
 import { CenteredStatus } from "../common/CenteredStatus";
 import { UsageAccountingFooter } from "./UsageAccountingFooter";
-import { usageSourceLabel } from "./UsageAccounting.logic";
 
 export function UsagePanel({ visible }: { visible: boolean }) {
   const providers = useServerProviders();
   const { summary, loading, error } = useUsagePanelSummary(visible);
   const displaySummary = summary ? applyUsageDisplayLabels(summary, providers) : null;
+
+  // First load fills the panel with the logo, like the usage page; refreshes keep data visible.
+  if (loading && !summary && !error) {
+    return <BigbudLoader className="flex-1" label="Loading usage" />;
+  }
+
   return (
     <div className={STANDALONE_PAGE_SCROLL_CLASS}>
       <div className={cn("@container space-y-4 p-4 text-sm", STANDALONE_PAGE_WIDTH_CLASS)}>
@@ -38,40 +43,14 @@ export function UsagePanel({ visible }: { visible: boolean }) {
                   : "text-xs text-muted-foreground"
               }
             >
-              {error ?? (summary ? "Refreshing usage" : "Loading usage")}
+              {error ?? "Refreshing usage"}
               {error && summary ? " Showing last successful data; values may be out of date." : ""}
             </CenteredStatus>
           ) : null}
           {displaySummary ? (
             <>
               <UsageDataStatus summary={displaySummary} />
-              <div className="grid grid-cols-2 gap-2 @min-[800px]:grid-cols-4">
-                <UsageStatCard
-                  compact
-                  icon={SigmaIcon}
-                  label="Total tokens"
-                  sourceLabel={usageSourceLabel(displaySummary.totals.accounting)}
-                  value={displaySummary.totals.usedTokens.toLocaleString()}
-                />
-                <UsageStatCard
-                  compact
-                  icon={CpuIcon}
-                  label="Top provider"
-                  value={displaySummary.favoriteProvider?.label ?? "None"}
-                />
-                <UsageStatCard
-                  compact
-                  icon={AiIcon}
-                  label="Top model"
-                  value={displaySummary.favoriteModel?.label ?? "None"}
-                />
-                <UsageStatCard
-                  compact
-                  icon={FlameIcon}
-                  label="Current streak · UTC"
-                  value={`${displaySummary.streakDays}d`}
-                />
-              </div>
+              <UsageOverviewCard summary={displaySummary} />
             </>
           ) : null}
         </section>

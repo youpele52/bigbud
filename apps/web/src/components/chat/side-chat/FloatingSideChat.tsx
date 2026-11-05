@@ -11,7 +11,7 @@ import type { MarkdownAnchorClick } from "~/components/common/BaseMarkdown";
 import { ScrollToBottomPill } from "~/components/chat/common/ScrollToBottomPill";
 import { ActivityStatusIndicator } from "~/components/chat/common/ActivityStatusIndicator";
 import {
-  ThreadActivityDots,
+  ThreadActivityIndicator,
   threadActivityLabel,
 } from "~/components/chat/common/threadActivityIndicator";
 import { ChatViewComposer } from "~/components/chat/view/chat-view/ChatViewComposer";
@@ -216,7 +216,7 @@ function SidecarContent(props: {
               className="inline-flex items-center text-info-foreground"
             >
               <span aria-hidden="true" className="inline-flex items-center gap-[3px] pr-1">
-                <ThreadActivityDots tone={activityTone} dotClassName="h-1 w-1" />
+                <ThreadActivityIndicator tone={activityTone} />
               </span>
             </span>
           ) : null}

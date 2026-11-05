@@ -95,34 +95,43 @@ export const COPILOT_COMPUTER_USE_PARAMETERS = {
   additionalProperties: false,
 } as const;
 
-export function renderPiComputerUseToolSource(): string {
+/** Legacy (0.9.1) Pi parameter source lines; unchanged. */
+const LEGACY_PI_COMPUTER_USE_PARAMETER_LINES: ReadonlyArray<string> = [
+  '    action: Type.String({ description: "Computer-use action name" }),',
+  '    surface: Type.Optional(Type.Union([Type.Literal("browser"), Type.Literal("desktop")])),',
+  `    url: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_URL_MAX_CHARS}, pattern: "^https?://" })),`,
+  `    x: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+  `    y: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+  '    button: Type.Optional(Type.Union([Type.Literal("left"), Type.Literal("middle"), Type.Literal("right")])),',
+  `    startX: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+  `    startY: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+  `    endX: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+  `    endY: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
+  `    deltaX: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_SCROLL_DELTA_MIN}, maximum: ${COMPUTER_USE_SCROLL_DELTA_MAX} })),`,
+  `    deltaY: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_SCROLL_DELTA_MIN}, maximum: ${COMPUTER_USE_SCROLL_DELTA_MAX} })),`,
+  `    text: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_TEXT_MAX_CHARS} })),`,
+  `    key: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_KEY_MAX_CHARS} })),`,
+  `    durationMs: Type.Optional(Type.Number({ minimum: 1, maximum: ${COMPUTER_USE_WAIT_DURATION_MS_MAX} })),`,
+  "    prompt: Type.Optional(Type.Boolean()),",
+  `    name: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_APP_NAME_MAX_CHARS} })),`,
+  "    pid: Type.Optional(Type.Number()),",
+  "    windowId: Type.Optional(Type.Number()),",
+  `    maxDepth: Type.Optional(Type.Number({ minimum: 1, maximum: ${COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH} })),`,
+  "    captureAfter: Type.Optional(Type.Boolean()),",
+];
+
+/** Shared Pi tool body: only the description and parameter lines vary by profile. */
+export function renderPiComputerUseToolWith(
+  description: string,
+  parameterLines: ReadonlyArray<string>,
+): string {
   return [
     "const computerUseTool = defineTool({",
     '  name: "computer_use",',
     '  label: "computer_use",',
-    `  description: ${JSON.stringify(COMPUTER_USE_TOOL_DESCRIPTION)},`,
+    `  description: ${JSON.stringify(description)},`,
     "  parameters: Type.Object({",
-    '    action: Type.String({ description: "Computer-use action name" }),',
-    '    surface: Type.Optional(Type.Union([Type.Literal("browser"), Type.Literal("desktop")])),',
-    `    url: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_URL_MAX_CHARS}, pattern: "^https?://" })),`,
-    `    x: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
-    `    y: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
-    '    button: Type.Optional(Type.Union([Type.Literal("left"), Type.Literal("middle"), Type.Literal("right")])),',
-    `    startX: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
-    `    startY: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
-    `    endX: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
-    `    endY: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_COORDINATE_MIN}, maximum: ${COMPUTER_USE_COORDINATE_MAX} })),`,
-    `    deltaX: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_SCROLL_DELTA_MIN}, maximum: ${COMPUTER_USE_SCROLL_DELTA_MAX} })),`,
-    `    deltaY: Type.Optional(Type.Number({ minimum: ${COMPUTER_USE_SCROLL_DELTA_MIN}, maximum: ${COMPUTER_USE_SCROLL_DELTA_MAX} })),`,
-    `    text: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_TEXT_MAX_CHARS} })),`,
-    `    key: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_KEY_MAX_CHARS} })),`,
-    `    durationMs: Type.Optional(Type.Number({ minimum: 1, maximum: ${COMPUTER_USE_WAIT_DURATION_MS_MAX} })),`,
-    "    prompt: Type.Optional(Type.Boolean()),",
-    `    name: Type.Optional(Type.String({ maxLength: ${COMPUTER_USE_APP_NAME_MAX_CHARS} })),`,
-    "    pid: Type.Optional(Type.Number()),",
-    "    windowId: Type.Optional(Type.Number()),",
-    `    maxDepth: Type.Optional(Type.Number({ minimum: 1, maximum: ${COMPUTER_USE_ACCESSIBILITY_MAX_DEPTH} })),`,
-    "    captureAfter: Type.Optional(Type.Boolean()),",
+    ...parameterLines,
     "  }),",
     "  async execute(_toolCallId, args) {",
     "    const result = await callOrchestrationTool({",
@@ -133,6 +142,13 @@ export function renderPiComputerUseToolSource(): string {
     "  },",
     "});",
   ].join("\n");
+}
+
+export function renderPiComputerUseToolSource(): string {
+  return renderPiComputerUseToolWith(
+    COMPUTER_USE_TOOL_DESCRIPTION,
+    LEGACY_PI_COMPUTER_USE_PARAMETER_LINES,
+  );
 }
 
 export { COMPUTER_USE_TOOL_DESCRIPTION, renderCallOrchestrationToolSource };

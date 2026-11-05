@@ -26,8 +26,8 @@ export interface BuildSidebarStateResultInput {
   setAreChatsExpanded: (expanded: boolean) => void;
   areProjectsExpanded: boolean;
   setAreProjectsExpanded: (expanded: boolean) => void;
-  areRemoteProjectsExpanded: boolean;
-  setAreRemoteProjectsExpanded: (expanded: boolean) => void;
+  areRemoteWorkspacesExpanded: boolean;
+  setAreRemoteWorkspacesExpanded: (expanded: boolean) => void;
   showAllChats: boolean;
   setShowAllChats: (showAll: boolean) => void;
   hasMoreChats: boolean;
@@ -52,6 +52,7 @@ export interface BuildSidebarStateResultInput {
   projectActions: SidebarProjectActionsOutput;
   threadActions: SidebarThreadActionsOutput;
   handleNewChat: () => Promise<void>;
+  handleNewChats: () => Promise<void>;
   handleNewThread: SharedProjectItemProps["handleNewThread"];
   sharedProjectItemProps: SharedProjectItemProps;
   updateSettings: ReturnType<typeof useUpdateSettings>["updateSettings"];
@@ -71,8 +72,8 @@ export function buildSidebarStateResult(input: BuildSidebarStateResultInput): Si
     setAreChatsExpanded: input.setAreChatsExpanded,
     areProjectsExpanded: input.areProjectsExpanded,
     setAreProjectsExpanded: input.setAreProjectsExpanded,
-    areRemoteProjectsExpanded: input.areRemoteProjectsExpanded,
-    setAreRemoteProjectsExpanded: input.setAreRemoteProjectsExpanded,
+    areRemoteWorkspacesExpanded: input.areRemoteWorkspacesExpanded,
+    setAreRemoteWorkspacesExpanded: input.setAreRemoteWorkspacesExpanded,
     showAllChats: input.showAllChats,
     setShowAllChats: input.setShowAllChats,
     hasMoreChats: input.hasMoreChats,
@@ -97,6 +98,7 @@ export function buildSidebarStateResult(input: BuildSidebarStateResultInput): Si
     ...input.projectActions,
     ...input.threadActions,
     handleNewChat: input.handleNewChat,
+    handleNewChats: input.handleNewChats,
     handleNewThread: input.handleNewThread,
     expandThreadListForProject: input.renderedProjectsState.expandThreadListForProject,
     collapseThreadListForProject: input.renderedProjectsState.collapseThreadListForProject,
@@ -105,6 +107,7 @@ export function buildSidebarStateResult(input: BuildSidebarStateResultInput): Si
     sharedProjectItemProps: input.sharedProjectItemProps,
     updateSettings: input.updateSettings,
     newThreadShortcutLabel: input.renderedProjectsState.newThreadShortcutLabel,
+    newChatShortcutLabel: input.renderedProjectsState.newChatShortcutLabel,
     showThreadJumpHints: input.renderedProjectsState.showThreadJumpHints,
     threadJumpLabelById: input.renderedProjectsState.threadJumpLabelById,
   };

@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useStore } from "~/stores/main";
+import { GAMES_WORK_TOAST_ACTION } from "~/constants/gamesWorkToast";
+import { createGamesWorkToastPicker } from "./gamesWorkToast.copy";
 import { toastManager } from "../ui/toast";
 import {
   gamesWorkDueAt,
@@ -8,6 +10,8 @@ import {
   reconcileGamesWorkMarkers,
   saveGamesWorkMarkers,
 } from "./gamesWorkToast.logic";
+
+const pickGamesWorkToast = createGamesWorkToastPicker();
 
 export function GamesWorkToastCoordinator() {
   const navigate = useNavigate();
@@ -39,9 +43,11 @@ export function GamesWorkToastCoordinator() {
           }
           toastManager.add({
             type: "info",
-            title: "Your agent is still working",
-            description: "Take a break with a game while it continues.",
-            actionProps: { children: "Games", onClick: () => void navigate({ to: "/games" }) },
+            ...pickGamesWorkToast(storage),
+            actionProps: {
+              children: GAMES_WORK_TOAST_ACTION,
+              onClick: () => void navigate({ to: "/games" }),
+            },
           });
         } else nextDue = Math.min(nextDue ?? dueAt, dueAt);
       }

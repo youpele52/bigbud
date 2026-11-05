@@ -58,8 +58,9 @@ The authoritative defaults are [`DEFAULT_KEYBINDINGS`](../apps/server/src/keybin
 - `rightPanel.toggle`, `rightPanel.newTab`, `rightPanel.closeTab`: toggle the right panel, open its panel switcher, or close its active tab.
 - `commandPalette.toggle`, `sidebar.toggle`, `settings.toggle`, `search.toggle`: toggle the corresponding interface.
 - `chat.focus`: focus the chat composer.
-- `chat.new`: create a chat preserving the active thread's branch/worktree context.
-- `chat.newLocal`: create a chat in a new environment according to the app's local/worktree preference.
+- `chat.new`: create a chat in the active thread or draft's project, preserving its branch/worktree directory. Without an active thread, use the selected project; with no selection, use Chats and the configured default chat directory.
+- `chat.newLocal`: always create a chat in the built-in Chats section using the configured default chat directory (`defaultChatCwd`, initially `~/Documents`), without inheriting a project or worktree.
+- Both commands retain saved-draft reuse. Terminal-focused shortcuts remain unchanged.
 - `sidecar.toggle`, `planCard.toggle`: toggle Sidecar or the floating Tasks/Plan card.
 - `project.open`: open the project picker.
 - `editor.openFavorite`: open the active workspace in the preferred editor.

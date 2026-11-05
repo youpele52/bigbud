@@ -2,6 +2,10 @@ import { Schema } from "effect";
 import { TurnStartFailureClass } from "./orchestration.turnFailure";
 import { ThreadRecoverySetCommand } from "./orchestration.recovery";
 import {
+  ThreadOrganizationIdleCommand,
+  ThreadOrganizationSnoozeExpireCommand,
+} from "./orchestration.organization";
+import {
   CheckpointRef,
   CommandId,
   IsoDateTime,
@@ -230,5 +234,7 @@ export const InternalOrchestrationCommand = Schema.Union([
   ThreadDelegationModelChoiceHoldCommand,
   ThreadDelegationModelChoiceExpireCommand,
   ThreadRecoverySetCommand,
+  ThreadOrganizationSnoozeExpireCommand,
+  ThreadOrganizationIdleCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;

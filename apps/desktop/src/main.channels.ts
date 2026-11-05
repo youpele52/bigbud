@@ -1,4 +1,8 @@
 export const desktopIpcChannels = {
+  resourceAwarenessGet: "desktop:resource-awareness-get",
+  resourceAwarenessAcknowledge: "desktop:resource-awareness-acknowledge",
+  resourceAwarenessMutate: "desktop:resource-awareness-mutate",
+  resourceAwarenessState: "desktop:resource-awareness-state",
   recoverBackendOwnership: "desktop:recover-backend-ownership",
   checkBackendOwnership: "desktop:check-backend-ownership",
   systemMonitorSubscribe: "desktop:system-monitor-subscribe",
@@ -56,4 +60,7 @@ export const desktopIpcChannels = {
   getFloatingAssistantCaller: "desktop:get-floating-assistant-caller",
   setFloatingAssistantCaller: "desktop:set-floating-assistant-caller",
   floatingAssistantCallerChanged: "desktop:floating-assistant-caller-changed",
+  setMascotComputerUseActive: "desktop:set-mascot-computer-use-active",
+  stopComputerUseRequested: "desktop:stop-computer-use-requested",
+  windowZoomChanged: "desktop:window-zoom-changed",
 } as const;

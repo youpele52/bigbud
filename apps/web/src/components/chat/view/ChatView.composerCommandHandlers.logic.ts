@@ -1,4 +1,3 @@
-// TODO: Split by concern when this file is next touched.
 import { useCallback } from "react";
 import {
   collapseExpandedComposerCursor,
@@ -84,8 +83,13 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
       });
       const { snapshot, trigger } = resolveActiveComposerTrigger();
       if (!trigger) return;
-      if (item.type === "path") {
-        const replacement = `@${item.path} `;
+      if (item.type === "path" || item.type === "agent" || item.type === "skill") {
+        const replacement =
+          item.type === "path"
+            ? `@${item.path} `
+            : item.type === "agent"
+              ? `@agent::${item.agent.name} `
+              : `${buildSkillMentionPrompt(item.skill.name)} `;
         const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
           snapshot.value,
           trigger.rangeEnd,
@@ -98,58 +102,6 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
           {
             expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
           },
-        );
-        if (applied) setComposerHighlightedItemId(null);
-        return;
-      }
-      if (item.type === "agent") {
-        const replacement = `@agent::${item.agent.name} `;
-        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
-          snapshot.value,
-          trigger.rangeEnd,
-          replacement,
-        );
-        const applied = applyPromptReplacement(
-          trigger.rangeStart,
-          replacementRangeEnd,
-          replacement,
-          {
-            expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
-          },
-        );
-        if (applied) setComposerHighlightedItemId(null);
-        return;
-      }
-      if (item.type === "skill") {
-        const replacement = `${buildSkillMentionPrompt(item.skill.name)} `;
-        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
-          snapshot.value,
-          trigger.rangeEnd,
-          replacement,
-        );
-        const applied = applyPromptReplacement(
-          trigger.rangeStart,
-          replacementRangeEnd,
-          replacement,
-          {
-            expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd),
-          },
-        );
-        if (applied) setComposerHighlightedItemId(null);
-        return;
-      }
-      if (item.type === "plugin") {
-        const replacement = `@plugin::${item.name} `;
-        const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
-          snapshot.value,
-          trigger.rangeEnd,
-          replacement,
-        );
-        const applied = applyPromptReplacement(
-          trigger.rangeStart,
-          replacementRangeEnd,
-          replacement,
-          { expectedText: snapshot.value.slice(trigger.rangeStart, replacementRangeEnd) },
         );
         if (applied) setComposerHighlightedItemId(null);
         return;
@@ -192,12 +144,7 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
           return;
         }
 
-        if (
-          item.command === "agents" ||
-          item.command === "skill" ||
-          item.command === "skills" ||
-          item.command === "plugins"
-        ) {
+        if (item.command === "agents" || item.command === "skill" || item.command === "skills") {
           const replacement = `/${item.command} `;
           const replacementRangeEnd = extendReplacementRangeForTrailingSpace(
             snapshot.value,

@@ -102,6 +102,25 @@ describe("remote workspace runtime adapter", () => {
     ).rejects.toThrow("requires an SSH execution target");
   });
 
+  it("reports resolution failure as undispatched rather than a native write failure", async () => {
+    const runtime = makeRemoteWorkspaceRuntime({
+      resolve: async () => {
+        throw new Error("unavailable");
+      },
+    });
+    const error = await Effect.runPromise(
+      Effect.flip(
+        runtime.files.writeFile({
+          executionTargetId: "ssh:example",
+          cwd: "/remote/project",
+          relativePath: "README.md",
+          contents: "updated",
+        }),
+      ),
+    );
+    expect(error).toMatchObject({ writeDisposition: "not-dispatched" });
+  });
+
   it("reopens a read operation once after transport loss without rerunning writes", async () => {
     const replacement = fakeClient();
     const lost = Object.assign(fakeClient(), { reconnect: async () => replacement });
@@ -156,33 +175,5 @@ describe("remote workspace runtime adapter", () => {
 
     expect(operationIds).toHaveLength(2);
     expect(operationIds[0]).not.toBe(operationIds[1]);
-  });
-
-  it("reuses a stable write identity after transport loss without a second marker", async () => {
-    const client = fakeClient();
-    const operationIds: Array<string> = [];
-    const markedOperations = new Set<string>();
-    client.writeFile = async (input) => {
-      operationIds.push(input.operationId);
-      if (!markedOperations.has(input.operationId)) {
-        markedOperations.add(input.operationId);
-        throw new RemoteAgentConnectionError("transport lost after accepted write");
-      }
-      return fakeClient().writeFile(input);
-    };
-    const runtime = makeRemoteWorkspaceRuntime({ resolve: async () => client });
-    const input = {
-      executionTargetId: "ssh:example",
-      operationId: "workspace-write-retry-1",
-      cwd: "/remote/project",
-      relativePath: "README.md",
-      contents: "updated",
-    } as const;
-
-    await expect(Effect.runPromise(runtime.files.writeFile(input))).rejects.toBeDefined();
-    await Effect.runPromise(runtime.files.writeFile(input));
-
-    expect(operationIds).toEqual(["workspace-write-retry-1", "workspace-write-retry-1"]);
-    expect(markedOperations).toHaveLength(1);
   });
 });

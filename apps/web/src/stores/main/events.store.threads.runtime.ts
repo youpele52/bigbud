@@ -1,5 +1,8 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { retainUserInputHistoryActivities } from "./userInputHistory.store";
+import {
+  isUserInputHistoryActivity,
+  retainUserInputHistoryActivities,
+} from "./userInputHistory.store";
 
 import { mapMessage, mapProposedPlan, mapSession, mapTurnDiffSummary } from "./mappers.store";
 import { type AppState } from "./main.store";
@@ -342,36 +345,41 @@ export function applyThreadRuntimeEvent(
             turnCount: event.payload.turnCount,
             occurredAt: event.occurredAt,
           }),
-        { preserveLatestUserMessageAt: false },
+        { preserveLatestUserMessageAt: false, pendingUserInputChanged: true },
       );
     }
 
     case "thread.activity-appended": {
-      return updateThreadState(state, event.payload.threadId, (thread) => {
-        const activities = retainUserInputHistoryActivities(
-          [
-            ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
-            { ...event.payload.activity },
-          ].toSorted(compareActivities),
-          MAX_THREAD_ACTIVITIES,
-        );
-        const providerTurnStartError = getProviderTurnStartFailureDetail(event.payload.activity);
-        return applyDelegationLinkedActivity(
-          {
-            ...thread,
-            activities,
-            // A redelivered activity (same id) is not a new step.
-            turnStartRequest: thread.activities.some(
-              (activity) => activity.id === event.payload.activity.id,
-            )
-              ? thread.turnStartRequest
-              : recordTurnStartRecoveryStep(thread.turnStartRequest, event.payload.activity),
-            error: providerTurnStartError ?? thread.error,
-            updatedAt: event.occurredAt,
-          },
-          event.payload.activity,
-        );
-      });
+      return updateThreadState(
+        state,
+        event.payload.threadId,
+        (thread) => {
+          const activities = retainUserInputHistoryActivities(
+            [
+              ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
+              { ...event.payload.activity },
+            ].toSorted(compareActivities),
+            MAX_THREAD_ACTIVITIES,
+          );
+          const providerTurnStartError = getProviderTurnStartFailureDetail(event.payload.activity);
+          return applyDelegationLinkedActivity(
+            {
+              ...thread,
+              activities,
+              // A redelivered activity (same id) is not a new step.
+              turnStartRequest: thread.activities.some(
+                (activity) => activity.id === event.payload.activity.id,
+              )
+                ? thread.turnStartRequest
+                : recordTurnStartRecoveryStep(thread.turnStartRequest, event.payload.activity),
+              error: providerTurnStartError ?? thread.error,
+              updatedAt: event.occurredAt,
+            },
+            event.payload.activity,
+          );
+        },
+        { pendingUserInputChanged: isUserInputHistoryActivity(event.payload.activity) },
+      );
     }
 
     default:

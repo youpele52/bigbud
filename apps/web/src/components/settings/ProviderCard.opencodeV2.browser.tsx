@@ -52,9 +52,7 @@ it("exposes shared native setup only and preserves retained isolated configurati
     await expect
       .element(page.getByRole("combobox", { name: "OpenCode connection mode" }))
       .not.toBeInTheDocument();
-    await expect
-      .element(page.getByRole("button", { name: "Retry setup", includeHidden: true }))
-      .not.toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
     await page.getByText("Thread tools & setup", { exact: true }).click();
     await expect.element(page.getByRole("button", { name: "Retry setup" })).toBeVisible();
     await screen.rerender(cloneElement(content, { connectionMode: "isolated" }));

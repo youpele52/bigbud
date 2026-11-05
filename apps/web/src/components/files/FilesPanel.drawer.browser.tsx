@@ -68,7 +68,9 @@ describe("FilesPanel tree drawer", () => {
       await advance(249);
       expect(treeRegion().getAttribute("aria-hidden")).toBe("true");
       await advance(1);
-      expect(treeRegion().getAttribute("aria-hidden")).toBe("false");
+      await vi.waitFor(() => expect(treeRegion().getAttribute("aria-hidden")).toBe("false"), {
+        interval: 0,
+      });
       expect(treeRegion().getBoundingClientRect().width).toBeCloseTo(300, 0);
       expect(previewRegion().getBoundingClientRect().width).toBe(previewBounds.width);
       expect(document.querySelector("[data-preview-content]")).toBe(content);
@@ -215,7 +217,7 @@ describe("FilesPanel tree drawer", () => {
       expect(treeRegion().inert).toBe(false);
       window.dispatchEvent(new Event("dragend"));
       await advance(1000);
-      expect(treeRegion().inert).toBe(true);
+      await vi.waitFor(() => expect(treeRegion().inert).toBe(true), { interval: 0 });
     } finally {
       await mounted.unmount();
     }

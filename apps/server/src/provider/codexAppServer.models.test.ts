@@ -44,6 +44,19 @@ describe("parseCodexReasoningEffortLevels", () => {
 });
 
 describe("parseCodexModelCapabilities", () => {
+  it.each([
+    [[{ id: "standard" }], false],
+    [[{ id: "fast" }], true],
+    [[{ id: "priority" }], false],
+    [[{ id: " fast " }], false],
+    [[], false],
+    [null, false],
+  ])("uses exact modern service-tier IDs, overriding legacy fast: %j", (serviceTiers, expected) => {
+    expect(
+      parseCodexModelCapabilities({ serviceTiers, additionalSpeedTiers: ["fast"] })
+        .supportsFastMode,
+    ).toBe(expected);
+  });
   it("preserves fast-mode support independently of effort levels", () => {
     expect(
       parseCodexModelCapabilities({

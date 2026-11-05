@@ -4,8 +4,8 @@
  *
  * @module ThreadOrchestrationTools.listAvailableModels
  */
-import type { ThreadId } from "@bigbud/contracts";
-import { Effect } from "effect";
+import { ModelSelection, type ThreadId } from "@bigbud/contracts";
+import { Effect, Schema } from "effect";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadToolModelSources } from "./ThreadOrchestrationToolDispatcher.ts";
@@ -57,7 +57,9 @@ export const listAvailableModelsViaOrchestration = Effect.fn("listAvailableModel
     }
     const agentModelChoice = context.settings.delegatedThreadModelChoice;
     const ranked =
-      agentModelChoice === "parent" ? [] : listRankedUsableModels(context, caller.modelSelection);
+      agentModelChoice === "parent" || !Schema.is(ModelSelection)(caller.modelSelection)
+        ? []
+        : listRankedUsableModels(context, caller.modelSelection);
     return {
       parentModel,
       agentModelChoice,

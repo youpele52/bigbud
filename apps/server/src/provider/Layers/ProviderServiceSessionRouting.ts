@@ -34,10 +34,9 @@ import {
 import { resolveProviderSessionExecutionTargets } from "../providerSessionExecutionTargets.ts";
 import type { ProviderCapabilitiesResolver } from "../providerCapabilities.ts";
 import { assertProviderWorktreeIdentity } from "./ProviderService.worktreeIdentity.ts";
-import {
-  isRetiredProvider,
-  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
-} from "@bigbud/shared/providerLifecycle";
+import { isRetiredProvider, getProviderReadOnlyMessage } from "@bigbud/shared/providerLifecycle";
+import { hasCodexRewindMarker } from "../Services/ProviderRewind.ts";
+import { hasPendingInspectionTerminal } from "../Services/ProviderInspectionTerminal.ts";
 
 export function makeRecoverSessionForThread(
   registry: ProviderAdapterRegistryShape,
@@ -65,6 +64,14 @@ export function makeRecoverSessionForThread(
     ProviderServiceError
   > {
     if (
+      hasCodexRewindMarker(input.binding.runtimePayload) ||
+      hasPendingInspectionTerminal(input.binding.runtimePayload)
+    )
+      return yield* toValidationError(
+        input.operation,
+        "Incomplete Codex rewind blocks automatic recovery and restart.",
+      );
+    if (
       input.binding.runtimePayload &&
       typeof input.binding.runtimePayload === "object" &&
       "explicitlyStopped" in input.binding.runtimePayload &&
@@ -75,7 +82,10 @@ export function makeRecoverSessionForThread(
         `Provider session for thread '${input.binding.threadId}' was explicitly stopped. Start it before sending more work; retained resume evidence is unchanged.`,
       );
     if (isRetiredProvider(input.binding.provider)) {
-      return yield* toValidationError(input.operation, LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+      return yield* toValidationError(
+        input.operation,
+        getProviderReadOnlyMessage(input.binding.provider),
+      );
     }
     yield* Effect.annotateCurrentSpan({
       "provider.operation": "recover-session",
@@ -161,6 +171,7 @@ export function makeRecoverSessionForThread(
             ? { resumeCursor: input.binding.resumeCursor }
             : {}),
         runtimeMode: input.binding.runtimeMode ?? "full-access",
+        sessionEpoch: readPersistedSessionEpoch(input.binding.runtimePayload) ?? 0,
       });
       if (resumed.provider !== adapter.provider) {
         return yield* toValidationError(
@@ -227,7 +238,10 @@ export function makeResolveRoutableSession(
     }
     const persistedEpoch = readPersistedSessionEpoch(binding.runtimePayload);
     if (isRetiredProvider(binding.provider)) {
-      return yield* toValidationError(input.operation, LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+      return yield* toValidationError(
+        input.operation,
+        getProviderReadOnlyMessage(binding.provider),
+      );
     }
     if (
       input.expectedSessionEpoch !== undefined &&

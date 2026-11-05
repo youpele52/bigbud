@@ -27,16 +27,7 @@ describe("model selection across discovery recovery", () => {
       ).toBe("gpt-5.5");
     }
   });
-  it.each([
-    "codex",
-    "claudeAgent",
-    "copilot",
-    "cursor",
-    "devin",
-    "pi",
-    "opencode",
-    "kilocode",
-  ] as const)(
+  it.each(["codex", "claudeAgent", "copilot", "cursor", "devin", "pi", "opencode"] as const)(
     "keeps the selected %s model across pending, fallback, and live snapshots",
     (provider) => {
       const base: ServerProvider = {

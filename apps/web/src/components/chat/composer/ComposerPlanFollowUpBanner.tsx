@@ -16,6 +16,7 @@ export const ComposerPlanFollowUpBanner = memo(function ComposerPlanFollowUpBann
       kind="plan-follow-up"
       scope={[planId]}
       role="status"
+      variant="success"
       title="Plan ready"
       description={planTitle}
       dismissLabel="Dismiss plan ready notice"

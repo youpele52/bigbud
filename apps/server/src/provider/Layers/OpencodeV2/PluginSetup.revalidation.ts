@@ -24,7 +24,7 @@ const approvalKey = (signed: Signed, bootSession: string) =>
   `publication-revalidation:${recoveryDigest(signed)}:${bootSession}`;
 
 /** Explicit adoption checks: device numbers may change, but neither canonical object nor bytes may. */
-async function observe(
+export async function observeV2InstallationRevalidation(
   records: V2ThreadRecords,
   key: string,
   signed: Signed,
@@ -80,7 +80,10 @@ export async function prepareV2InstallationRevalidation(
   );
   if (recoveryDigest(archived) !== recoveryDigest(signed))
     throw new Error("V2 installation revalidation backup differs from the signed installation.");
-  const approval = { ...(await observe(records, key, signed, root, issuer)), backup };
+  const approval = {
+    ...(await observeV2InstallationRevalidation(records, key, signed, root, issuer)),
+    backup,
+  };
   if (
     (await readV2ThreadPrivateFile(
       path.join(backup.directory, v2PublicationFilename(approval.revalidated)),
@@ -138,7 +141,13 @@ export async function recoverV2InstallationRevalidation(
       },
     };
   }
-  const observed = await observe(records, key, signed, root, artifact.issuer);
+  const observed = await observeV2InstallationRevalidation(
+    records,
+    key,
+    signed,
+    root,
+    artifact.issuer,
+  );
   const store = await records.sibling("recovery"),
     approval = await store.read(approvalKey(signed, observed.host.bootSession));
   const value = approval?.value as { backup?: unknown } | undefined;
@@ -160,8 +169,9 @@ export async function recoverV2InstallationRevalidation(
     assertCurrent();
     if (requireRetirement) await assertV2PluginUpgradeIdle(artifact);
     if (
-      recoveryDigest(await observe(records, key, signed, root, artifact.issuer)) !==
-        recoveryDigest(observed) ||
+      recoveryDigest(
+        await observeV2InstallationRevalidation(records, key, signed, root, artifact.issuer),
+      ) !== recoveryDigest(observed) ||
       recoveryDigest(await store.read(approvalKey(signed, observed.host.bootSession))) !==
         recoveryDigest(approval)
     )
@@ -169,8 +179,9 @@ export async function recoverV2InstallationRevalidation(
     await authority.publication!.beforeMutation();
     assertCurrent();
     if (
-      recoveryDigest(await observe(records, key, signed, root, artifact.issuer)) !==
-      recoveryDigest(observed)
+      recoveryDigest(
+        await observeV2InstallationRevalidation(records, key, signed, root, artifact.issuer),
+      ) !== recoveryDigest(observed)
     )
       throw new Error("V2 installation revalidation native successor preserved.");
     // The signed approval already durably archives the original before conditional replacement.

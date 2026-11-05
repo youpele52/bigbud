@@ -13,6 +13,7 @@ function fixture() {
   const callbacks: Array<() => void> = [];
   const terminal = {
     options: { disableStdin: false },
+    buffer: { active: { type: "normal" } },
     write: vi.fn((_data, done) => callbacks.push(done)),
   };
   const failure = vi.fn();
@@ -20,7 +21,17 @@ function fixture() {
   lanes.push(lane);
   const applied = vi.fn();
   const input = vi.fn();
-  const intake = new TerminalViewportIntake(terminal as never, lane, applied, input);
+  const attached = vi.fn();
+  const intake = new TerminalViewportIntake(
+    terminal as never,
+    lane,
+    applied,
+    input,
+    undefined,
+    undefined,
+    undefined,
+    attached,
+  );
   const snapshot = {
     threadId: "thread",
     terminalId: "terminal",
@@ -34,7 +45,7 @@ function fixture() {
     exitSignal: null,
     updatedAt: "2026-10-10T00:00:00.000Z",
   };
-  return { terminal, callbacks, lane, failure, applied, intake, snapshot };
+  return { terminal, callbacks, lane, failure, applied, attached, intake, snapshot };
 }
 it("input stays gated across withheld final callback, failure and disposal", async () => {
   const f = fixture();
@@ -67,14 +78,39 @@ it("bounded hydration exhaustion stays visibly paused instead of silently splici
   f.intake.dispose();
 });
 
-it("refuses an incomplete baseline before resetting or writing to the emulator", async () => {
+it("attaches live without a baseline: no reset, no suffix replay, modes first, input enabled", async () => {
   const f = fixture();
-  await f.intake.hydrate({ ...f.snapshot, history: "unsafe suffix", historyTruncated: true });
-  vi.runAllTimers();
-  expect(f.terminal.write).not.toHaveBeenCalled();
-  expect(f.failure).toHaveBeenCalledWith(
-    expect.objectContaining({ message: expect.stringContaining("process is still running") }),
+  const state = { settled: false };
+  const hydrated = f.intake
+    .hydrate({
+      ...f.snapshot,
+      history: "unsafe suffix",
+      historyTruncated: true,
+      liveModes: { sequence: "\x1b[?2004h", alternateScreen: true },
+    })
+    .finally(() => {
+      state.settled = true;
+    });
+  f.intake.receive({
+    type: "output",
+    threadId: "thread",
+    terminalId: "terminal",
+    data: "post-cut",
+    createdAt: "2026-10-10T00:00:01.000Z",
+  });
+  for (let round = 0; round < 20 && !state.settled; round++) {
+    await vi.advanceTimersByTimeAsync(100);
+    f.callbacks.splice(0).forEach((done) => done());
+  }
+  await hydrated;
+  const written = f.terminal.write.mock.calls.map(([data]) => String(data)).join("");
+  expect(written).toBe("\x1b[?1049h\x1b[?2004h");
+  expect(f.applied).toHaveBeenCalledWith(expect.objectContaining({ data: "post-cut" }));
+  expect(f.failure).not.toHaveBeenCalled();
+  expect(f.intake.acceptsInput).toBe(true);
+  expect(f.attached).toHaveBeenCalledOnce();
+  expect(f.attached).toHaveBeenCalledWith(
+    expect.objectContaining({ threadId: "thread", terminalId: "terminal" }),
   );
-  expect(f.intake.acceptsInput).toBe(false);
   f.intake.dispose();
 });

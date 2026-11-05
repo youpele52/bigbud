@@ -1,11 +1,6 @@
 import "../../../index.css";
 
-import {
-  type CodexModelOptions,
-  DEFAULT_MODEL_BY_PROVIDER,
-  ProjectId,
-  ThreadId,
-} from "@bigbud/contracts";
+import { type CodexModelOptions, ProjectId, ThreadId } from "@bigbud/contracts";
 import { page } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
@@ -20,7 +15,7 @@ import {
 
 async function mountCodexPicker(props: { model?: string; options?: CodexModelOptions }) {
   const threadId = ThreadId.makeUnsafe("thread-codex-traits");
-  const model = props.model ?? DEFAULT_MODEL_BY_PROVIDER.codex;
+  const model = props.model ?? "gpt-5.4";
   const draftsByThreadId: Record<ThreadId, ComposerThreadDraftState> = {
     [threadId]: {
       prompt: "",

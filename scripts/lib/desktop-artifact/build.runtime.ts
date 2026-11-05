@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
+import type { CopilotPackagingMode } from "../../../apps/desktop/scripts/copilotRuntimePackaging.cjs";
 
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
@@ -29,10 +30,14 @@ const SERVER_RUNTIME_EXTERNAL_PACKAGES = new Set([
 /** Filter a dependency map to only include packages that are external at runtime. */
 export function pickExternalDependencies(
   dependencies: Record<string, unknown>,
+  copilotMode: CopilotPackagingMode = "bridge",
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [name, version] of Object.entries(dependencies)) {
-    if (SERVER_RUNTIME_EXTERNAL_PACKAGES.has(name)) {
+    if (
+      SERVER_RUNTIME_EXTERNAL_PACKAGES.has(name) &&
+      (copilotMode !== "slim" || name !== "@github/copilot")
+    ) {
       result[name] = version;
     }
   }

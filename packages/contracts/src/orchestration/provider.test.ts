@@ -12,6 +12,19 @@ const decodeModelSelection = (value: unknown) =>
 const encodeModelSelection = Schema.encodeUnknownSync(ModelSelection);
 
 describe("CliProxyModelSelection", () => {
+  it("round-trips a trimmed native effort selection", () => {
+    const selection = decodeModelSelection({
+      provider: "cliProxy",
+      model: "gpt-live",
+      options: { effort: " xhigh " },
+    });
+    expect(encodeModelSelection(selection)).toEqual({
+      provider: "cliProxy",
+      model: "gpt-live",
+      options: { effort: "xhigh" },
+    });
+  });
+
   it("decodes and encodes the minimal persisted selection", () => {
     const selection = { provider: "cliProxy", model: "gpt-5.6" } as const;
 

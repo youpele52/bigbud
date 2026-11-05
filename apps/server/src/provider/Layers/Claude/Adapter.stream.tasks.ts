@@ -76,6 +76,8 @@ export const updateClaudeTaskPlan = Effect.fn("updateClaudeTaskPlan")(function* 
               ? { snapshotGeneration: deps.context.taskState.backgroundGeneration }
               : {}),
           providerMessageId: deps.toolUseId,
+          // Updates also carry this observation time; omitting it makes removals look older.
+          providerTimestamp: deps.now,
           observedOrdinal: deps.context.taskState.nextObservedOrdinal,
         },
         replacement: removalSource === "observed" ? "explicit" : "snapshot",

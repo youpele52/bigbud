@@ -1,5 +1,6 @@
 import type { CodexSessionContext } from "./codexAppServerManager.types.ts";
 import { classifyCodexStderrLine } from "./codexStderrClassifier.ts";
+import { closeCodexTransport } from "./codexAppServerManager.transport.ts";
 
 export function attachProcessListeners(
   context: CodexSessionContext,
@@ -27,24 +28,24 @@ export function attachProcessListeners(
 
   const rejectPending = (error: Error): void => {
     context.mcpReadiness?.cancel(error);
-    for (const pending of context.pending.values()) {
-      clearTimeout(pending.timeout);
-      pending.reject(error);
-    }
-    context.pending.clear();
+    closeCodexTransport(context, error);
   };
 
-  context.child.on("error", (error) => {
+  const onError = (error: Error) => {
+    if (context.stopping || callbacks.sessions.get(context.session.threadId) !== context) return;
     const message = error.message || "codex app-server process errored.";
     rejectPending(error);
     callbacks.updateSession(context, { status: "error", lastError: message });
     callbacks.emitErrorEvent(context, "process/error", message);
-  });
+  };
+  context.child.on("error", onError);
+  context.child.stdin.on("error", onError);
 
   context.child.on("exit", (code, signal) => {
     const message = `codex app-server exited (code=${code ?? "null"}, signal=${signal ?? "null"}).`;
     rejectPending(new Error(message));
-    if (context.stopping) return;
+    if (context.stopping || callbacks.sessions.get(context.session.threadId) !== context) return;
+    context.stopping = true;
     context.output.close();
     callbacks.updateSession(context, {
       status: "closed",
@@ -57,6 +58,7 @@ export function attachProcessListeners(
   });
 
   context.child.on("close", () => {
+    rejectPending(new Error("Codex app-server transport closed."));
     if (!context.stopping && context.mcpReadiness) {
       context.mcpReadiness.cancel(new Error("Codex app-server transport closed."));
     }

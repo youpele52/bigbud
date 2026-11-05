@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 
 import { getLocalStorageItem, setLocalStorageItem } from "~/hooks/useLocalStorage";
+import { normalizeBrowserFaviconUrl } from "./BrowserPanel.favicon";
 
 const BROWSER_HISTORY_STORAGE_KEY = "bigbud:browser-history:v2";
 const LEGACY_BROWSER_HISTORY_STORAGE_KEY = "bigbud:browser-history:v1";
@@ -36,6 +37,7 @@ export interface BrowserVisitRecord {
   readonly origin: string;
   readonly visitedAt: string;
   readonly visitCount: number;
+  readonly faviconUrl?: string | null;
 }
 
 function normalizeBrowserUrl(url: string): { normalizedUrl: string; origin: string } | null {
@@ -66,12 +68,14 @@ function isRecord(value: unknown): value is BrowserVisitRecord {
 function sanitizeVisit(record: BrowserVisitRecord): BrowserVisitRecord | null {
   const normalized = normalizeBrowserUrl(record.normalizedUrl);
   if (!normalized || !Number.isFinite(record.visitCount) || record.visitCount < 1) return null;
+  const faviconUrl = normalizeBrowserFaviconUrl(record.faviconUrl);
   return {
     normalizedUrl: normalized.normalizedUrl,
     origin: normalized.origin,
     title: record.title.trim(),
     visitedAt: record.visitedAt,
     visitCount: Math.floor(record.visitCount),
+    ...(faviconUrl ? { faviconUrl } : {}),
   };
 }
 
@@ -145,6 +149,7 @@ export function resolveNextBrowserHistory(
     title: input.title.trim() || existing?.title || "",
     visitedAt: input.visitedAt ?? new Date().toISOString(),
     visitCount: (existing?.visitCount ?? 0) + 1,
+    ...(existing?.faviconUrl ? { faviconUrl: existing.faviconUrl } : {}),
   };
   return [next, ...history.filter((visit) => visit.normalizedUrl !== next.normalizedUrl)].slice(
     0,
@@ -184,16 +189,22 @@ export function recordBrowserHistoryVisit(input: {
   return updated;
 }
 
-export function updateBrowserHistoryVisitTitle(url: string, title: string): BrowserVisitRecord[] {
+export function updateBrowserHistoryVisitMetadata(
+  url: string,
+  metadata: { title: string; faviconUrl: string | null },
+): BrowserVisitRecord[] {
   const normalized = normalizeBrowserUrl(url);
   const history = readBrowserHistory();
-  if (!normalized || !title.trim()) return history;
+  if (!normalized) return history;
   const index = history.findIndex((visit) => visit.normalizedUrl === normalized.normalizedUrl);
   if (index < 0) return history;
   const existing = history[index];
   if (!existing) return history;
+  const title = metadata.title.trim() || existing.title;
+  const faviconUrl = normalizeBrowserFaviconUrl(metadata.faviconUrl) ?? existing.faviconUrl;
+  if (title === existing.title && faviconUrl === existing.faviconUrl) return history;
   const updated = [...history];
-  updated[index] = { ...existing, title: title.trim() };
+  updated[index] = { ...existing, title, ...(faviconUrl ? { faviconUrl } : {}) };
   writeBrowserHistory(updated);
   return updated;
 }

@@ -34,6 +34,16 @@ describe("generic foreground agent detection", () => {
     });
   });
 
+  it.each(["herdr", "/opt/homebrew/bin/herdr --session work"])(
+    "detects herdr from %s as a terminal-only identity without a provider",
+    (command) => {
+      expect(detectTerminalAgentForShell(100, foreground(command), "posix")).toEqual({
+        agent: { id: "herdr", names: ["herdr"] },
+        provider: null,
+      });
+    },
+  );
+
   it("does not mistake unregistered tools, ordinary searches, or background agents for foreground evidence", () => {
     for (const command of [
       "mystery-agent --task auth",

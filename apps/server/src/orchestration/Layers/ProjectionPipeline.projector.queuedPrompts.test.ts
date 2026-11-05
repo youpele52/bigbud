@@ -47,6 +47,9 @@ function repository() {
       Effect.sync(() => void (current = { ...current, lastActivityAt: occurredAt })),
     listRecentModelSelections: () => Effect.succeed([]),
     setRecovery: () => Effect.void,
+    listPendingSnoozes: () => Effect.succeed([]),
+    listIdleCandidates: () => Effect.succeed([]),
+    setOrganization: () => Effect.void,
     get: () => current,
   };
 }

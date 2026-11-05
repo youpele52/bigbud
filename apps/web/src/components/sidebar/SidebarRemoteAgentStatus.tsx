@@ -17,14 +17,14 @@ import {
   readRemoteAgentAdmissionRequestId,
 } from "../../stores/remoteAccess/remoteAgentAdmissionRequest";
 import {
-  createRemoteProjectExecutionTargetId,
-  type RemoteProjectDraft,
-} from "./Sidebar.projects.logic";
+  createRemoteWorkspaceExecutionTargetId,
+  type RemoteWorkspaceDraft,
+} from "./Sidebar.remoteWorkspaces.logic";
 
-export function remoteProjectAgentTarget(draft: RemoteProjectDraft): string | null {
+export function remoteWorkspaceAgentTarget(draft: RemoteWorkspaceDraft): string | null {
   if (draft.remoteTransport !== "agent") return null;
   try {
-    return draft.host.trim() ? createRemoteProjectExecutionTargetId(draft) : null;
+    return draft.host.trim() ? createRemoteWorkspaceExecutionTargetId(draft) : null;
   } catch {
     return null;
   }

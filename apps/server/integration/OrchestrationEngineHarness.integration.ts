@@ -47,6 +47,7 @@ import { ProjectionSnapshotQuery } from "../src/orchestration/Services/Projectio
 import { SchedulerReactor } from "../src/orchestration/Services/SchedulerReactor.ts";
 import { ThreadWatchReactor } from "../src/orchestration/Services/ThreadWatchReactor.ts";
 import { LearningReactor } from "../src/orchestration/Services/LearningReactor.ts";
+import { ThreadOrganizationReactor } from "../src/orchestration/Services/ThreadOrganizationReactor.ts";
 import {
   RuntimeReceiptBus,
   type OrchestrationRuntimeReceipt,
@@ -267,6 +268,9 @@ export const makeOrchestrationIntegrationHarness = (
     const learningReactorLayer = Layer.succeed(LearningReactor, {
       start: () => Effect.void,
     });
+    const threadOrganizationReactorLayer = Layer.succeed(ThreadOrganizationReactor, {
+      start: () => Effect.void,
+    });
     const orchestrationReactorLayer = OrchestrationReactorLive.pipe(
       Layer.provideMerge(runtimeIngestionLayer),
       Layer.provideMerge(providerCommandReactorLayer),
@@ -274,6 +278,7 @@ export const makeOrchestrationIntegrationHarness = (
       Layer.provideMerge(schedulerReactorLayer),
       Layer.provideMerge(threadWatchReactorLayer),
       Layer.provideMerge(learningReactorLayer),
+      Layer.provideMerge(threadOrganizationReactorLayer),
       Layer.provideMerge(ProviderTurnSupervisorLive.pipe(Layer.provide(runtimeServicesLayer))),
     );
     const clockLayer = options?.testClock ? TestClock.layer() : Layer.empty;

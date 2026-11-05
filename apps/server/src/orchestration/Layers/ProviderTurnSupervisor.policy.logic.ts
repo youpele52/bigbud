@@ -50,6 +50,11 @@ export interface RecoveryFacts {
   readonly threadIdle: boolean;
   /** The thread has a pending approval or user-input request: the turn waits for the user. */
   readonly waitingForUser: boolean;
+  /**
+   * The provider's adapter declares turn-control continuation unsupported
+   * (e.g. Muse): automated sleep continuation must never issue fresh input.
+   */
+  readonly continuationUnsupported?: boolean;
 }
 
 export type RecoveryDecision =
@@ -97,6 +102,9 @@ function decideCut(facts: RecoveryFacts): RecoveryDecision {
   }
   if (facts.networkOnline === false) return { type: "wait-network" };
   if (!facts.threadIdle) return { type: "none" };
+  if (facts.continuationUnsupported) {
+    return { type: "await-user", reason: "interrupted-by-sleep", toolSummary: null };
+  }
   return { type: "continue" };
 }
 

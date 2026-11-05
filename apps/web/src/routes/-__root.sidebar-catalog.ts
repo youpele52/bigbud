@@ -3,6 +3,7 @@ import type { OrchestrationEvent } from "@bigbud/contracts";
 import type { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
 import { retryTransportRecoveryOperation } from "../logic/orchestration";
+import { useInyosiraStore } from "../stores/inyosira/inyosira.store";
 
 type Api = NonNullable<ReturnType<typeof readNativeApi>>;
 
@@ -22,6 +23,19 @@ export function shouldRefreshSidebarCatalog(event: OrchestrationEvent): boolean 
       return event.payload.role === "user";
     default:
       return false;
+  }
+}
+
+/**
+ * A thread moved into an Inyosira state that this client has never loaded cannot be grouped from
+ * the event alone, so the open Inyosira view reloads that state's first page.
+ */
+export function markUnknownInyosiraMovesStale(events: ReadonlyArray<OrchestrationEvent>): void {
+  const known = useStore.getState().sidebarThreadsById;
+  for (const event of events) {
+    if (event.type === "thread.organization-updated" && !known[event.payload.threadId]) {
+      useInyosiraStore.getState().markStale(event.payload.organization.state);
+    }
   }
 }
 

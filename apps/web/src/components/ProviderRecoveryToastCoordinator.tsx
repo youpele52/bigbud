@@ -37,7 +37,7 @@ export function ProviderRecoveryToastCoordinator() {
 
     if (decision.kind === "recovery" || decision.kind === "attention") {
       show({
-        type: "warning",
+        type: decision.kind === "recovery" ? "loading" : "warning",
         title: decision.title!,
         description: decision.description!,
         timeout: 0,

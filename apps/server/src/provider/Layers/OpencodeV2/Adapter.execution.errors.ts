@@ -9,10 +9,24 @@ import {
 import { V2AdmissionUnconfirmed, V2PreparationFailed } from "./Admission.ts";
 import { V2HttpStatusError, v2HttpFailureStatus } from "./Client.errors.ts";
 import { V2ResponseSizeError } from "./Client.response.ts";
+import { V2SharedServiceError, v2AcquisitionFailure } from "./SharedService.errors.ts";
+import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
+import { V2DiagnosticError } from "./PluginSetup.diagnostics.ts";
 import { V2SavedPermissionConflict } from "./Runtime.permissions.saved.ts";
 
 /** Only local classifications escape the adapter; native SDK causes may contain credentials. */
 export function v2ExecutionIssue(error: unknown): string {
+  if (error instanceof V2SharedServiceError) return v2AcquisitionFailure(error).message;
+  if (
+    (error instanceof V2DiagnosticError || error instanceof V2NativeCompatibilityError) &&
+    error.diagnostic
+  )
+    return new V2DiagnosticError(
+      error.diagnostic.stage,
+      error.diagnostic.code,
+      error.diagnostic.sourceIndex,
+      error.diagnostic.sourceCount,
+    ).message;
   if (error instanceof V2SavedPermissionConflict) return error.message;
   if (
     Schema.is(V2AdmissionUnconfirmed)(error) ||

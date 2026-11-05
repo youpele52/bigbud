@@ -9,7 +9,6 @@
  */
 import type {
   ApprovalRequestId,
-  ProviderActiveTurnInspection,
   ProviderApprovalDecision,
   ProviderKind,
   ProviderUserInputAnswers,
@@ -26,8 +25,21 @@ import type { Effect } from "effect";
 import type { Stream } from "effect";
 import type { ProviderServiceShape } from "./ProviderService.ts";
 import type { ProviderSubagentCapability } from "../providerSubagents.capabilities.ts";
+import type { InspectionConfirmation } from "./ProviderInspectionTerminal.ts";
+import type {
+  ProviderExactRewindInput,
+  ProviderPreparedRewind,
+  ProviderTurnInspection,
+} from "./ProviderRewind.ts";
 
 export interface ProviderMcpOperations<TError> {
+  readonly reloadAll?: (
+    threadId: ThreadId,
+    sessionEpoch: number,
+  ) => Effect.Effect<
+    import("@bigbud/contracts/server/providerControls").ProviderControlsSnapshot,
+    TError
+  >;
   readonly refresh: (
     threadId: ThreadId,
   ) => Effect.Effect<ReadonlyArray<McpServerStatusEntry>, TError>;
@@ -112,6 +124,17 @@ export interface ProviderAdapterShape<TError> {
   readonly capabilities: ProviderAdapterCapabilities;
   /** Provider-neutral MCP controls; omitted when the provider cannot support them. */
   readonly mcp?: ProviderMcpOperations<TError>;
+  readonly controls?: (
+    input: import("@bigbud/contracts/server/providerControls").ProviderControlsInput,
+  ) => Effect.Effect<
+    import("@bigbud/contracts/server/providerControls").ProviderControlsSnapshot,
+    TError
+  >;
+  /** `false` verifies live proof without mutation; `true` acknowledges its durable storage. */
+  readonly confirmCompaction?: (
+    input: import("./ProviderCompaction.ts").CodexCompactionConfirmation,
+    persisted: boolean,
+  ) => Effect.Effect<boolean, TError>;
   /** Isolated durable job path; production workload availability remains separately gated. */
   readonly runBackgroundReview?: (
     input: Parameters<ProviderServiceShape["runBackgroundReview"]>[0],
@@ -162,7 +185,15 @@ export interface ProviderAdapterShape<TError> {
   readonly inspectActiveTurn: (
     threadId: ThreadId,
     turnId: TurnId,
-  ) => Effect.Effect<ProviderActiveTurnInspection, TError>;
+  ) => Effect.Effect<ProviderTurnInspection, TError>;
+  /** Acknowledge reconciliation of a previously inspected terminal turn in this exact process. */
+  readonly confirmInspectedTurn?: (
+    threadId: ThreadId,
+    turnId: TurnId,
+    sessionEpoch: number,
+    status: "completed" | "failed",
+    publication?: ProviderRuntimeEvent,
+  ) => Effect.Effect<InspectionConfirmation, TError>;
 
   /**
    * Respond to an interactive approval request.
@@ -209,6 +240,17 @@ export interface ProviderAdapterShape<TError> {
     threadId: ThreadId,
     numTurns: number,
   ) => Effect.Effect<ProviderThreadSnapshot, TError>;
+
+  readonly prepareRewind?: (input: ProviderExactRewindInput) => Effect.Effect<
+    {
+      readonly nativeThreadId: string;
+      readonly runtimeVersion: string;
+      readonly nativeTurnIds?: ReadonlyArray<TurnId>;
+    },
+    TError
+  >;
+  readonly revertThread?: (input: ProviderPreparedRewind) => Effect.Effect<void, TError>;
+  readonly verifyRewind?: (input: ProviderPreparedRewind) => Effect.Effect<void, TError>;
 
   /**
    * Stop all sessions owned by this adapter.

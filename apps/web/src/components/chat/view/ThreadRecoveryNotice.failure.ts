@@ -29,6 +29,8 @@ export interface ServerTurnFailure {
   readonly failureEventId: string;
   /** Empty when the server did not classify the failure. */
   readonly failureClass: string;
+  /** The provider's own failure detail from the activity payload, when present. */
+  readonly detail?: string;
 }
 
 interface FailureActivity {
@@ -60,10 +62,18 @@ export function deriveServerTurnFailure(thread: {
   if (answered) return null;
   const failure = findOwnTurnStartFailure(thread, pending.id);
   if (failure === undefined) return null;
-  const payload = failure.payload as { failureClass?: unknown } | null | undefined;
+  const payload = failure.payload as
+    | { failureClass?: unknown; detail?: unknown }
+    | null
+    | undefined;
+  const detail =
+    typeof payload?.detail === "string" && payload.detail.trim()
+      ? payload.detail.trim()
+      : undefined;
   return {
     pendingMessageId: pending.id,
     failureEventId: failure.id,
     failureClass: typeof payload?.failureClass === "string" ? payload.failureClass : "",
+    ...(detail ? { detail } : {}),
   };
 }

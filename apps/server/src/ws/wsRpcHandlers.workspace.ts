@@ -28,7 +28,14 @@ export function projectWriteFileError(
     : conflict
       ? "Workspace file changed since it was read."
       : "Failed to write workspace file";
-  return new ProjectWriteFileError({ message, ...(conflict ? { conflict: true } : {}), cause });
+  return new ProjectWriteFileError({
+    message,
+    ...(conflict ? { conflict: true } : {}),
+    writeDisposition: Schema.is(WorkspacePathOutsideRootError)(cause)
+      ? "not-dispatched"
+      : cause.writeDisposition,
+    cause,
+  });
 }
 
 export function makeWorkspaceWsRpcHandlers(

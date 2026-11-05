@@ -36,6 +36,7 @@ export class SystemMonitorBridge {
   private appResourcesSupported = false;
   private closing = false;
   private subscribers = new Set<WebContents>();
+  private listeners = new Set<(event: MonitorEvent) => void>();
   private snapshotWaiters = new Map<
     number,
     { resolve: (snapshot: MonitorSnapshot) => void; reject: (error: Error) => void }
@@ -55,8 +56,15 @@ export class SystemMonitorBridge {
     sender.once("destroyed", () => this.subscribers.delete(sender));
   }
   private emit(event: MonitorEvent): void {
+    for (const listener of this.listeners) listener(event);
     for (const sender of this.subscribers) {
-      if (!sender.isDestroyed()) sender.send("desktop:system-monitor-event", event);
+      if (!sender.isDestroyed()) {
+        try {
+          sender.send("desktop:system-monitor-event", event);
+        } catch {
+          this.subscribers.delete(sender);
+        }
+      }
     }
   }
   private resolveBinary(): string {
@@ -71,6 +79,7 @@ export class SystemMonitorBridge {
     return path;
   }
   private async connect(): Promise<void> {
+    if (this.closing) throw new Error("monitor stopped");
     if (this.ready) return;
     if (this.connecting) return this.connecting;
     this.connecting = this.start().finally(() => {
@@ -210,6 +219,29 @@ export class SystemMonitorBridge {
     if (event.type !== "subscribeAck") throw new Error("monitor subscribe failed");
     return event.subscriptionId;
   }
+  onEventInternal(listener: (event: MonitorEvent) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+  takeEarlySnapshot(subscriptionId: number): MonitorSnapshot | undefined {
+    const snapshot = this.earlySnapshots.get(subscriptionId);
+    this.earlySnapshots.delete(subscriptionId);
+    return snapshot;
+  }
+  async awarenessDemand(processes: boolean): Promise<MonitorDemand> {
+    await this.connect();
+    return {
+      processes,
+      disks: true,
+      sensors: true,
+      appResources: this.appResourcesSupported && this.getRoots(this.child).length > 0,
+    };
+  }
+  appResourceStatus(): "ready" | "unsupported" | "unavailable" {
+    if (!this.ready) return "unavailable";
+    if (!this.appResourcesSupported) return "unsupported";
+    return this.getRoots(this.child).length > 0 ? "ready" : "unavailable";
+  }
   async readSnapshot(): Promise<MonitorSnapshot> {
     const subscriptionId = await this.subscribe({ processes: false, disks: false, sensors: false });
     try {
@@ -334,5 +366,6 @@ export class SystemMonitorBridge {
     this.snapshotWaiters.clear();
     this.earlySnapshots.clear();
     this.subscribers.clear();
+    this.listeners.clear();
   }
 }

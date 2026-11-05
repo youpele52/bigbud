@@ -4,47 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 
-const mocks = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
-vi.mock("../../rpc/nativeApi", () => ({
-  readNativeApi: () => ({
-    projects: {
-      readFilePreview: mocks.read,
-      writeFile: mocks.write,
-      onDirectoryChange: () => () => {},
-    },
-  }),
-  ensureNativeApi: () => ({
-    projects: {
-      readFilePreview: mocks.read,
-      writeFile: mocks.write,
-      onDirectoryChange: () => () => {},
-    },
-  }),
-}));
-vi.mock("../../rpc/serverState", () => ({ useServerConfig: () => ({}) }));
-vi.mock("../../hooks/useTheme", () => ({ useTheme: () => ({ resolvedTheme: "light" }) }));
-
-import { FilePreview } from "./FilePreview";
-import { TooltipProvider } from "../ui/tooltip";
-
-const hash = "a".repeat(64);
-function preview(relativePath: string, executionTargetId?: string) {
-  return (
-    <TooltipProvider>
-      <div style={{ width: 480, height: 280 }}>
-        <FilePreview
-          cwd="/workspace"
-          relativePath={relativePath}
-          executionTargetId={executionTargetId}
-          canNavigateBack={false}
-          canNavigateForward={false}
-          onNavigateBack={() => {}}
-          onNavigateForward={() => {}}
-        />
-      </div>
-    </TooltipProvider>
-  );
-}
+import { hash, mocks, preview } from "./FilePreview.edit.fixtures";
 
 describe("Files panel text editing", () => {
   beforeEach(() => {
@@ -211,8 +171,17 @@ describe("Files panel text editing", () => {
     try {
       await vi.waitFor(() => expect(page.getByRole("button", { name: "Edit file" })).toBeVisible());
       expect(
+        document
+          .querySelector('[aria-label="Edit file"] svg')
+          ?.classList.contains("text-muted-foreground"),
+      ).toBe(true);
+      expect(
         document.querySelector('[role="status"]')?.classList.contains("text-muted-foreground"),
       ).toBe(true);
+      const mutedColor = getComputedStyle(
+        document.querySelector('[aria-label="Edit file"] svg')!,
+      ).color;
+      expect(mutedColor).toBe(getComputedStyle(document.querySelector('[role="status"]')!).color);
       [...document.querySelectorAll<HTMLButtonElement>("[data-file-preview-header] button")]
         .find((button) => button.getAttribute("aria-label") === "Edit file")!
         .click();
@@ -244,14 +213,28 @@ describe("Files panel text editing", () => {
       const header = document.querySelector("[data-file-preview-header]")!;
       const navigation = header.firstElementChild!;
       const edit = header.querySelector('[aria-label="Preview file"]')!;
+      expect(edit.getAttribute("aria-pressed")).toBe("true");
+      expect(edit.querySelector("svg")?.classList.contains("text-info")).toBe(true);
+      expect(getComputedStyle(edit.querySelector("svg")!).color).not.toBe(mutedColor);
       const saved = header.querySelector('[role="status"]')!;
       expect(navigation.contains(edit)).toBe(true);
       expect(navigation.contains(saved)).toBe(true);
-      expect(edit.getBoundingClientRect().left).toBeGreaterThan(
+      expect(saved.getBoundingClientRect().left).toBeGreaterThan(
         navigation.querySelector('[aria-label="Forward"]')!.getBoundingClientRect().right,
       );
-      expect(saved.getBoundingClientRect().left).toBeGreaterThan(
-        edit.getBoundingClientRect().right,
+      expect(edit.getBoundingClientRect().left).toBeGreaterThan(
+        saved.getBoundingClientRect().right,
+      );
+      (edit as HTMLButtonElement).click();
+      await vi.waitFor(() =>
+        expect(
+          header
+            .querySelector('[aria-label="Edit file"] svg')
+            ?.classList.contains("text-muted-foreground"),
+        ).toBe(true),
+      );
+      expect(getComputedStyle(header.querySelector('[aria-label="Edit file"] svg')!).color).toBe(
+        mutedColor,
       );
     } finally {
       await mounted.unmount();
@@ -274,6 +257,9 @@ describe("Files panel text editing", () => {
       await userEvent.keyboard("{End}!");
       await vi.waitFor(() => expect(mocks.write).toHaveBeenCalledOnce(), { timeout: 5000 });
       expect(document.querySelector('[role="status"]')?.classList.contains("text-info")).toBe(true);
+      expect(
+        getComputedStyle(document.querySelector('[aria-label="Preview file"] svg')!).color,
+      ).toBe(getComputedStyle(document.querySelector('[role="status"]')!).color);
       expect(document.querySelector('[role="alert"]')).toBeNull();
       expect(
         document.querySelector('[role="status"] svg')?.classList.contains("file-preview-save-sway"),
@@ -292,11 +278,16 @@ describe("Files panel text editing", () => {
 
   it("shows an explicit conflict and requires a verified disk read before discarding", async () => {
     mocks.write.mockRejectedValueOnce(
-      Object.assign(new Error("Workspace file changed since it was read."), { conflict: true }),
+      Object.assign(new Error("Workspace file changed since it was read."), {
+        conflict: true,
+        writeDisposition: "terminal",
+      }),
     );
     const mounted = await render(preview("conflict.txt"));
     try {
       await vi.waitFor(() => expect(page.getByRole("button", { name: "Edit file" })).toBeVisible());
+      // Keep the automatic post-write verification pending until the explicit refresh below.
+      mocks.read.mockImplementationOnce(() => new Promise(() => {}));
       [...document.querySelectorAll<HTMLButtonElement>("[data-file-preview-header] button")]
         .find((button) => button.getAttribute("aria-label") === "Edit file")!
         .click();

@@ -1,4 +1,5 @@
 import { EventId } from "@bigbud/contracts/core/baseSchemas";
+import { HTML_RENDER_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/htmlRender.ts";
 import { UserInputQuestion } from "@bigbud/contracts/orchestration/providerRuntime.payloads.ts";
 import type { OrchestrationThreadActivity } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { Effect, Schema } from "effect";
@@ -23,6 +24,23 @@ export function normalizeDetailActivity(
 
 /** Load complete prompt/response pairs for the message window, independently of work-log limits. */
 export function makeThreadDetailActivityReaders(sql: SqlClient.SqlClient) {
+  const readHtmlRenderHistory = SqlSchema.findAll({
+    Request: Schema.Struct({
+      threadId: Schema.String,
+      oldestCreatedAt: Schema.NullOr(Schema.String),
+      beforeCreatedAt: Schema.NullOr(Schema.String),
+    }),
+    Result: ThreadDetailActivityDbRow,
+    execute: ({ threadId, oldestCreatedAt, beforeCreatedAt }) => sql`
+      SELECT activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
+        tone, kind, summary, payload_json AS payload, sequence, created_at AS "createdAt"
+      FROM projection_thread_activities
+      WHERE thread_id = ${threadId} AND kind = ${HTML_RENDER_ACTIVITY_KIND}
+        AND (${oldestCreatedAt} IS NULL OR created_at >= ${oldestCreatedAt})
+        AND (${beforeCreatedAt} IS NULL OR created_at <= ${beforeCreatedAt})
+      ORDER BY sequence ASC
+    `,
+  });
   const readActivities = SqlSchema.findAll({
     Request: Schema.Struct({
       threadId: Schema.String,
@@ -96,5 +114,5 @@ export function makeThreadDetailActivityReaders(sql: SqlClient.SqlClient) {
       normalizeDetailActivity(row),
     ]);
   });
-  return { readActivities, readUserInputHistory };
+  return { readActivities, readUserInputHistory, readHtmlRenderHistory };
 }

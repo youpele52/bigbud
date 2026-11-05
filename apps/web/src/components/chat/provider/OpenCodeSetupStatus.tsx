@@ -1,6 +1,6 @@
 import type { ServerOpencodeV2ThreadToolsSetupResult } from "@bigbud/contracts/server/server.opencodeV2ThreadToolsSetup";
 import { useThreadNoticeDismissal } from "../../../stores/ui/threadNoticeDismissal.store";
-import { StatusBanner } from "../../common/StatusBanner";
+import { ChatBanner } from "../common/ChatBanner";
 import { Button } from "../../ui/button";
 import { isPendingOpenCodeSetup } from "./opencodeSetup.observer";
 
@@ -31,48 +31,59 @@ export function OpenCodeSetupStatus({
       ? "OpenCode setup queued — waiting for idle"
       : `OpenCode setup — ${state}`
     : `OpenCode setup — ${state ?? result?.status ?? "status unavailable"}`;
-  const tone =
+  const variant =
     error || result?.severity === "error"
-      ? "text-destructive"
+      ? "error"
       : pending
-        ? "text-info"
-        : result?.severity === "info"
-          ? "text-info"
-          : result?.severity === "warning"
-            ? "text-warning"
-            : result?.status === "ready"
-              ? "text-success"
-              : "text-warning";
+        ? "loading"
+        : result?.severity === "warning"
+          ? "warning"
+          : result?.status === "ready"
+            ? "success"
+            : result?.severity === "info"
+              ? "info"
+              : "warning";
   return (
-    <section
-      aria-label="OpenCode setup status"
-      className={`space-y-2 border-b border-current/20 bg-current/5 px-4 py-3 text-sm ${tone}`}
-    >
-      <StatusBanner
+    <section aria-label="OpenCode setup status" className="shrink-0">
+      <ChatBanner
         role="status"
-        variant="default"
+        variant={variant}
         title={title}
-        description={result?.message}
+        description={
+          <>
+            {result?.message ? (
+              <span className="line-clamp-3" title={result.message}>
+                {result.message}
+              </span>
+            ) : null}
+            {error && error !== result?.message ? (
+              <span role="alert" className="line-clamp-3 text-destructive" title={error}>
+                {error}
+              </span>
+            ) : null}
+            {pending ? (
+              <span className="text-xs">
+                Setup waits for known native work to finish. Retrying cannot bypass the idle gate;
+                prompts are not replayed automatically.
+              </span>
+            ) : null}
+          </>
+        }
         dismissLabel="Dismiss OpenCode setup status"
         onDismiss={dismiss}
+        action={
+          <>
+            <Button variant="outline" disabled={disabled || (pending && !error)} onClick={onRetry}>
+              Retry setup
+            </Button>
+            {pending && result?.interestId ? (
+              <Button variant="outline" disabled={disabled} onClick={onCancel}>
+                Cancel this setup request
+              </Button>
+            ) : null}
+          </>
+        }
       />
-      {error ? <p role="alert">{error}</p> : null}
-      {pending ? (
-        <p className="text-xs text-muted-foreground">
-          Setup waits for known native work to finish. Retrying cannot bypass the idle gate; prompts
-          are not replayed automatically.
-        </p>
-      ) : null}
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" disabled={disabled || (pending && !error)} onClick={onRetry}>
-          Retry setup
-        </Button>
-        {pending && result?.interestId ? (
-          <Button variant="outline" disabled={disabled} onClick={onCancel}>
-            Cancel this setup request
-          </Button>
-        ) : null}
-      </div>
     </section>
   );
 }

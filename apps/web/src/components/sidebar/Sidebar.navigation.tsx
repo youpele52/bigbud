@@ -3,18 +3,30 @@ import type { SidebarProjectSortOrder, SidebarThreadSortOrder } from "@bigbud/co
 import { isElectron } from "../../config/env";
 import { useSidebar, SidebarContent } from "../ui/sidebar";
 import { BigbudLogo } from "./SidebarProjectItem";
-import { SidebarActionsSection } from "./Sidebar.actionsSection";
+import { SidebarActionsSection, SidebarFixedActions } from "./Sidebar.actionsSection";
 import { SidebarFavoritesSection } from "./Sidebar.favoritesSection";
 import { SidebarChatsSection } from "./Sidebar.chatsSection";
 import { SidebarProjectsSection } from "./Sidebar.projectsSection";
 import { useSidebarState } from "./Sidebar.state";
+import { useInyosiraStore } from "../../stores/inyosira/inyosira.store";
+import { SidebarInyosiraArrangementSwitch } from "./Sidebar.inyosiraArrangementSwitch";
+import { SidebarInyosiraSection } from "./Sidebar.inyosiraSection";
 import type { SidebarTopLevelHeaderProps } from "./SidebarSectionLabel";
 
 export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSidebarState> }) {
   const navigate = useNavigate();
+  const isInyosira = useInyosiraStore((store) => store.arrangement === "inyosira");
   const { isMobile, setOpenMobile } = useSidebar();
   const closeMobileSidebar = () => {
     if (isMobile) setOpenMobile(false);
+  };
+  const handleNewChat = () => {
+    closeMobileSidebar();
+    void s.handleNewChat();
+  };
+  const handleNewChats = () => {
+    closeMobileSidebar();
+    void s.handleNewChats();
   };
 
   const projectProps = {
@@ -35,7 +47,7 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
     },
     shouldShowProjectPathEntry: s.shouldShowProjectPathEntry,
     handleStartAddProject: s.handleStartAddProject,
-    openRemoteProjectDialog: s.openRemoteProjectDialog,
+    openRemoteWorkspaceDialog: s.openRemoteWorkspaceDialog,
     onCloseMobileSidebar: closeMobileSidebar,
     isElectron,
     newCwd: s.newCwd,
@@ -51,8 +63,8 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
     renderedProjects: s.renderedProjects,
     isExpanded: s.areProjectsExpanded,
     onExpandedChange: s.setAreProjectsExpanded,
-    isRemoteProjectsExpanded: s.areRemoteProjectsExpanded,
-    onRemoteProjectsExpandedChange: s.setAreRemoteProjectsExpanded,
+    isRemoteWorkspacesExpanded: s.areRemoteWorkspacesExpanded,
+    onRemoteWorkspacesExpandedChange: s.setAreRemoteWorkspacesExpanded,
     isManualProjectSorting: s.isManualProjectSorting,
     onDragStart: s.handleProjectDragStart,
     onDragEnd: s.handleProjectDragEnd,
@@ -60,87 +72,92 @@ export function SidebarNavigation({ state: s }: { state: ReturnType<typeof useSi
     sharedProjectItemProps: s.sharedProjectItemProps,
   };
 
-  const sections = s.bootstrapComplete
-    ? {
-        pinned: (headerProps: SidebarTopLevelHeaderProps) => (
-          <SidebarFavoritesSection
-            headerProps={headerProps}
-            renderedFavorites={s.renderedFavorites}
-            isExpanded={s.areFavouritesExpanded}
-            onExpandedChange={s.setAreFavouritesExpanded}
-            showAll={s.showAllFavourites}
-            onShowAllChange={s.setShowAllFavourites}
-            sharedProjectItemProps={s.sharedProjectItemProps}
-          />
-        ),
-        chats: (headerProps: SidebarTopLevelHeaderProps) => (
-          <SidebarChatsSection
-            headerProps={headerProps}
-            renderedChats={s.renderedChats}
-            isExpanded={s.areChatsExpanded}
-            onExpandedChange={s.setAreChatsExpanded}
-            showAll={s.showAllChats}
-            onShowAllChange={(showAll) => {
-              s.setShowAllChats(showAll);
-              if (showAll) s.loadMoreChats();
-            }}
-            hasMoreChats={s.hasMoreChats}
-            collapsedHiddenChatCount={s.collapsedHiddenChatCount}
-            unloadedChatCount={s.unloadedChatCount}
-            isLoadingMoreChats={s.isLoadingMoreChats}
-            onLoadMoreChats={s.loadMoreChats}
-            onNewChat={() => {
-              closeMobileSidebar();
-              void s.handleNewChat();
-            }}
-            newThreadShortcutLabel={s.newThreadShortcutLabel}
-            sharedProjectItemProps={s.sharedProjectItemProps}
-            chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
-            onChatsSortOrderChange={(sortOrder) => {
-              s.updateSettings({ sidebarChatsSortOrder: sortOrder });
-            }}
-          />
-        ),
-        projects: (headerProps: SidebarTopLevelHeaderProps) => (
-          <SidebarProjectsSection {...projectProps} scope="local" headerProps={headerProps} />
-        ),
-        "remote-projects": (headerProps: SidebarTopLevelHeaderProps) => (
-          <SidebarProjectsSection {...projectProps} scope="remote" headerProps={headerProps} />
-        ),
-      }
-    : {};
+  // Both arrangements keep New chat and Search; only Projects shows the other actions and sections.
+  const sections =
+    s.bootstrapComplete && !isInyosira
+      ? {
+          pinned: (headerProps: SidebarTopLevelHeaderProps) => (
+            <SidebarFavoritesSection
+              headerProps={headerProps}
+              renderedFavorites={s.renderedFavorites}
+              isExpanded={s.areFavouritesExpanded}
+              onExpandedChange={s.setAreFavouritesExpanded}
+              showAll={s.showAllFavourites}
+              onShowAllChange={s.setShowAllFavourites}
+              sharedProjectItemProps={s.sharedProjectItemProps}
+            />
+          ),
+          chats: (headerProps: SidebarTopLevelHeaderProps) => (
+            <SidebarChatsSection
+              headerProps={headerProps}
+              renderedChats={s.renderedChats}
+              isExpanded={s.areChatsExpanded}
+              onExpandedChange={s.setAreChatsExpanded}
+              showAll={s.showAllChats}
+              onShowAllChange={(showAll) => {
+                s.setShowAllChats(showAll);
+                if (showAll) s.loadMoreChats();
+              }}
+              hasMoreChats={s.hasMoreChats}
+              collapsedHiddenChatCount={s.collapsedHiddenChatCount}
+              unloadedChatCount={s.unloadedChatCount}
+              isLoadingMoreChats={s.isLoadingMoreChats}
+              onLoadMoreChats={s.loadMoreChats}
+              onNewChat={handleNewChats}
+              newThreadShortcutLabel={s.newThreadShortcutLabel}
+              sharedProjectItemProps={s.sharedProjectItemProps}
+              chatsSortOrder={s.appSettings.sidebarChatsSortOrder}
+              onChatsSortOrderChange={(sortOrder) => {
+                s.updateSettings({ sidebarChatsSortOrder: sortOrder });
+              }}
+            />
+          ),
+          projects: (headerProps: SidebarTopLevelHeaderProps) => (
+            <SidebarProjectsSection {...projectProps} scope="local" headerProps={headerProps} />
+          ),
+          "remote-workspaces": (headerProps: SidebarTopLevelHeaderProps) => (
+            <SidebarProjectsSection {...projectProps} scope="remote" headerProps={headerProps} />
+          ),
+        }
+      : {};
 
   return (
     <>
       <SidebarContent className="min-h-full gap-0">
-        <SidebarActionsSection
-          onNewChat={() => {
-            closeMobileSidebar();
-            void s.handleNewChat();
-          }}
-          newThreadShortcutLabel={s.newThreadShortcutLabel}
-          onOpenAutomations={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/automations" });
-          }}
-          onOpenPlugins={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/plugins" });
-          }}
-          onOpenGames={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/games" });
-          }}
-          onOpenUsage={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/usage" });
-          }}
-          onOpenSystemMonitor={() => {
-            closeMobileSidebar();
-            void navigate({ to: "/system-monitor" });
-          }}
-          sections={sections}
-        />
+        <SidebarInyosiraArrangementSwitch />
+        {isInyosira ? (
+          <div className="py-2">
+            <SidebarFixedActions
+              onNewChat={handleNewChat}
+              newThreadShortcutLabel={s.newChatShortcutLabel}
+            />
+          </div>
+        ) : (
+          <SidebarActionsSection
+            onNewChat={handleNewChat}
+            newThreadShortcutLabel={s.newChatShortcutLabel}
+            onOpenAutomations={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/automations" });
+            }}
+            onOpenGames={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/games" });
+            }}
+            onOpenUsage={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/usage" });
+            }}
+            onOpenSystemMonitor={() => {
+              closeMobileSidebar();
+              void navigate({ to: "/system-monitor" });
+            }}
+            sections={sections}
+          />
+        )}
+        {s.bootstrapComplete && isInyosira ? (
+          <SidebarInyosiraSection shared={s.sharedProjectItemProps} />
+        ) : null}
         {!s.bootstrapComplete ? (
           <div className="flex flex-1 items-center justify-center">
             <BigbudLogo className="size-4 animate-breathe text-muted-foreground/40 motion-reduce:animate-none" />

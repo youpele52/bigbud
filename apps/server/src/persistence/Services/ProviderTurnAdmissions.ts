@@ -61,6 +61,16 @@ export interface ProviderTurnAdmissionsShape {
     finalText?: string,
     terminalOutcome?: ProviderTurnAdmission["terminalOutcome"],
   ) => Effect.Effect<ProviderTurnAdmission, ProviderTurnAdmissionError>;
+  /**
+   * Narrow settlement for a proven native refusal: dispatch-intent -> terminal/failed
+   * under the same immutable-binding and revision fences. Only an authoritative
+   * typed refusal may use it; timeout/transport loss never qualify. The generic
+   * transition rules are unchanged.
+   */
+  readonly settleProvenRefusal: (
+    current: ProviderTurnAdmission,
+    updatedAt: string,
+  ) => Effect.Effect<ProviderTurnAdmission, ProviderTurnAdmissionError>;
   readonly listUnresolved: (
     limit: number,
   ) => Effect.Effect<ReadonlyArray<ProviderTurnAdmission>, ProviderTurnAdmissionError>;

@@ -2,6 +2,8 @@ import type { TerminalSessionSnapshot } from "@bigbud/contracts/workspace/termin
 import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
 
 export interface TerminalLaunchBinding {
+  updatedAt?: string | undefined;
+  runtimeGeneration?: string | undefined;
   wslIdentity?: TerminalWslIdentity | undefined;
   cwd: string;
   worktreePath?: string | null | undefined;
@@ -44,12 +46,21 @@ export function bindTerminalLaunch(
   return binding;
 }
 
+/** Events and delayed RPC responses share the same timestamp fence. */
+export function isCurrentTerminalSnapshot(snapshot: TerminalSessionSnapshot): boolean {
+  const previous = readTerminalLaunch(snapshot.threadId, snapshot.terminalId);
+  return !previous?.updatedAt || snapshot.updatedAt >= previous.updatedAt;
+}
+
 /** The server's actual launch folder wins for future reattachments, including Home fallback. */
-export function recordTerminalLaunch(snapshot: TerminalSessionSnapshot): void {
+export function recordTerminalLaunch(snapshot: TerminalSessionSnapshot): boolean {
   const id = key(snapshot.threadId, snapshot.terminalId);
   const previous = bindings.get(id);
+  if (!isCurrentTerminalSnapshot(snapshot)) return false;
   bindings.set(id, {
     ...previous,
+    updatedAt: snapshot.updatedAt,
+    runtimeGeneration: snapshot.runtimeGeneration,
     wslIdentity: snapshot.wslIdentity,
     cwd: snapshot.cwd,
     worktreePath: snapshot.worktreePath,
@@ -57,6 +68,7 @@ export function recordTerminalLaunch(snapshot: TerminalSessionSnapshot): void {
     runtimeEnv: snapshot.runtimeEnv ? { ...snapshot.runtimeEnv } : undefined,
   });
   for (const listener of listeners) listener();
+  return true;
 }
 
 export function forgetTerminalLaunch(threadId: string, terminalId: string): void {

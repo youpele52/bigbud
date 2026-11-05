@@ -14,21 +14,14 @@ import { v2SharedRegistrationFile } from "./SharedService.registration.ts";
 import { ProviderAdapterValidationError } from "../../Errors.ts";
 import { buildServerProvider } from "../../providerSnapshot.ts";
 import { makeProviderSnapshotStore } from "../../providerSnapshot.store.ts";
-import { makeSharedOpencodeV2Adapter } from "./Adapter.shared.ts";
 import { makeDormantOpencodeV2Adapter } from "./Adapter.ts";
-import { makeV2DevelopmentProvider } from "./Development.provider.ts";
-import { OpencodeV2ServerManager } from "./ServerManager.ts";
 import { ServerConfig } from "../../../startup/config.ts";
 import { BackendInstance } from "../../../startup/backendInstance.ts";
 import { inspectV2Admissions, startV2AdmissionMaintenance } from "./Application.maintenance.ts";
-import { makeV2SharedTargetPreparation } from "./Application.targets.shared.ts";
-import { makeV2RequiredOrchestration } from "./Application.orchestration.lazy.ts";
 import { V2_APPLICATION_CAPABILITIES } from "./Application.capabilities.ts";
 import { readV2SharedApplicationConfig } from "./Application.shared.ts";
-import { borrowV2SharedService } from "./SharedService.connection.ts";
 import { V2SharedServiceError } from "./SharedService.errors.ts";
 import { Schedule } from "effect";
-import path from "node:path";
 import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
 import { hasOpencodeV2NativeTrust } from "@bigbud/shared/opencodeNativeTrust";
 import { V2_EXECUTION_CAPABILITIES } from "./Adapter.capabilities.ts";
@@ -37,7 +30,8 @@ import { validV2Publication } from "./Runtime.publication.ts";
 import { warnV2SharedRollback } from "./Application.rollback.ts";
 import { invalidatedV2Snapshot } from "./Application.snapshot.ts";
 import { makeV2ApplicationInvoke } from "./Application.invoke.ts";
-import { makeV2NativeFamilyPreparation } from "./Subagents.application.ts";
+import { makeV2ApplicationGraph, type V2ApplicationGraph } from "./Application.graph.ts";
+import { V2GenerationCoordinator } from "./Application.generation.ts";
 
 /** Settings-driven local preview. Harness authorization never leaks into application routing. */
 export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistration")(
@@ -73,14 +67,10 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
       Effect.mapError(() => failure("V2 settings are unavailable.")),
     );
     let lastFailureVersion: string | undefined;
-    let initialized:
-      | {
-          key: string;
-          consentRevision: number;
-          adapter: OpencodeV2AdapterShape;
-          provider: Awaited<Effect.Success<ReturnType<typeof makeV2DevelopmentProvider>>>;
-        }
-      | undefined;
+    let initialized: V2ApplicationGraph | undefined;
+    const generation = new V2GenerationCoordinator();
+    yield* Effect.addFinalizer(() => Effect.sync(() => generation.close()));
+    let maintenanceStarted = false;
     const ensure = permit.withPermits(1)(
       Effect.gen(function* () {
         const value = yield* configuration;
@@ -106,6 +96,49 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
             return yield* failure(
               "V2 shared service connection changed. Restart bigbud to apply; existing history and ownership are retained.",
             );
+          yield* Effect.tryPromise({
+            try: () =>
+              generation.run(
+                async (signal, validate) => {
+                  const next = await readV2SharedApplicationConfig(
+                    value,
+                    serverConfig.value.cwd,
+                  ).catch(async (error) => {
+                    validate();
+                    await initialized!.detach();
+                    throw error;
+                  });
+                  validate();
+                  if (
+                    next.process.sharedService.generation !== initialized!.connection.generation ||
+                    initialized!.consentRevision !== consent.currentRevision()
+                  ) {
+                    await initialized!.replace(next, validate);
+                    validate();
+                    initialized!.consentRevision = consent.currentRevision();
+                  }
+                  await initialized!.recover(signal, validate);
+                },
+                () => {
+                  currentV2RequestContext()?.permit.assertCurrent();
+                  const latest = settings.currentSnapshot?.()?.settings.providers.opencodeV2;
+                  if (
+                    !latest?.enabled ||
+                    v2ApplicationConfigKey(latest) !== key ||
+                    !hasOpencodeV2NativeTrust(latest)
+                  )
+                    throw new Error("V2 settings changed during generation recovery.");
+                },
+              ),
+            catch: (error) =>
+              failure(
+                error instanceof V2SharedServiceError
+                  ? error.message
+                  : error instanceof Error && error.message.includes("timed out")
+                    ? "V2 generation recovery deadline exceeded; retained owners remain blocked until the next refresh."
+                    : "V2 native generation reconnecting; retained history was not replaced or resent.",
+              ),
+          });
           return initialized;
         }
         lastFailureVersion = undefined;
@@ -130,97 +163,33 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
             failure("V2 admission inventory is unavailable; no automatic replay."),
           ),
         );
-        const orchestration = makeV2RequiredOrchestration(
-          serverConfig.value.stateDir,
-          activation,
-          config.process.sharedService,
+        const graph = yield* makeV2ApplicationGraph(
+          config,
+          key,
+          serverConfig.value,
+          bindings,
           backend,
-        );
-        const nativeFamilies = makeV2NativeFamilyPreparation(serverConfig.value.stateDir);
-        yield* Effect.addFinalizer(() => Effect.promise(() => nativeFamilies.close())).pipe(
-          Scope.provide(scope),
-        );
-        yield* Effect.addFinalizer(() => Effect.promise(() => orchestration.close())).pipe(
-          Scope.provide(scope),
-        );
-        const manager = new OpencodeV2ServerManager({
-          maxProcesses: 26,
-          start: (config) => {
-            if (!config.sharedService)
-              throw new Error("V2 production rejects private process acquisition.");
-            return borrowV2SharedService(config.sharedService);
-          },
-          maxOwners: 32,
-          maxQueuedEvents: 256,
-          maxEventBytes: 2000000,
-          consumerTimeoutMs: 10000,
-          consent,
-        });
-        const executionOptions = {
-          manager,
-          journal,
-          sharedBindings: bindings,
-          consent,
-          config: config.process,
-          threadBridge: orchestration.bridge,
-          threadToolsPreflight: orchestration.preflight,
-          activation: orchestration.activation,
-          profileIssuer: orchestration.issuer,
-          allowLocalWorkspace: true,
-          enableLocalTools: true,
-          nativeSubagents: {
-            stateDirectory: serverConfig.value.stateDir,
-            prepare: nativeFamilies.prepare,
-          },
-          ...(Option.isSome(serverConfig)
-            ? {
-                attachmentsDir: serverConfig.value.attachmentsDir,
-                attachmentAdmissionsDir: path.join(
-                  serverConfig.value.stateDir,
-                  "opencode-v2-attachment-admissions",
-                ),
-              }
-            : {}),
-          authorizeExecution: async () => {
-            currentV2RequestContext()?.permit.assertCurrent();
-            const current = await Effect.runPromise(configuration);
-            currentV2RequestContext()?.permit.assertCurrent();
-            if (
-              !current.enabled ||
-              v2ApplicationConfigKey(current) !== key ||
-              (resolveOpencodeV2ConnectionMode(current) === "shared" &&
-                !hasOpencodeV2NativeTrust(current))
-            )
-              throw new Error(
-                "V2 shared configuration changed or is disabled; restart bigbud after native connection changes.",
-              );
-          },
-        };
-        const executing = yield* makeSharedOpencodeV2Adapter({
-          ...executionOptions,
-          prepareSession: makeV2SharedTargetPreparation(
-            { ...executionOptions, emit: async () => {} },
-            serverConfig.value.stateDir,
-            serverConfig.value.port,
-          ),
-        }).pipe(Scope.provide(scope));
-        const provider = yield* makeV2DevelopmentProvider(executing.runtime, config, true).pipe(
+        ).pipe(
           Scope.provide(scope),
           Effect.provideService(ServerSettingsService, settings),
+          Effect.provideService(ProviderTurnAdmissions, journal),
+          Effect.provideService(ThreadToolsActivation, activation),
         );
-        yield* Stream.runForEach(executing.adapter.streamEvents, (event) =>
+        currentV2RequestContext()?.permit.assertCurrent();
+        yield* Stream.runForEach(graph.adapter.streamEvents, (event) =>
           Effect.sync(() => {
             if (validV2Publication(event) && !PubSub.publishUnsafe(events, event))
               throw new Error("V2 application event publication queue overflow.");
           }),
         ).pipe(Effect.forkScoped, Scope.provide(scope));
-        initialized = {
-          key,
-          consentRevision: consent.currentRevision(),
-          adapter: executing.adapter,
-          provider,
-        };
-        yield* startV2AdmissionMaintenance(journal).pipe(Scope.provide(scope));
+        initialized = graph;
+        yield* Effect.addFinalizer(() => Effect.sync(() => generation.close())).pipe(
+          Scope.provide(scope),
+        );
+        if (!maintenanceStarted) {
+          yield* startV2AdmissionMaintenance(journal).pipe(Scope.provide(scope));
+          maintenanceStarted = true;
+        }
         return initialized;
       }),
     );
@@ -266,13 +235,12 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
             !hasOpencodeV2NativeTrust(config)) ||
           initialized.consentRevision !== consent.currentRevision())
       ) {
-        const owned = yield* initialized.adapter.listSessions();
-        yield* Effect.forEach(
-          owned,
-          (session) => initialized!.adapter.stopSession(session.threadId),
-          { discard: true, concurrency: "unbounded" },
-        );
-        initialized.consentRevision = consent.currentRevision();
+        generation.invalidate();
+        yield* Effect.tryPromise({
+          try: initialized.detach,
+          catch: () =>
+            failure("V2 borrowed generation retirement remains unconfirmed; history retained."),
+        });
       }
       if (
         config.enabled &&
@@ -382,8 +350,8 @@ export const makeV2ApplicationRegistration = Effect.fn("makeV2ApplicationRegistr
       capabilities: {
         ...V2_APPLICATION_CAPABILITIES,
         supportsRemoteProviderRuntime: false,
-        supportsLocalRuntimeRemoteWorkspace: false,
-        needsBuiltinsDisabled: false,
+        supportsLocalRuntimeRemoteWorkspace: true,
+        needsBuiltinsDisabled: true,
       },
     } satisfies OptionalProviderRegistration;
   },

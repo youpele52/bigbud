@@ -1,13 +1,15 @@
 import { isLocalExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
-import { MAX_EDIT_BYTES } from "./fileEditDrafts";
+import { MAX_EDIT_BYTES } from "./fileEditDrafts.state";
 
-/** Editing requires a transport with conditional writes, not merely an SSH host. */
-export function canEditFilePreview(input: {
+interface FileEditPreviewInput {
   executionTargetId?: string | undefined;
   sha256: string | null;
   sizeBytes: number | null;
   truncated: boolean;
-}): boolean {
+}
+
+/** Full reads can reconcile retained drafts even when the disk file exceeds the edit limit. */
+export function canReconcileFilePreview(input: FileEditPreviewInput): boolean {
   const { executionTargetId, sha256, sizeBytes, truncated } = input;
   const agent =
     executionTargetId?.startsWith("ssh:") &&
@@ -17,7 +19,14 @@ export function canEditFilePreview(input: {
     typeof sha256 === "string" &&
     /^[a-f0-9]{64}$/.test(sha256) &&
     sizeBytes !== null &&
-    sizeBytes <= MAX_EDIT_BYTES &&
+    sizeBytes >= 0 &&
     !truncated
+  );
+}
+
+/** Editing requires a transport with conditional writes and a bounded, verified text file. */
+export function canEditFilePreview(input: FileEditPreviewInput): boolean {
+  return (
+    canReconcileFilePreview(input) && input.sizeBytes !== null && input.sizeBytes <= MAX_EDIT_BYTES
   );
 }

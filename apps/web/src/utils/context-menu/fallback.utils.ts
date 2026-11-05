@@ -1,81 +1,88 @@
 import type { ContextMenuItem } from "@bigbud/contracts";
 
+import {
+  createContextMenuPanel,
+  focusFirstMenuButton,
+  moveMenuFocus,
+  positionContextMenuPanel,
+} from "./fallback.panel.utils";
+
 /**
  * Imperative DOM-based context menu for non-Electron environments.
  * Shows a positioned dropdown and returns a promise that resolves
- * with the clicked item id, or null if dismissed.
+ * with the clicked item id, or null if dismissed. Items with children open one submenu level.
  */
 export function showContextMenuFallback<T extends string>(
   items: readonly ContextMenuItem<T>[],
   position?: { x: number; y: number },
 ): Promise<T | null> {
   return new Promise<T | null>((resolve) => {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const overlay = document.createElement("div");
     overlay.style.cssText = "position:fixed;inset:0;z-index:9999";
+    let submenu: { panel: HTMLElement; parent: HTMLButtonElement } | null = null;
 
-    const menu = document.createElement("div");
-    menu.className =
-      "fixed z-[10000] min-w-[140px] rounded-md border border-border bg-popover py-1 shadow-xl animate-in fade-in zoom-in-95";
-
-    const x = position?.x ?? 0;
-    const y = position?.y ?? 0;
-    menu.style.top = `${y}px`;
-    menu.style.left = `${x}px`;
+    function closeSubmenu(focusParent: boolean) {
+      if (!submenu) return;
+      submenu.panel.remove();
+      submenu.parent.setAttribute("aria-expanded", "false");
+      if (focusParent) submenu.parent.focus();
+      submenu = null;
+    }
 
     function cleanup(result: T | null) {
       document.removeEventListener("keydown", onKeyDown);
+      closeSubmenu(false);
       overlay.remove();
       menu.remove();
+      previousFocus?.focus();
       resolve(result);
     }
 
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        cleanup(null);
+    function openSubmenu(parent: HTMLButtonElement, children: readonly ContextMenuItem<T>[]) {
+      if (submenu?.parent === parent) return;
+      closeSubmenu(false);
+      const panel = createContextMenuPanel(children, {
+        onSelect: cleanup,
+        onOpenSubmenu: () => undefined,
+      });
+      document.body.appendChild(panel);
+      const rect = parent.getBoundingClientRect();
+      positionContextMenuPanel(panel, { x: rect.right, y: rect.top - 4 }, rect.left);
+      parent.setAttribute("aria-expanded", "true");
+      submenu = { panel, parent };
+    }
+
+    const menu = createContextMenuPanel(items, {
+      onSelect: cleanup,
+      onOpenSubmenu: (parent, children, viaKeyboard) => {
+        openSubmenu(parent, children);
+        if (viaKeyboard && submenu) focusFirstMenuButton(submenu.panel);
+      },
+      onHoverPlainItem: () => closeSubmenu(false),
+    });
+
+    function onKeyDown(event: KeyboardEvent) {
+      const inSubmenu = submenu !== null && submenu.panel.contains(document.activeElement);
+      const panel = inSubmenu && submenu ? submenu.panel : menu;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (inSubmenu) closeSubmenu(true);
+        else cleanup(null);
+      } else if (event.key === "ArrowLeft" && inSubmenu) {
+        event.preventDefault();
+        closeSubmenu(true);
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        moveMenuFocus(panel, event.key === "ArrowDown" ? 1 : -1);
       }
     }
 
     overlay.addEventListener("mousedown", () => cleanup(null));
     document.addEventListener("keydown", onKeyDown);
-
-    for (const item of items) {
-      if (item.separator) {
-        const separator = document.createElement("div");
-        separator.className = "my-1 border-t border-border";
-        separator.setAttribute("role", "separator");
-        menu.appendChild(separator);
-        continue;
-      }
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.textContent = item.label;
-      const isDestructiveAction = item.destructive === true || item.id === "delete";
-      const isDisabled = item.disabled === true;
-      btn.disabled = isDisabled;
-      btn.className = isDisabled
-        ? "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-muted-foreground/60 cursor-not-allowed"
-        : isDestructiveAction
-          ? "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-destructive hover:bg-accent cursor-default"
-          : "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-popover-foreground hover:bg-accent cursor-default";
-      if (!isDisabled) {
-        btn.addEventListener("click", () => cleanup(item.id));
-      }
-      menu.appendChild(btn);
-    }
-
     document.body.appendChild(overlay);
     document.body.appendChild(menu);
-
-    // Adjust if menu overflows viewport
-    requestAnimationFrame(() => {
-      const rect = menu.getBoundingClientRect();
-      if (rect.right > window.innerWidth) {
-        menu.style.left = `${window.innerWidth - rect.width - 4}px`;
-      }
-      if (rect.bottom > window.innerHeight) {
-        menu.style.top = `${window.innerHeight - rect.height - 4}px`;
-      }
-    });
+    positionContextMenuPanel(menu, { x: position?.x ?? 0, y: position?.y ?? 0 });
   });
 }

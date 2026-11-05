@@ -279,7 +279,7 @@ describe("computerUseViaOrchestration", () => {
           });
         }).pipe(Effect.provide(NodeServices.layer)),
       ),
-    ).rejects.toThrow(/disabled in Bigbud settings/);
+    ).rejects.toThrow(/disabled in bigbud settings/);
 
     expect(execute).not.toHaveBeenCalled();
   });

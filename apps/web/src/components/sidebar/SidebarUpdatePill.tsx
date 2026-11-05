@@ -1,4 +1,4 @@
-import { DownloadIcon, InfoIcon, RotateCwIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { DownloadIcon, InfoIcon, RotateCwIcon, XIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
@@ -22,13 +22,7 @@ import {
 } from "../layout/desktopUpdate.logic";
 import { useBannerDismissal } from "../../stores/ui/useBannerDismissal";
 import { StatusBanner } from "../common/StatusBanner";
-import {
-  Progress,
-  ProgressIndicator,
-  ProgressLabel,
-  ProgressTrack,
-  ProgressValue,
-} from "../ui/progress";
+import { DownloadProgress } from "../common/DownloadProgress";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 const DOWNLOAD_PREVIEW_QUERY_PARAM = "previewUpdate";
@@ -77,7 +71,6 @@ export function SidebarUpdatePill() {
   const tooltip = state ? getDesktopUpdateButtonTooltip(state) : "Update available";
   const disabled = isDesktopUpdateButtonDisabled(state);
   const action = state ? resolveDesktopUpdateButtonAction(state) : "none";
-  const downloadPercent = Math.round(Math.min(100, Math.max(0, state?.downloadPercent ?? 0)));
 
   const showArm64Warning = isElectron && shouldShowArm64IntelBuildWarning(state);
   const arm64Description =
@@ -155,8 +148,7 @@ export function SidebarUpdatePill() {
           dismissalKey={["desktop", "arm64-intel-build"]}
           dismissLabel="Dismiss Intel build warning"
           variant="warning"
-          icon={<TriangleAlertIcon />}
-          className="rounded-2xl border-warning/40 bg-warning/8 text-xs"
+          className="rounded-2xl text-xs"
           title="Intel build on Apple Silicon"
           description={arm64Description}
         />
@@ -164,27 +156,7 @@ export function SidebarUpdatePill() {
       {visible && (
         <div className="group/update relative w-full pr-6 text-xs">
           {state?.status === "downloading" ? (
-            <Progress
-              aria-label="Downloading update"
-              aria-valuetext={`Download progress: ${downloadPercent}%`}
-              value={state.downloadPercent}
-              className="gap-1.5 px-2 py-1"
-            >
-              <div className="flex items-center gap-2">
-                <DownloadIcon
-                  className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} animate-breathe text-info`}
-                />
-                <ProgressLabel className="text-muted-foreground transition-colors group-hover/update:text-foreground group-focus-within/update:text-foreground">
-                  Downloading update
-                </ProgressLabel>
-                <ProgressValue className="ml-auto transition-colors group-hover/update:text-foreground group-focus-within/update:text-foreground">
-                  {(_, value) => (value === null ? "…" : `${Math.round(value)}%`)}
-                </ProgressValue>
-              </div>
-              <ProgressTrack>
-                <ProgressIndicator className="bg-info" />
-              </ProgressTrack>
-            </Progress>
+            <DownloadProgress label="Downloading update" percent={state.downloadPercent} />
           ) : (
             <Tooltip>
               <TooltipTrigger

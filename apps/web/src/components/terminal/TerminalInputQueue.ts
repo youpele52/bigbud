@@ -1,3 +1,5 @@
+import { TERMINAL_WRITE_MAX_CODE_UNITS } from "@bigbud/contracts/workspace/terminal.ts";
+
 /** Orca's coalescing bound (`TERMINAL_INPUT_COALESCE_MAX_CODE_UNITS`). */
 export const TERMINAL_INPUT_COALESCE_MAX_UNITS = 4096;
 
@@ -16,6 +18,8 @@ export class TerminalInputQueue {
   constructor(
     private readonly write: (data: string) => Promise<void>,
     private readonly onFailure: (error: unknown) => void,
+    /** The server's write payload limit; larger items are split, never rejected. */
+    private readonly maxWriteUnits = TERMINAL_WRITE_MAX_CODE_UNITS,
   ) {}
 
   get queued(): number {
@@ -69,13 +73,24 @@ export class TerminalInputQueue {
   private take(): string | null {
     const first = this.pending.shift();
     if (first === undefined) return null;
+    // A paste larger than one write is sent in order, one surrogate-safe piece at a time.
+    // At least two units, so a leading surrogate pair always fits and every piece makes progress.
+    const maxWriteUnits = Math.max(2, this.maxWriteUnits);
+    if (first.length > maxWriteUnits) {
+      let end = maxWriteUnits;
+      const last = first.charCodeAt(end - 1);
+      if (last >= 0xd800 && last <= 0xdbff) end -= 1;
+      this.pending.unshift(first.slice(end));
+      return first.slice(0, end);
+    }
+    const coalesceLimit = Math.min(TERMINAL_INPUT_COALESCE_MAX_UNITS, maxWriteUnits);
     // A single oversized item (a paste) is written as-is; coalescing only joins small items.
-    if (first.length >= TERMINAL_INPUT_COALESCE_MAX_UNITS) return first;
+    if (first.length >= coalesceLimit) return first;
     const parts = [first];
     let length = first.length;
     while (this.pending.length > 0) {
       const next = this.pending[0]!;
-      if (length + next.length > TERMINAL_INPUT_COALESCE_MAX_UNITS) break;
+      if (length + next.length > coalesceLimit) break;
       parts.push(next);
       length += next.length;
       this.pending.shift();

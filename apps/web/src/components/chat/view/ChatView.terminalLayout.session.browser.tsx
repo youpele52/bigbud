@@ -100,6 +100,7 @@ function TerminalSessionLayoutHarness({
             height={333}
             fillAvailableSpace={layout.terminalPresentation === "fill"}
             onToggleExpanded={onToggleExpanded ?? layout.toggleExpanded}
+            onMinimize={() => layout.selectLayout("chat-only")}
             terminalIds={terminalIds}
             activeTerminalId="synthetic"
             terminalGroups={[]}
@@ -138,7 +139,7 @@ it("keeps the real emulator, process, live hidden output and split size through 
   const provider = await render(<ToastProvider />);
   const screen = await render(<TerminalSessionLayoutHarness />);
   try {
-    await selectLayout("Terminal only");
+    await selectLayout("Terminal");
     await expect.poll(() => opened.mock.instances.length).toBe(1);
     const terminal = opened.mock.instances[0] as Terminal;
     await expect.poll(() => terminal.options.disableStdin).toBe(false);
@@ -150,7 +151,7 @@ it("keeps the real emulator, process, live hidden output and split size through 
     expect(document.querySelector<HTMLElement>(".thread-terminal-drawer")!.style.height).toBe(
       "333px",
     );
-    await selectLayout("Chat only");
+    await selectLayout("Chat");
     expect(document.querySelector<HTMLElement>("[data-terminal-layout]")!.hidden).toBe(true);
     publishTerminalOutput({
       type: "output",
@@ -162,7 +163,7 @@ it("keeps the real emulator, process, live hidden output and split size through 
     await expect
       .poll(() => buffer.getLine(0)?.translateToString(true))
       .toBe("original-hidden-output");
-    await selectLayout("Chat + terminal");
+    await selectLayout("Chat x terminal");
     terminal.input("still-live", true);
     await expect.poll(() => mocks.write.mock.calls.length).toBe(1);
     await page.getByRole("button", { name: "Expand terminal", exact: true }).click();
@@ -180,6 +181,63 @@ it("keeps the real emulator, process, live hidden output and split size through 
     disposed.mockRestore();
   }
 });
+
+it.each(
+  ["Chat x terminal", "Terminal"].flatMap((layout) => [
+    { layout, variant: "floating", terminalIds: ["synthetic"] },
+    { layout, variant: "sidebar", terminalIds: ["synthetic", "synthetic-2"] },
+  ]),
+)(
+  "minimizes the $variant toolbar from $layout without closing or recreating sessions",
+  async ({ layout, terminalIds }) => {
+    vi.clearAllMocks();
+    await page.viewport(900, 600);
+    const opened = vi.spyOn(Terminal.prototype, "open");
+    const disposed = vi.spyOn(Terminal.prototype, "dispose");
+    const provider = await render(<ToastProvider />);
+    const screen = await render(<TerminalSessionLayoutHarness terminalIds={terminalIds} />);
+    try {
+      await selectLayout(layout);
+      await expect.poll(() => opened.mock.instances.length).toBe(1);
+      const terminal = opened.mock.instances[0] as Terminal;
+      await expect.poll(() => terminal.options.disableStdin).toBe(false);
+      const buffer = terminal.buffer.active;
+      const openCount = mocks.open.mock.calls.length;
+      await page.getByRole("button", { name: "Minimize terminal", exact: true }).click();
+      const region = document.querySelector<HTMLElement>("[data-terminal-layout]")!;
+      await expect.poll(() => region.dataset.terminalLayout).toBe("hidden");
+      expect(region.hidden).toBe(true);
+      expect(region.inert).toBe(true);
+      await page.getByRole("button", { name: "Chat layout", exact: true }).click();
+      await expect
+        .element(page.getByRole("menuitemradio", { name: "Chat", exact: true }))
+        .toHaveAttribute("aria-checked", "true");
+      publishTerminalOutput({
+        type: "output",
+        threadId: "layout-session",
+        terminalId: "synthetic",
+        data: "-while-minimized",
+        createdAt: "2026-10-11T00:00:01.000Z",
+      });
+      await expect
+        .poll(() => buffer.getLine(0)?.translateToString(true))
+        .toBe("original-while-minimized");
+      await page.getByRole("menuitemradio", { name: "Chat x terminal", exact: true }).click();
+      await expect.poll(() => region.hidden).toBe(false);
+      expect(terminal.buffer.active).toBe(buffer);
+      expect(mocks.open).toHaveBeenCalledTimes(openCount);
+      expect(opened).toHaveBeenCalledOnce();
+      expect(disposed).not.toHaveBeenCalled();
+      expect(mocks.close).not.toHaveBeenCalled();
+    } finally {
+      await screen.unmount();
+      toastManager.close();
+      await provider.unmount();
+      opened.mockRestore();
+      disposed.mockRestore();
+    }
+  },
+);
 
 it.each([
   { variant: "floating", terminalIds: ["synthetic"] },
@@ -199,7 +257,7 @@ it.each([
       />,
     );
     try {
-      await selectLayout("Chat + terminal");
+      await selectLayout("Chat x terminal");
       const drawer = document.querySelector<HTMLElement>(".thread-terminal-drawer")!;
       const buttons = Array.from(
         drawer.querySelectorAll<HTMLButtonElement>("button.transition-colors"),
@@ -241,7 +299,7 @@ it.each([
           }
         });
       }
-      await selectLayout("Terminal only");
+      await selectLayout("Terminal");
       expect(drawer.querySelector('[aria-label="Expand terminal"]')).toBeNull();
       expect(drawer.querySelector('[aria-label="Restore split view"]')).toBeNull();
       expect(onExpand).not.toHaveBeenCalled();

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { EditorId, OpenError, WS_METHODS } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { assertFailure } from "@effect/vitest/utils";
@@ -179,6 +181,7 @@ it.layer(serverTestLayer)("server router seam > websocket projects and shell", (
         contents: "export const rpc = true;\n",
         sizeBytes: 25,
         truncated: false,
+        sha256: createHash("sha256").update("export const rpc = true;\n").digest("hex"),
       });
     }).pipe(Effect.provide(serverHttpTestLayer)),
   );

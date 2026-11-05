@@ -2,9 +2,10 @@ import type { OrchestrationCommand } from "@bigbud/contracts/orchestration/orche
 import { OrchestrationDispatchCommandError } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 import { Effect } from "effect";
 import {
-  isLegacyOpencodeThread,
+  isReadOnlyProviderThread,
   isRetiredProvider,
-  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+  getProviderReadOnlyMessage,
+  getReadOnlyThreadProvider,
 } from "@bigbud/shared/providerLifecycle";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
@@ -26,7 +27,10 @@ export function validateBootstrapSubmission(input: {
       isRetiredProvider(command.bootstrap?.createThread?.modelSelection.provider)
     ) {
       return yield* new OrchestrationDispatchCommandError({
-        message: LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+        message: getProviderReadOnlyMessage(
+          ("modelSelection" in command ? command.modelSelection?.provider : undefined) ??
+            command.bootstrap?.createThread?.modelSelection.provider,
+        ),
       });
     }
     const thread = engine.ensureThreadState
@@ -48,9 +52,9 @@ export function validateBootstrapSubmission(input: {
                   readModel.threads.find((entry) => entry.id === command.threadId),
                 ),
               );
-    if (thread && isLegacyOpencodeThread(thread)) {
+    if (thread && isReadOnlyProviderThread(thread)) {
       return yield* new OrchestrationDispatchCommandError({
-        message: LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+        message: getProviderReadOnlyMessage(getReadOnlyThreadProvider(thread)),
       });
     }
     // Shell bootstrap keeps its existing non-queue admission semantics.

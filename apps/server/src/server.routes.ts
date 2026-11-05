@@ -13,7 +13,6 @@ import {
 } from "./ws/http.ts";
 import { mobilePairingRoutesLayer } from "./ws/http.mobile.ts";
 import { mobileWebStaticRouteLayer } from "./ws/http.mobileWeb.ts";
-import { pluginAssetRouteLayer } from "./ws/http.plugins.ts";
 import { gameMetadataRouteLayer } from "./ws/http.games.metadata.ts";
 import { threadOrchestrationToolsRouteLayer } from "./ws/http.threadTools.ts";
 
@@ -32,7 +31,6 @@ export const makeRoutesLayer = Layer.unwrap(
       attachmentsRouteLayer,
       otlpTracesProxyRouteLayer,
       projectFaviconRouteLayer,
-      pluginAssetRouteLayer,
       gameMetadataRouteLayer,
       workspacePdfViewerRouteLayer,
       workspaceFilePreviewRouteLayer,

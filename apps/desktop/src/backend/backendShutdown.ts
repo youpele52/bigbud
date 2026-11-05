@@ -5,9 +5,20 @@ import { recordInstalledProcessTreeUncertainty } from "./installedProcessQuiesce
 
 const FORCE_KILL_DELAY_MS = 2_000;
 
+/**
+ * Backend SIGTERM-to-SIGKILL window. On SIGTERM the server stops its provider sessions, and one
+ * ACP agent stop takes up to about 5 s (see `ACP_SESSION_STOP_WAIT` in the server's
+ * `provider/acp/AcpSessionStop.ts`). A SIGKILL before that orphans the agents, which run in their
+ * own process groups, so the backend gets that budget plus room for the rest of its teardown.
+ */
+export const BACKEND_FORCE_KILL_DELAY_MS = 8_000;
+/** Default wait for a backend stop to finish: the force-kill window plus the SIGKILL exit. */
+export const BACKEND_STOP_WAIT_TIMEOUT_MS = BACKEND_FORCE_KILL_DELAY_MS + 2_000;
+
 export function stopChildProcessTree(
   child: ChildProcess.ChildProcess,
   expectedChildren: WeakSet<ChildProcess.ChildProcess>,
+  forceKillDelayMs = FORCE_KILL_DELAY_MS,
 ): void {
   if (child.exitCode !== null || child.signalCode !== null) return;
   expectedChildren.add(child);
@@ -16,13 +27,14 @@ export function stopChildProcessTree(
     if (child.exitCode === null && child.signalCode === null) {
       killProcessTree(child, "SIGKILL");
     }
-  }, 2_000).unref();
+  }, forceKillDelayMs).unref();
 }
 
 export async function stopChildProcessTreeAndWait(
   child: ChildProcess.ChildProcess,
   expectedChildren: WeakSet<ChildProcess.ChildProcess>,
   timeoutMs: number,
+  forceKillDelayMs = FORCE_KILL_DELAY_MS,
 ): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   expectedChildren.add(child);
@@ -75,7 +87,7 @@ export async function stopChildProcessTreeAndWait(
       if (child.exitCode === null && child.signalCode === null) {
         terminate("SIGKILL");
       }
-    }, FORCE_KILL_DELAY_MS);
+    }, forceKillDelayMs);
     forceKillTimer.unref();
     exitTimeoutTimer = setTimeout(() => {
       if (child.exitCode !== null || child.signalCode !== null) {
@@ -91,5 +103,14 @@ export async function stopChildProcessTreeAndWait(
   });
 }
 
-export const stopBackendChild = stopChildProcessTree;
-export const stopBackendChildAndWait = stopChildProcessTreeAndWait;
+export const stopBackendChild = (
+  child: ChildProcess.ChildProcess,
+  expectedChildren: WeakSet<ChildProcess.ChildProcess>,
+): void => stopChildProcessTree(child, expectedChildren, BACKEND_FORCE_KILL_DELAY_MS);
+
+export const stopBackendChildAndWait = (
+  child: ChildProcess.ChildProcess,
+  expectedChildren: WeakSet<ChildProcess.ChildProcess>,
+  timeoutMs: number = BACKEND_STOP_WAIT_TIMEOUT_MS,
+): Promise<void> =>
+  stopChildProcessTreeAndWait(child, expectedChildren, timeoutMs, BACKEND_FORCE_KILL_DELAY_MS);

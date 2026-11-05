@@ -124,7 +124,7 @@ describe("turn-start failure classification per provider adapter", () => {
     expect(classify(empty)).toBe("invalid-request");
   });
 
-  it.each(["opencode", "kilocode"] as const)("%s (shared OpenCode V1 session methods)", (p) => {
+  it.each(["opencode"] as const)("%s (shared OpenCode V1 session methods)", (p) => {
     // requireSession after a transport failure tore the session record down.
     expect(
       classify(new ProviderAdapterSessionNotFoundError({ provider: p, threadId: THREAD })),

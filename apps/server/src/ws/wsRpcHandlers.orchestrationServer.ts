@@ -31,6 +31,7 @@ import {
 import { makeThinkingActivityDeltaStream } from "./wsStreams";
 import { makeOrchestrationDeliveryStream } from "./wsOrchestrationDelivery.ts";
 import { makeThreadRetentionWsRpcHandlers } from "./wsRpcHandlers.retention.ts";
+import { makeOrganizationWsRpcHandlers } from "./wsRpcHandlers.organization.ts";
 import {
   getOrchestrationCommandOutcome,
   resolveOrchestrationThreadOwnership,
@@ -318,6 +319,7 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
       ),
     ...makeServerWsRpcHandlers(context),
     ...makeThreadRetentionWsRpcHandlers(context),
+    ...makeOrganizationWsRpcHandlers(context),
     ...makeWorkspaceWsRpcHandlers(context, toProjectDirectoryWatchError),
   };
 }

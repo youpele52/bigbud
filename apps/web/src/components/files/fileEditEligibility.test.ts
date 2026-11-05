@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canEditFilePreview } from "./fileEditEligibility";
+import { canEditFilePreview, canReconcileFilePreview } from "./fileEditEligibility";
 
 const hash = "a".repeat(64);
 
@@ -35,5 +35,13 @@ describe("file preview edit eligibility", () => {
       { sha256: hash, sizeBytes: 5, truncated: true },
     ])
       expect(canEditFilePreview(input)).toBe(false);
+  });
+
+  it("allows full oversized reads for recovery, without enabling new edits", () => {
+    const input = { sha256: hash, sizeBytes: 512 * 1024 + 1, truncated: false };
+    expect(canReconcileFilePreview(input)).toBe(true);
+    expect(canEditFilePreview(input)).toBe(false);
+    expect(canReconcileFilePreview({ ...input, truncated: true })).toBe(false);
+    expect(canReconcileFilePreview({ ...input, sha256: null })).toBe(false);
   });
 });

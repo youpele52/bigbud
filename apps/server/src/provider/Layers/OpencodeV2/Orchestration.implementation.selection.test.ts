@@ -7,10 +7,11 @@ import {
 import { V2ImplementationSelection } from "./Orchestration.implementation.selection.ts";
 
 it("signed app-side default persists independently of native bootstrap and cannot hot-switch existing owner references", async () => {
-  const app = await makeV2ThreadPluginFixture();
+  const app = await makeV2ThreadPluginFixture({ legacyRegistration: true });
   try {
-    const registry = new V2ThreadImplementationRegistry(),
-      a = registry.acquire();
+    const registry = new V2ThreadImplementationRegistry();
+    registry.select("v1");
+    const a = registry.acquire();
     const selected = await V2ImplementationSelection.open(app.artifact, registry);
     const controller = new AbortController(),
       authority = {

@@ -22,8 +22,15 @@ import type { CodexMcpReadinessTracker } from "./codexAppServerManager.mcpReadin
 
 export type PendingRequestKey = string;
 
+/** Admission is rechecked at actual stdin dispatch, after any preceding backpressure. */
+export interface CodexWriteOptions {
+  readonly shouldDispatch: () => boolean;
+  readonly onDispatch: () => void;
+}
+
 export interface PendingRequest {
   method: string;
+  dispatched?: boolean;
   timeout: ReturnType<typeof setTimeout>;
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
@@ -32,6 +39,12 @@ export interface PendingRequest {
 export interface PendingApprovalRequest {
   requestId: ApprovalRequestId;
   jsonRpcId: string | number;
+  nativeThreadId?: string | undefined;
+  nativeTurnId?: TurnId | undefined;
+  epoch?: number | undefined;
+  state?: "pending" | "response-sent-unconfirmed";
+  uiClosed?: boolean;
+  responding?: boolean;
   method:
     | "item/commandExecution/requestApproval"
     | "item/fileChange/requestApproval"
@@ -45,6 +58,12 @@ export interface PendingApprovalRequest {
 export interface PendingUserInputRequest {
   requestId: ApprovalRequestId;
   jsonRpcId: string | number;
+  nativeThreadId?: string | undefined;
+  nativeTurnId?: TurnId | undefined;
+  epoch?: number | undefined;
+  state?: "pending" | "response-sent-unconfirmed";
+  uiClosed?: boolean;
+  responding?: boolean;
   threadId: ThreadId;
   turnId?: TurnId;
   itemId?: ProviderItemId;
@@ -59,6 +78,7 @@ export interface CodexDynamicToolSpec {
 }
 
 export interface CodexDynamicToolCallInput {
+  readonly turnId?: string;
   readonly namespace?: string;
   readonly tool: string;
   readonly arguments: unknown;
@@ -100,6 +120,19 @@ export interface CodexSessionContext {
   activeModelCatalog: CodexModelCatalog;
   effectiveModelSelection: CodexEffectiveModelSelection | undefined;
   nextRequestId: number;
+  runtimeVersion?: string | undefined;
+  historyGeneration?: number;
+  manualCompact?: import("./codexAppServerManager.controls.state.ts").CodexCompactOperation;
+  pendingToolCalls?: number;
+  ownedTurnId?: TurnId | undefined;
+  completedTurnId?: TurnId | undefined;
+  retryingTurnId?: TurnId | undefined;
+  inspectedTerminal?: {
+    readonly turnId: TurnId;
+    readonly epoch: number | undefined;
+    readonly status: "completed" | "failed";
+    readonly generation: number;
+  };
   dynamicToolCallHandler?: CodexDynamicToolCallHandler | undefined;
   mcpReadiness?: CodexMcpReadinessTracker | undefined;
   cleanupRemoteWorkspaceBridge?: (() => Promise<void>) | undefined;
@@ -109,6 +142,7 @@ export interface CodexSessionContext {
 export interface JsonRpcError {
   code?: number;
   message?: string;
+  data?: unknown;
 }
 
 export interface JsonRpcRequest {
@@ -156,7 +190,7 @@ export interface CodexAppServerStartSessionInput {
   readonly cwd?: string;
   readonly model?: string;
   readonly effort?: string;
-  readonly serviceTier?: string;
+  readonly serviceTier?: string | null;
   readonly customModels?: ReadonlyArray<string>;
   readonly resumeCursor?: unknown;
   readonly binaryPath: string;
@@ -175,11 +209,18 @@ export interface CodexAppServerStartSessionInput {
 export interface CodexThreadTurnSnapshot {
   id: TurnId;
   items: unknown[];
+  status?: string | undefined;
+  error?: unknown;
+  completedAt?: string | undefined;
 }
 
 export interface CodexThreadSnapshot {
   threadId: string;
   turns: CodexThreadTurnSnapshot[];
+  historyMode?: string | undefined;
+  nativeStatus?: string | undefined;
+  ephemeral?: boolean | undefined;
+  metadataFingerprint?: string | undefined;
 }
 
 export interface CodexAppServerManagerEvents {

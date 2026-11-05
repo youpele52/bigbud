@@ -54,11 +54,32 @@ describe("isSessionActivelyRunningTurn", () => {
     ).toBe(true);
   });
 
-  it("returns false when the same turn already completed and only the session is stale", () => {
+  // Codex/Claude complete an assistant message ("I'll open the app…") before their tool calls;
+  // that stamps `completedAt`, but the session still owns the turn, so Stop must stay available.
+  it("returns true after a mid-turn assistant message while the session still owns the turn", () => {
     expect(
       isSessionActivelyRunningTurn(completedTurn, {
         orchestrationStatus: "running",
         activeTurnId: TurnId.makeUnsafe("turn-1"),
+      }),
+    ).toBe(true);
+  });
+
+  it("keeps an unconfirmed turn interruptible after a mid-turn assistant message", () => {
+    expect(
+      isSessionActivelyRunningTurn(completedTurn, {
+        orchestrationStatus: "error",
+        activeTurnId: TurnId.makeUnsafe("turn-1"),
+        reason: "provider.stalled",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false once the session no longer owns an active turn", () => {
+    expect(
+      isSessionActivelyRunningTurn(completedTurn, {
+        orchestrationStatus: "running",
+        activeTurnId: undefined,
       }),
     ).toBe(false);
   });
@@ -116,13 +137,13 @@ describe("isLatestTurnSettled", () => {
     completedAt: "2026-02-27T21:10:06.000Z",
   } as const;
 
-  it("returns true once the latest turn has completion timestamps", () => {
+  it("returns false while the session still owns a turn with a completed assistant message", () => {
     expect(
       isLatestTurnSettled(latestTurn, {
         orchestrationStatus: "running",
         activeTurnId: TurnId.makeUnsafe("turn-1"),
       }),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("returns false while a different turn is still active in the session", () => {
@@ -174,7 +195,7 @@ describe("deriveActiveWorkStartedAt", () => {
     completedAt: "2026-02-27T21:10:06.000Z",
   } as const;
 
-  it("falls back to the local send timestamp when the latest turn is already settled", () => {
+  it("keeps the turn start while the session still owns the turn after an assistant message", () => {
     expect(
       deriveActiveWorkStartedAt(
         latestTurn,
@@ -184,7 +205,7 @@ describe("deriveActiveWorkStartedAt", () => {
         },
         "2026-02-27T21:11:00.000Z",
       ),
-    ).toBe("2026-02-27T21:11:00.000Z");
+    ).toBe("2026-02-27T21:10:00.000Z");
   });
 
   it("falls back to sendStartedAt once the latest turn is settled", () => {
@@ -230,7 +251,7 @@ describe("PROVIDER_OPTIONS", () => {
       { value: "copilot", label: "Copilot", available: true },
       { value: "cursor", label: "Cursor", available: true },
       { value: "devin", label: "Devin", available: true },
-      { value: "kilocode", label: "KiloCode", available: true },
+      { value: "muse", label: "Muse Code", available: true },
       { value: "opencodeV2", label: "OpenCode", available: true },
       { value: "pi", label: "Pi", available: true },
     ]);

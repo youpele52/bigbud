@@ -188,6 +188,17 @@ describe("terminalDisplay", () => {
     expect(
       resolveTerminalProviderFromEvents([started, oldOutput, pi, opencode, cleared]),
     ).toBeNull();
+    const herdr = makeEvent({
+      type: "agentIdentity",
+      threadId: "thread-1",
+      terminalId: "terminal-2",
+      createdAt: "2026-07-05T11:00:04.000Z",
+      provider: null,
+      agent: { id: "herdr", names: ["herdr"] },
+    });
+    expect(resolveTerminalProviderFromEvents([started, oldOutput, pi, cleared, herdr])).toBe(
+      "herdr",
+    );
   });
 
   it("falls back to the base terminal icon when no supported provider is detected", () => {

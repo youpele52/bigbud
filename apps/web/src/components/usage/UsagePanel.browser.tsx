@@ -112,7 +112,7 @@ describe("Usage panel", () => {
       </RouterContextProvider>,
     );
     await expect.element(mounted.getByText("12,345")).toBeVisible();
-    await expect.element(mounted.getByText("11d")).toBeVisible();
+    await expect.element(mounted.getByText("11 days")).toBeVisible();
     await expect.element(mounted.getByText("Codex", { exact: true }).first()).toBeVisible();
     expect(getUsageSummary).toHaveBeenCalledExactlyOnceWith({ range: "24h" });
     await expect.element(mounted.getByRole("heading", { name: "24-hour overview" })).toBeVisible();
@@ -130,11 +130,12 @@ describe("Usage panel", () => {
     expect(mounted.getByText("Five-hour limit", { exact: true }).all()).toHaveLength(4);
     expect(document.querySelectorAll(".recharts-wrapper")).toHaveLength(0);
     expect(document.querySelector('[aria-label="Select usage range"]')).toBeNull();
+    // A 280px panel stacks the shared overview card to one column.
     const grid = mounted
       .getByRole("heading", { name: "Total tokens" })
       .element()
-      .closest('[data-slot="card"]')?.parentElement;
-    expect(getComputedStyle(grid!).gridTemplateColumns.split(" ")).toHaveLength(2);
+      .closest('[data-slot="usage-overview-grid"]');
+    expect(getComputedStyle(grid!).gridTemplateColumns.split(" ")).toHaveLength(1);
     const link = mounted.getByRole("link", { name: "View full usage" });
     expect(link.element().getAttribute("href")).toBe("/usage");
     await link.click();
@@ -183,7 +184,7 @@ describe("Usage panel", () => {
     expect(mounted.getByText("999", { exact: true }).all()).toHaveLength(0);
   });
 
-  it("centers the compact breathing logo while loading", async () => {
+  it("fills the panel with the bigbud logo until the first summary arrives", async () => {
     let finish!: (value: ServerUsageSummaryResult) => void;
     getUsageSummary.mockReturnValueOnce(
       new Promise<ServerUsageSummaryResult>((resolve) => {
@@ -192,22 +193,20 @@ describe("Usage panel", () => {
     );
     mounted = await render(
       <RouterContextProvider router={makeRouter()}>
-        <div style={{ width: 280 }} data-testid="surface">
+        <div style={{ width: 280, height: 600 }} className="flex flex-col" data-testid="surface">
           <UsagePanel visible />
         </div>
       </RouterContextProvider>,
     );
-    await expect.element(mounted.getByText("Loading usage", { exact: true })).toBeVisible();
-    expectCenteredStatuses(mounted.getByTestId("surface").element());
-    expect(
-      mounted
-        .getByText("Loading usage", { exact: true })
-        .element()
-        .closest('[data-slot="centered-status"]')
-        ?.getAttribute("data-loading"),
-    ).toBe("true");
+    const loader = mounted.getByRole("status");
+    await expect.element(loader).toHaveTextContent("Loading usage");
+    expect(loader.element().querySelector(".animate-pulse-slow")).not.toBeNull();
+    const surface = mounted.getByTestId("surface").element().getBoundingClientRect();
+    expect(loader.element().getBoundingClientRect().height).toBeCloseTo(surface.height);
+    expect(mounted.getByRole("heading", { name: "Usage", exact: true }).all()).toHaveLength(0);
     finish(summary);
     await expect.element(mounted.getByText("12,345")).toBeVisible();
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
   });
 
   it.each([280, 1200])(
@@ -234,9 +233,9 @@ describe("Usage panel", () => {
       const metricsGrid = mounted
         .getByRole("heading", { name: "Total tokens" })
         .element()
-        .closest('[data-slot="card"]')?.parentElement;
+        .closest('[data-slot="usage-overview-grid"]');
       expect(getComputedStyle(metricsGrid!).gridTemplateColumns.split(" ")).toHaveLength(
-        width >= 800 ? 4 : 2,
+        width >= 800 ? 2 : 1,
       );
       const overviewCard = mounted
         .getByRole("heading", { name: "Total tokens" })

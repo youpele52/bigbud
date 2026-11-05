@@ -3,7 +3,7 @@ import type { ModelSelection } from "@bigbud/contracts/orchestration/orchestrati
 export interface CodexManagerModelSelection {
   readonly model?: string;
   readonly effort?: string;
-  readonly serviceTier?: "fast";
+  readonly serviceTier?: "fast" | null;
 }
 
 export function toCodexManagerModelSelection(
@@ -18,6 +18,8 @@ export function toCodexManagerModelSelection(
     ...(modelSelection.options?.reasoningEffort !== undefined
       ? { effort: modelSelection.options.reasoningEffort }
       : {}),
-    ...(modelSelection.options?.fastMode ? { serviceTier: "fast" as const } : {}),
+    ...(modelSelection.options?.fastMode !== undefined
+      ? { serviceTier: modelSelection.options.fastMode ? ("fast" as const) : null }
+      : {}),
   };
 }

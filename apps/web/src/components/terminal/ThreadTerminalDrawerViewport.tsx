@@ -5,6 +5,7 @@ import {
 } from "@bigbud/contracts";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { TerminalViewport } from "./TerminalViewport";
+import { TerminalViewportErrorBoundary } from "./TerminalViewportErrorBoundary";
 
 interface ThreadTerminalDrawerViewportProps {
   threadId: ThreadId;
@@ -76,13 +77,17 @@ export function ThreadTerminalDrawerViewport({
             }}
           >
             <div className="thread-terminal-theme-host h-full bg-background p-1">
-              <TerminalViewport
-                terminalId={terminalId}
+              <TerminalViewportErrorBoundary
                 terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
-                onSessionExited={() => onCloseTerminal(terminalId)}
-                autoFocus={visible && terminalId === resolvedActiveTerminalId}
-                {...sharedProps}
-              />
+              >
+                <TerminalViewport
+                  terminalId={terminalId}
+                  terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
+                  onSessionExited={() => onCloseTerminal(terminalId)}
+                  autoFocus={visible && terminalId === resolvedActiveTerminalId}
+                  {...sharedProps}
+                />
+              </TerminalViewportErrorBoundary>
             </div>
           </div>
         ))}
@@ -92,14 +97,18 @@ export function ThreadTerminalDrawerViewport({
 
   return (
     <div className="thread-terminal-theme-host h-full bg-background p-1">
-      <TerminalViewport
+      <TerminalViewportErrorBoundary
         key={resolvedActiveTerminalId}
-        terminalId={resolvedActiveTerminalId}
         terminalLabel={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}
-        onSessionExited={() => onCloseTerminal(resolvedActiveTerminalId)}
-        autoFocus={visible}
-        {...sharedProps}
-      />
+      >
+        <TerminalViewport
+          terminalId={resolvedActiveTerminalId}
+          terminalLabel={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}
+          onSessionExited={() => onCloseTerminal(resolvedActiveTerminalId)}
+          autoFocus={visible}
+          {...sharedProps}
+        />
+      </TerminalViewportErrorBoundary>
     </div>
   );
 }

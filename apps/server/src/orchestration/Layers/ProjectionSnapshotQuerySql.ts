@@ -42,6 +42,7 @@ import {
   WorkspaceRootLookupInput,
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
 import { makeListProjectionSessionRows } from "./ProjectionSnapshotQuerySql.sessions.ts";
+import { threadOrganizationJsonSql } from "../../persistence/Layers/ProjectionThreads.organization.ts";
 
 // ---------------------------------------------------------------------------
 // Query factories (require a SqlClient instance)
@@ -97,6 +98,7 @@ export function makeProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
            queue_hold AS "queueHold",
            pending_turn_start_json AS "pendingTurnStart",
            recovery_json AS "recovery",
+           ${threadOrganizationJsonSql(sql)} AS "organization",
           CASE
              WHEN parent_thread_id IS NULL OR parent_thread_title IS NULL THEN NULL
              ELSE json_object(

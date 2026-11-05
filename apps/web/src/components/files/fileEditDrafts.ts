@@ -1,38 +1,16 @@
-import { readNativeApi } from "../../rpc/nativeApi";
+import {
+  cancelFileEditTimer,
+  fileEditEncoder,
+  fileEditEntries as entries,
+  fileEditListeners as listeners,
+  updateFileEditDraft as update,
+  MAX_EDIT_BYTES,
+  type FileEditDraft,
+} from "./fileEditDrafts.state";
+import { scheduleFileEditSave as schedule } from "./fileEditDrafts.write";
 
-export const MAX_EDIT_BYTES = 512 * 1024;
-const SAVE_DELAY_MS = 650;
-
-export type DraftStatus = "saved" | "pending" | "saving" | "error" | "conflict";
-
-export interface FileEditDraft {
-  readonly contents: string;
-  readonly baseContents: string;
-  readonly baseHash: string;
-  readonly status: DraftStatus;
-  /** Timestamp of the most recent acknowledged write, not an initial read. */
-  readonly savedAt: number | null;
-  readonly message: string | null;
-  readonly diskVerified: boolean;
-}
-
-interface DraftEntry {
-  readonly key: string;
-  readonly cwd: string;
-  readonly relativePath: string;
-  readonly executionTargetId?: string;
-  draft: FileEditDraft;
-  timer: ReturnType<typeof setTimeout> | null;
-  writing: boolean;
-  revision: number;
-  editingCount: number;
-  disk: { contents: string; hash: string };
-  uncertain?: { contents: string; baseHash: string; operationId: string };
-}
-
-const entries = new Map<string, DraftEntry>();
-const listeners = new Map<string, Set<() => void>>();
-const encoder = new TextEncoder();
+export { MAX_EDIT_BYTES, getFileEditReadEpoch } from "./fileEditDrafts.state";
+export type { FileEditDraft, DraftStatus } from "./fileEditDrafts.state";
 
 if (typeof window !== "undefined") {
   window.addEventListener("beforeunload", (event) => {
@@ -61,13 +39,23 @@ export function subscribeFileEditDraft(key: string, listener: () => void): () =>
   };
 }
 
-function update(entry: DraftEntry, draft: FileEditDraft) {
-  if (draft.status === "saved") delete entry.uncertain;
-  entry.draft = draft;
-  for (const listener of listeners.get(entry.key) ?? []) listener();
+/** Failed or incomplete reads cannot authorize recovery from an older disk snapshot. */
+export function invalidateFileEditRead(key: string): void {
+  const entry = entries.get(key);
+  if (
+    !entry ||
+    (!entry.draft.diskVerified && !entry.draft.needsVerification && !entry.draft.retryAllowed)
+  )
+    return;
+  update(entry, {
+    ...entry.draft,
+    diskVerified: false,
+    needsVerification: false,
+    retryAllowed: entry.failure?.disposition === "not-dispatched",
+  });
 }
 
-function trimSavedDrafts() {
+function trimSavedDrafts(): void {
   if (entries.size <= 100) return;
   for (const [key, entry] of entries) {
     if (entries.size <= 100) break;
@@ -76,93 +64,19 @@ function trimSavedDrafts() {
   }
 }
 
-function schedule(entry: DraftEntry) {
-  if (entry.timer) clearTimeout(entry.timer);
-  entry.timer = setTimeout(() => {
-    entry.timer = null;
-    void save(entry);
-  }, SAVE_DELAY_MS);
-}
-
-async function sha256(contents: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(contents));
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function save(entry: DraftEntry) {
-  if (entry.writing || entry.draft.status !== "pending") return;
-  const { contents, baseHash } = entry.draft;
-  const operationId =
-    entry.uncertain?.contents === contents && entry.uncertain.baseHash === baseHash
-      ? entry.uncertain.operationId
-      : `file-edit-${crypto.randomUUID()}`;
-  const revision = entry.revision;
-  if (encoder.encode(contents).byteLength > MAX_EDIT_BYTES) {
-    update(entry, {
-      ...entry.draft,
-      status: "error",
-      message: "Draft exceeds the 512 KiB edit limit. Reduce it before retrying.",
-    });
-    return;
-  }
-  entry.writing = true;
-  update(entry, { ...entry.draft, status: "saving", message: null });
-  try {
-    const api = readNativeApi();
-    if (!api) throw new Error("Connection unavailable.");
-    const nextHash = await sha256(contents);
-    await api.projects.writeFile({
-      cwd: entry.cwd,
-      relativePath: entry.relativePath,
-      ...(entry.executionTargetId ? { executionTargetId: entry.executionTargetId } : {}),
-      contents,
-      expectedSha256: baseHash,
-      operationId,
-    });
-    const newer = entry.revision !== revision;
-    update(entry, {
-      ...entry.draft,
-      baseContents: contents,
-      baseHash: nextHash,
-      status: newer ? "pending" : "saved",
-      savedAt: newer ? null : Date.now(),
-      message: null,
-      diskVerified: false,
-    });
-  } catch (cause) {
-    // A transport failure may mean the write succeeded. Never blindly retry it.
-    entry.uncertain = { contents, baseHash, operationId };
-    const detail = cause instanceof Error ? cause.message : String(cause);
-    const conflict =
-      (typeof cause === "object" &&
-        cause !== null &&
-        "conflict" in cause &&
-        cause.conflict === true) ||
-      /workspace file changed since it was read/i.test(detail);
-    update(entry, {
-      ...entry.draft,
-      status: conflict ? "conflict" : "error",
-      diskVerified: false,
-      message: conflict
-        ? "File changed on disk. Draft retained; refresh to inspect the latest version before resolving."
-        : `${detail}. Draft retained; verify the file before retrying.`,
-    });
-  } finally {
-    entry.writing = false;
-    if (entry.draft.status === "pending") schedule(entry);
-  }
-}
-
+/** Observe only complete, hash-verified reads; oversized files may still resolve retained drafts. */
 export function observeFileEditRead(input: {
   cwd: string;
   relativePath: string;
   executionTargetId?: string;
   contents: string;
   sha256: string;
+  readEpoch?: number;
 }) {
   const key = fileEditKey(input.cwd, input.relativePath, input.executionTargetId);
   const entry = entries.get(key);
   if (!entry) {
+    if (fileEditEncoder.encode(input.contents).byteLength > MAX_EDIT_BYTES) return;
     entries.set(key, {
       key,
       cwd: input.cwd,
@@ -176,9 +90,13 @@ export function observeFileEditRead(input: {
         savedAt: null,
         message: null,
         diskVerified: false,
+        retryAllowed: false,
+        verificationEpoch: 0,
+        needsVerification: false,
       },
       timer: null,
       writing: false,
+      readDuringWrite: false,
       revision: 0,
       editingCount: 0,
       disk: { contents: input.contents, hash: input.sha256 },
@@ -187,57 +105,84 @@ export function observeFileEditRead(input: {
     trimSavedDrafts();
     return;
   }
-  if (entry.writing) return;
+  if (entry.writing) {
+    entry.readDuringWrite = true;
+    return;
+  }
+  if (input.readEpoch !== undefined && input.readEpoch !== entry.draft.verificationEpoch) {
+    if (!entry.draft.needsVerification) update(entry, { ...entry.draft, needsVerification: true });
+    return;
+  }
   entry.disk = { contents: input.contents, hash: input.sha256 };
-  if (entry.editingCount > 0 && entry.draft.baseHash !== input.sha256) {
-    if (entry.timer) clearTimeout(entry.timer);
-    entry.timer = null;
+  const verified = { ...entry.draft, needsVerification: false };
+  if (entry.failure?.disposition === "unknown") {
+    update(entry, { ...verified, status: "error", retryAllowed: false, diskVerified: false });
+    return;
+  }
+  if (
+    entry.failure &&
+    input.sha256 === entry.failure.hash &&
+    input.contents === entry.failure.contents
+  ) {
+    const attempted = entry.failure;
+    delete entry.failure;
+    const newer = entry.draft.contents !== attempted.contents;
     update(entry, {
-      ...entry.draft,
-      status: "conflict",
-      message:
-        "File changed on disk while editing. Your draft is retained; review before discarding it.",
-      diskVerified: true,
+      ...verified,
+      baseContents: attempted.contents,
+      baseHash: input.sha256,
+      status: newer ? "error" : "saved",
+      retryAllowed: newer,
+      message: newer
+        ? "Previous save is on disk. Review and retry to save your newer draft."
+        : null,
     });
     return;
   }
   if (entry.draft.contents === input.contents) {
+    delete entry.failure;
     update(entry, {
-      contents: input.contents,
+      ...verified,
       baseContents: input.contents,
       baseHash: input.sha256,
       status: "saved",
       savedAt: entry.draft.baseHash === input.sha256 ? entry.draft.savedAt : null,
-      message: null,
+      retryAllowed: false,
       diskVerified: false,
+      message: null,
+    });
+  } else if (
+    entry.draft.baseHash !== input.sha256 &&
+    (entry.editingCount > 0 || entry.draft.status !== "saved")
+  ) {
+    cancelFileEditTimer(entry);
+    update(entry, {
+      ...verified,
+      status: "conflict",
+      retryAllowed: false,
+      message: "File changed on disk. Your draft is retained; review before discarding it.",
+      diskVerified: true,
     });
   } else if (entry.draft.status === "saved") {
     update(entry, {
+      ...verified,
       contents: input.contents,
       baseContents: input.contents,
       baseHash: input.sha256,
-      status: "saved",
       savedAt: null,
       message: null,
       diskVerified: false,
     });
-  } else if (entry.draft.baseHash !== input.sha256) {
-    if (entry.timer) clearTimeout(entry.timer);
-    entry.timer = null;
+  } else if (entry.failure || entry.draft.status === "conflict" || entry.draft.status === "error") {
     update(entry, {
-      ...entry.draft,
-      status: "conflict",
-      message:
-        "File changed on disk. Your draft is retained; copy it before resolving the conflict.",
-      diskVerified: true,
-    });
-  } else if (entry.draft.status === "conflict" && !entry.draft.diskVerified) {
-    update(entry, {
-      ...entry.draft,
+      ...verified,
       status: "error",
-      message:
-        "The file still matches the original version. Review and retry if you want to save your draft.",
+      retryAllowed: true,
+      diskVerified: true,
+      message: "The file still matches the original version. Review and retry to save your draft.",
     });
+  } else if (entry.draft.needsVerification) {
+    update(entry, verified);
   }
 }
 
@@ -246,7 +191,7 @@ export function changeFileEditDraft(key: string, contents: string) {
   if (!entry) return;
   entry.revision++;
   const status =
-    entry.draft.status === "conflict" || entry.draft.status === "error"
+    entry.failure || entry.draft.status === "conflict" || entry.draft.status === "error"
       ? entry.draft.status
       : entry.writing
         ? "saving"
@@ -260,16 +205,22 @@ export function changeFileEditDraft(key: string, contents: string) {
     savedAt: status === "saved" ? entry.draft.savedAt : null,
   });
   if (status === "pending") schedule(entry);
-  else if (entry.timer) {
-    clearTimeout(entry.timer);
-    entry.timer = null;
-  }
+  else cancelFileEditTimer(entry);
 }
 
+/** Only finished attempts may be retired; unknown execution cannot be retried even after edits. */
 export function retryFileEditDraft(key: string) {
   const entry = entries.get(key);
-  if (!entry || entry.writing || entry.draft.status !== "error") return;
-  update(entry, { ...entry.draft, status: "pending", message: null });
+  if (
+    !entry ||
+    entry.writing ||
+    entry.draft.status !== "error" ||
+    !entry.draft.retryAllowed ||
+    entry.failure?.disposition === "unknown"
+  )
+    return;
+  delete entry.failure;
+  update(entry, { ...entry.draft, status: "pending", retryAllowed: false, message: null });
   schedule(entry);
 }
 
@@ -280,12 +231,14 @@ export function discardConflictedFileEditDraft(key: string) {
     entry.writing ||
     entry.editingCount > 0 ||
     entry.draft.status !== "conflict" ||
-    !entry.draft.diskVerified
+    !entry.draft.diskVerified ||
+    entry.failure?.disposition === "unknown"
   )
     return;
-  if (entry.timer) clearTimeout(entry.timer);
-  entry.timer = null;
+  cancelFileEditTimer(entry);
+  delete entry.failure;
   update(entry, {
+    ...entry.draft,
     contents: entry.disk.contents,
     baseContents: entry.disk.contents,
     baseHash: entry.disk.hash,
@@ -293,6 +246,8 @@ export function discardConflictedFileEditDraft(key: string) {
     savedAt: null,
     message: null,
     diskVerified: false,
+    retryAllowed: false,
+    needsVerification: false,
   });
 }
 

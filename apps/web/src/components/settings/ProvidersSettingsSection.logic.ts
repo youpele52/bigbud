@@ -163,10 +163,10 @@ export function createInitialCustomModelInputs(): Record<ProviderKind, string> {
     copilot: "",
     opencode: "",
     opencodeV2: "",
-    kilocode: "",
     pi: "",
     cursor: "",
     devin: "",
+    muse: "",
   };
 }
 
@@ -251,6 +251,7 @@ export function buildProviderCards(input: {
       statusStyle: PROVIDER_STATUS_STYLES[statusKey],
       summary,
       nativeStatus: native?.status,
+      cliProxyVersion: liveProvider?.cliProxyVersion,
       versionLabel: getProviderVersionLabel(liveProvider?.version),
     };
   });

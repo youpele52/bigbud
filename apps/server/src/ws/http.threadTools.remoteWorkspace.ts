@@ -7,6 +7,8 @@ import { isLocalExecutionTarget } from "../executionTargets.ts";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 import { resolveToolTransportTarget, runToolCommand } from "../tool-transport/toolTransport.ts";
 import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspaceTarget.ts";
+import type { RemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
+import type { ThreadToolWorkspaceBinding } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
 import { ThreadToolRequestError } from "./http.threadTools.schema.ts";
 
 const MAX_REMOTE_TIMEOUT_MS = 120_000;
@@ -45,8 +47,14 @@ function boundedPositiveInteger(
 
 export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(function* (input: {
   readonly callerThreadId: ThreadId;
+  /** Present for workspace-bound issuers (OpenCode v2); legacy providers retain their contract. */
+  readonly workspaceBinding?: ThreadToolWorkspaceBinding | undefined;
+  readonly executionOwner?: RemoteWorkspaceExecutions | undefined;
+  readonly executionGeneration?: number | undefined;
   readonly request: RemoteWorkspaceProcessRequest;
 }) {
+  const owner = input.executionOwner;
+  const generation = input.executionGeneration ?? owner?.captureGeneration();
   const invocationId = input.request.remoteInvocationId;
   if (!invocationId || invocationId.length > 256 || !/^[\x21-\x7e]+$/.test(invocationId))
     return yield* new ThreadToolRequestError({
@@ -130,25 +138,49 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
     });
   }
 
-  return yield* Effect.tryPromise({
-    try: () =>
-      runToolCommand({
-        invocationId: createHash("sha256")
-          .update(JSON.stringify([input.callerThreadId, invocationId]))
-          .digest("hex"),
-        target: resolveToolTransportTarget({
-          location: "remote",
-          executionTargetId,
-          cwd,
-        }),
-        command,
-        args,
-        ...(input.request.remoteStdin !== undefined ? { stdin: input.request.remoteStdin } : {}),
-        allowNonZeroExit: input.request.remoteAllowNonZeroExit === true,
-        timeoutMs,
-        maxBufferBytes,
-        outputMode: input.request.remoteOutputMode ?? "error",
+  const binding = input.workspaceBinding;
+  if (binding && (binding.executionTargetId !== executionTargetId || binding.cwd !== cwd)) {
+    return yield* new ThreadToolRequestError({
+      status: 409,
+      message:
+        "Remote workspace changed since these tools were connected. Restore the original VPS project or explicitly reconnect the thread; no command was dispatched.",
+    });
+  }
+
+  if (binding && !owner)
+    return yield* new ThreadToolRequestError({
+      status: 409,
+      message:
+        "Remote command owner is unavailable. Reconnect workspace tools before running commands.",
+    });
+  const run = (signal?: AbortSignal) =>
+    runToolCommand({
+      ...(signal ? { signal } : {}),
+      invocationId: createHash("sha256")
+        .update(JSON.stringify([input.callerThreadId, invocationId]))
+        .digest("hex"),
+      target: resolveToolTransportTarget({
+        location: "remote",
+        // Dispatch the authorized snapshot, never re-resolve mutable project settings.
+        executionTargetId: binding?.executionTargetId ?? executionTargetId,
+        cwd: binding?.cwd ?? cwd,
       }),
+      command,
+      args,
+      ...(input.request.remoteStdin !== undefined ? { stdin: input.request.remoteStdin } : {}),
+      allowNonZeroExit: input.request.remoteAllowNonZeroExit === true,
+      timeoutMs,
+      maxBufferBytes,
+      outputMode: input.request.remoteOutputMode ?? "error",
+    });
+  return yield* Effect.tryPromise({
+    try: (signal) => {
+      if (owner) {
+        owner.assertGeneration(generation!);
+        return owner.run(invocationId, run, signal);
+      }
+      return run();
+    },
     catch: (cause) =>
       new ThreadToolRequestError({
         status: 502,

@@ -20,7 +20,7 @@ describe("getRemoteAgentAccessError", () => {
         targetVersion: "0.2.0",
       }),
     ).toBe(
-      "The bigbud remote agent must be upgraded from 0.1.0 to 0.2.0. Edit the remote project to review and approve the upgrade.",
+      "The bigbud remote agent must be upgraded from 0.1.0 to 0.2.0. Edit the remote workspace to review and approve the upgrade.",
     );
   });
 

@@ -27,6 +27,7 @@ import { ProjectionNoteRepository } from "../../persistence/Services/ProjectionN
 import { ProjectionKanbanRepository } from "../../persistence/Services/ProjectionKanban.ts";
 import { rehydrateThreadTitleLocks } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { ComputerUse } from "../../computer-use/Services/ComputerUse.ts";
+import { ComputerUseActivity } from "../../computer-use/Services/ComputerUseActivity.ts";
 import { BrowserManager } from "../../browser/Services/BrowserManager.ts";
 import { BrowserManagerLive } from "../../browser/Layers/BrowserManager.ts";
 import { VisibleBrowserControl } from "../../browser/Services/VisibleBrowserControl.ts";
@@ -71,6 +72,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const operationalQueryOption = yield* Effect.serviceOption(ProjectionOperationalStateQuery);
   const projectionCatalogQuery = yield* Effect.serviceOption(ProjectionCatalogQuery);
   const computerUse = yield* ComputerUse;
+  const computerUseActivity = yield* Effect.serviceOption(ComputerUseActivity);
   const browser = yield* BrowserManager;
   const visibleBrowser = yield* VisibleBrowserControl;
   const fileSystem = yield* FileSystem.FileSystem;
@@ -329,6 +331,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   yield* installOrchestrationEngineToolDispatchers({
     browser,
     computerUse,
+    computerUseActivity,
     engine,
     fileSystem,
     kanban,

@@ -8,7 +8,6 @@ it("allows attachments across all providers; target/model delivery is validated 
   expect(providerAttachmentIssue("opencodeV2", undefined)).toBeUndefined();
   for (const provider of [
     "opencode",
-    "kilocode",
     "codex",
     "claudeAgent",
     "copilot",

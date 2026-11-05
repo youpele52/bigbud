@@ -43,4 +43,16 @@ describe("project write errors", () => {
       ).message,
     ).toBe("Workspace file path must stay within the project root.");
   });
+
+  it("does not invent settlement evidence for a legacy filesystem error", () => {
+    expect(
+      projectWriteFileError(
+        new WorkspaceFileSystemError({
+          ...input,
+          operation: "workspaceFileSystem.writeFile",
+          detail: "write failed",
+        }),
+      ).writeDisposition,
+    ).toBeUndefined();
+  });
 });

@@ -7,6 +7,8 @@
  */
 import type { TaskUpdatedPayload } from "@bigbud/contracts";
 
+import { isCodexSessionAgent } from "../../../codex/codexSubagentIdentity.ts";
+
 type Status = TaskUpdatedPayload["status"];
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -85,6 +87,7 @@ export function readSubAgentActivity(
   if (item.type !== "subAgentActivity" || typeof item.kind !== "string" || !agentThreadId)
     return undefined;
   const agentPath = text(item.agentPath);
+  if (isCodexSessionAgent(agentThreadId, undefined, agentPath)) return undefined;
   const model = text(item.model);
   const effort = text(item.reasoningEffort);
   return {
@@ -127,6 +130,29 @@ export function subAgentActivityStatus(kind: string): Status | undefined {
       return "stopped";
     case "completed":
       return "completed";
+    default:
+      return undefined;
+  }
+}
+
+/** Isolated child lifecycle forwarded by the manager (never a parent turn event). */
+export function readChildTurnStatus(
+  method: string,
+  payload: unknown,
+): { readonly status: Status; readonly terminalReason?: string } | undefined {
+  if (method === "subagent/turn/started") return { status: "inProgress" };
+  if (method === "subagent/turn/aborted") return { status: "stopped" };
+  if (method !== "subagent/turn/completed") return undefined;
+  const turn = record(record(payload)?.turn);
+  switch (turn?.status) {
+    case "completed":
+      return { status: "completed" };
+    case "interrupted":
+      return { status: "stopped" };
+    case "failed": {
+      const terminalReason = text(record(turn.error)?.message);
+      return { status: "failed", ...(terminalReason ? { terminalReason } : {}) };
+    }
     default:
       return undefined;
   }

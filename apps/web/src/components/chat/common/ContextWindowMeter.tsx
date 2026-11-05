@@ -1,4 +1,3 @@
-import { TriangleAlertIcon } from "lucide-react";
 import { useSettings } from "~/hooks/useSettings";
 import { cn } from "~/lib/utils";
 import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/contextWindow";
@@ -132,7 +131,6 @@ export function ContextWindowMeter(props: {
             <StatusBanner
               dismissalKey={["thread", props.threadId, "context-window"]}
               variant="warning"
-              icon={<TriangleAlertIcon />}
               className="mt-2"
               title="Context window warning"
               description={

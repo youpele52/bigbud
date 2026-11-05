@@ -175,9 +175,7 @@ it("keeps essential trust scope visible and Advanced/Details passive and keyboar
     await expect
       .element(page.getByText(/Revoking consent stops new bigbud requests/))
       .toBeVisible();
-    await expect
-      .element(page.getByRole("button", { name: "Show status", includeHidden: true }))
-      .not.toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Show status" })).toBeVisible();
     await page.getByText("Thread tools & setup", { exact: true }).click();
     await page.getByText("Plugin configuration", { exact: true }).click();
     await expect

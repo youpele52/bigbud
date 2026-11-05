@@ -1,3 +1,4 @@
+import type { V2DiagnosticError } from "./PluginSetup.diagnostics.ts";
 import * as Schema from "effect/Schema";
 import { OPENCODE_V2_CLIENT_VERSION } from "./Compatibility.ts";
 export const V2NativePlatform = Schema.Literals(["darwin", "linux", "win32"]);
@@ -70,13 +71,16 @@ export type V2NativeCompatibilityReason =
 
 /** Safe classified diagnostics only; never retain native spec, credentials or policy documents. */
 export class V2NativeCompatibilityError extends Error {
+  readonly diagnostic?: V2DiagnosticError["diagnostic"];
   readonly nativeVersion?: string;
   constructor(
     readonly reasonCode: V2NativeCompatibilityReason,
     message: string,
     nativeVersion?: string,
+    diagnostic?: V2DiagnosticError,
   ) {
-    super(`V2 ${message}`);
+    super(`V2 ${message}${diagnostic ? ` ${diagnostic.message}` : ""}`);
+    if (diagnostic) this.diagnostic = diagnostic.diagnostic;
     if (
       nativeVersion &&
       nativeVersion.length <= 50 &&

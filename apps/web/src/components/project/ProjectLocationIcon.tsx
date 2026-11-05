@@ -4,7 +4,7 @@ import { LaptopMinimalIcon } from "lucide-react";
 
 import type { Project } from "../../models/types";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
-import { isRemoteExecutionTargetId } from "../sidebar/Sidebar.projects.logic";
+import { isRemoteExecutionTargetId } from "../sidebar/Sidebar.remoteWorkspaces.logic";
 
 export function ProjectLocationIcon({
   className,

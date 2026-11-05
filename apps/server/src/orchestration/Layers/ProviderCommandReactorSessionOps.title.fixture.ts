@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import {
   CommandId,
   EventId,
@@ -70,7 +71,7 @@ export function titleFixture() {
     threadId: thread.id,
     cwd: "/fixture",
     messageText: "Investigate session reconnect",
-    modelSelection: thread.modelSelection,
+    modelSelection: requireActiveModelSelection(thread.modelSelection),
   });
   const addSuccess = (index: number, model = `actual-${index}`) => {
     const turnId = TurnId.makeUnsafe(`turn-${index}`),

@@ -5,7 +5,7 @@ import { Effect, Exit } from "effect";
 import { ProviderAdapterProcessError } from "./Errors.ts";
 import { OpencodeServerManager } from "./Services/Opencode/ServerManager.ts";
 
-type ManagedServerProvider = Extract<ProviderKind, "opencode" | "kilocode">;
+type ManagedServerProvider = Extract<ProviderKind, "opencode">;
 
 export function withManagedServerProbe<A>(input: {
   readonly provider: ManagedServerProvider;

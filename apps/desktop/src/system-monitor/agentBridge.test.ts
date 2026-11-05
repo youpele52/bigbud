@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import type { SystemMonitorBridge } from "./bridge";
+import type { ResourceAwareness } from "./awareness";
+import { defaultResourcePreferences } from "@bigbud/shared/resourceAwareness.preferences";
 import {
   revokeSystemMonitorAgentToken,
   rotateSystemMonitorAgentToken,
@@ -8,6 +9,17 @@ import {
 } from "./agentBridge";
 
 afterEach(() => stopSystemMonitorAgentBridge());
+
+const owner = (readSnapshot: unknown) =>
+  ({
+    readSnapshot,
+    stop: vi.fn(),
+    state: () => ({
+      preferences: { ...defaultResourcePreferences(), rules: [] },
+      alerts: [],
+      health: "healthy",
+    }),
+  }) as unknown as ResourceAwareness;
 
 it("requires the current backend token and reads the existing monitor", async () => {
   const readSnapshot = vi.fn().mockResolvedValue({
@@ -21,7 +33,7 @@ it("requires the current backend token and reads the existing monitor", async ()
     summaryStatus: "ready",
     cpuPercent: { value: 3, status: "ready", sampledAtMs: Date.now() },
   });
-  await startSystemMonitorAgentBridge({ readSnapshot } as unknown as SystemMonitorBridge);
+  await startSystemMonitorAgentBridge(owner(readSnapshot));
   const first = rotateSystemMonitorAgentToken()!;
   expect((await fetch(first.endpoint)).status).toBe(404);
   const response = await fetch(first.endpoint, {
@@ -47,7 +59,7 @@ it("does not disclose an in-flight snapshot after backend access is revoked", as
         release = resolve;
       }),
   );
-  await startSystemMonitorAgentBridge({ readSnapshot } as unknown as SystemMonitorBridge);
+  await startSystemMonitorAgentBridge(owner(readSnapshot));
   const access = rotateSystemMonitorAgentToken()!;
   const pending = fetch(access.endpoint, { headers: { authorization: `Bearer ${access.token}` } });
   await vi.waitFor(() => expect(readSnapshot).toHaveBeenCalledOnce());

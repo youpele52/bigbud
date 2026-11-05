@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { Schema } from "effect";
 import type { Endpoint } from "@opencode/client/service";
@@ -24,12 +25,19 @@ export interface V2SharedRegistration {
 
 /** Authentication may rotate; logical transport generations are not durable storage or exit proof. */
 export function v2SharedGeneration(registration: V2SharedRegistration): string {
-  return JSON.stringify([
-    registration.id,
-    registration.pid,
-    registration.version,
-    registration.endpoint.url,
-  ]);
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        registration.id,
+        registration.pid,
+        registration.version,
+        registration.endpoint.url,
+        registration.endpoint.auth?.type ?? null,
+        registration.endpoint.auth?.username ?? null,
+        registration.endpoint.auth?.password ?? null,
+      ]),
+    )
+    .digest("hex");
 }
 
 /** Match the native Promise Service registration convention; never create a profile. */

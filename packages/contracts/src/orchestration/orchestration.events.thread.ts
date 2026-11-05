@@ -21,7 +21,7 @@ import { MessageOriginSegment } from "./orchestration.messageOrigin";
 import {
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
-  ModelSelection,
+  HistoricalModelSelection,
   ProviderApprovalDecision,
   ProviderInteractionMode,
   ProviderUserInputAnswers,
@@ -55,7 +55,7 @@ export const ThreadCreatedPayload = Schema.Struct({
   providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),
-  modelSelection: ModelSelection,
+  modelSelection: HistoricalModelSelection,
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(() => DEFAULT_PROVIDER_INTERACTION_MODE),
@@ -138,7 +138,7 @@ export const ThreadMetaUpdatedPayload = Schema.Struct({
   providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),
-  modelSelection: Schema.optional(ModelSelection),
+  modelSelection: Schema.optional(HistoricalModelSelection),
   branch: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   updatedAt: IsoDateTime,
@@ -178,7 +178,7 @@ export const ThreadTurnStartRequestedPayload = Schema.Struct({
   threadId: ThreadId,
   messageId: MessageId,
   replyTo: Schema.optional(OrchestrationMessageReply),
-  modelSelection: Schema.optional(ModelSelection),
+  modelSelection: Schema.optional(HistoricalModelSelection),
   titleSeed: Schema.optional(TrimmedNonEmptyString),
   runtimeMode: RuntimeMode.pipe(Schema.withDecodingDefault(() => DEFAULT_RUNTIME_MODE)),
   interactionMode: ProviderInteractionMode.pipe(

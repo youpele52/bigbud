@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import { BUILT_IN_CHATS_PROJECT_ID, type ModelSelection, type ProjectId } from "@bigbud/contracts";
 
 import { buildExplicitExecutionTargets } from "~/lib/providerExecutionTargets";
@@ -125,8 +126,9 @@ function automationOwnedThreadInput(input: {
   return {
     ...base,
     ...executionTargets,
-    modelSelection:
+    modelSelection: requireActiveModelSelection(
       modelSelection ?? project.defaultModelSelection ?? getDefaultModelSelection(providers),
+    ),
     worktreePath: null,
   };
 }

@@ -288,7 +288,6 @@ export function makeProviderServiceLayer(options?: {
   const cliProxy = makeFakeCodexAdapter("cliProxy", {
     sessionRecovery: options?.cliProxySessionRecovery ?? "unsupported",
   });
-  const kilocode = makeFakeCodexAdapter("kilocode");
   const copilot = makeFakeCodexAdapter("copilot");
   const opencode = makeFakeCodexAdapter("opencode");
   const pi = makeFakeCodexAdapter("pi");
@@ -311,11 +310,9 @@ export function makeProviderServiceLayer(options?: {
                   ? Effect.succeed(devin.adapter)
                   : provider === "opencode"
                     ? Effect.succeed(opencode.adapter)
-                    : provider === "kilocode"
-                      ? Effect.succeed(kilocode.adapter)
-                      : provider === "pi"
-                        ? Effect.succeed(pi.adapter)
-                        : Effect.fail(new ProviderUnsupportedError({ provider })),
+                    : provider === "pi"
+                      ? Effect.succeed(pi.adapter)
+                      : Effect.fail(new ProviderUnsupportedError({ provider })),
     listProviders: () =>
       Effect.succeed([
         "codex",
@@ -325,7 +322,6 @@ export function makeProviderServiceLayer(options?: {
         "cursor",
         "devin",
         "opencode",
-        "kilocode",
         "pi",
       ]),
   };
@@ -374,7 +370,6 @@ export function makeProviderServiceLayer(options?: {
     codex,
     claude,
     cliProxy,
-    kilocode,
     copilot,
     cursor,
     devin,

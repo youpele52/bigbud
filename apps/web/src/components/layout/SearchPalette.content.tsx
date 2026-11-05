@@ -14,12 +14,13 @@ import {
 import { projectSearchFileContentsQueryOptions } from "~/lib/projectReactQuery";
 import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useRemoteExecutionAccessGate } from "~/hooks/useRemoteExecutionAccessGate";
-import { isRemoteExecutionTargetId } from "~/components/sidebar/Sidebar.projects.logic";
+import { isRemoteExecutionTargetId } from "~/components/sidebar/Sidebar.remoteWorkspaces.logic";
 import { isVisibleThread } from "~/logic/thread/threadVisibility.logic";
 import { useDefaultChatCwd } from "~/rpc/serverState";
 import { useProjectById, useStore, useThreadById } from "../../stores/main";
 import { openPathFromChat } from "../../stores/files/filesPanel.open";
 import { useSearchStore, useUiStateStore } from "../../stores/ui";
+import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 import {
   Command,
   CommandDialog,
@@ -192,12 +193,14 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
 
   const handleSelectThread = (threadId: ThreadId) => {
     setOpen(false);
+    acknowledgeThreadOpen(threadId);
     void navigate({ to: "/$threadId", params: { threadId } });
   };
 
   const handleSelectMessage = (threadId: ThreadId, messageId: MessageId) => {
     setOpen(false);
     requestMessageFocus(threadId, messageId);
+    acknowledgeThreadOpen(threadId);
     if (threadId !== activeThreadId) {
       void navigate({ to: "/$threadId", params: { threadId } });
     }
@@ -257,7 +260,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   );
   const projectResults = toProjectSearchResults({
     localProjects: projectCatalogQueries[0]?.data?.projects ?? [],
-    remoteProjects: projectCatalogQueries[1]?.data?.projects ?? [],
+    remoteWorkspaces: projectCatalogQueries[1]?.data?.projects ?? [],
   });
   const isSearchPending = searchQueryDebouncer.state.isPending;
   const isFileSearchPending = fileContentsQuery.isFetching;

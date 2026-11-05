@@ -24,6 +24,7 @@ import {
 } from "./ChatView.sendTurn.materialization";
 import { handleChatSendFailure } from "./ChatView.sendTurn.chat.failure";
 import { preservePendingEnvMode } from "../../../lib/threadMaterialization.envMode";
+import { ensureCopilotRuntimeForChat } from "../provider/copilotRuntime.guard";
 
 interface SendTurnActionInput {
   api: NonNullable<ReturnType<typeof readNativeApi>>;
@@ -54,6 +55,8 @@ export async function sendChatTurn({
     shouldAutoScrollRef,
   } = input;
   if (!thread) return;
+  if (selectedModelSelection.provider === "copilot" && !(await ensureCopilotRuntimeForChat(api)))
+    return;
   const prepared = await prepareComposerPrompt({ api, sendInput: input, resetComposerDraft });
   if (!prepared || !project) return;
   const {
@@ -80,6 +83,8 @@ export async function sendChatTurn({
   const isServer = !isDraft;
   let turnStartSucceeded = false;
   try {
+    if (selectedModelSelection.provider === "copilot" && !(await ensureCopilotRuntimeForChat(api)))
+      return;
     let messageIdForSend = newMessageId();
     let commandIdForSend = newCommandId();
     const messageCreatedAt = new Date().toISOString();

@@ -2,6 +2,7 @@ import { type VirtualItem } from "@tanstack/react-virtual";
 
 import { MessagesTimelineRowContent } from "./MessagesTimeline.rows";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
+import { getMessagesTimelineRowMeasurementKey } from "./MessagesTimeline.virtualization";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
 
 interface MessagesTimelineRowsProps extends Omit<MessagesTimelineRowContentProps, "row"> {
@@ -48,9 +49,15 @@ export function VirtualizedMessagesTimelineRows({
 
 export function NonVirtualizedMessagesTimelineRows({
   rows,
+  measurementScopeKey,
   ...rowProps
-}: MessagesTimelineRowsProps) {
+}: MessagesTimelineRowsProps & { measurementScopeKey: string }) {
   return rows.map((row) => (
-    <div key={`non-virtual-row:${row.id}`}>{renderMessagesTimelineRow(row, rowProps)}</div>
+    <div
+      key={`non-virtual-row:${row.id}`}
+      data-tail-measurement-key={`${measurementScopeKey}:${getMessagesTimelineRowMeasurementKey(row)}`}
+    >
+      {renderMessagesTimelineRow(row, rowProps)}
+    </div>
   ));
 }

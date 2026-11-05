@@ -47,7 +47,7 @@ it("draws four actual donut sectors with canonical nulls and reconciles to overv
     await expect.element(page.getByText(label, { exact: true })).toBeVisible();
   }
   await expect.element(page.getByText("100", { exact: true })).toBeVisible();
-  expect(document.body.textContent).toContain("Input may include unseparated cache usage");
+  expect(document.body.textContent).not.toContain("Input may include unseparated cache usage");
   expect(document.body.textContent).not.toContain("Breakdown incomplete");
   expect(document.body.textContent).not.toContain("Unsplit usage");
   await expect.poll(() => document.querySelectorAll(".recharts-pie-sector").length).toBe(4);
@@ -73,6 +73,8 @@ it("renders older-server totals as unsplit instead of an empty chart or fabricat
   mounted = await render(<UsageTokenMixCard totals={oldTotals} />);
   await expect.element(page.getByText("Unsplit usage", { exact: true })).toBeVisible();
   await expect.element(page.getByText("100", { exact: true }).first()).toBeVisible();
-  expect(document.body.textContent).toContain("Unsplit usage has no reliable category breakdown");
+  expect(document.body.textContent).not.toContain(
+    "Unsplit usage has no reliable category breakdown",
+  );
   await expect.poll(() => document.querySelectorAll(".recharts-pie-sector").length).toBe(1);
 });

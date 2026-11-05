@@ -31,7 +31,12 @@ export function FilePreviewEditRecovery({
           <Button size="xs" variant="ghost" onClick={() => void onRefresh()}>
             Check disk
           </Button>
-          <Button size="xs" variant="ghost" onClick={() => retryFileEditDraft(draftKey)}>
+          <Button
+            size="xs"
+            variant="ghost"
+            disabled={!draft.retryAllowed}
+            onClick={() => retryFileEditDraft(draftKey)}
+          >
             Retry save
           </Button>
         </>

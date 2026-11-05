@@ -261,8 +261,6 @@ export function useOrchestraPlayerComposer(input: {
         insertMention(`@agent::${item.agent.name} `);
       } else if (item.type === "skill") {
         insertMention(`${buildSkillMentionPrompt(item.skill.name)} `);
-      } else if (item.type === "plugin") {
-        insertMention(`@plugin::${item.name} `);
       }
       setSyntheticMenuKind(null);
       setHighlightedItemId(null);
@@ -270,20 +268,13 @@ export function useOrchestraPlayerComposer(input: {
     }
 
     if (!trigger) return;
-    if (
-      item.type === "path" ||
-      item.type === "agent" ||
-      item.type === "skill" ||
-      item.type === "plugin"
-    ) {
+    if (item.type === "path" || item.type === "agent" || item.type === "skill") {
       const replacement =
         item.type === "path"
           ? `@${item.path} `
           : item.type === "agent"
             ? `@agent::${item.agent.name} `
-            : item.type === "skill"
-              ? `${buildSkillMentionPrompt(item.skill.name)} `
-              : `@plugin::${item.name} `;
+            : `${buildSkillMentionPrompt(item.skill.name)} `;
       const rangeEnd = extendReplacementRangeForTrailingSpace(
         promptRef.current,
         trigger.rangeEnd,

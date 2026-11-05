@@ -31,6 +31,114 @@ function wireRequests(socket: MockWebSocket) {
 }
 
 describe("read-only config request deadlines", () => {
+  it("bounds monitor RPCs when the transport is waiting for reconnect", async () => {
+    const transport = createTransport(transports, "ws://localhost:3020");
+    (transport as unknown as { reconnectOperation: Promise<void> }).reconnectOperation =
+      new Promise(() => undefined);
+    await expect(
+      transport.request(() => Effect.succeed("unused"), {
+        timeout: Option.some(Duration.millis(20)),
+      }),
+    ).rejects.toThrow();
+  });
+
+  it("does not dispatch after reconnect exhausts the original deadline", async () => {
+    const transport = createTransport(transports, "ws://localhost:3020");
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    const socket = getSocket(sockets);
+    socket.open();
+    let complete!: () => void;
+    (transport as unknown as { reconnectOperation: Promise<void> }).reconnectOperation =
+      new Promise((resolve) => (complete = resolve));
+    let clock = 1_000;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    try {
+      const pending = transport.request((client) => client[WS_METHODS.serverGetConfig]({}), {
+        timeout: Option.some(Duration.millis(100)),
+      });
+      const rejected = expect(pending).rejects.toThrow(/timed out/);
+      clock = 1_100;
+      complete();
+      await rejected;
+      expect(wireRequests(socket)).toHaveLength(0);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("interrupts an in-flight request after only the remaining reconnect budget", async () => {
+    const transport = createTransport(transports, "ws://localhost:3020");
+    await waitFor(() => expect(sockets).toHaveLength(1));
+    const socket = getSocket(sockets);
+    socket.open();
+    let complete!: () => void;
+    (transport as unknown as { reconnectOperation: Promise<void> }).reconnectOperation =
+      new Promise((resolve) => (complete = resolve));
+    let clock = 1_000;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+    try {
+      const pending = transport.request((client) => client[WS_METHODS.serverGetConfig]({}), {
+        timeout: Option.some(Duration.millis(150)),
+      });
+      const rejected = expect(pending).rejects.toThrow();
+      clock = 1_110;
+      complete();
+      await waitFor(() => expect(wireRequests(socket)).toHaveLength(1));
+      const id = wireRequests(socket)[0]!.id;
+      await rejected;
+      await waitFor(() =>
+        expect(socket.sent.map((frame) => JSON.parse(frame))).toContainEqual({
+          _tag: "Interrupt",
+          requestId: id,
+        }),
+      );
+      socket.serverMessage(
+        JSON.stringify({
+          _tag: "Exit",
+          requestId: id,
+          exit: { _tag: "Success", value: serverConfigFixture },
+        }),
+      );
+      expect(wireRequests(socket)).toHaveLength(1);
+      const fresh = transport.request((client) => client[WS_METHODS.serverGetConfig]({}), {
+        timeout: Option.some(Duration.millis(150)),
+      });
+      await waitFor(() => expect(wireRequests(socket)).toHaveLength(2));
+      socket.serverMessage(
+        JSON.stringify({
+          _tag: "Exit",
+          requestId: wireRequests(socket)[1]!.id,
+          exit: { _tag: "Success", value: { ...serverConfigFixture, cwd: "/fresh" } },
+        }),
+      );
+      await expect(fresh).resolves.toMatchObject({ cwd: "/fresh" });
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("assigns finite deadlines to SSH discovery and sampling", async () => {
+    const deadlines: number[] = [];
+    const request: WsTransport["request"] = async <A>(
+      _execute: unknown,
+      options?: { timeout?: Option.Option<Duration.Input> },
+    ) => {
+      const timeout = options?.timeout;
+      deadlines.push(
+        timeout && Option.isSome(timeout)
+          ? Duration.toMillis(Duration.fromInputUnsafe(timeout.value))
+          : 0,
+      );
+      return [] as unknown as A;
+    };
+    const server = createWsRpcClient({ request } as unknown as WsTransport).server;
+    await server.listConnectedSshMonitors();
+    await server.sampleSshMonitor({
+      projectId: "saved" as Parameters<typeof server.sampleSshMonitor>[0]["projectId"],
+    });
+    expect(deadlines).toEqual([30_000, 10_000]);
+  });
+
   it("opts only getConfig into a 15-second deadline without changing its public signature", async () => {
     const deadlines: Array<Option.Option<Duration.Input> | undefined> = [];
     const request: WsTransport["request"] = async <A>(

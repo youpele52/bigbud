@@ -5,6 +5,7 @@ import {
   type OptionalProviderRegistration,
 } from "../ProviderRegistration.ts";
 import { CliProxyCompositionLive } from "./CliProxy/Composition.ts";
+import { makeMuseRegistration, MuseImplementationLive } from "./Muse/Composition.ts";
 import { makeDormantOpencodeV2Adapter } from "./OpencodeV2/Adapter.ts";
 import { makeDormantOpencodeV2Provider } from "./OpencodeV2/Provider.ts";
 import { makeV2ApplicationRegistration } from "./OpencodeV2/Application.composition.ts";
@@ -48,13 +49,26 @@ export const composeOptionalProviders = Effect.fn("composeOptionalProviders")(fu
   return [...registrations, yield* makeV2ApplicationRegistration()];
 });
 
+/** Append the Muse optional registration; existing registrations survive unchanged. */
+export function appendMuseRegistration(
+  registrations: ReadonlyArray<OptionalProviderRegistration>,
+  muse: OptionalProviderRegistration,
+): ReadonlyArray<OptionalProviderRegistration> {
+  if (registrations.some((registration) => registration.provider === "muse")) {
+    throw new Error("Muse is already registered.");
+  }
+  return [...registrations, muse];
+}
+
 export const OptionalProviderCompositionLive = Layer.effect(
   OptionalProviderRegistrations,
   Effect.gen(function* () {
     const registrations = yield* OptionalProviderRegistrations;
-    return yield* composeOptionalProviders(registrations);
+    const composed = yield* composeOptionalProviders(registrations);
+    return appendMuseRegistration(composed, yield* makeMuseRegistration);
   }),
 ).pipe(
   Layer.provide(CliProxyCompositionLive),
+  Layer.provide(MuseImplementationLive),
   Layer.provide(Layer.merge(ProviderTurnAdmissionsLive, OpencodeV2SharedBindingsLive)),
 );

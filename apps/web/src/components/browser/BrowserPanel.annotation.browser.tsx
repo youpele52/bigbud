@@ -58,6 +58,11 @@ vi.mock("~/config/env", () => ({
   isElectron: true,
 }));
 
+vi.mock("~/hooks/useSettings", () => ({
+  useSettings: (selector: (settings: { browserSearchEngine: string }) => unknown) =>
+    selector({ browserSearchEngine: "duckduckgo" }),
+}));
+
 vi.mock("~/hooks/useLocalStorage", () => ({
   getLocalStorageItem: vi.fn(() => null),
   setLocalStorageItem: browserHistoryStorageMock.set,

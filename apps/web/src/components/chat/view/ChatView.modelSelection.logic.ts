@@ -1,4 +1,4 @@
-import { type ModelSelection, type ProviderKind, type ThreadId } from "@bigbud/contracts";
+import { type HistoricalModelSelection, type ProviderKind, type ThreadId } from "@bigbud/contracts";
 import { useMemo } from "react";
 import { LRUCache } from "../../../lib/lruCache";
 import { useStore } from "../../../stores/main";
@@ -10,7 +10,7 @@ export function providerSupportsSubProviderID(provider: ProviderKind): boolean {
 }
 
 export function getModelSelectionSubProviderID(
-  selection: ModelSelection | null | undefined,
+  selection: HistoricalModelSelection | null | undefined,
 ): string | null {
   return (selection?.provider === "opencode" ||
     selection?.provider === "kilocode" ||
@@ -21,8 +21,8 @@ export function getModelSelectionSubProviderID(
 }
 
 export function modelSelectionsEqual(
-  left: ModelSelection | null | undefined,
-  right: ModelSelection | null | undefined,
+  left: HistoricalModelSelection | null | undefined,
+  right: HistoricalModelSelection | null | undefined,
 ): boolean {
   if (left === right) {
     return true;
@@ -38,7 +38,7 @@ export function modelSelectionsEqual(
   );
 }
 
-export function modelPickerValue(selection: ModelSelection | null | undefined): string {
+export function modelPickerValue(selection: HistoricalModelSelection | null | undefined): string {
   const model = selection?.model?.trim();
   if (!model) {
     return "";

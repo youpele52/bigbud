@@ -7,6 +7,7 @@ import { render } from "vitest-browser-react";
 
 import { TerminalDrawerSwitchFixture } from "./ChatView.terminalDrawer.fixture";
 import { terminalRendererBudget } from "../../terminal/TerminalRendererController.policy";
+import { HIDDEN_WEBGL_RELEASE_DELAY_MS } from "../../terminal/TerminalRendererController";
 import { publishTerminalOutput } from "../../terminal/TerminalOutputStream";
 import { useTerminalStateStore } from "../../../stores/terminal/terminal.store";
 import { resetTerminalStore } from "../../../stores/terminal/terminal.store.test.helpers";
@@ -73,7 +74,7 @@ vi.mock("../../terminal/useThreadTerminalDrawer", async (original) => {
 const frames = () =>
   new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
 
-it("warm thread/layout switches retain measurable emulators, release hidden GPU and never replay entrance", async () => {
+it("warm switches retain GPU contexts and measurable emulators, then expiry releases GPU without replay", async () => {
   resetTerminalStore();
   vi.clearAllMocks();
   for (const id of ["a", "b"])
@@ -82,7 +83,6 @@ it("warm thread/layout switches retain measurable emulators, release hidden GPU 
   const disposed = vi.spyOn(Terminal.prototype, "dispose");
   const addonDisposed = vi.spyOn(WebglAddon.prototype, "dispose");
   const screen = await render(<TerminalDrawerSwitchFixture />);
-  let widthSpy: ReturnType<typeof vi.spyOn> | undefined;
   try {
     await expect.poll(() => opened.mock.instances.length).toBe(2);
     const terminals = opened.mock.instances as Terminal[];
@@ -112,19 +112,6 @@ it("warm thread/layout switches retain measurable emulators, release hidden GPU 
     await expect.poll(() => terminals.map(currentScreen)).toEqual(["current Pi", "current Pi"]);
     const writes = terminals.map((terminal) => vi.spyOn(terminal, "write"));
     const buffers = terminals.map((terminal) => terminal.buffer.active);
-    const readWidth = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetWidth")!.get!;
-    let measurements = 0;
-    let zeroMeasurements = 0;
-    widthSpy = vi
-      .spyOn(HTMLElement.prototype, "offsetWidth", "get")
-      .mockImplementation(function (this: HTMLElement) {
-        const width = readWidth.call(this) as number;
-        if (this.parentElement?.classList.contains("xterm-width-cache-measure-container")) {
-          measurements++;
-          if (width === 0) zeroMeasurements++;
-        }
-        return width;
-      });
     for (const active of ["a", "b", "a", "b", "a"]) {
       await screen.rerender(<TerminalDrawerSwitchFixture active={active} />);
       await expect.poll(() => terminalRendererBudget.count).toBe(1);
@@ -149,11 +136,52 @@ it("warm thread/layout switches retain measurable emulators, release hidden GPU 
       );
       await frames();
       expect(hidden.querySelector(".xterm")).not.toBeNull();
+      expect(terminalRendererBudget.retainedCount).toBe(1);
+      expect(addonDisposed).not.toHaveBeenCalled();
     }
-    expect(measurements).toBeGreaterThan(0); // Real WebGL -> DOM handoff ran the width-cache path.
-    expect(zeroMeasurements).toBe(0);
-    expect(addonDisposed.mock.calls.length).toBeGreaterThanOrEqual(4);
-    await screen.rerender(<TerminalDrawerSwitchFixture presentation="hidden" />);
+
+    const shown = screen.container.querySelector<HTMLElement>(
+      '[data-terminal-presentation="fill"]',
+    )!;
+    const webglCanvas = Array.from(shown.querySelectorAll("canvas")).find((canvas) =>
+      canvas.getContext("webgl2"),
+    );
+    expect(webglCanvas).toBeDefined();
+    // xterm 6.1 measures its DOM renderer's width cache on 1x1 canvases, not hidden spans.
+    const measurementPrototype =
+      typeof OffscreenCanvasRenderingContext2D === "undefined"
+        ? CanvasRenderingContext2D.prototype
+        : OffscreenCanvasRenderingContext2D.prototype;
+    const measureText = measurementPrototype.measureText;
+    let measurements = 0;
+    let invalidMeasurements = 0;
+    vi.spyOn(measurementPrototype, "measureText").mockImplementation(function (
+      this: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+      text: string,
+    ) {
+      const metrics = measureText.call(this, text);
+      if (this.canvas.width === 1 && this.canvas.height === 1 && text.length > 0) {
+        measurements++;
+        if (!Number.isFinite(metrics.width) || metrics.width <= 0) invalidMeasurements++;
+      }
+      return metrics;
+    });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      await screen.rerender(<TerminalDrawerSwitchFixture presentation="hidden" />);
+      expect(terminalRendererBudget.count).toBe(0);
+      expect(terminalRendererBudget.retainedCount).toBe(2);
+      vi.advanceTimersByTime(HIDDEN_WEBGL_RELEASE_DELAY_MS - 1);
+      expect(addonDisposed).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+    } finally {
+      vi.useRealTimers();
+    }
+    await expect.poll(() => measurements, { timeout: 5000 }).toBeGreaterThan(0);
+    expect(invalidMeasurements).toBe(0);
+    expect(addonDisposed).toHaveBeenCalledOnce();
+    expect(webglCanvas!.isConnected).toBe(false);
+    expect(terminalRendererBudget.retainedCount).toBe(1);
     await expect.poll(() => terminalRendererBudget.count).toBe(0);
     await screen.rerender(<TerminalDrawerSwitchFixture />);
     await expect.poll(() => terminalRendererBudget.count).toBe(1);
@@ -184,7 +212,7 @@ it("warm thread/layout switches retain measurable emulators, release hidden GPU 
     await expect.poll(() => disposed.mock.calls.length).toBe(1);
     expect(terminalRendererBudget.count).toBe(0);
   } finally {
-    widthSpy?.mockRestore();
+    vi.useRealTimers();
     await screen.unmount();
     vi.restoreAllMocks();
     resetTerminalStore();

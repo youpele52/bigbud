@@ -22,6 +22,7 @@ export function registerV2RuntimeOwner(
         if (
           runtime.sessions.get(owner.threadId) !== owner ||
           owner.stopped ||
+          owner.transportDetached ||
           owner.epoch !== epoch ||
           owner.dirtyGeneration !== dirty ||
           owner.lease.hub.generation(owner.native.id) !== generation

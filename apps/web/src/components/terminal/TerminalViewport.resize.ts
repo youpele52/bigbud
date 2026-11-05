@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useRef, type MutableRefObject } from "react"
 import type { Terminal } from "@xterm/xterm";
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { terminalResizeGeometry } from "./terminalRecoveryGeometry";
 
 /** Coalesce geometry changes without letting old RPC completions mutate a replacement view. */
 export function useTerminalResizeRequest(input: {
@@ -30,8 +31,7 @@ export function useTerminalResizeRequest(input: {
       .resize({
         threadId: input.threadId,
         terminalId: input.terminalId,
-        cols: terminal.cols,
-        rows: terminal.rows,
+        ...terminalResizeGeometry(terminal),
       })
       .catch(() => undefined)
       .finally(() => {

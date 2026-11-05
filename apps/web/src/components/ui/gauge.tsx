@@ -17,6 +17,8 @@ export type GaugeProps = Omit<ComponentProps<"div">, "children"> & {
   label: string;
   description?: ReactNode;
   formatValue?: (value: number) => string;
+  /** Format scale endpoints independently, defaulting to the live-value formatter. */
+  formatEndpoint?: (value: number) => string;
   /** Override the readout without changing the bounded needle (e.g. an over-capacity estimate). */
   valueText?: string;
   segments?: number;
@@ -35,6 +37,7 @@ export function Gauge({
   label,
   description,
   formatValue = defaultFormat,
+  formatEndpoint = formatValue,
   valueText,
   segments = 40,
   bands = DEFAULT_GAUGE_BANDS,
@@ -102,7 +105,7 @@ export function Gauge({
           strokeWidth={2}
         />
         <text x={26} y={126} textAnchor="middle" fill="var(--muted-foreground)" className="text-xs">
-          {formatValue(min)}
+          {formatEndpoint(min)}
         </text>
         <text
           x={214}
@@ -111,7 +114,7 @@ export function Gauge({
           fill="var(--muted-foreground)"
           className="text-xs"
         >
-          {formatValue(max)}
+          {formatEndpoint(max)}
         </text>
       </svg>
       <div

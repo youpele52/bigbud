@@ -1,5 +1,5 @@
 import type { OrchestrationThread } from "@bigbud/contracts";
-import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
+import { isReadOnlyProviderThread } from "@bigbud/shared/providerLifecycle";
 
 import { hasPendingTurnStart } from "./PendingTurnStart.logic.ts";
 import { resolveThreadWorkflowStatus } from "./ThreadWorkflowStatus.logic.ts";
@@ -13,7 +13,7 @@ export function hasActiveThreadTurnOrSession(thread: OrchestrationThread): boole
 }
 
 export function isThreadTurnDispatchBlocked(thread: OrchestrationThread): boolean {
-  if (isLegacyOpencodeThread(thread)) return true;
+  if (isReadOnlyProviderThread(thread)) return true;
   if (hasActiveThreadTurnOrSession(thread)) return true;
   // A requested turn stays busy until it binds or fails; its session may already say `ready`.
   if (hasPendingTurnStart(thread)) return true;

@@ -8,6 +8,7 @@ import {
 import { isThreadCompletedStatus } from "../../logic/thread/threadCompletion.logic";
 import { hasFreshActiveProviderAgent } from "../chat/agents/agentActivity.presentation";
 import { isSessionCompacting } from "../chat/common/threadActivityIndicator";
+import type { AgentWorkingBlobTone } from "../../constants/agentWorkingBlob";
 
 export interface ThreadStatusPill {
   label:
@@ -126,10 +127,18 @@ export function resolveProjectStatusIndicator(
   statuses: ReadonlyArray<ThreadStatusPill | null>,
 ): ThreadStatusPill | null {
   return statuses.reduce<ThreadStatusPill | null>((selected, candidate) => {
-    if (candidate === null) return selected;
+    // Idle is the absence of a state. A grey dot next to a project does not say
+    // anything a missing marker does not already say.
+    if (candidate === null || candidate.label === "Idle") return selected;
     return selected === null ||
       THREAD_STATUS_PRIORITY[candidate.label] > THREAD_STATUS_PRIORITY[selected.label]
       ? candidate
       : selected;
   }, null);
+}
+
+/** Collapsed project headers show the liquid loader for live work; subagent work uses its violet. */
+export function projectStatusBlobTone(status: ThreadStatusPill): AgentWorkingBlobTone | null {
+  if (status.label === "Subagents Working") return "subagent";
+  return status.label === "Working" || status.label === "Getting Ready" ? "agent" : null;
 }

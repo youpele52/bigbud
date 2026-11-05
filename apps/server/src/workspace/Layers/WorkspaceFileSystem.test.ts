@@ -107,6 +107,7 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
         expect(failure).toMatchObject({
           _tag: "WorkspaceFileSystemError",
           detail: "Conditional editing of symbolic links is not supported.",
+          writeDisposition: "terminal",
         });
         expect(yield* Effect.promise(() => readFile(join(cwd, "actual.txt"), "utf8"))).toBe(
           "unchanged",

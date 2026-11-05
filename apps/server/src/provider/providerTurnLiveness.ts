@@ -37,3 +37,19 @@ export function isTerminalProviderEvent(event: ProviderRuntimeEvent): boolean {
     event.type === "session.exited"
   );
 }
+
+/**
+ * An explicitly flagged recovery redelivery of an already-settled terminal
+ * outcome (today only Muse journal recovery emits it, with a stable event
+ * ID). Publication may proceed despite an existing liveness claim so a
+ * canonical outcome lost in the claim-to-delivery crash window can be
+ * delivered; canonical ingestion drops it when the turn is proven settled.
+ * Unflagged events keep the existing claim-suppression behavior.
+ */
+export function isRecoveryRedeliveryEvent(event: ProviderRuntimeEvent): boolean {
+  return (
+    event.type === "turn.completed" &&
+    "recoveryRedelivery" in event.payload &&
+    event.payload.recoveryRedelivery === true
+  );
+}

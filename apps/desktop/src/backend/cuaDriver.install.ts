@@ -18,7 +18,13 @@ import type {
   DesktopComputerUseRuntimeStatus,
 } from "@bigbud/contracts/server/ipc.desktopComputerUse.ts";
 
-import { resolveManagedPaths, resolveManagedVersionPaths } from "./cuaDriver.paths";
+import {
+  resolveManagedPaths,
+  resolveManagedVersionPaths,
+  resolvePrivateStateHome,
+} from "./cuaDriver.paths";
+import { writeFileAtomically } from "./cuaDriver.atomicFile";
+import { readPointerRuntimeVersion } from "./cuaDriver.runtime";
 import { validateCuaDriverActivation } from "./cuaDriver.activation";
 import { validateCuaDriverRuntime } from "./cuaDriver.manifest";
 import { runCommand } from "./cuaDriver.process";
@@ -39,27 +45,46 @@ function installManagedBinary(sourcePath: string, destinationPath: string): void
 }
 
 function writeJsonAtomically(filePath: string, value: unknown): void {
-  writeTextAtomically(filePath, JSON.stringify(value));
-}
-
-function writeTextAtomically(filePath: string, contents: string, mode?: number): void {
-  const tempPath = `${filePath}.${Crypto.randomUUID()}.tmp`;
-  FS.mkdirSync(Path.dirname(filePath), { recursive: true });
-  FS.writeFileSync(tempPath, contents, mode === undefined ? undefined : { encoding: "utf8", mode });
-  FS.renameSync(tempPath, filePath);
+  writeFileAtomically(filePath, JSON.stringify(value));
 }
 
 export function writeManagedPolicy(policyPath: string): void {
-  writeTextAtomically(policyPath, CUA_DRIVER_POLICY_YAML, 0o600);
+  writeFileAtomically(policyPath, CUA_DRIVER_POLICY_YAML, 0o600);
 }
 
-function readVersionPath(pointerPath: string): string | null {
+function readPointer(pointerPath: string): Record<string, unknown> | null {
   try {
-    const value = JSON.parse(FS.readFileSync(pointerPath, "utf8")) as Record<string, unknown>;
-    return typeof value.versionPath === "string" ? value.versionPath : null;
+    return JSON.parse(FS.readFileSync(pointerPath, "utf8")) as Record<string, unknown>;
   } catch {
     return null;
   }
+}
+
+function readVersionPath(pointerPath: string): string | null {
+  const value = readPointer(pointerPath);
+  return typeof value?.versionPath === "string" ? value.versionPath : null;
+}
+
+/**
+ * The pointer to keep in `previous.json` after activating `installingVersion`:
+ * one retained generation per known version, so a repair or reinstall of the
+ * pinned version never evicts the other version's rollback slot (plan §11).
+ * `null` leaves `previous.json` untouched.
+ */
+export function retainedPreviousPointer(input: {
+  readonly active: Record<string, unknown> | null;
+  readonly previous: Record<string, unknown> | null;
+  readonly installingVersion: string;
+}): Record<string, unknown> | null {
+  if (!input.active) return null;
+  const activeVersion = readPointerRuntimeVersion(input.active);
+  const previousVersion = input.previous ? readPointerRuntimeVersion(input.previous) : null;
+  const activeIsSameVersion = activeVersion === input.installingVersion;
+  const previousIsOtherVersion =
+    input.previous !== null &&
+    previousVersion !== null &&
+    previousVersion !== input.installingVersion;
+  return activeIsSameVersion && previousIsOtherVersion ? null : input.active;
 }
 
 export function cleanupUnreferencedVersions(baseDir: string): void {
@@ -148,6 +173,27 @@ async function extractArtifact(archivePath: string, extractDir: string): Promise
   }
 }
 
+/**
+ * `active.json` contents. `runtimeVersion` lets runtime selection skip a
+ * generation whose Driver version differs from the pin, so a pin flip falls
+ * back to the retained `previous.json` generation with no download.
+ */
+export function activeRuntimePointer(
+  versionPaths: Pick<
+    ReturnType<typeof resolveManagedVersionPaths>,
+    "rootDir" | "binaryPath" | "policyPath"
+  >,
+) {
+  return {
+    versionPath: versionPaths.rootDir,
+    binaryPath: versionPaths.binaryPath,
+    policyPath: versionPaths.policyPath,
+    policyVersion: CUA_DRIVER_POLICY_VERSION,
+    policySha256: CUA_DRIVER_POLICY_SHA256,
+    runtimeVersion: CUA_DRIVER_VERSION,
+  };
+}
+
 async function installManagedComputerUseRuntimeExclusive(input: {
   readonly baseDir: string;
   readonly getStatus: () => Promise<DesktopComputerUseRuntimeStatus>;
@@ -158,7 +204,7 @@ async function installManagedComputerUseRuntimeExclusive(input: {
   const artifact = resolveManagedArtifact();
   const archivePath = Path.join(managedPaths.downloadDir, artifact.archiveName);
   const extractDir = Path.join(managedPaths.downloadDir, "extract");
-  FS.mkdirSync(managedPaths.homeDir, { recursive: true });
+  const stateHome = resolvePrivateStateHome(input.baseDir);
   FS.mkdirSync(managedPaths.downloadDir, { recursive: true });
   cleanupUnreferencedVersions(input.baseDir);
 
@@ -191,25 +237,19 @@ async function installManagedComputerUseRuntimeExclusive(input: {
         });
       }
     }
-    await validateCuaDriverRuntime(versionPaths.binaryPath, versionPaths.policyPath);
+    await validateCuaDriverRuntime(versionPaths.binaryPath, versionPaths.policyPath, stateHome);
     await validateCuaDriverActivation({
       binaryPath: versionPaths.binaryPath,
       policyPath: versionPaths.policyPath,
       hostBundleId: input.hostBundleId,
     });
-    const previous = FS.existsSync(managedPaths.activePath)
-      ? FS.readFileSync(managedPaths.activePath, "utf8")
-      : null;
-    if (previous) {
-      writeJsonAtomically(managedPaths.previousPath, JSON.parse(previous));
-    }
-    writeJsonAtomically(managedPaths.activePath, {
-      versionPath: versionPaths.rootDir,
-      binaryPath: versionPaths.binaryPath,
-      policyPath: versionPaths.policyPath,
-      policyVersion: CUA_DRIVER_POLICY_VERSION,
-      policySha256: CUA_DRIVER_POLICY_SHA256,
+    const retainedPrevious = retainedPreviousPointer({
+      active: readPointer(managedPaths.activePath),
+      previous: readPointer(managedPaths.previousPath),
+      installingVersion: CUA_DRIVER_VERSION,
     });
+    if (retainedPrevious) writeJsonAtomically(managedPaths.previousPath, retainedPrevious);
+    writeJsonAtomically(managedPaths.activePath, activeRuntimePointer(versionPaths));
     cleanupUnreferencedVersions(input.baseDir);
   } catch (error) {
     FS.rmSync(versionPaths.rootDir, { recursive: true, force: true });

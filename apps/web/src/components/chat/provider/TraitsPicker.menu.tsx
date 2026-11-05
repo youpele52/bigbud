@@ -1,5 +1,9 @@
 import { type PiThinkingLevel } from "@bigbud/contracts";
-import { applyClaudePromptEffortPrefix, getDefaultEffort } from "@bigbud/shared/model";
+import {
+  applyClaudePromptEffortPrefix,
+  getDefaultEffort,
+  patchProviderEffort,
+} from "@bigbud/shared/model";
 import { memo, useCallback } from "react";
 import {
   MenuGroup,
@@ -92,15 +96,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
         const stripped = prompt.replace(/^Ultrathink:\s*/i, "");
         onPromptChange(stripped);
       }
-      const effortKey =
-        provider === "claudeAgent"
-          ? "effort"
-          : provider === "cursor" || provider === "devin"
-            ? "reasoning"
-            : "reasoningEffort";
-      updateModelOptions(
-        buildNextOptions(provider, modelOptions, { [effortKey]: nextOption.value }),
-      );
+      updateModelOptions(patchProviderEffort(provider, modelOptions, nextOption.value));
     },
     [
       ultrathinkPromptControlled,

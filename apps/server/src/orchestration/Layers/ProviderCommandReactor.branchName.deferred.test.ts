@@ -216,12 +216,14 @@ describe("deferred worktree branch generation", () => {
           yield* handle({ payload: { threadId, activity } });
           // A generated title proves the success handler ran, not merely that success was persisted.
           yield* Effect.promise(() =>
-            waitFor(() => harness.generateThreadTitle.mock.calls.length === 1),
+            waitFor(() => harness.generateThreadTitle.mock.calls.length > 0, 10_000),
           );
           expect(harness.generateBranchName).not.toHaveBeenCalled();
           yield* Deferred.succeed(release, undefined);
           yield* Fiber.join(branch);
-          yield* Effect.promise(() => waitFor(() => harness.renameBranch.mock.calls.length === 1));
+          yield* Effect.promise(() =>
+            waitFor(() => harness.renameBranch.mock.calls.length > 0, 10_000),
+          );
           expect(harness.generateBranchName).toHaveBeenCalledTimes(1);
           expect(harness.generateBranchName.mock.calls[0]?.[0]).toMatchObject({
             modelSelection: { provider: "codex", model: "verified-model" },

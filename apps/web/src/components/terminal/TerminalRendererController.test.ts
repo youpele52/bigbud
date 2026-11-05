@@ -19,13 +19,15 @@ function fixture(budget = new TerminalRendererBudget()) {
     }),
   };
   const terminal = { loadAddon: vi.fn(), refresh: vi.fn(), rows: 20 };
-  const load = vi.fn(async () => () => addon);
+  const create = vi.fn(() => addon);
+  const load = vi.fn(async () => create);
   const state = vi.fn();
   const controller = new TerminalRendererController(terminal, state, load, budget, () => clock);
   return {
     controller,
     terminal,
     load,
+    create,
     addon,
     state,
     budget,
@@ -146,7 +148,8 @@ describe.each(["auto", "on"] as const)("TerminalRendererController %s", (setting
     expect(f.addon.dispose).toHaveBeenCalledOnce();
     f.controller.retry();
     await Promise.resolve();
-    expect(f.load).toHaveBeenCalledTimes(2);
+    expect(f.create).toHaveBeenCalledTimes(2);
+    expect(f.load).toHaveBeenCalledOnce();
     f.controller.dispose();
   });
   it("never retains a lost context and latches after three losses without automatic timer retry", async () => {
@@ -160,12 +163,13 @@ describe.each(["auto", "on"] as const)("TerminalRendererController %s", (setting
       f.controller.update(setting, true, allowed);
       await Promise.resolve();
     }
-    expect(f.load).toHaveBeenCalledTimes(3);
+    expect(f.create).toHaveBeenCalledTimes(3);
     expect(f.budget.isLatched).toBe(true);
     expect(f.budget.count).toBe(0);
     f.controller.retry();
     await Promise.resolve();
-    expect(f.load).toHaveBeenCalledTimes(4);
+    expect(f.create).toHaveBeenCalledTimes(4);
+    expect(f.load).toHaveBeenCalledOnce();
     f.controller.update(setting, false, allowed);
     expect(f.budget.count).toBe(0);
     f.controller.dispose();
@@ -213,7 +217,8 @@ describe.each(["auto", "on"] as const)("TerminalRendererController %s", (setting
     // The evicted view reattaches on show; it was not a failure, so no cooldown applies.
     panes[0]!.controller.update(setting, true, allowed);
     await Promise.resolve();
-    expect(panes[0]!.load).toHaveBeenCalledTimes(2);
+    expect(panes[0]!.create).toHaveBeenCalledTimes(2);
+    expect(panes[0]!.load).toHaveBeenCalledOnce();
     panes.forEach((f) => f.controller.dispose());
     expect(budget.count).toBe(0);
     expect(budget.retainedCount).toBe(0);
@@ -255,7 +260,8 @@ describe.each(["auto", "on"] as const)("TerminalRendererController %s", (setting
     await Promise.resolve();
     f.controller.reattach();
     await Promise.resolve();
-    expect(f.load).toHaveBeenCalledTimes(2);
+    expect(f.create).toHaveBeenCalledTimes(2);
+    expect(f.load).toHaveBeenCalledOnce();
     expect(f.addon.dispose).toHaveBeenCalledOnce();
     expect(f.state).toHaveBeenLastCalledWith({ mode: "webgl", reason: null });
     expect(f.budget.count).toBe(1);

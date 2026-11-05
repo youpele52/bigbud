@@ -3,7 +3,7 @@ import { ResourceCapacityUsage } from "./ResourceCapacityUsage";
 import { ResourceMetricHistory } from "./ResourceMetricHistory";
 import { ResourceNetworkRates, type NetworkRates } from "./ResourceNetworkRates";
 import { Gauge } from "../ui/gauge";
-import { formatPercent } from "./resourceMonitor.format";
+import { formatPercent, formatPercentEndpoint } from "./resourceMonitor.format";
 import {
   capacityPercent,
   formatCapacityGiB,
@@ -72,6 +72,7 @@ export function ResourceMetricCard({
             value={metric.gaugeValue}
             label={`CPU usage${metric.gaugeValue === null ? " unavailable" : ""}`}
             formatValue={formatPercent}
+            formatEndpoint={formatPercentEndpoint}
             description="of total host CPU"
           />
         ) : metric.networkRates ? (

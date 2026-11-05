@@ -5,6 +5,7 @@ import {
   assertTerminalCommandContext,
   terminalCommandContextMatches,
 } from "@bigbud/shared/terminalCommand";
+import { readTerminalLifecycle } from "../stores/terminal/terminalLifecycle.store";
 import {
   bindTerminalLaunch,
   readTerminalLaunch,
@@ -37,6 +38,14 @@ export async function runBoundTerminalCommand(
     ...(isNew ? input.newTerminalDimensions : {}),
     terminalId: isNew ? input.createTerminalId() : baseTerminalId,
   };
+  const assertAvailable = () => {
+    if (readTerminalLifecycle(openInput.threadId, openInput.terminalId)) {
+      throw new Error(
+        "This terminal is closing or restarting. Wait for it to finish before running a command.",
+      );
+    }
+  };
+  assertAvailable();
   bindTerminalLaunch(openInput.threadId, openInput.terminalId, {
     cwd: openInput.cwd,
     worktreePath: openInput.worktreePath,
@@ -45,12 +54,15 @@ export async function runBoundTerminalCommand(
   });
   // Bind before mounting a viewport so concurrent opens use the command's launch context.
   input.onTerminalSelected(openInput, isNew);
+  assertAvailable();
   const opened = await terminal.open(openInput);
+  assertAvailable();
   recordTerminalLaunch(opened);
   assertTerminalCommandContext(opened, openInput);
   await terminal.write({
     threadId: openInput.threadId,
     terminalId: openInput.terminalId,
     data: `${input.command}\r`,
+    ...(opened.runtimeGeneration ? { expectedGeneration: opened.runtimeGeneration } : {}),
   });
 }

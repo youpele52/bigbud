@@ -7,44 +7,29 @@ import {
   type SessionFsConfig,
 } from "@github/copilot-sdk";
 
+import { readManagedCopilotRuntime } from "@bigbud/shared/copilotRuntime.paths";
+import { copilotNativePackageName } from "./Runtime.release.ts";
+import { resolveExternalCopilot, sdkCopilotExecutable } from "./Runtime.executable.ts";
+
+export { copilotNativePackageName } from "./Runtime.release.ts";
+
 const DEFAULT_BINARY_PATH = "copilot";
+let detectedLinuxMusl: boolean | undefined;
 
 export interface CopilotRuntimeInvocation {
   readonly path: string;
   readonly args: ReadonlyArray<string>;
-  readonly source: "configured" | "bundled-native";
-}
-
-interface RuntimePlatform {
-  readonly arch: string;
-  readonly platform: NodeJS.Platform;
-  readonly isMusl: boolean;
+  readonly source: "configured" | "managed" | "bundled-native" | "existing" | "sdk";
 }
 
 function isLinuxMusl(): boolean {
+  if (process.platform !== "linux") return false;
+  if (detectedLinuxMusl !== undefined) return detectedLinuxMusl;
   const report = process.report?.getReport() as
     | { readonly header?: { readonly glibcVersionRuntime?: string } }
     | undefined;
-  return process.platform === "linux" && !report?.header?.glibcVersionRuntime;
-}
-
-export function copilotNativePackageName(input: RuntimePlatform): string | undefined {
-  switch (input.platform) {
-    case "darwin":
-      return input.arch === "arm64" || input.arch === "x64"
-        ? `@github/copilot-darwin-${input.arch}`
-        : undefined;
-    case "win32":
-      return input.arch === "arm64" || input.arch === "x64"
-        ? `@github/copilot-win32-${input.arch}`
-        : undefined;
-    case "linux": {
-      if (input.arch !== "arm64" && input.arch !== "x64") return undefined;
-      return `@github/copilot-linux${input.isMusl ? "musl" : ""}-${input.arch}`;
-    }
-    default:
-      return undefined;
-  }
+  detectedLinuxMusl = !report?.header?.glibcVersionRuntime;
+  return detectedLinuxMusl;
 }
 
 export function resolveCopilotRuntimeInvocation(
@@ -55,18 +40,43 @@ export function resolveCopilotRuntimeInvocation(
     readonly arch?: string;
     readonly isMusl?: boolean;
     readonly resolve?: (id: string) => string;
+    readonly managedRoot?: string;
+    readonly env?: NodeJS.ProcessEnv;
+    readonly resolveSdk?: (target: string) => string | undefined;
   } = {},
 ): CopilotRuntimeInvocation | undefined {
-  if (binaryPath !== DEFAULT_BINARY_PATH) {
-    return { path: binaryPath, args: [], source: "configured" };
+  if (!binaryPath.trim()) binaryPath = DEFAULT_BINARY_PATH;
+  const environment = input.env ?? process.env;
+  const packageName = copilotNativePackageName({
+    platform: input.platform ?? process.platform,
+    arch: input.arch ?? process.arch,
+    isMusl: input.isMusl ?? isLinuxMusl(),
+  });
+  const configured = binaryPath !== DEFAULT_BINARY_PATH ? binaryPath : environment.COPILOT_CLI_PATH;
+  if (configured) {
+    const existing = resolveExternalCopilot(configured, packageName, environment);
+    if (existing) return { path: existing, args: [], source: "configured" };
   }
+  const managed = readManagedCopilotRuntime(input.managedRoot);
+  // An Intel bridge running under Rosetta can be followed by a native arm64 app update.
+  const compatibleIntelMigration =
+    (input.platform ?? process.platform) === "darwin" &&
+    (input.arch ?? process.arch) === "arm64" &&
+    managed?.target === "darwin-x64";
+  if (
+    managed &&
+    (packageName === `@github/copilot-${managed.target}` || compatibleIntelMigration)
+  ) {
+    return { path: managed.path, args: [], source: "managed" };
+  }
+  // Stale configured bundle paths can disappear in a slim upgrade. Prefer a preserved managed copy.
+  if (configured) return { path: configured, args: [], source: "configured" };
 
-  if (input.isElectron ?? "electron" in process.versions) {
-    const packageName = copilotNativePackageName({
-      platform: input.platform ?? process.platform,
-      arch: input.arch ?? process.arch,
-      isMusl: input.isMusl ?? isLinuxMusl(),
-    });
+  // Bridge compatibility: do not remove this fallback until existing users have migrated.
+  if (
+    input.isElectron ??
+    ("electron" in process.versions || environment.BIGBUD_DESKTOP_PACKAGED === "1")
+  ) {
     if (!packageName) {
       throw new Error(
         `No bundled Copilot runtime is available for ${input.platform ?? process.platform}/${input.arch ?? process.arch}`,
@@ -83,12 +93,23 @@ export function resolveCopilotRuntimeInvocation(
         source: "bundled-native",
       };
     } catch (cause) {
-      throw new Error(`Unable to resolve the bundled Copilot runtime package ${packageName}`, {
-        cause,
-      });
+      const existing = resolveExternalCopilot("copilot", packageName, environment);
+      if (existing) return { path: existing, args: [], source: "existing" };
+      const sdk = (input.resolveSdk ?? sdkCopilotExecutable)(
+        packageName.slice("@github/copilot-".length),
+      );
+      if (sdk) return { path: sdk, args: [], source: "sdk" };
+      throw new Error(
+        `Unable to resolve the bundled Copilot runtime package ${packageName}. Runtime not found; install Copilot in Settings → Providers → GitHub Copilot.`,
+        {
+          cause,
+        },
+      );
     }
   }
 
+  const existing = resolveExternalCopilot("copilot", packageName, environment);
+  if (existing) return { path: existing, args: [], source: "existing" };
   return undefined;
 }
 

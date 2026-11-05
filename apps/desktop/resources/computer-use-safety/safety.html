@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'none'; connect-src 'none'"
+    />
+    <title>Computer use</title>
+    <link rel="stylesheet" href="safety.css" />
+  </head>
+  <body>
+    <p id="status" class="status">Computer use unavailable</p>
+    <div id="notice" class="notice" hidden>
+      <p>Computer use can see and control every app you have not restricted.</p>
+      <button id="acknowledge" type="button" class="link">Got it</button>
+    </div>
+    <div class="actions">
+      <button id="stop" type="button" class="stop">Stop computer use</button>
+      <button id="restrictions" type="button" class="link">Manage app restrictions</button>
+    </div>
+    <script src="safety.js"></script>
+  </body>
+</html>

@@ -62,12 +62,6 @@ const PROVIDER_WORKLOAD_SUPPORT = {
     learning: true,
     usageAccounting: true,
   },
-  kilocode: {
-    interactive: true,
-    unattendedTextGeneration: true,
-    learning: true,
-    usageAccounting: true,
-  },
   opencode: {
     interactive: false,
     unattendedTextGeneration: false,
@@ -90,6 +84,12 @@ const PROVIDER_WORKLOAD_SUPPORT = {
     interactive: true,
     unattendedTextGeneration: true,
     learning: true,
+    usageAccounting: false,
+  },
+  muse: {
+    interactive: true,
+    unattendedTextGeneration: false,
+    learning: false,
     usageAccounting: false,
   },
 } as const satisfies Record<ProviderKind, ProviderWorkloadSupport>;
