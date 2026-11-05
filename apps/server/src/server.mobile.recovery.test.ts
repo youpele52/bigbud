@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { CommandId } from "@bigbud/contracts/core/baseSchemas";
 import { MOBILE_RECOVERY_WS_METHODS } from "@bigbud/contracts/server/mobile.recovery";
 import { MobileWsRpcGroup } from "@bigbud/contracts/server/rpc.mobile";
@@ -14,6 +13,7 @@ import {
   serverTestLayer,
   wsRpcOpenRetrySchedule,
 } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 
 const makeClient = RpcClient.make(MobileWsRpcGroup);
 type Client = typeof makeClient extends Effect.Effect<infer A, any, any> ? A : never;
@@ -84,7 +84,7 @@ it.layer(serverTestLayer)("mobile command outcome seam", (it) => {
       if (response.status !== "accepted") throw new Error("Expected an accepted outcome");
       assert.equal(validationCalls, 2);
       assert.equal(response.resultSequence, 7);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("does not disclose a receipt from another thread", () =>
@@ -118,6 +118,6 @@ it.layer(serverTestLayer)("mobile command outcome seam", (it) => {
       );
       assert.equal(response.status, "unknown");
       assert.notProperty(response, "resultSequence");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

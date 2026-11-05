@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { useShallow } from "zustand/react/shallow";
+import { SIDEBAR_THREAD_PREVIEW_LIMIT } from "../../constants/sidebar";
 import { useStore } from "../../stores/main";
 import { useUiStateStore } from "../../stores/ui";
 import { useTerminalStateStore } from "../../stores/terminal";
@@ -19,14 +20,14 @@ import {
   useThreadJumpHintVisibility,
 } from "./Sidebar.logic";
 import { useSidebarKeyboardNav } from "./Sidebar.keyboardNav.logic";
+import { useInyosiraStore } from "../../stores/inyosira/inyosira.store";
+import { groupInyosiraThreadIds, visibleInyosiraThreadIds } from "./Sidebar.inyosira.logic";
 import type { SidebarThreadSummary } from "../../models/types";
 import {
   getRemainingSidebarThreadCount,
   indexActiveSidebarThreadIdsByProject,
 } from "../../logic/thread/sidebarThreadCount.logic";
 import type { RenderedProjectEntry, SidebarProjectSnapshot } from "./Sidebar.types";
-
-const THREAD_PREVIEW_LIMIT = 4;
 
 export interface SidebarRenderedProjectsInput {
   sortedProjects: SidebarProjectSnapshot[];
@@ -44,6 +45,7 @@ export interface SidebarRenderedProjectsOutput {
   attachThreadListAutoAnimateRef: (node: HTMLElement | null) => void;
   showThreadJumpHints: boolean;
   threadJumpLabelById: Map<ThreadId, string>;
+  newChatShortcutLabel: string | null | undefined;
   newThreadShortcutLabel: string | null | undefined;
   loadMoreThreadsForProject: (projectId: ProjectId) => void;
 }
@@ -127,7 +129,7 @@ export function useSidebarRenderedProjects({
           threads: projectThreads,
           activeThreadId,
           isThreadListExpanded: false,
-          previewLimit: THREAD_PREVIEW_LIMIT,
+          previewLimit: SIDEBAR_THREAD_PREVIEW_LIMIT,
         });
         const visibleProjectThreads = isThreadListExpanded
           ? projectThreads
@@ -188,9 +190,29 @@ export function useSidebarRenderedProjects({
     ],
   );
 
+  const arrangement = useInyosiraStore((store) => store.arrangement);
+  const collapsedInyosiraStates = useInyosiraStore((store) => store.collapsedStates);
+  const expandedInyosiraThreadLists = useInyosiraStore((store) => store.expandedThreadLists);
+  // Inyosira replaces the thread arrangement, so traversal and jump shortcuts follow its groups.
   const visibleSidebarThreadIds = useMemo(
-    () => [...visibleChatThreadIds, ...getVisibleSidebarThreadIds(renderedProjects)],
-    [renderedProjects, visibleChatThreadIds],
+    () =>
+      arrangement === "inyosira"
+        ? visibleInyosiraThreadIds(
+            groupInyosiraThreadIds(sidebarThreadsById),
+            collapsedInyosiraStates,
+            expandedInyosiraThreadLists,
+            routeThreadId,
+          )
+        : [...visibleChatThreadIds, ...getVisibleSidebarThreadIds(renderedProjects)],
+    [
+      arrangement,
+      collapsedInyosiraStates,
+      expandedInyosiraThreadLists,
+      routeThreadId,
+      renderedProjects,
+      sidebarThreadsById,
+      visibleChatThreadIds,
+    ],
   );
 
   const threadJumpCommandById = useMemo(() => {
@@ -221,9 +243,16 @@ export function useSidebarRenderedProjects({
     return mapping;
   }, [keybindings, sidebarShortcutLabelOptions, threadJumpCommandById]);
 
-  const newThreadShortcutLabel =
-    shortcutLabelForCommand(keybindings, "chat.newLocal", sidebarShortcutLabelOptions) ??
-    shortcutLabelForCommand(keybindings, "chat.new", sidebarShortcutLabelOptions);
+  const newChatShortcutLabel = shortcutLabelForCommand(
+    keybindings,
+    "chat.new",
+    sidebarShortcutLabelOptions,
+  );
+  const newThreadShortcutLabel = shortcutLabelForCommand(
+    keybindings,
+    "chat.newLocal",
+    sidebarShortcutLabelOptions,
+  );
 
   const orderedSidebarThreadIds = visibleSidebarThreadIds;
 
@@ -308,6 +337,7 @@ export function useSidebarRenderedProjects({
     showThreadJumpHints,
     threadJumpLabelById,
     newThreadShortcutLabel,
+    newChatShortcutLabel,
     loadMoreThreadsForProject,
   };
 }

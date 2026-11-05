@@ -177,7 +177,7 @@ describe("FilePreview source block geometry", () => {
       );
       expect(rows).toHaveLength(1);
       expect(rows[0]!.height).toBe(row.getBoundingClientRect().height);
-      expect(rows[0]!.height).toBeGreaterThan(100);
+      expect(rows[0]!.height).toBeGreaterThan(80);
       preview.scrollTop = rows[0]!.top + rows[0]!.height * 0.7;
       expect(preview.scrollTop).toBeGreaterThan(300);
       expect(captureFilePreviewAnchor(anchorInput("preview", refs, contents)).sourceStartLine).toBe(

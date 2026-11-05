@@ -67,6 +67,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Install Playwright Chromium for server terminal browser tests
+        run: bun run --cwd apps/server test:browser:install
+
       - name: Test
         run: bun run test
 

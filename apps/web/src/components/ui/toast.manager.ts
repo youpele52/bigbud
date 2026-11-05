@@ -12,7 +12,8 @@ export type ThreadToastData = {
 };
 
 export const toastManager = Toast.createToastManager<ThreadToastData>();
-export const anchoredToastManager = Toast.createToastManager<ThreadToastData>();
+// Legacy callers keep the same API, but all app notifications share one stack.
+export const anchoredToastManager = toastManager;
 
 function attachMascotAttention(manager: { add: typeof toastManager.add }) {
   const add = manager.add.bind(manager);
@@ -23,4 +24,3 @@ function attachMascotAttention(manager: { add: typeof toastManager.add }) {
 }
 
 attachMascotAttention(toastManager);
-attachMascotAttention(anchoredToastManager);

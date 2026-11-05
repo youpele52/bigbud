@@ -6,13 +6,23 @@
  *
  * @module ProviderRuntimeIngestionService
  */
-import { ServiceMap } from "effect";
+import { Data, ServiceMap } from "effect";
 import type { Effect, Scope } from "effect";
+import type { ProviderRuntimeEvent } from "@bigbud/contracts";
+
+export class InspectionReconciliationError extends Data.TaggedError(
+  "InspectionReconciliationError",
+)<{
+  readonly cause: unknown;
+}> {}
 
 /**
  * ProviderRuntimeIngestionShape - Service API for runtime ingestion lifecycle.
  */
 export interface ProviderRuntimeIngestionShape {
+  readonly reconcileInspection?: (
+    events: ReadonlyArray<ProviderRuntimeEvent>,
+  ) => Effect.Effect<boolean, InspectionReconciliationError>;
   /**
    * Start ingesting provider runtime events into orchestration commands.
    *

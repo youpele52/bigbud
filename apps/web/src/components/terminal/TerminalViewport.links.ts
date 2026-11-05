@@ -17,6 +17,26 @@ interface TerminalLinkProviderOptions {
   writeNotice?: (terminal: Terminal, message: string) => void;
 }
 
+/** Register links against the latest session path without retaining stale snapshot context. */
+export function makeTerminalLinkRegistrar(
+  terminal: Terminal,
+  options: Pick<TerminalLinkProviderOptions, "terminalRef" | "api" | "writeNotice">,
+) {
+  return (context: {
+    cwd: string;
+    worktreePath?: string | null | undefined;
+    executionTargetId?: ExecutionTargetId | undefined;
+  }) =>
+    terminal.registerLinkProvider(
+      makeTerminalLinkProvider({
+        ...options,
+        cwd: context.cwd,
+        workspaceRoot: context.worktreePath ?? context.cwd,
+        executionTargetId: context.executionTargetId,
+      }),
+    );
+}
+
 /**
  * Creates a link provider for the xterm.js terminal that handles path and URL links.
  */

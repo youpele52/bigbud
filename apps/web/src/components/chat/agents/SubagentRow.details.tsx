@@ -3,11 +3,13 @@ import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestr
 
 import { cn } from "~/lib/utils";
 import { formatToolDisplayName } from "~/lib/toolPresentation";
+import { AgentWorkingBlob } from "../../ui/agent-working-blob";
 import { Button, textButtonTypography } from "../../ui/button";
 import {
   SUBAGENT_STATUS_TONE_CLASSES,
   subagentMetricsLabel,
   subagentRecentStepsLabel,
+  subagentStepBlobState,
   subagentStepLabel,
 } from "./subagentPresentation.logic";
 
@@ -81,19 +83,27 @@ export function SubagentRowDetails(props: {
         <DetailSection label={subagentRecentStepsLabel(agent)}>
           <ul
             aria-label="Recent steps"
-            className="grid min-w-0 grid-cols-[0.375rem_fit-content(8rem)_minmax(0,1fr)_auto] gap-x-2 gap-y-0.5"
+            className="grid min-w-0 grid-cols-[0.875rem_fit-content(8rem)_minmax(0,1fr)_auto] gap-x-2 gap-y-0.5"
           >
             {agent.recentSteps.map((step, index) => {
               const label = subagentStepLabel(step);
+              const blobState = subagentStepBlobState(step.status);
               return (
                 <li
                   key={step.id ?? `${step.toolName}-${index}`}
                   className="col-span-full grid min-w-0 grid-cols-subgrid items-center"
                 >
-                  <span
-                    aria-hidden="true"
-                    className={cn("size-1.5 rounded-full", STEP_TONE[step.status].dot)}
-                  />
+                  {blobState ? (
+                    <AgentWorkingBlob tone="subagent" state={blobState} />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "size-1.5 justify-self-center rounded-full",
+                        STEP_TONE[step.status].dot,
+                      )}
+                    />
+                  )}
                   <span className="truncate text-foreground/80" title={step.toolName}>
                     {formatToolDisplayName(step.toolName)}
                   </span>

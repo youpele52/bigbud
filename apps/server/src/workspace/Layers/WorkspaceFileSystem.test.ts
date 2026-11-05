@@ -1,4 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import { createHash } from "node:crypto";
+import { readFile, symlink } from "node:fs/promises";
+import { join } from "node:path";
 import { it, describe, expect } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Path } from "effect";
 
@@ -50,6 +53,68 @@ const writeTextFile = Effect.fn("writeTextFile")(function* (
 });
 
 it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
+  it.effect("serializes concurrent conditional writes to one local file", () =>
+    Effect.gen(function* () {
+      const workspaceFileSystem = yield* WorkspaceFileSystem;
+      const cwd = yield* makeTempDir;
+      yield* writeTextFile(cwd, "shared.txt", "old");
+      const original = yield* workspaceFileSystem.readFilePreview({
+        cwd,
+        relativePath: "shared.txt",
+      });
+      const results = yield* Effect.all(
+        ["first", "second"].map((contents) =>
+          workspaceFileSystem
+            .writeFile({
+              cwd,
+              relativePath: "shared.txt",
+              contents,
+              expectedSha256: original.sha256,
+            })
+            .pipe(Effect.result),
+        ),
+        { concurrency: 2 },
+      );
+      expect(results.map((result) => result._tag).toSorted()).toEqual(["Failure", "Success"]);
+      const updated = yield* workspaceFileSystem.readFilePreview({
+        cwd,
+        relativePath: "shared.txt",
+      });
+      expect(["first", "second"]).toContain(updated.contents);
+    }),
+  );
+
+  it.effect(
+    "rejects conditional edits through symlinks without replacing the link or its target",
+    () =>
+      Effect.gen(function* () {
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const cwd = yield* makeTempDir;
+        yield* writeTextFile(cwd, "actual.txt", "unchanged");
+        yield* Effect.promise(() => symlink("actual.txt", join(cwd, "link.txt")));
+        const original = yield* workspaceFileSystem.readFilePreview({
+          cwd,
+          relativePath: "link.txt",
+        });
+        const failure = yield* workspaceFileSystem
+          .writeFile({
+            cwd,
+            relativePath: "link.txt",
+            contents: "changed",
+            expectedSha256: original.sha256,
+          })
+          .pipe(Effect.flip);
+        expect(failure).toMatchObject({
+          _tag: "WorkspaceFileSystemError",
+          detail: "Conditional editing of symbolic links is not supported.",
+          writeDisposition: "terminal",
+        });
+        expect(yield* Effect.promise(() => readFile(join(cwd, "actual.txt"), "utf8"))).toBe(
+          "unchanged",
+        );
+      }),
+  );
+
   describe("readFilePreview", () => {
     it.effect("reads text files relative to the workspace root", () =>
       Effect.gen(function* () {
@@ -67,6 +132,7 @@ it.layer(TestLayer)("WorkspaceFileSystemLive", (it) => {
           contents: "export const value = 1;\n",
           sizeBytes: 24,
           truncated: false,
+          sha256: createHash("sha256").update("export const value = 1;\n").digest("hex"),
         });
       }),
     );

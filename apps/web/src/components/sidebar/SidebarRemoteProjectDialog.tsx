@@ -17,7 +17,10 @@ import type {
   UpdateRemoteProjectDraft,
 } from "./Sidebar.projects.logic";
 import { rememberRemoteProjectConnectionSource } from "./Sidebar.projects.connectionSourcePreference";
-import { remoteProjectAgentTarget, SidebarRemoteAgentStatus } from "./SidebarRemoteAgentStatus";
+import {
+  remoteWorkspaceAgentTarget as remoteProjectAgentTarget,
+  SidebarRemoteAgentStatus,
+} from "./SidebarRemoteAgentStatus";
 import { SidebarRemoteProjectManualFields } from "./SidebarRemoteProjectDialog.manualFields";
 import { SidebarRemoteProjectPathField } from "./SidebarRemoteProjectDialog.pathField";
 import {

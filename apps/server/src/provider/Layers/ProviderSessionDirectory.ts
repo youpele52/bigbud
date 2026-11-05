@@ -1,5 +1,13 @@
 import { type ProviderKind, type ThreadId } from "@bigbud/contracts";
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option, Semaphore } from "effect";
+import { CODEX_REWIND_KEY, hasCodexRewindMarker } from "../Services/ProviderRewind.ts";
+import {
+  hasPendingInspectionTerminal,
+  INSPECTION_TERMINAL_KEY,
+} from "../Services/ProviderInspectionTerminal.ts";
+import { makeDirectoryInspection } from "./ProviderSessionDirectory.inspection.ts";
+import { makeDirectoryCompaction } from "./ProviderSessionDirectory.compaction.ts";
+import { CODEX_COMPACTIONS_KEY } from "../Services/ProviderCompaction.ts";
 
 import { ProviderSessionRuntimeRepository } from "../../persistence/Services/ProviderSessionRuntime.ts";
 import type { ProviderSessionRuntime } from "../../persistence/Services/ProviderSessionRuntime.ts";
@@ -43,8 +51,15 @@ function mergeRuntimePayload(
     return existing ?? null;
   }
   if (isRecord(existing) && isRecord(next)) {
-    return { ...existing, ...next };
+    const {
+      [CODEX_REWIND_KEY]: _reserved,
+      [INSPECTION_TERMINAL_KEY]: _journal,
+      [CODEX_COMPACTIONS_KEY]: _compactions,
+      ...ordinary
+    } = next;
+    return { ...existing, ...ordinary };
   }
+  if (hasCodexRewindMarker(existing) || hasPendingInspectionTerminal(existing)) return existing;
   return next;
 }
 
@@ -74,6 +89,8 @@ const toRuntimeBinding = (
 
 const makeProviderSessionDirectory = Effect.gen(function* () {
   const repository = yield* ProviderSessionRuntimeRepository;
+  // Covers the entire read/merge/write, not just individual repository calls.
+  const writes = yield* Semaphore.make(1);
 
   const getBinding = (threadId: ThreadId) =>
     repository.getByThreadId({ threadId }).pipe(
@@ -156,11 +173,70 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
     );
 
   const remove: ProviderSessionDirectoryShape["remove"] = (threadId) =>
-    repository
-      .deleteByThreadId({ threadId })
-      .pipe(
-        Effect.mapError(toPersistenceError("ProviderSessionDirectory.remove:deleteByThreadId")),
-      );
+    writes.withPermits(1)(
+      Effect.gen(function* () {
+        const binding = Option.getOrUndefined(yield* getBinding(threadId));
+        if (
+          hasCodexRewindMarker(binding?.runtimePayload) ||
+          hasPendingInspectionTerminal(binding?.runtimePayload)
+        ) {
+          // Session teardown must not erase the durable uncertainty fence.
+          yield* upsert({ threadId, provider: binding!.provider, status: "stopped" }).pipe(
+            Effect.mapError(toPersistenceError("ProviderSessionDirectory.remove:preserveRewind")),
+          );
+          return;
+        }
+        yield* repository
+          .deleteByThreadId({ threadId })
+          .pipe(
+            Effect.mapError(toPersistenceError("ProviderSessionDirectory.remove:deleteByThreadId")),
+          );
+      }),
+    );
+
+  const setCodexRewind: NonNullable<ProviderSessionDirectoryShape["setCodexRewind"]> = (
+    threadId,
+    marker,
+    operationId,
+  ) =>
+    writes.withPermits(1)(
+      Effect.gen(function* () {
+        const existing = Option.getOrUndefined(
+          yield* repository
+            .getByThreadId({ threadId })
+            .pipe(
+              Effect.mapError(toPersistenceError("ProviderSessionDirectory.setCodexRewind:read")),
+            ),
+        );
+        const payload = isRecord(existing?.runtimePayload) ? existing.runtimePayload : {};
+        const previous = payload[CODEX_REWIND_KEY];
+        if (
+          !existing ||
+          (previous != null && (!isRecord(previous) || previous.operationId !== operationId)) ||
+          (marker !== null && marker.operationId !== operationId)
+        ) {
+          return yield* new ProviderValidationError({
+            operation: "ProviderSessionDirectory.setCodexRewind",
+            issue: "Rewind binding or operation identity changed; the durable fence was retained.",
+          });
+        }
+        if (!repository.setCodexRewind)
+          return yield* new ProviderValidationError({
+            operation: "ProviderSessionDirectory.setCodexRewind",
+            issue: "Atomic rewind marker persistence is unavailable.",
+          });
+        const changed = yield* repository
+          .setCodexRewind(threadId, marker, operationId)
+          .pipe(
+            Effect.mapError(toPersistenceError("ProviderSessionDirectory.setCodexRewind:write")),
+          );
+        if (!changed)
+          return yield* new ProviderValidationError({
+            operation: "ProviderSessionDirectory.setCodexRewind",
+            issue: "Atomic rewind marker identity/stage check failed; fence retained.",
+          });
+      }),
+    );
 
   const listThreadIds: ProviderSessionDirectoryShape["listThreadIds"] = () =>
     repository.list().pipe(
@@ -181,7 +257,10 @@ const makeProviderSessionDirectory = Effect.gen(function* () {
     );
 
   return {
-    upsert,
+    ...makeDirectoryInspection(repository),
+    ...makeDirectoryCompaction(repository),
+    upsert: (binding) => writes.withPermits(1)(upsert(binding)),
+    setCodexRewind,
     getProvider,
     getBinding,
     remove,

@@ -62,6 +62,9 @@ describe("system capacity gauges", () => {
     expect(markup).toContain('data-slot="gauge"');
     expect(markup).toContain('data-slot="badge"');
     expect(markup).toContain('aria-valuenow="47.66"');
+    expect(markup).toContain(">0%</text>");
+    expect(markup).toContain(">100%</text>");
+    expect(markup).toContain(">47.66%</div>");
     expect(markup.match(/10 logical cores/g)).toHaveLength(1);
   });
   it("shows memory totals in a badge and keeps available/swap details, but not visible severity", () => {
@@ -83,6 +86,9 @@ describe("system capacity gauges", () => {
     expect(markup).toContain('data-slot="badge"');
     expect(markup).toContain("13.00 GiB / 16.00 GiB");
     expect(markup).toContain('aria-valuetext="81.25% used · Critical usage"');
+    expect(markup).toContain(">0%</text>");
+    expect(markup).toContain(">100%</text>");
+    expect(markup).toContain(">81.25%</div>");
     expect(markup).not.toContain(">Critical usage</p>");
     expect(markup).toContain("Available: 3.00 GiB");
     expect(markup).toContain("Swap: 1.00 GiB used / 2.00 GiB total");

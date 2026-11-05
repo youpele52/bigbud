@@ -3,8 +3,14 @@ import type { MutableRefObject } from "react";
 import type { NativeApi, ResolvedKeybindingsConfig } from "@bigbud/contracts";
 import { useTerminalStateStore } from "../../stores/terminal/terminal.store";
 import { TerminalInputQueue } from "./TerminalInputQueue";
+import { TerminalSetupCleanup } from "./TerminalSetupCleanup";
 import { attachTerminalKeybindings } from "./TerminalViewport.keybindings";
 import { attachTerminalMouseWheelMultiplier } from "./TerminalViewport.wheel";
+import { readTerminalLaunch, subscribeTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import {
+  readTerminalLifecycle,
+  useTerminalLifecycleStore,
+} from "../../stores/terminal/terminalLifecycle.store";
 
 export interface AttachTerminalViewportInputOptions {
   readonly terminal: Terminal;
@@ -27,8 +33,15 @@ export interface AttachTerminalViewportInputOptions {
  */
 export function attachTerminalViewportInput(options: AttachTerminalViewportInputOptions) {
   const { terminal, api, threadId, terminalId } = options;
+  let generation = readTerminalLaunch(threadId, terminalId)?.runtimeGeneration;
   const queue = new TerminalInputQueue(
-    (data) => api.terminal.write({ threadId, terminalId, data }),
+    (data) =>
+      api.terminal.write({
+        threadId,
+        terminalId,
+        data,
+        ...(generation ? { expectedGeneration: generation } : {}),
+      }),
     (error) => {
       if (options.acceptsInput())
         options.writeNotice(
@@ -37,33 +50,50 @@ export function attachTerminalViewportInput(options: AttachTerminalViewportInput
         );
     },
   );
-  const send = (data: string) => {
-    if (!options.acceptsInput()) return;
-    if (data.length > 0)
-      useTerminalStateStore.getState().markTerminalAgentActive(threadId, terminalId);
-    options.markInput();
-    queue.enqueue(data);
+  const resources = new TerminalSetupCleanup();
+  resources.add(() => queue.dispose());
+  const syncGeneration = () => {
+    const current = readTerminalLaunch(threadId, terminalId)?.runtimeGeneration;
+    if (current === generation) return;
+    // An external restart can replace the shell without a local lifecycle operation.
+    queue.clear();
+    generation = current;
   };
-  const dataDisposable = terminal.onData(send);
-  attachTerminalMouseWheelMultiplier(terminal, {
-    getTuiMouseWheelMultiplier: options.tuiWheelMultiplier,
-  });
-  attachTerminalKeybindings({
-    terminal,
-    terminalRef: options.terminalRef,
-    threadId,
-    terminalId,
-    keybindingsRef: options.keybindingsRef,
-    api,
-    acceptsInput: options.acceptsInput,
-    writeNotice: options.writeNotice,
-    sendInput: send,
-    onFind: options.onFind,
-  });
-  return {
-    dispose: () => {
-      dataDisposable.dispose();
-      queue.dispose();
-    },
-  };
+  try {
+    resources.add(subscribeTerminalLaunch(syncGeneration));
+    resources.add(
+      useTerminalLifecycleStore.subscribe(() => {
+        if (readTerminalLifecycle(threadId, terminalId)) queue.clear();
+      }),
+    );
+    const send = (data: string) => {
+      syncGeneration();
+      if (!options.acceptsInput() || readTerminalLifecycle(threadId, terminalId)) return;
+      if (data.length > 0)
+        useTerminalStateStore.getState().markTerminalAgentActive(threadId, terminalId);
+      options.markInput();
+      queue.enqueue(data);
+    };
+    const dataDisposable = terminal.onData(send);
+    resources.add(() => dataDisposable.dispose());
+    attachTerminalMouseWheelMultiplier(terminal, {
+      getTuiMouseWheelMultiplier: options.tuiWheelMultiplier,
+    });
+    attachTerminalKeybindings({
+      terminal,
+      terminalRef: options.terminalRef,
+      threadId,
+      terminalId,
+      keybindingsRef: options.keybindingsRef,
+      api,
+      acceptsInput: options.acceptsInput,
+      writeNotice: options.writeNotice,
+      sendInput: send,
+      onFind: options.onFind,
+    });
+    return { dispose: () => resources.dispose() };
+  } catch (error) {
+    resources.dispose();
+    throw error;
+  }
 }

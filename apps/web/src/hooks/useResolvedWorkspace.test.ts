@@ -28,6 +28,103 @@ const project = {
 } as Project;
 
 describe("resolveWorkspaceContext", () => {
+  it.each([
+    "local",
+    "ssh:host=workspace&transport=direct",
+    "ssh:host=workspace&transport=agent",
+  ] as const)(
+    "keeps %s paired with draft and server worktrees rather than the provider target",
+    (workspaceExecutionTargetId) => {
+      const remoteProject = {
+        ...project,
+        workspaceExecutionTargetId,
+        executionTargetId: "ssh:provider",
+      };
+      const contexts = [
+        { serverThread: undefined, draftThread: draftThread() },
+        {
+          serverThread: {
+            projectId: draftProjectId,
+            worktreePath: "/worktrees/draft",
+            workspaceExecutionTargetId,
+            executionTargetId: "ssh:provider",
+          },
+          draftThread: null,
+        },
+      ];
+      for (const context of contexts) {
+        expect(
+          resolveWorkspaceContext({
+            ...context,
+            selectedProjectId,
+            project: remoteProject,
+            defaultChatCwd: "/default",
+          }),
+        ).toEqual({
+          projectId: draftProjectId,
+          cwd: "/worktrees/draft",
+          executionTargetId: workspaceExecutionTargetId,
+        });
+      }
+    },
+  );
+
+  it("retains legacy remote thread targets when explicit workspace targets are absent", () => {
+    expect(
+      resolveWorkspaceContext({
+        serverThread: {
+          projectId: serverProjectId,
+          worktreePath: "/srv/worktrees/legacy",
+          executionTargetId: "ssh:legacy",
+        },
+        draftThread: null,
+        selectedProjectId,
+        project,
+        defaultChatCwd: "/default",
+      }),
+    ).toEqual({
+      projectId: serverProjectId,
+      cwd: "/srv/worktrees/legacy",
+      executionTargetId: "ssh:legacy",
+    });
+  });
+
+  it("keeps the remote thread target paired with its worktree", () => {
+    expect(
+      resolveWorkspaceContext({
+        serverThread: {
+          projectId: serverProjectId,
+          worktreePath: "/srv/worktrees/feature",
+          workspaceExecutionTargetId: "ssh:vps",
+          executionTargetId: "local",
+        },
+        draftThread: null,
+        selectedProjectId,
+        project,
+        defaultChatCwd: "/default",
+      }),
+    ).toEqual({
+      projectId: serverProjectId,
+      cwd: "/srv/worktrees/feature",
+      executionTargetId: "ssh:vps",
+    });
+  });
+
+  it("uses the draft project's remote target for a draft worktree", () => {
+    expect(
+      resolveWorkspaceContext({
+        serverThread: undefined,
+        draftThread: draftThread(),
+        selectedProjectId,
+        project: { ...project, workspaceExecutionTargetId: "ssh:vps" },
+        defaultChatCwd: "/default",
+      }),
+    ).toEqual({
+      projectId: draftProjectId,
+      cwd: "/worktrees/draft",
+      executionTargetId: "ssh:vps",
+    });
+  });
   it("prefers the server thread project and worktree", () => {
     expect(
       resolveWorkspaceContext({
@@ -37,7 +134,7 @@ describe("resolveWorkspaceContext", () => {
         project,
         defaultChatCwd: "/default",
       }),
-    ).toEqual({ projectId: serverProjectId, cwd: "/worktrees/server" });
+    ).toEqual({ projectId: serverProjectId, cwd: "/worktrees/server", executionTargetId: "local" });
   });
 
   it("uses the draft thread project and worktree before selected project fallbacks", () => {
@@ -49,7 +146,7 @@ describe("resolveWorkspaceContext", () => {
         project,
         defaultChatCwd: "/default",
       }),
-    ).toEqual({ projectId: draftProjectId, cwd: "/worktrees/draft" });
+    ).toEqual({ projectId: draftProjectId, cwd: "/worktrees/draft", executionTargetId: "local" });
   });
 
   it("falls back from a draft project to its cwd and then the default chat cwd", () => {
@@ -61,7 +158,7 @@ describe("resolveWorkspaceContext", () => {
         project,
         defaultChatCwd: "/default",
       }),
-    ).toEqual({ projectId: draftProjectId, cwd: "/projects/draft" });
+    ).toEqual({ projectId: draftProjectId, cwd: "/projects/draft", executionTargetId: "local" });
 
     expect(
       resolveWorkspaceContext({
@@ -71,6 +168,6 @@ describe("resolveWorkspaceContext", () => {
         project: undefined,
         defaultChatCwd: "/default",
       }),
-    ).toEqual({ projectId: selectedProjectId, cwd: "/default" });
+    ).toEqual({ projectId: selectedProjectId, cwd: "/default", executionTargetId: undefined });
   });
 });

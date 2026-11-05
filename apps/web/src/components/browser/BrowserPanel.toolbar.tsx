@@ -1,10 +1,16 @@
-import { memo, useCallback, useState } from "react";
+import {
+  DEFAULT_BROWSER_SEARCH_ENGINE,
+  type BrowserSearchEngine,
+} from "@bigbud/contracts/constants/browser.constant.ts";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import {
   ArrowUpRightIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   MousePointer2Icon,
   RotateCwIcon,
+  SearchIcon,
   XIcon,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
@@ -12,14 +18,18 @@ import { isElectron } from "~/config/env";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import type { BrowserPageMetadata } from "./BrowserPanel.viewport";
+import { BrowserFaviconIcon } from "./BrowserPanel.faviconIcon";
+import { getBrowserFaviconUrl, getBrowserSuggestions } from "./BrowserPanel.suggestions";
+import { buildBrowserSearchUrl, resolveBrowserOmniboxInput } from "./BrowserPanel.omnibox";
 import {
   type BrowserVisitRecord,
-  filterBrowserHistory,
   resolveBrowserHistorySelectionIndex,
 } from "./BrowserPanel.history";
 
 export interface BrowserToolbarProps {
   inputUrl: string;
+  pageUrl?: string;
+  searchEngine?: BrowserSearchEngine;
   setInputUrl: (v: string) => void;
   onNavigate: () => void;
   onSelectHistoryUrl: (url: string) => void;
@@ -35,6 +45,7 @@ export interface BrowserToolbarProps {
   onAnnotate: () => void;
   annotationActive?: boolean;
   pageMetadata: BrowserPageMetadata;
+  pageMetadataUrl?: string | null;
   historyUrls: BrowserVisitRecord[];
   annotationDisabled?: boolean;
   agentControlled?: boolean;
@@ -52,6 +63,8 @@ function getBrowserFallbackLabel(inputUrl: string): string {
 
 export const BrowserToolbar = memo(function BrowserToolbar({
   inputUrl,
+  pageUrl = inputUrl,
+  searchEngine = DEFAULT_BROWSER_SEARCH_ENGINE,
   setInputUrl,
   onNavigate,
   onSelectHistoryUrl,
@@ -67,6 +80,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
   onAnnotate,
   annotationActive = false,
   pageMetadata,
+  pageMetadataUrl = null,
   historyUrls,
   annotationDisabled = false,
   agentControlled = false,
@@ -76,41 +90,53 @@ export const BrowserToolbar = memo(function BrowserToolbar({
   const [addressBarHovered, setAddressBarHovered] = useState(false);
   const [urlFocused, setUrlFocused] = useState(false);
   const [selectedHistoryIndex, setSelectedHistoryIndex] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [debouncedInputUrl] = useDebouncedValue(inputUrl, { wait: 250 });
   const pageLabel = pageMetadata.title.trim() || getBrowserFallbackLabel(inputUrl);
   const isAddressBarExpanded = urlFocused || addressBarHovered || inputUrl.trim().length === 0;
-  const matchingHistoryUrls = urlFocused ? filterBrowserHistory(historyUrls, inputUrl) : [];
+  const suggestions = useMemo(
+    () => (urlFocused ? getBrowserSuggestions(historyUrls, inputUrl, searchEngine) : []),
+    [historyUrls, inputUrl, searchEngine, urlFocused],
+  );
+  const addressUrl = urlFocused ? resolveBrowserOmniboxInput(inputUrl, searchEngine) : pageUrl;
+  const isSearch =
+    urlFocused &&
+    Boolean(inputUrl.trim()) &&
+    addressUrl === buildBrowserSearchUrl(inputUrl.trim(), searchEngine);
+  const observedPage = { url: pageMetadataUrl, faviconUrl: pageMetadata.faviconUrl };
+  const allowFaviconFallback = !urlFocused || debouncedInputUrl === inputUrl;
+  const faviconUrl = isSearch
+    ? null
+    : getBrowserFaviconUrl(addressUrl ?? "", historyUrls, observedPage, allowFaviconFallback);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
-      const currentMatchingHistoryUrls = urlFocused
-        ? filterBrowserHistory(historyUrls, inputUrl)
-        : [];
-      if (e.key === "ArrowDown" && currentMatchingHistoryUrls.length > 0) {
+      if (e.key === "ArrowDown" && suggestions.length > 0) {
         e.preventDefault();
         setSelectedHistoryIndex((index) =>
-          resolveBrowserHistorySelectionIndex(index, 1, currentMatchingHistoryUrls.length),
+          resolveBrowserHistorySelectionIndex(index, 1, suggestions.length),
         );
         return;
       }
-      if (e.key === "ArrowUp" && currentMatchingHistoryUrls.length > 0) {
+      if (e.key === "ArrowUp" && suggestions.length > 0) {
         e.preventDefault();
         setSelectedHistoryIndex((index) =>
-          resolveBrowserHistorySelectionIndex(index, -1, currentMatchingHistoryUrls.length),
+          resolveBrowserHistorySelectionIndex(index, -1, suggestions.length),
         );
         return;
       }
       if (e.key === "Enter") {
         e.preventDefault();
-        const selectedUrl = currentMatchingHistoryUrls[selectedHistoryIndex];
-        if (selectedUrl) {
-          onSelectHistoryUrl(selectedUrl);
+        const selected = suggestions[selectedHistoryIndex];
+        if (selected) {
+          onSelectHistoryUrl(selected.url);
           setSelectedHistoryIndex(-1);
           return;
         }
         onNavigate();
       }
     },
-    [historyUrls, inputUrl, onNavigate, onSelectHistoryUrl, selectedHistoryIndex, urlFocused],
+    [onNavigate, onSelectHistoryUrl, selectedHistoryIndex, suggestions],
   );
 
   const annotateTooltip = annotationDisabled
@@ -213,7 +239,18 @@ export const BrowserToolbar = memo(function BrowserToolbar({
         onMouseEnter={() => setAddressBarHovered(true)}
         onMouseLeave={() => setAddressBarHovered(false)}
       >
+        <span
+          className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2"
+          data-browser-address-icon="true"
+        >
+          {isSearch ? (
+            <SearchIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />
+          ) : (
+            <BrowserFaviconIcon key={faviconUrl} faviconUrl={faviconUrl} />
+          )}
+        </span>
         <input
+          ref={inputRef}
           data-browser-omnibox="true"
           type="text"
           value={inputUrl}
@@ -232,7 +269,7 @@ export const BrowserToolbar = memo(function BrowserToolbar({
           }}
           disabled={agentControlled}
           className={cn(
-            "h-8 w-full min-w-0 rounded-lg border px-3 pr-10 text-left font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45",
+            "h-8 w-full min-w-0 rounded-lg border pl-9 pr-10 text-left font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground outline-none placeholder:text-muted-foreground/72 focus-visible:border-ring/45",
             isAddressBarExpanded
               ? "border-input bg-background dark:bg-input/32"
               : "border-transparent bg-transparent",
@@ -266,23 +303,40 @@ export const BrowserToolbar = memo(function BrowserToolbar({
             <TooltipPopup side="bottom">Open in default browser</TooltipPopup>
           </Tooltip>
         ) : null}
-        {matchingHistoryUrls.length > 0 && (
+        {suggestions.length > 0 && (
           <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-lg">
-            {matchingHistoryUrls.map((url, index) => (
+            {suggestions.map((suggestion, index) => (
               <button
-                key={url}
+                key={`${suggestion.kind}:${suggestion.url}`}
+                data-browser-suggestion={suggestion.kind}
                 type="button"
                 className={cn(
-                  "flex h-7 w-full min-w-0 items-center px-3 text-left font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground hover:bg-accent",
+                  "flex h-7 w-full min-w-0 items-center gap-2 px-3 text-left font-['DM_Sans',-apple-system,BlinkMacSystemFont,'Segoe_UI',system-ui,sans-serif] text-[0.6875rem] tracking-tighter text-foreground hover:bg-accent",
                   index === selectedHistoryIndex && "bg-accent",
                 )}
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  onSelectHistoryUrl(url);
+                  onSelectHistoryUrl(suggestion.url);
+                  inputRef.current?.blur();
                 }}
                 onMouseEnter={() => setSelectedHistoryIndex(index)}
               >
-                <span className="truncate">{url}</span>
+                {suggestion.kind === "search" ? (
+                  <SearchIcon
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0 text-muted-foreground"
+                  />
+                ) : (
+                  <BrowserFaviconIcon
+                    faviconUrl={getBrowserFaviconUrl(
+                      suggestion.url,
+                      historyUrls,
+                      observedPage,
+                      allowFaviconFallback,
+                    )}
+                  />
+                )}
+                <span className="truncate">{suggestion.label}</span>
               </button>
             ))}
           </div>

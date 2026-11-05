@@ -1,8 +1,11 @@
-import { ipcMain, type IpcMainInvokeEvent } from "electron";
+import type { IpcMainInvokeEvent } from "electron";
 
 import { desktopIpcChannels } from "../main.channels";
 import type { DesktopWindowRegistry } from "./DesktopWindowRegistry";
 import type { CompactScreenshotHandoff } from "./compactScreenshotHandoff";
+import { authorizedHandle, type IpcRoles } from "./ipcAuthorization";
+
+const COMPACT_ROLES: IpcRoles = ["compact-chat"];
 
 const validId = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && value.length <= 256;
@@ -15,12 +18,16 @@ export function registerCompactScreenshotIpc(
     const window = registry.get("compact-chat");
     return window?.webContents === event.sender && event.senderFrame === event.sender.mainFrame;
   };
-  ipcMain.removeHandler(desktopIpcChannels.getPendingCompactScreenshot);
-  ipcMain.handle(desktopIpcChannels.getPendingCompactScreenshot, (event, threadId: unknown) =>
-    trusted(event) && validId(threadId) ? handoff.read(threadId) : null,
+  authorizedHandle(
+    desktopIpcChannels.getPendingCompactScreenshot,
+    COMPACT_ROLES,
+    (event, threadId: unknown) =>
+      trusted(event) && validId(threadId) ? handoff.read(threadId) : null,
   );
-  ipcMain.removeHandler(desktopIpcChannels.acknowledgeCompactScreenshot);
-  ipcMain.handle(desktopIpcChannels.acknowledgeCompactScreenshot, (event, captureId: unknown) =>
-    trusted(event) && validId(captureId) ? handoff.acknowledge(captureId) : false,
+  authorizedHandle(
+    desktopIpcChannels.acknowledgeCompactScreenshot,
+    COMPACT_ROLES,
+    (event, captureId: unknown) =>
+      trusted(event) && validId(captureId) ? handoff.acknowledge(captureId) : false,
   );
 }

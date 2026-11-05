@@ -6,6 +6,17 @@ import { useResourceMonitorStore } from "~/stores/resource-monitor/resourceMonit
 import { SystemMonitorPage } from "./SystemMonitorPage";
 import { appMonitorSnapshot } from "./BigbudResourceView.fixtures";
 import type { MonitorScope } from "./MonitorScopeToggle";
+import { useStore } from "~/stores/main/main.store";
+import { useRemoteAccessStore } from "~/stores/remoteAccess/remoteAccess.store";
+import { useConnectedSshMonitorStore } from "~/stores/resource-monitor/remoteMonitor.connections.store";
+import { WsTransportDisconnectedError } from "~/rpc/wsTransport.errors";
+import type { ProjectId } from "@bigbud/contracts/core/baseSchemas.ts";
+
+vi.mock("./useRemoteMonitor", () => ({ useRemoteMonitor: () => undefined }));
+const listConnected = vi.hoisted(() => vi.fn());
+vi.mock("~/rpc/wsRpcClient", () => ({
+  getWsRpcClient: () => ({ server: { listConnectedSshMonitors: listConnected } }),
+}));
 
 vi.mock("../standalone/StandaloneChatPageShell", () => ({
   StandaloneChatPageShell: ({ header, children }: { header: ReactNode; children: ReactNode }) => (
@@ -24,6 +35,7 @@ const unsubscribe = vi.fn(async () => {});
 let screen: Awaited<ReturnType<typeof render>> | undefined;
 const originalBridge = window.desktopBridge;
 beforeEach(() => {
+  listConnected.mockReset().mockResolvedValue([]);
   subscribe.mockClear();
   unsubscribe.mockClear();
   Object.defineProperty(window, "desktopBridge", {
@@ -118,6 +130,89 @@ it("shows the desktop-only diagnostic instead of indefinite loading without a br
     .element(screen.getByText(/System Monitor is available in the desktop app/))
     .toBeVisible();
   expect(document.querySelector(".animate-pulse-slow")).toBeNull();
+});
+
+it("keeps a deep link through delayed discovery, partial catalog hydration, and a transient socket drop", async () => {
+  const projects = useStore.getState().projects;
+  const projectCatalogLoadingByScope = useStore.getState().projectCatalogLoadingByScope;
+  const projectCatalogRemainingCountByScope =
+    useStore.getState().projectCatalogRemainingCountByScope;
+  const connectedState = useConnectedSshMonitorStore.getState();
+  const verifiedExecutionTargetIds = useRemoteAccessStore.getState().verifiedExecutionTargetIds;
+  const onScopeChange = vi.fn();
+  const discovered = {
+    projectId: "vps-one" as ProjectId,
+    name: "Production",
+    target: "ssh:host=prod",
+  };
+  let resolveDiscovery!: (projects: (typeof discovered)[]) => void;
+  listConnected
+    .mockImplementationOnce(() => new Promise((resolve) => (resolveDiscovery = resolve)))
+    .mockRejectedValueOnce(new WsTransportDisconnectedError())
+    .mockResolvedValueOnce([discovered])
+    .mockResolvedValueOnce([]);
+  useStore.setState({
+    projects: [
+      {
+        id: "other-page-project" as (typeof projects)[number]["id"],
+        name: "Another VPS",
+        cwd: "/home/other",
+        scripts: [],
+        defaultModelSelection: null,
+        workspaceExecutionTargetId: "ssh:host=other",
+      },
+    ],
+    projectCatalogLoadingByScope: { local: false, remote: true },
+    projectCatalogRemainingCountByScope: { local: null, remote: 249 },
+  });
+  useRemoteAccessStore.setState({ verifiedExecutionTargetIds: { "ssh:host=prod": true } });
+  useConnectedSshMonitorStore.setState({ targets: {}, projects: [], status: "pending" });
+  try {
+    screen = await render(<SystemMonitorPage scope="vps:vps-one" onScopeChange={onScopeChange} />);
+    await expect.element(screen.getByText("Checking VPS connection")).toBeVisible();
+    await expect.poll(() => listConnected.mock.calls.length).toBe(1);
+    expect(onScopeChange).not.toHaveBeenCalled();
+    resolveDiscovery([discovered]);
+    await expect
+      .element(screen.getByRole("button", { name: "Monitor Production resources" }))
+      .toBeVisible();
+    expect(useStore.getState().projects.map((project) => project.id)).toEqual([
+      "other-page-project",
+    ]);
+    expect(onScopeChange).not.toHaveBeenCalled();
+    await expect.poll(() => listConnected.mock.calls.length, { timeout: 7_000 }).toBe(2);
+    await expect.element(screen.getByText(/SSH connection status unavailable/)).toBeVisible();
+    expect(onScopeChange).not.toHaveBeenCalled();
+    await expect.poll(() => listConnected.mock.calls.length, { timeout: 7_000 }).toBe(3);
+    await expect
+      .element(screen.getByRole("button", { name: "Monitor Production resources" }))
+      .toBeVisible();
+    expect(onScopeChange).not.toHaveBeenCalled();
+    await expect.poll(() => listConnected.mock.calls.length, { timeout: 7_000 }).toBe(4);
+    await expect
+      .element(screen.getByRole("button", { name: "Monitor system resources" }))
+      .toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Monitor Production resources" }).elements(),
+    ).toHaveLength(0);
+    await expect.poll(() => onScopeChange.mock.calls.length).toBe(1);
+    expect(onScopeChange).toHaveBeenCalledWith("system");
+    expect(
+      useRemoteAccessStore.getState().verifiedExecutionTargetIds["ssh:host=prod"],
+    ).toBeUndefined();
+  } finally {
+    useStore.setState({
+      projects,
+      projectCatalogLoadingByScope,
+      projectCatalogRemainingCountByScope,
+    });
+    useRemoteAccessStore.setState({ verifiedExecutionTargetIds });
+    useConnectedSshMonitorStore.setState({
+      targets: connectedState.targets,
+      projects: connectedState.projects,
+      status: connectedState.status,
+    });
+  }
 });
 
 it("does not suppress missing app-sample diagnostics or expose stale totals", async () => {

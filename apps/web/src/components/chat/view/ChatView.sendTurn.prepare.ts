@@ -123,7 +123,7 @@ export async function prepareComposerPrompt(input: {
           return null;
         })
     : promptText;
-  if (!promptTextForSend) return null;
+  if (promptTextForSend === null) return null;
   const transformedPromptText = sendInput.transformPromptForSend
     ? sendInput.transformPromptForSend(promptTextForSend)
     : promptTextForSend;

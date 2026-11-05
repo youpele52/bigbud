@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { CheckIcon, ChevronDownIcon, FolderPlusIcon, SquarePenIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, FolderPlusIcon } from "lucide-react";
+import { NewChatIcon } from "../common/NewChatIcon";
 import { BUILT_IN_CHATS_PROJECT_ID, type ProjectId, type ThreadId } from "@bigbud/contracts";
 import { cn } from "~/lib/utils";
 
@@ -156,7 +157,7 @@ export default function BranchToolbarProjectMenu({
                       className="min-h-7 justify-start py-1 text-xs text-muted-foreground sm:min-h-7"
                       onClick={() => void handleNewThread(project.id)}
                     >
-                      <SquarePenIcon className="size-3 opacity-60" />
+                      <NewChatIcon className="size-3 opacity-60" />
                       New thread
                     </MenuItem>
                     <MenuSeparator />

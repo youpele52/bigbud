@@ -46,6 +46,7 @@ import { projectThreadQueuedPromptEvent } from "./projectorThreadQueuedPrompts.t
 import { projectThreadTurnControlEvent } from "./projectorThreadTurnControl.ts";
 import { projectThreadPendingTurnStart } from "./projectorThreadPendingTurnStart.ts";
 import { projectThreadRecovery } from "./projectorThreadRecovery.ts";
+import { projectThreadOrganization } from "./projectorThreadOrganization.ts";
 import { retainThreadTitleOwnership } from "../orchestration-tools/TerminalThreadTitle.ts";
 
 const MAX_THREAD_MESSAGES = 2_000;
@@ -56,7 +57,10 @@ export function projectEvent(
   event: OrchestrationEvent,
 ): Effect.Effect<OrchestrationReadModel, OrchestrationProjectorDecodeError> {
   return Effect.map(projectEventState(model, event), (next) =>
-    projectThreadRecovery(projectThreadPendingTurnStart(next, event), event),
+    projectThreadOrganization(
+      projectThreadRecovery(projectThreadPendingTurnStart(next, event), event),
+      event,
+    ),
   );
 }
 

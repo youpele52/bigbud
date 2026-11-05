@@ -9,6 +9,7 @@ import { createThreadOrchestrationBridge } from "../../../orchestration-tools/or
 import { beginThreadToolDispatch } from "../../../orchestration-tools/threadToolInvocationFlights.ts";
 
 export const V2_ORCHESTRATION_ACTIONS = [
+  "render_html",
   "rename",
   "archive",
   "get_status",
@@ -24,6 +25,9 @@ export const V2_ORCHESTRATION_ACTIONS = [
   "read_capability_guide",
   "workspace",
   "get_system_resources",
+  "configure_system_resource_rules",
+  "move",
+  "snooze",
 ] as const;
 
 /** Canonical invocation id for a serialized invocation identity (the durable receipt key). */

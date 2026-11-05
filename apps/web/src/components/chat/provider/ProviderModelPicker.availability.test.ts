@@ -19,6 +19,24 @@ function provider(overrides: Partial<ServerProvider> = {}): ServerProvider {
 }
 
 describe("getProviderModelAvailability", () => {
+  it("keeps an older CLIProxyAPI selectable when an update is recommended", () => {
+    const snapshot = provider({
+      status: "ready",
+      auth: { status: "authenticated" },
+      message: undefined,
+      cliProxyVersion: {
+        recommendedVersion: "8.0.51",
+        runtimeVersion: "8.0.30",
+        installedVersion: "8.0.30",
+        installation: "homebrew",
+        updateSource: "runtime",
+      },
+    });
+    expect(
+      getProviderModelAvailability({ providers: [snapshot], provider: snapshot, modelCount: 1 }),
+    ).toEqual({ loading: false, unavailable: false, unavailableMessage: undefined });
+  });
+
   it("shows loading during the initial V2 native/catalog probe", () => {
     const snapshot = provider({ provider: "opencodeV2", initialProbeComplete: false });
     expect(
@@ -143,7 +161,7 @@ describe("getProviderModelAvailability", () => {
 
   it("keeps supported providers selectable for remote workspaces", () => {
     const snapshot = provider({
-      provider: "kilocode",
+      provider: "pi",
       status: "ready",
       supportsLocalRuntimeRemoteWorkspace: true,
     });

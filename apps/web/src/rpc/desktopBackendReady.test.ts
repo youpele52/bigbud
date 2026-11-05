@@ -101,6 +101,46 @@ describe("desktop backend readiness", () => {
     await expect(waiting).resolves.toBeUndefined();
   });
 
+  it("waits for the next ready generation after a failed startup when retrying", async () => {
+    let listener: ((next: DesktopBackendStartupState) => void) | undefined;
+    const unsubscribe = vi.fn();
+    const resolved = vi.fn();
+    const waiting = waitForDesktopBackendReady(
+      {
+        getBackendStartupState: async () => state("failed"),
+        onBackendStartupState: (next) => {
+          listener = next;
+          return unsubscribe;
+        },
+      },
+      undefined,
+      { waitForRestart: true },
+    ).then(resolved);
+
+    await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+    listener?.(state("starting", 2));
+    expect(resolved).not.toHaveBeenCalled();
+    listener?.(state("ready", 2));
+    await waiting;
+    expect(resolved).toHaveBeenCalledOnce();
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("unsubscribes a synchronous ready replay without an extra IPC read", async () => {
+    const unsubscribe = vi.fn();
+    const getBackendStartupState = vi.fn(async () => state("starting"));
+    await waitForDesktopBackendReady({
+      getBackendStartupState,
+      onBackendStartupState: (listener) => {
+        listener(state("ready"));
+        return unsubscribe;
+      },
+    });
+    expect(unsubscribe).toHaveBeenCalledOnce();
+    expect(getBackendStartupState).not.toHaveBeenCalled();
+  });
+
   it("unsubscribes when a pending readiness wait is cancelled", async () => {
     const controller = new AbortController();
     const unsubscribe = vi.fn();

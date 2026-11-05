@@ -1,0 +1,22 @@
+@keyframes file-preview-save-sway {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-1.5px);
+  }
+  75% {
+    transform: translateX(1.5px);
+  }
+}
+
+.file-preview-save-sway {
+  animation: file-preview-save-sway 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-preview-save-sway {
+    animation: none;
+  }
+}

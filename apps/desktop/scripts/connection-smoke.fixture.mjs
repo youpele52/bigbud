@@ -7,7 +7,6 @@ const providerNames = [
   "claudeAgent",
   "cliProxy",
   "copilot",
-  "kilocode",
   "opencode",
   "opencodeV2",
   "pi",

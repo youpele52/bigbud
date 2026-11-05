@@ -50,7 +50,7 @@ describe("DiscoveryRegistry — provider descriptor coverage", () => {
         );
 
         const catalog = yield* withRegistry(cwd, (registry) => registry.getCatalog);
-        const providers = new Set([
+        const providers = new Set<string>([
           ...catalog.agents.map((entry) => entry.provider),
           ...catalog.skills.map((entry) => entry.provider),
         ]);
@@ -62,7 +62,7 @@ describe("DiscoveryRegistry — provider descriptor coverage", () => {
         assert.isTrue(providers.has("opencode"));
         assert.isTrue(providers.has("pi"));
         assert.isTrue(providers.has("devin"));
-        assert.isTrue(providers.has("kilocode"));
+        assert.isFalse(providers.has("kilocode"));
         assert.isTrue(providers.has("bigbud"));
       }),
     );

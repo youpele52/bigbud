@@ -9,7 +9,7 @@ import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTa
 import { useTerminalStateStore } from "../../stores/terminal";
 import { toastManager } from "../ui/toast";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
-import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
+import { isRemoteExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
 
 interface PendingRemoteThreadActivation {
   readonly threadId: ThreadId;

@@ -44,6 +44,7 @@ import { type TerminalStateStoreState } from "./terminal.store.types";
 import { removeTerminalLayouts, resetClosedTerminalLayout } from "./terminal.store.layout";
 import { terminalWslSelectionPatch, removeOrphanedWslSelections } from "./terminal.store.wsl";
 import { terminalPersistenceOptions } from "./terminal.store.persistence";
+import { reconcileTerminalInventory } from "./terminal.store.inventory";
 
 export type { TerminalEventEntry, ThreadTerminalLaunchContext, ThreadTerminalState };
 export {
@@ -229,6 +230,8 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         ),
       applyTerminalEvent: (event) => set((state) => applyTerminalEventToState(state, event)),
       applyTerminalEvents: (events) => set((state) => applyTerminalEventsToState(state, events)),
+      reconcileTerminalInventory: (inventory) =>
+        set((state) => reconcileTerminalInventory(state, inventory)),
       hydrateTerminalAgentFromSnapshot: (snapshot) =>
         set((state) => hydrateTerminalAgentFromSnapshot(state, snapshot)),
       clearTerminalState: (threadId) =>

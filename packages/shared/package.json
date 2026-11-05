@@ -4,6 +4,17 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./resourceAwareness.preferences": "./src/resourceAwareness.preferences.ts",
+    "./resourceAwareness.metrics": "./src/resourceAwareness.metrics.ts",
+    "./resourceAwareness.rules": "./src/resourceAwareness.rules.ts",
+    "./terminalUnicodeProvider": "./src/terminalUnicodeProvider.ts",
+    "./copilotRuntime.paths": "./src/copilotRuntime.paths.ts",
+    "./copilotRuntime.storage": "./src/copilotRuntime.storage.ts",
+    "./copilotRuntime.bridge": "./src/copilotRuntime.bridge.ts",
+    "./queueDecision": {
+      "types": "./src/queueDecision.ts",
+      "import": "./src/queueDecision.ts"
+    },
     "./backendOwnership.paths": {
       "types": "./src/backendOwnership.paths.ts",
       "import": "./src/backendOwnership.paths.ts"
@@ -296,9 +307,81 @@
       "types": "./src/cua-driver/manifest.ts",
       "import": "./src/cua-driver/manifest.ts"
     },
+    "./cua-driver/mcpCompatibility": {
+      "types": "./src/cua-driver/mcpCompatibility.ts",
+      "import": "./src/cua-driver/mcpCompatibility.ts"
+    },
     "./cua-driver/policy": {
       "types": "./src/cua-driver/policy.ts",
       "import": "./src/cua-driver/policy.ts"
+    },
+    "./cua-driver/cursorTheme": {
+      "types": "./src/cua-driver/cursorTheme.ts",
+      "import": "./src/cua-driver/cursorTheme.ts"
+    },
+    "./computer-use/protocol.codec": {
+      "types": "./src/computer-use/protocol.codec.ts",
+      "import": "./src/computer-use/protocol.codec.ts"
+    },
+    "./computer-use/protocol.fields": {
+      "types": "./src/computer-use/protocol.fields.ts",
+      "import": "./src/computer-use/protocol.fields.ts"
+    },
+    "./computer-use/protocol.profile": {
+      "types": "./src/computer-use/protocol.profile.ts",
+      "import": "./src/computer-use/protocol.profile.ts"
+    },
+    "./computer-use/protocol.validation": {
+      "types": "./src/computer-use/protocol.validation.ts",
+      "import": "./src/computer-use/protocol.validation.ts"
+    },
+    "./computer-use/tuple": {
+      "types": "./src/computer-use/tuple.ts",
+      "import": "./src/computer-use/tuple.ts"
+    },
+    "./computer-use/selection": {
+      "types": "./src/computer-use/selection.ts",
+      "import": "./src/computer-use/selection.ts"
+    },
+    "./computer-use/scroll": {
+      "types": "./src/computer-use/scroll.ts",
+      "import": "./src/computer-use/scroll.ts"
+    },
+    "./computer-use/keys": {
+      "types": "./src/computer-use/keys.ts",
+      "import": "./src/computer-use/keys.ts"
+    },
+    "./computer-use/v2.plan": {
+      "types": "./src/computer-use/v2.plan.ts",
+      "import": "./src/computer-use/v2.plan.ts"
+    },
+    "./computer-use/v2.grounding": {
+      "types": "./src/computer-use/v2.grounding.ts",
+      "import": "./src/computer-use/v2.grounding.ts"
+    },
+    "./computer-use/v2.request": {
+      "types": "./src/computer-use/v2.request.ts",
+      "import": "./src/computer-use/v2.request.ts"
+    },
+    "./computer-use/surface": {
+      "types": "./src/computer-use/surface.ts",
+      "import": "./src/computer-use/surface.ts"
+    },
+    "./computer-use/policy.canonical": {
+      "types": "./src/computer-use/policy.canonical.ts",
+      "import": "./src/computer-use/policy.canonical.ts"
+    },
+    "./computer-use/policy.digest": {
+      "types": "./src/computer-use/policy.digest.ts",
+      "import": "./src/computer-use/policy.digest.ts"
+    },
+    "./computer-use/policy.migration": {
+      "types": "./src/computer-use/policy.migration.ts",
+      "import": "./src/computer-use/policy.migration.ts"
+    },
+    "./computer-use/policy.watch": {
+      "types": "./src/computer-use/policy.watch.ts",
+      "import": "./src/computer-use/policy.watch.ts"
     }
   },
   "scripts": {

@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 /**
@@ -27,22 +27,55 @@ function linuxStartToken(pid: number): string | undefined {
 /** Bound for the synchronous `ps` probe; it only reads local process state. */
 const PS_START_TOKEN_TIMEOUT_MS = 2_000;
 
+/** Environment for every `ps` probe: fixed C locale and UTC, so the caller's TZ/LC_* cannot vary
+ * `lstart`. Shared with process-table snapshots so their tokens compare equal to these. */
+export const PS_PROBE_ENV: NodeJS.ProcessEnv = {
+  PATH: process.env.PATH ?? "/usr/bin:/bin",
+  LC_ALL: "C",
+  LANG: "C",
+  TZ: "UTC",
+};
+
+/** Token for a `ps -o lstart=` value read under `PS_PROBE_ENV`. */
+export function psLstartStartToken(lstart: string): string | undefined {
+  const value = lstart.trim();
+  return value ? `${PROCESS_START_TOKEN_PREFIX}ps-utc:${value.replaceAll(/\s+/g, "_")}` : undefined;
+}
+
 /** Other POSIX: `ps lstart` under a fixed C locale and UTC, so the caller's TZ/LC_* cannot vary it. */
 function psStartToken(pid: number): string | undefined {
   try {
-    const value = execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: PS_START_TOKEN_TIMEOUT_MS,
-      killSignal: "SIGKILL",
-      env: { PATH: process.env.PATH ?? "/usr/bin:/bin", LC_ALL: "C", LANG: "C", TZ: "UTC" },
-    }).trim();
-    return value
-      ? `${PROCESS_START_TOKEN_PREFIX}ps-utc:${value.replaceAll(/\s+/g, "_")}`
-      : undefined;
+    return psLstartStartToken(
+      execFileSync("ps", ["-p", String(pid), "-o", "lstart="], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: PS_START_TOKEN_TIMEOUT_MS,
+        killSignal: "SIGKILL",
+        env: PS_PROBE_ENV,
+      }),
+    );
   } catch {
     return undefined;
   }
+}
+
+/** `processStartToken` without blocking the event loop on `ps` (Linux reads `/proc` directly). */
+export function processStartTokenAsync(pid: number): Promise<string | undefined> {
+  if (process.platform === "linux") return Promise.resolve(linuxStartToken(pid));
+  if (process.platform === "win32") return Promise.resolve(undefined);
+  return new Promise((resolve) => {
+    execFile(
+      "ps",
+      ["-p", String(pid), "-o", "lstart="],
+      {
+        encoding: "utf8",
+        timeout: PS_START_TOKEN_TIMEOUT_MS,
+        killSignal: "SIGKILL",
+        env: PS_PROBE_ENV,
+      },
+      (error, stdout) => resolve(error ? undefined : psLstartStartToken(stdout)),
+    );
+  });
 }
 
 /**

@@ -23,7 +23,11 @@ import {
 } from "../env/pathResolver";
 import { readPersistedBackendObservabilitySettings } from "../logging/logging";
 import { killBackendProcess } from "./backendProcess";
-import { stopBackendChild, stopBackendChildAndWait } from "./backendShutdown";
+import {
+  BACKEND_STOP_WAIT_TIMEOUT_MS,
+  stopBackendChild,
+  stopBackendChildAndWait,
+} from "./backendShutdown";
 import { beginBackendStartup, recordBackendStartupFailure } from "./backendStartupState";
 import {
   ensureBackendModulesPath,
@@ -40,11 +44,13 @@ import {
 } from "../system-monitor/agentBridge";
 import { resolveBackendStartWhenAllowed } from "./backendStartGuard";
 import { attachBackendChildLifecycle } from "./backendManager.child";
-import { captureBackendStderr } from "./backendManager.output";
+import { captureBackendStderr, logBackendOutputPipeErrors } from "./backendManager.output";
 import {
   buildBackendBootstrapEnvelope,
+  type ComputerUseOwnerAccess,
   consumeBackendStartReason,
   markNextBackendStartReason,
+  takeComputerUseOwnerAccess,
 } from "./backendBootstrapEnvelope";
 import {
   asLifecycleHintStream,
@@ -65,6 +71,10 @@ const swallowPipeError = () => {};
 interface BackendManagerDeps {
   readonly rootDir: string;
   readonly baseDir: string;
+  /** Legacy Cua runtime base; a dev-only state root in development (see main config). */
+  readonly cuaDriverBaseDir: string;
+  /** One-use owner access for this start; absent or null (today) leaves the envelope unchanged. */
+  readonly getComputerUseOwnerAccess?: () => ComputerUseOwnerAccess | null;
   readonly backendMaxOldSpaceMb: number | null;
   readonly cuaDriverHostBundleId: string;
   readonly serverSettingsPath: string;
@@ -140,7 +150,7 @@ export async function startBackend(): Promise<void> {
   let computerUseRuntimeEnv: NodeJS.ProcessEnv | undefined;
   try {
     computerUseRuntimeEnv = await resolveBackendStartWhenAllowed(() =>
-      resolveComputerUseRuntimeEnv(_deps!.baseDir, _deps!.cuaDriverHostBundleId),
+      resolveComputerUseRuntimeEnv(_deps!.cuaDriverBaseDir, _deps!.cuaDriverHostBundleId),
     );
   } finally {
     backendStartPending = false;
@@ -231,16 +241,7 @@ export async function startBackend(): Promise<void> {
     "child_spawned",
     `generation=${startupGeneration} pid=${child.pid ?? "unknown"} launcher=${backendLauncherPath} entry=${backendEntry}`,
   );
-  if (child.stdout)
-    child.stdout.on("error", (error) => {
-      logBackendLifecycle("stdout_error", `generation=${startupGeneration} error=${error.message}`);
-      swallowPipeError();
-    });
-  if (child.stderr)
-    child.stderr.on("error", (error) => {
-      logBackendLifecycle("stderr_error", `generation=${startupGeneration} error=${error.message}`);
-      swallowPipeError();
-    });
+  logBackendOutputPipeErrors(child, startupGeneration, logBackendLifecycle, swallowPipeError);
   const statusStream = child.stdio[4];
   if (statusStream && "on" in statusStream) {
     statusStream.on("error", (error) => {
@@ -281,6 +282,7 @@ export async function startBackend(): Promise<void> {
         t3Home: _deps.baseDir,
         authToken: backendAuthToken,
         systemMonitorAgentAccess: monitorAgentAccess,
+        computerUseOwner: takeComputerUseOwnerAccess(_deps.getComputerUseOwnerAccess),
         otlpTracesUrl: backendObservabilitySettings.otlpTracesUrl,
         otlpMetricsUrl: backendObservabilitySettings.otlpMetricsUrl,
         startReason: consumeBackendStartReason(),
@@ -375,7 +377,9 @@ export function stopBackend(): void {
   stopBackendChild(child, expectedBackendExitChildren);
 }
 
-export async function stopBackendAndWaitForExit(timeoutMs = 5_000): Promise<void> {
+export async function stopBackendAndWaitForExit(
+  timeoutMs = BACKEND_STOP_WAIT_TIMEOUT_MS,
+): Promise<void> {
   revokeSystemMonitorAgentToken();
   if (restartTimer) {
     clearTimeout(restartTimer);

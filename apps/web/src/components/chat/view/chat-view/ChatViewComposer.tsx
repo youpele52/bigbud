@@ -4,20 +4,16 @@ import { useMemo, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 
 import { ContextWindowMeter } from "../../common/ContextWindowMeter";
-import { ComposerAnnotationPreviews } from "../../composer/ComposerAnnotationPreviews";
 import { ComposerAttachmentMenu } from "../../composer/ComposerAttachmentMenu";
 import { ComposerFooterLeading } from "../../composer/ComposerFooterLeading";
-import { ComposerFilePreviews } from "../../composer/ComposerFilePreviews";
-import { ComposerImagePreviews } from "../../composer/ComposerImagePreviews";
 import { ComposerListeningBar } from "../../composer/ComposerListeningBar";
 import { ComposerMicButton, type ComposerMicButtonHandle } from "../../composer/ComposerMicButton";
 import { ComposerPendingApprovalActions } from "../../composer/ComposerPendingApprovalActions";
 import { ComposerPrimaryActions } from "../../composer/ComposerPrimaryActions";
 import { ComposerPromptEditor } from "../../composer/ComposerPromptEditor";
 import { ComposerReadDialog } from "../../composer/ComposerReadDialog";
-import { ComposerReplyPreview } from "../../composer/ComposerReplyPreview";
 import { composerSurfaceStyles } from "../../composer/ComposerSurface.styles";
-import { isBrowserAnnotationAttachment } from "../../../../stores/composer";
+import { ChatViewComposerPreviews } from "./ChatViewComposerPreviews";
 import { useSttStore } from "../../../../stores/stt/stt.store";
 import { deriveVisiblePromptSuggestion } from "../../../../logic/promptSuggestion.logic";
 import { describeThreadBackgroundWork } from "../ChatView.subagents.logic";
@@ -73,7 +69,6 @@ export function ChatViewComposer({
   // bar and hide the send button.
   const [isRecording, setIsRecording] = useState(false);
   const micRef = useRef<ComposerMicButtonHandle>(null);
-  const activeReplyTarget = base.composerDraft.replyTarget;
   const suggestionThread = base.isServerThread ? base.activeThread : undefined;
   const suggestionBlocked =
     thread.isComposerApprovalState ||
@@ -176,44 +171,12 @@ export function ChatViewComposer({
               onOpenDiscoveryItemSourcePath={onOpenDiscoveryItemSourcePath}
             />
 
-            {!thread.isComposerApprovalState && !thread.isOpencodePendingUserInputMode ? (
-              <>
-                {activeReplyTarget &&
-                !thread.showPlanFollowUpPrompt &&
-                !base.composerDraft.shellMode ? (
-                  <ComposerReplyPreview
-                    replyTarget={activeReplyTarget}
-                    onClear={() => base.setComposerReplyTarget(base.activeThread!.id, null)}
-                    onOpenSource={() => onOpenReplySource(activeReplyTarget.messageId)}
-                  />
-                ) : null}
-                <ComposerImagePreviews
-                  composerImages={base.composerImages}
-                  nonPersistedComposerImageIdSet={composer.nonPersistedComposerImageIdSet}
-                  onRemoveImage={base.removeComposerImageFromDraft}
-                  onExpandImage={base.setExpandedImage}
-                />
-                <ComposerAnnotationPreviews
-                  annotations={base.composerAnnotations}
-                  images={base.composerImages}
-                  onRemoveAnnotation={base.removeComposerAnnotationFromDraft}
-                  onClearAnnotations={() => {
-                    for (const annotation of base.composerAnnotations) {
-                      if (isBrowserAnnotationAttachment(annotation)) {
-                        base.removeComposerImageFromDraft(annotation.imageId);
-                      }
-                      base.removeComposerAnnotationFromDraft(annotation.id);
-                    }
-                  }}
-                />
-                <ComposerFilePreviews
-                  composerFiles={base.composerFiles}
-                  resolvedTheme={base.resolvedTheme}
-                  onRemoveFile={base.removeComposerFileFromDraft}
-                  onToggleWatchForCompletion={base.toggleComposerFileWatchForCompletion}
-                />
-              </>
-            ) : null}
+            <ChatViewComposerPreviews
+              base={base}
+              composer={composer}
+              thread={thread}
+              onOpenReplySource={onOpenReplySource}
+            />
 
             <ComposerPromptEditor
               ref={base.composerEditorRef}

@@ -1,6 +1,7 @@
 import {
   SIDEBAR_ACTION_IDS,
   SIDEBAR_ACTION_LABELS,
+  SIDEBAR_PRIMARY_GROUP_SIZE,
   type SidebarActionId,
 } from "./Sidebar.actions.logic";
 
@@ -18,6 +19,7 @@ export function buildSidebarItemMenuItems(input: {
   order: readonly SidebarActionId[];
   visible: readonly SidebarActionId[];
   hidden: readonly SidebarActionId[];
+  primaryGroupSize?: number;
 }): SidebarMenuItem[] {
   const { id, order, visible, hidden } = input;
   const index = id === null ? -1 : visible.indexOf(id);
@@ -44,7 +46,9 @@ export function buildSidebarItemMenuItems(input: {
     {
       id: "reset-order",
       label: "Reset order",
-      disabled: order.every((entry, index) => entry === SIDEBAR_ACTION_IDS[index]),
+      disabled:
+        (input.primaryGroupSize ?? SIDEBAR_PRIMARY_GROUP_SIZE) === SIDEBAR_PRIMARY_GROUP_SIZE &&
+        order.every((entry, index) => entry === SIDEBAR_ACTION_IDS[index]),
     },
   ];
 }

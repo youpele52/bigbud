@@ -2,7 +2,7 @@ import { type ProjectId } from "@bigbud/contracts";
 
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import type { Project } from "../../models/types";
-import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
+import { isRemoteExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
 import type { SidebarProjectSnapshot } from "./Sidebar.types";
 
 interface BuildSidebarProjectSnapshotsInput {
@@ -16,13 +16,13 @@ export function buildSidebarProjectSnapshots(
 ): SidebarProjectSnapshot[] {
   return input.orderedProjects.map((project) => {
     const executionTargetId = resolveWorkspaceExecutionTargetId(project);
-    const isDisconnectedRemoteProject =
+    const isDisconnectedRemoteWorkspace =
       isRemoteExecutionTargetId(executionTargetId) &&
       !input.verifiedExecutionTargetIds[executionTargetId];
 
     return {
       ...project,
-      expanded: isDisconnectedRemoteProject
+      expanded: isDisconnectedRemoteWorkspace
         ? false
         : (input.projectExpandedById[project.id as ProjectId] ?? true),
     };

@@ -1,7 +1,7 @@
-import { Effect, Layer, ServiceMap } from "effect";
+import { Effect, Layer, Schema, ServiceMap } from "effect";
 import { HttpRouter, HttpServer } from "effect/unstable/http";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
-import { CommandId, ProjectId, ThreadId, MessageId } from "@bigbud/contracts";
+import { CommandId, ProjectId, ThreadId, MessageId, ModelSelection } from "@bigbud/contracts";
 import type { OpencodeV2AdapterShape } from "../../Services/OpencodeV2/Adapter.ts";
 import { createOrchestrationSystem } from "../../../orchestration/Layers/OrchestrationEngine.test.helpers.ts";
 import {
@@ -77,6 +77,10 @@ export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFi
             if (!adapter) throw new Error("provider consumer missing");
             const readModel = yield* Effect.promise(() => system.run(system.engine.getReadModel()));
             const child = readModel.threads.find((thread) => thread.id === result.childThreadId)!;
+            const childModelSelection = child.modelSelection;
+            if (!Schema.is(ModelSelection)(childModelSelection)) {
+              throw new Error("Committed child provider is unavailable.");
+            }
             // Consume the real committed canonical child turn; no fabricated child IDs or responses.
             const userMessage = child.messages.find(
               (message) => message.id === request.sourceMessageId,
@@ -85,14 +89,14 @@ export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFi
             yield* adapter.startSession({
               threadId: child.id,
               cwd: input.workspace,
-              modelSelection: child.modelSelection,
+              modelSelection: childModelSelection,
               runtimeMode: child.runtimeMode,
               providerRuntimeExecutionTargetId: child.providerRuntimeExecutionTargetId,
               workspaceExecutionTargetId: child.workspaceExecutionTargetId,
             });
             yield* adapter.sendTurn({
               threadId: child.id,
-              modelSelection: child.modelSelection,
+              modelSelection: childModelSelection,
               input: userMessage.text,
               requestMessageId: MessageId.makeUnsafe(userMessage.id),
             });

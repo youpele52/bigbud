@@ -1,3 +1,4 @@
+import { requireActiveModelSelection } from "@bigbud/shared/providerLifecycle";
 import {
   type ChatAttachment,
   CommandId,
@@ -143,7 +144,7 @@ export const dispatchThreadWatchTriggerTurn = Effect.fn("dispatchThreadWatchTrig
         ],
       },
       ...(input.watcherThread.modelSelection !== undefined
-        ? { modelSelection: input.watcherThread.modelSelection }
+        ? { modelSelection: requireActiveModelSelection(input.watcherThread.modelSelection) }
         : {}),
       runtimeMode: input.watcherThread.runtimeMode ?? DEFAULT_RUNTIME_MODE,
       interactionMode: input.watcherThread.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE,

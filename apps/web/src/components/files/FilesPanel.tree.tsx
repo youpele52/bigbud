@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
 import { VscodeEntryIcon } from "../chat/common/VscodeEntryIcon";
+import { WorkspaceRequestStatus } from "../common/WorkspaceRequestStatus";
 import { EMPTY_ENTRIES, entryName, type DirectoryState } from "./FilesPanel.shared";
 import { joinWorkspaceEntryPath, writeFilesPanelDragEntry } from "./filesPanel.dnd";
 
@@ -15,6 +16,8 @@ interface FilesPanelTreeProps {
   resolvedTheme: "light" | "dark";
   expandedDirectories: Readonly<Record<string, boolean>>;
   directoryStateByPath: Readonly<Record<string, DirectoryState>>;
+  remote?: boolean | undefined;
+  onRetryDirectory?: ((path: string) => void) | undefined;
   onToggleDirectory: (entry: ProjectEntry) => void;
   onOpenFile: (entry: ProjectEntry) => void;
   onOpenContextMenu: (input: {
@@ -96,7 +99,21 @@ export function renderFilesPanelTree(props: FilesPanelTreeProps): ReactNode {
         </button>
         {isDirectory && expanded ? (
           <div>
-            {showNestedLoading ? (
+            {props.remote ? (
+              <>
+                {nestedState?.loading || nestedState?.error ? (
+                  <div style={{ paddingLeft: `${16 + props.depth * 16}px` }}>
+                    <WorkspaceRequestStatus
+                      error={nestedState.error}
+                      recovering={nestedState.recovering}
+                      pending={nestedState.requestPending}
+                      onRetry={() => props.onRetryDirectory?.(entry.path)}
+                    />
+                  </div>
+                ) : null}
+                {renderFilesPanelTree({ ...props, entries: nestedEntries, depth: props.depth + 1 })}
+              </>
+            ) : showNestedLoading ? (
               <div
                 className="px-2 py-1 text-xs text-muted-foreground/60"
                 style={{ paddingLeft: `${24 + props.depth * 16}px` }}

@@ -135,7 +135,8 @@ export function makeGetSelectedThreadDetail(
     `,
   });
 
-  const { readActivities, readUserInputHistory } = makeThreadDetailActivityReaders(sql);
+  const { readActivities, readUserInputHistory, readHtmlRenderHistory } =
+    makeThreadDetailActivityReaders(sql);
 
   const readPendingApprovals = SqlSchema.findAll({
     Request: ThreadPageRequest,
@@ -301,6 +302,12 @@ export function makeGetSelectedThreadDetail(
             beforeCreatedAt: input.messageCursor?.createdAt ?? null,
           });
           const activities = rows.activities.slice(0, activityLimit).map(normalizeDetailActivity);
+          const htmlHistory = yield* readHtmlRenderHistory({
+            threadId: input.threadId,
+            oldestCreatedAt: hasOlder ? (oldestMessage?.createdAt ?? null) : null,
+            beforeCreatedAt: input.messageCursor?.createdAt ?? null,
+          });
+          userInputHistory.push(...htmlHistory.map(normalizeDetailActivity));
           const activityIds = new Set(activities.map((activity) => activity.id));
 
           return {

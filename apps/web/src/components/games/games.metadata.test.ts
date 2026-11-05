@@ -6,11 +6,12 @@ vi.mock("~/rpc/wsHttpOrigin", () => ({ resolveWsHttpOrigin: () => "http://localh
 describe("Games catalog metadata", () => {
   beforeEach(() => vi.resetModules());
 
-  it("keeps all thirteen approved destinations exact", () => {
+  it("keeps all fourteen approved destinations exact", () => {
     expect(GAMES.map((game) => game.url)).toEqual([
       "https://www.google.com/logos/2010/pacman10-i.html",
       "https://playsnake.org/",
       "https://tetris.com/play-tetris",
+      "https://lagosrun.org/",
       "https://orteil.dashnet.org/cookieclicker/",
       "https://www.decisionproblem.com/paperclips/",
       "https://adarkroom.doublespeakgames.com/",
@@ -22,6 +23,12 @@ describe("Games catalog metadata", () => {
       "https://www.crazygames.com/game/word-wipe",
       "https://www.retrogames.cz/",
     ]);
+    expect(GAMES.find((game) => game.name === "Lagos Run")).toEqual({
+      name: "Lagos Run",
+      url: "https://lagosrun.org/",
+      category: "Arcade",
+      description: "Drive a danfo through Lagos traffic and deliver passengers.",
+    });
     expect(GAMES.at(-1)).toMatchObject({
       name: "Retro Games",
       category: "Retro Games",

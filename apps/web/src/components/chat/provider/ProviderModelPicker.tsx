@@ -36,6 +36,9 @@ import { useSettings } from "../../../hooks/useSettings";
 import { getVisibleComposerProviders } from "../../../models/provider/composerVisibility.models";
 import type { ProviderModelPickerProps } from "./ProviderModelPicker.types";
 import { visibleProviderOptionsForPicker } from "./ProviderModelPicker.models";
+import { UnavailableProviderMenuItem } from "./ProviderModelPicker.unavailable";
+import { CopilotSetupMenuItem } from "./ProviderModelPicker.copilotSetup";
+import { ensureCopilotRuntimeForChat } from "./copilotRuntime.guard";
 
 export { visibleModelOptionsForPicker } from "./ProviderModelPicker.models";
 export { AVAILABLE_PROVIDER_OPTIONS } from "./ProviderModelPicker.models";
@@ -124,9 +127,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
     formatSlugAsDisplayName(modelSlug);
   const ProviderIcon = PROVIDER_ICON_BY_PROVIDER[activeProvider];
 
-  const handleModelChange = (provider: ProviderKind, value: string) => {
+  const handleModelChange = async (provider: ProviderKind, value: string) => {
     if (props.disabled) return;
     if (!value) return;
+    if (provider === "copilot" && !(await ensureCopilotRuntimeForChat())) return;
     const matchedOption = props.modelOptionsByProvider[provider].find(
       (option) => modelOptionValue(option) === value,
     );
@@ -254,6 +258,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                 unavailableMessage,
               } = availability;
               if (isUnavailable && liveProvider) {
+                if (option.value === "copilot" && !liveProvider.installed)
+                  return (
+                    <CopilotSetupMenuItem key={option.value} className={props.menuItemClassName} />
+                  );
                 const unavailableLabel = !liveProvider.enabled
                   ? "Disabled"
                   : !liveProvider.installed
@@ -302,24 +310,13 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(
                   );
                 }
                 return (
-                  <MenuItem
+                  <UnavailableProviderMenuItem
                     key={option.value}
                     className={props.menuItemClassName}
-                    disabled
-                    title={unavailableMessage ?? liveProvider.message ?? unavailableLabel}
-                  >
-                    <OptionIcon
-                      aria-hidden="true"
-                      className={cn(
-                        "size-4 shrink-0 opacity-80",
-                        providerIconClassName(option.value, "text-muted-foreground/70"),
-                      )}
-                    />
-                    <span>{option.label}</span>
-                    <span className="ms-auto max-w-64 truncate text-[11px] text-muted-foreground/80 uppercase tracking-[0.08em]">
-                      {unavailableMessage ?? unavailableLabel}
-                    </span>
-                  </MenuItem>
+                    provider={option.value}
+                    label={option.label}
+                    message={unavailableMessage ?? liveProvider.message ?? unavailableLabel}
+                  />
                 );
               }
               return (

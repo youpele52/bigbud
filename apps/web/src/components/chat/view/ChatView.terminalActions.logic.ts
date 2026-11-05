@@ -5,7 +5,7 @@ import { DEFAULT_THREAD_TERMINAL_ID, MAX_TERMINALS_PER_GROUP } from "../../../mo
 import { randomUUID } from "~/lib/utils";
 import { readNativeApi } from "../../../rpc/nativeApi";
 import { ensureThreadMaterialized } from "../../../lib/threadMaterialization";
-import { forgetTerminalLaunch } from "../../../lib/terminalLaunchBinding";
+import { closeTerminalConfirmed } from "../../terminal/terminalLifecycle.operations";
 import { runBoundTerminalCommand } from "../../../lib/terminalLaunchBinding.command";
 import { useRemoteExecutionAccessGate } from "../../../hooks/useRemoteExecutionAccessGate";
 import { resolveWorkspaceExecutionTargetId } from "../../../lib/providerExecutionTargets";
@@ -153,35 +153,25 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
     (terminalId: string) => {
       const api = readNativeApi();
       if (!activeThreadId || !api) return;
-      const isFinalTerminal = terminalState.terminalIds.length <= 1;
-      const fallbackExitWrite = () =>
-        api.terminal
-          .write({ threadId: activeThreadId, terminalId, data: "exit\n" })
-          .catch(() => undefined);
-      if ("close" in api.terminal && typeof api.terminal.close === "function") {
-        void (async () => {
-          if (isFinalTerminal) {
-            await api.terminal
-              .clear({ threadId: activeThreadId, terminalId })
-              .catch(() => undefined);
-          }
-          await api.terminal.close({
-            threadId: activeThreadId,
-            terminalId,
-            deleteHistory: true,
-          });
-        })().catch(() => fallbackExitWrite());
-      } else {
-        void fallbackExitWrite();
-      }
-      storeCloseTerminal(activeThreadId, terminalId);
-      forgetTerminalLaunch(activeThreadId, terminalId);
-      setTerminalFocusRequestId((value) => value + 1);
+      void closeTerminalConfirmed({
+        api,
+        threadId: activeThreadId,
+        terminalId,
+        onPending: () => {
+          const next = terminalState.terminalIds.find((id) => id !== terminalId);
+          if (next && terminalState.activeTerminalId === terminalId)
+            storeSetActiveTerminal(activeThreadId, next);
+          setTerminalFocusRequestId((value) => value + 1);
+        },
+        onConfirmed: () => storeCloseTerminal(activeThreadId, terminalId),
+      });
     },
     [
       activeThreadId,
       storeCloseTerminal,
-      terminalState.terminalIds.length,
+      terminalState.terminalIds,
+      terminalState.activeTerminalId,
+      storeSetActiveTerminal,
       setTerminalFocusRequestId,
     ],
   );

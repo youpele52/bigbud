@@ -10,8 +10,11 @@ import { decodeV2ThreadCallback } from "./Orchestration.callback.ts";
 import { V2ThreadApprovals } from "./Orchestration.approval.ts";
 import { assertV2ThreadPolicy } from "./Orchestration.admission.ts";
 import { V2ActiveExecutions } from "./Execution.owners.ts";
-import { V2ThreadImplementationRegistry } from "./Orchestration.implementation.ts";
-import type { V2ThreadImplementation } from "./Orchestration.implementation.types.ts";
+import {
+  V2ThreadImplementationRegistry,
+  v2ImplementationForBootstrap,
+} from "./Orchestration.implementation.ts";
+import type { V2ThreadImplementation } from "./Orchestration.implementation.types.v3.ts";
 import type { V2NativeRuntimeProof } from "./NativeCompatibility.types.ts";
 import { invokeV2ThreadOwner } from "./Orchestration.bridge.invoke.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
@@ -30,6 +33,11 @@ import {
 import type { V2DeadBackendContext } from "./Orchestration.enrollment.deadBackend.ts";
 import type { OpencodeV2Client } from "./Client.ts";
 import { settleWithinShutdown } from "./Runtime.shutdown.ts";
+import {
+  suspendV2ThreadOwner,
+  reconnectV2ThreadOwner,
+  v2ThreadResponseLease,
+} from "./Orchestration.bridge.transport.ts";
 
 export interface Owner {
   readonly runtime: OpencodeV2Runtime;
@@ -76,6 +84,12 @@ export interface V2ThreadBridgeOptions {
 export class V2ThreadBridge {
   private readonly owners = new Map<string, Owner>();
   private readonly implementations: V2ThreadImplementationRegistry;
+  suspend(session: V2RuntimeSession) {
+    suspendV2ThreadOwner(this.owners.get(session.native.id));
+  }
+  reconnect(session: V2RuntimeSession, runtime: OpencodeV2Runtime) {
+    return reconnectV2ThreadOwner(this, this.owners, session, runtime);
+  }
   constructor(private readonly options: V2ThreadBridgeOptions) {
     this.implementations = options.implementations ?? new V2ThreadImplementationRegistry();
   }
@@ -110,8 +124,9 @@ export class V2ThreadBridge {
     };
     if (this.owners.has(session.native.id))
       throw new Error("V2 canonical enrollment already owned.");
-    const selected =
+    const requested =
       (await this.options.selectImplementation?.()) ?? this.implementations.current();
+    const selected = v2ImplementationForBootstrap(requested, verified?.bootstrapAbi);
     assertCurrent();
     if (this.owners.has(session.native.id))
       throw new Error(
@@ -134,6 +149,8 @@ export class V2ThreadBridge {
       storageIdentity: session.storageIdentity,
       directory: session.native.location.directory,
       runtimeTargetId: "local",
+      // Canonical ownership describes the local native Location, including synthetic Locations.
+      // Remote file authority stays in the session/binding and target-bound MCP credentials.
       workspaceTargetId: "local",
       sessionEpoch: session.epoch,
       transportGeneration: shared.generation,
@@ -213,9 +230,14 @@ export class V2ThreadBridge {
         return owner.active.cancel();
       },
     };
-    const abort = () => revoke();
-    session.consentPermit.signal.addEventListener("abort", abort, { once: true });
-    owner.releaseListener = () => session.consentPermit!.signal.removeEventListener("abort", abort);
+    const abort = () => {
+      // Pending approval has no physical effect; settle it without cancelling dispatched work.
+      approvals.cancel();
+      suspendV2ThreadOwner(owner);
+    };
+    const permit = session.consentPermit;
+    permit.signal.addEventListener("abort", abort, { once: true });
+    owner.releaseListener = () => permit.signal.removeEventListener("abort", abort);
     const retire = async (signal?: AbortSignal) => {
       revoke();
       await owner.active.cancel();
@@ -280,6 +302,16 @@ export class V2ThreadBridge {
       item.enrollment.matches(token, request.ownerDigest, request.enrollmentNonce),
     );
     if (!owner) throw new Error("V2 thread-tools callback owner rejected.");
+    if (
+      owner.session.transportDetached ||
+      (owner.session.transportRecovering &&
+        !(
+          request.kind === "proof" &&
+          owner.enrollment.options.owner.transportGeneration ===
+            owner.runtime.options.config.sharedService?.generation
+        ))
+    )
+      throw new Error("V2 stale-generation canonical callback rejected.");
     const bounded = AbortSignal.any([
       signal,
       owner.enrollment.controller.signal,
@@ -347,18 +379,7 @@ export class V2ThreadBridge {
   }
 
   responseLease(value: unknown) {
-    const request = decodeV2ThreadCallback(value);
-    const owner = [...this.owners.values()].find(
-      (item) =>
-        item.enrollment.digest === request.ownerDigest &&
-        item.enrollment.options.owner.enrollmentNonce === request.enrollmentNonce,
-    );
-    if (!owner) throw new Error("V2 callback response owner unavailable.");
-    if (request.kind === "proof") {
-      owner.enrollment.assertPendingLease(request.leaseRevision, request.leaseExpiresAt);
-      return { revision: request.leaseRevision, expiry: request.leaseExpiresAt };
-    }
-    return owner.enrollment.acknowledgedLease();
+    return v2ThreadResponseLease(this.owners.values(), value);
   }
 
   async reply(

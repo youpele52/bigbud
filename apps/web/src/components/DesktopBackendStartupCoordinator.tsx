@@ -66,7 +66,7 @@ export function DesktopBackendStartupCoordinator() {
       description: describeDesktopStartupProgress(state),
       timeout: 0,
       title: "Starting bigbud",
-      type: "info" as const,
+      type: "loading" as const,
       data: { hideCopyButton: true },
     };
     if (toastRef.current) {

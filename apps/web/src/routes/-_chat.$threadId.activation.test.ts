@@ -13,7 +13,7 @@ import {
 } from "./-_chat.$threadId.activation";
 
 const localProjectId = ProjectId.makeUnsafe("local-project");
-const remoteProjectId = ProjectId.makeUnsafe("remote-project");
+const remoteWorkspaceId = ProjectId.makeUnsafe("remote-workspace");
 
 function makeThread(projectId: ProjectId, overrides: Partial<Thread> = {}): Thread {
   return {
@@ -42,41 +42,41 @@ describe("canonical thread route activation", () => {
     ).toMatchObject({
       openChats: false,
       openProjects: true,
-      openRemoteProjects: false,
+      openRemoteWorkspaces: false,
       projectId: localProjectId,
     });
   });
 
-  it("opens Remote Projects using project execution scope", () => {
+  it("opens Remote Workspaces using project execution scope", () => {
     expect(
       resolveCanonicalThreadRouteActivation({
-        thread: makeThread(remoteProjectId),
-        project: makeProject(remoteProjectId, "ssh:workspace"),
+        thread: makeThread(remoteWorkspaceId),
+        project: makeProject(remoteWorkspaceId, "ssh:workspace"),
         isPinned: false,
       }),
-    ).toMatchObject({ openProjects: false, openRemoteProjects: true });
+    ).toMatchObject({ openProjects: false, openRemoteWorkspaces: true });
   });
 
   it("keeps Sidebar project scope authoritative over thread metadata", () => {
     expect(
       resolveCanonicalThreadRouteActivation({
-        thread: makeThread(remoteProjectId, { workspaceExecutionTargetId: "local" }),
-        project: makeProject(remoteProjectId, "ssh:workspace"),
+        thread: makeThread(remoteWorkspaceId, { workspaceExecutionTargetId: "local" }),
+        project: makeProject(remoteWorkspaceId, "ssh:workspace"),
         isPinned: false,
       }),
-    ).toMatchObject({ openProjects: false, openRemoteProjects: true });
+    ).toMatchObject({ openProjects: false, openRemoteWorkspaces: true });
   });
 
   it("falls back to thread execution scope until its project arrives", () => {
     expect(
       resolveCanonicalThreadRouteActivation({
-        thread: makeThread(remoteProjectId, {
+        thread: makeThread(remoteWorkspaceId, {
           workspaceExecutionTargetId: "ssh:workspace",
         }),
         project: undefined,
         isPinned: false,
       }),
-    ).toMatchObject({ openProjects: false, openRemoteProjects: true });
+    ).toMatchObject({ openProjects: false, openRemoteWorkspaces: true });
   });
 
   it("opens Chats for the built-in project and Pinned for a pinned route", () => {
@@ -90,7 +90,7 @@ describe("canonical thread route activation", () => {
       openChats: true,
       openFavourites: true,
       openProjects: false,
-      openRemoteProjects: false,
+      openRemoteWorkspaces: false,
     });
   });
 

@@ -31,9 +31,9 @@ it("registers shared-only V2 without development flags and rejects retained isol
               BIGBUD_ENABLE_OPENCODE_V2_DEVELOPMENT: "1",
             });
             const registration = registrations[0]!;
-            expect(registration.capabilities.needsBuiltinsDisabled).toBe(false);
+            expect(registration.capabilities.needsBuiltinsDisabled).toBe(true);
             expect(registration.capabilities.supportsRemoteProviderRuntime).toBe(false);
-            expect(registration.capabilities.supportsLocalRuntimeRemoteWorkspace).toBe(false);
+            expect(registration.capabilities.supportsLocalRuntimeRemoteWorkspace).toBe(true);
             const disabled = yield* registration.providerService.getSnapshot;
             expect(disabled).toMatchObject({ provider: "opencodeV2", enabled: false, models: [] });
             expect(disabled.developmentOnly).toBeUndefined();

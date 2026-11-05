@@ -85,11 +85,17 @@ describe("CheckpointReactor", () => {
     expect(thread.latestTurn?.turnId).toBe("turn-1");
     expect(thread.checkpoints).toHaveLength(1);
     expect(thread.checkpoints[0]?.checkpointTurnCount).toBe(1);
-    expect(harness.provider.rollbackConversation).toHaveBeenCalledTimes(1);
-    expect(harness.provider.rollbackConversation).toHaveBeenCalledWith({
+    expect(harness.provider.rollbackConversation).not.toHaveBeenCalled();
+    expect(harness.provider.rewindInputs).toHaveLength(1);
+    expect(harness.provider.rewindInputs[0]).toMatchObject({
       threadId: ThreadId.makeUnsafe("thread-1"),
-      numTurns: 1,
+      currentTurnCount: 2,
+      targetTurnCount: 1,
+      expectedTurnIds: ["turn-1", "turn-2"],
+      retainedTurnId: "turn-1",
+      firstRemovedTurnId: "turn-2",
     });
+    await harness.drain();
     expect(fs.readFileSync(path.join(harness.cwd, "README.md"), "utf8")).toBe("v2\n");
     expect(
       gitRefExists(harness.cwd, checkpointRefForThreadTurn(ThreadId.makeUnsafe("thread-1"), 2)),
@@ -239,14 +245,22 @@ describe("CheckpointReactor", () => {
 
     await harness.drain();
 
-    expect(harness.provider.rollbackConversation).toHaveBeenCalledTimes(2);
-    expect(harness.provider.rollbackConversation.mock.calls[0]?.[0]).toEqual({
+    expect(harness.provider.rollbackConversation).not.toHaveBeenCalled();
+    expect(harness.provider.rewindInputs).toHaveLength(2);
+    expect(harness.provider.rewindInputs[0]).toMatchObject({
       threadId: ThreadId.makeUnsafe("thread-1"),
-      numTurns: 1,
+      currentTurnCount: 2,
+      targetTurnCount: 1,
+      expectedTurnIds: ["turn-1", "turn-2"],
+      firstRemovedTurnId: "turn-2",
     });
-    expect(harness.provider.rollbackConversation.mock.calls[1]?.[0]).toEqual({
+    expect(harness.provider.rewindInputs[1]).toMatchObject({
       threadId: ThreadId.makeUnsafe("thread-1"),
-      numTurns: 1,
+      currentTurnCount: 1,
+      targetTurnCount: 0,
+      expectedTurnIds: ["turn-1"],
+      retainedTurnId: null,
+      firstRemovedTurnId: "turn-1",
     });
   });
 

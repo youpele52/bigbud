@@ -1,5 +1,5 @@
 /**
- * Per-child subagent detail for the OpenCode V1 (and KiloCode) child tracker: model,
+ * Per-child subagent detail for the OpenCode V1 child tracker: model,
  * summed usage across the child's assistant messages, and tool steps from tool parts.
  *
  * @module OpencodeAdapter.stream.children.activity

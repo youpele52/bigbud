@@ -113,6 +113,7 @@ beforeEach(() => {
   initBackendManager({
     rootDir: "/tmp",
     baseDir: "/tmp",
+    cuaDriverBaseDir: "/tmp/cua-base",
     backendMaxOldSpaceMb: null,
     cuaDriverHostBundleId: "test",
     serverSettingsPath: "/tmp/settings.json",
@@ -161,6 +162,9 @@ describe("backend manager start", () => {
     expect(stdio.slice(3)).toEqual(["pipe", "pipe", "pipe", "pipe", "pipe"]);
     expect(children[0]!.envelope()).toMatchObject({ mode: "desktop", lifecycleHintFd: 5 });
     expect(children[0]!.envelope()).not.toHaveProperty("startReason");
+    // The legacy Cua runtime resolves under its own base; the server home stays `baseDir`.
+    expect(mocks.runtime).toHaveBeenCalledWith("/tmp/cua-base", "test");
+    expect(children[0]!.envelope()).toMatchObject({ t3Home: "/tmp" });
     // Clean up the module's single backend for the next test.
     mocks.lifecycle[0]!.onDisconnected();
   });
@@ -182,5 +186,52 @@ describe("backend manager start", () => {
     expect(children).toHaveLength(3);
     expect(children[2]!.envelope()).not.toHaveProperty("startReason");
     mocks.lifecycle[2]!.onDisconnected();
+  });
+
+  it("sends no computer-use owner field when main provides no access (today)", async () => {
+    await startBackend();
+    expect(children[0]!.envelope()).not.toHaveProperty("computerUseOwner");
+    mocks.lifecycle[0]!.onDisconnected();
+  });
+
+  it("takes fresh one-use owner access on every start, only through the envelope", async () => {
+    let issued = 0;
+    const getComputerUseOwnerAccess = vi.fn(() => ({
+      endpoint: "/run/owner.sock",
+      capability: `capability-${++issued}`,
+      tupleDigest: "sha256:tuple",
+      ownerGeneration: "1",
+    }));
+    initBackendManager({
+      rootDir: "/tmp",
+      baseDir: "/tmp",
+      cuaDriverBaseDir: "/tmp/cua-base",
+      getComputerUseOwnerAccess,
+      backendMaxOldSpaceMb: null,
+      cuaDriverHostBundleId: "test",
+      serverSettingsPath: "/tmp/settings.json",
+      getIsQuitting: () => false,
+      getBackendLogSink: () => null,
+      isDevelopmentDiagnostics: false,
+      runId: "run",
+    });
+
+    await startBackend();
+    expect(children[0]!.envelope()).toMatchObject({
+      computerUseOwner: { capability: "capability-1" },
+    });
+    // Never in argv or env.
+    const [, args, options] = mocks.spawn.mock.calls[0]!;
+    expect(JSON.stringify([args, options.env])).not.toContain("capability-1");
+
+    mocks.lifecycle[0]!.onDisconnected();
+    mocks.lifecycle[0]!.scheduleRestart("exit");
+    await vi.advanceTimersByTimeAsync(600);
+    expect(children).toHaveLength(2);
+    expect(children[1]!.envelope()).toMatchObject({
+      computerUseOwner: { capability: "capability-2" },
+    });
+    expect(getComputerUseOwnerAccess).toHaveBeenCalledTimes(2);
+    mocks.lifecycle[1]!.onDisconnected();
   });
 });

@@ -7,6 +7,10 @@ import {
   cuaDriverMcpArguments,
 } from "@bigbud/shared/cua-driver/invocation";
 import { CUA_DRIVER_REQUIRED_TOOLS } from "@bigbud/shared/cua-driver/policy";
+import {
+  validateCuaDriverMcpProtocol,
+  validateCuaDriverMcpTools,
+} from "@bigbud/shared/cua-driver/mcpCompatibility";
 
 import {
   CuaDriver,
@@ -14,7 +18,14 @@ import {
   type CuaDriverCallResult,
   type CuaDriverShape,
 } from "../Services/CuaDriver.ts";
+import { parseAvailableTools, toCallResult } from "./CuaDriver.results.ts";
+import { requestResponse, stderrTails, writeMessage } from "./CuaDriver.framing.ts";
+import { makeCuaDriverCallQueue } from "./CuaDriver.queue.ts";
 import { resetCuaDriverDaemon } from "./CuaDriver.reset.ts";
+import {
+  COMPUTER_USE_STOPPED_BY_USER_MESSAGE,
+  ComputerUseAdmission,
+} from "../computerUseAdmission.ts";
 import {
   formatCuaDriverHealthReport,
   requireCuaDriverEmbeddedHostBundleId,
@@ -23,8 +34,6 @@ import {
 
 const JSONRPC_VERSION = "2.0";
 const MCP_PROTOCOL_VERSION = "2025-06-18";
-const CUA_DRIVER_REQUEST_TIMEOUT_MS = 60 * 60_000;
-const CUA_DRIVER_MAX_MESSAGE_BYTES = 25 * 1024 * 1024;
 const CUA_DRIVER_STDERR_TAIL_BYTES = 4 * 1024;
 const MUTATING_TOOLS = new Set([
   "launch_app",
@@ -36,7 +45,6 @@ const MUTATING_TOOLS = new Set([
   "press_key",
   "hotkey",
 ]);
-const stderrTails = new WeakMap<ChildProcessWithoutNullStreams, string>();
 
 function resolveCuaDriverCommand(): string {
   return process.env.BIGBUD_CUA_DRIVER_PATH?.trim() || "cua-driver";
@@ -63,160 +71,12 @@ function stopChild(child: ChildProcessWithoutNullStreams): void {
   child.kill("SIGTERM");
 }
 
-function stderrSuffix(child: ChildProcessWithoutNullStreams): string {
-  const tail = stderrTails.get(child)?.trim();
-  return tail ? ` Driver diagnostics: ${tail.slice(-1_024)}` : "";
-}
-
-function writeMessage(child: ChildProcessWithoutNullStreams, message: unknown): Promise<void> {
-  const body = JSON.stringify(message);
-  return new Promise((resolve, reject) => {
-    child.stdin.write(`${body}\n`, (error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
-async function requestResponse(
-  child: ChildProcessWithoutNullStreams,
-  id: number,
-  method: string,
-  params?: Record<string, unknown>,
-): Promise<unknown> {
-  return await new Promise((resolve, reject) => {
-    let buffer = Buffer.alloc(0);
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error(`cua-driver MCP request '${method}' timed out.`));
-    }, CUA_DRIVER_REQUEST_TIMEOUT_MS);
-
-    const cleanup = () => {
-      clearTimeout(timeout);
-      child.stdout.removeListener("data", onData);
-      child.removeListener("error", onError);
-      child.removeListener("exit", onExit);
-    };
-
-    const onError = (error: Error) => {
-      cleanup();
-      reject(error);
-    };
-
-    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
-      cleanup();
-      reject(
-        new Error(
-          `cua-driver mcp exited (code=${code ?? "null"}, signal=${signal ?? "null"}).${stderrSuffix(child)}`,
-        ),
-      );
-    };
-
-    const onData = (chunk: Buffer) => {
-      buffer = Buffer.concat([buffer, chunk]);
-      if (buffer.length > CUA_DRIVER_MAX_MESSAGE_BYTES) {
-        cleanup();
-        reject(new Error("cua-driver MCP response exceeded the maximum size."));
-        return;
-      }
-      for (;;) {
-        const lineEnd = buffer.indexOf("\n");
-        if (lineEnd === -1) {
-          return;
-        }
-        const body = buffer.slice(0, lineEnd).toString("utf8").trim();
-        buffer = buffer.slice(lineEnd + 1);
-        if (!body) continue;
-        let message: Record<string, unknown>;
-        try {
-          message = JSON.parse(body) as Record<string, unknown>;
-        } catch (error) {
-          cleanup();
-          reject(error);
-          return;
-        }
-        if (message.id !== id) {
-          continue;
-        }
-        cleanup();
-        if (message.error && typeof message.error === "object") {
-          const errorRecord = message.error as Record<string, unknown>;
-          reject(
-            new Error(
-              typeof errorRecord.message === "string"
-                ? errorRecord.message
-                : "cua-driver returned an MCP error.",
-            ),
-          );
-          return;
-        }
-        resolve(message.result);
-        return;
-      }
-    };
-
-    child.stdout.on("data", onData);
-    child.once("error", onError);
-    child.once("exit", onExit);
-    void writeMessage(child, {
-      jsonrpc: JSONRPC_VERSION,
-      id,
-      method,
-      ...(params ? { params } : {}),
-    }).catch(onError);
-  });
-}
-
-export function toCallResult(result: unknown): CuaDriverCallResult {
-  const record = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
-  const content = Array.isArray(record.content)
-    ? record.content.flatMap((entry) => {
-        if (!entry || typeof entry !== "object") {
-          return [];
-        }
-        const block = entry as Record<string, unknown>;
-        if (typeof block.type !== "string") {
-          return [];
-        }
-        return [
-          {
-            type: block.type,
-            ...(typeof block.text === "string" ? { text: block.text } : {}),
-            ...(typeof block.mimeType === "string" ? { mimeType: block.mimeType } : {}),
-            ...(typeof block.data === "string" ? { data: block.data } : {}),
-          },
-        ];
-      })
-    : [];
-  if (record.isError === true) {
-    const message = content.find((entry) => entry.text)?.text;
-    throw new Error(message ?? "cua-driver reported an MCP tool error.");
-  }
-  return {
-    content,
-    ...(record.structuredContent === undefined
-      ? {}
-      : { structuredContent: record.structuredContent }),
-  };
-}
-
-export function parseAvailableTools(result: unknown): ReadonlySet<string> {
-  if (!result || typeof result !== "object") return new Set();
-  const tools = (result as Record<string, unknown>).tools;
-  if (!Array.isArray(tools)) return new Set();
-  return new Set(
-    tools.flatMap((tool) =>
-      tool && typeof tool === "object" && typeof tool.name === "string" ? [tool.name] : [],
-    ),
-  );
+function cuaDriverSocketPath(): string | undefined {
+  return process.env.BIGBUD_CUA_ENDPOINT?.trim() ?? process.env.BIGBUD_CUA_DRIVER_SOCKET?.trim();
 }
 
 async function createSession(): Promise<CuaDriverSession> {
-  const socketPath =
-    process.env.BIGBUD_CUA_ENDPOINT?.trim() ?? process.env.BIGBUD_CUA_DRIVER_SOCKET?.trim();
+  const socketPath = cuaDriverSocketPath();
   const hostBundleId = socketPath ? requireCuaDriverEmbeddedHostBundleId(process.env) : undefined;
   const child = spawn(
     resolveCuaDriverCommand(),
@@ -238,16 +98,19 @@ async function createSession(): Promise<CuaDriverSession> {
     );
   });
   try {
-    await requestResponse(child, 1, "initialize", {
+    const initialized = await requestResponse(child, 1, "initialize", {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
       clientInfo: { name: "bigbud", version: "1.0.0" },
     });
+    if (process.env.BIGBUD_CUA_VALIDATE_MCP === "1") validateCuaDriverMcpProtocol(initialized);
     await writeMessage(child, {
       jsonrpc: JSONRPC_VERSION,
       method: "notifications/initialized",
     });
-    const availableTools = parseAvailableTools(await requestResponse(child, 2, "tools/list"));
+    const tools = await requestResponse(child, 2, "tools/list");
+    if (process.env.BIGBUD_CUA_VALIDATE_MCP === "1") validateCuaDriverMcpTools(tools);
+    const availableTools = parseAvailableTools(tools);
     const missingTools = CUA_DRIVER_REQUIRED_TOOLS.filter((name) => !availableTools.has(name));
     if (missingTools.length > 0) {
       throw new Error(`cua-driver is missing required tools: ${missingTools.join(", ")}.`);
@@ -263,30 +126,64 @@ function isSessionAlive(session: CuaDriverSession | null): session is CuaDriverS
   return session !== null && session.child.exitCode === null && session.child.signalCode === null;
 }
 
-function makeCuaDriver(): CuaDriverShape {
+/** A session created for halted work is never used: its child is stopped once it exists. */
+async function createSessionFor(
+  calls: ReturnType<typeof makeCuaDriverCallQueue>,
+  isCurrent: () => boolean,
+): Promise<CuaDriverSession> {
+  const pending = createSession();
+  try {
+    const created = await calls.abortable(pending);
+    if (!isCurrent()) throw new Error(COMPUTER_USE_STOPPED_BY_USER_MESSAGE);
+    return created;
+  } catch (error) {
+    void pending.then(
+      (created) => stopChild(created.child),
+      () => undefined,
+    );
+    throw error;
+  }
+}
+
+const STOP_RESET_FAILED_MESSAGE =
+  "The desktop driver did not come back after Stop. bigbud keeps restarting it, and computer use works again once it is back.";
+
+/** Fails an action admitted before a user Stop, before it reaches the driver. */
+const requireCurrentAdmission = Effect.gen(function* () {
+  const admission = yield* ComputerUseAdmission;
+  if (!admission.isCurrent()) {
+    return yield* new CuaDriverError({ message: COMPUTER_USE_STOPPED_BY_USER_MESSAGE });
+  }
+  return admission;
+});
+
+export function makeCuaDriver(): CuaDriverShape {
   let session: CuaDriverSession | null = null;
   let unavailableReason: string | null = null;
-  let queue: Promise<void> = Promise.resolve();
+  let daemonReset: Promise<void> | null = null;
+  let stopInFlight: Promise<void> | null = null;
+  const calls = makeCuaDriverCallQueue();
   const operationSemaphore = Effect.runSync(Semaphore.make(1));
 
   async function callToolViaSession(
     name: string,
     args: Record<string, unknown>,
+    isCurrent: () => boolean,
   ): Promise<CuaDriverCallResult> {
     if (unavailableReason) throw new Error(unavailableReason);
     if (!isSessionAlive(session)) {
-      session = await createSession();
+      session = await createSessionFor(calls, isCurrent);
     }
     if (!session.availableTools.has(name)) {
       throw new Error(`cua-driver did not advertise tool '${name}'.`);
     }
+    if (!isCurrent()) throw new Error(COMPUTER_USE_STOPPED_BY_USER_MESSAGE);
     const id = session.nextId;
     session.nextId += 1;
     try {
-      const result = await requestResponse(session.child, id, "tools/call", {
-        name,
-        arguments: args,
-      });
+      const result = await calls.abortable(
+        requestResponse(session.child, id, "tools/call", { name, arguments: args }),
+      );
       return toCallResult(result);
     } catch (error) {
       if (isSessionAlive(session)) {
@@ -304,29 +201,42 @@ function makeCuaDriver(): CuaDriverShape {
     }
   }
 
-  function enqueueCall<T>(work: () => Promise<T>): Promise<T> {
-    const previous = queue;
-    let release: () => void;
-    queue = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    return previous
-      .catch(() => undefined)
-      .then(work)
-      .finally(() => {
-        release();
-      });
-  }
-
   function resetProxy(): void {
     if (isSessionAlive(session)) stopChild(session.child);
     session = null;
   }
 
-  async function resetDaemonAfterUncertainAction(reason: string): Promise<void> {
+  /** Concurrent resets (an interrupted tool and a user Stop) share one daemon restart. */
+  function resetDaemonAfterUncertainAction(reason: string): Promise<void> {
+    daemonReset ??= resetDaemonOnce(reason).finally(() => {
+      daemonReset = null;
+    });
+    return daemonReset;
+  }
+
+  /**
+   * A Stop has already halted all input, so a daemon that does not come back in time must not
+   * block later work: unlike an uncertain action, it leaves `unavailableReason` alone, and calls
+   * work again as soon as the desktop supervisor has the daemon back.
+   */
+  function resetDaemonAfterStop(socketPath: string, reason: string): Promise<void> {
+    daemonReset ??= (async () => {
+      resetProxy();
+      try {
+        await resetCuaDriverDaemon({ command: resolveCuaDriverCommand(), socketPath, reason });
+        unavailableReason = null;
+      } catch (cause) {
+        throw new Error(STOP_RESET_FAILED_MESSAGE, { cause });
+      }
+    })().finally(() => {
+      daemonReset = null;
+    });
+    return daemonReset;
+  }
+
+  async function resetDaemonOnce(reason: string): Promise<void> {
     resetProxy();
-    const socketPath =
-      process.env.BIGBUD_CUA_ENDPOINT?.trim() ?? process.env.BIGBUD_CUA_DRIVER_SOCKET?.trim();
+    const socketPath = cuaDriverSocketPath();
     if (!socketPath) {
       unavailableReason = `Computer Use is unavailable after an uncertain action: ${reason}`;
       throw new Error(unavailableReason);
@@ -344,6 +254,27 @@ function makeCuaDriver(): CuaDriverShape {
     }
   }
 
+  /**
+   * User Stop: nothing queued before it reaches the driver, the call in flight settles now, and
+   * the proxy dies at once. A socket daemon is then restarted under the queue, so later work
+   * never talks to a daemon mid-restart; without a socket the killed stdio proxy was the driver.
+   */
+  function stopAllActivity(reason: string): Promise<"reset" | "idle"> {
+    calls.halt(new Error(COMPUTER_USE_STOPPED_BY_USER_MESSAGE));
+    const socketPath = cuaDriverSocketPath();
+    const hadProxy = isSessionAlive(session);
+    resetProxy();
+    // Without a daemon socket the stdio proxy was the driver: killing it stopped all input.
+    if (!socketPath) return Promise.resolve(hadProxy ? "reset" : "idle");
+    // A second Stop while this one waits must not cancel the restart it is waiting for.
+    stopInFlight ??= calls
+      .enqueue(() => resetDaemonAfterStop(socketPath, reason), { survivesHalt: true })
+      .finally(() => {
+        stopInFlight = null;
+      });
+    return stopInFlight.then(() => "reset" as const);
+  }
+
   const resetAfterUncertainAction = (reason: string) =>
     Effect.tryPromise({
       try: () => resetDaemonAfterUncertainAction(reason),
@@ -353,41 +284,56 @@ function makeCuaDriver(): CuaDriverShape {
 
   return {
     callTool: (name, args) =>
-      Effect.callback<CuaDriverCallResult, CuaDriverError>((resume) => {
-        let active = true;
-        void enqueueCall(() => callToolViaSession(name, args)).then(
-          (result) => {
-            if (active) resume(Effect.succeed(result));
-          },
-          (cause) => {
-            if (active) {
-              resume(
-                Effect.fail(toDriverError(cause, `Failed to call cua-driver tool '${name}'.`)),
-              );
-            }
-          },
-        );
-        return Effect.sync(() => {
-          active = false;
-        }).pipe(
-          Effect.andThen(
-            MUTATING_TOOLS.has(name)
-              ? resetAfterUncertainAction(`Tool '${name}' was interrupted.`).pipe(Effect.ignore)
-              : Effect.sync(resetProxy),
-          ),
-        );
-      }),
+      Effect.flatMap(requireCurrentAdmission, (admission) =>
+        Effect.callback<CuaDriverCallResult, CuaDriverError>((resume) => {
+          let active = true;
+          void calls
+            .enqueue((isCurrent) =>
+              callToolViaSession(name, args, () => isCurrent() && admission.isCurrent()),
+            )
+            .then(
+              (result) => {
+                if (active) resume(Effect.succeed(result));
+              },
+              (cause) => {
+                if (active) {
+                  resume(
+                    Effect.fail(toDriverError(cause, `Failed to call cua-driver tool '${name}'.`)),
+                  );
+                }
+              },
+            );
+          return Effect.sync(() => {
+            active = false;
+          }).pipe(
+            Effect.andThen(
+              MUTATING_TOOLS.has(name)
+                ? resetAfterUncertainAction(`Tool '${name}' was interrupted.`).pipe(Effect.ignore)
+                : Effect.sync(resetProxy),
+            ),
+          );
+        }),
+      ),
+    // Every call inside the exclusive lock re-checks the admission, so an action that waited
+    // through a Stop fails at its first driver call (`start_session`) instead of starting.
     runDoctor: () =>
-      Effect.tryPromise({
-        try: () =>
-          enqueueCall(async () =>
-            formatCuaDriverHealthReport(await callToolViaSession("health_report", {})),
-          ),
-        catch: (cause) => toDriverError(cause, "Failed to read cua-driver health."),
-      }),
+      Effect.andThen(requireCurrentAdmission, () =>
+        Effect.tryPromise({
+          try: () =>
+            calls.enqueue(async (isCurrent) =>
+              formatCuaDriverHealthReport(await callToolViaSession("health_report", {}, isCurrent)),
+            ),
+          catch: (cause) => toDriverError(cause, "Failed to read cua-driver health."),
+        }),
+      ),
     withExclusiveAccess: (effect) => operationSemaphore.withPermit(effect),
     resetProxy: Effect.sync(resetProxy),
     resetAfterUncertainAction,
+    stopAllActivity: (reason) =>
+      Effect.tryPromise({
+        try: () => stopAllActivity(reason),
+        catch: (cause) => toDriverError(cause, STOP_RESET_FAILED_MESSAGE),
+      }),
     dispose: Effect.sync(() => {
       resetProxy();
     }),

@@ -10,6 +10,7 @@ import {
   submitPlanFollowUp,
 } from "./ChatView.sendTurn.actions";
 import { canQueueComposerPrompt } from "./ChatView.sendTurn.admission.logic";
+import { isChatCitationAttachment } from "../../../stores/composer/types.annotation.store";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
 
 /** Returns the `onSend` handler for the composer form. */
@@ -23,6 +24,7 @@ export function useOnSend(input: UseOnSendInput) {
     async (e?: { preventDefault: () => void }) => {
       e?.preventDefault();
       const api = readNativeApi();
+      const submittedInput = inputRef.current;
       const {
         activeThread: thread,
         isSendBusy: sendBusy,
@@ -37,7 +39,7 @@ export function useOnSend(input: UseOnSendInput) {
         isOpencodePendingUserInputMode,
         activePendingUserInputRequestId,
         activePendingUserInput,
-      } = inputRef.current;
+      } = submittedInput;
 
       if (!api || !thread) return;
       const attachmentIssue = providerAttachmentIssue(inputRef.current.selectedProvider, [
@@ -48,12 +50,18 @@ export function useOnSend(input: UseOnSendInput) {
         inputRef.current.setThreadError(thread.id, attachmentIssue);
         return;
       }
-      const resetComposerDraft = () => {
+      const resetComposerDraft = (preserveCitations = false) => {
+        // Structured answers cannot carry attachments. Keep quotes for a later chat turn.
+        const citations = preserveCitations
+          ? submittedInput.composerAnnotations.filter(isChatCitationAttachment)
+          : [];
+        submittedInput.clearComposerDraftContent(thread.id);
+        if (citations.length > 0) submittedInput.addComposerAnnotationsToDraft(citations);
+        if (inputRef.current.activeThread?.id !== thread.id) return;
         pRef.current = "";
-        inputRef.current.clearComposerDraftContent(thread.id);
-        inputRef.current.setComposerHighlightedItemId(null);
-        inputRef.current.setComposerCursor(0);
-        inputRef.current.setComposerTrigger(null);
+        submittedInput.setComposerHighlightedItemId(null);
+        submittedInput.setComposerCursor(0);
+        submittedInput.setComposerTrigger(null);
       };
       const trimmed = pRef.current.trim();
       if (isOpencodePendingUserInputMode && activePendingUserInputRequestId) {
@@ -61,7 +69,7 @@ export function useOnSend(input: UseOnSendInput) {
           activePendingUserInput,
           activePendingUserInputRequestId,
           onRespondToUserInput: inputRef.current.onRespondToUserInput,
-          resetComposerDraft,
+          resetComposerDraft: () => resetComposerDraft(true),
           trimmed,
         });
         return;

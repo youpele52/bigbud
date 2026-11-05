@@ -113,7 +113,7 @@ async function spawnRemotePty(
       message: "Remote PTY requires an execution target and remote workspace root.",
     });
   }
-  return createRemoteAgentWorkspacePty(
+  const process = await createRemoteAgentWorkspacePty(
     {
       executionTargetId,
       workspaceRoot: root,
@@ -125,6 +125,7 @@ async function spawnRemotePty(
     },
     resolver,
   );
+  return Object.assign(process, { pidDomain: "remote" as const });
 }
 
 export function makeRemoteAgentPtyAdapter(

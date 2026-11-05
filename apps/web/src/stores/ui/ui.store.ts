@@ -5,6 +5,7 @@ import {
   reorderSidebarAction,
   moveSidebarActionToEdge,
   SIDEBAR_ACTION_IDS,
+  SIDEBAR_PRIMARY_GROUP_SIZE,
   type SidebarActionId,
 } from "../../components/sidebar/Sidebar.actions.logic";
 
@@ -239,7 +240,7 @@ export function setThreadChangedFilesExpanded(
 
 export function setSidebarSectionExpanded(
   state: UiState,
-  section: "chatsExpanded" | "projectsExpanded" | "remoteProjectsExpanded",
+  section: "chatsExpanded" | "projectsExpanded" | "remoteWorkspacesExpanded",
   expanded: boolean,
 ): UiState {
   return state[section] === expanded ? state : { ...state, [section]: expanded };
@@ -261,7 +262,7 @@ interface UiStateStore extends UiState {
   setChatsExpanded: (expanded: boolean) => void;
   setFavouritesExpanded: (expanded: boolean) => void;
   setProjectsExpanded: (expanded: boolean) => void;
-  setRemoteProjectsExpanded: (expanded: boolean) => void;
+  setRemoteWorkspacesExpanded: (expanded: boolean) => void;
   toggleProject: (projectId: ProjectId) => void;
   setProjectExpanded: (projectId: ProjectId, expanded: boolean) => void;
   setSelectedProject: (projectId: ProjectId | null) => void;
@@ -286,7 +287,11 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => ({
       sidebarActionOrder: moveSidebarActionToEdge(state.sidebarActionOrder, id, edge),
     })),
-  resetSidebarActionOrder: () => set({ sidebarActionOrder: [...SIDEBAR_ACTION_IDS] }),
+  resetSidebarActionOrder: () =>
+    set({
+      sidebarActionOrder: [...SIDEBAR_ACTION_IDS],
+      sidebarPrimaryGroupSize: SIDEBAR_PRIMARY_GROUP_SIZE,
+    }),
   syncProjects: (projects) => set((state) => syncProjects(state, projects)),
   syncThreads: (threads) => set((state) => syncThreads(state, threads)),
   markThreadVisited: (threadId, visitedAt) =>
@@ -302,8 +307,8 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
   setFavouritesExpanded: (expanded) => set((state) => setFavouritesExpanded(state, expanded)),
   setProjectsExpanded: (expanded) =>
     set((state) => setSidebarSectionExpanded(state, "projectsExpanded", expanded)),
-  setRemoteProjectsExpanded: (expanded) =>
-    set((state) => setSidebarSectionExpanded(state, "remoteProjectsExpanded", expanded)),
+  setRemoteWorkspacesExpanded: (expanded) =>
+    set((state) => setSidebarSectionExpanded(state, "remoteWorkspacesExpanded", expanded)),
   toggleProject: (projectId) => set((state) => toggleProject(state, projectId)),
   setProjectExpanded: (projectId, expanded) =>
     set((state) => setProjectExpanded(state, projectId, expanded)),

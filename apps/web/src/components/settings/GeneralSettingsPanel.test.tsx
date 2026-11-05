@@ -17,8 +17,10 @@ vi.mock("../../hooks/useSettings", () => ({
   useSettings: (selector?: (settings: UnifiedSettings) => unknown) =>
     selector ? selector(mock.settings) : mock.settings,
   useUpdateSettings: () => ({ updateSettings: mock.updateSettings }),
+  persistServerSettings: vi.fn(),
 }));
 
+import { BrowserSettingsSection } from "./BrowserSettingsSection";
 import { GeneralSettingsPanel } from "./GeneralSettingsPanel";
 import { TerminalSettingsSection } from "./TerminalSettingsSection";
 
@@ -37,7 +39,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     mock.updateSettings.mockClear();
   });
 
-  it("places the terminal settings in their own shared section immediately after Threads", () => {
+  it("places the terminal settings in their own shared section after Browser", () => {
     const markup = renderToStaticMarkup(<GeneralSettingsPanel />);
     const sections = [...markup.matchAll(/<section\b[^>]*>[\s\S]*?<\/section>/g)].map(
       ([section]) => ({
@@ -50,6 +52,8 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(sections.map(({ title }) => title)).toEqual([
       "General",
       "Threads",
+      "Idle threads",
+      "Browser",
       "Terminal",
       expect.stringContaining("Learning projects"),
     ]);
@@ -61,16 +65,24 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Diff line wrapping",
     ]);
     expect(sections[2]?.rows).toEqual([
+      "Move idle threads out of Present",
+      "Idle timeout",
+      "Move idle threads to",
+      "Move older threads to Done",
+      "Older than",
+    ]);
+    expect(sections[3]?.rows).toEqual(["Default agent browser", "Default search engine"]);
+    expect(sections[4]?.rows).toEqual([
       "Terminal font",
       "Terminal font size",
       "Terminal theme (dark appearance)",
       "Terminal theme (light appearance)",
-      "Terminal GPU rendering",
       "Terminal scroll speed",
       "Terminal fast scroll speed",
       "Full-screen app scroll speed",
       "Terminal ligatures",
       "Terminal inline images",
+      "Terminal GPU rendering",
     ]);
     const sectionClasses = sections.map(
       ({ markup: section }) => section.match(/^<section class="([^"]+)"/)?.[1],
@@ -87,6 +99,23 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(markup).toContain('aria-label="Terminal GPU rendering"');
     expect(markup).toContain("JetBrains Mono Nerd Font Mono");
     expect(mock.updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("saves valid search engines and resets to DuckDuckGo", () => {
+    const row = (BrowserSettingsSection().props.children as SettingRow[])[1]!;
+    expect(row.props.control.props.value).toBe("duckduckgo");
+    expect(row.props.resetAction).toBeNull();
+    for (const engine of ["duckduckgo", "google", "brave", "bing", "startpage"]) {
+      row.props.control.props.onValueChange(engine);
+      expect(mock.updateSettings).toHaveBeenLastCalledWith({ browserSearchEngine: engine });
+    }
+    mock.updateSettings.mockClear();
+    row.props.control.props.onValueChange("invalid");
+    expect(mock.updateSettings).not.toHaveBeenCalled();
+    mock.settings = { ...mock.settings, browserSearchEngine: "google" };
+    const changedRow = (BrowserSettingsSection().props.children as SettingRow[])[1]!;
+    changedRow.props.resetAction!.props.onClick();
+    expect(mock.updateSettings).toHaveBeenLastCalledWith({ browserSearchEngine: "duckduckgo" });
   });
 
   it("keeps the font defaults, accepted options, validation, and reset behavior", () => {

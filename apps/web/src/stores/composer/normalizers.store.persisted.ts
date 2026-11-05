@@ -1,4 +1,6 @@
 import type { ThreadId } from "@bigbud/contracts";
+import * as Schema from "effect/Schema";
+import { ComposerChatCitationAttachment } from "./types.annotation.store";
 
 import type {
   ComposerAnnotationAttachment,
@@ -64,6 +66,11 @@ export function normalizePersistedAnnotation(value: unknown): ComposerAnnotation
     createdAt.length === 0
   ) {
     return null;
+  }
+
+  if (candidate.kind === "chat") {
+    const citation = { ...candidate, id, comment, createdAt, intent };
+    return Schema.is(ComposerChatCitationAttachment)(citation) ? citation : null;
   }
 
   if (candidate.kind === "code") {

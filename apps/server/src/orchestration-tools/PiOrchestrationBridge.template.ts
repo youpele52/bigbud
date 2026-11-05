@@ -1,5 +1,10 @@
-import { renderPiComputerUseToolSource } from "./orchestrationComputerUseTool.shared.ts";
+import { renderPiComputerUseTool } from "./orchestrationComputerUseTool.selected.ts";
+import {
+  HTML_RENDER_TOOL_DESCRIPTION,
+  HTML_RENDER_TOOL_PARAMETERS,
+} from "./htmlRenderTool.shared.ts";
 import { renderPiBrowserToolSource } from "./orchestrationBrowserTool.shared.ts";
+import { renderPiOrganizationToolsSource } from "./PiOrchestrationBridge.template.organization.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
@@ -172,6 +177,8 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "  },",
     "});",
     "",
+    renderPiOrganizationToolsSource(),
+    "",
     "const archiveThreadTool = defineTool({",
     '  name: "archive_thread",',
     '  label: "archive_thread",',
@@ -297,17 +304,26 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "  },",
     "});",
     "",
-    renderPiComputerUseToolSource(),
+    renderPiComputerUseTool(),
     "",
     renderPiBrowserToolSource(),
     "",
     "export default function bigbudOrchestrationBridge(pi) {",
+    "  pi.registerTool(defineTool({",
+    `    name: 'render_html', label: 'render_html', description: ${JSON.stringify(HTML_RENDER_TOOL_DESCRIPTION)}, parameters: ${JSON.stringify(HTML_RENDER_TOOL_PARAMETERS)},`,
+    "    async execute(toolCallId, args) {",
+    "      const result = await callOrchestrationTool({ action: 'render_html', htmlArguments: args, invocationId: toolCallId });",
+    "      return textResult(JSON.stringify(result.result));",
+    "    },",
+    "  }));",
     "  for (const tool of workspaceTools) pi.registerTool(tool);",
     "  pi.registerTool(searchCapabilitiesTool);",
     "  pi.registerTool(readCapabilityGuideTool);",
     "  pi.registerTool(createThreadTool);",
     "  pi.registerTool(listAvailableModelsTool);",
     "  pi.registerTool(renameThreadTool);",
+    "  pi.registerTool(moveThreadTool);",
+    "  pi.registerTool(snoozeThreadTool);",
     "  pi.registerTool(archiveThreadTool);",
     "  pi.registerTool(getThreadStatusTool);",
     "  pi.registerTool(sendThreadMessageTool);",

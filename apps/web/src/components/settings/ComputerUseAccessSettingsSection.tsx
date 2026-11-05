@@ -16,6 +16,8 @@ import {
 } from "../../lib/desktopComputerUseReactQuery";
 import { ComputerUseLimitSettingsRows } from "./ComputerUseAccessSettingsSection.limits";
 import { PermissionStatusGrid } from "./ComputerUseAccessSettingsSection.permissions";
+import { ComputerUseSupervisedSettings } from "./ComputerUseSupervisedSettings";
+import { ComputerUseDeliverySettingsRow } from "./ComputerUseDeliverySettingsRow";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { SettingsAiIcon } from "./SettingsAiIcon";
 import { enableComputerUseInBackground } from "../computer-use/computerUseEnable";
@@ -201,6 +203,10 @@ export function ComputerUseAccessSettingsSection() {
       ) : null}
 
       <ComputerUseLimitSettingsRows settings={settings} />
+
+      <ComputerUseDeliverySettingsRow />
+
+      <ComputerUseSupervisedSettings />
 
       <SettingsRow
         title={getComputerUsePermissionsTitle(platform)}

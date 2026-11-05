@@ -101,7 +101,7 @@ it("startup rejection after native readiness retains uncertain storage and relea
     .mockResolvedValueOnce(second.process);
   const manager = new OpencodeV2ServerManager({ ...bounds, start });
   try {
-    await expect(manager.acquire(config)).rejects.toThrow("acquisition failed");
+    await expect(manager.acquire(config)).rejects.toThrow("acquisition-unverified");
     await expect(manager.acquire(config)).rejects.toThrow("closing");
     await expect(manager.acquire({ ...config, workspaceRoot: "/other-root" })).rejects.toThrow(
       "storage is already owned",

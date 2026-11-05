@@ -1,3 +1,4 @@
+import { V2SharedServiceError } from "./SharedService.errors.ts";
 import { createHash } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { discoverV2SharedService } from "./SharedService.discovery.ts";
@@ -18,7 +19,10 @@ export async function resolveV2SharedConnection(file: string): Promise<V2SharedC
   const registrationFile = await realpath(file);
   const discovered = await discoverV2SharedService({ file: registrationFile });
   if (!sameV2SharedRegistration(original, discovered.registration))
-    throw new Error("V2 shared registration changed during canonical discovery.");
+    throw new V2SharedServiceError(
+      "generation",
+      "V2 shared registration changed during canonical discovery.",
+    );
   return {
     registrationFile,
     generation: discovered.generation,

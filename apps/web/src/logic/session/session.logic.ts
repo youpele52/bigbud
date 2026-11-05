@@ -184,14 +184,14 @@ export function isSessionActivelyRunningTurn(
   }
   if (!latestTurn) return true;
 
-  const activeTurnId = session.activeTurnId;
-  if (activeTurnId === undefined) {
+  if (session.activeTurnId === undefined) {
     return latestTurn.completedAt === null;
   }
-  if (latestTurn.turnId !== activeTurnId) {
-    return true;
-  }
-  return latestTurn.completedAt === null;
+  // The session still owns a turn, so it is running. `latestTurn.completedAt` is not a turn-end
+  // signal here: it is stamped when an assistant message completes, and Codex/Claude send several
+  // per turn (e.g. "I'll open the app…" before tool calls). Late running updates for a turn that
+  // already ended are normalized at ingestion by `isStaleRunningSessionUpdate`.
+  return true;
 }
 
 export function isLatestTurnSettled(

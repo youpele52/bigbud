@@ -1,9 +1,10 @@
 import { Effect } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { Schema } from "effect";
-import { BrowserAction, ComputerUseAction, ThreadId } from "@bigbud/contracts";
+import { BrowserAction, ThreadId } from "@bigbud/contracts";
 
 import { ServerConfig } from "../startup/config.ts";
+import { handleHtmlRenderAction } from "./http.threadTools.htmlRender.ts";
 import {
   isThreadOrchestrationToolAuthorized,
   readThreadOrchestrationToolAuthByToken,
@@ -23,12 +24,17 @@ import {
   handleListPinnedThreadsAction,
   handleListThreadsAction,
 } from "./http.threadTools.reads.ts";
+import { findRemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
 import { runRemoteWorkspaceProcess } from "./http.threadTools.remoteWorkspace.ts";
 import { handleRenameThreadAction } from "./http.threadTools.rename.ts";
+import { handleOrganizationThreadAction } from "./http.threadTools.organization.ts";
 import { enterThreadToolInvocation } from "../orchestration-tools/threadToolInvocationFlights.ts";
+import {
+  decodeComputerUseToolRequest,
+  dispatchComputerUseToolRequest,
+} from "../orchestration-tools/computerUseToolRequest.ts";
 
 const THREAD_TOOLS_PATH = "/api/internal/thread-tools";
-const decodeComputerUseAction = Schema.decodeUnknownSync(ComputerUseAction);
 const decodeBrowserAction = Schema.decodeUnknownSync(BrowserAction);
 
 export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
@@ -39,6 +45,10 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
     let leave: (() => void) | undefined;
     return Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
+      const token = request.headers["x-bigbud-thread-tool-token"];
+      // Capture before body/auth/read-model I/O: Stop must fence requests already in flight.
+      const executionOwner = token ? findRemoteWorkspaceExecutions(token) : undefined;
+      const executionGeneration = executionOwner?.captureGeneration();
       const config = yield* ServerConfig;
       const dispatcher = getThreadOrchestrationToolDispatcher();
       if (!dispatcher) {
@@ -69,7 +79,6 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
           });
       }
 
-      const token = request.headers["x-bigbud-thread-tool-token"];
       if (!token) {
         return yield* new ThreadToolRequestError({
           status: 401,
@@ -96,11 +105,28 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       }
       const threadId = ThreadId.makeUnsafe(authRecord.threadId);
       const capabilityCatalog = getEffectiveCapabilityCatalog(threadId);
+      if (body.action === "render_html")
+        return yield* handleHtmlRenderAction({ dispatcher, threadId, body });
 
+      if (body.action === "configure_system_resource_rules") {
+        if (!dispatcher.configureSystemResourceRules)
+          return yield* new ThreadToolRequestError({
+            status: 503,
+            message: "monitor settings unavailable",
+          });
+        const result = yield* dispatcher
+          .configureSystemResourceRules(body.resourceArguments)
+          .pipe(
+            Effect.mapError(
+              (error) => new ThreadToolRequestError({ status: 409, message: error.message }),
+            ),
+          );
+        return yield* HttpServerResponse.json({ ok: true, result });
+      }
       if (body.action === "get_system_resources") {
         const result = dispatcher.getSystemResources
           ? yield* dispatcher
-              .getSystemResources()
+              .getSystemResources(body.resourceArguments ?? {})
               .pipe(
                 Effect.catch(() =>
                   Effect.succeed({ available: false, reason: "desktop monitor unavailable" }),
@@ -113,6 +139,9 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       if (body.action === "remote_workspace_process") {
         const result = yield* runRemoteWorkspaceProcess({
           callerThreadId: threadId,
+          workspaceBinding: authRecord.workspaceBinding,
+          executionOwner,
+          executionGeneration,
           request: body,
         });
         return yield* HttpServerResponse.json({ ok: true, result });
@@ -269,29 +298,36 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
         return yield* handleRenameThreadAction({ dispatcher, callerThreadId: threadId, body });
       }
 
+      if (body.action === "move" || body.action === "snooze") {
+        return yield* handleOrganizationThreadAction({
+          dispatcher,
+          callerThreadId: threadId,
+          body: { ...body, action: body.action },
+        });
+      }
+
       if (body.action === "computer_use") {
-        const computerUseAction = yield* Effect.try({
-          try: () => decodeComputerUseAction(body.computerUseAction),
+        const computerUseRequest = yield* Effect.try({
+          try: () => decodeComputerUseToolRequest(body.computerUseAction),
           catch: () =>
             new ThreadToolRequestError({
               status: 400,
               message: "Invalid computer-use action.",
             }),
         });
-        const result = yield* dispatcher
-          .computerUse({
-            threadId,
-            action: computerUseAction,
-          })
-          .pipe(
-            Effect.mapError(
-              (error) =>
-                new ThreadToolRequestError({
-                  status: 400,
-                  message: error instanceof Error ? error.message : "Computer-use action failed.",
-                }),
-            ),
-          );
+        const result = yield* dispatchComputerUseToolRequest(
+          dispatcher,
+          threadId,
+          computerUseRequest,
+        ).pipe(
+          Effect.mapError(
+            (error) =>
+              new ThreadToolRequestError({
+                status: 400,
+                message: error instanceof Error ? error.message : "Computer-use action failed.",
+              }),
+          ),
+        );
         return yield* HttpServerResponse.json({ ok: true, result });
       }
 
@@ -313,6 +349,13 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
         return yield* HttpServerResponse.json({ ok: true, result });
       }
 
+      // Only an explicit archive request archives; an unmatched action must never fall through.
+      if (body.action !== "archive") {
+        return yield* new ThreadToolRequestError({
+          status: 400,
+          message: `Unsupported thread tool action '${body.action}'.`,
+        });
+      }
       if (body.threadId === undefined || body.threadId !== authRecord.threadId) {
         return yield* new ThreadToolRequestError({
           status: body.threadId === undefined ? 400 : 401,

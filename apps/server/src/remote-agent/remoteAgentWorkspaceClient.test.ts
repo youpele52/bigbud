@@ -33,7 +33,7 @@ describe("remote agent workspace client", () => {
           return () => {};
         },
       ),
-    ).rejects.toThrow("revoked");
+    ).rejects.toMatchObject({ message: "revoked", writeDisposition: "not-dispatched" });
     expect(request).not.toHaveBeenCalled();
     expect(mutation.terminal).toHaveBeenCalledWith("revoked");
     expect(mutation.unknown).not.toHaveBeenCalled();
@@ -54,7 +54,7 @@ describe("remote agent workspace client", () => {
         requestDigest: new Uint8Array([1]),
         bytes: new TextEncoder().encode("next"),
       }),
-    ).rejects.toMatchObject({ code: "UNKNOWN_OUTCOME" });
+    ).rejects.toMatchObject({ code: "UNKNOWN_OUTCOME", writeDisposition: "unknown" });
   });
 
   it.each(["conflict", "size-limit", "rejected"])(
@@ -79,9 +79,68 @@ describe("remote agent workspace client", () => {
           requestDigest: new Uint8Array([1]),
           bytes: new Uint8Array([2]),
         }),
-      ).rejects.toMatchObject({ code: `WRITE_${kind.toUpperCase()}` });
+      ).rejects.toMatchObject({
+        code: `WRITE_${kind.toUpperCase()}`,
+        writeDisposition: "terminal",
+      });
       expect(mutation.terminal).toHaveBeenCalledOnce();
       expect(mutation.unknown).not.toHaveBeenCalled();
     },
   );
+
+  it.each([
+    { terminal: false, errorCode: "" },
+    { terminal: true, errorCode: "UNKNOWN_OUTCOME" },
+  ])(
+    "keeps an unknown native response $errorCode unknown when recording it fails",
+    async (response) => {
+      const mutation = {
+        prepare: vi.fn(),
+        terminal: vi.fn(),
+        unknown: vi.fn().mockRejectedValue(new Error("owner unavailable")),
+      };
+      const connection = {
+        request: async () => ({ value: response }),
+      } as unknown as RemoteAgentConnection;
+      await expect(
+        new RemoteAgentWorkspaceClient(connection, undefined, mutation).writeFile({
+          workspaceHandle: "workspace",
+          path: "file.txt",
+          operationId: "uncertain",
+          requestDigest: new Uint8Array([1]),
+          bytes: new Uint8Array([2]),
+        }),
+      ).rejects.toMatchObject({ writeDisposition: "unknown" });
+      expect(mutation.terminal).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps revoked writes undispatched even when reservation cleanup fails", async () => {
+    const request = vi.fn();
+    const mutation = {
+      prepare: vi.fn(),
+      terminal: vi.fn().mockRejectedValue(new Error("cleanup failed")),
+      unknown: vi.fn(),
+    };
+    const client = new RemoteAgentWorkspaceClient(
+      { request } as unknown as RemoteAgentConnection,
+      undefined,
+      mutation,
+    );
+    await expect(
+      client.writeFile(
+        {
+          workspaceHandle: "workspace",
+          path: "file.txt",
+          operationId: "revoked",
+          requestDigest: new Uint8Array([1]),
+          bytes: new Uint8Array([2]),
+        },
+        async () => {
+          throw new Error("revoked");
+        },
+      ),
+    ).rejects.toMatchObject({ writeDisposition: "not-dispatched" });
+    expect(request).not.toHaveBeenCalled();
+  });
 });

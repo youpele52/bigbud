@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Socket } from "node:net";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
+import { runDetachedV2RequestContext } from "./Client.guard.ts";
 
 export type V2ThreadCallback = (body: unknown, signal: AbortSignal) => Promise<unknown>;
 
@@ -20,7 +21,7 @@ export async function openV2ThreadTransport(invoke: V2ThreadCallback) {
       connectionsCheckingInterval: 1000,
     },
     (request, response) => {
-      void handle(request, response);
+      void runDetachedV2RequestContext(() => handle(request, response));
     },
   );
   server.on("connection", (socket) => {

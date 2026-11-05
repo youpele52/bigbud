@@ -39,7 +39,7 @@ import {
   resolveMobileThreadWorkspaceRoot,
 } from "./MobileThread.workspace";
 import { useMobileThreadDelivery } from "./MobileThread.delivery";
-import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
+import { getReadOnlyThreadProvider } from "@bigbud/shared/providerLifecycle";
 
 export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const { session } = useMobileSessionState();
@@ -336,7 +336,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     <div className="relative h-full">
       <MobileQueueNotice queuedPromptCount={thread?.queuedPrompts?.length ?? 0} />
       <MobileThreadView
-        legacyReadOnly={isLegacyOpencodeThread(thread)}
+        readOnlyProvider={getReadOnlyThreadProvider(thread)}
         activeWorkStartedAt={activeWorkStartedAt}
         isFollowing={isFollowing}
         messages={messages}

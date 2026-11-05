@@ -18,10 +18,10 @@ export function getRemoteAgentAccessError(
   remoteAgent: ServerVerifyExecutionTargetResult["remoteAgent"],
 ): string | null {
   if (remoteAgent?.status === "install-required") {
-    return "The bigbud remote agent is not installed. Edit the remote project to review and approve installation.";
+    return "The bigbud remote agent is not installed. Edit the remote workspace to review and approve installation.";
   }
   if (remoteAgent?.status === "upgrade-required") {
-    return `The bigbud remote agent must be upgraded from ${remoteAgent.currentVersion} to ${remoteAgent.targetVersion}. Edit the remote project to review and approve the upgrade.`;
+    return `The bigbud remote agent must be upgraded from ${remoteAgent.currentVersion} to ${remoteAgent.targetVersion}. Edit the remote workspace to review and approve the upgrade.`;
   }
   return null;
 }

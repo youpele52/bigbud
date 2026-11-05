@@ -21,7 +21,7 @@ it("freezes the exact previous descriptor and preserves canonical implementation
     knownV2BootstrapCompatibility(V2_N2_BOOTSTRAP_COMPATIBILITY, V2_N2_COMPATIBILITY_DIGEST),
   ).toBe(V2_N2_BOOTSTRAP_COMPATIBILITY);
   const implementation = v2ThreadImplementation();
-  expect(implementation.bootstrapAbi).toBe("bigbud.thread.bootstrap.v1");
+  expect(implementation.bootstrapAbi).toBe("bigbud.thread.bootstrap.v4");
   expect(() => assertV2ImplementationCompatible(implementation)).not.toThrow();
   expect(() =>
     assertV2ImplementationCompatible({ ...implementation, schemaDigest: "foreign" }),
@@ -115,7 +115,7 @@ it.each([
         disposers.set(v2ThreadRegistration(app.artifact).id, await plugin.setup(context));
       }
       expect(handlers.size).toBe(2);
-      expect(hostA.tools.size).toBe(10);
+      expect(hostA.tools.size).toBe(ra.tools.length + rb.tools.length);
       expect(ra.tools.every((name) => name.length < 64)).toBe(true);
       await Promise.all([
         call(ra.id, "enroll", a.envelope("enroll", 1, Date.now() + 50000)),
@@ -166,7 +166,7 @@ it.each([
       expect(await request(ownerB.nativeSessionId)).toEqual(rb.tools.toSorted());
       await disposers.get(ra.id)!();
       disposers.delete(ra.id);
-      expect(hostA.tools.size).toBe(5);
+      expect(hostA.tools.size).toBe(rb.tools.length);
       expect(await request(ownerB.nativeSessionId)).toEqual(rb.tools.toSorted());
     } finally {
       for (const dispose of disposers.values()) await dispose();

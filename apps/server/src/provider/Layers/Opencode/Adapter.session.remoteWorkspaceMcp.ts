@@ -38,7 +38,7 @@ export function makeOpencodeBridgeCleanup(input: {
 
 export const registerOpencodeRemoteWorkspaceMcp = Effect.fn("registerOpencodeRemoteWorkspaceMcp")(
   function* (input: {
-    readonly provider: Extract<ProviderKind, "opencode" | "kilocode">;
+    readonly provider: Extract<ProviderKind, "opencode">;
     readonly threadId: ThreadId;
     readonly serverHandle: OpencodeServerHandle;
     readonly serverDirectory: string | undefined;

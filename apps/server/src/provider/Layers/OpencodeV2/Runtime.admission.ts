@@ -290,8 +290,9 @@ export async function dispatchV2Turn(
               if (!isCurrent()) throw failure();
               const ack = await v2Request("session.prompt", (signal) => {
                 validate();
-                const prompt = () =>
-                  session.lease.process.client.session.prompt(
+                const prompt = () => {
+                  session.resources?.remoteCommands?.resume();
+                  return session.lease.process.client.session.prompt(
                     {
                       sessionID: session.native.id,
                       id: row.nativeAdmissionId,
@@ -315,6 +316,7 @@ export async function dispatchV2Turn(
                     },
                     { signal },
                   );
+                };
                 const activation = session.activation;
                 return activation?.token
                   ? activation.gate.dispatch(activation.token, prompt)

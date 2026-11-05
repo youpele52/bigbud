@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { MessageId, ProjectId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Stream } from "effect";
@@ -6,6 +5,7 @@ import { HttpRouter } from "effect/unstable/http";
 import { afterEach, expect } from "vitest";
 import { join } from "node:path";
 import { getHttpServerUrl, serverTestLayer } from "../server.test.rpc.ts";
+import { serverHttpTestLayer } from "../server.test.http.ts";
 import { deriveServerPaths, ServerConfig } from "../startup/config.ts";
 import { threadOrchestrationToolsRouteLayer } from "./http.threadTools.ts";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
@@ -156,6 +156,6 @@ it.layer(serverTestLayer)("authenticated canonical rename HTTP", (it) => {
           )?.title,
         ).toBe("child-title");
         expect(isThreadTitleLocked(delegated.childThreadId)).toBe(true);
-      }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+      }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

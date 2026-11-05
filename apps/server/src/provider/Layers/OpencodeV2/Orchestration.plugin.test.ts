@@ -48,7 +48,7 @@ it("enrolls/renews under stable identity, reconciles lost/reordered acknowledgme
   }
 });
 
-it("exposes only five enrolled primary tools, preserves foreign tools, and carries trusted context rather than model identity", async () => {
+it("exposes only six enrolled primary tools, preserves foreign tools, and carries trusted context rather than model identity", async () => {
   const app = await makeV2ThreadPluginFixture();
   try {
     const owner = app.bind("ses_context", app.root);
@@ -56,10 +56,10 @@ it("exposes only five enrolled primary tools, preserves foreign tools, and carri
     const plugin = (await import(/* @vite-ignore */ app.artifact.entryUri)).default;
     const cleanup = await plugin.setup(host.context);
     try {
-      expect(host.tools.size).toBe(5);
+      expect(host.tools.size).toBe(6);
       expect(Object.keys((await host.request("ses_unrelated")).tools)).toHaveLength(0);
       await host.call("enroll", app.envelope("enroll", 1, Date.now() + 40000));
-      expect(Object.keys((await host.request(owner.nativeSessionId)).tools)).toHaveLength(5);
+      expect(Object.keys((await host.request(owner.nativeSessionId)).tools)).toHaveLength(6);
       expect(
         Object.keys((await host.request(owner.nativeSessionId, "generate")).tools),
       ).toHaveLength(0);

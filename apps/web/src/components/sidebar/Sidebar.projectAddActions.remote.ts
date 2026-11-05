@@ -17,10 +17,10 @@ import type { Project } from "../../models/types";
 import { useRemoteProjectSubmit } from "./Sidebar.projectAddActions.remote.submit";
 import { useRemoteProjectUnlock } from "./Sidebar.projectAddActions.remote.unlock";
 import {
-  createRemoteProjectFieldErrors,
-  hasRemoteProjectFieldErrors,
-  type RemoteProjectFieldErrors,
-  withoutRemoteProjectFieldError,
+  createRemoteWorkspaceFieldErrors as createRemoteProjectFieldErrors,
+  hasRemoteWorkspaceFieldErrors as hasRemoteProjectFieldErrors,
+  type RemoteWorkspaceFieldErrors as RemoteProjectFieldErrors,
+  withoutRemoteWorkspaceFieldError as withoutRemoteProjectFieldError,
 } from "./Sidebar.projectAddActions.helpers";
 import type {
   SidebarRemoteAgentInstallRequest,

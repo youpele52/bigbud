@@ -1,29 +1,15 @@
-import {
-  useCallback,
-  useState,
-  type PointerEvent,
-  type MouseEvent,
-  type KeyboardEvent,
-} from "react";
+import { useSidebarProjectDeleteActions } from "./Sidebar.projectActions.delete";
+import { useCallback, type PointerEvent, type MouseEvent, type KeyboardEvent } from "react";
 import { type DragCancelEvent, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
-import {
-  isBuiltInChatsProject,
-  ThreadId,
-  type ProjectId,
-  type ThreadId as ThreadIdType,
-} from "@bigbud/contracts";
-import { useNavigate, useParams } from "@tanstack/react-router";
-import { isMacPlatform, newCommandId } from "../../lib/utils";
-import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
-import { useStore } from "../../stores/main";
+import { isBuiltInChatsProject, type ProjectId } from "@bigbud/contracts";
+import { isMacPlatform } from "../../lib/utils";
 import { useUiStateStore } from "../../stores/ui";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
-import { toastManager } from "../ui/toast";
-import { getFallbackThreadIdAfterDelete, isContextMenuPointerDown } from "./Sidebar.logic";
-import { isRemoteExecutionTargetId } from "./Sidebar.projects.logic";
+import { isContextMenuPointerDown } from "./Sidebar.logic";
+import { isRemoteExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
 import { useSidebarProjectRenameActions } from "./Sidebar.projectActions.rename";
 import type {
   SidebarProjectActionsInput,
@@ -44,7 +30,7 @@ export function useSidebarProjectActions({
   clearSelection,
   copyPathToClipboard,
   cancelThreadRename,
-  openRemoteProjectEditDialog,
+  openRemoteWorkspaceEditDialog,
 }: SidebarProjectActionsInput): SidebarProjectActionsOutput {
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
@@ -55,17 +41,6 @@ export function useSidebarProjectActions({
   );
   const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
   const reconnect = useSidebarProjectReconnectActions(projects);
-  const routeThreadId = useParams({
-    strict: false,
-    select: (params) => (params.threadId ? ThreadId.makeUnsafe(params.threadId) : null),
-  });
-  const navigate = useNavigate();
-
-  const [pendingProjectDeleteConfirmation, setPendingProjectDeleteConfirmation] = useState<{
-    projectId: ProjectId;
-    projectName: string;
-    threadCount: number;
-  } | null>(null);
   const {
     renamingProjectId,
     setRenamingProjectId,
@@ -78,87 +53,16 @@ export function useSidebarProjectActions({
     markProjectRenameCommitted,
     commitProjectRename,
   } = useSidebarProjectRenameActions();
-  const dismissPendingProjectDeleteConfirmation = useCallback(() => {
-    setPendingProjectDeleteConfirmation(null);
-  }, []);
-
-  const requestProjectDelete = useCallback(
-    (projectId: ProjectId) => {
-      const project = projects.find((entry) => entry.id === projectId);
-      if (!project) return;
-
-      setPendingProjectDeleteConfirmation({
-        projectId,
-        projectName: project.name,
-        threadCount: threadIdsByProjectId[projectId]?.length ?? 0,
-      });
-    },
-    [projects, threadIdsByProjectId],
-  );
-  const confirmPendingProjectDelete = useCallback(async () => {
-    if (!pendingProjectDeleteConfirmation) {
-      return;
-    }
-
-    const { projectId, projectName } = pendingProjectDeleteConfirmation;
-    setPendingProjectDeleteConfirmation(null);
-
-    const api = readNativeApi();
-    if (!api) {
-      return;
-    }
-
-    try {
-      const { threads } = useStore.getState();
-      const projectThreadIdSet = new Set(threadIdsByProjectId[projectId] ?? []);
-      const projectThreads = threads.filter(
-        (thread) => thread.projectId === projectId && projectThreadIdSet.has(thread.id),
-      );
-      const deletedThreadIds = new Set<ThreadIdType>(projectThreads.map((thread) => thread.id));
-
-      const fallbackThreadId =
-        routeThreadId && deletedThreadIds.has(routeThreadId)
-          ? getFallbackThreadIdAfterDelete({
-              threads,
-              deletedThreadId: routeThreadId,
-              deletedThreadIds,
-              sortOrder: appSettings.sidebarThreadSortOrder,
-            })
-          : null;
-
-      await dispatchCommandWithOutcomeRecovery(api, {
-        type: "project.delete",
-        commandId: newCommandId(),
-        projectId,
-      });
-
-      if (routeThreadId && deletedThreadIds.has(routeThreadId)) {
-        if (fallbackThreadId) {
-          await navigate({
-            to: "/$threadId",
-            params: { threadId: fallbackThreadId },
-            replace: true,
-          });
-        } else {
-          await navigate({ to: "/", replace: true });
-        }
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error removing project.";
-      console.error("Failed to remove project", { projectId, error });
-      toastManager.add({
-        type: "error",
-        title: `Failed to remove "${projectName}"`,
-        description: message,
-      });
-    }
-  }, [
-    appSettings.sidebarThreadSortOrder,
-    navigate,
+  const {
     pendingProjectDeleteConfirmation,
-    routeThreadId,
+    dismissPendingProjectDeleteConfirmation,
+    requestProjectDelete,
+    confirmPendingProjectDelete,
+  } = useSidebarProjectDeleteActions({
+    projects,
     threadIdsByProjectId,
-  ]);
+    appSettings,
+  });
   const handleProjectContextMenuAsync = useCallback(
     async (projectId: ProjectId, position: { x: number; y: number }) => {
       const api = readNativeApi();
@@ -193,7 +97,7 @@ export function useSidebarProjectActions({
         return;
       }
       if (clicked === "edit-ssh") {
-        openRemoteProjectEditDialog(project);
+        openRemoteWorkspaceEditDialog(project);
         return;
       }
       if (clicked !== "delete") return;
@@ -203,7 +107,7 @@ export function useSidebarProjectActions({
     [
       cancelThreadRename,
       copyPathToClipboard,
-      openRemoteProjectEditDialog,
+      openRemoteWorkspaceEditDialog,
       projectRenamingCommittedRef,
       projects,
       requestProjectDelete,
@@ -298,12 +202,12 @@ export function useSidebarProjectActions({
 
       const project = projects.find((entry) => entry.id === projectId);
       const executionTargetId = project ? resolveWorkspaceExecutionTargetId(project) : null;
-      const isRemoteProject =
+      const isRemoteWorkspace =
         executionTargetId !== null && isRemoteExecutionTargetId(executionTargetId);
       const isVerifiedRemoteTarget =
-        isRemoteProject && verifiedExecutionTargetIds[executionTargetId];
+        isRemoteWorkspace && verifiedExecutionTargetIds[executionTargetId];
 
-      if (!project || !isRemoteProject || isVerifiedRemoteTarget) {
+      if (!project || !isRemoteWorkspace || isVerifiedRemoteTarget) {
         setSelectedProject(projectId);
         toggleProject(projectId);
         return;
@@ -342,12 +246,12 @@ export function useSidebarProjectActions({
       }
       const project = projects.find((entry) => entry.id === projectId);
       const executionTargetId = project ? resolveWorkspaceExecutionTargetId(project) : null;
-      const isRemoteProject =
+      const isRemoteWorkspace =
         executionTargetId !== null && isRemoteExecutionTargetId(executionTargetId);
       const isVerifiedRemoteTarget =
-        isRemoteProject && verifiedExecutionTargetIds[executionTargetId];
+        isRemoteWorkspace && verifiedExecutionTargetIds[executionTargetId];
 
-      if (!project || !isRemoteProject || isVerifiedRemoteTarget) {
+      if (!project || !isRemoteWorkspace || isVerifiedRemoteTarget) {
         setSelectedProject(projectId);
         toggleProject(projectId);
         return;

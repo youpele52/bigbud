@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { DesktopCertificateChallenge } from "@bigbud/contracts/server/ipc.desktopCertificate.ts";
 
+import { useSettings } from "~/hooks/useSettings";
 import { isElectron } from "~/config/env";
 import { useBrowserPanelStore } from "../../stores/browser/browser.store";
 import { closeBrowserTab, openNewBrowserTab } from "../../stores/browser/browserPanel.actions";
@@ -27,7 +28,7 @@ import {
   getBrowserHistory,
   recordBrowserHistoryVisit,
   subscribeBrowserData,
-  updateBrowserHistoryVisitTitle,
+  updateBrowserHistoryVisitMetadata,
 } from "./BrowserPanel.history";
 import { planDesktopBrowserContextMenu, planDesktopBrowserReload } from "./BrowserPanel.menuAction";
 import { reloadBrowserViewport } from "./BrowserPanel.reload";
@@ -46,6 +47,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   tabId = "browser",
   visible = true,
 }: BrowserPanelProps) {
+  const searchEngine = useSettings((settings) => settings.browserSearchEngine);
   const open = useBrowserPanelStore((state) => state.open);
   const url = useBrowserPanelStore((state) => state.tabsById[tabId]?.url ?? "");
   const agentLease = useBrowserPanelStore((state) => state.tabsById[tabId]?.agentLease);
@@ -68,6 +70,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     title: "",
     faviconUrl: null,
   });
+  const [pageMetadataUrl, setPageMetadataUrl] = useState<string | null>(null);
   const { annotationActive, cancelAnnotation, handleAnnotate } = useBrowserAnnotation({
     activeThreadId: activeThreadId ?? null,
     viewportRef,
@@ -135,7 +138,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   );
 
   const handleNavigate = useCallback(() => {
-    const nextUrl = resolveBrowserOmniboxInput(inputUrl);
+    const nextUrl = resolveBrowserOmniboxInput(inputUrl, searchEngine);
     if (!nextUrl) {
       if (getUnsupportedBrowserOmniboxScheme(inputUrl)) {
         setLoadError({
@@ -149,7 +152,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     setInputUrl(nextUrl);
     setLoadError(null);
     setTabUrl(tabId, nextUrl);
-  }, [inputUrl, setTabUrl, tabId]);
+  }, [inputUrl, searchEngine, setTabUrl, tabId]);
 
   const handleSelectHistoryUrl = useCallback(
     (nextUrl: string) => {
@@ -180,8 +183,9 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   const handlePageMetadataChange = useCallback(
     (metadata: BrowserPageMetadata, metadataUrl?: string) => {
       setPageMetadata(metadata);
-      if (metadata.title.trim() && metadataUrl) {
-        setBrowserHistory(updateBrowserHistoryVisitTitle(metadataUrl, metadata.title));
+      setPageMetadataUrl(metadataUrl ?? null);
+      if (metadataUrl) {
+        setBrowserHistory(updateBrowserHistoryVisitMetadata(metadataUrl, metadata));
       }
     },
     [],
@@ -276,6 +280,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
   }, [queuedDesktopReload, reloadViewport]);
 
   const contextMenuItems: ContextMenuItem[] = createBrowserContextMenuItems({
+    searchEngine,
     canGoBack,
     canGoForward,
     context: contextMenu.context,
@@ -289,6 +294,8 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
     <>
       <BrowserToolbar
         inputUrl={inputUrl}
+        pageUrl={url}
+        searchEngine={searchEngine}
         setInputUrl={setInputUrl}
         onNavigate={handleNavigate}
         onSelectHistoryUrl={handleSelectHistoryUrl}
@@ -304,6 +311,7 @@ export const BrowserPanelContent = memo(function BrowserPanelContent({
         onAnnotate={handleAnnotate}
         annotationActive={annotationActive}
         pageMetadata={pageMetadata}
+        pageMetadataUrl={pageMetadataUrl}
         historyUrls={browserHistory}
         annotationDisabled={!isElectron || !url.trim()}
         agentControlled={isAgentControlled}

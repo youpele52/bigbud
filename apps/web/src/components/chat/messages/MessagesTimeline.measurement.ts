@@ -17,7 +17,7 @@ export function measureVisibleTimelineElement<
   return measureElement(element, entry, instance);
 }
 
-export function useTimelineWidth() {
+export function useTimelineWidth(hasTimelineRoot: boolean) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
   const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);
 
@@ -40,7 +40,7 @@ export function useTimelineWidth() {
     });
     observer.observe(timelineRoot);
     return () => observer.disconnect();
-  }, []);
+  }, [hasTimelineRoot]);
 
   return { timelineRootRef, timelineWidthPx };
 }

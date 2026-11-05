@@ -27,6 +27,13 @@ export async function invokeV2ThreadOwner(
   const { session, runtime, enrollment } = owner,
     controller = new AbortController();
   const captured = implementations.acquire(owner.implementation);
+  if (
+    request.action === "render_html" &&
+    captured.handler.bootstrapAbi !== "bigbud.thread.bootstrap.v4"
+  ) {
+    captured.release();
+    throw new Error("Retained bootstrap does not authorize HTML publication.");
+  }
   signal = AbortSignal.any([signal, controller.signal]);
   return owner.active
     .run(controller, async () => {
@@ -71,7 +78,10 @@ export async function invokeV2ThreadOwner(
             }),
             session.threadId,
           );
-          const prepared = prepareV2OrchestrationRequest(body, identity),
+          const prepared = prepareV2OrchestrationRequest(
+              body.action === "render_html" ? { ...body, htmlExpectedTurnId: row.turnId } : body,
+              identity,
+            ),
             { action: _action, ...argumentsForApproval } = body;
           await owner.approvals.require(
             key,

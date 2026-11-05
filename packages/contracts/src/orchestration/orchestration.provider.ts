@@ -1,11 +1,12 @@
 import { Schema } from "effect";
 import {
   ClaudeModelOptions,
+  CliProxyModelOptions,
   CodexModelOptions,
   CopilotModelOptions,
   CursorModelOptions,
   DevinModelOptions,
-  KilocodeModelOptions,
+  MuseModelOptions,
   OpencodeModelOptions,
   OpencodeV2ModelOptions,
   PiModelOptions,
@@ -58,7 +59,7 @@ export type ClaudeModelSelection = typeof ClaudeModelSelection.Type;
 export const CliProxyModelSelection = Schema.Struct({
   provider: Schema.Literal("cliProxy"),
   model: TrimmedNonEmptyString,
-  options: Schema.optionalKey(Schema.Record(Schema.String, Schema.Never)),
+  options: Schema.optionalKey(CliProxyModelOptions),
 });
 export type CliProxyModelSelection = typeof CliProxyModelSelection.Type;
 
@@ -86,15 +87,6 @@ export const OpencodeV2ModelSelection = Schema.Struct({
 });
 export type OpencodeV2ModelSelection = typeof OpencodeV2ModelSelection.Type;
 
-export const KilocodeModelSelection = Schema.Struct({
-  provider: Schema.Literal("kilocode"),
-  model: TrimmedNonEmptyString,
-  options: Schema.optionalKey(KilocodeModelOptions),
-  /** Sub-provider ID for routing (e.g. "openrouter", "google"). Resolved at model enumeration time and sent back to the adapter. */
-  subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
-});
-export type KilocodeModelSelection = typeof KilocodeModelSelection.Type;
-
 export const PiModelSelection = Schema.Struct({
   provider: Schema.Literal("pi"),
   model: TrimmedNonEmptyString,
@@ -118,17 +110,26 @@ export const DevinModelSelection = Schema.Struct({
 });
 export type DevinModelSelection = typeof DevinModelSelection.Type;
 
+export const MuseModelSelection = Schema.Struct({
+  provider: Schema.Literal("muse"),
+  model: TrimmedNonEmptyString,
+  options: Schema.optionalKey(MuseModelOptions),
+  /** Native MSP catalog provider ID (qualified rows carry "meta"); preserved for routing. */
+  subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type MuseModelSelection = typeof MuseModelSelection.Type;
+
 export const ModelSelection = Schema.Union([
   CodexModelSelection,
   ClaudeModelSelection,
   CliProxyModelSelection,
   CopilotModelSelection,
-  KilocodeModelSelection,
   OpencodeModelSelection,
   OpencodeV2ModelSelection,
   PiModelSelection,
   CursorModelSelection,
   DevinModelSelection,
+  MuseModelSelection,
 ]);
 export type ModelSelection = typeof ModelSelection.Type;
 
@@ -148,6 +149,18 @@ export const PersistedModelSelection = Schema.Struct({
   subProviderID: Schema.optional(TrimmedNonEmptyString),
 });
 export type PersistedModelSelection = typeof PersistedModelSelection.Type;
+
+/** Stored identities include retired KiloCode without admitting it to live routing. */
+export const HistoricalModelSelection = Schema.Union([
+  ModelSelection,
+  Schema.Struct({
+    provider: Schema.Literal("kilocode"),
+    model: TrimmedNonEmptyString,
+    options: Schema.optionalKey(Schema.Unknown),
+    subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
+  }),
+]);
+export type HistoricalModelSelection = typeof HistoricalModelSelection.Type;
 
 export const RuntimeMode = Schema.Literals(RUNTIME_MODES);
 export type RuntimeMode = typeof RuntimeMode.Type;

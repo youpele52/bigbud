@@ -1,4 +1,3 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { type KeybindingRule, type ResolvedKeybindingRule, WS_METHODS } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Path } from "effect";
@@ -9,6 +8,7 @@ import {
   serverTestLayer,
   withWsRpcClient,
 } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 
 it.layer(serverTestLayer)("server router seam > websocket auth", (it) => {
   it.effect("routes websocket rpc server.upsertKeybinding", () =>
@@ -44,7 +44,7 @@ it.layer(serverTestLayer)("server router seam > websocket auth", (it) => {
 
       assert.deepEqual(response.issues, []);
       assert.deepEqual(response.keybindings, [resolved]);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("rejects websocket rpc handshake when auth token is missing", () =>
@@ -79,7 +79,7 @@ it.layer(serverTestLayer)("server router seam > websocket auth", (it) => {
         return;
       }
       assert.include(String(result.failure), "SocketOpenError");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("accepts websocket rpc handshake when auth token is provided", () =>
@@ -111,6 +111,6 @@ it.layer(serverTestLayer)("server router seam > websocket auth", (it) => {
 
       assert.isAtLeast(response.entries.length, 1);
       assert.equal(response.truncated, false);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

@@ -11,7 +11,11 @@ interface MockWindow {
   readonly handlers: Map<string, Array<(...args: never[]) => void>>;
   readonly operations: string[];
   readonly options: Record<string, unknown>;
-  readonly webContents: { id: number };
+  readonly webContents: {
+    id: number;
+    on: ReturnType<typeof vi.fn>;
+    send: ReturnType<typeof vi.fn>;
+  };
   readonly hide: ReturnType<typeof vi.fn>;
   readonly destroy: ReturnType<typeof vi.fn>;
   readonly focus: ReturnType<typeof vi.fn>;
@@ -26,7 +30,12 @@ interface MockWindow {
   readonly showInactive: ReturnType<typeof vi.fn>;
 }
 
-const { mockWindowInstances } = vi.hoisted(() => ({
+const { mockBuildFromTemplate, mockWindowInstances } = vi.hoisted(() => ({
+  mockBuildFromTemplate: vi.fn(
+    (_template: ReadonlyArray<{ label?: string; click?: () => void }>) => ({
+      popup: vi.fn(),
+    }),
+  ),
   mockWindowInstances: [] as MockWindow[],
 }));
 
@@ -39,6 +48,7 @@ vi.mock("electron", () => ({
     readonly webContents = {
       id: mockWindowInstances.length + 1,
       on: vi.fn(),
+      send: vi.fn(),
       setWindowOpenHandler: vi.fn(),
     };
     readonly hide = vi.fn();
@@ -88,7 +98,7 @@ vi.mock("electron", () => ({
       for (const handler of this.handlers.get(event) ?? []) handler(...args);
     }
   },
-  Menu: { buildFromTemplate: vi.fn(() => ({ popup: vi.fn() })) },
+  Menu: { buildFromTemplate: mockBuildFromTemplate },
   screen: {
     getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1000, height: 800 } }),
     getDisplayNearestPoint: ({ x }: { x: number }) =>
@@ -299,6 +309,8 @@ describe("FloatingAssistantWindows", () => {
 
   it("places Restart bigbud immediately before Quit bigbud", () => {
     const labels = buildMascotContextMenuTemplate({
+      computerUseActive: false,
+      onStopComputerUse: vi.fn(),
       onDisable: vi.fn(),
       onHideMascot: vi.fn(),
       onOpenChat: vi.fn(),
@@ -320,5 +332,34 @@ describe("FloatingAssistantWindows", () => {
       "Restart bigbud",
       "Quit bigbud",
     ]);
+  });
+
+  it("offers Stop computer use only while the mascot reports activity", async () => {
+    const { registry, windows } = createWindows();
+    await windows.ensureMascot();
+    const mascot = registry.get("mascot") as unknown as MockWindow;
+    const webContentsHandler = (event: string) =>
+      mascot.webContents.on.mock.calls.find(([name]) => name === event)?.[1] as () => void;
+    const openMenu = () => {
+      (webContentsHandler("context-menu") as (event: unknown, params: unknown) => void)({}, {});
+      return mockBuildFromTemplate.mock.lastCall![0];
+    };
+    const labels = () => openMenu().map((item) => item.label);
+
+    expect(labels()).not.toContain("Stop computer use");
+    expect(windows.computerUse.setActive(mascot.webContents.id, true)).toBe(true);
+    expect(labels()[0]).toBe("Stop computer use");
+    openMenu()[0]!.click!();
+    expect(mascot.webContents.send).toHaveBeenCalledExactlyOnceWith(
+      "desktop:stop-computer-use-requested",
+    );
+    windows.computerUse.setActive(mascot.webContents.id, false);
+    expect(labels()).not.toContain("Stop computer use");
+    for (const event of ["did-start-loading", "render-process-gone"]) {
+      windows.computerUse.setActive(mascot.webContents.id, true);
+      expect(labels()[0]).toBe("Stop computer use");
+      webContentsHandler(event)();
+      expect(labels()).not.toContain("Stop computer use");
+    }
   });
 });

@@ -13,7 +13,7 @@ import {
 } from "../common/ChatFileTargetContextMenu";
 import { openChatFileTarget } from "../common/chatFileTargets";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
-import { normalizeMentionName, type MentionKind } from "./MessagesTimeline.userMessage.sources";
+import { type MentionKind } from "./MessagesTimeline.userMessage.sources";
 
 export const UserMessageMentionChip = memo(function UserMessageMentionChip(props: {
   label: string;
@@ -23,7 +23,7 @@ export const UserMessageMentionChip = memo(function UserMessageMentionChip(props
   workspaceRoot?: string | undefined;
 }) {
   const { resolvedTheme } = useTheme();
-  const clickable = props.mentionKind === "plugin" || !!props.targetPath;
+  const clickable = props.mentionKind !== "plugin" && !!props.targetPath;
   const inferredPathKind =
     props.mentionKind === "path"
       ? inferEntryKindFromPath(props.rawValue ?? props.label)
@@ -34,32 +34,23 @@ export const UserMessageMentionChip = memo(function UserMessageMentionChip(props
       <span
         className={cn(COMPOSER_INLINE_CHIP_CLASS_NAME, "mx-[1px]", clickable && "cursor-pointer")}
         title={
-          clickable
-            ? props.mentionKind === "path"
-              ? "Double-click to open"
-              : "Click to open"
-            : undefined
+          props.mentionKind === "plugin"
+            ? "Retired plugin reference (marketplace removed)"
+            : clickable
+              ? props.mentionKind === "path"
+                ? "Double-click to open"
+                : "Click to open"
+              : undefined
         }
         onClick={
-          props.mentionKind === "plugin"
+          clickable && props.mentionKind !== "path"
             ? (event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                const name = normalizeMentionName(
-                  "plugin",
-                  props.rawValue ?? props.label,
-                  props.label,
-                );
-                window.location.assign(`/plugins/openai-public%3A${encodeURIComponent(name)}`);
+                if (props.targetPath)
+                  openChatFileTarget(props.targetPath, props.workspaceRoot, "file");
               }
-            : clickable && props.mentionKind !== "path"
-              ? (event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (props.targetPath)
-                    openChatFileTarget(props.targetPath, props.workspaceRoot, "file");
-                }
-              : undefined
+            : undefined
         }
         onDoubleClick={
           props.targetPath && props.mentionKind === "path"
@@ -76,7 +67,7 @@ export const UserMessageMentionChip = memo(function UserMessageMentionChip(props
             : undefined
         }
         onContextMenu={
-          props.targetPath
+          clickable && props.targetPath
             ? (event) => {
                 event.preventDefault();
                 event.stopPropagation();

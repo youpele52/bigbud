@@ -1,10 +1,10 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Path } from "effect";
 import { HttpClient } from "effect/unstable/http";
 
 import { resolveAttachmentRelativePath } from "./attachments/attachmentPaths.ts";
 import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 
 it.layer(serverTestLayer)("server router seam > http", (it) => {
   it.effect("serves static index content for GET / when staticDir is configured", () =>
@@ -20,7 +20,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
       const response = yield* HttpClient.get("/");
       assert.equal(response.status, 200);
       assert.include(yield* response.text, "router-static-ok");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("redirects to dev URL when configured", () =>
@@ -34,7 +34,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
 
       assert.equal(response.status, 302);
       assert.equal(response.headers.get("location"), "http://127.0.0.1:5173/");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("serves project favicon requests before the dev URL redirect", () =>
@@ -59,7 +59,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
 
       assert.equal(response.status, 200);
       assert.equal(yield* response.text, "<svg>router-project-favicon</svg>");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("serves workspace PDF previews before the dev URL redirect", () =>
@@ -83,7 +83,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
 
       assert.equal(response.status, 200);
       assert.include(yield* response.text, "preview-ok");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("serves workspace PDF previews for unicode filenames", () =>
@@ -107,7 +107,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
 
       assert.equal(response.status, 200);
       assert.include(yield* response.text, "unicode-preview-ok");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("serves workspace PDF viewer pages before the dev URL redirect", () =>
@@ -132,7 +132,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
       assert.equal(response.status, 200);
       assert.include(yield* response.text, 'type="application/pdf"');
       assert.include(yield* response.text, "/api/workspace-file-preview?");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("serves the fallback project favicon when no icon exists", () =>
@@ -152,7 +152,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
 
       assert.equal(response.status, 200);
       assert.include(yield* response.text, 'data-fallback="project-favicon"');
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("rejects workspace preview path traversal", () =>
@@ -169,7 +169,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
       );
 
       assert.equal(response.status, 400);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("serves partial workspace file previews for byte range requests", () =>
@@ -193,7 +193,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
       assert.equal(response.status, 206);
       assert.equal(response.headers.get("content-range"), "bytes 4-9/16");
       assert.equal(yield* Effect.promise(() => response.text()), "456789");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("serves remote workspace file previews through the target-aware range backend", () =>
@@ -233,7 +233,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
       assert.equal(response.status, 206);
       assert.equal(response.headers.get("content-range"), "bytes 4-9/16");
       assert.equal(yield* Effect.promise(() => response.text()), "456789");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("serves attachment files from state dir", () =>
@@ -255,7 +255,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
       const response = yield* HttpClient.get(`/attachments/${attachmentId}`);
       assert.equal(response.status, 200);
       assert.equal(yield* response.text, "attachment-ok");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("serves attachment files for URL-encoded paths", () =>
@@ -278,7 +278,7 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
       );
       assert.equal(response.status, 200);
       assert.equal(yield* response.text, "attachment-encoded-ok");
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 
   it.effect("returns 404 for missing attachment id lookups", () =>
@@ -289,6 +289,6 @@ it.layer(serverTestLayer)("server router seam > http", (it) => {
         "/attachments/missing-11111111-1111-4111-8111-111111111111",
       );
       assert.equal(response.status, 404);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

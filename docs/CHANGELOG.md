@@ -4,12 +4,136 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 
 ## What's new?
 
-- **[Know what’s slowing your computer down](#new-desktop-system-monitor):** Check CPU, memory, storage, and network activity—and bigbud’s own resource use—from the desktop System Monitor.
-- **[Follow your agents and subagents more easily](#better-control-over-supporting-agents):** See subagents’ progress, inspect their work, and stop background subagents on supported providers.
-- **[A terminal built for real work](#a-more-powerful-easier-to-use-terminal):** Choose from 30+ themes, search terminal output, and enjoy smoother scrolling and rendering.
-- **[A chat history worth coming back to](#a-clearer-chat-history):** Revisit answered questions and expand work logs, thinking, and helper activity without cluttering the conversation.
-- **[Remote projects without the guesswork](#easier-remote-project-setup):** Pick a saved SSH host, browse its folders, and confirm a new server’s identity before connecting.
-- **[Know how much AI allowance you have left](#subscription-limits-across-supported-providers):** Check subscription limits, reset times, and extra-usage details across supported providers, including model-specific limits where available.
+- **[Focus on what matters with Inyosira](#organize-your-work-with-inyosira):** Bring the right chats into focus with Present, Needs you, Later, and Done—and snooze work you want to return to.
+- **[See how your computer and servers are performing](#resource-warnings-without-watching-the-monitor):** Get warnings when CPU or memory use stays high or disk space runs low on your computer, and view live resource usage on connected Linux servers.
+- **[Edit files without leaving bigbud](#edit-files-without-leaving-bigbud):** Update code, Markdown, and text files directly in the Files panel, with automatic saving and clear feedback when something needs your attention.
+- **[Bring Meta Muse into your workflow](#meta-muse-integration):** Enable Meta Muse to work with its models directly in bigbud, using your installed Muse CLI and native account sign-in.
+- **[Point your agent at the exact words](#cite-the-exact-part-of-a-conversation):** Select a passage from a message, reply, or question and cite it in your next message—with a link back to the original.
+
+## v0.3.2 (5 November, 2026)
+
+### Organize Your Work With Inyosira
+
+Inyosira means **breathe**. Be fully present with what truly matters in this moment. Your attention is finite; it does not have to belong to everything at once. Some things need you now, others can wait, and finished work deserves to rest. Inyosira is an invitation to make those distinctions—to choose what deserves your attention, and let the rest step back.
+
+- **See what matters across your projects:** Switch from **Projects** to **Inyosira** to group chats into **Present**, **Needs you**, **Later**, and **Done**, with clearer spacing between headings and chats and their project or workspace shown beneath. Expanded headings always show counts, including zero and unloaded chats; unavailable totals are marked rather than guessed. Your arrangement and groups are remembered, and loaded chats follow recent user-message activity. Switching views does not restart chats or change their projects.
+- **Put chats where they belong:** Drag chats between groups, use **Move to** for one or several chats with only **Present**, **Needs you**, **Later**, and **Done** as destinations, or ask a supported agent to move or snooze them. Agents wait for your choice before moving completed work to Done or Later. Organizing does not stop running work, archive chats, or claim that a task succeeded.
+- **Find the work waiting for you:** New approvals, questions, and delegated model choices move chats to Needs you. Deliberately opening one returns it to Present without answering or approving anything; sending a new message also brings a chat back to Present.
+- **Come back to a chat later:** Right-click a chat and choose **Snooze for…** for short duration choices such as **10 mins** or **1 hour**, or **Custom duration…**, starting at 10 minutes and adjustable from 2 minutes to 24 hours. An existing wake time and **Cancel snooze** appear separately above the durations. A clock before the provider icons marks snoozed chats and shows their wake time on hover. They wait in Later and return to Needs you when due, including after restart or wake. Snooze is a reminder—not a scheduled agent run—and does not send a notification.
+- **Keep your active list manageable:** Each group starts with four chats plus your active chat if it falls outside the preview. Use **See more (n)** and **Show less** independently in each group for the current session, and **Load more (n)** to fetch more chats; remaining counts appear when known. Projects uses the same four-chat previews and list controls, while keyboard navigation, numbered jumps, and range selection follow visible chats rather than hidden rows. Two rules are on by default: idle Present chats move to Later after 10 minutes, and older Present or unsnoozed Later chats move to Done after a day without activity. Adjust the timeouts, choose Done for idle chats, or disable either rule in Settings → General → Idle threads. Working chats, queued work, unanswered requests, and active snoozes are protected.
+
+### Resource Warnings Without Watching the Monitor
+
+- **Catch sustained resource pressure:** Desktop background monitoring is on by default while bigbud is running, even with System Monitor closed. In-app warnings highlight sustained high CPU or memory use, low disk space, and critical temperatures where supported. Monitoring does not send operating-system notifications or keep running after you quit bigbud.
+- **Choose when bigbud should warn you:** Find **Background resource alerts** in **Settings → Notifications**, with rules tucked under **Edit alert rules** instead of crowding System Monitor. Edit warning thresholds, add rules for your computer or bigbud, snooze alerts, restore defaults, or disable background monitoring. bigbud memory and disk free-space limits are shown in GiB, and warning toasts offer **Alert settings** to take you straight there. bigbud rules can include attributed tools started by agents. Preferences and cooldowns are saved locally; recent monitoring history stays in memory rather than becoming a permanent activity log.
+- **Give your agent useful troubleshooting context:** With background monitoring enabled, bigbud automatically adds a compact resource summary to messages sent to your provider when readings are available, excluding process names and lists from that automatic summary. Codex, Copilot, Claude, and OpenCode V2 can request more detail, including processes, recent trends, and alert rules. Readings describe the desktop computer—not a remote workspace—and unavailable metrics are not treated as zero. Resource inspection is read-only; agents are instructed to change alert settings only when you ask, and monitoring never starts an AI turn or controls processes.
+
+### See How Your Remote Server Is Doing
+
+- **Monitor a connected Linux VPS:** Choose a connected, saved SSH workspace in System Monitor or its side panel to see that server's CPU, memory, storage, and network activity, with temperatures where available. Monitoring uses read-only SSH commands without installing or starting a remote agent.
+- **Find resource-heavy processes:** Search and sort the captured process inventory by CPU, memory, name, or PID, page through results, and inspect individual processes. Recent CPU, memory, and network charts help you follow changes while watching. Capped inventories are clearly marked, and search and sorting apply only to the captured rows—not every process on the server.
+- **Keep remote and desktop readings distinct:** Each remote view identifies its SSH host separately from the desktop and bigbud views. Monitoring requires a connected, verified saved workspace, and connection and freshness checks prevent old remote samples from being presented as current. Unsupported remote operating systems and unavailable readings are reported rather than guessed; the monitor does not change files or control server processes.
+
+### More Control Over Desktop Computer Use
+
+- **Keep desktop work in the background where supported:** When desktop computer use is enabled, **Background** is now the default interaction mode. Choose **Foreground** in Settings → AI → Computer Use when the task needs visible desktop interaction. Background actions are refused when the runtime cannot deliver them without taking focus; bigbud does not silently switch to foreground input.
+- **Keep automation on the intended window:** Each chat keeps its own temporary window target instead of following whichever app happens to have focus. An expired, missing, ambiguous, or resized target requires a fresh selection or capture rather than sending input to an uncertain window.
+- **Avoid unexpected app switches:** Background app selection does not activate the app, and actions that would open a browser or system permission prompt are refused in that mode. Background app launching is supported on macOS; on Windows and Linux, open the app yourself before selecting it.
+- **Get clearer runtime readiness checks:** Updated the default Cua Driver to 0.38.0 and added compatibility checks for installed runtimes, with clearer setup and diagnostic failures. Desktop control still requires explicit enablement and operating-system permissions, with **Full access** required for input-changing actions.
+- These changes are implemented, but live background-automation checks and full packaged-app checks across macOS, Windows, and Linux are still outstanding. Additional supervised controls and app restrictions remain hidden and are not presented as released capabilities.
+
+### Meta Muse Integration
+
+- **Work with Meta Muse directly in bigbud:** Added an opt-in Muse Code provider with model discovery, native approval and question handling, usage information, and retained-session recovery. It is off by default and uses your installed Muse CLI and its native browser sign-in.
+- **Choose Muse models with clearer information:** Pick from the models Muse reports. Contributor models are labeled **content may be used for training**, so you can see the disclosure before selecting one rather than having it chosen silently.
+- **Keep Muse's access limits explicit:** Muse currently supports **Auto-accept edits** only: workspace edits can apply automatically, while shell commands and restricted actions use native approval. Approval required, Full access, and Plan mode are not supported. Opt-in is available on macOS, Windows, and Linux, but live Windows and Linux qualification is still outstanding.
+
+### Edit Files Without Leaving bigbud
+
+- **Make changes right where you read:** Open an existing text file in the Files panel and choose **Edit file** to update code, Markdown, or plain text, then switch back to preview. Editing supports local workspaces and remote workspaces connected through the bigbud remote agent; Direct SSH remains read-only. Only fully loaded files up to 512 KiB can be edited.
+- **Save as you go:** Changes save automatically after a short pause, with visible saving, saved, and failure feedback. Your draft stays available when you navigate between files, and Markdown previews reflect your edits without opening another editor.
+- **Resolve changes without losing your draft:** If a file changes on disk, saving pauses for you to check the latest version. Failed saves retain your draft with **Check disk** and **Retry save** controls; discarding a conflicting draft requires a fresh read and confirmation. Unsaved drafts are held in memory, not backed up across app reloads.
+
+### Easier Copilot Setup and Management
+
+- **Set up Copilot without a separate manual runtime installation:** bigbud reuses a working Copilot installation and offers a managed installation when one is needed, with download progress, cancellation, and retry controls.
+- **Manage Copilot without deleting your work:** Inspect, update, or uninstall bigbud-managed runtime files from provider settings. Chats, authentication, settings, and external installations are preserved, and uninstall waits for active Copilot work to stop.
+- **A leaner desktop app:** Removed redundant bundled Copilot runtime components while preserving working installations.
+
+### Cite the Exact Part of a Conversation
+
+- **Point your agent at the words you mean:** Select text in your message or an assistant reply, then choose **Cite** to attach that exact passage to your next message without copying the whole exchange.
+- **Keep several references together:** Citations appear as separate, removable chips in the composer and stay with saved drafts and sent messages, including after switching chats. Clicking a sent citation returns to its source and highlights the original passage when it is still available.
+- **Refer directly to an agent's question:** Cite question headings, prompts, or answer options, including while composing a structured answer. Quotes are preserved through submission, and changed or unavailable sources are not highlighted as if they still matched.
+
+### A Clearer View of Your AI Usage
+
+- **See the essentials at a glance:** A redesigned overview brings total tokens, your top provider and model, and your activity streak to the Usage page and side panel. A full bigbud loader handles first load; refreshes keep your numbers visible, with shared explanations distinguishing estimates from provider reports.
+- **Understand a busy hour, day, or month:** Select an Activity bar to inspect its usage share, rank, turns, tokens per turn, reporting source, and leading provider and model. Arrow keys move between periods; Escape restores the token-type breakdown. Empty periods stay on the timeline instead of being skipped or showing misleading source warnings.
+- **Compare providers and models over time:** Switch between **Trend** gradient area charts and **Split** donut charts to see changing usage or each provider's and model's share. Older servers without period-by-period breakdowns keep the supported Split view.
+
+### More Dependable Follow-Ups and Supporting Agents
+
+- **Send queued follow-ups more safely:** **Send now** rechecks the messages, settings, and turn you saw before acting, protecting newer work from delayed requests. Queue decisions survive lost responses without duplicating messages, and a missing-reservation fix prevents compatible follow-ups from being incorrectly rejected.
+- **Keep helpers with the right work:** Supporting-agent updates stay with their launching turn, and late events no longer restore removed entries. Codex correctly distinguishes its main session from helpers, so child completion, failure, or interruption neither leaves the parent stuck working nor prematurely finishes its response.
+- **Keep control and unanswered questions visible:** Stop remains available until the active turn actually ends, including through intermediate commentary. Independent amber question bubbles identify every chat awaiting an answer, including unloaded chats, and clear as each request resolves.
+
+### Terminals That Recover Without Starting Over
+
+- **Recover without restarting the shell:** Terminals reattach to running processes when earlier output is no longer retained, request a redraw where supported, and explain missing history without promising full scrollback restoration. A crashed view can also reload independently without restarting the shell or taking down chat.
+- **Close and restart with fewer surprises:** Improved ownership and shutdown checks prevent overlapping replacements and preserve failure details and history when an exit cannot be confirmed. Retained data from the retired experimental backend remains compatible without introducing a new default backend.
+- **Put the terminal away without stopping it:** **Minimize terminal** returns to Chat while keeping the session available. Rename and expand controls have clearer icons, and advanced rendering settings sit below everyday interaction options.
+- **Recognize running tools more easily:** Terminal and sidebar indicators recognize Muse launchers and the terminal-only herdr identity, with reduced-motion support. Terminal-only tools do not become selectable chat providers.
+- **Keep additional recovery opt-in:** The recovery mirror handles emoji output and unanswered terminal queries more reliably. It remains off by default and does not promise complete screen restoration.
+
+### More Reliable Codex, OpenCode, and CLIProxy Sessions
+
+- **Rewind Codex more carefully:** Rewind uses exact native turn boundaries, with stricter checks before changing history or files and explicit handling when the outcome is uncertain, rather than relying on message counts. Updated compatibility and pagination handling also improve recovery with supported Codex versions.
+- **Keep OpenCode history and model choices intact:** Recovery retains native sessions and history without replaying the conversation, while isolating unhealthy sessions. Effort updates preserve the correct provider identity, and compatibility changes cover OpenCode 2.2.0 and later 2.2.5 policy handling without rewriting compatible thread-tool setup.
+- **Use CLIProxy with clearer choices and update guidance:** Effort controls follow advertised model capabilities and retain your selection; cleaner GPT names leave model identifiers unchanged. Dismissible notices recommend CLIProxyAPI 8.0.51, distinguish connected-server and installed-binary versions, and leave older versions usable. Updates remain manual.
+- **Find provider controls more easily:** Provider settings now separate **Configuration** from **Visibility**, with clearer descriptions of connections, models, and which providers appear. Removed the misleading live-session management entry point without changing session recovery.
+
+### Search Your Way in the Built-In Browser
+
+- **Choose your preferred search engine:** Pick DuckDuckGo, Google, Brave Search, Bing, or Startpage in Settings → General → Browser, alongside your preserved default agent-browser preference. DuckDuckGo is the new search default; your choice applies to address-bar queries and **Search the web** on selected text.
+- **Find pages faster as you type:** The address bar offers search, direct-address, and browsing-history suggestions with keyboard and pointer selection. Suggestions are assembled locally; your unfinished query is not sent to a search-suggestion service.
+- **Recognize destinations more easily:** Pages and history suggestions can show learned site icons, with a globe fallback when an icon is unavailable.
+
+### More Reliable Remote Workspaces
+
+- **Keep OpenCode V2's remote work on its selected target:** Added a guarded path for a local shared native service to use bigbud's remote-workspace tools. Native local file, shell, plugin, and helper-agent tools are denied for that remote session instead of acting on your local machine. Live VPS qualification of this path is still outstanding.
+- **Find and open files on the right machine:** Search and previews preserve the worktree folder and its local or remote destination. Remote-agent filename search uses case-insensitive matching and path-aware ranking before limiting results, while respecting workspace boundaries and avoiding discovered links.
+- **Recover temporary file-loading failures more clearly:** Remote browsing and search coordinate retries within a 30-second window, retain cached content, and provide actionable guidance instead of retrying indefinitely.
+- **Recognize remote locations consistently:** Remote projects are now called **remote workspaces** across navigation, search, settings, and setup. Existing connections, saved expansion preferences, and local project terminology are preserved.
+
+### Smoother Desktop Navigation and Feedback
+
+- **Navigate without losing your context:** New chat and Cmd/Ctrl+N preserve your project and worktree; the Chats action and Cmd/Ctrl+Alt+N use the built-in Chats location. Terminal-focused shortcuts stay unchanged. The desktop sidebar toggle remains beside native window controls across pages, with zoom-aware header spacing on macOS.
+- **Read and dismiss notifications more comfortably:** Banners and toasts use consistent 14px text across desktop and mobile, including descriptions, guidance, and action buttons, while preserving status colors and emphasis. Toasts keep equal widths, scrollable messages, accessible actions, and reliable keyboard focus without accidental swipe dismissal. Hidden-chat notices do not occupy visible slots, and dismiss-all protects newly arriving notices. Confirmed title and summary failures offer retry; unconfirmed generation notices stay out of the way.
+- **Follow activity with less visual noise:** A liquid working indicator respects reduced motion and pauses when hidden or off-screen, settling green where appropriate. Layouts use **Chat**, **Chat x terminal**, and **Terminal** labels, with more consistent activity headings and icons, tighter thinking sections, and simpler gauge endpoints that preserve precise live readings.
+- **Use familiar controls across devices:** Process sorting and mobile theme selection now use the app's shared dropdowns, with keyboard selection and cancellation. Changing a process sort preserves your search and sort direction, and mobile's **System**, **Light**, and **Dark** theme choices remain remembered.
+
+### More Predictable Startup and Cleanup
+
+- **Reconnect to the replacement desktop backend:** Each reconnect waits for backend readiness and uses its current address and authentication, avoiding repeated attempts against an old endpoint during restart. Cancelling or replacing the connection can interrupt that wait.
+- **Leave fewer provider processes behind:** Provider startup and shutdown now track owned child processes more carefully. After a backend crash, startup can clean up verified orphaned processes while leaving processes with uncertain identity alone, and desktop shutdown gives cleanup more time to finish.
+
+### Retired Integrations Without Deleting Your History
+
+- **Keep old KiloCode chats readable:** The KiloCode integration has been removed. Retained chats, session records, preferences, events, and usage remain readable, but KiloCode chats cannot restart or silently switch providers. Start a new chat with an available provider to continue new work.
+- **Keep your existing plugin files:** The built-in plugin marketplace, its navigation, installation, update checks, and automatic discovery of marketplace-installed packages have been removed. Existing installed packages and saved marketplace data are not deleted, but bigbud no longer activates them through the retired marketplace.
+- **Keep using agents and skills directly:** Direct agent and skill selection remains available in regular chats and orchestration. Historical plugin mentions remain readable but inactive, and old marketplace links return to the home screen without being mistaken for chats.
+
+### Games and Long-Task Reminders
+
+- **Find Lagos Run in Arcade:** Added the browser game about driving a danfo through Lagos traffic and delivering passengers to the shared Games catalog.
+- **Keep longer-task reminders varied:** Reminder messages keep rotating even when browser storage is unavailable, and older saved rotation preferences carry forward.
+
+### Visual Replies Right in Chat
+
+- **Ask for a visual answer:** Added a built-in `render_html` tool so supported agents can present dashboards, diagrams, tables, and interactive explanations directly in the conversation instead of returning code to copy elsewhere.
+- **Keep visuals feeling at home:** Replies use bigbud's theme colors, fonts, and text sizing by default, and follow light and dark theme changes. Agents favor HTML and CSS, with JavaScript available for interactive details.
+- **Return to your visual answers:** Rendered replies stay with the chat when you reload or reopen it. Interactive controls run separately from the app, with external navigation and ordinary resource requests blocked.
 
 ## v0.3.1 (25 October, 2026)
 

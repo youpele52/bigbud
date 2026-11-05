@@ -80,6 +80,10 @@ describe("FilePreview scroll handoff lifecycle", () => {
       positions.mockClear();
       await vi.advanceTimersByTimeAsync(MARKDOWN_RESTORE_TIMEOUT_MS + 1000);
       await animationFrames();
+      // The initial mount may have scheduled a layout measurement before the deadline.
+      // Only callbacks after the deadline must avoid scanning the source blocks.
+      measurement.mockClear();
+      await animationFrames();
       expect(measurement).not.toHaveBeenCalled();
       expect(positions).toHaveBeenLastCalledWith(top);
       image.style.height = "220px";
@@ -118,7 +122,8 @@ describe("FilePreview scroll handoff lifecycle", () => {
         await animationFrames();
         expect(positions).toHaveBeenLastCalledWith(400);
         const image = refs.markdown.current!.querySelector("img")!;
-        // Keep the browser's own anchoring out of this explicit scroll ownership assertion.
+        // Cancellation restores native anchoring; disable it after the scroll event has canceled
+        // correction so the image reflow only tests application scroll ownership.
         container.style.overflowAnchor = "none";
         image.style.height = "220px";
         image.dispatchEvent(new Event("load"));

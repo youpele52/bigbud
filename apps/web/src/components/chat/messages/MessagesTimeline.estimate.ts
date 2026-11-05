@@ -1,6 +1,6 @@
 import { type MessageId } from "@bigbud/contracts";
 import { type PendingUserInput } from "../../../logic/session";
-import { buildTurnDiffTree, type TurnDiffTreeNode } from "../../../lib/turnDiffTree";
+import { buildTurnDiffTree } from "../../../lib/turnDiffTree";
 import { type ProposedPlan, type TurnDiffSummary } from "../../../models/types";
 import { estimateTimelineMessageHeight, estimateWrappedLineCount } from "../../timelineHeight";
 import {
@@ -38,8 +38,8 @@ const WORK_ENTRY_DETAILS_MAX_PRE_PX = 256;
 // A finished subagent row with its one-line summary.
 const SUBAGENT_ROW_PX = 28;
 const SUBAGENTS_VISIBLE_WHEN_COLLAPSED = 1;
-// Thinking markdown renders text-xs at 1.55 line height across the full timeline width.
-const THINKING_LINE_PX = 18.6;
+// Thinking markdown uses the same text-xs / leading-5 rhythm as work entries and subagents.
+const THINKING_LINE_PX = 20;
 const THINKING_AVG_CHAR_WIDTH_PX = 5.6;
 const THINKING_FALLBACK_CHARS_PER_LINE = 120;
 // Answered questions: text-sm lines are 20px. Label + mb-1, question + mb-1.5, options with
@@ -63,6 +63,8 @@ export function estimateMessagesTimelineRowHeight(
 ): number {
   const accordionOpen = isTimelineRowAccordionOpen(row, input.activityAccordionOpenById);
   switch (row.kind) {
+    case "html-render":
+      return 420;
     case "work":
       return estimateWorkRowHeight(row, accordionOpen, input);
     case "thinking":
@@ -191,19 +193,9 @@ function estimateUserInputQuestionRowHeight(pendingUserInput: PendingUserInput):
 
 function estimateChangedFilesCardHeight(turnDiffSummary: TurnDiffSummary): number {
   const treeNodes = buildTurnDiffTree(turnDiffSummary.files);
-  const visibleNodeCount = countTurnDiffTreeNodes(treeNodes);
+  // Directories start collapsed; their descendants do not contribute to the initial row height.
+  const visibleNodeCount = treeNodes.length;
 
   // Card chrome: top/bottom padding, header row, and tree spacing.
   return 60 + visibleNodeCount * 25;
-}
-
-function countTurnDiffTreeNodes(nodes: ReadonlyArray<TurnDiffTreeNode>): number {
-  let count = 0;
-  for (const node of nodes) {
-    count += 1;
-    if (node.kind === "directory") {
-      count += countTurnDiffTreeNodes(node.children);
-    }
-  }
-  return count;
 }

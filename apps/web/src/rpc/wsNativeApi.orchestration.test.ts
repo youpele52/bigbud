@@ -160,7 +160,11 @@ describe("wsNativeApi — orchestration", () => {
     const onTerminalEvent = vi.fn();
     const onDomainEvent = vi.fn();
 
-    api.terminal.onEvent(onTerminalEvent);
+    const onInventory = vi.fn();
+    api.terminal.onEvent(onTerminalEvent, { onInventory });
+    expect(rpcClientMock.terminal.onEvent).toHaveBeenLastCalledWith(onTerminalEvent, {
+      onInventory,
+    });
     api.orchestration.onDomainEvent(onDomainEvent);
 
     const terminalEvent = {

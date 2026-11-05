@@ -1,5 +1,7 @@
 import type * as Effect from "effect/Effect";
 import type * as Fiber from "effect/Fiber";
+import type { TerminalRecoveryModel } from "./TerminalRecoveryModel";
+import type { TerminalModeTracker } from "./TerminalModeTracker";
 
 import type {
   TerminalCwdError,
@@ -10,6 +12,7 @@ import type {
 import type { ProviderKind } from "@bigbud/contracts/orchestration/orchestration.provider";
 import type { PtyAdapterShape, PtyExitEvent, PtyProcess } from "../Services/PTY";
 import type { TerminalSubprocessChecker } from "./Manager.shell";
+import type { RemoteTerminalProcessInspector } from "./Manager.remote-inspection.ts";
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
 import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
 import type { TerminalAgentIdentity } from "@bigbud/contracts/workspace/terminal.agentIdentity.ts";
@@ -31,9 +34,21 @@ export const DEFAULT_OPEN_ROWS = 30;
 // ---------------------------------------------------------------------------
 
 export interface TerminalSessionState {
+  recoveryModel?: TerminalRecoveryModel | undefined;
+  /** Input-affecting modes since process birth; survives history truncation. */
+  modeTracker?: TerminalModeTracker | undefined;
+  recoveryOutputHeld?: boolean;
+  hasDeliveryOutputHold?: (() => boolean) | undefined;
+  recoveryResizeOutput?: { bytes: number; chunks: string[] } | undefined;
   wslIdentity?: TerminalWslIdentity | undefined;
+  remoteShellPid?: number | undefined;
   remoteOwnerRecoveryRequired?: boolean;
   restartPending?: boolean;
+  stopPending?: boolean;
+  reconcileOutputHold?: (() => void) | undefined;
+  lifecyclePending?: boolean;
+  observedExit?: { process: PtyProcess; event: PtyExitEvent } | undefined;
+  lastRestartOperation?: { id: string; fingerprint: string; generation: string };
   restartPreparation?: (() => Promise<void>) | undefined;
   threadId: string;
   terminalId: string;
@@ -65,6 +80,7 @@ export interface TerminalSessionState {
   process: PtyProcess | null;
   unsubscribeData: (() => void) | null;
   unsubscribeExit: (() => void) | null;
+  unsubscribeError?: (() => void) | null;
   hasRunningSubprocess: boolean;
   activeAgentProvider: ProviderKind | null;
   activeAgent?: TerminalAgentIdentity | null;
@@ -125,6 +141,7 @@ export interface TerminalManagerOptions {
   shellResolver?: () => string;
   subprocessChecker?: TerminalSubprocessChecker;
   agentDetector?: TerminalAgentDetector;
+  remoteProcessInspector?: RemoteTerminalProcessInspector;
   subprocessPollIntervalMs?: number;
   processKillGraceMs?: number;
   maxRetainedInactiveSessions?: number;

@@ -24,13 +24,14 @@ export const DEFAULT_MODEL_BY_PROVIDER = {
   claudeAgent: "default",
   cliProxy: "default",
   copilot: "gpt-5",
-  kilocode: "claude-sonnet-4-6",
   opencode: "claude-sonnet-4-6",
   // App sentinel only: V2 requires verified catalog selection before execution.
   opencodeV2: "default",
   pi: "claude-sonnet-4.6",
   cursor: "claude-sonnet-4-5",
   devin: "default",
+  // App sentinel only: Muse requires a verified catalog selection before execution.
+  muse: "default",
 } as const;
 
 /**
@@ -44,12 +45,12 @@ export const DEFAULT_GIT_TEXT_GENERATION_MODEL_BY_PROVIDER = {
   claudeAgent: "haiku",
   cliProxy: "default",
   copilot: "gpt-5-mini",
-  kilocode: "claude-haiku-4-5",
   opencode: "claude-haiku-4-5",
   opencodeV2: "default",
   pi: "claude-haiku-4.5",
   cursor: "claude-haiku-4-5",
   devin: "default",
+  muse: "default",
 } as const;
 
 /**
@@ -95,10 +96,10 @@ export const MODEL_SLUG_ALIASES_BY_PROVIDER = {
     "gpt-5.3-codex": "gpt-5",
     "gpt-5.3-codex-spark": "gpt-5-mini",
   },
-  kilocode: {},
   opencode: {},
   opencodeV2: {},
   pi: {},
   cursor: {},
   devin: {},
+  muse: {},
 } as const;

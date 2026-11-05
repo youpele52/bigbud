@@ -34,7 +34,19 @@ function renderToolbar(options?: {
             ? (options.faviconUrl ?? null)
             : "https://nairaland.com/favicon.ico",
       }}
-      historyUrls={[]}
+      historyUrls={[
+        {
+          normalizedUrl: "https://nairaland.com/",
+          origin: "https://nairaland.com",
+          title: "Nairaland Forum",
+          visitedAt: "2026-01-01T00:00:00.000Z",
+          visitCount: 1,
+          faviconUrl:
+            options && "faviconUrl" in options
+              ? (options.faviconUrl ?? null)
+              : "https://nairaland.com/favicon.ico",
+        },
+      ]}
       loading={options?.loading ?? false}
       canStopLoading={options?.canStopLoading ?? true}
     />,
@@ -42,11 +54,12 @@ function renderToolbar(options?: {
 }
 
 describe("BrowserToolbar page identity", () => {
-  it("shows a centered page title without duplicating the tab favicon", () => {
+  it("shows a centered page title and the observed site favicon", () => {
     const markup = renderToolbar();
 
     expect(markup).toContain("Nairaland Forum");
-    expect(markup).not.toContain('src="https://nairaland.com/favicon.ico"');
+    expect(markup).toContain('src="https://nairaland.com/favicon.ico"');
+    expect(markup).toContain('referrerPolicy="no-referrer"');
     expect(markup).toContain("justify-center");
     expect(markup).toContain("text-left");
     expect(markup).toContain("border-transparent bg-transparent");
@@ -59,7 +72,7 @@ describe("BrowserToolbar page identity", () => {
     const markup = renderToolbar({ title: "", faviconUrl: null });
 
     expect(markup).toContain("nairaland.com");
-    expect(markup).not.toContain("<img");
+    expect(markup).toContain('src="https://nairaland.com/favicon.ico"');
   });
 
   it("hides the external-browser action until the address bar is hovered", () => {

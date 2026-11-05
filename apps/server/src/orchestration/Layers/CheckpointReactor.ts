@@ -29,6 +29,8 @@ import {
 import { makeHandleRevertRequested } from "./CheckpointReactorRevert.ts";
 import { checkpointRefForThreadTurn } from "../../checkpointing/Utils.ts";
 import { makeHandlePathCheckpointRequested } from "./CheckpointReactorPath.ts";
+import { isInspectedTerminal } from "../../provider/Services/ProviderInspectionTerminal.ts";
+import type { ProviderServiceError } from "../../provider/Errors.ts";
 
 type ReactorInput =
   | { readonly source: "runtime"; readonly event: ProviderRuntimeEvent }
@@ -258,22 +260,30 @@ const make = Effect.gen(function* () {
       const turnId = toTurnId(event.turnId);
       yield* refreshLocalGitStatusFromTurnCompletion(event);
       yield* captureCheckpointFromTurnCompletion(event).pipe(
-        Effect.catch((error: any) =>
+        Effect.catch((error) =>
           appendCaptureFailureActivity({
             threadId: event.threadId,
             turnId,
             detail: error.message,
             createdAt: new Date().toISOString(),
-          }).pipe(Effect.catch(() => Effect.void)),
+          }).pipe(
+            Effect.catch(() => Effect.void),
+            Effect.andThen(isInspectedTerminal(event) ? Effect.fail(error) : Effect.void),
+          ),
         ),
       );
+      yield* providerService.acknowledgeInspectionTerminal?.(event, "checkpoint") ?? Effect.void;
       return;
     }
   });
 
   const processInput = (
     input: ReactorInput,
-  ): Effect.Effect<void, CheckpointStoreError | OrchestrationDispatchError, never> =>
+  ): Effect.Effect<
+    void,
+    CheckpointStoreError | OrchestrationDispatchError | ProviderServiceError,
+    never
+  > =>
     input.source === "domain" ? processDomainEvent(input.event) : processRuntimeEvent(input.event);
 
   const processInputSafely = (input: ReactorInput) =>

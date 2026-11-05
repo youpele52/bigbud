@@ -8,6 +8,8 @@ import {
 } from "react";
 
 import { readNativeApi } from "../../rpc/nativeApi";
+import { useWorkspaceRequestRecovery } from "../../hooks/useWorkspaceRequestRecovery";
+import { workspaceErrorMessage } from "../../lib/workspaceRequestRecovery.errors";
 import {
   getRemovedEntryPaths,
   reconcilePreviewPathAfterDirectoryRefresh,
@@ -56,6 +58,7 @@ export function useFilesPanelDirectoryLoader({
   workspaceKey,
 }: UseFilesPanelDirectoryLoaderInput) {
   const workspaceIdentity = `${workspaceKey}:${workspaceRoot ?? ""}:${workspaceExecutionTargetId ?? ""}`;
+  const recovery = useWorkspaceRequestRecovery(workspaceIdentity, workspaceExecutionTargetId);
   const [directoryStateSnapshot, setDirectoryStateSnapshot] = useState<{
     readonly workspaceIdentity: string;
     readonly values: Record<string, DirectoryState>;
@@ -113,11 +116,11 @@ export function useFilesPanelDirectoryLoader({
       const generation = workspaceGenerationRef.current;
 
       const existing = directoryStateRef.current[relativePath];
-      if (shouldQueueForceDirectoryRefresh(existing?.loading === true, options?.force)) {
+      if (shouldQueueForceDirectoryRefresh(recovery.isActive(relativePath), options?.force)) {
         pendingForceRefreshRef.current.add(relativePath);
         return;
       }
-      if (existing && !options?.force) return;
+      if (recovery.isActive(relativePath) || (existing && !options?.force)) return;
 
       const requestId = (directoryRequestIdsRef.current.get(relativePath) ?? 0) + 1;
       directoryRequestIdsRef.current.set(relativePath, requestId);
@@ -138,70 +141,89 @@ export function useFilesPanelDirectoryLoader({
         },
       }));
 
-      try {
+      const request = () => {
         const api = readNativeApi();
-        if (!api) {
-          throw new Error("Native API not found.");
-        }
-        const result = await api.projects.listDirectory({
+        if (!api) throw new Error("Native API not found.");
+        return api.projects.listDirectory({
           cwd: workspaceRoot,
           ...(workspaceExecutionTargetId ? { executionTargetId: workspaceExecutionTargetId } : {}),
           ...(relativePath.length > 0 ? { relativePath } : {}),
         });
-        if (!isCurrentRequest()) return;
-        const currentPreviewPath = previewPathRef.current;
-        const nextPreviewPath = reconcilePreviewPathAfterDirectoryRefresh({
-          previewPath: currentPreviewPath,
-          refreshedRelativePath: relativePath,
-          previousEntries: existing?.entries ?? EMPTY_ENTRIES,
-          nextEntries: result.entries,
-        });
-        const removedPaths = getRemovedEntryPaths(
-          existing?.entries ?? EMPTY_ENTRIES,
-          result.entries,
-        );
-
-        setDirectoryStateByPath((current) => {
-          const next = pruneRemovedPaths(current, removedPaths);
-          return {
-            ...next,
-            [relativePath]: {
-              entries: result.entries,
-              loading: false,
-              error: null,
-            },
-          };
-        });
-        if (nextPreviewPath !== currentPreviewPath) {
-          setPreviewPath(nextPreviewPath);
-          if (nextPreviewPath === null && previewPositionRef.current !== null) {
-            setPreviewPosition(null);
-          }
-        }
-        if (removedPaths.length > 0) onEntriesRemoved(removedPaths);
-      } catch (error) {
-        if (!isCurrentRequest()) return;
-        if (relativePath.length > 0 && isConfirmedMissingWorkspacePathError(error)) {
-          pendingForceRefreshRef.current.delete(relativePath);
-          setDirectoryStateByPath((current) => pruneRemovedPaths(current, [relativePath]));
-          onEntriesRemoved([relativePath]);
-          return;
-        }
-        setDirectoryStateByPath((current) => ({
-          ...current,
-          [relativePath]: {
-            entries: current[relativePath]?.entries ?? EMPTY_ENTRIES,
-            loading: false,
-            error: error instanceof Error ? error.message : "Failed to load directory.",
+      };
+      await recovery
+        .execute(relativePath, request, {
+          onRecovering: () => {
+            if (!isCurrentRequest()) return;
+            setDirectoryStateByPath((current) => ({
+              ...current,
+              [relativePath]: {
+                entries: current[relativePath]?.entries ?? EMPTY_ENTRIES,
+                loading: true,
+                error: null,
+                recovering: true,
+                requestPending: true,
+              },
+            }));
           },
-        }));
-      } finally {
-        runPendingForceRefresh(relativePath, generation);
-      }
+          onSuccess: (result) => {
+            if (!isCurrentRequest()) return;
+            const currentPreviewPath = previewPathRef.current;
+            const nextPreviewPath = reconcilePreviewPathAfterDirectoryRefresh({
+              previewPath: currentPreviewPath,
+              refreshedRelativePath: relativePath,
+              previousEntries: existing?.entries ?? EMPTY_ENTRIES,
+              nextEntries: result.entries,
+            });
+            const removedPaths = getRemovedEntryPaths(
+              existing?.entries ?? EMPTY_ENTRIES,
+              result.entries,
+            );
+
+            setDirectoryStateByPath((current) => {
+              const next = pruneRemovedPaths(current, removedPaths);
+              return {
+                ...next,
+                [relativePath]: {
+                  entries: result.entries,
+                  loading: false,
+                  error: null,
+                },
+              };
+            });
+            if (nextPreviewPath !== currentPreviewPath) {
+              setPreviewPath(nextPreviewPath);
+              if (nextPreviewPath === null && previewPositionRef.current !== null) {
+                setPreviewPosition(null);
+              }
+            }
+            if (removedPaths.length > 0) onEntriesRemoved(removedPaths);
+          },
+          onError: (error, pending) => {
+            if (!isCurrentRequest()) return;
+            if (relativePath.length > 0 && isConfirmedMissingWorkspacePathError(error)) {
+              pendingForceRefreshRef.current.delete(relativePath);
+              setDirectoryStateByPath((current) => pruneRemovedPaths(current, [relativePath]));
+              onEntriesRemoved([relativePath]);
+              return;
+            }
+            setDirectoryStateByPath((current) => ({
+              ...current,
+              [relativePath]: {
+                entries: current[relativePath]?.entries ?? EMPTY_ENTRIES,
+                loading: false,
+                error: workspaceErrorMessage(error),
+                requestPending: pending,
+              },
+            }));
+          },
+          onSettled: () => runPendingForceRefresh(relativePath, generation),
+        })
+        .catch(() => undefined);
     },
     [
       previewPathRef,
       previewPositionRef,
+      recovery,
       runPendingForceRefresh,
       onEntriesRemoved,
       setDirectoryStateByPath,

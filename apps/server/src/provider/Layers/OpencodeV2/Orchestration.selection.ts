@@ -7,6 +7,7 @@ import {
 import { readV2RetainedArtifact } from "./Orchestration.artifact.retained.ts";
 import { V2_COMPACT_NATIVE_SESSION_PREFIX } from "./Orchestration.sessionIdentity.ts";
 import { V2_SCOPED_BOOTSTRAP_ABI } from "./Orchestration.registration.ts";
+import { selectV2HtmlBootstrapUpgrade } from "./Orchestration.selection.htmlUpgrade.ts";
 import {
   v2OwnerRegistration,
   v2ThreadRegistration,
@@ -25,7 +26,8 @@ export interface V2SessionRegistrationIdentity {
 export function assertV2SessionBootstrap(artifact: V2PluginSetupArtifact, nativeSessionId: string) {
   if (
     nativeSessionId.startsWith(V2_COMPACT_NATIVE_SESSION_PREFIX) &&
-    artifact.bootstrapAbi !== V2_SCOPED_BOOTSTRAP_ABI
+    artifact.bootstrapAbi !== V2_SCOPED_BOOTSTRAP_ABI &&
+    artifact.bootstrapAbi !== "bigbud.thread.bootstrap.v3"
   )
     throw new Error(
       "V2 compact native history requires its namespace-aware bootstrap; no downgrade or replacement.",
@@ -39,6 +41,7 @@ export async function selectV2SessionArtifact(
   identity: V2SessionRegistrationIdentity,
 ) {
   const digests = new Set<string>();
+  const owners: Array<ReturnType<typeof decodeV2EnrollmentRecord>> = [];
   for (const entry of await records.entries()) {
     const record = decodeV2EnrollmentRecord(entry.value),
       owner = record.owner;
@@ -59,6 +62,11 @@ export async function selectV2SessionArtifact(
         "V2 historical bootstrap is cleanup-only; retained history remains read-only.",
       );
     digests.add(owner.bootstrapDigest);
+    owners.push(record);
+  }
+  if (identity.registrationFamily === "scoped") {
+    const upgraded = await selectV2HtmlBootstrapUpgrade(preferred, records, owners);
+    if (upgraded) return upgraded;
   }
   if (digests.size > 1 || (!digests.size && identity.registrationFamily === "legacy"))
     throw new Error(

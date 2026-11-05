@@ -1,12 +1,15 @@
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
+import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { type TerminalAgentDetector } from "./Manager.agentDetection";
+import { TerminalModeTracker } from "./TerminalModeTracker";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
 
-import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
+import type { RemoteTerminalProcessInspector } from "./Manager.remote-inspection.ts";
 
 import { type PtyAdapterShape, type PtyProcess } from "../Services/PTY";
 import { TerminalProcessSignalError, type TerminalSubprocessCheckError } from "./Manager.shell";
@@ -42,6 +45,7 @@ export interface ProcessLifecycleContext {
   // subprocessChecker may fail with TerminalSubprocessCheckError; errors are handled internally
   subprocessChecker: (pid: number) => Effect.Effect<boolean, TerminalSubprocessCheckError>;
   agentDetector: TerminalAgentDetector;
+  remoteProcessInspector?: RemoteTerminalProcessInspector;
   subprocessPollIntervalMs: number;
   shellResolver: () => string;
   ptyAdapter: PtyAdapterShape;
@@ -52,10 +56,13 @@ export interface ProcessLifecycleContext {
 // ---------------------------------------------------------------------------
 
 export function cleanupProcessHandles(session: TerminalSessionState): void {
+  session.recoveryModel?.dispose("process-retired");
   session.unsubscribeData?.();
   session.unsubscribeData = null;
   session.unsubscribeExit?.();
   session.unsubscribeExit = null;
+  session.unsubscribeError?.();
+  session.unsubscribeError = null;
 }
 
 export function enqueueProcessEvent(
@@ -63,7 +70,11 @@ export function enqueueProcessEvent(
   expectedPid: number,
   event: PendingProcessEvent,
 ): boolean {
-  if (!session.process || session.status !== "running" || session.pid !== expectedPid) {
+  if (
+    !session.process ||
+    (session.status !== "running" && session.status !== "error") ||
+    session.pid !== expectedPid
+  ) {
     return false;
   }
 
@@ -90,15 +101,18 @@ export function snapshot(session: TerminalSessionState): TerminalSessionSnapshot
     status: session.status,
     pid: session.pid,
     runtimeGeneration: session.runtimeGeneration,
-    ...(isLocalExecutionTarget(session.executionTargetId)
-      ? {
+    ...(isWslTerminalTargetId(session.executionTargetId)
+      ? {}
+      : {
           activeAgentProvider: session.activeAgentProvider,
           activeAgent: session.activeAgent ?? null,
-        }
-      : {}),
+        }),
     history: session.history + session.pendingHistoryControlSequence,
     ...(session.historyTruncated ? { historyTruncated: true } : {}),
     ...(session.historyUnavailable ? { historyUnavailable: true } : {}),
+    ...(session.historyTruncated || session.historyUnavailable
+      ? { liveModes: (session.modeTracker ?? new TerminalModeTracker()).snapshot() }
+      : {}),
     exitCode: session.exitCode,
     exitSignal: session.exitSignal,
     updatedAt: session.updatedAt,
@@ -210,11 +224,11 @@ export interface ProcessLifecycleFns {
     threadId: string,
     terminalId: string,
   ) => Effect.Effect<void>;
-  stopProcess: (session: TerminalSessionState) => Effect.Effect<void>;
+  stopProcess: (session: TerminalSessionState) => Effect.Effect<void, TerminalExecutionTargetError>;
   startSession: (
     session: TerminalSessionState,
     input: TerminalStartInput,
     eventType: "started" | "restarted",
-  ) => Effect.Effect<void>;
+  ) => Effect.Effect<void, TerminalExecutionTargetError>;
   pollSubprocessActivity: () => Effect.Effect<void>;
 }

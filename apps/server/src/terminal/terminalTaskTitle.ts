@@ -16,14 +16,20 @@ const SHELL =
 export function createTerminalTaskTitleResolver(
   agents: ReadonlyArray<TerminalAgentDescriptor> = TERMINAL_AGENTS,
 ) {
-  const resolver = createTerminalAgentEvidenceResolver(agents);
+  // Logo-only programs title like a plain shell: neither their names nor their presence is evidence.
+  const logoOnlyIds = new Set(agents.filter((agent) => agent.logoOnly).map((agent) => agent.id));
+  const resolver = createTerminalAgentEvidenceResolver(agents.filter((agent) => !agent.logoOnly));
   return (raw: string, context: TerminalTaskTitleContext): string | null => {
     if (raw.length > 1024) return null;
     for (let index = 0; index < raw.length; index++) {
       const code = raw.charCodeAt(index);
       if (code < 32 || (code >= 127 && code <= 159)) return null;
     }
-    const evidence = resolver.resolve(raw, context.foregroundAgent);
+    const foregroundAgent =
+      context.foregroundAgent && !logoOnlyIds.has(context.foregroundAgent.id)
+        ? context.foregroundAgent
+        : null;
+    const evidence = resolver.resolve(raw, foregroundAgent);
     if (!evidence) return null;
     const title = evidence.title.replace(/\s+/g, " ").trim();
     if (

@@ -44,7 +44,7 @@ describe("Settings search dropdown", () => {
 
     await input.click();
     await expect
-      .element(page.getByRole("button", { name: "Browser AI", exact: true }))
+      .element(page.getByRole("button", { name: "Default agent browser Browser", exact: true }))
       .toBeVisible();
     await expect.element(input).toHaveAttribute("aria-expanded", "true");
   });
@@ -54,7 +54,7 @@ describe("Settings search dropdown", () => {
     const input = page.getByRole("searchbox", { name: "Search settings" });
     await input.fill("brows");
     await expect
-      .element(page.getByRole("button", { name: "Browser AI", exact: true }))
+      .element(page.getByRole("button", { name: "Default agent browser Browser", exact: true }))
       .toBeVisible();
 
     await page.getByRole("heading", { name: "Current settings" }).click();
@@ -65,7 +65,7 @@ describe("Settings search dropdown", () => {
 
     await input.click();
     await expect
-      .element(page.getByRole("button", { name: "Browser AI", exact: true }))
+      .element(page.getByRole("button", { name: "Default agent browser Browser", exact: true }))
       .toBeVisible();
   });
 
@@ -73,9 +73,12 @@ describe("Settings search dropdown", () => {
     await render(<SettingsSearchFixture />);
     const input = page.getByRole("searchbox", { name: "Search settings" });
     await input.fill("brows");
-    await page.getByRole("button", { name: "Default agent browser AI", exact: true }).click();
+    await page.getByRole("button", { name: "Default agent browser Browser", exact: true }).click();
 
-    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({ to: "/settings/ai", replace: true });
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
+      to: "/settings/general",
+      replace: true,
+    });
     await expect.element(input).toHaveAttribute("aria-expanded", "false");
     await expect.element(input).toHaveValue("brows");
     await expect.element(input).not.toHaveFocus();
@@ -83,7 +86,7 @@ describe("Settings search dropdown", () => {
 
     await input.click();
     await expect
-      .element(page.getByRole("button", { name: "Browser AI", exact: true }))
+      .element(page.getByRole("button", { name: "Default agent browser Browser", exact: true }))
       .toBeVisible();
   });
 
@@ -93,7 +96,10 @@ describe("Settings search dropdown", () => {
     await input.fill("brows");
     await userEvent.keyboard("{Enter}");
 
-    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({ to: "/settings/ai", replace: true });
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
+      to: "/settings/general",
+      replace: true,
+    });
     await expect.element(input).toHaveAttribute("aria-expanded", "false");
     await expect.element(input).toHaveValue("brows");
     await expect.element(input).not.toHaveFocus();
@@ -105,7 +111,7 @@ describe("Settings search dropdown", () => {
     await input.fill("brows");
     await userEvent.tab();
     await expect
-      .element(page.getByRole("button", { name: "Browser AI", exact: true }))
+      .element(page.getByRole("button", { name: "Default search engine Browser", exact: true }))
       .toHaveFocus();
     await expect.element(input).toHaveAttribute("aria-expanded", "true");
 

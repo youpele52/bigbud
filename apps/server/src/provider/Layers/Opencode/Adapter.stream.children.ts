@@ -25,6 +25,12 @@ const MAX_PROGRESS_LENGTH = 500;
 const PROGRESS_EMIT_INTERVAL_MS = 250;
 type ChildStatus = "pending" | "inProgress" | "completed" | "failed" | "stopped";
 
+function nativeStatus(type: string | undefined): ChildStatus | undefined {
+  if (type === "idle") return "completed";
+  if (type === "busy" || type === "retry") return "inProgress";
+  return undefined;
+}
+
 /** Child sessions are tracked only for providers that declare native subagent support. */
 export function tracksChildSessions(provider: ProviderKind): boolean {
   return PROVIDER_SUBAGENT_CAPABILITIES[provider].support === "native";
@@ -39,14 +45,16 @@ function taskCreatedAt(child: Session, observedAt: string) {
 
 export function makeChildSessionTracker(
   session: ActiveOpencodeSession,
-  provider: "opencode" | "kilocode" = "opencode",
+  provider: "opencode" = "opencode",
 ) {
   const children = new Map<string, Session>();
   const statuses = new Map<string, ChildStatus>();
   const activity = new Map<string, ChildActivity>();
   const turns = new Map<string, TurnId | undefined>();
   const ended = new Map<string, string>();
+  const liveRevisions = new Map<string, number>();
   let observedOrdinal = 0;
+  let refreshGeneration = 0;
 
   function update(child: Session, status: ChildStatus): ProviderRuntimeEvent {
     const observedAt = new Date().toISOString();
@@ -109,6 +117,7 @@ export function makeChildSessionTracker(
   }
 
   async function refresh(): Promise<ReadonlyArray<ProviderRuntimeEvent>> {
+    const generation = ++refreshGeneration;
     const output: ProviderRuntimeEvent[] = [];
     const queue = [session.opencodeSessionId, ...children.keys()];
     const visited = new Set<string>();
@@ -119,6 +128,7 @@ export function makeChildSessionTracker(
       const response = await session.client.session
         .children({ sessionID: parent })
         .catch(() => ({ data: undefined }));
+      if (generation !== refreshGeneration) return output;
       if (!Array.isArray(response.data)) break;
       for (const child of response.data) {
         if (children.size >= MAX_CHILDREN) break;
@@ -131,11 +141,16 @@ export function makeChildSessionTracker(
         queue.push(child.id);
       }
     }
+    const revisions = new Map(liveRevisions);
     const response = await session.client.session.status().catch(() => ({ data: undefined }));
+    // Keep already-stamped discoveries: a newer refresh may have no status for
+    // them. Their older freshness cannot overwrite subsequent live settlement.
+    if (generation !== refreshGeneration) return output;
     for (const [id, child] of children) {
-      const live = response.data?.[id];
-      if (!live) continue;
-      const status = live.type === "idle" ? "completed" : "inProgress";
+      // A live event received during the read outranks its unversioned snapshot.
+      if (liveRevisions.get(id) !== revisions.get(id)) continue;
+      const status = nativeStatus(response.data?.[id]?.type);
+      if (!status) continue;
       if (
         status === "completed" &&
         (statuses.get(id) === "failed" || statuses.get(id) === "stopped")
@@ -162,6 +177,7 @@ export function makeChildSessionTracker(
     };
     const id = opencodeEventSessionId(event);
     if (!id || id === session.opencodeSessionId) return [];
+    if (children.has(id)) liveRevisions.set(id, (liveRevisions.get(id) ?? 0) + 1);
     if (!children.has(id)) {
       const info = properties.info as Session | undefined;
       const parent = info?.parentID;
@@ -265,6 +281,7 @@ export function makeChildSessionTracker(
     )
       return [];
     const error = properties.error as { data?: { message?: unknown }; name?: unknown } | undefined;
+    if (event.type === "session.status" && !nativeStatus(properties.status?.type)) return [];
     const status =
       event.type === "session.error"
         ? error?.name === "MessageAbortedError"

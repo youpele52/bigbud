@@ -86,7 +86,7 @@ function RemoteProjectEditHarness({
     clearSelection: vi.fn(),
     copyPathToClipboard: vi.fn(),
     cancelThreadRename: vi.fn(),
-    openRemoteProjectEditDialog: remote.openRemoteProjectEditDialog,
+    openRemoteWorkspaceEditDialog: remote.openRemoteProjectEditDialog,
   });
   return (
     <>

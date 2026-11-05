@@ -8,7 +8,7 @@ import type {
 import type {
   CreateProjectInput,
   CreateProjectResult,
-  RemoteProjectFieldErrors,
+  RemoteWorkspaceFieldErrors as RemoteProjectFieldErrors,
 } from "./Sidebar.projectAddActions.helpers";
 
 export interface UseSidebarRemoteProjectAddActionsInput {

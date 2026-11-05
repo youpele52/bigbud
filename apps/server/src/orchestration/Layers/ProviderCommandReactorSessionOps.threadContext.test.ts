@@ -74,7 +74,7 @@ describe("prependThreadContextToProviderInput", () => {
       serverMode: "web",
     });
 
-    expect(result).toContain("Desktop automation requires the Bigbud desktop app.");
+    expect(result).toContain("Desktop automation requires the bigbud desktop app.");
     expect(result).not.toContain("Use `check_permissions` or `doctor` first");
   });
 
@@ -85,7 +85,7 @@ describe("prependThreadContextToProviderInput", () => {
       serverMode: "desktop",
     });
 
-    expect(result).toContain("Desktop computer use is disabled in Bigbud settings");
+    expect(result).toContain("Desktop computer use is disabled in bigbud settings");
     expect(result).toContain(
       "Use the `browser` tool for bigbud's built-in visible or background browser",
     );

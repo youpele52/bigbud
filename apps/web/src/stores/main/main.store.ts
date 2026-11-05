@@ -35,6 +35,8 @@ import {
   setError,
   setThreadBranch,
 } from "./selectors.store";
+import type { GetOrganizationThreadSummariesResult } from "@bigbud/contracts/orchestration/orchestration.catalog.organization.ts";
+import { appendOrganizationPage } from "./helpers.organization.store";
 
 // ── State ────────────────────────────────────────────────────────────
 
@@ -130,6 +132,7 @@ interface AppStore extends AppState {
   syncSelectedThreadDetail: (detail: GetSelectedThreadDetailResult, loadingOlder: boolean) => void;
   mergeSearchMessageDetail: (detail: GetSelectedThreadDetailResult) => void;
   appendProjectThreadSummaries: (page: GetProjectThreadSummariesResult) => void;
+  appendOrganizationPage: (page: GetOrganizationThreadSummariesResult) => void;
   appendProjectCatalogPage: (
     scope: ProjectCatalogScope,
     page: GetStartupProjectCatalogResult,
@@ -165,6 +168,7 @@ export const useStore = create<AppStore>((set) => ({
       ),
     ),
   syncSidebarCatalog: (sidebarCatalog) => set((state) => syncSidebarCatalog(state, sidebarCatalog)),
+  appendOrganizationPage: (page) => set((state) => appendOrganizationPage(state, page)),
   syncSelectedThreadDetail: (detail, loadingOlder) =>
     set((state) => syncSelectedThreadDetail(state, detail, loadingOlder)),
   mergeSearchMessageDetail: (detail) => set((state) => mergeSearchMessageDetail(state, detail)),

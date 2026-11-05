@@ -1,8 +1,9 @@
 import type { OrchestrationCommand, OrchestrationReadModel } from "@bigbud/contracts";
 import {
-  isLegacyOpencodeThread,
+  isReadOnlyProviderThread,
   isRetiredProvider,
-  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+  getProviderReadOnlyMessage,
+  getReadOnlyThreadProvider,
 } from "@bigbud/shared/providerLifecycle";
 import * as Effect from "effect/Effect";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
@@ -43,14 +44,20 @@ export function requireActiveOpencodeIntegration(
       isRetiredProvider(command.defaultModelSelection?.provider));
   const forbidden =
     selectedLegacy ||
-    (isLegacyOpencodeThread(thread) &&
+    (isReadOnlyProviderThread(thread) &&
       (RUNTIME_COMMANDS.has(command.type) ||
         (command.type === "thread.meta.update" && command.modelSelection !== undefined)));
   return forbidden
     ? Effect.fail(
         new OrchestrationCommandInvariantError({
           commandType: command.type,
-          detail: LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+          detail: getProviderReadOnlyMessage(
+            getReadOnlyThreadProvider(thread) ??
+              ("modelSelection" in command ? command.modelSelection?.provider : undefined) ??
+              ("defaultModelSelection" in command
+                ? command.defaultModelSelection?.provider
+                : undefined),
+          ),
         }),
       )
     : Effect.void;

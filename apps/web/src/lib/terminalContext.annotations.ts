@@ -1,3 +1,6 @@
+import { CHAT_CITATION_HEADER } from "../constants/chatCitations";
+import { parseChatCitationEntry, type ParsedChatCitationEntry } from "./terminalContext.citations";
+
 export interface ParsedBrowserAnnotationEntry {
   kind: "browser";
   text: string;
@@ -32,7 +35,8 @@ export interface ParsedTerminalAnnotationEntry {
 export type ParsedUserAnnotationEntry =
   | ParsedBrowserAnnotationEntry
   | ParsedCodeAnnotationEntry
-  | ParsedTerminalAnnotationEntry;
+  | ParsedTerminalAnnotationEntry
+  | ParsedChatCitationEntry;
 
 const ANNOTATION_SEPARATOR = "\n\n---\n\n";
 const BROWSER_ANNOTATION_HEADER = "Browser annotation\n\nUser instruction:\n";
@@ -155,6 +159,7 @@ function isTerminalAnnotationBlock(text: string): boolean {
 }
 
 function parseAnnotationEntry(text: string): ParsedUserAnnotationEntry | null {
+  if (text.startsWith(CHAT_CITATION_HEADER)) return parseChatCitationEntry(text);
   if (isBrowserAnnotationBlock(text)) {
     return parseBrowserAnnotationEntry(text);
   }
@@ -169,6 +174,11 @@ function parseAnnotationEntry(text: string): ParsedUserAnnotationEntry | null {
 
 function findAnnotationStartIndexes(prompt: string): number[] {
   const starts = new Set<number>();
+  let citationIndex = prompt.indexOf(CHAT_CITATION_HEADER);
+  while (citationIndex !== -1) {
+    starts.add(citationIndex);
+    citationIndex = prompt.indexOf(CHAT_CITATION_HEADER, citationIndex + 1);
+  }
   let browserIndex = prompt.indexOf(BROWSER_ANNOTATION_HEADER);
   while (browserIndex !== -1) {
     starts.add(browserIndex);

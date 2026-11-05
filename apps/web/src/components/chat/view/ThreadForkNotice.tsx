@@ -17,7 +17,7 @@ const LINK_CLASS = "font-medium text-foreground underline underline-offset-2 hov
 
 /**
  * Fork lineage notices: a fork names its source (with a link), and a source links the fork it
- * continued in. Blue (info): informational. While the source stays dead, a later message that
+ * continued in. Neutral grey: informational. While the source stays dead, a later message that
  * never reached the provider may follow the existing fork, only when the user asks (D20).
  */
 export function ThreadForkNotice({

@@ -33,6 +33,10 @@ export interface ContextMenuItem<T extends string = string> {
   separator?: boolean;
   destructive?: boolean;
   disabled?: boolean;
+  /** Shows a check mark when true; omit for items that are not toggles or choices. */
+  checked?: boolean;
+  /** One level of submenu items. A parent item is never returned as the clicked id. */
+  children?: readonly ContextMenuItem<T>[];
 }
 
 export type DesktopTheme = "light" | "dark" | "system";
@@ -76,6 +80,10 @@ export interface DesktopBridge
     DesktopScreenshotBridge,
     DesktopSystemMonitorBridge {
   getWindowRole?: () => DesktopWindowRole | null;
+  /** This window's page zoom factor; 1 is actual size. */
+  getWindowZoomFactor?: () => number;
+  /** Calls `listener` with the new page zoom factor whenever this window is zoomed. */
+  onWindowZoomFactorChange?: (listener: (zoomFactor: number) => void) => () => void;
   getTerminalRenderingPolicy?: () => Promise<TerminalRenderingPolicy>;
   openMainWindow?: (threadId?: string) => Promise<boolean>;
   openCompactChat?: () => Promise<boolean>;
@@ -93,6 +101,10 @@ export interface DesktopBridge
   onFloatingAssistantCallerChange?: (
     listener: (caller: FloatingAssistantCaller) => void,
   ) => () => void;
+  /** Mascot only: whether the mascot menu offers "Stop computer use". */
+  setComputerUseActive?: (active: boolean) => Promise<boolean>;
+  /** Mascot only: the user chose "Stop computer use" in the mascot menu. */
+  onStopComputerUseRequested?: (listener: () => void) => () => void;
   getWsUrl: () => string | null;
   getMobileBackendBaseUrl: () => string | null;
   getBackendStartupState: () => Promise<DesktopBackendStartupState>;

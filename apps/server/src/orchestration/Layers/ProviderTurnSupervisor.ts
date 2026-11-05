@@ -29,6 +29,8 @@ import {
 } from "./ProviderTurnSupervisor.observe.ts";
 import { runRecoveryPass } from "./ProviderTurnSupervisor.recovery.ts";
 import { handleBackendStart } from "./ProviderTurnSupervisor.startup.ts";
+import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeIngestion.ts";
+import { ProviderRuntimeIngestionLive } from "./ProviderRuntimeIngestion.ts";
 import {
   makeRecoveryMemory,
   readSleepContinuationEnabled,
@@ -99,6 +101,7 @@ export const makeProviderTurnSupervisor = Effect.fn("makeProviderTurnSupervisor"
   const attempts = yield* Effect.serviceOption(ProviderDispatchAttemptRepository);
   const sleep = yield* Effect.serviceOption(SystemSleepEpochs);
   const config = yield* Effect.serviceOption(ServerConfig);
+  const ingestion = yield* Effect.serviceOption(ProviderRuntimeIngestionService);
   const permit = yield* Semaphore.make(1);
   // Callers hold the permit. Taking it back is uninterruptible, so the count stays balanced.
   const outsidePermit = <A, E>(effect: Effect.Effect<A, E>) =>
@@ -131,6 +134,7 @@ export const makeProviderTurnSupervisor = Effect.fn("makeProviderTurnSupervisor"
         orchestrationEngine: engine,
         providerService,
         now: () => new Date(nowMs()),
+        reconcileInspection: Option.getOrUndefined(ingestion)?.reconcileInspection,
       }).pipe(logFailure("provider turn supervision failed")),
       recovery(runRecoveryPass),
     ],
@@ -154,14 +158,27 @@ export const makeProviderTurnSupervisor = Effect.fn("makeProviderTurnSupervisor"
     yield* Effect.forkScoped(
       runPass.pipe(Effect.repeat(Schedule.fixed(PROVIDER_TURN_SUPERVISOR_INTERVAL))),
     );
-    if (ctx === null) return;
     yield* Effect.forkScoped(
       Stream.runForEach(providerService.streamEvents, (event) =>
-        RECOVERY_RUNTIME_EVENT_TYPES.has(event.type)
-          ? recovery((context) => observeRuntimeEvent(context, event))
-          : Effect.void,
+        (RECOVERY_RUNTIME_EVENT_TYPES.has(event.type)
+          ? recovery((context) =>
+              observeRuntimeEvent(context, event).pipe(
+                Effect.andThen(
+                  providerService.acknowledgeInspectionTerminal?.(event, "recovery") ?? Effect.void,
+                ),
+              ),
+            )
+          : Effect.void
+        ).pipe(
+          Effect.andThen(
+            ctx === null
+              ? (providerService.acknowledgeInspectionTerminal?.(event, "recovery") ?? Effect.void)
+              : Effect.void,
+          ),
+        ),
       ),
     );
+    if (ctx === null) return;
     yield* Effect.forkScoped(
       Stream.runForEach(engine.streamDomainEvents, (event) =>
         RECOVERY_DOMAIN_EVENT_TYPES.has(event.type)
@@ -191,4 +208,4 @@ export const makeProviderTurnSupervisor = Effect.fn("makeProviderTurnSupervisor"
 export const ProviderTurnSupervisorLive = Layer.effect(
   ProviderTurnSupervisor,
   makeProviderTurnSupervisor(),
-);
+).pipe(Layer.provide(ProviderRuntimeIngestionLive));

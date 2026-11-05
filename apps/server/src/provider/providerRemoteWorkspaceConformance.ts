@@ -59,13 +59,6 @@ const CONFORMANCE: Record<ProviderKind, ProviderRemoteWorkspaceConformance> = {
     reason:
       "Devin ACP filesystem and terminal callbacks dispatch through the configured remote workspace transport.",
   },
-  kilocode: {
-    provider: "kilocode",
-    backend: "agent-runtime",
-    supportsLocalRuntimeRemoteWorkspace: true,
-    reason:
-      "KiloCode's local built-in overrides dispatch through the configured remote workspace transport.",
-  },
   opencode: {
     provider: "opencode",
     backend: "agent-runtime",
@@ -79,6 +72,13 @@ const CONFORMANCE: Record<ProviderKind, ProviderRemoteWorkspaceConformance> = {
     supportsLocalRuntimeRemoteWorkspace: true,
     reason:
       "Pi's local extension bridge dispatches through the configured remote workspace transport.",
+  },
+  muse: {
+    provider: "muse",
+    backend: "unsupported",
+    supportsLocalRuntimeRemoteWorkspace: false,
+    reason:
+      "Muse Code runs only against local workspaces in bigbud's first milestone; remote provider execution and local runtime against a remote workspace are not qualified.",
   },
 };
 

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { makeProviderCapabilitiesResolver } from "./providerCapabilities.ts";
 import { CLIPROXY_PROVIDER_CAPABILITIES } from "./Layers/CliProxy/Composition.ts";
+import { MUSE_PROVIDER_CAPABILITIES } from "./Layers/Muse/Composition.ts";
 import { V2_APPLICATION_CAPABILITIES } from "./Layers/OpencodeV2/Application.capabilities.ts";
 import {
   getProviderRemoteWorkspaceConformance,
@@ -26,6 +27,7 @@ describe("provider remote workspace conformance matrix", () => {
     const resolveCapabilities = makeProviderCapabilitiesResolver([
       { provider: "cliProxy", capabilities: CLIPROXY_PROVIDER_CAPABILITIES },
       { provider: "opencodeV2", capabilities: V2_APPLICATION_CAPABILITIES },
+      { provider: "muse", capabilities: MUSE_PROVIDER_CAPABILITIES },
     ]);
     for (const provider of PROVIDER_KINDS) {
       const conformance = getProviderRemoteWorkspaceConformance(provider);

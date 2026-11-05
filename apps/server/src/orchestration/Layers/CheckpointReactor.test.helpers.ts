@@ -311,6 +311,7 @@ export async function createHarness(options?: {
   return {
     engine,
     provider,
+    checkpointStore,
     cwd,
     drain,
   };

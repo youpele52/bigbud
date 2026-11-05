@@ -1,6 +1,7 @@
 import "../../../index.css";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { ComposerAnnotationPreviews } from "./ComposerAnnotationPreviews";
 import type {
@@ -132,7 +133,10 @@ describe("ComposerAnnotationPreviews", () => {
     );
 
     try {
-      expect(document.body.textContent).toContain("No instruction provided");
+      await page.getByRole("button", { name: "Show 1 annotation" }).click();
+      await expect
+        .element(page.getByText("No instruction provided", { exact: true }))
+        .toBeVisible();
     } finally {
       await screen.unmount();
     }

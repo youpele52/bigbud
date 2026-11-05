@@ -151,7 +151,6 @@ export const PROVIDER_SUBAGENT_CAPABILITIES: {
       "Devin CLI via ACP: the same session/update kinds as every ACP agent and no extension methods. No subagent or child-session data.",
     tests: [],
   },
-  kilocode: OPENCODE_V1_CHILDREN,
   opencode: OPENCODE_V1_CHILDREN,
   opencodeV2: {
     support: "gated",
@@ -166,6 +165,13 @@ export const PROVIDER_SUBAGENT_CAPABILITIES: {
       "provider/Layers/OpencodeV2/Subagents.prerequisites.test.ts",
       "provider/Layers/OpencodeV2/Runtime.family.execution.test.ts",
     ],
+  },
+  muse: {
+    support: "gated",
+    fields: [],
+    evidence:
+      "Muse MSP exposes native subagent items, but bigbud's first Muse milestone does not project or control them; delegated canonical threads remain the supported delegation path.",
+    tests: ["provider/Layers/Muse/Adapter.lifecycle.test.ts"],
   },
   pi: {
     support: "native",

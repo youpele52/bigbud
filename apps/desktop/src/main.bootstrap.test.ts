@@ -5,6 +5,9 @@ let resolvePendingPort: (port: number) => void = () => undefined;
 const mocks = vi.hoisted(() => {
   return {
     events: [] as string[],
+    preserveCopilot: vi.fn(async () => {
+      mocks.events.push("copilot preserved");
+    }),
     initializeBrowserSession: vi.fn(() => {
       mocks.events.push("browser session");
     }),
@@ -41,8 +44,11 @@ vi.mock("./backend/backendManager", () => ({
   backendPort: 3000,
   backendWsUrl: "ws://127.0.0.1:3000",
   setBackendConnectionInfo: vi.fn(),
-  startBackend: vi.fn(async () => undefined),
+  startBackend: vi.fn(async () => mocks.events.push("backend started")),
   stopBackendAndWaitForExit: mocks.stopBackendAndWaitForExit,
+}));
+vi.mock("./backend/copilotRuntimeMigration", () => ({
+  preservePackagedCopilotRuntime: mocks.preserveCopilot,
 }));
 vi.mock("./backend/tailscaleRemoteAccess", () => ({
   disableDesktopTailscaleRemoteAccess: vi.fn(),
@@ -54,10 +60,12 @@ vi.mock("./backend/cuaDriver", () => ({
   getComputerUseRuntimeStatus: vi.fn(),
   installComputerUseRuntime: vi.fn(),
   requestComputerUsePermissions: vi.fn(),
+  runComputerUseDoctor: vi.fn(),
+}));
+vi.mock("./backend/cuaDriver.runtime", () => ({
   resolveComputerUseRuntime: vi.fn(() => ({
     binaryPath: String.raw`C:\Program Files\bigbud\cua-driver.exe`,
   })),
-  runComputerUseDoctor: vi.fn(),
 }));
 vi.mock("./backend/cuaDriver.daemon", () => ({
   stopCuaDriverDaemon: vi.fn(),
@@ -96,7 +104,14 @@ vi.mock("./updater/autoUpdater", () => ({
 }));
 vi.mock("./window/ipcHandlers", () => ({ registerIpcHandlers: vi.fn() }));
 vi.mock("./system-monitor/ipc", () => ({ registerSystemMonitorIpc: vi.fn() }));
+vi.mock("./main.systemMonitor", () => ({
+  startDesktopResourceAwareness: vi.fn(async () => undefined),
+}));
 vi.mock("./main.terminalRendering", () => ({ registerTerminalRenderingIpc: vi.fn() }));
+vi.mock("./computer-use/computerUse.bootstrap", () => ({
+  registerComputerUseSafetySurface: vi.fn(),
+  startComputerUseGuard: vi.fn(() => null),
+}));
 vi.mock("./connectivity/connectivitySignals.main", () => ({
   startDesktopConnectivitySignals: vi.fn(),
 }));
@@ -133,6 +148,11 @@ function makeBootstrapOptions(): Parameters<typeof bootstrapDesktop>[0] {
     systemMonitor: {} as never,
     channels: {} as never,
     cuaDriverHostBundleId: "bundle-id",
+    computerUseGuard: {
+      rootDir: "/repo",
+      desktopDir: "/repo/apps/desktop/dist",
+      developmentRoot: null,
+    },
     desktopPreferences: { get: () => ({ floatingAssistantEnabled: false }) } as never,
     desktopRuntimeInfo: {} as never,
     floatingAssistantWindows: { ensureMascot: vi.fn() } as never,
@@ -158,6 +178,9 @@ describe("bootstrapDesktop", () => {
   beforeEach(() => {
     Object.defineProperty(process, "platform", { configurable: true, value: "win32" });
     mocks.events.length = 0;
+    mocks.preserveCopilot.mockReset().mockImplementation(async () => {
+      mocks.events.push("copilot preserved");
+    });
     mocks.beginInstalledProcessQuiescence
       .mockReset()
       .mockImplementation(() => mocks.events.push("quiesce"));
@@ -192,6 +215,9 @@ describe("bootstrapDesktop", () => {
 
     mocks.resolvePort(3001);
     await bootstrap;
+    expect(mocks.events.indexOf("copilot preserved")).toBeLessThan(
+      mocks.events.indexOf("backend started"),
+    );
   });
 
   it("orders quiescence, tracked cleanup, exact-path sweep, and updater handoff", async () => {
@@ -217,6 +243,7 @@ describe("bootstrapDesktop", () => {
     await coordinator.install();
 
     expect(mocks.events).toEqual([
+      "copilot preserved",
       "quiesce",
       "backend stopped",
       "daemon stopped",
@@ -248,6 +275,21 @@ describe("bootstrapDesktop", () => {
     expect(mocks.stopCuaDriverCommandsAndWait).toHaveBeenCalledOnce();
     expect(mocks.sweepWindowsCuaDriverProcesses).toHaveBeenCalledOnce();
     expect(mocks.assertWindowsFilesReplaceable).toHaveBeenCalledOnce();
+  });
+
+  it("does not stop the working backend or hand off an update if Copilot preservation fails", async () => {
+    const bootstrap = bootstrapDesktop(makeBootstrapOptions());
+    mocks.resolvePort(3001);
+    await bootstrap;
+    mocks.preserveCopilot.mockRejectedValueOnce(
+      new Error("Copilot preservation failed: disk full"),
+    );
+    mocks.updaterDeps!.beginUpdatePreparation();
+    await expect(mocks.updaterDeps!.prepareForUpdateInstall()).rejects.toThrow("disk full");
+    expect(mocks.stopBackendAndWaitForExit).not.toHaveBeenCalled();
+    expect(mocks.stopCuaDriverDaemonAndWait).not.toHaveBeenCalled();
+    expect(mocks.stopCuaDriverCommandsAndWait).not.toHaveBeenCalled();
+    expect(mocks.beginInstalledProcessQuiescence).not.toHaveBeenCalled();
   });
 
   it("blocks handoff and marks a sweep failure as restart-required", async () => {

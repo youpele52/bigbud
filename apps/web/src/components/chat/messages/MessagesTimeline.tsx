@@ -1,6 +1,5 @@
-import { type MessageId } from "@bigbud/contracts";
 import { ChatGreeting } from "../common/ChatGreeting";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { AUTO_SCROLL_BOTTOM_THRESHOLD_PX } from "../../../utils/scroll";
 import { deriveChatReaderPosition } from "../scroller/chatScroll.readerPosition.logic";
@@ -17,7 +16,9 @@ import {
   resolveFirstUnvirtualizedRowIndex,
 } from "./MessagesTimeline.virtualization";
 import { measureVisibleTimelineElement, useTimelineWidth } from "./MessagesTimeline.measurement";
+import { useTailRowMeasurements } from "./MessagesTimeline.tailMeasurements";
 import { type MessagesTimelineProps } from "./MessagesTimeline.shared";
+import { useTimelineCitationFocus } from "./MessagesTimeline.questionFocus.hook";
 import { CHAT_COLUMN_CLASS_NAME } from "../common/chatColumn";
 
 export const MessagesTimeline = memo(function MessagesTimeline({
@@ -58,10 +59,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onVirtualizerSnapshot,
   onReaderPositionChange,
 }: MessagesTimelineProps) {
-  const { timelineRootRef, timelineWidthPx } = useTimelineWidth();
-  const [focusedMessageId, setFocusedMessageId] = useState<MessageId | null>(null);
-  const lastProcessedFocusMessageIdRef = useRef<MessageId | null>(null);
-
   const rows = useMemo(
     () =>
       deriveMessagesTimelineRows({
@@ -79,6 +76,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       historicalAgents,
     ],
   );
+  const { timelineRootRef, timelineWidthPx } = useTimelineWidth(rows.length > 0 || isWorking);
 
   const firstUnvirtualizedRowIndex = useMemo(() => {
     return resolveFirstUnvirtualizedRowIndex({
@@ -119,14 +117,22 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       window.cancelAnimationFrame(frameId);
     };
   }, [scrollContainer, rows.length]);
-  const virtualMeasurementScopeKey =
-    timelineWidthPx === null ? "width:unknown" : `width:${Math.round(timelineWidthPx)}`;
+  const { measurementsRef: tailMeasurementsRef, measurementScopeKey: virtualMeasurementScopeKey } =
+    useTailRowMeasurements({
+      timelineRootRef,
+      timelineWidthPx,
+      rows,
+      virtualizedRowCount,
+      expandedWorkGroups,
+      activityAccordionOpenById,
+      changedFilesExpandedByTurnId,
+    });
 
   const rowVirtualizer = useVirtualizer({
     count: virtualizedRowCount,
     getScrollElement: () => scrollContainer,
-    // Scope cached row measurements to the current timeline width so offscreen
-    // rows do not keep stale heights after wrapping changes.
+    // Scope cached row measurements to width and expansion state so offscreen
+    // rows do not keep stale heights after layout changes.
     getItemKey: (index: number) => {
       const row = rows[index];
       if (!row) return `${virtualMeasurementScopeKey}:${index}`;
@@ -135,6 +141,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     estimateSize: (index: number) => {
       const row = rows[index];
       if (!row) return 96;
+      const measuredTailHeight = tailMeasurementsRef.current.get(
+        `${virtualMeasurementScopeKey}:${getMessagesTimelineRowMeasurementKey(row)}`,
+      );
+      if (measuredTailHeight !== undefined) return measuredTailHeight;
       return estimateMessagesTimelineRowHeight(row, {
         expandedWorkGroups,
         activityAccordionOpenById,
@@ -146,10 +156,18 @@ export const MessagesTimeline = memo(function MessagesTimeline({
     useAnimationFrameWithResizeObserver: true,
     overscan: 8,
   });
+  const focusedMessageId = useTimelineCitationFocus({
+    focusMessageId,
+    rows,
+    virtualizedRowCount,
+    rowVirtualizer,
+    timelineRootRef,
+    onSetActivityAccordionOpen,
+  });
   useEffect(() => {
     if (timelineWidthPx === null) return;
     rowVirtualizer.measure();
-  }, [rowVirtualizer, timelineWidthPx]);
+  }, [rowVirtualizer, timelineWidthPx, virtualMeasurementScopeKey]);
   useEffect(() => {
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
       const viewportHeight = instance.scrollRect?.height ?? 0;
@@ -182,46 +200,6 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       }
     };
   }, []);
-  useEffect(() => {
-    if (!focusMessageId) {
-      lastProcessedFocusMessageIdRef.current = null;
-      return;
-    }
-    if (lastProcessedFocusMessageIdRef.current === focusMessageId) {
-      return;
-    }
-
-    const rowIndex = rows.findIndex(
-      (row) => row.kind === "message" && row.message.id === focusMessageId,
-    );
-    if (rowIndex < 0) {
-      return;
-    }
-
-    lastProcessedFocusMessageIdRef.current = focusMessageId;
-
-    if (rowIndex < virtualizedRowCount) {
-      rowVirtualizer.scrollToIndex(rowIndex, { align: "center" });
-    }
-
-    const frameId = window.requestAnimationFrame(() => {
-      const element = timelineRootRef.current?.querySelector<HTMLElement>(
-        `[data-message-id="${CSS.escape(focusMessageId)}"]`,
-      );
-      element?.scrollIntoView({ block: "center", behavior: "smooth" });
-      setFocusedMessageId(focusMessageId);
-    });
-    const timeoutId = window.setTimeout(() => {
-      setFocusedMessageId((current: MessageId | null) =>
-        current === focusMessageId ? null : current,
-      );
-    }, 2_000);
-
-    return () => {
-      window.cancelAnimationFrame(frameId);
-      window.clearTimeout(timeoutId);
-    };
-  }, [focusMessageId, rowVirtualizer, rows, virtualizedRowCount]);
   useLayoutEffect(() => {
     if (!onVirtualizerSnapshot) {
       return;
@@ -356,6 +334,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
 
       <NonVirtualizedMessagesTimelineRows
         rows={nonVirtualizedRows}
+        measurementScopeKey={virtualMeasurementScopeKey}
         expandedWorkGroups={expandedWorkGroups}
         onToggleWorkGroup={onToggleWorkGroup}
         activityAccordionOpenById={activityAccordionOpenById}

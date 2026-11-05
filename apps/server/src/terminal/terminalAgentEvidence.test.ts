@@ -96,10 +96,11 @@ describe("provider-neutral terminal evidence adapters", () => {
     for (const agent of terminalOnly) {
       for (const name of agent.names) {
         expect(resolve(`${name}: Review authentication flow`, noAgent)).toBe(
-          "Review authentication flow",
+          agent.logoOnly ? null : "Review authentication flow",
         );
       }
     }
+    expect(terminalOnly.some((agent) => agent.logoOnly)).toBe(true);
   });
 
   it("shares supported executable and wrapper metadata with process detection", () => {

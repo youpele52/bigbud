@@ -1,5 +1,5 @@
 import { AlertCircleIcon } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AnnotationIntent } from "../../stores/composer";
 import { selectElementContents, showFilePreviewContextMenu } from "./FilePreview.contextMenu";
@@ -25,6 +25,14 @@ import { useFilePreviewPosition } from "./useFilePreviewPosition";
 import { useMarkdownPreviewScroll } from "./useMarkdownPreviewScroll";
 import { FilePreviewSearchFocus } from "./FilePreviewSearchFocus";
 import { BigbudLoader } from "../layout/BigbudLoader";
+import { FilePreviewEditActions } from "./FilePreview.editActions";
+import { FilePreviewEditRecovery } from "./FilePreview.editRecovery";
+import { FilePreviewEditStatus } from "./FilePreview.editStatus";
+import { useFileEditDraft } from "./useFileEditDraft";
+
+const FilePreviewEditor = lazy(() =>
+  import("./FilePreview.editor").then((module) => ({ default: module.FilePreviewEditor })),
+);
 
 interface FilePreviewProps extends FilePreviewNavigationProps, FilePreviewScrollProps {
   cwd: string;
@@ -65,7 +73,9 @@ export const FilePreview = memo(function FilePreview({
     endLine: number;
     renderedRange?: Range;
   } | null>(null);
+  const [editing, setEditing] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const editScrollRef = useRef<{ key: string; top: number } | null>(null);
   const linesContainerRef = useRef<HTMLDivElement>(null);
   const markdownContentRef = useRef<HTMLDivElement>(null);
   const codeContainerRef = useRef<HTMLDivElement>(null);
@@ -90,8 +100,18 @@ export const FilePreview = memo(function FilePreview({
   });
 
   const isMarkdownFile = useMemo(() => isMarkdownFilePath(relativePath), [relativePath]);
-  const fileKey = JSON.stringify([executionTargetId ?? null, cwd, relativePath]);
-  const ready = state.loaded && !state.error;
+  const { draftKey, draft, eligible } = useFileEditDraft({
+    cwd,
+    relativePath,
+    executionTargetId,
+    preview: state,
+    editing,
+    refreshPreview,
+  });
+  const fileKey = draftKey;
+  useEffect(() => setEditing(false), [fileKey]);
+  const contents = eligible && draft ? draft.contents : state.contents;
+  const ready = (state.loaded && !state.error) || (eligible && draft !== null);
   const {
     viewMode: markdownViewMode,
     handleModeChange,
@@ -99,14 +119,14 @@ export const FilePreview = memo(function FilePreview({
     cancelPendingRestore,
   } = useMarkdownPreviewScroll({
     fileKey,
-    ready,
-    contents: state.contents,
+    ready: ready && !editing,
+    contents,
     isMarkdownFile,
     scrollContainerRef,
     linesContainerRef,
     markdownContentRef,
     lineHeight: FILE_PREVIEW_LINE_HEIGHT,
-    totalLines: state.contents.split("\n").length,
+    totalLines: contents.split("\n").length,
     onScrollPositionChange,
   });
 
@@ -116,11 +136,11 @@ export const FilePreview = memo(function FilePreview({
 
   const { claimInitialPosition, handleSearchMatch } = useFilePreviewPosition({
     fileKey,
-    contents: state.contents,
-    ready,
+    contents,
+    ready: ready && !editing,
     isMarkdownFile,
     mode: markdownViewMode,
-    totalLines: state.contents.split("\n").length,
+    totalLines: contents.split("\n").length,
     targetLine,
     initialScrollTop,
     scrollContainerRef,
@@ -130,14 +150,26 @@ export const FilePreview = memo(function FilePreview({
     onSearchMatch,
   });
 
+  useEffect(() => {
+    if (editing || editScrollRef.current?.key !== fileKey) return;
+    const frame = requestAnimationFrame(() => {
+      const prior = editScrollRef.current;
+      if (prior?.key === fileKey && scrollContainerRef.current) {
+        scrollContainerRef.current.scrollTop = prior.top;
+        editScrollRef.current = null;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editing, fileKey, markdownViewMode]);
+
   const lines = useMemo(
     () =>
-      state.contents.split("\n").map((text, index) => ({
+      contents.split("\n").map((text, index) => ({
         id: `${index + 1}:${text}`,
         lineNumber: index + 1,
         text,
       })),
-    [state.contents],
+    [contents],
   );
   const language = useMemo(() => inferPreviewLanguage(relativePath), [relativePath]);
   const isPlainTextFile = useMemo(
@@ -181,19 +213,19 @@ export const FilePreview = memo(function FilePreview({
         renderedRange?: Range;
       } | null = null;
 
-      if (onCreateAnnotation && selectedText.length >= 2 && state.contents) {
+      if (onCreateAnnotation && selectedText.length >= 2 && contents) {
         if (isMarkdownFile && markdownViewMode === "preview") {
           annotationRange = resolveMarkdownPreviewAnnotationSelection(
             window.getSelection(),
             markdownContentRef.current,
           );
         } else {
-          const startIndex = state.contents.indexOf(selectedText);
+          const startIndex = contents.indexOf(selectedText);
           if (startIndex !== -1) {
             const endIndex = startIndex + selectedText.length;
             annotationRange = {
-              startLine: state.contents.slice(0, startIndex).split("\n").length,
-              endLine: state.contents.slice(0, endIndex).split("\n").length,
+              startLine: contents.slice(0, startIndex).split("\n").length,
+              endLine: contents.slice(0, endIndex).split("\n").length,
             };
           }
         }
@@ -219,14 +251,7 @@ export const FilePreview = memo(function FilePreview({
               },
       });
     },
-    [
-      absolutePath,
-      isMarkdownFile,
-      markdownViewMode,
-      onCreateAnnotation,
-      relativePath,
-      state.contents,
-    ],
+    [absolutePath, isMarkdownFile, markdownViewMode, onCreateAnnotation, relativePath, contents],
   );
 
   const handleHeaderContextMenu = useCallback(
@@ -248,8 +273,8 @@ export const FilePreview = memo(function FilePreview({
   return (
     <FilePreviewSearchFocus
       className="flex h-full min-h-0 flex-col bg-background"
-      contents={state.contents}
-      enabled={state.loaded && !state.loading && !state.error}
+      contents={contents}
+      enabled={ready && !editing}
       path={relativePath}
       onSelectMatch={handleSearchMatch}
     >
@@ -262,31 +287,72 @@ export const FilePreview = memo(function FilePreview({
         onNavigateForward={onNavigateForward}
         onClose={onClose}
         onContextMenu={handleHeaderContextMenu}
+        leadingActions={
+          <FilePreviewEditActions
+            eligible={eligible}
+            draft={draft}
+            editing={editing}
+            readUnavailable={state.error !== null || state.refreshError !== null}
+            onToggle={() => {
+              setSelectedRange(null);
+              if (!editing)
+                editScrollRef.current = {
+                  key: fileKey,
+                  top: scrollContainerRef.current?.scrollTop ?? 0,
+                };
+              setEditing((value) => !value);
+            }}
+          />
+        }
         actions={
-          isMarkdownFile ? (
-            <FilePreviewMarkdownToggle
-              viewMode={markdownViewMode}
-              onViewModeChange={(mode) => {
-                if (mode === markdownViewMode) return;
-                if (ready) claimInitialPosition();
-                setSelectedRange(null);
-                handleModeChange(mode);
-              }}
+          <>
+            <FilePreviewEditRecovery
+              eligible={eligible}
+              draft={draft}
+              draftKey={draftKey}
+              editing={editing}
+              executionTargetId={executionTargetId}
+              onRefresh={refreshPreview}
             />
-          ) : null
+            {isMarkdownFile && !editing ? (
+              <FilePreviewMarkdownToggle
+                viewMode={markdownViewMode}
+                onViewModeChange={(mode) => {
+                  if (mode === markdownViewMode) return;
+                  if (ready) claimInitialPosition();
+                  setSelectedRange(null);
+                  handleModeChange(mode);
+                }}
+              />
+            ) : null}
+          </>
         }
       />
 
-      {shouldShowPreviewLoading(state) ? (
+      <FilePreviewEditStatus
+        draft={draft}
+        eligible={eligible}
+        readError={state.error ?? state.refreshError}
+      />
+      {shouldShowPreviewLoading(state) && !draft ? (
         <BigbudLoader className="min-h-0 flex-1" label="Loading file preview..." />
-      ) : state.error ? (
+      ) : state.error && !draft ? (
         <div className="flex gap-2 p-3 text-sm text-destructive/80">
           <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
           <span>{state.error}</span>
         </div>
+      ) : editing && eligible && draft ? (
+        <Suspense fallback={<BigbudLoader className="min-h-0 flex-1" label="Loading editor..." />}>
+          <FilePreviewEditor
+            key={draftKey}
+            fileKey={draftKey}
+            relativePath={relativePath}
+            initialContents={draft.contents}
+          />
+        </Suspense>
       ) : isMarkdownFile && markdownViewMode === "preview" ? (
         <FilePreviewMarkdownView
-          contents={state.contents}
+          contents={contents}
           cwd={cwd}
           scrollContainerRef={scrollContainerRef}
           contentRef={markdownContentRef}
@@ -300,7 +366,7 @@ export const FilePreview = memo(function FilePreview({
         />
       ) : (
         <FilePreviewCode
-          contents={state.contents}
+          contents={contents}
           language={language}
           themeName={themeName}
           isPlainTextFile={isPlainTextFile}

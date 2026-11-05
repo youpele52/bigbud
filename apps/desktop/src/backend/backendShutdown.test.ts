@@ -3,7 +3,13 @@ import { EventEmitter } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { killProcessTree } from "./backendProcess";
-import { stopChildProcessTreeAndWait } from "./backendShutdown";
+import {
+  BACKEND_FORCE_KILL_DELAY_MS,
+  BACKEND_STOP_WAIT_TIMEOUT_MS,
+  stopBackendChild,
+  stopBackendChildAndWait,
+  stopChildProcessTreeAndWait,
+} from "./backendShutdown";
 import {
   beginInstalledProcessQuiescence,
   getInstalledProcessTreeUncertainty,
@@ -89,6 +95,49 @@ describe("stopChildProcessTreeAndWait", () => {
     ).rejects.toThrow("did not exit within 5000ms");
     await vi.advanceTimersByTimeAsync(5_000);
     await expectation;
+  });
+});
+
+describe("backend stop", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("outlasts the server's ACP session shutdown before SIGKILL", () => {
+    // One server-side ACP session stop's worst case (about 5 s, see AcpSessionStop.ts).
+    expect(BACKEND_FORCE_KILL_DELAY_MS).toBeGreaterThan(5_000);
+    expect(BACKEND_STOP_WAIT_TIMEOUT_MS).toBeGreaterThan(BACKEND_FORCE_KILL_DELAY_MS);
+  });
+
+  it("gives a backend that is still shutting down its full window before SIGKILL", async () => {
+    const child = makeChild();
+    child.kill.mockImplementation((signal: NodeJS.Signals) => {
+      if (signal === "SIGKILL") emitExit(child);
+      return true;
+    });
+
+    const stopped = stopBackendChildAndWait(child as never, new WeakSet());
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(child.kill.mock.calls).toEqual([["SIGTERM"]]);
+    await vi.advanceTimersByTimeAsync(BACKEND_FORCE_KILL_DELAY_MS - 2_000);
+    await stopped;
+
+    expect(child.kill.mock.calls).toEqual([["SIGTERM"], ["SIGKILL"]]);
+  });
+
+  it("applies the same window to the fire-and-forget quit path", async () => {
+    const child = makeChild();
+
+    stopBackendChild(child as never, new WeakSet());
+    await vi.advanceTimersByTimeAsync(BACKEND_FORCE_KILL_DELAY_MS - 1);
+    expect(child.kill.mock.calls).toEqual([["SIGTERM"]]);
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(child.kill.mock.calls).toEqual([["SIGTERM"], ["SIGKILL"]]);
   });
 });
 

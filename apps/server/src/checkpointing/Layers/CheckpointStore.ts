@@ -64,9 +64,10 @@ const makeCheckpointStore = Effect.gen(function* () {
   const resolveCheckpointCommit = (
     cwd: string,
     checkpointRef: CheckpointRef,
+    exactRef = false,
   ): Effect.Effect<string | null, GitCommandError> =>
     Effect.forEach(
-      checkpointRefCandidates(checkpointRef),
+      exactRef ? [checkpointRef] : checkpointRefCandidates(checkpointRef),
       (candidateCheckpointRef) =>
         git
           .execute({
@@ -260,17 +261,21 @@ const makeCheckpointStore = Effect.gen(function* () {
     );
   });
 
-  const hasCheckpointRef: CheckpointStoreShape["hasCheckpointRef"] = (input) =>
-    resolveCheckpointCommit(input.cwd, input.checkpointRef).pipe(
-      Effect.map((commit) => commit !== null),
-    );
+  const hasCheckpointRef: CheckpointStoreShape["hasCheckpointRef"] = Effect.fn("hasCheckpointRef")(
+    function* (input) {
+      if (input.identity) yield* identityOps.assertRepositoryIdentity(input.cwd, input.identity);
+      return (
+        (yield* resolveCheckpointCommit(input.cwd, input.checkpointRef, input.exactRef)) !== null
+      );
+    },
+  );
 
   const restoreCheckpoint: CheckpointStoreShape["restoreCheckpoint"] = Effect.fn(
     "restoreCheckpoint",
   )(function* (input) {
     const operation = "CheckpointStore.restoreCheckpoint";
-
-    let commitOid = yield* resolveCheckpointCommit(input.cwd, input.checkpointRef);
+    if (input.identity) yield* identityOps.assertRepositoryIdentity(input.cwd, input.identity);
+    let commitOid = yield* resolveCheckpointCommit(input.cwd, input.checkpointRef, input.exactRef);
 
     if (!commitOid && input.fallbackToHead === true) {
       commitOid = yield* resolveHeadCommit(input.cwd);

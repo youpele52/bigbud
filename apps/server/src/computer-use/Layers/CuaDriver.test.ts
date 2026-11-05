@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAvailableTools, toCallResult } from "./CuaDriver.ts";
+import { parseAvailableTools, toCallResult } from "./CuaDriver.results.ts";
 
 describe("CuaDriver MCP parsing", () => {
   it("reads only valid advertised tool names", () => {

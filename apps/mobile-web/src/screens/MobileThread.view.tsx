@@ -12,7 +12,7 @@ import { MobileMessages } from "../components/threads/thread/MobileMessages";
 import { MobileReaderOutline } from "../components/threads/thread/MobileReaderOutline";
 import { MobileWorkLog } from "../components/threads/thread/MobileWorkLog";
 import { shouldShowMobileEmptyState } from "./MobileThread.view.logic";
-import { LegacyOpencodeNotice } from "~/components/chat/common/LegacyOpencodeNotice";
+import { RetiredProviderNotice } from "~/components/chat/common/RetiredProviderNotice";
 
 interface MobileThreadViewProps {
   readonly activeWorkStartedAt: string | null;
@@ -31,6 +31,7 @@ interface MobileThreadViewProps {
   readonly workLogEntries: ComponentProps<typeof MobileWorkLog>["entries"];
   readonly workspaceRoot: string | undefined;
   readonly legacyReadOnly?: boolean;
+  readonly readOnlyProvider?: string | null;
 }
 
 export function MobileThreadView(props: MobileThreadViewProps) {
@@ -96,8 +97,8 @@ export function MobileThreadView(props: MobileThreadViewProps) {
         </div>
       </div>
       <div className="shrink-0">
-        {props.legacyReadOnly ? (
-          <LegacyOpencodeNotice />
+        {props.legacyReadOnly || props.readOnlyProvider ? (
+          <RetiredProviderNotice provider={props.readOnlyProvider} />
         ) : (
           <MobileComposer {...props.composerProps} />
         )}

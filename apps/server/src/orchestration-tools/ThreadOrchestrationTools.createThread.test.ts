@@ -1,5 +1,5 @@
 import { Effect, Option } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { createThreadViaOrchestration } from "./ThreadOrchestrationTools.createThread.ts";
 import type { PersistenceSqlError } from "../persistence/Errors.ts";
@@ -16,6 +16,29 @@ const run = (input: Parameters<typeof createThreadViaOrchestration>[0]) =>
   Effect.runPromise(createThreadViaOrchestration(input));
 
 describe("createThreadViaOrchestration", () => {
+  it("rejects delegation from a removed provider without dispatching or reserving a child", async () => {
+    const system = makeSystem({
+      ...callerThread,
+      modelSelection: { provider: "kilocode", model: "legacy-model" },
+    });
+    const reserve = vi.spyOn(system.repository, "reserve");
+    await expect(
+      run({
+        orchestrationEngine: system.engine,
+        threadDelegationRepository: system.repository,
+        projectionThreadWatchRepository: system.projectionThreadWatchRepository,
+        callerThreadId,
+        sourceMessageId,
+        invocationId: "removed-provider",
+        title: "Child",
+        task: "Do the work",
+        watchForCompletion: false,
+      }),
+    ).rejects.toThrow("provider is no longer available");
+    expect(system.dispatch).not.toHaveBeenCalled();
+    expect(reserve).not.toHaveBeenCalled();
+    expect(system.updateState).not.toHaveBeenCalled();
+  });
   it("preserves V2 identity/supervised targets for canonical background children and cached delegation never dispatches again", async () => {
     const modelSelection = {
       provider: "opencodeV2",

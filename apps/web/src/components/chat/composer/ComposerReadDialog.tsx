@@ -167,9 +167,9 @@ export const ComposerReadDialog = memo(function ComposerReadDialog({
           </div>
 
           {hasConflictingSources ? (
-            <div className="rounded-lg border border-warning/35 bg-warning/10 px-3 py-2 text-sm text-warning">
-              Choose either a URL or local files for one send.
-            </div>
+            <Alert variant="warning">
+              <AlertDescription>Choose either a URL or local files for one send.</AlertDescription>
+            </Alert>
           ) : null}
         </DialogPanel>
         <DialogFooter>
@@ -205,3 +205,4 @@ export const ComposerReadDialog = memo(function ComposerReadDialog({
     </Dialog>
   );
 });
+import { Alert, AlertDescription } from "../../ui/alert";

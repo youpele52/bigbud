@@ -1,3 +1,5 @@
+import type { ResourceAwarenessState, ResourceRuleMutation } from "./awareness.ts";
+
 export interface MonitorDemand {
   processes: boolean;
   disks: boolean;
@@ -71,6 +73,10 @@ export interface MonitorNetworkInterface {
   mtuBytes?: MonitorMetric;
 }
 export interface MonitorSnapshot {
+  /** Bounded, read-only SSH process inventory when the remote OS exposes it. */
+  processRows?: MonitorProcessRow[];
+  /** The read-only SSH process inventory has more entries than the bounded capture. */
+  processRowsTruncated?: boolean;
   appResources?: MonitorAppResources;
   subscriptionId: number;
   epoch: number;
@@ -133,8 +139,8 @@ export interface MonitorProcessRow {
   cpuPercent?: MonitorMetric;
   residentBytes: number;
   virtualBytes: number;
-  diskReadBytes: number;
-  diskWrittenBytes: number;
+  diskReadBytes?: number;
+  diskWrittenBytes?: number;
 }
 export interface MonitorProcessPage {
   requestId: number;
@@ -179,6 +185,10 @@ export type MonitorEvent =
   | { type: "collectionStatus"; status: MonitorCollectionStatus }
   | { type: "unavailable"; reason: string };
 export interface DesktopSystemMonitorBridge {
+  resourceAwarenessGet?: () => Promise<ResourceAwarenessState>;
+  resourceAwarenessAcknowledge?: (ids: string[]) => Promise<void>;
+  resourceAwarenessMutate?: (mutation: ResourceRuleMutation) => Promise<ResourceAwarenessState>;
+  onResourceAwarenessState?: (listener: (state: ResourceAwarenessState) => void) => () => void;
   systemMonitorSubscribe?: (demand: MonitorDemand) => Promise<number>;
   systemMonitorUpdate?: (subscriptionId: number, demand: MonitorDemand) => Promise<void>;
   systemMonitorUnsubscribe?: (subscriptionId: number) => Promise<void>;

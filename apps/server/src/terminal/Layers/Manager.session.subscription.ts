@@ -1,6 +1,7 @@
 import { type TerminalEvent } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 
+import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { toSessionKey } from "./Manager.shell";
 import type { SessionApiContext } from "./Manager.session.types.ts";
@@ -45,9 +46,46 @@ export function subscribeToTerminalEvents(
       const events: TerminalEvent[] = [];
       const updatedAtByKey = new Map<string, string>();
       for (const session of state.sessions.values()) {
-        if (!isLocalExecutionTarget(session.executionTargetId)) {
-          continue;
+        if (options?.outputScope === "legacyDetection") {
+          // A global subscriber may have missed lifecycle/activity while reconnecting.
+          if (!isWslTerminalTargetId(session.executionTargetId) || session.status !== "running") {
+            events.push({
+              type: "activity",
+              threadId: session.threadId,
+              terminalId: session.terminalId,
+              createdAt: session.updatedAt,
+              hasRunningSubprocess: session.status === "running" && session.hasRunningSubprocess,
+            });
+          }
+          if (session.status === "exited" || session.status === "error") {
+            const base = {
+              threadId: session.threadId,
+              terminalId: session.terminalId,
+              createdAt: session.updatedAt,
+              runtimeGeneration: session.runtimeGeneration,
+            };
+            events.push(
+              session.status === "exited"
+                ? {
+                    ...base,
+                    type: "exited",
+                    exitCode: session.exitCode,
+                    exitSignal: session.exitSignal,
+                  }
+                : {
+                    ...base,
+                    type: "error",
+                    message: "Terminal is unavailable. Reconnect to inspect its status.",
+                  },
+            );
+            updatedAtByKey.set(
+              toSessionKey(session.threadId, session.terminalId),
+              session.updatedAt,
+            );
+            continue;
+          }
         }
+        if (isWslTerminalTargetId(session.executionTargetId)) continue;
         events.push({
           type: "agentIdentity",
           threadId: session.threadId,
@@ -59,9 +97,20 @@ export function subscribeToTerminalEvents(
         });
         updatedAtByKey.set(toSessionKey(session.threadId, session.terminalId), session.updatedAt);
       }
-      return [{ events, updatedAtByKey }, state] as const;
+      const inventory = options?.onInventory
+        ? {
+            type: "inventory" as const,
+            createdAt: new Date().toISOString(),
+            sessions: [...state.sessions.values()].map(({ threadId, terminalId }) => ({
+              threadId,
+              terminalId,
+            })),
+          }
+        : undefined;
+      return [{ events, updatedAtByKey, inventory }, state] as const;
     });
 
+    if (options?.onInventory && replay.inventory) yield* options.onInventory(replay.inventory);
     for (const event of replay.events) {
       yield* listener(event);
     }

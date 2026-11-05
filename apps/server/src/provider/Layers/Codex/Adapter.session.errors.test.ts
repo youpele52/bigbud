@@ -9,6 +9,7 @@ import { ServerConfig } from "../../../startup/config.ts";
 import { ServerSettingsService } from "../../../ws/serverSettings.ts";
 import { CodexAdapter } from "../../Services/Codex/Adapter.ts";
 import { makeCodexAdapterLive } from "./Adapter.ts";
+import { CodexSessionUnavailableError } from "../../../codex/codexAppServerManager.errors.ts";
 import {
   FakeCodexManager,
   asThreadId,
@@ -17,7 +18,7 @@ import {
 
 const sessionErrorManager = new FakeCodexManager();
 sessionErrorManager.sendTurnImpl.mockImplementation(async () => {
-  throw new Error("Unknown session: sess-missing");
+  throw new CodexSessionUnavailableError("missing");
 });
 const sessionErrorLayer = it.layer(
   makeCodexAdapterLive({ manager: sessionErrorManager }).pipe(

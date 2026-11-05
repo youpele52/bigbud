@@ -106,6 +106,7 @@ export class V2NativeFamilyBridge {
         proof.directory !== owner.native.location.directory ||
         runtime.sessions.get(owner.threadId) !== owner ||
         owner.stopped ||
+        owner.transportDetached ||
         owner.epoch !== epoch ||
         owner.lease.generation !== process ||
         !owner.lease.process.isRunning()
@@ -178,6 +179,12 @@ export class V2NativeFamilyBridge {
           timer,
         };
         this.owners.set(owner.native.id, entry);
+        owner.detachFamilyTransport = () => {
+          if (entry.active || owner.family?.live || owner.family?.persistenceUncertain)
+            throw new Error("V2 family transport retirement requires authoritative settlement.");
+          clearInterval(timer);
+          if (this.owners.get(owner.native.id) === entry) this.owners.delete(owner.native.id);
+        };
         const call = (
           method: "enroll" | "authorize" | "fence" | "inspect" | "receipt",
           body: Record<string, unknown>,

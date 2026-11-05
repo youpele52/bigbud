@@ -1,15 +1,12 @@
-import {
-  type ProviderKind,
-  type ThreadId,
-  type TerminalEvent,
-  type TerminalSessionSnapshot,
-} from "@bigbud/contracts";
+import { type ThreadId, type TerminalEvent, type TerminalSessionSnapshot } from "@bigbud/contracts";
 
 import {
   type TerminalEventEntry,
   type ThreadTerminalLaunchContext,
   type ThreadTerminalState,
 } from "./helpers.store";
+import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type { TerminalAgentKind } from "./terminal.store.agentKind";
 import type { TerminalAgentVersion } from "./terminal.store.identity";
 import type { TerminalLayoutMode, TerminalLayoutState } from "./terminal.store.layout";
 
@@ -22,7 +19,7 @@ export interface TerminalStateStoreState extends TerminalLayoutState {
   terminalLabelOverridesByThreadId: Record<ThreadId, Record<string, string>>;
   terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
-  terminalAgentProviderByKey: Record<string, ProviderKind | null>;
+  terminalAgentProviderByKey: Record<string, TerminalAgentKind | null>;
   terminalAgentVersionByKey: Record<string, TerminalAgentVersion>;
   terminalEventLastIdsByKey: Record<string, number>;
   nextTerminalEventId: number;
@@ -61,6 +58,7 @@ export interface TerminalStateStoreState extends TerminalLayoutState {
   recordTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvent: (event: TerminalEvent) => void;
   applyTerminalEvents: (events: ReadonlyArray<TerminalEvent>) => void;
+  reconcileTerminalInventory: (inventory: TerminalSessionInventory) => void;
   hydrateTerminalAgentFromSnapshot: (snapshot: TerminalSessionSnapshot) => void;
   clearTerminalState: (threadId: ThreadId) => void;
   removeTerminalState: (threadId: ThreadId) => void;

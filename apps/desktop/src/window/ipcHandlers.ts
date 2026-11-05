@@ -1,4 +1,6 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, nativeTheme, shell } from "electron";
+import { BrowserWindow, clipboard, dialog, nativeTheme, shell } from "electron";
+
+import { authorizedHandle, authorizedOn, BROAD_RENDERER_ROLES } from "./ipcAuthorization";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -119,8 +121,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     BACKEND_STARTUP_GET_STATE_CHANNEL,
   } = deps;
 
-  ipcMain.removeHandler(BACKEND_STARTUP_GET_STATE_CHANNEL);
-  ipcMain.handle(BACKEND_STARTUP_GET_STATE_CHANNEL, (event) => {
+  authorizedHandle(BACKEND_STARTUP_GET_STATE_CHANNEL, BROAD_RENDERER_ROLES, (event) => {
     if (
       !deps.isTrustedRenderer?.(event.sender) &&
       event.sender !== deps.getMainWindow()?.webContents
@@ -130,13 +131,11 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     return deps.getBackendStartupState();
   });
 
-  ipcMain.removeAllListeners(GET_WS_URL_CHANNEL);
-  ipcMain.on(GET_WS_URL_CHANNEL, (event) => {
+  authorizedOn(GET_WS_URL_CHANNEL, BROAD_RENDERER_ROLES, (event) => {
     event.returnValue = deps.getBackendWsUrl();
   });
 
-  ipcMain.removeAllListeners(GET_MOBILE_BACKEND_BASE_URL_CHANNEL);
-  ipcMain.on(GET_MOBILE_BACKEND_BASE_URL_CHANNEL, (event) => {
+  authorizedOn(GET_MOBILE_BACKEND_BASE_URL_CHANNEL, BROAD_RENDERER_ROLES, (event) => {
     event.returnValue = deps.getMobileBackendBaseUrl();
   });
 
@@ -155,21 +154,19 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   });
   registerCertificateChallengeHandlers();
 
-  ipcMain.removeHandler(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL);
-  ipcMain.handle(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL, () =>
+  authorizedHandle(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL, BROAD_RENDERER_ROLES, () =>
     deps.getTailscaleRemoteAccessStatus(),
   );
 
-  ipcMain.removeHandler(ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL);
-  ipcMain.handle(ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL, () => deps.enableTailscaleRemoteAccess());
+  authorizedHandle(ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL, BROAD_RENDERER_ROLES, () =>
+    deps.enableTailscaleRemoteAccess(),
+  );
 
-  ipcMain.removeHandler(DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL);
-  ipcMain.handle(DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL, () =>
+  authorizedHandle(DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL, BROAD_RENDERER_ROLES, () =>
     deps.disableTailscaleRemoteAccess(),
   );
 
-  ipcMain.removeHandler(PICK_FOLDER_CHANNEL);
-  ipcMain.handle(PICK_FOLDER_CHANNEL, async (event) => {
+  authorizedHandle(PICK_FOLDER_CHANNEL, BROAD_RENDERER_ROLES, async (event) => {
     const owner = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
     const result = owner
       ? await dialog.showOpenDialog(owner, {
@@ -182,8 +179,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     return result.filePaths[0] ?? null;
   });
 
-  ipcMain.removeHandler(CONFIRM_CHANNEL);
-  ipcMain.handle(CONFIRM_CHANNEL, async (event, message: unknown) => {
+  authorizedHandle(CONFIRM_CHANNEL, BROAD_RENDERER_ROLES, async (event, message: unknown) => {
     if (typeof message !== "string") {
       return false;
     }
@@ -192,8 +188,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     return showDesktopConfirmDialog(message, owner);
   });
 
-  ipcMain.removeHandler(SET_THEME_CHANNEL);
-  ipcMain.handle(SET_THEME_CHANNEL, async (_event, rawTheme: unknown) => {
+  authorizedHandle(SET_THEME_CHANNEL, BROAD_RENDERER_ROLES, async (_event, rawTheme: unknown) => {
     const theme = getSafeTheme(rawTheme);
     if (!theme) {
       return;
@@ -202,25 +197,27 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     nativeTheme.themeSource = theme;
   });
 
-  ipcMain.removeHandler(SET_WINDOW_MATERIAL_CHANNEL);
-  ipcMain.handle(SET_WINDOW_MATERIAL_CHANNEL, async (event, rawWindowMaterial: unknown) => {
-    const windowMaterial = getSafeWindowMaterial(rawWindowMaterial);
-    if (!windowMaterial) {
-      return;
-    }
+  authorizedHandle(
+    SET_WINDOW_MATERIAL_CHANNEL,
+    BROAD_RENDERER_ROLES,
+    async (event, rawWindowMaterial: unknown) => {
+      const windowMaterial = getSafeWindowMaterial(rawWindowMaterial);
+      if (!windowMaterial) {
+        return;
+      }
 
-    const window = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
-    if (!window) {
-      return;
-    }
+      const window = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
+      if (!window) {
+        return;
+      }
 
-    applyWindowMaterial(window, windowMaterial);
-  });
+      applyWindowMaterial(window, windowMaterial);
+    },
+  );
 
   registerContextMenuIpcHandler(CONTEXT_MENU_CHANNEL, deps.getMainWindow);
 
-  ipcMain.removeHandler(OPEN_EXTERNAL_CHANNEL);
-  ipcMain.handle(OPEN_EXTERNAL_CHANNEL, async (_event, rawUrl: unknown) => {
+  authorizedHandle(OPEN_EXTERNAL_CHANNEL, BROAD_RENDERER_ROLES, async (_event, rawUrl: unknown) => {
     const externalUrl = getSafeExternalUrl(rawUrl);
     if (!externalUrl) {
       return false;
@@ -234,11 +231,11 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     }
   });
 
-  ipcMain.removeHandler(UPDATE_GET_STATE_CHANNEL);
-  ipcMain.handle(UPDATE_GET_STATE_CHANNEL, async () => deps.getUpdateState());
+  authorizedHandle(UPDATE_GET_STATE_CHANNEL, BROAD_RENDERER_ROLES, async () =>
+    deps.getUpdateState(),
+  );
 
-  ipcMain.removeHandler(UPDATE_DOWNLOAD_CHANNEL);
-  ipcMain.handle(UPDATE_DOWNLOAD_CHANNEL, async () => {
+  authorizedHandle(UPDATE_DOWNLOAD_CHANNEL, BROAD_RENDERER_ROLES, async () => {
     const result = await deps.downloadAvailableUpdate();
     return {
       accepted: result.accepted,
@@ -247,8 +244,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     } satisfies DesktopUpdateActionResult;
   });
 
-  ipcMain.removeHandler(UPDATE_INSTALL_CHANNEL);
-  ipcMain.handle(UPDATE_INSTALL_CHANNEL, async () => {
+  authorizedHandle(UPDATE_INSTALL_CHANNEL, BROAD_RENDERER_ROLES, async () => {
     if (deps.getIsQuitting()) {
       return {
         accepted: false,
@@ -264,8 +260,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     } satisfies DesktopUpdateActionResult;
   });
 
-  ipcMain.removeHandler(UPDATE_CHECK_CHANNEL);
-  ipcMain.handle(UPDATE_CHECK_CHANNEL, async () => {
+  authorizedHandle(UPDATE_CHECK_CHANNEL, BROAD_RENDERER_ROLES, async () => {
     if (!deps.isUpdaterConfigured()) {
       return {
         checked: false,
@@ -279,11 +274,11 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     } satisfies DesktopUpdateCheckResult;
   });
 
-  ipcMain.removeHandler(NOTIFICATIONS_IS_SUPPORTED_CHANNEL);
-  ipcMain.handle(NOTIFICATIONS_IS_SUPPORTED_CHANNEL, () => isDesktopNotificationSupported());
+  authorizedHandle(NOTIFICATIONS_IS_SUPPORTED_CHANNEL, BROAD_RENDERER_ROLES, () =>
+    isDesktopNotificationSupported(),
+  );
 
-  ipcMain.removeHandler(NOTIFICATIONS_SHOW_CHANNEL);
-  ipcMain.handle(NOTIFICATIONS_SHOW_CHANNEL, (_event, input: unknown) => {
+  authorizedHandle(NOTIFICATIONS_SHOW_CHANNEL, BROAD_RENDERER_ROLES, (_event, input: unknown) => {
     if (typeof input !== "object" || input === null) {
       return false;
     }
@@ -303,40 +298,46 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     );
   });
 
-  ipcMain.removeHandler(COPY_TO_CLIPBOARD_CHANNEL);
-  ipcMain.handle(COPY_TO_CLIPBOARD_CHANNEL, async (_event, text: unknown) => {
-    if (typeof text !== "string") return;
-    clipboard.writeText(text);
-  });
+  authorizedHandle(
+    COPY_TO_CLIPBOARD_CHANNEL,
+    BROAD_RENDERER_ROLES,
+    async (_event, text: unknown) => {
+      if (typeof text !== "string") return;
+      clipboard.writeText(text);
+    },
+  );
 
-  ipcMain.removeHandler(REQUEST_FILE_ACCESS_CHANNEL);
-  ipcMain.handle(REQUEST_FILE_ACCESS_CHANNEL, async (_event, level: unknown) => {
-    const home = os.homedir();
-    const folders =
-      level === "unrestricted"
-        ? ["/", "/Users", home]
-        : level === "common-folders"
-          ? ["Desktop", "Documents", "Downloads", "Music", "Pictures"].map((f) =>
-              path.join(home, f),
-            )
-          : [];
+  authorizedHandle(
+    REQUEST_FILE_ACCESS_CHANNEL,
+    BROAD_RENDERER_ROLES,
+    async (_event, level: unknown) => {
+      const home = os.homedir();
+      const folders =
+        level === "unrestricted"
+          ? ["/", "/Users", home]
+          : level === "common-folders"
+            ? ["Desktop", "Documents", "Downloads", "Music", "Pictures"].map((f) =>
+                path.join(home, f),
+              )
+            : [];
 
-    const granted: string[] = [];
-    const denied: string[] = [];
+      const granted: string[] = [];
+      const denied: string[] = [];
 
-    for (const folder of folders) {
-      try {
-        fs.accessSync(folder, fs.constants.R_OK);
-        granted.push(folder);
-      } catch {
-        denied.push(folder);
+      for (const folder of folders) {
+        try {
+          fs.accessSync(folder, fs.constants.R_OK);
+          granted.push(folder);
+        } catch {
+          denied.push(folder);
+        }
       }
-    }
 
-    return {
-      success: granted.length > 0,
-      granted,
-      denied,
-    };
-  });
+      return {
+        success: granted.length > 0,
+        granted,
+        denied,
+      };
+    },
+  );
 }

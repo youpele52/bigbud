@@ -1,5 +1,8 @@
-import { ipcMain, type WebContents } from "electron";
+import type { WebContents } from "electron";
 import { desktopIpcChannels } from "../main.channels";
+import { authorizedHandle, type IpcRoles } from "./ipcAuthorization";
+
+const MAIN_ROLES: IpcRoles = ["main"];
 
 /** Only the current trusted main frame can authorize interruption of another backend. */
 export function registerOwnershipRecoveryIpc(
@@ -12,8 +15,7 @@ export function registerOwnershipRecoveryIpc(
     [desktopIpcChannels.recoverBackendOwnership, recover],
     [desktopIpcChannels.checkBackendOwnership, recover.check],
   ] as const) {
-    ipcMain.removeHandler(channel);
-    ipcMain.handle(channel, async (event, generation: unknown) => {
+    authorizedHandle(channel, MAIN_ROLES, async (event, generation: unknown) => {
       if (
         event.sender !== getMain() ||
         !event.senderFrame ||

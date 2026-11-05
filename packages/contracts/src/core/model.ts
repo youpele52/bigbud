@@ -36,6 +36,11 @@ export const ClaudeModelOptions = Schema.Struct({
 });
 export type ClaudeModelOptions = typeof ClaudeModelOptions.Type;
 
+export const CliProxyModelOptions = Schema.Struct({
+  effort: Schema.optional(TrimmedNonEmptyString),
+});
+export type CliProxyModelOptions = typeof CliProxyModelOptions.Type;
+
 export const CopilotModelOptions = Schema.Struct({
   reasoningEffort: Schema.optional(Schema.Literals(CODEX_REASONING_EFFORT_OPTIONS)),
 });
@@ -50,11 +55,6 @@ export const OpencodeV2ModelOptions = Schema.Struct({
   variant: Schema.optional(TrimmedNonEmptyString),
 });
 export type OpencodeV2ModelOptions = typeof OpencodeV2ModelOptions.Type;
-
-export const KilocodeModelOptions = Schema.Struct({
-  reasoningEffort: Schema.optional(TrimmedNonEmptyString),
-});
-export type KilocodeModelOptions = typeof KilocodeModelOptions.Type;
 
 export const PI_THINKING_LEVEL_OPTIONS = [
   "off",
@@ -87,17 +87,22 @@ export const DevinModelOptions = Schema.Struct({
 });
 export type DevinModelOptions = typeof DevinModelOptions.Type;
 
+export const MuseModelOptions = Schema.Struct({
+  reasoningEffort: Schema.optional(TrimmedNonEmptyString),
+});
+export type MuseModelOptions = typeof MuseModelOptions.Type;
+
 export const ProviderModelOptions = Schema.Struct({
   codex: Schema.optional(CodexModelOptions),
   claudeAgent: Schema.optional(ClaudeModelOptions),
-  cliProxy: Schema.optional(Schema.Record(Schema.String, Schema.Never)),
+  cliProxy: Schema.optional(CliProxyModelOptions),
   copilot: Schema.optional(CopilotModelOptions),
-  kilocode: Schema.optional(KilocodeModelOptions),
   opencode: Schema.optional(OpencodeModelOptions),
   opencodeV2: Schema.optional(OpencodeV2ModelOptions),
   pi: Schema.optional(PiModelOptions),
   cursor: Schema.optional(CursorModelOptions),
   devin: Schema.optional(DevinModelOptions),
+  muse: Schema.optional(MuseModelOptions),
 });
 export type ProviderModelOptions = typeof ProviderModelOptions.Type;
 

@@ -22,7 +22,7 @@ export async function prepareV2RuntimeSession(
       disableTools,
     );
     const canonical = created.localTools
-      ? await prepared?.resources.activateCanonicalTools?.()
+      ? await prepared?.resources.activateCanonicalTools?.(created, mutations, signal)
       : undefined;
     return {
       ...created,

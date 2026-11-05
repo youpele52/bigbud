@@ -7,6 +7,8 @@ const windows = vi.hoisted(
 
 vi.mock("electron", () => ({ BrowserWindow: { getAllWindows: () => windows } }));
 
+import { COMPUTER_USE_SAFETY_ROLE } from "../window/DesktopWindowRegistry";
+import { configureRendererWindows } from "../window/rendererWindows";
 import {
   beginBackendStartup,
   configureBackendStartupState,
@@ -117,5 +119,31 @@ describe("backend startup state", () => {
     beginBackendStartup();
     expect(getBackendStartupState().developmentDiagnostics).toBeUndefined();
     configureBackendStartupState("desktop:backend-startup-state", false);
+  });
+
+  it("broadcasts to broad renderers only, never the computer-use safety window", () => {
+    const window = (id: number, destroyed = false) => ({
+      isDestroyed: () => destroyed,
+      webContents: { id, send: vi.fn() },
+    });
+    const main = window(1);
+    const safety = window(2);
+    const gone = window(3, true);
+    windows.push(main, safety, gone);
+    configureRendererWindows({
+      getRole: (contents) =>
+        (contents as unknown as { id: number }).id === 2 ? COMPUTER_USE_SAFETY_ROLE : "main",
+    });
+    configureBackendStartupState("desktop:backend-startup-state", false);
+
+    beginBackendStartup();
+
+    expect(main.webContents.send).toHaveBeenCalledWith(
+      "desktop:backend-startup-state",
+      expect.objectContaining({ status: "starting" }),
+    );
+    expect(safety.webContents.send).not.toHaveBeenCalled();
+    expect(gone.webContents.send).not.toHaveBeenCalled();
+    windows.length = 0;
   });
 });

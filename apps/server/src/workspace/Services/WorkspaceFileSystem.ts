@@ -20,6 +20,7 @@ import type {
   ProjectWriteFileResult,
 } from "@bigbud/contracts";
 import { WorkspacePathOutsideRootError } from "./WorkspacePaths.ts";
+import { ProjectWriteFileDisposition } from "@bigbud/contracts/workspace/project.ts";
 
 export class WorkspaceFileSystemError extends Schema.TaggedErrorClass<WorkspaceFileSystemError>()(
   "WorkspaceFileSystemError",
@@ -29,6 +30,7 @@ export class WorkspaceFileSystemError extends Schema.TaggedErrorClass<WorkspaceF
     operation: Schema.String,
     detail: Schema.String,
     retryable: Schema.optional(Schema.Boolean),
+    writeDisposition: Schema.optional(ProjectWriteFileDisposition),
     cause: Schema.optional(Schema.Defect),
   },
 ) {}

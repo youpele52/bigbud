@@ -12,7 +12,6 @@ import {
   normalizeCodexModelOptionsWithCapabilities,
   normalizeCursorModelOptionsWithCapabilities,
   normalizeDevinModelOptionsWithCapabilities,
-  normalizeKilocodeModelOptionsWithCapabilities,
   normalizeOpencodeModelOptionsWithCapabilities,
   normalizePiModelOptionsWithCapabilities,
   resolveEffort,
@@ -81,8 +80,6 @@ function normalizeProviderOptions(
       return normalizeDevinModelOptionsWithCapabilities(caps, input.modelOptions?.devin);
     case "opencode":
       return normalizeOpencodeModelOptionsWithCapabilities(caps, input.modelOptions?.opencode);
-    case "kilocode":
-      return normalizeKilocodeModelOptionsWithCapabilities(caps, input.modelOptions?.kilocode);
     case "pi":
       return normalizePiModelOptionsWithCapabilities(caps, input.modelOptions?.pi);
     case "cliProxy":

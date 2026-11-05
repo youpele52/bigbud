@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-vi.mock("electron", () => ({ ipcMain: { handle: vi.fn() } }));
+vi.mock("electron", () => ({ ipcMain: { handle: vi.fn(), removeHandler: vi.fn() } }));
 import { ipcMain } from "electron";
 import {
   resolveLinuxDisplayServer,
@@ -7,6 +7,7 @@ import {
   registerTerminalRenderingIpc,
   registerTerminalRenderingPolicy,
 } from "./main.terminalRendering";
+import { authorizeFakeSenders, fakeIpcSender } from "./window/ipcAuthorization.testSupport";
 
 describe("terminal rendering application policy", () => {
   it.each([undefined, "disabled_software", "unavailable_software", "disabled_off"])(
@@ -40,17 +41,23 @@ describe("terminal rendering application policy", () => {
       getGPUFeatureStatus: () => ({ webgl2: "enabled" }),
     };
     registerTerminalRenderingPolicy(app as never, false, "linux");
-    const mainFrame = {};
-    const sender = { id: 1, mainFrame };
+    const sender = fakeIpcSender(1);
+    const mainFrame = sender.mainFrame;
+    const stranger = { ...sender, id: 2 };
+    authorizeFakeSenders([
+      [sender, "main"],
+      [stranger, "main"],
+    ]);
     registerTerminalRenderingIpc((candidate) => candidate.id === 1);
     const read = vi.mocked(ipcMain.handle).mock.calls.at(-1)![1];
     expect(read({ sender, senderFrame: mainFrame } as never).allowed).toBe(false);
     listeners.get("gpu-info-update")?.();
     expect(read({ sender, senderFrame: mainFrame } as never).allowed).toBe(true);
-    expect(() => read({ sender: { ...sender, id: 2 }, senderFrame: mainFrame } as never)).toThrow(
-      "Untrusted",
-    );
-    expect(() => read({ sender, senderFrame: {} } as never)).toThrow("Untrusted");
+    // Registered but rejected by the handler's own trust predicate.
+    expect(() => read({ sender: stranger, senderFrame: mainFrame } as never)).toThrow("Untrusted");
+    // Unregistered sender and subframe: bounded denial from the authorizer.
+    expect(read({ sender: { ...sender }, senderFrame: mainFrame } as never)).toBeNull();
+    expect(read({ sender, senderFrame: {} } as never)).toBeNull();
     listeners.get("child-process-gone")?.({}, { type: "GPU", reason: "crashed" });
     expect(read({ sender, senderFrame: mainFrame } as never).allowed).toBe(false);
   });
@@ -69,8 +76,9 @@ describe("terminal rendering application policy", () => {
       false,
       "linux",
     );
-    const mainFrame = {};
-    const sender = { mainFrame };
+    const sender = fakeIpcSender(0);
+    const mainFrame = sender.mainFrame;
+    authorizeFakeSenders([[sender, "compact-chat"]]);
     registerTerminalRenderingIpc(() => true);
     const read = vi.mocked(ipcMain.handle).mock.calls.at(-1)![1];
     expect(read({ sender, senderFrame: mainFrame } as never).allowed).toBe(false);

@@ -13,7 +13,7 @@ const UNSORTED_PROVIDER_KINDS = [
   "copilot",
   "cursor",
   "devin",
-  "kilocode",
+  "muse",
   "opencode",
   "opencodeV2",
   "pi",
@@ -24,12 +24,12 @@ export const PROVIDER_DISPLAY_NAMES = {
   claudeAgent: "Claude",
   cliProxy: "CLIProxyAPI",
   copilot: "Copilot",
-  kilocode: "KiloCode",
   opencode: "OpenCode",
   opencodeV2: "OpenCode",
   pi: "Pi",
   cursor: "Cursor",
   devin: "Devin",
+  muse: "Muse Code",
   bigbud: "bigbud",
 } as const;
 

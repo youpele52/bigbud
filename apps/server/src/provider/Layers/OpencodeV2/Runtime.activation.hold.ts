@@ -8,6 +8,7 @@ export type V2SettlementHoldReason =
   | "mutations-busy"
   | "admission-in-flight"
   | "coding-busy"
+  | "remote-busy"
   | "publication-unconfirmed"
   | "final-events"
   | "final-publication-pending"
@@ -32,6 +33,7 @@ export function v2SettlementBusyReason(
   if (runtime.mutations.busyCount()) return "mutations-busy";
   if (includeAdmission && owner.admissionInFlight) return "admission-in-flight";
   if (owner.coding?.busyCount?.()) return "coding-busy";
+  if (owner.resources?.remoteCommands?.busyCount()) return "remote-busy";
   if (owner.publicationUnconfirmed) return "publication-unconfirmed";
   if (owner.finalEvents?.length) return "final-events";
   if (owner.finalPublication?.state === "pending") return "final-publication-pending";

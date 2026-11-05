@@ -9,6 +9,7 @@ import {
 } from "./window/certificateChallenge.channels";
 import { isDesktopMenuAction } from "./window/menuAction.validation";
 import { desktopIpcChannels } from "./main.channels";
+import { createWindowZoomObserver } from "./window/windowZoom.preload";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
@@ -57,7 +58,20 @@ const emptyBackendStartupState = { generation: 0, startedAt: 0, status: "idle" }
 // This is evaluated inside the isolated preload, not supplied by the renderer.
 const allowDevelopmentDiagnostics = process.defaultApp === true;
 
+const windowZoom = createWindowZoomObserver(desktopIpcChannels.windowZoomChanged);
+
 contextBridge.exposeInMainWorld("desktopBridge", {
+  resourceAwarenessGet: () => ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessGet),
+  resourceAwarenessAcknowledge: (ids) =>
+    ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessAcknowledge, ids),
+  resourceAwarenessMutate: (mutation) =>
+    ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessMutate, mutation),
+  onResourceAwarenessState: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) =>
+      listener(state);
+    ipcRenderer.on(desktopIpcChannels.resourceAwarenessState, handler);
+    return () => ipcRenderer.removeListener(desktopIpcChannels.resourceAwarenessState, handler);
+  },
   checkBackendOwnership: (generation) =>
     ipcRenderer.invoke(desktopIpcChannels.checkBackendOwnership, generation),
   recoverBackendOwnership: (generation) =>
@@ -81,6 +95,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.on(desktopIpcChannels.systemMonitorEvent, handler);
     return () => ipcRenderer.removeListener(desktopIpcChannels.systemMonitorEvent, handler);
   },
+  getWindowZoomFactor: windowZoom.getWindowZoomFactor,
+  onWindowZoomFactorChange: windowZoom.onWindowZoomFactorChange,
   getWindowRole: () => {
     const result = ipcRenderer.sendSync(GET_WINDOW_ROLE_CHANNEL);
     return result === "main" || result === "mascot" || result === "compact-chat" ? result : null;
@@ -119,6 +135,14 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.on(FLOATING_ASSISTANT_CALLER_CHANGED_CHANNEL, wrappedListener);
     return () =>
       ipcRenderer.removeListener(FLOATING_ASSISTANT_CALLER_CHANGED_CHANNEL, wrappedListener);
+  },
+  setComputerUseActive: (active) =>
+    ipcRenderer.invoke(desktopIpcChannels.setMascotComputerUseActive, active),
+  onStopComputerUseRequested: (listener) => {
+    const wrappedListener = () => listener();
+    ipcRenderer.on(desktopIpcChannels.stopComputerUseRequested, wrappedListener);
+    return () =>
+      ipcRenderer.removeListener(desktopIpcChannels.stopComputerUseRequested, wrappedListener);
   },
   getWsUrl: () => {
     const result = ipcRenderer.sendSync(GET_WS_URL_CHANNEL);

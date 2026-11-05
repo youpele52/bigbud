@@ -5,7 +5,6 @@
 src/remote-agent/localWorkspaceWatchAgent.binary.test.ts
 src/remote-agent/remoteAgentAdmission.guard.test.ts
 src/remote-agent/remoteAgentAdmission.references.test.ts
-src/remote-agent/remoteAgentArtifact.test.ts
 src/remote-agent/remoteAgentArtifactDownload.test.ts
 src/remote-agent/remoteAgentCompatibility.test.ts
 src/remote-agent/remoteAgentConnection.test.ts

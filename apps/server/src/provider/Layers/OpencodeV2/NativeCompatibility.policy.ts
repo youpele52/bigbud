@@ -3,6 +3,7 @@ import {
   validateV2NativeConfigSources,
   projectV2NativeConfigSources,
 } from "./NativeCompatibility.sources.ts";
+import { V2DiagnosticError } from "./PluginSetup.diagnostics.ts";
 import { inspectV2PluginControls } from "./PluginSetup.policy.ts";
 import type { V2ThreadRegistration } from "./Orchestration.registration.ts";
 import {
@@ -68,6 +69,7 @@ export async function assertV2NativeSourcePolicy(
       "config-source-unverified",
       "native source policy is denied, ambiguous or not safely owned; canonical authority remains blocked.",
       proof.nativeVersion,
+      error instanceof V2DiagnosticError ? error : undefined,
     );
   }
   proof.assertCurrent();

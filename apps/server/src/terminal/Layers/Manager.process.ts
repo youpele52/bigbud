@@ -10,11 +10,13 @@ import * as Semaphore from "effect/Semaphore";
 import * as SynchronizedRef from "effect/SynchronizedRef";
 
 import { type PtyProcess } from "../Services/PTY";
+import { scheduleRemoteTerminalInspection } from "./Manager.remote-inspection.schedule.ts";
+import { inspectRemoteTerminalProcesses } from "./Manager.remote-inspection.ts";
 import { defaultTerminalAgentDetector } from "./Manager.agentDetection";
 import { defaultShellResolver, defaultSubprocessChecker, toSessionKey } from "./Manager.shell";
 import {
   drainProcessEventsWith,
-  pollSubprocessActivityWith,
+  startProcessPollingWith,
   startSessionWith,
   stopProcessWith,
 } from "./Manager.process-drain";
@@ -94,7 +96,15 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     const maxRetainedInactiveSessions =
       options.maxRetainedInactiveSessions ?? DEFAULT_MAX_RETAINED_INACTIVE_SESSIONS;
 
-    yield* fileSystem.makeDirectory(logsDir, { recursive: true }).pipe(Effect.orDie);
+    // History persistence is best-effort; an unwritable log directory must not stop the server.
+    yield* fileSystem.makeDirectory(logsDir, { recursive: true }).pipe(
+      Effect.catch((error) =>
+        Effect.logWarning("failed to create terminal log directory", {
+          logsDir,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      ),
+    );
 
     const managerStateRef = yield* SynchronizedRef.make<TerminalManagerState>({
       sessions: new Map(),
@@ -223,7 +233,12 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       function* () {
         yield* modifyManagerState((state) => {
           const inactiveSessions = [...state.sessions.values()].filter(
-            (session) => session.status !== "running",
+            // A starting session is about to own a process; evicting it would orphan that PTY.
+            (session) =>
+              !session.process &&
+              !session.lifecyclePending &&
+              session.status !== "running" &&
+              session.status !== "starting",
           );
           if (inactiveSessions.length <= maxRetainedInactiveSessions) {
             return [undefined, state] as const;
@@ -263,6 +278,9 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       runFork,
       subprocessChecker,
       agentDetector,
+      remoteProcessInspector:
+        options.remoteProcessInspector ??
+        scheduleRemoteTerminalInspection(inspectRemoteTerminalProcesses),
       subprocessPollIntervalMs,
       shellResolver,
       ptyAdapter: options.ptyAdapter,
@@ -286,20 +304,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       );
 
     const stopProcess = (session: TerminalSessionState) =>
-      stopProcessWith(
-        lifecycleCtx,
-        clearKillFiber,
-        (proc, threadId, terminalId) =>
-          startKillEscalation({
-            lifecycleCtx,
-            processKillGraceMs,
-            workerScope,
-            proc,
-            threadId,
-            terminalId,
-          }),
-        session,
-      );
+      stopProcessWith(lifecycleCtx, clearKillFiber, session);
 
     const startSession = (
       session: TerminalSessionState,
@@ -325,22 +330,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
         eventType,
       );
 
-    const pollSubprocessActivity = () => pollSubprocessActivityWith(lifecycleCtx);
-
-    yield* Effect.forever(
-      readManagerState.pipe(
-        Effect.map((state) =>
-          [...state.sessions.values()].some((session) => session.status === "running"),
-        ),
-        Effect.flatMap((active) =>
-          active
-            ? pollSubprocessActivity().pipe(
-                Effect.flatMap(() => Effect.sleep(subprocessPollIntervalMs)),
-              )
-            : Effect.sleep(subprocessPollIntervalMs),
-        ),
-      ),
-    ).pipe(Effect.forkIn(workerScope));
+    yield* startProcessPollingWith(lifecycleCtx);
 
     yield* Effect.addFinalizer(() =>
       Effect.gen(function* () {

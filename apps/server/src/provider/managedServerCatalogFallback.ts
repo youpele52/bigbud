@@ -46,20 +46,13 @@ function model(
 
 /** Small bundled safety net used only when the provider's Models.dev cache is unavailable. */
 export function managedServerBuiltInModels(
-  provider: Extract<ProviderKind, "kilocode" | "opencode">,
+  _provider: Extract<ProviderKind, "opencode">,
 ): ReadonlyArray<ServerProviderModel> {
-  const gatewayModels =
-    provider === "opencode"
-      ? [
-          model("gpt-6.1-sol", "GPT-6.1 Sol", "OpenCode Zen", "opencode", true),
-          model("claude-opus-5-5", "Claude Opus 5.5", "OpenCode Zen", "opencode", true),
-          model("claude-sonnet-5-5", "Claude Sonnet 5.5", "OpenCode Zen", "opencode", true),
-        ]
-      : [
-          model("openai/gpt-6.1-sol", "GPT-6.1 Sol", "Kilo Gateway", "kilo", true),
-          model("anthropic/claude-opus-5.5", "Claude Opus 5.5", "Kilo Gateway", "kilo", true),
-          model("anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5", "Kilo Gateway", "kilo", true),
-        ];
+  const gatewayModels = [
+    model("gpt-6.1-sol", "GPT-6.1 Sol", "OpenCode Zen", "opencode", true),
+    model("claude-opus-5-5", "Claude Opus 5.5", "OpenCode Zen", "opencode", true),
+    model("claude-sonnet-5-5", "Claude Sonnet 5.5", "OpenCode Zen", "opencode", true),
+  ];
 
   return [
     ...gatewayModels,
@@ -146,10 +139,10 @@ function modelsDevCacheRoot(): string {
 }
 
 export const loadManagedServerFallbackModels = Effect.fn("loadManagedServerFallbackModels")(
-  function* (provider: Extract<ProviderKind, "kilocode" | "opencode">) {
+  function* (provider: Extract<ProviderKind, "opencode">) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
-    const cacheName = provider === "opencode" ? "opencode" : "kilo";
+    const cacheName = provider;
     const encoded = yield* fs
       .readFileString(path.join(modelsDevCacheRoot(), cacheName, "models.json"))
       .pipe(Effect.orElseSucceed(() => ""));

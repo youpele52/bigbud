@@ -1,7 +1,7 @@
 import * as Crypto from "node:crypto";
 import { SystemMonitorBridge } from "./system-monitor/bridge";
 import { getDesktopMonitorRoots } from "./system-monitor/ownership";
-import { stopSystemMonitorAgentBridge } from "./system-monitor/agentBridge";
+import { stopDesktopResourceAwareness } from "./main.systemMonitor";
 
 import { app, BrowserWindow, dialog } from "electron";
 
@@ -275,7 +275,7 @@ function prepareForAppQuit(reason: string): void {
   isQuitting = true;
   systemMonitor.stop();
   stopDesktopConnectivitySignals();
-  stopSystemMonitorAgentBridge();
+  stopDesktopResourceAwareness();
   floatingAssistantWindows.destroyForQuit();
   logHeader(`${reason} received`);
   clearUpdatePollTimer();
@@ -306,6 +306,7 @@ app
     initBackendManager({
       rootDir: ROOT_DIR,
       baseDir: BASE_DIR,
+      cuaDriverBaseDir: mainConfig.cuaDriverBaseDir,
       backendMaxOldSpaceMb: desktopLinuxRuntimeConfig.backendMaxOldSpaceMb,
       cuaDriverHostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
       serverSettingsPath: SERVER_SETTINGS_PATH,
@@ -335,9 +336,14 @@ app
       isDevelopment,
     });
     void bootstrapDesktop({
-      baseDir: BASE_DIR,
+      baseDir: mainConfig.cuaDriverBaseDir,
       channels,
       cuaDriverHostBundleId: CUA_DRIVER_HOST_BUNDLE_ID,
+      computerUseGuard: {
+        rootDir: ROOT_DIR,
+        desktopDir: __dirname,
+        developmentRoot: mainConfig.computerUseDevelopmentRoot,
+      },
       desktopPreferences,
       desktopRuntimeInfo,
       floatingAssistantWindows,

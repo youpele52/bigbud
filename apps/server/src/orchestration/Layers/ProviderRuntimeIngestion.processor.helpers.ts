@@ -111,6 +111,7 @@ export function makeProcessorHelpers(
     threadId: ThreadId;
     threadProposedPlans: ReadonlyArray<{
       id: string;
+      planMarkdown: string;
       createdAt: string;
       implementedAt: string | null;
       implementationThreadId: ThreadId | null;
@@ -127,6 +128,7 @@ export function makeProcessorHelpers(
     }
 
     const existingPlan = input.threadProposedPlans.find((entry) => entry.id === input.planId);
+    if (existingPlan?.planMarkdown === planMarkdown) return;
     yield* orchestrationEngine.dispatch({
       type: "thread.proposed-plan.upsert",
       commandId: providerCommandId(input.event, "proposed-plan-upsert"),
@@ -149,6 +151,7 @@ export function makeProcessorHelpers(
     threadId: ThreadId;
     threadProposedPlans: ReadonlyArray<{
       id: string;
+      planMarkdown: string;
       createdAt: string;
       implementedAt: string | null;
       implementationThreadId: ThreadId | null;
@@ -161,7 +164,8 @@ export function makeProcessorHelpers(
     const bufferedPlan = yield* takeBufferedProposedPlan(input.planId);
     const bufferedMarkdown = normalizeProposedPlanMarkdown(bufferedPlan?.text);
     const fallbackMarkdown = normalizeProposedPlanMarkdown(input.fallbackMarkdown);
-    const planMarkdown = bufferedMarkdown ?? fallbackMarkdown;
+    // A completed native item is authoritative; buffered deltas are only a terminal fallback.
+    const planMarkdown = fallbackMarkdown ?? bufferedMarkdown;
     if (!planMarkdown) {
       return;
     }

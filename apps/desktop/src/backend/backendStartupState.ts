@@ -1,10 +1,10 @@
-import { BrowserWindow } from "electron";
 import type {
   DesktopBackendStartupDiagnostics,
   DesktopBackendDevelopmentDiagnostics,
   DesktopBackendStartupFailureReason,
   DesktopBackendStartupState,
 } from "@bigbud/contracts/server/ipc.desktop.ts";
+import { broadRendererWindows } from "../window/rendererWindows";
 import { createBackendStartupDiagnostics } from "./backendStartupDiagnostics";
 import type { OwnershipRecoveryState } from "@bigbud/contracts/server/ipc.ownershipRecovery.ts";
 
@@ -44,9 +44,8 @@ function emit(): void {
   const publicState = allowDevelopmentDiagnostics
     ? state
     : { ...state, developmentDiagnostics: undefined };
-  for (const window of BrowserWindow.getAllWindows()) {
-    if (!window.isDestroyed()) window.webContents.send(channel, publicState);
-  }
+  // Never the restricted computer-use safety renderer; destroyed windows are skipped too.
+  for (const window of broadRendererWindows()) window.webContents.send(channel, publicState);
 }
 
 /** Re-sends the unchanged state, e.g. a confirmed `ready` after the machine wakes. */

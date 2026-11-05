@@ -48,7 +48,6 @@ const config: ServerConfigShape = {
   providerEventLogPath: path.join(stateDir, "logs", "provider", "events.log"),
   terminalLogsDir: path.join(stateDir, "logs", "terminals"),
   anonymousIdPath: path.join(stateDir, "anonymous-id"),
-  pluginsDir: path.join(stateDir, "plugins"),
   staticDir: undefined,
   mobileWebStaticDir: undefined,
   devUrl: undefined,

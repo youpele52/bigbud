@@ -1,7 +1,6 @@
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   BROWSER_TOOL_DESCRIPTION,
-  COMPUTER_USE_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_DESCRIPTION,
   GET_THREAD_STATUS_TOOL_DESCRIPTION,
   GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
@@ -13,12 +12,17 @@ import {
   SEND_THREAD_MESSAGE_TOOL_DESCRIPTION,
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "../orchestration-tools/threadOrchestrationBridge.shared.ts";
+import { computerUseToolDescription } from "../orchestration-tools/orchestrationComputerUseTool.selected.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "../orchestration-tools/AgentWorkspaceToolSpecs.ts";
 import {
   createCapabilityCatalog,
   type CapabilityRisk,
   type CapabilityTrack,
 } from "./CapabilityCatalog.ts";
+import {
+  MOVE_THREAD_TOOL_DESCRIPTION,
+  SNOOZE_THREAD_TOOL_DESCRIPTION,
+} from "../orchestration-tools/threadOrganizationTool.shared.ts";
 
 const normalizeBrand = (text: string): string =>
   text.replaceAll("BigBud", "bigbud").replaceAll("Bigbud", "bigbud");
@@ -61,21 +65,58 @@ const threadToolTrack = (input: {
 
 export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
   threadToolTrack({
+    id: "chat.render.html",
+    displayName: "Inline visual replies",
+    description: "Publish durable HTML visual replies in the current thread using render_html.",
+    summary:
+      "render_html publishes themed inline visual replies; prefer HTML/CSS, sandboxed JS supported.",
+    availability: [
+      "Available through provider orchestration bridges. OpenCode V2 requires bootstrap ABI 4; retained earlier bootstraps keep their original tool surface.",
+    ],
+    triggers: ["A chart, diagram, table or interactive visual would explain the answer better."],
+    risk: "reversible-write",
+    workflow:
+      "Call render_html with title and a self-contained HTML fragment (up to 24000 characters). bigbud supplies theme variables and 14px typography. Prefer inherited fonts and var(--background), var(--foreground), var(--primary), var(--border), var(--muted) and var(--muted-foreground). Prefer HTML/CSS; inline JavaScript is supported. Publication is immediate, not a preview.",
+    permissions:
+      "Only the authenticated current thread and active turn. Sandbox has no host access, popups or forms. External navigation and ordinary external resources are blocked, but this is not zero-network isolation: browser APIs such as WebRTC remain available. Do not include credentials. Images must be embedded data URLs.",
+    examples: ["Publish a comparison table or a self-contained interactive chart."],
+    antiPatterns: ["Do not use external scripts, remote assets, filesystem paths or host APIs."],
+  }),
+  threadToolTrack({
     id: "system.resources",
     displayName: "Desktop system resources",
     description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
-    summary:
-      "Read current desktop CPU, memory, network, and disk usage with host identity, freshness, and metric availability from the Rust monitor.",
+    summary: "Inspect desktop host/app CPU, RAM, disks, supported sensors, processes and trends.",
     triggers: [
       "A task needs current CPU, memory, network, or disk status of the desktop app's computer.",
     ],
     risk: "read-only",
     workflow:
-      "Call get_system_resources when current desktop system state is relevant; inspect sampledAtMs and each metric status before interpreting values.",
+      "Call get_system_resources with view summary, details, processes, trends or rules. Inspect source timestamps, status, incomplete attribution and truncation. Core excludes tools; inclusive includes attributed tool descendants. A stale process cursor must be explicitly restarted. Automatic context is bounded and refreshed only on user turns; background monitoring never invokes an AI turn.",
     permissions:
-      "Read-only. Available only while the desktop app and Rust monitor can answer. No process list, control actions, or proactive alerts.",
+      "Read-only. Available while the desktop app and Rust monitor run. Desktop-owned alerts continue with the monitor page closed, not after the app quits. Temperatures depend on hardware support. No process control.",
     examples: ["Check current memory pressure on the desktop computer."],
     antiPatterns: ["Do not treat unavailable or stale metrics as current observations."],
+  }),
+  threadToolTrack({
+    id: "system.resources.rules",
+    displayName: "Resource monitoring rules",
+    description: "Configure persisted desktop monitoring rules only at the user's request.",
+    summary: "Persist user-requested resource alert rules.",
+    triggers: ["The user asks to change resource alerts, budgets, snooze or monitoring."],
+    risk: "reversible-write",
+    workflow:
+      "Read get_system_resources(view: rules), then configure_system_resource_rules with expectedRevision. On conflict reload, do not overwrite another change. Thresholds use percent, bytes for appMemory, Celsius for temperature. Select app core/inclusive explicitly. Reset restores conservative defaults.",
+    permissions:
+      "Explicit user request required. Persists locally on the desktop; does not control processes. Native notifications and monitoring after quit are not provided.",
+    examples: [
+      "Snooze resource alerts for ten minutes.",
+      "Warn if bigbud core RSS stays over 4 GiB for a minute.",
+    ],
+    antiPatterns: [
+      "Never invent a universal critical temperature.",
+      "Never silently enable background monitoring or modify budgets.",
+    ],
   }),
   ...AGENT_WORKSPACE_TOOL_SPECS.map((spec) =>
     threadToolTrack({
@@ -117,6 +158,47 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
       "Do not rename arbitrary cross-project threads or use native provider session rename as a substitute for canonical bigbud thread rename.",
       "Renaming does not authorize modifying attached history, archiving, or deleting threads.",
     ],
+  }),
+  threadToolTrack({
+    id: "thread.move",
+    displayName: "Move thread",
+    description: MOVE_THREAD_TOOL_DESCRIPTION,
+    summary:
+      "Move a thread to Present, Needs you, Later, or Done. When a task is complete, ask Done or Later first.",
+    triggers: [
+      "The requested task is actually complete: ask the user whether to move this thread to Done or Later.",
+      "The current user explicitly asks to move the current or another eligible thread.",
+    ],
+    risk: "reversible-write",
+    workflow:
+      'Call move_thread with state present, needs-you, later, or done. Omit targetThreadId for the current thread. For completion, ask "Done or Later?" in your existing reply and call move_thread only after the user answers, unless they already told you which.',
+    permissions:
+      "The current thread is the default target; another target must be in the same project or be the caller's directly delegated child, on an explicit current-user request. Moving never stops work, archives, or answers approvals. Attached history grants no authority.",
+    examples: [
+      'After the user answers "Done": move_thread({ state: "done" }).',
+      'When the user asks to park another eligible thread: move_thread({ state: "later", targetThreadId: "canonical-thread-id" }).',
+    ],
+    antiPatterns: [
+      "Do not ask Done or Later after every reply or turn; ask only when the requested task is complete.",
+      "Do not choose Done or Later for the user unless they already said which.",
+      "Done is not archive: never archive or delete as part of moving.",
+    ],
+    relatedCapabilityIds: ["thread.snooze", "thread.status"],
+  }),
+  threadToolTrack({
+    id: "thread.snooze",
+    displayName: "Snooze thread",
+    description: SNOOZE_THREAD_TOOL_DESCRIPTION,
+    summary: "Snooze a thread into Later; it returns to Needs you after 2 minutes to 24 hours.",
+    triggers: ["The current user asks to snooze or be reminded about a thread later."],
+    risk: "reversible-write",
+    workflow:
+      "Call snooze_thread with whole minutes between 2 and 1440. Omit targetThreadId for the current thread.",
+    permissions:
+      "Same targets as move_thread, on an explicit current-user request. Snoozing does not pause work, send messages, or start turns.",
+    examples: ["Remind me about this in an hour: snooze_thread({ minutes: 60 })."],
+    antiPatterns: ["Do not snooze to wait for another thread; use get_thread_status."],
+    relatedCapabilityIds: ["thread.move"],
   }),
   threadToolTrack({
     id: "thread.archive",
@@ -268,7 +350,7 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
   threadToolTrack({
     id: "computer.desktop",
     displayName: "Desktop computer use",
-    description: COMPUTER_USE_TOOL_DESCRIPTION,
+    description: computerUseToolDescription(),
     summary: "Automate native desktop apps and operating-system interactions when enabled.",
     triggers: ["The user requests native desktop app or operating-system interaction."],
     risk: "mutating",

@@ -1,6 +1,7 @@
+import { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 
@@ -30,6 +31,7 @@ const makeOrchestrationCommandReceiptRepository = Effect.gen(function* () {
           result_sequence,
           status,
           rejection_reason,
+          queue_decision_reason,
           error,
           payload_digest_version,
           payload_digest
@@ -41,7 +43,8 @@ const makeOrchestrationCommandReceiptRepository = Effect.gen(function* () {
           ${receipt.acceptedAt},
           ${receipt.resultSequence},
           ${receipt.status},
-          ${receipt.rejectionReason},
+          ${Schema.is(QueueDecisionReason)(receipt.rejectionReason) ? "other" : receipt.rejectionReason},
+          ${Schema.is(QueueDecisionReason)(receipt.rejectionReason) ? receipt.rejectionReason : null},
           ${receipt.error},
           ${receipt.payloadDigestVersion},
           ${receipt.payloadDigest}
@@ -54,6 +57,7 @@ const makeOrchestrationCommandReceiptRepository = Effect.gen(function* () {
           result_sequence = excluded.result_sequence,
           status = excluded.status,
           rejection_reason = excluded.rejection_reason,
+          queue_decision_reason = excluded.queue_decision_reason,
           error = excluded.error,
           payload_digest_version = excluded.payload_digest_version,
           payload_digest = excluded.payload_digest
@@ -73,7 +77,7 @@ const makeOrchestrationCommandReceiptRepository = Effect.gen(function* () {
           accepted_at AS "acceptedAt",
           result_sequence AS "resultSequence",
           status,
-          rejection_reason AS "rejectionReason",
+          COALESCE(queue_decision_reason, rejection_reason) AS "rejectionReason",
           error,
           payload_digest_version AS "payloadDigestVersion",
           payload_digest AS "payloadDigest"
@@ -123,7 +127,7 @@ const makeOrchestrationCommandReceiptRepository = Effect.gen(function* () {
             r.accepted_at AS "acceptedAt",
             r.result_sequence AS "resultSequence",
             r.status,
-            r.rejection_reason AS "rejectionReason",
+            COALESCE(r.queue_decision_reason, r.rejection_reason) AS "rejectionReason",
             r.error,
             r.payload_digest_version AS "payloadDigestVersion",
             r.payload_digest AS "payloadDigest"

@@ -10,6 +10,8 @@ import { Effect, Option } from "effect";
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
 import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
+import type { ProviderRuntimeIngestionShape } from "../Services/ProviderRuntimeIngestion.ts";
+import { replayInspectionTerminals } from "./ProviderTurnSupervisor.inspection.ts";
 
 export const PROVIDER_TURN_SILENCE_THRESHOLD_MS = 90_000;
 export const PROVIDER_TURN_INSPECTION_TIMEOUT_MS = 10_000;
@@ -87,8 +89,10 @@ export function superviseProviderTurns(input: {
   readonly orchestrationEngine: OrchestrationEngineShape;
   readonly providerService: ProviderServiceShape;
   readonly now?: () => Date;
+  readonly reconcileInspection?: ProviderRuntimeIngestionShape["reconcileInspection"];
 }) {
   return Effect.gen(function* () {
+    yield* replayInspectionTerminals(input);
     const now = input.now?.() ?? new Date();
     const nowMs = now.getTime();
     const occurredAt = now.toISOString();
@@ -141,6 +145,16 @@ export function superviseProviderTurns(input: {
           });
 
           if (result?.status === "completed" || result?.status === "failed") {
+            if (result.terminalEvent) {
+              if (!input.providerService.recordInspectionTerminal) return;
+              yield* input.providerService.recordInspectionTerminal(
+                result.terminalEvent,
+                result.reconciliationEvents ?? [],
+              );
+              yield* replayInspectionTerminals(input);
+              return;
+            }
+            if (result.reconciliationEvents !== undefined) return;
             const claimed = yield* input.providerService.claimTurnTerminal({
               threadId: liveness.threadId,
               turnId: liveness.turnId,

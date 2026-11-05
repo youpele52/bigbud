@@ -8,7 +8,7 @@ export function memoryReviewNotification(kind: string) {
       };
     case "learning.memory.retrying":
       return {
-        type: "info" as const,
+        type: "warning" as const,
         title: "Memory review will retry",
         description: "Your saved memory is still available. bigbud will try this review again.",
       };

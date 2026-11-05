@@ -6,12 +6,14 @@ import {
   remoteAgentWorkspaceHandle,
 } from "./remoteAgentProcessRequest.ts";
 import { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
+import { withCommandCancellation } from "../utils/commandCancellation.ts";
 import type { OwnedRemoteProcessRunner } from "./remoteAgentOwnedProcess.ts";
 
 let observationalRequestSequence = 0;
 
 export interface RemoteAgentToolRunInput {
   readonly invocationId?: string;
+  readonly signal?: AbortSignal;
   readonly executionTargetId: string;
   readonly cwd: string;
   readonly command: string;
@@ -57,6 +59,7 @@ export function makeRemoteAgentToolRunner(input: {
   readonly resolve: (executionTargetId: string) => Promise<RemoteAgentProcessClient>;
 }): RemoteAgentToolRunner {
   return async (runInput) => {
+    runInput.signal?.throwIfAborted();
     const durable = input.runOwned !== undefined && runInput.invocationId !== undefined;
     const client = durable ? undefined : await input.resolve(runInput.executionTargetId);
     const handle = remoteAgentWorkspaceHandle(runInput);
@@ -86,16 +89,22 @@ export function makeRemoteAgentToolRunner(input: {
       maxOutputBytes,
       environment: requestEnvironment,
       ...(runInput.stdin !== undefined ? { stdin: new TextEncoder().encode(runInput.stdin) } : {}),
+      ...(runInput.signal ? { signal: runInput.signal } : {}),
     };
     const result = durable
       ? await input.runOwned({
           ownerKey: `tool:${runInput.invocationId}`,
+          cancelOnAbort: true,
           invocationId: runInput.invocationId,
           target: runInput.executionTargetId,
           cwd: runInput.cwd,
           request,
         })
-      : await client!.run(request);
+      : await withCommandCancellation(
+          runInput.signal,
+          () => client!.run(request),
+          () => client!.cancelAndWait({ operationId: request.operationId }),
+        );
     const stdout = new TextDecoder().decode(result.stdout);
     const stderr = new TextDecoder().decode(result.stderr);
     const code = result.completed.hasExitCode ? result.completed.exitCode : null;

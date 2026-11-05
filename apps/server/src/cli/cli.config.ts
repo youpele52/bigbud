@@ -19,7 +19,7 @@ import {
 import { readBootstrapEnvelope } from "../startup/bootstrap";
 import { expandHomePath, resolveBaseDir } from "../utils/os-jank";
 import { TraceModeSchema } from "../observability/TracePolicy.ts";
-import { setSystemMonitorAgentAccess } from "../orchestration-tools/ThreadSystemResourcesTool.ts";
+import { setSystemMonitorAgentAccess } from "../orchestration-tools/ThreadSystemResourcesTool.client.ts";
 
 export const PortSchema = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }));
 

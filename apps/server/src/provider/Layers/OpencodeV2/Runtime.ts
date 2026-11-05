@@ -40,6 +40,8 @@ import type { V2ProcessConfig } from "./ServerManager.child.ts";
 import { watchV2OutputPublication } from "./Runtime.publication.failure.ts";
 import { attachV2OwnedFamily } from "./Runtime.family.ts";
 import { retireV2FailedStart } from "./Runtime.start.failure.ts";
+import { suspendV2BorrowedOwner } from "./Runtime.transport.ts";
+import { reconnectV2BorrowedOwner } from "./Runtime.reconnect.ts";
 
 /** Owned preview execution engine shared by application routing and disposable conformance harnesses. */
 export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
@@ -54,7 +56,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
   private readonly timer: ReturnType<typeof setInterval>;
   private closed = false;
 
-  constructor(readonly options: V2IsolatedRuntimeOptions<C>) {
+  constructor(public options: V2IsolatedRuntimeOptions<C>) {
     this.teardown = new V2RuntimeTeardown({
       sessions: this.sessions,
       serialize: (owner, run) => this.exclusive(owner, run),
@@ -85,6 +87,12 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
     return pending;
   }
 
+  reconnect(owner: V2RuntimeSession, signal: AbortSignal, validate: () => void) {
+    return this.authorized(() =>
+      this.exclusive(owner, () => reconnectV2BorrowedOwner(this, owner, signal, validate)),
+    );
+  }
+
   get(threadId: ThreadId): V2RuntimeSession {
     const session = this.sessions.get(threadId);
     if (!session || session.stopped) throw new Error("V2 session is not owned by this runtime.");
@@ -96,6 +104,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
     return this.authorized(() =>
       this.exclusive(session, async () => {
         if (this.get(threadId) !== session) throw new Error("V2 stale session operation owner.");
+        if (session.transportDetached) throw new Error(session.executionBlocked);
         session.consentPermit?.assertCurrent();
         return operation();
       }),
@@ -136,6 +145,7 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
           !settlingIsolated &&
           (current !== session ||
             session.stopped ||
+            session.transportDetached ||
             session.epoch !== epoch ||
             session.dirtyGeneration !== dirtyGeneration ||
             session.lease.hub.generation(session.native.id) !== hubGeneration))
@@ -201,6 +211,10 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
       }
       const unregister = registerV2RuntimeOwner(this, owner, (run) => this.exclusive(owner, run));
       const unsubscribeDeath = observeV2ProcessLifecycle(owner.lease.process, () => {
+        if (owner.lease.process.ownership === "borrowed") {
+          suspendV2BorrowedOwner(owner);
+          return;
+        }
         owner.stopped = true;
         owner.coding?.revoke();
         void this.exclusive(owner, () => this.processLost(owner)).catch(() =>
@@ -248,10 +262,12 @@ export class OpencodeV2Runtime<C extends V2ProcessConfig = V2ProcessConfig> {
 
   async cancelStart(attempt: V2StartAttempt) {
     attempt.controller.abort();
+    if (attempt.owner?.transportDetached) return;
     if (attempt.owner) await this.stop(attempt.owner.threadId, attempt.owner);
   }
 
   scheduleRepair(session: V2RuntimeSession, invalidate = true) {
+    if (session.transportDetached) return;
     try {
       session.consentPermit?.assertCurrent();
     } catch {

@@ -24,8 +24,8 @@ describe("Settings search", () => {
     expect(getSettingsSearchResults("general")).not.toHaveLength(0);
     expect(getSettingsSearchResults("system default browser")).toContainEqual({
       label: "System default browser",
-      section: "AI",
-      to: "/settings/ai",
+      section: "Browser",
+      to: "/settings/general",
     });
   });
 

@@ -5,7 +5,7 @@ import { Deferred, Effect, Fiber, Ref } from "effect";
 import { discoverManagedServerCatalog, resolveManagedServerCatalog } from "./managedServerCatalog";
 import { runCoordinatedProviderProbe } from "./providerProbeCoordinator";
 
-const snapshot = (provider: "kilocode" | "opencode" = "opencode"): ServerProvider => ({
+const snapshot = (provider: "opencode" = "opencode"): ServerProvider => ({
   provider,
   enabled: true,
   installed: true,
@@ -244,7 +244,7 @@ describe("managed server catalog", () => {
       const active = yield* Ref.make(0);
       const peak = yield* Ref.make(0);
       const release = yield* Deferred.make<void>();
-      const run = (provider: "kilocode" | "opencode") =>
+      const run = (provider: "opencode") =>
         runCoordinatedProviderProbe(
           discoverManagedServerCatalog({
             provider,
@@ -260,7 +260,7 @@ describe("managed server catalog", () => {
         );
 
       const fiber = yield* Effect.all(
-        [run("opencode"), run("kilocode"), run("opencode"), run("kilocode")],
+        [run("opencode"), run("opencode"), run("opencode"), run("opencode")],
         { concurrency: "unbounded" },
       ).pipe(Effect.forkChild);
       yield* Effect.yieldNow;

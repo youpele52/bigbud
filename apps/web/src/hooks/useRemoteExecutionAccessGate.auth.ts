@@ -19,7 +19,7 @@ export async function submitRemoteExecutionAuth(retry: () => void): Promise<void
     return;
   }
   if (!pendingAction || !authMode) {
-    state.setAuthError("Remote access context was lost. Try opening the remote project again.");
+    state.setAuthError("Remote access context was lost. Try opening the remote workspace again.");
     return;
   }
   state.setIsAuthenticating(true);

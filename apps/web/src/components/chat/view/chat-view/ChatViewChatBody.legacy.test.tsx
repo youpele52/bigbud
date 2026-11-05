@@ -1,4 +1,7 @@
-import { LEGACY_OPENCODE_READ_ONLY_MESSAGE } from "@bigbud/shared/providerLifecycle";
+import {
+  LEGACY_OPENCODE_READ_ONLY_MESSAGE,
+  KILOCODE_READ_ONLY_MESSAGE,
+} from "@bigbud/shared/providerLifecycle";
 import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -25,7 +28,7 @@ vi.mock("../../side-chat/sideChat.actions", () => ({ openSideChat: vi.fn() }));
 // Router-bound recovery and fork notices are covered by their own tests.
 vi.mock("../ThreadRecoveryNotices", () => ({ ThreadRecoveryNotices: () => null }));
 
-function makeProps(provider: "opencode" | "opencodeV2") {
+function makeProps(provider: "opencode" | "opencodeV2" | "kilocode") {
   return {
     base: {
       activeThread: { id: "thread-1", modelSelection: { provider }, error: null, activities: [] },
@@ -52,6 +55,17 @@ describe("legacy OpenCode warning placement", () => {
     );
     expect(markup).toContain("branch-toolbar");
     expect(markup).not.toContain("composer-controls");
+    expect(
+      renderToStaticMarkup(<ChatViewMainComposer {...props} onOpenReplySource={vi.fn()} />),
+    ).toBe("");
+  });
+
+  it("keeps KiloCode history readable with its own notice and no composer", () => {
+    const props = makeProps("kilocode");
+    const markup = renderToStaticMarkup(<ChatViewChatBody {...props} />);
+    expect(markup).toContain(KILOCODE_READ_ONLY_MESSAGE);
+    expect(markup).not.toContain(LEGACY_OPENCODE_READ_ONLY_MESSAGE);
+    expect(markup).toContain("transcript");
     expect(
       renderToStaticMarkup(<ChatViewMainComposer {...props} onOpenReplySource={vi.fn()} />),
     ).toBe("");

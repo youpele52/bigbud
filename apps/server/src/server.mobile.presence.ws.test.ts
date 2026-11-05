@@ -1,10 +1,10 @@
-import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import { EventId, ThreadId, WS_METHODS, type OrchestrationEvent } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 
 import { desktopSupervisorDeliveryTestCoordinator } from "./desktop-supervisor/desktopSupervisorDelivery.testLayer.ts";
 import { buildAppUnderTest, getWsServerUrl, serverTestLayer } from "./server.test.helpers.ts";
+import { serverHttpTestLayer } from "./server.test.http.ts";
 import { withRetriedMobileWsRpcClient } from "./server.test.mobile.ts";
 
 it.layer(serverTestLayer)("server router seam > mobile presence", (it) => {
@@ -70,6 +70,6 @@ it.layer(serverTestLayer)("server router seam > mobile presence", (it) => {
 
       assert.lengthOf(Array.from(frames), 1);
       assert.deepStrictEqual(observed, [false]);
-    }).pipe(Effect.provide(NodeHttpServer.layerTest)),
+    }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 });

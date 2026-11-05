@@ -21,6 +21,9 @@ export async function interruptV2Execution(
     throw new Error("V2 interrupt turn fence rejected.");
   const familyFence = session.family?.fence();
   const codingCancellation = session.coding?.cancelActive();
+  const remoteCancellation = session.resources?.remoteCommands?.cancelActive();
+  // The queue may be held by native work; cancellation starts and is observed outside it.
+  void remoteCancellation?.catch(() => {});
   return runtime.withCleanupSession(threadId, async () => {
     if (runtime.get(threadId) !== session || (turnId && turnId !== session.row?.turnId))
       throw new Error("V2 interrupt owner fence rejected.");
@@ -28,6 +31,7 @@ export async function interruptV2Execution(
     const results = await Promise.allSettled([
       familyFence,
       codingCancellation,
+      remoteCancellation,
       session.familyControl?.fence(),
       closeV2FamilyInteractions(runtime, session),
       cancelV2FamilyRootInputs(session),

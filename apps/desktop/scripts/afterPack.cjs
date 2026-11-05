@@ -5,6 +5,7 @@ const {
   resolvePackagedServerDir,
   shouldEnsurePosixBackendModulesSymlink,
 } = require("./afterPack.shared.cjs");
+const { assertCopilotRuntimePackaging } = require("./copilotRuntimePackaging.cjs");
 
 /**
  * electron-builder afterPack hook.
@@ -22,6 +23,7 @@ module.exports = async function afterPack(context) {
 
   assertPackagedBundledSkills(serverDir);
   assertPackagedDesktopSupervisor(serverDir, platformName);
+  assertCopilotRuntimePackaging(serverDir);
   console.log(`[afterPack] Verified bundled native skills at ${serverDir}.`);
 
   if (shouldEnsurePosixBackendModulesSymlink(platformName)) {

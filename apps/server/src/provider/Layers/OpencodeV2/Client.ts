@@ -37,6 +37,8 @@ export function makeV2Client(input: {
   readonly headers?: Record<string, string> | undefined;
   readonly fetch?: typeof globalThis.fetch;
   readonly beforeRequest?: () => Promise<void>;
+  readonly afterResponse?: () => Promise<void>;
+  readonly signal?: AbortSignal;
   readonly sharedTransport?: string;
 }): OpencodeV2Client {
   const origin = validateOwnedEndpoint(input.endpoint);
@@ -47,7 +49,6 @@ export function makeV2Client(input: {
       if (url.origin !== origin || url.username || url.password) {
         return Promise.reject(new Error("OpenCode v2 request origin rejected."));
       }
-      await input.beforeRequest?.();
       const context = input.sharedTransport
         ? assertV2RequestContext(
             input.sharedTransport,
@@ -59,9 +60,11 @@ export function makeV2Client(input: {
         await assertV2OrchestrationRpc(context, url, request, init);
       const originalSignal =
         init?.signal ?? (request instanceof Request ? request.signal : undefined);
-      const signal = context
-        ? AbortSignal.any([context.permit.signal, ...(originalSignal ? [originalSignal] : [])])
-        : originalSignal;
+      const signals = [context?.permit.signal, input.signal, originalSignal].filter(
+        (value): value is AbortSignal => value !== undefined && value !== null,
+      );
+      const signal = signals.length ? AbortSignal.any(signals) : undefined;
+      await input.beforeRequest?.();
       signal?.throwIfAborted();
       currentV2RequestContext()?.operationSignal?.throwIfAborted();
       assertV2OperationCurrent();
@@ -74,9 +77,15 @@ export function makeV2Client(input: {
         ...init,
         ...(signal ? { signal } : {}),
         redirect: "error",
-      }).then((response) => {
-        try {
+      }).then(async (response) => {
+        const validate = async () => {
+          signal?.throwIfAborted();
+          await input.afterResponse?.();
+          signal?.throwIfAborted();
           context?.permit.assertCurrent();
+        };
+        try {
+          await validate();
         } catch (error) {
           void response.body?.cancel().catch(() => {});
           throw error;
@@ -92,6 +101,7 @@ export function makeV2Client(input: {
           /\/(?:event|message|inbox)(?:\/|$)|\/prompt$/.test(url.pathname)
             ? V2_MEDIA_RESPONSE_BYTES
             : undefined,
+          validate,
         );
       });
     },
@@ -146,7 +156,6 @@ export async function v2Request<T>(
       operationAborted: context?.operationSignal?.aborted ?? false,
       callerAborted: options.signal?.aborted ?? false,
     });
-    // oxlint-disable-next-line preserve-caught-error -- Native SDK causes may retain credentials or request contents.
     throw new V2RequestFailedError(operation, error);
   }
 }

@@ -205,7 +205,11 @@ describe("pending-start exits never wedge the queue", () => {
     };
     vi.useFakeTimers({ toFake: ["Date"] });
     try {
-      expect(queuedIds(await sendNowAt("2026-08-01T00:01:59.000Z"))).toEqual(["queued-c"]);
+      vi.setSystemTime(now);
+      ready = await continuationSessionReady();
+      await expect(sendNowAt("2026-08-01T00:01:59.000Z")).rejects.toMatchObject({
+        code: "queue_pending_start",
+      });
       const released = await sendNowAt("2026-08-01T00:02:00.000Z");
       expect(queuedIds(released)).toEqual([]);
       expect(thread(released).pendingTurnStart?.messageId).toBe("queued-c");

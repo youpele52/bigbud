@@ -24,6 +24,7 @@ import { type ActiveCopilotSession, eventBase } from "./Adapter.types.ts";
 interface CopilotAgent {
   readonly nativeId: string;
   readonly subject: string;
+  readonly turnId: ActiveCopilotSession["activeTurnId"];
   terminal: boolean;
   model?: string;
   steps?: ReadonlyArray<ProviderSubagentStep> | undefined;
@@ -34,6 +35,7 @@ const MAX_TRACKED = 128;
 const ordinals = new WeakMap<ActiveCopilotSession, number>();
 const terminalCalls = new WeakMap<ActiveCopilotSession, Set<string>>();
 const agents = new WeakMap<ActiveCopilotSession, Map<string, CopilotAgent>>();
+const calls = new WeakMap<ActiveCopilotSession, Map<string, CopilotAgent>>();
 
 function nextOrdinal(session: ActiveCopilotSession): number {
   const next = (ordinals.get(session) ?? 0) + 1;
@@ -55,11 +57,11 @@ function update(
   session: ActiveCopilotSession,
   event: SessionEvent,
   eventId: EventId,
-  input: Omit<ProviderSubagentUpdate, "taskId" | "freshness" | "createdAt" | "turnId"> & {
+  input: Omit<ProviderSubagentUpdate, "taskId" | "freshness" | "createdAt"> & {
     readonly sourcePriority: number;
   },
 ): ProviderRuntimeEvent {
-  const turnId = session.activeTurnId;
+  const turnId = input.turnId;
   const { sourcePriority, ...rest } = input;
   return providerSubagentEvent(
     eventBase({
@@ -108,11 +110,15 @@ function mapLifecycle(session: ActiveCopilotSession, event: LifecycleEvent, even
   const subject = (event.data.agentDisplayName || event.data.agentName).slice(0, 120);
   const known = agents.get(session) ?? new Map<string, CopilotAgent>();
   agents.set(session, known);
-  const agent: CopilotAgent = (event.agentId ? known.get(event.agentId) : undefined) ?? {
+  const knownCalls = calls.get(session) ?? new Map<string, CopilotAgent>();
+  calls.set(session, knownCalls);
+  const agent: CopilotAgent = knownCalls.get(nativeId) ?? {
     nativeId,
     subject,
+    turnId: session.activeTurnId,
     terminal: false,
   };
+  knownCalls.set(remember(knownCalls, nativeId), agent);
   agent.terminal = event.type !== "subagent.started";
   if (event.data.model) agent.model = event.data.model;
   if (event.agentId) known.set(remember(known, event.agentId), agent);
@@ -143,6 +149,7 @@ function mapLifecycle(session: ActiveCopilotSession, event: LifecycleEvent, even
   return [
     update(session, event, eventId, {
       nativeId,
+      turnId: agent.turnId,
       status,
       activityFresh: true,
       subject,
@@ -196,6 +203,7 @@ export function mapCopilotSubagentEvent(
   return [
     update(session, event, eventId, {
       nativeId: agent.nativeId,
+      turnId: agent.turnId,
       status: "inProgress",
       subject: agent.subject,
       agentId: event.agentId,

@@ -1,5 +1,6 @@
 import { Button } from "../../../ui/button";
 import { Card } from "../../../ui/card";
+import { Alert, AlertDescription } from "../../../ui/alert";
 import { Loader2Icon } from "lucide-react";
 
 export type ProviderSwitchBranchMode = "handoff" | "conversation";
@@ -82,9 +83,9 @@ export function ProviderSwitchBranchModal({
           </div>
 
           {handoffError ? (
-            <div className="rounded-md border border-destructive/32 bg-destructive/4 px-3 py-2 text-xs text-destructive">
-              {handoffError}
-            </div>
+            <Alert variant="error" className="text-xs">
+              <AlertDescription>{handoffError}</AlertDescription>
+            </Alert>
           ) : null}
 
           <div className="flex justify-end gap-2">

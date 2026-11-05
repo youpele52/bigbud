@@ -51,6 +51,35 @@ export function lifecycleSessionStatus(
   }
 }
 
+/**
+ * Canonical proof that a recovery-redelivered terminal outcome was already
+ * applied: the canonical latest turn is this turn in a settled state and
+ * the session no longer runs it. Anything else (turn still active, latest
+ * turn still running, failed-before-start pending registration, a
+ * superseding turn) falls through to normal processing, whose existing
+ * lifecycle/queue identity guards remain authoritative. Owner/tombstone
+ * fencing is untouched: deleted threads never reach this check.
+ */
+export function isProvenSettledRecoveryTerminal(
+  event: ProviderRuntimeEvent,
+  thread: OrchestrationThread,
+): boolean {
+  if (
+    event.type !== "turn.completed" ||
+    !("recoveryRedelivery" in event.payload) ||
+    event.payload.recoveryRedelivery !== true ||
+    !event.turnId
+  ) {
+    return false;
+  }
+  const latest = thread.latestTurn;
+  if (!latest || !sameId(latest.turnId, event.turnId)) return false;
+  if (latest.state === "running") return false;
+  const activeTurnId = thread.session?.activeTurnId ?? null;
+  if (activeTurnId !== null && sameId(activeTurnId, event.turnId)) return false;
+  return true;
+}
+
 export function isProviderLifecycleEvent(event: ProviderRuntimeEvent): boolean {
   return (
     event.type === "session.exited" ||

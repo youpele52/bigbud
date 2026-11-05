@@ -7,7 +7,7 @@ import {
 } from "./PluginSetup.record.ts";
 import type { V2PluginSetupAuthority } from "./PluginSetup.paths.ts";
 import type { V2PluginFileIdentity } from "./PluginSetup.fs.ts";
-import { recoverV2InstallationRevalidation } from "./PluginSetup.revalidation.ts";
+import { recoverV2AutomaticInstallationIdentity } from "./PluginSetup.revalidation.automatic.ts";
 import { closeV2PublicationBoundary } from "./PluginSetup.publication.boundary.ts";
 
 /** Metadata-only admission: no native write, owner retirement, epoch change or history authority. */
@@ -36,7 +36,13 @@ export async function revalidateV2UnchangedPublication(
     old.rootIdentity.dev === rootIdentity.dev
   )
     return false;
-  const candidate = await recoverV2InstallationRevalidation(records, key, signed, artifact, root);
+  const candidate = await recoverV2AutomaticInstallationIdentity(
+    records,
+    key,
+    signed,
+    artifact,
+    root,
+  );
   if (!("applyIdentityOnly" in candidate) || !candidate.applyIdentityOnly) return false;
   const owned: V2PluginSetupAuthority = {
     ...authority,

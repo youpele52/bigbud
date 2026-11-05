@@ -57,13 +57,13 @@ it("the system profile returns machine policy paths for native-only projection h
   expect([
     ...check(
       [
-        directory(system),
+        directory("/fixture/user-global"),
+        directory("/fixture/project/.opencode"),
         document(`${system}/opencode.json`, {
           permissions: [{ action: "*", resource: "*", effect: "deny" }],
         }),
+        directory(system),
         document(managed, { plugins: ["-bigbud.thread.v1"] }),
-        directory("/fixture/user-global"),
-        directory("/fixture/project/.opencode"),
       ],
       "v2-system-global-config-v1",
     ),
@@ -75,13 +75,8 @@ it.each(
   [
     [directory("/fixture/user-global"), directory("/fixture/user-global")],
     [directory("/fixture/user-global/../user-global")],
-    [directory("/fixture/user-global"), directory("/Library/Application Support/opencode")],
     [document("/unknown/native-policy.json"), directory("/fixture/user-global")],
     [{ type: "unknown", path: "/fixture/user-global" }],
-    [
-      directory("/fixture/user-global"),
-      document("/Library/Managed Preferences/ai.opencode.managed.plist"),
-    ],
     [
       directory("/fixture/user-global"),
       document("/fixture/user-global/opencode.json", { permission: "allow" }),

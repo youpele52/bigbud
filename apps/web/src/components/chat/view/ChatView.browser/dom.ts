@@ -3,7 +3,6 @@ import { expect, vi } from "vitest";
 
 import { isMacPlatform } from "../../../../lib/utils";
 import { getServerConfig } from "../../../../rpc/serverState";
-import { shortcutLabelForCommand } from "../../../../models/keybindings/keybindings.models";
 import type { MessageId } from "@bigbud/contracts";
 
 import { type ChatRouter, type UserRowMeasurement, type ViewportSpec } from "./types";
@@ -228,12 +227,8 @@ export async function waitForNewThreadShortcutLabel(): Promise<void> {
   const newThreadButton = page.getByTestId("new-thread-button");
   await expect.element(newThreadButton).toBeInTheDocument();
   await newThreadButton.hover();
-  const bindings = getServerConfig()?.keybindings ?? [];
-  const shortcutLabel =
-    shortcutLabelForCommand(bindings, "chat.newLocal", navigator.platform) ??
-    shortcutLabelForCommand(bindings, "chat.new", navigator.platform);
-  expect(shortcutLabel).toBeTruthy();
-  await expect.element(page.getByText(`New thread (${shortcutLabel})`)).toBeInTheDocument();
+  // The project button uses the default environment, not either global shortcut's semantics.
+  await expect.element(page.getByText("New thread", { exact: true })).toBeInTheDocument();
 }
 
 async function waitForImagesToLoad(scope: ParentNode): Promise<void> {

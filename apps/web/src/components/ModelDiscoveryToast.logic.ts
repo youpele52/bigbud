@@ -10,7 +10,7 @@ export function getModelDiscoveryToast(provider: ServerProvider) {
   return {
     operationId: recovery.operationId,
     key: `${recovery.operationId}:${recovery.attempt}:${recovery.status}`,
-    type: working ? ("info" as const) : recovered ? ("success" as const) : ("warning" as const),
+    type: working ? ("loading" as const) : recovered ? ("success" as const) : ("warning" as const),
     title: working
       ? `Refreshing ${name} models`
       : recovered

@@ -134,6 +134,7 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
           input,
           resolveDefaultChatCwd(full),
           Option.getOrUndefined(engine),
+          config.stateDir,
         );
         if (!path.isAbsolute(inferred)) return unavailable;
         const directory = await realpath(inferred);

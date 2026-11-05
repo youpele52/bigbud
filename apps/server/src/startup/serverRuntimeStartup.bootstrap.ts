@@ -4,12 +4,13 @@ import {
   CommandId,
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_PROVIDER_INTERACTION_MODE,
-  type ModelSelection,
+  ModelSelection,
+  type HistoricalModelSelection,
   PROVIDER_KINDS,
   ProjectId,
   ThreadId,
 } from "@bigbud/contracts";
-import { Effect, Option, Path } from "effect";
+import { Effect, Option, Path, Schema } from "effect";
 
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery";
@@ -74,20 +75,21 @@ export const autoBootstrapWelcome = Effect.gen(function* () {
         serverConfig.cwd,
       );
       let nextProjectId: ProjectId;
-      let nextProjectDefaultModelSelection: ModelSelection;
+      let nextProjectDefaultModelSelection: HistoricalModelSelection;
 
       if (Option.isNone(existingProject)) {
         const createdAt = new Date().toISOString();
         nextProjectId = ProjectId.makeUnsafe(crypto.randomUUID());
         const bootstrapProjectTitle = path.basename(serverConfig.cwd) || "project";
-        nextProjectDefaultModelSelection = yield* resolveBootstrapModelSelection;
+        const bootstrapSelection = yield* resolveBootstrapModelSelection;
+        nextProjectDefaultModelSelection = bootstrapSelection;
         yield* orchestrationEngine.dispatch({
           type: "project.create",
           commandId: CommandId.makeUnsafe(crypto.randomUUID()),
           projectId: nextProjectId,
           title: bootstrapProjectTitle,
           workspaceRoot: serverConfig.cwd,
-          defaultModelSelection: nextProjectDefaultModelSelection,
+          defaultModelSelection: bootstrapSelection,
           createdAt,
         });
       } else {
@@ -99,6 +101,10 @@ export const autoBootstrapWelcome = Effect.gen(function* () {
       const existingThreadId =
         yield* projectionReadModelQuery.getFirstActiveThreadIdByProjectId(nextProjectId);
       if (Option.isNone(existingThreadId)) {
+        if (!Schema.is(ModelSelection)(nextProjectDefaultModelSelection)) {
+          bootstrapProjectId = nextProjectId;
+          return;
+        }
         const createdAt = new Date().toISOString();
         const createdThreadId = ThreadId.makeUnsafe(crypto.randomUUID());
         const targetProject = Option.getOrUndefined(existingProject);

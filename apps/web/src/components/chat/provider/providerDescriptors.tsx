@@ -16,11 +16,11 @@ import {
   CursorIcon,
   DevinIcon,
   type Icon,
-  KilocodeIcon,
   OpenAI,
   OpenCodeIcon,
   PiIcon,
 } from "../../Icons";
+import { MuseIcon } from "./MuseIcon";
 
 export type ProviderSettingsPath =
   | {
@@ -96,7 +96,7 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
       ),
     },
     customModels: null,
-    traitsEnabled: false,
+    traitsEnabled: true,
   },
   codex: {
     provider: "codex",
@@ -150,7 +150,7 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
       setupUrl: "https://help.router-for.me/introduction/quick-start.html",
     },
     customModels: null,
-    traitsEnabled: false,
+    traitsEnabled: true,
   },
   copilot: {
     provider: "copilot",
@@ -164,18 +164,6 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
       path: binary("Copilot binary path", "Path to the GitHub Copilot CLI binary"),
     },
     customModels: customModels("GitHub Copilot", "your-copilot-model-slug", "gpt-5"),
-    traitsEnabled: true,
-  },
-  kilocode: {
-    provider: "kilocode",
-    label: PROVIDER_DISPLAY_NAMES.kilocode,
-    icon: KilocodeIcon,
-    pickerAvailable: true,
-    isVisible: visible,
-    supportsSubProviderID: true,
-    catalogAuthoritative: false,
-    settings: { path: binary("KiloCode binary path", "Path to the KiloCode binary") },
-    customModels: customModels("KiloCode", "your-kilocode-model-slug", "claude-sonnet-4-6"),
     traitsEnabled: true,
   },
   opencode: {
@@ -214,6 +202,25 @@ const DESCRIPTORS_BY_PROVIDER: Record<ProviderKind, ProviderDescriptor> = {
       path: binary("Cursor agent binary path", "Path to the Cursor agent binary (agent CLI)"),
     },
     customModels: customModels("Cursor", "your-cursor-model-slug", "claude-sonnet-4-5"),
+    traitsEnabled: true,
+  },
+  muse: {
+    provider: "muse",
+    label: PROVIDER_DISPLAY_NAMES.muse,
+    icon: MuseIcon,
+    pickerAvailable: true,
+    isVisible: visible,
+    supportsSubProviderID: true,
+    catalogAuthoritative: true,
+    attachments: providerAttachmentPolicy("muse"),
+    settings: {
+      path: binary(
+        "Muse binary path",
+        "Path to the user-installed Muse CLI (muse). Sign in by running `muse` in a terminal and choosing browser sign-in; bigbud never signs in for you and never uses an API key instead. Contributor catalog models may use your content for product improvement — bigbud labels them and asks before project content is sent.",
+      ),
+      setupUrl: "https://dev.meta.ai/docs/muse-code",
+    },
+    customModels: null,
     traitsEnabled: true,
   },
   devin: {

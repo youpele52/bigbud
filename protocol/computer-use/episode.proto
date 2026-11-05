@@ -1,0 +1,25 @@
+syntax = "proto3";
+package bigbud.computer_use.episode;
+
+// Trusted server context, never provider-selected participation.
+message BeginEpisode {
+  string request_id = 1;
+  string caller_id = 2;
+  string provider_generation = 3;
+  string runtime_mode_revision = 4;
+  string participation_id = 5;
+}
+message SurfaceLease {
+  string owner_generation = 1;
+  string host_identity = 2;
+  string document_generation = 3;
+  string challenge = 4;
+  string interactive_desktop_identity = 5;
+  string qualification_id = 6;
+}
+message WarningPresented {
+  string episode_id = 1;
+  string notice_id = 2;
+  string document_generation = 3;
+  string challenge = 4;
+}

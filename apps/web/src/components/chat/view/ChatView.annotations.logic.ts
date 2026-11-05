@@ -4,6 +4,7 @@ import {
   type ComposerAnnotationAttachment,
 } from "../../../stores/composer";
 import {
+  isChatCitationAttachment,
   normalizeAnnotationComment,
   normalizeBrowserAnnotationElement,
   normalizeBrowserAnnotationPage,
@@ -11,6 +12,7 @@ import {
   type ComposerCodeAnnotationAttachment,
   type ComposerTerminalAnnotationAttachment,
 } from "../../../stores/composer/types.annotation.store";
+import { buildChatCitationPrompt } from "../../../lib/terminalContext.citations";
 
 const COMMENT_INSTRUCTION_LINE =
   "Use the selected content and the user's comment as context. If the comment asks for a change, make it. If it asks a question, answer it.";
@@ -103,6 +105,9 @@ export function buildTerminalAnnotationPrompt(
 }
 
 export function buildBrowserAnnotationPrompt(annotation: ComposerAnnotationAttachment): string {
+  if (isChatCitationAttachment(annotation)) {
+    return buildChatCitationPrompt(annotation);
+  }
   if (isCodeAnnotationAttachment(annotation)) {
     return buildCodeAnnotationPrompt(annotation);
   }

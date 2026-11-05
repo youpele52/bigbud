@@ -24,6 +24,23 @@ export type V2InstructionStage =
 /** Shared orchestration/learning content is already assembled into input; only provider-owned context goes here. */
 export function v2InstructionEntries(session: V2RuntimeSession): InstructionEntryInfo[] {
   if (!session.localTools) return [];
+  const remote = session.resources?.remoteWorkspace;
+  if (remote)
+    return [
+      {
+        key: OWNED_KEYS[0]!,
+        value: `OpenCode runs locally, but this project's files and commands run on the remote workspace through ${remote.serverName}_* tools. Native local file, shell, skill, plugin and subagent tools are disabled for this session. Respect the selected ${session.session.runtimeMode} access mode. Use the enrolled canonical thread tools for bigbud thread operations.`,
+      },
+      {
+        key: OWNED_KEYS[1]!,
+        value: {
+          workspaceTargetId: remote.executionTargetId,
+          root: remote.cwd ?? null,
+          guidance:
+            "The native Location is a synthetic local directory, not the project. Use remote read/write/edit/list/glob/grep/apply_patch/bash tools for all project work. If remote access fails, report the failure; never fall back to local paths.",
+        },
+      },
+    ];
   return [
     {
       key: OWNED_KEYS[0]!,

@@ -14,6 +14,7 @@ import {
 } from "./remoteAgentWorkspaceWatchClient.ts";
 import type { RemoteAgentWorkspaceWatchEvent } from "./remoteAgentProtocol.ts";
 import type { RemoteAgentWorkspaceMutation } from "./remoteAgentWorkspaceMutation.ts";
+import type { ProjectWriteFileDisposition } from "@bigbud/contracts/workspace/project.ts";
 
 export class RemoteAgentWorkspaceError extends Error {
   readonly _tag = "RemoteAgentWorkspaceError";
@@ -21,6 +22,7 @@ export class RemoteAgentWorkspaceError extends Error {
   constructor(
     readonly code: string,
     message: string,
+    readonly writeDisposition?: ProjectWriteFileDisposition,
   ) {
     super(message);
     this.name = "RemoteAgentWorkspaceError";
@@ -159,40 +161,66 @@ export class RemoteAgentWorkspaceClient {
       }
     } catch (cause) {
       // The final guard ran before any native request; this reservation is definitively undispatched.
-      await this.mutation?.terminal(input.operationId);
-      throw cause;
+      let message = cause instanceof Error ? cause.message : String(cause);
+      try {
+        await this.mutation?.terminal(input.operationId);
+      } catch (cleanupCause) {
+        message += `; owner cleanup failed: ${String(cleanupCause)}`;
+      }
+      throw new RemoteAgentWorkspaceError("WRITE_NOT_DISPATCHED", message, "not-dispatched");
     }
+    let response: {
+      readonly type: "writeFileResponse";
+      readonly value: RemoteAgentWriteFileResponse;
+    };
     try {
-      const response = (await this.connection.request(
+      response = (await this.connection.request(
         {
           type: "writeFileRequest",
           value: { ...input, requestId, expectedSha256: input.expectedSha256 ?? "" },
         },
         (frame) => frame.type === "writeFileResponse" && frame.value.requestId === requestId,
       )) as { readonly type: "writeFileResponse"; readonly value: RemoteAgentWriteFileResponse };
-      if (!response.value.terminal) {
-        await this.mutation?.unknown(input.operationId);
-        throw new RemoteAgentWorkspaceError(
-          "UNKNOWN_OUTCOME",
-          "Remote write outcome is not terminal.",
-        );
-      }
-      if (response.value.errorCode) {
-        await this.mutation?.terminal(input.operationId);
-        throw new RemoteAgentWorkspaceError(response.value.errorCode, response.value.errorMessage);
-      }
-      await this.mutation?.terminal(input.operationId);
-      return response.value;
     } catch (cause) {
-      if (cause instanceof RemoteAgentConnectionError) {
+      let message =
+        "The remote file write may have been accepted before the connection was lost; it was not retried.";
+      try {
         await this.mutation?.unknown(input.operationId);
-        throw new RemoteAgentWorkspaceError(
-          "UNKNOWN_OUTCOME",
-          "The remote file write may have been accepted before the connection was lost; it was not retried.",
-        );
+      } catch (cleanupCause) {
+        message += `; owner update failed: ${String(cleanupCause)}`;
       }
-      throw cause;
+      throw new RemoteAgentWorkspaceError(
+        "UNKNOWN_OUTCOME",
+        `${message} (${String(cause)})`,
+        "unknown",
+      );
     }
+    if (!response.value.terminal || response.value.errorCode === "UNKNOWN_OUTCOME") {
+      let message = response.value.errorMessage || "Remote write outcome is not terminal.";
+      try {
+        await this.mutation?.unknown(input.operationId);
+      } catch (cause) {
+        message += `; owner update failed: ${String(cause)}`;
+      }
+      throw new RemoteAgentWorkspaceError("UNKNOWN_OUTCOME", message, "unknown");
+    }
+    try {
+      await this.mutation?.terminal(input.operationId);
+    } catch (cause) {
+      throw new RemoteAgentWorkspaceError(
+        "WRITE_FINALIZATION_FAILED",
+        `${response.value.errorMessage || "Remote file write completed"}; owner cleanup failed: ${String(cause)}`,
+        "terminal",
+      );
+    }
+    if (response.value.errorCode) {
+      throw new RemoteAgentWorkspaceError(
+        response.value.errorCode,
+        response.value.errorMessage,
+        "terminal",
+      );
+    }
+    return response.value;
   }
 
   async searchFilenames(input: {

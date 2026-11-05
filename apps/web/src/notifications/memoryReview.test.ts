@@ -5,7 +5,7 @@ import { memoryReviewNotification } from "./memoryReview";
 describe("memory review notifications", () => {
   it.each([
     ["updated", "success"],
-    ["retrying", "info"],
+    ["retrying", "warning"],
     ["rejected", "warning"],
     ["failed", "error"],
   ])("expresses %s severity", (outcome, severity) => {

@@ -7,7 +7,7 @@
  *
  * Depth: the generated type does not document the `agentPath` format, so depth is the
  * sender's depth plus 1 when the sender is a known subagent thread, and 1 otherwise.
- * `agentPath` is kept only as an opaque bounded label.
+ * Other than excluding Codex's `/root` identity, `agentPath` stays an opaque label.
  *
  * @module CodexAdapter.stream.subagents
  */
@@ -28,6 +28,7 @@ import { providerSubagentEvent, providerSubagentTaskId } from "../../providerSub
 import {
   collabAgentStatus,
   readChildToolItem,
+  readChildTurnStatus,
   readCollabCall,
   readConversationId,
   readItem,
@@ -53,9 +54,11 @@ interface CodexAgent {
   lastToolName?: string;
   steps?: ReadonlyArray<ProviderSubagentStep>;
   readonly createdAt: string;
+  readonly turnId?: ProviderEvent["turnId"];
 }
 
 interface ThreadState {
+  readonly epoch: number;
   ordinal: number;
   readonly agents: Map<string, CodexAgent>;
 }
@@ -66,19 +69,25 @@ const isTerminal = (status: TaskUpdatedPayload["status"]) =>
 export function makeCodexSubagentTracker() {
   const threads = new Map<ThreadId, ThreadState>();
 
-  function threadState(threadId: ThreadId): ThreadState {
+  function threadState(threadId: ThreadId, epoch: number): ThreadState {
     let state = threads.get(threadId);
     if (state) {
       threads.delete(threadId);
     } else {
-      state = { ordinal: 0, agents: new Map() };
+      state = { epoch, ordinal: 0, agents: new Map() };
     }
     threads.set(threadId, state);
     if (threads.size > MAX_THREADS) threads.delete(threads.keys().next().value!);
     return state;
   }
 
-  function agentFor(state: ThreadState, id: string, createdAt: string, sender?: string) {
+  function agentFor(
+    state: ThreadState,
+    id: string,
+    createdAt: string,
+    turnId: ProviderEvent["turnId"],
+    sender?: string,
+  ) {
     let agent = state.agents.get(id);
     if (agent) return agent;
     if (state.agents.size >= MAX_AGENTS_PER_THREAD) return undefined;
@@ -88,6 +97,7 @@ export function makeCodexSubagentTracker() {
       status: "inProgress",
       depth: parent ? parent.depth + 1 : 1,
       createdAt,
+      ...(turnId ? { turnId } : {}),
     };
     state.agents.set(id, agent);
     return agent;
@@ -111,6 +121,7 @@ export function makeCodexSubagentTracker() {
   function toEvent(event: ProviderEvent, state: ThreadState, agent: CodexAgent) {
     const ordinal = ++state.ordinal;
     const terminal = isTerminal(agent.status);
+    const turnId = agent.turnId ?? event.turnId;
     return providerSubagentEvent(
       {
         eventId: EventId.makeUnsafe(`${event.id}:subagent:${agent.nativeId}`),
@@ -118,7 +129,7 @@ export function makeCodexSubagentTracker() {
         threadId: event.threadId,
         createdAt: event.createdAt,
         sessionEpoch: event.sessionEpoch,
-        ...(event.turnId ? { turnId: event.turnId } : {}),
+        ...(turnId ? { turnId } : {}),
         raw: {
           source: "codex.app-server.notification",
           method: event.method,
@@ -155,31 +166,44 @@ export function makeCodexSubagentTracker() {
           observedOrdinal: ordinal,
         },
         createdAt: agent.createdAt,
-        ...(event.turnId ? { turnId: event.turnId } : {}),
+        ...(turnId ? { turnId } : {}),
       },
     );
   }
 
   function map(event: ProviderEvent): ReadonlyArray<ProviderRuntimeEvent> {
-    if (event.kind !== "notification") return [];
     if (event.method === "session/exited" || event.method === "session/closed") {
       threads.delete(event.threadId);
       return [];
     }
+    if (event.kind !== "notification") return [];
+    const epoch = event.sessionEpoch ?? 0;
+    let state = threads.get(event.threadId);
+    if (state && state.epoch !== epoch) {
+      threads.delete(event.threadId);
+      state = undefined;
+    }
+    const conversationId = readConversationId(event.payload);
+    const childStatus = readChildTurnStatus(event.method, event.payload);
+    if (childStatus) {
+      const agent = conversationId ? state?.agents.get(conversationId) : undefined;
+      if (!state || !agent) return [];
+      setStatus(agent, childStatus, event.createdAt);
+      return [toEvent(event, state, agent)];
+    }
     if (event.method !== "item/started" && event.method !== "item/completed") return [];
     const item = readItem(event.payload);
     if (!item) return [];
-    const state = threads.get(event.threadId);
     const call = readCollabCall(item);
     if (call) {
-      const current = threadState(event.threadId);
+      const current = threadState(event.threadId, epoch);
       const touched: CodexAgent[] = [];
       const receivers =
         call.tool === "spawnAgent" ? call.receiverThreadIds : [...call.states.keys()];
       for (const id of receivers) {
         const agent =
           call.tool === "spawnAgent"
-            ? agentFor(current, id, event.createdAt, call.senderThreadId)
+            ? agentFor(current, id, event.createdAt, event.turnId, call.senderThreadId)
             : current.agents.get(id);
         if (!agent) continue;
         if (call.tool === "spawnAgent") {
@@ -206,9 +230,13 @@ export function makeCodexSubagentTracker() {
     }
     const activity = readSubAgentActivity(item);
     if (activity) {
+      // A self-referencing activity is not evidence of a new child. Known children may
+      // still report their own activity through their forwarded item stream.
+      if (activity.agentThreadId === conversationId && !state?.agents.has(conversationId))
+        return [];
       const status = subAgentActivityStatus(activity.kind);
-      const current = threadState(event.threadId);
-      const agent = agentFor(current, activity.agentThreadId, event.createdAt);
+      const current = threadState(event.threadId, epoch);
+      const agent = agentFor(current, activity.agentThreadId, event.createdAt, event.turnId);
       if (!agent) return [];
       if (status) setStatus(agent, { status }, event.createdAt);
       if (activity.model) agent.model = activity.model;
@@ -216,7 +244,6 @@ export function makeCodexSubagentTracker() {
       if (activity.agentPath) agent.agentPath = activity.agentPath;
       return [toEvent(event, current, agent)];
     }
-    const conversationId = readConversationId(event.payload);
     const agent = conversationId ? state?.agents.get(conversationId) : undefined;
     const tool = agent ? readChildToolItem(item, event.method) : undefined;
     if (!state || !agent || !tool || isTerminal(agent.status)) return [];

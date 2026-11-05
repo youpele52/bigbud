@@ -13,6 +13,8 @@ import {
 } from "./browserSession";
 import { certificateChallengeManager } from "./certificateChallengeManager";
 import { isBrowserGuestFocusLocationShortcut } from "./browserGuestShortcuts";
+import { bindTrafficLightsToZoom, trafficLightPositionForZoom } from "./trafficLights";
+import { desktopIpcChannels } from "../main.channels";
 
 const MACOS_TRANSLUCENT_BACKGROUND_COLOR = "#00000000";
 const DEFAULT_WINDOW_MATERIAL: DesktopWindowMaterial = "automatic";
@@ -122,7 +124,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
     ...getIconOption(deps.resolveIconPath),
     title: deps.appDisplayName,
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
+    trafficLightPosition: trafficLightPositionForZoom(1),
     backgroundColor:
       resolveWindowMaterial(DEFAULT_WINDOW_MATERIAL) === "translucent"
         ? MACOS_TRANSLUCENT_BACKGROUND_COLOR
@@ -144,6 +146,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
     },
   });
   const hostWebContents = window.webContents;
+  bindTrafficLightsToZoom(window, desktopIpcChannels.windowZoomChanged);
 
   const syncBackgroundColorWithTheme = (): void => {
     applyWindowMaterial(window, getWindowMaterial(window));

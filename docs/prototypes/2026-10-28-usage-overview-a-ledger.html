@@ -1,0 +1,1178 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>bigbud · usage overview A (ledger)</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Shared shell for the usage overview prototypes.
+   Theme tokens mirrored from apps/web/src/index.css (Tailwind v4 oklch values). */
+      :root {
+        color-scheme: light;
+        --emerald-400: oklch(76.5% 0.177 163.223);
+        --emerald-500: oklch(69.6% 0.17 162.48);
+        --sky-400: oklch(74.6% 0.16 232.661);
+        --sky-500: oklch(68.5% 0.169 237.323);
+        --amber-400: oklch(82.8% 0.189 84.429);
+        --amber-500: oklch(76.9% 0.188 70.08);
+        --rose-400: oklch(71.2% 0.194 13.428);
+        --rose-500: oklch(64.5% 0.246 16.439);
+        --neutral-300: oklch(87% 0 0);
+        --neutral-500: oklch(55.6% 0 0);
+        --neutral-600: oklch(43.9% 0 0);
+        --neutral-950: oklch(14.5% 0 0);
+
+        --background: oklch(98.5% 0 0);
+        --foreground: oklch(20.5% 0 0);
+        --card: #ffffff;
+        --muted: rgb(0 0 0 / 4%);
+        --muted-foreground: color-mix(in srgb, var(--neutral-600) 78%, black);
+        --border: rgb(0 0 0 / 8%);
+        --input: rgb(0 0 0 / 10%);
+        --info: oklch(62.3% 0.214 259.815);
+        --success: var(--emerald-500);
+        --warning: var(--amber-500);
+        --chart-1: color-mix(in srgb, var(--emerald-500) 86%, white);
+        --chart-2: color-mix(in srgb, var(--sky-500) 88%, white);
+        --chart-3: color-mix(in srgb, var(--amber-500) 90%, white);
+        --chart-4: color-mix(in srgb, var(--rose-500) 84%, white);
+        --chart-5: color-mix(in srgb, var(--neutral-500) 78%, white);
+        --edge-highlight: 0 1px rgb(0 0 0 / 4%);
+        --radius: 10px;
+        --card-surface-radius: 20px;
+      }
+      .dark {
+        color-scheme: dark;
+        --background: color-mix(in srgb, var(--neutral-950) 95%, white);
+        --foreground: oklch(97% 0 0);
+        --card: color-mix(in srgb, var(--background) 98%, white);
+        --muted: rgb(255 255 255 / 4%);
+        --muted-foreground: color-mix(in srgb, var(--neutral-500) 90%, white);
+        --border: rgb(255 255 255 / 6%);
+        --input: rgb(255 255 255 / 10%);
+        --chart-1: color-mix(in srgb, var(--emerald-400) 88%, white);
+        --chart-2: color-mix(in srgb, var(--sky-400) 88%, white);
+        --chart-3: color-mix(in srgb, var(--amber-400) 90%, white);
+        --chart-4: color-mix(in srgb, var(--rose-400) 88%, white);
+        --chart-5: color-mix(in srgb, var(--neutral-300) 82%, white);
+        --edge-highlight: 0 -1px rgb(255 255 255 / 6%);
+      }
+
+      /* Token-mix identity. Order keeps sky and emerald apart in stacks (validated). */
+      :root {
+        --mix-cache-read: var(--chart-1);
+        --mix-output: var(--chart-3);
+        --mix-input: var(--chart-2);
+        --mix-cache-write: var(--chart-5);
+        --mix-unsplit: var(--muted-foreground);
+        /* Unsplit has no reliable category split, so it wears a hatch, not a hue. */
+        --hatch: repeating-linear-gradient(
+          135deg,
+          color-mix(in srgb, var(--mix-unsplit) 55%, transparent) 0 2px,
+          color-mix(in srgb, var(--mix-unsplit) 18%, transparent) 2px 6px
+        );
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        background: var(--background);
+        color: var(--foreground);
+        font-family:
+          "DM Sans",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+        font-size: 14px;
+        line-height: 1.43;
+        transition:
+          background 0.3s,
+          color 0.3s;
+      }
+      h1,
+      h2,
+      h3,
+      p {
+        margin: 0;
+      }
+      h2 {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      h3 {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .muted {
+        color: var(--muted-foreground);
+      }
+      .xs {
+        font-size: 12px;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+      }
+
+      /* ---------- Page shell (StandaloneChatPageHeader + StandalonePageContent) ---------- */
+      .page-header {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 24px;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in srgb, var(--background) 38%, transparent);
+        backdrop-filter: blur(44px);
+      }
+      .page-header h1 {
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .page-header .actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .page {
+        width: min(1100px, calc(100vw - 48px));
+        margin: 0 auto;
+        padding: 32px 0 64px;
+        display: flex;
+        flex-direction: column;
+        gap: 32px;
+      }
+      .section {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .prototype-note {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+        padding: 10px 12px;
+      }
+      .prototype-note strong {
+        color: var(--foreground);
+        font-weight: 500;
+      }
+
+      /* ---------- Card (components/ui/card.tsx) ---------- */
+      .card {
+        position: relative;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--border);
+        border-radius: var(--card-surface-radius);
+        background: transparent;
+        transition: background-color 0.15s;
+      }
+      .card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: calc(var(--card-surface-radius) - 1px);
+        box-shadow: var(--edge-highlight);
+      }
+      .card:hover {
+        background: var(--card);
+      }
+      .card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 24px 24px 0;
+      }
+      .card-content {
+        padding: 16px 24px 24px;
+      }
+
+      /* ---------- Icon box (UsageStatCard) ---------- */
+      .icon-box {
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        border-radius: calc(var(--radius) - 2px);
+        border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+        background: color-mix(in srgb, var(--muted) 50%, transparent);
+        color: var(--muted-foreground);
+      }
+      .icon-box.sm {
+        width: 24px;
+        height: 24px;
+      }
+      .icon-box svg,
+      .icon {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* ---------- Toggle group, toolbar variant, xs ---------- */
+      .toggle-group {
+        display: inline-flex;
+        gap: 2px;
+      }
+      .toggle {
+        font: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        height: 24px;
+        min-width: 24px;
+        padding: 0 7px;
+        border-radius: calc(var(--radius) - 2px);
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--muted-foreground);
+        cursor: pointer;
+      }
+      .toggle:hover {
+        background: var(--muted);
+        color: var(--foreground);
+      }
+      .toggle[aria-pressed="true"] {
+        background: color-mix(in srgb, var(--input) 64%, transparent);
+        color: var(--foreground);
+      }
+      .toggle:focus-visible {
+        outline: 2px solid var(--info);
+        outline-offset: 1px;
+      }
+
+      /* ---------- Legend + swatches ---------- */
+      .swatch {
+        flex-shrink: 0;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--fill);
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* ---------- SVG chart primitives ---------- */
+      .chart svg {
+        display: block;
+        width: 100%;
+        overflow: visible;
+      }
+      .chart .grid line {
+        stroke: var(--border);
+        stroke-width: 1;
+      }
+      .chart .tick {
+        fill: var(--muted-foreground);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+      .chart .hit {
+        fill: transparent;
+        cursor: default;
+      }
+      .chart .hit:hover,
+      .chart .hit[data-active] {
+        fill: var(--muted);
+      }
+
+      /* ---------- Tooltip (ChartTooltipContent) ---------- */
+      .tooltip {
+        position: fixed;
+        z-index: 50;
+        pointer-events: none;
+        min-width: 160px;
+        padding: 8px 10px;
+        border-radius: calc(var(--radius) - 2px);
+        border: 1px solid var(--border);
+        background: var(--card);
+        box-shadow: 0 8px 24px rgb(0 0 0 / 18%);
+        font-size: 12px;
+        opacity: 0;
+        transform: translateY(4px);
+        transition:
+          opacity 0.12s,
+          transform 0.12s;
+      }
+      .tooltip[data-open] {
+        opacity: 1;
+        transform: none;
+      }
+      .tooltip .t-title {
+        font-weight: 500;
+        margin-bottom: 6px;
+      }
+      .tooltip .t-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        color: var(--muted-foreground);
+      }
+      .tooltip .t-row b {
+        color: var(--foreground);
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+      .tooltip .t-key {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* ---------- Stacked 100% bar ---------- */
+      .stack {
+        display: flex;
+        gap: 2px;
+        height: 10px;
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .stack .seg {
+        min-width: 3px;
+        background: var(--fill);
+      }
+
+      /* Hatch wins over any `background: var(--fill)` consumer (strip, ranked bars, swatches). */
+      .stack .seg.hatch,
+      .ranked .fill.hatch,
+      .swatch.hatch {
+        background: var(--hatch);
+      }
+      .swatch.hatch {
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+      }
+
+      @media (max-width: 720px) {
+        .page {
+          width: calc(100vw - 32px);
+        }
+      }
+    </style>
+    <style>
+      /* ---------- Overview: one ledger card ---------- */
+      .ledger {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 300px;
+      }
+      .ledger-main {
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+      .hero-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .chip {
+        font-size: 12px;
+        color: var(--muted-foreground);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0 8px;
+        line-height: 20px;
+      }
+      .hero {
+        font-size: 44px;
+        line-height: 1.05;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+      }
+      .hero-sub {
+        margin-top: 6px;
+      }
+      .mix-legend {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .mix-legend .item {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        min-width: 0;
+      }
+      .mix-legend .name {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--muted-foreground);
+        white-space: nowrap;
+      }
+      .mix-legend .pct {
+        font-weight: 500;
+      }
+      .ledger-facts {
+        margin: 0;
+        border-left: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+      }
+      .fact {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 20px;
+      }
+      .fact + .fact {
+        border-top: 1px solid var(--border);
+      }
+      .fact dt {
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .fact dd {
+        margin: 0;
+        font-weight: 500;
+      }
+
+      /* ---------- Breakdown table ---------- */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        text-align: left;
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--muted-foreground);
+        padding: 0 0 8px;
+      }
+      td {
+        padding: 10px 0;
+        border-top: 1px solid var(--border);
+      }
+      th:first-child {
+        width: 40%;
+      }
+      th.r,
+      td.r {
+        text-align: right;
+        padding-left: 16px;
+      }
+      .share {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+      .share .track {
+        width: 120px;
+        height: 6px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--muted) 150%, transparent);
+      }
+      .share .fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--chart-2);
+      }
+      .share .pct {
+        width: 48px;
+        color: var(--muted-foreground);
+      }
+
+      @media (max-width: 860px) {
+        .ledger {
+          grid-template-columns: 1fr;
+        }
+        .ledger-facts {
+          border-left: 0;
+          border-top: 1px solid var(--border);
+        }
+        .mix-legend {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="page-header">
+      <h1>Usage</h1>
+      <div class="actions">
+        <div id="range" aria-label="Select usage range"></div>
+        <button class="toggle" id="theme"></button>
+      </div>
+    </header>
+
+    <main class="page">
+      <p class="prototype-note">
+        <strong>A · Ledger.</strong> Leads with one number and shows the mix right under it as a
+        100% strip, so the donut goes away (two big slices were hiding three small ones). The chart
+        stacks the same five categories over time; unsplit usage is hatched because nobody knows
+        what's inside it. Providers and models share one table with turns and share. <br />Needs
+        data: <code>bucket.tokenMix</code> (additive and optional, like
+        <code>totals.tokenMix</code>). Without it the chart falls back to <em>Total</em>.
+      </p>
+
+      <section class="section" aria-label="Overview">
+        <h2>Overview</h2>
+        <div class="card ledger">
+          <div class="ledger-main">
+            <div>
+              <div class="hero-label">
+                <h3 class="muted">Total tokens</h3>
+                <span class="chip" id="source"></span>
+              </div>
+              <div class="hero" id="hero"></div>
+              <p class="hero-sub muted xs" id="hero-sub"></p>
+            </div>
+            <div class="stack" id="mix-strip" role="img"></div>
+            <div class="mix-legend" id="mix-legend"></div>
+          </div>
+          <dl class="ledger-facts" id="facts"></dl>
+        </div>
+      </section>
+
+      <section class="section" aria-label="Token usage">
+        <h2>Token usage</h2>
+        <div class="card">
+          <div class="card-header">
+            <div style="display: grid; gap: 8px">
+              <h3>Over time</h3>
+              <div class="legend" id="chart-legend"></div>
+            </div>
+            <div id="chart-mode" aria-label="Chart series"></div>
+          </div>
+          <div class="card-content">
+            <div class="chart" id="chart-a"></div>
+            <p class="muted xs" style="margin-top: 12px">
+              Input may include unseparated cache usage. Reasoning stays in Output. Hatched usage
+              has no reliable category breakdown.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" aria-label="Breakdown">
+        <div class="section-head">
+          <h2>Breakdown</h2>
+          <div id="breakdown-mode" aria-label="Breakdown dimension"></div>
+        </div>
+        <div class="card">
+          <div class="card-content" style="padding-top: 20px">
+            <table>
+              <thead>
+                <tr>
+                  <th id="breakdown-col">Provider</th>
+                  <th class="r">Turns</th>
+                  <th class="r">Tokens</th>
+                  <th class="r">Share</th>
+                </tr>
+              </thead>
+              <tbody id="breakdown"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      /* Mock usage data shaped like ServerUsageSummaryResult (packages/contracts/src/server/usage.ts).
+   The 24h range reproduces the current screenshot totals exactly. Classic script so the
+   prototypes open straight from disk (file:// blocks ES module imports). */
+      (function () {
+        const MIX = [
+          { key: "cacheRead", label: "Cache read", color: "var(--mix-cache-read)" },
+          { key: "output", label: "Output", color: "var(--mix-output)" },
+          { key: "input", label: "Input", color: "var(--mix-input)" },
+          { key: "cacheWrite", label: "Cache write", color: "var(--mix-cache-write)" },
+          { key: "unsplit", label: "Unsplit usage", color: "var(--mix-unsplit)", hatch: true },
+        ];
+
+        const HOURLY = [
+          1240000, 520000, 21380000, 7960000, 340000, 0, 0, 0, 0, 2480000, 1760000, 0, 0, 0,
+          5320000, 7840000, 3520000, 0, 0, 7010000, 1120000, 720000, 840000, 252844,
+        ];
+        const DAILY = [12480000, 0, 0, 41236512, 55904220, 38712906, 62302844];
+        const DAY_NAMES = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+        // Hours that leaned on providers without a category split (drives the stacked mock).
+        const UNSPLIT_BIAS_24H = { 14: 3, 15: 3.2, 16: 2.6, 19: 2.4 };
+
+        function hourLabel(h) {
+          const suffix = h < 12 ? "AM" : "PM";
+          const hour = h % 12 === 0 ? 12 : h % 12;
+          return `${hour} ${suffix}`;
+        }
+
+        function turnsFor(tokens) {
+          return tokens > 0 ? Math.max(1, Math.round(tokens / 182000)) : 0;
+        }
+
+        /* Iterative proportional fit: spread each mix total across buckets so rows and columns
+     both reconcile. Only design A uses per-bucket mix (needs an additive bucket.tokenMix). */
+        function fitBucketMix(tokens, mixTotals, bias) {
+          const cells = tokens.map((t, i) =>
+            Object.fromEntries(
+              MIX.map((m) => [
+                m.key,
+                t === 0 ? 0 : t * (m.key === "unsplit" ? (bias[i] ?? 0.6) : 1),
+              ]),
+            ),
+          );
+          for (let pass = 0; pass < 40; pass += 1) {
+            for (const m of MIX) {
+              const sum = cells.reduce((s, c) => s + c[m.key], 0);
+              const k = sum > 0 ? mixTotals[m.key] / sum : 0;
+              cells.forEach((c) => (c[m.key] *= k));
+            }
+            cells.forEach((c, i) => {
+              const sum = MIX.reduce((s, m) => s + c[m.key], 0);
+              const k = sum > 0 ? tokens[i] / sum : 0;
+              MIX.forEach((m) => (c[m.key] *= k));
+            });
+          }
+          return cells.map((c) =>
+            Object.fromEntries(MIX.map((m) => [m.key, Math.round(c[m.key])])),
+          );
+        }
+
+        function scaleMix(base, total) {
+          const used = Object.values(base).reduce((a, b) => a + b, 0);
+          const out = {};
+          let assigned = 0;
+          MIX.forEach((m) => {
+            out[m.key] = Math.round((base[m.key] / used) * total);
+            assigned += out[m.key];
+          });
+          out.cacheRead += total - assigned;
+          return out;
+        }
+
+        function withTurns(entries) {
+          return entries.map(([id, label, usedTokens]) => ({
+            id,
+            label,
+            usedTokens,
+            turnCount: turnsFor(usedTokens),
+          }));
+        }
+
+        function reconcileTurns(rows, total) {
+          const largest = rows.reduce((a, r) => (r.usedTokens > a.usedTokens ? r : a));
+          largest.turnCount += total - rows.reduce((s, r) => s + r.turnCount, 0);
+        }
+
+        function build(range, values, labels, mix, providers, models, bias) {
+          const usedTokens = values.reduce((a, b) => a + b, 0);
+          const bucketMix = fitBucketMix(values, mix, bias);
+          const buckets = values.map((v, i) => ({
+            label: labels[i],
+            usedTokens: v,
+            turnCount: turnsFor(v),
+            tokenMix: bucketMix[i],
+            source: v === 0 ? "none" : "mixed",
+          }));
+          const providerRows = withTurns(providers);
+          const modelRows = withTurns(models);
+          // Rounded per-row turns must still reconcile: buckets and models sum to the providers.
+          const turnTotal = providerRows.reduce((s, r) => s + r.turnCount, 0);
+          reconcileTurns(buckets, turnTotal);
+          reconcileTurns(modelRows, turnTotal);
+          return {
+            range,
+            historyStatus: "ready",
+            totals: {
+              usedTokens,
+              turnCount: buckets.reduce((s, b) => s + b.turnCount, 0),
+              tokenMix: mix,
+              source: "Mixed",
+            },
+            buckets,
+            providers: providerRows,
+            models: modelRows,
+            favoriteProvider: providerRows[0],
+            favoriteModel: modelRows[0],
+            streakDays: 4,
+            activeDays: DAILY.map((v) => v > 0),
+          };
+        }
+
+        const MIX_24H = {
+          cacheRead: 44648131,
+          output: 221687,
+          input: 558773,
+          cacheWrite: 965000,
+          unsplit: 15909253,
+        };
+        const total7d = DAILY.reduce((a, b) => a + b, 0);
+
+        const DATA = {
+          "24h": build(
+            "24h",
+            HOURLY,
+            HOURLY.map((_, h) => hourLabel(h)),
+            MIX_24H,
+            [
+              ["claudeAgent", "Claude", 54524121],
+              ["codex", "Codex", 5912400],
+              ["opencode", "OpenCode", 1866323],
+            ],
+            [
+              ["claude-opus-5-5", "Claude Opus 5.5", 54524121],
+              ["gpt-5.5-codex", "GPT-5.5 Codex", 5912400],
+              ["qwen3-coder", "Qwen3 Coder", 1204100],
+              ["kimi-k2", "Kimi K2", 662223],
+            ],
+            Object.fromEntries(Object.entries(UNSPLIT_BIAS_24H).map(([h, v]) => [Number(h), v])),
+          ),
+          "7d": build(
+            "7d",
+            DAILY,
+            DAY_NAMES,
+            scaleMix(MIX_24H, total7d),
+            [
+              ["claudeAgent", "Claude", 165092112],
+              ["codex", "Codex", 31708440],
+              ["opencode", "OpenCode", 13835930],
+            ],
+            [
+              ["claude-opus-5-5", "Claude Opus 5.5", 139662310],
+              ["claude-sonnet-5-5", "Claude Sonnet 5.5", 25429802],
+              ["gpt-5.5-codex", "GPT-5.5 Codex", 31708440],
+              ["qwen3-coder", "Qwen3 Coder", 9120400],
+              ["kimi-k2", "Kimi K2", 4715530],
+            ],
+            { 3: 2.8, 4: 1.4 },
+          ),
+        };
+        // Keep model rows ranked by tokens, as the server returns them.
+        Object.values(DATA).forEach((d) => d.models.sort((a, b) => b.usedTokens - a.usedTokens));
+
+        window.UsageData = { DATA, MIX };
+      })();
+    </script>
+    <script>
+      /* Shared helpers for the usage overview prototypes: formatting, icons, theme, tooltip,
+   range toggle, and a column chart that follows the app's Recharts look. */
+      (function () {
+        const { MIX } = window.UsageData;
+
+        const fmt = {
+          full: (n) => n.toLocaleString("en-US"),
+          compact(n) {
+            if (n >= 1e9) return `${trim(n / 1e9)}B`;
+            if (n >= 1e6) return `${trim(n / 1e6)}M`;
+            if (n >= 1e3) return `${trim(n / 1e3)}K`;
+            return String(n);
+          },
+          pct(part, whole, digits = 1) {
+            if (!whole) return "0%";
+            const p = (part / whole) * 100;
+            return p > 0 && p < 0.1 ? "<0.1%" : `${p.toFixed(digits)}%`;
+          },
+        };
+        function trim(v) {
+          return v >= 100 ? v.toFixed(0) : v.toFixed(1).replace(/\.0$/, "");
+        }
+
+        const svg = (body, extra = "") =>
+          `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" ${extra}>${body}</svg>`;
+        const icons = {
+          sigma: svg(
+            '<path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/>',
+          ),
+          claude: svg(
+            '<path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6 5.6 18.4M7.5 3.8l9 16.4M16.5 3.8l-9 16.4"/>',
+            'stroke-width="1.6"',
+          ),
+          bot: svg(
+            '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/>',
+          ),
+          flame: svg(
+            '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+          ),
+          cache: svg(
+            '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+          ),
+          turns: svg('<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>'),
+          sun: svg(
+            '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>',
+          ),
+          moon: svg('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'),
+          info: svg('<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>'),
+        };
+
+        function swatch(m) {
+          return `<span class="swatch${m.hatch ? " hatch" : ""}" style="--fill:${m.color}"></span>`;
+        }
+
+        /* ---------- theme ---------- */
+        function mountThemeToggle(button) {
+          const root = document.documentElement;
+          const paint = () => {
+            const dark = root.classList.contains("dark");
+            button.innerHTML = dark ? icons.sun : icons.moon;
+            button.setAttribute(
+              "aria-label",
+              dark ? "Switch to light theme" : "Switch to dark theme",
+            );
+          };
+          button.addEventListener("click", () => {
+            root.classList.toggle("dark");
+            paint();
+          });
+          paint();
+        }
+
+        /* ---------- tooltip ---------- */
+        const tip = document.createElement("div");
+        tip.className = "tooltip";
+        tip.setAttribute("role", "tooltip");
+        document.addEventListener("DOMContentLoaded", () => document.body.append(tip));
+        const tooltip = {
+          show(html, x, y) {
+            tip.innerHTML = html;
+            tip.dataset.open = "";
+            const r = tip.getBoundingClientRect();
+            const left = Math.min(x + 14, window.innerWidth - r.width - 8);
+            const top = Math.max(8, y - r.height - 12);
+            tip.style.left = `${left}px`;
+            tip.style.top = `${top}px`;
+          },
+          hide() {
+            delete tip.dataset.open;
+          },
+          rows(title, rows) {
+            return `<div class="t-title">${title}</div>${rows
+              .map(
+                (r) =>
+                  `<div class="t-row"><span class="t-key">${r.key ?? ""}${r.label}</span><b>${r.value}</b></div>`,
+              )
+              .join("")}`;
+          },
+        };
+
+        /* ---------- toggle groups ---------- */
+        function mountToggleGroup(group, options, value, onChange) {
+          group.classList.add("toggle-group");
+          group.setAttribute("role", "group");
+          const paint = () =>
+            group.querySelectorAll(".toggle").forEach((b) => {
+              b.setAttribute("aria-pressed", String(b.dataset.value === value));
+            });
+          group.innerHTML = options
+            .map(([v, label]) => `<button class="toggle" data-value="${v}">${label}</button>`)
+            .join("");
+          group.addEventListener("click", (e) => {
+            const b = e.target.closest(".toggle");
+            if (!b || b.dataset.value === value) return;
+            value = b.dataset.value;
+            paint();
+            onChange(value);
+          });
+          paint();
+        }
+
+        /* ---------- column chart ---------- */
+        /* Smallest clean step (1/2/2.5/5 × 10^k) that fits the max in at most 5 intervals. */
+        function niceScale(v) {
+          if (v <= 0) return { max: 1, step: 1 };
+          const mag = 10 ** Math.floor(Math.log10(v / 5));
+          const step = [1, 2, 2.5, 5, 10].map((n) => n * mag).find((s) => Math.ceil(v / s) <= 5);
+          return { max: Math.ceil(v / step) * step, step };
+        }
+        function activeAverage(buckets) {
+          const active = buckets.filter((b) => b.usedTokens > 0);
+          return active.reduce((s, b) => s + b.usedTokens, 0) / Math.max(1, active.length);
+        }
+        function topRoundedRect(x, y, w, h, r) {
+          if (h <= 0) return "";
+          const rr = Math.min(r, w / 2, h);
+          return `M${x},${y + h}V${y + rr}Q${x},${y} ${x + rr},${y}H${x + w - rr}Q${x + w},${y} ${x + w},${y + rr}V${y + h}Z`;
+        }
+
+        /**
+         * opts: { height, stacked, labelEvery, labelOffset, peak, average, selected, onSelect, tooltipRows }
+         * Bars cap at 24px, round only the data-end, and keep a 2px surface gap between stack segments.
+         */
+        function columnChart(el, buckets, opts = {}) {
+          const height = opts.height ?? 300;
+          const draw = () => {
+            const width = el.clientWidth;
+            const pad = { top: 18, right: 4, bottom: 26, left: 48 };
+            const plotW = width - pad.left - pad.right;
+            const plotH = height - pad.top - pad.bottom;
+            const { max, step } = niceScale(Math.max(...buckets.map((b) => b.usedTokens)));
+            const y = (v) => pad.top + plotH - (v / max) * plotH;
+            const slot = plotW / buckets.length;
+            const barW = Math.min(24, slot * 0.64);
+            const every = opts.labelEvery ?? 1;
+
+            let out = `<defs><pattern id="hatch-${el.id}" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" style="fill:color-mix(in srgb, var(--mix-unsplit) 22%, transparent)"/><rect width="2.4" height="6" style="fill:color-mix(in srgb, var(--mix-unsplit) 70%, transparent)"/></pattern></defs>`;
+            out += '<g class="grid">';
+            for (let v = 0; v <= max + step / 2; v += step) {
+              out += `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(v)}" y2="${y(v)}" />`;
+              out += `<text class="tick" x="${pad.left - 10}" y="${y(v) + 4}" text-anchor="end">${fmt.compact(v)}</text>`;
+            }
+            out += "</g>";
+
+            // Reference line only; its label lives in the card header so it never collides with bars.
+            if (opts.average) {
+              out += `<line x1="${pad.left}" x2="${width - pad.right}" y1="${y(activeAverage(buckets))}" y2="${y(activeAverage(buckets))}" style="stroke:var(--muted-foreground);stroke-opacity:.55" />`;
+            }
+
+            let peakIndex = 0;
+            buckets.forEach((b, i) => {
+              if (b.usedTokens > buckets[peakIndex].usedTokens) peakIndex = i;
+            });
+
+            buckets.forEach((b, i) => {
+              const cx = pad.left + slot * i + slot / 2;
+              const x = cx - barW / 2;
+              const dim =
+                opts.selected != null && opts.selected !== i ? ' style="opacity:.38"' : "";
+              out += `<g${dim}>`;
+              if (opts.stacked && b.usedTokens > 0) {
+                // Baseline-up in MIX order; sub-pixel segments live in the tooltip only.
+                const segs = MIX.filter((m) => y(0) - y(b.tokenMix[m.key]) >= 1.5);
+                let base = 0;
+                segs.forEach((m, si) => {
+                  const isTop = si === segs.length - 1;
+                  const yTop = y(base + b.tokenMix[m.key]);
+                  const h = y(base) - yTop - (si === 0 ? 0 : 2);
+                  const fill = m.hatch ? `url(#hatch-${el.id})` : m.color;
+                  out += isTop
+                    ? `<path d="${topRoundedRect(x, yTop, barW, h, 4)}" style="fill:${fill}" />`
+                    : `<rect x="${x}" y="${yTop}" width="${barW}" height="${Math.max(0, h)}" style="fill:${fill}" />`;
+                  base += b.tokenMix[m.key];
+                });
+              } else if (b.usedTokens > 0) {
+                out += `<path d="${topRoundedRect(x, y(b.usedTokens), barW, y(0) - y(b.usedTokens), 4)}" style="fill:var(--chart-2)" />`;
+              }
+              out += "</g>";
+              if (i % every === (opts.labelOffset ?? 0)) {
+                out += `<text class="tick" x="${cx}" y="${height - 6}" text-anchor="middle">${b.label}</text>`;
+              }
+            });
+
+            if (opts.peak) {
+              const b = buckets[peakIndex];
+              const cx = pad.left + slot * peakIndex + slot / 2;
+              out += `<text class="tick" x="${cx + barW / 2 + 6}" y="${y(b.usedTokens) + 10}" style="fill:var(--foreground)">Peak ${fmt.compact(b.usedTokens)}</text>`;
+            }
+
+            buckets.forEach((b, i) => {
+              const sel = opts.selected === i ? " data-active" : "";
+              out += `<rect class="hit" data-i="${i}" x="${pad.left + slot * i}" y="${pad.top}" width="${slot}" height="${plotH}" rx="6"${sel} />`;
+            });
+
+            el.innerHTML = `<svg viewBox="0 0 ${width} ${height}" height="${height}" role="img" aria-label="Tokens over time">${out}</svg>`;
+            el.querySelectorAll(".hit").forEach((hit) => {
+              const b = buckets[Number(hit.dataset.i)];
+              hit.addEventListener("mousemove", (e) =>
+                tooltip.show(tooltip.rows(b.label, opts.tooltipRows(b)), e.clientX, e.clientY),
+              );
+              hit.addEventListener("mouseleave", tooltip.hide);
+              if (opts.onSelect) {
+                hit.style.cursor = "pointer";
+                hit.addEventListener("click", () => opts.onSelect(Number(hit.dataset.i)));
+              }
+            });
+          };
+          draw();
+          const ro = new ResizeObserver(draw);
+          ro.observe(el);
+          return () => ro.disconnect();
+        }
+
+        window.UsageUI = {
+          fmt,
+          icons,
+          swatch,
+          tooltip,
+          mountThemeToggle,
+          mountToggleGroup,
+          columnChart,
+          activeAverage,
+        };
+      })();
+    </script>
+    <script>
+      const { DATA, MIX } = window.UsageData;
+      const { fmt, icons, swatch, tooltip, mountThemeToggle, mountToggleGroup, columnChart } =
+        window.UsageUI;
+      const $ = (id) => document.getElementById(id);
+      const state = { range: "24h", chart: "type", breakdown: "providers" };
+      let disposeChart = () => {};
+
+      function renderOverview(d) {
+        const t = d.totals;
+        $("hero").textContent = fmt.full(t.usedTokens);
+        $("source").textContent = t.source;
+        $("hero-sub").textContent =
+          `${fmt.full(t.turnCount)} turns · ${fmt.compact(Math.round(t.usedTokens / t.turnCount))} per turn`;
+
+        $("mix-strip").setAttribute(
+          "aria-label",
+          MIX.map((m) => `${m.label} ${fmt.pct(t.tokenMix[m.key], t.usedTokens)}`).join(", "),
+        );
+        $("mix-strip").innerHTML = MIX.map(
+          (m) =>
+            `<span class="seg${m.hatch ? " hatch" : ""}" data-key="${m.key}" style="--fill:${m.color};flex:${t.tokenMix[m.key]} 1 0"></span>`,
+        ).join("");
+        $("mix-strip")
+          .querySelectorAll(".seg")
+          .forEach((seg) => {
+            const m = MIX.find((x) => x.key === seg.dataset.key);
+            seg.addEventListener("mousemove", (e) =>
+              tooltip.show(
+                tooltip.rows(m.label, [
+                  { label: "Tokens", value: fmt.full(t.tokenMix[m.key]) },
+                  { label: "Share", value: fmt.pct(t.tokenMix[m.key], t.usedTokens) },
+                ]),
+                e.clientX,
+                e.clientY,
+              ),
+            );
+            seg.addEventListener("mouseleave", tooltip.hide);
+          });
+        $("mix-legend").innerHTML = MIX.map(
+          (m) => `<div class="item">
+            <span class="name">${swatch(m)}${m.label}</span>
+            <span class="pct">${fmt.pct(t.tokenMix[m.key], t.usedTokens)}</span>
+            <span class="muted xs num">${fmt.full(t.tokenMix[m.key])}</span>
+          </div>`,
+        ).join("");
+
+        const fact = (icon, label, value) =>
+          `<div class="fact"><span class="icon-box">${icon}</span><div><dt>${label}</dt><dd>${value}</dd></div></div>`;
+        $("facts").innerHTML =
+          fact(icons.claude, "Top provider", d.favoriteProvider.label) +
+          fact(icons.bot, "Top model", d.favoriteModel.label) +
+          fact(icons.flame, "Streak", `${d.streakDays} days`);
+      }
+
+      function renderChart(d) {
+        const stacked = state.chart === "type";
+        $("chart-legend").innerHTML = stacked
+          ? MIX.map((m) => `<span>${swatch(m)}${m.label}</span>`).join("")
+          : `<span>${swatch({ color: "var(--chart-2)" })}Tokens</span>`;
+        disposeChart();
+        disposeChart = columnChart($("chart-a"), d.buckets, {
+          height: 300,
+          stacked,
+          labelEvery: d.range === "24h" ? 3 : 1,
+          labelOffset: d.range === "24h" ? 2 : 0,
+          tooltipRows: (b) => [
+            { label: "Total", value: fmt.full(b.usedTokens) },
+            { label: "Turns", value: fmt.full(b.turnCount) },
+            ...(stacked && b.usedTokens > 0
+              ? MIX.slice()
+                  .reverse()
+                  .filter((m) => b.tokenMix[m.key] > 0)
+                  .map((m) => ({
+                    key: swatch(m),
+                    label: m.label,
+                    value: fmt.full(b.tokenMix[m.key]),
+                  }))
+              : []),
+          ],
+        });
+      }
+
+      function renderBreakdown(d) {
+        const rows = state.breakdown === "providers" ? d.providers : d.models;
+        $("breakdown-col").textContent = state.breakdown === "providers" ? "Provider" : "Model";
+        $("breakdown").innerHTML = rows
+          .map((r) => {
+            const pct = (r.usedTokens / d.totals.usedTokens) * 100;
+            return `<tr>
+              <td>${r.label}</td>
+              <td class="r muted num">${fmt.full(r.turnCount)}</td>
+              <td class="r num">${fmt.full(r.usedTokens)}</td>
+              <td class="r"><div class="share">
+                <div class="track"><div class="fill" style="width:${Math.max(2, pct)}%"></div></div>
+                <span class="pct num xs">${pct.toFixed(1)}%</span>
+              </div></td>
+            </tr>`;
+          })
+          .join("");
+      }
+
+      function render() {
+        const d = DATA[state.range];
+        renderOverview(d);
+        renderChart(d);
+        renderBreakdown(d);
+      }
+
+      mountThemeToggle($("theme"));
+      mountToggleGroup(
+        $("range"),
+        [
+          ["24h", "24h"],
+          ["7d", "7d"],
+        ],
+        state.range,
+        (v) => {
+          state.range = v;
+          render();
+        },
+      );
+      mountToggleGroup(
+        $("chart-mode"),
+        [
+          ["type", "By type"],
+          ["total", "Total"],
+        ],
+        state.chart,
+        (v) => {
+          state.chart = v;
+          renderChart(DATA[state.range]);
+        },
+      );
+      mountToggleGroup(
+        $("breakdown-mode"),
+        [
+          ["providers", "Providers"],
+          ["models", "Models"],
+        ],
+        state.breakdown,
+        (v) => {
+          state.breakdown = v;
+          renderBreakdown(DATA[state.range]);
+        },
+      );
+      render();
+    </script>
+  </body>
+</html>

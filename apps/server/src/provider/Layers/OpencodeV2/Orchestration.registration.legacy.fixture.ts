@@ -5,8 +5,13 @@ import {
   V2_N2_COMPATIBILITY_DIGEST,
   V2_N3_BOOTSTRAP_COMPATIBILITY,
   V2_N3_COMPATIBILITY_DIGEST,
+  V2_N6_BOOTSTRAP_COMPATIBILITY,
+  V2_N6_COMPATIBILITY_DIGEST,
 } from "./Orchestration.compatibility.legacy.ts";
 import { V2_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.ts";
+import { V2_NATIVE_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.ts";
+import { V2_HTML_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v4.ts";
+import { V2_IMPLEMENTATION_MANIFEST } from "./Orchestration.implementation.manifest.generated.ts";
 import {
   ensureV2ThreadPrivateChild,
   readV2ThreadPrivateFile,
@@ -25,12 +30,25 @@ export async function makeV2HexRegistrationFixture(preferred: V2PluginSetupArtif
   return makeRetainedRegistrationFixture(preferred, true);
 }
 
+export async function makeV2PreHtmlRegistrationFixture(preferred: V2PluginSetupArtifact) {
+  return makeRetainedRegistrationFixture(preferred, true, true);
+}
+
 async function makeRetainedRegistrationFixture(
   preferred: V2PluginSetupArtifact,
   scopedHex: boolean,
+  preHtml = false,
 ) {
-  const compatibility = scopedHex ? V2_N3_BOOTSTRAP_COMPATIBILITY : V2_N2_BOOTSTRAP_COMPATIBILITY;
-  const compatibilityDigest = scopedHex ? V2_N3_COMPATIBILITY_DIGEST : V2_N2_COMPATIBILITY_DIGEST;
+  const compatibility = preHtml
+    ? V2_N6_BOOTSTRAP_COMPATIBILITY
+    : scopedHex
+      ? V2_N3_BOOTSTRAP_COMPATIBILITY
+      : V2_N2_BOOTSTRAP_COMPATIBILITY;
+  const compatibilityDigest = preHtml
+    ? V2_N6_COMPATIBILITY_DIGEST
+    : scopedHex
+      ? V2_N3_COMPATIBILITY_DIGEST
+      : V2_N2_COMPATIBILITY_DIGEST;
   const manifest = JSON.parse(
     await readV2ThreadPrivateFile(path.join(preferred.directory, "manifest.json")),
   );
@@ -41,7 +59,7 @@ async function makeRetainedRegistrationFixture(
       source = source
         .replaceAll('"bigbud.thread.v2."+issuer', '"bigbud.thread.v1"')
         .replace('.map(spec=>({...spec,name:"bb2_"+issuer.slice(0,32)+"_"+spec.action}))', "");
-    if (name === "registry.mjs") {
+    if (name === "registry.mjs" && !preHtml) {
       source = source
         .replace(/^  const compactPrefix=.*\n/m, "")
         .replace(/^    if\(owner\.nativeSessionId\.startsWith.*\n/m, "")
@@ -52,7 +70,12 @@ async function makeRetainedRegistrationFixture(
       if (!scopedHex) source = source.replace(/^    if\(native\.metadata\.bigbud_issuer.*\n/m, "");
     }
     source = source
-      .replaceAll("bigbud.thread.bootstrap.v3", compatibility.bootstrapAbi)
+      .replaceAll(
+        JSON.stringify(V2_HTML_BOOTSTRAP_SPECS),
+        JSON.stringify(V2_NATIVE_BOOTSTRAP_SPECS),
+      )
+      .replaceAll(V2_IMPLEMENTATION_MANIFEST.v3.schemaDigest, compatibility.schemaDigest)
+      .replaceAll("bigbud.thread.bootstrap.v4", compatibility.bootstrapAbi)
       .replaceAll(V2_COMPATIBILITY_DIGEST, compatibilityDigest);
     modules[name] = source;
   }

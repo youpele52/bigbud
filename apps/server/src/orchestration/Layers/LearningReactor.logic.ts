@@ -1,4 +1,9 @@
-import type { ModelSelection, OrchestrationMessage, ProviderKind } from "@bigbud/contracts";
+import type {
+  HistoricalModelSelection,
+  ModelSelection,
+  OrchestrationMessage,
+  ProviderKind,
+} from "@bigbud/contracts";
 
 const MEMORY_REVIEW_USER_MESSAGE_INTERVAL = 15;
 
@@ -22,9 +27,9 @@ export function shouldScheduleMemoryReview(input: {
 export function resolveLearningModelSelection(input: {
   readonly provider: ProviderKind;
   readonly model: string;
-  readonly selected: ModelSelection;
+  readonly selected: HistoricalModelSelection;
 }): ModelSelection {
-  if (input.selected.provider === input.provider) {
+  if (input.selected.provider !== "kilocode" && input.selected.provider === input.provider) {
     return { ...input.selected, model: input.model };
   }
   switch (input.provider) {
@@ -36,8 +41,6 @@ export function resolveLearningModelSelection(input: {
       return { provider: "claudeAgent", model: input.model };
     case "copilot":
       return { provider: "copilot", model: input.model };
-    case "kilocode":
-      return { provider: "kilocode", model: input.model };
     case "opencode":
       return { provider: "opencode", model: input.model };
     case "pi":
@@ -48,5 +51,7 @@ export function resolveLearningModelSelection(input: {
       return { provider: "devin", model: input.model };
     case "cliProxy":
       return { provider: "cliProxy", model: input.model };
+    case "muse":
+      return { provider: "muse", model: input.model };
   }
 }

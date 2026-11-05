@@ -39,7 +39,7 @@ import {
 } from "./Adapter.session.remoteWorkspaceMcp.ts";
 
 export interface StartSessionDeps {
-  readonly provider: Extract<ProviderKind, "opencode" | "kilocode">;
+  readonly provider: Extract<ProviderKind, "opencode">;
   readonly sessions: Map<string, ActiveOpencodeSession>;
   readonly serverManager: OpencodeServerManagerShape;
   readonly serverSettings: Pick<ServerSettingsShape, "getSettings">;
@@ -153,7 +153,7 @@ export function makeStartSession(deps: StartSessionDeps): OpencodeAdapterShape["
                 ),
               catch: (cause) =>
                 new ProviderAdapterProcessError({
-                  provider: deps.provider as Extract<ProviderKind, "opencode" | "kilocode">,
+                  provider: deps.provider as Extract<ProviderKind, "opencode">,
                   threadId: input.threadId,
                   detail: toMessage(
                     cause,

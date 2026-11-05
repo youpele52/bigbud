@@ -166,7 +166,7 @@ export function ProvidersSettingsSection({
 
   return (
     <SettingsSection
-      title="Providers"
+      title="Configuration"
       headerAction={
         <div className="flex items-center gap-1.5">
           <ProviderLastChecked lastCheckedAt={lastCheckedAt} />
@@ -178,6 +178,9 @@ export function ProvidersSettingsSection({
         </div>
       }
     >
+      <p className="mb-4 px-4 pt-4 text-xs text-muted-foreground sm:px-5">
+        Set up providers, connections, and available models.
+      </p>
       {providerCards.map((card) => {
         const modelListRef = {
           get current() {
@@ -269,6 +272,8 @@ export function ProvidersSettingsSection({
               card.provider === "cliProxy" ? () => void activateCliProxy() : undefined
             }
             isActivatingCliProxy={card.provider === "cliProxy" ? isActivatingCliProxy : false}
+            onRefreshProviders={refreshProviders}
+            isRefreshingProviders={isRefreshingProviders}
             onToggleEnabled={(checked) => {
               if (
                 card.provider === "opencodeV2" &&

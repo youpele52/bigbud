@@ -6,6 +6,7 @@ import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import { pinRemoteAgentBuild } from "./remoteAgentInstall.registry.transitions.ts";
 import { currentRemoteAgentController } from "./remoteAgentController.ts";
 import { scheduleRemoteAgentCleanup } from "./remoteAgentInstall.maintenance.ts";
+import { RemoteAgentWorkspaceError } from "./remoteAgentWorkspaceClient.ts";
 
 export interface RemoteAgentWorkspaceMutation {
   readonly prepare: (operationId: string, digest: Uint8Array) => Promise<void>;
@@ -23,6 +24,10 @@ export function makeRemoteAgentWorkspaceMutation(
   return {
     prepare: async (operationId, digest) => {
       const reservationId = randomUUID();
+      const requestDigest =
+        digest.byteLength === 32
+          ? Buffer.from(digest).toString("hex")
+          : createHash("sha256").update(digest).digest("hex");
       const store = remoteAgentOwners();
       const controller = currentRemoteAgentController();
       await reclaimDeadPreparedOwner(
@@ -40,19 +45,29 @@ export function makeRemoteAgentWorkspaceMutation(
         connectionId: binding.connectionId ?? binding.runtime.generation,
         resourceId: operationId,
         reservationId,
-        digest:
-          digest.byteLength === 32
-            ? Buffer.from(digest).toString("hex")
-            : createHash("sha256").update(digest).digest("hex"),
+        digest: requestDigest,
         state: "prepared",
         outputSequence: 0,
         nextInputSequence: 1,
         inputAcknowledged: 0,
       });
-      if (owner.reservationId !== reservationId)
-        throw new Error(
+      if (owner.reservationId !== reservationId) {
+        if (
+          owner.target !== target ||
+          owner.digest !== requestDigest ||
+          owner.resourceId !== operationId
+        )
+          throw new RemoteAgentWorkspaceError(
+            "WRITE_IDENTITY_CONFLICT",
+            "An existing file write has a different target or request digest.",
+            "unknown",
+          );
+        throw new RemoteAgentWorkspaceError(
+          "WRITE_REPLAY_FORBIDDEN",
           "An existing file write cannot be replayed. Its original response is unavailable.",
+          owner.state === "terminal" ? "terminal" : "unknown",
         );
+      }
       let control: Awaited<ReturnType<typeof openRemoteAgentControl>>;
       try {
         control = await openRemoteAgentControl(target);
@@ -73,7 +88,11 @@ export function makeRemoteAgentWorkspaceMutation(
         } catch {
           // Keep the durable owner when a local rollback cannot be proven.
         }
-        throw cause;
+        throw new RemoteAgentWorkspaceError(
+          "WRITE_NOT_DISPATCHED",
+          cause instanceof Error ? cause.message : String(cause),
+          "not-dispatched",
+        );
       }
     },
     terminal: async (operationId) => {

@@ -1,3 +1,6 @@
+import { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
+import { queueDecisionMessages } from "@bigbud/shared/queueDecision";
+import { Schema } from "effect";
 import type { ClientOrchestrationCommand } from "@bigbud/contracts/orchestration/orchestration.commands.ts";
 import type { GetCommandOutcomeResult } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 import type { NativeApi } from "@bigbud/contracts/server/ipc.nativeApi.ts";
@@ -16,16 +19,20 @@ import { commandIdKey } from "./orchestrationCommandRecovery.storage";
 export class OrchestrationCommandOutcomeError extends Error {
   readonly status: "rejected" | "unknown";
   readonly reason: string | undefined;
+  readonly code: string | undefined;
 
   constructor(outcome: Extract<GetCommandOutcomeResult, { status: "rejected" | "unknown" }>) {
     super(
       outcome.status === "rejected"
-        ? `Orchestration command was rejected: ${outcome.reason}.`
+        ? Schema.is(QueueDecisionReason)(outcome.reason)
+          ? queueDecisionMessages[outcome.reason]
+          : `Orchestration command was rejected: ${outcome.reason}.`
         : "Orchestration command outcome is not yet known.",
     );
     this.name = "OrchestrationCommandOutcomeError";
     this.status = outcome.status;
     this.reason = outcome.status === "rejected" ? outcome.reason : undefined;
+    this.code = this.reason;
   }
 }
 

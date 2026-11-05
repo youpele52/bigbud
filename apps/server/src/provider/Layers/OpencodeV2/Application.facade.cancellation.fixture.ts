@@ -36,6 +36,7 @@ export async function withV2FacadeCancellationFixture(
     http: Parameters<Parameters<typeof withV2RuntimeFixture>[0]>[0]["http"];
     base: Parameters<Parameters<typeof withV2RuntimeFixture>[0]>[0]["runtime"];
     directory: string;
+    settings: typeof ServerSettingsService.Service;
     entered: Promise<void>;
     pause: () => void;
     release: () => void;
@@ -118,6 +119,7 @@ export async function withV2FacadeCancellationFixture(
     const coordinator = new V2ThreadToolsActivation(settings, async (...args) => ({
       ...(await raw(...args)),
       transport: wire.descriptor.registrationFile,
+      generation: wire.descriptor.generation,
     }));
     let job: V2OwnedActivationJob | undefined;
     const target = coordinator as unknown as {
@@ -144,6 +146,7 @@ export async function withV2FacadeCancellationFixture(
                 http,
                 base,
                 directory,
+                settings,
                 entered: entered.promise,
                 pause: () => {
                   paused = true;

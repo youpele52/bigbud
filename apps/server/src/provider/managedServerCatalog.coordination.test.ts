@@ -7,7 +7,7 @@ import { makeManagedServerProvider } from "./makeManagedServerProvider";
 import { discoverManagedServerCatalog } from "./managedServerCatalog";
 import { runCoordinatedProviderProbe } from "./providerProbeCoordinator";
 
-function snapshot(provider: "opencode" | "kilocode", live = false): ServerProvider {
+function snapshot(provider: "opencode", live = false): ServerProvider {
   return {
     provider,
     enabled: true,
@@ -30,7 +30,7 @@ function snapshot(provider: "opencode" | "kilocode", live = false): ServerProvid
 }
 
 it.effect(
-  "OpenCode and KiloCode catalog wrappers finish while the third probe permit is occupied",
+  "Independent OpenCode catalog wrappers finish while the third probe permit is occupied",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -44,7 +44,7 @@ it.effect(
         const releaseAvailability = yield* Deferred.make<void>();
         let availabilityCalls = 0;
         let catalogCalls = 0;
-        const make = (provider: "opencode" | "kilocode") =>
+        const make = (provider: "opencode") =>
           makeManagedServerProvider({
             initialSnapshot: snapshot(provider),
             getSettings: Effect.succeed(true),
@@ -70,11 +70,11 @@ it.effect(
               }),
           });
         const opencode = yield* make("opencode");
-        const kilocode = yield* make("kilocode");
+        const secondService = yield* make("opencode");
         yield* Deferred.await(bothStarted);
         yield* Deferred.succeed(releaseAvailability, undefined);
         yield* TestClock.adjust(1);
-        for (const service of [opencode, kilocode]) {
+        for (const service of [opencode, secondService]) {
           const result = yield* service.getSnapshot;
           assert.strictEqual(result.initialProbeComplete, true);
           assert.strictEqual(result.modelDiscovery?.status, "live");

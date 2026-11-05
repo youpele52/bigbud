@@ -6,6 +6,7 @@ import { acquireV2PluginPublicationLock } from "./PluginSetup.lock.ts";
 import type { V2PluginSetupArtifact } from "./PluginSetup.record.ts";
 import type { V2PluginSetupAuthority } from "./PluginSetup.paths.ts";
 import { captureV2OperationAuthority } from "./Client.guard.ts";
+import { assertV2ImplementationCompatible } from "./Orchestration.compatibility.ts";
 import {
   v2ThreadImplementation,
   type V2ImplementationVersion,
@@ -14,7 +15,7 @@ import {
 
 const Selection = Schema.Struct({
   protocol: Schema.Literal("bigbud.thread.implementation.selection.v1"),
-  version: Schema.Literals(["v1", "v2"]),
+  version: Schema.Literals(["v1", "v2", "v3", "v4"]),
   implementationDigest: Schema.String,
   bootstrapAbi: Schema.String,
   schemaDigest: Schema.String,
@@ -54,7 +55,11 @@ export class V2ImplementationSelection {
   }
   async refresh() {
     const signed = await this.records.read("default");
-    if (!signed) return this.registry.current();
+    const preferred = this.artifact.bootstrapAbi === "bigbud.thread.bootstrap.v4" ? "v3" : "v1";
+    if (!signed) {
+      this.registry.select(preferred);
+      return this.registry.current();
+    }
     const selected = Schema.decodeUnknownSync(Selection)(signed.value, {
       onExcessProperty: "error",
     });
@@ -62,10 +67,17 @@ export class V2ImplementationSelection {
       throw new Error(
         "V2 stored implementation selection no longer matches the trusted bundled closure/ABI.",
       );
-    this.registry.select(selected.version);
+    // Selection is app-private and retained byte-for-byte. A breaking bootstrap needs its own handler.
+    this.registry.select(
+      selected.bootstrapAbi === this.artifact.bootstrapAbi ||
+        (preferred === "v1" && selected.bootstrapAbi === "bigbud.thread.bootstrap.v1")
+        ? selected.version
+        : preferred,
+    );
     return this.registry.current();
   }
   async select(version: V2ImplementationVersion, requested: V2PluginSetupAuthority) {
+    assertV2ImplementationCompatible(v2ThreadImplementation(version), this.artifact.compatibility);
     const authority = captureV2OperationAuthority(requested);
     const next = valueFor(version);
     authority.assertCurrent();

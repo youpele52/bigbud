@@ -19,6 +19,9 @@ import { ProviderThreadToolsSetup } from "./ProviderThreadToolsSetup";
 import { ProviderNativeStatus } from "./ProviderCard.nativeStatus";
 import { ClaudeSubagentCapsSettings } from "./ProviderCard.claudeSubagentCaps";
 import type { OpenCodeSettingsStatus } from "./ProvidersSettingsSection.opencode";
+import { CopilotRuntimeSettings } from "./CopilotRuntimeSettings";
+import type { CliProxyVersion } from "@bigbud/contracts/server/server.providers.ts";
+import { CliProxyVersionDetails } from "./ProviderCard.cliProxyVersion";
 
 export type ProviderCardData = {
   provider: ProviderKind;
@@ -41,6 +44,7 @@ export type ProviderCardData = {
   summary: { headline: string; detail: string | null };
   versionLabel: string | null;
   nativeStatus?: OpenCodeSettingsStatus | undefined;
+  cliProxyVersion?: CliProxyVersion | undefined;
 };
 
 type ProviderCardProps = {
@@ -56,6 +60,8 @@ type ProviderCardProps = {
   onToggleEnabled: (checked: boolean) => void;
   onActivateCliProxy?: (() => void) | undefined;
   isActivatingCliProxy?: boolean | undefined;
+  onRefreshProviders?: (() => void) | undefined;
+  isRefreshingProviders?: boolean | undefined;
   onBinaryPathChange: (value: string) => void;
   onConfigPathChange: (value: string) => void;
   onOpenSetupGuide: () => void;
@@ -88,6 +94,8 @@ export function ProviderCard({
   onToggleEnabled,
   onActivateCliProxy,
   isActivatingCliProxy = false,
+  onRefreshProviders,
+  isRefreshingProviders,
   onBinaryPathChange,
   onConfigPathChange,
   onOpenSetupGuide,
@@ -186,10 +194,23 @@ export function ProviderCard({
         </div>
       </div>
 
+      {card.provider === "cliProxy" && card.providerConfig.enabled ? (
+        <CliProxyVersionDetails
+          version={card.cliProxyVersion}
+          onCheckAgain={onRefreshProviders}
+          checking={isRefreshingProviders}
+        />
+      ) : null}
       <Collapsible open={isOpen} onOpenChange={onOpenChange}>
         <CollapsibleContent>
           <div className="space-y-0">
             {card.nativeStatus ? <ProviderNativeStatus status={card.nativeStatus} /> : null}
+            {card.provider === "copilot" ? (
+              <CopilotRuntimeSettings
+                customPath={card.binaryPathValue}
+                onClearPath={() => onBinaryPathChange("copilot")}
+              />
+            ) : null}
             {card.provider === "opencodeV2" && connectionMode === "isolated" ? (
               <div className="space-y-2 border-t border-border/60 px-4 py-3 text-sm sm:px-5">
                 <p className="text-warning">

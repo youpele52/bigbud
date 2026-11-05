@@ -1,5 +1,5 @@
 import { type MessageId } from "@bigbud/contracts";
-import { isLegacyOpencodeThread } from "@bigbud/shared/providerLifecycle";
+import { isReadOnlyProviderThread } from "@bigbud/shared/providerLifecycle";
 
 import { openSideChat } from "../../side-chat/sideChat.actions";
 import { SideChatHost } from "../../side-chat/SideChatHost";
@@ -22,7 +22,7 @@ export function ChatViewMainComposer(props: {
   if (!props.base.activeThread) {
     return null;
   }
-  if (props.base.isServerThread && isLegacyOpencodeThread(props.base.activeThread)) {
+  if (props.base.isServerThread && isReadOnlyProviderThread(props.base.activeThread)) {
     return null;
   }
 

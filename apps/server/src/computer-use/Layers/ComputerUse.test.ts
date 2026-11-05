@@ -6,7 +6,12 @@ import { describe, expect, it, vi } from "vitest";
 import { BrowserManager, type BrowserManagerShape } from "../../browser/Services/BrowserManager.ts";
 import { CuaDriver, type CuaDriverShape } from "../Services/CuaDriver.ts";
 import { ComputerUse } from "../Services/ComputerUse.ts";
-import { ComputerUseLive } from "./ComputerUse.ts";
+import { ComputerUseLive as ComputerUseLiveWithSettings } from "./ComputerUse.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
+
+const ComputerUseLive = ComputerUseLiveWithSettings.pipe(
+  Layer.provide(ServerSettingsService.layerTest({ computerUseDeliveryMode: "foreground" })),
+);
 import { Open, OpenError, type OpenShape } from "../../utils/open.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 

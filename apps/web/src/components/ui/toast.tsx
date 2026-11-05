@@ -1,32 +1,20 @@
 "use client";
 
+import "./notificationTypography.css";
 import { Toast } from "@base-ui/react/toast";
-import type { CSSProperties } from "react";
+import { createContext, useContext, type CSSProperties } from "react";
 import { useParams } from "@tanstack/react-router";
 import { ThreadId } from "@bigbud/contracts";
-import {
-  CircleAlertIcon,
-  CircleCheckIcon,
-  InfoIcon,
-  LoaderCircleIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
 import { ToastCloseButton, ToastTitleAndDescription } from "./toast.presentation";
 import { ToastVisibleAutoDismiss, usePruneThreadToastTimeouts } from "./toast.autoDismiss";
+import { useToastViewportFocus } from "./toast.focus";
 
 import { cn } from "~/lib/utils";
 import { buttonVariants } from "~/components/ui/button";
 import { buildVisibleToastLayout, shouldHideCollapsedToastContent } from "./toast.logic";
 import { toastManager, anchoredToastManager, type ThreadToastData } from "./toast.manager";
+import { statusSurfaceAccent } from "./statusSurface";
 export type { ThreadToastData } from "./toast.manager";
-
-const TOAST_ICONS = {
-  error: CircleAlertIcon,
-  info: InfoIcon,
-  loading: LoaderCircleIcon,
-  success: CircleCheckIcon,
-  warning: TriangleAlertIcon,
-} as const;
 
 type ToastPosition =
   | "top-left"
@@ -60,29 +48,52 @@ function useActiveThreadIdFromRoute(): ThreadId | null {
   });
 }
 
-function ToastProvider({ children, position = "top-right", ...props }: ToastProviderProps) {
+const SharedToastContext = createContext(false);
+
+function ToastProvider({
+  children,
+  position = "top-right",
+  limit = 3,
+  ...props
+}: ToastProviderProps) {
   return (
-    <Toast.Provider toastManager={toastManager} {...props}>
-      {children}
-      <Toasts position={position} />
-    </Toast.Provider>
+    <SharedToastContext value={true}>
+      <Toast.Provider toastManager={toastManager} limit={Infinity} {...props}>
+        {children}
+        <Toasts position={position} limit={limit} />
+      </Toast.Provider>
+    </SharedToastContext>
   );
 }
 
-function Toasts({ position = "top-right" }: { position: ToastPosition }) {
+function Toasts({ position, limit }: { position: ToastPosition; limit: number }) {
   const { toasts } = Toast.useToastManager<ThreadToastData>();
   const activeThreadId = useActiveThreadIdFromRoute();
   const isTop = position.startsWith("top");
-  const visibleToasts = toasts.filter((toast) =>
-    shouldRenderForActiveThread(toast.data, activeThreadId),
-  );
+  // Apply the display limit AFTER thread filtering. Hidden-thread notifications
+  // must not consume slots or make the only active-thread card inert.
+  let activeIndex = 0;
+  const visibleToasts = toasts
+    .filter((toast) => shouldRenderForActiveThread(toast.data, activeThreadId))
+    .map((toast) => {
+      const limited = toast.transitionStatus !== "ending" && activeIndex++ >= limit;
+      // Do not mutate Base UI's store objects; also normalize legacy anchors,
+      // since Base UI disables swiping whenever positionerProps.anchor exists.
+      return Object.assign({}, toast, { limited, positionerProps: undefined });
+    });
   const visibleToastLayout = buildVisibleToastLayout(visibleToasts);
+  const hasVisibleToasts = visibleToasts.some(
+    (toast) => !toast.limited && toast.transitionStatus !== "ending",
+  );
+  const viewportFocus = useToastViewportFocus(hasVisibleToasts);
 
   usePruneThreadToastTimeouts(toasts);
 
   return (
-    <Toast.Portal data-slot="toast-portal">
+    // Include Base UI's viewport-adjacent focus guards in keyboard exclusion.
+    <Toast.Portal data-slot="toast-portal" inert={!hasVisibleToasts}>
       <Toast.Viewport
+        {...viewportFocus}
         className={cn(
           "fixed z-50 mx-auto flex w-[calc(100%-var(--toast-inset)*2)] max-w-90 [--toast-header-offset:52px] [--toast-inset:--spacing(4)] sm:[--toast-inset:--spacing(8)]",
           // Vertical positioning
@@ -101,8 +112,18 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
           } as CSSProperties
         }
       >
+        {/* Hidden-thread cards still need a root to complete dismissal/removal.
+            Without this, close-all leaves unmounted ending entries in the store. */}
+        {toasts
+          .filter(
+            (toast) =>
+              toast.transitionStatus === "ending" &&
+              !shouldRenderForActiveThread(toast.data, activeThreadId),
+          )
+          .map((toast) => (
+            <Toast.Root key={toast.id} toast={toast} hidden className="hidden" />
+          ))}
         {visibleToastLayout.items.map(({ toast, visibleIndex, offsetY }) => {
-          const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
           const hideCollapsedContent = shouldHideCollapsedToastContent(
             visibleIndex,
             visibleToastLayout.items.length,
@@ -117,6 +138,9 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
             <Toast.Root
               className={cn(
                 "absolute z-[calc(9999-var(--toast-index))] h-(--toast-calc-height) w-full select-none rounded-lg border bg-popover not-dark:bg-clip-padding text-popover-foreground shadow-lg/5 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s] before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+                "min-h-(--toast-min-height) max-h-(--toast-max-height) [--toast-min-height:--spacing(12)] [--toast-max-height:--spacing(30)]",
+                // Severity remains visible even for notifications without an icon.
+                statusSurfaceAccent(toast.type),
                 // Base positioning using data-position
                 "data-[position*=right]:right-0 data-[position*=right]:left-auto",
                 "data-[position*=left]:right-auto data-[position*=left]:left-0",
@@ -131,13 +155,13 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
                 // Base UI exposes a shared front-most height for the collapsed stack.
                 // If that shared measurement is briefly stale, long content can render
                 // outside the card until hover expands the toast and swaps to its own height.
-                "[--toast-calc-height:max(var(--toast-frontmost-height,var(--toast-height)),var(--toast-height))] [--toast-gap:--spacing(3)] [--toast-peek:--spacing(3)] [--toast-scale:calc(max(0,1-(var(--toast-index)*.1)))] [--toast-shrink:calc(1-var(--toast-scale))]",
+                "[--toast-calc-height:max(var(--toast-frontmost-height,var(--toast-height)),var(--toast-height))] [--toast-gap:--spacing(3)] [--toast-peek:--spacing(3)]",
                 // Define offset-y variable
                 "data-[position*=top]:[--toast-calc-offset-y:calc(var(--toast-offset-y)+var(--toast-index)*var(--toast-gap)+var(--toast-swipe-movement-y))]",
                 "data-[position*=bottom]:[--toast-calc-offset-y:calc(var(--toast-offset-y)*-1+var(--toast-index)*var(--toast-gap)*-1+var(--toast-swipe-movement-y))]",
-                // Default state transform
-                "data-[position*=top]:transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)+(var(--toast-index)*var(--toast-peek))+(var(--toast-shrink)*var(--toast-calc-height))))_scale(var(--toast-scale))]",
-                "data-[position*=bottom]:transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--toast-peek))-(var(--toast-shrink)*var(--toast-calc-height))))_scale(var(--toast-scale))]",
+                // Keep collapsed cards full-width; only their vertical peek changes.
+                "data-[position*=top]:transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)+(var(--toast-index)*var(--toast-peek))))]",
+                "data-[position*=bottom]:transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--toast-peek))))]",
                 // Limited state
                 "data-limited:opacity-0",
                 // Expanded state
@@ -147,7 +171,7 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
                 "data-[position*=top]:data-starting-style:transform-[translateY(calc(-100%-var(--toast-inset)))]",
                 "data-[position*=bottom]:data-starting-style:transform-[translateY(calc(100%+var(--toast-inset)))]",
                 "data-[position*=top]:data-[position*=right]:data-starting-style:transform-[translateX(calc(100%+var(--toast-inset)))_translateY(var(--toast-calc-offset-y))]",
-                "data-ending-style:opacity-0",
+                "data-ending-style:pointer-events-none data-ending-style:opacity-0",
                 // Progress can finish before its entrance settles. A cancelled exit
                 // transition can strand Base UI's removal waiter, retaining stale status.
                 toast.type === "loading" && "data-ending-style:transition-none",
@@ -165,6 +189,7 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
                 "data-expanded:data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+100%+var(--toast-inset)))]",
               )}
               data-position={position}
+              data-slot="toast-popup"
               key={toast.id}
               style={
                 {
@@ -187,7 +212,7 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
               />
               <Toast.Content
                 className={cn(
-                  "pointer-events-auto overflow-hidden px-3.5 py-3 text-sm transition-opacity duration-250 data-expanded:opacity-100 relative flex flex-col gap-3",
+                  "pointer-events-auto min-h-[calc(var(--toast-min-height)-2px)] max-h-[calc(var(--toast-max-height)-2px)] overflow-hidden px-3.5 py-3 text-sm transition-opacity duration-250 data-expanded:opacity-100 relative flex flex-col gap-2",
                   hideCollapsedContent &&
                     "not-data-expanded:pointer-events-none not-data-expanded:opacity-0",
                 )}
@@ -197,13 +222,12 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
                   exposeToAccessibility={visibleIndex === 0}
                 />
                 <ToastTitleAndDescription
-                  Icon={Icon}
-                  icon={toast.data?.icon}
+                  loading={toast.type === "loading"}
                   description={showErrorCopyButton ? toast.description : null}
                   hideCopyButton={!showErrorCopyButton}
                 />
                 {actionProps && (
-                  <div className="flex items-center justify-end gap-2 pt-2">
+                  <div className="flex shrink-0 items-center justify-end gap-2">
                     <Toast.Action
                       className={cn(buttonVariants({ size: "xs" }), "shrink-0")}
                       data-slot="toast-action"
@@ -221,92 +245,12 @@ function Toasts({ position = "top-right" }: { position: ToastPosition }) {
   );
 }
 
+// Backward compatible wrapper, including standalone use. A nested wrapper must
+// not subscribe twice to the same manager or render a second overlapping stack.
 function AnchoredToastProvider({ children, ...props }: Toast.Provider.Props) {
-  return (
-    <Toast.Provider toastManager={anchoredToastManager} {...props}>
-      {children}
-      <AnchoredToasts />
-    </Toast.Provider>
-  );
-}
-
-function AnchoredToasts() {
-  const { toasts } = Toast.useToastManager<ThreadToastData>();
-  const activeThreadId = useActiveThreadIdFromRoute();
-
-  return (
-    <Toast.Portal data-slot="toast-portal-anchored">
-      <Toast.Viewport className="outline-none" data-slot="toast-viewport-anchored">
-        {toasts
-          .filter((toast) => shouldRenderForActiveThread(toast.data, activeThreadId))
-          .map((toast) => {
-            const Icon = toast.type ? TOAST_ICONS[toast.type as keyof typeof TOAST_ICONS] : null;
-            const tooltipStyle = toast.data?.tooltipStyle ?? false;
-            const positionerProps = toast.positionerProps;
-            const actionProps = toast.actionProps;
-            const showErrorCopyButton =
-              toast.type === "error" &&
-              typeof toast.description === "string" &&
-              !toast.data?.hideCopyButton;
-
-            if (!positionerProps?.anchor) {
-              return null;
-            }
-
-            return (
-              <Toast.Positioner
-                className="z-50 max-w-[min(--spacing(64),var(--available-width))]"
-                data-slot="toast-positioner"
-                key={toast.id}
-                sideOffset={positionerProps.sideOffset ?? 4}
-                toast={toast}
-              >
-                <Toast.Root
-                  className={cn(
-                    "relative text-balance border bg-popover not-dark:bg-clip-padding text-popover-foreground text-xs transition-[scale,opacity] before:pointer-events-none before:absolute before:inset-0 before:shadow-[0_1px_--theme(--color-black/4%)] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0 dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
-                    tooltipStyle
-                      ? "rounded-md shadow-md/5 before:rounded-[calc(var(--radius-md)-1px)]"
-                      : "rounded-lg shadow-lg/5 before:rounded-[calc(var(--radius-lg)-1px)]",
-                  )}
-                  data-slot="toast-popup"
-                  toast={toast}
-                >
-                  {tooltipStyle ? (
-                    <Toast.Content className="pointer-events-auto px-2 py-1">
-                      <Toast.Title data-slot="toast-title" />
-                    </Toast.Content>
-                  ) : (
-                    <Toast.Content
-                      className={cn(
-                        "pointer-events-auto overflow-hidden px-3.5 py-3 text-sm relative flex flex-col gap-3",
-                      )}
-                    >
-                      <ToastCloseButton className="absolute top-3 right-3" exposeToAccessibility />
-                      <ToastTitleAndDescription
-                        Icon={Icon}
-                        icon={toast.data?.icon}
-                        description={showErrorCopyButton ? toast.description : null}
-                        hideCopyButton={!showErrorCopyButton}
-                      />
-                      {actionProps && (
-                        <div className="flex items-center justify-end gap-2 pt-2">
-                          <Toast.Action
-                            className={cn(buttonVariants({ size: "xs" }), "shrink-0")}
-                            data-slot="toast-action"
-                          >
-                            {actionProps.children}
-                          </Toast.Action>
-                        </div>
-                      )}
-                    </Toast.Content>
-                  )}
-                </Toast.Root>
-              </Toast.Positioner>
-            );
-          })}
-      </Toast.Viewport>
-    </Toast.Portal>
-  );
+  const hasSharedProvider = useContext(SharedToastContext);
+  if (hasSharedProvider) return children;
+  return <ToastProvider {...props}>{children}</ToastProvider>;
 }
 
 export {

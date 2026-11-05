@@ -7,9 +7,13 @@ import {
   V2PluginPublication,
   v2PublicationFilename,
   v2PluginContentHash,
+  v2ManagedPluginEntry,
+  v2PublicationProtocol,
 } from "./PluginSetup.record.ts";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
 import { readV2NativePluginFile } from "./PluginSetup.fs.ts";
+import { assertV2RetainedInstallationIdentity } from "./PluginSetup.revalidation.retained.ts";
+import { readV2RetainedArtifact } from "./Orchestration.artifact.retained.ts";
 import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 
 /** Private bytes alone do not establish the native entry's source, uniqueness or exact managed predecessor. */
@@ -17,6 +21,7 @@ export async function assertV2NativeThreadSource(
   artifact: V2PluginSetupArtifact,
   client: OpencodeV2Client,
   directory: string,
+  root?: string,
 ) {
   const inventory = await v2Request(
     "required bootstrap source proof",
@@ -42,11 +47,25 @@ export async function assertV2NativeThreadSource(
     ].includes(source)
   )
     return;
+  const retained = await readV2ManagedThreadSource(artifact, source, root);
+  if (retained?.artifactDigest === artifact.artifactDigest) return;
+  throw new Error(
+    "V2 required bootstrap source lacks exact signed managed-entry proof; no history mutation.",
+  );
+}
+
+/** Resolve only a committed same-issuer publication with its original root/inode/content proof.
+ * Reading it grants no replacement authority and never consults or retires enrollment owners. */
+export async function readV2ManagedThreadSource(
+  preferred: V2PluginSetupArtifact,
+  source: string,
+  root?: string,
+) {
   const records = await V2ThreadRecords.open(
-    artifact.root,
+    preferred.root,
     "installations",
-    artifact.privateKey,
-    artifact.publicKey,
+    preferred.privateKey,
+    preferred.publicKey,
   );
   for (const signed of await records.entries()) {
     const record = Schema.decodeUnknownSync(V2PluginPublication)(signed.value, {
@@ -55,11 +74,21 @@ export async function assertV2NativeThreadSource(
     if (source !== path.join(record.root, "plugins", v2PublicationFilename(record))) continue;
     if (
       record.phase !== "committed" ||
-      record.next.issuer !== artifact.issuer ||
-      record.next.artifactDigest !== artifact.artifactDigest ||
+      (root !== undefined && record.root !== root) ||
+      record.next.issuer !== preferred.issuer ||
       !record.nextIdentity
     )
       break;
+    const artifact = await readV2RetainedArtifact(preferred, record.next.artifactDigest);
+    const entry = v2ManagedPluginEntry(artifact, record.root);
+    if (
+      record.protocol !== v2PublicationProtocol(artifact) ||
+      record.next.artifactDirectoryUri !== artifact.pluginUri ||
+      record.next.content !== entry.content ||
+      record.next.hash !== entry.hash
+    )
+      break;
+    await assertV2RetainedInstallationIdentity(record, artifact);
     const file = await readV2NativePluginFile(source, true, 16384);
     if (
       file &&
@@ -68,10 +97,8 @@ export async function assertV2NativeThreadSource(
       file.identity.dev === record.nextIdentity.dev &&
       file.identity.ino === record.nextIdentity.ino
     )
-      return;
+      return artifact;
     break;
   }
-  throw new Error(
-    "V2 required bootstrap source lacks exact signed managed-entry proof; no history mutation.",
-  );
+  return undefined;
 }

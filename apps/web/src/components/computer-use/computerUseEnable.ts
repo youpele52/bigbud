@@ -34,6 +34,7 @@ export function enableComputerUseInBackground(options: EnableComputerUseOptions)
 async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions): Promise<void> {
   const bridge = window.desktopBridge;
   let refreshPermissions = true;
+  let progressToastId: ReturnType<typeof toastManager.add> | null = null;
   const platform = typeof navigator === "undefined" ? "" : navigator.platform;
   if (!bridge) {
     return;
@@ -44,8 +45,8 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
     setDesktopComputerUseStatusQueryData(queryClient, runtimeStatus);
 
     if (needsComputerUseRuntimeRepair(runtimeStatus)) {
-      toastManager.add({
-        type: "info",
+      progressToastId = toastManager.add({
+        type: "loading",
         title: "Setting up Computer Use",
         description: "bigbud is preparing desktop automation in the background.",
       });
@@ -93,7 +94,7 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
     }
 
     toastManager.add({
-      type: "info",
+      type: "warning",
       title: getComputerUsePermissionsToastTitle(platform),
       description: permissions.message
         ? normalizeComputerUsePermissionMessage(permissions.message)
@@ -109,6 +110,9 @@ async function ensureComputerUseReady({ queryClient }: EnableComputerUseOptions)
           : "Computer Use could not be enabled.",
     });
   } finally {
+    if (progressToastId !== null) {
+      toastManager.close(progressToastId);
+    }
     void queryClient.invalidateQueries({ queryKey: desktopComputerUseQueryKeys.status() });
     if (refreshPermissions) {
       void queryClient.invalidateQueries({ queryKey: desktopComputerUseQueryKeys.permissions() });

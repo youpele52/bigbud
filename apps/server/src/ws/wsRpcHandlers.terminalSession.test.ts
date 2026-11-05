@@ -1,11 +1,16 @@
-import { Effect, Fiber, Stream } from "effect";
+import { Deferred, Effect, Fiber, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { type TerminalEvent, WS_METHODS } from "@bigbud/contracts";
-import type { TerminalSessionStreamItem } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type {
+  TerminalEventsStreamItem,
+  TerminalSessionStreamItem,
+} from "@bigbud/contracts/workspace/terminal.stream.ts";
 
 import { TERMINAL_OUTPUT_DELIVERY_LIMITS } from "../terminal/TerminalOutputDelivery";
 import type { WsRpcContext } from "./wsRpcContext";
+import type { TerminalSubscribeOptions } from "../terminal/Services/Manager";
 import { makeWsRpcTerminalSessionHandlers } from "./wsRpcHandlers.terminalSession";
+import { TERMINAL_EVENTS_OUTPUT_BACKLOG_LIMITS } from "./wsRpcHandlers.terminalEvents";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 const output = (terminalId: string, data: string): TerminalEvent => ({
@@ -88,6 +93,106 @@ describe("terminal session stream handlers", () => {
     await tick();
     expect(subscribeOptions).toEqual([{ outputScope: "legacyDetection" }]);
     await Effect.runPromise(Fiber.interrupt(fiber));
+  });
+
+  it("opts into inventory control items through the same bounded global queue", async () => {
+    const inventory = {
+      type: "inventory" as const,
+      createdAt: "2026-10-29T00:00:00Z",
+      sessions: [],
+    };
+    const unsubscribe = vi.fn();
+    const subscribe = vi.fn((_listener: unknown, options?: TerminalSubscribeOptions) =>
+      Effect.gen(function* () {
+        yield* options!.onInventory!(inventory);
+        return unsubscribe;
+      }),
+    );
+    const handlers = makeWsRpcTerminalSessionHandlers({
+      terminalManager: { subscribe },
+    } as unknown as WsRpcContext);
+    const items = await Effect.runPromise(
+      Stream.runCollect(
+        Stream.take(
+          handlers[WS_METHODS.subscribeTerminalEvents]({
+            outputScope: "legacyDetection",
+            includeInventory: true,
+          }),
+          1,
+        ),
+      ),
+    );
+    expect([...items]).toEqual([inventory]);
+    expect(subscribe).toHaveBeenCalledWith(expect.any(Function), {
+      outputScope: "legacyDetection",
+      onInventory: expect.any(Function),
+    });
+    expect(unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("ends a stalled global subscriber at the hard cap without affecting a fast subscriber", async () => {
+    const { handlers, listeners, publish } = fixture();
+    const gate = Deferred.makeUnsafe<void>();
+    const slowEvents: TerminalEventsStreamItem[] = [];
+    const fastEvents: TerminalEventsStreamItem[] = [];
+    const stream = () =>
+      handlers[WS_METHODS.subscribeTerminalEvents]({ outputScope: "legacyDetection" });
+    const slow = Effect.runFork(
+      Stream.runForEach(stream(), (event) =>
+        Effect.gen(function* () {
+          slowEvents.push(event);
+          yield* Deferred.await(gate);
+        }),
+      ),
+    );
+    const fast = Effect.runFork(
+      Stream.runForEach(stream(), (event) =>
+        Effect.sync(() => {
+          fastEvents.push(event);
+        }),
+      ),
+    );
+    const event: TerminalEvent = {
+      type: "exited",
+      threadId: "thread",
+      terminalId: "a",
+      createdAt: "2026-10-29T00:00:00Z",
+      exitCode: 0,
+      exitSignal: null,
+    };
+    let replacement: ReturnType<typeof Effect.runFork> | undefined;
+    try {
+      await tick();
+      await publish(event);
+      await tick();
+      expect(slowEvents).toHaveLength(1);
+      const count = TERMINAL_EVENTS_OUTPUT_BACKLOG_LIMITS.totalItems + 1;
+      for (let index = 0; index < count; index++) {
+        await publish(event);
+        if (index % 64 === 0) await tick();
+      }
+      await Effect.runPromise(Deferred.succeed(gate, undefined));
+      await Effect.runPromise(Fiber.join(slow));
+      await tick();
+      expect(slowEvents).toHaveLength(1);
+      expect(fastEvents).toHaveLength(count + 1);
+      expect(listeners.size).toBe(1);
+      replacement = Effect.runFork(
+        Stream.runForEach(stream(), (item) =>
+          Effect.sync(() => {
+            slowEvents.push(item);
+          }),
+        ),
+      );
+      await tick();
+      await publish(event);
+      await tick();
+      expect(slowEvents).toHaveLength(2);
+    } finally {
+      if (replacement) await Effect.runPromise(Fiber.interrupt(replacement));
+      await Effect.runPromise(Fiber.interrupt(slow));
+      await Effect.runPromise(Fiber.interrupt(fast));
+    }
   });
 
   it("delegates search to the manager and returns no hits when it cannot search", async () => {

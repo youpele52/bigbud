@@ -37,7 +37,7 @@ function makeSession(activeTurnId?: TurnId): ActiveOpencodeSession {
   };
 }
 
-function lifecycleContract(provider: "opencode" | "kilocode") {
+function lifecycleContract(provider: "opencode") {
   it(`${provider}: canonical listSessions keeps an incomplete stream running and becomes idle on completion`, async () => {
     const session = makeSession(TURN_ID);
     const sessions = new Map([[THREAD_ID, session]]);
@@ -64,5 +64,4 @@ function lifecycleContract(provider: "opencode" | "kilocode") {
 
 describe("OpenCode-derived adapter lifecycle contract", () => {
   lifecycleContract("opencode");
-  lifecycleContract("kilocode");
 });

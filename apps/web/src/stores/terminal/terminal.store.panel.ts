@@ -90,6 +90,11 @@ export function applyTerminalEventToState(
   state: TerminalEventStateSlice,
   event: TerminalEvent,
 ): TerminalEventStateSlice {
+  if (
+    (event.type === "started" || event.type === "restarted") &&
+    !recordTerminalLaunch(event.snapshot)
+  )
+    return state;
   const threadId = ThreadId.makeUnsafe(event.threadId);
   let nextTerminalStateByThreadId = state.terminalStateByThreadId;
   let nextPanelTerminalStateByThreadId = state.panelTerminalStateByThreadId;
@@ -120,7 +125,6 @@ export function applyTerminalEventToState(
   };
 
   if (event.type === "started" || event.type === "restarted") {
-    recordTerminalLaunch(event.snapshot);
     updateTargetTerminalState((current) => {
       let nextState = current;
       if (!current.terminalIds.includes(event.terminalId)) {

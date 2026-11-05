@@ -221,6 +221,7 @@ export function makeOwnedRemoteAgentPty(
     );
     process.onExit(removeRestartListener);
     return {
+      pidDomain: "remote",
       recovered: !created,
       prepareRestart: () => restartBarrier.prepareRestart(),
       detach: () => process.detach(),

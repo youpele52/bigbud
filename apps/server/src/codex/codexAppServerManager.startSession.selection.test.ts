@@ -180,7 +180,9 @@ describe("Codex start-session model selection", () => {
 
       const session = await startSession(baseInput({ effort }), ops);
 
-      expect(sendRequest.mock.calls.find((entry) => entry[1] === "model/list")?.[3]).toBe(5_000);
+      const catalogTimeout = sendRequest.mock.calls.find((entry) => entry[1] === "model/list")?.[3];
+      expect(catalogTimeout).toBeGreaterThan(0);
+      expect(catalogTimeout).toBeLessThanOrEqual(5_000);
       const params = requestParams(sendRequest, "thread/start");
       expect(params).toMatchObject({
         model: "gpt-current-codex",

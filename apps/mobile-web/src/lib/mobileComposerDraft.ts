@@ -12,6 +12,7 @@ import {
   TrimmedNonEmptyString,
 } from "@bigbud/contracts";
 import { Schema } from "effect";
+import { OrchestrationCommandRejectionReason } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 
 import type { PendingUserInputDraftAnswer } from "~/logic/user-input";
 
@@ -51,7 +52,7 @@ export interface MobileSubmittedCommand {
   readonly submittedAt: string;
   readonly deadlineAt: number;
   readonly status: MobileCommandDeliveryStatus;
-  readonly rejectionReason?: "thread_already_exists" | "other";
+  readonly rejectionReason?: OrchestrationCommandRejectionReason;
 }
 
 export interface MobileComposerDraft {
@@ -91,7 +92,7 @@ const MobileSubmittedCommandSchema = Schema.Struct({
   submittedAt: IsoDateTime,
   deadlineAt: Schema.Number,
   status: Schema.Literals(["pending", "accepted", "rejected", "uncertain", "reconciling"]),
-  rejectionReason: Schema.optional(Schema.Literals(["thread_already_exists", "other"])),
+  rejectionReason: Schema.optional(OrchestrationCommandRejectionReason),
 });
 
 const MobileComposerDraftSchema = Schema.Struct({

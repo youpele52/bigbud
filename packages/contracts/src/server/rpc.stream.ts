@@ -29,8 +29,10 @@ import {
   OrchestrationDeliveryStreamItem,
   OrchestrationDeliverySubscriptionInput,
 } from "../orchestration/orchestration.delivery";
-import { TerminalEvent } from "../workspace/terminal";
-import { TerminalEventsSubscriptionInput } from "../workspace/terminal.stream";
+import {
+  TerminalEventsStreamItem,
+  TerminalEventsSubscriptionInput,
+} from "../workspace/terminal.stream";
 import { ServerConfigStreamEvent, ServerLifecycleStreamEvent } from "./server";
 import { ServerSettingsError } from "../core/settings";
 import { WS_METHODS } from "../constants/websocket.constant";
@@ -194,7 +196,7 @@ export const WsSubscribeThinkingActivityDeltasRpc = Rpc.make(
 
 export const WsSubscribeTerminalEventsRpc = Rpc.make(WS_METHODS.subscribeTerminalEvents, {
   payload: TerminalEventsSubscriptionInput,
-  success: TerminalEvent,
+  success: TerminalEventsStreamItem,
   stream: true,
 });
 

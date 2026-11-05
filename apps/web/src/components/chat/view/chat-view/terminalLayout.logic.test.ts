@@ -51,9 +51,9 @@ describe("terminal layout", () => {
 
   it("offers explicit layouts in display order", () => {
     expect(Object.entries(TERMINAL_LAYOUT_LABELS)).toEqual([
-      ["chat-only", "Chat only"],
-      ["split", "Chat + terminal"],
-      ["terminal-only", "Terminal only"],
+      ["chat-only", "Chat"],
+      ["split", "Chat x terminal"],
+      ["terminal-only", "Terminal"],
     ]);
   });
 });

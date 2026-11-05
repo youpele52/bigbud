@@ -40,6 +40,25 @@ describe("buildVisibleToastLayout", () => {
     );
   });
 
+  it("does not reserve height or indices for ending and limited cards", () => {
+    const layout = buildVisibleToastLayout([
+      { id: "ending", height: 70, transitionStatus: "ending" },
+      { id: "front", height: 48 },
+      { id: "limited", height: 100, limited: true },
+      { id: "behind", height: 32 },
+    ]);
+    assert.equal(layout.frontmostHeight, 48);
+    assert.deepEqual(
+      layout.items.map(({ visibleIndex, offsetY }) => [visibleIndex, offsetY]),
+      [
+        [0, 0],
+        [0, 0],
+        [1, 48],
+        [1, 48],
+      ],
+    );
+  });
+
   it("treats missing heights as zero", () => {
     const layout = buildVisibleToastLayout([
       { id: "a" },

@@ -1,9 +1,7 @@
-import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 
 import {
   ApprovalRequestId,
-  EventId,
   ThreadId,
   TurnId,
   type ProviderApprovalDecision,
@@ -28,6 +26,7 @@ import {
   type CodexAppServerSteerTurnInput,
   type CodexSessionContext,
   type CodexThreadSnapshot,
+  type CodexWriteOptions,
   type JsonRpcNotification,
   type JsonRpcRequest,
   type JsonRpcResponse,
@@ -43,13 +42,32 @@ import {
   type TurnOps,
   interruptTurn,
   readThread,
-  respondToRequest,
-  respondToUserInput,
   rollbackThread,
   sendTurn,
   steerTurn,
 } from "./codexAppServerManager.turn";
+import { respondToRequest, respondToUserInput } from "./codexAppServerManager.interactions.ts";
 import { interruptChildTurns } from "./codexAppServerManager.turn.children";
+import { CodexSessionUnavailableError } from "./codexAppServerManager.errors.ts";
+import {
+  prepareCodexRewind,
+  revertCodexThread,
+  verifyCodexRewind,
+} from "./codexAppServerManager.rewind.ts";
+import type {
+  ProviderExactRewindInput,
+  ProviderPreparedRewind,
+} from "../provider/Services/ProviderRewind.ts";
+import { confirmCodexInspectedTurn, inspectCodexTurn } from "./codexAppServerManager.inspection.ts";
+import {
+  closeCodexTransport,
+  sendCodexRequest,
+  writeCodexMessage,
+} from "./codexAppServerManager.transport.ts";
+import { codexProviderControls } from "./codexAppServerManager.controls.ts";
+import { codexSessionEvent } from "./codexAppServerManager.events.ts";
+import { confirmCodexCompaction } from "./codexAppServerManager.controls.state.ts";
+import type { CodexCompactionConfirmation } from "../provider/Services/ProviderCompaction.ts";
 
 export { buildCodexInitializeParams } from "../provider/codexAppServer";
 export { readCodexAccountSnapshot, resolveCodexModelForAccount } from "../provider/codexAccount";
@@ -133,13 +151,69 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     return rollbackThread(context, numTurns, this.turnOps());
   }
 
+  async prepareRewind(input: ProviderExactRewindInput) {
+    return prepareCodexRewind(this.requireSession(input.threadId), input, this.turnOps());
+  }
+
+  async providerControls(
+    input: import("@bigbud/contracts/server/providerControls").ProviderControlsInput,
+  ) {
+    const context = this.requireSession(input.threadId);
+    return codexProviderControls(
+      context,
+      input,
+      this.turnOps(),
+      () => this.sessions.get(input.threadId) === context,
+    );
+  }
+
+  confirmCompaction(input: CodexCompactionConfirmation, persisted: boolean) {
+    return confirmCodexCompaction(this.sessions.get(input.threadId), input, persisted);
+  }
+
+  async inspectActiveTurn(threadId: ThreadId, turnId: TurnId) {
+    const context = this.sessions.get(threadId);
+    if (!context) return { status: "unavailable" as const, observedAt: new Date().toISOString() };
+    const result = await inspectCodexTurn(context, turnId, this.turnOps());
+    return this.sessions.get(threadId) === context
+      ? result
+      : { status: "unavailable" as const, observedAt: new Date().toISOString() };
+  }
+
+  confirmInspectedTurn(
+    threadId: ThreadId,
+    turnId: TurnId,
+    epoch: number,
+    status: "completed" | "failed",
+    publication?: import("@bigbud/contracts").ProviderRuntimeEvent,
+  ) {
+    const context = this.sessions.get(threadId);
+    return confirmCodexInspectedTurn(
+      context,
+      turnId,
+      epoch,
+      status,
+      this.turnOps(),
+      publication,
+      () => this.sessions.get(threadId) === context,
+    );
+  }
+
+  async revertThread(input: ProviderPreparedRewind) {
+    return revertCodexThread(this.requireSession(input.threadId), input, this.turnOps());
+  }
+
+  async verifyRewind(input: ProviderPreparedRewind) {
+    return verifyCodexRewind(this.requireSession(input.threadId), input, this.turnOps());
+  }
+
   async respondToRequest(
     threadId: ThreadId,
     requestId: ApprovalRequestId,
     decision: ProviderApprovalDecision,
   ): Promise<void> {
     const context = this.requireSession(threadId);
-    respondToRequest(context, requestId, decision, this.turnOps());
+    await respondToRequest(context, requestId, decision, this.turnOps());
   }
 
   async respondToUserInput(
@@ -148,7 +222,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     answers: ProviderUserInputAnswers,
   ): Promise<void> {
     const context = this.requireSession(threadId);
-    respondToUserInput(context, requestId, answers, this.turnOps());
+    await respondToUserInput(context, requestId, answers, this.turnOps());
   }
 
   stopSession(threadId: ThreadId): void {
@@ -163,11 +237,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
       new Error("Codex session stopped while waiting for MCP readiness."),
     );
 
-    for (const pending of context.pending.values()) {
-      clearTimeout(pending.timeout);
-      pending.reject(new Error("Session stopped before request completed."));
-    }
-    context.pending.clear();
+    closeCodexTransport(context, new Error("Session stopped before request completed."));
     context.pendingApprovals.clear();
     context.pendingUserInputs.clear();
 
@@ -206,9 +276,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
 
   private turnOps(): TurnOps {
     return {
-      sendRequest: (ctx, method, params, timeoutMs) =>
-        this.sendRequest(ctx, method, params, timeoutMs),
-      writeMessage: (ctx, msg) => this.writeMessage(ctx, msg),
+      sendRequest: (ctx, method, params, timeoutMs, shouldDispatch) =>
+        shouldDispatch === undefined
+          ? this.sendRequest(ctx, method, params, timeoutMs)
+          : this.sendRequest(ctx, method, params, timeoutMs, shouldDispatch),
+      writeMessage: (ctx, msg, options) => this.writeMessage(ctx, msg, options),
       updateSession: (ctx, updates) => this.updateSession(ctx, updates),
       emitEvent: (event) => this.emitEvent(event),
     };
@@ -217,11 +289,11 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   private requireSession(threadId: ThreadId): CodexSessionContext {
     const context = this.sessions.get(threadId);
     if (!context) {
-      throw new Error(`Unknown session for thread: ${threadId}`);
+      throw new CodexSessionUnavailableError("missing");
     }
 
     if (context.session.status === "closed") {
-      throw new Error(`Session is closed for thread: ${threadId}`);
+      throw new CodexSessionUnavailableError("closed", context.session.sessionEpoch);
     }
 
     return context;
@@ -240,6 +312,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
   }
 
   private handleStdoutLine(context: CodexSessionContext, line: string): void {
+    if (context.stopping || this.sessions.get(context.session.threadId) !== context) return;
     handleStdoutLine(context, line, {
       handleServerRequest: (ctx, req) => this.handleServerRequest(ctx, req),
       handleServerNotification: (ctx, notif) => this.handleServerNotification(ctx, notif),
@@ -262,6 +335,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     handleServerRequest(context, request, {
       emitEvent: (event) => this.emitEvent(event),
       writeMessage: (ctx, message) => this.writeMessage(ctx, message),
+      isCurrent: () => this.sessions.get(context.session.threadId) === context,
     });
   }
 
@@ -274,65 +348,25 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     method: string,
     params: unknown,
     timeoutMs = 20_000,
+    shouldDispatch?: () => boolean,
   ): Promise<TResponse> {
-    const id = context.nextRequestId;
-    context.nextRequestId += 1;
-
-    const result = await new Promise<unknown>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        context.pending.delete(String(id));
-        reject(new Error(`Timed out waiting for ${method}.`));
-      }, timeoutMs);
-
-      context.pending.set(String(id), {
-        method,
-        timeout,
-        resolve,
-        reject,
-      });
-      this.writeMessage(context, {
-        method,
-        id,
-        params,
-      });
-    });
-
-    return result as TResponse;
+    return sendCodexRequest<TResponse>(context, method, params, timeoutMs, shouldDispatch);
   }
 
-  private writeMessage(context: CodexSessionContext, message: unknown): void {
-    const encoded = JSON.stringify(message);
-    if (!context.child.stdin.writable) {
-      throw new Error("Cannot write to codex app-server stdin.");
-    }
-
-    context.child.stdin.write(`${encoded}\n`);
+  private writeMessage(
+    context: CodexSessionContext,
+    message: unknown,
+    options?: CodexWriteOptions,
+  ): Promise<void> {
+    return writeCodexMessage(context, message, options);
   }
 
   private emitLifecycleEvent(context: CodexSessionContext, method: string, message: string): void {
-    this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
-      kind: "session",
-      provider: "codex",
-      threadId: context.session.threadId,
-      sessionEpoch: context.session.sessionEpoch!,
-      createdAt: new Date().toISOString(),
-      method,
-      message,
-    });
+    this.emitEvent(codexSessionEvent(context, "session", method, message));
   }
 
   private emitErrorEvent(context: CodexSessionContext, method: string, message: string): void {
-    this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
-      kind: "error",
-      provider: "codex",
-      threadId: context.session.threadId,
-      sessionEpoch: context.session.sessionEpoch!,
-      createdAt: new Date().toISOString(),
-      method,
-      message,
-    });
+    this.emitEvent(codexSessionEvent(context, "error", method, message));
   }
 
   private emitNotificationEvent(
@@ -340,16 +374,7 @@ export class CodexAppServerManager extends EventEmitter<CodexAppServerManagerEve
     method: string,
     message: string,
   ): void {
-    this.emitEvent({
-      id: EventId.makeUnsafe(randomUUID()),
-      kind: "notification",
-      provider: "codex",
-      threadId: context.session.threadId,
-      sessionEpoch: context.session.sessionEpoch!,
-      createdAt: new Date().toISOString(),
-      method,
-      message,
-    });
+    this.emitEvent(codexSessionEvent(context, "notification", method, message));
   }
 
   private emitEvent(event: ProviderEvent): void {

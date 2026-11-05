@@ -15,7 +15,7 @@ export const resolveThreadToolParticipants = Effect.fn("resolveThreadToolPartici
     readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
-    readonly operation: "send" | "status" | "rename";
+    readonly operation: "send" | "status" | "rename" | "organize";
   }) {
     const callerThread = yield* ensureOrchestrationThreadState(
       input.orchestrationEngine,

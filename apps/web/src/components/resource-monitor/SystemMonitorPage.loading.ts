@@ -4,9 +4,9 @@ import {
   useResourceMonitorStore,
 } from "~/stores/resource-monitor/resourceMonitor.store";
 import { currentAppResources } from "./BigbudResourceView.logic";
-import type { MonitorScope } from "./MonitorScopeToggle";
+type LocalMonitorScope = "system" | "bigbud";
 
-function hasPageData(state: MonitorState, scope: MonitorScope): boolean {
+function hasPageData(state: MonitorState, scope: LocalMonitorScope): boolean {
   const { snapshot } = state;
   if (scope === "bigbud") {
     const current =
@@ -27,7 +27,7 @@ function hasPageData(state: MonitorState, scope: MonitorScope): boolean {
 }
 
 /** Gate only initial collection; later gaps keep diagnostics visible without exposing stale totals. */
-export function useSystemMonitorPageLoading(scope: MonitorScope): boolean {
+export function useSystemMonitorPageLoading(scope: LocalMonitorScope): boolean {
   const hasData = useResourceMonitorStore((state) => hasPageData(state, scope));
   const failed = useResourceMonitorStore(
     (state) =>

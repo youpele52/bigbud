@@ -42,7 +42,7 @@ it("N accepts exact L cleanup only; legacy tombstones cannot revoke the same-non
         storageIdentity: owner.storageIdentity,
         directory: owner.directory,
         runtimeTargetId: owner.runtimeTargetId,
-        workspaceTargetId: owner.workspaceTargetId,
+        workspaceTargetId: "local",
         sessionEpoch: owner.sessionEpoch,
         transportGeneration: owner.transportGeneration,
         consentRevision: owner.consentRevision,
@@ -102,7 +102,7 @@ it("N accepts exact L cleanup only; legacy tombstones cannot revoke the same-non
         ),
       );
       expect(await host.call("inspect", app.envelope("inspect"))).toEqual(enrolled);
-      expect(Object.keys((await host.request(owner.nativeSessionId)).tools)).toHaveLength(5);
+      expect(Object.keys((await host.request(owner.nativeSessionId)).tools)).toHaveLength(6);
       expect(app.state.invocations).toHaveLength(0);
       await host.call("detach", app.envelope("detach"));
       await expect(host.request(owner.nativeSessionId)).rejects.toThrow();

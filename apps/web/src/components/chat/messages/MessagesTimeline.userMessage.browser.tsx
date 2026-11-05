@@ -194,27 +194,34 @@ it("does not open an arbitrary provider source when no trustworthy match exists"
   expect(mocks.openFile).not.toHaveBeenCalled();
 });
 
-it("keeps plugin mentions separate from skill source navigation", async () => {
-  mocks.skills = [
-    {
-      id: "plugin-skill",
-      name: "example",
-      provider: "opencode",
-      source: "plugin",
-      sourcePath: "/plugin/SKILL.md",
-    },
-  ];
-  await render(
-    <UserMessageBody
-      text="@plugin::example"
-      cwd="/project"
-      terminalContexts={[]}
-      preferredProvider="opencode"
-    />,
-  );
-  await expect.element(page.getByText("example", { exact: true })).toBeVisible();
-  expect(mocks.openFile).not.toHaveBeenCalled();
-});
+it.each(["@plugin::example", "@plugin:example"])(
+  "keeps retired %s readable and inert",
+  async (text) => {
+    mocks.skills = [
+      {
+        id: "user-skill",
+        name: "example",
+        provider: "opencode",
+        source: "user",
+        sourcePath: "/skills/example/SKILL.md",
+      },
+    ];
+    await render(
+      <UserMessageBody
+        text={text}
+        cwd="/project"
+        terminalContexts={[]}
+        preferredProvider="opencode"
+      />,
+    );
+    await expect.element(page.getByText("example", { exact: true })).toBeVisible();
+    const chip = page.getByText("example", { exact: true });
+    await chip.click();
+    expect(chip.element().parentElement?.title).toContain("Retired plugin reference");
+    expect(window.location.pathname).not.toContain("/plugins");
+    expect(mocks.openFile).not.toHaveBeenCalled();
+  },
+);
 
 it("opens the babysitter chip in Additional instructions using verified native OpenCode provenance", async () => {
   const sourcePath = "/home/user/.config/opencode/agents/babysitter.md";

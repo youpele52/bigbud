@@ -3,8 +3,8 @@ import { remoteAgentFailureDetail, remoteAgentFailureMessage } from "./remoteAge
 
 describe("remote agent setup failure details", () => {
   it("retains the actionable failure and explains manual transport switching", () => {
-    expect(remoteAgentFailureMessage(new Error("Supervisor handshake timed out"))).toContain(
-      "Supervisor handshake timed out. You can switch Connection method to Direct SSH",
+    expect(remoteAgentFailureMessage(new Error("Supervisor handshake timed out"))).toBe(
+      "Supervisor handshake timed out. You can switch Connection method to Direct SSH in the remote workspace settings.",
     );
   });
   it("does not expose remote command text or output", () => {

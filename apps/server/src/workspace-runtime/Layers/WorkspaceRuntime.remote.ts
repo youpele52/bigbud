@@ -8,7 +8,6 @@ import type {
   ProjectReadFilePreviewInput,
   ProjectSearchEntriesInput,
   ProjectSearchFileContentsInput,
-  ProjectWriteFileInput,
 } from "@bigbud/contracts/workspace/project.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { WorkspaceEntriesError } from "../../workspace/Services/WorkspaceEntries.ts";
@@ -28,6 +27,7 @@ import { RemoteWorkspaceRuntime as RemoteWorkspaceRuntimeService } from "../Serv
 import { makeRemoteWorkspaceWatch } from "../../remote-agent/remoteAgentWorkspaceWatch.ts";
 import { readRemoteFile } from "./WorkspaceRuntime.remote.read.ts";
 import { withRemoteReadReconnect } from "./WorkspaceRuntime.remote.reconnect.ts";
+import { makeRemoteWorkspaceWriteFile } from "./WorkspaceRuntime.remote.write.ts";
 import { remoteAgentRequestDigest } from "../../remote-agent/remoteAgentRequestDigest.ts";
 
 export interface RemoteAgentClientResolver {
@@ -42,7 +42,6 @@ export interface RemoteWorkspaceRuntimeShape {
 }
 
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024;
-const MAX_REMOTE_WRITE_BYTES = 512 * 1024;
 
 function stableId(prefix: string, value: unknown): string {
   return `${prefix}-${createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 32)}`;
@@ -81,13 +80,6 @@ function projectEntry(entry: {
     kind: entry.isDirectory ? "directory" : entry.isFile ? "file" : "file",
     ...(parentPath ? { parentPath } : {}),
   };
-}
-
-function clientFor(
-  resolver: RemoteAgentClientResolver,
-  executionTargetId: string | undefined,
-): Promise<RemoteAgentWorkspaceClient> {
-  return resolver.resolve(remoteTarget(executionTargetId));
 }
 
 function workspaceError(input: {
@@ -191,53 +183,11 @@ export function makeRemoteWorkspaceRuntime(
       contents,
       sizeBytes: response.totalBytes,
       truncated: false,
+      sha256: createHash("sha256").update(response.bytes).digest("hex"),
     };
   });
 
-  const writeFile: WorkspaceFilesShape["writeFile"] = Effect.fn("RemoteWorkspaceFiles.writeFile")(
-    function* (input: ProjectWriteFileInput) {
-      const target = remoteTarget(input.executionTargetId);
-      const bytes = new TextEncoder().encode(input.contents);
-      if (input.expectedSha256 !== undefined && !/^[a-f0-9]{64}$/.test(input.expectedSha256)) {
-        return yield* new WorkspaceFileSystemError({
-          cwd: input.cwd,
-          relativePath: input.relativePath,
-          operation: "remoteWorkspace.writeFile",
-          detail: "expectedSha256 must be a lowercase SHA-256 digest.",
-        });
-      }
-      if (bytes.byteLength > MAX_REMOTE_WRITE_BYTES) {
-        return yield* new WorkspaceFileSystemError({
-          cwd: input.cwd,
-          relativePath: input.relativePath,
-          operation: "remoteWorkspace.writeFile",
-          detail: "Remote file writes are limited to 512 KiB.",
-        });
-      }
-      yield* Effect.tryPromise({
-        try: async () => {
-          const client = await clientFor(resolver, target);
-          const handle = await open(client, target, input.cwd);
-          await client.writeFile({
-            workspaceHandle: handle,
-            path: input.relativePath,
-            bytes,
-            operationId: input.operationId ?? operationId("write"),
-            requestDigest: remoteAgentRequestDigest(input),
-            ...(input.expectedSha256 !== undefined ? { expectedSha256: input.expectedSha256 } : {}),
-          });
-        },
-        catch: (cause) =>
-          workspaceError({
-            cwd: input.cwd,
-            relativePath: input.relativePath,
-            operation: "remoteWorkspace.writeFile",
-            cause,
-          }),
-      });
-      return { relativePath: input.relativePath };
-    },
-  );
+  const writeFile = makeRemoteWorkspaceWriteFile({ resolve: resolver.resolve, remoteTarget, open });
 
   const readFileRange: WorkspaceFilesShape["readFileRange"] = Effect.fn(
     "RemoteWorkspaceFiles.readFileRange",

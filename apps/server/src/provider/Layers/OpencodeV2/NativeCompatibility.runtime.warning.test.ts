@@ -63,13 +63,13 @@ it("derives the system/global profile from observed source shape, never a versio
   await withV2RuntimeWarningFixture("2.9.123", async (f) => {
     const { systemRoot, paths } = v2ConfigSourcePaths();
     f.config.mockResolvedValue([
-      { type: "directory", path: systemRoot },
+      { type: "directory", path: f.root },
       {
         type: "document",
         path: paths.join(systemRoot, "opencode.json"),
         info: {},
       },
-      { type: "directory", path: f.root },
+      { type: "directory", path: systemRoot },
     ]);
     expect(
       (await verifyV2NativeEligibility(f.artifact, f.client, f.directory, f.root)).semanticProfile,

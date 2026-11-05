@@ -10,16 +10,11 @@ import { useCallback, useEffect, useState } from "react";
 import { useUpdateSettings } from "../../hooks/useSettings";
 import { Input } from "../ui/input";
 import { SettingResetButton, SettingsRow } from "./settingsLayout";
-
-const MS_PER_MINUTE = 60_000;
-
-function toMinutes(ms: number): number {
-  return Math.round(ms / MS_PER_MINUTE);
-}
-
-function clampMinutes(value: number, minMs: number, maxMs: number): number {
-  return Math.min(toMinutes(maxMs), Math.max(toMinutes(minMs), Math.round(value)));
-}
+import {
+  formatLimitBound,
+  formatLimitMinutes,
+  resolveLimitCommit,
+} from "./ComputerUseAccessSettingsSection.limits.logic";
 
 function LimitSettingsRow({
   title,
@@ -40,31 +35,27 @@ function LimitSettingsRow({
   maxMs: number;
   onCommit: (valueMs: number) => void;
 }) {
-  const [draft, setDraft] = useState(String(toMinutes(valueMs)));
+  const [draft, setDraft] = useState(formatLimitMinutes(valueMs));
 
   useEffect(() => {
-    setDraft(String(toMinutes(valueMs)));
+    setDraft(formatLimitMinutes(valueMs));
   }, [valueMs]);
 
   const commit = useCallback(() => {
-    const parsed = Number(draft);
-    if (!Number.isFinite(parsed)) {
-      setDraft(String(toMinutes(valueMs)));
+    const next = resolveLimitCommit({ draft, valueMs, minMs, maxMs });
+    if (next.kind === "commit") {
+      setDraft(formatLimitMinutes(next.valueMs));
+      onCommit(next.valueMs);
       return;
     }
-    const nextMinutes = clampMinutes(parsed, minMs, maxMs);
-    const nextValueMs = nextMinutes * MS_PER_MINUTE;
-    setDraft(String(nextMinutes));
-    if (nextValueMs !== valueMs) {
-      onCommit(nextValueMs);
-    }
+    setDraft(formatLimitMinutes(valueMs));
   }, [draft, maxMs, minMs, onCommit, valueMs]);
 
   return (
     <SettingsRow
       title={title}
       description={description}
-      status={`Minimum ${toMinutes(minMs)} minute, maximum ${toMinutes(maxMs)} minutes.`}
+      status={`Minimum ${formatLimitBound(minMs)}, maximum ${formatLimitBound(maxMs)}.`}
       resetAction={
         valueMs !== defaultValueMs ? (
           <SettingResetButton label={label} onClick={() => onCommit(defaultValueMs)} />
@@ -74,9 +65,9 @@ function LimitSettingsRow({
         <div className="w-full sm:w-[116px]">
           <Input
             type="number"
-            min={toMinutes(minMs)}
-            max={toMinutes(maxMs)}
-            step={1}
+            min={minMs / 60_000}
+            max={maxMs / 60_000}
+            step="any"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={commit}

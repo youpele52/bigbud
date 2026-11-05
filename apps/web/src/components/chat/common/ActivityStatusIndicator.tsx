@@ -3,18 +3,9 @@ import { useWsConnectionStatus } from "~/rpc/wsConnectionState";
 import { resolveActivityStatus } from "./ActivityStatusIndicator.logic";
 import { formatWorkingTimer } from "../messages/MessagesTimeline.assistantMessage.meta";
 
+import { AgentWorkingBlob } from "../../ui/agent-working-blob";
 import { SpinnerVerbShimmer } from "./SpinnerVerbShimmer";
 import { CHAT_COLUMN_CLASS_NAME } from "./chatColumn";
-
-function WorkingDots() {
-  return (
-    <span className="inline-flex items-center gap-[3px] leading-none">
-      <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground/30" />
-      <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground/30 [animation-delay:200ms]" />
-      <span className="h-1 w-1 animate-pulse rounded-full bg-muted-foreground/30 [animation-delay:400ms]" />
-    </span>
-  );
-}
 
 interface ActivityStatusIndicatorProps {
   verb: string;
@@ -38,19 +29,22 @@ export function ActivityStatusIndicator({
           className="flex items-center gap-2 rounded-md bg-transparent px-7 pt-1 pb-1 text-[11px] text-muted-foreground/70"
           role="status"
         >
-          <SpinnerVerbShimmer
-            verb={status.label}
-            warningColor={status.kind !== "working"}
-            leading={
-              status.kind === "reconnecting" ? (
-                <Wifi
-                  aria-hidden="true"
-                  className="mr-2 inline-block size-3.5 shrink-0 align-[-0.15em]"
-                />
-              ) : undefined
-            }
-          />
-          <WorkingDots />
+          {status.kind === "working" ? <AgentWorkingBlob /> : null}
+          <span className="inline-flex items-baseline leading-none">
+            <SpinnerVerbShimmer
+              verb={status.label}
+              warningColor={status.kind !== "working"}
+              leading={
+                status.kind === "reconnecting" ? (
+                  <Wifi
+                    aria-hidden="true"
+                    className="mr-2 inline-block size-3.5 shrink-0 align-[-0.15em]"
+                  />
+                ) : undefined
+              }
+            />
+            <span aria-hidden="true" className="agent-working-ellipsis" />
+          </span>
           <span className="flex-1" />
           {activeWorkStartedAt ? (
             <span className="leading-none">

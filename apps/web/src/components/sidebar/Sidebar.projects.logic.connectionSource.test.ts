@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  createRemoteProjectFieldErrors,
-  withoutRemoteProjectFieldError,
+  createRemoteWorkspaceFieldErrors as createRemoteProjectFieldErrors,
+  withoutRemoteWorkspaceFieldError as withoutRemoteProjectFieldError,
 } from "./Sidebar.projectAddActions.helpers";
 import {
   applyRemoteProjectDraftChange,

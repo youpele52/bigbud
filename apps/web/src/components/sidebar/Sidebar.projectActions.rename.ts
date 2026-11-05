@@ -4,6 +4,9 @@ import { newCommandId } from "../../lib/utils";
 import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
+import { useStore } from "../../stores/main";
+import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
+import { isRemoteExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
 
 export function useSidebarProjectRenameActions() {
   const [renamingProjectId, setRenamingProjectId] = useState<ProjectId | null>(null);
@@ -44,11 +47,15 @@ export function useSidebarProjectRenameActions() {
         });
       };
 
+      const project = useStore.getState().projects.find((entry) => entry.id === projectId);
+      const isRemoteWorkspace =
+        project && isRemoteExecutionTargetId(resolveWorkspaceExecutionTargetId(project));
+      const itemLabel = isRemoteWorkspace ? "Remote workspace" : "Project";
       const trimmed = newTitle.trim();
       if (trimmed.length === 0) {
         toastManager.add({
           type: "warning",
-          title: "Project title cannot be empty",
+          title: `${itemLabel} title cannot be empty`,
         });
         finishRename();
         return;
@@ -72,7 +79,7 @@ export function useSidebarProjectRenameActions() {
       } catch (error) {
         toastManager.add({
           type: "error",
-          title: "Failed to rename project",
+          title: `Failed to rename ${itemLabel.toLowerCase()}`,
           description: error instanceof Error ? error.message : "An error occurred.",
         });
       }

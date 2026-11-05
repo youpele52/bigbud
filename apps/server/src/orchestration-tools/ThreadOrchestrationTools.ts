@@ -5,6 +5,7 @@ import type { OrchestrationEngineShape } from "../orchestration/Services/Orchest
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import { resolveThreadToolParticipants } from "./ThreadOrchestrationTools.participants.ts";
+import { currentThreadOrganization } from "../orchestration/threadOrganization.logic.ts";
 
 export const agentThreadCommandId = (tag: string): CommandId =>
   CommandId.makeUnsafe(`agent:${tag}:${crypto.randomUUID()}`);
@@ -35,7 +36,10 @@ export const getThreadStatusViaOrchestration = Effect.fn("getThreadStatusViaOrch
       operation: "status",
     });
 
-    return resolveThreadWorkflowStatus(targetThread);
+    return {
+      ...resolveThreadWorkflowStatus(targetThread),
+      organization: currentThreadOrganization(targetThread),
+    };
   },
 );
 

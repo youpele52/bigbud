@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { Popover, PopoverPopup, PopoverTrigger } from "~/components/ui/popover";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
 export interface TerminalActionButtonProps {
   label: string;
@@ -15,22 +15,21 @@ export function TerminalActionButton({
   children,
 }: TerminalActionButtonProps) {
   return (
-    <Popover>
-      <PopoverTrigger
-        openOnHover
+    <Tooltip>
+      <TooltipTrigger
         render={<button type="button" className={className} onClick={onClick} aria-label={label} />}
       >
         {children}
-      </PopoverTrigger>
-      <PopoverPopup
-        tooltipStyle
+      </TooltipTrigger>
+      <TooltipPopup
         side="bottom"
         sideOffset={6}
         align="center"
         className="pointer-events-none select-none"
+        positionerClassName="pointer-events-none"
       >
         {label}
-      </PopoverPopup>
-    </Popover>
+      </TooltipPopup>
+    </Tooltip>
   );
 }

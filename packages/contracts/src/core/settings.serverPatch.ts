@@ -2,6 +2,8 @@ import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas";
 import { GreetingName } from "./settings.greeting";
+import { ComputerUseDeliveryMode } from "./settings.computerUsePolicy";
+import { InyosiraIdleSettingsPatchFields } from "./settings.inyosira";
 import { OpencodeV2NativeServiceTrust, OpencodeV2PluginConfigRoot } from "./settings.opencodeV2";
 import {
   ClaudeModelOptions,
@@ -9,7 +11,7 @@ import {
   CopilotModelOptions,
   CursorModelOptions,
   DevinModelOptions,
-  KilocodeModelOptions,
+  MuseModelOptions,
   OpencodeModelOptions,
   PiModelOptions,
 } from "./model";
@@ -43,10 +45,6 @@ const OpencodeModelOptionsPatch = Schema.Struct({
   reasoningEffort: Schema.optionalKey(OpencodeModelOptions.fields.reasoningEffort),
 });
 
-const KilocodeModelOptionsPatch = Schema.Struct({
-  reasoningEffort: Schema.optionalKey(KilocodeModelOptions.fields.reasoningEffort),
-});
-
 const PiModelOptionsPatch = Schema.Struct({
   thinkingLevel: Schema.optionalKey(PiModelOptions.fields.thinkingLevel),
 });
@@ -56,6 +54,10 @@ const CursorModelOptionsPatch = Schema.Struct({
   contextWindow: Schema.optionalKey(CursorModelOptions.fields.contextWindow),
   fastMode: Schema.optionalKey(CursorModelOptions.fields.fastMode),
   thinking: Schema.optionalKey(CursorModelOptions.fields.thinking),
+});
+
+const MuseModelOptionsPatch = Schema.Struct({
+  reasoningEffort: Schema.optionalKey(MuseModelOptions.fields.reasoningEffort),
 });
 
 const DevinModelOptionsPatch = Schema.Struct({
@@ -96,11 +98,6 @@ const ModelSelectionPatch = Schema.Union([
     options: Schema.optionalKey(Schema.Struct({ variant: Schema.optional(TrimmedNonEmptyString) })),
   }),
   Schema.Struct({
-    provider: Schema.optionalKey(Schema.Literal("kilocode")),
-    model: Schema.optionalKey(TrimmedNonEmptyString),
-    options: Schema.optionalKey(KilocodeModelOptionsPatch),
-  }),
-  Schema.Struct({
     provider: Schema.optionalKey(Schema.Literal("pi")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(PiModelOptionsPatch),
@@ -114,6 +111,12 @@ const ModelSelectionPatch = Schema.Union([
     provider: Schema.optionalKey(Schema.Literal("devin")),
     model: Schema.optionalKey(TrimmedNonEmptyString),
     options: Schema.optionalKey(DevinModelOptionsPatch),
+  }),
+  Schema.Struct({
+    provider: Schema.optionalKey(Schema.Literal("muse")),
+    model: Schema.optionalKey(TrimmedNonEmptyString),
+    options: Schema.optionalKey(MuseModelOptionsPatch),
+    subProviderID: Schema.optionalKey(TrimmedNonEmptyString),
   }),
 ]);
 
@@ -143,11 +146,13 @@ export const ServerSettingsPatch = Schema.Struct({
   ),
   agentBrowserPreference: Schema.optionalKey(AgentBrowserPreference),
   computerUseEnabled: Schema.optionalKey(Schema.Boolean),
+  computerUseDeliveryMode: Schema.optionalKey(ComputerUseDeliveryMode),
   hasSeenComputerUsePrompt: Schema.optionalKey(Schema.Boolean),
   computerUseCheckInIntervalMs: Schema.optionalKey(ComputerUseCheckInIntervalMs),
   computerUseActionTimeoutMs: Schema.optionalKey(ComputerUseActionTimeoutMs),
   hiddenComposerProviders: Schema.optionalKey(Schema.Array(ProviderKind)),
   delegatedThreadModelChoice: Schema.optionalKey(DelegatedThreadModelChoice),
+  ...InyosiraIdleSettingsPatchFields,
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(
@@ -180,7 +185,6 @@ export const ServerSettingsPatch = Schema.Struct({
         }),
       ),
       copilot: Schema.optionalKey(ProviderSettingsPatch),
-      kilocode: Schema.optionalKey(ProviderSettingsPatch),
       opencode: Schema.optionalKey(ProviderSettingsPatch),
       opencodeV2: Schema.optionalKey(
         Schema.Struct({
@@ -201,6 +205,12 @@ export const ServerSettingsPatch = Schema.Struct({
         }),
       ),
       devin: Schema.optionalKey(ProviderSettingsPatch),
+      muse: Schema.optionalKey(
+        Schema.Struct({
+          enabled: Schema.optionalKey(Schema.Boolean),
+          binaryPath: Schema.optionalKey(Schema.String),
+        }),
+      ),
     }),
   ),
 });

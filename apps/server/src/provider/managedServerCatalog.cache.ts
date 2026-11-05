@@ -6,7 +6,7 @@ import { applyProviderEffortCache } from "./effortCache/effortCache.apply.ts";
 export const applyManagedProviderEffortCache = Effect.fn("applyManagedProviderEffortCache")(
   function* (input: {
     readonly snapshot: ServerProvider;
-    readonly provider: Extract<ProviderKind, "kilocode" | "opencode">;
+    readonly provider: Extract<ProviderKind, "opencode">;
     readonly binaryPath: string;
     readonly customModels: ReadonlyArray<string>;
     readonly workspace: string;

@@ -10,7 +10,7 @@ import {
   ElevatorSummary,
   ExecutionTargetId,
   IsoDateTime,
-  ModelSelection,
+  HistoricalModelSelection,
   NonNegativeInt,
   ParentThreadReference,
   OrchestrationThreadPurpose,
@@ -26,6 +26,7 @@ import {
 import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.fork.ts";
 import { OrchestrationPendingTurnStart } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import type { ThreadRecovery } from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
+import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import type * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -43,7 +44,7 @@ export const ProjectionThread = Schema.Struct({
   providerRuntimeExecutionTargetId: ExecutionTargetId,
   workspaceExecutionTargetId: ExecutionTargetId,
   executionTargetId: ExecutionTargetId,
-  modelSelection: ModelSelection,
+  modelSelection: HistoricalModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
   branch: Schema.NullOr(Schema.String),
@@ -149,6 +150,44 @@ export interface ProjectionThreadRepositoryShape {
     readonly threadId: ThreadId;
     readonly recovery: ThreadRecovery | null;
   }) => Effect.Effect<void, ProjectionRepositoryError>;
+  /** Sets the thread's Inyosira organization (`organization_*` columns). */
+  readonly setOrganization: (input: {
+    readonly threadId: ThreadId;
+    readonly organization: ThreadOrganization;
+  }) => Effect.Effect<void, ProjectionRepositoryError>;
+  /** Pending Inyosira snoozes of live threads in deadline order, one keyset page at a time. */
+  readonly listPendingSnoozes: (
+    input: ListPendingThreadSnoozesInput,
+  ) => Effect.Effect<ReadonlyArray<PendingThreadSnooze>, ProjectionRepositoryError>;
+  /** Quiescent Present threads idle since the cutoff, oldest activity first. */
+  readonly listIdleCandidates: (
+    input: ListIdleThreadCandidatesInput,
+  ) => Effect.Effect<ReadonlyArray<IdleThreadCandidate>, ProjectionRepositoryError>;
+}
+
+export interface IdleThreadCandidate {
+  readonly threadId: ThreadId;
+  readonly state: "present" | "later";
+  readonly revision: number;
+  readonly activityAt: string;
+}
+
+export interface ListIdleThreadCandidatesInput {
+  readonly states: ReadonlyArray<"present" | "later">;
+  readonly cutoff: string;
+  readonly limit: number;
+}
+
+export interface PendingThreadSnooze {
+  readonly threadId: ThreadId;
+  readonly snoozeId: string;
+  readonly until: string;
+}
+
+export interface ListPendingThreadSnoozesInput {
+  readonly limit: number;
+  /** Keyset cursor: the last row of the previous page. */
+  readonly after?: { readonly until: string; readonly threadId: ThreadId };
 }
 
 /**
