@@ -62,42 +62,43 @@ const OPENCODE_V1_CHILDREN: ProviderSubagentCapability = {
   tests: ["provider/Layers/Opencode/Adapter.stream.children.fields.test.ts"],
 };
 
+const CLAUDE_CODE_SUBAGENTS: ProviderSubagentCapability = {
+  support: "native",
+  fields: [
+    "status",
+    "subject",
+    "model",
+    "effort",
+    "prompt",
+    "depth",
+    "nesting",
+    "background",
+    "metrics",
+    "recentSteps",
+    "lastToolName",
+    "progressSummary",
+    "resultSummary",
+    "endedAt",
+  ],
+  evidence:
+    "@anthropic-ai/claude-agent-sdk 0.3.310: task_* system messages, background_tasks_changed, subagent frames (agent_id), Agent tool input and AgentOutput, AgentInfo.model.",
+  tests: [
+    "provider/Layers/Claude/Adapter.stream.subagents.replay.test.ts",
+    "provider/Layers/Claude/Adapter.stream.subagents.test.ts",
+    "provider/Layers/Claude/Adapter.controls.subagents.test.ts",
+  ],
+  stop: true,
+};
+
 export const PROVIDER_SUBAGENT_CAPABILITIES: {
   readonly [Provider in ProviderKind]: ProviderSubagentCapability;
 } = {
-  claudeAgent: {
-    support: "native",
-    fields: [
-      "status",
-      "subject",
-      "model",
-      "effort",
-      "prompt",
-      "depth",
-      "nesting",
-      "background",
-      "metrics",
-      "recentSteps",
-      "lastToolName",
-      "progressSummary",
-      "resultSummary",
-      "endedAt",
-    ],
-    evidence:
-      "@anthropic-ai/claude-agent-sdk 0.3.301: task_* system messages, background_tasks_changed, subagent frames (agent_id), Agent tool input and AgentOutput, AgentInfo.model.",
-    tests: [
-      "provider/Layers/Claude/Adapter.stream.subagents.replay.test.ts",
-      "provider/Layers/Claude/Adapter.stream.subagents.test.ts",
-      "provider/Layers/Claude/Adapter.controls.subagents.test.ts",
-    ],
-    stop: true,
-  },
+  claudeAgent: CLAUDE_CODE_SUBAGENTS,
   cliProxy: {
-    support: "gated",
-    fields: [],
+    ...CLAUDE_CODE_SUBAGENTS,
     evidence:
-      "Shares the Claude adapter, but the CLIProxyAPI harness has no verified subagent frames; providerSubagentsSupported stays false, so every task stays an ordinary task (D11).",
-    tests: ["provider/Layers/Claude/Adapter.stream.subagents.replay.test.ts"],
+      "Shared Claude Code harness mapping. Bounded live probe 2026-11-05 (Claude 2.1.318, SDK 0.3.310, CLIProxyAPI 8.0.51, gpt-6-astra) observed foreground/background local_agent lifecycle, child agent_id/model frames, completion usage and native stopTask -> stopped. Optional fields remain conditional; live nesting/resume/concurrency were not exercised. See docs/plans/2026-11-05-cliproxy-claude-harness-parity-plan.md.",
+    tests: [...CLAUDE_CODE_SUBAGENTS.tests, "provider/Layers/CliProxy/Adapter.subagents.test.ts"],
   },
   codex: {
     support: "native",

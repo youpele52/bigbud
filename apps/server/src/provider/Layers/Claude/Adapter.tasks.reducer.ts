@@ -125,7 +125,7 @@ function updateRecord(input: {
     ? existing.nativeStatus
     : (status?.nativeStatus ?? existing?.nativeStatus);
   // A newer run starts clean: the previous run's end, result and failure are stale.
-  const base = reopened ? withoutRunResult(existing) : existing;
+  const base = transition === "newer" && existing ? withoutRunResult(existing) : existing;
   const nextStatus = preserveTerminal
     ? existing.status
     : (status?.status ?? existing?.status ?? "pending");

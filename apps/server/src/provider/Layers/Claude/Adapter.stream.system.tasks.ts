@@ -184,6 +184,7 @@ export function makeTaskSystemHandler(deps: {
         if (!task) return yield* invalid(context, message);
         yield* update(context, task.taskId, "task_updated", {
           task_id: task.taskId,
+          ...(task.runId ? { run_id: task.runId } : {}),
           patch: task.patch,
         });
         return;

@@ -129,8 +129,9 @@ export function subagentTaskFields(
 }
 
 /**
- * Orders a frame against the task's current run. A frame from an older run is late and
- * ignored; a frame from a newer run reopens a terminal task.
+ * SDK 0.3.310 SDKTaskUpdatedMessage.run_id guarantees plain-string ordering
+ * within a task, including progress, membership and saved notification frames.
+ * No UUID structure is assumed. This also recovers when a start frame is missing.
  */
 export function runTransition(
   record: Record<string, unknown>,
@@ -143,6 +144,13 @@ export function runTransition(
 
 /** Drops the previous run's end time, result and failure reason. */
 export function withoutRunResult(task: ClaudeTask): ClaudeTask {
-  const { endedAt: _endedAt, resultSummary: _result, terminalReason: _reason, ...rest } = task;
+  const {
+    endedAt: _endedAt,
+    resultSummary: _result,
+    terminalReason: _reason,
+    usage: _usage,
+    metrics: _metrics,
+    ...rest
+  } = task;
   return rest;
 }

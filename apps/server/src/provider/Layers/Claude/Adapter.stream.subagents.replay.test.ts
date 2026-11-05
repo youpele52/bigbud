@@ -119,7 +119,7 @@ describe("Claude SDK 0.3.301 subagent fixture replay", () => {
     );
   });
 
-  it.effect("keeps every CLIProxy task an ordinary task (D11)", () => {
+  it.effect("keeps tasks ordinary when a harness does not declare child-event support", () => {
     const harness = makeHarness({
       resolveHarness: () => Effect.succeed({ binaryPath: "claude" }),
     });

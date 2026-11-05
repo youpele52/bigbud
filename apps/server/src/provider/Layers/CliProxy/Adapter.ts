@@ -265,6 +265,8 @@ const makeCliProxyAdapter = Effect.fn("makeCliProxyAdapter")(function* (
       claude.respondToRequest(threadId, requestId, decision).pipe(Effect.mapError(remapError)),
     respondToUserInput: (threadId, requestId, answers) =>
       claude.respondToUserInput(threadId, requestId, answers).pipe(Effect.mapError(remapError)),
+    stopSubagent: (threadId, nativeTaskId) =>
+      claude.stopSubagent(threadId, nativeTaskId).pipe(Effect.mapError(remapError)),
     stopSession: (threadId) => claude.stopSession(threadId).pipe(Effect.mapError(remapError)),
     listSessions: () =>
       claude
