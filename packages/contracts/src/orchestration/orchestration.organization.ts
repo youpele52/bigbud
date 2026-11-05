@@ -103,6 +103,8 @@ export const ThreadOrganizationIdleCommand = Schema.Struct({
     Schema.withDecodingDefault(() => "present" as const),
   ),
   destination: Schema.Literals(["done", "later"]),
+  /** Captured rule cutoff, rechecked against server-owned terminal completion facts. */
+  terminalIdleCutoff: Schema.optionalKey(IsoDateTime),
   createdAt: IsoDateTime,
 });
 export type ThreadOrganizationIdleCommand = typeof ThreadOrganizationIdleCommand.Type;

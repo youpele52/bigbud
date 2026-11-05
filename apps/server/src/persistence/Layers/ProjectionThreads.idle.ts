@@ -18,30 +18,30 @@ import type {
  * unfinished Codex rewind or unacknowledged inspection (provider runtime, not the read model).
  */
 export function makeListIdleThreadCandidates(sql: SqlClient.SqlClient) {
+  const activity = sql`MAX(
+    COALESCE(t.last_activity_at, t.created_at),
+    COALESCE(t.organization_changed_at, t.created_at)
+  )`;
   return (input: ListIdleThreadCandidatesInput) =>
     sql<IdleThreadCandidate>`
       SELECT
         t.thread_id AS "threadId",
         t.organization_state AS "state",
         t.organization_revision AS "revision",
-        MAX(
-          COALESCE(t.last_activity_at, t.created_at),
-          COALESCE(t.organization_changed_at, t.created_at)
-        ) AS "activityAt"
+        ${activity} AS "activityAt"
       FROM projection_threads t
       LEFT JOIN projection_thread_sessions s ON s.thread_id = t.thread_id
       LEFT JOIN projection_turns turn
         ON turn.thread_id = t.thread_id AND turn.turn_id = t.latest_turn_id
       WHERE t.organization_state IN ${sql.in(input.states)}
+        AND ${input.excludeThreadIds?.length ? sql` t.thread_id NOT IN ${sql.in(input.excludeThreadIds)}` : sql`1 = 1`}
         AND t.organization_snooze_id IS NULL
         AND t.deleted_at IS NULL
         AND t.archived_at IS NULL
         AND t.deleting_at IS NULL
         AND t.purpose = 'standard'
-        AND MAX(
-          COALESCE(t.last_activity_at, t.created_at),
-          COALESCE(t.organization_changed_at, t.created_at)
-        ) <= ${input.cutoff}
+        AND ${activity} <= ${input.cutoff}
+        AND ${input.after ? sql`(${activity}, t.thread_id) > (${input.after.activityAt}, ${input.after.threadId})` : sql`1 = 1`}
         AND (s.status IS NULL OR s.status NOT IN ('starting', 'running'))
         AND (turn.state IS NULL OR turn.state <> 'running')
         AND (t.queued_prompts_json IS NULL OR t.queued_prompts_json IN ('', '[]'))

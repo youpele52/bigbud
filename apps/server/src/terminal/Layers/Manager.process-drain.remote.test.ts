@@ -5,6 +5,7 @@ import {
   parsePosixAgentProcesses,
   TerminalAgentInspectionError,
 } from "./Manager.agentDetection.ts";
+import { terminalPaneWork } from "./Manager.idleWork.ts";
 import { pollSubprocessActivityWith } from "./Manager.process-drain.poll.ts";
 import { createTerminalSessionState } from "./Manager.session.state.ts";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle.ts";
@@ -89,6 +90,9 @@ it("batches per target and isolates local, Direct SSH and agent-backed PID space
   expect(direct.activeAgentProvider).toBeNull();
   expect(agent.activeAgentProvider).toBe("codex");
   expect(unknown.activeAgent).toBeNull();
+  expect(terminalPaneWork(direct)).toBe("busy");
+  expect(terminalPaneWork(agent)).toBe("busy");
+  expect(terminalPaneWork(unknown)).toBe("unknown");
   expect(f.events.filter((event) => event.type === "activity")).toHaveLength(3);
 });
 
@@ -110,6 +114,27 @@ it("keeps identity on transient failures/missing roots and clears only after con
   await Effect.runPromise(pollSubprocessActivityWith(f.ctx));
   expect(direct.activeAgent).toBeNull();
   expect(direct.hasRunningSubprocess).toBe(false);
+  expect(terminalPaneWork(direct)).toBe("idle");
+});
+
+it("vetoes idle during remote transport/inspection uncertainty and reassesses after reconnect", async () => {
+  const direct = session("direct", target, 9000, 100);
+  const f = fixture([direct]);
+  f.ctx.remoteProcessInspector = () =>
+    Effect.succeed(parsePosixAgentProcesses("100 1 100 100 /bin/zsh"));
+  await Effect.runPromise(pollSubprocessActivityWith(f.ctx));
+  expect(terminalPaneWork(direct)).toBe("idle");
+  f.ctx.remoteProcessInspector = () =>
+    Effect.fail(new TerminalAgentInspectionError({ message: "offline" }));
+  await Effect.runPromise(pollSubprocessActivityWith(f.ctx));
+  expect(terminalPaneWork(direct)).toBe("unknown");
+  f.ctx.remoteProcessInspector = () => Effect.succeed(parsePosixAgentProcesses("1 0 1 -1 init"));
+  await Effect.runPromise(pollSubprocessActivityWith(f.ctx));
+  expect(terminalPaneWork(direct)).toBe("unknown");
+  f.ctx.remoteProcessInspector = () =>
+    Effect.succeed(parsePosixAgentProcesses("100 1 100 100 /bin/zsh"));
+  await Effect.runPromise(pollSubprocessActivityWith(f.ctx));
+  expect(terminalPaneWork(direct)).toBe("idle");
 });
 
 for (const change of ["epoch", "generation", "exit", "target"] as const) {

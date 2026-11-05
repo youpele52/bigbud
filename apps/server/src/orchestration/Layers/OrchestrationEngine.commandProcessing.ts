@@ -1,15 +1,14 @@
+import { commandToAggregateRef } from "./OrchestrationEngine.commandAggregate.ts";
+import { makeTerminalIdleGuard } from "./OrchestrationEngine.terminalIdle.ts";
 import { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
 import type {
   OrchestrationCommand,
   OrchestrationEvent,
   OrchestrationReadModel,
-  ProjectId,
-  ThreadId,
 } from "@bigbud/contracts";
 import { Cause, Deferred, Duration, Effect, Exit, Metric, Option, Schema, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { persistWorktreeRuntimeCwd } from "../../git/Layers/WorktreeRuntimeCwd.ts";
-
 import {
   metricAttributes,
   orchestrationCommandAckDuration,
@@ -59,22 +58,7 @@ export interface CommandEnvelope {
   readonly startedAtMs: number;
 }
 
-export function commandToAggregateRef(command: OrchestrationCommand): {
-  readonly aggregateKind: "project" | "thread";
-  readonly aggregateId: ProjectId | ThreadId;
-} {
-  switch (command.type) {
-    case "project.create":
-    case "project.meta.update":
-    case "project.reconfigure":
-    case "project.delete":
-    case "project.delete.finalize":
-    case "project.delete.abort":
-      return { aggregateKind: "project", aggregateId: command.projectId };
-    default:
-      return { aggregateKind: "thread", aggregateId: command.threadId };
-  }
-}
+export { commandToAggregateRef } from "./OrchestrationEngine.commandAggregate.ts";
 
 export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* (input: {
   readonly commandAdmission: BoundedCommandAdmission<CommandEnvelope>;
@@ -89,6 +73,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
   const retentionRepository = yield* Effect.serviceOption(ThreadRetentionRepository);
   const visibleBrowser = yield* VisibleBrowserControl;
   const recordRecoveryIntent = yield* makeRecoveryIntentRecorder;
+  const terminalIdleBlocked = yield* makeTerminalIdleGuard();
 
   return (envelope: CommandEnvelope): Effect.Effect<boolean> => {
     const dispatchStartSequence = input.readModel().snapshotSequence;
@@ -153,10 +138,12 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
           });
         }
         const currentReadModel = input.readModel();
-        const eventBase = yield* decideOrchestrationCommand({
-          command: envelope.command,
-          readModel: currentReadModel,
-        });
+        const eventBase = (yield* terminalIdleBlocked(envelope.command))
+          ? []
+          : yield* decideOrchestrationCommand({
+              command: envelope.command,
+              readModel: currentReadModel,
+            });
         const eventBases = Array.isArray(eventBase) ? eventBase : [eventBase];
         if (envelope.command.type === "thread.queued-prompt.flush" && eventBases.length === 0)
           return yield* new OrchestrationCommandInvariantError({

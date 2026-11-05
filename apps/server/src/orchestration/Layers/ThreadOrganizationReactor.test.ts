@@ -20,6 +20,7 @@ import {
   withDatabase,
 } from "./OrchestrationEngine.test.runtime.ts";
 import { ThreadOrganizationReactorLive } from "./ThreadOrganizationReactor.ts";
+import type { TerminalManagerShape } from "../../terminal/Services/Manager.ts";
 
 const threadId = ThreadId.makeUnsafe("thread-inyosira-reactor");
 const createdAt = "2026-10-30T00:00:00.000Z";
@@ -51,6 +52,73 @@ const userMessage = (id: string): OrchestrationCommand => ({
 });
 
 describe("ThreadOrganizationReactor", () => {
+  it("forgets terminal barriers for every finalized subtree ID, retaining unrelated threads", () =>
+    withDatabase("inyosira-terminal-delete-", async (dbPath) => {
+      const child = ThreadId.makeUnsafe("terminal-delete-child");
+      const other = ThreadId.makeUnsafe("terminal-delete-other");
+      const barriers = new Set<string>([threadId, child, other]);
+      const forgotten: string[] = [];
+      const unused = () => Effect.die("unused terminal operation");
+      const terminal: TerminalManagerShape = {
+        open: unused,
+        snapshot: unused,
+        restart: unused,
+        write: () => Effect.void,
+        resize: () => Effect.void,
+        clear: () => Effect.void,
+        close: () => Effect.void,
+        subscribe: () => Effect.succeed(() => {}),
+        forgetThreadIdleWork: (id) =>
+          Effect.sync(() => {
+            forgotten.push(id);
+            barriers.delete(id);
+          }),
+      };
+      const runtime = createRuntime(dbPath, terminal);
+      const scope = await Effect.runPromise(Scope.make("sequential"));
+      try {
+        const engine = await engineFor(runtime);
+        for (const command of createCommands(ProjectId.makeUnsafe("terminal-delete"), [
+          threadId,
+          child,
+          other,
+        ])) {
+          await runtime.runPromise(engine.dispatch(command));
+        }
+        await runtime.runPromise(
+          Effect.gen(function* () {
+            yield* (yield* ThreadOrganizationReactor).start();
+          }).pipe(
+            Effect.provide(
+              ThreadOrganizationReactorLive.pipe(Layer.provide(ProjectionThreadRepositoryLive)),
+            ),
+            Scope.provide(scope),
+          ),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        await runtime.runPromise(
+          engine.dispatch({
+            type: "thread.delete",
+            commandId: CommandId.makeUnsafe("terminal-delete-root"),
+            threadId,
+          }),
+        );
+        await runtime.runPromise(
+          engine.dispatch({
+            type: "thread.delete.finalize",
+            commandId: CommandId.makeUnsafe("terminal-delete-finalize"),
+            threadId,
+            threadIds: [threadId, child],
+            createdAt,
+          }),
+        );
+        await expect.poll(() => forgotten.toSorted()).toEqual([threadId, child].toSorted());
+        expect([...barriers]).toEqual([other]);
+      } finally {
+        await Effect.runPromise(Scope.close(scope, Exit.void));
+        await runtime.dispose();
+      }
+    }));
   it("moves blocked threads to Needs you once per request and back to Present on user work", () =>
     withDatabase("inyosira-reactor-", async (dbPath) => {
       const runtime = createRuntime(dbPath);

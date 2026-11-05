@@ -90,7 +90,15 @@ export interface TerminalSubscribeOptions {
 /**
  * TerminalManagerShape - Service API for terminal session lifecycle operations.
  */
+export interface TerminalIdleWork {
+  readonly state: "busy" | "unknown" | "idle";
+  readonly quietSince: number | null;
+}
+
 export interface TerminalManagerShape {
+  /** Server-owned sampled work facts; a shell alone is not work. */
+  readonly getThreadIdleWork?: (threadId: string) => Effect.Effect<TerminalIdleWork>;
+  readonly forgetThreadIdleWork?: (threadId: string) => Effect.Effect<void>;
   readonly recovery?: (
     input: TerminalRecoveryInput,
   ) => Effect.Effect<TerminalRecoveryResult, TerminalError>;

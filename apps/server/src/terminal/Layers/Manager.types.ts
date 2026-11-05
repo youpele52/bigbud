@@ -81,6 +81,8 @@ export interface TerminalSessionState {
   unsubscribeData: (() => void) | null;
   unsubscribeExit: (() => void) | null;
   unsubscribeError?: (() => void) | null;
+  subprocessAssessedGeneration?: string | undefined;
+  subprocessAssessedEpoch?: number | undefined;
   hasRunningSubprocess: boolean;
   activeAgentProvider: ProviderKind | null;
   activeAgent?: TerminalAgentIdentity | null;

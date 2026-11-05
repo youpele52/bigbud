@@ -13,6 +13,7 @@ import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
 import { makeProviderLogSecurity } from "./server.providerLogs.ts";
+import { withEngineTerminal } from "./server.engineTerminal.ts";
 import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
 import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
 import { ProviderTurnLivenessRepositoryLive } from "./persistence/Layers/ProviderTurnLiveness";
@@ -152,7 +153,26 @@ const OrchestrationInfrastructureLayerLive = Layer.mergeAll(
   Recovery.RecoveryPersistenceLayerLive,
 );
 
-const OrchestrationEngineLayerLive = OrchestrationEngineLive.pipe(
+const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers();
+const RemoteAgentLayerLive = configuredRemoteAgentLayers.services;
+const WorkspaceLayerLive = configuredRemoteAgentLayers.workspace;
+const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
+  ? Layer.effect(
+      PtyAdapter,
+      Effect.gen(function* () {
+        const base = yield* PtyAdapter;
+        const resolver = configuredRemoteAgentLayers.ptyResolver;
+        if (!resolver) return base;
+        return makeRemoteAgentPtyAdapter(base, resolver, isRemoteAgentExecutionTarget);
+      }),
+    ).pipe(Layer.provide(PtyAdapterLive))
+  : PtyAdapterLive;
+const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(TerminalPtyLayerLive));
+
+const OrchestrationEngineLayerLive = withEngineTerminal(
+  OrchestrationEngineLive,
+  TerminalLayerLive,
+).pipe(
   Layer.provide(OrchestrationInfrastructureLayerLive),
   Layer.provide(ComputerUseLayerLive),
   Layer.provide(VisibleBrowserControlLive),
@@ -280,22 +300,6 @@ const ProjectionPersistenceLayerLive = Layer.mergeAll(
   SkillChangeProposalRepositoryLive,
   MemoryStoreLive,
 );
-
-const configuredRemoteAgentLayers = makeConfiguredRemoteAgentLayers();
-const RemoteAgentLayerLive = configuredRemoteAgentLayers.services;
-const WorkspaceLayerLive = configuredRemoteAgentLayers.workspace;
-const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
-  ? Layer.effect(
-      PtyAdapter,
-      Effect.gen(function* () {
-        const base = yield* PtyAdapter;
-        const resolver = configuredRemoteAgentLayers.ptyResolver;
-        if (!resolver) return base;
-        return makeRemoteAgentPtyAdapter(base, resolver, isRemoteAgentExecutionTarget);
-      }),
-    ).pipe(Layer.provide(PtyAdapterLive))
-  : PtyAdapterLive;
-const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(TerminalPtyLayerLive));
 
 const GitLayerLive = makeGitLayerLive(RemoteAgentLayerLive);
 const DirectResourceCleanupLayerLive = DirectResourceCleanupRecoveryLive.pipe(

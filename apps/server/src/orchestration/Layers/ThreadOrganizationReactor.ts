@@ -1,5 +1,5 @@
 import { CommandId } from "@bigbud/contracts";
-import { Effect, Layer, Stream } from "effect";
+import { Effect, Layer, Option, Stream } from "effect";
 
 import { stableThreadToolId } from "../../orchestration-tools/ThreadOrchestrationTools.origins.ts";
 import {
@@ -18,16 +18,23 @@ import {
 } from "./ThreadOrganizationReactor.logic.ts";
 import { startThreadSnoozeDelivery } from "./ThreadOrganizationReactor.snooze.ts";
 import { startThreadIdleCleanup } from "./ThreadOrganizationReactor.idle.ts";
+import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 
 const makeThreadOrganizationReactor = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const threadRepository = yield* ProjectionThreadRepository;
   const settings = yield* ServerSettingsService;
+  const terminalManager = yield* Effect.serviceOption(TerminalManager);
 
   const react = Effect.fn("reactToOrganizationEvent")(function* (
     event: Parameters<typeof organizationReactionForEvent>[0],
   ) {
+    if (event.type === "thread.deleted" && Option.isSome(terminalManager)) {
+      for (const threadId of new Set([event.aggregateId, ...(event.payload.threadIds ?? [])])) {
+        yield* terminalManager.value.forgetThreadIdleWork?.(threadId) ?? Effect.void;
+      }
+    }
     const reaction = organizationReactionForEvent(event);
     if (!reaction) return;
     const thread = yield* ensureOrchestrationThreadState(
@@ -55,7 +62,12 @@ const makeThreadOrganizationReactor = Effect.gen(function* () {
 
   const start: ThreadOrganizationReactorShape["start"] = Effect.fn("start")(function* () {
     yield* startThreadSnoozeDelivery({ orchestrationEngine, threadRepository });
-    yield* startThreadIdleCleanup({ orchestrationEngine, threadRepository, settings });
+    yield* startThreadIdleCleanup({
+      orchestrationEngine,
+      threadRepository,
+      settings,
+      ...(Option.isSome(terminalManager) ? { terminalManager: terminalManager.value } : {}),
+    });
     yield* Effect.forkScoped(
       Stream.runForEach(orchestrationEngine.streamDomainEvents, (event) =>
         react(event).pipe(

@@ -1,4 +1,5 @@
 import { Effect, Option } from "effect";
+import { invalidateTerminalWorkAssessment } from "./Manager.idleWork.ts";
 
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
@@ -73,6 +74,16 @@ export function pollSubprocessActivityWith(
         );
 
         if (Option.isNone(hasRunningSubprocess)) {
+          yield* invalidateTerminalWorkAssessment(ctx, [
+            {
+              threadId: session.threadId,
+              terminalId: session.terminalId,
+              runtimeGeneration,
+              runtimeEpoch,
+              executionTargetId,
+              pid: terminalPid,
+            },
+          ]);
           return;
         }
 
@@ -86,12 +97,16 @@ export function pollSubprocessActivityWith(
             liveSession.value.pid !== terminalPid ||
             liveSession.value.runtimeEpoch !== runtimeEpoch ||
             liveSession.value.runtimeGeneration !== runtimeGeneration ||
-            liveSession.value.executionTargetId !== executionTargetId ||
-            liveSession.value.hasRunningSubprocess === hasRunningSubprocess.value
+            liveSession.value.executionTargetId !== executionTargetId
           ) {
             return [Option.none(), managerState] as const;
           }
 
+          liveSession.value.subprocessAssessedGeneration = runtimeGeneration;
+          liveSession.value.subprocessAssessedEpoch = runtimeEpoch;
+          if (liveSession.value.hasRunningSubprocess === hasRunningSubprocess.value) {
+            return [Option.none(), managerState] as const;
+          }
           liveSession.value.hasRunningSubprocess = hasRunningSubprocess.value;
           liveSession.value.updatedAt = nextTerminalTimestamp(liveSession.value.updatedAt);
 
@@ -131,5 +146,6 @@ export function pollSubprocessActivityWith(
       ],
       { concurrency: 3, discard: true },
     );
+    yield* ctx.refreshIdleWork ?? Effect.void;
   }).pipe(Effect.withSpan("terminal.pollSubprocessActivity"));
 }

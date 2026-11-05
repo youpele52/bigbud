@@ -172,7 +172,11 @@ export interface IdleThreadCandidate {
   readonly activityAt: string;
 }
 
+export type IdleThreadCursor = Pick<IdleThreadCandidate, "activityAt" | "threadId">;
+
 export interface ListIdleThreadCandidatesInput {
+  readonly after?: IdleThreadCursor;
+  readonly excludeThreadIds?: ReadonlyArray<ThreadId>;
   readonly states: ReadonlyArray<"present" | "later">;
   readonly cutoff: string;
   readonly limit: number;

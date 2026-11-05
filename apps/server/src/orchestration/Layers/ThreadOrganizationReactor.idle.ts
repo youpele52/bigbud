@@ -9,7 +9,10 @@
  *
  * @module ThreadOrganizationReactor.idle
  */
-import { CommandId, type ServerSettings } from "@bigbud/contracts";
+import { makeIdleSweepPaging } from "./ThreadOrganizationReactor.idle.paging.ts";
+import { terminalWorkAllowsIdle } from "../../terminal/Layers/Manager.idleWork.ts";
+import type { TerminalManagerShape } from "../../terminal/Services/Manager.ts";
+import { CommandId, type ThreadId, type ServerSettings } from "@bigbud/contracts";
 import { Clock, Effect, Ref, Schedule, Stream } from "effect";
 
 import { stableThreadToolId } from "../../orchestration-tools/ThreadOrchestrationTools.origins.ts";
@@ -83,6 +86,7 @@ export const startThreadIdleCleanup = Effect.fn("startThreadIdleCleanup")(functi
   readonly orchestrationEngine: Pick<OrchestrationEngineShape, "dispatch">;
   readonly threadRepository: Pick<ProjectionThreadRepositoryShape, "listIdleCandidates">;
   readonly settings: Pick<ServerSettingsShape, "getSettings" | "streamChanges">;
+  readonly terminalManager?: Pick<TerminalManagerShape, "getThreadIdleWork">;
 }) {
   const startedAt = yield* Clock.currentTimeMillis;
   const barriers = yield* Ref.make<Record<IdleRule["name"], number>>({
@@ -91,7 +95,11 @@ export const startThreadIdleCleanup = Effect.fn("startThreadIdleCleanup")(functi
   });
   const lastTick = yield* Ref.make(startedAt);
   const lastPolicy = yield* Ref.make<Record<IdleRule["name"], string> | null>(null);
-  const attempted = new Map<string, number>();
+  const attempted = new Map<
+    string,
+    { threadId: ThreadId; retryAt: number; rule?: IdleRule["name"] }
+  >();
+  const paging = makeIdleSweepPaging();
 
   const observePolicy = (settings: IdlePolicy) =>
     Effect.gen(function* () {
@@ -99,6 +107,8 @@ export const startThreadIdleCleanup = Effect.fn("startThreadIdleCleanup")(functi
       const keys = { idle: ruleKey(rules[0]!), older: ruleKey(rules[1]!) };
       const previous = yield* Ref.getAndSet(lastPolicy, keys);
       if (previous === null) return;
+      for (const rule of rules)
+        if (previous[rule.name] !== keys[rule.name]) paging.reset(rule.name);
       // Turning a rule on or changing it gives every thread a full new wait for that rule.
       const nowMs = yield* Clock.currentTimeMillis;
       yield* Ref.update(barriers, (current) => ({
@@ -112,40 +122,68 @@ export const startThreadIdleCleanup = Effect.fn("startThreadIdleCleanup")(functi
       if (!rule.enabled) return;
       if (nowMs - (yield* Ref.get(barriers))[rule.name] < rule.timeoutMs) return;
       const createdAt = new Date(nowMs).toISOString();
-      const candidates = (yield* input.threadRepository.listIdleCandidates({
+      const after = paging.after(rule.name);
+      const page = yield* input.threadRepository.listIdleCandidates({
         states: rule.fromStates,
+        ...(after ? { after } : {}),
+        excludeThreadIds: [
+          ...new Set(
+            [...attempted.values()]
+              .filter((entry) => entry.rule === undefined || entry.rule === rule.name)
+              .map((entry) => entry.threadId),
+          ),
+        ],
         cutoff: new Date(nowMs - rule.timeoutMs).toISOString(),
         limit: IDLE_SWEEP_BATCH,
-      })).filter((candidate) => !attempted.has(`${candidate.threadId}:${candidate.revision}`));
+      });
+      paging.advance(rule.name, page, IDLE_SWEEP_BATCH);
+      const candidates = page.filter(
+        (candidate) =>
+          !attempted.has(`${candidate.threadId}:${candidate.revision}`) &&
+          !attempted.has(`${rule.name}:${candidate.threadId}:${candidate.revision}`),
+      );
       yield* Effect.forEach(
         candidates,
-        (candidate) => {
-          attempted.set(`${candidate.threadId}:${candidate.revision}`, nowMs + IDLE_RETRY_AFTER_MS);
-          return input.orchestrationEngine
-            .dispatch({
-              type: "thread.organization.idle",
-              commandId: CommandId.makeUnsafe(
-                stableThreadToolId(
-                  "inyosira-idle",
-                  JSON.stringify([candidate.threadId, candidate.revision, createdAt]),
-                ),
-              ),
-              threadId: candidate.threadId,
-              expectedRevision: candidate.revision,
-              fromState: candidate.state,
-              destination: rule.destination,
-              createdAt,
-            })
-            .pipe(
-              Effect.catchCause((cause) =>
-                Effect.logWarning("idle cleanup move failed; retried after a minute", {
-                  threadId: candidate.threadId,
-                  rule: rule.name,
-                  cause: cause.toString(),
-                }),
-              ),
+        (candidate) =>
+          Effect.gen(function* () {
+            const work = yield* (
+              input.terminalManager?.getThreadIdleWork?.(candidate.threadId) ??
+                Effect.succeed({ state: "idle" as const, quietSince: null })
             );
-        },
+            const allowed = terminalWorkAllowsIdle(work, nowMs - rule.timeoutMs);
+            const key = `${candidate.threadId}:${candidate.revision}`;
+            attempted.set(allowed ? key : `${rule.name}:${key}`, {
+              threadId: candidate.threadId,
+              retryAt: nowMs + IDLE_RETRY_AFTER_MS,
+              ...(allowed ? {} : { rule: rule.name }),
+            });
+            if (!allowed) return;
+            yield* input.orchestrationEngine
+              .dispatch({
+                type: "thread.organization.idle",
+                commandId: CommandId.makeUnsafe(
+                  stableThreadToolId(
+                    "inyosira-idle",
+                    JSON.stringify([candidate.threadId, candidate.revision, createdAt]),
+                  ),
+                ),
+                threadId: candidate.threadId,
+                expectedRevision: candidate.revision,
+                fromState: candidate.state,
+                destination: rule.destination,
+                terminalIdleCutoff: new Date(nowMs - rule.timeoutMs).toISOString(),
+                createdAt,
+              })
+              .pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning("idle cleanup move failed; retried after a minute", {
+                    threadId: candidate.threadId,
+                    rule: rule.name,
+                    cause: cause.toString(),
+                  }),
+                ),
+              );
+          }),
         { concurrency: IDLE_CONCURRENCY, discard: true },
       );
     });
@@ -159,7 +197,7 @@ export const startThreadIdleCleanup = Effect.fn("startThreadIdleCleanup")(functi
     }));
     const settings = yield* input.settings.getSettings;
     yield* observePolicy(settings);
-    for (const [key, retryAt] of attempted) if (retryAt <= nowMs) attempted.delete(key);
+    for (const [key, entry] of attempted) if (entry.retryAt <= nowMs) attempted.delete(key);
     // Older threads first, so a thread past both waits goes straight to Done.
     const [idleRule, olderRule] = idleRulesFor(settings);
     yield* applyRule(olderRule!, nowMs);
