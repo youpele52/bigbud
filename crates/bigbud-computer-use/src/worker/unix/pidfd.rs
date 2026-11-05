@@ -22,6 +22,8 @@ pub(super) fn exited(fd: &OwnedFd) -> io::Result<bool> {
     Ok(event.revents & libc::POLLIN != 0)
 }
 
+// Reached only through AnchoredGroup::retain, whose sole launcher is macOS-only.
+#[allow(dead_code)]
 pub(super) fn open(pid: NonZeroU32) -> io::Result<Option<OwnedFd>> {
     // SAFETY: pid is a validated positive PID, flags=0; syscall has no pointers.
     let fd = unsafe { libc::syscall(libc::SYS_pidfd_open, pid.get() as libc::pid_t, 0) };

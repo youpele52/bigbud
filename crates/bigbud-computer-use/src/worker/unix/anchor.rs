@@ -57,6 +57,8 @@ impl AnchoredGroup {
     /// yet. Driver/helper work is forbidden until durable roots/full gates pass.
     /// Spawn and retention are inseparable: accepting an arbitrary Child would
     /// allow a previously reaped handle's PID to refer to a replacement child.
+    // Only the macOS private bootstrap launches anchors until other owners exist.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn spawn_bootstrap(
         command: &mut Command,
         generation: &str,
@@ -78,6 +80,7 @@ impl AnchoredGroup {
     }
 
     // Private: no caller can supply a cached/already-reaped std Child handle.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     fn retain(child: Child, generation: &str) -> Result<Self, AnchorError> {
         let prepare = || -> io::Result<_> {
             if !crate::guard::record::valid_id(generation) {
