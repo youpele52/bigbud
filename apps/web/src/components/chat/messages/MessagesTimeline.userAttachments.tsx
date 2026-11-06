@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { MessageSquareIcon } from "lucide-react";
+import { NewChatIcon } from "../../common/NewChatIcon";
 import type {
   ChatFileAttachment,
   ChatPathAttachment,
@@ -45,7 +45,7 @@ export function UserThreadReferenceChips(props: { threads: ReadonlyArray<ChatThr
             void navigate({ to: "/$threadId", params: { threadId: thread.threadId } });
           }}
         >
-          <MessageSquareIcon className="size-3 shrink-0 opacity-60" />
+          <NewChatIcon className="size-3 shrink-0 opacity-60" />
           <span className="min-w-0 truncate text-[11px] text-muted-foreground/60">
             {thread.title}
           </span>

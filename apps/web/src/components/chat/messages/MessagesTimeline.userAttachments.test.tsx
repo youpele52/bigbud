@@ -11,6 +11,7 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
 }));
 
+import { NewChatIcon } from "../../common/NewChatIcon";
 import { UserThreadReferenceChips } from "./MessagesTimeline.userAttachments";
 
 describe("UserThreadReferenceChips", () => {
@@ -48,6 +49,8 @@ describe("UserThreadReferenceChips", () => {
     const button = Array.isArray(element?.props.children)
       ? element.props.children[0]
       : element?.props.children;
+
+    expect(button.props.children[0].type).toBe(NewChatIcon);
 
     button.props.onClick();
 

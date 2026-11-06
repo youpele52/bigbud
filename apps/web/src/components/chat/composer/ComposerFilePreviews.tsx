@@ -1,4 +1,5 @@
-import { EyeIcon, EyeOffIcon, MessageSquareIcon, XIcon } from "lucide-react";
+import { EyeIcon, EyeOffIcon, XIcon } from "lucide-react";
+import { NewChatIcon } from "../../common/NewChatIcon";
 import { Button } from "../../ui/button";
 import { VscodeEntryIcon } from "../common/VscodeEntryIcon";
 import type { ComposerFileAttachment } from "../../../stores/composer";
@@ -30,7 +31,7 @@ export function ComposerFilePreviews({
           className="group relative flex max-w-[200px] items-center gap-1.5 rounded-lg border border-border/80 bg-background px-2 py-1.5"
         >
           {file.attachmentMode === "thread-reference" ? (
-            <MessageSquareIcon className="size-3.5 shrink-0 opacity-70" />
+            <NewChatIcon className="size-3.5 shrink-0 opacity-70" />
           ) : (
             <VscodeEntryIcon
               pathValue={file.filePath || file.name}
