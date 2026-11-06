@@ -21,6 +21,8 @@ const DESKTOP_PACKAGED_APP_FILES = [
   "apps/desktop/prod-resources/**",
 ] as const;
 
+export const DESKTOP_NSIS_INCLUDE = "apps/desktop/installer/installer.nsh";
+
 function generateMacIconSet(
   sourcePng: string,
   targetIcns: string,
@@ -316,6 +318,11 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(
           target: [target],
           icon: "icon.ico",
           signExts: [".exe"],
+        };
+        // Close every process running from the install folder (not only the
+        // main exe) before the old version is uninstalled during an update.
+        buildConfig.nsis = {
+          include: join(repoRoot, DESKTOP_NSIS_INCLUDE),
         };
       }
 

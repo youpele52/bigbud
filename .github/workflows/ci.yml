@@ -118,6 +118,17 @@ jobs:
         shell: pwsh
         run: pwsh -File scripts/bootstrap-installer-smoke.ps1
 
+  nsis_installer_scripts:
+    name: Windows Installer Process Cleanup
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate installer process cleanup script
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nsis-close-processes-smoke.ps1
+
   windows_cua_sweep:
     name: Windows CUA Sweep Native Helper
     runs-on: windows-2022
@@ -244,6 +255,11 @@ jobs:
 
       - name: Smoke test packaged delivery supervisor
         run: bun run verify:packaged-desktop-supervisor -- release "${{ matrix.platform }}"
+
+      - name: Smoke test Windows installer update over a running helper
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nsis-update-smoke.ps1 -ReleaseDir release
 
       - name: Build Linux .deb fallback
         if: matrix.platform == 'linux'

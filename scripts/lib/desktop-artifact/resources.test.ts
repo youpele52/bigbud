@@ -3,7 +3,12 @@ import { Effect } from "effect";
 import { desktopReleaseIdentityForChannel } from "@bigbud/shared/desktopReleaseIdentity";
 
 import { pickExternalDependencies } from "./build.runtime.ts";
-import { createBuildConfig, resolveDesktopRuntimeDependencies } from "./resources.ts";
+import { join } from "node:path";
+import {
+  DESKTOP_NSIS_INCLUDE,
+  createBuildConfig,
+  resolveDesktopRuntimeDependencies,
+} from "./resources.ts";
 
 describe("resolveDesktopRuntimeDependencies", () => {
   it("keeps installable runtime dependencies and resolves catalog entries", () => {
@@ -76,6 +81,8 @@ describe("createBuildConfig", () => {
       assert.equal(windows.appId, identity.appId);
       assert.equal(windows.productName, identity.productName);
       assert.notProperty(windows.win as object, "azureSignOptions");
+      assert.deepEqual(windows.nsis, { include: join("/repo", DESKTOP_NSIS_INCLUDE) });
+      assert.notProperty(linux, "nsis");
     },
   );
 
