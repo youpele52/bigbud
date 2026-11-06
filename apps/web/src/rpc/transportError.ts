@@ -3,6 +3,8 @@ import { APP_SERVER_NAME } from "../config/branding";
 const TRANSPORT_ERROR_PATTERNS = [
   /\bSocketCloseError\b/i,
   /\bSocketOpenError\b/i,
+  // The patched RPC client reports a missed Pong as a read failure of the open socket.
+  /\bSocketReadError\b/i,
   new RegExp(`Unable to connect to the ${APP_SERVER_NAME} WebSocket\\.`, "i"),
   new RegExp(`Not connected to the ${APP_SERVER_NAME}\\. Reconnecting`, "i"),
   /\bping timeout\b/i,
