@@ -120,6 +120,15 @@ describe("deriveSleepRecoveryNotice", () => {
     });
   });
 
+  it("asks after a crash restart, without blaming sleep", () => {
+    expect(derive(recovery({ reason: "backend-restarted" })).notice).toMatchObject({
+      kind: "backend-restarted",
+      tone: "warning",
+      description: "bigbud restarted unexpectedly. This turn's outcome is unknown.",
+      actions: [{ action: "continue" }, { action: "dismiss" }],
+    });
+  });
+
   it("parks in red with Retry after three failed attempts", () => {
     expect(
       derive(recovery({ status: "parked", reason: "continuation-failed", attempt: 3 })).notice,

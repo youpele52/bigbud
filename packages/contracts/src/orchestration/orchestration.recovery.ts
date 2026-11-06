@@ -44,6 +44,7 @@ export const ThreadRecoveryReason = Schema.Literals([
   "tool-in-flight",
   "no-activity-after-wake",
   "backend-restarted-after-wake",
+  "backend-restarted",
   "continuation-failed",
   "provider-continued",
 ]);

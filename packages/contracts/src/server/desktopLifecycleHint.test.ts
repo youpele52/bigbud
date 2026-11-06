@@ -38,11 +38,13 @@ it.effect("rejects renderer-only connectivity kinds", () =>
   }),
 );
 
-it.effect("decodes the resume-probe restart reason", () =>
+it.effect("decodes both restart reasons and rejects an ordinary start", () =>
   Effect.gen(function* () {
-    const reason =
-      yield* Schema.decodeUnknownEffect(DesktopBackendStartReason)("resume-probe-restart");
-    assert.strictEqual(reason, "resume-probe-restart");
+    const decodeReason = Schema.decodeUnknownEffect(DesktopBackendStartReason);
+    for (const reason of ["resume-probe-restart", "unexpected-exit-restart"] as const) {
+      assert.strictEqual(yield* decodeReason(reason), reason);
+    }
+    assert.ok(Exit.isFailure(yield* Effect.exit(decodeReason("ordinary"))));
   }),
 );
 

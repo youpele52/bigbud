@@ -65,6 +65,11 @@ export function markNextBackendStartReason(reason: DesktopBackendStartReason): v
   pendingStartReason = reason;
 }
 
+/** Whether a start reason is already recorded for the next backend start. */
+export function hasPendingBackendStartReason(): boolean {
+  return pendingStartReason !== null;
+}
+
 /**
  * Returns and clears the pending start reason once a backend has been spawned
  * and is about to receive its envelope. A failed spawn keeps it for the retry.
