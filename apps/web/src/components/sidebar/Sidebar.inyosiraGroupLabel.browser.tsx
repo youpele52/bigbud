@@ -100,7 +100,7 @@ it.each([
   },
 );
 
-it.each(["present", "needs-you", "later", "done"] as const)(
+it.each(["present", "later", "done"] as const)(
   "keeps the expanded %s count visible without hover or focus, including zero",
   async (state) => {
     api.request.mockResolvedValue({ totalCount: 0, threads: [] });
@@ -120,6 +120,59 @@ it.each(["present", "needs-you", "later", "done"] as const)(
     const count = screen.getByLabelText("75 threads");
     await expect.element(count).toHaveTextContent("(75)");
     await expect.poll(() => getComputedStyle(count.element()).opacity).toBe("1");
+  },
+);
+
+it.each([true, false])(
+  "mutes empty Needs you without disabling expansion (%s)",
+  async (isExpanded) => {
+    api.request.mockResolvedValue({ totalCount: 0, threads: [] });
+    const onExpandedChange = vi.fn();
+    const screen = await render(
+      <SidebarInyosiraGroupLabel
+        state="needs-you"
+        isExpanded={isExpanded}
+        onExpandedChange={onExpandedChange}
+      />,
+    );
+    const heading = screen.getByText("Needs you", { exact: true });
+    const button = screen.getByRole("button", { name: "Needs you", exact: true });
+    await expect
+      .poll(() => heading.element().parentElement?.classList.contains("text-muted-foreground"))
+      .toBe(true);
+    await expect.element(screen.getByLabelText("0 threads")).not.toBeInTheDocument();
+    await button.click();
+    expect(onExpandedChange).toHaveBeenCalledWith(!isExpanded);
+    api.request.mockResolvedValue({ totalCount: 1, threads: [] });
+    emit("thread.organization-updated");
+    await expect.element(screen.getByLabelText("1 thread")).toHaveTextContent("(1)");
+    await expect
+      .poll(() => heading.element().parentElement?.classList.contains("text-muted-foreground"))
+      .toBe(false);
+    api.request.mockResolvedValue({ totalCount: 0, threads: [] });
+    emit("thread.organization-updated");
+    await expect
+      .poll(() => heading.element().parentElement?.classList.contains("text-muted-foreground"))
+      .toBe(true);
+  },
+);
+
+it.each([{ status: "loading" }, { status: "error" }, { status: "loaded", count: 0 }] as const)(
+  "does not mute unknown counts or visible threads: %j",
+  async (result) => {
+    const screen = await render(
+      <GroupLabel
+        state="needs-you"
+        result={result}
+        hasThreads={result.status === "loaded"}
+        isExpanded
+        onExpandedChange={vi.fn()}
+      />,
+    );
+    const heading = screen.getByText("Needs you", { exact: true });
+    expect(heading.element().parentElement?.classList.contains("text-muted-foreground")).toBe(
+      false,
+    );
   },
 );
 

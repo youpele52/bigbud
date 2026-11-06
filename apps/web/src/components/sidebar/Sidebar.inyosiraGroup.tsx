@@ -97,6 +97,7 @@ export function SidebarInyosiraGroup({
       <SidebarInyosiraGroupLabel
         state={state}
         result={count}
+        hasThreads={threadIds.length > 0}
         isExpanded={expanded}
         onExpandedChange={(next) => setStateCollapsed(state, !next)}
       />

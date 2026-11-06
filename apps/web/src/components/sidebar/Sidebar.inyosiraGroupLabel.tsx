@@ -8,14 +8,18 @@ import { SidebarSectionLabel } from "./SidebarSectionLabel";
 export function SidebarInyosiraGroupLabel({
   state,
   result,
+  hasThreads = false,
   isExpanded,
   onExpandedChange,
 }: {
   state: ThreadOrganizationState;
   result: InyosiraCountResult;
+  hasThreads?: boolean;
   isExpanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
 }) {
+  const isEmptyNeedsYou =
+    state === "needs-you" && !hasThreads && result.status === "loaded" && result.count === 0;
   const count =
     result.status === "loaded"
       ? result.count.toLocaleString()
@@ -31,16 +35,20 @@ export function SidebarInyosiraGroupLabel({
 
   return (
     <SidebarSectionLabel isExpanded={isExpanded} onExpandedChange={onExpandedChange}>
-      <span className="inline-flex items-center gap-2">
+      <span
+        className={`inline-flex items-center gap-2 ${isEmptyNeedsYou ? "text-muted-foreground" : ""}`}
+      >
         <span aria-hidden="true" className={`${SIDEBAR_COMPACT_ICON_SIZE_CLASS} shrink-0`} />
         <span>{INYOSIRA_STATE_LABELS[state]}</span>
-        <span
-          data-slot="inyosira-thread-count"
-          className={`tabular-nums transition-opacity group-hover/project-header:opacity-100 group-focus-within/project-header:opacity-100 ${isExpanded ? "opacity-100" : "opacity-0"}`}
-          aria-label={countLabel}
-        >
-          ({count})
-        </span>
+        {!isEmptyNeedsYou ? (
+          <span
+            data-slot="inyosira-thread-count"
+            className={`tabular-nums transition-opacity group-hover/project-header:opacity-100 group-focus-within/project-header:opacity-100 ${isExpanded ? "opacity-100" : "opacity-0"}`}
+            aria-label={countLabel}
+          >
+            ({count})
+          </span>
+        ) : null}
       </span>
     </SidebarSectionLabel>
   );
