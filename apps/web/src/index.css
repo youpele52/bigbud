@@ -3,6 +3,7 @@
 @import "./index.markdown.css";
 @import "./index.effects.css";
 @import "./components/chat/common/ChatGreeting.shimmer.css";
+@import "./components/sidebar/Sidebar.inyosiraNeedsYou.css";
 @import "./components/terminal/terminalTypography.css";
 @import "./components/ui/agent-working-blob.css";
 

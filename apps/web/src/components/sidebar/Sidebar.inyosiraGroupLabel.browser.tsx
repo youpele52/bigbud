@@ -335,3 +335,34 @@ it("ignores a pending response after the displayed group changes", async () => {
   await expect.element(screen.getByText("(75)")).toBeInTheDocument();
   expect(api.unsubscribe).toHaveBeenCalledOnce();
 });
+
+const needsYouHand = () => document.querySelector('[data-slot="inyosira-needs-you-hand"]');
+
+it("points an amber hand at a waiting Needs you group, even when collapsed", async () => {
+  const label = (state: "needs-you" | "present", count: number, hasThreads = false) => (
+    <GroupLabel
+      state={state}
+      result={{ status: "loaded", count }}
+      hasThreads={hasThreads}
+      isExpanded={false}
+      onExpandedChange={vi.fn()}
+    />
+  );
+  const screen = await render(label("needs-you", 2));
+  const heading = screen.getByText("Needs you", { exact: true }).element().parentElement!;
+  expect(heading.classList.contains("text-warning-foreground")).toBe(false);
+  await expect.poll(() => getComputedStyle(screen.getByText("(2)").element()).opacity).toBe("1");
+  expect(needsYouHand()).not.toBeNull();
+  expect(needsYouHand()!.classList.contains("text-warning-foreground")).toBe(true);
+  expect(getComputedStyle(needsYouHand()!).animationName).toBe("inyosira-needs-you-point");
+
+  // Rows already on screen count as waiting even before the total catches up.
+  await screen.rerender(label("needs-you", 0, true));
+  expect(needsYouHand()).not.toBeNull();
+
+  await screen.rerender(label("needs-you", 0));
+  expect(needsYouHand()).toBeNull();
+
+  await screen.rerender(label("present", 5, true));
+  expect(needsYouHand()).toBeNull();
+});
