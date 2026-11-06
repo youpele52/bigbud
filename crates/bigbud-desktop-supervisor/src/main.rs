@@ -140,6 +140,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<_> = std::env::args().skip(1).collect();
+    if args
+        .first()
+        .is_some_and(|arg| arg == "--thread-organization")
+    {
+        let [_, nonce, generation] = args.as_slice() else {
+            return Err(
+                io::Error::other("expected organisation owner nonce and generation").into(),
+            );
+        };
+        let generation = generation.parse::<u64>()?;
+        return bigbud_desktop_supervisor::organization::runtime::run(nonce.clone(), generation)
+            .map_err(Into::into);
+    }
     if args.first().is_some_and(|arg| arg == "--inspect-process") {
         let [_, pid] = args.as_slice() else {
             return Err(io::Error::other("expected one process id").into());

@@ -1,6 +1,7 @@
 mod connection;
 mod frame;
 mod generated;
+pub mod organization;
 mod owner_session;
 pub mod process_identity;
 mod supervisor;

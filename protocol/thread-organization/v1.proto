@@ -1,0 +1,51 @@
+syntax = "proto3";
+package bigbud.thread_organization.v1;
+import "thread-organization/facts.proto";
+import "thread-organization/policy.proto";
+import "thread-organization/scheduling.proto";
+
+// Separate --thread-organization mode on the existing supervisor binary (not yet wired).
+// Every frame is fenced by backend nonce and fresh sidecar generation.
+// Admission rejects duplicate known singular fields recursively (including oneof
+// alternatives). Page rows are repeated; unknown fields remain forward compatible.
+message Frame {
+  string backend_nonce = 1;
+  uint64 generation = 2;
+  oneof payload {
+    Hello hello = 3;
+    SnapshotBegin begin = 4;
+    SnapshotPage page = 5;
+    SnapshotEnd end = 6;
+    bigbud.thread_organization.facts.v1.Fact fact = 7;
+    bigbud.thread_organization.scheduling.v1.Receipt receipt = 8;
+    bigbud.thread_organization.scheduling.v1.Heartbeat heartbeat = 9;
+    // In-place policy/barrier update after activation. A higher version replaces the policy;
+    // the same version may only advance the target drain barrier (Undo/target grace).
+    bigbud.thread_organization.policy.v1.Policy policy = 10;
+  }
+}
+message Hello {
+  uint32 major = 1;
+  uint32 minor = 2;
+  string capability = 3; // compact-facts-v1 (not scheduling authority)
+  bigbud.thread_organization.policy.v1.Limits limits = 4;
+}
+message SnapshotBegin {
+  string snapshot_id = 1;
+  uint64 sequence = 2; // organiser sequence included by the compact snapshot
+  uint64 source_frontier = 3; // canonical event frontier, not filtered event sequence
+  bigbud.thread_organization.policy.v1.Policy policy = 4;
+}
+message SnapshotPage {
+  string snapshot_id = 1;
+  uint32 index = 2;
+  repeated bigbud.thread_organization.facts.v1.ThreadFacts rows = 3;
+}
+message SnapshotEnd {
+  string snapshot_id = 1;
+  uint32 pages = 2;
+  uint32 rows = 3;
+  // SHA-256 over sorted rows: 4-byte big-endian encoded length then prost row bytes.
+  bytes digest = 4;
+  uint64 policy_version = 5;
+}

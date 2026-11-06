@@ -1,0 +1,38 @@
+syntax = "proto3";
+package bigbud.thread_organization.facts.v1;
+
+// Derived compact facts only. TS owns persistence, source observation and final validation.
+// All uint64 values are restricted to JavaScript's nonnegative safe-integer range.
+enum Section { SECTION_UNSPECIFIED = 0; SECTION_NEEDS_YOU = 1; SECTION_PRESENT = 2; SECTION_LATER = 3; SECTION_DONE = 4; }
+enum Work { WORK_UNSPECIFIED = 0; WORK_IDLE = 1; WORK_ACTIVE = 2; WORK_UNKNOWN = 3; }
+message ThreadFacts {
+  string thread_id = 1;
+  uint64 fact_version = 2;
+  uint64 organization_revision = 3;
+  Section section = 4;
+  Work work = 5;
+  bool actionable = 6;
+  uint64 attention_watermark = 7;
+  // Missing anchor means unclassified/protected; never substitute presentation changedAt.
+  optional uint64 inactivity_at_ms = 8;
+  optional uint64 manual_until_ms = 9;
+  optional uint64 snooze_until_ms = 10;
+  string snooze_identity = 11;
+  optional uint64 grace_until_ms = 12;
+  // False includes archived, deleting, nonstandard and unclassified rows.
+  bool eligible = 13;
+  // Presence keeps legacy compact-fact fixtures compatible. Scheduling requires these facts.
+  optional bool in_scope = 14;
+  optional uint64 manual_attention_watermark = 15;
+  optional uint64 engaged_until_ms = 16;
+  // True while the current Needs you placement was made by automation; any deliberate move
+  // clears it. Absent in legacy fixtures (treated as manual: never auto-returned).
+  optional bool automatic_placement = 17;
+}
+message Fact {
+  uint64 sequence = 1;
+  uint64 source_frontier = 2;
+  ThreadFacts row = 3;
+  // Tombstone retains the ID and strictly advancing fact version.
+  bool deleted = 4;
+}
