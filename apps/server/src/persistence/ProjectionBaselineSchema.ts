@@ -33,4 +33,7 @@ export const PROJECTION_BASELINE_REQUIRED_TABLES = [
   "projection_state",
   "projection_usage_backfill_state",
   "projection_usage_estimate_backfill_state",
+  "projection_baseline_rows",
+  // Disposable scan cursor: reset on restore, never a canonical timing fact.
+  "projection_organization_age_backfill",
 ] as const;

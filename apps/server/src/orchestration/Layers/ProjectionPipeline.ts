@@ -146,6 +146,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         verifyCandidateInWorkspace({
           candidate,
           source,
+          readSource: projectionBaselineRepository.payloadSource,
           eventStore,
           projectorNames,
         }).pipe(
@@ -222,7 +223,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         );
       }
       yield* projectionBaselineRepository.restorePayload(
-        baseline.value.payloadJson,
+        projectionBaselineRepository.payloadSource(baseline.value),
         baseline.value.sequence,
         projectorNames,
       );

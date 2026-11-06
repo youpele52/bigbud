@@ -10,11 +10,17 @@ import {
 import { ProjectionBaselineRepository } from "../Services/ProjectionBaselines.ts";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { ProjectionBaselineRepositoryLive } from "./ProjectionBaselines.ts";
+import { type BaselinePayload, makeThreadOwnedRowFilter } from "./ProjectionBaselines.payload.ts";
 import {
-  type BaselinePayload,
-  sanitizeLegacyThreadOwnedRows,
-} from "./ProjectionBaselines.payload.ts";
-import { deleteMissingRows } from "./ProjectionBaselines.restore.ts";
+  deleteRowsMissingFromKeys,
+  recordBaselineRestoreKeys,
+  resetBaselineRestoreKeys,
+  type TableColumn,
+} from "./ProjectionBaselines.restore.ts";
+import {
+  captureBaselinePayloadJson,
+  jsonBaselinePayloadSource,
+} from "./ProjectionBaselines.test.helpers.ts";
 import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 
 const layer = it.layer(
@@ -28,29 +34,25 @@ function emptyPayload(): BaselinePayload {
 }
 
 it("filters every thread-owned baseline table and reports only bounded table counts", () => {
-  const payload = emptyPayload();
-  payload.tables.projection_threads = [{ thread_id: "valid-thread" }];
+  const filter = makeThreadOwnedRowFilter();
+  assert.isTrue(filter.accept("projection_threads", { thread_id: "valid-thread" }));
   for (const table of PROJECTION_BASELINE_THREAD_OWNED_TABLES) {
-    payload.tables[table] = [
-      { thread_id: "valid-thread", value: `valid-${table}` },
-      { thread_id: "legacy-orphan", value: `orphan-${table}` },
-    ];
+    const valid = { thread_id: "valid-thread", value: `valid-${table}` };
+    const orphan = { thread_id: "legacy-orphan", value: `orphan-${table}` };
+    assert.isTrue(filter.accept(table, valid));
+    assert.isFalse(filter.accept(table, orphan));
+    // The second pass asks again without counting the orphan twice.
+    assert.isTrue(filter.keeps(table, valid));
+    assert.isFalse(filter.keeps(table, orphan));
   }
 
-  const result = sanitizeLegacyThreadOwnedRows(payload);
-  for (const table of PROJECTION_BASELINE_THREAD_OWNED_TABLES) {
-    assert.deepEqual(result.payload.tables[table], [
-      { thread_id: "valid-thread", value: `valid-${table}` },
-    ]);
-  }
-  assert.equal(result.sanitization.length, PROJECTION_BASELINE_THREAD_OWNED_TABLES.length);
-  assert.isTrue(result.sanitization.every((entry) => entry.removedCount === 1));
+  const sanitization = filter.sanitization();
+  assert.equal(sanitization.length, PROJECTION_BASELINE_THREAD_OWNED_TABLES.length);
+  assert.isTrue(sanitization.every((entry) => entry.removedCount === 1));
   assert.isTrue(
-    result.sanitization.every(
-      (entry) => Object.keys(entry).toSorted().join(",") === "removedCount,table",
-    ),
+    sanitization.every((entry) => Object.keys(entry).toSorted().join(",") === "removedCount,table"),
   );
-  const metadata = JSON.stringify(result.sanitization);
+  const metadata = JSON.stringify(sanitization);
   assert.notInclude(metadata, "valid-thread");
   assert.notInclude(metadata, "legacy-orphan");
   assert.notInclude(metadata, "orphan-");
@@ -69,14 +71,14 @@ layer("legacy projection baseline restore", (it) => {
         INSERT INTO projection_thread_sessions (thread_id, status, updated_at)
         VALUES (${threadId}, 'ready', '2026-09-03T00:00:00.000Z')
       `;
-        const payload = JSON.parse(yield* baselines.capturePayload()) as BaselinePayload;
+        const payload = JSON.parse(yield* captureBaselinePayloadJson) as BaselinePayload;
         const validSession = payload.tables.projection_thread_sessions![0]!;
         payload.tables.projection_thread_sessions = [
           validSession,
           { ...validSession, thread_id: "legacy-orphan-session" },
         ];
 
-        yield* baselines.restorePayload(JSON.stringify(payload), 0, []);
+        yield* baselines.restorePayload(jsonBaselinePayloadSource(JSON.stringify(payload)), 0, []);
         const sessions = yield* sql<{ readonly threadId: string; readonly status: string }>`
         SELECT thread_id AS "threadId", status FROM projection_thread_sessions
       `;
@@ -145,10 +147,10 @@ layer("legacy projection baseline restore", (it) => {
           ('baseline-completed-watch', ${threadId}, ${childThreadId}, 'Child', 'source-completed', 'completed', ${now})
       `;
 
-      const payload = yield* baselines.capturePayload();
+      const payload = yield* captureBaselinePayloadJson;
       yield* sql`UPDATE projection_projects SET title = 'Changed project' WHERE project_id = ${projectId}`;
       yield* sql`UPDATE projection_threads SET title = 'Changed thread' WHERE thread_id = ${threadId}`;
-      yield* baselines.restorePayload(payload, 0, []);
+      yield* baselines.restorePayload(jsonBaselinePayloadSource(payload), 0, []);
 
       assert.deepEqual(
         yield* sql`SELECT title FROM projection_projects WHERE project_id = ${projectId}`,
@@ -190,7 +192,7 @@ layer("legacy projection baseline restore", (it) => {
     }),
   );
 
-  it.effect("deletes large baseline key sets with one bounded SQLite value", () =>
+  it.effect("deletes large baseline key sets through one uncorrelated key subquery", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* sql`CREATE TEMP TABLE baseline_large_keys (key_a TEXT NOT NULL, key_b INTEGER NOT NULL, PRIMARY KEY (key_a, key_b))`;
@@ -205,14 +207,17 @@ layer("legacy projection baseline restore", (it) => {
         key_a: `row-${index + 1}`,
         key_b: index + 1,
       }));
-      const deletion = deleteMissingRows(
+      const columns: ReadonlyArray<TableColumn> = [
+        { name: "key_a", primaryKeyPosition: 1, defaultValue: null },
+        { name: "key_b", primaryKeyPosition: 2, defaultValue: null },
+      ];
+      yield* resetBaselineRestoreKeys(sql);
+      yield* recordBaselineRestoreKeys(
+        sql,
         "baseline_large_keys",
-        [
-          { name: "key_a", primaryKeyPosition: 1, defaultValue: null },
-          { name: "key_b", primaryKeyPosition: 2, defaultValue: null },
-        ],
-        payloadRows,
+        payloadRows.map((row) => [row.key_a, row.key_b]),
       );
+      const deletion = deleteRowsMissingFromKeys("baseline_large_keys", columns);
       assert.equal(deletion.params.length, 1);
       const queryPlan = yield* sql.unsafe<{ readonly detail: string }>(
         `EXPLAIN QUERY PLAN ${deletion.statement}`,
@@ -233,17 +238,15 @@ layer("legacy projection baseline restore", (it) => {
       yield* sql`CREATE TEMP TABLE baseline_nullable_keys (key_a TEXT, key_b TEXT, PRIMARY KEY (key_a, key_b))`;
       yield* sql`INSERT INTO baseline_nullable_keys (key_a, key_b) VALUES
         ('keep-a', NULL), (NULL, 'keep-b'), ('remove-a', NULL), (NULL, 'remove-b'), (NULL, NULL)`;
-      const deletion = deleteMissingRows(
-        "baseline_nullable_keys",
-        [
-          { name: "key_a", primaryKeyPosition: 1, defaultValue: null },
-          { name: "key_b", primaryKeyPosition: 2, defaultValue: null },
-        ],
-        [
-          { key_a: "keep-a", key_b: null },
-          { key_a: null, key_b: "keep-b" },
-        ],
-      );
+      yield* resetBaselineRestoreKeys(sql);
+      yield* recordBaselineRestoreKeys(sql, "baseline_nullable_keys", [
+        ["keep-a", null],
+        [null, "keep-b"],
+      ]);
+      const deletion = deleteRowsMissingFromKeys("baseline_nullable_keys", [
+        { name: "key_a", primaryKeyPosition: 1, defaultValue: null },
+        { name: "key_b", primaryKeyPosition: 2, defaultValue: null },
+      ]);
       yield* sql.unsafe(deletion.statement, deletion.params);
       assert.deepEqual(yield* sql`SELECT key_a, key_b FROM baseline_nullable_keys`, [
         { key_a: "keep-a", key_b: null },
@@ -258,7 +261,9 @@ layer("legacy projection baseline restore", (it) => {
       const payload = emptyPayload();
       payload.tables.projection_thread_sessions = [{ status: "ready" }];
       assert.equal(
-        (yield* Effect.exit(baselines.restorePayload(JSON.stringify(payload), 0, [])))._tag,
+        (yield* Effect.exit(
+          baselines.restorePayload(jsonBaselinePayloadSource(JSON.stringify(payload)), 0, []),
+        ))._tag,
         "Failure",
       );
     }),
@@ -274,13 +279,15 @@ layer("legacy projection baseline restore", (it) => {
         INSERT INTO projection_thread_sessions (thread_id, status, updated_at)
         VALUES (${threadId}, 'ready', '2026-09-03T00:00:00.000Z')
       `;
-      const payload = JSON.parse(yield* baselines.capturePayload()) as BaselinePayload;
+      const payload = JSON.parse(yield* captureBaselinePayloadJson) as BaselinePayload;
       payload.tables.projection_thread_sessions = [
         payload.tables.projection_thread_sessions![0]!,
         payload.tables.projection_thread_sessions![0]!,
       ];
       assert.equal(
-        (yield* Effect.exit(baselines.restorePayload(JSON.stringify(payload), 0, [])))._tag,
+        (yield* Effect.exit(
+          baselines.restorePayload(jsonBaselinePayloadSource(JSON.stringify(payload)), 0, []),
+        ))._tag,
         "Failure",
       );
     }),

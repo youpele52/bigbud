@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { Cause, Clock, Effect, Exit, FileSystem, Layer, Option, Path, Scope } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -19,7 +17,13 @@ import { ProjectionThreadTaskRepositoryLive } from "../../persistence/Layers/Pro
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
 import { type OrchestrationEventStoreShape } from "../../persistence/Services/OrchestrationEventStore.ts";
 import {
+  copyBaselinePayloadRows,
+  emptyBaselinePayloadSource,
+  storedBaselinePayloadSource,
+} from "../../persistence/ProjectionBaselineRows.ts";
+import {
   ProjectionBaselineRepository,
+  type BaselinePayloadSource,
   type ProjectionBaseline,
 } from "../../persistence/Services/ProjectionBaselines.ts";
 import { ProjectionPendingApprovalRepository } from "../../persistence/Services/ProjectionPendingApprovals.ts";
@@ -57,15 +61,6 @@ const workspaceLayer = Layer.mergeAll(
   ProjectionThreadTaskRepositoryLive,
   ProjectionTurnRepositoryLive,
 );
-
-function emptyPayload(candidatePayloadJson: string): string {
-  const candidate = JSON.parse(candidatePayloadJson) as {
-    tables: Record<string, ReadonlyArray<Record<string, unknown>>>;
-  };
-  return JSON.stringify({
-    tables: Object.fromEntries(Object.keys(candidate.tables).map((table) => [table, []])),
-  });
-}
 
 type WorkspaceMeta = {
   readonly candidateId: number;
@@ -105,6 +100,8 @@ const cleanupWorkspaceArtifacts = (input: {
 export const verifyCandidateInWorkspace = (input: {
   readonly candidate: ProjectionBaseline;
   readonly source: Option.Option<ProjectionBaseline>;
+  /** Reads the source baseline's rows from the live database, page by page. */
+  readonly readSource: (baseline: ProjectionBaseline) => BaselinePayloadSource;
   readonly eventStore: OrchestrationEventStoreShape;
   readonly projectorNames: ReadonlyArray<string>;
 }) =>
@@ -212,13 +209,29 @@ export const verifyCandidateInWorkspace = (input: {
                 metadata.candidateSequence !== input.candidate.sequence ||
                 metadata.sourceSequence !== sourceSequence
               ) {
+                // Copy the source rows in before the transaction: reads issued inside a
+                // workspace transaction would run against the workspace, not the live database.
+                const sourcePayload = yield* Option.match(input.source, {
+                  onNone: () => Effect.succeed(emptyBaselinePayloadSource),
+                  onSome: (baseline) =>
+                    copyBaselinePayloadRows(
+                      input.readSource(baseline),
+                      workspaceSql,
+                      baseline.baselineId,
+                    ).pipe(
+                      Effect.as(
+                        storedBaselinePayloadSource(
+                          workspaceSql,
+                          baseline.baselineId,
+                          baseline.payloadHash,
+                        ),
+                      ),
+                    ),
+                });
                 yield* workspaceSql.withTransaction(
                   Effect.gen(function* () {
                     yield* baselines.restorePayload(
-                      Option.match(input.source, {
-                        onNone: () => emptyPayload(input.candidate.payloadJson),
-                        onSome: (baseline) => baseline.payloadJson,
-                      }),
+                      sourcePayload,
                       sourceSequence,
                       input.projectorNames,
                     );
@@ -296,11 +309,8 @@ export const verifyCandidateInWorkspace = (input: {
                 if (cursor < input.candidate.sequence) yield* Effect.sleep("1 millis");
               }
 
-              const payloadJson = yield* baselines.capturePayload();
-              const hash = createHash("sha256").update(payloadJson).digest("hex");
-              return (
-                hash === input.candidate.payloadHash && payloadJson === input.candidate.payloadJson
-              );
+              // Same capture and hash as the candidate; neither payload is ever held in memory.
+              return (yield* baselines.captureDigest()) === input.candidate.payloadHash;
             }).pipe(Scope.provide(workspaceScope)),
           (workspaceScope, exit) => {
             const preserve =

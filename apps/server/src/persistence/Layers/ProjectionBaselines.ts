@@ -1,39 +1,28 @@
-import { createHash } from "node:crypto";
-
 import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceDecodeCauseError, toPersistenceSqlError } from "../Errors.ts";
 import { orchestrationSequenceFrontierSql } from "../OrchestrationSequenceFrontier.ts";
-import { PROJECTION_BASELINE_TABLES } from "../ProjectionBaselineSchema.ts";
+import {
+  BASELINE_SCRATCH_ID,
+  PROJECTION_BASELINE_FORMAT_VERSION,
+  storedBaselinePayloadSource,
+} from "../ProjectionBaselineRows.ts";
 import {
   ProjectionBaselineRepository,
   type ProjectionBaseline,
   type ProjectionBaselineRepositoryShape,
 } from "../Services/ProjectionBaselines.ts";
-import {
-  type BaselinePayload,
-  parseBaselinePayload,
-  sanitizeLegacyThreadOwnedRows,
-} from "./ProjectionBaselines.payload.ts";
-import {
-  defaultExpression,
-  deleteMissingRows,
-  hasDuplicatePrimaryKeys,
-  quoteIdentifier,
-  restoreActiveWatches,
-  type ActiveWatch,
-  type TableColumn,
-} from "./ProjectionBaselines.restore.ts";
-import { compareNormalizedRows, normalizeRow } from "./ProjectionBaselines.capture.ts";
+import { captureBaselineRows } from "./ProjectionBaselines.capture.ts";
+import { makeLatestVerifiedSequence } from "./ProjectionBaselines.queries.ts";
+import { restoreBaselinePayload } from "./ProjectionBaselines.restoreRows.ts";
 
-export const PROJECTION_BASELINE_FORMAT_VERSION = 1;
+export { PROJECTION_BASELINE_FORMAT_VERSION };
 
 type BaselineRow = {
   readonly baselineId: number;
   readonly sequence: number;
   readonly formatVersion: number;
-  readonly payloadJson: string;
   readonly payloadHash: string;
   readonly verificationStatus: "candidate" | "verified" | "rejected";
   readonly verificationDetail: string | null;
@@ -43,8 +32,7 @@ type BaselineRow = {
 
 const selectBaseline = `
   SELECT baseline_id AS baselineId, sequence, format_version AS formatVersion,
-    payload_json AS payloadJson, payload_hash AS payloadHash,
-    verification_status AS verificationStatus,
+    payload_hash AS payloadHash, verification_status AS verificationStatus,
     verification_detail AS verificationDetail, created_at AS createdAt,
     verified_at AS verifiedAt
   FROM projection_baselines
@@ -55,44 +43,26 @@ function validateBaseline(row: BaselineRow): ProjectionBaseline {
     throw new Error(`unsupported projection baseline format ${row.formatVersion}`);
   }
   if (Number.isNaN(Date.parse(row.createdAt))) throw new Error("invalid baseline timestamp");
-  const hash = createHash("sha256").update(row.payloadJson).digest("hex");
-  if (hash !== row.payloadHash) throw new Error("projection baseline payload hash mismatch");
-  parseBaselinePayload(row.payloadJson);
+  // The payload hash is checked against the stored rows whenever they are restored.
+  if (!/^[0-9a-f]{64}$/.test(row.payloadHash)) throw new Error("invalid baseline payload hash");
   return row;
 }
 
 const makeProjectionBaselineRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
 
-  const capturePayloadUnsafe = Effect.gen(function* () {
-    const tables: Record<string, ReadonlyArray<Record<string, unknown>>> = {};
-    for (const table of PROJECTION_BASELINE_TABLES) {
-      const rows = yield* sql.unsafe<Record<string, unknown>>(`SELECT * FROM ${table}`);
-      const currentThreadIds =
-        table === "projection_threads" ? new Set(rows.map((row) => row.thread_id)) : null;
-      const baselineRows =
-        table === "projection_projects"
-          ? rows.filter((row) => row.project_id !== "__chats__")
-          : currentThreadIds === null
-            ? rows
-            : rows.map((row) =>
-                row.parent_thread_id === null || currentThreadIds.has(row.parent_thread_id)
-                  ? row
-                  : Object.assign({}, row, {
-                      parent_thread_id: null,
-                      parent_thread_title: null,
-                      parent_thread_project_id: null,
-                    }),
-              );
-      tables[table] = baselineRows.map(normalizeRow).toSorted(compareNormalizedRows);
-    }
-    return JSON.stringify({ tables } satisfies BaselinePayload);
-  });
-
-  const capturePayload: ProjectionBaselineRepositoryShape["capturePayload"] = () =>
-    capturePayloadUnsafe.pipe(
-      Effect.mapError(toPersistenceSqlError("ProjectionBaselineRepository.capturePayload")),
-    );
+  const captureDigest: ProjectionBaselineRepositoryShape["captureDigest"] = () =>
+    sql
+      .withTransaction(
+        captureBaselineRows(sql, BASELINE_SCRATCH_ID).pipe(
+          Effect.tap(() =>
+            sql.unsafe("DELETE FROM projection_baseline_rows WHERE baseline_id = ?", [
+              BASELINE_SCRATCH_ID,
+            ]),
+          ),
+        ),
+      )
+      .pipe(Effect.mapError(toPersistenceSqlError("ProjectionBaselineRepository.captureDigest")));
 
   const createCandidate: ProjectionBaselineRepositoryShape["createCandidate"] = (
     requiredProjectors,
@@ -100,6 +70,10 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
     sql
       .withTransaction(
         Effect.gen(function* () {
+          // Do not compact evidence before bounded historical classification finishes.
+          const pending = yield* sql`SELECT 1 FROM projection_threads
+            WHERE organization_age_provenance = 'pending' AND organization_revision > 0 LIMIT 1`;
+          if (pending.length > 0) return Option.none<ProjectionBaseline>();
           const states = yield* sql.unsafe<{ projector: string; sequence: number }>(
             "SELECT projector, last_applied_sequence AS sequence FROM projection_state ORDER BY projector",
           );
@@ -125,161 +99,44 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
             [sequence],
           );
           if (existing[0]) return Option.some(validateBaseline(existing[0]));
-          const payloadJson = yield* capturePayloadUnsafe;
-          const payloadHash = createHash("sha256").update(payloadJson).digest("hex");
           const createdAt = new Date().toISOString();
-          const inserted = yield* sql.unsafe<BaselineRow>(
+          const inserted = yield* sql.unsafe<{ readonly baselineId: number }>(
             `INSERT INTO projection_baselines (
               sequence, format_version, payload_json, payload_hash,
               verification_status, verification_detail, created_at, verified_at
-            ) VALUES (?, ?, ?, ?, 'candidate', NULL, ?, NULL)
-            RETURNING baseline_id AS baselineId, sequence, format_version AS formatVersion,
-              payload_json AS payloadJson, payload_hash AS payloadHash,
-              verification_status AS verificationStatus,
-              verification_detail AS verificationDetail, created_at AS createdAt,
-              verified_at AS verifiedAt`,
-            [sequence, PROJECTION_BASELINE_FORMAT_VERSION, payloadJson, payloadHash, createdAt],
+            ) VALUES (?, ?, '', '', 'candidate', NULL, ?, NULL)
+            RETURNING baseline_id AS baselineId`,
+            [sequence, PROJECTION_BASELINE_FORMAT_VERSION, createdAt],
           );
-          return inserted[0] ? Option.some(inserted[0]) : Option.none<ProjectionBaseline>();
+          const baselineId = inserted[0]?.baselineId;
+          if (baselineId === undefined) return Option.none<ProjectionBaseline>();
+          const payloadHash = yield* captureBaselineRows(sql, baselineId);
+          yield* sql.unsafe(
+            "UPDATE projection_baselines SET payload_hash = ? WHERE baseline_id = ?",
+            [payloadHash, baselineId],
+          );
+          return Option.some<ProjectionBaseline>({
+            baselineId,
+            sequence,
+            formatVersion: PROJECTION_BASELINE_FORMAT_VERSION,
+            payloadHash,
+            verificationStatus: "candidate",
+            verificationDetail: null,
+            createdAt,
+            verifiedAt: null,
+          });
         }),
       )
       .pipe(Effect.mapError(toPersistenceSqlError("ProjectionBaselineRepository.createCandidate")));
 
   const restorePayload: ProjectionBaselineRepositoryShape["restorePayload"] = (
-    payloadJson,
+    source,
     sequence,
     requiredProjectors,
-  ) =>
-    Effect.try({
-      try: () => sanitizeLegacyThreadOwnedRows(parseBaselinePayload(payloadJson)),
-      catch: toPersistenceDecodeCauseError("ProjectionBaselineRepository.restorePayload:decode"),
-    }).pipe(
-      Effect.flatMap(({ payload, sanitization }) =>
-        Effect.gen(function* () {
-          if (sanitization.length > 0) {
-            yield* Effect.logWarning("legacy projection baseline rows sanitized", {
-              tables: sanitization,
-            });
-          }
-          yield* sql.withTransaction(
-            Effect.gen(function* () {
-              const restoredThreadIds = new Set(
-                (payload.tables.projection_threads ?? []).map((row) => row.thread_id),
-              );
-              const activeWatches = yield* sql<ActiveWatch>`
-              SELECT watch_id AS "watchId", watcher_thread_id AS "watcherThreadId",
-                watched_thread_id AS "watchedThreadId", watched_thread_title AS "watchedThreadTitle",
-                source_message_id AS "sourceMessageId", status, created_at AS "createdAt",
-                triggered_at AS "triggeredAt"
-              FROM projection_thread_watches
-              WHERE status = 'active'
-            `;
-              const tableColumns = new Map<string, ReadonlyArray<TableColumn>>();
-              for (const table of PROJECTION_BASELINE_TABLES) {
-                const columns = yield* sql.unsafe<{
-                  readonly name: string;
-                  readonly pk: number;
-                  readonly dflt_value: string | null;
-                }>(`PRAGMA table_info(${table})`);
-                tableColumns.set(
-                  table,
-                  columns.map((column) => ({
-                    name: column.name,
-                    primaryKeyPosition: column.pk,
-                    defaultValue: column.dflt_value,
-                  })),
-                );
-              }
-              for (const table of PROJECTION_BASELINE_TABLES.toReversed()) {
-                const schemaColumns = tableColumns.get(table)!;
-                if (hasDuplicatePrimaryKeys(payload.tables[table]!, schemaColumns)) {
-                  return yield* toPersistenceDecodeCauseError(
-                    "ProjectionBaselineRepository.restorePayload:duplicate",
-                  )(new Error(`duplicate primary key in baseline ${table}`));
-                }
-                const deletion = deleteMissingRows(table, schemaColumns, payload.tables[table]!);
-                yield* sql.unsafe(deletion.statement, deletion.params);
-              }
-              for (const table of PROJECTION_BASELINE_TABLES) {
-                const schemaColumns = tableColumns.get(table)!;
-                const allowedColumns = new Set(schemaColumns.map((column) => column.name));
-                for (const payloadRow of payload.tables[table] ?? []) {
-                  const row =
-                    table === "projection_threads" &&
-                    payloadRow.parent_thread_id !== null &&
-                    !restoredThreadIds.has(payloadRow.parent_thread_id)
-                      ? Object.assign({}, payloadRow, {
-                          parent_thread_id: null,
-                          parent_thread_title: null,
-                          parent_thread_project_id: null,
-                        })
-                      : payloadRow;
-                  const columns = schemaColumns.map((column) => column.name);
-                  if (
-                    columns.length === 0 ||
-                    Object.keys(row).some((column) => !allowedColumns.has(column))
-                  ) {
-                    return yield* toPersistenceDecodeCauseError(
-                      "ProjectionBaselineRepository.restorePayload:columns",
-                    )(new Error(`invalid columns for ${table}`));
-                  }
-                  const quoted = columns.map(quoteIdentifier).join(", ");
-                  const valueExpressions = columns.map((column) =>
-                    Object.hasOwn(row, column)
-                      ? "?"
-                      : defaultExpression(schemaColumns.find((item) => item.name === column)!),
-                  );
-                  const values = columns
-                    .filter((column) => Object.hasOwn(row, column))
-                    .map((column) => row[column]);
-                  const updates = schemaColumns
-                    .filter((column) => column.primaryKeyPosition === 0)
-                    .map(
-                      (column) =>
-                        `${quoteIdentifier(column.name)} = excluded.${quoteIdentifier(column.name)}`,
-                    )
-                    .join(", ");
-                  yield* sql.unsafe(
-                    `INSERT INTO ${table} (${quoted}) VALUES (${valueExpressions.join(", ")})` +
-                      (updates.length > 0
-                        ? ` ON CONFLICT DO UPDATE SET ${updates}`
-                        : " ON CONFLICT DO NOTHING"),
-                    values,
-                  );
-                }
-              }
-              yield* sql`
-              UPDATE projection_threads
-              SET parent_thread_id = NULL, parent_thread_title = NULL, parent_thread_project_id = NULL
-              WHERE parent_thread_id IS NOT NULL
-                AND NOT EXISTS (
-                  SELECT 1 FROM projection_threads AS parent
-                  WHERE parent.thread_id = projection_threads.parent_thread_id
-                )
-            `;
-              yield* sql`DELETE FROM projection_state`;
-              yield* sql`UPDATE projection_usage_backfill_state
-                SET last_activity_id = '', completed = 0`;
-              yield* sql`UPDATE projection_usage_estimate_backfill_state
-                SET last_message_id = '', completed = 0`;
-              const updatedAt = new Date().toISOString();
-              for (const projector of requiredProjectors) {
-                yield* sql`
-                INSERT INTO projection_state (projector, last_applied_sequence, updated_at)
-                VALUES (${projector}, ${sequence}, ${updatedAt})
-              `;
-              }
-              yield* restoreActiveWatches(sql, activeWatches);
-            }),
-          );
-        }),
-      ),
-      Effect.mapError((error) =>
-        error._tag === "PersistenceDecodeError"
-          ? error
-          : toPersistenceSqlError("ProjectionBaselineRepository.restorePayload")(error),
-      ),
-    );
+  ) => restoreBaselinePayload(sql, source, sequence, requiredProjectors);
+
+  const payloadSource: ProjectionBaselineRepositoryShape["payloadSource"] = (baseline) =>
+    storedBaselinePayloadSource(sql, baseline.baselineId, baseline.payloadHash);
 
   const getById: ProjectionBaselineRepositoryShape["getById"] = (baselineId) =>
     sql.unsafe<BaselineRow>(`${selectBaseline} WHERE baseline_id = ? LIMIT 1`, [baselineId]).pipe(
@@ -348,6 +205,8 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
               baselineId,
               sequence,
             ]),
+            sql.unsafe(`DELETE FROM projection_baseline_rows
+              WHERE baseline_id NOT IN (SELECT baseline_id FROM projection_baselines)`),
           ],
           { concurrency: 1, discard: true },
         ),
@@ -356,22 +215,34 @@ const makeProjectionBaselineRepository = Effect.gen(function* () {
 
   const markRejected: ProjectionBaselineRepositoryShape["markRejected"] = (baselineId, _detail) =>
     sql
-      .unsafe(
-        "DELETE FROM projection_baselines WHERE baseline_id = ? AND verification_status = 'candidate'",
-        [baselineId],
+      .withTransaction(
+        Effect.all(
+          [
+            sql.unsafe(
+              `DELETE FROM projection_baseline_rows WHERE baseline_id = ? AND EXISTS (
+                SELECT 1 FROM projection_baselines
+                WHERE baseline_id = ? AND verification_status = 'candidate')`,
+              [baselineId, baselineId],
+            ),
+            sql.unsafe(
+              "DELETE FROM projection_baselines WHERE baseline_id = ? AND verification_status = 'candidate'",
+              [baselineId],
+            ),
+          ],
+          { concurrency: 1, discard: true },
+        ),
       )
-      .pipe(
-        Effect.asVoid,
-        Effect.mapError(toPersistenceSqlError("ProjectionBaselineRepository.markRejected")),
-      );
+      .pipe(Effect.mapError(toPersistenceSqlError("ProjectionBaselineRepository.markRejected")));
 
   return {
-    capturePayload,
+    captureDigest,
     createCandidate,
     getById,
     latestVerified,
+    latestVerifiedSequence: makeLatestVerifiedSequence(sql),
     markRejected,
     markVerified,
+    payloadSource,
     restorePayload,
   } satisfies ProjectionBaselineRepositoryShape;
 });

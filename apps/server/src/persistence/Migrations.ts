@@ -162,6 +162,7 @@ import Migration0148 from "./Migrations/148_ThreadOrganizationAging.ts";
 import Migration0149 from "./Migrations/149_ThreadOrganizationOperations.ts";
 import Migration0150 from "./Migrations/150_ThreadOrganizationFacts.ts";
 import Migration0151 from "./Migrations/151_ThreadOrganizationAttention.ts";
+import Migration0152 from "./Migrations/152_ProjectionBaselineRows.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -314,6 +315,7 @@ export const migrationEntries = [
   [149, "ThreadOrganizationOperations", Migration0149],
   [150, "ThreadOrganizationFacts", Migration0150],
   [151, "ThreadOrganizationAttention", Migration0151],
+  [152, "ProjectionBaselineRows", Migration0152],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

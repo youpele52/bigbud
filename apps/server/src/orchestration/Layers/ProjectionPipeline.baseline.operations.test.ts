@@ -6,6 +6,7 @@ import {
   PersistenceSqlError,
   type ProjectionRepositoryError,
 } from "../../persistence/Errors.ts";
+import { emptyBaselinePayloadSource } from "../../persistence/ProjectionBaselineRows.ts";
 import type {
   ProjectionBaseline,
   ProjectionBaselineRepositoryShape,
@@ -16,8 +17,7 @@ import { makeProjectionBaselineOperations } from "./ProjectionPipeline.baseline.
 const candidate: ProjectionBaseline = {
   baselineId: 17,
   sequence: 17,
-  formatVersion: 1,
-  payloadJson: "{}",
+  formatVersion: 2,
   payloadHash: "hash-17",
   verificationStatus: "candidate",
   verificationDetail: null,
@@ -31,15 +31,18 @@ const makeBaselines = (input: {
 }) => {
   const rejected: Array<{ readonly id: number; readonly detail: string }> = [];
   const baselines: ProjectionBaselineRepositoryShape = {
-    capturePayload: () => Effect.succeed("{}"),
+    captureDigest: () => Effect.succeed("digest"),
     createCandidate: () => Effect.succeed(Option.some(candidate)),
     getById: () => Effect.succeed(Option.some(candidate)),
     latestVerified: () => Effect.succeed(input.latest ?? Option.none()),
+    latestVerifiedSequence: () =>
+      Effect.succeed(Option.map(input.latest ?? Option.none(), (baseline) => baseline.sequence)),
     markRejected: (id, detail) => {
       rejected.push({ id, detail });
       return input.markRejected ? Effect.fail(input.markRejected) : Effect.void;
     },
     markVerified: () => Effect.void,
+    payloadSource: () => emptyBaselinePayloadSource,
     restorePayload: () => Effect.void,
   };
   return { baselines, rejected };
