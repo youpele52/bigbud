@@ -94,6 +94,13 @@ describe("MessagesTimeline changed-files row sizing", () => {
       );
       expect(targetRowElement, "Unable to locate target changed-files row.").toBeTruthy();
 
+      // The changed files start collapsed; open the accordion before using its actions.
+      const changedFilesSummary = targetRowElement!.querySelector<HTMLElement>(
+        "[data-slot=activity-accordion] > summary",
+      );
+      expect(changedFilesSummary, "Unable to find the changed-files accordion.").toBeTruthy();
+      changedFilesSummary!.click();
+
       const expandAllButton =
         Array.from(targetRowElement!.querySelectorAll<HTMLButtonElement>("button")).find(
           (button) => button.textContent?.trim() === "Expand all",

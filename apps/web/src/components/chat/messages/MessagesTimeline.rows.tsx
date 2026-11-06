@@ -296,6 +296,8 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
           changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
           onSetChangedFilesExpanded={onSetChangedFilesExpanded}
+          activityAccordionOpenById={activityAccordionOpenById}
+          onSetActivityAccordionOpen={onSetActivityAccordionOpen}
           onOpenTurnDiff={onOpenTurnDiff}
           markdownCwd={markdownCwd}
           onMarkdownAnchorClick={onMarkdownAnchorClick}

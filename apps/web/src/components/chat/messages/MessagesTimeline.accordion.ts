@@ -60,3 +60,20 @@ export function workEntryDetailsAccordionControl(
     onSetOpen,
   });
 }
+
+/** Per-turn "Changed files" accordion under an assistant message, keyed by turn id. */
+export function changedFilesAccordionId(turnId: string): string {
+  return activityAccordionId("changed-files", turnId);
+}
+
+export function changedFilesAccordionControl(
+  turnId: string,
+  openById: ActivityAccordionOpenById,
+  onSetOpen: SetActivityAccordionOpen,
+): ActivityAccordionControl {
+  return controlledActivityAccordionProps({
+    id: changedFilesAccordionId(turnId),
+    openById,
+    onSetOpen,
+  });
+}

@@ -5,7 +5,13 @@ export type ActivityAccordionOpenById = Readonly<Record<string, boolean>>;
 export type SetActivityAccordionOpen = (id: string, open: boolean) => void;
 
 /** Namespaces keep ids unique when different row kinds share a timeline row id. */
-export type ActivityAccordionKind = "question" | "work" | "work-entry" | "thinking" | "subagents";
+export type ActivityAccordionKind =
+  | "question"
+  | "work"
+  | "work-entry"
+  | "thinking"
+  | "subagents"
+  | "changed-files";
 
 /** Controlled `<details>` props for an `ActivityAccordion`. */
 export interface ActivityAccordionControl {

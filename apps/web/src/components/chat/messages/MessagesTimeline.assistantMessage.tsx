@@ -3,16 +3,12 @@ import { TerminalIcon } from "lucide-react";
 import { stableVerbFromId } from "../../../utils/copy";
 import { formatElapsed } from "../../../logic/session";
 import { type TurnDiffSummary } from "../../../models/types";
-import { summarizeTurnDiffStats } from "../../../lib/turnDiffTree";
 import { activitySectionLabelTypography } from "../common/ActivityAccordion";
 import ChatMarkdown from "../common/ChatMarkdown";
-import { Button } from "../../ui/button";
 import { MessageCopyButton } from "../common/MessageCopyButton";
 import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
-import { DiffStatLabel, hasNonZeroStat } from "../diff-display/DiffStatLabel";
-import { ChangedFilesTree } from "../diff-display/ChangedFilesTree";
 import type { MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 import { useMemo } from "react";
@@ -24,6 +20,11 @@ import type { MarkdownAnchorClick } from "../../common/BaseMarkdown";
 
 import { formatMessageMeta } from "./MessagesTimeline.assistantMessage.meta";
 import { MessagesTimelineAutomationRequest } from "./MessagesTimeline.automationRequest";
+import { AssistantTurnChangedFiles } from "./MessagesTimeline.changedFiles";
+import type {
+  ActivityAccordionOpenById,
+  SetActivityAccordionOpen,
+} from "../common/ActivityAccordion.state";
 
 const SHELL_OUTPUT_MIN_WIDTH = "48rem";
 const SHELL_OUTPUT_MAX_WIDTH = "960px";
@@ -42,6 +43,8 @@ interface AssistantMessageBodyProps {
   turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
   changedFilesExpandedByTurnId: Record<string, boolean>;
   onSetChangedFilesExpanded: (turnId: TurnId, expanded: boolean) => void;
+  activityAccordionOpenById: ActivityAccordionOpenById;
+  onSetActivityAccordionOpen: SetActivityAccordionOpen;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   markdownCwd: string | undefined;
   onMarkdownAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
@@ -101,6 +104,8 @@ export function AssistantMessageBody({
   turnDiffSummaryByAssistantMessageId,
   changedFilesExpandedByTurnId,
   onSetChangedFilesExpanded,
+  activityAccordionOpenById,
+  onSetActivityAccordionOpen,
   onOpenTurnDiff,
   markdownCwd,
   onMarkdownAnchorClick,
@@ -177,11 +182,13 @@ export function AssistantMessageBody({
             ) : null}
           </>
         )}
-        <AssistantTurnDiffCard
+        <AssistantTurnChangedFiles
           messageId={row.message.id}
           turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
           changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
           onSetChangedFilesExpanded={onSetChangedFilesExpanded}
+          activityAccordionOpenById={activityAccordionOpenById}
+          onSetActivityAccordionOpen={onSetActivityAccordionOpen}
           onOpenTurnDiff={onOpenTurnDiff}
           resolvedTheme={resolvedTheme}
         />
@@ -209,75 +216,5 @@ export function AssistantMessageBody({
         </div>
       </div>
     </>
-  );
-}
-
-interface AssistantTurnDiffCardProps {
-  messageId: MessageId;
-  turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
-  changedFilesExpandedByTurnId: Record<string, boolean>;
-  onSetChangedFilesExpanded: (turnId: TurnId, expanded: boolean) => void;
-  onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
-  resolvedTheme: "light" | "dark";
-}
-
-function AssistantTurnDiffCard({
-  messageId,
-  turnDiffSummaryByAssistantMessageId,
-  changedFilesExpandedByTurnId,
-  onSetChangedFilesExpanded,
-  onOpenTurnDiff,
-  resolvedTheme,
-}: AssistantTurnDiffCardProps) {
-  const turnSummary = turnDiffSummaryByAssistantMessageId.get(messageId);
-  if (!turnSummary) return null;
-  const checkpointFiles = turnSummary.files;
-  if (checkpointFiles.length === 0) return null;
-
-  const summaryStat = summarizeTurnDiffStats(checkpointFiles);
-  const changedFileCountLabel = String(checkpointFiles.length);
-  const allDirectoriesExpanded = changedFilesExpandedByTurnId[turnSummary.turnId] ?? false;
-
-  return (
-    <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <p className={activitySectionLabelTypography}>
-          <span>Changed files ({changedFileCountLabel})</span>
-          {hasNonZeroStat(summaryStat) && (
-            <>
-              <span className="mx-1">•</span>
-              <DiffStatLabel additions={summaryStat.additions} deletions={summaryStat.deletions} />
-            </>
-          )}
-        </p>
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="xs"
-            variant="text"
-            type="button"
-            data-scroll-anchor-ignore
-            onClick={() => onSetChangedFilesExpanded(turnSummary.turnId, !allDirectoriesExpanded)}
-          >
-            {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
-          </Button>
-          <Button
-            size="xs"
-            variant="text"
-            type="button"
-            onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
-          >
-            View diff
-          </Button>
-        </div>
-      </div>
-      <ChangedFilesTree
-        key={`changed-files-tree:${turnSummary.turnId}`}
-        turnId={turnSummary.turnId}
-        files={checkpointFiles}
-        allDirectoriesExpanded={allDirectoriesExpanded}
-        resolvedTheme={resolvedTheme}
-        onOpenTurnDiff={onOpenTurnDiff}
-      />
-    </div>
   );
 }
