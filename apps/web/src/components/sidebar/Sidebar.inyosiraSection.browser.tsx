@@ -313,3 +313,35 @@ it.each(["unknown", null] as const)(
     );
   },
 );
+
+it.each(["light", "dark"])(
+  "keeps Inyosira row heights stable while thread jump hints show in %s mode",
+  async (theme) => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    const withHints = (show: boolean): SharedProjectItemProps => ({
+      ...shared,
+      showThreadJumpHints: show,
+      threadJumpLabelById: new Map([[ThreadId.makeUnsafe("present"), "⌘1"]]),
+    });
+    const screen = await render(
+      <div style={{ width: 280 }}>
+        <SidebarInyosiraSection shared={withHints(false)} />
+      </div>,
+    );
+    const row = screen.getByTestId("thread-row-present").element();
+    const before = row.getBoundingClientRect();
+    await screen.rerender(
+      <div style={{ width: 280 }}>
+        <SidebarInyosiraSection shared={withHints(true)} />
+      </div>,
+    );
+    await expect.element(screen.getByTitle("⌘1")).toBeVisible();
+    const after = row.getBoundingClientRect();
+    expect(after.height).toBe(before.height);
+    expect(after.top).toBe(before.top);
+    const pill = screen.getByTitle("⌘1").element().getBoundingClientRect();
+    const title = screen.getByText("Thread in present", { exact: true }).element();
+    const titleBox = title.getBoundingClientRect();
+    expect(pill.top + pill.height / 2).toBeCloseTo(titleBox.top + titleBox.height / 2, 0);
+  },
+);
