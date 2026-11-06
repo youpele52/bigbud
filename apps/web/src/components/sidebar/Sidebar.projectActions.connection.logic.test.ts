@@ -5,6 +5,7 @@ import type { Project, SidebarThreadSummary } from "../../models/types";
 import {
   type ConnectionActivityThread,
   describeDisconnectConfirmation,
+  resolveProjectOpenAction,
   shouldConfirmDisconnect,
   summarizeExecutionTargetActivity,
 } from "./Sidebar.projectActions.connection.logic";
@@ -159,5 +160,51 @@ describe("describeDisconnectConfirmation", () => {
 
     expect(copy.description.startsWith("1 running terminal will lose the connection")).toBe(true);
     expect(copy.description).not.toContain("other workspace");
+  });
+});
+
+describe("resolveProjectOpenAction", () => {
+  it("toggles local and verified remote workspaces", () => {
+    expect(
+      resolveProjectOpenAction({
+        isRemoteWorkspace: false,
+        isVerified: false,
+        isUserDisconnected: false,
+      }),
+    ).toBe("toggle");
+    expect(
+      resolveProjectOpenAction({
+        isRemoteWorkspace: true,
+        isVerified: true,
+        isUserDisconnected: false,
+      }),
+    ).toBe("toggle");
+  });
+
+  it("reconnects a workspace the user disconnected, even if a stale verify remains", () => {
+    expect(
+      resolveProjectOpenAction({
+        isRemoteWorkspace: true,
+        isVerified: false,
+        isUserDisconnected: true,
+      }),
+    ).toBe("connect");
+    expect(
+      resolveProjectOpenAction({
+        isRemoteWorkspace: true,
+        isVerified: true,
+        isUserDisconnected: true,
+      }),
+    ).toBe("connect");
+  });
+
+  it("checks access for other unverified remote workspaces", () => {
+    expect(
+      resolveProjectOpenAction({
+        isRemoteWorkspace: true,
+        isVerified: false,
+        isUserDisconnected: false,
+      }),
+    ).toBe("check");
   });
 });

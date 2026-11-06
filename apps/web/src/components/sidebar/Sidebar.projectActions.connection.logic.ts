@@ -110,3 +110,19 @@ export function describeDisconnectConfirmation(confirmation: PendingDisconnectCo
     description: `${work} will lose the connection, and active turns will stop. ${transportConsequence(confirmation.executionTargetId)}${shared}`,
   };
 }
+
+export type ProjectOpenAction = "toggle" | "connect" | "check";
+
+/**
+ * Clicking a workspace row: local or verified workspaces just toggle; a workspace the
+ * user disconnected reconnects; any other remote workspace runs the access check first.
+ */
+export function resolveProjectOpenAction(input: {
+  readonly isRemoteWorkspace: boolean;
+  readonly isVerified: boolean;
+  readonly isUserDisconnected: boolean;
+}): ProjectOpenAction {
+  if (!input.isRemoteWorkspace) return "toggle";
+  if (input.isUserDisconnected) return "connect";
+  return input.isVerified ? "toggle" : "check";
+}

@@ -140,7 +140,7 @@ describe("SidebarRemoteWorkspaceStatusIcon", () => {
     expect(html.match(/text-red-500/g)).toHaveLength(2);
   });
 
-  it("labels a user-disconnected target Disconnected in neutral grey", () => {
+  it("labels a user-disconnected target Disconnected with red dots", () => {
     remoteAccessState.verifiedExecutionTargetIds["ssh:paused.example.com"] = true;
     remoteAccessState.disconnectedExecutionTargetIds["ssh:paused.example.com"] = true;
 
@@ -153,7 +153,7 @@ describe("SidebarRemoteWorkspaceStatusIcon", () => {
 
     expect(html).toContain('aria-label="paused.example.com: Disconnected"');
     expect(html).toContain('data-connection-state="paused"');
-    expect(html).not.toContain("text-red-500");
+    expect(html.match(/text-red-500/g)).toHaveLength(2);
     expect(html).not.toContain("text-emerald-500");
   });
 });

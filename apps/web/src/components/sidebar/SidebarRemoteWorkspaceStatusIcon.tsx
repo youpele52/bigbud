@@ -34,7 +34,8 @@ const STATUS_STYLES: Record<
   connected: { indicatorClass: "text-emerald-500", label: "Connected" },
   connecting: { indicatorClass: "text-amber-500", label: "Connecting" },
   disconnected: { indicatorClass: "text-red-500", label: "Unavailable" },
-  paused: { indicatorClass: "text-muted-foreground", label: "Disconnected" },
+  // Red like other unreachable workspaces; a muted dot is invisible against the icon.
+  paused: { indicatorClass: "text-red-500", label: "Disconnected" },
 };
 
 export function SidebarRemoteWorkspaceStatusIcon({

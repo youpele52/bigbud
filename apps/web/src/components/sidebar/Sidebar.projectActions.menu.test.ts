@@ -15,27 +15,27 @@ function project(target: string): Project {
 }
 
 describe("project context menu", () => {
-  it("puts reconnect first only for SSH projects and disables it while active", () => {
+  it("puts Reconnect and Disconnect directly above Remove for SSH projects", () => {
     const items = buildProjectContextMenuItems({
       project: project("ssh:host=devbox&user=root&port=22&auth=ssh-key"),
       reconnectDisabled: true,
       disconnected: false,
     });
 
-    expect(items[0]).toMatchObject({ id: "reconnect", label: "Reconnect", disabled: true });
+    expect(items[3]).toMatchObject({ id: "reconnect", label: "Reconnect", disabled: true });
     expect(items.map((item) => item.label)).toEqual([
-      "Reconnect",
       "Rename remote workspace",
       "Edit remote workspace",
       "Copy Workspace Path",
+      "Reconnect",
       "Disconnect",
       "Remove remote workspace",
     ]);
     expect(items.map((item) => item.id)).toEqual([
-      "reconnect",
       "rename",
       "edit-ssh",
       "copy-path",
+      "reconnect",
       "disconnect",
       "delete",
     ]);
@@ -47,10 +47,14 @@ describe("project context menu", () => {
       reconnectDisabled: false,
       disconnected: false,
     });
-    expect(items[0]).toEqual({ id: "reconnect", label: "Reconnect", disabled: false });
+    expect(items.find((item) => item.id === "reconnect")).toEqual({
+      id: "reconnect",
+      label: "Reconnect",
+      disabled: false,
+    });
   });
 
-  it("offers Connect right before remove and hides Reconnect while disconnected", () => {
+  it("offers Connect above Remove and hides Reconnect while disconnected", () => {
     const items = buildProjectContextMenuItems({
       project: project("ssh:host=devbox&user=root&port=22&auth=password&transport=direct-ssh"),
       reconnectDisabled: false,
@@ -64,7 +68,7 @@ describe("project context menu", () => {
     expect(items[ids.indexOf("connect")]).toEqual({ id: "connect", label: "Connect" });
   });
 
-  it("places Disconnect immediately before remove for agent workspaces", () => {
+  it("places Disconnect immediately after Reconnect for agent workspaces", () => {
     const items = buildProjectContextMenuItems({
       project: project("ssh:host=devbox&user=root&port=22&auth=ssh-key&transport=agent"),
       reconnectDisabled: false,
@@ -72,7 +76,8 @@ describe("project context menu", () => {
     });
     const ids = items.map((item) => item.id);
 
-    expect(ids.indexOf("disconnect")).toBe(ids.indexOf("delete") - 1);
+    expect(ids.indexOf("disconnect")).toBe(ids.indexOf("reconnect") + 1);
+    expect(ids.indexOf("delete")).toBe(ids.indexOf("disconnect") + 1);
     expect(items[ids.indexOf("disconnect")]).toEqual({ id: "disconnect", label: "Disconnect" });
   });
 

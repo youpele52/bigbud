@@ -16,9 +16,6 @@ export function buildProjectContextMenuItems(input: {
   const isSshWorkspace = isSshExecutionTargetId(target);
   const isRemoteWorkspace = isRemoteExecutionTargetId(target);
   return [
-    ...(isSshWorkspace && !input.disconnected
-      ? [{ id: "reconnect", label: "Reconnect", disabled: input.reconnectDisabled }]
-      : []),
     { id: "rename", label: isRemoteWorkspace ? "Rename remote workspace" : "Rename project" },
     ...(isSshWorkspace ? [{ id: "edit-ssh", label: "Edit remote workspace" }] : []),
     ...(!isRemoteWorkspace ? [{ id: "edit-local", label: "Edit project" }] : []),
@@ -33,6 +30,10 @@ export function buildProjectContextMenuItems(input: {
           },
         ]
       : []),
+    ...(isSshWorkspace && !input.disconnected
+      ? [{ id: "reconnect", label: "Reconnect", disabled: input.reconnectDisabled }]
+      : []),
+    // Connection controls sit together directly above Remove: Reconnect then Disconnect, or Connect alone.
     ...(isSshWorkspace
       ? [
           input.disconnected

@@ -305,6 +305,16 @@ Approved deviations from the phases above:
   - The web sync merges local changes rather than discarding the server list.
   - Connect clears a stale verified state.
   - The confirm text depends on the transport.
+- After implementation (user feedback): the user-disconnected dot is red, like other
+  unreachable workspaces, rather than grey. The grey dot was invisible against the muted
+  server icon. The label stays "Disconnected", and connected stays green.
+- After implementation (user feedback): clicking, or pressing Enter/Space on, a
+  disconnected workspace row reconnects it, through the same Connect as the menu. The
+  workspace opens while the reconnect runs. Thread rows still open without connecting.
+- After implementation (user feedback): the menu order changed. Reconnect and then
+  Disconnect sit together directly above "Remove remote workspace", after Copy Workspace
+  Path. While disconnected, Connect takes that slot and Reconnect is hidden. This replaces
+  a brief interim placement at the top of the menu.
 
 Follow-ups:
 

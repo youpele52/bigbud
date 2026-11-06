@@ -20,6 +20,7 @@ import type {
 } from "./Sidebar.projectActions.types";
 import { useSidebarProjectReconnectActions } from "./Sidebar.projectActions.reconnect";
 import { useSidebarProjectConnectionActions } from "./Sidebar.projectActions.connection";
+import { resolveProjectOpenAction } from "./Sidebar.projectActions.connection.logic";
 import { buildProjectContextMenuItems } from "./Sidebar.projectActions.menu";
 import { useProjectEditor } from "./Sidebar.projectEdit.logic";
 
@@ -201,6 +202,49 @@ export function useSidebarProjectActions({
     [suppressProjectClickAfterDragRef, suppressProjectClickForContextMenuRef],
   );
 
+  const openProject = useCallback(
+    (projectId: ProjectId) => {
+      const project = projects.find((entry) => entry.id === projectId);
+      const executionTargetId = project ? resolveWorkspaceExecutionTargetId(project) : null;
+      const isRemoteWorkspace =
+        executionTargetId !== null && isRemoteExecutionTargetId(executionTargetId);
+      const action = resolveProjectOpenAction({
+        isRemoteWorkspace,
+        isVerified: isRemoteWorkspace && verifiedExecutionTargetIds[executionTargetId] === true,
+        isUserDisconnected: isRemoteWorkspace && isExecutionTargetDisconnected(executionTargetId),
+      });
+      if (!project || !executionTargetId || action === "toggle") {
+        setSelectedProject(projectId);
+        toggleProject(projectId);
+        return;
+      }
+      if (action === "connect") {
+        // Threads are local, so the workspace opens while the reconnect runs.
+        setSelectedProject(projectId);
+        setProjectExpanded(projectId, true);
+        void connection.requestConnect(projectId);
+        return;
+      }
+      void beginRemoteExecutionTargetAccessCheck({
+        executionTargetId,
+        ...(project.cwd ? { cwd: project.cwd } : {}),
+        onVerified: () => {
+          setSelectedProject(projectId);
+          setProjectExpanded(projectId, true);
+        },
+      });
+    },
+    [
+      beginRemoteExecutionTargetAccessCheck,
+      connection,
+      projects,
+      setProjectExpanded,
+      setSelectedProject,
+      toggleProject,
+      verifiedExecutionTargetIds,
+    ],
+  );
+
   const handleProjectTitleClick = useCallback(
     (event: MouseEvent<HTMLButtonElement>, projectId: ProjectId) => {
       if (suppressProjectClickForContextMenuRef.current) {
@@ -224,40 +268,15 @@ export function useSidebarProjectActions({
         clearSelection();
       }
 
-      const project = projects.find((entry) => entry.id === projectId);
-      const executionTargetId = project ? resolveWorkspaceExecutionTargetId(project) : null;
-      const isRemoteWorkspace =
-        executionTargetId !== null && isRemoteExecutionTargetId(executionTargetId);
-      const isVerifiedRemoteTarget =
-        isRemoteWorkspace && verifiedExecutionTargetIds[executionTargetId];
-
-      if (!project || !isRemoteWorkspace || isVerifiedRemoteTarget) {
-        setSelectedProject(projectId);
-        toggleProject(projectId);
-        return;
-      }
-
-      void beginRemoteExecutionTargetAccessCheck({
-        executionTargetId,
-        ...(project.cwd ? { cwd: project.cwd } : {}),
-        onVerified: () => {
-          setSelectedProject(projectId);
-          setProjectExpanded(projectId, true);
-        },
-      });
+      openProject(projectId);
     },
     [
       clearSelection,
       dragInProgressRef,
-      beginRemoteExecutionTargetAccessCheck,
-      projects,
+      openProject,
       selectedThreadIdsSize,
-      setProjectExpanded,
-      setSelectedProject,
       suppressProjectClickAfterDragRef,
       suppressProjectClickForContextMenuRef,
-      toggleProject,
-      verifiedExecutionTargetIds,
     ],
   );
 
@@ -268,37 +287,9 @@ export function useSidebarProjectActions({
       if (dragInProgressRef.current) {
         return;
       }
-      const project = projects.find((entry) => entry.id === projectId);
-      const executionTargetId = project ? resolveWorkspaceExecutionTargetId(project) : null;
-      const isRemoteWorkspace =
-        executionTargetId !== null && isRemoteExecutionTargetId(executionTargetId);
-      const isVerifiedRemoteTarget =
-        isRemoteWorkspace && verifiedExecutionTargetIds[executionTargetId];
-
-      if (!project || !isRemoteWorkspace || isVerifiedRemoteTarget) {
-        setSelectedProject(projectId);
-        toggleProject(projectId);
-        return;
-      }
-
-      void beginRemoteExecutionTargetAccessCheck({
-        executionTargetId,
-        ...(project.cwd ? { cwd: project.cwd } : {}),
-        onVerified: () => {
-          setSelectedProject(projectId);
-          setProjectExpanded(projectId, true);
-        },
-      });
+      openProject(projectId);
     },
-    [
-      dragInProgressRef,
-      beginRemoteExecutionTargetAccessCheck,
-      projects,
-      setProjectExpanded,
-      setSelectedProject,
-      toggleProject,
-      verifiedExecutionTargetIds,
-    ],
+    [dragInProgressRef, openProject],
   );
 
   return {
