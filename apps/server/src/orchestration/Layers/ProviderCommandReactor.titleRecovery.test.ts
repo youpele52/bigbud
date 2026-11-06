@@ -71,6 +71,63 @@ describe("staged title startup recovery", () => {
     });
     expect(harness.sendTurn).not.toHaveBeenCalled();
   });
+  it("recovers a definitively failed stage with legacy false uncertainty through real startup projections", async () => {
+    const harness = await createHarness({
+      startReactor: false,
+      serverSettingsOverrides: {
+        textGenerationModelSelection: { provider: "codex", model: "explicit-model" },
+      },
+    });
+    const threadId = ThreadId.makeUnsafe("thread-1");
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.makeUnsafe("fixture:legacy-title-first-user"),
+        threadId,
+        message: {
+          messageId: asMessageId("fixture:legacy-title-user"),
+          role: "user",
+          text: "Investigate historical title state",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: new Date().toISOString(),
+      }),
+    );
+    const thread = (await Effect.runPromise(harness.engine.getReadModel())).threads.find(
+      (item) => item.id === threadId,
+    )!;
+    for (const state of ["started", "failed", "uncertain"] as const) {
+      await Effect.runPromise(
+        recordTitleStage(
+          { orchestrationEngine: harness.engine } as SessionOpServices,
+          thread,
+          1,
+          state,
+        ),
+      );
+    }
+    await Effect.runPromise(
+      recordThreadTextGenerationStatus(harness.engine, threadId, "title", "uncertain"),
+    );
+    harness.generateThreadTitle.mockReturnValue(
+      Effect.succeed({ title: "Recovered legacy title state" }),
+    );
+    await harness.startReactor();
+    await waitFor(
+      async () =>
+        (await Effect.runPromise(harness.engine.getReadModel())).threads.find(
+          (item) => item.id === threadId,
+        )?.title === "Recovered legacy title state",
+    );
+    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
+    expect(harness.sendTurn).not.toHaveBeenCalled();
+    await harness.startReactor();
+    await harness.drain();
+    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
+  });
+
   it("retains a durable ambiguous stage without paying for a later stage or replaying chat", async () => {
     const harness = await createHarness({
       startReactor: false,

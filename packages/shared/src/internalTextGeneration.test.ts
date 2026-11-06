@@ -1,5 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { successfulUserTurns, USER_TURN_BOUND, MODEL_SUCCEEDED } from "./internalTextGeneration";
+import {
+  successfulUserTurns,
+  USER_TURN_BOUND,
+  MODEL_SUCCEEDED,
+  supportsInternalTextGeneration,
+  FULL_TEXT_GENERATION_PROVIDERS,
+} from "./internalTextGeneration";
+
+it("supports CLIProxy titles through Claude without advertising unsupported global generation overrides", () => {
+  expect(supportsInternalTextGeneration("cliProxy", "generateThreadTitle")).toBe(true);
+  expect(supportsInternalTextGeneration("cliProxy", "generateCommitMessage")).toBe(false);
+  expect(supportsInternalTextGeneration("cliProxy", "generateThreadElevatorSummary")).toBe(false);
+  expect(FULL_TEXT_GENERATION_PROVIDERS).not.toContain("cliProxy");
+});
 
 describe("verified successful user turns", () => {
   const binding = (turnId: string, messageId: string) => ({

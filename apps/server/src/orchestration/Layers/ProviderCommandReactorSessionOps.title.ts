@@ -6,10 +6,8 @@ import {
   type OrchestrationThread,
   type ThreadId,
 } from "@bigbud/contracts";
-import {
-  successfulUserTurns,
-  hasTextGenerationUncertainty,
-} from "@bigbud/shared/internalTextGeneration";
+import { successfulUserTurns } from "@bigbud/shared/internalTextGeneration";
+import { toBoundedRedactedText } from "@bigbud/shared/providerRuntime";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 import {
   getThreadTitleVersion,
@@ -34,6 +32,8 @@ import {
   readTitleStage,
   recordTitleStage,
   titlePipelineFinished,
+  hasUnresolvedTitleGeneration,
+  type TitleStageFailure,
   type TitleStage,
 } from "./ProviderCommandReactorSessionOps.title.state.ts";
 
@@ -57,7 +57,7 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
       const state = readTitleStage(initial, stage);
       return state?.state === "uncertain" || state?.state === "started";
     });
-    if (unresolved || hasTextGenerationUncertainty(initial.activities, "title")) {
+    if (hasUnresolvedTitleGeneration(initial)) {
       if (unresolved && readTitleStage(initial, unresolved)?.state === "started") {
         yield* recordTitleStage(services, initial, unresolved, "uncertain");
       }
@@ -207,6 +207,7 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
         return "completed" as const;
       });
 
+    const failures = new Map<TitleStage, TitleStageFailure>();
     const execute = (stage: TitleStage, thread: OrchestrationThread, model?: ModelSelection) =>
       Effect.gen(function* () {
         const claim = makeTextGenerationDispatchClaim(engine, input.threadId, "title");
@@ -248,6 +249,15 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
           (error.value.kind === "cancelled" || error.value.kind === "invalid-input")
         )
           return "cancelled" as const;
+        const typedError =
+          Option.isSome(error) && Schema.is(TextGenerationError)(error.value) ? error.value : null;
+        failures.set(stage, {
+          kind: typedError?.kind ?? "provider",
+          detail: toBoundedRedactedText(
+            typedError?.detail ?? "Unexpected internal generation failure.",
+            { maxChars: 500 },
+          ),
+        });
         yield* Effect.logWarning("staged thread title attempt failed", {
           threadId: input.threadId,
           stage,
@@ -306,7 +316,15 @@ export const maybeGenerateThreadTitleForFirstTurn = (services: SessionOpServices
       const model = stage >= 3 ? thirdModel : undefined;
       yield* recordTitleStage(services, thread, stage, "started", model);
       const outcome = yield* execute(stage, thread, model);
-      yield* recordTitleStage(services, thread, stage, outcome, model);
+      yield* recordTitleStage(
+        services,
+        thread,
+        stage,
+        outcome,
+        model,
+        outcome === "uncertain",
+        failures.get(stage),
+      );
       if (outcome === "uncertain") return;
       if (outcome !== "failed") {
         yield* recordThreadTextGenerationStatus(
