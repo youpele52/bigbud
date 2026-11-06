@@ -98,6 +98,8 @@ export interface TerminalIdleWork {
 export interface TerminalManagerShape {
   /** Server-owned sampled work facts; a shell alone is not work. */
   readonly getThreadIdleWork?: (threadId: string) => Effect.Effect<TerminalIdleWork>;
+  /** Cached owner facts only; no OS/global process rescan. */
+  readonly snapshotThreadIdleWork?: () => Effect.Effect<ReadonlyMap<string, TerminalIdleWork>>;
   readonly forgetThreadIdleWork?: (threadId: string) => Effect.Effect<void>;
   readonly recovery?: (
     input: TerminalRecoveryInput,

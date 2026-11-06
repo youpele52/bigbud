@@ -1,28 +1,31 @@
+import {
+  recordAppendedEventMetrics,
+  recordCommandResultMetrics,
+} from "./OrchestrationEngine.commandMetrics.ts";
+import { makeOrganizationUndo } from "../../thread-organization/organizationUndo.ts";
+import { makeOrganizationAcceptance } from "../../thread-organization/organizationAcceptance.ts";
+import { recordOrganizationRuntimeEvent } from "../../thread-organization/organizationFacts.events.ts";
+import { makeThreadOrganizationOperations } from "../../persistence/Layers/ThreadOrganizationOperations.ts";
+import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { commandToAggregateRef } from "./OrchestrationEngine.commandAggregate.ts";
 import { makeTerminalIdleGuard } from "./OrchestrationEngine.terminalIdle.ts";
 import { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
-import type {
-  OrchestrationCommand,
-  OrchestrationEvent,
-  OrchestrationReadModel,
-} from "@bigbud/contracts";
-import { Cause, Deferred, Duration, Effect, Exit, Metric, Option, Schema, Stream } from "effect";
+import type { OrchestrationEvent, OrchestrationReadModel } from "@bigbud/contracts";
+import type { CommandEnvelope } from "./OrchestrationEngine.commandEnvelope.ts";
+export type { CommandEnvelope } from "./OrchestrationEngine.commandEnvelope.ts";
+import { Cause, Deferred, Duration, Effect, Exit, Metric, Option, Schema } from "effect";
+import {
+  withWorkspaceCommandAdmission,
+  commitProjectWorkspaceApplication,
+} from "../ProjectWorkspace.engineTransition.ts";
+import { reconcileCommittedReadModel } from "./OrchestrationEngine.reconcileReadModel.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { persistWorktreeRuntimeCwd } from "../../git/Layers/WorktreeRuntimeCwd.ts";
-import {
-  metricAttributes,
-  orchestrationCommandAckDuration,
-  orchestrationCommandDuration,
-  orchestrationCommandsTotal,
-} from "../../observability/Metrics.ts";
+import { metricAttributes, orchestrationCommandAckDuration } from "../../observability/Metrics.ts";
 import {
   orchestrationCommandDigestConflictsTotal,
   orchestrationCommandUnknownOutcomesTotal,
 } from "../../observability/Metrics.orchestrationRecovery.ts";
-import {
-  orchestrationEventPayloadBytes,
-  orchestrationEventsAppendedTotal,
-} from "../../observability/Metrics.load.ts";
 import { toPersistenceSqlError } from "../../persistence/Errors.ts";
 import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
@@ -36,27 +39,14 @@ import {
   type OrchestrationDispatchError,
 } from "../Errors.ts";
 import { projectEvent } from "../projector.ts";
-import { makeLifecycleQueuedPromptFlushCommand } from "../QueuedPromptFlush.logic.ts";
+import * as ProjectWorkspace from "../ProjectWorkspace.files.ts";
+import { ServerConfig } from "../../startup/config.ts";
+import { TerminalManager } from "../../terminal/Services/Manager.ts";
+import { enqueueLifecycleFlush } from "./OrchestrationEngine.lifecycleFlush.ts";
 import type { BoundedCommandAdmission } from "../../command-admission/CommandAdmission.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { persistRejectedCommandReceipt } from "./OrchestrationEngine.rejectionReceipt.ts";
 import { makeRecoveryIntentRecorder } from "./OrchestrationEngine.recoveryIntents.ts";
-import {
-  calculateCommandPayloadDigest,
-  type OrchestrationCommandPayloadDigest,
-} from "../commandDigest.ts";
-
-const eventPayloadEncoder = new TextEncoder();
-
-export interface CommandEnvelope {
-  readonly worktreeOperationId?: string;
-  readonly expectedWorktreePath?: { readonly value: string | null };
-  readonly expectedWorktreeIdentity?: { readonly path: string; readonly identity: string };
-  readonly command: OrchestrationCommand;
-  readonly payloadDigest: OrchestrationCommandPayloadDigest;
-  readonly result: Deferred.Deferred<{ sequence: number }, OrchestrationDispatchError>;
-  readonly startedAtMs: number;
-}
 
 export { commandToAggregateRef } from "./OrchestrationEngine.commandAggregate.ts";
 
@@ -74,6 +64,12 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
   const visibleBrowser = yield* VisibleBrowserControl;
   const recordRecoveryIntent = yield* makeRecoveryIntentRecorder;
   const terminalIdleBlocked = yield* makeTerminalIdleGuard();
+  const undoOrganization = yield* makeOrganizationUndo;
+  const acceptOrganization = yield* makeOrganizationAcceptance;
+  const organizationOperations = yield* makeThreadOrganizationOperations;
+  const organizationSettings = yield* ServerSettingsService;
+  const workspaceConfig = yield* ServerConfig;
+  const workspaceTerminal = yield* Effect.serviceOption(TerminalManager);
 
   return (envelope: CommandEnvelope): Effect.Effect<boolean> => {
     const dispatchStartSequence = input.readModel().snapshotSequence;
@@ -83,20 +79,11 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
       commandType: envelope.command.type,
       aggregateKind: aggregateRef.aggregateKind,
     } as const;
-    const reconcileReadModelAfterDispatchFailure = Effect.gen(function* () {
-      const persistedEvents = yield* Stream.runCollect(
-        eventStore.readFromSequence(dispatchStartSequence),
-      ).pipe(Effect.map((chunk): OrchestrationEvent[] => Array.from(chunk)));
-      if (persistedEvents.length === 0) return;
-      let nextReadModel = input.readModel();
-      for (const persistedEvent of persistedEvents) {
-        nextReadModel = yield* projectEvent(nextReadModel, persistedEvent);
-      }
-      input.setReadModel(nextReadModel);
-      for (const persistedEvent of persistedEvents) {
-        yield* input.publishDomainEvent(persistedEvent);
-      }
-    });
+    const reconcileReadModelAfterDispatchFailure = reconcileCommittedReadModel(
+      eventStore,
+      dispatchStartSequence,
+      input,
+    );
 
     return Effect.exit(
       Effect.gen(function* () {
@@ -138,81 +125,136 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
           });
         }
         const currentReadModel = input.readModel();
-        const eventBase = (yield* terminalIdleBlocked(envelope.command))
-          ? []
-          : yield* decideOrchestrationCommand({
-              command: envelope.command,
-              readModel: currentReadModel,
-            });
-        const eventBases = Array.isArray(eventBase) ? eventBase : [eventBase];
-        if (envelope.command.type === "thread.queued-prompt.flush" && eventBases.length === 0)
-          return yield* new OrchestrationCommandInvariantError({
-            commandType: envelope.command.type,
-            detail: "Queue decision returned no action or refusal.",
-          });
-        const committedCommand = yield* sql
-          .withTransaction(
+        const committedCommand = yield* withWorkspaceCommandAdmission(
+          sql,
+          envelope.command,
+          currentReadModel,
+          envelope.nativeWorkspaceOperationId,
+          (nativeIdentity) =>
             Effect.gen(function* () {
-              const retentionClaim =
-                envelope.command.type === "thread.retention-delete" &&
-                Option.isSome(retentionRepository)
-                  ? yield* retentionRepository.value.recheckAndClaimItem({
-                      runId: envelope.command.runId,
-                      threadId: envelope.command.threadId,
-                      expectedLastActivityAt: envelope.command.expectedLastActivityAt,
-                      cutoffAt: envelope.command.cutoffAt,
-                      claimedAt: envelope.command.createdAt,
-                    })
-                  : envelope.command.type === "thread.retention-delete"
-                    ? yield* Effect.die("ThreadRetentionRepository is unavailable")
-                    : null;
-              const committedEvents: OrchestrationEvent[] = [];
-              let nextReadModel = currentReadModel;
-              for (const nextEvent of retentionClaim?.claimed === false ? [] : eventBases) {
-                const savedEvent = yield* eventStore.append(nextEvent);
-                const eventAttributes = metricAttributes({ eventType: savedEvent.type });
-                yield* Metric.update(
-                  Metric.withAttributes(orchestrationEventsAppendedTotal, eventAttributes),
-                  1,
-                );
-                yield* Metric.update(
-                  Metric.withAttributes(orchestrationEventPayloadBytes, eventAttributes),
-                  eventPayloadEncoder.encode(JSON.stringify(savedEvent.payload)).byteLength,
-                );
-                nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
-                yield* projectionPipeline.projectEvent(savedEvent);
-                yield* recordRecoveryIntent(savedEvent, envelope.command);
-                yield* persistWorktreeRuntimeCwd(sql, savedEvent);
-                committedEvents.push(savedEvent);
-              }
-              const lastSavedEvent = committedEvents.at(-1) ?? null;
-              yield* commandReceiptRepository.upsert({
-                commandId: envelope.command.commandId,
-                aggregateKind: lastSavedEvent?.aggregateKind ?? aggregateRef.aggregateKind,
-                aggregateId: lastSavedEvent?.aggregateId ?? aggregateRef.aggregateId,
-                acceptedAt: lastSavedEvent?.occurredAt ?? new Date().toISOString(),
-                resultSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
-                status: "accepted",
-                rejectionReason: null,
-                error: null,
-                payloadDigestVersion: envelope.payloadDigest.version,
-                payloadDigest: envelope.payloadDigest.digest,
-              });
-              return {
-                committedEvents,
-                lastSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
-                nextReadModel,
-              } as const;
+              const eventBase =
+                envelope.nativeOrganizationOperation ||
+                (envelope.command.type === "thread.organization.move" &&
+                  envelope.command.undoAutomaticMoveId) ||
+                (yield* terminalIdleBlocked(envelope.command))
+                  ? []
+                  : yield* decideOrchestrationCommand({
+                      command: envelope.command,
+                      readModel: currentReadModel,
+                    });
+              const eventBases = yield* ProjectWorkspace.prepareProjectWorkspaceEvents(
+                envelope.command,
+                currentReadModel,
+                Array.isArray(eventBase) ? eventBase : [eventBase],
+                {
+                  stateDir: workspaceConfig.stateDir,
+                  sql,
+                  ...(nativeIdentity
+                    ? { nativeWorkspaceOperationId: nativeIdentity.operationId }
+                    : {}),
+                  ...(Option.isSome(workspaceTerminal)
+                    ? { terminal: workspaceTerminal.value }
+                    : {}),
+                },
+              );
+              if (envelope.command.type === "thread.queued-prompt.flush" && eventBases.length === 0)
+                return yield* new OrchestrationCommandInvariantError({
+                  commandType: envelope.command.type,
+                  detail: "Queue decision returned no action or refusal.",
+                });
+              const committedCommand = yield* commitProjectWorkspaceApplication(
+                sql,
+                nativeIdentity,
+                Effect.gen(function* () {
+                  const retentionClaim =
+                    envelope.command.type === "thread.retention-delete" &&
+                    Option.isSome(retentionRepository)
+                      ? yield* retentionRepository.value.recheckAndClaimItem({
+                          runId: envelope.command.runId,
+                          threadId: envelope.command.threadId,
+                          expectedLastActivityAt: envelope.command.expectedLastActivityAt,
+                          cutoffAt: envelope.command.cutoffAt,
+                          claimedAt: envelope.command.createdAt,
+                        })
+                      : envelope.command.type === "thread.retention-delete"
+                        ? yield* Effect.die("ThreadRetentionRepository is unavailable")
+                        : null;
+                  const committedEvents: OrchestrationEvent[] = [];
+                  let nextReadModel = currentReadModel;
+                  const acceptedEvents = envelope.nativeOrganizationOperation
+                    ? yield* acceptOrganization(
+                        envelope.command,
+                        envelope.nativeOrganizationOperation,
+                      )
+                    : envelope.command.type === "thread.organization.move" &&
+                        envelope.command.undoAutomaticMoveId
+                      ? yield* undoOrganization(envelope.command)
+                      : eventBases;
+                  for (const nextEvent of retentionClaim?.claimed === false ? [] : acceptedEvents) {
+                    const savedEvent = yield* eventStore.append(nextEvent);
+                    yield* recordAppendedEventMetrics(savedEvent);
+                    nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
+                    yield* projectionPipeline.projectEvent(savedEvent);
+                    yield* recordOrganizationRuntimeEvent(
+                      sql,
+                      savedEvent,
+                      (yield* organizationSettings.getSettings).inyosiraGraceMinutes * 60000,
+                    );
+                    yield* recordRecoveryIntent(savedEvent, envelope.command);
+                    yield* persistWorktreeRuntimeCwd(sql, savedEvent);
+                    committedEvents.push(savedEvent);
+                  }
+                  const lastSavedEvent = committedEvents.at(-1) ?? null;
+                  if (
+                    envelope.nativeOrganizationOperation &&
+                    lastSavedEvent?.type === "thread.organization-updated"
+                  ) {
+                    yield* organizationOperations.settle(
+                      envelope.nativeOrganizationOperation.operationId,
+                      {
+                        status: "applied",
+                        resultRevision: lastSavedEvent.payload.organization.revision,
+                        resultSequence: lastSavedEvent.sequence,
+                      },
+                    );
+                  }
+                  yield* commandReceiptRepository.upsert({
+                    commandId: envelope.command.commandId,
+                    aggregateKind: lastSavedEvent?.aggregateKind ?? aggregateRef.aggregateKind,
+                    aggregateId: lastSavedEvent?.aggregateId ?? aggregateRef.aggregateId,
+                    acceptedAt: lastSavedEvent?.occurredAt ?? new Date().toISOString(),
+                    resultSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
+                    status: "accepted",
+                    rejectionReason: null,
+                    error: null,
+                    payloadDigestVersion: envelope.payloadDigest.version,
+                    payloadDigest: envelope.payloadDigest.digest,
+                  });
+                  return {
+                    committedEvents,
+                    lastSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
+                    nextReadModel,
+                  } as const;
+                }),
+              ).pipe(
+                Effect.catchTag("SqlError", (sqlError) =>
+                  Effect.fail(
+                    toPersistenceSqlError("OrchestrationEngine.processEnvelope:transaction")(
+                      sqlError,
+                    ),
+                  ),
+                ),
+                Effect.mapError(
+                  ProjectWorkspace.projectWorkspacePersistenceError(
+                    envelope.command,
+                    currentReadModel,
+                  ),
+                ),
+              );
+              input.setReadModel(committedCommand.nextReadModel);
+              return committedCommand;
             }),
-          )
-          .pipe(
-            Effect.catchTag("SqlError", (sqlError) =>
-              Effect.fail(
-                toPersistenceSqlError("OrchestrationEngine.processEnvelope:transaction")(sqlError),
-              ),
-            ),
-          );
-        input.setReadModel(committedCommand.nextReadModel);
+        );
         if (aggregateRef.aggregateKind === "thread") {
           const thread = committedCommand.nextReadModel.threads.find(
             (candidate) => candidate.id === aggregateRef.aggregateId,
@@ -245,25 +287,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
     ).pipe(
       Effect.flatMap((exit) =>
         Effect.gen(function* () {
-          const outcome = Exit.isSuccess(exit)
-            ? "success"
-            : Cause.hasInterruptsOnly(exit.cause)
-              ? "interrupt"
-              : "failure";
-          yield* Metric.update(
-            Metric.withAttributes(
-              orchestrationCommandDuration,
-              metricAttributes(baseMetricAttributes),
-            ),
-            Duration.millis(Math.max(0, Date.now() - processingStartedAtMs)),
-          );
-          yield* Metric.update(
-            Metric.withAttributes(
-              orchestrationCommandsTotal,
-              metricAttributes({ ...baseMetricAttributes, outcome }),
-            ),
-            1,
-          );
+          yield* recordCommandResultMetrics(exit, baseMetricAttributes, processingStartedAtMs);
           if (Exit.isSuccess(exit)) {
             const dispatchResult = exit.value.dispatchResult;
             if (dispatchResult === undefined) {
@@ -280,35 +304,11 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               envelope.result,
               dispatchResult,
             );
-            const flushCommand = makeLifecycleQueuedPromptFlushCommand({
-              trigger: envelope.command,
-              readModel: input.readModel(),
-              createdAt: new Date().toISOString(),
-            });
-            if (flushCommand) {
-              const result = yield* Deferred.make<
-                { sequence: number },
-                OrchestrationDispatchError
-              >();
-              yield* input.commandAdmission
-                .offer(
-                  {
-                    command: flushCommand,
-                    result,
-                    startedAtMs: Date.now(),
-                    payloadDigest: calculateCommandPayloadDigest(flushCommand),
-                  },
-                  "internal",
-                )
-                .pipe(
-                  Effect.catchTag("CommandAdmissionError", (error) =>
-                    Effect.logError("failed to enqueue lifecycle command", {
-                      queue: error.queue,
-                      code: error.code,
-                    }),
-                  ),
-                );
-            }
+            yield* enqueueLifecycleFlush(
+              input.commandAdmission,
+              envelope.command,
+              input.readModel(),
+            );
             return true;
           }
           const error = Cause.squash(exit.cause) as OrchestrationDispatchError;
@@ -338,7 +338,10 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                 ),
               ),
             );
-            if (Schema.is(OrchestrationCommandInvariantError)(error)) {
+            if (
+              Schema.is(OrchestrationCommandInvariantError)(error) &&
+              !envelope.nativeWorkspaceOperationId
+            ) {
               const persisted = yield* Effect.exit(
                 persistRejectedCommandReceipt({
                   receipts: commandReceiptRepository,

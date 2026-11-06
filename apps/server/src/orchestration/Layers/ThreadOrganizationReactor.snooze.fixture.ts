@@ -4,7 +4,10 @@
  * lost (restart, sleep, clock change). Delivery only dispatches the expire command; the decider
  * applies it once, and only while that snooze is still the thread's current one.
  *
- * @module ThreadOrganizationReactor.snooze
+ * Legacy TS scheduler kept ONLY as a test fixture/reference: Rust is the sole production
+ * scheduler and no production module may import this file (static test enforces it).
+ *
+ * @module ThreadOrganizationReactor.snooze.fixture
  */
 import type { ThreadId } from "@bigbud/contracts";
 import { Clock, Effect, FiberMap, Schedule, Stream } from "effect";
@@ -22,7 +25,7 @@ import {
   SNOOZE_SWEEP_INTERVAL_MS,
   snoozeDelayMs,
   snoozeEventEffect,
-} from "./ThreadOrganizationReactor.snooze.logic.ts";
+} from "./ThreadOrganizationReactor.snooze.logic.fixture.ts";
 
 export const startThreadSnoozeDelivery = Effect.fn("startThreadSnoozeDelivery")(function* (input: {
   readonly orchestrationEngine: Pick<OrchestrationEngineShape, "dispatch" | "streamDomainEvents">;

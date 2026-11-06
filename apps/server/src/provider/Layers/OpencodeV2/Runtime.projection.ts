@@ -227,6 +227,7 @@ export function projectionEvents(
       message,
       nativeSessionId: session.native.id,
       location: session.native.location.directory,
+      effectiveAdmissionLocation: session.effectiveAdmissionLocation,
       sessionEpoch: session.epoch,
       isCurrent: !session.stopped,
       correlationProven: true,

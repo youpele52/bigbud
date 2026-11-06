@@ -366,6 +366,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       getThreadIdleWork: (threadId: string) =>
         refreshThreadIdleWork(threadId).pipe(Effect.map(() => idleWork.get(threadId))),
       forgetThreadIdleWork: (threadId: string) => Effect.sync(() => idleWork.forget(threadId)),
+      snapshotThreadIdleWork: () => Effect.sync(() => idleWork.snapshot()),
       close: (input: Parameters<typeof api.close>[0]) =>
         refreshThreadIdleWork(input.threadId).pipe(
           Effect.andThen(api.close(input)),

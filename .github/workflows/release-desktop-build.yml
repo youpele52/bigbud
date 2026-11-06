@@ -1,0 +1,230 @@
+name: Build desktop release artifacts
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+      update_channel:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS arm64
+            runner: macos-14
+            platform: mac
+            target: dmg
+            arch: arm64
+          - label: macOS x64
+            runner: macos-15-intel
+            platform: mac
+            target: dmg
+            arch: x64
+          - label: Linux x64
+            runner: ubuntu-22.04
+            platform: linux
+            target: AppImage
+            arch: x64
+          - label: Windows x64
+            runner: windows-2022
+            platform: win
+            target: nsis
+            arch: x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Configure local Node headers for native dependencies
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_dir="$(dirname "$(dirname "$(node -p 'process.execPath')")")"
+          if [[ ! -f "$node_dir/include/node/node.h" ]]; then
+            echo "Node headers not found at $node_dir/include/node/node.h" >&2
+            exit 1
+          fi
+          echo "npm_config_nodedir=$node_dir" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Validate Windows CUA sweep native helper
+        if: matrix.platform == 'win'
+        run: bun run --cwd apps/desktop vitest run src/backend/cuaDriver.windowsSweep.native.test.ts
+
+      - name: Align package versions to release version
+        run: node scripts/update-release-package-versions.ts "${{ inputs.tag }}"
+
+      - name: Validate macOS signing credentials
+        if: matrix.platform == 'mac'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          for name in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing required macOS signing secret: $name" >&2
+              exit 1
+            fi
+          done
+
+      - id: windows_signing
+        name: Resolve Windows signing mode
+        if: matrix.platform == 'win'
+        shell: bash
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          set -euo pipefail
+          bun scripts/resolve-windows-signing-mode.ts
+
+      - name: Import code signing certificates
+        if: matrix.platform == 'mac'
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.CSC_LINK }}
+          p12-password: ${{ secrets.CSC_KEY_PASSWORD }}
+
+      - name: Build desktop artifact
+        shell: bash
+        env:
+          APPLE_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.platform == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+          WIN_CSC_LINK: ${{ matrix.platform == 'win' && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ matrix.platform == 'win' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ matrix.platform == 'win' && vars.BIGBUD_WINDOWS_SIGNING_SUBJECT || '' }}
+        run: |
+          args=(
+            --platform "${{ matrix.platform }}"
+            --target "${{ matrix.target }}"
+            --arch "${{ matrix.arch }}"
+            --build-version "${{ inputs.version }}"
+            --verbose
+          )
+
+          if [[ "${{ matrix.platform }}" == "mac" ]]; then
+            echo "macOS signing and notarization are required."
+            ulimit -n 65536
+            echo "macOS build open-file limit: $(ulimit -n)"
+            args+=(--signed)
+          elif [[ "${{ matrix.platform }}" == "win" ]]; then
+            if [[ "${{ steps.windows_signing.outputs.signed }}" == "true" ]]; then
+              echo "Windows Authenticode signing is enabled."
+              args+=(--signed)
+            else
+              echo "Building unsigned Windows artifacts."
+            fi
+          else
+            echo "Linux artifacts do not use OS code signing."
+          fi
+
+          bun run dist:desktop:artifact -- "${args[@]}"
+
+      - name: Preserve signed macOS app on notarization failure
+        if: failure() && matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: notarization-recovery-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: notarization-recovery/
+          retention-days: 3
+          if-no-files-found: ignore
+
+      - name: Smoke test packaged workspace watcher
+        shell: bash
+        env:
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          args=(release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish)
+          if [[ "${{ matrix.platform }}" == "mac" || "${{ steps.windows_signing.outputs.signed }}" == "true" ]]; then
+            args+=(--require-code-signature)
+          fi
+          node scripts/verify-packaged-workspace-agent.ts "${args[@]}"
+
+      - name: Smoke test packaged delivery supervisor
+        shell: bash
+        env:
+          BIGBUD_WINDOWS_SIGNING_SUBJECT: ${{ vars.BIGBUD_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          args=(release "${{ matrix.platform }}")
+          if [[ "${{ matrix.platform }}" == "mac" || "${{ steps.windows_signing.outputs.signed }}" == "true" ]]; then
+            args+=(--require-code-signature)
+          fi
+          bun run verify:packaged-desktop-supervisor -- "${args[@]}"
+
+      - name: Smoke test Windows installer update over a running helper
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nsis-update-smoke.ps1 -ReleaseDir release
+
+      - name: Build Linux .deb fallback
+        if: matrix.platform == 'linux'
+        run: >-
+          bun run dist:desktop:artifact -- --platform linux --target deb --arch x64
+          --build-version "${{ inputs.version }}" --output-dir release-deb
+          --skip-build --verbose && cp release-deb/*.deb release/
+
+      - name: Verify Linux desktop artifact
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          appimage_path=$(find release -maxdepth 1 -name '*.AppImage' | head -n 1)
+          if [[ -z "$appimage_path" ]]; then
+            echo "No .AppImage found in release/" >&2
+            exit 1
+          fi
+          echo "Found AppImage: $appimage_path"
+          chmod +x "$appimage_path"
+          bun run verify:desktop:linux-artifact -- "$appimage_path" --verbose
+
+      - name: Collect release assets
+        run: >-
+          node scripts/collect-desktop-release-assets.ts release release-publish
+          "${{ matrix.platform }}" "${{ matrix.arch }}"
+          "${{ inputs.update_channel }}"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release-publish/*
+          if-no-files-found: error

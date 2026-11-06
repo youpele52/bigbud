@@ -54,7 +54,7 @@ interface SidebarProjectsSectionProps {
   onCwdChange: (cwd: string) => void;
   onClearError: () => void;
   onPickFolder: () => void;
-  onAdd: () => void;
+  onAdd: (title: string) => void;
   onCancelAdd: () => void;
   // Project list
   renderedProjects: RenderedProjectEntry[];
@@ -192,7 +192,7 @@ export function SidebarProjectsSection({
           </SidebarSectionLabel>
 
           <div>
-            {isExpanded && shouldShowProjectPathEntry && (
+            {shouldShowProjectPathEntry && (
               <SidebarNewProjectFlow
                 isElectron={isElectron}
                 newCwd={newCwd}

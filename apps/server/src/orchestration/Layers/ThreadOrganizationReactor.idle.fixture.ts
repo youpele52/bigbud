@@ -2,17 +2,21 @@
  * Inyosira idle cleanup, in two rules checked every 15 s:
  * - idle: quiescent Present threads quiet for the timeout move to the destination (Later);
  * - older threads: quiescent Present or Later threads quiet for the age move to Done.
- * Each rule's timing starts no earlier than its latest barrier: server start, a change to that
- * rule (including turning it on), or a long pause in this loop (system sleep or a stalled
- * process), so no thread moves on stale clock time. The decider rechecks every gate when it
- * applies the move, so work admitted in the meantime always wins.
+ * The short idle rule restarts its wait at server start and after sleep/stalls. The older-thread
+ * rule uses persisted inactivity across those interruptions, not uninterrupted server uptime.
+ * Changing either policy (including enabling it) still grants that rule a full new wait.
+ * The decider rechecks every gate when applying the move, so admitted work always wins.
  *
- * @module ThreadOrganizationReactor.idle
+ * Legacy TS scheduler kept ONLY as a test fixture/reference: Rust is the sole production
+ * scheduler and no production module may import this file (static test enforces it).
+ *
+ * @module ThreadOrganizationReactor.idle.fixture
  */
 import { makeIdleSweepPaging } from "./ThreadOrganizationReactor.idle.paging.ts";
 import { terminalWorkAllowsIdle } from "../../terminal/Layers/Manager.idleWork.ts";
 import type { TerminalManagerShape } from "../../terminal/Services/Manager.ts";
-import { CommandId, type ThreadId, type ServerSettings } from "@bigbud/contracts";
+import { CommandId, type ThreadId } from "@bigbud/contracts";
+import { idleRulesFor, type IdlePolicy, type IdleRule } from "../threadOrganization.idleRules.ts";
 import { Clock, Effect, Ref, Schedule, Stream } from "effect";
 
 import { stableThreadToolId } from "../../orchestration-tools/ThreadOrchestrationTools.origins.ts";
@@ -27,43 +31,6 @@ const IDLE_CONCURRENCY = 3;
 export const IDLE_DISCONTINUITY_MS = 60_000;
 /** A candidate the decider declined is not retried at the same revision for a minute. */
 export const IDLE_RETRY_AFTER_MS = 60_000;
-
-type IdlePolicy = Pick<
-  ServerSettings,
-  | "inyosiraIdleCleanupEnabled"
-  | "inyosiraIdleTimeoutMinutes"
-  | "inyosiraIdleDestination"
-  | "inyosiraOlderThreadsEnabled"
-  | "inyosiraOlderThreadsDays"
->;
-
-export interface IdleRule {
-  readonly name: "idle" | "older";
-  readonly enabled: boolean;
-  readonly timeoutMs: number;
-  readonly fromStates: ReadonlyArray<"present" | "later">;
-  readonly destination: "done" | "later";
-}
-
-/** The two rules a settings snapshot describes, in the order a tick applies them. */
-export function idleRulesFor(settings: IdlePolicy): ReadonlyArray<IdleRule> {
-  return [
-    {
-      name: "idle",
-      enabled: settings.inyosiraIdleCleanupEnabled,
-      timeoutMs: settings.inyosiraIdleTimeoutMinutes * 60_000,
-      fromStates: ["present"],
-      destination: settings.inyosiraIdleDestination,
-    },
-    {
-      name: "older",
-      enabled: settings.inyosiraOlderThreadsEnabled,
-      timeoutMs: settings.inyosiraOlderThreadsDays * 24 * 60 * 60_000,
-      fromStates: ["present", "later"],
-      destination: "done",
-    },
-  ];
-}
 
 /**
  * The barrier after a tick: a gap much longer than the sweep interval means the process slept or
@@ -91,7 +58,8 @@ export const startThreadIdleCleanup = Effect.fn("startThreadIdleCleanup")(functi
   const startedAt = yield* Clock.currentTimeMillis;
   const barriers = yield* Ref.make<Record<IdleRule["name"], number>>({
     idle: startedAt,
-    older: startedAt,
+    // Age is durable; requiring another full day of uptime starves this rule on daily restarts.
+    older: Number.NEGATIVE_INFINITY,
   });
   const lastTick = yield* Ref.make(startedAt);
   const lastPolicy = yield* Ref.make<Record<IdleRule["name"], string> | null>(null);
@@ -193,7 +161,8 @@ export const startThreadIdleCleanup = Effect.fn("startThreadIdleCleanup")(functi
     const previousTickMs = yield* Ref.getAndSet(lastTick, nowMs);
     yield* Ref.update(barriers, (current) => ({
       idle: idleBarrierAfterTick({ barrierMs: current.idle, previousTickMs, nowMs }),
-      older: idleBarrierAfterTick({ barrierMs: current.older, previousTickMs, nowMs }),
+      // Sleep does not erase persisted age or an explicit policy-change grace period.
+      older: current.older,
     }));
     const settings = yield* input.settings.getSettings;
     yield* observePolicy(settings);

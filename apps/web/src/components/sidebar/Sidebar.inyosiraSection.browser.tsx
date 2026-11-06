@@ -43,6 +43,8 @@ vi.mock("./Sidebar.inyosira.catalog", () => ({
 }));
 vi.mock("./Sidebar.inyosira.actions", () => ({ moveThreadsToState: vi.fn() }));
 
+vi.mock("./Sidebar.inyosiraStatus", () => ({ InyosiraStatus: () => null }));
+
 const states = ["present", "needs-you", "later", "done"] as const;
 const shared = {
   routeThreadId: ThreadId.makeUnsafe("present"),
@@ -109,6 +111,17 @@ it.each(["light", "dark"])(
         <SidebarFixedActions onNewChat={vi.fn()} newThreadShortcutLabel={null} />
         <SidebarInyosiraSection shared={shared} />
       </div>,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /^Needs you / })
+        .element()
+        .getBoundingClientRect().top,
+    ).toBeLessThan(
+      screen
+        .getByRole("button", { name: /^Present / })
+        .element()
+        .getBoundingClientRect().top,
     );
     const reference = screen.getByText("New chat", { exact: true }).element();
     const textLeft = reference.getBoundingClientRect().left;

@@ -154,6 +154,8 @@ export interface ProjectionThreadRepositoryShape {
   readonly setOrganization: (input: {
     readonly threadId: ThreadId;
     readonly organization: ThreadOrganization;
+    readonly reason?: import("@bigbud/contracts/orchestration/orchestration.organization.ts").ThreadOrganizationChangeReason;
+    readonly source?: "deliberate" | "automatic";
   }) => Effect.Effect<void, ProjectionRepositoryError>;
   /** Pending Inyosira snoozes of live threads in deadline order, one keyset page at a time. */
   readonly listPendingSnoozes: (
@@ -175,6 +177,8 @@ export interface IdleThreadCandidate {
 export type IdleThreadCursor = Pick<IdleThreadCandidate, "activityAt" | "threadId">;
 
 export interface ListIdleThreadCandidatesInput {
+  /** Narrow final-acceptance recheck; never materializes the rest of the candidate set. */
+  readonly threadId?: ThreadId;
   readonly after?: IdleThreadCursor;
   readonly excludeThreadIds?: ReadonlyArray<ThreadId>;
   readonly states: ReadonlyArray<"present" | "later">;

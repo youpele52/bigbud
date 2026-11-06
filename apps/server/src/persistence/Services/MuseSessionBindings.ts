@@ -35,6 +35,11 @@ export type MuseSessionBindingError =
   | MuseSessionBindingConflict;
 
 export interface MuseSessionBindingsShape {
+  /** Archived native incarnations may never resume or reserve again after workspace reset. */
+  readonly isArchived?: (
+    threadId: string,
+    nativeSessionId: string,
+  ) => Effect.Effect<boolean, MuseSessionBindingError>;
   readonly find: (
     threadId: string,
   ) => Effect.Effect<MuseSessionBinding | undefined, MuseSessionBindingError>;

@@ -27,6 +27,8 @@ export function mapProjectSummary(project: ProjectSummary): Project {
     workspaceExecutionTargetId: project.workspaceExecutionTargetId,
     executionTargetId: project.executionTargetId,
     cwd: project.workspaceRoot,
+    workspaceKind: project.workspaceKind ?? "external",
+    previousWorkspaceRoot: project.previousWorkspaceRoot ?? null,
     defaultModelSelection: null,
     updatedAt: project.updatedAt,
     deletingAt: project.deletingAt,

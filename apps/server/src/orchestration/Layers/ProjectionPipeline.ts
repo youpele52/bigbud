@@ -48,6 +48,7 @@ import {
   ORCHESTRATION_PROJECTOR_NAMES,
 } from "./ProjectionPipeline.helpers.ts";
 import { makeProjectors, type ProjectorDefinition } from "./ProjectionPipeline.projectors.ts";
+import { makeOrganizationAgeBackfill } from "./ProjectionPipeline.agingBackfill.ts";
 import { runUsageContributionBackfill } from "./ProjectionPipeline.usageBackfill.ts";
 import { runUsageEstimateBackfill } from "./ProjectionPipeline.usageEstimateBackfill.ts";
 import { makeProjectionBaselineOperations } from "./ProjectionPipeline.baseline.ts";
@@ -67,6 +68,7 @@ export { PROJECTION_BASELINE_FAILURE_COOLDOWN_MS };
 const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjectionPipeline")(
   function* () {
     const sql = yield* SqlClient.SqlClient;
+    const startOrganizationAgeBackfill = yield* makeOrganizationAgeBackfill(sql);
     const eventStore = yield* OrchestrationEventStore;
     const projectionStateRepository = yield* ProjectionStateRepository;
     const projectionProjectRepository = yield* ProjectionProjectRepository;
@@ -270,6 +272,8 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
       Effect.provideService(Path.Path, path),
       Effect.provideService(ServerConfig, serverConfig),
       Effect.asVoid,
+      // Historical scanning is outside canonical transactions and never blocks bootstrap/events.
+      Effect.tap(() => startOrganizationAgeBackfill),
       Effect.tap(() =>
         Effect.logDebug("orchestration projection pipeline bootstrapped").pipe(
           Effect.annotateLogs({ projectors: projectors.length }),

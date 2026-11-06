@@ -257,7 +257,7 @@ const makeProviderLayerLive = (
         getProviderCapabilities,
         isProviderComposed: (provider) => isProviderRegistered(provider, optionalRegistrations),
       }).pipe(
-        Layer.provide(adapterRegistryLayer),
+        Layer.provideMerge(adapterRegistryLayer),
         Layer.provide(providerSessionDirectoryLayer),
         Layer.provide(ProviderTurnLivenessRepositoryLive),
         Layer.provide(Recovery.RecoveryPersistenceLayerLive),

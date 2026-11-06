@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { effectiveV2WorkspaceLocation } from "./Runtime.workspaceLocation.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 
@@ -21,14 +22,17 @@ export async function recoverV2Session(runtime: OpencodeV2Runtime, owner: V2Runt
     ? undefined
     : await Effect.runPromise(runtime.options.journal.latestBound(owner.threadId));
   const owned = unresolved.length ? unresolved : latest ? [latest] : [];
+  const locations = await Promise.all(
+    owned.map((row) => effectiveV2WorkspaceLocation(runtime.options.journal, row.binding)),
+  );
   if (
     owned.length > 1 ||
     owned.some(
-      (row) =>
+      (row, index) =>
         row.binding.provider !== "opencodeV2" ||
         row.binding.nativeSessionId !== owner.native.id ||
         row.binding.storageIdentity !== owner.storageIdentity ||
-        row.binding.location !== owner.native.location.directory ||
+        locations[index] !== owner.native.location.directory ||
         row.binding.runtimeTargetId !==
           (owner.session.providerRuntimeExecutionTargetId ?? "local") ||
         row.binding.workspaceTargetId !== (owner.session.workspaceExecutionTargetId ?? "local"),
@@ -36,6 +40,7 @@ export async function recoverV2Session(runtime: OpencodeV2Runtime, owner: V2Runt
   )
     throw new Error("V2 startup journal binding mismatch.");
   owner.row = owned[0];
+  owner.effectiveAdmissionLocation = locations[0];
   if (owner.row)
     owner.session = {
       ...owner.session,

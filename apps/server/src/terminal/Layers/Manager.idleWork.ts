@@ -78,6 +78,7 @@ export function makeTerminalIdleWorkTracker(now: () => number = Date.now) {
   return {
     refresh,
     refreshThread,
+    snapshot: (): ReadonlyMap<string, TerminalIdleWork> => new Map(threads),
     get: (threadId: string): TerminalIdleWork =>
       threads.get(threadId) ?? { state: "idle", quietSince: null },
     forget: (threadId: string) => {

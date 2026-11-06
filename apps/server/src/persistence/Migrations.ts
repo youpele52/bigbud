@@ -1,6 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Migrator from "effect/unstable/sql/Migrator";
+import {
+  OrganizationMigrationContext,
+  classifyOrganizationInstallation,
+} from "./OrganizationMigrationContext.ts";
 
 import {
   type MigrationProgressListener,
@@ -151,6 +155,13 @@ import Migration0141 from "./Migrations/141_ProjectionThreadOrganization.ts";
 import Migration0142 from "./Migrations/142_ProjectionThreadOrganizationIndex.ts";
 import Migration0143 from "./Migrations/143_ProjectionThreadSnoozeIndex.ts";
 import Migration0144 from "./Migrations/144_RetiredTerminalBackend.ts";
+import Migration0145 from "./Migrations/145_ProjectWorkspaceOwnership.ts";
+import Migration0146 from "./Migrations/146_ThreadOrganizationRuntime.ts";
+import Migration0147 from "./Migrations/147_ProjectWorkspaceNativeTransitions.ts";
+import Migration0148 from "./Migrations/148_ThreadOrganizationAging.ts";
+import Migration0149 from "./Migrations/149_ThreadOrganizationOperations.ts";
+import Migration0150 from "./Migrations/150_ThreadOrganizationFacts.ts";
+import Migration0151 from "./Migrations/151_ThreadOrganizationAttention.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -296,6 +307,13 @@ export const migrationEntries = [
   [142, "ProjectionThreadOrganizationIndex", Migration0142],
   [143, "ProjectionThreadSnoozeIndex", Migration0143],
   [144, "RetiredTerminalBackend", Migration0144],
+  [145, "ProjectWorkspaceOwnership", Migration0145],
+  [146, "ThreadOrganizationRuntime", Migration0146],
+  [147, "ProjectWorkspaceNativeTransitions", Migration0147],
+  [148, "ThreadOrganizationAging", Migration0148],
+  [149, "ThreadOrganizationOperations", Migration0149],
+  [150, "ThreadOrganizationFacts", Migration0150],
+  [151, "ThreadOrganizationAttention", Migration0151],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;
@@ -345,9 +363,10 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
       };
     }
   }
+  const newInstallation = yield* classifyOrganizationInstallation;
   const executedMigrations = yield* run({
     loader: makeMigrationLoader(toMigrationInclusive, wrap),
-  });
+  }).pipe(Effect.provideService(OrganizationMigrationContext, { newInstallation }));
   yield* Effect.log("Migrations ran successfully").pipe(
     Effect.annotateLogs({ migrations: executedMigrations.map(([id, name]) => `${id}_${name}`) }),
   );

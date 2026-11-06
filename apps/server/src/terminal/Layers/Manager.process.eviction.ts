@@ -1,6 +1,7 @@
 import * as Effect from "effect/Effect";
 import type { ProcessLifecycleContext } from "./Manager.process-lifecycle.ts";
 import { toSessionKey } from "./Manager.shell.ts";
+import { terminalPaneWork } from "./Manager.idleWork.ts";
 
 export function makeInactiveSessionEviction(
   modify: ProcessLifecycleContext["modifyManagerState"],
@@ -11,10 +12,7 @@ export function makeInactiveSessionEviction(
       // Starting/uncertain sessions still own a process or a lifecycle reservation.
       const inactive = [...state.sessions.values()].filter(
         (session) =>
-          !session.process &&
-          !session.lifecyclePending &&
-          session.status !== "running" &&
-          session.status !== "starting",
+          !session.process && session.status !== "running" && terminalPaneWork(session) === "idle",
       );
       if (inactive.length <= limit) return [undefined, state] as const;
       inactive.sort(

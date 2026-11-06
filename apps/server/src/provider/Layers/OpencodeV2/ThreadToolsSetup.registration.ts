@@ -2,6 +2,12 @@ import type { V2PluginSetupArtifact } from "./PluginSetup.record.ts";
 import type { OpencodeV2SharedBinding } from "../../../persistence/Services/OpencodeV2SharedBindings.ts";
 import type { ProviderTurnAdmission } from "@bigbud/contracts/orchestration/providerTurnAdmission.ts";
 import { decodeV2Cursor } from "./Runtime.cursor.ts";
+import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
+import type { ProviderTurnAdmissionsShape } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
+import {
+  effectiveV2WorkspaceLocation,
+  effectiveV2WorkspaceCursor,
+} from "./Runtime.workspaceLocation.ts";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
 import { selectV2SessionArtifact } from "./Orchestration.selection.ts";
 import { v2RetainedRegistrationFamily } from "./Runtime.registration.ts";
@@ -15,14 +21,26 @@ export async function selectV2SetupArtifact(
     binding?: OpencodeV2SharedBinding | undefined;
     admission?: ProviderTurnAdmission | undefined;
     cursor?: unknown;
+    journal?: ProviderTurnAdmissionsShape | undefined;
   },
 ) {
-  const cursor = input.cursor == null ? undefined : decodeV2Cursor(input.cursor);
+  const rawCursor = input.cursor == null ? undefined : decodeV2Cursor(input.cursor);
+  const cursor = input.journal
+    ? await effectiveV2WorkspaceCursor(input.journal, rawCursor, {
+        threadId: ThreadId.makeUnsafe(input.threadId),
+        runtimeTarget:
+          input.binding?.runtimeTargetId ?? input.admission?.binding.runtimeTargetId ?? "local",
+        workspaceTarget:
+          input.binding?.workspaceTargetId ?? input.admission?.binding.workspaceTargetId ?? "local",
+      })
+    : rawCursor;
+  const admissionDirectory =
+    input.admission && input.journal
+      ? await effectiveV2WorkspaceLocation(input.journal, input.admission.binding)
+      : input.admission?.binding.location;
   const candidates = [
     input.binding,
-    input.admission
-      ? { ...input.admission.binding, directory: input.admission.binding.location }
-      : undefined,
+    input.admission ? { ...input.admission.binding, directory: admissionDirectory! } : undefined,
     cursor,
   ].filter((value) => value !== undefined);
   const first = candidates[0];

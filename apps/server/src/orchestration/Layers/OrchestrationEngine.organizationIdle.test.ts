@@ -88,7 +88,8 @@ describe("Inyosira idle cleanup in the engine", () => {
           (await run(engine.getReadModel())).threads.find((thread) => thread.id === quietThread)!
             .organization?.state,
         ).toBe("later");
-        const finish = Date.parse(createdAt);
+        // The deliberate move is aged from server acceptance, not the caller's old createdAt.
+        const finish = Date.parse(later.organization!.changedAt!);
         work = { state: "idle", quietSince: finish };
         await run(
           engine.dispatch({
@@ -105,7 +106,7 @@ describe("Inyosira idle cleanup in the engine", () => {
           engine.dispatch({
             ...idle("older-quiet-complete", quietThread, 1),
             fromState: "later",
-            terminalIdleCutoff: createdAt,
+            terminalIdleCutoff: new Date(finish).toISOString(),
           }),
         );
         expect(

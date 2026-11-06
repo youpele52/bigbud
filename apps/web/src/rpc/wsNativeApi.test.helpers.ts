@@ -47,6 +47,7 @@ export const projectDirectoryEventListeners = new Set<
 >();
 
 export const rpcClientMock: DeepMock<WsRpcClient> = {
+  organization: { status: vi.fn(), engagement: vi.fn() },
   worktrees: {
     list: vi.fn(),
     create: vi.fn(),

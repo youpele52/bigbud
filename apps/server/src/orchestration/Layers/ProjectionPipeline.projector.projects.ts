@@ -60,6 +60,8 @@ export function makeProjectsProjector(
             LOCAL_EXECUTION_TARGET_ID,
           executionTargetId: event.payload.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
           workspaceRoot: event.payload.workspaceRoot,
+          workspaceKind: event.payload.workspaceKind ?? "external",
+          previousWorkspaceRoot: event.payload.previousWorkspaceRoot ?? null,
           defaultModelSelection: event.payload.defaultModelSelection,
           scripts: event.payload.scripts,
           createdAt: event.payload.createdAt,
@@ -91,6 +93,12 @@ export function makeProjectsProjector(
             : {}),
           ...(event.payload.executionTargetId !== undefined
             ? { executionTargetId: event.payload.executionTargetId }
+            : {}),
+          ...(event.payload.workspaceKind !== undefined
+            ? { workspaceKind: event.payload.workspaceKind }
+            : {}),
+          ...(event.payload.previousWorkspaceRoot !== undefined
+            ? { previousWorkspaceRoot: event.payload.previousWorkspaceRoot }
             : {}),
           ...(event.payload.workspaceRoot !== undefined
             ? { workspaceRoot: event.payload.workspaceRoot }

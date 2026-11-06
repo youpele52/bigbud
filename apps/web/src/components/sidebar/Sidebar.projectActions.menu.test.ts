@@ -82,16 +82,17 @@ describe("project context menu", () => {
       reconnectDisabled: false,
       disconnected: false,
     });
-    expect(items.map((item) => item.id)).toEqual(["rename", "copy-path", "delete"]);
+    expect(items.map((item) => item.id)).toEqual(["rename", "edit-local", "copy-path", "delete"]);
     expect(
       buildProjectContextMenuItems({
         project: project("local"),
         reconnectDisabled: false,
         disconnected: true,
       }).map((item) => item.id),
-    ).toEqual(["rename", "copy-path", "delete"]);
+    ).toEqual(["rename", "edit-local", "copy-path", "delete"]);
     expect(items.map((item) => item.label)).toEqual([
       "Rename project",
+      "Edit project",
       "Copy Project Path",
       "Remove project",
     ]);

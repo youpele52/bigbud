@@ -1,3 +1,4 @@
+import { isElectron } from "../../config/env";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import type { Project } from "../../models/types";
 import {
@@ -20,6 +21,10 @@ export function buildProjectContextMenuItems(input: {
       : []),
     { id: "rename", label: isRemoteWorkspace ? "Rename remote workspace" : "Rename project" },
     ...(isSshWorkspace ? [{ id: "edit-ssh", label: "Edit remote workspace" }] : []),
+    ...(!isRemoteWorkspace ? [{ id: "edit-local", label: "Edit project" }] : []),
+    ...(isElectron && !isRemoteWorkspace && input.project.cwd
+      ? [{ id: "reveal-folder", label: "Reveal project folder" }]
+      : []),
     ...(input.project.cwd
       ? [
           {

@@ -5,14 +5,18 @@ import {
   ThreadId,
 } from "@bigbud/contracts";
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Queue, Ref, Stream } from "effect";
+import { Clock, Effect, Queue, Ref, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
 import type {
   IdleThreadCandidate,
   ListIdleThreadCandidatesInput,
 } from "../../persistence/Services/ProjectionThreads.ts";
-import { idleBarrierAfterTick, startThreadIdleCleanup } from "./ThreadOrganizationReactor.idle.ts";
+import type { TerminalIdleWork } from "../../terminal/Services/Manager.ts";
+import {
+  idleBarrierAfterTick,
+  startThreadIdleCleanup,
+} from "./ThreadOrganizationReactor.idle.fixture.ts";
 
 const threadA = ThreadId.makeUnsafe("thread-a");
 const MINUTE = 60_000;
@@ -31,12 +35,21 @@ const candidate = (state: IdleThreadCandidate["state"]): IdleThreadCandidate => 
 
 const harness = (initial: ServerSettings, state: IdleThreadCandidate["state"] = "present") =>
   Effect.gen(function* () {
+    const clock = yield* Clock.Clock;
+    const wallClockOffset = yield* Ref.make(0);
     const settings = yield* Ref.make(initial);
     const changes = yield* Queue.unbounded<ServerSettings>();
     const dispatched = yield* Ref.make<ReadonlyArray<OrchestrationCommand>>([]);
     const queries = yield* Ref.make<ReadonlyArray<ListIdleThreadCandidatesInput>>([]);
     const candidates = yield* Ref.make<ReadonlyArray<IdleThreadCandidate>>([candidate(state)]);
+    const terminalWork = yield* Ref.make<ReadonlyMap<string, TerminalIdleWork>>(new Map());
     yield* startThreadIdleCleanup({
+      terminalManager: {
+        getThreadIdleWork: (threadId) =>
+          Ref.get(terminalWork).pipe(
+            Effect.map((all) => all.get(threadId) ?? { state: "idle", quietSince: null }),
+          ),
+      },
       orchestrationEngine: {
         dispatch: (command) =>
           Ref.update(dispatched, (all) => [...all, command]).pipe(Effect.as({ sequence: 1 })),
@@ -45,11 +58,27 @@ const harness = (initial: ServerSettings, state: IdleThreadCandidate["state"] = 
         listIdleCandidates: (query) =>
           Ref.update(queries, (all) => [...all, query]).pipe(
             Effect.andThen(Ref.get(candidates)),
-            Effect.map((all) => all.filter((entry) => query.states.includes(entry.state))),
+            Effect.map((all) =>
+              all
+                .filter(
+                  (entry) =>
+                    query.states.includes(entry.state) &&
+                    entry.activityAt <= query.cutoff &&
+                    !query.excludeThreadIds?.includes(entry.threadId),
+                )
+                .slice(0, query.limit),
+            ),
           ),
       },
       settings: { getSettings: Ref.get(settings), streamChanges: Stream.fromQueue(changes) },
-    });
+    }).pipe(
+      Effect.provideService(Clock.Clock, {
+        ...clock,
+        currentTimeMillis: Effect.gen(function* () {
+          return (yield* clock.currentTimeMillis) + (yield* Ref.get(wallClockOffset));
+        }),
+      }),
+    );
     const settle = Effect.gen(function* () {
       for (let index = 0; index < 50; index += 1) yield* Effect.yieldNow;
     });
@@ -66,7 +95,9 @@ const harness = (initial: ServerSettings, state: IdleThreadCandidate["state"] = 
           yield* settle;
         }
       });
-    return { dispatched, queries, candidates, change, advance, settle };
+    const wakeAfter = (ms: number) =>
+      Ref.update(wallClockOffset, (offset) => offset + ms).pipe(Effect.andThen(advance(15_000)));
+    return { dispatched, queries, candidates, terminalWork, change, advance, settle, wakeAfter };
   });
 
 const moves = (commands: ReadonlyArray<OrchestrationCommand>) =>
@@ -95,7 +126,7 @@ it.effect("by default waits 10 minutes after start, then moves Present to Later"
       assert.deepEqual(yield* Ref.get(dispatched), []);
       yield* advance(15_000);
       assert.deepEqual(moves(yield* Ref.get(dispatched)), [[threadA, 3, "present", "later"]]);
-      const [query] = yield* Ref.get(queries);
+      const query = (yield* Ref.get(queries)).find((entry) => entry.states.length === 1);
       assert.deepEqual(query?.states, ["present"]);
       assert.equal(query?.cutoff, new Date(0).toISOString());
       // A declined candidate is not retried at the same revision for a minute.
@@ -133,7 +164,7 @@ it.effect("by default moves an old Later thread to Done after a day", () =>
       assert.deepEqual(yield* Ref.get(dispatched), []);
       yield* advance(15_000);
       assert.deepEqual(moves(yield* Ref.get(dispatched)), [[threadA, 3, "later", "done"]]);
-      const older = (yield* Ref.get(queries)).find((query) => query.states.includes("later"));
+      const older = (yield* Ref.get(queries)).findLast((query) => query.states.includes("later"));
       assert.deepEqual(older?.states, ["present", "later"]);
       assert.equal(older?.cutoff, new Date(0).toISOString());
     }),
@@ -159,6 +190,88 @@ it.effect("turning the older-threads rule on gives every thread a full new wait"
       yield* advance(2 * MINUTE);
       yield* change({ ...off, inyosiraOlderThreadsEnabled: true, inyosiraOlderThreadsDays: 2 });
       yield* advance(2 * DAY - 15_000);
+      assert.deepEqual(yield* Ref.get(dispatched), []);
+      yield* advance(15_000);
+      assert.deepEqual(moves(yield* Ref.get(dispatched)), [[threadA, 3, "later", "done"]]);
+    }),
+  ).pipe(Effect.provide(TestClock.layer())),
+);
+
+it.effect("sweeps already-overdue Later threads on the first tick after startup", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { dispatched, candidates, advance } = yield* harness(DEFAULT_SERVER_SETTINGS, "later");
+      yield* Ref.set(candidates, [
+        { ...candidate("later"), activityAt: new Date(-2 * DAY).toISOString() },
+      ]);
+      yield* advance(15_000);
+      assert.deepEqual(moves(yield* Ref.get(dispatched)), [[threadA, 3, "later", "done"]]);
+    }),
+  ).pipe(Effect.provide(TestClock.layer())),
+);
+
+it.effect("counts persisted Later inactivity across sleep without resetting the day", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { dispatched, advance, wakeAfter } = yield* harness(DEFAULT_SERVER_SETTINGS, "later");
+      yield* advance(MINUTE);
+      yield* wakeAfter(DAY);
+      assert.deepEqual(moves(yield* Ref.get(dispatched)), [[threadA, 3, "later", "done"]]);
+    }),
+  ).pipe(Effect.provide(TestClock.layer())),
+);
+
+it.effect("also sweeps a quiescent Present thread older than seven days after startup", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { dispatched, candidates, advance } = yield* harness(DEFAULT_SERVER_SETTINGS);
+      yield* Ref.set(candidates, [
+        { ...candidate("present"), activityAt: new Date(-8 * DAY).toISOString() },
+      ]);
+      yield* advance(15_000);
+      assert.deepEqual(moves(yield* Ref.get(dispatched)), [[threadA, 3, "present", "done"]]);
+    }),
+  ).pipe(Effect.provide(TestClock.layer())),
+);
+
+it.effect("retains the short Present rule's full wake grace", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { dispatched, advance, wakeAfter } = yield* harness({
+        ...DEFAULT_SERVER_SETTINGS,
+        inyosiraOlderThreadsEnabled: false,
+      });
+      yield* advance(MINUTE);
+      yield* wakeAfter(DAY);
+      yield* advance(9 * MINUTE + 45_000);
+      assert.deepEqual(yield* Ref.get(dispatched), []);
+      yield* advance(15_000);
+      assert.deepEqual(moves(yield* Ref.get(dispatched)), [[threadA, 3, "present", "later"]]);
+    }),
+  ).pipe(Effect.provide(TestClock.layer())),
+);
+
+it.effect("does not let a full batch of terminal-busy threads starve overdue Later work", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { dispatched, candidates, terminalWork, advance } =
+        yield* harness(DEFAULT_SERVER_SETTINGS);
+      const busy = Array.from({ length: 50 }, (_, index) => ({
+        ...candidate("later"),
+        threadId: ThreadId.makeUnsafe(`busy-${index}`),
+        activityAt: new Date(-2 * DAY).toISOString(),
+      }));
+      yield* Ref.set(
+        terminalWork,
+        new Map(
+          busy.map((entry) => [entry.threadId, { state: "busy" as const, quietSince: null }]),
+        ),
+      );
+      yield* Ref.set(candidates, [
+        ...busy,
+        { ...candidate("later"), activityAt: new Date(-2 * DAY).toISOString() },
+      ]);
+      yield* advance(15_000);
       assert.deepEqual(yield* Ref.get(dispatched), []);
       yield* advance(15_000);
       assert.deepEqual(moves(yield* Ref.get(dispatched)), [[threadA, 3, "later", "done"]]);

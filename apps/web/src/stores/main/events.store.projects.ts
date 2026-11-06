@@ -22,30 +22,11 @@ import { applyActiveThreadCountTransition } from "./helpers.projectThreadCount.s
 import type { Project } from "../../models/types";
 import { getDeletedThreadIds } from "../../logic/orchestration/thread-deletion.logic";
 
-function recordProjectEventSequence(state: AppState, projectId: string, sequence: number) {
-  return {
-    ...state.latestProjectEventSequenceById,
-    [projectId]: Math.max(state.latestProjectEventSequenceById?.[projectId] ?? 0, sequence),
-  };
-}
-
-function recordProjectDeletionSequence(state: AppState, projectId: string, sequence: number) {
-  return {
-    ...state.deletedProjectSequenceById,
-    [projectId]: Math.max(state.deletedProjectSequenceById?.[projectId] ?? 0, sequence),
-  };
-}
-
-function clearProjectDeletionSequence(state: AppState, projectId: string, sequence: number) {
-  const deletionSequence = state.deletedProjectSequenceById?.[projectId];
-  if (deletionSequence === undefined || deletionSequence > sequence) {
-    return state.deletedProjectSequenceById ?? {};
-  }
-
-  const deletedProjectSequenceById = { ...state.deletedProjectSequenceById };
-  delete deletedProjectSequenceById[projectId];
-  return deletedProjectSequenceById;
-}
+import {
+  recordProjectEventSequence,
+  recordProjectDeletionSequence,
+  clearProjectDeletionSequence,
+} from "./events.store.projects.sequences";
 
 function recordPendingUnloadedProjectPatch(
   state: AppState,
@@ -104,6 +85,8 @@ export function applyProjectEvent(
         workspaceExecutionTargetId: event.payload.workspaceExecutionTargetId,
         executionTargetId: event.payload.executionTargetId,
         workspaceRoot: event.payload.workspaceRoot,
+        workspaceKind: event.payload.workspaceKind,
+        previousWorkspaceRoot: event.payload.previousWorkspaceRoot,
         defaultModelSelection: event.payload.defaultModelSelection,
         scripts: event.payload.scripts,
         createdAt: event.payload.createdAt,
@@ -158,6 +141,12 @@ export function applyProjectEvent(
           ? { executionTargetId: event.payload.executionTargetId }
           : {}),
         ...(event.payload.workspaceRoot !== undefined ? { cwd: event.payload.workspaceRoot } : {}),
+        ...(event.payload.workspaceKind !== undefined
+          ? { workspaceKind: event.payload.workspaceKind }
+          : {}),
+        ...(event.payload.previousWorkspaceRoot !== undefined
+          ? { previousWorkspaceRoot: event.payload.previousWorkspaceRoot }
+          : {}),
         ...(event.payload.defaultModelSelection !== undefined
           ? {
               defaultModelSelection: event.payload.defaultModelSelection

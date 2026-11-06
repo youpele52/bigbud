@@ -10,7 +10,7 @@ import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.t
 import {
   IDLE_SWEEP_INTERVAL_MS,
   startThreadIdleCleanup,
-} from "./ThreadOrganizationReactor.idle.ts";
+} from "./ThreadOrganizationReactor.idle.fixture.ts";
 
 export const MINUTE = 60_000;
 export const DAY = 24 * 60 * MINUTE;

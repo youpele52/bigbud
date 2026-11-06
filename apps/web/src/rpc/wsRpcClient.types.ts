@@ -1,3 +1,4 @@
+import type { OrganizationRpcClient } from "./wsRpcClient.organization.ts";
 import {
   type GitActionProgressEvent,
   type GitGetCommitDetailsInput,
@@ -122,6 +123,7 @@ export interface GitRunStackedActionOptions {
 }
 
 export interface WsRpcClient {
+  readonly organization: OrganizationRpcClient;
   readonly worktrees: NonNullable<NativeApi["worktrees"]>;
   readonly dispose: () => Promise<void>;
   readonly reconnect: () => Promise<void>;

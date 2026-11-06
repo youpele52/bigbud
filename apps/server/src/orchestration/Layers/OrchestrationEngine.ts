@@ -1,6 +1,8 @@
 import type { OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { makeWorktreeReservations } from "../../git/Layers/WorktreeReservations.ts";
+import { assertWorkspaceCommandAdmission } from "../ProjectWorkspace.engineTransition.ts";
+import { reconcileProjectWorkspaceStartup } from "../ProjectWorkspace.nativeStartup.ts";
 import {
   Cause,
   Deferred,
@@ -86,6 +88,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   const threadDeletion = yield* ThreadDeletion;
   // Reservations are persisted SQL state, available before hydration or startup flush recovery.
   const workspaceSql = yield* SqlClient.SqlClient;
+  yield* reconcileProjectWorkspaceStartup(workspaceSql);
   const worktreeReservations = makeWorktreeReservations(workspaceSql);
 
   let readModel = createEmptyReadModel(new Date().toISOString());
@@ -125,7 +128,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     },
   });
 
-  const prepareCommandState = makePrepareCommandState({ threadStateHydrator });
+  const prepareCommandState = makePrepareCommandState({ threadStateHydrator, sql: workspaceSql });
   const deletionFence = makeDeletionFence({
     threadDeletion,
     readModel: () => readModel,
@@ -182,16 +185,14 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           prepareCommandState(envelope.command).pipe(
             Effect.andThen(deletionFence.assertAllows(envelope.command)),
             Effect.andThen(
-              worktreeReservations.assertAllows(
-                envelope.command,
-                envelope.worktreeOperationId,
-                envelope.expectedWorktreePath,
-                envelope.expectedWorktreeIdentity,
-              ),
+              assertWorkspaceCommandAdmission(workspaceSql, worktreeReservations, envelope),
             ),
             Effect.matchEffect({
               onFailure: (error) => {
-                if (!Schema.is(OrchestrationCommandInvariantError)(error)) {
+                if (
+                  !Schema.is(OrchestrationCommandInvariantError)(error) ||
+                  envelope.nativeWorkspaceOperationId
+                ) {
                   return Deferred.fail(envelope.result, error as OrchestrationDispatchError).pipe(
                     Effect.asVoid,
                   );
@@ -263,6 +264,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       serverEpoch,
       canonicalRevision: () => readModel.snapshotSequence,
       receipts: commandReceiptRepository,
+      workspaceSql,
     });
   const readEvents: OrchestrationEngineShape["readEvents"] = (fromSequenceExclusive) =>
     eventStore.readFromSequence(fromSequenceExclusive);
@@ -283,6 +285,12 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       }
       const result = yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>();
       yield* commandAdmission.offer({
+        ...(options?.nativeOrganizationOperation
+          ? { nativeOrganizationOperation: options.nativeOrganizationOperation }
+          : {}),
+        ...(options?.nativeWorkspaceOperationId
+          ? { nativeWorkspaceOperationId: options.nativeWorkspaceOperationId }
+          : {}),
         ...(options?.worktreeOperationId
           ? { worktreeOperationId: options.worktreeOperationId }
           : {}),

@@ -1,3 +1,4 @@
+import { ORGANIZATION_AUTOMATION_METHODS } from "@bigbud/contracts/server/organizationAutomation.ts";
 import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@bigbud/contracts";
 
 import { randomUUID } from "~/lib/utils";
@@ -48,6 +49,12 @@ function subscribeEmptyInput<TEvent>(
 
 export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
   return {
+    organization: {
+      status: () =>
+        transport.request((client) => client[ORGANIZATION_AUTOMATION_METHODS.status]({})),
+      engagement: (input) =>
+        transport.request((client) => client[ORGANIZATION_AUTOMATION_METHODS.engagement](input)),
+    },
     dispose: () => transport.dispose(),
     reconnect: async () => {
       resetWsReconnectBackoff();

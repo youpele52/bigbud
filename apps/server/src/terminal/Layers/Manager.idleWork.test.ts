@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { Effect, SynchronizedRef } from "effect";
 import { makeManagerStateAccessors } from "./Manager.process.state.ts";
+import { makeInactiveSessionEviction } from "./Manager.process.eviction.ts";
 import {
   makeTerminalIdleWorkTracker,
   terminalPaneWork,
@@ -104,6 +105,40 @@ describe("server-owned terminal idle facts", () => {
     session.process = null;
     session.restartPreparation = async () => {};
     expect(terminalPaneWork(session)).toBe("unknown");
+  });
+
+  it.each([
+    "remoteOwnerRecoveryRequired",
+    "restartPreparation",
+    "restartPending",
+    "stopPending",
+    "lifecyclePending",
+  ] as const)("retains inactive uncertainty during eviction: %s", async (flag) => {
+    const session = pane();
+    session.status = "error";
+    session.process = null;
+    if (flag === "restartPreparation") session.restartPreparation = async () => {};
+    else session[flag] = true;
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const ref = yield* SynchronizedRef.make<TerminalManagerState>({
+          sessions: new Map([[toSessionKey(session.threadId, session.terminalId), session]]),
+          killFibers: new Map(),
+        });
+        const access = makeManagerStateAccessors(ref);
+        const evict = makeInactiveSessionEviction(access.modifyManagerState, 0);
+        yield* evict();
+        const retained = yield* access.sessionsForThread(session.threadId);
+        expect(retained).toEqual([session]);
+        const tracker = makeTerminalIdleWorkTracker();
+        tracker.refresh(retained);
+        expect(tracker.get(session.threadId).state).toBe("unknown");
+        if (flag === "restartPreparation") session.restartPreparation = undefined;
+        else session[flag] = false;
+        yield* evict();
+        expect(yield* access.sessionsForThread(session.threadId)).toEqual([]);
+      }),
+    );
   });
 
   it("bounds completion retention by the longest rule, not the current sweep policy", () => {

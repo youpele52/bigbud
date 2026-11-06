@@ -1,3 +1,4 @@
+import { forgetOrganizationEngagementCaller } from "../thread-organization/organizationEngagement.ts";
 import { Effect, Queue } from "effect";
 import { WsRpcGroup } from "@bigbud/contracts";
 import { RpcServer } from "effect/unstable/rpc";
@@ -12,7 +13,11 @@ export const bridgeSshMonitorDisconnects = Effect.fn("bridgeSshMonitorDisconnect
   yield* Effect.forever(
     Queue.take(source).pipe(
       Effect.tap((clientId) =>
-        Effect.sync(() => forgetSshMonitorCaller(sshMonitorCallerId(instanceId, clientId))),
+        Effect.sync(() => {
+          const caller = sshMonitorCallerId(instanceId, clientId);
+          forgetSshMonitorCaller(caller);
+          if (caller) forgetOrganizationEngagementCaller(caller);
+        }),
       ),
       Effect.flatMap((clientId) => Queue.offer(forwarded, clientId)),
     ),

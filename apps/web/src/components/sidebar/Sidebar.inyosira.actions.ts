@@ -7,6 +7,7 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { useStore } from "../../stores/main";
 import { toastManager } from "../ui/toast";
 import { INYOSIRA_STATE_LABELS } from "./Sidebar.inyosira.logic";
+import { manualOrganizationMoveDescription } from "../../lib/organizationNotifications";
 
 /** Presets in the Snooze for… submenu; "Custom duration…" opens the duration picker. */
 export const INYOSIRA_SNOOZE_PRESETS: ReadonlyArray<{
@@ -49,6 +50,21 @@ export async function moveThreadsToState(
     }),
   );
   const failures = results.filter((result) => result.status === "rejected");
+  // Confirmation comes from this client's own accepted commands, never from the shared event
+  // stream, so other windows/users and Undo restorations do not produce a manual-move toast.
+  const moved = threadIds.filter(
+    (threadId, index) =>
+      results[index]?.status === "fulfilled" && summaries[threadId]?.organization?.state !== state,
+  );
+  if (moved.length > 0)
+    toastManager.add({
+      type: "success",
+      title:
+        moved.length === 1
+          ? `Moved to ${INYOSIRA_STATE_LABELS[state]}`
+          : `Moved ${moved.length} threads to ${INYOSIRA_STATE_LABELS[state]}`,
+      description: manualOrganizationMoveDescription(state),
+    });
   if (failures.length === 0) return;
   toastManager.add({
     type: "error",

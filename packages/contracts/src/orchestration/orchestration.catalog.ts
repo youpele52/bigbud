@@ -37,6 +37,8 @@ export const ProjectSummary = Schema.Struct({
   workspaceExecutionTargetId: ExecutionTargetId,
   executionTargetId: ExecutionTargetId,
   workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
+  workspaceKind: Schema.optional(Schema.Literals(["managed", "external"])),
+  previousWorkspaceRoot: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   lastUsedAt: IsoDateTime,
   updatedAt: IsoDateTime,
   deletingAt: Schema.NullOr(IsoDateTime),

@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+import {
+  stageHostOrganizationSupervisor,
+  stageReleasedOrganizationSupervisors,
+  assertCompleteOrganizationSupervisorSet,
+} from "./organizationSupervisor.ts";
+
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Data, Effect, FileSystem, Logger, Option, Path } from "effect";
@@ -182,7 +188,12 @@ const buildCmd = Command.make(
         catch: (cause) =>
           new CliError({ message: "Failed to stage the server workspace watcher agent.", cause }),
       });
-      yield* Effect.log("[cli] Bundled the native workspace watcher agent");
+      yield* Effect.tryPromise({
+        try: () => stageHostOrganizationSupervisor(repoRoot, serverDir),
+        catch: (cause) =>
+          new CliError({ message: "Failed to stage native thread organisation", cause }),
+      });
+      yield* Effect.log("[cli] Bundled the native workspace watcher and organisation supervisor");
     }),
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
 
@@ -222,6 +233,8 @@ const publishCmd = Command.make(
         try: () => {
           stageReleasedServerWorkspaceAgents(repoRoot, serverDir);
           assertCompleteServerWorkspaceAgentSet(serverDir);
+          stageReleasedOrganizationSupervisors(repoRoot, serverDir);
+          assertCompleteOrganizationSupervisorSet(serverDir);
         },
         catch: (cause) =>
           new CliError({

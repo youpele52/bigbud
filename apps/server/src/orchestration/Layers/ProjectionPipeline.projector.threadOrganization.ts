@@ -13,6 +13,8 @@ export const projectThreadOrganizationEvent = Effect.fn("projectThreadOrganizati
     yield* input.repository.setOrganization({
       threadId: input.event.payload.threadId,
       organization: input.event.payload.organization,
+      reason: input.event.payload.reason,
+      ...(input.event.payload.source ? { source: input.event.payload.source } : {}),
     });
   },
 );

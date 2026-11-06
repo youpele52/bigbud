@@ -3,6 +3,7 @@ import { TurnStartFailureClass } from "./orchestration.turnFailure";
 import { ThreadRecoverySetCommand } from "./orchestration.recovery";
 import {
   ThreadOrganizationIdleCommand,
+  ThreadOrganizationReactCommand,
   ThreadOrganizationSnoozeExpireCommand,
 } from "./orchestration.organization";
 import {
@@ -236,5 +237,6 @@ export const InternalOrchestrationCommand = Schema.Union([
   ThreadRecoverySetCommand,
   ThreadOrganizationSnoozeExpireCommand,
   ThreadOrganizationIdleCommand,
+  ThreadOrganizationReactCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;

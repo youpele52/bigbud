@@ -51,6 +51,7 @@ export type ThreadTurnCommand = Exclude<
       | "thread.recovery.set"
       | "thread.recovery.resolve"
       | "thread.organization.move"
+      | "thread.organization.react"
       | "thread.organization.snooze"
       | "thread.organization.snooze.expire"
       | "thread.organization.idle";

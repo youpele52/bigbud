@@ -56,6 +56,21 @@ export function makeMuseStartSession(ctx: MuseAdapterContext) {
         "invalid-request",
       );
     }
+    if (
+      cursor &&
+      deps.bindings?.isArchived &&
+      (yield* deps.bindings
+        .isArchived(input.threadId, cursor.nativeSessionId)
+        .pipe(
+          Effect.mapError((e) => mapMuseRequestError("bindings.isArchived", e, "unsafe-to-replay")),
+        ))
+    ) {
+      return yield* museValidationError(
+        "startSession",
+        "This Muse native context was archived when the project folder changed. Start fresh with the current explicit provider/model selection; the old session remains a recovery copy.",
+        "unsafe-to-replay",
+      );
+    }
     const binding = deps.bindings
       ? yield* deps.bindings
           .find(input.threadId)

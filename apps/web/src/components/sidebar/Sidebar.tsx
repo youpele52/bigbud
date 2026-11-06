@@ -8,6 +8,7 @@ import { SidebarAppHeader } from "./SidebarHeader";
 import { SidebarFooterBar } from "./Sidebar.footer";
 import { SidebarNavigation } from "./Sidebar.navigation";
 import { SidebarRemoteWorkspaceDialog } from "./SidebarRemoteWorkspaceDialog";
+import { SidebarProjectEditDialog } from "./SidebarProjectEditDialog";
 import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import { SidebarInyosiraSnoozeDialog } from "./Sidebar.inyosiraSnoozeDialog";
@@ -21,6 +22,7 @@ export default function Sidebar() {
   return (
     <>
       <SidebarAppHeader />
+      <SidebarProjectEditDialog />
 
       {s.isOnSettings ? (
         <SettingsSidebarNav pathname={s.pathname} />

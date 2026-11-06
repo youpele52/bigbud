@@ -1,3 +1,4 @@
+import { WsOrganizationStatusRpc, WsOrganizationEngagementRpc } from "./rpc.organizationAutomation";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import {
   WsWorktreeOperationsRpc,
@@ -307,6 +308,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationSearchConversationMessagesRpc,
   WsOrchestrationGetProjectThreadSummariesRpc,
   WsOrchestrationGetOrganizationThreadSummariesRpc,
+  WsOrganizationStatusRpc,
+  WsOrganizationEngagementRpc,
   WsOrchestrationGetSelectedThreadDetailRpc,
   WsOrchestrationGetThreadOwnershipRpc,
   WsOrchestrationGetCommandOutcomeRpc,

@@ -24,6 +24,9 @@ export class ThreadShellRunnerError extends Schema.TaggedErrorClass<ThreadShellR
 
 export interface ThreadShellRunnerShape {
   readonly isActive?: (threadId: string) => Effect.Effect<boolean>;
+  /** Commands/queued command locks only; a retained unused shell is not work. */
+  readonly hasRunningCommand?: (threadId: string) => Effect.Effect<boolean>;
+  readonly workingThreadIds?: () => Effect.Effect<ReadonlyArray<string>>;
   readonly run: (
     input: ThreadShellRunInput,
   ) => Effect.Effect<ThreadShellRunResult, ThreadShellRunnerError>;

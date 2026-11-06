@@ -61,6 +61,8 @@ export interface V2RuntimeSession {
   unsubscribeDeath: () => void;
   session: ProviderSession;
   row?: ProviderTurnAdmission | undefined;
+  /** Derived from exact committed workspace lineage, never written into historical admission material. */
+  effectiveAdmissionLocation?: string | undefined;
   stopped: boolean;
   /** Borrowed transport loss is reversible and is not terminal native/process-loss proof. */
   transportDetached?: boolean;

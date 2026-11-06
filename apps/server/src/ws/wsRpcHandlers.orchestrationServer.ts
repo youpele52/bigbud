@@ -1,3 +1,4 @@
+import { makeOrganizationAutomationHandlers } from "./wsRpcHandlers.organizationAutomation.ts";
 import { Effect, Option, Schema } from "effect";
 import {
   OrchestrationDispatchCommandError,
@@ -52,6 +53,7 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
   };
 
   return {
+    ...makeOrganizationAutomationHandlers(context),
     [ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog]: (_input: unknown) =>
       observeRpcEffect(
         ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog,

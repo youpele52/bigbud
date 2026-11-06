@@ -1,4 +1,5 @@
 import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
+import { InyosiraStatus } from "./Sidebar.inyosiraStatus";
 import { useMemo } from "react";
 
 import { useStore } from "../../stores/main";
@@ -7,7 +8,7 @@ import { INYOSIRA_BOTTOM_STATES, groupInyosiraThreadIds } from "./Sidebar.inyosi
 import { SidebarInyosiraGroup } from "./Sidebar.inyosiraGroup";
 import type { SharedProjectItemProps } from "./Sidebar.types";
 
-/** Present at the top; Needs you, Later, and Done anchored together at the bottom. */
+/** Attention first, then current work; Later and Done remain below. */
 export function SidebarInyosiraSection({ shared }: { shared: SharedProjectItemProps }) {
   const summaries = useStore((store) => store.sidebarThreadsById);
   const projects = useStore((store) => store.projects);
@@ -32,6 +33,8 @@ export function SidebarInyosiraSection({ shared }: { shared: SharedProjectItemPr
 
   return (
     <div className="flex min-h-0 flex-1 flex-col pb-2" data-testid="inyosira-section">
+      <InyosiraStatus />
+      {renderGroup("needs-you")}
       {renderGroup("present")}
       <div className="mt-auto flex flex-col gap-1 pt-4">
         {INYOSIRA_BOTTOM_STATES.map(renderGroup)}

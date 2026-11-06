@@ -20,6 +20,8 @@ export function authoritativeAssistantRepair(input: {
   readonly message: SessionMessageAssistant;
   readonly nativeSessionId: string;
   readonly location: string;
+  /** Trusted caller derives this from exact committed native Location lineage. */
+  readonly effectiveAdmissionLocation?: string | undefined;
   readonly sessionEpoch: number;
   readonly isCurrent: boolean;
   readonly correlationProven: boolean;
@@ -31,7 +33,7 @@ export function authoritativeAssistantRepair(input: {
     admission.binding.provider !== "opencodeV2" ||
     (admission.state !== "accepted" && admission.state !== "terminal") ||
     input.nativeSessionId !== admission.binding.nativeSessionId ||
-    input.location !== admission.binding.location ||
+    input.location !== (input.effectiveAdmissionLocation ?? admission.binding.location) ||
     !Number.isInteger(input.sessionEpoch) ||
     input.sessionEpoch < 0 ||
     !isV2AssistantSettled(message) ||

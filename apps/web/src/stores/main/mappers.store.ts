@@ -244,6 +244,8 @@ export function mapProject(project: OrchestrationReadModel["projects"][number]):
       project.workspaceExecutionTargetId ?? project.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     executionTargetId: project.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     cwd: project.workspaceRoot,
+    workspaceKind: project.workspaceKind ?? "external",
+    previousWorkspaceRoot: project.previousWorkspaceRoot ?? null,
     defaultModelSelection: project.defaultModelSelection
       ? normalizeModelSlug(project.defaultModelSelection)
       : null,

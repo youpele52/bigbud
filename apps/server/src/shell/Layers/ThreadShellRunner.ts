@@ -49,6 +49,8 @@ export const ThreadShellRunnerLive = Layer.effect(
 
     return {
       isActive: (threadId) => Effect.sync(() => runner.isActive(threadId)),
+      hasRunningCommand: (threadId) => Effect.sync(() => runner.hasRunningCommand(threadId)),
+      workingThreadIds: () => Effect.sync(() => runner.workingThreadIds()),
       run: (input) =>
         Effect.tryPromise({
           try: () => runner.run(input),

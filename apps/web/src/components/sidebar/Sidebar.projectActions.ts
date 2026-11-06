@@ -21,6 +21,7 @@ import type {
 import { useSidebarProjectReconnectActions } from "./Sidebar.projectActions.reconnect";
 import { useSidebarProjectConnectionActions } from "./Sidebar.projectActions.connection";
 import { buildProjectContextMenuItems } from "./Sidebar.projectActions.menu";
+import { useProjectEditor } from "./Sidebar.projectEdit.logic";
 
 export function useSidebarProjectActions({
   projects,
@@ -108,6 +109,14 @@ export function useSidebarProjectActions({
           return;
         }
         copyPathToClipboard(project.cwd, { path: project.cwd });
+        return;
+      }
+      if (clicked === "edit-local") {
+        useProjectEditor.getState().open(projectId);
+        return;
+      }
+      if (clicked === "reveal-folder" && project.cwd) {
+        await api.shell.openPath(project.cwd);
         return;
       }
       if (clicked === "edit-ssh") {

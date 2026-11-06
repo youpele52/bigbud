@@ -150,6 +150,8 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         p.workspace_execution_target_id AS "workspaceExecutionTargetId",
         p.execution_target_id AS "executionTargetId",
         p.workspace_root AS "workspaceRoot",
+        p.workspace_kind AS "workspaceKind",
+        p.previous_workspace_root AS "previousWorkspaceRoot",
         p.last_used_at AS "lastUsedAt",
         p.updated_at AS "updatedAt",
         p.deleting_at AS "deletingAt",

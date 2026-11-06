@@ -22,6 +22,7 @@ export interface RenderedProjectData {
     id: ProjectId;
     name: string;
     cwd: string;
+    workspaceKind?: "managed" | "external";
     executionTargetId?: string | undefined;
     expanded: boolean;
   };

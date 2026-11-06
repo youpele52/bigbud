@@ -4,7 +4,7 @@ import { Effect, Queue, Ref, Stream } from "effect";
 import { TestClock } from "effect/testing";
 
 import type { PendingThreadSnooze } from "../../persistence/Services/ProjectionThreads.ts";
-import { startThreadSnoozeDelivery } from "./ThreadOrganizationReactor.snooze.ts";
+import { startThreadSnoozeDelivery } from "./ThreadOrganizationReactor.snooze.fixture.ts";
 
 const threadA = ThreadId.makeUnsafe("thread-a");
 const threadB = ThreadId.makeUnsafe("thread-b");

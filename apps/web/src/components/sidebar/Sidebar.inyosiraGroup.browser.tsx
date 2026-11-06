@@ -23,8 +23,8 @@ vi.mock("../../stores/main", () => ({
   useStore: (selector: (state: { sidebarThreadsById: object; projects: unknown[] }) => unknown) =>
     selector({ sidebarThreadsById: fixtures.threads, projects: [] }),
 }));
-vi.mock("../../rpc/nativeApi", () => ({
-  readNativeApi: () => ({
+vi.mock("../../rpc/nativeApi", () => {
+  const readNativeApi = () => ({
     orchestration: {
       getOrganizationThreadSummaries: fixtures.requestCount,
       onDomainEvent: (_callback: unknown, options: { onResubscribe: () => void }) => {
@@ -32,8 +32,9 @@ vi.mock("../../rpc/nativeApi", () => ({
         return () => fixtures.refreshCounts.delete(options.onResubscribe);
       },
     },
-  }),
-}));
+  });
+  return { readNativeApi, ensureNativeApi: readNativeApi };
+});
 vi.mock("./Sidebar.inyosira.catalog", () => ({
   useInyosiraCatalog: () => ({
     pages: useInyosiraStore((store) => store.pages),

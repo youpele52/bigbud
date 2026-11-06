@@ -157,6 +157,8 @@ export interface Project {
   workspaceExecutionTargetId?: ExecutionTargetId;
   executionTargetId?: ExecutionTargetId;
   cwd: string | null;
+  workspaceKind?: "managed" | "external";
+  previousWorkspaceRoot?: string | null;
   defaultModelSelection: HistoricalModelSelection | null;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;
