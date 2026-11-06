@@ -74,3 +74,35 @@ it("reports idle once no worker request is in flight", async () => {
   assert.equal(bridge.pendingCount, 0);
   await bridge.close();
 });
+
+it("reports a crash of an open worker once, but never a close or a failed open", async () => {
+  const failures: string[] = [];
+  const hooks = { onUnexpectedFailure: (f: { message: string }) => failures.push(f.message) };
+  const crashed = new NodeSqliteWorkerBridge(fixtureEntry, openOptions("crash"), undefined, hooks);
+  await crashed.open();
+  await new Promise<void>((resolve) =>
+    crashed.execute(
+      { kind: "execute", sql: "CRASH", params: [], mode: "rows", safeIntegers: false },
+      () => resolve(),
+    ),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(
+    failures.map((message) => message.replace(/:.*$/, "")),
+    ["SQLite worker crashed"],
+  );
+  await crashed.close();
+
+  const closed = new NodeSqliteWorkerBridge(fixtureEntry, openOptions("crash"), undefined, hooks);
+  await closed.open();
+  await closed.close();
+  const neverReady = new NodeSqliteWorkerBridge(
+    fixtureEntry,
+    openOptions("never-ready"),
+    { openTimeoutMs: 100, closeTimeoutMs: 100, exitTimeoutMs: 2_000 },
+    hooks,
+  );
+  await neverReady.open().catch(() => undefined);
+  await neverReady.close();
+  assert.equal(failures.length, 1);
+});

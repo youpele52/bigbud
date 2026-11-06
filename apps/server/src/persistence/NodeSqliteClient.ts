@@ -22,6 +22,8 @@ import * as Statement from "effect/unstable/sql/Statement";
 import { openNodeSqliteDatabase } from "./NodeSqliteClient.files.ts";
 import { makeInProcessConnection } from "./NodeSqliteClient.inProcess.ts";
 import { makeWorkerConnection, resolveNodeSqliteWorkerEntry } from "./NodeSqliteClient.worker.ts";
+import { exitProcessOnSqliteWorkerFailure } from "./NodeSqliteClient.worker.exit.ts";
+import type { NodeSqliteWorkerBridgeFailure } from "./NodeSqliteClient.worker.bridge.ts";
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name";
 
@@ -45,6 +47,12 @@ export interface SqliteClientConfig {
   readonly transformQueryNames?: ((str: string) => string) | undefined;
   /** Run the connection in a worker thread (default false); see `shouldUseWorker`. */
   readonly worker?: boolean | undefined;
+  /**
+   * Called once when an open worker crashes or exits on its own. The bridge never restarts,
+   * so by default the process exits (`exitProcessOnSqliteWorkerFailure`) instead of serving
+   * every later query a connection error while it looks alive.
+   */
+  readonly onWorkerFailure?: ((failure: NodeSqliteWorkerBridgeFailure) => void) | undefined;
 }
 
 export interface SqliteMemoryClientConfig extends Omit<
@@ -93,12 +101,17 @@ const makeConnection = Effect.fn("makeConnection")(function* (
   if (shouldUseWorker(options)) {
     const entry = resolveNodeSqliteWorkerEntry();
     if (entry) {
-      return yield* makeWorkerConnection(entry, {
-        filename: options.filename,
-        readonly: options.readonly ?? false,
-        allowExtension: options.allowExtension ?? false,
-        prepareCacheSize: options.prepareCacheSize ?? 200,
-      });
+      return yield* makeWorkerConnection(
+        entry,
+        {
+          filename: options.filename,
+          readonly: options.readonly ?? false,
+          allowExtension: options.allowExtension ?? false,
+          prepareCacheSize: options.prepareCacheSize ?? 200,
+        },
+        undefined,
+        { onUnexpectedFailure: options.onWorkerFailure ?? exitProcessOnSqliteWorkerFailure },
+      );
     }
     yield* Effect.logWarning(
       "SQLite worker entry not found; running SQLite on the main thread instead.",

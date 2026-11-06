@@ -7,6 +7,8 @@
  * - Opening is bounded by `openTimeoutMs`; a worker that has not reported
  *   `ready` by then is terminated and reported as a connection failure.
  * - If the worker throws, exits or fails to open, every pending request fails
+ *   and `onUnexpectedFailure` fires once, only for a worker that was open and
+ *   not being closed. The production client exits the process from that hook.
  *   with the bridge failure and every later request fails immediately. There is
  *   no automatic restart: an open transaction cannot survive a lost connection.
  * - A caller that stops waiting (fiber interruption) does not cancel its
@@ -64,8 +66,20 @@ export async function waitForNodeSqliteWorkersIdle(
   }
 }
 
+/** Observers of a bridge failure the caller did not ask for. */
+export interface NodeSqliteWorkerBridgeHooks {
+  readonly onUnexpectedFailure?: (failure: NodeSqliteWorkerBridgeFailure) => void;
+}
+
+export interface NodeSqliteWorkerBridgeFailure {
+  readonly message: string;
+  readonly cause: unknown;
+}
+
 export class NodeSqliteWorkerBridge {
   private readonly worker: Worker;
+  private opened = false;
+  private closing = false;
   private readonly pending = new Map<number, (response: NodeSqliteWorkerResult) => void>();
   private readonly exited: Promise<void>;
   private nextId = 1;
@@ -77,6 +91,7 @@ export class NodeSqliteWorkerBridge {
     entry: string,
     options: NodeSqliteWorkerOpenOptions,
     private readonly timeouts: NodeSqliteWorkerBridgeTimeouts = DEFAULT_NODE_SQLITE_WORKER_TIMEOUTS,
+    private readonly hooks: NodeSqliteWorkerBridgeHooks = {},
   ) {
     this.worker = new Worker(entry, { workerData: options });
     this.exited = new Promise((resolve) => this.worker.once("exit", () => resolve()));
@@ -94,7 +109,7 @@ export class NodeSqliteWorkerBridge {
   }
 
   /** Set once the bridge has failed; later requests fail with it immediately. */
-  get failure(): { readonly message: string; readonly cause: unknown } | undefined {
+  get failure(): NodeSqliteWorkerBridgeFailure | undefined {
     return this.failureMessage === undefined
       ? undefined
       : { message: this.failureMessage, cause: this.failureCause };
@@ -128,6 +143,7 @@ export class NodeSqliteWorkerBridge {
 
   /** Closes the database, then waits (bounded) for the worker thread to exit. */
   async close(): Promise<void> {
+    this.closing = true;
     if (this.failureMessage === undefined) {
       await new Promise<void>((resolve) => {
         const timer = setTimeout(resolve, this.timeouts.closeTimeoutMs);
@@ -168,6 +184,7 @@ export class NodeSqliteWorkerBridge {
 
   private receive(message: NodeSqliteWorkerResponse): void {
     if (message.kind === "ready") {
+      this.opened = true;
       this.onOpen?.(undefined);
       this.onOpen = undefined;
       return;
@@ -184,9 +201,14 @@ export class NodeSqliteWorkerBridge {
   }
 
   private fail(message: string, cause: unknown): void {
-    if (this.failureMessage === undefined) {
+    const first = this.failureMessage === undefined;
+    if (first) {
       this.failureMessage = message;
       this.failureCause = cause;
+    }
+    // A failed or timed-out open rejects `open()`; a close is the caller's own doing.
+    if (first && this.opened && !this.closing) {
+      this.hooks.onUnexpectedFailure?.({ message, cause });
     }
     this.onOpen?.(new NodeSqliteWorkerBridgeError(message, { cause }));
     this.onOpen = undefined;
