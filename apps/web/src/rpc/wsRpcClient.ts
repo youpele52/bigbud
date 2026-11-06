@@ -213,6 +213,14 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverRestartRemoteAgent](input)),
       getRemoteAgentRestartStatus: (input) =>
         transport.request((client) => client[WS_METHODS.serverGetRemoteAgentRestartStatus](input)),
+      disconnectExecutionTarget: (input) =>
+        transport.request((client) => client[WS_METHODS.serverDisconnectExecutionTarget](input)),
+      connectExecutionTarget: (input) =>
+        transport.request((client) => client[WS_METHODS.serverConnectExecutionTarget](input)),
+      listDisconnectedExecutionTargets: () =>
+        transport.request((client) =>
+          client[WS_METHODS.serverListDisconnectedExecutionTargets]({}),
+        ),
       getRemoteAgentUpdateStatus: (input) =>
         transport.request((client) => client[WS_METHODS.serverGetRemoteAgentUpdateStatus](input)),
       unlockSshKey: (input) =>

@@ -263,6 +263,14 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           sessions.some((session) => session.status === "running" || session.hasRunningSubprocess),
         ),
       ),
+    listExecutionTargetSessions: (executionTargetId) =>
+      modifyManagerState((state) => [Array.from(state.sessions.values()), state] as const).pipe(
+        Effect.map((sessions) =>
+          sessions
+            .filter((session) => session.executionTargetId === executionTargetId)
+            .map(({ threadId, terminalId }) => ({ threadId, terminalId })),
+        ),
+      ),
     open,
     // Retained lifecycle/identity is authoritative even after exit or a failed launch.
     snapshot: (input) =>

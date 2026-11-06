@@ -10,7 +10,12 @@ import {
   notifyRemoteAgentConnection,
   remoteAgentConnectionWarning,
 } from "./SidebarRemoteAgentConnection.notifications";
-import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
+import {
+  REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE,
+  useDisconnectedTargetsLoaded,
+  useIsExecutionTargetDisconnected,
+  useRemoteAccessStore,
+} from "../../stores/remoteAccess/remoteAccess.store";
 import {
   completeRemoteAgentAdmission,
   getRemoteAgentAdmissionRequestId,
@@ -46,6 +51,8 @@ export function SidebarRemoteAgentStatus({
   const [fallback, setFallback] = useState(false);
   const requestId = useRef<string | undefined>(undefined);
   const revision = useRef(0);
+  const disconnected = useIsExecutionTargetDisconnected(executionTargetId);
+  const disconnectListLoaded = useDisconnectedTargetsLoaded();
   useEffect(() => {
     let active = true;
     const observedRevision = ++revision.current;
@@ -68,6 +75,12 @@ export function SidebarRemoteAgentStatus({
           if (status && active && observedRevision === revision.current) setUpdateStatus(status);
         })
         .catch(() => undefined);
+    // A user-disconnected target is never verified on mount; Connect clears the flag first.
+    // Verification also waits until the server's disconnect list has loaded.
+    if (disconnected || !disconnectListLoaded)
+      return () => {
+        active = false;
+      };
     void Promise.resolve(api?.server.verifyExecutionTarget({ executionTargetId, cwd }))
       .then((result) => {
         if (!result || !active || observedRevision !== revision.current) return;
@@ -100,7 +113,7 @@ export function SidebarRemoteAgentStatus({
     return () => {
       active = false;
     };
-  }, [executionTargetId, cwd]);
+  }, [executionTargetId, cwd, disconnected, disconnectListLoaded]);
 
   const perform = async () => {
     if (busy) return;
@@ -216,6 +229,11 @@ export function SidebarRemoteAgentStatus({
           {message}
         </p>
       ) : null}
+      {disconnected ? (
+        <p role="status" className="text-muted-foreground">
+          {REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE}
+        </p>
+      ) : null}
       {error ? (
         <div role="alert" className="space-y-2 text-destructive">
           <p>{error}</p>
@@ -223,7 +241,7 @@ export function SidebarRemoteAgentStatus({
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="button" disabled={busy} onClick={() => void perform()}>
+        <Button type="button" disabled={busy || disconnected} onClick={() => void perform()}>
           Connect new session
         </Button>
       </div>

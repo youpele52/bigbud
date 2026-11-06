@@ -10,6 +10,7 @@ import { fixPath } from "./utils/os-jank";
 import { makeRoutesLayer } from "./server.routes.ts";
 import { OpenLive } from "./utils/open";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
+import { withRemoteExecutionTargetDisconnects } from "./persistence/Layers/RemoteExecutionTargetDisconnects.ts";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
 import { makeProviderLogSecurity } from "./server.providerLogs.ts";
@@ -283,7 +284,8 @@ const ProviderInfrastructureLayerLive = Layer.unwrap(
   }),
 ).pipe(Layer.provide(OptionalProviderCompositionLive));
 
-const PersistenceLayerLive = Layer.empty.pipe(Layer.provideMerge(SqlitePersistenceLayerLive));
+// Disconnect flags load before any SqlClient consumer, including remote-agent startup work.
+const PersistenceLayerLive = withRemoteExecutionTargetDisconnects(SqlitePersistenceLayerLive);
 
 const NotesPersistenceLayerLive = ProjectionNoteRepositoryLive;
 const KanbanPersistenceLayerLive = ProjectionKanbanRepositoryLive;

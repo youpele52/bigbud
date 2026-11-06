@@ -5,6 +5,7 @@ import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationComma
 import { newCommandId } from "../../lib/utils";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
+import { connectExecutionTargetForSetup } from "../../stores/remoteAccess/remoteAccess.connect";
 import {
   createRemoteWorkspaceExecutionTargetId,
   type RemoteWorkspaceDraft,
@@ -77,6 +78,7 @@ export async function reconfigureRemoteWorkspaceWithApi(input: {
       workspaceExecutionTargetId: createRemoteWorkspaceExecutionTargetId(input.draft),
       providerRuntimeLocation: input.draft.providerRuntimeLocation,
     });
+    await connectExecutionTargetForSetup(api, executionTargets.workspaceExecutionTargetId);
     const verifiedWorktreePaths = await verifyRemoteWorkspaceWorktrees({
       api,
       projectId: input.projectId,

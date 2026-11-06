@@ -22,6 +22,13 @@ vi.mock("../../stores/remoteAccess/remoteAccess.store", () => ({
   useRemoteAccessStore: Object.assign(() => new Set(), {
     getState: () => ({ recordRemoteConnection: vi.fn(), remoteConnections: {} }),
   }),
+  useIsExecutionTargetDisconnected: () => false,
+  useDisconnectedTargetsLoaded: () => true,
+  areDisconnectedTargetsLoaded: () => true,
+  isExecutionTargetDisconnected: () => false,
+  isExecutionTargetVerified: () => false,
+  REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE:
+    "Remote workspace is disconnected. Connect it to continue.",
 }));
 vi.mock("../../hooks/useRemoteExecutionAccessGate", () => ({
   useRemoteExecutionAccessGate: () => ({ beginRemoteExecutionTargetAccessCheck: vi.fn() }),

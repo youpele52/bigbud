@@ -1,6 +1,7 @@
 import { Effect, Scope, ServiceMap } from "effect";
 
 import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
+import { isSshTargetDisconnected } from "../ssh/sshTargetDisconnects.ts";
 import { isRemoteAgentExecutionTarget } from "./remoteAgentDefault.ts";
 import { openRemoteAgentControl, type RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
@@ -146,7 +147,8 @@ export function makeRemoteAgentUpdateCoordinator(
     ...(dependencies.connect ? { connect: dependencies.connect } : {}),
   });
   const prepare = async (target: string, item: RemoteAgentUpdateScheduleItem): Promise<void> => {
-    if (!isRemoteAgentExecutionTarget(target)) return;
+    // User-disconnected targets are skipped quietly, without opening SSH or logging.
+    if (!isRemoteAgentExecutionTarget(target) || isSshTargetDisconnected(target)) return;
     if (
       !item.triggers.has("authenticated") &&
       !item.forceRetry &&
@@ -160,10 +162,12 @@ export function makeRemoteAgentUpdateCoordinator(
     });
   };
 
+  const knownTargets = dependencies.knownTargets ?? defaultTargetList;
   scheduler =
     dependencies.scheduler ??
     makeRemoteAgentUpdateScheduler({
-      discoverTargets: dependencies.knownTargets ?? defaultTargetList,
+      discoverTargets: async () =>
+        (await knownTargets()).filter((target) => !isSshTargetDisconnected(target)),
       refreshSource: () => loadSource.refresh(),
       check: prepare,
       onError: logger,

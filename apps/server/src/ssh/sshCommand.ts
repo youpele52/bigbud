@@ -4,6 +4,7 @@ import {
   parseSshExecutionTarget,
 } from "./sshExecutionTarget.ts";
 import { buildSshPasswordSessionTransportArgs } from "./sshSession.ts";
+import { assertSshTargetConnected } from "./sshTargetDisconnects.ts";
 
 export interface SshCommandInvocation {
   readonly command: string;
@@ -32,6 +33,7 @@ export function buildSshTransportArgs(input: {
   readonly executionTargetId: string | null | undefined;
   readonly allocateTty?: boolean;
 }): ReadonlyArray<string> {
+  assertSshTargetConnected(input.executionTargetId);
   const target = parseSshExecutionTarget(input.executionTargetId);
   if (!target) {
     throw new Error(`Invalid SSH execution target '${input.executionTargetId ?? "local"}'.`);

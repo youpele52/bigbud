@@ -27,6 +27,7 @@ import {
   useServerWelcomeSubscription,
 } from "../rpc/serverState";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useDisconnectedExecutionTargetsSync } from "../hooks/useDisconnectedExecutionTargetsSync";
 import { useStore } from "../stores/main";
 import { useThreadSelectionStore } from "../stores/thread";
 import { useThinkingStreamStore } from "../stores/thinkingStream/thinkingStream.store";
@@ -342,6 +343,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     syncThreads,
   ]);
 
+  useDisconnectedExecutionTargetsSync();
   useServerWelcomeSubscription(handleWelcome);
   useServerConfigUpdatedSubscription(handleServerConfigUpdated);
 

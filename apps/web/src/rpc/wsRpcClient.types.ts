@@ -72,11 +72,6 @@ import {
   type VisibleBrowserRendererId,
   WS_METHODS,
 } from "@bigbud/contracts";
-import type {
-  ServerRestartRemoteAgentInput,
-  ServerRestartRemoteAgentResult,
-  ServerGetRemoteAgentRestartStatusInput,
-} from "@bigbud/contracts/server/server.remoteRestart";
 import { Effect, Stream } from "effect";
 import type {
   ServerPreviewThreadRetentionInput,
@@ -93,6 +88,7 @@ import type { WsRpcProtocolClient } from "./protocol";
 import type { SubscriptionRetryDelay } from "./wsTransport.retry";
 import type { WsInitialApplicationDeadline } from "./wsTransport.initialValue";
 import type { WsRpcMonitorMethods } from "./wsRpcClient.monitor.types";
+import type { WsRpcRemoteAgentMethods } from "./wsRpcClient.remoteAgent.types";
 
 export type RpcTag = keyof WsRpcProtocolClient & string;
 type RpcMethod<TTag extends RpcTag> = WsRpcProtocolClient[TTag];
@@ -257,12 +253,6 @@ export interface WsRpcClient {
     readonly listRemoteFolders: RpcUnaryMethod<typeof WS_METHODS.serverListRemoteFolders>;
     readonly installRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverInstallRemoteAgent>;
     readonly connectRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverConnectRemoteAgent>;
-    readonly restartRemoteAgent: (
-      input: ServerRestartRemoteAgentInput,
-    ) => Promise<ServerRestartRemoteAgentResult>;
-    readonly getRemoteAgentRestartStatus: (
-      input: ServerGetRemoteAgentRestartStatusInput,
-    ) => Promise<ServerRestartRemoteAgentResult>;
     readonly getRemoteAgentUpdateStatus: RpcUnaryMethod<
       typeof WS_METHODS.serverGetRemoteAgentUpdateStatus
     >;
@@ -346,7 +336,8 @@ export interface WsRpcClient {
     >;
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
-  } & WsRpcMonitorMethods;
+  } & WsRpcMonitorMethods &
+    WsRpcRemoteAgentMethods;
   readonly orchestration: {
     readonly getSidebarThreadCatalog: RpcUnaryMethod<
       typeof ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog

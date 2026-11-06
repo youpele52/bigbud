@@ -4,6 +4,9 @@ import { useShallow } from "zustand/react/shallow";
 import { isRemoteExecutionTargetId } from "../components/sidebar/Sidebar.remoteWorkspaces.logic";
 import { toastManager } from "../components/ui/toast";
 import {
+  areDisconnectedTargetsLoaded,
+  isExecutionTargetDisconnected,
+  isExecutionTargetVerified,
   type RemoteExecutionAuthMode,
   useRemoteAccessStore,
 } from "../stores/remoteAccess/remoteAccess.store";
@@ -19,6 +22,7 @@ import {
 } from "./useRemoteExecutionAccessGate.checks";
 import { verifyRemoteExecutionTarget } from "./useRemoteExecutionAccessGate.verification";
 import { submitRemoteExecutionAuth as submitAuth } from "./useRemoteExecutionAccessGate.auth";
+import { blockDisconnectedRemoteExecutionTarget } from "./useRemoteExecutionAccessGate.connection";
 
 interface EnsureRemoteExecutionTargetAccessInput {
   readonly executionTargetId: string | null | undefined;
@@ -111,7 +115,14 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
       }
       const executionTargetId = input.executionTargetId;
 
-      if (verifiedExecutionTargetIds[executionTargetId]) {
+      // Navigation only reads local history, so a user-disconnected target proceeds unverified,
+      // as does any target before the server's disconnect list has loaded.
+      if (
+        // Read live: Connect clears verification just before re-checking.
+        isExecutionTargetVerified(executionTargetId) ||
+        isExecutionTargetDisconnected(executionTargetId) ||
+        !areDisconnectedTargetsLoaded()
+      ) {
         if (!input.resumeOnUnlockOnly) {
           await input.onVerified?.();
         }
@@ -183,7 +194,7 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
       });
       return false;
     },
-    [executionTargetChecks, verifiedExecutionTargetIds],
+    [executionTargetChecks],
   );
 
   const ensureRemoteExecutionTargetAccess = useCallback(
@@ -195,6 +206,15 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
         return true;
       }
       const executionTargetId = input.executionTargetId;
+      if (
+        blockDisconnectedRemoteExecutionTarget({
+          executionTargetId,
+          onConnected: () =>
+            beginRemoteExecutionTargetAccessCheck({ ...input, resumeOnUnlockOnly: false }),
+        })
+      ) {
+        return false;
+      }
 
       if (verifiedExecutionTargetIds[executionTargetId]) {
         if (!input.resumeOnUnlockOnly) {
@@ -237,7 +257,8 @@ export function useRemoteExecutionAccessGate(): RemoteExecutionAccessGate {
         return false;
       }
 
-      if (check?.status !== "checking") {
+      // The background check waits for the disconnect list; the server still guards the action.
+      if (check?.status !== "checking" && areDisconnectedTargetsLoaded()) {
         startRemoteExecutionCheck({
           executionTargetId,
           ...(input.cwd ? { cwd: input.cwd } : {}),

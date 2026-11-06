@@ -8,12 +8,14 @@ import {
 export function buildProjectContextMenuItems(input: {
   readonly project: Project;
   readonly reconnectDisabled: boolean;
+  /** The user disconnected this SSH target; restart needs a connection, so Reconnect hides. */
+  readonly disconnected: boolean;
 }) {
   const target = resolveWorkspaceExecutionTargetId(input.project);
   const isSshWorkspace = isSshExecutionTargetId(target);
   const isRemoteWorkspace = isRemoteExecutionTargetId(target);
   return [
-    ...(isSshWorkspace
+    ...(isSshWorkspace && !input.disconnected
       ? [{ id: "reconnect", label: "Reconnect", disabled: input.reconnectDisabled }]
       : []),
     { id: "rename", label: isRemoteWorkspace ? "Rename remote workspace" : "Rename project" },
@@ -24,6 +26,13 @@ export function buildProjectContextMenuItems(input: {
             id: "copy-path",
             label: isRemoteWorkspace ? "Copy Workspace Path" : "Copy Project Path",
           },
+        ]
+      : []),
+    ...(isSshWorkspace
+      ? [
+          input.disconnected
+            ? { id: "connect", label: "Connect" }
+            : { id: "disconnect", label: "Disconnect" },
         ]
       : []),
     {

@@ -10,6 +10,7 @@ import type {
 
 import { formatSshDestination, parseSshExecutionTarget } from "./sshExecutionTarget.ts";
 import { describeSshLocalCommandFailure, runSshLocalCommand } from "./sshLocalCommand.ts";
+import { assertSshTargetConnected } from "./sshTargetDisconnects.ts";
 
 const CHALLENGE_TTL_MS = 5 * 60_000;
 const MAX_CHALLENGES = 128;
@@ -48,6 +49,7 @@ export async function inspectSshHostTrust(
   targetId: string,
   approvedPrompt?: string,
 ): Promise<void> {
+  assertSshTargetConnected(targetId);
   const target = parseSshExecutionTarget(targetId);
   if (!target) throw new Error(`Invalid SSH execution target '${targetId}'.`);
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "bigbud-ssh-trust-"));

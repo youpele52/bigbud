@@ -143,4 +143,18 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       expect(ptyAdapter.processes[0]?.killed).toBe(false);
     }),
   );
+
+  it.effect("lists tracked sessions by execution target for targeted shutdown", () =>
+    Effect.gen(function* () {
+      const { manager } = yield* createManager();
+      yield* manager.open(openInput());
+      yield* manager.open(openInput({ threadId: "thread-2", terminalId: "second" }));
+
+      expect(yield* manager.listExecutionTargetSessions!("local")).toEqual([
+        { threadId: "thread-1", terminalId: DEFAULT_TERMINAL_ID },
+        { threadId: "thread-2", terminalId: "second" },
+      ]);
+      expect(yield* manager.listExecutionTargetSessions!("ssh:host=devbox")).toEqual([]);
+    }),
+  );
 });

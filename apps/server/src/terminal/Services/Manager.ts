@@ -103,6 +103,10 @@ export interface TerminalManagerShape {
     input: TerminalRecoveryInput,
   ) => Effect.Effect<TerminalRecoveryResult, TerminalError>;
   readonly hasActiveThread?: (threadId: string) => Effect.Effect<boolean>;
+  /** Terminal sessions currently tracked for one execution target, for targeted shutdown. */
+  readonly listExecutionTargetSessions?: (
+    executionTargetId: string,
+  ) => Effect.Effect<ReadonlyArray<{ readonly threadId: string; readonly terminalId: string }>>;
   /**
    * Open or attach to a terminal session.
    *

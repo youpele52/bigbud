@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { retainRemoteMonitor, useRemoteMonitorStore } from "./remoteMonitor.store";
+import { useRemoteAccessStore } from "../remoteAccess/remoteAccess.store";
 
 const rpc = vi.hoisted(() => vi.fn());
 vi.mock("~/rpc/wsRpcClient", () => ({
@@ -15,6 +16,10 @@ const sample = (sequence: number) =>
     disks: [],
     interfaces: [],
   });
+
+beforeEach(() => {
+  useRemoteAccessStore.setState({ disconnectedTargetsLoaded: true });
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -42,5 +47,41 @@ describe("SSH monitor shared ownership", () => {
     expect(useRemoteMonitorStore.getState()["ssh:host=demo"]).toBeUndefined();
     await vi.advanceTimersByTimeAsync(30_000);
     expect(rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits for the disconnect list before sampling", async () => {
+    vi.useFakeTimers();
+    useRemoteAccessStore.setState({ disconnectedTargetsLoaded: false });
+    rpc.mockResolvedValue(sample(1));
+    const release = retainRemoteMonitor("ssh:host=loading", "project-one");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(rpc).not.toHaveBeenCalled();
+
+    useRemoteAccessStore.getState().markDisconnectedTargetsLoaded();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    release();
+  });
+
+  it("never samples a user-disconnected target and resumes after Connect", async () => {
+    vi.useFakeTimers();
+    const target = "ssh:host=paused";
+    useRemoteAccessStore.getState().markExecutionTargetDisconnected(target);
+    rpc.mockResolvedValue(sample(1));
+    const release = retainRemoteMonitor(target, "project-one");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(rpc).not.toHaveBeenCalled();
+    expect(useRemoteMonitorStore.getState()[target]).toMatchObject({
+      connection: "unavailable",
+      reason: "Remote workspace is disconnected. Connect it to continue.",
+    });
+    const idleState = useRemoteMonitorStore.getState();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(useRemoteMonitorStore.getState()).toBe(idleState);
+
+    useRemoteAccessStore.getState().clearExecutionTargetDisconnected(target);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(rpc).toHaveBeenCalledTimes(1);
+    release();
   });
 });

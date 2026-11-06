@@ -5,6 +5,7 @@ import { buildSshTransportArgs } from "../../ssh/sshCommand.ts";
 import { buildPasswordSessionControlPath } from "../../ssh/sshSession.ts";
 import { formatSshDestination, parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import { validSshMonitorTarget } from "../../ssh/sshMonitor.target.ts";
+import { assertSshTargetConnected } from "../../ssh/sshTargetDisconnects.ts";
 import {
   parsePosixAgentProcesses,
   TerminalAgentInspectionError,
@@ -28,6 +29,8 @@ export function remoteInspectionInvocation(executionTargetId: string) {
 
 /** Noninteractive SSH transport shared by read-only inspections; never triggers agent admission. */
 export function remoteReadOnlyInvocation(executionTargetId: string, command: string) {
+  // The password branch bypasses `buildSshTransportArgs`, so it needs its own guard.
+  assertSshTargetConnected(executionTargetId);
   if (!validSshMonitorTarget(executionTargetId)) throw new Error("Invalid SSH inspection target.");
   const target = parseSshExecutionTarget(executionTargetId);
   if (!target) throw new Error("Remote process inspection requires an SSH target.");

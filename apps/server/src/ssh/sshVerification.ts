@@ -31,6 +31,7 @@ import {
 } from "./sshLocalCommand.ts";
 import { runProcess } from "../utils/processRunner.ts";
 import { inspectSshHostTrustOnFailure } from "./sshHostTrust.ts";
+import { assertSshTargetConnected } from "./sshTargetDisconnects.ts";
 
 const SSH_VERIFY_TIMEOUT_MS = 8_000;
 const SSH_UNLOCK_ASKPASS_DIR_PREFIX = "bigbud-ssh-askpass-";
@@ -89,6 +90,7 @@ function keyNeedsAgent(key: KeyTarget, keyProbe: SshLocalCommandResult): boolean
  * several seconds; prefer `assertSshExecutionTargetReadyAsync`.
  */
 export function assertSshExecutionTargetReady(executionTargetId: string | null | undefined): void {
+  assertSshTargetConnected(executionTargetId);
   assertSshPasswordExecutionTargetReady(executionTargetId);
   const key = resolveKeyTarget(executionTargetId);
   if (!key) return;
@@ -100,11 +102,15 @@ export function assertSshExecutionTargetReady(executionTargetId: string | null |
   }
 }
 
-/** Bounded async local readiness probes; missing credentials first trigger host-identity discovery. */
+/**
+ * Bounded async local readiness probes; missing credentials first trigger host-identity discovery.
+ * A user-disconnected target fails before any probe and outside the host-trust fallback.
+ */
 export async function assertSshExecutionTargetReadyAsync(
   executionTargetId: string | null | undefined,
   deadline: SshDeadline = createSshDeadline(SSH_READINESS_DEADLINE_MS),
 ): Promise<void> {
+  assertSshTargetConnected(executionTargetId);
   try {
     await assertSshPasswordExecutionTargetReadyAsync(executionTargetId, deadline);
     const key = resolveKeyTarget(executionTargetId);

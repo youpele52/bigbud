@@ -9,15 +9,20 @@ export {
   REMOTE_SERVICE_RESTARTED,
   isRemoteAgentRestartError,
 } from "./remoteAgentConnectionPool.errors.ts";
-import { RemoteAgentLifecycle, type RemoteAgentLifecycleSnapshot } from "./remoteAgentLifecycle.ts";
+import type { RemoteAgentLifecycleSnapshot } from "./remoteAgentLifecycle.ts";
 import { RemoteAgentProcessClient } from "./remoteAgentProcessClient.ts";
 import { RemoteAgentPtyClient } from "./remoteAgentPtyClient.ts";
 import { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
 import { remoteAgentRuntimeEqual, type RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import { makeRemoteAgentWorkspaceMutation } from "./remoteAgentWorkspaceMutation.ts";
-import { assertRemoteAgentRuntimeHello } from "./remoteAgentCompatibility.ts";
 import { RemoteAgentRetirementFence } from "./remoteAgentRetirement.ts";
-import type { Entry } from "./remoteAgentConnectionPool.entry.ts";
+import { type Entry, makeRemoteAgentPoolEntry } from "./remoteAgentConnectionPool.entry.ts";
+import {
+  remoteAgentPoolBindingKey,
+  remoteAgentPoolEntryKey,
+  remoteAgentPoolRuntimeKey,
+} from "./remoteAgentConnectionPool.keys.ts";
+import { assertSshTargetConnected } from "../ssh/sshTargetDisconnects.ts";
 
 export interface RemoteAgentRuntimeBinding {
   readonly connectionId?: string;
@@ -55,13 +60,17 @@ export class RemoteAgentConnectionPool {
   }
 
   async get(executionTargetId: string): Promise<RemoteAgentConnection> {
+    assertSshTargetConnected(executionTargetId);
     const targetEpoch = this.targetEpochs.get(executionTargetId) ?? 0;
     const binding = await this.factory.resolveBinding?.(executionTargetId);
     if (targetEpoch !== (this.targetEpochs.get(executionTargetId) ?? 0))
       throw new RemoteAgentConnectionError(
         "Remote agent connection was invalidated before connection setup completed.",
       );
-    if (binding && this.invalidatedBindings.has(this.bindingKey(executionTargetId, binding)))
+    if (
+      binding &&
+      this.invalidatedBindings.has(remoteAgentPoolBindingKey(executionTargetId, binding))
+    )
       throw new RemoteAgentConnectionError(REMOTE_SERVICE_RESTARTED);
     const entry = this.entry(executionTargetId, binding);
     this.selectedEntries.set(executionTargetId, entry);
@@ -77,7 +86,8 @@ export class RemoteAgentConnectionPool {
     binding: RemoteAgentRuntimeBinding,
     capabilities: ReadonlyArray<string> = [],
   ): Promise<RemoteAgentConnection> {
-    if (this.invalidatedBindings.has(this.bindingKey(executionTargetId, binding)))
+    assertSshTargetConnected(executionTargetId);
+    if (this.invalidatedBindings.has(remoteAgentPoolBindingKey(executionTargetId, binding)))
       throw new RemoteAgentConnectionError(REMOTE_SERVICE_RESTARTED);
     const entry = this.entry(executionTargetId, binding);
     const connection = await this.withAcquisitionFence(
@@ -103,7 +113,7 @@ export class RemoteAgentConnectionPool {
       replacement.expectedEpoch === retired.expectedEpoch
     )
       throw new RemoteAgentConnectionError("Replacement runtime identity is not a new epoch.");
-    if (this.invalidatedBindings.has(this.bindingKey(executionTargetId, replacement)))
+    if (this.invalidatedBindings.has(remoteAgentPoolBindingKey(executionTargetId, replacement)))
       throw new RemoteAgentConnectionError(REMOTE_SERVICE_RESTARTED);
     const entry = this.entry(executionTargetId, replacement);
     this.selectedEntries.set(executionTargetId, entry);
@@ -143,7 +153,9 @@ export class RemoteAgentConnectionPool {
           if (entry.closed || entry.transportLost) {
             const wasTransportLost = entry.transportLost;
             entry.transportLost = false;
-            entry.lifecycle.close();
+            // A lost transport keeps the agent epoch so a later reconnect still verifies it.
+            if (wasTransportLost && !entry.closed) entry.lifecycle.markTransportLoss();
+            else entry.lifecycle.close();
             throw new RemoteAgentConnectionError(
               wasTransportLost
                 ? "Remote agent connection was invalidated during connection setup."
@@ -161,6 +173,8 @@ export class RemoteAgentConnectionPool {
           return connection;
         })
         .finally(() => {
+          // A setup that failed never reached the check above; the loss is already applied.
+          entry.transportLost = false;
           entry.connecting = undefined;
         });
     }
@@ -241,6 +255,24 @@ export class RemoteAgentConnectionPool {
       .snapshot;
   }
 
+  /**
+   * User disconnect: fails each live connection for the target with `error` so consumers
+   * see an ordinary transport loss, and invalidates setups in flight. Entries and their
+   * agent epochs are kept, so reattach resumes through them after Connect.
+   */
+  disconnect(executionTargetId: string, error: Error): void {
+    this.targetEpochs.set(executionTargetId, (this.targetEpochs.get(executionTargetId) ?? 0) + 1);
+    for (const entry of this.entries.values()) {
+      if (entry.executionTargetId !== executionTargetId) continue;
+      if (entry.connecting) entry.transportLost = true;
+      // A connection still in handshake is failed too, so its SSH child does not linger.
+      for (const connection of [entry.lifecycle.connection, entry.lifecycle.pendingConnection]) {
+        if (connection && typeof connection.disconnect === "function") connection.disconnect(error);
+      }
+      entry.lifecycle.markTransportLoss();
+    }
+  }
+
   close(executionTargetId: string): void {
     this.targetEpochs.set(executionTargetId, (this.targetEpochs.get(executionTargetId) ?? 0) + 1);
     for (const [key, entry] of this.entries) {
@@ -253,9 +285,9 @@ export class RemoteAgentConnectionPool {
   }
 
   closeBound(executionTargetId: string, binding: RemoteAgentRuntimeBinding): void {
-    const bindingKey = this.bindingKey(executionTargetId, binding);
+    const bindingKey = remoteAgentPoolBindingKey(executionTargetId, binding);
     this.invalidatedBindings.add(bindingKey);
-    const runtimeKey = this.runtimeKey(binding);
+    const runtimeKey = remoteAgentPoolRuntimeKey(binding);
     for (const [key, listeners] of this.restartListeners) {
       if (!key.endsWith(runtimeKey)) continue;
       for (const listener of listeners) listener();
@@ -271,7 +303,7 @@ export class RemoteAgentConnectionPool {
       )
         continue;
       affectedTargets.add(entry.executionTargetId);
-      this.invalidatedBindings.add(this.bindingKey(entry.executionTargetId, binding));
+      this.invalidatedBindings.add(remoteAgentPoolBindingKey(entry.executionTargetId, binding));
       entry.closed = true;
       entry.lifecycle.close();
       this.entries.delete(key);
@@ -289,7 +321,7 @@ export class RemoteAgentConnectionPool {
     }
   }
   onRuntimeRestart(binding: RemoteAgentRuntimeBinding, listener: () => void): () => void {
-    const key = `runtime:${this.runtimeKey(binding)}`;
+    const key = `runtime:${remoteAgentPoolRuntimeKey(binding)}`;
     const listeners = this.restartListeners.get(key) ?? new Set<() => void>();
     listeners.add(listener);
     this.restartListeners.set(key, listeners);
@@ -307,17 +339,7 @@ export class RemoteAgentConnectionPool {
     for (const entry of this.entries.values()) this.close(entry.executionTargetId);
   }
   private entry(executionTargetId: string, binding?: RemoteAgentRuntimeBinding): Entry {
-    const key = JSON.stringify([
-      executionTargetId,
-      binding
-        ? [
-            binding.runtime.generation,
-            binding.expectedEpoch,
-            binding.runtime.buildDigest,
-            binding.runtime.socketPath,
-          ]
-        : "external",
-    ]);
+    const key = remoteAgentPoolEntryKey(executionTargetId, binding);
     const existing = this.entries.get(key);
     if (existing) {
       if (
@@ -329,38 +351,11 @@ export class RemoteAgentConnectionPool {
         throw new Error("Runtime binding identity changed for an existing resource.");
       return existing;
     }
-    const entry: Entry = {
-      executionTargetId,
-      ...(binding ? { binding } : {}),
-      lifecycle: new RemoteAgentLifecycle({
-        create: () => this.factory.create(executionTargetId, binding),
-        ...(binding
-          ? {
-              expectedEpoch: binding.expectedEpoch,
-              validateHello: (hello: import("./remoteAgentProtocol.ts").RemoteAgentHello) =>
-                assertRemoteAgentRuntimeHello(binding.runtime, hello),
-            }
-          : {}),
-      }),
-      connecting: undefined,
-      closed: false,
-      transportLost: false,
-    };
+    const entry = makeRemoteAgentPoolEntry(executionTargetId, binding, () =>
+      this.factory.create(executionTargetId, binding),
+    );
     this.entries.set(key, entry);
     return entry;
-  }
-
-  private bindingKey(executionTargetId: string, binding: RemoteAgentRuntimeBinding): string {
-    return JSON.stringify([executionTargetId, this.runtimeKey(binding)]);
-  }
-
-  private runtimeKey(binding: RemoteAgentRuntimeBinding): string {
-    return JSON.stringify([
-      binding.runtime.generation,
-      binding.expectedEpoch,
-      binding.runtime.buildDigest,
-      binding.runtime.socketPath,
-    ]);
   }
 
   private async getWithCapabilities(
@@ -380,6 +375,8 @@ export class RemoteAgentConnectionPool {
     acquire: () => Promise<A>,
     checkRetirement = true,
   ): Promise<A> {
+    // Reconnect closures of process, PTY and workspace clients reacquire through here.
+    assertSshTargetConnected(executionTargetId);
     if (!binding) return acquire();
     const release = this.retirementFence.acquire(binding.runtime.generation);
     try {

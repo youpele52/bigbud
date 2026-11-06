@@ -1,6 +1,7 @@
 import { Data, Effect } from "effect";
 import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker";
 import { makeRemoteAgentInstallManager } from "./remoteAgentInstallManager.ts";
+import { isSshTargetDisconnected } from "../ssh/sshTargetDisconnects.ts";
 
 class RemoteAgentMaintenanceError extends Data.TaggedError("RemoteAgentMaintenanceError") {}
 let schedule: ((target: string) => void) | undefined;
@@ -27,10 +28,15 @@ export const makeRemoteAgentMaintenance = Effect.gen(function* () {
     process: (target) =>
       Effect.sleep(2_000).pipe(
         Effect.andThen(
-          Effect.tryPromise({
-            try: () => manager.cleanup(target),
-            catch: () => new RemoteAgentMaintenanceError(),
-          }),
+          // A user-disconnected target is skipped quietly; cleanup runs again after reconnecting.
+          Effect.suspend(() =>
+            isSshTargetDisconnected(target)
+              ? Effect.void
+              : Effect.tryPromise({
+                  try: () => manager.cleanup(target),
+                  catch: () => new RemoteAgentMaintenanceError(),
+                }),
+          ),
         ),
         Effect.catch(() =>
           Effect.logWarning(

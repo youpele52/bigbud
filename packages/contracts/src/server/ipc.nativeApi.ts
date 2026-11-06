@@ -47,6 +47,7 @@ import type * as Notes from "./notes";
 import type * as PinnedThreads from "./pinnedThreads";
 import type * as Server from "./server";
 import type * as RemoteRestart from "./server.remoteRestart";
+import type * as RemoteConnection from "./server.remoteConnection";
 import type * as SshConfig from "./server.sshConfig";
 import type * as RemoteFolders from "./server.remoteFolders";
 import type * as Handoff from "./server.handoff";
@@ -227,6 +228,13 @@ export interface NativeApi {
     getRemoteAgentUpdateStatus: (
       input: Server.ServerGetRemoteAgentUpdateStatusInput,
     ) => Promise<Server.ServerRemoteAgentUpdateStatus>;
+    disconnectExecutionTarget: (
+      input: RemoteConnection.ServerRemoteConnectionInput,
+    ) => Promise<RemoteConnection.ServerRemoteConnectionResult>;
+    connectExecutionTarget: (
+      input: RemoteConnection.ServerRemoteConnectionInput,
+    ) => Promise<RemoteConnection.ServerRemoteConnectionResult>;
+    listDisconnectedExecutionTargets: () => Promise<RemoteConnection.ServerListDisconnectedExecutionTargetsResult>;
     unlockSshKey: (
       input: Server.ServerUnlockSshKeyInput,
     ) => Promise<Server.ServerUnlockSshKeyResult>;

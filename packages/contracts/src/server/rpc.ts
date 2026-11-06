@@ -121,6 +121,9 @@ import {
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,
   WsServerGetRemoteAgentRestartStatusRpc,
+  WsServerDisconnectExecutionTargetRpc,
+  WsServerConnectExecutionTargetRpc,
+  WsServerListDisconnectedExecutionTargetsRpc,
 } from "./rpc.remoteAgent";
 import { WsServerListSshConfigHostsRpc } from "./rpc.sshConfig";
 import { WsServerSampleSshMonitorRpc, WsServerListConnectedSshMonitorsRpc } from "./rpc.sshMonitor";
@@ -196,6 +199,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,
   WsServerGetRemoteAgentRestartStatusRpc,
+  WsServerDisconnectExecutionTargetRpc,
+  WsServerConnectExecutionTargetRpc,
+  WsServerListDisconnectedExecutionTargetsRpc,
   WsServerUnlockSshKeyRpc,
   WsServerUnlockSshPasswordRpc,
   WsServerTrustSshHostRpc,

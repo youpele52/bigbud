@@ -4,7 +4,10 @@ import { type DragCancelEvent, type DragStartEvent, type DragEndEvent } from "@d
 import { isBuiltInChatsProject, type ProjectId } from "@bigbud/contracts";
 import { isMacPlatform } from "../../lib/utils";
 import { useUiStateStore } from "../../stores/ui";
-import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
+import {
+  isExecutionTargetDisconnected,
+  useRemoteAccessStore,
+} from "../../stores/remoteAccess/remoteAccess.store";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
@@ -16,6 +19,7 @@ import type {
   SidebarProjectActionsOutput,
 } from "./Sidebar.projectActions.types";
 import { useSidebarProjectReconnectActions } from "./Sidebar.projectActions.reconnect";
+import { useSidebarProjectConnectionActions } from "./Sidebar.projectActions.connection";
 import { buildProjectContextMenuItems } from "./Sidebar.projectActions.menu";
 
 export function useSidebarProjectActions({
@@ -41,6 +45,7 @@ export function useSidebarProjectActions({
   );
   const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
   const reconnect = useSidebarProjectReconnectActions(projects);
+  const connection = useSidebarProjectConnectionActions(projects);
   const {
     renamingProjectId,
     setRenamingProjectId,
@@ -76,10 +81,19 @@ export function useSidebarProjectActions({
       const menuItems = buildProjectContextMenuItems({
         project,
         reconnectDisabled: reconnect.isReconnectPending(projectId),
+        disconnected: isExecutionTargetDisconnected(resolveWorkspaceExecutionTargetId(project)),
       });
       const clicked = await api.contextMenu.show(menuItems, position);
       if (clicked === "reconnect") {
         reconnect.requestReconnect(projectId);
+        return;
+      }
+      if (clicked === "disconnect") {
+        connection.requestDisconnect(projectId);
+        return;
+      }
+      if (clicked === "connect") {
+        await connection.requestConnect(projectId);
         return;
       }
       if (clicked === "rename") {
@@ -114,6 +128,7 @@ export function useSidebarProjectActions({
       setRenamingProjectId,
       setRenamingProjectTitle,
       reconnect,
+      connection,
     ],
   );
 
@@ -293,6 +308,9 @@ export function useSidebarProjectActions({
     pendingReconnect: reconnect.pendingReconnect,
     dismissReconnect: reconnect.dismissReconnect,
     confirmReconnect: reconnect.confirmReconnect,
+    pendingDisconnect: connection.pendingDisconnect,
+    dismissDisconnect: connection.dismissDisconnect,
+    confirmDisconnect: connection.confirmDisconnect,
     handleProjectContextMenu,
     handleProjectDragStart,
     handleProjectDragEnd,

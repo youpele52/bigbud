@@ -5,6 +5,7 @@ import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { REMOTE_SERVICE_RESTARTED } from "./remoteAgentConnectionPool.errors.ts";
 import { RemoteAgentProcessClient } from "./remoteAgentProcessClient.ts";
 import {
+  isDefinitiveReattachFailure,
   REMOTE_AGENT_IMMEDIATE_REATTACH_ATTEMPTS,
   remoteAgentReattachBackoffMs,
   type RemoteAgentReattachEnvironment,
@@ -15,6 +16,14 @@ import {
   waitForRemoteAgentReattachWake,
 } from "./remoteAgentProcessClient.wake.ts";
 import type { RemoteAgentFrame } from "./remoteAgentProtocol.ts";
+import {
+  assertSshTargetConnected,
+  clearSshTargetDisconnected,
+  configureSshTargetDisconnects,
+  markSshTargetDisconnected,
+  REMOTE_TARGET_DISCONNECTED_CODE,
+  RemoteTargetDisconnectedError,
+} from "../ssh/sshTargetDisconnects.ts";
 
 const accepted: RemoteAgentFrame = {
   type: "processAccepted",
@@ -277,5 +286,68 @@ describe("remote agent reattach backoff", () => {
     expect(
       describeRemoteAgentProcessReplayGap({ hasExitCode: false, exitCode: 0, state: "cancelled" }),
     ).toBe("finished (cancelled), output partly lost");
+  });
+});
+
+describe("remote agent reattach across a user disconnect", () => {
+  const target = "ssh:host=box&transport=agent";
+
+  it("never treats the disconnect guard as definitive", () => {
+    const guard = new RemoteTargetDisconnectedError(target);
+    expect(isDefinitiveReattachFailure(guard)).toBe(false);
+    expect(
+      isDefinitiveReattachFailure(
+        new RemoteAgentConnectionError(guard.message, REMOTE_TARGET_DISCONNECTED_CODE),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps the remote process waiting while disconnected and reattaches after Connect", async () => {
+    await markSshTargetDisconnected(target);
+    const attaches: RemoteAgentFrame[] = [];
+    let reconnects = 0;
+    const environment: RemoteAgentReattachEnvironment = {
+      now: () => 0,
+      delay: () => new Promise(() => undefined),
+      waitForWake: waitForRemoteAgentReattachWake,
+      random: () => 0,
+      retentionMs: 60_000,
+    };
+    const disconnectedLink = {
+      request: async () => accepted,
+      nextFrame: async () => {
+        throw new RemoteAgentConnectionError(
+          new RemoteTargetDisconnectedError(target).message,
+          REMOTE_TARGET_DISCONNECTED_CODE,
+        );
+      },
+      send: async () => undefined,
+    } as unknown as RemoteAgentConnection;
+    const replacement = new RemoteAgentProcessClient(
+      scripted([attachResponse(1, 2), output(1, "built"), completedWith(0)], attaches),
+    );
+    const client = new RemoteAgentProcessClient(
+      disconnectedLink,
+      async () => {
+        reconnects += 1;
+        assertSshTargetConnected(target);
+        return replacement;
+      },
+      { reattach: environment },
+    );
+
+    try {
+      const result = run(client);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(reconnects).toBe(REMOTE_AGENT_IMMEDIATE_REATTACH_ATTEMPTS);
+
+      // Connect clears the flag, then wakes the waiting reattach.
+      await clearSshTargetDisconnected(target);
+      notifyRemoteAgentReattachWake();
+      await expect(result).resolves.toMatchObject({ completed: { exitCode: 0 } });
+      expect(attaches.every((frame) => frame.type !== "processRequest")).toBe(true);
+    } finally {
+      configureSshTargetDisconnects(undefined, []);
+    }
   });
 });

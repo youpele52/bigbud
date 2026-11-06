@@ -4,6 +4,11 @@ import { create } from "zustand";
 import { getWsRpcClient } from "~/rpc/wsRpcClient";
 import type { HistoryPoint } from "./resourceMonitor.store";
 import { appendTransferHistory } from "./resourceMonitor.history";
+import {
+  areDisconnectedTargetsLoaded,
+  isExecutionTargetDisconnected,
+  REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE,
+} from "../remoteAccess/remoteAccess.store";
 
 export interface RemoteMonitorState {
   snapshot: MonitorSnapshot | null;
@@ -36,7 +41,27 @@ function append(history: HistoryPoint[], metric: number | undefined, sequence: n
 async function sample(target: string, owner: NonNullable<ReturnType<typeof owners.get>>) {
   try {
     const projectId = owner.projectIds.keys().next().value;
-    if (!projectId) return;
+    // Wait for the disconnect list before contacting any host; the next poll retries.
+    if (!projectId || !areDisconnectedTargetsLoaded()) return;
+    // Keep the cheap local poll so sampling resumes after Connect, but never contact the host.
+    if (isExecutionTargetDisconnected(target)) {
+      owner.failures = 0;
+      // Unchanged state keeps subscribers from re-rendering on every idle poll.
+      useRemoteMonitorStore.setState((state) =>
+        state[target]?.connection === "unavailable" &&
+        state[target]?.reason === REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE
+          ? state
+          : {
+              ...state,
+              [target]: {
+                ...empty(),
+                connection: "unavailable",
+                reason: REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE,
+              },
+            },
+      );
+      return;
+    }
     const encoded = await getWsRpcClient().server.sampleSshMonitor({
       projectId: projectId as ProjectId,
     });

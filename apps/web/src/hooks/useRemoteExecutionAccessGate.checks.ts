@@ -1,6 +1,10 @@
 import { toastManager } from "../components/ui/toast";
 import type { RemoteExecutionCheckState } from "../stores/remoteAccess/remoteAccess.store";
-import { useRemoteAccessStore } from "../stores/remoteAccess/remoteAccess.store";
+import {
+  isExecutionTargetDisconnected,
+  REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE,
+  useRemoteAccessStore,
+} from "../stores/remoteAccess/remoteAccess.store";
 import {
   REMOTE_EXECUTION_BACKGROUND_TOAST_INTERVAL_MS,
   resolveRemoteExecutionCheckingStatus,
@@ -182,6 +186,10 @@ export function startRemoteExecutionCheck(input: {
           executionTargetId: input.executionTargetId,
           ...(input.cwd ? { cwd: input.cwd } : {}),
         });
+        // A check that finishes after the user disconnected must not re-mark the target verified.
+        if (isExecutionTargetDisconnected(input.executionTargetId)) {
+          throw new Error(REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE);
+        }
         useRemoteAccessStore
           .getState()
           .setExecutionTargetCheck(input.executionTargetId, resolveRemoteExecutionVerifiedStatus());

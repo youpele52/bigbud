@@ -18,6 +18,12 @@ import {
   parseSshExecutionTarget,
   type SshExecutionTarget,
 } from "./sshExecutionTarget.ts";
+import { buildSshControlArgs, type SshPasswordSessionRecord } from "./sshSession.control.ts";
+import {
+  assertSshTargetConnected,
+  isSshTargetDisconnected,
+  RemoteTargetDisconnectedError,
+} from "./sshTargetDisconnects.ts";
 
 const SSH_PASSWORD_SESSION_DIR_PREFIX = "bbs-";
 const SSH_PASSWORD_ASKPASS_DIR_PREFIX = "bigbud-ssh-password-askpass-";
@@ -29,13 +35,7 @@ const sessionRootBaseDirectory =
 const sessionRootDirectory = fs.mkdtempSync(
   path.join(sessionRootBaseDirectory, SSH_PASSWORD_SESSION_DIR_PREFIX),
 );
-const passwordSessionByExecutionTargetId = new Map<
-  string,
-  {
-    readonly controlPath: string;
-    readonly destination: string;
-  }
->();
+const passwordSessionByExecutionTargetId = new Map<string, SshPasswordSessionRecord>();
 
 function writePasswordAskpassScript(directoryPath: string): string {
   const scriptPath = path.join(directoryPath, "askpass.sh");
@@ -59,10 +59,7 @@ export function buildPasswordSessionControlPath(executionTargetId: string): stri
   return path.join(sessionRootDirectory, `s-${digest}`);
 }
 
-function getPasswordSessionRecord(target: SshExecutionTarget): {
-  readonly controlPath: string;
-  readonly destination: string;
-} {
+function getPasswordSessionRecord(target: SshExecutionTarget): SshPasswordSessionRecord {
   const existing = passwordSessionByExecutionTargetId.get(target.executionTargetId);
   if (existing) {
     return existing;
@@ -91,20 +88,6 @@ function buildPasswordTransportArgs(input: {
     "-o",
     `ControlPath=${input.controlPath}`,
     ...(input.target.port ? ["-p", input.target.port] : []),
-  ];
-}
-
-function buildControlCheckArgs(
-  target: SshExecutionTarget,
-  session: { readonly controlPath: string; readonly destination: string },
-): string[] {
-  return [
-    "-O",
-    "check",
-    "-o",
-    `ControlPath=${session.controlPath}`,
-    ...(target.port ? ["-p", target.port] : []),
-    session.destination,
   ];
 }
 
@@ -144,7 +127,7 @@ function isPasswordSessionActive(target: SshExecutionTarget): boolean {
   if (!session || !fs.existsSync(session.controlPath)) {
     return false;
   }
-  const result = runSshLocalCommandSync("ssh", buildControlCheckArgs(target, session), {
+  const result = runSshLocalCommandSync("ssh", buildSshControlArgs("check", target, session), {
     timeoutMs: SSH_LOCAL_PROBE_TIMEOUT_MS,
   });
   if (result.status === 0) {
@@ -162,7 +145,7 @@ async function isPasswordSessionActiveAsync(
   if (!session || !fs.existsSync(session.controlPath)) {
     return false;
   }
-  const result = await runSshLocalCommand("ssh", buildControlCheckArgs(target, session), {
+  const result = await runSshLocalCommand("ssh", buildSshControlArgs("check", target, session), {
     timeoutMs,
   });
   if (result.status === 0) {
@@ -219,6 +202,7 @@ export function buildSshPasswordSessionTransportArgs(input: {
   readonly executionTargetId: string | null | undefined;
   readonly allocateTty?: boolean;
 }): string[] {
+  assertSshTargetConnected(input.executionTargetId);
   const target = parseSshExecutionTarget(input.executionTargetId);
   if (!target) {
     throw new Error(`Invalid SSH execution target '${input.executionTargetId ?? "local"}'.`);
@@ -240,6 +224,7 @@ export async function unlockSshExecutionTargetPassword(input: {
   readonly executionTargetId: string;
   readonly password: string;
 }): Promise<{ readonly message: string }> {
+  assertSshTargetConnected(input.executionTargetId);
   const target = parseSshExecutionTarget(input.executionTargetId);
   if (!target) {
     throw new Error(`Invalid SSH execution target '${input.executionTargetId}'.`);
@@ -330,6 +315,11 @@ export async function unlockSshExecutionTargetPassword(input: {
     ) {
       throw new Error("Failed to unlock SSH password session. SSH did not retain the connection.");
     }
+    // A Disconnect that landed during the unlock has already run its teardown: end this master.
+    if (isSshTargetDisconnected(target.executionTargetId)) {
+      await closeSshPasswordSession(target.executionTargetId);
+      throw new RemoteTargetDisconnectedError(target.executionTargetId);
+    }
 
     return {
       message: `SSH password session for ${buildPasswordSessionDestination(target)} is ready to use.`,
@@ -339,23 +329,36 @@ export async function unlockSshExecutionTargetPassword(input: {
   }
 }
 
+/**
+ * Closes the password ControlMaster for one target (`ssh -O exit`, bounded) and forgets
+ * the session, so the next use requires the password again. A missing socket is a no-op.
+ */
+export async function closeSshPasswordSession(executionTargetId: string): Promise<void> {
+  const target = parseSshExecutionTarget(executionTargetId);
+  if (!target) return;
+  const session = passwordSessionByExecutionTargetId.get(target.executionTargetId) ?? {
+    controlPath: buildPasswordSessionControlPath(target.executionTargetId),
+    destination: formatSshDestination(target),
+  };
+  try {
+    if (fs.existsSync(session.controlPath)) {
+      await runSshLocalCommand("ssh", buildSshControlArgs("exit", target, session), {
+        timeoutMs: SSH_LOCAL_PROBE_TIMEOUT_MS,
+      });
+    }
+  } finally {
+    forgetPasswordSession(target, session.controlPath);
+  }
+}
+
 function closeAllPasswordSessions(): void {
   for (const [executionTargetId, session] of passwordSessionByExecutionTargetId.entries()) {
     const target = parseSshExecutionTarget(executionTargetId);
     if (target) {
       // Runs from the process `exit` handler, so it must stay synchronous; bounded per session.
-      runSshLocalCommandSync(
-        "ssh",
-        [
-          "-O",
-          "exit",
-          "-o",
-          `ControlPath=${session.controlPath}`,
-          ...(target.port ? ["-p", target.port] : []),
-          session.destination,
-        ],
-        { timeoutMs: SSH_LOCAL_PROBE_TIMEOUT_MS },
-      );
+      runSshLocalCommandSync("ssh", buildSshControlArgs("exit", target, session), {
+        timeoutMs: SSH_LOCAL_PROBE_TIMEOUT_MS,
+      });
     }
     fs.rmSync(session.controlPath, { force: true });
   }

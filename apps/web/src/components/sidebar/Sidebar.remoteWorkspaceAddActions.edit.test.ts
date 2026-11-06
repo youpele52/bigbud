@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
+
 import {
   collectRemoteWorkspaceWorktreePaths,
   reconfigureRemoteWorkspaceWithApi,
@@ -121,5 +123,52 @@ describe("collectRemoteWorkspaceWorktreePaths", () => {
     expect(error).toContain("The new SSH target cannot access these worktrees");
     expect(error).toContain("/srv/worktree-a: missing worktree");
     expect(dispatchCommand).not.toHaveBeenCalled();
+  });
+
+  it("connects a disconnected target before verifying, and reports a refused connect", async () => {
+    const target = "ssh:host=devbox&user=alice&port=22&auth=ssh-key&transport=agent";
+    useRemoteAccessStore.setState({ disconnectedExecutionTargetIds: { [target]: true } });
+    const getSnapshot = vi.fn().mockResolvedValue({ projects: [], threads: [] });
+    const connectExecutionTarget = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("Connect refused."))
+      .mockResolvedValueOnce({ executionTargetId: target, disconnected: false });
+    const reconfigure = () =>
+      reconfigureRemoteWorkspaceWithApi({
+        api: {
+          server: { connectExecutionTarget, verifyExecutionTarget: vi.fn() },
+          orchestration: { getSnapshot, dispatchCommand: vi.fn().mockResolvedValue({}) },
+        } as never,
+        projectId: "project-1" as never,
+        title: "Remote project",
+        expectedUpdatedAt: "2026-01-01T00:00:00.000Z",
+        draft: {
+          displayName: "Remote project",
+          host: "devbox",
+          username: "alice",
+          port: "22",
+          workspaceRoot: "/srv/project",
+          sshKeyPath: "",
+          authMode: "ssh-key",
+          remoteTransport: "agent",
+          providerRuntimeLocation: "local",
+          connectionSource: "manual",
+          inactiveConnection: {
+            host: "",
+            username: "",
+            port: "",
+            sshKeyPath: "",
+            authMode: "ssh-key",
+          },
+        },
+      });
+
+    await expect(reconfigure()).resolves.toBe("Connect refused.");
+    expect(getSnapshot).not.toHaveBeenCalled();
+    expect(useRemoteAccessStore.getState().disconnectedExecutionTargetIds[target]).toBe(true);
+
+    await expect(reconfigure()).resolves.toBeNull();
+    expect(connectExecutionTarget).toHaveBeenLastCalledWith({ executionTargetId: target });
+    expect(useRemoteAccessStore.getState().disconnectedExecutionTargetIds[target]).toBeUndefined();
   });
 });
