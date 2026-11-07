@@ -47,7 +47,8 @@ it.effect("moves only old unreferenced managed files to trash, then deletes them
     for (const name of ["notes.png", "README", `${attachmentIdFor(THREAD_ID, 7)}.exe`]) {
       yield* promise(() => writeAttachmentFile(root, name, name));
     }
-    // An upload staging directory still holding its file: never swept, whatever its age.
+    // A crashed upload's staging directory still holding its file: the orphan sweep never trashes
+    // the staged file; the staging cleanup removes the day-old leftover whole.
     yield* promise(() =>
       writeAttachmentFile(path.join(root, ".submission-upload-abc123"), "upload", "bytes"),
     );
@@ -88,7 +89,8 @@ it.effect("moves only old unreferenced managed files to trash, then deletes them
     }
     assert.isTrue((yield* promise(() => lstat(path.join(root, linked)))).isSymbolicLink());
     assert.equal(yield* promise(() => readFile(outside, "utf8")), "outside");
-    assert.isTrue(existsSync(path.join(root, ".submission-upload-abc123")));
+    assert.equal(first.sweep.uploadDirectoriesRemoved, 1);
+    assert.isFalse(existsSync(path.join(root, ".submission-upload-abc123")));
 
     const notDue = yield* maintenance.runTick({ nowMs: START_MS + 6 * DAY_MS });
     assert.equal(notDue.sweep.deleted, 0);

@@ -3,8 +3,9 @@
  * attachments directory. See `Services/AttachmentMaintenance.ts` for the contract.
  *
  * A tick, in order: restore re-referenced trash and delete expired trash, move old orphans to
- * the trash, remove old empty upload staging directories, then backfill legacy ownership. It stops at the first file boundary past its time
- * budget, never runs twice at once, and keeps only in-memory cursors: after a restart it starts
+ * the trash, remove old upload staging directories, then backfill legacy ownership. The root
+ * listing is reused while the root is unchanged (`AttachmentMaintenance.listing`). It stops at
+ * the first file boundary past its time budget, never runs twice at once, and keeps only in-memory cursors: after a restart it starts
  * a fresh pass, which is safe because every step re-reads the filesystem and the database.
  *
  * @module AttachmentMaintenanceLive
@@ -16,10 +17,7 @@ import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { ServerConfig } from "../../startup/config.ts";
-import {
-  ATTACHMENT_SWEEP_FILE_LIMIT,
-  managedAttachmentIdFromFileName,
-} from "../attachmentMaintenance.layout.ts";
+import { ATTACHMENT_SWEEP_FILE_LIMIT } from "../attachmentMaintenance.layout.ts";
 import {
   AttachmentMaintenance,
   AttachmentMaintenanceError,
@@ -31,11 +29,8 @@ import {
   runAttachmentOwnershipBackfill,
   type AttachmentBackfillState,
 } from "./AttachmentMaintenance.backfill.ts";
-import { compareNames, readDirectoryIfRealDirectory } from "./AttachmentMaintenance.fs.ts";
-import type {
-  AttachmentTickContext,
-  ManagedAttachmentFile,
-} from "./AttachmentMaintenance.holds.ts";
+import type { AttachmentTickContext } from "./AttachmentMaintenance.holds.ts";
+import { makeAttachmentRootLister } from "./AttachmentMaintenance.listing.ts";
 import {
   runAttachmentOrphanScan,
   type AttachmentSweepState,
@@ -70,24 +65,6 @@ const idleResult = (
   },
 });
 
-export function listManagedAttachmentFiles(
-  names: ReadonlyArray<string>,
-): Array<ManagedAttachmentFile> {
-  return names
-    .flatMap((fileName) => {
-      const attachmentId = managedAttachmentIdFromFileName(fileName);
-      return attachmentId ? [{ attachmentId, fileName }] : [];
-    })
-    .toSorted((left, right) => compareNames(left.fileName, right.fileName));
-}
-
-function groupById(files: ReadonlyArray<ManagedAttachmentFile>) {
-  const byId = new Map<string, Array<string>>();
-  for (const file of files)
-    byId.set(file.attachmentId, [...(byId.get(file.attachmentId) ?? []), file.fileName]);
-  return byId;
-}
-
 export const makeAttachmentMaintenance = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const config = yield* ServerConfig;
@@ -95,6 +72,7 @@ export const makeAttachmentMaintenance = Effect.gen(function* () {
   const backfillState: AttachmentBackfillState = { cursor: "", passCompletedAtMs: null };
   const sweepState: AttachmentSweepState = { cursor: "" };
   const uploadDirectoryState: UploadDirectorySweepState = { cursor: "" };
+  const rootLister = makeAttachmentRootLister();
   let inFlight = false;
 
   const tick = Effect.fn("AttachmentMaintenance.tick")(function* (
@@ -107,7 +85,7 @@ export const makeAttachmentMaintenance = Effect.gen(function* () {
       if (!budgetExhausted && performance.now() - startedAt >= budgetMs) budgetExhausted = true;
       return budgetExhausted;
     };
-    const listing = yield* Effect.tryPromise(() => readDirectoryIfRealDirectory(root));
+    const listing = yield* Effect.tryPromise(() => rootLister.read(root));
     if (listing === "missing" || listing === "invalid") {
       if (listing === "invalid") {
         yield* Effect.logWarning("attachments root is not a real directory; skipping", { root });
@@ -121,18 +99,17 @@ export const makeAttachmentMaintenance = Effect.gen(function* () {
       deadlineReached,
       fileOps: { remaining: ATTACHMENT_SWEEP_FILE_LIMIT },
     };
-    const files = listManagedAttachmentFiles(listing);
     const trash = yield* runAttachmentTrashPass(context);
-    const orphans = yield* runAttachmentOrphanScan(context, sweepState, files);
+    const orphans = yield* runAttachmentOrphanScan(context, sweepState, listing.files);
     const uploadDirectories = yield* runUploadDirectorySweep(
       context,
       uploadDirectoryState,
-      listing,
+      listing.names,
     );
     const backfill = yield* runAttachmentOwnershipBackfill({
       context,
       state: backfillState,
-      filesById: groupById(files),
+      filesById: listing.filesById,
     });
     const sweep = {
       scanned: orphans.scanned,

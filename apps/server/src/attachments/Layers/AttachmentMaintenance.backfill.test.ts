@@ -20,7 +20,7 @@ import {
   THREAD_ID,
   writeAttachmentFile,
 } from "./AttachmentMaintenance.test.helpers.ts";
-import { listManagedAttachmentFiles } from "./AttachmentMaintenance.ts";
+import { listManagedAttachmentFiles } from "./AttachmentMaintenance.listing.ts";
 
 const sha256 = (content: string) => createHash("sha256").update(content).digest("hex");
 

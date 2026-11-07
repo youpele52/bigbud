@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { lstat, mkdir, readdir, rmdir, symlink, writeFile } from "node:fs/promises";
+import { link, lstat, mkdir, readdir, rmdir, symlink, utimes, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { assert, it } from "@effect/vitest";
@@ -21,7 +21,7 @@ const uploadDirectories = (root: string) =>
   );
 
 it.effect(
-  "removes only empty, real, day-old upload staging directories and never follows a symlink",
+  "removes day-old staging directories that are empty or hold only their old staged file",
   () =>
     Effect.gen(function* () {
       const { attachmentsDir: root, stateDir } = yield* ServerConfig;
@@ -32,6 +32,19 @@ it.effect(
         await mkdir(at(".submission-upload-empty1"));
         await mkdir(at(".submission-upload-busy01"));
         await writeFile(path.join(at(".submission-upload-busy01"), "upload"), "bytes");
+        await writeFile(path.join(at(".submission-upload-busy01"), "other"), "bytes");
+        // A crash after the staged file was linked to its destination, before the cleanup.
+        await mkdir(at(".submission-upload-crash1"));
+        await writeFile(path.join(at(".submission-upload-crash1"), "upload"), "published bytes");
+        await link(path.join(at(".submission-upload-crash1"), "upload"), at("published-upload"));
+        // A staged file written recently (by mtime) is left alone.
+        await mkdir(at(".submission-upload-fresh1"));
+        await writeFile(path.join(at(".submission-upload-fresh1"), "upload"), "bytes");
+        const later = new Date(Date.now() + 2 * DAY_MS);
+        await utimes(path.join(at(".submission-upload-fresh1"), "upload"), later, later);
+        // A symlink in place of the staged file is never followed or removed.
+        await mkdir(at(".submission-upload-slink1"));
+        await symlink(at("published-upload"), path.join(at(".submission-upload-slink1"), "upload"));
         await writeFile(at(".submission-upload-file01"), "not a directory");
         // An empty directory outside the root, reachable only through a symlink.
         await mkdir(path.join(stateDir, "outside-empty"));
@@ -47,16 +60,21 @@ it.effect(
 
       const old = yield* maintenance.runTick({ nowMs: Date.now() + 2 * DAY_MS });
       assert.equal(old.status, "completed");
-      assert.equal(old.sweep.uploadDirectoriesRemoved, 1);
-      assert.equal(old.processed, 1);
+      assert.equal(old.sweep.uploadDirectoriesRemoved, 2);
+      assert.equal(old.processed, 2);
       assert.equal(old.sweep.failed, 0);
       assert.deepEqual(yield* uploadDirectories(root), [
         ".submission-upload-bad.name",
         ".submission-upload-busy01",
         ".submission-upload-file01",
+        ".submission-upload-fresh1",
         ".submission-upload-link01",
+        ".submission-upload-slink1",
       ]);
       assert.isTrue(existsSync(path.join(at(".submission-upload-busy01"), "upload")));
+      assert.isTrue(existsSync(path.join(at(".submission-upload-fresh1"), "upload")));
+      // The published destination keeps its own link to the bytes.
+      assert.isTrue(existsSync(at("published-upload")));
       assert.isTrue(
         (yield* promise(() => lstat(at(".submission-upload-link01")))).isSymbolicLink(),
       );

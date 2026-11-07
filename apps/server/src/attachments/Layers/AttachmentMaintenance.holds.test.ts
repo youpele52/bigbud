@@ -133,3 +133,31 @@ it.effect("restores a file at once when a reference lands while it moves to the 
     assert.deepEqual(trash, [`${Math.floor(START_MS)}__${orphan.fileName}`]);
   }).pipe(Effect.provide(makeAttachmentMaintenanceTestLayer())),
 );
+
+it.effect("holds IDs mentioned by unresolved references, reading each source once per query", () =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    yield* seedThread(THREAD_ID);
+    const mentioned = file(1);
+    const alsoMentioned = file(2);
+    const orphan = file(3);
+    // Malformed attachments JSON that still contains the IDs as raw text.
+    const raw = `[{"id":"${mentioned.attachmentId}"},{"id":"${alsoMentioned.attachmentId}"`;
+    yield* sql`INSERT INTO projection_thread_messages
+      (message_id, thread_id, role, text, attachments_json, is_streaming, created_at, updated_at)
+      VALUES ('message-broken', ${THREAD_ID}, 'user', 'image', ${raw}, 0,
+        '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')`;
+    yield* sql`INSERT OR IGNORE INTO projection_thread_attachment_refs
+      (thread_id, attachment_id, source_kind, source_id, is_unresolved)
+      VALUES (${THREAD_ID}, '', 'message', 'message-broken', 1)`;
+    const unresolved = yield* sql<{ readonly count: number }>`
+      SELECT COUNT(*) AS "count" FROM projection_thread_attachment_refs WHERE attachment_id = ''
+    `;
+    assert.equal(unresolved[0]?.count, 1);
+
+    const holds = yield* loadAttachmentHolds(sql, [mentioned, alsoMentioned, orphan]);
+    assert.equal(holds.get(mentioned.fileName), "referenced");
+    assert.equal(holds.get(alsoMentioned.fileName), "referenced");
+    assert.isUndefined(holds.get(orphan.fileName));
+  }).pipe(Effect.provide(makeAttachmentMaintenanceTestLayer())),
+);

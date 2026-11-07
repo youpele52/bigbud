@@ -1,13 +1,15 @@
 /**
- * Staging-directory cleanup: removes empty `.submission-upload-*` directories in the attachments
- * root that are older than 1 day. An upload creates its directory fresh, writes one file into
- * it and removes it whole, so an old empty one is a leftover (crash, or the leak fixed in
- * `Normalizer.attachmentStorage`).
+ * Staging-directory cleanup: removes `.submission-upload-*` directories in the attachments root
+ * that are older than 1 day. An upload creates its directory fresh, writes one file into it and
+ * removes it whole, so an old one is a leftover (crash, or the leak fixed in
+ * `Normalizer.attachmentStorage`). An empty one is removed; one that still holds only its old
+ * staged file (a crash mid-upload) has that file unlinked first.
  *
  * Bounded: at most 100 candidates are examined per tick, in name order from an in-memory
  * cursor, so old non-empty directories cannot starve the rest. Only top-level names matching
- * the staging pattern are considered; symlinks, non-directories, young and non-empty
- * directories are left alone (see `removeEmptyDirectoryIfOld`).
+ * the staging pattern are considered; symlinks, non-directories, young directories and any
+ * holding something other than one old staged file are left alone (see
+ * `removeEmptyDirectoryIfOld` and `removeStaleStagedUpload`).
  *
  * @module AttachmentMaintenance.uploadDirs
  */
@@ -21,7 +23,12 @@ import {
   SUBMISSION_UPLOAD_DIRECTORY_MAX_AGE_MS,
   SUBMISSION_UPLOAD_DIRECTORY_SCAN_LIMIT,
 } from "../attachmentMaintenance.layout.ts";
-import { compareNames, removeEmptyDirectoryIfOld } from "./AttachmentMaintenance.fs.ts";
+import {
+  compareNames,
+  type EmptyDirectoryRemoval,
+  removeEmptyDirectoryIfOld,
+  removeStaleStagedUpload,
+} from "./AttachmentMaintenance.fs.ts";
 import type { AttachmentTickContext } from "./AttachmentMaintenance.holds.ts";
 
 export interface UploadDirectorySweepState {
@@ -34,6 +41,16 @@ export interface UploadDirectorySweepResult {
   readonly failed: number;
   /** Candidates not examined yet in this pass. */
   readonly pending: number;
+}
+
+async function removeStaleUploadDirectory(
+  target: string,
+  input: { readonly nowMs: number; readonly minAgeMs: number },
+): Promise<EmptyDirectoryRemoval> {
+  const outcome = await removeEmptyDirectoryIfOld(target, input);
+  if (outcome !== "not-empty" || !(await removeStaleStagedUpload(target, input))) return outcome;
+  // Unlinking the file just touched the directory; its age was checked above.
+  return removeEmptyDirectoryIfOld(target, { ...input, minAgeMs: 0 });
 }
 
 export const runUploadDirectorySweep = Effect.fn("AttachmentMaintenance.uploadDirectorySweep")(
@@ -54,7 +71,7 @@ export const runUploadDirectorySweep = Effect.fn("AttachmentMaintenance.uploadDi
       examined += 1;
       state.cursor = name;
       const outcome = yield* Effect.tryPromise(() =>
-        removeEmptyDirectoryIfOld(path.join(context.root, name), {
+        removeStaleUploadDirectory(path.join(context.root, name), {
           nowMs: context.nowMs,
           minAgeMs: SUBMISSION_UPLOAD_DIRECTORY_MAX_AGE_MS,
         }),

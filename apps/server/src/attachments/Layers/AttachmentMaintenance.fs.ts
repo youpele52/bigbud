@@ -16,6 +16,7 @@ import path from "node:path";
 import {
   ATTACHMENT_TRASH_DIRECTORY,
   attachmentTrashEntryName,
+  SUBMISSION_UPLOAD_STAGED_FILE_NAME,
 } from "../attachmentMaintenance.layout.ts";
 
 function errorCode(error: unknown): string | undefined {
@@ -145,6 +146,33 @@ export async function deleteTrashedFile(trashPath: string): Promise<boolean> {
   const stats = await lstatIfPresent(trashPath);
   if (!isRegularFile(stats)) return false;
   await nodeFs.unlink(trashPath);
+  return true;
+}
+
+/**
+ * Unlinks the staged file a crashed upload left in its staging `directory`, so the directory
+ * can be removed. Only a directory holding exactly that one name, a regular file (not a
+ * symlink) at least `minAgeMs` old, is touched. If publishing got as far as linking the file
+ * to its destination, the destination keeps its own link. True when the file is gone.
+ */
+export async function removeStaleStagedUpload(
+  directory: string,
+  input: { readonly nowMs: number; readonly minAgeMs: number },
+): Promise<boolean> {
+  const entries = await readDirectoryIfRealDirectory(directory);
+  if (typeof entries === "string") return false;
+  if (entries.length !== 1 || entries[0] !== SUBMISSION_UPLOAD_STAGED_FILE_NAME) return false;
+  const staged = path.join(directory, SUBMISSION_UPLOAD_STAGED_FILE_NAME);
+  const stats = await lstatIfPresent(staged);
+  if (stats === null) return true;
+  if (!isRegularFile(stats)) return false;
+  const changedAtMs = Math.max(Number(stats.mtimeMs), Number(stats.ctimeMs));
+  if (input.nowMs - changedAtMs < input.minAgeMs) return false;
+  try {
+    await nodeFs.unlink(staged);
+  } catch (error) {
+    if (!isMissing(error)) throw error;
+  }
   return true;
 }
 

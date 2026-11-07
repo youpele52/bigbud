@@ -1,5 +1,10 @@
 import { Effect, FileSystem, Path } from "effect";
 
+import {
+  SUBMISSION_UPLOAD_DIRECTORY_PREFIX,
+  SUBMISSION_UPLOAD_STAGED_FILE_NAME,
+} from "../attachments/attachmentMaintenance.layout.ts";
+
 /** Publish complete immutable uploads; a retry must not truncate an accepted blob. */
 export const persistSubmissionAttachment = Effect.fn("persistSubmissionAttachment")(function* (
   destination: string,
@@ -22,9 +27,12 @@ export const persistSubmissionAttachment = Effect.fn("persistSubmissionAttachmen
   // The staging directory sits beside the destination so `link` stays on one filesystem; it is
   // removed whole, because a temp file's own directory would otherwise be left behind.
   return yield* Effect.acquireUseRelease(
-    fs.makeTempDirectory({ directory: path.dirname(destination), prefix: ".submission-upload-" }),
+    fs.makeTempDirectory({
+      directory: path.dirname(destination),
+      prefix: SUBMISSION_UPLOAD_DIRECTORY_PREFIX,
+    }),
     (stagingDirectory) => {
-      const temporary = path.join(stagingDirectory, "upload");
+      const temporary = path.join(stagingDirectory, SUBMISSION_UPLOAD_STAGED_FILE_NAME);
       return fs.writeFile(temporary, bytes).pipe(
         Effect.andThen(fs.link(temporary, destination)),
         Effect.as(true),

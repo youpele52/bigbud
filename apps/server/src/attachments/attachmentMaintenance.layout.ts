@@ -31,7 +31,12 @@ export const ATTACHMENT_BACKFILL_SCAN_LIMIT = 200;
 export const ATTACHMENT_HOLD_CHUNK_SIZE = 100;
 /** Prefix of the per-upload staging directories `persistSubmissionAttachment` creates. */
 export const SUBMISSION_UPLOAD_DIRECTORY_PREFIX = ".submission-upload-";
-/** An empty staging directory older than this belongs to no live upload and is removed. */
+/** The one file an upload writes into its staging directory before publishing it. */
+export const SUBMISSION_UPLOAD_STAGED_FILE_NAME = "upload";
+/**
+ * A staging directory older than this belongs to no live upload and is removed: when empty, or
+ * when it holds only its staged file (a crash before the upload removed it).
+ */
 export const SUBMISSION_UPLOAD_DIRECTORY_MAX_AGE_MS = DAY_MS;
 /** Staging-directory candidates examined per tick (each costs one `lstat`, maybe one `rmdir`). */
 export const SUBMISSION_UPLOAD_DIRECTORY_SCAN_LIMIT = 100;
@@ -122,15 +127,17 @@ export const ATTACHMENT_HOLDS_SQL = `
   SELECT 'referenced', ref.attachment_id FROM managed_attachment_references AS ref
   WHERE ref.active = 1 AND ref.attachment_id IN (SELECT value FROM ids)
   UNION ALL
-  SELECT 'referenced', ids.value FROM ids WHERE EXISTS (
-    SELECT 1 FROM projection_thread_attachment_refs AS unresolved
+  SELECT DISTINCT 'referenced', ids.value
+  FROM (
+    SELECT COALESCE(message.attachments_json, activity.payload_json, '') AS text
+    FROM projection_thread_attachment_refs AS unresolved
     LEFT JOIN projection_thread_messages AS message
       ON unresolved.source_kind = 'message' AND message.message_id = unresolved.source_id
     LEFT JOIN projection_thread_activities AS activity
       ON unresolved.source_kind = 'activity' AND activity.activity_id = unresolved.source_id
     WHERE unresolved.attachment_id = ''
-      AND instr(COALESCE(message.attachments_json, activity.payload_json, ''), ids.value) > 0
-  )
+  ) AS unresolved_source CROSS JOIN ids
+  WHERE instr(unresolved_source.text, ids.value) > 0
   UNION ALL
   SELECT 'referenced', gated.attachment_id FROM (
     SELECT CASE WHEN attachment.type = 'object'
