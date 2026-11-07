@@ -164,7 +164,8 @@ describe("bounded project catalog bootstrap", () => {
 
     expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledWith({
       projectId: project2,
-      limit: 5,
+      limit: 4,
+      sortOrder: "updated_at",
     });
   });
   it("keeps a successful scope and exposes a head retry when the other scope fails", async () => {

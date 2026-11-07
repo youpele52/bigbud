@@ -5,7 +5,6 @@ import { formatElapsed } from "../../../logic/session";
 import { type TurnDiffSummary } from "../../../models/types";
 import { activitySectionLabelTypography } from "../common/ActivityAccordion";
 import ChatMarkdown from "../common/ChatMarkdown";
-import { MessageCopyButton } from "../common/MessageCopyButton";
 import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
@@ -21,6 +20,11 @@ import type { MarkdownAnchorClick } from "../../common/BaseMarkdown";
 import { formatMessageMeta } from "./MessagesTimeline.assistantMessage.meta";
 import { MessagesTimelineAutomationRequest } from "./MessagesTimeline.automationRequest";
 import { AssistantTurnChangedFiles } from "./MessagesTimeline.changedFiles";
+import { OlderTurnWorkLogButton } from "./MessagesTimeline.turnActivitiesButton";
+import {
+  TimelineMessageCopyButton,
+  TruncatedMessageNotice,
+} from "./MessagesTimeline.truncatedMessageNotice";
 import type {
   ActivityAccordionOpenById,
   SetActivityAccordionOpen,
@@ -182,6 +186,7 @@ export function AssistantMessageBody({
             ) : null}
           </>
         )}
+        <TruncatedMessageNotice message={row.message} />
         <AssistantTurnChangedFiles
           messageId={row.message.id}
           turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
@@ -195,7 +200,7 @@ export function AssistantMessageBody({
         <div className="mt-1.5 flex justify-start">
           <div className="flex min-w-0 items-center gap-2 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
             {row.showAssistantCopyButton && messageText.length > 0 ? (
-              <MessageCopyButton text={messageText} />
+              <TimelineMessageCopyButton message={row.message} text={messageText} />
             ) : null}
             {row.showAssistantCopyButton ? (
               <MessageReplyButton onClick={() => onReplyToMessage(row.message.id)} />
@@ -203,6 +208,7 @@ export function AssistantMessageBody({
             {onBranchThread ? (
               <MessageBranchButton onClick={() => onBranchThread(row.message.id)} />
             ) : null}
+            {row.showAssistantCopyButton ? <OlderTurnWorkLogButton message={row.message} /> : null}
             <p className="shrink-0 text-[10px] text-muted-foreground/30">
               {formatMessageMeta(
                 row.message.createdAt,

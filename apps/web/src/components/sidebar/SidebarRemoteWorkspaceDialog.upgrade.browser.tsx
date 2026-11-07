@@ -20,7 +20,7 @@ describe("SidebarRemoteWorkspaceDialog remote-agent upgrades", () => {
         },
       }),
       installRemoteAgent,
-      getSnapshot: vi.fn(),
+      getProjectWorktreePaths: vi.fn(),
       dispatchCommand,
     });
     await using _ = await mountHarness();
@@ -60,7 +60,7 @@ describe("SidebarRemoteWorkspaceDialog remote-agent upgrades", () => {
         pendingVersion: null,
         fallbackVersion: null,
       }),
-      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      getProjectWorktreePaths: vi.fn().mockResolvedValue({ worktreePaths: [], truncated: false }),
       dispatchCommand,
     });
     await using _ = await mountHarness();

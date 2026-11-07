@@ -118,6 +118,7 @@ export function SidebarInyosiraGroup({
             hasMoreThreads={hasMoreThreads}
             collapsedHiddenCount={collapsedHiddenCount}
             unloadedCount={unloadedCount}
+            hiddenLoadedCount={preview.hiddenCount}
             isExpanded={showAll}
             isLoading={page.status === "loading"}
             loadError={page.status === "error"}

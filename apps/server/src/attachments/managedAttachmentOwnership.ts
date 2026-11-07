@@ -11,7 +11,7 @@ import { parseAttachmentIdFromRelativePath } from "./attachmentStore.ts";
 const STAGED_RECONCILIATION_DELAY_MS = 5 * 60_000;
 const STAGED_RECONCILIATION_BATCH_SIZE = 25;
 
-async function verifiedIdentity(input: {
+export async function verifiedIdentity(input: {
   readonly attachmentsDir: string;
   readonly destination: string;
   readonly contentSha256: string;

@@ -57,6 +57,8 @@ export function ChatThreadRouteView() {
     select: (params) => ThreadId.makeUnsafe(params.threadId),
   });
   useOrganizationEngagement(threadId);
+  // Keeps full detail for the most recently viewed threads; older ones fall back to summaries.
+  useEffect(() => useStore.getState().markThreadViewed(threadId), [threadId]);
   const routeThread = useStore((store) => store.threads.find((thread) => thread.id === threadId));
   const routeProject = useStore((store) =>
     store.projects.find((project) => project.id === routeThread?.projectId),

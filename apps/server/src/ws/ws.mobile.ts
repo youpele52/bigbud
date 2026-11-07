@@ -21,8 +21,7 @@ import { Effect, Layer, Option, Schema, Stream } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 
-import { getThreadFromOrchestrationSnapshot } from "../mobile/mobileSnapshot.thread.ts";
-import { trimOrchestrationSnapshotForMobile } from "../mobile/mobileSnapshot.trim.ts";
+import { readBoundedMobileSnapshot, readBoundedMobileThread } from "./ws.mobile.bounded.ts";
 import { MobileRemoteControl } from "../mobile/Services/MobileRemoteControl";
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
 import {
@@ -117,11 +116,11 @@ const makeMobileWsRpcLayer = (
             }),
             { "rpc.aggregate": "mobile-orchestration" },
           ),
+        // Legacy mobile clients only: the bounded mobile baseline, never the full snapshot.
         [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input: unknown) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.getSnapshot,
-            context.projectionSnapshotQuery.getSnapshot().pipe(
-              Effect.map(trimOrchestrationSnapshotForMobile),
+            readBoundedMobileSnapshot(context).pipe(
               Effect.mapError(
                 (cause) =>
                   new OrchestrationGetSnapshotError({
@@ -135,18 +134,7 @@ const makeMobileWsRpcLayer = (
         [ORCHESTRATION_WS_METHODS.getMobileThread]: (input: { threadId: ThreadId }) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.getMobileThread,
-            context.projectionSnapshotQuery.getSnapshot().pipe(
-              Effect.flatMap((snapshot) => {
-                const thread = getThreadFromOrchestrationSnapshot(snapshot, input.threadId);
-                if (thread === null) {
-                  return Effect.fail(
-                    new OrchestrationGetMobileThreadError({
-                      message: "Thread not found in orchestration snapshot",
-                    }),
-                  );
-                }
-                return Effect.succeed(thread);
-              }),
+            readBoundedMobileThread(context, input.threadId).pipe(
               Effect.mapError((cause) =>
                 Schema.is(OrchestrationGetMobileThreadError)(cause)
                   ? cause

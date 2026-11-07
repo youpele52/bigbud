@@ -6,7 +6,10 @@ import type {
 import { EventId } from "@bigbud/contracts";
 
 import type { Project, SidebarThreadSummary, Thread } from "../../models/types";
-import { isTranscriptHistoryActivity } from "./userInputHistory.store";
+import {
+  isTranscriptHistoryActivity,
+  retainUserInputHistoryActivities,
+} from "./userInputHistory.store";
 import {
   mapMessage,
   mapProposedPlan,
@@ -16,7 +19,25 @@ import {
 } from "./mappers.store";
 import { hydrateDelegatedChildModelChoices } from "./events.store.delegations";
 import { capProviderAgents } from "./events.store.providerAgents";
-import { buildLatestTurn } from "./helpers.store";
+import {
+  buildLatestTurn,
+  MAX_THREAD_ACTIVITIES,
+  MAX_THREAD_CHECKPOINTS,
+  MAX_THREAD_MESSAGES,
+  MAX_THREAD_PROPOSED_PLANS,
+} from "./helpers.store";
+
+/** Keeps the first entry per id in one pass; the merge order decides which copy wins. */
+function firstById<T extends { readonly id: string }>(entries: ReadonlyArray<T>): T[] {
+  const seen = new Set<string>();
+  const kept: T[] = [];
+  for (const entry of entries) {
+    if (seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    kept.push(entry);
+  }
+  return kept;
+}
 
 export function mapProjectSummary(project: ProjectSummary): Project {
   return {
@@ -173,14 +194,16 @@ export function mergeThreadDetail(
   loadingOlder: boolean,
 ): Thread {
   const detailMessages = detail.messages.map(mapMessage);
-  const messages = (
-    loadingOlder ? [...thread.messages, ...detailMessages] : [...detailMessages, ...thread.messages]
+  const messages = firstById(
+    loadingOlder
+      ? [...thread.messages, ...detailMessages]
+      : [...detailMessages, ...thread.messages],
   )
-    .filter((message, index, all) => all.findIndex((entry) => entry.id === message.id) === index)
     .toSorted(
       (left, right) =>
         left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-    );
+    )
+    .slice(-MAX_THREAD_MESSAGES);
   const completedAssistantMessage = loadingOlder
     ? undefined
     : detailMessages.find(
@@ -209,15 +232,16 @@ export function mergeThreadDetail(
   const detailActivities = mergePendingActivities(detail).filter(
     (activity) => !loadingOlder || isTranscriptHistoryActivity(activity),
   );
-  const activities = [...thread.activities, ...detailActivities]
-    .filter((activity, index, all) => all.findIndex((entry) => entry.id === activity.id) === index)
-    .toSorted(
+  const activities = retainUserInputHistoryActivities(
+    firstById([...thread.activities, ...detailActivities]).toSorted(
       (left, right) =>
         left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
-    );
+    ),
+    MAX_THREAD_ACTIVITIES,
+  );
   const detailPlans = detail.activePlan === null ? [] : [mapProposedPlan(detail.activePlan)];
-  const proposedPlans = [...thread.proposedPlans, ...detailPlans].filter(
-    (plan, index, all) => all.findIndex((entry) => entry.id === plan.id) === index,
+  const proposedPlans = firstById([...thread.proposedPlans, ...detailPlans]).slice(
+    -MAX_THREAD_PROPOSED_PLANS,
   );
   const detailCheckpoints = detail.checkpoints.map((checkpoint) =>
     mapTurnDiffSummary({ ...checkpoint, files: [] }),
@@ -227,7 +251,8 @@ export function mergeThreadDetail(
       (checkpoint, index, all) =>
         all.findIndex((entry) => entry.turnId === checkpoint.turnId) === index,
     )
-    .toSorted((left, right) => (left.checkpointTurnCount ?? 0) - (right.checkpointTurnCount ?? 0));
+    .toSorted((left, right) => (left.checkpointTurnCount ?? 0) - (right.checkpointTurnCount ?? 0))
+    .slice(-MAX_THREAD_CHECKPOINTS);
   return {
     ...thread,
     messages,

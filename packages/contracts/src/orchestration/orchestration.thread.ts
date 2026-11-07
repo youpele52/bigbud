@@ -164,6 +164,10 @@ export const OrchestrationThreadActivity = Schema.Struct({
   turnId: Schema.NullOr(TurnId),
   sequence: Schema.optional(NonNegativeInt),
   createdAt: IsoDateTime,
+  /** Set by bounded reads when the stored payload was too large to send. */
+  payloadTruncated: Schema.optional(Schema.Boolean),
+  /** Stored payload length in characters; present when `payloadTruncated` is set. */
+  payloadLength: Schema.optional(NonNegativeInt),
 });
 export type OrchestrationThreadActivity = typeof OrchestrationThreadActivity.Type;
 

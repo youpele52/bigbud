@@ -192,6 +192,8 @@ Stall reports name SQL calls on the single SQLite connection, baseline work, dis
 
 ### Phase 5: database growth (decision gate)
 
+> Superseded by `docs/plans/2026-11-06-bounded-database-growth-and-loading-plan.md`, which found that automatic compaction has had no caller since 19 August, 2026, and that retention is blocked by stale runtime rows.
+
 - **Not implemented.** Changing the thread retention default deletes threads, so it needs the user's decision.
 - Safe manual procedure, with the app fully quit:
   1. Back up `~/.bigbud/userdata/state.sqlite*`.

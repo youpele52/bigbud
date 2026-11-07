@@ -42,5 +42,13 @@ export function stripPublicProvenance(command: OrchestrationCommand): Orchestrat
       }),
     };
   }
+  // Branch copies carry provenance read from the server's own projection; the command is
+  // internal-only, so one arriving over a public transport keeps no provenance at all.
+  if (command.type === "thread.branch-copy.append") {
+    return {
+      ...command,
+      messages: command.messages.map(({ originSegments: _originSegments, ...safe }) => safe),
+    };
+  }
   return command;
 }

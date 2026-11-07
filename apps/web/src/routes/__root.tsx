@@ -25,6 +25,7 @@ import { ServerStateBootstrap } from "./-__root.bootstrap";
 import { EventRouter } from "./-__root.logic";
 import { FileAccessPermissionDialog } from "../components/file-access/FileAccessPermissionDialog";
 import { ComputerUseStartupRepairCoordinator } from "../components/computer-use/ComputerUseStartupRepairCoordinator";
+import { DatabaseCompactionCoordinator } from "../components/settings/DatabaseCompactionCoordinator";
 import { GamesWorkToastCoordinator } from "../components/games/GamesWorkToastCoordinator";
 import { ProviderRecoveryToastCoordinator } from "../components/ProviderRecoveryToastCoordinator";
 import { useSettings } from "../hooks/useSettings";
@@ -156,6 +157,7 @@ export function RootRouteView() {
               onOpenChange={setShowFileAccessDialog}
             />
             {hasLoadedServerConfig ? <ComputerUseStartupRepairCoordinator /> : null}
+            {hasLoadedServerConfig ? <DatabaseCompactionCoordinator /> : null}
           </>
         </WebSocketConnectionSurface>
       </AnchoredToastProvider>
@@ -181,6 +183,7 @@ function CompactChatRoot() {
         <WebSocketConnectionSurface>
           <CompactChatShell compactChat={compactChat} />
         </WebSocketConnectionSurface>
+        <DatabaseCompactionCoordinator />
       </AnchoredToastProvider>
     </ToastProvider>
   );

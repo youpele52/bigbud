@@ -3,6 +3,7 @@ import {
   type MessageId,
   type OrchestrationTask,
   type ProviderKind,
+  type ThreadId,
   type TurnId,
 } from "@bigbud/contracts";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
@@ -58,6 +59,8 @@ export interface MessagesTimelineProps {
   onOpenReplySource?: (messageId: MessageId) => void;
   onBranchThread?: (messageId: MessageId) => void;
   onReaderPositionChange?: (position: ChatReaderPosition) => void;
+  /** Server thread rendered: older 15-message pages and truncated message text load through it. */
+  serverThreadId?: ThreadId | null;
   onVirtualizerSnapshot?: (snapshot: {
     totalSize: number;
     measurements: ReadonlyArray<{

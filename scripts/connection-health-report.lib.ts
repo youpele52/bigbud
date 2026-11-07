@@ -27,6 +27,10 @@ export interface TraceMetrics {
    * the trace ends are not written yet, so the newest reconnects can read as orphaned.
    */
   readonly reconnectsWithoutDeliverySession: number;
+  /** Times event-log maintenance reported its backlog growing for 24 hours. */
+  readonly maintenanceStarvedWarnings: number;
+  /** Maintenance batches that held the SQLite worker over their 50 ms target. */
+  readonly maintenanceSlowBatches: number;
 }
 
 const GC_ABORT_LINE = /^\[(\d+):0x[0-9a-f]+\]\s+\d+ ms: Mark-Compact/;
@@ -106,6 +110,8 @@ export const DELIVERY_RESUBSCRIBE_GRACE_MS = 30_000;
 export function analyzeTrace(lines: Iterable<string>): TraceMetrics {
   let stallsOverFiveSeconds = 0;
   let sqlSpansOverTenSeconds = 0;
+  let maintenanceStarvedWarnings = 0;
+  let maintenanceSlowBatches = 0;
   const reconnects: Array<{ readonly consumer: string; readonly atMs: number }> = [];
   const sessionStarts = new Map<string, Array<number>>();
 
@@ -125,6 +131,12 @@ export function analyzeTrace(lines: Iterable<string>): TraceMetrics {
       case "sql.execute":
       case "sql.transaction":
         if ((span.durationMs ?? 0) > 10_000) sqlSpansOverTenSeconds += 1;
+        break;
+      case "event_log.maintenance.starved":
+        maintenanceStarvedWarnings += 1;
+        break;
+      case "event_log.maintenance.slow_batch":
+        maintenanceSlowBatches += 1;
         break;
       case "ws.connection.diagnostics":
         if (attributes["connection.trigger"] === "reconnect-success") {
@@ -155,5 +167,7 @@ export function analyzeTrace(lines: Iterable<string>): TraceMetrics {
     sqlSpansOverTenSeconds,
     reconnects: reconnects.length,
     reconnectsWithoutDeliverySession,
+    maintenanceStarvedWarnings,
+    maintenanceSlowBatches,
   };
 }

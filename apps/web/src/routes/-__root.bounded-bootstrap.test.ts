@@ -28,6 +28,8 @@ import {
 const project1 = ProjectId.makeUnsafe("project-1");
 const project2 = ProjectId.makeUnsafe("project-2");
 const selectedThread = ThreadId.makeUnsafe("thread-selected");
+/** Project pages follow the displayed sidebar order (the default client setting). */
+const DISPLAY_ORDER = { sortOrder: "updated_at" } as const;
 
 function makeCatalog(): GetStartupProjectCatalogResult {
   return {
@@ -127,7 +129,6 @@ function makeApi() {
     getStartupProjectCatalog: vi.fn(async () => makeCatalog()),
     getProjectThreadSummaries: vi.fn(async ({ projectId }) => makeThreadPage(projectId)),
     getSelectedThreadDetail: vi.fn(async () => makeDetail()),
-    getSnapshot: vi.fn(),
     replayEvents: vi.fn(
       async (fromSequenceExclusive: number): Promise<OrchestrationReplayEventsResult> => ({
         requestedFromSequenceExclusive: fromSequenceExclusive,
@@ -186,6 +187,7 @@ describe("bounded orchestration bootstrap", () => {
     expect(orchestration.getSidebarThreadCatalog).toHaveBeenCalledTimes(1);
     expect(orchestration.getSelectedThreadDetail).toHaveBeenCalledWith({
       threadId: selectedThread,
+      messageLimit: 15,
     });
     expect(orchestration.getStartupProjectCatalog.mock.calls).toEqual([
       [{ scope: "local", limit: 2, priorityProjectId: project2 }],
@@ -193,9 +195,8 @@ describe("bounded orchestration bootstrap", () => {
     ]);
     expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(1);
     expect(orchestration.getProjectThreadSummaries.mock.calls).toEqual([
-      [{ projectId: project2, limit: 5, priorityThreadId: selectedThread }],
+      [{ projectId: project2, limit: 4, priorityThreadId: selectedThread, ...DISPLAY_ORDER }],
     ]);
-    expect(orchestration.getSnapshot).not.toHaveBeenCalled();
     expect(useStore.getState().threadHydrationById[selectedThread]).toEqual({
       status: "complete",
     });
@@ -263,7 +264,8 @@ describe("bounded orchestration bootstrap", () => {
 
     expect(orchestration.getProjectThreadSummaries).toHaveBeenLastCalledWith({
       projectId: project2,
-      limit: 5,
+      limit: 4,
+      ...DISPLAY_ORDER,
       cursor,
     });
     expect(useStore.getState().threadIdsByProjectId[project2]).toEqual([
@@ -358,7 +360,6 @@ describe("bounded orchestration bootstrap", () => {
     expect(orchestration.getSelectedThreadDetail).toHaveBeenCalledTimes(2);
     expect(orchestration.getSidebarThreadCatalog).toHaveBeenCalledTimes(2);
     expect(orchestration.getProjectThreadSummaries).toHaveBeenCalledTimes(2);
-    expect(orchestration.getSnapshot).not.toHaveBeenCalled();
   });
 
   it("accepts empty-complete and nonempty-contiguous typed replay results", async () => {

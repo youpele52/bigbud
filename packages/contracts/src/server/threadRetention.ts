@@ -106,6 +106,10 @@ export const ServerThreadRetentionRun = Schema.Struct({
   pendingResourceCount: Schema.optional(NonNegativeInt),
   blockedResourceCount: Schema.optional(NonNegativeInt),
   canonicalPendingCount: Schema.optional(NonNegativeInt),
+  /** Live threads at or past the cutoff by the run's own age rule, when the run recorded it. */
+  olderThanCutoffCount: Schema.optional(NonNegativeInt),
+  /** Why the run's selector skipped those threads (one reason per thread), when recorded. */
+  exclusionCounts: Schema.optional(Schema.Array(ThreadRetentionExclusionCount)),
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   completedAt: Schema.NullOr(IsoDateTime),

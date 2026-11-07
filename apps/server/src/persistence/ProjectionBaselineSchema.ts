@@ -37,3 +37,21 @@ export const PROJECTION_BASELINE_REQUIRED_TABLES = [
   // Disposable scan cursor: reset on restore, never a canonical timing fact.
   "projection_organization_age_backfill",
 ] as const;
+
+/**
+ * Tables whose primary key is an AUTOINCREMENT surrogate that baselines leave out, by column.
+ *
+ * `projection_turns.row_id` identifies nothing outside its own database: nothing references it
+ * and no projector reads it, but its value depends on `sqlite_sequence`, which survives deleting
+ * the newest row (revert, cleared pending start, thread delete). A replay workspace restored
+ * from a baseline restarts the sequence at the largest restored id, so any turn inserted after
+ * the baseline would get a different id there than live, and every candidate would fail
+ * verification. Capture therefore drops the column, restore lets SQLite assign it, and restore
+ * replaces such a table whole (it has no stable key to match rows by); the table's own UNIQUE
+ * constraints still reject duplicate turns.
+ */
+export const PROJECTION_BASELINE_SURROGATE_KEYS: Readonly<
+  Partial<Record<(typeof PROJECTION_BASELINE_TABLES)[number], string>>
+> = {
+  projection_turns: "row_id",
+};

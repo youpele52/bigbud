@@ -6,6 +6,7 @@ import { threadOrganizationJsonSqlText } from "../../persistence/Layers/Projecti
  * The `ThreadSummary` columns shared by every catalog query. Requires the aliases
  * `t` (`projection_threads`), `s` (`projection_thread_sessions`, LEFT JOIN), and `turn`
  * (`projection_turns` for the latest turn, LEFT JOIN). Decode rows with `ThreadSummaryDbRow`.
+ * `latest_user_message_at` is kept exact by the migration 154 triggers.
  */
 const THREAD_SUMMARY_COLUMNS_SQL = `
   t.thread_id AS id,
@@ -23,11 +24,7 @@ const THREAD_SUMMARY_COLUMNS_SQL = `
   t.worktree_path AS "worktreePath",
   t.created_at AS "createdAt",
   t.updated_at AS "updatedAt",
-  (
-    SELECT MAX(m.created_at)
-    FROM projection_thread_messages m
-    WHERE m.thread_id = t.thread_id AND m.role = 'user'
-  ) AS "latestUserMessageAt",
+  t.latest_user_message_at AS "latestUserMessageAt",
   t.pinned_at AS "pinnedAt",
   ${threadOrganizationJsonSqlText("t")} AS "organization",
   s.status AS "sessionStatus",

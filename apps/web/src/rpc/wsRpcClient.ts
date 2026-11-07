@@ -17,6 +17,9 @@ import { requestRemoteFolders, requestSshConfigHosts } from "./wsRpcClient.remot
 import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import { createComputerUseRpcClient } from "./wsRpcClient.computerUse";
+import { createBranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
+import { createDetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
+import { createDatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
 
 let sharedWsRpcClient: WsRpcClient | null = null;
@@ -198,6 +201,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       },
     },
     server: {
+      ...createDatabaseCompactionRpcMethods(transport),
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
       getConfig: () => requestServerConfig(transport),
       refreshProviders: () =>
@@ -348,8 +352,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getThreadOwnership](input)),
       getCommandOutcome: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getCommandOutcome](input)),
-      getSnapshot: () =>
-        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getSnapshot]({})),
+      ...createDetailPagingRpcMethods(transport),
+      ...createBranchCopyRpcMethods(transport),
       dispatchCommand: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.dispatchCommand](input)),
       getTurnDiff: (input) =>

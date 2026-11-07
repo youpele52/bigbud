@@ -1,30 +1,15 @@
-/** Recover only an unambiguous, exact historical request; never infer from current thread settings.
+/** Attribution comes only from projections: `projection_turns` carries each turn's provider, model
+ * and mode (migration 157 backfilled turns that predate them), so compaction of old
+ * `orchestration_events` never changes usage. Never infer from current thread settings.
  * Shared effective population suppresses overlaps before date filtering or streak calculation.
  */
-export const EFFECTIVE_USAGE_CTE = `WITH historical_requests AS (
-  SELECT e.stream_id AS thread_id,
-    json_extract(e.payload_json, '$.messageId') AS message_id,
-    json_extract(e.payload_json, '$.createdAt') AS requested_at,
-    MAX(e.payload_json) AS request_json
-  FROM orchestration_events e
-  WHERE e.aggregate_kind = 'thread' AND e.event_type = 'thread.turn-start-requested'
-  GROUP BY e.stream_id, json_extract(e.payload_json, '$.messageId'), json_extract(e.payload_json, '$.createdAt')
-  HAVING COUNT(*) = 1
-), requested_turns AS (
-  SELECT t.*, r.request_json
-  FROM projection_turns t
-  LEFT JOIN historical_requests r ON r.thread_id = t.thread_id
-    AND r.message_id = t.pending_message_id AND r.requested_at = t.requested_at
-    AND (t.usage_provider IS NULL OR t.usage_model IS NULL
-      OR t.usage_provider = 'unknown' OR t.usage_model = 'unknown')
-), attributed_turns AS (
+function makeEffectiveUsageCte() {
+  return `WITH attributed_turns AS (
   SELECT t.*,
-    COALESCE(NULLIF(t.usage_provider, 'unknown'), json_extract(t.request_json, '$.usageAttribution.provider'),
-      json_extract(t.request_json, '$.modelSelection.provider'), 'unknown') AS effective_provider,
-    COALESCE(NULLIF(t.usage_model, 'unknown'), json_extract(t.request_json, '$.usageAttribution.model'),
-      json_extract(t.request_json, '$.modelSelection.model'), 'unknown') AS effective_model,
-    COALESCE(t.usage_interaction_mode, json_extract(t.request_json, '$.interactionMode'), 'unknown') AS effective_mode
-  FROM requested_turns t
+    COALESCE(t.usage_provider, 'unknown') AS effective_provider,
+    COALESCE(t.usage_model, 'unknown') AS effective_model,
+    COALESCE(t.usage_interaction_mode, 'unknown') AS effective_mode
+  FROM projection_turns t
 ), official AS (
   SELECT c.* FROM projection_usage_contributions c
   WHERE (COALESCE(json_extract(c.accounting_json, '$.source'), 'legacy') = 'legacy' OR c.turn_id IS NOT NULL) AND NOT EXISTS (
@@ -39,25 +24,36 @@ export const EFFECTIVE_USAGE_CTE = `WITH historical_requests AS (
         AND c.contribution_id <> c.provider || ':' || c.thread_id || ':turn:' || c.turn_id
       ))
   )
-), observable AS (
-  SELECT t.thread_id, t.turn_id, t.requested_at,
-    t.effective_provider AS provider,
-    t.effective_model AS model,
-    t.effective_mode AS interaction_mode,
-    SUM(CASE WHEN m.role = 'user' THEN m.observable_token_count ELSE 0 END) AS input_tokens,
-    SUM(CASE WHEN m.role = 'assistant' THEN m.observable_token_count ELSE 0 END) AS output_tokens
-  FROM attributed_turns t
-  JOIN projection_thread_messages m ON m.thread_id = t.thread_id
-    AND ((m.role = 'user' AND (m.turn_id = t.turn_id OR m.message_id = t.pending_message_id))
-      OR (m.role = 'assistant' AND m.turn_id = t.turn_id AND m.is_streaming = 0))
+), observable_turns AS MATERIALIZED (
+  SELECT t.* FROM attributed_turns t
   WHERE t.turn_id IS NOT NULL AND t.started_at IS NOT NULL
     AND t.state IN ('completed', 'error', 'interrupted')
     AND NOT EXISTS (SELECT 1 FROM projection_usage_contributions c
-      WHERE c.thread_id = t.thread_id AND (c.turn_id = t.turn_id
-        OR (c.turn_id IS NULL AND COALESCE(json_extract(c.accounting_json, '$.source'), 'legacy') = 'legacy')))
-  GROUP BY t.thread_id, t.turn_id
-  HAVING SUM(CASE WHEN m.observable_token_count IS NULL
-    OR m.observable_estimator_version IS NOT 'observable-text-v1' THEN 1 ELSE 0 END) = 0
+      WHERE c.thread_id = t.thread_id AND c.turn_id = t.turn_id)
+    AND NOT EXISTS (SELECT 1 FROM projection_usage_contributions c
+      WHERE c.thread_id = t.thread_id AND c.turn_id IS NULL
+        AND COALESCE(json_extract(c.accounting_json, '$.source'), 'legacy') = 'legacy')
+), observable_messages AS (
+  -- CROSS JOIN keeps eligible turns outermost so each message lookup uses its exact key.
+  -- Otherwise SQLite can reorder this into a lifetime message scan.
+  SELECT t.*, m.role, m.observable_token_count, m.observable_estimator_version
+  FROM observable_turns t
+  CROSS JOIN projection_thread_messages m ON m.thread_id = t.thread_id AND m.turn_id = t.turn_id
+  WHERE m.role = 'user' OR (m.role = 'assistant' AND m.is_streaming = 0)
+  UNION ALL
+  SELECT t.*, m.role, m.observable_token_count, m.observable_estimator_version
+  FROM observable_turns t
+  CROSS JOIN projection_thread_messages m ON m.thread_id = t.thread_id AND m.message_id = t.pending_message_id
+  WHERE m.role = 'user' AND m.turn_id IS NOT t.turn_id
+), observable AS (
+  SELECT thread_id, turn_id, requested_at,
+    effective_provider AS provider, effective_model AS model, effective_mode AS interaction_mode,
+    SUM(CASE WHEN role = 'user' THEN observable_token_count ELSE 0 END) AS input_tokens,
+    SUM(CASE WHEN role = 'assistant' THEN observable_token_count ELSE 0 END) AS output_tokens
+  FROM observable_messages
+  GROUP BY thread_id, turn_id
+  HAVING SUM(CASE WHEN observable_token_count IS NULL
+    OR observable_estimator_version IS NOT 'observable-text-v1' THEN 1 ELSE 0 END) = 0
 ), effective AS (
   SELECT c.contribution_id, c.thread_id, c.turn_id,
     CASE WHEN json_extract(c.accounting_json, '$.source') = 'provider-reported' THEN COALESCE(t.requested_at, c.occurred_at)
@@ -79,3 +75,9 @@ export const EFFECTIVE_USAGE_CTE = `WITH historical_requests AS (
       'reportedTotal', NULL, 'subtotal', input_tokens + output_tokens), 'estimated'
   FROM observable
 )`;
+}
+
+export const EFFECTIVE_USAGE_CTE = makeEffectiveUsageCte();
+// Dates, tokens and overlap suppression do not depend on provider/model attribution; kept as a
+// separate name for the streak query.
+export const EFFECTIVE_USAGE_DAYS_CTE = EFFECTIVE_USAGE_CTE;

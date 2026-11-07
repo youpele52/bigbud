@@ -53,8 +53,23 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
 
   it.effect("accepts a valid mobile session token for orchestration snapshot reads", () =>
     Effect.gen(function* () {
+      let fullSnapshotCalls = 0;
       yield* buildAppUnderTest({
         layers: {
+          // The legacy mobile snapshot is served from the bounded mobile baseline.
+          projectionSnapshotQuery: {
+            getSnapshot: () =>
+              Effect.sync(() => {
+                fullSnapshotCalls += 1;
+                return makeDefaultOrchestrationReadModel();
+              }),
+            getMobileRecoveryBaseline: () =>
+              Effect.succeed({
+                snapshot: makeDefaultOrchestrationReadModel(),
+                snapshotSequence: 0,
+                selectedThread: null,
+              }),
+          },
           mobileRemoteControl: {
             validateSessionToken: () =>
               Effect.succeed({
@@ -79,6 +94,7 @@ it.layer(serverTestLayer)("server router seam > mobile websocket auth", (it) => 
       );
 
       assert.isAtLeast(response.threads.length, 1);
+      assert.equal(fullSnapshotCalls, 0);
     }).pipe(Effect.provide(serverHttpTestLayer)),
   );
 

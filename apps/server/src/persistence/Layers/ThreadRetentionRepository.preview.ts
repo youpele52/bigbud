@@ -1,12 +1,11 @@
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
-import type { ThreadRetentionExclusionReason } from "../Services/ThreadRetentionRepository.ts";
 import {
   retentionAgeSql,
   retentionExclusionCaseSql,
-  retentionVisibleActivitySql,
 } from "./ThreadRetentionRepository.eligibility.ts";
+import { makeRetentionExclusionSummary } from "./ThreadRetentionRepository.exclusions.ts";
 import {
   retentionEligibleRootFromSql,
   retentionSubtreeCteSql,
@@ -18,6 +17,7 @@ const CHECKPOINT_LIMIT = 1_000;
 const BYTE_LIMIT = 100 * 1024 * 1024;
 
 export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
+  const exclusionSummary = makeRetentionExclusionSummary(sql);
   return Effect.fn("ThreadRetentionRepository.preview")(function* (
     cutoffAt: string,
     options?: {
@@ -47,16 +47,7 @@ export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
           ${retentionEligibleRootFromSql}`,
           [cutoffAt],
         );
-        const exclusions = yield* sql.unsafe<{
-          reason: ThreadRetentionExclusionReason;
-          count: number;
-        }>(
-          `SELECT reason, COUNT(*) AS count FROM (
-            SELECT ${perThread ? retentionExclusionCaseSql("t", "per-thread") : retentionExclusionCaseSql("t")} AS reason
-            FROM projection_threads AS t WHERE ${perThread ? age : retentionVisibleActivitySql("t")} <= ?
-          ) WHERE reason IS NOT NULL GROUP BY reason ORDER BY reason ASC`,
-          [cutoffAt],
-        );
+        const exclusions = yield* exclusionSummary(cutoffAt, options);
         const estimates = yield* sql
           .unsafe<{
             attachmentCount: number;
@@ -188,7 +179,7 @@ export function makeThreadRetentionPreview(sql: SqlClient.SqlClient) {
           eligibleCount,
           oldestEligibleAgeAt: total?.oldest ?? null,
           newestEligibleAgeAt: total?.newest ?? null,
-          exclusionCounts: exclusions.map((row) => ({ reason: row.reason, count: row.count })),
+          exclusionCounts: exclusions.exclusionCounts,
           estimatedAttachmentCount: attachmentCount,
           estimatedResourceCount:
             attachmentCount + checkpointCount + (estimate?.worktreeCount ?? 0),

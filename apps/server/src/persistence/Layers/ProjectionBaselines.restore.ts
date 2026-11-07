@@ -1,6 +1,8 @@
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { PROJECTION_BASELINE_SURROGATE_KEYS } from "../ProjectionBaselineSchema.ts";
+
 export type TableColumn = {
   readonly name: string;
   readonly primaryKeyPosition: number;
@@ -72,11 +74,21 @@ export const countDistinctBaselineRestoreKeys = (sql: SqlClient.SqlClient, table
     )
     .pipe(Effect.map((rows) => rows[0]?.count ?? 0));
 
-/** Deletes live rows whose key was not recorded for `table`. One uncorrelated subquery. */
+/** Whether baselines leave out `table`'s surrogate key, so restore replaces the table whole. */
+export function hasBaselineSurrogateKey(table: string): boolean {
+  return Object.hasOwn(PROJECTION_BASELINE_SURROGATE_KEYS, table);
+}
+
+/**
+ * Deletes live rows whose key was not recorded for `table`. One uncorrelated subquery. A table
+ * whose surrogate key baselines leave out has no key to match rows by, so all its rows go and
+ * the baseline rows are inserted afresh.
+ */
 export function deleteRowsMissingFromKeys(
   table: string,
   columns: ReadonlyArray<TableColumn>,
 ): { readonly statement: string; readonly params: ReadonlyArray<unknown> } {
+  if (hasBaselineSurrogateKey(table)) return { statement: `DELETE FROM ${table}`, params: [] };
   const primaryKey = primaryKeyColumns(columns);
   if (primaryKey.length === 0) throw new Error(`baseline table ${table} has no primary key`);
   const projectGuard = table === "projection_projects" ? " AND project_id <> '__chats__'" : "";

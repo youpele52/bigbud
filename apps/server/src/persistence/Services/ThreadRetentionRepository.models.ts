@@ -60,6 +60,9 @@ export const ThreadRetentionExclusionReason = Schema.Literals([
   "scheduled",
   "activity_changed",
   "policy_changed",
+  // Legacy subtree mode only: an old root with no blocker of its own, held back by a
+  // descendant that is newer than the cutoff or excluded for its own reason.
+  "blocked_by_descendant",
 ]);
 export type ThreadRetentionExclusionReason = typeof ThreadRetentionExclusionReason.Type;
 
@@ -77,6 +80,16 @@ export const ThreadRetentionExclusionCount = Schema.Struct({
   reason: ThreadRetentionExclusionReason,
   count: NonNegativeInt,
 });
+/**
+ * What a run's selector saw at selection start. `olderThanCutoffCount` counts live threads at
+ * or past the run's age cutoff by the selector's own age rule; `exclusionCounts` says why
+ * each skipped one was held back (one reason per thread, so the counts are disjoint).
+ */
+export const ThreadRetentionExclusionSummary = Schema.Struct({
+  olderThanCutoffCount: NonNegativeInt,
+  exclusionCounts: Schema.Array(ThreadRetentionExclusionCount),
+});
+export type ThreadRetentionExclusionSummary = typeof ThreadRetentionExclusionSummary.Type;
 export const ThreadRetentionPreview = Schema.Struct({
   eligibleCount: NonNegativeInt,
   oldestEligibleAgeAt: Schema.NullOr(IsoDateTime),
@@ -117,6 +130,7 @@ export const ThreadRetentionRun = Schema.Struct({
   failureCountInWindow: NonNegativeInt,
   lastFailureAt: Schema.NullOr(IsoDateTime),
   circuitOpenUntil: Schema.NullOr(IsoDateTime),
+  exclusionSummary: Schema.optional(Schema.NullOr(ThreadRetentionExclusionSummary)),
   createdAt: IsoDateTime,
   startedAt: Schema.NullOr(IsoDateTime),
   updatedAt: IsoDateTime,

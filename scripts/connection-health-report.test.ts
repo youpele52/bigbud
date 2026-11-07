@@ -88,6 +88,9 @@ describe("analyzeTrace", () => {
       span("server.stalled", base, { "stall.duration_ms": 1_200 }),
       span("sql.execute", base, {}, 73_686),
       span("sql.execute", base, {}, 9_000),
+      span("event_log.maintenance.starved", base, { "maintenance.backlog_sequences": 90_000 }),
+      span("event_log.maintenance.slow_batch", base, { "maintenance.batch_ms": 64 }),
+      span("event_log.maintenance.slow_batch", base, { "maintenance.batch_ms": 71 }),
       "not json",
     ];
 
@@ -96,6 +99,8 @@ describe("analyzeTrace", () => {
       sqlSpansOverTenSeconds: 1,
       reconnects: 2,
       reconnectsWithoutDeliverySession: 1,
+      maintenanceStarvedWarnings: 1,
+      maintenanceSlowBatches: 2,
     });
   });
 });

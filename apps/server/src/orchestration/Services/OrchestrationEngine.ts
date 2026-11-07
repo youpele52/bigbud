@@ -89,6 +89,9 @@ export interface OrchestrationEngineShape {
     commandId: CommandId,
   ) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, OrchestrationEventStoreError>;
 
+  /** Lowest read cursor of an open internal reactor stream, or null when none is open. */
+  readonly oldestReactorCursor?: () => number | null;
+
   /**
    * Dispatch a validated orchestration command.
    *

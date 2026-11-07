@@ -11,7 +11,11 @@ import { observeRpcEffect } from "../observability/RpcInstrumentation.ts";
 import { usageProviderCoverage } from "../orchestration/usageAccountingSupport.ts";
 import type { WsRpcContext } from "./wsRpcContext";
 import { computeCurrentStreakDays } from "./wsRpcHandlers.usage.streak.ts";
-import { summarizeUsageAccounting } from "./wsRpcHandlers.usage.accounting.ts";
+import {
+  prepareUsageAccounting,
+  summarizeUsageAccounting,
+} from "./wsRpcHandlers.usage.accounting.ts";
+import { cachedUsageSummary } from "./wsRpcHandlers.usage.cache.ts";
 import {
   tallyUsageBucketShare,
   type UsageBucketShareTally,
@@ -211,44 +215,45 @@ function buildUsageSummary(
 }
 
 export function makeWsRpcUsageHandlers(context: WsRpcContext) {
+  const loadSummary = cachedUsageSummary(context.projectionSnapshotQuery, (range) =>
+    Effect.gen(function* () {
+      const now = new Date();
+      const rangeStart = getRangeStart(range, now);
+      const tomorrow = new Date(now);
+      tomorrow.setUTCHours(24, 0, 0, 0);
+      const [rows, historyStatus, activeDays] = yield* Effect.all([
+        context.projectionSnapshotQuery.getUsageEntries(rangeStart?.toISOString() ?? null),
+        context.projectionSnapshotQuery.getUsageHistoryStatus(),
+        context.projectionSnapshotQuery.getUsageActiveDays(tomorrow.toISOString()),
+      ]);
+      const entries: UsageEntry[] = rows.flatMap((row) => {
+        const createdAt = parseValidDate(row.createdAt);
+        return createdAt
+          ? [
+              {
+                ...prepareUsageAccounting(row),
+                createdAt: createdAt.toISOString(),
+                createdAtMs: createdAt.getTime(),
+                turnKey: `${row.threadId}:${row.turnId ?? row.contributionId}`,
+                turnCount: 1,
+              },
+            ]
+          : [];
+      });
+
+      return buildUsageSummary(
+        entries,
+        range,
+        historyStatus,
+        computeCurrentStreakDays(activeDays, now),
+        now,
+      );
+    }).pipe(Effect.mapError((cause) => toUsageError(cause, "Failed to load usage summary"))),
+  );
   return {
     [WS_METHODS.serverGetUsageSummary]: (input: typeof ServerGetUsageSummaryInput.Type) =>
-      observeRpcEffect(
-        WS_METHODS.serverGetUsageSummary,
-        Effect.gen(function* () {
-          const now = new Date();
-          const rangeStart = getRangeStart(input.range, now);
-          const tomorrow = new Date(now);
-          tomorrow.setUTCHours(24, 0, 0, 0);
-          const [rows, historyStatus, activeDays] = yield* Effect.all([
-            context.projectionSnapshotQuery.getUsageEntries(rangeStart?.toISOString() ?? null),
-            context.projectionSnapshotQuery.getUsageHistoryStatus(),
-            context.projectionSnapshotQuery.getUsageActiveDays(tomorrow.toISOString()),
-          ]);
-          const entries: UsageEntry[] = rows.flatMap((row) => {
-            const createdAt = parseValidDate(row.createdAt);
-            return createdAt
-              ? [
-                  {
-                    ...row,
-                    createdAt: createdAt.toISOString(),
-                    createdAtMs: createdAt.getTime(),
-                    turnKey: `${row.threadId}:${row.turnId ?? row.contributionId}`,
-                    turnCount: 1,
-                  },
-                ]
-              : [];
-          });
-
-          return buildUsageSummary(
-            entries,
-            input.range,
-            historyStatus,
-            computeCurrentStreakDays(activeDays, now),
-            now,
-          );
-        }).pipe(Effect.mapError((cause) => toUsageError(cause, "Failed to load usage summary"))),
-        { "rpc.aggregate": "server" },
-      ),
+      observeRpcEffect(WS_METHODS.serverGetUsageSummary, loadSummary(input.range), {
+        "rpc.aggregate": "server",
+      }),
   };
 }

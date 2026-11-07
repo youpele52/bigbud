@@ -20,6 +20,7 @@ import { decideThreadTaskCommand } from "./deciderThreads.tasks.ts";
 import { decideThreadForkCommand } from "./deciderThreads.fork.ts";
 import { decideDelegationModelChoiceCommand } from "./deciderThreads.delegationModelChoice.ts";
 import { decideThreadRecoveryCommand } from "./deciderThreads.recovery.ts";
+import { decideThreadBranchCopyAppend } from "./deciderThreads.branchCopy.ts";
 import {
   decideThreadOrganizationCommand,
   THREAD_ORGANIZATION_COMMAND_TYPES,
@@ -118,6 +119,9 @@ export const decideThreadCommand = Effect.fn("decideThreadCommand")(function* ({
   }
   if (command.type === "thread.task.upsert" || command.type === "thread.task.remove") {
     return yield* decideThreadTaskCommand({ command, readModel });
+  }
+  if (command.type === "thread.branch-copy.append") {
+    return yield* decideThreadBranchCopyAppend({ command, readModel });
   }
   if (command.type === "thread.recovery.set" || command.type === "thread.recovery.resolve") {
     return yield* decideThreadRecoveryCommand({ command, readModel });

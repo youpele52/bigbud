@@ -32,8 +32,25 @@ export const ProjectionTurnState = Schema.Literals([
 ]);
 export type ProjectionTurnState = typeof ProjectionTurnState.Type;
 
+/**
+ * The raw `usage_*` columns of a stored turn, including attribution that is not a complete
+ * `UsageAttribution` (partial values recovered from a request payload). `listByThreadId` returns
+ * it so `thread.reverted` writes kept turns back with exactly the attribution they had, and
+ * `getPendingTurnStartByThreadId` returns it so a started turn inherits exactly the pending
+ * start's columns. When present, `upsertByTurnId` and `replacePendingTurnStart` insert it instead
+ * of deriving the columns from `usageAttribution`.
+ */
+export const ProjectionTurnStoredUsage = Schema.Struct({
+  provider: Schema.NullOr(Schema.String),
+  model: Schema.NullOr(Schema.String),
+  interactionMode: Schema.NullOr(Schema.String),
+  source: Schema.NullOr(Schema.String),
+});
+export type ProjectionTurnStoredUsage = typeof ProjectionTurnStoredUsage.Type;
+
 export const ProjectionTurn = Schema.Struct({
   usageAttribution: Schema.optional(Schema.NullOr(UsageAttribution)),
+  storedUsage: Schema.optional(ProjectionTurnStoredUsage),
   threadId: ThreadId,
   turnId: Schema.NullOr(TurnId),
   pendingMessageId: Schema.NullOr(MessageId),
@@ -53,6 +70,7 @@ export type ProjectionTurn = typeof ProjectionTurn.Type;
 
 export const ProjectionTurnById = Schema.Struct({
   usageAttribution: Schema.optional(Schema.NullOr(UsageAttribution)),
+  storedUsage: Schema.optional(ProjectionTurnStoredUsage),
   threadId: ThreadId,
   turnId: TurnId,
   pendingMessageId: Schema.NullOr(MessageId),
@@ -72,6 +90,7 @@ export type ProjectionTurnById = typeof ProjectionTurnById.Type;
 
 export const ProjectionPendingTurnStart = Schema.Struct({
   usageAttribution: Schema.optional(Schema.NullOr(UsageAttribution)),
+  storedUsage: Schema.optional(ProjectionTurnStoredUsage),
   threadId: ThreadId,
   messageId: MessageId,
   sourceProposedPlanThreadId: Schema.NullOr(ThreadId),

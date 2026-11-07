@@ -1,5 +1,11 @@
-import type { AutomationSchedule, RuntimeMode, ServerDiscoveredSkill } from "@bigbud/contracts";
+import type {
+  AutomationSchedule,
+  RuntimeMode,
+  ServerDiscoveredSkill,
+  ThreadId,
+} from "@bigbud/contracts";
 import type { ChatMessage } from "~/models/types";
+import { resolveFullMessageText } from "~/stores/main/messageText.store";
 
 import { buildSkillMentionPrompt } from "./skillMentions";
 
@@ -139,6 +145,25 @@ export function extractAutomationRequest(text: string): AutomationSkillRequest |
   } catch {
     return null;
   }
+}
+
+/**
+ * The request in an automation reply. A truncated reply returns "unread": its request block may
+ * sit past the preview, so it must go through `readAutomationRequest` first.
+ */
+export function peekAutomationRequest(
+  message: Pick<ChatMessage, "text" | "textTruncated">,
+): AutomationSkillRequest | null | "unread" {
+  return message.textTruncated === true ? "unread" : extractAutomationRequest(message.text);
+}
+
+/** The request in an automation reply, read from the full text when the store has a preview. */
+export async function readAutomationRequest(
+  threadId: ThreadId,
+  message: Pick<ChatMessage, "id" | "text" | "textTruncated">,
+  resolveText: typeof resolveFullMessageText = resolveFullMessageText,
+): Promise<AutomationSkillRequest | null> {
+  return extractAutomationRequest(await resolveText(threadId, message));
 }
 
 export function extractAutomationRequestPayload(text: string): string | null {

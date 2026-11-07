@@ -14,6 +14,15 @@ import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
 import { WsTerminalRecoveryRpc } from "./rpc.terminalRecovery";
 import { WsOrchestrationGetOrganizationThreadSummariesRpc } from "./rpc.organization";
 import {
+  WsOrchestrationGetMessageTextChunkRpc,
+  WsOrchestrationGetProjectWorktreePathsRpc,
+  WsOrchestrationGetTurnActivitiesRpc,
+} from "./rpc.detailPaging";
+import {
+  WsOrchestrationGetThreadBranchCopyRpc,
+  WsOrchestrationStartThreadBranchRpc,
+} from "./rpc.branchCopy";
+import {
   WsSubscribeTerminalSessionRpc,
   WsTerminalOutputAckRpc,
   WsTerminalSearchRpc,
@@ -136,7 +145,6 @@ import {
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetCommandOutcomeRpc,
   WsOrchestrationGetFullThreadDiffRpc,
-  WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetSidebarThreadCatalogRpc,
   WsOrchestrationGetStartupProjectCatalogRpc,
   WsOrchestrationSearchConversationMessagesRpc,
@@ -160,9 +168,16 @@ import {
 
 export { WS_METHODS };
 import { WsServerOpencodeV2ThreadToolsSetupRpc } from "./rpc.opencodeV2ThreadToolsSetup";
+import {
+  WsServerGetDatabaseCompactionStatusRpc,
+  WsServerPreviewDatabaseCompactionRpc,
+  WsServerStartDatabaseCompactionRpc,
+} from "./rpc.databaseCompaction";
 export * from "./rpc.automation";
 export * from "./rpc.browser";
 export * from "./rpc.core";
+export * from "./rpc.detailPaging";
+export * from "./rpc.branchCopy";
 export * from "./rpc.retention";
 export * from "./rpc.stream";
 export * from "./rpc.usage";
@@ -302,7 +317,6 @@ export const WsRpcGroup = RpcGroup.make(
   WsCompleteVisibleBrowserCommandRpc,
   WsRevokeVisibleBrowserLeaseRpc,
   WsGetVisibleBrowserLeasesRpc,
-  WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetSidebarThreadCatalogRpc,
   WsOrchestrationGetStartupProjectCatalogRpc,
   WsOrchestrationSearchConversationMessagesRpc,
@@ -311,6 +325,11 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrganizationStatusRpc,
   WsOrganizationEngagementRpc,
   WsOrchestrationGetSelectedThreadDetailRpc,
+  WsOrchestrationGetTurnActivitiesRpc,
+  WsOrchestrationGetMessageTextChunkRpc,
+  WsOrchestrationGetProjectWorktreePathsRpc,
+  WsOrchestrationStartThreadBranchRpc,
+  WsOrchestrationGetThreadBranchCopyRpc,
   WsOrchestrationGetThreadOwnershipRpc,
   WsOrchestrationGetCommandOutcomeRpc,
   WsOrchestrationDispatchCommandRpc,
@@ -319,4 +338,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationReplayEventsRpc,
   WsOrchestrationAcknowledgeDeliveryRpc,
   WsOrchestrationAcknowledgeDeliveryBaselineRpc,
+  WsServerGetDatabaseCompactionStatusRpc,
+  WsServerPreviewDatabaseCompactionRpc,
+  WsServerStartDatabaseCompactionRpc,
 );

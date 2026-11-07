@@ -322,6 +322,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     readEventsByCommandId,
     readReplay,
     openDeliveryLiveCapture: domainEvents.openDeliveryCapture,
+    oldestReactorCursor: domainEvents.oldestOpenCursor,
     ...(threadStateHydrator === null
       ? {}
       : {

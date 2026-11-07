@@ -6,6 +6,13 @@ import * as Layer from "effect/Layer";
 import * as CliError from "effect/unstable/cli/CliError";
 import { Command } from "effect/unstable/cli";
 
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { ownershipStateDir } from "@bigbud/shared/backendOwnership.paths";
+
+import { acquireStateDirLock } from "../startup/stateDirLock.ts";
 import { cli } from "./cli.ts";
 
 const CliRuntimeLayer = Layer.mergeAll(NodeServices.layer, NetService.layer);
@@ -80,13 +87,24 @@ it.layer(NodeServices.layer)("cli log-level parsing", (it) => {
     }),
   );
 
-  it.effect("requires server shutdown confirmation for canonical event compaction", () =>
+  it.effect("refuses canonical event compaction while a live backend holds the lock", () =>
     Effect.gen(function* () {
+      const baseDir = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "bigbud-cli-lock-")));
+      const stateDir = ownershipStateDir(baseDir, false);
+      const held = yield* Effect.promise(() => acquireStateDirLock({ stateDir, port: 3773 }));
       const error = yield* Command.runWith(cli, { version: "0.0.0" })([
         "canonical-event-compaction",
         "--apply",
-      ]).pipe(Effect.provide(CliRuntimeLayer), Effect.flip);
-      assert.match(String(error), /--apply requires --server-stopped/);
+        "--server-stopped",
+        "--base-dir",
+        baseDir,
+      ]).pipe(
+        Effect.provide(CliRuntimeLayer),
+        Effect.flip,
+        Effect.ensuring(Effect.promise(held.release)),
+      );
+      assert.match(String(error), /needs the bigbud backend stopped/);
+      yield* Effect.promise(() => rm(baseDir, { recursive: true, force: true }));
     }),
   );
 

@@ -22,6 +22,7 @@ import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { toastManager } from "../ui/toast";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { DatabaseCompactionSettingsRow } from "./DatabaseCompactionSettingsRow";
 import { ThreadBehaviorSettingsRows } from "./ThreadRetentionSettingsSection.behavior";
 import { ThreadRetentionConfirmationContent } from "./ThreadRetentionConfirmationContent";
 import { ThreadRetentionCriterionSelect } from "./ThreadRetentionCriterionSelect";
@@ -30,6 +31,7 @@ import {
   useThreadRetentionProgress,
 } from "./ThreadRetentionSettingsSection.progress";
 import {
+  formatLatestRetentionCleanup,
   getRetentionRunStatusMessage,
   getRetentionPolicyUpdatedToast,
 } from "./ThreadRetentionSettingsSection.logic";
@@ -226,8 +228,7 @@ export function ThreadRetentionSettingsSection() {
               </p>
             ) : progress.recentRuns[0] ? (
               <p className="text-xs text-muted-foreground">
-                Latest cleanup: {progress.recentRuns[0].completedCount} threads deleted ·{" "}
-                {progress.recentRuns[0].status.replaceAll("_", " ")}
+                {formatLatestRetentionCleanup(progress.recentRuns[0])}
                 {formatRetentionResourceOutcomes(progress.recentRuns[0])
                   ? ` · ${formatRetentionResourceOutcomes(progress.recentRuns[0])}`
                   : ""}
@@ -301,6 +302,7 @@ export function ThreadRetentionSettingsSection() {
             </Button>
           }
         />
+        <DatabaseCompactionSettingsRow />
       </SettingsSection>
 
       <AlertDialog

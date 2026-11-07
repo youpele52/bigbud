@@ -57,6 +57,18 @@ export interface ProviderSessionRuntimeListInput {
 /**
  * ProviderSessionRuntimeRepositoryShape - Service API for provider runtime records.
  */
+export interface ProviderRuntimeReconcileInput {
+  /** Threads with a live adapter session in this process. Never changed. */
+  readonly liveThreadIds: ReadonlyArray<string>;
+  /** Providers whose session listing failed or timed out. Their rows are left as they are. */
+  readonly unavailableProviders: ReadonlyArray<string>;
+  /** Taken before listing sessions; only rows last written earlier are changed. */
+  readonly observedBefore: string;
+  readonly reconciledAt: string;
+  /** Limits the pass to these threads (a turn that ended); every thread when absent. */
+  readonly threadIds?: ReadonlyArray<string>;
+}
+
 export interface ProviderSessionRuntimeRepositoryShape {
   readonly recordCodexCompaction?: (
     input: import("../../provider/Services/ProviderCompaction.ts").CodexCompactionConfirmation,
@@ -85,6 +97,13 @@ export interface ProviderSessionRuntimeRepositoryShape {
     marker: unknown | null,
     operationId: string,
   ) => Effect.Effect<boolean, ProviderSessionRuntimeRepositoryError>;
+  /**
+   * Mark `starting`/`running` rows with no live adapter session `stopped`, keeping the resume
+   * cursor, and remove their provider leases. Returns how many rows changed.
+   */
+  readonly reconcileStale?: (
+    input: ProviderRuntimeReconcileInput,
+  ) => Effect.Effect<number, ProviderSessionRuntimeRepositoryError>;
   /**
    * Insert or replace a provider runtime row.
    *

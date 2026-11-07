@@ -1,4 +1,8 @@
-import type { NativeApi, OrchestrationReadModel, ProjectId } from "@bigbud/contracts";
+import type { NativeApi, ProjectId } from "@bigbud/contracts";
+import {
+  PROJECT_WORKTREE_PATHS_MAX,
+  type GetProjectWorktreePathsResult,
+} from "@bigbud/contracts/orchestration/orchestration.detail.paging.ts";
 
 import { buildExplicitExecutionTargets } from "../../lib/providerExecutionTargets";
 import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
@@ -11,16 +15,15 @@ import {
   type RemoteWorkspaceDraft,
 } from "./Sidebar.remoteWorkspaces.logic";
 
+/** Unique, non-blank worktree paths from the bounded per-project read. */
 export function collectRemoteWorkspaceWorktreePaths(
-  snapshot: OrchestrationReadModel,
-  projectId: ProjectId,
+  result: Pick<GetProjectWorktreePathsResult, "worktreePaths">,
 ): ReadonlyArray<string> {
   return Array.from(
     new Set(
-      snapshot.threads
-        .filter((thread) => thread.projectId === projectId && thread.deletedAt === null)
-        .map((thread) => thread.worktreePath?.trim())
-        .filter((worktreePath): worktreePath is string => Boolean(worktreePath)),
+      result.worktreePaths
+        .map((worktreePath) => worktreePath.trim())
+        .filter((worktreePath) => worktreePath.length > 0),
     ),
   );
 }
@@ -30,8 +33,16 @@ async function verifyRemoteWorkspaceWorktrees(input: {
   readonly projectId: ProjectId;
   readonly executionTargetId: string;
 }): Promise<ReadonlyArray<string>> {
-  const snapshot = await input.api.orchestration.getSnapshot();
-  const paths = collectRemoteWorkspaceWorktreePaths(snapshot, input.projectId);
+  const result = await input.api.orchestration.getProjectWorktreePaths({
+    projectId: input.projectId,
+  });
+  if (result.truncated) {
+    // Every worktree must be verified before the server accepts the edit; never verify a subset.
+    throw new Error(
+      `This project has more than ${PROJECT_WORKTREE_PATHS_MAX} worktrees, too many to verify on the new SSH target.`,
+    );
+  }
+  const paths = collectRemoteWorkspaceWorktreePaths(result);
   const results = await Promise.allSettled(
     paths.map((cwd) =>
       input.api.server.verifyExecutionTarget({ executionTargetId: input.executionTargetId, cwd }),

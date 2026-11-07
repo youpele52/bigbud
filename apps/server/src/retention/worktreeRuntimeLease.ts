@@ -3,7 +3,8 @@ import * as nodeFs from "node:fs/promises";
 import { Effect } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
-function isDefinitelyTerminated(pid: number): boolean {
+/** True only when the PID certainly no longer exists (`ESRCH`); permission errors count as alive. */
+export function isDefinitelyTerminated(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return false;

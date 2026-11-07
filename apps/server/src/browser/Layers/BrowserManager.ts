@@ -10,6 +10,11 @@ import { BROWSER_PAGE_TEXT_MAX_CHARS, type ThreadId } from "@bigbud/contracts";
 import { Effect, Layer } from "effect";
 import * as Semaphore from "effect/Semaphore";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import {
+  holdThreadLease,
+  releaseThreadLease,
+  threadLeaseExpiresAt,
+} from "../../retention/threadLeaseHeartbeat.ts";
 
 import {
   BrowserManager,
@@ -34,6 +39,7 @@ const makeBrowserManager = Effect.gen(function* () {
   const releaseLease = (threadId: ThreadId) =>
     sql`DELETE FROM thread_activity_leases WHERE lease_id = ${browserLeaseId(threadId)}`.pipe(
       Effect.ignore,
+      Effect.ensuring(Effect.sync(() => releaseThreadLease(browserLeaseId(threadId)))),
     );
 
   const getBrowser = (): Effect.Effect<import("playwright").Browser, BrowserManagerError> =>
@@ -67,9 +73,12 @@ const makeBrowserManager = Effect.gen(function* () {
         return existing;
       }
       yield* sql`
-        INSERT INTO thread_activity_leases (lease_id, thread_id, activity_kind, acquired_at)
-        VALUES (${browserLeaseId(threadId)}, ${threadId}, 'browser', ${new Date().toISOString()})
+        INSERT INTO thread_activity_leases (
+          lease_id, thread_id, activity_kind, acquired_at, expires_at
+        ) VALUES (${browserLeaseId(threadId)}, ${threadId}, 'browser', ${new Date().toISOString()},
+          ${threadLeaseExpiresAt()})
       `.pipe(
+        Effect.tap(() => Effect.sync(() => holdThreadLease(browserLeaseId(threadId)))),
         Effect.mapError(
           (cause) =>
             new BrowserManagerError({

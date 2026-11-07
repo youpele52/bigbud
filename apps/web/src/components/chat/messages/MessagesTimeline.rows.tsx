@@ -10,7 +10,10 @@ import { SubagentsCard } from "../agents/SubagentsCard";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { UserInputQuestions } from "./UserInputQuestions";
 import { AnsweredUserInput } from "./AnsweredUserInput";
-import { MessageCopyButton } from "../common/MessageCopyButton";
+import {
+  TimelineMessageCopyButton,
+  TruncatedMessageNotice,
+} from "./MessagesTimeline.truncatedMessageNotice";
 import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
@@ -259,6 +262,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                     cwd={markdownCwd}
                   />
                 )}
+                <TruncatedMessageNotice message={row.message} />
                 <div className="mt-1.5 flex justify-end">
                   <p className="text-xs text-muted-foreground/50">
                     {formatTimestamp(row.message.createdAt, timestampFormat)}
@@ -267,7 +271,10 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
               </div>
               <div className="flex items-center gap-1.5 px-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
                 {displayedUserMessage.copyText && (
-                  <MessageCopyButton text={displayedUserMessage.copyText} />
+                  <TimelineMessageCopyButton
+                    message={row.message}
+                    text={displayedUserMessage.copyText}
+                  />
                 )}
                 <MessageReplyButton onClick={() => onReplyToMessage(row.message.id)} />
                 {onBranchThread ? (

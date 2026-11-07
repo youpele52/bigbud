@@ -191,12 +191,12 @@ it("keeps preview and paging controls outside the thread-only horizontal inset",
       provider.getBoundingClientRect().left - 8,
     );
   };
-  const seeMore = screen.getByRole("button", { name: "See more", exact: true });
-  await expect.element(seeMore).toBeVisible();
-  checkControl(seeMore.element());
-  await seeMore.click();
+  const showMore = screen.getByRole("button", { name: "Show 4 more", exact: true });
+  await expect.element(showMore).toBeVisible();
+  checkControl(showMore.element());
+  await showMore.click();
   checkControl(screen.getByRole("button", { name: "Show less", exact: true }).element());
-  checkControl(screen.getByRole("button", { name: "Load more", exact: true }).element());
+  checkControl(screen.getByRole("button", { name: "Show 4 more", exact: true }).element());
 });
 
 it.each(["light", "dark"])(

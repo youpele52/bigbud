@@ -9,23 +9,19 @@ import { DatabaseSync } from "node:sqlite";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as Client from "effect/unstable/sql/SqlClient";
 import type { Connection } from "effect/unstable/sql/SqlConnection";
-import * as Statement from "effect/unstable/sql/Statement";
+import { makeSqliteClient } from "./SqliteClient.connection.ts";
 
 import { openNodeSqliteDatabase } from "./NodeSqliteClient.files.ts";
 import { makeInProcessConnection } from "./NodeSqliteClient.inProcess.ts";
 import { makeWorkerConnection, resolveNodeSqliteWorkerEntry } from "./NodeSqliteClient.worker.ts";
 import { exitProcessOnSqliteWorkerFailure } from "./NodeSqliteClient.worker.exit.ts";
 import type { NodeSqliteWorkerBridgeFailure } from "./NodeSqliteClient.worker.bridge.ts";
-
-const ATTR_DB_SYSTEM_NAME = "db.system.name";
 
 export const TypeId: TypeId = "~local/sqlite-node/SqliteClient";
 
@@ -126,34 +122,7 @@ const makeWithDatabase = Effect.fn("makeWithDatabase")(function* (
 ): Effect.fn.Return<Client.SqlClient, never, Scope.Scope | Reactivity.Reactivity> {
   yield* checkNodeSqliteCompat();
 
-  const compiler = Statement.makeCompilerSqlite(options.transformQueryNames);
-  const transformRows = options.transformResultNames
-    ? Statement.defaultTransforms(options.transformResultNames).array
-    : undefined;
-
-  const semaphore = yield* Semaphore.make(1);
-  const connection = yield* makeConnection(options, openDatabase);
-
-  const acquirer = semaphore.withPermits(1)(Effect.succeed(connection));
-  const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
-    const fiber = Fiber.getCurrent()!;
-    const scope = ServiceMap.getUnsafe(fiber.services, Scope.Scope);
-    return Effect.as(
-      Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-      connection,
-    );
-  });
-
-  return yield* Client.make({
-    acquirer,
-    compiler,
-    transactionAcquirer,
-    spanAttributes: [
-      ...(options.spanAttributes ? Object.entries(options.spanAttributes) : []),
-      [ATTR_DB_SYSTEM_NAME, "sqlite"],
-    ],
-    transformRows,
-  });
+  return yield* makeSqliteClient(options, makeConnection(options, openDatabase));
 });
 
 const make = (

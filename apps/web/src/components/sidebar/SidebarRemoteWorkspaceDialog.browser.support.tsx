@@ -6,7 +6,10 @@ import { render } from "vitest-browser-react";
 
 const nativeApi = vi.hoisted(() => ({ current: null as never }));
 
-vi.mock("../../rpc/nativeApi", () => ({ readNativeApi: () => nativeApi.current }));
+vi.mock("../../rpc/nativeApi", () => ({
+  readNativeApi: () => nativeApi.current,
+  ensureNativeApi: () => nativeApi.current,
+}));
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn(), useParams: () => null }));
 vi.mock("../../stores/main", () => ({ useStore: () => ({ threads: [] }) }));
 vi.mock("../../stores/ui", () => ({
@@ -182,7 +185,7 @@ export function setApi(input: {
   readonly unlockSshKey?: ReturnType<typeof vi.fn>;
   readonly unlockSshPassword?: ReturnType<typeof vi.fn>;
   readonly trustSshHost?: ReturnType<typeof vi.fn>;
-  readonly getSnapshot: ReturnType<typeof vi.fn>;
+  readonly getProjectWorktreePaths: ReturnType<typeof vi.fn>;
   readonly dispatchCommand: ReturnType<typeof vi.fn>;
   readonly show: ReturnType<typeof vi.fn>;
 }) {
@@ -198,7 +201,10 @@ export function setApi(input: {
       ...(input.unlockSshPassword ? { unlockSshPassword: input.unlockSshPassword } : {}),
       ...(input.trustSshHost ? { trustSshHost: input.trustSshHost } : {}),
     },
-    orchestration: { getSnapshot: input.getSnapshot, dispatchCommand: input.dispatchCommand },
+    orchestration: {
+      getProjectWorktreePaths: input.getProjectWorktreePaths,
+      dispatchCommand: input.dispatchCommand,
+    },
   } as never;
 }
 

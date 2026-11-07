@@ -45,6 +45,7 @@ export type ThreadTurnCommand = Exclude<
       | "thread.task.upsert"
       | "thread.task.remove"
       | "thread.fork"
+      | "thread.branch-copy.append"
       | "thread.delegation.model-choice.hold"
       | "thread.delegation.model-choice.expire"
       | "thread.delegation.model-choice.pick"

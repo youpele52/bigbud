@@ -10,6 +10,8 @@ type ProjectStatusIndicator = NonNullable<ReturnType<typeof resolveThreadStatusP
 export interface SidebarThreadCountState {
   collapsedHiddenCount: number | null;
   unloadedCount: number | null;
+  /** Loaded threads the collapsed preview hides; "Show more" reveals these before fetching. */
+  hiddenLoadedCount?: number;
 }
 
 export interface RenderedProjectData {

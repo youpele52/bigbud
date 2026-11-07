@@ -133,7 +133,7 @@ layer("ProjectionCatalogQuery", (it) => {
       assert.equal("messages" in (result.threads[0] ?? {}), false);
       assert.deepEqual(result.nextCursor, {
         updatedAt: "2026-01-03",
-        threadId: "thread-a",
+        threadId: ThreadId.makeUnsafe("thread-a"),
       });
 
       const prioritized = yield* query.getProjectThreadSummaries({

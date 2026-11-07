@@ -13,6 +13,7 @@ import {
   countDistinctBaselineRestoreKeys,
   defaultExpression,
   deleteRowsMissingFromKeys,
+  hasBaselineSurrogateKey,
   primaryKeyColumns,
   quoteIdentifier,
   recordBaselineRestoreKeys,
@@ -74,10 +75,15 @@ const insertRow = (
       .filter((column) => column.primaryKeyPosition === 0)
       .map((column) => `${quoteIdentifier(column.name)} = excluded.${quoteIdentifier(column.name)}`)
       .join(", ");
+    // A surrogate-key table was emptied first: a conflict is a duplicate row and must fail.
+    const onConflict = hasBaselineSurrogateKey(table)
+      ? ""
+      : updates.length > 0
+        ? ` ON CONFLICT DO UPDATE SET ${updates}`
+        : " ON CONFLICT DO NOTHING";
     yield* sql.unsafe(
       `INSERT INTO ${table} (${columns.map(quoteIdentifier).join(", ")}) ` +
-        `VALUES (${valueExpressions.join(", ")})` +
-        (updates.length > 0 ? ` ON CONFLICT DO UPDATE SET ${updates}` : " ON CONFLICT DO NOTHING"),
+        `VALUES (${valueExpressions.join(", ")})${onConflict}`,
       values,
     );
   });
@@ -88,6 +94,8 @@ const insertRow = (
  * Pass 1 hashes every row, validates thread ownership and records primary keys in a temp
  * table. A hash mismatch, malformed row or duplicate key fails here, before anything is
  * deleted. Pass 2 deletes rows that are not in the baseline and upserts the baseline rows.
+ * Tables whose surrogate key baselines leave out (`projection_turns`) are emptied and
+ * re-inserted instead, with SQLite assigning the key; a duplicate there fails the insert.
  * Everything runs in one transaction, so any failure leaves the projections untouched.
  */
 export const restoreBaselinePayload = (
@@ -113,7 +121,10 @@ export const restoreBaselinePayload = (
         yield* resetBaselineRestoreKeys(sql);
 
         for (const table of PROJECTION_BASELINE_TABLES) {
-          const primaryKey = primaryKeyColumns(tableColumns.get(table)!);
+          // No key to record when baselines leave the primary key out: the table is replaced.
+          const primaryKey = hasBaselineSurrogateKey(table)
+            ? null
+            : primaryKeyColumns(tableColumns.get(table)!);
           let keyCount = 0;
           hasher.beginTable(table);
           yield* forEachBaselinePayloadPage(source, table, (rows) =>
@@ -124,8 +135,12 @@ export const restoreBaselinePayload = (
                 try: () =>
                   decoded
                     .filter((row) => filter.accept(table, row))
-                    .filter((row) => primaryKey.every((column) => Object.hasOwn(row, column.name)))
-                    .map((row) => primaryKey.map((column) => row[column.name])),
+                    .filter(
+                      (row) =>
+                        primaryKey !== null &&
+                        primaryKey.every((column) => Object.hasOwn(row, column.name)),
+                    )
+                    .map((row) => primaryKey!.map((column) => row[column.name])),
                 catch: decodeError("decode"),
               });
               keyCount += keys.length;

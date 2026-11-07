@@ -12,16 +12,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { analyzeServerChildLog, analyzeTrace } from "./connection-health-report.lib.ts";
-
-const argValue = (flag: string) => {
-  const index = process.argv.indexOf(flag);
-  return index === -1 ? undefined : process.argv[index + 1];
-};
+import { argValue, formatLabeledRows, hasFlag } from "./lib/report-cli.ts";
 
 const logsDir =
   argValue("--logs") ?? join(homedir(), "Library", "Application Support", "bigbud", "logs");
 const traceDir = argValue("--trace") ?? join(homedir(), ".bigbud", "userdata", "logs");
-const currentOnly = process.argv.includes("--current");
+const currentOnly = hasFlag("--current");
 
 const filesFor = (dir: string, base: string) => {
   if (!existsSync(dir)) return [];
@@ -48,11 +44,14 @@ const rows: Array<readonly [string, number, string]> = [
   ["SQL spans over 10 s", trace.sqlSpansOverTenSeconds, "falling"],
   ["Socket reconnects", trace.reconnects, "info"],
   ["Reconnects without a delivery session", trace.reconnectsWithoutDeliverySession, "0"],
+  ["Starved event-log maintenance warnings", trace.maintenanceStarvedWarnings, "0"],
+  ["Maintenance batches over 50 ms", trace.maintenanceSlowBatches, "0"],
 ];
 
 console.log(`server-child logs: ${childLogs.length} file(s) in ${logsDir}`);
 console.log(`trace files:       ${traces.length} file(s) in ${traceDir}\n`);
-const width = Math.max(...rows.map(([label]) => label.length));
-for (const [label, value, target] of rows) {
-  console.log(`${label.padEnd(width)}  ${String(value).padStart(8)}   target ${target}`);
+for (const line of formatLabeledRows(
+  rows.map(([label, value, target]) => [label, value, `target ${target}`] as const),
+)) {
+  console.log(line);
 }

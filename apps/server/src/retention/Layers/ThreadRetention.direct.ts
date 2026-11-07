@@ -37,7 +37,10 @@ type DirectThreadRetentionInput = {
     Partial<
       Pick<
         ThreadRetentionRepositoryShape,
-        "readCleanupState" | "readResourceSummary" | "countOutstandingItems"
+        | "readCleanupState"
+        | "readResourceSummary"
+        | "countOutstandingItems"
+        | "recordRunExclusionSummary"
       >
     >;
   readonly orchestration: OrchestrationEngineShape;
@@ -214,6 +217,26 @@ export function runDirectThreadRetentionCoordinated(
         if (outstanding.length === 0) break;
         yield* Effect.forEach(outstanding, executeItem, { concurrency: 1, discard: true });
       }
+    }
+
+    // Once per run, before this run deletes anything: why the selector skips old threads.
+    if (input.run.exclusionSummary == null && input.repository.recordRunExclusionSummary) {
+      yield* input.repository
+        .recordRunExclusionSummary({
+          runId: input.run.runId,
+          cutoffAt,
+          selectionMode: input.run.selectionMode ?? "legacy-subtree",
+          ageCriterion: input.run.ageCriterion ?? "last-conversation-activity",
+          updatedAt: new Date(now()).toISOString(),
+        })
+        .pipe(
+          Effect.catch((error) =>
+            Effect.logWarning("thread retention exclusion summary was not recorded", {
+              runId: input.run.runId,
+              detail: String(error),
+            }),
+          ),
+        );
     }
 
     while (true) {

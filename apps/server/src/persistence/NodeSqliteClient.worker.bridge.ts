@@ -66,6 +66,18 @@ export async function waitForNodeSqliteWorkersIdle(
   }
 }
 
+/**
+ * Statements queued on, or running in, the busiest read-write worker; 0 without one. Background
+ * maintenance reads it as its load signal: every statement shares that single connection.
+ */
+export function nodeSqliteWriterQueueDepth(): number {
+  let depth = 0;
+  for (const bridge of activeBridges) {
+    if (!bridge.readOnly) depth = Math.max(depth, bridge.pendingCount);
+  }
+  return depth;
+}
+
 /** Observers of a bridge failure the caller did not ask for. */
 export interface NodeSqliteWorkerBridgeHooks {
   readonly onUnexpectedFailure?: (failure: NodeSqliteWorkerBridgeFailure) => void;
@@ -78,6 +90,7 @@ export interface NodeSqliteWorkerBridgeFailure {
 
 export class NodeSqliteWorkerBridge {
   private readonly worker: Worker;
+  readonly readOnly: boolean;
   private opened = false;
   private closing = false;
   private readonly pending = new Map<number, (response: NodeSqliteWorkerResult) => void>();
@@ -93,6 +106,7 @@ export class NodeSqliteWorkerBridge {
     private readonly timeouts: NodeSqliteWorkerBridgeTimeouts = DEFAULT_NODE_SQLITE_WORKER_TIMEOUTS,
     private readonly hooks: NodeSqliteWorkerBridgeHooks = {},
   ) {
+    this.readOnly = options.readonly;
     this.worker = new Worker(entry, { workerData: options });
     this.exited = new Promise((resolve) => this.worker.once("exit", () => resolve()));
     activeBridges.add(this);

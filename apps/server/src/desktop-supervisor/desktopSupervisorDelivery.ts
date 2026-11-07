@@ -130,6 +130,15 @@ export class DesktopSupervisorDeliveryCoordinator implements DesktopSupervisorDe
     return !this.closed && hasOpenDeliveryConsumer(this.authoritativeSessions.values());
   }
 
+  lowestAcknowledgedSequence(): number | null {
+    let oldest: number | null = null;
+    for (const session of this.authoritativeSessions.values()) {
+      if (session.closed) continue;
+      oldest = Math.min(oldest ?? session.acknowledgedSequence, session.acknowledgedSequence);
+    }
+    return oldest;
+  }
+
   get retainedConsumerGenerationCount(): number {
     return this.generations.size;
   }

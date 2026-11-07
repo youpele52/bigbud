@@ -22,10 +22,12 @@ import {
   OrchestrationThreadPurpose,
 } from "./orchestration.thread";
 import { ThreadOrganizationField } from "./orchestration.organization";
+import { SIDEBAR_THREAD_SORT_ORDERS } from "../constants/settings.constant";
 
 export const STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT = 1;
 export const STARTUP_PROJECT_CATALOG_MAX_LIMIT = 20;
-export const PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT = 5;
+/** Sidebar project pages match the 4-row preview; "Show 4 more" fetches the next page. */
+export const PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT = 4;
 export const PROJECT_THREAD_SUMMARY_MAX_LIMIT = 50;
 export const SIDEBAR_THREAD_CATALOG_RECENT_LIMIT = 5;
 export const SIDEBAR_THREAD_CATALOG_MAX_RECENT_MEMBERS = SIDEBAR_THREAD_CATALOG_RECENT_LIMIT * 2;
@@ -96,9 +98,19 @@ export type ProjectCatalogCursor = typeof ProjectCatalogCursor.Type;
 export const ProjectCatalogScope = Schema.Literals(["local", "remote"]);
 export type ProjectCatalogScope = typeof ProjectCatalogScope.Type;
 
+/**
+ * The displayed sidebar order: `updated_at` is the latest user message (falling back to creation),
+ * `created_at` is creation time. Both page by `(sortKey DESC, threadId DESC)`.
+ */
+export const ThreadSummarySortOrder = Schema.Literals(SIDEBAR_THREAD_SORT_ORDERS);
+export type ThreadSummarySortOrder = typeof ThreadSummarySortOrder.Type;
+
 export const ThreadSummaryCursor = Schema.Struct({
   updatedAt: IsoDateTime,
   threadId: ThreadId,
+  /** Sort key of the last row for display-ordered pages; absent on legacy `updated_at` pages. */
+  sortKey: Schema.optional(IsoDateTime),
+  sortOrder: Schema.optional(ThreadSummarySortOrder),
 });
 export type ThreadSummaryCursor = typeof ThreadSummaryCursor.Type;
 
@@ -124,6 +136,8 @@ export const GetProjectThreadSummariesInput = Schema.Struct({
   limit: Schema.optional(PositiveInt),
   priorityThreadId: Schema.optional(ThreadId),
   cursor: Schema.optional(ThreadSummaryCursor),
+  /** Display order. Absent keeps the legacy `updated_at`-column order for older callers. */
+  sortOrder: Schema.optional(ThreadSummarySortOrder),
 });
 export type GetProjectThreadSummariesInput = typeof GetProjectThreadSummariesInput.Type;
 

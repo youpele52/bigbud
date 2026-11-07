@@ -4,7 +4,6 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetCommandOutcomeError,
-  OrchestrationGetSnapshotError,
   OrchestrationGetSidebarThreadCatalogError,
   OrchestrationGetProjectThreadSummariesError,
   OrchestrationGetStartupProjectCatalogError,
@@ -33,6 +32,8 @@ import { makeThinkingActivityDeltaStream } from "./wsStreams";
 import { makeOrchestrationDeliveryStream } from "./wsOrchestrationDelivery.ts";
 import { makeThreadRetentionWsRpcHandlers } from "./wsRpcHandlers.retention.ts";
 import { makeOrganizationWsRpcHandlers } from "./wsRpcHandlers.organization.ts";
+import { makeDetailPagingWsRpcHandlers } from "./wsRpcHandlers.detailPaging.ts";
+import { makeBranchCopyWsRpcHandlers } from "./wsRpcHandlers.branchCopy.ts";
 import {
   getOrchestrationCommandOutcome,
   resolveOrchestrationThreadOwnership,
@@ -163,20 +164,6 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
             () =>
               new OrchestrationGetCommandOutcomeError({
                 message: "Failed to resolve command outcome",
-              }),
-          ),
-        ),
-        { "rpc.aggregate": "orchestration" },
-      ),
-    [ORCHESTRATION_WS_METHODS.getSnapshot]: (_input: unknown) =>
-      observeRpcEffect(
-        ORCHESTRATION_WS_METHODS.getSnapshot,
-        context.projectionSnapshotQuery.getSnapshot().pipe(
-          Effect.mapError(
-            (cause) =>
-              new OrchestrationGetSnapshotError({
-                message: "Failed to load orchestration snapshot",
-                cause,
               }),
           ),
         ),
@@ -322,6 +309,8 @@ export function makeWsRpcOrchestrationServerHandlers(context: WsRpcContext) {
     ...makeServerWsRpcHandlers(context),
     ...makeThreadRetentionWsRpcHandlers(context),
     ...makeOrganizationWsRpcHandlers(context),
+    ...makeDetailPagingWsRpcHandlers(context),
+    ...makeBranchCopyWsRpcHandlers(context),
     ...makeWorkspaceWsRpcHandlers(context, toProjectDirectoryWatchError),
   };
 }

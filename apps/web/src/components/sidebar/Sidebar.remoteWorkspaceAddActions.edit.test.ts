@@ -8,40 +8,27 @@ import {
 } from "./Sidebar.remoteWorkspaceAddActions.edit";
 
 describe("collectRemoteWorkspaceWorktreePaths", () => {
-  it("returns unique worktrees for live project threads", () => {
+  it("returns unique, non-blank worktrees from the bounded project read", () => {
     expect(
-      collectRemoteWorkspaceWorktreePaths(
-        {
-          projects: [],
-          threads: [
-            { projectId: "project-1", worktreePath: "/srv/worktree-a", deletedAt: null },
-            { projectId: "project-1", worktreePath: "/srv/worktree-a", deletedAt: null },
-            { projectId: "project-1", worktreePath: "/srv/deleted", deletedAt: "2026-01-01" },
-            { projectId: "project-2", worktreePath: "/srv/other", deletedAt: null },
-          ],
-        } as never,
-        "project-1" as never,
-      ),
-    ).toEqual(["/srv/worktree-a"]);
+      collectRemoteWorkspaceWorktreePaths({
+        worktreePaths: ["/srv/worktree-a", " /srv/worktree-a ", "  ", "/srv/worktree-b"],
+      }),
+    ).toEqual(["/srv/worktree-a", "/srv/worktree-b"]);
   });
 
   it("verifies retained worktrees before dispatching the revision-guarded command", async () => {
+    const getProjectWorktreePaths = vi.fn().mockResolvedValue({
+      projectId: "project-1",
+      worktreePaths: ["/srv/worktree-a"],
+      truncated: false,
+    });
     const verifyExecutionTarget = vi.fn().mockResolvedValue({ message: "verified" });
     const dispatchCommand = vi.fn().mockResolvedValue({ sequence: 1 });
     const error = await reconfigureRemoteWorkspaceWithApi({
       api: {
         server: { verifyExecutionTarget },
         orchestration: {
-          getSnapshot: vi.fn().mockResolvedValue({
-            projects: [],
-            threads: [
-              {
-                projectId: "project-1",
-                worktreePath: "/srv/worktree-a",
-                deletedAt: null,
-              },
-            ],
-          }),
+          getProjectWorktreePaths,
           dispatchCommand,
         },
       } as never,
@@ -70,6 +57,7 @@ describe("collectRemoteWorkspaceWorktreePaths", () => {
     });
 
     expect(error).toBeNull();
+    expect(getProjectWorktreePaths).toHaveBeenCalledWith({ projectId: "project-1" });
     expect(verifyExecutionTarget).toHaveBeenCalledWith({
       executionTargetId: "ssh:host=devbox&user=alice&port=22&auth=ssh-key&transport=agent",
       cwd: "/srv/worktree-a",
@@ -89,9 +77,10 @@ describe("collectRemoteWorkspaceWorktreePaths", () => {
       api: {
         server: { verifyExecutionTarget: vi.fn().mockRejectedValue(new Error("missing worktree")) },
         orchestration: {
-          getSnapshot: vi.fn().mockResolvedValue({
-            projects: [],
-            threads: [{ projectId: "project-1", worktreePath: "/srv/worktree-a", deletedAt: null }],
+          getProjectWorktreePaths: vi.fn().mockResolvedValue({
+            projectId: "project-1",
+            worktreePaths: ["/srv/worktree-a"],
+            truncated: false,
           }),
           dispatchCommand,
         },
@@ -125,10 +114,56 @@ describe("collectRemoteWorkspaceWorktreePaths", () => {
     expect(dispatchCommand).not.toHaveBeenCalled();
   });
 
+  it("refuses to verify a capped worktree list instead of verifying a subset", async () => {
+    const verifyExecutionTarget = vi.fn();
+    const dispatchCommand = vi.fn();
+    const error = await reconfigureRemoteWorkspaceWithApi({
+      api: {
+        server: { verifyExecutionTarget },
+        orchestration: {
+          getProjectWorktreePaths: vi.fn().mockResolvedValue({
+            projectId: "project-1",
+            worktreePaths: ["/srv/worktree-a"],
+            truncated: true,
+          }),
+          dispatchCommand,
+        },
+      } as never,
+      projectId: "project-1" as never,
+      title: "Remote project",
+      expectedUpdatedAt: "2026-01-01T00:00:00.000Z",
+      draft: {
+        displayName: "Remote project",
+        host: "devbox",
+        username: "alice",
+        port: "22",
+        workspaceRoot: "/srv/project",
+        sshKeyPath: "",
+        authMode: "ssh-key",
+        remoteTransport: "agent",
+        providerRuntimeLocation: "local",
+        connectionSource: "manual",
+        inactiveConnection: {
+          host: "",
+          username: "",
+          port: "",
+          sshKeyPath: "",
+          authMode: "ssh-key",
+        },
+      },
+    });
+
+    expect(error).toContain("more than 500 worktrees");
+    expect(verifyExecutionTarget).not.toHaveBeenCalled();
+    expect(dispatchCommand).not.toHaveBeenCalled();
+  });
+
   it("connects a disconnected target before verifying, and reports a refused connect", async () => {
     const target = "ssh:host=devbox&user=alice&port=22&auth=ssh-key&transport=agent";
     useRemoteAccessStore.setState({ disconnectedExecutionTargetIds: { [target]: true } });
-    const getSnapshot = vi.fn().mockResolvedValue({ projects: [], threads: [] });
+    const getProjectWorktreePaths = vi
+      .fn()
+      .mockResolvedValue({ projectId: "project-1", worktreePaths: [], truncated: false });
     const connectExecutionTarget = vi
       .fn()
       .mockRejectedValueOnce(new Error("Connect refused."))
@@ -137,7 +172,10 @@ describe("collectRemoteWorkspaceWorktreePaths", () => {
       reconfigureRemoteWorkspaceWithApi({
         api: {
           server: { connectExecutionTarget, verifyExecutionTarget: vi.fn() },
-          orchestration: { getSnapshot, dispatchCommand: vi.fn().mockResolvedValue({}) },
+          orchestration: {
+            getProjectWorktreePaths,
+            dispatchCommand: vi.fn().mockResolvedValue({}),
+          },
         } as never,
         projectId: "project-1" as never,
         title: "Remote project",
@@ -164,7 +202,7 @@ describe("collectRemoteWorkspaceWorktreePaths", () => {
       });
 
     await expect(reconfigure()).resolves.toBe("Connect refused.");
-    expect(getSnapshot).not.toHaveBeenCalled();
+    expect(getProjectWorktreePaths).not.toHaveBeenCalled();
     expect(useRemoteAccessStore.getState().disconnectedExecutionTargetIds[target]).toBe(true);
 
     await expect(reconfigure()).resolves.toBeNull();

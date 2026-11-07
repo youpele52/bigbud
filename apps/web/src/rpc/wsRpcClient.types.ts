@@ -1,4 +1,7 @@
 import type { OrganizationRpcClient } from "./wsRpcClient.organization.ts";
+import type { BranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
+import type { DetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
+import type { DatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
 import {
   type GitActionProgressEvent,
   type GitGetCommitDetailsInput,
@@ -244,7 +247,7 @@ export interface WsRpcClient {
       typeof WS_METHODS.gitPreparePullRequestThread
     >;
   };
-  readonly server: {
+  readonly server: DatabaseCompactionRpcMethods & {
     readonly ping: RpcUnaryNoArgMethod<typeof WS_METHODS.serverPing>;
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
     readonly refreshProviders: RpcUnaryNoArgMethod<typeof WS_METHODS.serverRefreshProviders>;
@@ -340,50 +343,52 @@ export interface WsRpcClient {
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   } & WsRpcMonitorMethods &
     WsRpcRemoteAgentMethods;
-  readonly orchestration: {
-    readonly getSidebarThreadCatalog: RpcUnaryMethod<
-      typeof ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog
-    >;
-    readonly getStartupProjectCatalog: RpcUnaryMethod<
-      typeof ORCHESTRATION_WS_METHODS.getStartupProjectCatalog
-    >;
-    readonly searchConversationMessages: RpcUnaryMethod<
-      typeof ORCHESTRATION_WS_METHODS.searchConversationMessages
-    >;
-    readonly getProjectThreadSummaries: RpcUnaryMethod<
-      typeof ORCHESTRATION_WS_METHODS.getProjectThreadSummaries
-    >;
-    readonly getOrganizationThreadSummaries: RpcUnaryMethod<
-      typeof ORCHESTRATION_WS_METHODS.getOrganizationThreadSummaries
-    >;
-    readonly getSelectedThreadDetail: RpcUnaryMethod<
-      typeof ORCHESTRATION_WS_METHODS.getSelectedThreadDetail
-    >;
-    readonly getThreadOwnership: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getThreadOwnership>;
-    readonly getCommandOutcome: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getCommandOutcome>;
-    readonly getSnapshot: RpcUnaryNoArgMethod<typeof ORCHESTRATION_WS_METHODS.getSnapshot>;
-    readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
-    readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
-    readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
-    readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
-    readonly acknowledgeDelivery: RpcUnaryMethod<
-      typeof ORCHESTRATION_WS_METHODS.acknowledgeDelivery
-    >;
-    readonly acknowledgeDeliveryBaseline: RpcUnaryMethod<
-      typeof ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline
-    >;
-    readonly onDomainEvent: (
-      input: () => OrchestrationDeliverySubscriptionInput,
-      listener: Parameters<
-        RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>
-      >[0],
-      options?: StreamSubscriptionOptions,
-    ) => () => void;
-    readonly onThinkingDelta: (
-      listener: (event: ThinkingActivityDeltaEvent) => void,
-      options?: StreamSubscriptionOptions,
-    ) => () => void;
-  };
+  readonly orchestration: DetailPagingRpcMethods &
+    BranchCopyRpcMethods & {
+      readonly getSidebarThreadCatalog: RpcUnaryMethod<
+        typeof ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog
+      >;
+      readonly getStartupProjectCatalog: RpcUnaryMethod<
+        typeof ORCHESTRATION_WS_METHODS.getStartupProjectCatalog
+      >;
+      readonly searchConversationMessages: RpcUnaryMethod<
+        typeof ORCHESTRATION_WS_METHODS.searchConversationMessages
+      >;
+      readonly getProjectThreadSummaries: RpcUnaryMethod<
+        typeof ORCHESTRATION_WS_METHODS.getProjectThreadSummaries
+      >;
+      readonly getOrganizationThreadSummaries: RpcUnaryMethod<
+        typeof ORCHESTRATION_WS_METHODS.getOrganizationThreadSummaries
+      >;
+      readonly getSelectedThreadDetail: RpcUnaryMethod<
+        typeof ORCHESTRATION_WS_METHODS.getSelectedThreadDetail
+      >;
+      readonly getThreadOwnership: RpcUnaryMethod<
+        typeof ORCHESTRATION_WS_METHODS.getThreadOwnership
+      >;
+      readonly getCommandOutcome: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getCommandOutcome>;
+      readonly dispatchCommand: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.dispatchCommand>;
+      readonly getTurnDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getTurnDiff>;
+      readonly getFullThreadDiff: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.getFullThreadDiff>;
+      readonly replayEvents: RpcUnaryMethod<typeof ORCHESTRATION_WS_METHODS.replayEvents>;
+      readonly acknowledgeDelivery: RpcUnaryMethod<
+        typeof ORCHESTRATION_WS_METHODS.acknowledgeDelivery
+      >;
+      readonly acknowledgeDeliveryBaseline: RpcUnaryMethod<
+        typeof ORCHESTRATION_WS_METHODS.acknowledgeDeliveryBaseline
+      >;
+      readonly onDomainEvent: (
+        input: () => OrchestrationDeliverySubscriptionInput,
+        listener: Parameters<
+          RpcStreamMethod<typeof WS_METHODS.subscribeOrchestrationDomainEvents>
+        >[0],
+        options?: StreamSubscriptionOptions,
+      ) => () => void;
+      readonly onThinkingDelta: (
+        listener: (event: ThinkingActivityDeltaEvent) => void,
+        options?: StreamSubscriptionOptions,
+      ) => () => void;
+    };
 }
 import type {
   ServerOpencodeV2ThreadToolsSetupInput,

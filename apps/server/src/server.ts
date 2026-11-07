@@ -1,6 +1,4 @@
-// TODO: Split by concern when this file is next touched.
 import { Effect, Layer } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
 
 import { ServerConfig } from "./startup/config";
@@ -13,22 +11,9 @@ import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/
 import { withRemoteExecutionTargetDisconnects } from "./persistence/Layers/RemoteExecutionTargetDisconnects.ts";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
 import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
-import { makeProviderLogSecurity } from "./server.providerLogs.ts";
 import { withEngineTerminal } from "./server.engineTerminal.ts";
-import { ProviderSessionDirectoryLive } from "./provider/Layers/ProviderSessionDirectory";
-import { ProviderSessionRuntimeRepositoryLive } from "./persistence/Layers/ProviderSessionRuntime";
-import { ProviderTurnLivenessRepositoryLive } from "./persistence/Layers/ProviderTurnLiveness";
-import { makeCodexAdapterLive } from "./provider/Layers/Codex/Adapter";
-import { makeClaudeAdapterLive } from "./provider/Layers/Claude/Adapter";
-import { OptionalProviderCompositionLive } from "./provider/Layers/OptionalProviderComposition.ts";
 import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
-import { makeCopilotAdapterLive } from "./provider/Layers/Copilot/Adapter";
-import { makeCursorAdapterLive } from "./provider/Layers/Cursor/Adapter";
-import { makeDevinAdapterLive } from "./provider/Layers/Devin/Adapter";
 import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerManager";
-import { makePiAdapterLive } from "./provider/Layers/Pi/Adapter";
-import { makeProviderAdapterRegistryLive } from "./provider/Layers/ProviderAdapterRegistry";
-import { makeProviderServiceLive } from "./provider/Layers/ProviderService";
 import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEngine";
 import { CommandGatewayLive } from "./command-gateway/Layers/CommandGateway.ts";
 import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
@@ -58,16 +43,7 @@ import { CheckpointReactorLive } from "./orchestration/Layers/CheckpointReactor"
 import { ThreadWatchReactorLive } from "./orchestration/Layers/ThreadWatchReactor";
 import { ThreadOrganizationReactorLive } from "./orchestration/Layers/ThreadOrganizationReactor.ts";
 import { ThreadToolModelSourcesLive } from "./orchestration-tools/ThreadOrchestrationTools.modelSources.ts";
-import { makeProviderRegistryLive } from "./provider/Layers/ProviderRegistry";
 import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
-import {
-  OptionalProviderRegistrations,
-  type OptionalProviderRegistration,
-} from "./provider/ProviderRegistration";
-import {
-  isProviderRegistered,
-  makeProviderCapabilitiesResolver,
-} from "./provider/providerCapabilities";
 import { ServerSettingsLive } from "./ws/serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
 import { makeConfiguredRemoteAgentLayers } from "./remote-agent/remoteAgentServerLayer.ts";
@@ -82,7 +58,6 @@ import { ProjectionThreadWatchRepositoryLive } from "./persistence/Layers/Projec
 import { LearningJobRepositoryLive } from "./persistence/Layers/LearningJobs";
 import { SkillChangeProposalRepositoryLive } from "./persistence/Layers/SkillChangeProposals";
 import { LearningReactorLive } from "./orchestration/Layers/LearningReactor";
-import { ClaudeProviderRefreshReactorLive } from "./provider/Layers/ClaudeProviderRefreshReactor";
 import { MemoryStoreLive } from "./learning/Layers/MemoryStore";
 import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
 import { ThreadRetentionRepositoryLive } from "./persistence/Layers/ThreadRetentionRepository.ts";
@@ -101,6 +76,9 @@ import { DirectResourceCleanupExecutorLive } from "./deletion/Layers/DirectResou
 import { DirectResourceCleanupRecoveryLive } from "./deletion/Layers/DirectResourceCleanupRecovery.ts";
 import * as Recovery from "./server.recoveryLayers.ts";
 import { ProcessLedgerLive } from "./process-ledger/Layers/ProcessLedger.ts";
+import { makeProviderInfrastructureLayerLive } from "./server.providerLayers.ts";
+import { BackgroundMaintenanceLayerLive } from "./server.maintenanceLayers.ts";
+import { ThreadBranchCopyLive } from "./orchestration/Layers/ThreadBranchCopy.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
     if (typeof Bun !== "undefined") {
@@ -190,6 +168,8 @@ const OrchestrationLayerLive = Layer.mergeAll(
   OrchestrationCommandLayerLive,
 );
 
+const ThreadBranchCopyLayerLive = ThreadBranchCopyLive.pipe(Layer.provide(OrchestrationLayerLive));
+
 const ThreadRetentionLayerLive = ThreadRetentionLive.pipe(
   Layer.provide(OrchestrationLayerLive),
   Layer.provide(ServerSettingsLive),
@@ -200,89 +180,9 @@ const CheckpointingLayerLive = Layer.empty.pipe(
   Layer.provideMerge(CheckpointStoreLive),
 );
 
-const makeProviderLayerLive = (
-  optionalRegistrations: ReadonlyArray<OptionalProviderRegistration>,
-) =>
-  Layer.unwrap(
-    Effect.gen(function* () {
-      const { baseDir, devUrl, providerEventLogPath } = yield* ServerConfig;
-      const sql = yield* SqlClient.SqlClient;
-      const { canonicalEventLogger, nativeEventLogger, settleThreadLogs } =
-        yield* makeProviderLogSecurity({ baseDir, devUrl, providerEventLogPath, sql });
-      const providerSessionDirectoryLayer = ProviderSessionDirectoryLive.pipe(
-        Layer.provide(ProviderSessionRuntimeRepositoryLive),
-      );
-      const codexAdapterLayer = makeCodexAdapterLive(
-        nativeEventLogger ? { nativeEventLogger } : undefined,
-      );
-      const claudeAdapterLayer = makeClaudeAdapterLive(
-        nativeEventLogger ? { nativeEventLogger } : undefined,
-      );
-      const copilotAdapterLayer = makeCopilotAdapterLive(
-        nativeEventLogger ? { nativeEventLogger } : undefined,
-      );
-      const cursorAdapterLayer = makeCursorAdapterLive({
-        ...(nativeEventLogger ? { nativeEventLogger } : {}),
-        ...(configuredRemoteAgentLayers.ptyResolver
-          ? { remoteAgentPtyResolver: configuredRemoteAgentLayers.ptyResolver }
-          : {}),
-      });
-      const devinAdapterLayer = makeDevinAdapterLive({
-        ...(nativeEventLogger ? { nativeEventLogger } : {}),
-        ...(configuredRemoteAgentLayers.ptyResolver
-          ? { remoteAgentPtyResolver: configuredRemoteAgentLayers.ptyResolver }
-          : {}),
-      });
-      const piAdapterLayer = makePiAdapterLive(
-        nativeEventLogger ? { nativeEventLogger } : undefined,
-      );
-      const adapterRegistryLayer = makeProviderAdapterRegistryLive({
-        optionalRegistrations: optionalRegistrations.map((registration) => ({
-          provider: registration.provider,
-          service: registration.adapterService,
-        })),
-      }).pipe(
-        Layer.provide(codexAdapterLayer),
-        Layer.provide(claudeAdapterLayer),
-        Layer.provide(copilotAdapterLayer),
-        Layer.provide(cursorAdapterLayer),
-        Layer.provide(devinAdapterLayer),
-        Layer.provide(piAdapterLayer),
-        Layer.provideMerge(providerSessionDirectoryLayer),
-      );
-      const getProviderCapabilities = makeProviderCapabilitiesResolver(optionalRegistrations);
-      return makeProviderServiceLive({
-        ...(canonicalEventLogger ? { canonicalEventLogger } : {}),
-        settleThreadLogs,
-        getProviderCapabilities,
-        isProviderComposed: (provider) => isProviderRegistered(provider, optionalRegistrations),
-      }).pipe(
-        Layer.provideMerge(adapterRegistryLayer),
-        Layer.provide(providerSessionDirectoryLayer),
-        Layer.provide(ProviderTurnLivenessRepositoryLive),
-        Layer.provide(Recovery.RecoveryPersistenceLayerLive),
-      );
-    }),
-  );
-
-const ProviderInfrastructureLayerLive = Layer.unwrap(
-  Effect.gen(function* () {
-    const optionalRegistrations = yield* OptionalProviderRegistrations;
-    return ClaudeProviderRefreshReactorLive.pipe(
-      Layer.provideMerge(
-        Layer.mergeAll(
-          makeProviderLayerLive(optionalRegistrations),
-          makeProviderRegistryLive({
-            optionalRegistrations: optionalRegistrations.map((registration) => ({
-              provider: registration.provider,
-              service: registration.providerService,
-            })),
-          }),
-        ),
-      ),
-    );
-  }),
-).pipe(Layer.provide(OptionalProviderCompositionLive));
+const ProviderInfrastructureLayerLive = makeProviderInfrastructureLayerLive(
+  configuredRemoteAgentLayers,
+);
 
 // Disconnect flags load before any SqlClient consumer, including remote-agent startup work.
 const PersistenceLayerLive = withRemoteExecutionTargetDisconnects(SqlitePersistenceLayerLive);
@@ -313,11 +213,12 @@ const DirectResourceCleanupLayerLive = DirectResourceCleanupRecoveryLive.pipe(
 );
 
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
+  Layer.provideMerge(BackgroundMaintenanceLayerLive),
   // Core Services
   Layer.provideMerge(Layer.mergeAll(RemoteAgentLayerLive, CheckpointingLayerLive)),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(OrchestrationLayerLive),
-  Layer.provideMerge(ThreadRetentionLayerLive),
+  Layer.provideMerge(Layer.mergeAll(ThreadRetentionLayerLive, ThreadBranchCopyLayerLive)),
   Layer.provideMerge(ProjectionPersistenceLayerLive),
   Layer.provideMerge(DiscoveryRegistryLive),
   Layer.provideMerge(ProviderInfrastructureLayerLive),
