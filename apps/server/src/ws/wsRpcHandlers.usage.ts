@@ -15,7 +15,7 @@ import {
   prepareUsageAccounting,
   summarizeUsageAccounting,
 } from "./wsRpcHandlers.usage.accounting.ts";
-import { cachedUsageSummary } from "./wsRpcHandlers.usage.cache.ts";
+import { cachedUsageSummary, type UsageSummaryLookup } from "./wsRpcHandlers.usage.cache.ts";
 import {
   tallyUsageBucketShare,
   type UsageBucketShareTally,
@@ -214,42 +214,44 @@ function buildUsageSummary(
   };
 }
 
-export function makeWsRpcUsageHandlers(context: WsRpcContext) {
-  const loadSummary = cachedUsageSummary(context.projectionSnapshotQuery, (range) =>
-    Effect.gen(function* () {
-      const now = new Date();
-      const rangeStart = getRangeStart(range, now);
-      const tomorrow = new Date(now);
-      tomorrow.setUTCHours(24, 0, 0, 0);
-      const [rows, historyStatus, activeDays] = yield* Effect.all([
-        context.projectionSnapshotQuery.getUsageEntries(rangeStart?.toISOString() ?? null),
-        context.projectionSnapshotQuery.getUsageHistoryStatus(),
-        context.projectionSnapshotQuery.getUsageActiveDays(tomorrow.toISOString()),
-      ]);
-      const entries: UsageEntry[] = rows.flatMap((row) => {
-        const createdAt = parseValidDate(row.createdAt);
-        return createdAt
-          ? [
-              {
-                ...prepareUsageAccounting(row),
-                createdAt: createdAt.toISOString(),
-                createdAtMs: createdAt.getTime(),
-                turnKey: `${row.threadId}:${row.turnId ?? row.contributionId}`,
-                turnCount: 1,
-              },
-            ]
-          : [];
-      });
+/** Reads only from `query`, so the shared cache never keeps a connection's context alive. */
+const loadUsageSummary: UsageSummaryLookup = (query, range) =>
+  Effect.gen(function* () {
+    const now = new Date();
+    const rangeStart = getRangeStart(range, now);
+    const tomorrow = new Date(now);
+    tomorrow.setUTCHours(24, 0, 0, 0);
+    const [rows, historyStatus, activeDays] = yield* Effect.all([
+      query.getUsageEntries(rangeStart?.toISOString() ?? null),
+      query.getUsageHistoryStatus(),
+      query.getUsageActiveDays(tomorrow.toISOString()),
+    ]);
+    const entries: UsageEntry[] = rows.flatMap((row) => {
+      const createdAt = parseValidDate(row.createdAt);
+      return createdAt
+        ? [
+            {
+              ...prepareUsageAccounting(row),
+              createdAt: createdAt.toISOString(),
+              createdAtMs: createdAt.getTime(),
+              turnKey: `${row.threadId}:${row.turnId ?? row.contributionId}`,
+              turnCount: 1,
+            },
+          ]
+        : [];
+    });
 
-      return buildUsageSummary(
-        entries,
-        range,
-        historyStatus,
-        computeCurrentStreakDays(activeDays, now),
-        now,
-      );
-    }).pipe(Effect.mapError((cause) => toUsageError(cause, "Failed to load usage summary"))),
-  );
+    return buildUsageSummary(
+      entries,
+      range,
+      historyStatus,
+      computeCurrentStreakDays(activeDays, now),
+      now,
+    );
+  }).pipe(Effect.mapError((cause) => toUsageError(cause, "Failed to load usage summary")));
+
+export function makeWsRpcUsageHandlers(context: WsRpcContext) {
+  const loadSummary = cachedUsageSummary(context.projectionSnapshotQuery, loadUsageSummary);
   return {
     [WS_METHODS.serverGetUsageSummary]: (input: typeof ServerGetUsageSummaryInput.Type) =>
       observeRpcEffect(WS_METHODS.serverGetUsageSummary, loadSummary(input.range), {

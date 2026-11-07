@@ -50,6 +50,37 @@ it("shares in-flight work and reopen results across handlers, but separates rang
   );
 });
 
+it("keeps the shared lookup running when the caller that started it is interrupted", async () => {
+  const context = makeContext();
+  let calls = 0;
+  await Effect.runPromise(
+    Effect.gen(function* () {
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      vi.spyOn(context.projectionSnapshotQuery, "getUsageEntries").mockImplementation(() =>
+        Effect.gen(function* () {
+          calls++;
+          yield* Deferred.succeed(entered, undefined);
+          yield* Deferred.await(release);
+          return [];
+        }),
+      );
+      const first = makeWsRpcUsageHandlers(context)["server.getUsageSummary"];
+      const second = makeWsRpcUsageHandlers(context)["server.getUsageSummary"];
+      const a = yield* Effect.forkChild(first({ range: "30d" }));
+      yield* Deferred.await(entered);
+      const b = yield* Effect.forkChild(second({ range: "30d" }));
+      yield* Effect.yieldNow;
+      // The first window closes mid-query.
+      yield* Fiber.interrupt(a);
+      yield* Deferred.succeed(release, undefined);
+      const result = yield* Fiber.join(b);
+      expect(result.streakDays).toBe(0);
+      expect(calls).toBe(1);
+    }),
+  );
+});
+
 it("does not cache failed requests", async () => {
   const context = makeContext();
   let calls = 0;
