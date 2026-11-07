@@ -4,6 +4,14 @@ import { useOrganizationStatus } from "../../hooks/useOrganizationStatus";
 import { organizationPausedCopy } from "../../lib/organizationStatusCopy";
 import { persistServerSettings, useSettings } from "../../hooks/useSettings";
 import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPopup,
+  DialogTitle,
+} from "../ui/dialog";
 import { toastManager } from "../ui/toast";
 
 export function InyosiraStatus() {
@@ -11,7 +19,10 @@ export function InyosiraStatus() {
   const dismissed = useSettings((settings) => settings.inyosiraIntroductionDismissed);
   const enabled = useSettings((settings) => settings.inyosiraPresentTargetEnabled);
   const [saving, setSaving] = useState(false);
+  const [dismissedPaused, setDismissedPaused] = useState<string | null>(null);
   const paused = organizationPausedCopy(status);
+  // An explicit choice in Settings (on or off) is respected; only an unset choice asks.
+  const showIntroduction = status?.installation === "existing" && enabled == null && !dismissed;
   const decide = async (enable: boolean) => {
     setSaving(true);
     try {
@@ -20,39 +31,60 @@ export function InyosiraStatus() {
         // Enabling keeps any target already configured in Settings (default 7).
         ...(enable ? { inyosiraPresentTargetEnabled: true } : {}),
       });
+      setDismissedPaused(paused);
     } catch {
       toastManager.add({ type: "error", title: "Couldn't save Inyosira preference" });
     } finally {
       setSaving(false);
     }
   };
+  const close = () => {
+    if (saving) return;
+    if (showIntroduction) void decide(false);
+    else setDismissedPaused(paused);
+  };
   return (
-    <div className="mx-2 space-y-2 text-xs text-muted-foreground">
-      {paused ? <p role="status">{paused}</p> : null}
-      {/* An explicit choice in Settings (on or off) is respected; only an unset choice asks. */}
-      {status?.installation === "existing" && enabled == null && !dismissed ? (
-        <div className="rounded-md bg-muted/50 p-2" aria-label="Inyosira introduction">
-          <p>
-            Keep Present focused with a soft target of 7 threads. Working threads always stay
-            visible.
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1">
-            <Button size="xs" variant="outline" disabled={saving} onClick={() => void decide(true)}>
+    <Dialog
+      open={showIntroduction || (paused !== null && paused !== dismissedPaused)}
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+    >
+      <DialogPopup className="max-w-md" showCloseButton={!saving}>
+        <DialogHeader>
+          <DialogTitle>Inyosira</DialogTitle>
+          <DialogDescription className="space-y-3 text-sm">
+            {paused ? (
+              <span className="block" role="status">
+                {paused}
+              </span>
+            ) : null}
+            {showIntroduction ? (
+              <span className="block">
+                Keep Present focused with a soft target of 7 threads. Working threads always stay
+                visible.
+              </span>
+            ) : null}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Link
+            className="self-center rounded px-2 py-1 text-sm underline underline-offset-2"
+            to="/settings/general"
+            hash="inyosira"
+          >
+            Settings
+          </Link>
+          <Button size="sm" variant="secondary" disabled={saving} onClick={close}>
+            Not now
+          </Button>
+          {showIntroduction ? (
+            <Button size="sm" disabled={saving} onClick={() => void decide(true)}>
               Enable
             </Button>
-            <Link
-              className="rounded px-2 py-1 text-xs underline underline-offset-2"
-              to="/settings/general"
-              hash="inyosira"
-            >
-              Settings
-            </Link>
-            <Button size="xs" variant="ghost" disabled={saving} onClick={() => void decide(false)}>
-              Not now
-            </Button>
-          </div>
-        </div>
-      ) : null}
-    </div>
+          ) : null}
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
   );
 }
