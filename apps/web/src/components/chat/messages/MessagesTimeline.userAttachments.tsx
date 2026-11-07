@@ -1,5 +1,6 @@
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useNavigate } from "@tanstack/react-router";
-import { NewChatIcon } from "../../common/NewChatIcon";
 import type {
   ChatFileAttachment,
   ChatPathAttachment,
@@ -45,7 +46,13 @@ export function UserThreadReferenceChips(props: { threads: ReadonlyArray<ChatThr
             void navigate({ to: "/$threadId", params: { threadId: thread.threadId } });
           }}
         >
-          <NewChatIcon className="size-3 shrink-0 opacity-60" />
+          <HugeiconsIcon
+            aria-hidden="true"
+            className="size-3 shrink-0 opacity-60"
+            icon={Comment03Icon}
+            size={12}
+            strokeWidth={1.5}
+          />
           <span className="min-w-0 truncate text-[11px] text-muted-foreground/60">
             {thread.title}
           </span>

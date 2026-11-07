@@ -1,10 +1,11 @@
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { NewChatIcon } from "../../common/NewChatIcon";
 import { ComposerFilePreviews } from "./ComposerFilePreviews";
 
 describe("ComposerFilePreviews", () => {
-  it("uses the shared chat icon for thread-reference attachments", () => {
+  it("uses the Recents icon for thread-reference attachments", () => {
     const element = ComposerFilePreviews({
       composerFiles: [
         {
@@ -23,7 +24,8 @@ describe("ComposerFilePreviews", () => {
     });
     const chip = element?.props.children[0];
 
-    expect(chip.props.children[0].type).toBe(NewChatIcon);
+    expect(chip.props.children[0].type).toBe(HugeiconsIcon);
+    expect(chip.props.children[0].props.icon).toBe(Comment03Icon);
     expect(chip.props.children[0].props.className).toBe("size-3.5 shrink-0 opacity-70");
   });
 });
