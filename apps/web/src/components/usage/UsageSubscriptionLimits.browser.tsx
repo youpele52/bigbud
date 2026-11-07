@@ -139,20 +139,36 @@ describe("UsageSubscriptionLimits", () => {
       .toBeVisible();
   });
 
-  it.each([
-    ["pending", "Checking Claude subscription limits"],
-    ["error", "Couldn't load Claude subscription limits"],
-  ] as const)("renders the %s state", async (state, text) => {
-    await renderLimits(status(state));
-    await expect.element(page.getByText(text)).toBeInTheDocument();
-    const banner = page.getByText(text).element().closest('[data-slot="alert"]')!;
-    expect(
-      banner.classList.contains(
-        state === "pending" ? "border-l-info-foreground" : "border-l-destructive",
-      ),
-    ).toBe(true);
-    expect(banner.querySelectorAll(".animate-spin")).toHaveLength(state === "pending" ? 1 : 0);
-    expect(getComputedStyle(page.getByText(text).element()).textAlign).not.toBe("center");
+  it("loads pending providers independently and centers their logo in the reserved space", async () => {
+    const ready: ServerProviderUsageLimits = {
+      ...status("available"),
+      source: "codex-app-server",
+      windows: [{ id: "weekly", kind: "seven-day", label: "Weekly limit", utilization: 25 }],
+    };
+    await renderLimits(status("pending"), ready);
+    await expect.element(page.getByRole("progressbar", { name: "Weekly limit" })).toBeVisible();
+    const loader = page.getByRole("status");
+    await expect.element(loader).toHaveTextContent("Checking Claude subscription limits");
+    const bounds = loader.element().getBoundingClientRect();
+    expect(bounds.height).toBeGreaterThanOrEqual(160);
+    const logo = loader.element().querySelector(".animate-pulse-slow")!.getBoundingClientRect();
+    expect(logo.left + logo.width / 2).toBeCloseTo(bounds.left + bounds.width / 2, 0);
+    expect(logo.top + logo.height / 2).toBeCloseTo(bounds.top + bounds.height / 2, 0);
+    await mounted!.rerender(
+      <UsageSubscriptionLimits limits={[{ ...ready, source: "claude-agent-sdk" }, ready]} />,
+    );
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
+    expect(page.getByRole("progressbar", { name: "Weekly limit" }).all()).toHaveLength(2);
+  });
+
+  it("renders the error state", async () => {
+    await renderLimits(status("error"));
+    const text = page.getByText("Couldn't load Claude subscription limits");
+    await expect.element(text).toBeInTheDocument();
+    const banner = text.element().closest('[data-slot="alert"]')!;
+    expect(banner.classList.contains("border-l-destructive")).toBe(true);
+    expect(banner.querySelectorAll(".animate-spin")).toHaveLength(0);
+    expect(getComputedStyle(text.element()).textAlign).not.toBe("center");
   });
 
   it("renders retained bars and the last-success timestamp while stale", async () => {

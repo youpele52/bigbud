@@ -9,14 +9,17 @@ import { render } from "vitest-browser-react";
 
 const { getUsageSummary, state } = vi.hoisted(() => ({
   getUsageSummary: vi.fn(),
-  state: { providers: [] as ServerProvider[] },
+  state: { providers: [] as ServerProvider[], configLoaded: true },
 }));
 
 vi.mock("~/rpc/nativeApi", () => {
   const api = { server: { getUsageSummary } };
   return { readNativeApi: () => api, ensureNativeApi: () => api };
 });
-vi.mock("~/rpc/serverState", () => ({ useServerProviders: () => state.providers }));
+vi.mock("~/rpc/serverState", () => ({
+  useServerProviders: () => state.providers,
+  useServerConfig: () => (state.configLoaded ? {} : null),
+}));
 vi.mock("../standalone/StandaloneChatPageShell", () => ({
   StandaloneChatPageShell: ({ header, children }: { header: ReactNode; children: ReactNode }) => (
     <div>
@@ -71,6 +74,7 @@ let mounted: Awaited<ReturnType<typeof render>> | undefined;
 describe("Usage page heading hierarchy", () => {
   beforeEach(() => {
     getUsageSummary.mockReset().mockResolvedValue(summary);
+    state.configLoaded = true;
     state.providers = (
       [
         ["codex", "codex-app-server"],
@@ -103,9 +107,10 @@ describe("Usage page heading hierarchy", () => {
     document.body.innerHTML = "";
   });
 
-  it("keeps the full-page loader until the usage summary arrives, even with limits ready", async () => {
+  it("loads each summary card without blocking ready subscription limits", async () => {
     const providers = state.providers;
     state.providers = [];
+    state.configLoaded = false;
     let finish!: (value: ServerUsageSummaryResult) => void;
     getUsageSummary.mockReturnValue(
       new Promise<ServerUsageSummaryResult>((resolve) => {
@@ -113,16 +118,31 @@ describe("Usage page heading hierarchy", () => {
       }),
     );
     mounted = await render(<UsagePage />);
-    expect(document.querySelectorAll(".animate-pulse-slow")).toHaveLength(1);
+    expect(document.querySelectorAll(".animate-pulse-slow")).toHaveLength(5);
+    expect(document.body.textContent).not.toContain("Subscription limits unavailable");
     await expect.element(page.getByRole("button", { name: "30d", exact: true })).toBeVisible();
     state.providers = providers;
+    state.configLoaded = true;
     await mounted.rerender(<UsagePage />);
-    expect(document.querySelectorAll(".animate-pulse-slow")).toHaveLength(1);
-    expect(document.body.textContent).not.toContain("Loading usage summary");
-    finish(summary);
+    expect(document.querySelectorAll(".animate-pulse-slow")).toHaveLength(4);
     await expect
-      .element(page.getByRole("heading", { name: "Overview", exact: true }))
+      .element(page.getByRole("region", { name: "Codex subscription limits", exact: true }))
       .toBeVisible();
+    for (const name of ["Overview", "Activity", "Providers & models"]) {
+      await expect.element(page.getByRole("region", { name, exact: true })).toBeVisible();
+    }
+    const loaders = document.querySelectorAll('[data-slot="card"] [role="status"]');
+    expect(loaders).toHaveLength(4);
+    for (const loader of loaders) {
+      expect(loader.closest('[aria-busy="true"]')).toBeNull();
+      expect(loader.getBoundingClientRect().height).toBeGreaterThanOrEqual(176);
+      const logo = loader.querySelector(".animate-pulse-slow")!.getBoundingClientRect();
+      const bounds = loader.getBoundingClientRect();
+      expect(logo.left + logo.width / 2).toBeCloseTo(bounds.left + bounds.width / 2, 0);
+      expect(logo.top + logo.height / 2).toBeCloseTo(bounds.top + bounds.height / 2, 0);
+    }
+    finish(summary);
+    await expect.element(page.getByRole("heading", { name: "Total tokens" })).toBeVisible();
     expect(document.querySelector(".animate-pulse-slow")).toBeNull();
     await expect
       .element(page.getByRole("region", { name: "Codex subscription limits", exact: true }))
@@ -151,9 +171,7 @@ describe("Usage page heading hierarchy", () => {
 
   it("retains summary data through pending refresh and a failed refresh", async () => {
     mounted = await render(<UsagePage />);
-    await expect
-      .element(page.getByRole("heading", { name: "Overview", exact: true }))
-      .toBeVisible();
+    await expect.element(page.getByText("100", { exact: true }).first()).toBeVisible();
     let fail!: (error: Error) => void;
     getUsageSummary.mockReturnValueOnce(
       new Promise((_, reject) => {
@@ -161,17 +179,13 @@ describe("Usage page heading hierarchy", () => {
       }),
     );
     await page.getByRole("button", { name: "30d", exact: true }).click();
-    await expect
-      .element(page.getByRole("heading", { name: "Overview", exact: true }))
-      .toBeVisible();
+    await expect.element(page.getByText("100", { exact: true }).first()).toBeVisible();
     expect(document.querySelector(".animate-pulse-slow")).toBeNull();
     fail(new Error("usage offline"));
     await expect
       .element(page.getByRole("alert"))
       .toHaveTextContent("Showing last successful data.");
-    await expect
-      .element(page.getByRole("heading", { name: "Overview", exact: true }))
-      .toBeVisible();
+    await expect.element(page.getByText("100", { exact: true }).first()).toBeVisible();
   });
 
   it("ends the initial loader on failure and retries with another range", async () => {
@@ -182,9 +196,10 @@ describe("Usage page heading hierarchy", () => {
     expect(document.querySelector(".animate-pulse-slow")).toBeNull();
     getUsageSummary.mockResolvedValueOnce(summary);
     await page.getByRole("button", { name: "30d", exact: true }).click();
-    await expect
-      .element(page.getByRole("heading", { name: "Overview", exact: true }))
-      .toBeVisible();
+    await expect.element(page.getByText("100", { exact: true }).first()).toBeVisible();
+    expect(getUsageSummary).toHaveBeenLastCalledWith({ range: "30d" });
+    await expect.element(page.getByRole("alert")).not.toBeInTheDocument();
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
   });
 
   it("ignores a late summary from an obsolete range", async () => {
