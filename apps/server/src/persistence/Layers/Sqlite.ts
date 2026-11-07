@@ -57,6 +57,11 @@ const restrictDatabaseFiles = (dbPath: string) =>
 const migrateSchema = Effect.fn("migrateSchema")(function* (options: SqlitePersistenceOptions) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`PRAGMA journal_mode = WAL;`;
+  // In WAL mode NORMAL syncs only at checkpoints, not on every commit. Commits stay atomic and
+  // the database cannot corrupt; a power loss or OS crash (not an app crash) can lose the last
+  // commits before the next checkpoint. FULL's per-commit fsync caused the remaining 50 ms+
+  // worker stalls under maintenance. Per connection: only this writer connection commits.
+  yield* sql`PRAGMA synchronous = NORMAL;`;
   yield* sql`PRAGMA foreign_keys = ON;`;
   yield* sql`PRAGMA busy_timeout = 5000;`;
   yield* runMigrations(options.reportStartupProgress ? { onProgress: writeStartupProgress } : {});

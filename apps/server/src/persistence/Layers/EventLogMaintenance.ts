@@ -166,7 +166,6 @@ export const makeEventLogMaintenance = Effect.fn("makeEventLogMaintenance")(func
     rate: new DeletionRate(),
     startedAtMs: now(),
     inFlight: false,
-    receiptsBlockedUntilMs: null,
     baselineRefreshAtMs: null,
     ticks: 0,
   };

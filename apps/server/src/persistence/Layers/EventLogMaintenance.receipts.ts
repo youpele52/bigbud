@@ -1,8 +1,11 @@
 /**
  * Command-ledger pruning: receipts with their claims, and claims whose receipt is gone.
  *
- * - Receipts older than 7 days with `result_sequence` at or below
- *   `min(floor, retained_through_sequence)` are deleted with their claim in one transaction.
+ * - Receipts with `result_sequence` at or below `min(floor, retained_through_sequence)` are
+ *   deleted with their claim in one transaction: a receipt is kept no longer than the events it
+ *   produced. A retry that found the receipt but not its events could only fail ("did not
+ *   produce a delivery outcome"); once both are gone a retry runs as a new command. Events are
+ *   kept at least 24 hours (the hot window), so ordinary retries still see both.
  * - Orphan claims (no receipt) older than 7 days and older than the floor's first event are
  *   deleted on their own. A claim is written when command processing starts and its receipt
  *   when the command commits, so an orphan is a command that never committed (failed, or the
@@ -26,7 +29,8 @@ import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 
-export const RECEIPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+/** A claim with no receipt younger than this may still be in flight. */
+export const ORPHAN_CLAIM_MIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const changes = (sql: SqlClient.SqlClient) =>
   sql<{ readonly count: number }>`SELECT changes() AS "count"`.pipe(
@@ -48,11 +52,11 @@ export const keptCommandSql = (alias: string) => `
   OR EXISTS (SELECT 1 FROM thread_organization_operations AS operation
     WHERE operation.operation_id = ${alias}.command_id AND operation.status = 'prepared')`;
 
-/** Binds cursor, upper sequence, cutoff, limit. Exposed for the query-plan test. */
+/** Binds cursor, upper sequence, limit. Exposed for the query-plan test. */
 export const prunableReceiptsSql = (column: "rowid" | "command_id" | "result_sequence") => `
   SELECT receipt.${column} FROM orchestration_command_receipts AS receipt
   WHERE receipt.result_sequence > ? AND receipt.result_sequence <= ?
-    AND receipt.accepted_at < ? AND NOT (${keptCommandSql("receipt")})
+    AND NOT (${keptCommandSql("receipt")})
   ORDER BY receipt.result_sequence, receipt.rowid LIMIT ?`;
 
 export interface ReceiptPruneResult {
@@ -60,8 +64,6 @@ export interface ReceiptPruneResult {
   readonly claims: number;
   /** Everything at or below this sequence is pruned or deliberately kept. */
   readonly cursor: number;
-  /** Set when the next receipt in order is younger than 7 days: when it becomes prunable. */
-  readonly blockedUntilMs: number | null;
 }
 
 /** Prunes at most `limit` receipts after `cursor`, and their claims. */
@@ -72,19 +74,12 @@ export const pruneReceipts = Effect.fn("EventLogMaintenance.pruneReceipts")(
       readonly cursor: number;
       readonly throughSequence: number;
       readonly limit: number;
-      readonly nowMs: number;
     },
   ) {
     if (input.throughSequence <= input.cursor) {
-      return {
-        receipts: 0,
-        claims: 0,
-        cursor: input.cursor,
-        blockedUntilMs: null,
-      } satisfies ReceiptPruneResult;
+      return { receipts: 0, claims: 0, cursor: input.cursor } satisfies ReceiptPruneResult;
     }
     const limit = Math.max(1, Math.floor(input.limit));
-    const cutoff = new Date(input.nowMs - RECEIPT_RETENTION_MS).toISOString();
     return yield* sql.withTransaction(
       Effect.gen(function* () {
         // The `limit`-th receipt in order bounds the range, so no scan walks further than that.
@@ -94,7 +89,7 @@ export const pruneReceipts = Effect.fn("EventLogMaintenance.pruneReceipts")(
           ORDER BY result_sequence LIMIT 1 OFFSET ${limit - 1}
         `;
         const upper = edge?.sequence ?? input.throughSequence;
-        const params = [input.cursor, upper, cutoff, limit] as const;
+        const params = [input.cursor, upper, limit] as const;
         const [selected] = yield* sql.unsafe<{ readonly count: number; readonly last: number }>(
           `SELECT COUNT(*) AS "count", MAX(result_sequence) AS "last"
            FROM (${prunableReceiptsSql("result_sequence")})`,
@@ -117,26 +112,8 @@ export const pruneReceipts = Effect.fn("EventLogMaintenance.pruneReceipts")(
           receipts = yield* changes(sql);
         }
         // A full batch may have left prunable receipts in its last sequence.
-        const settled = count < limit ? upper : Math.max(input.cursor, (selected?.last ?? 0) - 1);
-        const [young] = yield* sql<{ readonly sequence: number; readonly acceptedAt: string }>`
-          SELECT result_sequence AS "sequence", accepted_at AS "acceptedAt"
-          FROM orchestration_command_receipts
-          WHERE result_sequence > ${input.cursor} AND result_sequence <= ${settled}
-            AND accepted_at >= ${cutoff}
-          ORDER BY result_sequence LIMIT 1
-        `;
-        if (young === undefined) {
-          return { receipts, claims, cursor: settled, blockedUntilMs: null };
-        }
-        const acceptedMs = Date.parse(young.acceptedAt);
-        return {
-          receipts,
-          claims,
-          cursor: Math.max(input.cursor, young.sequence - 1),
-          blockedUntilMs: Number.isFinite(acceptedMs)
-            ? acceptedMs + RECEIPT_RETENTION_MS
-            : input.nowMs + RECEIPT_RETENTION_MS,
-        } satisfies ReceiptPruneResult;
+        const cursor = count < limit ? upper : Math.max(input.cursor, (selected?.last ?? 0) - 1);
+        return { receipts, claims, cursor } satisfies ReceiptPruneResult;
       }),
     );
   },
@@ -169,7 +146,7 @@ export const pruneOrphanClaims = Effect.fn("EventLogMaintenance.pruneOrphanClaim
     },
   ) {
     const limit = Math.max(1, Math.floor(input.limit));
-    const retentionCutoff = new Date(input.nowMs - RECEIPT_RETENTION_MS).toISOString();
+    const retentionCutoff = new Date(input.nowMs - ORPHAN_CLAIM_MIN_AGE_MS).toISOString();
     return yield* sql.withTransaction(
       Effect.gen(function* () {
         const [floorEvent] = yield* sql<{ readonly occurredAt: string }>`

@@ -40,7 +40,7 @@ it.effect("keeps referenced receipts and prunes the rest together with their cla
     const now = new Date(NOW_MS).toISOString();
     yield* seedCompactableLog(sql, { count: 1_000, receipts: false });
     yield* seedReceipts(sql, { start: 1, end: 500 });
-    // Below the floor but only 2 days old.
+    // Below the floor and only 2 days old: their events are gone, so they go too.
     yield* seedReceipts(sql, { start: 501, end: 600, ageMs: 2 * DAY_MS });
     yield* seedReceipts(sql, { start: 601, end: 1_000 });
 
@@ -111,13 +111,12 @@ it.effect("keeps referenced receipts and prunes the rest together with their cla
     for (const commandId of kept) assert.isTrue(receipts.has(commandId), commandId);
     assert.isFalse(receipts.has("command-11"));
     assert.isFalse(receipts.has("command-500"));
-    // Receipts younger than 7 days and receipts above the floor stay. The cursor waits at the
-    // first young receipt; old ones after it go when a batch reaches them, or once it ages.
+    // A receipt is kept no longer than its events: everything up to the floor goes, whatever
+    // its age, and receipts above the floor stay.
     for (let sequence = 1; sequence <= 1_000; sequence += 1) {
       const commandId = `command-${sequence}`;
       if (kept.includes(commandId)) continue;
-      if (sequence <= 500) assert.isFalse(receipts.has(commandId), commandId);
-      else if (sequence <= 600 || sequence > 900) assert.isTrue(receipts.has(commandId), commandId);
+      assert.equal(receipts.has(commandId), sequence > 900, commandId);
     }
     // Claims go only with their receipt.
     assert.deepEqual([...claims].toSorted(), [...receipts].toSorted());

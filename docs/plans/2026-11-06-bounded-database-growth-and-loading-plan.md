@@ -397,7 +397,7 @@ All phases are implemented in the working tree and pass focused checks. Nothing 
 
 **Open:**
 
-- **Durability tradeoff:** commits still fsync under `synchronous = FULL`, and the remaining outliers over 50 ms are disk stalls. Switching to `NORMAL` would remove them but trades durability for every write. Not decided.
+- **Durability (decided 7 November, 2026):** the writer connection now runs `synchronous = NORMAL` (`Sqlite.ts`). In WAL mode commits stay atomic and the file cannot corrupt, but a power loss or OS crash can lose the commits since the last checkpoint. This removes the per-commit fsync behind the remaining 50 ms+ stalls.
 - **Live verification:** the scheduler loop, retention deletes and the Settings rows still need to run in the app. The health report should then be compared with the 2026-11-05 baseline.
 - **Restored baselines:** a verified baseline taken before migration 157 and restored after compaction would show legacy turns as "unknown".
 
@@ -409,7 +409,7 @@ These came out of the 7 November review and are deliberately not fixed yet.
 
 - **Fixed: who verifies baselines.** Only deletion paths used to capture and verify baselines, so a quiet stretch with no deletions left the newest baseline holding the floor. Event-log maintenance now asks the projection pipeline to verify one itself (`EventLogMaintenance.baselineRefresh.ts`) when the `baseline` holder keeps the floor at least 10,000 sequences below every other holder. It does this only on full-mode (idle) ticks, at most once an hour, and through the same single-flight coordinator the deletion paths use. A failure is logged and the tick keeps the old floor.
 
-- **Tool retries after events are compacted:** events can be removed after about 24 hours, but command receipts are kept for 7 days. Thread tools that use stable IDs (`ThreadOrchestrationTools.sendMessage.ts`, `HtmlRenderTool.ts`, `ThreadOrchestrationTools.organization.ts`) look up existing events by command ID before dispatching. A retry with the same invocation ID 1 to 7 days later finds the receipt but no events and fails with "did not produce a delivery outcome". After 7 days the receipt is gone too, so a retry would run the side effect again. Choose a policy: keep receipts no longer than events, or have the tools accept a receipt without events.
+- **Fixed: tool retries after events are compacted.** Policy: a receipt is kept no longer than its events. Receipt pruning dropped its 7-day minimum age and now removes a receipt (with its claim) once `result_sequence` is at or below `min(floor, retained_through_sequence)`. A retry finds either both or neither. Events are kept at least 24 hours, so ordinary retries still deduplicate; a retry after its events are compacted runs as a new command. Orphan claims keep their 7-day in-flight guard.
 - **Batch sizing under write load:** the `wal_checkpoint(PASSIVE)` after each batch counts WAL frames written by other writers or pinned by a long reader. The sizer treats them as the batch's own cost, so under write load every batch size can drop to the minimum of 100 and draining slows to a crawl.
 - **Cost of skipped ticks:** a `skip-soft` tick still reads the whole floor (about 25 statements, including a `projection_threads` scan with `json_valid`) and writes the state row, every 15 seconds while the app is busy.
 - **Minimum mode:** the guaranteed-progress minimum runs one batch of each of the five kinds plus five checkpoints, not the single minimum batch the plan describes.

@@ -51,11 +51,9 @@ it.effect("drains a sequence shared by thousands of receipts in batches of at mo
         cursor,
         throughSequence: 40,
         limit: 200,
-        nowMs: NOW_MS,
       });
       assert.isAtMost(result.receipts, 200);
       assert.equal(result.claims, result.receipts);
-      assert.isNull(result.blockedUntilMs);
       // The cursor never passes the group while prunable receipts remain in it.
       if (cursor < 20 && result.cursor >= 20) {
         const left = yield* sql<{ readonly count: number }>`
@@ -78,31 +76,22 @@ it.effect("drains a sequence shared by thousands of receipts in batches of at mo
   }).pipe(Effect.provide(SqlitePersistenceMemory)),
 );
 
-it.effect("waits before a young receipt inside a shared sequence", () =>
+it.effect("prunes a receipt as soon as its events are gone, whatever its age", () =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     yield* seedReceiptGroup(sql, { prefix: "group-", sequence: 20, count: 500 });
+    yield* seedReceiptGroup(sql, { prefix: "above-", sequence: 41, count: 5 });
     yield* sql`
-      UPDATE orchestration_command_receipts SET accepted_at = ${iso(2 * DAY_MS)}
+      UPDATE orchestration_command_receipts SET accepted_at = ${iso(60_000)}
       WHERE command_id = 'group-500'
     `;
-    let result = yield* pruneReceipts(sql, {
-      cursor: 0,
-      throughSequence: 40,
-      limit: 200,
-      nowMs: NOW_MS,
-    });
-    for (let batch = 0; batch < 10 && result.blockedUntilMs === null; batch += 1) {
-      result = yield* pruneReceipts(sql, {
-        cursor: result.cursor,
-        throughSequence: 40,
-        limit: 200,
-        nowMs: NOW_MS,
-      });
+    let cursor = 0;
+    for (let batch = 0; batch < 10 && cursor < 40; batch += 1) {
+      cursor = (yield* pruneReceipts(sql, { cursor, throughSequence: 40, limit: 200 })).cursor;
     }
-    assert.equal(result.cursor, 19);
-    assert.equal(result.blockedUntilMs, NOW_MS - 2 * DAY_MS + 7 * DAY_MS);
-    assert.equal(yield* countRows(sql, "orchestration_command_receipts"), 1);
+    assert.equal(cursor, 40);
+    assert.equal(yield* countRows(sql, "orchestration_command_receipts"), 5);
+    assert.equal(yield* countRows(sql, "orchestration_command_receipt_claims"), 5);
   }).pipe(Effect.provide(SqlitePersistenceMemory)),
 );
 
@@ -111,7 +100,7 @@ it.effect("selects prunable receipts in index order without a sort", () =>
     const sql = yield* SqlClient.SqlClient;
     const plan = yield* sql.unsafe<{ readonly detail: string }>(
       `EXPLAIN QUERY PLAN ${prunableReceiptsSql("rowid")}`,
-      [0, 10, iso(0), 100],
+      [0, 10, 100],
     );
     const details = plan.map((row) => row.detail).join("\n");
     assert.match(details, /idx_orch_command_receipts_sequence/);

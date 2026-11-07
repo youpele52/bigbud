@@ -54,7 +54,6 @@ export interface BatchRoundInput {
   readonly floor: number;
   readonly retainedThroughSequence: number;
   readonly receiptsCursor: number;
-  readonly receiptsBlockedUntilMs: number | null;
   readonly orphanClaimsCursor: number;
   readonly orphanClaimsPassAtMs: number | null;
   /** Learned batch sizes, updated in place so the next tick starts from them. */
@@ -78,7 +77,6 @@ export interface BatchRoundResult {
   readonly orphanClaimsDeleted: number;
   readonly retainedThroughSequence: number;
   readonly receiptsCursor: number;
-  readonly receiptsBlockedUntilMs: number | null;
   readonly orphanClaimsCursor: number;
   readonly orphanClaimsPassAtMs: number | null;
   readonly batches: number;
@@ -130,12 +128,11 @@ export const runBatchRound = Effect.fn("EventLogMaintenance.runBatchRound")(func
     events: false,
     gaps: false,
     eventIds: false,
-    receipts: input.receiptsBlockedUntilMs !== null && input.nowMs < input.receiptsBlockedUntilMs,
+    receipts: false,
     orphanClaims: orphanClaimsPassAtMs !== null,
   };
   let retained = input.retainedThroughSequence;
   let receiptsCursor = input.receiptsCursor;
-  let receiptsBlockedUntilMs = done.receipts ? input.receiptsBlockedUntilMs : null;
   const totals = {
     events: 0,
     gaps: 0,
@@ -184,12 +181,10 @@ export const runBatchRound = Effect.fn("EventLogMaintenance.runBatchRound")(func
           cursor: receiptsCursor,
           throughSequence: through,
           limit: size,
-          nowMs: input.nowMs,
         });
         rows = result.receipts;
-        finished = result.blockedUntilMs !== null || result.cursor >= through;
+        finished = result.cursor >= through;
         receiptsCursor = result.cursor;
-        receiptsBlockedUntilMs = result.blockedUntilMs;
         totals.receipts += result.receipts;
         totals.claims += result.claims;
       }
@@ -201,15 +196,9 @@ export const runBatchRound = Effect.fn("EventLogMaintenance.runBatchRound")(func
       lastElapsed[kind] = elapsedMs + checkpointMs;
       input.onBatch(kind, elapsedMs, rows, size, checkpointMs);
       if (input.mode === "full") input.sizers[kind].record(rows, elapsedMs, walPages);
-      // Ledgers follow `retained_through`, so they are drained only once the events are; a
-      // receipt cursor waiting for a receipt to turn 7 days old is done for this tick. Orphan
+      // Ledgers follow `retained_through`, so they are drained only once the events are. Orphan
       // claims do not follow the events.
-      done[kind] =
-        finished &&
-        (kind === "events" ||
-          kind === "orphanClaims" ||
-          done.events ||
-          (kind === "receipts" && receiptsBlockedUntilMs !== null));
+      done[kind] = finished && (kind === "events" || kind === "orphanClaims" || done.events);
     });
 
   const rounds = input.mode === "minimum" ? 1 : Number.POSITIVE_INFINITY;
@@ -242,7 +231,6 @@ export const runBatchRound = Effect.fn("EventLogMaintenance.runBatchRound")(func
     orphanClaimsDeleted: totals.orphanClaims,
     retainedThroughSequence: retained,
     receiptsCursor,
-    receiptsBlockedUntilMs,
     orphanClaimsCursor,
     orphanClaimsPassAtMs,
     batches: totals.batches,

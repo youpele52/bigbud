@@ -79,7 +79,6 @@ export interface MaintenanceMemory {
   readonly rate: DeletionRate;
   readonly startedAtMs: number;
   inFlight: boolean;
-  receiptsBlockedUntilMs: number | null;
   /** When maintenance last tried to verify its own baseline; null when never. */
   baselineRefreshAtMs: number | null;
   ticks: number;
@@ -172,7 +171,6 @@ export const runMaintenanceTick = Effect.fn("EventLogMaintenance.tick")(function
             floor: floor.floor,
             retainedThroughSequence: floor.retainedThroughSequence,
             receiptsCursor: memory.state.receiptsThroughSequence,
-            receiptsBlockedUntilMs: memory.receiptsBlockedUntilMs,
             orphanClaimsCursor: memory.state.orphanClaimsThroughRowid,
             orphanClaimsPassAtMs: memory.state.orphanClaimsPassAtMs,
             sizers: memory.sizers,
@@ -199,7 +197,6 @@ export const runMaintenanceTick = Effect.fn("EventLogMaintenance.tick")(function
     );
     if (round !== null) {
       memory.rate.record(nowMs, round.eventsDeleted);
-      memory.receiptsBlockedUntilMs = round.receiptsBlockedUntilMs;
     }
     const failed = round !== null && round.error !== null;
     const errorText = failed ? Cause.pretty(round.error as Cause.Cause<unknown>) : null;

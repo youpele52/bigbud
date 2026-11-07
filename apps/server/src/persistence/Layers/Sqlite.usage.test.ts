@@ -30,6 +30,8 @@ it.live("opens a distinct read-only usage connection after migrations, with WAL 
     assert.deepEqual(yield* usage`PRAGMA query_only`, [{ query_only: 1 }]);
     assert.deepEqual(yield* usage`PRAGMA busy_timeout`, [{ timeout: 5000 }]);
     assert.deepEqual(yield* usage`PRAGMA journal_mode`, [{ journal_mode: "wal" }]);
+    // The writer commits without a per-commit fsync (1 = NORMAL).
+    assert.deepEqual(yield* sql`PRAGMA synchronous`, [{ synchronous: 1 }]);
     yield* sql`CREATE TABLE usage_connection_probe (value TEXT)`;
     yield* sql`INSERT INTO usage_connection_probe VALUES ('committed')`;
     assert.deepEqual(yield* usage`SELECT value FROM usage_connection_probe`, [
