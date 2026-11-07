@@ -12,13 +12,14 @@ import { Cause, Effect } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { TRACE_RETAIN_ATTRIBUTE } from "../../observability/TracePolicy.ts";
-import type { OrchestrationEventStoreError } from "../Errors.ts";
+import type { OrchestrationEventStoreError, ProjectionRepositoryError } from "../Errors.ts";
 import type { EventLogMaintenanceTickReport } from "../Services/EventLogMaintenance.ts";
 import {
   type CompactBatchResult,
   type MaintenanceBatchKind,
   runBatchRound,
 } from "./EventLogMaintenance.batches.ts";
+import { maybeRefreshBaseline } from "./EventLogMaintenance.baselineRefresh.ts";
 import { isEventLogFloorPinned, readEventLogFloor } from "./EventLogMaintenance.floor.ts";
 import {
   type BatchSizer,
@@ -51,6 +52,10 @@ export interface MaintenanceRuntime {
     readonly deliveryAcknowledged: number | null;
   };
   readonly hotWindow?: { readonly sequences: number; readonly ms: number };
+  /** Captures and verifies a baseline covering the sequence (see `EventLogMaintenance.baselineRefresh`). */
+  readonly refreshBaseline?: (
+    throughSequence: number,
+  ) => Effect.Effect<void, ProjectionRepositoryError>;
   /** Read the floor and report, but delete nothing (`BIGBUD_DISABLE_EVENT_LOG_MAINTENANCE`). */
   readonly batchesDisabled?: boolean;
   /** Wall clock, epoch ms. */
@@ -75,6 +80,8 @@ export interface MaintenanceMemory {
   readonly startedAtMs: number;
   inFlight: boolean;
   receiptsBlockedUntilMs: number | null;
+  /** When maintenance last tried to verify its own baseline; null when never. */
+  baselineRefreshAtMs: number | null;
   ticks: number;
 }
 
@@ -130,11 +137,27 @@ export const runMaintenanceTick = Effect.fn("EventLogMaintenance.tick")(function
   }
   memory.inFlight = true;
   return yield* Effect.gen(function* () {
-    const floor = yield* readEventLogFloor(runtime.sql, {
-      nowMs,
-      ...runtime.floorInputs(),
-      ...(runtime.hotWindow ? { hotWindow: runtime.hotWindow } : {}),
-    });
+    const readFloor = () =>
+      readEventLogFloor(runtime.sql, {
+        nowMs,
+        ...runtime.floorInputs(),
+        ...(runtime.hotWindow ? { hotWindow: runtime.hotWindow } : {}),
+      });
+    let floor = yield* readFloor();
+    const refreshedAtMs =
+      runtime.batchesDisabled === true
+        ? null
+        : yield* maybeRefreshBaseline({
+            floor,
+            mode: decision.mode,
+            nowMs,
+            lastAttemptAtMs: memory.baselineRefreshAtMs,
+            refresh: runtime.refreshBaseline,
+          });
+    if (refreshedAtMs !== null) {
+      memory.baselineRefreshAtMs = refreshedAtMs;
+      floor = yield* readFloor();
+    }
     let longestBatchMs = 0;
     let longestCheckpointMs = 0;
     const slowBatches: Array<{ kind: MaintenanceBatchKind; elapsedMs: number; rows: number }> = [];

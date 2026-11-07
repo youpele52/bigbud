@@ -26,6 +26,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { ConnectionDiagnostics } from "../../connection-diagnostics/Services/ConnectionDiagnostics.ts";
 import { DesktopSupervisorDelivery } from "../../desktop-supervisor/desktopSupervisorDelivery.ts";
 import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
+import { OrchestrationProjectionPipeline } from "../../orchestration/Services/ProjectionPipeline.ts";
 import { backgroundSqlActivityCount } from "../backgroundSqlActivity.ts";
 import { nodeSqliteWriterQueueDepth } from "../NodeSqliteClient.worker.bridge.ts";
 import { DatabaseCompaction } from "../Services/DatabaseCompaction.ts";
@@ -70,6 +71,8 @@ export interface EventLogMaintenanceOptions {
   readonly onBatch?: MaintenanceRuntime["onBatch"];
   /** Replaces the compaction batch (tests). */
   readonly compact?: MaintenanceRuntime["compact"];
+  /** Replaces the pipeline's baseline verification (tests). */
+  readonly refreshBaseline?: MaintenanceRuntime["refreshBaseline"];
   /** Replaces the 50,000-sequence / 24-hour hot window (tests). */
   readonly hotWindow?: { readonly sequences: number; readonly ms: number };
 }
@@ -81,6 +84,12 @@ export const makeEventLogMaintenance = Effect.fn("makeEventLogMaintenance")(func
 ) {
   const sql = yield* SqlClient.SqlClient;
   const engine = yield* Effect.serviceOption(OrchestrationEngineService);
+  const pipeline = yield* Effect.serviceOption(OrchestrationProjectionPipeline);
+  const refreshBaseline =
+    options.refreshBaseline ??
+    (Option.isSome(pipeline)
+      ? pipeline.value.ensureVerifiedBaselineThroughWithoutCompaction
+      : undefined);
   const delivery = yield* Effect.serviceOption(DesktopSupervisorDelivery);
   const diagnostics = yield* Effect.serviceOption(ConnectionDiagnostics);
   const now = options.now ?? (() => Date.now());
@@ -145,6 +154,7 @@ export const makeEventLogMaintenance = Effect.fn("makeEventLogMaintenance")(func
           ? (delivery.value.lowestAcknowledgedSequence?.() ?? null)
           : null,
       })),
+    ...(refreshBaseline ? { refreshBaseline } : {}),
     now,
     clock: options.clock ?? (() => performance.now()),
     ...(options.hotWindow ? { hotWindow: options.hotWindow } : {}),
@@ -157,6 +167,7 @@ export const makeEventLogMaintenance = Effect.fn("makeEventLogMaintenance")(func
     startedAtMs: now(),
     inFlight: false,
     receiptsBlockedUntilMs: null,
+    baselineRefreshAtMs: null,
     ticks: 0,
   };
   // The longest batch is reported per process run.

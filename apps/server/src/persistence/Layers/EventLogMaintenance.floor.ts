@@ -22,9 +22,9 @@
  * `pinnedSinceMs` reports when a holder other than the hot window started holding the floor
  * (see `readPinnedSince`); Settings warns once that is over a day ago, whatever the backlog says.
  * Only the lowest holder is examined: a self-releasing holder (an organization undo) sitting just
- * below a longer pin hides that pin until its 7-day window ends. The `baseline` holder does pin:
- * only deletion paths verify baselines today, so a quiet stretch with 50,000+ events and no
- * deletions shows "waiting for a saved database checkpoint" after a day.
+ * below a longer pin hides that pin until its 7-day window ends. The `baseline` holder can pin
+ * when verification keeps failing; when it merely lags (no deletions for a while), maintenance
+ * verifies a new baseline itself (`EventLogMaintenance.baselineRefresh`).
  *
  * @module EventLogMaintenance.floor
  */
