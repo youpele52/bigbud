@@ -2,12 +2,14 @@
  * The other background steps the event-log maintenance scheduler runs after each tick, outside
  * any batch transaction and under the same load decision:
  *
- * - attachment maintenance (`AttachmentMaintenance.runTick`): a full tick when the tick ran in
- *   `full` mode, every 5 minutes (15 seconds while a backlog remains); under soft load only a
+ * - attachment maintenance (`AttachmentMaintenance.runTick`): a full tick when the tick found
+ *   no load (`full`, or a failure `backoff` with no load signal), every 5 minutes (15 seconds while a backlog remains); under soft load only a
  *   50 ms guaranteed-progress tick once a backlog has seen no progress for 10 minutes; never on
  *   a hard skip;
  * - the database steady-state step (`DatabaseCompaction.runSteadyStateStep`): incremental
  *   vacuum and the idle WAL truncate, with `idle` true only when the tick found no load.
+ *
+ * An event-log failure backoff is not load, so it does not slow either step.
  *
  * Both services are optional; a step whose service is absent is skipped.
  *
@@ -50,15 +52,23 @@ export const initialSchedulerStepsMemory = (nowMs: number): SchedulerStepsMemory
   attachmentsProgressAtMs: nowMs,
 });
 
+type StepsTick = Pick<EventLogMaintenanceTickReport, "mode"> &
+  Partial<Pick<EventLogMaintenanceTickReport, "idle">>;
+
+/** Whether the event-log tick found no load; a `full` tick always did. */
+const tickWasIdle = (tick: StepsTick) => tick.mode === "full" || tick.idle === true;
+
 /** Pure: whether the attachment tick runs after an event-log tick of `mode`, and how much. */
 export function decideAttachmentStep(input: {
   readonly mode: EventLogMaintenanceTickMode;
+  /** No load signal (see `EventLogMaintenanceTickReport.idle`); implied by `full`. */
+  readonly idle?: boolean;
   readonly nowMs: number;
   readonly memory: SchedulerStepsMemory;
 }): { readonly budgetMs: number } | null {
   const { memory, nowMs } = input;
   if (input.mode === "skip-hard" || nowMs < memory.attachmentsDueAtMs) return null;
-  if (input.mode === "full") return { budgetMs: ATTACHMENT_MAINTENANCE_SCHEDULE.budgetMs };
+  if (tickWasIdle(input)) return { budgetMs: ATTACHMENT_MAINTENANCE_SCHEDULE.budgetMs };
   // Not gated on backlog: the tick starts with the trash restore pass, which must run even when
   // nothing is left to sweep (a file trashed by mistake is put back within 10 minutes).
   const starving = nowMs - memory.attachmentsProgressAtMs >= MAINTENANCE_GUARANTEED_PROGRESS_MS;
@@ -68,10 +78,10 @@ export function decideAttachmentStep(input: {
 const runAttachmentStep = Effect.fn("EventLogMaintenance.attachmentStep")(function* (
   attachments: AttachmentMaintenanceShape,
   memory: SchedulerStepsMemory,
-  mode: EventLogMaintenanceTickMode,
+  tick: StepsTick,
   nowMs: number,
 ) {
-  const decision = decideAttachmentStep({ mode, nowMs, memory });
+  const decision = decideAttachmentStep({ ...tick, nowMs, memory });
   if (decision === null) return;
   const exit = yield* Effect.exit(attachments.runTick({ budgetMs: decision.budgetMs }));
   if (Exit.isFailure(exit)) {
@@ -98,15 +108,15 @@ const runAttachmentStep = Effect.fn("EventLogMaintenance.attachmentStep")(functi
 export const runSchedulerSteps = Effect.fn("EventLogMaintenance.schedulerSteps")(function* (
   steps: MaintenanceSchedulerSteps,
   memory: SchedulerStepsMemory,
-  report: Pick<EventLogMaintenanceTickReport, "mode">,
+  report: StepsTick,
   nowMs: number,
 ) {
   if (steps.attachments !== null) {
-    yield* runAttachmentStep(steps.attachments, memory, report.mode, nowMs);
+    yield* runAttachmentStep(steps.attachments, memory, report, nowMs);
   }
   if (steps.compaction === null || report.mode === "skip-hard") return null;
   const step: DatabaseSteadyStateStepReport = yield* steps.compaction.runSteadyStateStep({
-    idle: report.mode === "full",
+    idle: tickWasIdle(report),
   });
   if (step.elapsedMs > MAINTENANCE_BATCH.targetMs) {
     yield* Effect.logWarning("database steady-state step exceeded the batch target", {

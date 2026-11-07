@@ -49,6 +49,12 @@ export interface EventLogMaintenanceTickReport {
   /** True when nothing below the floor is left to delete. */
   readonly drained: boolean;
   readonly failed: boolean;
+  /**
+   * The tick found no load: true for `full` ticks, and for `backoff` ticks that would otherwise
+   * have run in full, so the other steps keep their idle cadence while event-log maintenance
+   * backs off after a failure.
+   */
+  readonly idle: boolean;
 }
 
 export interface EventLogMaintenanceShape {

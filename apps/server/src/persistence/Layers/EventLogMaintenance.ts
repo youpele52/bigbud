@@ -167,6 +167,9 @@ export const makeEventLogMaintenance = Effect.fn("makeEventLogMaintenance")(func
     startedAtMs: now(),
     inFlight: false,
     baselineRefreshAtMs: null,
+    floorReadAtMs: null,
+    receiptsRescanAtMs: null,
+    minimumTurn: 0,
     ticks: 0,
   };
   // The longest batch is reported per process run.
@@ -205,6 +208,7 @@ export const makeEventLogMaintenance = Effect.fn("makeEventLogMaintenance")(func
           elapsedMs: 0,
           drained: false,
           failed: true,
+          idle: false,
         }),
       );
     }),

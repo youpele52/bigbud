@@ -29,6 +29,12 @@ export const MAINTENANCE_IDLE_INTERVAL_MS = 2 * 60_000;
 export const MAINTENANCE_BACKLOG_INTERVAL_MS = 15_000;
 /** While a backlog remains, one minimum batch runs at least this often, even under soft load. */
 export const MAINTENANCE_GUARANTEED_PROGRESS_MS = 10 * 60_000;
+/**
+ * A `skip-soft` tick reuses the last floor this long instead of reading it again (about 25
+ * statements). Below the 10-minute guaranteed-progress interval, so a backlog that appears
+ * while the app stays busy is still seen and drained.
+ */
+export const MAINTENANCE_SKIP_FLOOR_REFRESH_MS = 5 * 60_000;
 /** Matches the baseline coordinator's cooldown. */
 export const MAINTENANCE_FAILURE_BACKOFF_MS = 15 * 60_000;
 export const MAINTENANCE_STARVED_AFTER_MS = 24 * 60 * 60_000;
@@ -87,6 +93,40 @@ export class BatchSizer {
   }
 }
 
+/** One `PRAGMA wal_checkpoint(PASSIVE)` result: frames in the WAL and frames copied back. */
+export interface WalCheckpointResult {
+  readonly log: number;
+  readonly checkpointed: number;
+}
+
+/**
+ * WAL frames one batch wrote, from PASSIVE checkpoints run just before and just after it. The
+ * WAL's frame count alone also holds other writers' frames since the last checkpoint and every
+ * frame a long reader keeps from being copied back; the difference leaves only the batch (and
+ * any statement the worker ran between the three steps).
+ *
+ * Once a checkpoint has copied the whole WAL back, the next write may start the WAL over from
+ * frame 1 (it does unless a reader still uses it), so the count after the batch is the batch's
+ * own. A reader that blocks that restart makes this an overcount by the earlier frames, which
+ * only shrinks the next batch.
+ *
+ * One rare sequence undercounts: the first checkpoint is partial (a reader pins frames), the
+ * reader finishes, another statement on the worker commits and its autocheckpoint copies the
+ * whole WAL back, and the batch then restarts the WAL yet leaves it at least as long as before.
+ * The difference then misses the earlier frames. The restart is not visible in the counts, so
+ * this is accepted: it needs that interleaving inside one batch, and the 50 ms time target
+ * still bounds the batch. Null when either checkpoint had no WAL to report.
+ */
+export function batchWalFrames(
+  before: WalCheckpointResult | null,
+  after: WalCheckpointResult | null,
+): number | null {
+  if (before === null || after === null) return null;
+  const mayHaveRestarted = before.checkpointed >= before.log;
+  if (mayHaveRestarted || after.log < before.log) return after.log;
+  return after.log - before.log;
+}
+
 export interface MaintenanceLoadSignals {
   /** Statements queued on the read-write SQLite worker. */
   readonly queueDepth: number;
@@ -109,6 +149,19 @@ export interface TickDecisionInput {
   readonly backoffUntilMs: number | null;
 }
 
+/** The soft load signal that holds maintenance back, or null when there is none. */
+export function softLoadReason(signals: MaintenanceLoadSignals): string | null {
+  return signals.queueDepth > MAINTENANCE_LOAD.softQueueDepth
+    ? "worker-queue"
+    : signals.eventLoopLagged
+      ? "event-loop-lag"
+      : signals.streamingTurns > MAINTENANCE_LOAD.maxStreamingTurns
+        ? "streaming-turns"
+        : signals.backgroundActive > 0
+          ? "background-maintenance"
+          : null;
+}
+
 export function decideTick(input: TickDecisionInput): {
   readonly mode: EventLogMaintenanceTickMode;
   readonly reason: string;
@@ -121,16 +174,7 @@ export function decideTick(input: TickDecisionInput): {
     return { mode: "skip-hard", reason: "worker-queue-hard" };
   if (input.backoffUntilMs !== null && input.nowMs < input.backoffUntilMs)
     return { mode: "backoff", reason: "failure-backoff" };
-  const soft =
-    signals.queueDepth > MAINTENANCE_LOAD.softQueueDepth
-      ? "worker-queue"
-      : signals.eventLoopLagged
-        ? "event-loop-lag"
-        : signals.streamingTurns > MAINTENANCE_LOAD.maxStreamingTurns
-          ? "streaming-turns"
-          : signals.backgroundActive > 0
-            ? "background-maintenance"
-            : null;
+  const soft = softLoadReason(signals);
   if (soft === null) return { mode: "full", reason: "idle" };
   if (
     input.backlog > 0 &&

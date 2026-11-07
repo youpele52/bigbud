@@ -10,7 +10,9 @@
  *   a replay gap (`OrchestrationEngine.domainEvents`), so it must never see one.
  * - `delivery`: the lowest sequence an open delivery session (desktop supervisor or direct
  *   web) has acknowledged; later events may still be replayed to it.
- * - `hot-window`: the newest 50,000 sequences or the last 24 hours, whichever keeps more.
+ * - `hot-window`: the newest 50,000 sequences or the last 24 hours, whichever keeps more. The
+ *   24 hours are measured by the server's clock (`EventLogMaintenance.sequenceClock`) once a
+ *   day-old sample exists, and by `occurred_at` until then.
  * - `cleanup`: events of open direct-cleanup intents and unfinished cleanup plans. An open intent
  *   whose plan is `blocked` does not hold it: `blocked` is terminal (nothing moves a plan out of
  *   it and no reader needs the intent's event again), so it would otherwise pin the log forever.
@@ -34,6 +36,7 @@ import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceSqlError } from "../Errors.ts";
 import { orchestrationSequenceFrontierSql } from "../OrchestrationSequenceFrontier.ts";
+import { readSequenceClockFloor } from "./EventLogMaintenance.sequenceClock.ts";
 import { ORGANIZATION_OPERATION_RETENTION } from "./ThreadOrganizationOperations.ts";
 
 export const EVENT_LOG_HOT_WINDOW_SEQUENCES = 50_000;
@@ -122,12 +125,14 @@ export const readEventLogFloor = Effect.fn("EventLogMaintenance.readFloor")(
     const [projector] = yield* sql<{ readonly value: number | null; readonly count: number }>`
       SELECT MIN(last_applied_sequence) AS "value", COUNT(*) AS "count" FROM projection_state
     `;
+    const hotWindowMs = input.hotWindow?.ms ?? EVENT_LOG_HOT_WINDOW_MS;
     const hotWindow = yield* readHotWindowFloor(sql, {
       head,
       retained,
       nowMs: input.nowMs,
       sequences: input.hotWindow?.sequences ?? EVENT_LOG_HOT_WINDOW_SEQUENCES,
-      ms: input.hotWindow?.ms ?? EVENT_LOG_HOT_WINDOW_MS,
+      ms: hotWindowMs,
+      clockFloor: yield* readSequenceClockFloor(sql, { nowMs: input.nowMs, windowMs: hotWindowMs }),
     });
     const [cleanup] = yield* sql<NullableNumber>`
       SELECT MIN(sequence) AS "value" FROM (
@@ -243,9 +248,11 @@ const readPinnedSince = Effect.fn("EventLogMaintenance.readPinnedSince")(functio
 });
 
 /**
- * Keeps the newest 50,000 sequences or the last 24 hours, whichever keeps more. Usually one
- * primary-key probe; when the 50,000th-newest event is itself younger than 24 hours, a binary
- * search over sequence (about 23 probes) finds the 24-hour boundary.
+ * Keeps the newest 50,000 sequences or the last 24 hours, whichever keeps more. With a day-old
+ * sequence-clock sample (`clockFloor`) the 24 hours come from the server's clock and no event
+ * is read. Otherwise usually one primary-key probe; when the 50,000th-newest event is itself
+ * younger than 24 hours by `occurred_at`, a binary search over sequence (about 23 probes) finds
+ * the 24-hour boundary.
  */
 const readHotWindowFloor = Effect.fn("EventLogMaintenance.readHotWindowFloor")(function* (
   sql: SqlClient.SqlClient,
@@ -255,9 +262,12 @@ const readHotWindowFloor = Effect.fn("EventLogMaintenance.readHotWindowFloor")(f
     readonly nowMs: number;
     readonly sequences: number;
     readonly ms: number;
+    /** Head of the newest server-clock sample at least `ms` old; null when none is. */
+    readonly clockFloor: number | null;
   },
 ) {
   const bySequence = Math.max(0, input.head - input.sequences);
+  if (input.clockFloor !== null) return Math.max(0, Math.min(bySequence, input.clockFloor));
   const cutoff = new Date(input.nowMs - input.ms).toISOString();
   const firstAtOrAfter = (sequence: number) =>
     sql<{ readonly sequence: number; readonly occurredAt: string }>`

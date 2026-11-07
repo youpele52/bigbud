@@ -151,7 +151,9 @@ it.effect("rolls back a batch that fails mid-transaction, backs off, then resume
     const progress = yield* crashing.service.progress;
     assert.equal(progress.state, "backing-off");
     assert.match(progress.lastError ?? "", /worker lost mid-batch/);
-    assert.equal((yield* crashing.service.runTick).mode, "backoff");
+    // Backoff is not load: the tick still reports idleness so attachment work keeps its cadence.
+    const backoff = yield* crashing.service.runTick;
+    assert.deepEqual([backoff.mode, backoff.idle], ["backoff", true]);
 
     // A fresh instance (a restart) reads the stored backoff and resumes once it has passed.
     nowMs += MAINTENANCE_FAILURE_BACKOFF_MS - 1_000;

@@ -1,6 +1,9 @@
 /**
  * One event-log maintenance tick: read the load signals, decide how much may run, read the
  * floor, run a batch round, then record backlog, starvation and failures in the state row.
+ * A soft-skipped tick deletes nothing, so it reuses the last floor (no reads, no state write)
+ * unless that floor is over 5 minutes old. A full tick starts the receipt cursor over once a
+ * day, so receipts kept on purpose are pruned once their reason ends.
  *
  * Failures never escape: the failed batch's transaction rolled back, the error is recorded
  * and maintenance backs off for 15 minutes. A crash mid-batch leaves the database as it was;
@@ -16,18 +19,26 @@ import type { OrchestrationEventStoreError, ProjectionRepositoryError } from "..
 import type { EventLogMaintenanceTickReport } from "../Services/EventLogMaintenance.ts";
 import {
   type CompactBatchResult,
+  isReceiptRescanDue,
   type MaintenanceBatchKind,
   runBatchRound,
 } from "./EventLogMaintenance.batches.ts";
 import { maybeRefreshBaseline } from "./EventLogMaintenance.baselineRefresh.ts";
-import { isEventLogFloorPinned, readEventLogFloor } from "./EventLogMaintenance.floor.ts";
+import {
+  EVENT_LOG_HOT_WINDOW_MS,
+  isEventLogFloorPinned,
+  readEventLogFloor,
+} from "./EventLogMaintenance.floor.ts";
+import { recordSequenceClock } from "./EventLogMaintenance.sequenceClock.ts";
 import {
   type BatchSizer,
   DeletionRate,
   decideTick,
   MAINTENANCE_BATCH,
   MAINTENANCE_FAILURE_BACKOFF_MS,
+  MAINTENANCE_SKIP_FLOOR_REFRESH_MS,
   type MaintenanceLoadSignals,
+  softLoadReason,
   updateBacklogWatermark,
 } from "./EventLogMaintenance.scheduler.ts";
 import {
@@ -81,6 +92,12 @@ export interface MaintenanceMemory {
   inFlight: boolean;
   /** When maintenance last tried to verify its own baseline; null when never. */
   baselineRefreshAtMs: number | null;
+  /** When the floor was last read; null before the first read. */
+  floorReadAtMs: number | null;
+  /** Position in `MINIMUM_BATCH_ROTATION` of the next minimum batch. */
+  minimumTurn: number;
+  /** When the receipt cursor last started over (`isReceiptRescanDue`); null when never. */
+  receiptsRescanAtMs: number | null;
   ticks: number;
 }
 
@@ -88,6 +105,7 @@ const emptyReport = (
   mode: EventLogMaintenanceTickReport["mode"],
   reason: string,
   state: EventLogMaintenanceState,
+  idle = false,
 ): EventLogMaintenanceTickReport => ({
   mode,
   reason,
@@ -106,6 +124,7 @@ const emptyReport = (
   elapsedMs: 0,
   drained: state.backlogSequences === 0,
   failed: false,
+  idle,
 });
 
 const retainedSpan = (name: string, attributes: Record<string, unknown>) =>
@@ -131,7 +150,19 @@ export const runMaintenanceTick = Effect.fn("EventLogMaintenance.tick")(function
     lastProgressAtMs: memory.state.lastBatchAtMs ?? memory.startedAtMs,
     backoffUntilMs: memory.state.backoffUntilMs,
   });
-  if (decision.mode === "skip-hard" || decision.mode === "backoff") {
+  if (decision.mode === "skip-hard")
+    return emptyReport(decision.mode, decision.reason, memory.state);
+  if (decision.mode === "backoff") {
+    // Backoff is not load: report idleness so attachment work keeps its full cadence.
+    const idle = softLoadReason(signals) === null;
+    return emptyReport(decision.mode, decision.reason, memory.state, idle);
+  }
+  // A soft skip deletes nothing: reuse the last floor (and skip the state write) for a while.
+  if (
+    decision.mode === "skip-soft" &&
+    memory.floorReadAtMs !== null &&
+    nowMs - memory.floorReadAtMs < MAINTENANCE_SKIP_FLOOR_REFRESH_MS
+  ) {
     return emptyReport(decision.mode, decision.reason, memory.state);
   }
   memory.inFlight = true;
@@ -143,6 +174,13 @@ export const runMaintenanceTick = Effect.fn("EventLogMaintenance.tick")(function
         ...(runtime.hotWindow ? { hotWindow: runtime.hotWindow } : {}),
       });
     let floor = yield* readFloor();
+    memory.floorReadAtMs = nowMs;
+    yield* recordSequenceClock(runtime.sql, {
+      // Taken after the head was read: every event at or below it already existed then.
+      nowMs: runtime.now(),
+      head: floor.head,
+      windowMs: runtime.hotWindow?.ms ?? EVENT_LOG_HOT_WINDOW_MS,
+    });
     const refreshedAtMs =
       runtime.batchesDisabled === true
         ? null
@@ -160,6 +198,8 @@ export const runMaintenanceTick = Effect.fn("EventLogMaintenance.tick")(function
     let longestBatchMs = 0;
     let longestCheckpointMs = 0;
     const slowBatches: Array<{ kind: MaintenanceBatchKind; elapsedMs: number; rows: number }> = [];
+    const receiptsRescan =
+      decision.mode === "full" && isReceiptRescanDue(memory.receiptsRescanAtMs, nowMs);
     const round =
       decision.mode === "skip-soft" || runtime.batchesDisabled === true
         ? null
@@ -170,11 +210,12 @@ export const runMaintenanceTick = Effect.fn("EventLogMaintenance.tick")(function
             nowMs,
             floor: floor.floor,
             retainedThroughSequence: floor.retainedThroughSequence,
-            receiptsCursor: memory.state.receiptsThroughSequence,
+            receiptsCursor: receiptsRescan ? 0 : memory.state.receiptsThroughSequence,
             orphanClaimsCursor: memory.state.orphanClaimsThroughRowid,
             orphanClaimsPassAtMs: memory.state.orphanClaimsPassAtMs,
             sizers: memory.sizers,
             mode: decision.mode === "minimum" ? "minimum" : "full",
+            minimumTurn: memory.minimumTurn,
             onBatch: (kind, elapsedMs, rows, size, checkpointMs) => {
               runtime.onBatch?.(kind, elapsedMs, rows, size, checkpointMs);
               longestBatchMs = Math.max(longestBatchMs, elapsedMs);
@@ -197,6 +238,8 @@ export const runMaintenanceTick = Effect.fn("EventLogMaintenance.tick")(function
     );
     if (round !== null) {
       memory.rate.record(nowMs, round.eventsDeleted);
+      if (receiptsRescan) memory.receiptsRescanAtMs = nowMs;
+      memory.minimumTurn = round.minimumTurn;
     }
     const failed = round !== null && round.error !== null;
     const errorText = failed ? Cause.pretty(round.error as Cause.Cause<unknown>) : null;
@@ -285,6 +328,7 @@ export const runMaintenanceTick = Effect.fn("EventLogMaintenance.tick")(function
       elapsedMs: runtime.clock() - startedAt,
       drained: round?.drained ?? backlog === 0,
       failed,
+      idle: decision.mode === "full",
     } satisfies EventLogMaintenanceTickReport;
   }).pipe(
     Effect.ensuring(

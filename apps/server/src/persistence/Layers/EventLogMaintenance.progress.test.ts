@@ -95,8 +95,13 @@ it.effect(
         nowMs = NOW_MS + elapsed;
         const report = yield* tick;
         if (report.mode === "minimum") {
+          // One batch per minimum tick: events every other one, a ledger kind in between.
+          assert.equal(report.batches, 1);
+          assert.equal(
+            report.eventsDeleted,
+            minimumAt.length % 2 === 0 ? MAINTENANCE_BATCH.min : 0,
+          );
           minimumAt.push(elapsed);
-          assert.equal(report.eventsDeleted, MAINTENANCE_BATCH.min);
         } else {
           assert.equal(report.mode, "skip-soft");
         }

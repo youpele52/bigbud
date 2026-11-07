@@ -169,6 +169,7 @@ import Migration0155 from "./Migrations/155_ThreadRetentionLeaseExpiry.ts";
 import Migration0156 from "./Migrations/156_EventLogMaintenance.ts";
 import Migration0157 from "./Migrations/157_ProjectionTurnUsageAttribution.ts";
 import Migration0158 from "./Migrations/158_EventLogMaintenanceOrphanClaims.ts";
+import Migration0159 from "./Migrations/159_EventLogSequenceClock.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -328,6 +329,7 @@ export const migrationEntries = [
   [156, "EventLogMaintenance", Migration0156],
   [157, "ProjectionTurnUsageAttribution", Migration0157],
   [158, "EventLogMaintenanceOrphanClaims", Migration0158],
+  [159, "EventLogSequenceClock", Migration0159],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

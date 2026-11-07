@@ -81,6 +81,14 @@ describe("attachment step decision", () => {
     assert.isNull(decideAttachmentStep({ mode: "full", nowMs: NOW, memory: notDue }));
   });
 
+  it("keeps the full cadence while event-log maintenance backs off without load", () => {
+    const memory = initialSchedulerStepsMemory(NOW);
+    assert.deepEqual(decideAttachmentStep({ mode: "backoff", idle: true, nowMs: NOW, memory }), {
+      budgetMs: 1_000,
+    });
+    assert.isNull(decideAttachmentStep({ mode: "backoff", idle: false, nowMs: NOW, memory }));
+  });
+
   it("under soft load runs a 50 ms tick once 10 minutes pass without progress", () => {
     const fresh = { ...initialSchedulerStepsMemory(NOW), attachmentsBacklog: 5 };
     assert.isNull(decideAttachmentStep({ mode: "skip-soft", nowMs: NOW + MINUTE, memory: fresh }));
@@ -120,6 +128,22 @@ describe("scheduler steps", () => {
         compaction.inputs.map((input) => input?.idle),
         [true, false],
         "the steady-state step runs after full and soft ticks, never after a hard skip",
+      );
+    }),
+  );
+
+  it.effect("treats an idle backoff tick as idle for both steps", () =>
+    Effect.gen(function* () {
+      const attachments = fakeAttachments([tickResult(0, 0)]);
+      const compaction = fakeCompaction();
+      const steps = { attachments: attachments.service, compaction: compaction.service };
+      const memory = initialSchedulerStepsMemory(NOW);
+      yield* runSchedulerSteps(steps, memory, { mode: "backoff", idle: true }, NOW);
+      assert.deepEqual(attachments.budgets, [1_000]);
+      yield* runSchedulerSteps(steps, memory, { mode: "backoff", idle: false }, NOW + 1);
+      assert.deepEqual(
+        compaction.inputs.map((input) => input?.idle),
+        [true, false],
       );
     }),
   );
