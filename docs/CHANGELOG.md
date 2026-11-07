@@ -4,11 +4,89 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 
 ## What's new?
 
-- **[Focus on what matters with Inyosira](#organize-your-work-with-inyosira):** Bring the right chats into focus with Present, Needs you, Later, and Done—and snooze work you want to return to.
+- **[Focus on what matters with Inyosira](#keep-present-focused-with-inyosira):** A gentle nudge in **Needs you** draws attention to chats waiting for you. Keep current work in **Present**, while inactive chats move automatically to **Later** or **Done**.
 - **[See how your computer and servers are performing](#resource-warnings-without-watching-the-monitor):** Get warnings when CPU or memory use stays high or disk space runs low on your computer, and view live resource usage on connected Linux servers.
+- **[Start your project your way](#start-a-project-with-just-a-name):** Start with a folder or just a name—bigbud makes room for your ideas and handles the workspace setup.
 - **[Edit files without leaving bigbud](#edit-files-without-leaving-bigbud):** Update code, Markdown, and text files directly in the Files panel, with automatic saving and clear feedback when something needs your attention.
-- **[Bring Meta Muse into your workflow](#meta-muse-integration):** Enable Meta Muse to work with its models directly in bigbud, using your installed Muse CLI and native account sign-in.
-- **[Point your agent at the exact words](#cite-the-exact-part-of-a-conversation):** Select a passage from a message, reply, or question and cite it in your next message—with a link back to the original.
+- **[Move swiftly, browse easily](#lighter-loading-for-larger-chat-histories):** Browse large chat histories with less memory use. Older messages load as you scroll, and long replies expand when you need them.
+
+## v0.3.3 (8 November, 2026)
+
+### Start a Project With Just a Name
+
+- **Start with a name:** Leave **Folder (optional)** empty and bigbud creates a workspace for you. You can also choose an existing folder.
+- **Change folders without losing your project:** **Edit project** preserves chats, notes, cards, and history. Choose **Switch without moving files** or **Transfer files** for a populated managed workspace. Transfers copy to an empty folder and keep the original, without merging or overwriting files.
+- **Recover interrupted folder changes:** Saved recovery details prevent transfers from being blindly repeated after a restart or lost response. Before changing folders, stop active work, close project terminals, and detach worktrees. Muse context resets need confirmation; OpenCode V2 relocation remains disabled pending live checks.
+
+### Keep Present Focused With Inyosira
+
+- **Keep your active list manageable:** **Keep Present focused** starts with a soft target of seven chats across your projects. Inactive chats move to Later after their protection period. Working chats can stay above the target. It is on for new installations; existing users can choose whether to enable it.
+- **Give recent activity time to settle:** **Protection after activity** defaults to five minutes, adjustable from two to ten. Idle timing survives restarts and sleep. Automatic moves no longer reset it, while deliberate moves and snoozes keep their grace periods.
+- **Protect quiet terminal work:** Running programs and background tools keep chats active even without new output. An unused shell does not. Finishing terminal work starts a fresh quiet period before a chat can move.
+- **Undo automatic moves:** **Moved to …** notifications offer **Undo**. Old notifications do not replay after reconnect. If the native organizer becomes unavailable, automatic moves pause with an explanation. Manual organization still works.
+- **Spot what needs you:** An amber pointing hand marks **Needs you** when chats are waiting. Empty headings stay quieter, and keyboard jump hints no longer shift chat rows.
+
+### Disconnect Remote Workspaces Without Removing Them
+
+- **Pause a saved SSH connection:** **Disconnect** keeps the workspace and its history. Your choice survives restarts. Automatic connection attempts and remote monitoring stay paused until you choose **Connect**.
+- **Know what will stop:** bigbud asks before disconnecting running work and warns when workspaces share a connection. Active turns stop. Direct SSH terminals and commands end; remote-agent terminal processes can stay on the host and reattach later.
+- **Reconnect from the workspace row:** Click it or press Enter or Space to connect. Saved chats remain readable offline. Sending work or opening a terminal offers **Connect**. Red status dots distinguish **Disconnected** from **Unavailable** by label and turn green when connected.
+
+### Lighter Loading for Larger Chat Histories
+
+- **Load less at once:** Startup, the sidebar, and chat history use smaller pages to reduce memory use. Recently viewed chats stay ready; older details reload when needed.
+- **Read back without losing your place:** Chats start with the latest 15 messages. Scroll up to load more without shifting your reading position. Older work logs load when expanded, with retry controls if loading fails.
+- **Open long replies in stages:** Large messages offer **Show full message**, then **Load more** if needed. Copy, export, and handoff still use the full text.
+- **Reveal a few more chats:** **Show 4 more** loads the next four chats in Projects or Inyosira, following your selected order.
+
+### Cleanup That Follows Your Saved Settings
+
+- **Let your saved retention policy work again:** Stale session records and abandoned tasks no longer block old-chat cleanup. Active work stays protected. **Latest cleanup** in **Settings → Threads** explains skipped chats.
+- **Review retention before updating:** Scheduled cleanup uses your saved policy without asking again. Previously blocked chats may now be deleted, including those in Later or Done. Inyosira groups do not prevent deletion. Choose a longer period in **Settings → Threads** before updating if needed.
+- **Keep internal records under control:** Maintenance clears old internal records in small batches. It preserves what recovery, active work, and organization undo still need. This cleanup does not delete messages or remove recorded usage attribution.
+- **Clear abandoned attachments safely:** Unreferenced managed files wait seven days, then spend seven more in internal trash before deletion. Referenced files and active uploads stay protected. Stale temporary uploads left by crashes can also be removed.
+- **Reduce cleanup overhead:** Maintenance adjusts batch sizes, does fewer repeated checks while busy, and retries failures. Recent-history protection uses server timing once enough samples exist, reducing reliance on message senders' clocks.
+
+### Reclaim Database Space With Clear Progress
+
+- **Return unused space to disk:** **Compact database** in **Settings → Threads** is offered when unused space exceeds both 25% and 500 MB. Preview the size and confirm before starting. Compaction does not delete chats, messages, or settings.
+- **Follow progress while bigbud pauses:** Turns, sync, and other actions wait during compaction. A progress overlay keeps this visible. Smaller background steps reclaim space afterward.
+- **See when cleanup needs attention:** Diagnostics shows the backlog, cleanup rate, and latest error. Warnings highlight blocked or growing backlogs. Read-only database-size and connection-health scripts help with troubleshooting.
+
+### More Stable Sessions Under Load
+
+- **Use less memory for recovery:** Large recovery snapshots are processed in smaller pieces instead of repeatedly loaded whole. Integrity checks still run before restoring saved state.
+- **Keep updates flowing after a timeout:** Fixed chats appearing frozen while agents kept working. Reconnecting now restores the live-update subscription.
+- **Choose what happens after a crash:** Interrupted turns offer **Continue** or **Dismiss** and explain that the outcome is unknown. Work is not resent automatically. A fatal database-worker failure now lets the desktop restart the backend instead of leaving it unable to save.
+- **Avoid needless rescans:** Unrelated provider logs no longer trigger repeated agent and skill discovery. Overlapping refreshes are combined.
+- **Reduce pauses during saves:** Database writes sync to disk at checkpoints rather than after every commit. Writes stay atomic, but a power loss or operating-system crash can lose changes since the last checkpoint.
+
+### Dates That Make Chat History Easier to Follow
+
+- **Recognize older messages:** Timestamps show today's time, **Yesterday**, or an older date. They refresh at midnight and after wake or timezone changes. Your time format and response durations stay intact.
+- **Fit actions into narrow panes:** Message dates sit alongside action icons, visible on hover or keyboard focus for your messages. Footers wrap without overflowing.
+
+### Usage That Loads One Section at a Time
+
+- **See ready information sooner:** Usage sections load independently on the page and side panel. Available subscription limits stay visible while summaries load. Provider setup and pending limits have separate indicators.
+- **Keep numbers visible during refreshes:** Loaded summaries stay visible if a refresh is slow or fails, with less layout jumping. Closing one window no longer cancels another window's shared usage lookup.
+
+### More Consistent CLIProxy Sessions and Chat Titles
+
+- **Keep your Claude Code setup with CLIProxy:** CLIProxy uses shared settings and hooks while keeping your selected connection and model. Supporting agents gain progress reporting and individual **Stop** controls. Access modes and approvals stay unchanged.
+- **Recover automatic titles:** Completed title work no longer blocks title recovery. CLIProxy titles also use the shared generator with your selected connection and model.
+
+### Small Changes That Remove Friction
+
+- **Expand changed files when needed:** Changed files start collapsed, with file and line-change totals visible. Open the section for the file tree and diff controls. It remembers your choice as you scroll.
+- **Spot conversation references:** **Cite** now uses the primary button style. Attached chat references use bigbud's shared chat icon and still link to their source.
+- **Avoid locked files during Windows updates:** The installer closes bigbud and its installed helpers before replacing files. This interrupts work running in those processes.
+
+### Verification Still in Progress
+
+- Inyosira passed packaged-backend checks on Apple silicon Macs and Linux sidecar checks under emulation. Full Windows, Intel Mac, and Linux desktop checks remain open, along with signing, release, and large-data checks.
+- Live checks are still needed for remote disconnect and reattachment, retention, and compaction. Packaged-app connection and memory measurements are also pending.
+- OpenCode V2 folder relocation remains disabled. CLIProxy helpers still need live checks for nested agents, resume, and concurrent work.
 
 ## v0.3.2 (5 November, 2026)
 
