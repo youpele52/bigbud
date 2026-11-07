@@ -12,6 +12,7 @@ import type { MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 import { useMemo } from "react";
 import { useSettings } from "../../../hooks/useSettings";
+import { useLocalDay } from "../../../hooks/useLocalDay";
 import { terminalFontFamilyFromSettings } from "../../terminal/terminalTypography";
 import { cn } from "~/lib/utils";
 import { deriveAutomationAssistantDisplayState } from "~/lib/automation";
@@ -100,6 +101,19 @@ function ShellOutputCard(props: {
       </div>
     </div>
   );
+}
+
+function AssistantMessageMeta({
+  createdAt,
+  duration,
+  timestampFormat,
+}: {
+  createdAt: string;
+  duration: string | null;
+  timestampFormat: TimestampFormat;
+}) {
+  const day = useLocalDay();
+  return <>{formatMessageMeta(createdAt, duration, timestampFormat, new Date(day))}</>;
 }
 
 export function AssistantMessageBody({
@@ -198,7 +212,10 @@ export function AssistantMessageBody({
           resolvedTheme={resolvedTheme}
         />
         <div className="mt-1.5 flex justify-start">
-          <div className="flex min-w-0 items-center gap-2 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
+          <div
+            data-message-footer="assistant"
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100"
+          >
             {row.showAssistantCopyButton && messageText.length > 0 ? (
               <TimelineMessageCopyButton message={row.message} text={messageText} />
             ) : null}
@@ -209,14 +226,16 @@ export function AssistantMessageBody({
               <MessageBranchButton onClick={() => onBranchThread(row.message.id)} />
             ) : null}
             {row.showAssistantCopyButton ? <OlderTurnWorkLogButton message={row.message} /> : null}
-            <p className="shrink-0 text-[10px] text-muted-foreground/30">
-              {formatMessageMeta(
-                row.message.createdAt,
-                row.message.streaming
-                  ? formatElapsed(row.durationStart, nowIso)
-                  : formatElapsed(row.durationStart, row.message.completedAt),
-                timestampFormat,
-              )}
+            <p className="min-w-0 max-w-full break-words text-[10px] text-muted-foreground/30">
+              <AssistantMessageMeta
+                createdAt={row.message.createdAt}
+                duration={
+                  row.message.streaming
+                    ? formatElapsed(row.durationStart, nowIso)
+                    : formatElapsed(row.durationStart, row.message.completedAt)
+                }
+                timestampFormat={timestampFormat}
+              />
             </p>
           </div>
         </div>

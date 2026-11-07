@@ -29,7 +29,8 @@ export function formatMessageMeta(
   createdAt: string,
   duration: string | null,
   timestampFormat: TimestampFormat,
+  now: Date = new Date(),
 ): string {
-  if (!duration) return formatTimestamp(createdAt, timestampFormat);
-  return `${formatTimestamp(createdAt, timestampFormat)} • ${duration}`;
+  if (!duration) return formatTimestamp(createdAt, timestampFormat, now);
+  return `${formatTimestamp(createdAt, timestampFormat, now)} • ${duration}`;
 }
