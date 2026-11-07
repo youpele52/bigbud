@@ -48,10 +48,27 @@ vi.mock("../../hooks/useSettings", async () => {
 });
 vi.mock("../ui/toast", () => ({ toastManager: { add: fixture.toast } }));
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children }: { children: React.ReactNode }) => (
-    <a href="/settings/general#inyosira">{children}</a>
+  Link: ({
+    children,
+    onClick,
+  }: {
+    children: React.ReactNode;
+    onClick?: React.MouseEventHandler<HTMLAnchorElement>;
+  }) => (
+    <a
+      href="/settings/general#inyosira"
+      onClick={(event) => {
+        event.preventDefault();
+        onClick?.(event);
+      }}
+    >
+      {children}
+    </a>
   ),
 }));
+const introductionTitle = "Room for every idea. Breathing room for your attention.";
+const introductionCopy =
+  "Inyosira organises your threads around what needs you, what you’re working on, and what can wait. It aims for 7 threads in Present, moving inactive threads to Later as the list grows. Working threads always stay visible, and you can adjust the target anytime.";
 beforeEach(() => {
   fixture.settings = {
     ...fixture.settings,
@@ -67,74 +84,74 @@ beforeEach(() => {
   });
   fixture.toast.mockReset();
 });
-it("existing installations stay off until explicit Enable; Not now stays dismissed in another view", async () => {
-  const screen = await render(<InyosiraStatus key="client-a" />);
-  await expect
-    .element(
-      screen.getByText(
-        "Keep Present focused with a soft target of 7 threads. Working threads always stay visible.",
-      ),
-    )
-    .toBeVisible();
-  await screen.getByRole("button", { name: "Not now" }).click();
-  expect(fixture.settings.inyosiraPresentTargetEnabled).toBeNull();
-  await expect.element(screen.getByRole("button", { name: "Enable" })).not.toBeInTheDocument();
-  await screen.rerender(<InyosiraStatus key="client-b" />);
-  await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
-});
-it("Enable keeps the configured target and dismisses once; new installations never get the opt-in dialog", async () => {
+it.each(["new", "existing"])(
+  "%s installations acknowledge the default target once across views",
+  async (installation) => {
+    fixture.status.installation = installation;
+    const screen = await render(<InyosiraStatus key="client-a" />);
+    await expect.element(screen.getByRole("dialog", { name: introductionTitle })).toBeVisible();
+    await expect.element(screen.getByText(introductionCopy)).toBeVisible();
+    await expect
+      .element(screen.getByRole("link", { name: "Change target" }))
+      .toHaveAttribute("href", "/settings/general#inyosira");
+    await screen.getByRole("button", { name: "Use default" }).click();
+    expect(fixture.save).toHaveBeenCalledWith({ inyosiraIntroductionDismissed: true });
+    expect(fixture.settings.inyosiraPresentTargetEnabled).toBeNull();
+    await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
+    await screen.rerender(<InyosiraStatus key="client-b" />);
+    await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
+  },
+);
+it("shows and keeps the configured target without resetting it to seven", async () => {
   fixture.settings = { ...fixture.settings, inyosiraPresentTarget: 12 };
   const screen = await render(<InyosiraStatus />);
-  await screen.getByRole("button", { name: "Enable" }).click();
+  await expect.element(screen.getByText(/It aims for 12 threads in Present/)).toBeVisible();
+  await screen.getByRole("button", { name: "Keep current target" }).click();
   expect(fixture.save).toHaveBeenCalledWith({
     inyosiraIntroductionDismissed: true,
-    inyosiraPresentTargetEnabled: true,
   });
   expect(fixture.settings.inyosiraPresentTarget).toBe(12);
-  fixture.status.installation = "new";
-  await screen.rerender(<InyosiraStatus />);
-  await expect.element(screen.getByRole("button", { name: "Enable" })).not.toBeInTheDocument();
+  expect(fixture.settings.inyosiraPresentTargetEnabled).toBeNull();
+  await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
 });
-it("an explicit off in Settings is respected: no opt-in dialog", async () => {
+it("an explicit off in Settings is respected: no target introduction", async () => {
   fixture.settings = { ...fixture.settings, inyosiraPresentTargetEnabled: false };
   const screen = await render(<InyosiraStatus />);
-  await expect.element(screen.getByRole("button", { name: "Enable" })).not.toBeInTheDocument();
+  await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
 });
-it("shows both messages in a dialog and dismisses them together without enabling automation", async () => {
+it("Change target opens the settings link and remembers the introduction without changing the target", async () => {
+  fixture.settings = { ...fixture.settings, inyosiraPresentTarget: 12 };
+  const screen = await render(<InyosiraStatus />);
+  await screen.getByRole("link", { name: "Change target" }).click();
+  expect(fixture.save).toHaveBeenCalledWith({ inyosiraIntroductionDismissed: true });
+  expect(fixture.settings.inyosiraPresentTarget).toBe(12);
+  expect(fixture.settings.inyosiraPresentTargetEnabled).toBeNull();
+  await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
+});
+it("keeps the introduction focused on the target even when automation is paused", async () => {
   fixture.status.state = "paused";
   const screen = await render(
     <div data-testid="sidebar-status">
       <InyosiraStatus />
     </div>,
   );
-  const dialog = screen.getByRole("dialog", { name: "Inyosira" });
+  const dialog = screen.getByRole("dialog", { name: introductionTitle });
   await expect.element(dialog).toBeVisible();
+  await expect.element(dialog.getByRole("status")).not.toBeInTheDocument();
+  await expect.element(dialog.getByText(/Automatic organisation/)).not.toBeInTheDocument();
+  await expect.element(dialog.getByText(introductionCopy)).toBeVisible();
   await expect
-    .element(dialog.getByRole("status"))
-    .toHaveTextContent(
-      "Automatic organisation is paused. You can still move threads. It retries on its own, or right away when you move a thread or change Inyosira settings.",
-    );
-  await expect
-    .element(
-      dialog.getByText(
-        "Keep Present focused with a soft target of 7 threads. Working threads always stay visible.",
-      ),
-    )
-    .toBeVisible();
-  await expect
-    .element(dialog.getByRole("link", { name: "Settings" }))
+    .element(dialog.getByRole("link", { name: "Change target" }))
     .toHaveAttribute("href", "/settings/general#inyosira");
   expect(screen.getByTestId("sidebar-status").element().textContent).toBe("");
-  await dialog.getByRole("button", { name: "Not now" }).click();
+  await dialog.getByRole("button", { name: "Use default" }).click();
   await expect.element(dialog).not.toBeInTheDocument();
   expect(fixture.settings.inyosiraPresentTargetEnabled).toBeNull();
 });
-it("allows closing a paused-only dialog without saving preferences or reopening on the same status", async () => {
+it("paused status changes do not reopen an acknowledged introduction", async () => {
   fixture.settings = { ...fixture.settings, inyosiraIntroductionDismissed: true };
   fixture.status.state = "paused";
   const screen = await render(<InyosiraStatus />);
-  await expect.element(screen.getByRole("dialog", { name: "Inyosira" })).toBeVisible();
-  await screen.getByRole("button", { name: "Close", exact: true }).click();
   await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
   fixture.status = { ...fixture.status };
   await screen.rerender(<InyosiraStatus />);
@@ -142,12 +159,9 @@ it("allows closing a paused-only dialog without saving preferences or reopening 
   expect(fixture.save).not.toHaveBeenCalled();
   fixture.status.reason = "capture-time";
   await screen.rerender(<InyosiraStatus />);
-  await expect.element(screen.getByRole("dialog")).toBeVisible();
-  await expect
-    .element(screen.getByRole("status"))
-    .toHaveTextContent("Automatic organisation stopped: reading your threads took too long.");
+  await expect.element(screen.getByRole("dialog")).not.toBeInTheDocument();
 });
-it("Escape dismisses the introduction using the same saved choice as Not now", async () => {
+it("Escape acknowledges the introduction without changing the default target", async () => {
   const screen = await render(<InyosiraStatus />);
   await expect.element(screen.getByRole("dialog")).toBeVisible();
   await userEvent.keyboard("{Escape}");
@@ -157,25 +171,21 @@ it("Escape dismisses the introduction using the same saved choice as Not now", a
 it("keeps the dialog available after a failed preference save", async () => {
   fixture.save.mockRejectedValueOnce(new Error("save failed"));
   const screen = await render(<InyosiraStatus />);
-  await screen.getByRole("button", { name: "Not now" }).click();
+  await screen.getByRole("button", { name: "Use default" }).click();
   await expect.poll(() => fixture.toast.mock.calls.length).toBe(1);
   await expect.element(screen.getByRole("dialog")).toBeVisible();
-  await expect.element(screen.getByRole("button", { name: "Not now" })).toBeEnabled();
+  await expect.element(screen.getByRole("button", { name: "Use default" })).toBeEnabled();
 });
-it("settings expose target/grace and truthfully retain values after save failure", async () => {
+it("settings show the target enabled by default and retain values after save failure", async () => {
   const screen = await render(<InyosiraIdleSettingsSection />);
   await expect
     .element(screen.getByRole("heading", { name: "Inyosira", exact: true }))
     .toBeVisible();
-  await expect
-    .element(screen.getByRole("switch", { name: "Keep Present focused" }))
-    .not.toBeChecked();
+  await expect.element(screen.getByRole("switch", { name: "Keep Present focused" })).toBeChecked();
   fixture.save.mockRejectedValueOnce(new Error("save failed"));
   await screen.getByRole("switch", { name: "Keep Present focused" }).click();
   await expect.poll(() => fixture.toast.mock.calls.length).toBe(1);
-  await expect
-    .element(screen.getByRole("switch", { name: "Keep Present focused" }))
-    .not.toBeChecked();
+  await expect.element(screen.getByRole("switch", { name: "Keep Present focused" })).toBeChecked();
   const grace = screen.getByRole("spinbutton", { name: "Inyosira grace in minutes" });
   await grace.fill("1");
   await grace.element().blur();

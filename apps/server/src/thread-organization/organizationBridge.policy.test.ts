@@ -19,6 +19,29 @@ const stored = (version: number, barrier: number | null): OrganizationRuntimePol
     targetDrainNotBeforeMs: barrier,
   }) as OrganizationRuntimePolicy;
 
+it.each(["new", "existing"] as const)(
+  "%s installations default the target on while respecting explicit choices and custom targets",
+  (installation) => {
+    assert.equal(DEFAULT_SERVER_SETTINGS.inyosiraPresentTargetEnabled, null);
+    const defaults = organizationPolicySettings(DEFAULT_SERVER_SETTINGS, installation);
+    assert.equal(defaults.targetEnabled, true);
+    const wire = (settings: ServerSettings) =>
+      organizationWirePolicy(settings, installation, stored(1, 50_000));
+    assert.equal(wire(DEFAULT_SERVER_SETTINGS).scheduling?.presentTarget, 7);
+    const disabled = { ...DEFAULT_SERVER_SETTINGS, inyosiraPresentTargetEnabled: false };
+    assert.equal(organizationPolicySettings(disabled, installation).targetEnabled, false);
+    assert.equal(wire(disabled).scheduling?.presentTarget, undefined);
+    assert.notEqual(
+      defaults.policyFingerprint,
+      organizationPolicySettings(disabled, installation).policyFingerprint,
+    );
+    const custom = { ...DEFAULT_SERVER_SETTINGS, inyosiraPresentTarget: 12 };
+    assert.equal(wire(custom).scheduling?.presentTarget, 12);
+    assert.equal(wire(custom).scheduling?.targetNotBeforeMs, 50_000);
+    assert.equal(wire(custom).scheduling?.graceMs, 5 * 60_000);
+  },
+);
+
 it.effect("barrier and settings changes become in-place policy frames, never mid-proposal", () =>
   Effect.gen(function* () {
     let settings: ServerSettings = DEFAULT_SERVER_SETTINGS;

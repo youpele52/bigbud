@@ -1,7 +1,7 @@
+import { INYOSIRA_DEFAULT_PRESENT_TARGET } from "@bigbud/contracts/core/settings.inyosira.ts";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useOrganizationStatus } from "../../hooks/useOrganizationStatus";
-import { organizationPausedCopy } from "../../lib/organizationStatusCopy";
 import { persistServerSettings, useSettings } from "../../hooks/useSettings";
 import { Button } from "../ui/button";
 import {
@@ -9,6 +9,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
+  DialogPanel,
   DialogPopup,
   DialogTitle,
 } from "../ui/dialog";
@@ -18,20 +19,16 @@ export function InyosiraStatus() {
   const status = useOrganizationStatus();
   const dismissed = useSettings((settings) => settings.inyosiraIntroductionDismissed);
   const enabled = useSettings((settings) => settings.inyosiraPresentTargetEnabled);
+  const target = useSettings((settings) => settings.inyosiraPresentTarget);
   const [saving, setSaving] = useState(false);
-  const [dismissedPaused, setDismissedPaused] = useState<string | null>(null);
-  const paused = organizationPausedCopy(status);
-  // An explicit choice in Settings (on or off) is respected; only an unset choice asks.
-  const showIntroduction = status?.installation === "existing" && enabled == null && !dismissed;
-  const decide = async (enable: boolean) => {
+  const showIntroduction = status !== undefined && enabled !== false && !dismissed;
+  const acknowledge = async () => {
+    if (saving) return;
     setSaving(true);
     try {
       await persistServerSettings({
         inyosiraIntroductionDismissed: true,
-        // Enabling keeps any target already configured in Settings (default 7).
-        ...(enable ? { inyosiraPresentTargetEnabled: true } : {}),
       });
-      setDismissedPaused(paused);
     } catch {
       toastManager.add({ type: "error", title: "Couldn't save Inyosira preference" });
     } finally {
@@ -39,50 +36,43 @@ export function InyosiraStatus() {
     }
   };
   const close = () => {
-    if (saving) return;
-    if (showIntroduction) void decide(false);
-    else setDismissedPaused(paused);
+    if (showIntroduction) void acknowledge();
   };
   return (
     <Dialog
-      open={showIntroduction || (paused !== null && paused !== dismissedPaused)}
+      open={showIntroduction}
       onOpenChange={(open) => {
         if (!open) close();
       }}
     >
       <DialogPopup className="max-w-md" showCloseButton={!saving}>
         <DialogHeader>
-          <DialogTitle>Inyosira</DialogTitle>
-          <DialogDescription className="space-y-3 text-sm">
-            {paused ? (
-              <span className="block" role="status">
-                {paused}
-              </span>
-            ) : null}
-            {showIntroduction ? (
-              <span className="block">
-                Keep Present focused with a soft target of 7 threads. Working threads always stay
-                visible.
-              </span>
-            ) : null}
-          </DialogDescription>
+          <DialogTitle>Room for every idea. Breathing room for your attention.</DialogTitle>
         </DialogHeader>
+        <DialogPanel>
+          <DialogDescription className="text-sm">
+            Inyosira organises your threads around what needs you, what you’re working on, and what
+            can wait. It aims for {target} threads in Present, moving inactive threads to Later as
+            the list grows. Working threads always stay visible, and you can adjust the target
+            anytime.
+          </DialogDescription>
+        </DialogPanel>
         <DialogFooter>
           <Link
             className="self-center rounded px-2 py-1 text-sm underline underline-offset-2"
             to="/settings/general"
             hash="inyosira"
+            aria-disabled={saving}
+            onClick={(event) => {
+              if (saving) event.preventDefault();
+              else if (showIntroduction) void acknowledge();
+            }}
           >
-            Settings
+            Change target
           </Link>
-          <Button size="sm" variant="secondary" disabled={saving} onClick={close}>
-            Not now
+          <Button size="sm" disabled={saving} onClick={close}>
+            {target === INYOSIRA_DEFAULT_PRESENT_TARGET ? "Use default" : "Keep current target"}
           </Button>
-          {showIntroduction ? (
-            <Button size="sm" disabled={saving} onClick={() => void decide(true)}>
-              Enable
-            </Button>
-          ) : null}
         </DialogFooter>
       </DialogPopup>
     </Dialog>

@@ -7,9 +7,9 @@ const fingerprint = (value: unknown) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export function organizationPolicySettings(
   settings: ServerSettings,
-  installation: "new" | "existing",
+  _installation: "new" | "existing",
 ) {
-  const targetEnabled = settings.inyosiraPresentTargetEnabled ?? installation === "new";
+  const targetEnabled = settings.inyosiraPresentTargetEnabled ?? true;
   const shortFingerprint = fingerprint([
     settings.inyosiraIdleCleanupEnabled,
     settings.inyosiraIdleTimeoutMinutes,

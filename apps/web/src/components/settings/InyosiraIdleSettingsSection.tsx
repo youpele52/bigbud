@@ -106,7 +106,7 @@ export function InyosiraIdleSettingsSection() {
           control={
             <Switch
               tone="success"
-              checked={targetEnabled ?? status?.installation === "new"}
+              checked={targetEnabled ?? true}
               disabled={saving || !status}
               aria-label="Keep Present focused"
               onCheckedChange={(checked) =>

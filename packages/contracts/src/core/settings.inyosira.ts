@@ -42,7 +42,7 @@ export const InyosiraPresentTarget = Schema.Int.check(
 export const InyosiraGraceMinutes = Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 10 }));
 
 export const InyosiraIdleSettingsFields = {
-  // Null means use the durable new/existing-install classification, never settings-file absence.
+  // Null uses the enabled default; an explicit false always disables the target.
   inyosiraPresentTargetEnabled: Schema.NullOr(Schema.Boolean).pipe(
     Schema.withDecodingDefault(() => null),
   ),
