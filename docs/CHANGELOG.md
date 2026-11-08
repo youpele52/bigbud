@@ -88,6 +88,11 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - Live checks are still needed for remote disconnect and reattachment, retention, and compaction. Packaged-app connection and memory measurements are also pending.
 - OpenCode V2 folder relocation remains disabled. CLIProxy helpers still need live checks for nested agents, resume, and concurrent work.
 
+### More Reliable OpenCode Recovery
+
+- **Recover chats after OpenCode updates:** bigbud can safely repair unchanged plugin installation metadata and recover retained thread-tool ownership before replacing a managed plugin. Native sessions and chat history stay intact, and conversations are never replayed to recover them.
+- **Continue conversations after reconnecting:** OpenCode’s default model variant is recognized consistently, so a harmless provider response difference no longer prevents a saved chat from continuing. Compatibility checks and ownership safeguards remain in place.
+
 ## v0.3.2 (5 November, 2026)
 
 ### Organize Your Work With Inyosira
