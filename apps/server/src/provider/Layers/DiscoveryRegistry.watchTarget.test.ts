@@ -51,10 +51,8 @@ describe("DiscoveryRegistry watch targets on the real file system", () => {
           yield* settle;
 
           const afterAppear = yield* Ref.get(changes);
-          yield* fs.writeFileString(
-            path.join(leaf, "new-skill", "SKILL.md"),
-            "---\nname: x\n---\n",
-          );
+          // A direct child: Linux watches are non-recursive, so nested writes are not seen.
+          yield* fs.makeDirectory(path.join(leaf, "second-skill"));
           yield* waitForCount(changes, afterAppear + 1);
         }),
       ).pipe(Effect.provide(NodeServices.layer)),
