@@ -83,6 +83,8 @@ export const ThreadDetailMessageDbRow = ProjectionThreadMessage.mapFields(
     originSegments: Schema.NullOr(
       Schema.fromJsonString(ProjectionThreadMessage.fields.originSegments),
     ),
+    /** Full stored length when selected with `boundedMessageTextColumnsSql`. */
+    textLength: Schema.optional(NonNegativeInt),
   }),
 );
 export type ThreadDetailMessageDbRow = typeof ThreadDetailMessageDbRow.Type;
@@ -91,6 +93,8 @@ export const ThreadDetailActivityDbRow = ProjectionThreadActivity.mapFields(
   Struct.assign({
     payload: Schema.fromJsonString(Schema.Unknown),
     sequence: Schema.NullOr(NonNegativeInt),
+    /** Stored payload length when selected with `boundedActivityPayloadColumnsSql`. */
+    payloadLength: Schema.optional(Schema.NullOr(NonNegativeInt)),
   }),
 );
 export type ThreadDetailActivityDbRow = typeof ThreadDetailActivityDbRow.Type;

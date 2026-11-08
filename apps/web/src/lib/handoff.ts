@@ -3,6 +3,7 @@ import type { SeedMessageOutput } from "./threadBranch";
 
 import { readNativeApi } from "../rpc/nativeApi";
 import { selectIsThreadRunning, selectThreadById, useStore } from "../stores/main";
+import { resolveFullMessageText } from "../stores/main/messageText.store";
 import { buildSkillMentionPrompt } from "./skillMentions";
 import { newCommandId, newMessageId } from "./utils";
 
@@ -62,6 +63,8 @@ export async function dispatchHandoffSkillTurn(input: DispatchHandoffTurnInput):
 interface WaitForHandoffSummaryOptions {
   requestMessageId?: string;
   timeoutMs?: number;
+  /** Reads the full text of a message the store holds only a preview of. */
+  resolveMessageText?: typeof resolveFullMessageText;
 }
 
 function extractHandoffDocument(text: string): string | null {
@@ -201,11 +204,15 @@ export function waitForHandoffDocument(
 ): Promise<string> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_HANDOFF_TIMEOUT_MS;
   const requestMessageId = options?.requestMessageId ?? null;
+  const resolveMessageText = options?.resolveMessageText ?? resolveFullMessageText;
 
   return new Promise((resolve, reject) => {
     let intervalHandle: ReturnType<typeof setInterval> | null = null;
     let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
     let completionDetectedAt: number | null = null;
+    // A truncated response is read in full once; the document may sit past the preview.
+    const fullTextById = new Map<string, string>();
+    let readingFullText = false;
 
     const cleanup = (onComplete: () => void) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
@@ -237,11 +244,37 @@ export function waitForHandoffDocument(
       const assistantMessages = thread.messages
         .slice(requestMessageIndex + 1)
         .filter((message) => message.role === "assistant" && !message.streaming && message.text);
+      const unread = assistantMessages.filter(
+        (message) => message.textTruncated === true && !fullTextById.has(message.id),
+      );
+      if (unread.length > 0) {
+        if (readingFullText) return;
+        readingFullText = true;
+        void (async () => {
+          for (const message of unread) {
+            fullTextById.set(message.id, await resolveMessageText(threadId, message));
+          }
+        })().then(
+          () => {
+            readingFullText = false;
+            check();
+          },
+          (error: unknown) =>
+            cleanup(() =>
+              reject(
+                new HandoffError(
+                  `Could not read the full handoff response: ${
+                    error instanceof Error ? error.message : String(error)
+                  }`,
+                ),
+              ),
+            ),
+        );
+        return;
+      }
       const handoffDocument = assistantMessages
-        .map(
-          (message) =>
-            extractHandoffDocument(message.text) ?? extractFallbackHandoffDocument(message.text),
-        )
+        .map((message) => fullTextById.get(message.id) ?? message.text)
+        .map((text) => extractHandoffDocument(text) ?? extractFallbackHandoffDocument(text))
         .findLast((document) => document !== null);
       if (handoffDocument) {
         cleanup(() => resolve(handoffDocument));

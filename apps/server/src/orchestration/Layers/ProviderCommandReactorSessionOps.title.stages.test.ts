@@ -185,7 +185,10 @@ describe("staged automatic thread titles", () => {
     expect(f.generate).toHaveBeenCalledTimes(5);
     expect(f.generate.mock.calls[4]?.[0]).toMatchObject({ verifiedThreadModelOnly: true });
     expect(f.thread.title).toBe("Manual metadata recovery");
-    expect(f.thread.activities.at(-1)?.kind).toBe("text-generation.completed");
+    expect(f.dispatch.mock.calls.at(-1)?.[0]).toMatchObject({
+      type: "thread.activity.append",
+      activity: { kind: "text-generation.completed" },
+    });
     await Effect.runPromise(f.run());
     expect(f.generate).toHaveBeenCalledTimes(5);
   });

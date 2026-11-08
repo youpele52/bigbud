@@ -184,8 +184,20 @@ describe("backend manager start", () => {
     mocks.lifecycle[1]!.scheduleRestart("exit");
     await vi.advanceTimersByTimeAsync(60_000);
     expect(children).toHaveLength(3);
-    expect(children[2]!.envelope()).not.toHaveProperty("startReason");
+    // A later exit the desktop did not ask for is still a crash, never an ordinary start.
+    expect(children[2]!.envelope()).toMatchObject({ startReason: "unexpected-exit-restart" });
     mocks.lifecycle[2]!.onDisconnected();
+  });
+
+  it("marks the start after an unexpected exit, but never the first start", async () => {
+    await startBackend();
+    expect(children[0]!.envelope()).not.toHaveProperty("startReason");
+    mocks.lifecycle[0]!.onDisconnected();
+    mocks.lifecycle[0]!.scheduleRestart("code=null signal=SIGABRT");
+    await vi.advanceTimersByTimeAsync(600);
+    expect(children).toHaveLength(2);
+    expect(children[1]!.envelope()).toMatchObject({ startReason: "unexpected-exit-restart" });
+    mocks.lifecycle[1]!.onDisconnected();
   });
 
   it("sends no computer-use owner field when main provides no access (today)", async () => {

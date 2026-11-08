@@ -85,6 +85,11 @@ describe("desktop release assets", () => {
       "server-workspace-agent-linux-x64",
       "server-workspace-agent-win32-x64.exe",
       "server-workspace-agent-win32-arm64.exe",
+      "server-organization-supervisor-darwin-arm64",
+      "server-organization-supervisor-darwin-x64",
+      "server-organization-supervisor-linux-x64",
+      "server-organization-supervisor-win32-x64.exe",
+      "server-organization-supervisor-win32-arm64.exe",
     ];
     for (const name of files) {
       writeFileSync(join(directory, name), name);
@@ -127,6 +132,11 @@ describe("desktop release assets", () => {
       "server-workspace-agent-linux-x64",
       "server-workspace-agent-win32-x64.exe",
       "server-workspace-agent-win32-arm64.exe",
+      "server-organization-supervisor-darwin-arm64",
+      "server-organization-supervisor-darwin-x64",
+      "server-organization-supervisor-linux-x64",
+      "server-organization-supervisor-win32-x64.exe",
+      "server-organization-supervisor-win32-arm64.exe",
     ]) {
       writeFileSync(join(directory, name), name);
     }
@@ -156,6 +166,11 @@ describe("desktop release assets", () => {
       "server-workspace-agent-linux-x64",
       "server-workspace-agent-win32-x64.exe",
       "server-workspace-agent-win32-arm64.exe",
+      "server-organization-supervisor-darwin-arm64",
+      "server-organization-supervisor-darwin-x64",
+      "server-organization-supervisor-linux-x64",
+      "server-organization-supervisor-win32-x64.exe",
+      "server-organization-supervisor-win32-arm64.exe",
     ]) {
       writeFileSync(join(directory, name), name);
     }

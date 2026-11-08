@@ -33,6 +33,8 @@ export const OrchestrationProject = Schema.Struct({
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),
   workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
+  workspaceKind: Schema.optional(Schema.Literals(["managed", "external"])),
+  previousWorkspaceRoot: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   defaultModelSelection: Schema.NullOr(HistoricalModelSelection),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,

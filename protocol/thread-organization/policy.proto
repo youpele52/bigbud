@@ -1,0 +1,20 @@
+syntax = "proto3";
+package bigbud.thread_organization.policy.v1;
+import "thread-organization/scheduling.proto";
+
+// Identity/barriers must already be committed by TS before publishing this snapshot.
+// Actual scheduling settings/proposals are deliberately not part of this admission slice.
+message Policy {
+  uint64 version = 1;
+  string fingerprint = 2;
+  optional uint64 older_policy_changed_at_ms = 3;
+  bigbud.thread_organization.scheduling.v1.Settings scheduling = 4;
+}
+message Limits {
+  uint32 frame_bytes = 1; // <= 1 MiB
+  uint32 page_rows = 2; // <= 256
+  uint32 live_rows = 3; // <= 100,000
+  uint32 state_bytes = 4; // <= 64 MiB (canonical encoded row bytes + 4-byte lengths)
+  uint32 pending_facts = 5; // <= 2,000
+  uint32 pending_bytes = 6; // <= 8 MiB (canonical encoded fact bytes)
+}

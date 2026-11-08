@@ -4,6 +4,8 @@ import { knownV2BootstrapCompatibility } from "./Orchestration.compatibility.ts"
 import {
   V2_N5_BOOTSTRAP_COMPATIBILITY,
   V2_N5_COMPATIBILITY_DIGEST,
+  V2_N7_BOOTSTRAP_COMPATIBILITY,
+  V2_N7_COMPATIBILITY_DIGEST,
 } from "./Orchestration.compatibility.legacy.ts";
 import { V2_NATIVE_POLICY_ACTIONS } from "./NativeCompatibility.policy.actions.ts";
 import { validateV2ConfigControls } from "./NativeCompatibility.sources.controls.ts";
@@ -17,14 +19,16 @@ import {
 } from "./PluginSetup.policy.native.ts";
 import { inspectV2PluginControls } from "./PluginSetup.policy.ts";
 
-it("retains the exact prior descriptor without rewriting signed bootstrap evidence", () => {
-  expect(
-    createHash("sha256").update(JSON.stringify(V2_N5_BOOTSTRAP_COMPATIBILITY)).digest("hex"),
-  ).toBe(V2_N5_COMPATIBILITY_DIGEST);
-  expect(
-    knownV2BootstrapCompatibility(V2_N5_BOOTSTRAP_COMPATIBILITY, V2_N5_COMPATIBILITY_DIGEST),
-  ).toBe(V2_N5_BOOTSTRAP_COMPATIBILITY);
-});
+it.each([
+  [V2_N5_BOOTSTRAP_COMPATIBILITY, V2_N5_COMPATIBILITY_DIGEST],
+  [V2_N7_BOOTSTRAP_COMPATIBILITY, V2_N7_COMPATIBILITY_DIGEST],
+])(
+  "retains the exact prior descriptor without rewriting signed bootstrap evidence",
+  (descriptor, digest) => {
+    expect(createHash("sha256").update(JSON.stringify(descriptor)).digest("hex")).toBe(digest);
+    expect(knownV2BootstrapCompatibility(descriptor, digest)).toBe(descriptor);
+  },
+);
 
 it.each(V2_NATIVE_POLICY_ACTIONS)("preserves ordered allow/deny semantics for %s", (action) => {
   const deny = { action, resource: "*", effect: "deny" as const };
@@ -52,16 +56,16 @@ it.each(V2_NATIVE_POLICY_ACTIONS)("preserves ordered allow/deny semantics for %s
   ).toThrow();
 });
 
-it("accepts the source-backed 2.2.5 action enum but not future security semantics", () => {
+it("accepts the source-backed 2.2.6 action enum but not future security semantics", () => {
   const contract = v2CanonicalApiFixture();
   const policies = schemaObject(
     contract.components.schemas["Config.InfoEncoded"]!.properties.policies,
   );
   const action = schemaObject(schemaObject(schemaObject(policies.items).properties).action);
   action.enum = [...V2_NATIVE_POLICY_ACTIONS];
-  expect(assertV2CanonicalNativeApi(contract, "2.2.5")).toMatch(/^[a-f0-9]{64}$/);
+  expect(assertV2CanonicalNativeApi(contract, "2.2.6")).toMatch(/^[a-f0-9]{64}$/);
   action.enum = [...V2_NATIVE_POLICY_ACTIONS, "future.use"];
-  expect(() => assertV2CanonicalNativeApi(contract, "2.2.5")).toThrow("incompatible");
+  expect(() => assertV2CanonicalNativeApi(contract, "2.2.6")).toThrow("incompatible");
   expect(() =>
     validateV2ConfigControls({
       policies: [{ action: "future.use", resource: "*", effect: "deny" }],

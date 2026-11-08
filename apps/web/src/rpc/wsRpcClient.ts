@@ -1,3 +1,4 @@
+import { ORGANIZATION_AUTOMATION_METHODS } from "@bigbud/contracts/server/organizationAutomation.ts";
 import { ORCHESTRATION_WS_METHODS, WS_METHODS } from "@bigbud/contracts";
 
 import { randomUUID } from "~/lib/utils";
@@ -16,6 +17,9 @@ import { requestRemoteFolders, requestSshConfigHosts } from "./wsRpcClient.remot
 import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import { createComputerUseRpcClient } from "./wsRpcClient.computerUse";
+import { createBranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
+import { createDetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
+import { createDatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
 
 let sharedWsRpcClient: WsRpcClient | null = null;
@@ -48,6 +52,12 @@ function subscribeEmptyInput<TEvent>(
 
 export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
   return {
+    organization: {
+      status: () =>
+        transport.request((client) => client[ORGANIZATION_AUTOMATION_METHODS.status]({})),
+      engagement: (input) =>
+        transport.request((client) => client[ORGANIZATION_AUTOMATION_METHODS.engagement](input)),
+    },
     dispose: () => transport.dispose(),
     reconnect: async () => {
       resetWsReconnectBackoff();
@@ -191,6 +201,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
       },
     },
     server: {
+      ...createDatabaseCompactionRpcMethods(transport),
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
       getConfig: () => requestServerConfig(transport),
       refreshProviders: () =>
@@ -213,6 +224,14 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverRestartRemoteAgent](input)),
       getRemoteAgentRestartStatus: (input) =>
         transport.request((client) => client[WS_METHODS.serverGetRemoteAgentRestartStatus](input)),
+      disconnectExecutionTarget: (input) =>
+        transport.request((client) => client[WS_METHODS.serverDisconnectExecutionTarget](input)),
+      connectExecutionTarget: (input) =>
+        transport.request((client) => client[WS_METHODS.serverConnectExecutionTarget](input)),
+      listDisconnectedExecutionTargets: () =>
+        transport.request((client) =>
+          client[WS_METHODS.serverListDisconnectedExecutionTargets]({}),
+        ),
       getRemoteAgentUpdateStatus: (input) =>
         transport.request((client) => client[WS_METHODS.serverGetRemoteAgentUpdateStatus](input)),
       unlockSshKey: (input) =>
@@ -333,8 +352,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getThreadOwnership](input)),
       getCommandOutcome: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getCommandOutcome](input)),
-      getSnapshot: () =>
-        transport.request((client) => client[ORCHESTRATION_WS_METHODS.getSnapshot]({})),
+      ...createDetailPagingRpcMethods(transport),
+      ...createBranchCopyRpcMethods(transport),
       dispatchCommand: (input) =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.dispatchCommand](input)),
       getTurnDiff: (input) =>

@@ -2,6 +2,7 @@ import type {
   ProviderTurnAdmission,
   ProviderTurnAdmissionIdentity,
   ProviderTurnAdmissionState,
+  ProviderTurnAdmissionBinding,
 } from "@bigbud/contracts/orchestration/providerTurnAdmission.ts";
 import { ServiceMap, Schema } from "effect";
 import type * as Effect from "effect/Effect";
@@ -20,6 +21,10 @@ export type ProviderTurnAdmissionError =
   | ProviderTurnAdmissionConflict;
 
 export interface ProviderTurnAdmissionsShape {
+  /** Resolve verified committed V2 Location lineage without changing immutable admission material. */
+  readonly effectiveWorkspaceLocation?: (
+    binding: ProviderTurnAdmissionBinding,
+  ) => Effect.Effect<string, ProviderTurnAdmissionError>;
   readonly assertOwnerAvailable: (
     threadId: ThreadId,
   ) => Effect.Effect<void, ProviderTurnAdmissionError>;

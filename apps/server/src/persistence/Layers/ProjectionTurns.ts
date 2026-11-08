@@ -15,12 +15,14 @@ import {
   ProjectionTurn,
   ProjectionTurnById,
   ProjectionTurnRepository,
+  ProjectionTurnStoredUsage,
   type ProjectionTurnRepositoryShape,
 } from "../Services/ProjectionTurns.ts";
 
 const ProjectionTurnDbRowSchema = ProjectionTurn.mapFields(
   Struct.assign({
     usageAttribution: Schema.optional(Schema.NullOr(Schema.fromJsonString(UsageAttribution))),
+    storedUsage: Schema.optional(Schema.fromJsonString(ProjectionTurnStoredUsage)),
     checkpointFiles: Schema.fromJsonString(Schema.Array(OrchestrationCheckpointFile)),
   }),
 );
@@ -68,8 +70,10 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           checkpoint_files_json
         )
         VALUES (
-          ${row.usageAttribution?.provider ?? null}, ${row.usageAttribution?.model ?? null},
-          ${row.usageAttribution?.interactionMode ?? null}, ${row.usageAttribution ? "turn-request" : null},
+          ${row.storedUsage ? row.storedUsage.provider : (row.usageAttribution?.provider ?? null)},
+          ${row.storedUsage ? row.storedUsage.model : (row.usageAttribution?.model ?? null)},
+          ${row.storedUsage ? row.storedUsage.interactionMode : (row.usageAttribution?.interactionMode ?? null)},
+          ${row.storedUsage ? row.storedUsage.source : row.usageAttribution ? "turn-request" : null},
           ${row.threadId},
           ${row.turnId},
           ${row.pendingMessageId},
@@ -141,8 +145,10 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           checkpoint_files_json
         )
         VALUES (
-          ${row.usageAttribution?.provider ?? null}, ${row.usageAttribution?.model ?? null},
-          ${row.usageAttribution?.interactionMode ?? null}, ${row.usageAttribution ? "turn-request" : null},
+          ${row.storedUsage ? row.storedUsage.provider : (row.usageAttribution?.provider ?? null)},
+          ${row.storedUsage ? row.storedUsage.model : (row.usageAttribution?.model ?? null)},
+          ${row.storedUsage ? row.storedUsage.interactionMode : (row.usageAttribution?.interactionMode ?? null)},
+          ${row.storedUsage ? row.storedUsage.source : row.usageAttribution ? "turn-request" : null},
           ${row.threadId},
           NULL,
           ${row.messageId},
@@ -164,7 +170,10 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
   const getPendingProjectionTurn = SqlSchema.findOneOption({
     Request: GetProjectionPendingTurnStartInput,
     Result: ProjectionPendingTurnStart.mapFields(
-      Struct.assign({ usageAttribution: Schema.NullOr(Schema.fromJsonString(UsageAttribution)) }),
+      Struct.assign({
+        usageAttribution: Schema.NullOr(Schema.fromJsonString(UsageAttribution)),
+        storedUsage: Schema.fromJsonString(ProjectionTurnStoredUsage),
+      }),
     ),
     execute: ({ threadId }) =>
       sql`
@@ -172,6 +181,7 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           thread_id AS "threadId",
           pending_message_id AS "messageId",
           CASE WHEN usage_attribution_source IS NOT NULL THEN json_object('provider', usage_provider, 'model', usage_model, 'interactionMode', usage_interaction_mode) END AS "usageAttribution",
+          json_object('provider', usage_provider, 'model', usage_model, 'interactionMode', usage_interaction_mode, 'source', usage_attribution_source) AS "storedUsage",
           source_proposed_plan_thread_id AS "sourceProposedPlanThreadId",
           source_proposed_plan_id AS "sourceProposedPlanId",
           requested_at AS "requestedAt"
@@ -196,6 +206,7 @@ const makeProjectionTurnRepository = Effect.gen(function* () {
           turn_id AS "turnId",
           pending_message_id AS "pendingMessageId",
           CASE WHEN usage_attribution_source IS NOT NULL THEN json_object('provider', usage_provider, 'model', usage_model, 'interactionMode', usage_interaction_mode) END AS "usageAttribution",
+          json_object('provider', usage_provider, 'model', usage_model, 'interactionMode', usage_interaction_mode, 'source', usage_attribution_source) AS "storedUsage",
           source_proposed_plan_thread_id AS "sourceProposedPlanThreadId",
           source_proposed_plan_id AS "sourceProposedPlanId",
           assistant_message_id AS "assistantMessageId",

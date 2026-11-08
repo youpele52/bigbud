@@ -83,8 +83,10 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
   const isFavorite = props.favoriteThreadIds.has(effectiveThreadId);
   const isAutomationThread = props.automationThreadIds?.has(effectiveThreadId) ?? false;
+  // `h-4` matches the title's text-xs line: the taller jump-hint pill overflows it centered
+  // instead of growing auto-height (two-line Inyosira) rows while the modifier is held.
   const threadMetaClassName =
-    "pointer-events-none transition-opacity duration-150 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0";
+    "pointer-events-none flex h-4 items-center transition-opacity duration-150 group-hover/menu-sub-item:opacity-0 group-focus-within/menu-sub-item:opacity-0";
 
   const handleDeleteAction = useCallback(
     (event: MouseEvent<HTMLButtonElement>) => {

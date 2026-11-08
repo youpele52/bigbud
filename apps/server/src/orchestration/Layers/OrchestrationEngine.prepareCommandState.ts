@@ -1,5 +1,6 @@
 import type { OrchestrationCommand, OrchestrationThread, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
+import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { forkLineageThreadIds } from "../deciderThreads.fork.logic.ts";
 import { commandToAggregateRef } from "./OrchestrationEngine.commandProcessing.ts";
@@ -13,9 +14,19 @@ type ThreadStateHydrator<HydrationError> = {
 
 export function makePrepareCommandState<HydrationError>(input: {
   readonly threadStateHydrator: ThreadStateHydrator<HydrationError> | null;
+  readonly sql?: SqlClient.SqlClient;
 }) {
   return (command: OrchestrationCommand) => {
     if (input.threadStateHydrator === null) return Effect.void;
+    if (command.type === "project.reconfigure") {
+      return Effect.gen(function* () {
+        const sql = input.sql;
+        if (!sql) return;
+        const rows = yield* sql<{ threadId: ThreadId }>`SELECT thread_id AS "threadId"
+          FROM projection_threads WHERE project_id = ${command.projectId} AND deleted_at IS NULL`;
+        for (const row of rows) yield* input.threadStateHydrator!.load(row.threadId, "history");
+      });
+    }
     if (command.type === "thread.create") {
       return Effect.gen(function* () {
         yield* input.threadStateHydrator!.load(command.threadId, "operational");

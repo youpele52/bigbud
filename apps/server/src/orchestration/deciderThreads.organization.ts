@@ -17,6 +17,7 @@ import type {
 } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import { Effect } from "effect";
 
+import { effectiveOrganizationActivity, organizationWithAge } from "./threadOrganization.aging.ts";
 import { OrchestrationCommandInvariantError } from "./Errors.ts";
 import { requireThreadNotArchived, requireThreadNotDeleting } from "./commandInvariants.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
@@ -37,6 +38,7 @@ export type ThreadOrganizationCommand = Extract<
   {
     type:
       | "thread.organization.move"
+      | "thread.organization.react"
       | "thread.organization.snooze"
       | "thread.organization.snooze.expire"
       | "thread.organization.idle";
@@ -45,6 +47,7 @@ export type ThreadOrganizationCommand = Extract<
 
 export const THREAD_ORGANIZATION_COMMAND_TYPES: ReadonlySet<string> = new Set([
   "thread.organization.move",
+  "thread.organization.react",
   "thread.organization.snooze",
   "thread.organization.snooze.expire",
   "thread.organization.idle",
@@ -56,7 +59,19 @@ function organizationUpdatedEvent(input: {
   readonly organization: ThreadOrganization;
   readonly reason: ThreadOrganizationChangeReason;
   readonly occurredAt: string;
+  readonly current: ThreadOrganization;
+  readonly automatic?: boolean;
 }): DecidedEvent {
+  const source =
+    input.automatic || input.reason === "idle" || input.reason === "snooze-expired"
+      ? ("automatic" as const)
+      : ("deliberate" as const);
+  const payload = {
+    threadId: input.threadId,
+    organization: input.organization,
+    reason: input.reason,
+    source,
+  };
   return {
     ...withEventBase({
       aggregateKind: "thread",
@@ -65,11 +80,7 @@ function organizationUpdatedEvent(input: {
       commandId: input.commandId,
     }),
     type: "thread.organization-updated",
-    payload: {
-      threadId: input.threadId,
-      organization: input.organization,
-      reason: input.reason,
-    },
+    payload: { ...payload, organization: organizationWithAge(input.current, payload) },
   };
 }
 
@@ -89,6 +100,17 @@ export const decideThreadOrganizationCommand = Effect.fn("decideThreadOrganizati
       if (thread.deletingAt) return [];
       const occurredAt = nowIso();
       const current = currentThreadOrganization(thread);
+      if (command.type === "thread.organization.idle" && command.terminalIdleCutoff !== undefined) {
+        const activity = effectiveOrganizationActivity({
+          createdAt: thread.createdAt,
+          // Operational read models expose updatedAt, which conservatively overcounts activity.
+          // The serialized SQL guard separately rechecks the exact projection age/gates.
+          lastActivityAt: thread.updatedAt,
+          organization: current,
+          completedAt: thread.latestTurn?.completedAt ?? null,
+        });
+        if (activity === null || activity > command.terminalIdleCutoff) return [];
+      }
       // Commands are decided one at a time, so admitted work always blocks a later idle move.
       const organization =
         command.type === "thread.organization.idle"
@@ -105,6 +127,7 @@ export const decideThreadOrganizationCommand = Effect.fn("decideThreadOrganizati
           organization,
           occurredAt,
           reason: command.type === "thread.organization.idle" ? "idle" : "snooze-expired",
+          current,
         }),
       ];
     }
@@ -131,21 +154,39 @@ export const decideThreadOrganizationCommand = Effect.fn("decideThreadOrganizati
           organization,
           occurredAt,
           reason: "snooze",
+          current,
         }),
       ];
     }
 
-    if (command.expectedRevision !== undefined && command.expectedRevision !== current.revision) {
+    if (
+      command.type === "thread.organization.move" &&
+      command.expectedRevision !== undefined &&
+      command.expectedRevision !== current.revision
+    ) {
       return yield* new OrchestrationCommandInvariantError({
         commandType: command.type,
         detail: `Thread '${command.threadId}' was reorganized since revision ${command.expectedRevision}.`,
       });
     }
-    const organization = organizationAfterMove(current, command.state, occurredAt);
+    const organization =
+      command.type === "thread.organization.move" &&
+      current.state === command.state &&
+      current.snooze === null
+        ? { ...current, revision: current.revision + 1, changedAt: occurredAt }
+        : organizationAfterMove(current, command.state, occurredAt);
     if (organization === null) return [];
     const { commandId, threadId } = command;
     return [
-      organizationUpdatedEvent({ commandId, threadId, organization, occurredAt, reason: "move" }),
+      organizationUpdatedEvent({
+        commandId,
+        threadId,
+        organization,
+        occurredAt,
+        reason: "move",
+        current,
+        automatic: command.type === "thread.organization.react",
+      }),
     ];
   },
 );
@@ -185,6 +226,7 @@ export function withLifecycleOrganizationEvents(input: {
       organization,
       occurredAt,
       reason: archived ? "archive" : "unarchive",
+      current,
     }),
   ];
 }

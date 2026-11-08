@@ -10,13 +10,14 @@ import {
 } from "../deletion/Layers/CanonicalThreadCleanup.ts";
 import { runLegacyPurgeManifestRecovery } from "../deletion/Layers/LegacyPurgeManifestRecovery.ts";
 import { OrchestrationProjectionPipelineLive } from "../orchestration/Layers/ProjectionPipeline.ts";
-import { OrchestrationProjectionPipeline } from "../orchestration/Services/ProjectionPipeline.ts";
+import { OrchestrationEventStore } from "../persistence/Services/OrchestrationEventStore.ts";
 import { OrchestrationEventStoreLive } from "../persistence/Layers/OrchestrationEventStore.ts";
 import {
   layerConfig as SqlitePersistenceLayerLive,
   makeSqliteReadOnlyPersistenceLive,
 } from "../persistence/Layers/Sqlite.ts";
 import { PurgeJobRepositoryLive } from "../persistence/Layers/PurgeJobRepository.ts";
+import { holdBackendLockForCli } from "./cli.backendLock.ts";
 import { PortSchema, resolveServerConfig } from "./cli.config.ts";
 import { runServer } from "../server";
 import { writeStartupStatus } from "../startup/startupStatus";
@@ -170,7 +171,7 @@ const canonicalEventCompactionCommand = Command.make("canonical-event-compaction
   ),
   serverStopped: Flag.boolean("server-stopped").pipe(
     Flag.optional,
-    Flag.withDescription("Confirm the bigbud desktop app and server are stopped before applying."),
+    Flag.withDescription("Accepted for compatibility; --apply now checks the backend lock."),
   ),
 }).pipe(
   Command.withDescription(
@@ -179,23 +180,22 @@ const canonicalEventCompactionCommand = Command.make("canonical-event-compaction
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const apply = Option.getOrElse(flags.apply, () => false);
-      const serverStopped = Option.getOrElse(flags.serverStopped, () => false);
-      if (apply && !serverStopped) {
-        return yield* Effect.fail(
-          new Error(
-            "--apply requires --server-stopped after stopping the bigbud desktop app and server.",
-          ),
-        );
-      }
       const logLevel = yield* GlobalFlag.LogLevel;
       const config = yield* resolveServerConfig(flags, logLevel);
+      // Held until the command ends: proves no backend runs, and keeps one from starting.
+      if (apply) {
+        yield* holdBackendLockForCli({
+          stateDir: config.stateDir,
+          port: config.port,
+          command: "canonical-event-compaction",
+        });
+      }
       const persistenceLayer = apply
         ? SqlitePersistenceLayerLive
         : makeSqliteReadOnlyPersistenceLive(config.dbPath);
-      const compactionLayer = Layer.mergeAll(
-        OrchestrationEventStoreLive,
-        OrchestrationProjectionPipelineLive.pipe(Layer.provide(OrchestrationEventStoreLive)),
-      ).pipe(Layer.provideMerge(persistenceLayer));
+      const compactionLayer = OrchestrationEventStoreLive.pipe(
+        Layer.provideMerge(persistenceLayer),
+      );
       const result = yield* Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         const states = yield* sql<{
@@ -258,27 +258,14 @@ const canonicalEventCompactionCommand = Command.make("canonical-event-compaction
             deletedCount: 0,
           };
         }
-        const pipeline = yield* OrchestrationProjectionPipeline;
+        const eventStore = yield* OrchestrationEventStore;
         let deletedCount = 0;
-        let previousRetained = state.retainedThroughSequence;
         let completed = false;
+        // Each pass reports what it deleted, so no pass re-counts the whole log.
         for (let pass = 0; pass < maxPasses && !completed; pass += 1) {
-          yield* pipeline.compactVerifiedPrefix(batchSize);
-          const next = yield* sql<{
-            retainedThroughSequence: number;
-            compactThroughSequence: number;
-          }>`
-            SELECT retained_through_sequence AS "retainedThroughSequence",
-              compact_through_sequence AS "compactThroughSequence"
-            FROM orchestration_retention_state WHERE singleton_id = 1
-          `;
-          const retained = next[0]?.retainedThroughSequence ?? previousRetained;
-          const nextEventCounts = yield* sql<{ count: number }>`
-            SELECT COUNT(*) AS count FROM orchestration_events
-          `;
-          deletedCount = initialEventCount - (nextEventCounts[0]?.count ?? initialEventCount);
-          previousRetained = retained;
-          completed = retained >= (next[0]?.compactThroughSequence ?? state.compactThroughSequence);
+          const result = yield* eventStore.compactVerifiedPrefix!(batchSize);
+          deletedCount += result.deletedCount;
+          completed = result.complete;
         }
         return {
           mode: "apply" as const,
@@ -294,7 +281,7 @@ const canonicalEventCompactionCommand = Command.make("canonical-event-compaction
         };
       }).pipe(Effect.provide(compactionLayer), Effect.provideService(ServerConfig, config));
       yield* Effect.logInfo("canonical event compaction completed", result);
-    }),
+    }).pipe(Effect.scoped),
   ),
 );
 

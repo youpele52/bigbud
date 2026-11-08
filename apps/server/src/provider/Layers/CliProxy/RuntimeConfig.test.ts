@@ -175,6 +175,7 @@ describe("resolveCliProxyRuntimeConfig", () => {
       PATH: process.env.PATH,
       HOME: process.env.HOME,
       ELECTRON_RUN_AS_NODE: "1",
+      ...result.first.harness.protectedSettingsEnvironment,
       ANTHROPIC_AUTH_TOKEN: "first-token",
       ANTHROPIC_BASE_URL: "http://127.0.0.1:8317",
       ANTHROPIC_CUSTOM_MODEL_OPTION: "gpt-5-codex",
@@ -183,12 +184,32 @@ describe("resolveCliProxyRuntimeConfig", () => {
     expect(result.second.harness.environment).toEqual({
       PATH: process.env.PATH,
       HOME: process.env.HOME,
+      ...result.second.harness.protectedSettingsEnvironment,
       ANTHROPIC_AUTH_TOKEN: "second-token",
       ANTHROPIC_CUSTOM_MODEL_OPTION: "gpt-5-codex",
       ANTHROPIC_CUSTOM_MODEL_OPTION_SUPPORTED_CAPABILITIES: "",
       ANTHROPIC_BASE_URL: "http://127.0.0.1:8317",
     });
-    expect(result.second.harness.settingSources).toEqual([]);
+    expect(result.second.harness.settingSources).toEqual(["user", "project", "local"]);
+    expect(result.second.harness.protectedSettingsEnvironment).toMatchObject({
+      ANTHROPIC_API_KEY: "",
+      ANTHROPIC_CUSTOM_HEADERS: "",
+      CLAUDE_CODE_OAUTH_TOKEN: "",
+      CLAUDE_CODE_USE_ANTHROPIC_AWS: "0",
+      CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD: "0",
+      CLAUDE_CODE_USE_MANTLE: "0",
+      CLAUDE_CODE_USE_GATEWAY: "0",
+      CLAUDE_CODE_SUBAGENT_MODEL: "gpt-5-codex",
+      CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "0",
+      CLAUDE_CODE_USE_BEDROCK: "0",
+      CLAUDE_CODE_USE_VERTEX: "0",
+      CLAUDE_CODE_USE_FOUNDRY: "0",
+      ANTHROPIC_MODEL: "gpt-5-codex",
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: "gpt-5-codex",
+      ANTHROPIC_DEFAULT_SONNET_MODEL: "gpt-5-codex",
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "gpt-5-codex",
+    });
+    expect(result.second.harness.capabilities).toEqual({ providerSubagents: true });
     expect(Object.isFrozen(result.second)).toBe(true);
     expect(Object.isFrozen(result.second.harness)).toBe(true);
     expect(activate).not.toHaveBeenCalled();

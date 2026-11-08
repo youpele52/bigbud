@@ -262,7 +262,11 @@ async function settleV2PluginReadiness(
         authority.assertCurrent();
         return;
       } catch (error) {
-        if (error instanceof V2NativeCompatibilityError) throw error;
+        if (
+          error instanceof V2NativeCompatibilityError &&
+          (error.reasonCode !== "bootstrap-contract-incompatible" || attempt === 5)
+        )
+          throw error;
         authority.assertCurrent();
         authority.signal.throwIfAborted();
       }

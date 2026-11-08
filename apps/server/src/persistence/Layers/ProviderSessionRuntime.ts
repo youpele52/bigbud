@@ -6,6 +6,7 @@ import { Data, Effect, Layer, Option, Schema, Struct } from "effect";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { captureLocalRuntimePathIdentity } from "../../retention/worktreeRuntimeLease.ts";
 import { inspectionStore } from "./ProviderSessionRuntime.inspection.ts";
+import { deleteOrphanProviderLeases, reconcileStore } from "./ProviderSessionRuntime.reconcile.ts";
 import {
   codexRewindAbsent,
   codexMaintenanceStore,
@@ -109,13 +110,7 @@ const captureProviderLeaseIdentity = Effect.fn("captureProviderLeaseIdentity")(f
 
 const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  yield* sql`
-    DELETE FROM worktree_runtime_leases AS lease
-    WHERE lease.runtime_kind = 'provider' AND NOT EXISTS (
-      SELECT 1 FROM provider_session_runtime AS runtime
-      WHERE runtime.thread_id = lease.thread_id AND runtime.status IN ('starting', 'running')
-    )
-  `;
+  yield* deleteOrphanProviderLeases(sql);
 
   const upsertRuntimeRow = SqlSchema.void({
     Request: ProviderSessionRuntimeDbRowSchema,
@@ -385,6 +380,7 @@ const makeProviderSessionRuntimeRepository = Effect.gen(function* () {
 
   return {
     ...inspectionStore(sql),
+    ...reconcileStore(sql),
     upsert,
     ...codexMaintenanceStore(sql),
     getByThreadId,

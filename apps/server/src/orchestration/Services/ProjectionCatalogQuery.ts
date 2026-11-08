@@ -11,7 +11,7 @@ import type {
 import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog.ts";
 import { ServiceMap } from "effect";
 import { Schema } from "effect";
-import type { Effect } from "effect";
+import type { Effect, Option } from "effect";
 
 import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
 import type { ProjectId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
@@ -29,6 +29,7 @@ import type {
   GetOrganizationThreadSummariesResult,
 } from "@bigbud/contracts/orchestration/orchestration.catalog.organization.ts";
 import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
+import type * as DetailPaging from "@bigbud/contracts/orchestration/orchestration.detail.paging.ts";
 
 export interface ListCatalogThreadsInput {
   readonly callerThreadId: ThreadId;
@@ -101,6 +102,21 @@ export interface ProjectionCatalogQueryShape {
   readonly getSelectedThreadDetail: (
     input: GetSelectedThreadDetailInput,
   ) => Effect.Effect<GetSelectedThreadDetailResult, ProjectionCatalogQueryError>;
+  /** Newest bounded activities of one older turn, loaded when its work log is expanded. */
+  readonly getTurnActivities: (
+    input: DetailPaging.GetTurnActivitiesInput,
+  ) => Effect.Effect<DetailPaging.GetTurnActivitiesResult, ProjectionRepositoryError>;
+  /** One chunk of a stored message; `None` when the message or its thread no longer exists. */
+  readonly getMessageTextChunk: (
+    input: DetailPaging.GetMessageTextChunkInput,
+  ) => Effect.Effect<
+    Option.Option<DetailPaging.GetMessageTextChunkResult>,
+    ProjectionRepositoryError
+  >;
+  /** Distinct worktree paths of a project's non-deleted threads, capped. */
+  readonly getProjectWorktreePaths: (
+    input: DetailPaging.GetProjectWorktreePathsInput,
+  ) => Effect.Effect<DetailPaging.GetProjectWorktreePathsResult, ProjectionRepositoryError>;
 }
 
 export class ProjectionCatalogQuery extends ServiceMap.Service<

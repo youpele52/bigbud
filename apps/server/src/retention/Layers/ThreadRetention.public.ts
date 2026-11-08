@@ -30,6 +30,12 @@ export function toServerThreadRetentionRun(
     pendingResourceCount: resources?.pendingResourceCount ?? 0,
     blockedResourceCount: resources?.blockedResourceCount ?? 0,
     canonicalPendingCount: resources?.canonicalPendingCount ?? 0,
+    ...(run.exclusionSummary
+      ? {
+          olderThanCutoffCount: run.exclusionSummary.olderThanCutoffCount,
+          exclusionCounts: run.exclusionSummary.exclusionCounts,
+        }
+      : {}),
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     completedAt: run.completedAt,

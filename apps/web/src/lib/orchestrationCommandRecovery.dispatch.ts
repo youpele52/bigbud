@@ -26,8 +26,11 @@ export class OrchestrationCommandOutcomeError extends Error {
       outcome.status === "rejected"
         ? Schema.is(QueueDecisionReason)(outcome.reason)
           ? queueDecisionMessages[outcome.reason]
-          : `Orchestration command was rejected: ${outcome.reason}.`
-        : "Orchestration command outcome is not yet known.",
+          : (outcome.detail ?? `Orchestration command was rejected: ${outcome.reason}.`)
+        : outcome.workspaceTransition
+          ? (outcome.workspaceTransition.error ??
+            `Workspace transition '${outcome.workspaceTransition.operationId}' is ${outcome.workspaceTransition.phase}. Keep this exact request for recovery; do not submit another folder change.`)
+          : "Orchestration command outcome is not yet known.",
     );
     this.name = "OrchestrationCommandOutcomeError";
     this.status = outcome.status;

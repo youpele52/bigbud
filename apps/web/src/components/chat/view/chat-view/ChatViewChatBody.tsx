@@ -230,6 +230,7 @@ export function ChatViewChatBody({
                   <DelegatedChildrenCard items={base.activeThread!.delegatedChildren ?? []} />
                   <MessagesTimeline
                     key={base.activeThread!.id}
+                    serverThreadId={base.isServerThread ? base.activeThread!.id : null}
                     emptyChatGreeting={timeline.emptyChatGreeting}
                     shimmerEmptyChat={timeline.shimmerEmptyChat}
                     isWorking={thread.isWorking}

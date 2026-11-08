@@ -2,7 +2,7 @@ import type { OpenCodeEvent } from "@opencode/client";
 
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { checkedV2EventConnection } from "./EventHub.connection.ts";
-import { isV2LocationlessExecutionStart } from "./EventHub.hints.ts";
+import { isV2LocationlessSessionHint } from "./EventHub.hints.ts";
 import {
   V2ChildIndex,
   V2_MAX_CHILDREN_PER_OWNER,
@@ -20,6 +20,8 @@ export interface V2EventOwner {
   readonly onDrained?: () => void;
   /** A known native child changed; the owner may refresh its read-only observer. */
   readonly onChildHint?: () => void;
+  /** Known locationless session notifications carry no trusted content; queue an owned reread. */
+  readonly onSessionHint?: () => void;
 }
 
 type Owner = V2EventOwner & {
@@ -261,9 +263,15 @@ export class OpencodeV2EventHub {
         // Invalidate observations BEFORE delivery queues, Location filtering, or an exclusive
         // consumer can delay processing. A locationless execution start is still activity.
         owner.arrivalGeneration++;
-        // The pinned native start notification is allowed to omit Location. Never route it
-        // as owned content or infer a source gap from this explicitly optional hint.
-        if (isV2LocationlessExecutionStart(event, sessionID)) continue;
+        // Native host-scoped notifications can omit Location. Their content is never delivered.
+        if (isV2LocationlessSessionHint(event, sessionID)) {
+          try {
+            owner.onSessionHint?.();
+          } catch {
+            /* Periodic authoritative polling remains available. */
+          }
+          continue;
+        }
         if (envelope.location?.directory !== owner.location) {
           this.dirty(owner, "ambiguous");
           continue;

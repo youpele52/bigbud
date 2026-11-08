@@ -74,6 +74,7 @@
     "./terminal-owner/shutdown": "./src/terminal-owner/shutdown.ts",
     "./terminal-owner/auth": "./src/terminal-owner/auth.ts",
     "./server/server.remoteRestart": "./src/server/server.remoteRestart.ts",
+    "./server/server.remoteConnection": "./src/server/server.remoteConnection.ts",
     "./server/server.sshConfig": "./src/server/server.sshConfig.ts",
     "./server/server.remoteFolders": "./src/server/server.remoteFolders.ts",
     "./server/server.sshHostTrust": "./src/server/server.sshHostTrust.ts",

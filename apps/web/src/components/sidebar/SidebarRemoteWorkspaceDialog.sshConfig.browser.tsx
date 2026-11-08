@@ -33,7 +33,7 @@ function baseApi(overrides: Partial<Parameters<typeof setApi>[0]> = {}) {
   setApi({
     show: vi.fn().mockResolvedValue("edit-ssh"),
     verifyExecutionTarget: vi.fn().mockResolvedValue({ message: "SSH verified" }),
-    getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+    getProjectWorktreePaths: vi.fn().mockResolvedValue({ worktreePaths: [], truncated: false }),
     dispatchCommand: vi.fn().mockResolvedValue(undefined),
     listSshConfigHosts: vi.fn().mockResolvedValue(hostsResult),
     ...overrides,

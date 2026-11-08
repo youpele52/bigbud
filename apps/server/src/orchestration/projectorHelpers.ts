@@ -83,6 +83,8 @@ export function projectProjectCreated(
           LOCAL_EXECUTION_TARGET_ID,
         executionTargetId: payload.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
         workspaceRoot: payload.workspaceRoot,
+        workspaceKind: payload.workspaceKind ?? "external",
+        previousWorkspaceRoot: payload.previousWorkspaceRoot ?? null,
         defaultModelSelection: payload.defaultModelSelection,
         scripts: payload.scripts,
         createdAt: payload.createdAt,
@@ -121,6 +123,12 @@ export function projectProjectMetaUpdated(
                 : {}),
               ...(payload.executionTargetId !== undefined
                 ? { executionTargetId: payload.executionTargetId }
+                : {}),
+              ...(payload.workspaceKind !== undefined
+                ? { workspaceKind: payload.workspaceKind }
+                : {}),
+              ...(payload.previousWorkspaceRoot !== undefined
+                ? { previousWorkspaceRoot: payload.previousWorkspaceRoot }
                 : {}),
               ...(payload.workspaceRoot !== undefined
                 ? { workspaceRoot: payload.workspaceRoot }

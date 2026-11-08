@@ -52,7 +52,7 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(sections.map(({ title }) => title)).toEqual([
       "General",
       "Threads",
-      "Idle threads",
+      "Inyosira",
       "Browser",
       "Terminal",
       expect.stringContaining("Learning projects"),
@@ -65,6 +65,9 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Diff line wrapping",
     ]);
     expect(sections[2]?.rows).toEqual([
+      "Keep Present focused",
+      "Present target",
+      "Protection after activity",
       "Move idle threads out of Present",
       "Idle timeout",
       "Move idle threads to",

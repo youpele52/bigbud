@@ -243,6 +243,8 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           workspaceExecutionTargetId: "local",
           executionTargetId: "local",
           workspaceRoot: "/tmp/project-1",
+          workspaceKind: "external",
+          previousWorkspaceRoot: null,
           defaultModelSelection: {
             provider: "codex",
             model: "gpt-5-codex",
@@ -326,7 +328,14 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
           pendingTurnControlOperation: null,
           pendingTurnStart: null,
           recovery: null,
-          organization: { state: "present", revision: 0, changedAt: null, snooze: null },
+          organization: {
+            state: "present",
+            revision: 0,
+            changedAt: null,
+            activityAt: null,
+            ageProvenance: "known",
+            snooze: null,
+          },
           queueHold: false,
           tasks: [
             {

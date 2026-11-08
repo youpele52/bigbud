@@ -58,7 +58,7 @@ export async function readV2ActivationIdle(
       });
     } catch {
       throw new Error(
-        "V2 retained owner retirement is not durably physically settled; plugin replacement is blocked, not waiting for native foreground/shell idle. Exact unchanged-installation identity maintenance requires its separate backed-up approval; no owner/history is retired or replayed.",
+        "V2 retained owner retirement is not durably physically settled; plugin replacement is blocked. Recovery must verify the previous backend and native session before setup can continue. Retrying or opening a new thread cannot bypass this shared installation check; history is preserved.",
       );
     } // Foreign/live/pending/uncertain ownership is a durable barrier, not inferred busy/expired work.
   }

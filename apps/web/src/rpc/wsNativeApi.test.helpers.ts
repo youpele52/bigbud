@@ -47,6 +47,7 @@ export const projectDirectoryEventListeners = new Set<
 >();
 
 export const rpcClientMock: DeepMock<WsRpcClient> = {
+  organization: { status: vi.fn(), engagement: vi.fn() },
   worktrees: {
     list: vi.fn(),
     create: vi.fn(),
@@ -152,6 +153,9 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     connectRemoteAgent: vi.fn(),
     restartRemoteAgent: vi.fn(),
     getRemoteAgentRestartStatus: vi.fn(),
+    disconnectExecutionTarget: vi.fn(),
+    connectExecutionTarget: vi.fn(),
+    listDisconnectedExecutionTargets: vi.fn(),
     getRemoteAgentUpdateStatus: vi.fn(),
     unlockSshKey: vi.fn(),
     unlockSshPassword: vi.fn(),
@@ -159,6 +163,9 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     upsertKeybinding: vi.fn(),
     getSettings: vi.fn(),
     updateSettings: vi.fn(),
+    getDatabaseCompactionStatus: vi.fn(),
+    previewDatabaseCompaction: vi.fn(),
+    startDatabaseCompaction: vi.fn(),
     previewThreadRetention: vi.fn(),
     startThreadRetention: vi.fn(),
     getThreadRetentionRun: vi.fn(),
@@ -203,7 +210,11 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     getSelectedThreadDetail: vi.fn(),
     getThreadOwnership: vi.fn(),
     getCommandOutcome: vi.fn(),
-    getSnapshot: vi.fn(),
+    getTurnActivities: vi.fn(),
+    getMessageTextChunk: vi.fn(),
+    getProjectWorktreePaths: vi.fn(),
+    startThreadBranch: vi.fn(),
+    getThreadBranchCopy: vi.fn(),
     dispatchCommand: vi.fn(),
     getTurnDiff: vi.fn(),
     getFullThreadDiff: vi.fn(),

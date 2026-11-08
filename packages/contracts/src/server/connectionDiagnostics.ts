@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 
 import { IsoDateTime, NonNegativeInt, TrimmedNonEmptyString } from "../core/baseSchemas";
+import { EventLogMaintenanceProgress } from "./eventLogMaintenance";
 import {
   SERVER_STALL_MAX_SPANS,
   WS_CONNECTION_DIAGNOSTICS_CONSUMER_ID_MAX_LENGTH,
@@ -157,6 +158,8 @@ export const ServerWsConnectionDiagnosticsSnapshot = Schema.Struct({
   reports: Schema.Array(WsConnectionDiagnosticsReportEntry),
   serverEvents: Schema.Array(ServerConnectionDiagnosticsEvent),
   eventLoop: Schema.NullOr(ServerEventLoopWindow),
+  /** Absent from servers without background event-log maintenance. */
+  eventLogMaintenance: Schema.optional(Schema.NullOr(EventLogMaintenanceProgress)),
 });
 export type ServerWsConnectionDiagnosticsSnapshot =
   typeof ServerWsConnectionDiagnosticsSnapshot.Type;

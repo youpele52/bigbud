@@ -132,7 +132,9 @@ it.effect("rolls back an interrupted repair and succeeds on retry", () =>
     assert.deepEqual(yield* sql`SELECT lease_id FROM thread_activity_leases`, [
       { lease_id: "existing" },
     ]);
-    yield* runMigrations();
+    // Re-running the 119 repair only makes sense on the schema it was written for; migration
+    // 155 later adds `expires_at` to this table.
+    yield* runMigrations({ toMigrationInclusive: 119 });
     assert.isTrue(yield* repository.acquireLease({ jobId: "retry", threadId: owner }));
     yield* sql.withTransaction(repair);
     assert.deepEqual(yield* sql`SELECT lease_id FROM thread_activity_leases ORDER BY lease_id`, [

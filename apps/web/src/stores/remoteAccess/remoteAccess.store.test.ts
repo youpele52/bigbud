@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { isExecutionTargetVerified, useRemoteAccessStore } from "./remoteAccess.store";
+import {
+  isExecutionTargetDisconnected,
+  isExecutionTargetVerified,
+  useRemoteAccessStore,
+} from "./remoteAccess.store";
 
 describe("remoteAccessStore", () => {
   beforeEach(() => {
     useRemoteAccessStore.setState({
       verifiedExecutionTargetIds: {},
+      disconnectedExecutionTargetIds: {},
+      disconnectedTargetsLoaded: false,
       executionTargetChecks: {},
       pendingAction: null,
       isAuthDialogOpen: false,
@@ -32,6 +38,35 @@ describe("remoteAccessStore", () => {
     expect(useRemoteAccessStore.getState().executionTargetChecks[executionTargetId]?.status).toBe(
       "idle",
     );
+  });
+
+  it("sets, clears and replaces user-initiated disconnects per execution target", () => {
+    const first = "ssh:host=devbox&user=root&port=22&auth=ssh-key";
+    const second = "ssh:host=build&user=ci&port=22&auth=password";
+    const store = useRemoteAccessStore.getState();
+
+    expect(isExecutionTargetDisconnected(first)).toBe(false);
+    expect(isExecutionTargetDisconnected(null)).toBe(false);
+
+    store.markExecutionTargetDisconnected(first);
+    const afterMark = useRemoteAccessStore.getState().disconnectedExecutionTargetIds;
+    store.markExecutionTargetDisconnected(first);
+    expect(useRemoteAccessStore.getState().disconnectedExecutionTargetIds).toBe(afterMark);
+    expect(isExecutionTargetDisconnected(first)).toBe(true);
+
+    expect(useRemoteAccessStore.getState().disconnectedTargetsLoaded).toBe(false);
+    store.replaceDisconnectedExecutionTargetIds([second]);
+    expect(useRemoteAccessStore.getState().disconnectedTargetsLoaded).toBe(true);
+    expect(useRemoteAccessStore.getState().disconnectedExecutionTargetIds).toEqual({
+      [second]: true,
+    });
+    expect(isExecutionTargetDisconnected(first)).toBe(false);
+
+    store.clearExecutionTargetDisconnected(second);
+    const afterClear = useRemoteAccessStore.getState().disconnectedExecutionTargetIds;
+    store.clearExecutionTargetDisconnected(second);
+    expect(useRemoteAccessStore.getState().disconnectedExecutionTargetIds).toBe(afterClear);
+    expect(afterClear).toEqual({});
   });
 
   it("tracks detailed remote execution check state per target", () => {

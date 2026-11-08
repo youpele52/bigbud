@@ -48,10 +48,27 @@ export type OrchestrationCommandRejectionReason = typeof OrchestrationCommandRej
 export const GetCommandOutcomeInput = Schema.Struct({ commandId: CommandId });
 export type GetCommandOutcomeInput = typeof GetCommandOutcomeInput.Type;
 
+export const ProjectWorkspaceTransitionStatus = Schema.Struct({
+  operationId: Schema.String,
+  phase: Schema.String,
+  sourcePath: Schema.String,
+  destinationPath: Schema.String,
+  error: Schema.NullOr(Schema.String),
+  steps: Schema.Array(
+    Schema.Struct({
+      threadId: Schema.String,
+      provider: Schema.String,
+      nativeSessionId: Schema.String,
+      phase: Schema.String,
+    }),
+  ),
+});
+
 export const GetCommandOutcomeResult = Schema.Union([
   Schema.Struct({
     commandId: CommandId,
     status: Schema.Literal("unknown"),
+    workspaceTransition: Schema.optional(ProjectWorkspaceTransitionStatus),
     serverEpoch: Schema.String,
     canonicalRevision: NonNegativeInt,
   }),
@@ -73,6 +90,7 @@ export const GetCommandOutcomeResult = Schema.Union([
     rejectedAt: IsoDateTime,
     resultSequence: NonNegativeInt,
     reason: OrchestrationCommandRejectionReason,
+    detail: Schema.optional(Schema.String),
     serverEpoch: Schema.String,
     canonicalRevision: NonNegativeInt,
   }),

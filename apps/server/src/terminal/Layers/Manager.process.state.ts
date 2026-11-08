@@ -52,12 +52,22 @@ export const makeManagerStateAccessors = (
     );
   });
 
+  let indexedSessions: TerminalManagerState["sessions"] | undefined;
+  const byThread = new Map<string, TerminalSessionState[]>();
   const sessionsForThread = Effect.fn("terminal.sessionsForThread")(function* (threadId: string) {
-    return yield* readManagerState.pipe(
-      Effect.map((state) =>
-        [...state.sessions.values()].filter((session) => session.threadId === threadId),
-      ),
-    );
+    const state = yield* readManagerState;
+    // Membership changes replace the map; pane state updates mutate its session objects.
+    // Rebuild once per membership version, never once per candidate or output event.
+    if (indexedSessions !== state.sessions) {
+      byThread.clear();
+      for (const session of state.sessions.values()) {
+        const panes = byThread.get(session.threadId) ?? [];
+        panes.push(session);
+        byThread.set(session.threadId, panes);
+      }
+      indexedSessions = state.sessions;
+    }
+    return byThread.get(threadId) ?? [];
   });
 
   return {

@@ -1,3 +1,4 @@
+import { ThreadOrganizationAutomaticMove } from "./orchestration.organization.native";
 import { Schema } from "effect";
 
 import {
@@ -12,7 +13,7 @@ import {
  * Inyosira organization of a thread. It is independent of the provider's runtime status: moving a
  * thread never starts, stops, archives, or answers anything.
  */
-export const THREAD_ORGANIZATION_STATES = ["present", "needs-you", "later", "done"] as const;
+export const THREAD_ORGANIZATION_STATES = ["needs-you", "present", "later", "done"] as const;
 export const ThreadOrganizationState = Schema.Literals(THREAD_ORGANIZATION_STATES);
 export type ThreadOrganizationState = typeof ThreadOrganizationState.Type;
 
@@ -39,6 +40,9 @@ export const ThreadOrganization = Schema.Struct({
   revision: NonNegativeInt,
   changedAt: Schema.NullOr(IsoDateTime),
   snooze: Schema.NullOr(ThreadOrganizationSnooze),
+  /** Source-aware inactivity anchor; absent on legacy snapshots. */
+  activityAt: Schema.optionalKey(Schema.NullOr(IsoDateTime)),
+  ageProvenance: Schema.optionalKey(Schema.Literals(["pending", "known", "fallback"])),
 });
 export type ThreadOrganization = typeof ThreadOrganization.Type;
 
@@ -57,6 +61,9 @@ export const ThreadOrganizationField = Schema.optional(ThreadOrganization).pipe(
 /** Client command: move a thread to a state. Any move replaces an existing snooze. */
 export const ThreadOrganizationMoveCommand = Schema.Struct({
   type: Schema.Literal("thread.organization.move"),
+  undoAutomaticMoveId: Schema.optionalKey(
+    Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+  ),
   commandId: CommandId,
   threadId: ThreadId,
   state: ThreadOrganizationState,
@@ -65,6 +72,15 @@ export const ThreadOrganizationMoveCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 export type ThreadOrganizationMoveCommand = typeof ThreadOrganizationMoveCommand.Type;
+
+/** Internal reaction, never accepted from client dispatch. Does not renew deliberate age. */
+export const ThreadOrganizationReactCommand = Schema.Struct({
+  type: Schema.Literal("thread.organization.react"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  state: ThreadOrganizationState,
+  createdAt: IsoDateTime,
+});
 
 /** Client command: put a thread in Later until the server-calculated deadline. */
 export const ThreadOrganizationSnoozeCommand = Schema.Struct({
@@ -103,6 +119,8 @@ export const ThreadOrganizationIdleCommand = Schema.Struct({
     Schema.withDecodingDefault(() => "present" as const),
   ),
   destination: Schema.Literals(["done", "later"]),
+  /** Captured rule cutoff, rechecked against server-owned terminal completion facts. */
+  terminalIdleCutoff: Schema.optionalKey(IsoDateTime),
   createdAt: IsoDateTime,
 });
 export type ThreadOrganizationIdleCommand = typeof ThreadOrganizationIdleCommand.Type;
@@ -126,5 +144,8 @@ export const ThreadOrganizationUpdatedPayload = Schema.Struct({
   threadId: ThreadId,
   organization: ThreadOrganization,
   reason: ThreadOrganizationChangeReason,
+  automaticMove: Schema.optionalKey(ThreadOrganizationAutomaticMove),
+  /** Absent legacy `move` is conservatively deliberate, never inferred from command IDs. */
+  source: Schema.optionalKey(Schema.Literals(["deliberate", "automatic"])),
 });
 export type ThreadOrganizationUpdatedPayload = typeof ThreadOrganizationUpdatedPayload.Type;

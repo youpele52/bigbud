@@ -142,8 +142,9 @@ export function runV2Cleanup<T>(
   signal?: AbortSignal,
 ) {
   if (!transport) return runDetachedV2Caller(run);
+  const parent = contexts.getStore();
   const controller = new AbortController();
-  const operationSignal = signal ?? contexts.getStore()?.operationSignal;
+  const operationSignal = signal ?? parent?.operationSignal;
   const cleanupSignal = operationSignal
     ? AbortSignal.any([controller.signal, operationSignal])
     : controller.signal;
@@ -161,12 +162,23 @@ export function runV2Cleanup<T>(
         intent: "cleanup",
         nativeSessionId,
         ...(operationSignal ? { operationSignal } : {}),
-        ...(contexts.getStore()?.operationGuard
-          ? { operationGuard: contexts.getStore()!.operationGuard }
+        // Validate inherited publication/compatibility authority where it was acquired.
+        // Only the synchronous guard re-enters that scope; requests still use cleanup's
+        // restricted routes, signed original-owner RPC authority and non-execution permit.
+        ...(parent?.operationGuard
+          ? {
+              operationGuard: () => {
+                if (parent.transport !== transport)
+                  throw new Error("V2 cleanup cannot transfer inherited transport authority.");
+                contexts.run(parent, () => {
+                  parent.permit.assertCurrent();
+                  parent.operationSignal?.throwIfAborted();
+                  parent.operationGuard!();
+                });
+              },
+            }
           : {}),
-        ...(contexts.getStore()?.observeOperation
-          ? { observeOperation: contexts.getStore()!.observeOperation }
-          : {}),
+        ...(parent?.observeOperation ? { observeOperation: parent.observeOperation } : {}),
       },
       run,
     ),

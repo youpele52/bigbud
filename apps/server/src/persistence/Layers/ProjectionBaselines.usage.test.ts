@@ -12,6 +12,10 @@ import {
   PROJECTION_BASELINE_REQUIRED_TABLES,
 } from "../ProjectionBaselineSchema.ts";
 import { parseBaselinePayload } from "./ProjectionBaselines.payload.ts";
+import {
+  captureBaselinePayloadJson,
+  jsonBaselinePayloadSource,
+} from "./ProjectionBaselines.test.helpers.ts";
 
 it("accepts old baselines missing only the additive Codex state table", () => {
   const tables = Object.fromEntries(
@@ -62,12 +66,12 @@ effectIt.layer(ProjectionBaselineRepositoryLive.pipe(Layer.provideMerge(SqlitePe
       occurred_at, used_tokens, input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens, finalized, updated_at)
       VALUES ('baseline-count', 'baseline-activity', ${threadId}, 'codex', 'model', 'default',
         '2026-10-01T00:00:00.000Z', 44, 44, 0, 0, 0, 1, '2026-10-01T00:00:00.000Z')`;
-        const payload = yield* baselines.capturePayload();
+        const payload = yield* captureBaselinePayloadJson;
         yield* sql`UPDATE projection_usage_codex_state SET state_json = '{}' WHERE thread_id = ${threadId}`;
         yield* sql`DELETE FROM projection_usage_codex_retired_turns WHERE thread_id = ${threadId}`;
         yield* sql`UPDATE projection_usage_backfill_state SET last_activity_id = 'done', completed = 1`;
         yield* sql`UPDATE projection_usage_estimate_backfill_state SET last_message_id = 'done', completed = 1`;
-        yield* baselines.restorePayload(payload, 0, []);
+        yield* baselines.restorePayload(jsonBaselinePayloadSource(payload), 0, []);
         const [restored] = yield* sql<{
           state_json: string;
         }>`SELECT state_json FROM projection_usage_codex_state WHERE thread_id = ${threadId}`;

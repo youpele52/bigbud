@@ -32,11 +32,7 @@ export function makeGetSidebarThreadCatalog(
           AND t.deleted_at IS NULL
           AND t.archived_at IS NULL
           AND t.deleting_at IS NULL
-        ORDER BY COALESCE((
-          SELECT MAX(m.created_at)
-          FROM projection_thread_messages m
-          WHERE m.thread_id = t.thread_id AND m.role = 'user'
-        ), t.created_at) DESC, t.thread_id DESC
+        ORDER BY COALESCE(t.latest_user_message_at, t.created_at) DESC, t.thread_id DESC
         LIMIT ${SIDEBAR_THREAD_CATALOG_RECENT_LIMIT}
       ), recent_by_created AS (
         SELECT t.thread_id

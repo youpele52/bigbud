@@ -33,6 +33,7 @@ export interface RemoteAgentConnectionFactory {
 export class RemoteAgentLifecycle {
   private snapshotValue: RemoteAgentLifecycleSnapshot = { state: "unavailable" };
   private connectionValue: RemoteAgentConnection | null = null;
+  private pendingValue: RemoteAgentConnection | null = null;
 
   constructor(private readonly factory: RemoteAgentConnectionFactory) {
     if (factory.expectedEpoch)
@@ -47,6 +48,11 @@ export class RemoteAgentLifecycle {
     return this.connectionValue;
   }
 
+  /** A connection still in handshake, not yet usable; lets a disconnect end its child. */
+  get pendingConnection(): RemoteAgentConnection | null {
+    return this.pendingValue;
+  }
+
   markInstalling(): void {
     this.snapshotValue = { state: "installing" };
   }
@@ -59,6 +65,7 @@ export class RemoteAgentLifecycle {
     };
     try {
       const connection = await this.factory.create();
+      this.pendingValue = connection;
       let hello: RemoteAgentHello;
       try {
         hello = await connection.handshake();
@@ -66,6 +73,8 @@ export class RemoteAgentLifecycle {
       } catch (error) {
         connection.close();
         throw error;
+      } finally {
+        this.pendingValue = null;
       }
       if (previousEpoch && previousEpoch !== hello.agentEpoch) {
         connection.close();

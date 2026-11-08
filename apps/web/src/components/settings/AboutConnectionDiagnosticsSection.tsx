@@ -11,6 +11,7 @@ import {
   type ConnectionTransitionRow,
   describeEventLoopWindow,
 } from "./AboutConnectionDiagnosticsSection.logic";
+import { describeEventLogMaintenance } from "./AboutEventLogMaintenance.logic";
 
 const CONNECTION_DIAGNOSTICS_QUERY_KEY = ["ws-connection-diagnostics"] as const;
 
@@ -53,6 +54,7 @@ export function AboutConnectionDiagnosticsSection() {
   const snapshot = query.data ?? null;
   const rows = snapshot ? buildConnectionTransitionRows(snapshot) : [];
   const unavailable = query.isSuccess && snapshot === null;
+  const maintenance = describeEventLogMaintenance(snapshot?.eventLogMaintenance);
 
   return (
     <SettingsSection
@@ -80,6 +82,28 @@ export function AboutConnectionDiagnosticsSection() {
               : query.isError
                 ? "Could not read connection diagnostics."
                 : describeEventLoopWindow(snapshot?.eventLoop ?? null)}
+          </span>
+        }
+      />
+      <SettingsRow
+        title="History cleanup"
+        description="Background removal of old internal event history and command records."
+        searchTerms={["database", "compaction", "backlog", "storage"]}
+        status={
+          <span className="flex flex-col gap-0.5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-2">
+              {maintenance.badge ? (
+                <Badge variant="warning" size="sm">
+                  {maintenance.badge}
+                </Badge>
+              ) : null}
+              <span className={maintenance.tone === "warning" ? "text-warning-foreground" : ""}>
+                {maintenance.text}
+              </span>
+            </span>
+            {maintenance.details.length > 0 ? (
+              <span className="break-all">{maintenance.details.join(" · ")}</span>
+            ) : null}
           </span>
         }
       />

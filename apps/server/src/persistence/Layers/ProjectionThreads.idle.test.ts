@@ -52,6 +52,71 @@ const thread = (threadId: string, overrides: Record<string, unknown> = {}) =>
   });
 
 layer("Inyosira idle candidates", (it) => {
+  it.effect(
+    "uses activity and intentional moves, not incidental row updates or ready sessions",
+    () =>
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* runMigrations();
+        yield* thread("later-incidental-update", {
+          organization_state: "later",
+          updated_at: RECENT,
+        });
+        yield* insertRow("projection_thread_sessions", {
+          thread_id: "later-incidental-update",
+          status: "ready",
+          updated_at: RECENT,
+        });
+        yield* thread("later-recent-activity", {
+          organization_state: "later",
+          last_activity_at: RECENT,
+        });
+        yield* thread("later-deliberate-move", {
+          organization_state: "later",
+          organization_changed_at: RECENT,
+        });
+        const list = makeListIdleThreadCandidates(sql);
+        const rows = yield* list({ states: ["later"], cutoff: CUTOFF, limit: 50 });
+        assert.deepEqual(
+          rows.map((row) => row.threadId),
+          ["later-incidental-update"],
+        );
+        assert.deepEqual(
+          yield* list({
+            states: ["later"],
+            cutoff: CUTOFF,
+            limit: 50,
+            excludeThreadIds: [rows[0]!.threadId],
+          }),
+          [],
+        );
+        const settled = ["completed", "failed", "superseded", "cancelled"];
+        for (const state of [
+          ...settled,
+          "requested",
+          "provider-acknowledged",
+          "waiting-for-settlement",
+          "ambiguous",
+        ]) {
+          yield* thread(`later-control-${state}`, {
+            organization_state: "later",
+            pending_turn_control_operation_json: JSON.stringify({ state }),
+          });
+        }
+        const controls = yield* list({ states: ["later"], cutoff: CUTOFF, limit: 50 });
+        assert.deepEqual(
+          controls
+            .map((row) => row.threadId)
+            .filter((id) => id.startsWith("later-control-"))
+            .toSorted(),
+          settled.map((state) => `later-control-${state}`).toSorted(),
+        );
+        yield* sql`DELETE FROM projection_threads WHERE thread_id LIKE 'later-control-%'`;
+        yield* sql`DELETE FROM projection_thread_sessions WHERE thread_id = 'later-incidental-update'`;
+        yield* sql`DELETE FROM projection_threads WHERE thread_id IN
+        ('later-incidental-update', 'later-recent-activity', 'later-deliberate-move')`;
+      }),
+  );
   it.effect("returns only quiet, quiescent threads in the asked states; each gate excludes", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

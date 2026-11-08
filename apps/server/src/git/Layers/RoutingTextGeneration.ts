@@ -207,6 +207,8 @@ export function makeInternalTextGenerationRouter(deps: {
         const service = route(selection);
         if (service) return service.generateThreadTitle(resolved);
         switch (selection.provider) {
+          case "cliProxy":
+            return claude.generateThreadTitle(resolved);
           case "pi":
             return generatePiThreadTitleNative(nativeDeps, { ...input, modelSelection: selection });
           case "copilot":

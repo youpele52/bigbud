@@ -33,6 +33,7 @@ import {
 } from "./wsRemoteAgentRestart.ts";
 import { listSshConfigHostsEffect } from "./wsSshConfigHosts.ts";
 import { makeSshMonitorHandlers } from "./wsSshMonitor.handlers.ts";
+import { makeRemoteConnectionHandlers } from "./wsRemoteConnection.handlers.ts";
 import { verifyAndAdmitSshMonitorTarget } from "./wsSshMonitor.verify.ts";
 import { listRemoteFoldersEffect } from "./wsRemoteFolders.ts";
 import { trustSshHostEffect } from "./wsSshHostTrust.ts";
@@ -60,6 +61,7 @@ function withGitMutationOperationId<
 export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScope?: Scope.Scope) {
   return {
     ...makeSshMonitorHandlers(context),
+    ...makeRemoteConnectionHandlers(context),
     [WS_METHODS.serverTrustSshHost]: (input: Parameters<typeof trustSshHostEffect>[0]) =>
       observeRpcEffect(WS_METHODS.serverTrustSshHost, trustSshHostEffect(input), {
         "rpc.aggregate": "server",

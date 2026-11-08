@@ -31,9 +31,12 @@ import {
 import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
 import {
   buildThreadMessageLatestTurn,
+  bumpSummaryLatestUserMessageAt,
   getProviderTurnStartFailureDetail,
   upsertThreadMessage,
 } from "./events.store.threads.runtime.messages";
+import { isSummaryActivity, isSummaryOnlyThread } from "./helpers.lazy.eviction.store";
+import { boundActivityPayload } from "./messageText.store";
 import {
   clearPendingTurnStartRequest,
   recordTurnStartRecoveryStep,
@@ -58,6 +61,7 @@ export function applyThreadRuntimeEvent(
         providerAgents: removeProviderAgent(thread.providerAgents, event.payload.taskId),
       }));
     case "thread.message-sent": {
+      const summaryOnly = isSummaryOnlyThread(state, event.payload.threadId);
       const nextState = updateThreadState(state, event.payload.threadId, (thread) => {
         const message = mapMessage({
           id: event.payload.messageId,
@@ -75,7 +79,9 @@ export function applyThreadRuntimeEvent(
           createdAt: event.payload.createdAt,
           updatedAt: event.payload.updatedAt,
         });
-        const messages = upsertThreadMessage(thread, message, event);
+        const messages = summaryOnly
+          ? thread.messages
+          : upsertThreadMessage(thread, message, event);
         const currentSession = thread.session;
         const session =
           currentSession !== null &&
@@ -113,14 +119,15 @@ export function applyThreadRuntimeEvent(
           updatedAt: event.occurredAt,
         };
       });
-      const summary = nextState.sidebarThreadsById[event.payload.threadId];
+      const summarized = summaryOnly ? bumpSummaryLatestUserMessageAt(nextState, event) : nextState;
+      const summary = summarized.sidebarThreadsById[event.payload.threadId];
       if (event.payload.role !== "user" || !summary || !isBuiltInChatsProject(summary.projectId)) {
-        return nextState;
+        return summarized;
       }
       return {
-        ...nextState,
+        ...summarized,
         sidebarRecentThreadIds: prependSidebarRecentThreadId(
-          nextState.sidebarRecentThreadIds,
+          summarized.sidebarRecentThreadIds,
           event.payload.threadId,
         ),
       };
@@ -350,17 +357,22 @@ export function applyThreadRuntimeEvent(
     }
 
     case "thread.activity-appended": {
+      const appended = boundActivityPayload(event.payload.activity);
+      const keepActivity =
+        !isSummaryOnlyThread(state, event.payload.threadId) || isSummaryActivity(appended);
       return updateThreadState(
         state,
         event.payload.threadId,
         (thread) => {
-          const activities = retainUserInputHistoryActivities(
-            [
-              ...thread.activities.filter((activity) => activity.id !== event.payload.activity.id),
-              { ...event.payload.activity },
-            ].toSorted(compareActivities),
-            MAX_THREAD_ACTIVITIES,
-          );
+          const activities = keepActivity
+            ? retainUserInputHistoryActivities(
+                [
+                  ...thread.activities.filter((activity) => activity.id !== appended.id),
+                  appended,
+                ].toSorted(compareActivities),
+                MAX_THREAD_ACTIVITIES,
+              )
+            : thread.activities;
           const providerTurnStartError = getProviderTurnStartFailureDetail(event.payload.activity);
           return applyDelegationLinkedActivity(
             {

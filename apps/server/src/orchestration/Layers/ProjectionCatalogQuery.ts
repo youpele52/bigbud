@@ -31,6 +31,8 @@ import {
   threadSummaryJoinsSql,
 } from "./ProjectionCatalogQuery.summaryColumns.ts";
 import { makeGetOrganizationThreadSummaries } from "./ProjectionCatalogQuery.organization.ts";
+import { makeDetailPagingQueries } from "./ProjectionCatalogQuery.paging.ts";
+import { makeGetSortedProjectThreadSummaries } from "./ProjectionCatalogQuery.threadPages.ts";
 
 const ProjectCatalogQueryRequest = Schema.Struct({
   scope: Schema.Literals(["local", "remote"]),
@@ -150,6 +152,8 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
         p.workspace_execution_target_id AS "workspaceExecutionTargetId",
         p.execution_target_id AS "executionTargetId",
         p.workspace_root AS "workspaceRoot",
+        p.workspace_kind AS "workspaceKind",
+        p.previous_workspace_root AS "previousWorkspaceRoot",
         p.last_used_at AS "lastUsedAt",
         p.updated_at AS "updatedAt",
         p.deleting_at AS "deletingAt",
@@ -221,6 +225,13 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
     `,
   });
 
+  const getSortedProjectThreadSummaries = makeGetSortedProjectThreadSummaries(sql, () =>
+    readProjectionSequence(undefined).pipe(
+      Effect.map((row) => row.projectionSequence ?? 0),
+      Effect.mapError(toPersistenceSqlError("ProjectionCatalogQuery.getProjectThreadSummaries")),
+    ),
+  );
+
   const getStartupProjectCatalog: ProjectionCatalogQueryShape["getStartupProjectCatalog"] = (
     input,
   ) => {
@@ -275,6 +286,9 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
       minimum: 1,
       maximum: PROJECT_THREAD_SUMMARY_MAX_LIMIT,
     });
+    if (input.sortOrder !== undefined) {
+      return getSortedProjectThreadSummaries(input, input.sortOrder, limit);
+    }
     return sql
       .withTransaction(
         Effect.all({
@@ -328,6 +342,7 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
   );
 
   return {
+    ...makeDetailPagingQueries(sql),
     searchConversationMessages: makeSearchConversationMessages(sql),
     listThreads,
     getSidebarThreadCatalog,

@@ -2,6 +2,7 @@ import { Effect, Layer, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceDecodeCauseError, toPersistenceSqlError } from "../Errors.ts";
+import { isArchivedMuseWorkspaceNative } from "./ProviderWorkspaceActiveView.ts";
 import {
   MuseSessionBinding,
   MuseSessionBindingConflict,
@@ -34,6 +35,8 @@ const make = Effect.gen(function* () {
   );
   return {
     find,
+    isArchived: (threadId, nativeSessionId) =>
+      isArchivedMuseWorkspaceNative(sql, threadId, nativeSessionId),
     reserve: Effect.fn("MuseSessionBindings.reserve")(function* (input) {
       const row = yield* Effect.try({
         try: () =>
@@ -44,6 +47,12 @@ const make = Effect.gen(function* () {
           }),
         catch: toPersistenceDecodeCauseError("MuseSessionBindings.reserve"),
       });
+      if (yield* isArchivedMuseWorkspaceNative(sql, row.threadId, row.nativeSessionId)) {
+        return yield* new MuseSessionBindingConflict({
+          detail:
+            "This Muse native session was archived during a workspace reset and cannot be reserved or resumed again.",
+        });
+      }
       yield* sql`INSERT INTO muse_session_bindings (
           thread_id, native_session_id, creation_command_id, workspace, storage_identity,
           selection_fingerprint, created_at, phase, revision

@@ -1,6 +1,6 @@
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { Effect } from "effect";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type {
   MuseSessionBinding,
@@ -89,13 +89,14 @@ const binding = (phase: MuseSessionBinding["phase"]): MuseSessionBinding => ({
   revision: phase === "reserved" ? 0 : 1,
 });
 
-const start = (deps: MuseAdapterDeps) =>
+const start = (deps: MuseAdapterDeps, resumeCursor?: unknown) =>
   Effect.runPromise(
     Effect.gen(function* () {
       const adapter = yield* makeMuseAdapterShape(deps);
       return yield* Effect.exit(
         adapter.startSession({
           threadId,
+          ...(resumeCursor !== undefined ? { resumeCursor } : {}),
           cwd: workspace,
           runtimeMode: "auto-accept-edits",
           modelSelection: { provider: "muse", model: "muse-spark-1.3", subProviderID: "meta" },
@@ -112,6 +113,31 @@ const baseDeps = (host: ReturnType<typeof makeHost>, bindings: MuseSessionBindin
 });
 
 describe("Muse session start with a durable binding", () => {
+  it("refuses an archived old cursor before launching Muse after a workspace reset", async () => {
+    const host = makeHost({ nativeModel: "muse-spark-1.3" });
+    const hostFactory = vi.fn(host.factory);
+    const isArchived = vi.fn(() => Effect.succeed(true));
+    const bindings = makeBindings(binding("bound"));
+    const exit = await start(
+      {
+        ...baseDeps(host, { ...bindings.shape, find: () => Effect.succeed(undefined), isArchived }),
+        hostFactory,
+      },
+      {
+        version: 1,
+        provider: "muse",
+        nativeSessionId: "native-session-1",
+        workspace,
+        storageIdentity: "/fake-home",
+        model: "old-model",
+        subProviderID: "meta",
+      },
+    );
+    expect(exit._tag).toBe("Failure");
+    expect(isArchived).toHaveBeenCalledWith(threadId, "native-session-1");
+    expect(hostFactory).not.toHaveBeenCalled();
+    expect(host.calls).toEqual([]);
+  });
   it("resumes a bound session by exact ID when no cursor is sent, never replaying session/start", async () => {
     const host = makeHost({ nativeModel: "muse-wonder-1.0" });
     const bindings = makeBindings(binding("bound"));

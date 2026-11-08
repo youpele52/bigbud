@@ -6,6 +6,10 @@ import { Effect, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { ThreadDetailActivityDbRow } from "./ProjectionCatalogQuery.schemas.ts";
+import {
+  activityTruncationFields,
+  boundedActivityPayloadColumnsSql,
+} from "./ProjectionCatalogQuery.boundedText.ts";
 
 export function normalizeDetailActivity(
   row: ThreadDetailActivityDbRow,
@@ -19,6 +23,7 @@ export function normalizeDetailActivity(
     turnId: row.turnId,
     ...(row.sequence !== null ? { sequence: row.sequence } : {}),
     createdAt: row.createdAt,
+    ...activityTruncationFields(row.payloadLength),
   };
 }
 
@@ -33,7 +38,8 @@ export function makeThreadDetailActivityReaders(sql: SqlClient.SqlClient) {
     Result: ThreadDetailActivityDbRow,
     execute: ({ threadId, oldestCreatedAt, beforeCreatedAt }) => sql`
       SELECT activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
-        tone, kind, summary, payload_json AS payload, sequence, created_at AS "createdAt"
+        tone, kind, summary, ${boundedActivityPayloadColumnsSql(sql)}, sequence,
+        created_at AS "createdAt"
       FROM projection_thread_activities
       WHERE thread_id = ${threadId} AND kind = ${HTML_RENDER_ACTIVITY_KIND}
         AND (${oldestCreatedAt} IS NULL OR created_at >= ${oldestCreatedAt})
@@ -50,7 +56,8 @@ export function makeThreadDetailActivityReaders(sql: SqlClient.SqlClient) {
     Result: ThreadDetailActivityDbRow,
     execute: ({ threadId, turnId, limit }) => sql`
       SELECT activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
-        tone, kind, summary, payload_json AS payload, sequence, created_at AS "createdAt"
+        tone, kind, summary, ${boundedActivityPayloadColumnsSql(sql)}, sequence,
+        created_at AS "createdAt"
       FROM projection_thread_activities
       WHERE thread_id = ${threadId} AND turn_id = ${turnId}
       ORDER BY sequence DESC, created_at DESC, activity_id ASC
@@ -92,8 +99,8 @@ export function makeThreadDetailActivityReaders(sql: SqlClient.SqlClient) {
           ))
       )
       SELECT activity_id AS "activityId", thread_id AS "threadId", turn_id AS "turnId",
-        tone, kind, summary, payload_json AS payload, sequence, created_at AS "createdAt",
-        request_id AS "requestId", requested_at AS "requestedAt", questions_json AS questions
+        tone, kind, summary, ${boundedActivityPayloadColumnsSql(sql)}, sequence,
+        created_at AS "createdAt", request_id AS "requestId", requested_at AS "requestedAt", questions_json AS questions
       FROM responses WHERE response_rank = 1
     `,
   });

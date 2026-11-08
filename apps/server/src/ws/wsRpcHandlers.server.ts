@@ -200,7 +200,8 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
                       }),
                     ),
                   )
-              : context.projectionSnapshotQuery.getSnapshot()
+              : // Bounded reads only: without the history query there is no export.
+                Effect.fail(new Error("Thread history is unavailable on this server."))
           ).pipe(
             Effect.mapError(
               (cause) =>

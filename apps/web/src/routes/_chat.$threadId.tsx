@@ -1,3 +1,4 @@
+import { useOrganizationEngagement } from "../hooks/useOrganizationEngagement.ts";
 import { ThreadId, type GetThreadOwnershipResult } from "@bigbud/contracts";
 import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
@@ -55,6 +56,9 @@ export function ChatThreadRouteView() {
   const threadId = Route.useParams({
     select: (params) => ThreadId.makeUnsafe(params.threadId),
   });
+  useOrganizationEngagement(threadId);
+  // Keeps full detail for the most recently viewed threads; older ones fall back to summaries.
+  useEffect(() => useStore.getState().markThreadViewed(threadId), [threadId]);
   const routeThread = useStore((store) => store.threads.find((thread) => thread.id === threadId));
   const routeProject = useStore((store) =>
     store.projects.find((project) => project.id === routeThread?.projectId),

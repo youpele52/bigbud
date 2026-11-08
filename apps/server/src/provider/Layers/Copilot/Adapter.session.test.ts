@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -107,7 +108,10 @@ describe("CopilotAdapter remote workspace sessions", () => {
 
   it.effect("starts remote workspace sessions locally with a remote session-fs bridge", () => {
     const client = new FakeCopilotClient();
-    const customBinaryPath = "/tmp/custom/copilot";
+    // A real executable keeps the configured path ahead of any managed runtime on the host.
+    const customBinaryDir = mkdtempSync(path.join(tmpdir(), "copilot-custom-"));
+    const customBinaryPath = path.join(customBinaryDir, "copilot");
+    writeFileSync(customBinaryPath, "#!/bin/sh\n", { mode: 0o755 });
     let createdClientOptions: CopilotClientOptions | undefined;
     const layer = makeCopilotAdapterLive({
       remoteWorkspaceReadinessProbe: async () => ({ os: "linux", architecture: "x86_64" }),
@@ -242,7 +246,10 @@ describe("CopilotAdapter remote workspace sessions", () => {
       yield* adapter.stopSession(THREAD_ID);
       assert.equal(client.stopped, true);
       assert.equal(existsSync(syntheticCwd), false);
-    }).pipe(Effect.provide(layer));
+    }).pipe(
+      Effect.provide(layer),
+      Effect.ensuring(Effect.sync(() => rmSync(customBinaryDir, { recursive: true, force: true }))),
+    );
   });
 
   it.effect(

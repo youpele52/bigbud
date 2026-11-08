@@ -28,6 +28,7 @@ import {
 } from "../Services/PTY";
 import { makeTerminalManagerWithOptions } from "./Manager";
 import type { RemoteTerminalProcessInspector } from "./Manager.remote-inspection.ts";
+import type { TerminalSubprocessChecker } from "./Manager.shell.ts";
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
 
 export class FakePtyProcess implements PtyProcess {
@@ -240,7 +241,7 @@ export function writeFileString(filePath: string, contents: string) {
 
 export interface CreateManagerOptions {
   shellResolver?: () => string;
-  subprocessChecker?: (terminalPid: number) => Effect.Effect<boolean>;
+  subprocessChecker?: TerminalSubprocessChecker;
   agentDetector?: TerminalAgentDetector;
   remoteProcessInspector?: RemoteTerminalProcessInspector;
   subprocessPollIntervalMs?: number;

@@ -1,3 +1,5 @@
+import { findPackagedDesktopSupervisor } from "./lib/packaged-desktop-supervisor.ts";
+import { smokeTestThreadOrganizationBinary } from "./lib/thread-organization-smoke.ts";
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -65,9 +67,17 @@ if (
 await verifyWorkspaceAgentHandshake(binaryPath);
 await verifyWorkspaceAgentCleanupSmoke(binaryPath);
 
+const supervisorPath = findPackagedDesktopSupervisor(releaseRoot, desktopPlatform);
+if (!supervisorPath) throw new Error("Packaged organisation supervisor was not found");
+await smokeTestThreadOrganizationBinary(supervisorPath);
+
 if (copyDirectory) {
   mkdirSync(copyDirectory, { recursive: true });
   const extension = platform === "win32" ? ".exe" : "";
+  copyFileSync(
+    supervisorPath,
+    join(copyDirectory, `server-organization-supervisor-${platform}-${architecture}${extension}`),
+  );
   copyFileSync(
     binaryPath,
     join(copyDirectory, `server-workspace-agent-${platform}-${architecture}${extension}`),

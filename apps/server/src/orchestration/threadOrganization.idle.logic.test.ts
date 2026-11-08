@@ -20,6 +20,24 @@ describe("isThreadQuiescent", () => {
     expect(isThreadQuiescent({ ...quiet, session: { status: "ready" } } as never)).toBe(true);
   });
 
+  it.each(["completed", "failed", "superseded", "cancelled"])(
+    "does not treat a retained %s turn-control operation as pending work",
+    (state) => {
+      expect(isThreadQuiescent({ ...quiet, pendingTurnControlOperation: { state } } as never)).toBe(
+        true,
+      );
+    },
+  );
+
+  it.each(["requested", "provider-acknowledged", "waiting-for-settlement", "ambiguous"])(
+    "still protects a %s turn-control operation",
+    (state) => {
+      expect(isThreadQuiescent({ ...quiet, pendingTurnControlOperation: { state } } as never)).toBe(
+        false,
+      );
+    },
+  );
+
   it("rejects each blocker on its own", () => {
     for (const blocker of [
       { session: { status: "running" } },

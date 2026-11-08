@@ -1,0 +1,50 @@
+syntax = "proto3";
+package bigbud.thread_organization.scheduling.v1;
+import "thread-organization/facts.proto";
+
+// TS persists this policy before publishing it. Rust alone chooses candidates/deadlines.
+message Settings {
+  bool idle_enabled = 1;
+  uint64 idle_timeout_ms = 2;
+  bigbud.thread_organization.facts.v1.Section idle_destination = 3;
+  bool older_enabled = 4;
+  uint64 older_timeout_ms = 5;
+  optional uint32 present_target = 6;
+  optional uint64 target_not_before_ms = 7;
+  uint64 grace_ms = 8;
+}
+enum Reason { REASON_UNSPECIFIED = 0; REASON_ATTENTION = 1; REASON_ACTIVE = 2; REASON_SNOOZE_EXPIRED = 3; REASON_OLDER = 4; REASON_IDLE = 5; REASON_TARGET = 6; REASON_RESOLVED = 7; }
+message Proposal {
+  string operation_id = 1;
+  string occurrence_id = 2;
+  uint64 attempt = 3;
+  string thread_id = 4;
+  uint64 fact_version = 5;
+  uint64 expected_revision = 6;
+  uint64 policy_version = 7;
+  bigbud.thread_organization.facts.v1.Section from = 8;
+  bigbud.thread_organization.facts.v1.Section destination = 9;
+  Reason reason = 10;
+  string snooze_identity = 11;
+  optional uint64 inactivity_cutoff_ms = 12;
+  uint64 created_at_ms = 13;
+}
+enum Outcome { OUTCOME_UNSPECIFIED = 0; OUTCOME_APPLIED = 1; OUTCOME_STALE = 2; OUTCOME_NOT_DUE = 3; }
+message Receipt {
+  string operation_id = 1;
+  Outcome outcome = 2;
+  optional uint64 retry_not_before_ms = 3;
+  uint64 result_revision = 4;
+  uint64 result_sequence = 5;
+}
+message Ready { uint64 sequence = 1; uint64 policy_version = 2; }
+message Heartbeat { uint64 sequence = 1; }
+message NativeFrame {
+  string backend_nonce = 1;
+  uint64 generation = 2;
+  oneof payload {
+    Ready ready = 3;
+    Proposal proposal = 4;
+    Heartbeat heartbeat = 5;
+  }
+}

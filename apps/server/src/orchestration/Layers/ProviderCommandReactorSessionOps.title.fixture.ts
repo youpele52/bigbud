@@ -15,6 +15,7 @@ import { vi } from "vitest";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 import { maybeGenerateThreadTitleForFirstTurn } from "./ProviderCommandReactorSessionOps.title.ts";
 import type { ThreadTitleGenerationInput } from "../../git/Services/TextGeneration.ts";
+import { compareThreadActivities } from "../projectorThreadState.ts";
 
 /** Persisted projection simulation; the production scoped rename handler is deliberately not mocked. */
 export function titleFixture() {
@@ -47,7 +48,13 @@ export function titleFixture() {
   const dispatch = vi.fn((command: OrchestrationCommand) =>
     Effect.sync(() => {
       if (command.type === "thread.activity.append")
-        thread = { ...thread, activities: [...thread.activities, command.activity] };
+        thread = {
+          ...thread,
+          activities: [
+            ...thread.activities.filter((item) => item.id !== command.activity.id),
+            command.activity,
+          ].toSorted(compareThreadActivities),
+        };
       if (command.type === "thread.meta.update" && command.title)
         thread = { ...thread, title: command.title };
       return { sequence: 1 };
@@ -129,6 +136,12 @@ export function titleFixture() {
             updatedAt: now,
           },
         ],
+      };
+    },
+    reload: () => {
+      thread = {
+        ...structuredClone(thread),
+        activities: structuredClone(thread.activities).toSorted(compareThreadActivities),
       };
     },
     services,

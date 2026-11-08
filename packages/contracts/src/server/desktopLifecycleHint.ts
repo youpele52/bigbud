@@ -53,6 +53,12 @@ export type DesktopLifecycleHint = typeof DesktopLifecycleHint.Type;
  * - `resume-probe-restart`: `restartUnresponsiveBackend` restarted a backend that refused
  *   connections after wake. Unsettled turns whose provider call may have been sent become
  *   "outcome unknown" prompts instead of being settled as stopped.
+ * - `unexpected-exit-restart`: `scheduleBackendRestart` replaced a backend that exited on its
+ *   own (a crash such as heap exhaustion). The same turns become prompts, so an agent that died
+ *   with the process is never a silent stop. Yields to a pending `resume-probe-restart`.
  */
-export const DesktopBackendStartReason = Schema.Literals(["resume-probe-restart"]);
+export const DesktopBackendStartReason = Schema.Literals([
+  "resume-probe-restart",
+  "unexpected-exit-restart",
+]);
 export type DesktopBackendStartReason = typeof DesktopBackendStartReason.Type;

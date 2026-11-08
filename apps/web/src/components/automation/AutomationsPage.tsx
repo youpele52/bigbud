@@ -11,7 +11,8 @@ import { usePageTitle } from "~/hooks/usePageTitle";
 import {
   AUTOMATION_SKILL_PROMPT,
   buildAutomationSkillDispatchPrompt,
-  extractAutomationRequest,
+  peekAutomationRequest,
+  readAutomationRequest,
   findLatestAutomationAssistantMessage,
   getDeviceTimeZone,
   validateAutomationSkillRequest,
@@ -68,11 +69,11 @@ export function AutomationsPage() {
   );
 
   useEffect(() => {
-    const automationRequest = latestAssistantMessage
-      ? extractAutomationRequest(latestAssistantMessage.text)
+    const peekedRequest = latestAssistantMessage
+      ? peekAutomationRequest(latestAssistantMessage)
       : null;
 
-    if (!api || !builderThreadId || !latestAssistantMessage || !automationRequest) {
+    if (!api || !builderThreadId || !latestAssistantMessage || !peekedRequest) {
       return;
     }
 
@@ -84,6 +85,13 @@ export function AutomationsPage() {
 
     void (async () => {
       try {
+        const automationRequest =
+          peekedRequest === "unread"
+            ? await readAutomationRequest(builderThreadId, latestAssistantMessage)
+            : peekedRequest;
+        if (!automationRequest) {
+          return;
+        }
         const validationError = validateAutomationSkillRequest(automationRequest);
         if (validationError) {
           throw new Error(validationError);

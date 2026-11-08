@@ -1,6 +1,5 @@
 import type { ModelRef, SessionInfo } from "@opencode/client";
 import path from "node:path";
-import { Effect } from "effect";
 import { v2Request } from "./Client.ts";
 import { assertV2SavedGrantsCompatible } from "./Runtime.permissions.saved.ts";
 import type { V2IsolatedRuntimeOptions, V2RuntimeSession, V2StartInput } from "./Runtime.types.ts";
@@ -12,7 +11,7 @@ import { assertV2ModelAvailable } from "./Runtime.model.availability.ts";
 import { v2SharedToolPolicy } from "./Runtime.policy.shared.ts";
 import { v2RemoteToolPolicy } from "./Runtime.policy.remote.ts";
 import { v2SharedProtectedResources } from "./Runtime.policy.shared.paths.ts";
-import { decodeV2Cursor } from "./Runtime.cursor.ts";
+import { assertV2RetainedWorkspace } from "./Runtime.workspaceLocation.ts";
 import { decodeV2NativeSession } from "./Runtime.session.decode.ts";
 import { assertV2ThreadPolicy } from "./Orchestration.admission.ts";
 import {
@@ -73,18 +72,12 @@ export async function createRuntimeSession(
   const binding = await resolveV2RuntimeBinding(options, input);
   const { runtimeTarget, workspaceTarget, root, directory, storageIdentity, nativeSessionId } =
     binding;
-  const retained = await Effect.runPromise(options.journal.latestBound(input.threadId));
-  if (
-    retained &&
-    (retained.binding.storageIdentity !== storageIdentity ||
-      retained.binding.nativeSessionId !== nativeSessionId ||
-      retained.binding.location !== directory ||
-      retained.binding.runtimeTargetId !== runtimeTarget ||
-      retained.binding.workspaceTargetId !== workspaceTarget)
-  )
-    throw new Error(
-      "V2 retained admission belongs to another native storage/target. Existing history is read-only here; no session was created, rebound or replayed.",
-    );
+  const { cursor, retained } = await assertV2RetainedWorkspace(
+    options.journal,
+    input,
+    binding,
+    options.config.sharedService ? "shared" : "isolated",
+  );
   const selection = input.modelSelection;
   if (
     !selection ||
@@ -93,18 +86,6 @@ export async function createRuntimeSession(
     selection.model === "default"
   ) {
     throw new Error("V2 requires an explicit native provider/model.");
-  }
-  const cursor = input.resumeCursor === undefined ? undefined : decodeV2Cursor(input.resumeCursor);
-  if (cursor) {
-    if (
-      cursor.nativeSessionId !== nativeSessionId ||
-      cursor.storageIdentity !== storageIdentity ||
-      cursor.directory !== directory ||
-      (cursor.connectionMode !== undefined &&
-        cursor.connectionMode !== (options.config.sharedService ? "shared" : "isolated"))
-    ) {
-      throw new Error("V2 resume ownership mismatch; no fresh-session fallback.");
-    }
   }
   // Attach retained history before applying a new turn selection through the idle switch guard.
   const model: ModelRef = cursor?.model ?? {

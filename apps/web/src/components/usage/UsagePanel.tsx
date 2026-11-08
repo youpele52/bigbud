@@ -1,9 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { ArrowRightIcon } from "lucide-react";
 
-import { useServerProviders } from "~/rpc/serverState";
+import { useServerConfig, useServerProviders } from "~/rpc/serverState";
 import { cn } from "~/lib/utils";
-import { BigbudLoader } from "../layout/BigbudLoader";
+import { UsageSectionLoader } from "./UsageSectionLoader";
 import {
   STANDALONE_PAGE_SCROLL_CLASS,
   STANDALONE_PAGE_WIDTH_CLASS,
@@ -18,13 +18,9 @@ import { UsageAccountingFooter } from "./UsageAccountingFooter";
 
 export function UsagePanel({ visible }: { visible: boolean }) {
   const providers = useServerProviders();
+  const providersLoading = useServerConfig() === null;
   const { summary, loading, error } = useUsagePanelSummary(visible);
   const displaySummary = summary ? applyUsageDisplayLabels(summary, providers) : null;
-
-  // First load fills the panel with the logo, like the usage page; refreshes keep data visible.
-  if (loading && !summary && !error) {
-    return <BigbudLoader className="flex-1" label="Loading usage" />;
-  }
 
   return (
     <div className={STANDALONE_PAGE_SCROLL_CLASS}>
@@ -34,17 +30,15 @@ export function UsagePanel({ visible }: { visible: boolean }) {
           <div>
             <h3 className="text-sm font-medium">24-hour overview</h3>
           </div>
-          {loading || error ? (
-            <CenteredStatus
-              loading={loading && !error}
-              className={
-                error
-                  ? "text-xs text-amber-600 dark:text-amber-400"
-                  : "text-xs text-muted-foreground"
-              }
-            >
-              {error ?? "Refreshing usage"}
+          {error ? (
+            <CenteredStatus className="text-xs text-amber-600 dark:text-amber-400">
+              {error}
               {error && summary ? " Showing last successful data; values may be out of date." : ""}
+            </CenteredStatus>
+          ) : null}
+          {loading && displaySummary ? (
+            <CenteredStatus loading className="text-xs text-muted-foreground">
+              Refreshing usage
             </CenteredStatus>
           ) : null}
           {displaySummary ? (
@@ -52,10 +46,13 @@ export function UsagePanel({ visible }: { visible: boolean }) {
               <UsageDataStatus summary={displaySummary} />
               <UsageOverviewCard summary={displaySummary} />
             </>
+          ) : loading ? (
+            <UsageSectionLoader overview label="Loading usage overview" />
           ) : null}
         </section>
         <UsageSubscriptionLimits
           compact
+          loading={providersLoading}
           limits={providers
             .filter((provider) => provider.enabled)
             .map((provider) => provider.usageLimits)}

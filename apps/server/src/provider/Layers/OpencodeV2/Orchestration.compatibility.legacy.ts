@@ -2,6 +2,21 @@ import { createHash } from "node:crypto";
 import { V2_BOOTSTRAP_ABI } from "./Orchestration.plugin.specs.ts";
 import { V2_IMPLEMENTATION_MANIFEST } from "./Orchestration.implementation.manifest.generated.ts";
 
+/** Exact first six-tool descriptor, before the 2.2.6 websearch policy expansion. */
+export const V2_N7_BOOTSTRAP_COMPATIBILITY = Object.freeze({
+  format: "bigbud.thread.compatibility.v2",
+  bootstrapAbi: "bigbud.thread.bootstrap.v4",
+  registration: "bigbud.thread.registration.issuer.v1",
+  enrollmentProtocol: "bigbud.thread.enrollment.v2",
+  callbackProtocol: "bigbud.thread.callback.v1",
+  schemaDigest: "024e26ee0ac62d411a2715fd2a91d52b45666bf4169b629f2bb857d1ed1db2e6",
+  canonicalRequestAbi: "bigbud.thread.canonical.v2",
+  resultEncoding: "bigbud.thread.final-json.v1",
+  nativeContractDigest: "5c42274135e27b62dfbb7b7c98c51de81f2d116ff3b636ab4a7947b9fd546e7b",
+});
+export const V2_N7_COMPATIBILITY_DIGEST =
+  "e39bae5ac6ea41fe8ea225cb36399eb67ec8a34992e8b2a73adaa3ae1e910aa3";
+
 /** Exact N0 descriptor encoding/order. Retaining it does not promote historical partial qualification. */
 export const V2_N0_BOOTSTRAP_COMPATIBILITY = Object.freeze({
   format: "bigbud.thread.compatibility.v1",

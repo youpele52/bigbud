@@ -12,6 +12,13 @@ import {
   ServerRestartRemoteAgentResult,
   ServerGetRemoteAgentRestartStatusInput,
 } from "./server.remoteRestart";
+import {
+  ServerListDisconnectedExecutionTargetsInput,
+  ServerListDisconnectedExecutionTargetsResult,
+  ServerRemoteConnectionError,
+  ServerRemoteConnectionInput,
+  ServerRemoteConnectionResult,
+} from "./server.remoteConnection";
 
 export const WsServerRestartRemoteAgentRpc = Rpc.make(WS_METHODS.serverRestartRemoteAgent, {
   payload: ServerRestartRemoteAgentInput,
@@ -34,5 +41,29 @@ export const WsServerGetRemoteAgentUpdateStatusRpc = Rpc.make(
     payload: ServerGetRemoteAgentUpdateStatusInput,
     success: ServerRemoteAgentUpdateStatus,
     error: ServerGetRemoteAgentUpdateStatusError,
+  },
+);
+
+export const WsServerDisconnectExecutionTargetRpc = Rpc.make(
+  WS_METHODS.serverDisconnectExecutionTarget,
+  {
+    payload: ServerRemoteConnectionInput,
+    success: ServerRemoteConnectionResult,
+    error: ServerRemoteConnectionError,
+  },
+);
+
+export const WsServerConnectExecutionTargetRpc = Rpc.make(WS_METHODS.serverConnectExecutionTarget, {
+  payload: ServerRemoteConnectionInput,
+  success: ServerRemoteConnectionResult,
+  error: ServerRemoteConnectionError,
+});
+
+export const WsServerListDisconnectedExecutionTargetsRpc = Rpc.make(
+  WS_METHODS.serverListDisconnectedExecutionTargets,
+  {
+    payload: ServerListDisconnectedExecutionTargetsInput,
+    success: ServerListDisconnectedExecutionTargetsResult,
+    error: ServerRemoteConnectionError,
   },
 );

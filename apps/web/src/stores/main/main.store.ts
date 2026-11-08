@@ -37,6 +37,9 @@ import {
 } from "./selectors.store";
 import type { GetOrganizationThreadSummariesResult } from "@bigbud/contracts/orchestration/orchestration.catalog.organization.ts";
 import { appendOrganizationPage } from "./helpers.organization.store";
+import { markThreadViewed, unloadHydratedThreads } from "./helpers.lazy.eviction.store";
+import { mergeTurnActivities } from "./helpers.turnActivities.store";
+import type { OrchestrationThreadActivity } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 
 // ── State ────────────────────────────────────────────────────────────
 
@@ -67,6 +70,8 @@ export interface AppState {
   sidebarPinnedThreadIds: ThreadId[];
   bootstrapComplete: boolean;
   threadHydrationById: Record<string, ThreadHydration>;
+  /** Most recently viewed first; only these threads keep full detail (see the eviction helpers). */
+  recentlyViewedThreadIds?: ThreadId[];
 }
 
 export type ThreadHydration =
@@ -99,6 +104,7 @@ const initialState: AppState = {
   sidebarPinnedThreadIds: [],
   bootstrapComplete: false,
   threadHydrationById: {},
+  recentlyViewedThreadIds: [],
 };
 
 // ── Re-exports for consumers ─────────────────────────────────────────
@@ -147,6 +153,12 @@ interface AppStore extends AppState {
     generation?: number,
   ) => void;
   setThreadHydration: (threadId: ThreadId, hydration: ThreadHydration) => void;
+  markThreadViewed: (threadId: ThreadId) => void;
+  mergeTurnActivities: (
+    threadId: ThreadId,
+    activities: ReadonlyArray<OrchestrationThreadActivity>,
+  ) => void;
+  unloadHydratedThreads: (keepThreadId: ThreadId | null) => void;
   applyOrchestrationEvent: (event: OrchestrationEvent) => void;
   applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
   setError: (threadId: ThreadId, error: string | null) => void;
@@ -191,6 +203,11 @@ export const useStore = create<AppStore>((set) => ({
     ),
   setThreadHydration: (threadId, hydration) =>
     set((state) => setThreadHydration(state, threadId, hydration)),
+  markThreadViewed: (threadId) => set((state) => markThreadViewed(state, threadId)),
+  mergeTurnActivities: (threadId, activities) =>
+    set((state) => mergeTurnActivities(state, threadId, activities)),
+  unloadHydratedThreads: (keepThreadId) =>
+    set((state) => unloadHydratedThreads(state, keepThreadId)),
   applyOrchestrationEvent: (event) => set((state) => applyOrchestrationEvent(state, event)),
   applyOrchestrationEvents: (events) => set((state) => applyOrchestrationEvents(state, events)),
   setError: (threadId, error) => set((state) => setError(state, threadId, error)),

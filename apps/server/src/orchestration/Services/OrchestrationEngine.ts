@@ -1,3 +1,4 @@
+import type { ThreadOrganizationNativeOperation } from "@bigbud/contracts/orchestration/orchestration.organization.native.ts";
 /**
  * OrchestrationEngineService - Service interface for orchestration command handling.
  *
@@ -88,6 +89,9 @@ export interface OrchestrationEngineShape {
     commandId: CommandId,
   ) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, OrchestrationEventStoreError>;
 
+  /** Lowest read cursor of an open internal reactor stream, or null when none is open. */
+  readonly oldestReactorCursor?: () => number | null;
+
   /**
    * Dispatch a validated orchestration command.
    *
@@ -102,6 +106,9 @@ export interface OrchestrationEngineShape {
     options?: {
       readonly bootstrapSubmission?: BootstrapSubmissionDispatch;
       readonly worktreeOperationId?: string;
+      /** Server-only exact verified native workspace journal identity; never accepted over the wire. */
+      readonly nativeWorkspaceOperationId?: string;
+      readonly nativeOrganizationOperation?: ThreadOrganizationNativeOperation;
       readonly expectedWorktreePath?: { readonly value: string | null };
       readonly expectedWorktreeIdentity?: { readonly path: string; readonly identity: string };
     },
@@ -152,7 +159,7 @@ export function resolveOrchestrationThreadOwnership(
 export function getOrchestrationCommandOutcome(
   engine: OrchestrationEngineShape,
   commandId: CommandId,
-) {
+): Effect.Effect<GetCommandOutcomeResult, OrchestrationCommandReceiptRepositoryError> {
   return engine.getCommandOutcome
     ? engine.getCommandOutcome(commandId)
     : Effect.succeed({

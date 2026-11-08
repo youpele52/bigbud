@@ -276,6 +276,15 @@ export class RemoteAgentConnection {
     for (const waiter of this.waiters.splice(0)) waiter.reject(error);
   }
 
+  /**
+   * Ends the link as an ordinary transport loss: waiters and failure listeners see
+   * `error` (keeping its code) before the child closes. `close()` alone notifies no listener.
+   */
+  disconnect(error: Error & { readonly code?: string }): void {
+    this.fail(new RemoteAgentConnectionError(error.message, error.code));
+    this.close();
+  }
+
   async gracefulClose(timeoutMs = 2_000): Promise<void> {
     if (this.closed) return;
     this.closed = true;

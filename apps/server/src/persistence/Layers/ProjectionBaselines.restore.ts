@@ -1,6 +1,8 @@
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { PROJECTION_BASELINE_SURROGATE_KEYS } from "../ProjectionBaselineSchema.ts";
+
 export type TableColumn = {
   readonly name: string;
   readonly primaryKeyPosition: number;
@@ -22,52 +24,80 @@ export function quoteIdentifier(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
-function rowKey(row: Record<string, unknown>, columns: ReadonlyArray<TableColumn>) {
-  return columns.map((column) => row[column.name]);
-}
-
 export function defaultExpression(column: TableColumn): string {
   return column.defaultValue ?? "NULL";
 }
 
-export function deleteMissingRows(
-  table: string,
-  columns: ReadonlyArray<TableColumn>,
-  payloadRows: ReadonlyArray<Record<string, unknown>>,
-): { readonly statement: string; readonly params: ReadonlyArray<unknown> } {
-  const primaryKey = columns
+export function primaryKeyColumns(columns: ReadonlyArray<TableColumn>): ReadonlyArray<TableColumn> {
+  return columns
     .filter((column) => column.primaryKeyPosition > 0)
     .toSorted((left, right) => left.primaryKeyPosition - right.primaryKeyPosition);
-  if (primaryKey.length === 0) throw new Error(`baseline table ${table} has no primary key`);
-  const keys = payloadRows
-    .filter((row) => primaryKey.every((column) => Object.hasOwn(row, column.name)))
-    .map((row) => rowKey(row, primaryKey));
-  const projectGuard = table === "projection_projects" ? ` WHERE project_id <> '__chats__'` : "";
-  if (keys.length === 0) return { statement: `DELETE FROM ${table}${projectGuard}`, params: [] };
-  const encodedKeys = JSON.stringify(keys);
-  const keySql = `json_array(${primaryKey.map((column) => quoteIdentifier(column.name)).join(", ")})
-    NOT IN (SELECT payload_key.value FROM json_each(?) AS payload_key)`;
-  return {
-    statement: `DELETE FROM ${table}${projectGuard}${projectGuard ? " AND " : " WHERE "}${keySql}`,
-    params: [encodedKeys],
-  };
 }
 
-export function hasDuplicatePrimaryKeys(
-  rows: ReadonlyArray<Record<string, unknown>>,
+/**
+ * Primary keys of the rows being restored, recorded page by page so a restore never holds a
+ * whole table's keys in memory. Keys are stored as SQLite-rendered JSON arrays, the same form
+ * `json_array(<key columns>)` produces for live rows, so NULL key components compare exactly.
+ */
+export const BASELINE_RESTORE_KEYS_TABLE = "temp.projection_baseline_restore_keys";
+
+export const resetBaselineRestoreKeys = (sql: SqlClient.SqlClient) =>
+  Effect.gen(function* () {
+    yield* sql.unsafe(`CREATE TEMP TABLE IF NOT EXISTS projection_baseline_restore_keys (
+      table_name TEXT NOT NULL, key_json TEXT NOT NULL)`);
+    yield* sql.unsafe(`CREATE INDEX IF NOT EXISTS temp.projection_baseline_restore_keys_lookup
+      ON projection_baseline_restore_keys (table_name, key_json)`);
+    yield* sql.unsafe(`DELETE FROM ${BASELINE_RESTORE_KEYS_TABLE}`);
+  });
+
+export const recordBaselineRestoreKeys = (
+  sql: SqlClient.SqlClient,
+  table: string,
+  keys: ReadonlyArray<ReadonlyArray<unknown>>,
+) =>
+  keys.length === 0
+    ? Effect.void
+    : sql
+        .unsafe(
+          `INSERT INTO ${BASELINE_RESTORE_KEYS_TABLE} (table_name, key_json)
+           SELECT ?, value FROM json_each(?)`,
+          [table, JSON.stringify(keys)],
+        )
+        .pipe(Effect.asVoid);
+
+export const countDistinctBaselineRestoreKeys = (sql: SqlClient.SqlClient, table: string) =>
+  sql
+    .unsafe<{ readonly count: number }>(
+      `SELECT COUNT(DISTINCT key_json) AS count FROM ${BASELINE_RESTORE_KEYS_TABLE}
+       WHERE table_name = ?`,
+      [table],
+    )
+    .pipe(Effect.map((rows) => rows[0]?.count ?? 0));
+
+/** Whether baselines leave out `table`'s surrogate key, so restore replaces the table whole. */
+export function hasBaselineSurrogateKey(table: string): boolean {
+  return Object.hasOwn(PROJECTION_BASELINE_SURROGATE_KEYS, table);
+}
+
+/**
+ * Deletes live rows whose key was not recorded for `table`. One uncorrelated subquery. A table
+ * whose surrogate key baselines leave out has no key to match rows by, so all its rows go and
+ * the baseline rows are inserted afresh.
+ */
+export function deleteRowsMissingFromKeys(
+  table: string,
   columns: ReadonlyArray<TableColumn>,
-): boolean {
-  const primaryKey = columns
-    .filter((column) => column.primaryKeyPosition > 0)
-    .toSorted((left, right) => left.primaryKeyPosition - right.primaryKeyPosition);
-  const seen = new Set<string>();
-  for (const row of rows) {
-    if (!primaryKey.every((column) => Object.hasOwn(row, column.name))) continue;
-    const key = JSON.stringify(rowKey(row, primaryKey));
-    if (seen.has(key)) return true;
-    seen.add(key);
-  }
-  return false;
+): { readonly statement: string; readonly params: ReadonlyArray<unknown> } {
+  if (hasBaselineSurrogateKey(table)) return { statement: `DELETE FROM ${table}`, params: [] };
+  const primaryKey = primaryKeyColumns(columns);
+  if (primaryKey.length === 0) throw new Error(`baseline table ${table} has no primary key`);
+  const projectGuard = table === "projection_projects" ? " AND project_id <> '__chats__'" : "";
+  const keyColumns = primaryKey.map((column) => quoteIdentifier(column.name)).join(", ");
+  return {
+    statement: `DELETE FROM ${table} WHERE json_array(${keyColumns}) NOT IN (
+      SELECT key_json FROM ${BASELINE_RESTORE_KEYS_TABLE} WHERE table_name = ?)${projectGuard}`,
+    params: [table],
+  };
 }
 
 export function restoreActiveWatches(

@@ -23,7 +23,7 @@ function configure(overrides: Partial<Parameters<typeof setApi>[0]>) {
   setApi({
     show: vi.fn(),
     verifyExecutionTarget: vi.fn(),
-    getSnapshot: vi.fn(),
+    getProjectWorktreePaths: vi.fn(),
     dispatchCommand: vi.fn(),
     ...overrides,
   });

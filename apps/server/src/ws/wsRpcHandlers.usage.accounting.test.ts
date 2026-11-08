@@ -1,5 +1,6 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
+  prepareUsageAccounting,
   summarizeUsageAccounting,
   summarizeUsageSources,
 } from "./wsRpcHandlers.usage.accounting.ts";
@@ -109,6 +110,41 @@ it("accumulates usable contributions before legacy/null propagation and preserve
     reportedTokens: 216,
     estimatedTokens: 5,
   });
+});
+
+it("decodes accounting once across breakdowns, including malformed metadata", () => {
+  const parse = vi.spyOn(JSON, "parse");
+  try {
+    const entries = [
+      {
+        usedTokens: 5,
+        accountingJson: JSON.stringify({
+          version: 2,
+          source: "provider-reported",
+          basis: "test",
+          completeness: "partial",
+          inputTokens: 3,
+          outputTokens: 2,
+          cacheReadTokens: null,
+          cacheWriteTokens: null,
+          reasoningTokens: null,
+          reportedTotal: 5,
+          subtotal: 5,
+        }),
+      },
+      { usedTokens: 7, accountingJson: "{malformed" },
+    ];
+    const expected = summarizeUsageAccounting(entries);
+    parse.mockClear();
+    const prepared = entries.map(prepareUsageAccounting);
+    expect(parse).toHaveBeenCalledTimes(2);
+    for (let group = 0; group < 4; group++) {
+      expect(summarizeUsageAccounting(prepared)).toEqual(expected);
+    }
+    expect(parse).toHaveBeenCalledTimes(2);
+  } finally {
+    parse.mockRestore();
+  }
 });
 
 it("zero-only unknown rows do not null-poison other contributions' chart buckets", () => {

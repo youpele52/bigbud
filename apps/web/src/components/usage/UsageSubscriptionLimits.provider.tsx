@@ -1,6 +1,6 @@
 import type { ServerProviderUsageLimits } from "@bigbud/contracts/server/usageLimits.ts";
 import { StatusBanner } from "../common/StatusBanner";
-import { Alert, AlertDescription } from "../ui/alert";
+import { BigbudLoader } from "../layout/BigbudLoader";
 import {
   extraUsageUtilization,
   formatExtraUsageRemaining,
@@ -63,9 +63,7 @@ export function UsageSubscriptionProviderLimits({
         />
       ) : null}
       {limits.status === "pending" ? (
-        <Alert variant="loading" role="status">
-          <AlertDescription>Checking {title}</AlertDescription>
-        </Alert>
+        <BigbudLoader className="h-auto min-h-40 rounded-lg" label={`Checking ${title}`} />
       ) : null}
       {hasRetainedLimits ? (
         <div

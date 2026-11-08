@@ -10,7 +10,10 @@ import { SubagentsCard } from "../agents/SubagentsCard";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
 import { UserInputQuestions } from "./UserInputQuestions";
 import { AnsweredUserInput } from "./AnsweredUserInput";
-import { MessageCopyButton } from "../common/MessageCopyButton";
+import {
+  TimelineMessageCopyButton,
+  TruncatedMessageNotice,
+} from "./MessagesTimeline.truncatedMessageNotice";
 import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
@@ -28,7 +31,7 @@ import { Undo2Icon } from "lucide-react";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
 import { isVideoMimeType } from "~/lib/workspaceFilePreview";
 import { attachmentPreviewRoutePath, toAttachmentPreviewUrl } from "~/lib/attachmentPreview";
-import { formatTimestamp } from "../../../utils/timestamp";
+import { ChatTimestamp } from "../common/ChatTimestamp";
 import { cn } from "~/lib/utils";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
 import { timelineRowAccordionControl } from "./MessagesTimeline.accordion";
@@ -259,15 +262,23 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                     cwd={markdownCwd}
                   />
                 )}
-                <div className="mt-1.5 flex justify-end">
-                  <p className="text-xs text-muted-foreground/50">
-                    {formatTimestamp(row.message.createdAt, timestampFormat)}
-                  </p>
-                </div>
+                <TruncatedMessageNotice message={row.message} />
               </div>
-              <div className="flex items-center gap-1.5 px-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
+              <div
+                data-message-footer="user"
+                className="flex max-w-full flex-wrap items-center justify-end gap-1.5 px-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100"
+              >
+                <p className="min-w-0 max-w-full break-words text-xs text-muted-foreground/50">
+                  <ChatTimestamp
+                    createdAt={row.message.createdAt}
+                    timestampFormat={timestampFormat}
+                  />
+                </p>
                 {displayedUserMessage.copyText && (
-                  <MessageCopyButton text={displayedUserMessage.copyText} />
+                  <TimelineMessageCopyButton
+                    message={row.message}
+                    text={displayedUserMessage.copyText}
+                  />
                 )}
                 <MessageReplyButton onClick={() => onReplyToMessage(row.message.id)} />
                 {onBranchThread ? (
@@ -296,6 +307,8 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
           turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
           changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
           onSetChangedFilesExpanded={onSetChangedFilesExpanded}
+          activityAccordionOpenById={activityAccordionOpenById}
+          onSetActivityAccordionOpen={onSetActivityAccordionOpen}
           onOpenTurnDiff={onOpenTurnDiff}
           markdownCwd={markdownCwd}
           onMarkdownAnchorClick={onMarkdownAnchorClick}

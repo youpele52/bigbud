@@ -1,6 +1,11 @@
 import type { BrowserResult, VisibleBrowserCommand } from "@bigbud/contracts";
 import { Deferred, Effect, Layer, PubSub, Ref, Stream } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import {
+  holdThreadLease,
+  releaseThreadLease,
+  threadLeaseExpiresAt,
+} from "../../retention/threadLeaseHeartbeat.ts";
 
 import {
   VisibleBrowserControl,
@@ -27,6 +32,7 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
   const releaseDurableLease = (leaseId: string) =>
     sql`DELETE FROM thread_activity_leases WHERE lease_id = ${durableLeaseId(leaseId)}`.pipe(
       Effect.ignore,
+      Effect.ensuring(Effect.sync(() => releaseThreadLease(durableLeaseId(leaseId)))),
     );
   const retention = makeVisibleBrowserRetentionControl({
     state,
@@ -108,9 +114,12 @@ const makeVisibleBrowserControl = Effect.fn("makeVisibleBrowserControl")(functio
 
       if (!existingLease && input.action.action !== "close_tab") {
         yield* sql`
-          INSERT INTO thread_activity_leases (lease_id, thread_id, activity_kind, acquired_at)
-          VALUES (${durableLeaseId(leaseId)}, ${input.threadId}, 'browser', ${new Date().toISOString()})
+          INSERT INTO thread_activity_leases (
+            lease_id, thread_id, activity_kind, acquired_at, expires_at
+          ) VALUES (${durableLeaseId(leaseId)}, ${input.threadId}, 'browser',
+            ${new Date().toISOString()}, ${threadLeaseExpiresAt()})
         `.pipe(
+          Effect.tap(() => Effect.sync(() => holdThreadLease(durableLeaseId(leaseId)))),
           Effect.mapError(
             () =>
               new VisibleBrowserControlError({

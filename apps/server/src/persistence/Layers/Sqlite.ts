@@ -3,6 +3,7 @@ import { chmod } from "node:fs/promises";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { runMigrations } from "../Migrations.ts";
+import { UsageSqlClient } from "../Services/UsageSqlClient.ts";
 import { ensureProjectionThreadsElevatorSummaryColumns } from "../Migrations/ProjectionThreadsElevatorSummary.columns.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { writeStartupProgress } from "../../startup/startupStatus.ts";
@@ -56,6 +57,11 @@ const restrictDatabaseFiles = (dbPath: string) =>
 const migrateSchema = Effect.fn("migrateSchema")(function* (options: SqlitePersistenceOptions) {
   const sql = yield* SqlClient.SqlClient;
   yield* sql`PRAGMA journal_mode = WAL;`;
+  // In WAL mode NORMAL syncs only at checkpoints, not on every commit. Commits stay atomic and
+  // the database cannot corrupt; a power loss or OS crash (not an app crash) can lose the last
+  // commits before the next checkpoint. FULL's per-commit fsync caused the remaining 50 ms+
+  // worker stalls under maintenance. Per connection: only this writer connection commits.
+  yield* sql`PRAGMA synchronous = NORMAL;`;
   yield* sql`PRAGMA foreign_keys = ON;`;
   yield* sql`PRAGMA busy_timeout = 5000;`;
   yield* runMigrations(options.reportStartupProgress ? { onProgress: writeStartupProgress } : {});
@@ -64,10 +70,11 @@ const migrateSchema = Effect.fn("migrateSchema")(function* (options: SqlitePersi
 });
 
 /**
- * File databases run on the SQLite worker thread, so migrations, baseline
- * verification and runtime queries never block the event loop. One worker
- * owns the single connection for the life of the layer;
- * `BIGBUD_SQLITE_WORKER=0` keeps it in-process.
+ * Node file databases run on the SQLite worker thread, so migrations, baseline
+ * verification and runtime queries never block the event loop. Operational
+ * statements share one connection; Usage has its own read-only worker, opened
+ * after migrations. Bun development also isolates Usage in a worker.
+ * `BIGBUD_SQLITE_WORKER=0` keeps Node connections in-process.
  */
 export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(function* (
   dbPath: string,
@@ -77,7 +84,7 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
   const path = yield* Path.Path;
   yield* fs.makeDirectory(path.dirname(dbPath), { recursive: true });
 
-  return Layer.provideMerge(
+  const operational = Layer.provideMerge(
     Layer.effectDiscard(Effect.andThen(migrateSchema(options), restrictDatabaseFiles(dbPath))),
     makeRuntimeSqliteLayer({
       filename: dbPath,
@@ -88,7 +95,37 @@ export const makeSqlitePersistenceLive = Effect.fn("makeSqlitePersistenceLive")(
       },
     }),
   );
+
+  // Depend on the migrated operational layer before opening the second connection.
+  // Only publish its dedicated tag: never replace the operational SqlClient service.
+  const usage = Layer.unwrap(
+    Effect.as(Effect.service(SqlClient.SqlClient), makeUsageSqlitePersistenceLive(dbPath)),
+  );
+  return usage.pipe(Layer.provideMerge(operational));
 }, Layer.unwrap);
+
+const makeUsageSqlitePersistenceLive = (dbPath: string) =>
+  Layer.effect(
+    UsageSqlClient,
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`PRAGMA query_only = ON`;
+      yield* sql`PRAGMA foreign_keys = ON`;
+      yield* sql`PRAGMA busy_timeout = 5000`;
+      return sql;
+    }),
+  ).pipe(
+    Layer.provide(
+      process.versions.bun !== undefined
+        ? Layer.unwrap(
+            Effect.map(
+              Effect.promise(() => import("../BunSqliteReadClient.ts")),
+              (client) => client.layer({ filename: dbPath }),
+            ),
+          )
+        : makeRuntimeSqliteLayer({ filename: dbPath, readonly: true, worker: true }),
+    ),
+  );
 
 export const makeSqliteReadOnlyPersistenceLive = (dbPath: string) =>
   makeRuntimeSqliteLayer({ filename: dbPath, readonly: true });

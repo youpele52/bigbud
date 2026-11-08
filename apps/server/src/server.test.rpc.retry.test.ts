@@ -14,18 +14,18 @@ it.layer(serverTestLayer)("server websocket retry clock", (it) => {
         yield* buildAppUnderTest();
         const wsUrl = yield* getWsServerUrl("/ws");
         let attempts = 0;
-        const snapshot = yield* Effect.scoped(
+        const catalog = yield* Effect.scoped(
           withRetriedWsRpcClient(wsUrl, (client) => {
             attempts += 1;
             // Force the retry branch that real handshake failures reach under load.
             return attempts === 1
               ? Effect.fail(new Error("SocketOpenError: first connection failed"))
-              : client[ORCHESTRATION_WS_METHODS.getSnapshot]({});
+              : client[ORCHESTRATION_WS_METHODS.getStartupProjectCatalog]({ scope: "local" });
           }),
         );
 
         assert.equal(attempts, 2);
-        assert.isAtLeast(snapshot.threads.length, 1);
+        assert.isAtLeast(catalog.projectionSequence, 0);
       }).pipe(Effect.provide(serverHttpTestLayer)),
     2000,
   );

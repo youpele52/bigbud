@@ -16,6 +16,7 @@ import { V2NativeCompatibilityError } from "./NativeCompatibility.types.ts";
 import { resolveV2PluginConfigRoot } from "./PluginSetup.paths.ts";
 import { assertV2NativeRuntimePolicy } from "./NativeCompatibility.policy.ts";
 import { V2ReadinessError, type V2ReadinessOperation } from "./Orchestration.readiness.failure.ts";
+import { assertV2BootstrapContract } from "./Orchestration.readiness.contract.ts";
 
 const Info = Schema.Struct({
   protocol: Schema.String,
@@ -69,22 +70,17 @@ export async function verifyV2ThreadTools(
     proof.assertCurrent();
     operation = "contract";
     const info = Schema.decodeUnknownSync(Info)(value, { onExcessProperty: "error" });
-    if (
-      info.issuer !== artifact.issuer ||
-      info.protocol !== registration.id ||
-      info.artifactDigest !== artifact.artifactDigest ||
-      info.bootstrapDigest !== artifact.artifactDigest ||
-      info.bootstrapAbi !== artifact.compatibility.bootstrapAbi ||
-      info.compatibilityDigest !== artifact.compatibilityDigest ||
-      info.schemaDigest !== implementation.schemaDigest ||
-      info.nativeVersion !== proof.nativeVersion ||
-      JSON.stringify(info.tools.toSorted()) !== JSON.stringify(registration.tools.toSorted())
-    )
-      throw new V2NativeCompatibilityError(
-        "bootstrap-contract-incompatible",
-        "selected Location bootstrap contract/native version does not match verified eligibility.",
-        proof.nativeVersion,
-      );
+    assertV2BootstrapContract(info, {
+      issuer: artifact.issuer,
+      protocol: registration.id,
+      artifactDigest: artifact.artifactDigest,
+      bootstrapDigest: artifact.artifactDigest,
+      bootstrapAbi: artifact.compatibility.bootstrapAbi,
+      compatibilityDigest: artifact.compatibilityDigest,
+      schemaDigest: implementation.schemaDigest,
+      nativeVersion: proof.nativeVersion,
+      tools: registration.tools,
+    });
     operation = "source";
     await assertV2NativeThreadSource(artifact, client, directory, root);
     signal?.throwIfAborted();

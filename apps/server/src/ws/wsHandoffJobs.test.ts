@@ -3,6 +3,7 @@ import { ProjectId, TextGenerationError, ThreadId } from "@bigbud/contracts";
 import { Effect, Layer, Option } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ProjectionOperationalStateQuery } from "../orchestration/Services/ProjectionOperationalStateQuery.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
 import { ServerSettingsService } from "./serverSettings.ts";
 
@@ -44,9 +45,18 @@ function makeSnapshot(threadId = ThreadId.makeUnsafe("thread-1")) {
   } as never;
 }
 
-function makeProjectionSnapshotQueryLayer(threadId?: ThreadId) {
+/** Handoff reads the bounded per-thread history, never the full snapshot. */
+function makeThreadHistoryLayer(threadId?: ThreadId) {
+  return Layer.succeed(ProjectionOperationalStateQuery, {
+    getStartupOperationalState: () => Effect.die(new Error("not used by handoff jobs")),
+    getThreadOperationalState: () => Effect.die(new Error("not used by handoff jobs")),
+    getFullThreadHistory: () => Effect.succeed(Option.some(makeSnapshot(threadId))),
+  });
+}
+
+function makeProjectionSnapshotQueryLayer() {
   return Layer.succeed(ProjectionSnapshotQuery, {
-    getSnapshot: () => Effect.succeed(makeSnapshot(threadId)),
+    getSnapshot: () => Effect.die(new Error("handoff jobs must not read the full snapshot")),
     getCounts: () => Effect.succeed({ projectCount: 1, threadCount: 1 }),
     getUsageEntries: () => Effect.succeed([]),
     getUsageHistoryStatus: () => Effect.succeed("ready"),
@@ -66,7 +76,8 @@ async function createJobs(threadId?: ThreadId) {
           ServerSettingsService.layerTest({
             textGenerationModelSelection: { provider: "codex", model: "gpt-5.4-mini" },
           }),
-          makeProjectionSnapshotQueryLayer(threadId),
+          makeProjectionSnapshotQueryLayer(),
+          makeThreadHistoryLayer(threadId),
         ),
       ),
     ),

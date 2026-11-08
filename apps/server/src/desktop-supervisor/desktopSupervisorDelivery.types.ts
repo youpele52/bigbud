@@ -50,4 +50,7 @@ export interface DesktopSupervisorDeliveryShape {
   readonly close: () => Promise<void>;
   /** Any open supervised delivery consumer (desktop or web, not mobile): a user could answer (OD6). */
   readonly hasOpenConsumer: () => boolean;
+  /** Highest sequence every open session has acknowledged (events after it may still be
+   * replayed to that session); null when no session is open. */
+  readonly lowestAcknowledgedSequence?: () => number | null;
 }

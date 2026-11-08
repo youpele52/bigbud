@@ -120,6 +120,10 @@ export interface ChatMessage {
   createdAt: string;
   completedAt?: string | undefined;
   streaming: boolean;
+  /** `text` holds only a bounded preview; the rest loads through `getMessageTextChunk`. */
+  textTruncated?: boolean;
+  /** Full text length in characters; present when `textTruncated` is set. */
+  textLength?: number;
 }
 
 export interface ProposedPlan {
@@ -157,6 +161,8 @@ export interface Project {
   workspaceExecutionTargetId?: ExecutionTargetId;
   executionTargetId?: ExecutionTargetId;
   cwd: string | null;
+  workspaceKind?: "managed" | "external";
+  previousWorkspaceRoot?: string | null;
   defaultModelSelection: HistoricalModelSelection | null;
   createdAt?: string | undefined;
   updatedAt?: string | undefined;

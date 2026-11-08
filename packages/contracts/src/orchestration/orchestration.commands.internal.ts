@@ -1,8 +1,10 @@
 import { Schema } from "effect";
 import { TurnStartFailureClass } from "./orchestration.turnFailure";
 import { ThreadRecoverySetCommand } from "./orchestration.recovery";
+import { ThreadBranchCopyAppendCommand } from "./orchestration.branchCopy";
 import {
   ThreadOrganizationIdleCommand,
+  ThreadOrganizationReactCommand,
   ThreadOrganizationSnoozeExpireCommand,
 } from "./orchestration.organization";
 import {
@@ -236,5 +238,7 @@ export const InternalOrchestrationCommand = Schema.Union([
   ThreadRecoverySetCommand,
   ThreadOrganizationSnoozeExpireCommand,
   ThreadOrganizationIdleCommand,
+  ThreadOrganizationReactCommand,
+  ThreadBranchCopyAppendCommand,
 ]);
 export type InternalOrchestrationCommand = typeof InternalOrchestrationCommand.Type;

@@ -17,7 +17,7 @@ describe("SidebarRemoteWorkspaceDialog", () => {
     setApi({
       show: vi.fn().mockResolvedValue("edit-ssh"),
       verifyExecutionTarget: vi.fn(),
-      getSnapshot: vi.fn(),
+      getProjectWorktreePaths: vi.fn(),
       dispatchCommand: vi.fn(),
     });
     await using _ = await mountHarness();
@@ -46,7 +46,7 @@ describe("SidebarRemoteWorkspaceDialog", () => {
     setApi({
       show: vi.fn().mockResolvedValue("edit-ssh"),
       verifyExecutionTarget: vi.fn(),
-      getSnapshot: vi.fn(),
+      getProjectWorktreePaths: vi.fn(),
       dispatchCommand: vi.fn(),
     });
     await using _ = await mountHarness(undefined, directSshProject);
@@ -64,7 +64,7 @@ describe("SidebarRemoteWorkspaceDialog", () => {
     setApi({
       show: vi.fn().mockResolvedValue("edit-ssh"),
       verifyExecutionTarget,
-      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      getProjectWorktreePaths: vi.fn().mockResolvedValue({ worktreePaths: [], truncated: false }),
       dispatchCommand,
     });
     await using _ = await mountHarness();
@@ -92,7 +92,7 @@ describe("SidebarRemoteWorkspaceDialog", () => {
     setApi({
       show: vi.fn().mockResolvedValue("edit-ssh"),
       verifyExecutionTarget,
-      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      getProjectWorktreePaths: vi.fn().mockResolvedValue({ worktreePaths: [], truncated: false }),
       dispatchCommand,
     });
     await using _ = await mountHarness(undefined, directSshProject);
@@ -119,7 +119,7 @@ describe("SidebarRemoteWorkspaceDialog", () => {
     setApi({
       show: vi.fn().mockResolvedValue("edit-ssh"),
       verifyExecutionTarget: vi.fn().mockRejectedValue(new Error("SSH host is unavailable")),
-      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      getProjectWorktreePaths: vi.fn().mockResolvedValue({ worktreePaths: [], truncated: false }),
       dispatchCommand,
     });
     await using _ = await mountHarness();
@@ -138,7 +138,7 @@ describe("SidebarRemoteWorkspaceDialog", () => {
     setApi({
       show: vi.fn().mockResolvedValue("edit-ssh"),
       verifyExecutionTarget: vi.fn().mockResolvedValue({ message: "verified" }),
-      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      getProjectWorktreePaths: vi.fn().mockResolvedValue({ worktreePaths: [], truncated: false }),
       dispatchCommand: vi.fn(
         () =>
           new Promise<void>((resolve) => {
@@ -164,9 +164,10 @@ describe("SidebarRemoteWorkspaceDialog", () => {
         .mockResolvedValueOnce({ message: "status verified" })
         .mockResolvedValueOnce({ message: "project verified" })
         .mockRejectedValueOnce(new Error("missing worktree")),
-      getSnapshot: vi.fn().mockResolvedValue({
-        projects: [],
-        threads: [{ projectId: project.id, worktreePath: "/srv/worktree-a", deletedAt: null }],
+      getProjectWorktreePaths: vi.fn().mockResolvedValue({
+        projectId: project.id,
+        worktreePaths: ["/srv/worktree-a"],
+        truncated: false,
       }),
       dispatchCommand,
     });
@@ -192,7 +193,7 @@ describe("SidebarRemoteWorkspaceDialog", () => {
         remoteAgent: { status: "install-required" },
       }),
       installRemoteAgent,
-      getSnapshot: vi.fn(),
+      getProjectWorktreePaths: vi.fn(),
       dispatchCommand,
     });
     await using _ = await mountHarness();
@@ -215,7 +216,7 @@ describe("SidebarRemoteWorkspaceDialog", () => {
         message: "SSH verified; agent missing",
         remoteAgent: { status: "install-required" },
       }),
-      getSnapshot: vi.fn(),
+      getProjectWorktreePaths: vi.fn(),
       dispatchCommand: vi.fn(),
     });
     await using _ = await mountHarness(createProject);
@@ -252,7 +253,7 @@ describe("SidebarRemoteWorkspaceDialog", () => {
         pendingVersion: null,
         fallbackVersion: null,
       }),
-      getSnapshot: vi.fn().mockResolvedValue({ projects: [], threads: [] }),
+      getProjectWorktreePaths: vi.fn().mockResolvedValue({ worktreePaths: [], truncated: false }),
       dispatchCommand,
     });
     await using _ = await mountHarness();

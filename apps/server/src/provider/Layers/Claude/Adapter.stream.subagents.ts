@@ -2,8 +2,8 @@
  * Claude provider-subagent detail from the subagent's own frames: model, tool steps,
  * heartbeats, the Agent tool's input and its `AgentOutput`.
  *
- * Every path is gated by `context.providerSubagentsSupported` (D11), so an unsupported harness
- * (CLIProxy) never gains subagent fields.
+ * Every path is gated by explicit `context.providerSubagentsSupported` harness capability.
+ * The model connection does not change the native Claude Code child-event contract.
  *
  * @module ClaudeAdapter.stream.subagents
  */
@@ -65,7 +65,9 @@ export function findClaudeSubagentTask(
   const isSubagent = (task: ClaudeTask | undefined): task is ClaudeTask =>
     task !== undefined && isClaudeProviderSubagent(task, context.providerSubagentsSupported);
   const byAgent = ref.agentId ? context.taskState.tasks.get(ref.agentId) : undefined;
-  if (isSubagent(byAgent)) return byAgent;
+  // An explicit identity is authoritative, including when it is not known yet.
+  // A resumed child may retain another child's parent tool-use ID.
+  if (ref.agentId) return isSubagent(byAgent) ? byAgent : undefined;
   if (!ref.toolUseId) return undefined;
   return Array.from(context.taskState.tasks.values()).find(
     (task) =>

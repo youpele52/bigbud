@@ -12,7 +12,7 @@ import {
   CliProxyLifecycle,
   type CliProxyLifecycleShape,
 } from "../../Services/CliProxy/Lifecycle.ts";
-import type { ClaudeHarnessConfig } from "../Claude/Adapter.types.ts";
+import { CLAUDE_HARNESS_CAPABILITIES, type ClaudeHarnessConfig } from "../Claude/Adapter.types.ts";
 import {
   CliProxyClientError,
   inspectCliProxy,
@@ -215,6 +215,28 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
 
     const electronRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
     const modelCapabilities = selectedModel.capabilities ?? UNKNOWN_CLIPROXY_CAPABILITIES;
+    const protectedEnvironment = Object.freeze({
+      ANTHROPIC_BASE_URL: config.baseUrl.toString().replace(/\/$/u, ""),
+      ANTHROPIC_AUTH_TOKEN: config.apiKey,
+      ANTHROPIC_API_KEY: "",
+      ANTHROPIC_CUSTOM_HEADERS: "",
+      CLAUDE_CODE_OAUTH_TOKEN: "",
+      CLAUDE_CODE_USE_ANTHROPIC_AWS: "0",
+      CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD: "0",
+      CLAUDE_CODE_USE_MANTLE: "0",
+      CLAUDE_CODE_USE_GATEWAY: "0",
+      CLAUDE_CODE_SUBAGENT_MODEL: requestedModel,
+      CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "0",
+      CLAUDE_CODE_USE_BEDROCK: "0",
+      CLAUDE_CODE_USE_VERTEX: "0",
+      CLAUDE_CODE_USE_FOUNDRY: "0",
+      ANTHROPIC_MODEL: requestedModel,
+      ANTHROPIC_SMALL_FAST_MODEL: requestedModel,
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: requestedModel,
+      ANTHROPIC_DEFAULT_SONNET_MODEL: requestedModel,
+      ANTHROPIC_DEFAULT_OPUS_MODEL: requestedModel,
+      ...cliProxyModelEnvironment(requestedModel, modelCapabilities),
+    });
     return Object.freeze({
       config,
       models,
@@ -222,16 +244,14 @@ export function makeResolveCliProxyRuntimeConfig(options: CliProxyRuntimeConfigO
       harness: Object.freeze({
         binaryPath: settings.providers.claudeAgent.binaryPath,
         modelCapabilities,
-        settingSources: [],
-        boundedHookProgress: false,
-        forwardSubagentText: false,
+        capabilities: CLAUDE_HARNESS_CAPABILITIES,
+        settingSources: ["user", "project", "local"] as const,
+        protectedSettingsEnvironment: protectedEnvironment,
         environment: Object.freeze({
           PATH: process.env.PATH,
           HOME: process.env.HOME,
           ...(electronRunAsNode === undefined ? {} : { ELECTRON_RUN_AS_NODE: electronRunAsNode }),
-          ANTHROPIC_BASE_URL: config.baseUrl.toString().replace(/\/$/u, ""),
-          ANTHROPIC_AUTH_TOKEN: config.apiKey,
-          ...cliProxyModelEnvironment(requestedModel, modelCapabilities),
+          ...protectedEnvironment,
         }),
       }),
     });

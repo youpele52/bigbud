@@ -48,7 +48,8 @@ it.layer(layer)("LearningJobRepository recovery", (it) => {
       assert.equal(yield* repository.claim({ jobId: job.jobId, now }), null);
       assert.equal((yield* repository.claim({ jobId: job.jobId, now: later }))?.attemptCount, 2);
       assert.isTrue(yield* repository.acquireLease({ jobId: job.jobId, threadId: job.threadId }));
-      yield* sql`INSERT INTO thread_activity_leases VALUES ('browser-kept', ${job.threadId}, 'browser', ${now})`;
+      yield* sql`INSERT INTO thread_activity_leases (lease_id, thread_id, activity_kind, acquired_at)
+        VALUES ('browser-kept', ${job.threadId}, 'browser', ${now})`;
       assert.deepEqual(yield* repository.recoverInterrupted({ now: later }), [
         {
           jobId: "retry",

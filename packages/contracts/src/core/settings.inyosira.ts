@@ -34,7 +34,25 @@ export type InyosiraOlderThreadsDays = typeof InyosiraOlderThreadsDays.Type;
 export const InyosiraIdleDestination = Schema.Literals(["done", "later"]);
 export type InyosiraIdleDestination = typeof InyosiraIdleDestination.Type;
 
+export const INYOSIRA_DEFAULT_PRESENT_TARGET = 7;
+export const INYOSIRA_DEFAULT_GRACE_MINUTES = 5;
+export const InyosiraPresentTarget = Schema.Int.check(
+  Schema.isBetween({ minimum: 1, maximum: 100000 }),
+);
+export const InyosiraGraceMinutes = Schema.Int.check(Schema.isBetween({ minimum: 2, maximum: 10 }));
+
 export const InyosiraIdleSettingsFields = {
+  // Null uses the enabled default; an explicit false always disables the target.
+  inyosiraPresentTargetEnabled: Schema.NullOr(Schema.Boolean).pipe(
+    Schema.withDecodingDefault(() => null),
+  ),
+  inyosiraPresentTarget: InyosiraPresentTarget.pipe(
+    Schema.withDecodingDefault(() => INYOSIRA_DEFAULT_PRESENT_TARGET),
+  ),
+  inyosiraGraceMinutes: InyosiraGraceMinutes.pipe(
+    Schema.withDecodingDefault(() => INYOSIRA_DEFAULT_GRACE_MINUTES),
+  ),
+  inyosiraIntroductionDismissed: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
   inyosiraIdleCleanupEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   inyosiraIdleTimeoutMinutes: InyosiraIdleTimeoutMinutes.pipe(
     Schema.withDecodingDefault(() => DEFAULT_INYOSIRA_IDLE_TIMEOUT_MINUTES),
@@ -49,6 +67,10 @@ export const InyosiraIdleSettingsFields = {
 };
 
 export const InyosiraIdleSettingsPatchFields = {
+  inyosiraPresentTargetEnabled: Schema.optionalKey(Schema.NullOr(Schema.Boolean)),
+  inyosiraPresentTarget: Schema.optionalKey(InyosiraPresentTarget),
+  inyosiraGraceMinutes: Schema.optionalKey(InyosiraGraceMinutes),
+  inyosiraIntroductionDismissed: Schema.optionalKey(Schema.Boolean),
   inyosiraIdleCleanupEnabled: Schema.optionalKey(Schema.Boolean),
   inyosiraIdleTimeoutMinutes: Schema.optionalKey(InyosiraIdleTimeoutMinutes),
   inyosiraIdleDestination: Schema.optionalKey(InyosiraIdleDestination),

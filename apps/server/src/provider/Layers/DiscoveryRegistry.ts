@@ -18,6 +18,8 @@ import {
   Stream,
 } from "effect";
 
+import * as Semaphore from "effect/Semaphore";
+
 import { ServerConfig } from "../../startup/config";
 import { ServerSettingsService } from "../../ws/serverSettings";
 import { DiscoveryRegistry, type DiscoveryRegistryShape } from "../Services/DiscoveryRegistry";
@@ -31,9 +33,18 @@ import {
   parseDiscoveryFile,
   parseOpencodeConfigAgents,
 } from "./DiscoveryRegistry.parse.ts";
-import { createDiscoveryWatchStream } from "./DiscoveryRegistry.watch.ts";
+import {
+  resolveDiscoveryWatchTarget,
+  runDiscoveryWatchTarget,
+  type DiscoveryWatchTarget,
+} from "./DiscoveryRegistry.watch.ts";
+import { makeCoalescedDiscoverySync, type DiscoverySyncKind } from "./DiscoveryRegistry.sync.ts";
 import { opencodeMarkdownAgentSystemHash } from "../opencodeAgentSource.ts";
 import { buildNativeDiscoveryEntries } from "./DiscoveryRegistry.native.ts";
+
+/** Bounds parallel directory walks and file reads during one discovery scan. */
+const DISCOVERY_SCAN_CONCURRENCY = 8;
+const DISCOVERY_READ_CONCURRENCY = 16;
 
 const EMPTY_DISCOVERY: ServerDiscoveryCatalog = {
   agents: [],
@@ -81,47 +92,6 @@ const collectPathsRecursive = Effect.fn("DiscoveryRegistry.collectPathsRecursive
     .filter(predicate);
 });
 
-export const resolveExistingWatchPath = Effect.fn("DiscoveryRegistry.resolveExistingWatchPath")(
-  function* (fs: FileSystem.FileSystem, path: Path.Path, rawPath: string) {
-    // Avoid recursively watching broad system roots for optional descriptors.
-    if (rawPath.startsWith("/etc/")) {
-      const exists = yield* fs.exists(rawPath).pipe(
-        Effect.tapError((error) =>
-          Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
-            path: rawPath,
-            error: String(error),
-          }),
-        ),
-        Effect.orElseSucceed(() => false),
-      );
-      return exists ? rawPath : null;
-    }
-
-    const candidates = [rawPath];
-    const parentPath = path.dirname(rawPath);
-    if (parentPath !== rawPath) {
-      candidates.push(parentPath);
-    }
-
-    for (const currentPath of candidates) {
-      const exists = yield* fs.exists(currentPath).pipe(
-        Effect.tapError((error) =>
-          Effect.logWarning("DiscoveryRegistry: watch path exists check failed", {
-            path: currentPath,
-            error: String(error),
-          }),
-        ),
-        Effect.orElseSucceed(() => false),
-      );
-      if (exists) {
-        return currentPath;
-      }
-    }
-
-    return null;
-  },
-);
-
 export const haveDiscoveryChanged = (
   previousCatalog: ServerDiscoveryCatalog,
   nextCatalog: ServerDiscoveryCatalog,
@@ -167,14 +137,14 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
         ...fileDescriptors.map((entry) => entry.path),
         ...configDescriptors.map((entry) => entry.path),
       ];
-      const existingPaths = yield* Effect.forEach(
-        candidates,
-        (candidate) => resolveExistingWatchPath(fs, path, candidate),
-        { concurrency: "unbounded" },
+      const resolved = yield* Effect.forEach(
+        [...new Set(candidates)],
+        (candidate) => resolveDiscoveryWatchTarget(fs, path, candidate),
+        { concurrency: DISCOVERY_SCAN_CONCURRENCY },
       );
-      return [
-        ...new Set(existingPaths.filter((entry): entry is string => entry !== null)),
-      ].toSorted((left, right) => left.localeCompare(right));
+      return resolved
+        .filter((entry): entry is DiscoveryWatchTarget => entry !== null)
+        .toSorted((left, right) => left.path.localeCompare(right.path));
     });
 
   const scanDiscoveryFiles = () =>
@@ -193,7 +163,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
               paths.map((resolvedPath) => ({ ...descriptor, path: resolvedPath })),
             ),
           ),
-        { concurrency: "unbounded" },
+        { concurrency: DISCOVERY_SCAN_CONCURRENCY },
       );
       const flat = resolvedPaths.flat();
       yield* Effect.logInfo(
@@ -202,7 +172,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
       return flat;
     });
 
-  const loadDiscoveryCatalog = () =>
+  const scanDiscoveredFiles = () =>
     Effect.gen(function* () {
       const [fileDescriptors, configDescriptors] = yield* Effect.all(
         [scanDiscoveryFiles(), resolveConfigDescriptors()],
@@ -227,7 +197,7 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
             }),
             Effect.catch(() => Effect.succeed(null)),
           ),
-        { concurrency: "unbounded" },
+        { concurrency: DISCOVERY_READ_CONCURRENCY },
       );
 
       const discoveredConfigAgents = yield* Effect.forEach(
@@ -239,9 +209,14 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
             ),
             Effect.catch(() => Effect.succeed([] as ReadonlyArray<ServerDiscoveredAgent>)),
           ),
-        { concurrency: "unbounded" },
+        { concurrency: DISCOVERY_READ_CONCURRENCY },
       );
+      return { discoveredFileEntries, discoveredConfigAgents };
+    });
+  type DiscoveredFiles = Effect.Success<ReturnType<typeof scanDiscoveredFiles>>;
 
+  const assembleCatalog = ({ discoveredFileEntries, discoveredConfigAgents }: DiscoveredFiles) =>
+    Effect.gen(function* () {
       const agentEntries: Array<ServerDiscoveredAgent> = [];
       const skillEntries: Array<ServerDiscoveredSkill> = [];
 
@@ -281,12 +256,25 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
       return catalog;
     });
 
+  // Provider status changes reuse the last scan: they change native entries, never files.
+  const filesRef = yield* Ref.make<DiscoveredFiles | null>(null);
+  const loadDiscoveryCatalog = (kind: DiscoverySyncKind = "rescan") =>
+    Effect.gen(function* () {
+      const cached = kind === "assemble" ? yield* Ref.get(filesRef) : null;
+      const files = cached ?? (yield* scanDiscoveredFiles());
+      yield* Ref.set(filesRef, files);
+      return yield* assembleCatalog(files);
+    });
+
   const catalogRef = yield* Ref.make<ServerDiscoveryCatalog>(yield* loadDiscoveryCatalog());
 
-  const syncCatalog = (options?: { readonly publish?: boolean }) =>
+  const syncCatalog = (options?: {
+    readonly publish?: boolean;
+    readonly kind?: DiscoverySyncKind;
+  }) =>
     Effect.gen(function* () {
       const previousCatalog = yield* Ref.get(catalogRef);
-      const nextCatalog = yield* loadDiscoveryCatalog().pipe(
+      const nextCatalog = yield* loadDiscoveryCatalog(options?.kind).pipe(
         Effect.tapError((error) =>
           Effect.logWarning("DiscoveryRegistry: syncCatalog load failed", {
             error: String(error),
@@ -301,37 +289,37 @@ const makeDiscoveryRegistry = Effect.gen(function* () {
       return nextCatalog;
     });
 
-  yield* Stream.runForEach(serverSettings.streamChanges, () => syncCatalog()).pipe(
+  // Every background trigger goes through one coalescing fiber: at most one sync runs and
+  // one waits, however many watchers, settings or provider changes fire meanwhile.
+  // Background syncs and explicit refreshes share one lock, so an `assemble` built from an
+  // older scan can never finish after, and overwrite, a newer rescan.
+  const syncLock = yield* Semaphore.make(1);
+  const requestSync = yield* makeCoalescedDiscoverySync((kind) =>
+    syncLock.withPermits(1)(syncCatalog({ kind })).pipe(Effect.asVoid),
+  );
+  yield* Stream.runForEach(serverSettings.streamChanges, () => requestSync("rescan")).pipe(
     Effect.forkScoped,
   );
   const watchTargets = yield* resolveWatchTargets();
   if (Option.isSome(providerRegistry))
-    yield* Stream.runForEach(providerRegistry.value.streamChanges, () => syncCatalog()).pipe(
-      Effect.forkScoped,
-    );
+    yield* Stream.runForEach(providerRegistry.value.streamChanges, () =>
+      requestSync("assemble"),
+    ).pipe(Effect.forkScoped);
   yield* Effect.logInfo(
     `[DiscoveryRegistry] watching ${watchTargets.length} roots for auto-discovery changes`,
   );
   yield* Effect.forEach(
     watchTargets,
-    (watchPath) =>
-      Stream.runForEach(createDiscoveryWatchStream(watchPath), () => syncCatalog()).pipe(
-        Effect.tapError((error) =>
-          Effect.logWarning("DiscoveryRegistry: watch stream failed", {
-            watchPath,
-            error: String(error),
-          }),
-        ),
-        Effect.catch(() => Effect.void),
-        Effect.forkScoped,
-      ),
-    { concurrency: "unbounded" },
-  ).pipe(Effect.asVoid);
-  yield* Effect.forkScoped(Effect.repeat(syncCatalog(), Schedule.fixed(fallbackRescanInterval)));
+    (target) => runDiscoveryWatchTarget(fs, target, requestSync("rescan")).pipe(Effect.forkScoped),
+    { discard: true },
+  );
+  yield* Effect.forkScoped(
+    Effect.repeat(requestSync("rescan"), Schedule.fixed(fallbackRescanInterval)),
+  );
 
   return {
     getCatalog: Ref.get(catalogRef),
-    refresh: (_provider?: ProviderKind) => syncCatalog(),
+    refresh: (_provider?: ProviderKind) => syncLock.withPermits(1)(syncCatalog()),
     get streamChanges() {
       return Stream.fromPubSub(changesPubSub);
     },

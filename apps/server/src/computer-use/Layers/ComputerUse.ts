@@ -11,6 +11,11 @@ import { CuaDriver } from "../Services/CuaDriver.ts";
 import { ComputerUse, ComputerUseError, type ComputerUseShape } from "../Services/ComputerUse.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { createDesktopTargets } from "./ComputerUse.desktop.interaction.ts";
+import {
+  holdThreadLease,
+  releaseThreadLease,
+  threadLeaseExpiresAt,
+} from "../../retention/threadLeaseHeartbeat.ts";
 
 function resolveSurface(action: ComputerUseAction): "browser" | "desktop" {
   return resolveComputerUseSurface(action.action, "surface" in action ? action.surface : undefined);
@@ -49,10 +54,13 @@ export const ComputerUseLive = Layer.effect(
       const leaseId = crypto.randomUUID();
       return Effect.acquireUseRelease(
         sql`
-          INSERT INTO thread_activity_leases (lease_id, thread_id, activity_kind, acquired_at)
-          VALUES (${leaseId}, ${threadId}, 'computer-use', ${new Date().toISOString()})
+          INSERT INTO thread_activity_leases (
+            lease_id, thread_id, activity_kind, acquired_at, expires_at
+          ) VALUES (${leaseId}, ${threadId}, 'computer-use', ${new Date().toISOString()},
+            ${threadLeaseExpiresAt()})
         `.pipe(
           Effect.asVoid,
+          Effect.tap(() => Effect.sync(() => holdThreadLease(leaseId))),
           Effect.mapError(
             (cause) =>
               new ComputerUseError({
@@ -64,7 +72,10 @@ export const ComputerUseLive = Layer.effect(
         () =>
           beginAction(threadId).pipe(Effect.andThen(effect), Effect.ensuring(endAction(threadId))),
         () =>
-          sql`DELETE FROM thread_activity_leases WHERE lease_id = ${leaseId}`.pipe(Effect.ignore),
+          sql`DELETE FROM thread_activity_leases WHERE lease_id = ${leaseId}`.pipe(
+            Effect.ignore,
+            Effect.ensuring(Effect.sync(() => releaseThreadLease(leaseId))),
+          ),
       );
     };
 

@@ -30,7 +30,7 @@ describe("ChatView threading integration", () => {
     }
   });
 
-  it("keeps the project see-more count accurate when cached rows are deleted", async () => {
+  it("keeps the project show-more count accurate when cached rows are deleted", async () => {
     const snapshot = createProjectSnapshotWithThreadCount(8);
     const mounted = await ctx.mountChatView({
       viewport: DEFAULT_VIEWPORT,
@@ -38,7 +38,8 @@ describe("ChatView threading integration", () => {
     });
 
     try {
-      await expect.element(page.getByText("See more (4)")).toBeInTheDocument();
+      // One 4-thread page is loaded and shown; the other 4 of 8 threads remain on the server.
+      await expect.element(page.getByText("Show 4 more")).toBeInTheDocument();
 
       useStore
         .getState()
@@ -46,14 +47,14 @@ describe("ChatView threading integration", () => {
           makeThreadDeletedEvent("thread-project-overflow-8" as ThreadId, 2),
         );
 
-      await expect.element(page.getByText("See more (3)")).toBeInTheDocument();
+      await expect.element(page.getByText("Show 4 more")).toBeInTheDocument();
 
       useStore
         .getState()
         .applyOrchestrationEvent(
           makeThreadDeletedEvent("thread-project-overflow-7" as ThreadId, 3),
         );
-      await expect.element(page.getByText("See more (3)")).toBeInTheDocument();
+      await expect.element(page.getByText("Show 4 more")).toBeInTheDocument();
 
       useStore
         .getState()
@@ -61,7 +62,7 @@ describe("ChatView threading integration", () => {
           makeThreadDeletedEvent("thread-project-overflow-6" as ThreadId, 4),
         );
 
-      await expect.element(page.getByText("See more (3)")).toBeInTheDocument();
+      await expect.element(page.getByText("Show 4 more")).toBeInTheDocument();
 
       useStore
         .getState()
@@ -69,7 +70,8 @@ describe("ChatView threading integration", () => {
           makeThreadDeletedEvent("thread-project-overflow-5" as ThreadId, 5),
         );
 
-      await expect.element(page.getByText("See more (3)")).toBeInTheDocument();
+      await expect.element(page.getByText("Show 4 more")).toBeInTheDocument();
+      // Each deletion removed a shown row and one from the total, so 4 stay unloaded.
       expect(useStore.getState().projects[0]?.activeThreadCount).toBe(4);
     } finally {
       await mounted.cleanup();

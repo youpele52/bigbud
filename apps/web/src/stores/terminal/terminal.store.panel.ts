@@ -125,6 +125,7 @@ export function applyTerminalEventToState(
   };
 
   if (event.type === "started" || event.type === "restarted") {
+    recordTerminalLaunch(event.snapshot);
     updateTargetTerminalState((current) => {
       let nextState = current;
       if (!current.terminalIds.includes(event.terminalId)) {

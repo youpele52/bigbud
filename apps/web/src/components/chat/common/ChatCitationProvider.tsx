@@ -180,8 +180,8 @@ export function ChatCitationProvider({
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
-                className="bg-popover shadow-md"
+                variant="default"
+                className="shadow-md"
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={cite}
               >

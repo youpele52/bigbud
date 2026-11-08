@@ -69,6 +69,12 @@ function startWorker(): void {
     const params = request.params as Parameters<StatementSync["all"]>;
     statement.setReadBigInts(request.safeIntegers);
     if (!hasRows(statement)) {
+      // Unprepared statements run to completion, like `exec`: `incremental_vacuum` has no result
+      // columns yet does one page of work per step, and `run()` stops after the first step.
+      if (request.mode === "unprepared") {
+        statement.all(...params);
+        return [];
+      }
       const result = statement.run(...params);
       return request.mode === "raw" ? (result as unknown as unknown[]) : [];
     }

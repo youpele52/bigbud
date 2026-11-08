@@ -29,7 +29,7 @@ export function withWorktreeAccess<A, E>(
         if (
           operations.some(
             (operation) =>
-              operation.kind !== "access" &&
+              (operation.kind !== "access" || operation.branch === "workspace-mutation") &&
               (operation.repository === input.repository ||
                 reservations.overlaps(operation, identity.canonicalPath)),
           )

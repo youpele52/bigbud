@@ -67,6 +67,17 @@ describe("captured provider execution settings", () => {
     });
   });
 
+  it("starts fresh at the current cwd when a live generic session retains the old folder", async () => {
+    const h = makeSettingsHarness();
+    await Effect.runPromise(ensureSessionForThread(h.services)(threadId, createdAt, captured));
+    h.setActiveSession({ ...h.activeSession!, cwd: "/old-workspace" });
+    await Effect.runPromise(ensureSessionForThread(h.services)(threadId, createdAt, captured));
+    expect(h.startSession).toHaveBeenCalledTimes(1);
+    expect(h.startSessionFresh).toHaveBeenCalledTimes(1);
+    expect(h.startSessionFresh.mock.calls[0]?.[1]).toMatchObject({ cwd: "/workspace" });
+    expect(h.startSessionFresh.mock.calls[0]?.[1]?.resumeCursor).toBeUndefined();
+  });
+
   it("reuses a matching live runtime despite drifted thread defaults", async () => {
     const h = makeSettingsHarness();
     await Effect.runPromise(ensureSessionForThread(h.services)(threadId, createdAt, captured));

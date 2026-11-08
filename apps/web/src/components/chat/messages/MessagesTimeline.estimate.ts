@@ -5,9 +5,10 @@ import { type ProposedPlan, type TurnDiffSummary } from "../../../models/types";
 import { estimateTimelineMessageHeight, estimateWrappedLineCount } from "../../timelineHeight";
 import {
   activityAccordionId,
+  resolveActivityAccordionOpen,
   type ActivityAccordionOpenById,
 } from "../common/ActivityAccordion.state";
-import { isTimelineRowAccordionOpen } from "./MessagesTimeline.accordion";
+import { changedFilesAccordionId, isTimelineRowAccordionOpen } from "./MessagesTimeline.accordion";
 import { type MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { deriveWorkGroupPresentation } from "./MessagesTimeline.workGroup.logic";
 import { workEntryDetailBlocks } from "./MessagesTimeline.workEntry.logic";
@@ -37,6 +38,9 @@ const WORK_ENTRY_DETAILS_CHARS_PER_LINE = 96;
 const WORK_ENTRY_DETAILS_MAX_PRE_PX = 256;
 // A finished subagent row with its one-line summary.
 const SUBAGENT_ROW_PX = 28;
+// Changed files: `mt-2` above the section accordion, then one root tree row per node.
+const CHANGED_FILES_MARGIN_PX = 8;
+const CHANGED_FILES_TREE_ROW_PX = 25;
 const SUBAGENTS_VISIBLE_WHEN_COLLAPSED = 1;
 // Thinking markdown uses the same text-xs / leading-5 rhythm as work entries and subagents.
 const THINKING_LINE_PX = 20;
@@ -104,7 +108,11 @@ export function estimateMessagesTimelineRowHeight(
       });
       const turnDiffSummary = input.turnDiffSummaryByAssistantMessageId?.get(row.message.id);
       if (turnDiffSummary && turnDiffSummary.files.length > 0) {
-        estimate += estimateChangedFilesCardHeight(turnDiffSummary);
+        const changedFilesOpen = resolveActivityAccordionOpen(
+          input.activityAccordionOpenById,
+          changedFilesAccordionId(turnDiffSummary.turnId),
+        );
+        estimate += estimateChangedFilesHeight(turnDiffSummary, changedFilesOpen);
       }
       return estimate;
     }
@@ -191,11 +199,12 @@ function estimateUserInputQuestionRowHeight(pendingUserInput: PendingUserInput):
   return 80 + pendingUserInput.questions.length * 40 + optionLineCount * 28;
 }
 
-function estimateChangedFilesCardHeight(turnDiffSummary: TurnDiffSummary): number {
-  const treeNodes = buildTurnDiffTree(turnDiffSummary.files);
+function estimateChangedFilesHeight(turnDiffSummary: TurnDiffSummary, open: boolean): number {
+  const collapsed = CHANGED_FILES_MARGIN_PX + SECTION_ACCORDION_COLLAPSED_PX;
+  if (!open) return collapsed;
   // Directories start collapsed; their descendants do not contribute to the initial row height.
-  const visibleNodeCount = treeNodes.length;
-
-  // Card chrome: top/bottom padding, header row, and tree spacing.
-  return 60 + visibleNodeCount * 25;
+  const visibleNodeCount = buildTurnDiffTree(turnDiffSummary.files).length;
+  return (
+    collapsed + SECTION_ACCORDION_PANEL_PADDING_PX + visibleNodeCount * CHANGED_FILES_TREE_ROW_PX
+  );
 }

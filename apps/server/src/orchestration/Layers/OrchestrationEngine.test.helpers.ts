@@ -1,6 +1,7 @@
 import { CheckpointRef, MessageId, ProjectId, TurnId } from "@bigbud/contracts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Effect, Layer, ManagedRuntime, Metric } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { ComputerUse } from "../../computer-use/Services/ComputerUse.ts";
 import { OrchestrationCommandReceiptRepositoryLive } from "../../persistence/Layers/OrchestrationCommandReceipts.ts";
@@ -9,7 +10,10 @@ import {
   type OrchestrationCommandReceiptRepositoryShape,
 } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStoreLive } from "../../persistence/Layers/OrchestrationEventStore.ts";
-import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import {
+  makeSqlitePersistenceLive,
+  SqlitePersistenceMemory,
+} from "../../persistence/Layers/Sqlite.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
@@ -47,6 +51,7 @@ export const hasMetricSnapshot = (
 export async function createOrchestrationSystem(input?: {
   readonly receipts?: OrchestrationCommandReceiptRepositoryShape;
   readonly catalog?: boolean;
+  readonly databaseFilename?: string;
 }) {
   const ServerConfigLayer = ServerConfig.layerTest(process.cwd(), {
     prefix: "t3-orchestration-engine-test-",
@@ -62,7 +67,11 @@ export async function createOrchestrationSystem(input?: {
         ? Layer.succeed(OrchestrationCommandReceiptRepository, input.receipts)
         : OrchestrationCommandReceiptRepositoryLive,
     ),
-    Layer.provide(SqlitePersistenceMemory),
+    Layer.provideMerge(
+      input?.databaseFilename
+        ? makeSqlitePersistenceLive(input.databaseFilename, { worker: false })
+        : SqlitePersistenceMemory,
+    ),
     Layer.provideMerge(ComputerUseDisabledTestLayer),
     Layer.provideMerge(ServerConfigLayer),
     Layer.provideMerge(ServerSettingsService.layerTest()),
@@ -73,6 +82,7 @@ export async function createOrchestrationSystem(input?: {
   return {
     engine,
     run: <A, E>(effect: Effect.Effect<A, E>) => runtime.runPromise(effect),
+    runSql: <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => runtime.runPromise(effect),
     dispose: () => runtime.dispose(),
   };
 }

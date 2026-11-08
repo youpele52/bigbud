@@ -1,6 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Migrator from "effect/unstable/sql/Migrator";
+import {
+  OrganizationMigrationContext,
+  classifyOrganizationInstallation,
+} from "./OrganizationMigrationContext.ts";
 
 import {
   type MigrationProgressListener,
@@ -151,6 +155,21 @@ import Migration0141 from "./Migrations/141_ProjectionThreadOrganization.ts";
 import Migration0142 from "./Migrations/142_ProjectionThreadOrganizationIndex.ts";
 import Migration0143 from "./Migrations/143_ProjectionThreadSnoozeIndex.ts";
 import Migration0144 from "./Migrations/144_RetiredTerminalBackend.ts";
+import Migration0145 from "./Migrations/145_ProjectWorkspaceOwnership.ts";
+import Migration0146 from "./Migrations/146_ThreadOrganizationRuntime.ts";
+import Migration0147 from "./Migrations/147_ProjectWorkspaceNativeTransitions.ts";
+import Migration0148 from "./Migrations/148_ThreadOrganizationAging.ts";
+import Migration0149 from "./Migrations/149_ThreadOrganizationOperations.ts";
+import Migration0150 from "./Migrations/150_ThreadOrganizationFacts.ts";
+import Migration0151 from "./Migrations/151_ThreadOrganizationAttention.ts";
+import Migration0152 from "./Migrations/152_ProjectionBaselineRows.ts";
+import Migration0153 from "./Migrations/153_ThreadRetentionRunExclusionCounts.ts";
+import Migration0154 from "./Migrations/154_ProjectionThreadSidebarPaging.ts";
+import Migration0155 from "./Migrations/155_ThreadRetentionLeaseExpiry.ts";
+import Migration0156 from "./Migrations/156_EventLogMaintenance.ts";
+import Migration0157 from "./Migrations/157_ProjectionTurnUsageAttribution.ts";
+import Migration0158 from "./Migrations/158_EventLogMaintenanceOrphanClaims.ts";
+import Migration0159 from "./Migrations/159_EventLogSequenceClock.ts";
 
 export const migrationEntries = [
   [1, "OrchestrationEvents", Migration0001],
@@ -296,6 +315,21 @@ export const migrationEntries = [
   [142, "ProjectionThreadOrganizationIndex", Migration0142],
   [143, "ProjectionThreadSnoozeIndex", Migration0143],
   [144, "RetiredTerminalBackend", Migration0144],
+  [145, "ProjectWorkspaceOwnership", Migration0145],
+  [146, "ThreadOrganizationRuntime", Migration0146],
+  [147, "ProjectWorkspaceNativeTransitions", Migration0147],
+  [148, "ThreadOrganizationAging", Migration0148],
+  [149, "ThreadOrganizationOperations", Migration0149],
+  [150, "ThreadOrganizationFacts", Migration0150],
+  [151, "ThreadOrganizationAttention", Migration0151],
+  [152, "ProjectionBaselineRows", Migration0152],
+  [153, "ThreadRetentionRunExclusionCounts", Migration0153],
+  [154, "ProjectionThreadSidebarPaging", Migration0154],
+  [155, "ThreadRetentionLeaseExpiry", Migration0155],
+  [156, "EventLogMaintenance", Migration0156],
+  [157, "ProjectionTurnUsageAttribution", Migration0157],
+  [158, "EventLogMaintenanceOrphanClaims", Migration0158],
+  [159, "EventLogSequenceClock", Migration0159],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;
@@ -345,9 +379,10 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
       };
     }
   }
+  const newInstallation = yield* classifyOrganizationInstallation;
   const executedMigrations = yield* run({
     loader: makeMigrationLoader(toMigrationInclusive, wrap),
-  });
+  }).pipe(Effect.provideService(OrganizationMigrationContext, { newInstallation }));
   yield* Effect.log("Migrations ran successfully").pipe(
     Effect.annotateLogs({ migrations: executedMigrations.map(([id, name]) => `${id}_${name}`) }),
   );

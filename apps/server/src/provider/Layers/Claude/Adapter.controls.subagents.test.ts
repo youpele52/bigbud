@@ -71,9 +71,9 @@ const stopAfter = (
 };
 
 describe("Claude per-subagent Stop", () => {
-  it("declares per-subagent Stop for Claude only", () => {
+  it("declares the shared harness per-subagent Stop for both model connections", () => {
     assert.equal(PROVIDER_SUBAGENT_CAPABILITIES.claudeAgent.stop, true);
-    assert.notEqual(PROVIDER_SUBAGENT_CAPABILITIES.cliProxy.stop, true);
+    assert.equal(PROVIDER_SUBAGENT_CAPABILITIES.cliProxy.stop, true);
   });
 
   it.effect("calls stopTask for a running provider subagent", () =>

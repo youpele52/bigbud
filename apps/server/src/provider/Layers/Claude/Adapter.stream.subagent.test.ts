@@ -66,7 +66,9 @@ describe("ClaudeAdapterLive forwarded subagent text", () => {
   });
 
   it.effect("projects forwarded assistant text as nested tool progress", () => {
-    const harness = makeHarness();
+    const harness = makeHarness({
+      serverSettings: { providers: { claudeAgent: { rollout: { forwardedSubagentText: true } } } },
+    });
     return Effect.gen(function* () {
       const adapter = yield* ClaudeAdapter;
       const eventsFiber = yield* adapter.streamEvents.pipe(
@@ -80,7 +82,22 @@ describe("ClaudeAdapterLive forwarded subagent text", () => {
         runtimeMode: "full-access",
       });
       yield* adapter.sendTurn({ threadId: THREAD_ID, input: "delegate", attachments: [] });
-
+      // Forwarded text is projected only for a verified agent task.
+      const base = { type: "system", session_id: "sdk-session-subagent" };
+      harness.query.emit({
+        ...base,
+        subtype: "task_started",
+        uuid: "task-start-1",
+        task_id: "task-1",
+        tool_use_id: "task-tool-1",
+        description: "Review files",
+      } as unknown as SDKMessage);
+      harness.query.emit({
+        ...base,
+        subtype: "background_tasks_changed",
+        uuid: "task-snapshot-1",
+        tasks: [{ task_id: "task-1", task_type: "local_agent", description: "Review files" }],
+      } as unknown as SDKMessage);
       harness.query.emit({
         type: "assistant",
         session_id: "sdk-session-subagent",

@@ -255,8 +255,16 @@ export function SidebarRenderedProjectItem({
                 />
               ) : (
                 <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <span className="truncate text-xs font-medium text-foreground/90">
+                  <span
+                    className="min-w-0 truncate text-xs font-medium text-foreground/90"
+                    title={project.cwd ?? undefined}
+                  >
                     {project.name}
+                    {project.workspaceKind === "managed" ? (
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                        Managed by bigbud
+                      </span>
+                    ) : null}
                   </span>
                   {project.expanded ? (
                     <SidebarProjectChevron expanded />

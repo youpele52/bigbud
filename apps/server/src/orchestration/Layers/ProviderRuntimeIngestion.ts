@@ -46,34 +46,17 @@ import {
   makePeriodicReconciliationState,
   markPeriodicReconciliationDirty,
   markPeriodicReconciliationTerminal,
+  RECONCILIATION_DOMAIN_EVENT_TYPES,
+  RECONCILIATION_RUNTIME_EVENT_TYPES,
   selectPeriodicReconciliationThreads,
 } from "./ProviderRuntimeIngestion.periodic.ts";
+import { makeProviderRuntimeHygiene } from "./ProviderRuntimeIngestion.runtimeHygiene.ts";
 import { recoverTurnControlOperations } from "./ProviderRuntimeIngestion.turnControlRecovery.ts";
 import {
   makeReconcileInspection,
   processInspectionItems,
   type RuntimeIngestionQueueInput,
 } from "./ProviderRuntimeIngestion.inspection.ts";
-
-const RECONCILIATION_RUNTIME_EVENT_TYPES = new Set([
-  "session.started",
-  "session.configured",
-  "session.state.changed",
-  "session.exited",
-  "turn.started",
-  "turn.completed",
-  "turn.aborted",
-  "runtime.error",
-]);
-
-const RECONCILIATION_DOMAIN_EVENT_TYPES = new Set([
-  "thread.turn-start-requested",
-  "thread.turn-start-failed",
-  "thread.turn-interrupt-requested",
-  "thread.turn-control-set",
-  "thread.session-stop-requested",
-  "thread.session-set",
-]);
 
 const make = Effect.fn("make")(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -90,6 +73,7 @@ const make = Effect.fn("make")(function* () {
   };
 
   const processRuntimeEvent = makeRuntimeEventProcessor(processorServices, cacheHelpers);
+  const hygiene = yield* makeProviderRuntimeHygiene({ orchestrationEngine, providerService });
   // Shutdown boundary: persist throttled provider-subagent progress before the scope closes.
   yield* Effect.addFinalizer(() =>
     processRuntimeEvent.flushPendingSubagentUpserts.pipe(Effect.ignore),
@@ -113,6 +97,7 @@ const make = Effect.fn("make")(function* () {
               providerService.acknowledgeInspectionTerminal?.(input.event, "ingestion") ??
                 Effect.void
             );
+            yield* hygiene.afterRuntimeEvent(input.event);
           })
         : processDomainEvent(input.event);
 
@@ -201,6 +186,7 @@ const make = Effect.fn("make")(function* () {
 
   const reconcileThreadSessionsAtStartup = Effect.fn("reconcileThreadSessionsAtStartup")(
     function* () {
+      const observedBefore = new Date().toISOString();
       const [readModel, discovery] = yield* Effect.all([
         orchestrationEngine.getReadModel(),
         discoverProviderSessions(),
@@ -239,6 +225,7 @@ const make = Effect.fn("make")(function* () {
           liveSessionCount: liveSessions.length,
         });
       }
+      yield* hygiene.afterStartupProbe({ observedBefore, discovery });
     },
   );
 

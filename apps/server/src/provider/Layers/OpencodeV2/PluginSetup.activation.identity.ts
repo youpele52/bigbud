@@ -11,6 +11,7 @@ export function makeV2IdentityPublication(
   gate: V2ActivationGate,
   participants: ReadonlyMap<string, { busyCount: () => number }>,
   freshAuthority: (signal: AbortSignal) => Promise<void>,
+  assertInstallationOwner?: () => Promise<void>,
 ) {
   let window: V2ActivationWindow | undefined,
     closed = false;
@@ -31,6 +32,7 @@ export function makeV2IdentityPublication(
     }
   };
   const authority: NonNullable<V2PluginSetupAuthority["publication"]> = {
+    ...(assertInstallationOwner ? { assertInstallationOwner } : {}),
     joinPhysicalOnCancel: true,
     assertGate,
     prepare: async () => {

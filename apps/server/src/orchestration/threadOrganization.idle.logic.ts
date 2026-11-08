@@ -5,6 +5,8 @@
 import type { OrchestrationThread } from "@bigbud/contracts";
 import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 
+import { terminalTurnControlStates } from "./QueuedPromptPolicy.logic.ts";
+
 const ACTIVE_SESSION_STATUSES = new Set(["starting", "running"]);
 
 type QuiescenceFacts = Pick<
@@ -30,7 +32,12 @@ export function isThreadQuiescent(thread: QuiescenceFacts): boolean {
   if ((thread.queuedPrompts ?? []).length > 0) return false;
   if (thread.pendingTurnStart) return false;
   if (thread.pendingInterruptFlushIntent) return false;
-  if (thread.pendingTurnControlOperation) return false;
+  // Settled operations are retained for history/idempotency; only unfinished control is work.
+  if (
+    thread.pendingTurnControlOperation &&
+    !terminalTurnControlStates.has(thread.pendingTurnControlOperation.state)
+  )
+    return false;
   if (thread.queueHold) return false;
   return !thread.recovery;
 }

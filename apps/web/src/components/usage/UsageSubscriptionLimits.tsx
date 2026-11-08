@@ -4,13 +4,16 @@ import { UsageSubscriptionProviderLimits } from "./UsageSubscriptionLimits.provi
 import { SUBSCRIPTION_PROVIDER_LABELS } from "./UsageSubscriptionLimits.logic";
 import { CenteredStatus } from "../common/CenteredStatus";
 import { UsageSubscriptionLimitsRefresh } from "./UsageSubscriptionLimits.refresh";
+import { BigbudLoader } from "../layout/BigbudLoader";
 
 export function UsageSubscriptionLimits({
   limits,
   compact = false,
+  loading = false,
 }: {
   readonly limits: ReadonlyArray<ServerProviderUsageLimits | undefined>;
   readonly compact?: boolean;
+  readonly loading?: boolean;
 }) {
   const supportedLimits = limits
     .filter(
@@ -34,7 +37,13 @@ export function UsageSubscriptionLimits({
         </div>
       </div>
       {supportedLimits.length === 0 ? (
-        <CenteredStatus>Subscription limits unavailable for enabled providers.</CenteredStatus>
+        loading ? (
+          <Card className="overflow-hidden">
+            <BigbudLoader className="h-auto min-h-40" label="Loading subscription limits" />
+          </Card>
+        ) : (
+          <CenteredStatus>Subscription limits unavailable for enabled providers.</CenteredStatus>
+        )
       ) : (
         <Card>
           <CardContent

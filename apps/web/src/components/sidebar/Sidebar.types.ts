@@ -17,6 +17,7 @@ import type { ThreadPr } from "./SidebarThreadRow";
 import type { Project } from "../../models/types";
 import type { SidebarThreadCountState } from "./SidebarRenderedProjectItem.types";
 import type { SidebarRemoteWorkspaceAddActionsOutput } from "./Sidebar.remoteWorkspaceAddActions.types";
+import type { PendingDisconnectConfirmation } from "./Sidebar.projectActions.connection.logic";
 
 export type SidebarProjectSnapshot = Project & {
   expanded: boolean;
@@ -253,6 +254,9 @@ export interface SidebarState {
   pendingReconnect: { projectId: ProjectId; projectName: string } | null;
   dismissReconnect: () => void;
   confirmReconnect: () => Promise<void>;
+  pendingDisconnect: PendingDisconnectConfirmation | null;
+  dismissDisconnect: () => void;
+  confirmDisconnect: () => Promise<void>;
   // Thread selection
   selectedThreadIds: ReadonlySet<ThreadId>;
   clearSelection: () => void;
