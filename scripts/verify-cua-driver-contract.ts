@@ -16,13 +16,15 @@ import {
   CUA_DRIVER_REQUIRED_TOOLS,
 } from "@bigbud/shared/cua-driver/policy";
 import {
+  CUA_DRIVER_RELEASE_TAG,
+  CUA_DRIVER_REPOSITORY,
   CUA_DRIVER_VERSION,
-  cuaDriverReleaseUrl,
   resolveCuaDriverReleaseArtifact,
   type CuaDriverRuntimeArch,
   type CuaDriverRuntimePlatform,
 } from "@bigbud/shared/cua-driver/release";
 
+import { downloadGitHubReleaseAsset } from "./lib/github-release-asset.ts";
 import {
   cuaDriverContractFixtureDir,
   cuaDriverContractReadme,
@@ -175,7 +177,15 @@ async function main(): Promise<void> {
   let daemon: ChildProcess.ChildProcess | null = null;
   let proxy: ChildProcess.ChildProcessWithoutNullStreams | null = null;
   try {
-    run("curl", ["-fsSL", "-o", archivePath, cuaDriverReleaseUrl(artifact)]);
+    await downloadGitHubReleaseAsset(
+      {
+        repository: CUA_DRIVER_REPOSITORY,
+        tag: CUA_DRIVER_RELEASE_TAG,
+        assetName: artifact.archiveName,
+      },
+      archivePath,
+      { log: (message) => console.warn(message) },
+    );
     const digest = Crypto.createHash("sha256")
       .update(await FSP.readFile(archivePath))
       .digest("hex");

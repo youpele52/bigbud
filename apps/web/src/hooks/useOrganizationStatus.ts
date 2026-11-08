@@ -66,5 +66,9 @@ export function useOrganizationStatus() {
       `${connection.socketUrl ?? ""}|${connection.connectedAt ?? ""}`,
     );
   }, [connection.socketUrl, connection.connectedAt]);
-  return useSyncExternalStore(organizationStatusStore.subscribe, organizationStatusStore.snapshot);
+  return useSyncExternalStore(
+    organizationStatusStore.subscribe,
+    organizationStatusStore.snapshot,
+    organizationStatusStore.snapshot,
+  );
 }

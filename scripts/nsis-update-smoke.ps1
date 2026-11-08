@@ -72,12 +72,16 @@ try {
   $holder = Start-Process -FilePath $helperExe -ArgumentList "-n", "600", "127.0.0.1" -WindowStyle Hidden -PassThru
   Start-Sleep -Seconds 1
 
-  # Prove the scenario is real: a running program's file cannot be moved,
-  # which is exactly what made the old uninstaller give up.
+  $holder.Refresh()
+  if ($holder.HasExited) { Fail "test setup invalid: helper exited early with $($holder.ExitCode)" }
+
+  # Prove the scenario is real: a running program's image cannot be opened for
+  # exclusive write (or deleted), which is exactly what made the old uninstaller
+  # give up. Windows still allows renaming a running image, so a move proves nothing.
   $blocked = $false
   try {
-    Move-Item -LiteralPath $helperExe -Destination "$helperExe.moved"
-    Move-Item -LiteralPath "$helperExe.moved" -Destination $helperExe
+    $stream = [IO.File]::Open($helperExe, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    $stream.Dispose()
   } catch {
     $blocked = $true
   }

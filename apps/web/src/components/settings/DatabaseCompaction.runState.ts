@@ -78,7 +78,11 @@ const subscribe = (listener: () => void) => {
 };
 
 export function useDatabaseCompactionRunState(): DatabaseCompactionRunState {
-  return useSyncExternalStore(subscribe, () => state);
+  return useSyncExternalStore(
+    subscribe,
+    () => state,
+    () => state,
+  );
 }
 
 function readToastedRun(): string | null {

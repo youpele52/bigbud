@@ -97,10 +97,18 @@ it.layer(serverTestLayer)("authenticated Inyosira organization HTTP", (it) => {
         const replay = yield* post(stable);
         expect(replay.body.result).toMatchObject({ changed: false, organization: { revision: 1 } });
 
-        // A retried no-op commits no events; its retry still succeeds without a conflict.
-        const noop = { action: "move", organizationState: "done", invocationId: "call-2" };
-        expect((yield* post(noop)).body.result).toMatchObject({ changed: false });
-        expect((yield* post(noop)).status).toBe(200);
+        // A repeated same-state move renews the intentional period; its retry replays it once.
+        const renew = { action: "move", organizationState: "done", invocationId: "call-2" };
+        expect((yield* post(renew)).body.result).toMatchObject({
+          changed: true,
+          organization: { state: "done", revision: 2 },
+        });
+        const renewReplay = yield* post(renew);
+        expect(renewReplay.status).toBe(200);
+        expect(renewReplay.body.result).toMatchObject({
+          changed: false,
+          organization: { revision: 2 },
+        });
 
         const snoozed = yield* post({
           action: "snooze",

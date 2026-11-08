@@ -100,7 +100,21 @@ const tempRoot = mkdtempSync(join(tmpdir(), "bigbud-release-smoke-"));
 
 try {
   const releaseWorkflow = readFileSync(resolve(repoRoot, ".github/workflows/release.yml"), "utf8");
+  const desktopBuildWorkflow = readFileSync(
+    resolve(repoRoot, ".github/workflows/release-desktop-build.yml"),
+    "utf8",
+  );
   const ciWorkflow = readFileSync(resolve(repoRoot, ".github/workflows/ci.yml"), "utf8");
+  assertContains(
+    releaseWorkflow,
+    "uses: ./.github/workflows/release-desktop-build.yml",
+    "Release workflow must build desktop artifacts with the reusable desktop build workflow.",
+  );
+  assertContains(
+    releaseWorkflow,
+    "secrets: inherit",
+    "Release workflow must pass signing secrets to the desktop build workflow.",
+  );
   for (const credential of [
     "CSC_LINK",
     "CSC_KEY_PASSWORD",
@@ -109,36 +123,39 @@ try {
     "APPLE_TEAM_ID",
   ]) {
     assertContains(
-      releaseWorkflow,
+      desktopBuildWorkflow,
       `secrets.${credential}`,
-      `Release workflow is missing ${credential}.`,
+      `Desktop build workflow is missing ${credential}.`,
     );
   }
   assertContains(
-    releaseWorkflow,
+    desktopBuildWorkflow,
     "--require-code-signature",
-    "Release workflow must verify the macOS sidecar signature.",
+    "Desktop build workflow must verify the macOS sidecar signature.",
   );
   assertContains(
-    releaseWorkflow,
+    desktopBuildWorkflow,
     "bun scripts/resolve-windows-signing-mode.ts",
-    "Release workflow must resolve Windows signing mode once.",
+    "Desktop build workflow must resolve Windows signing mode once.",
   );
   assertOccurrenceCount(
-    releaseWorkflow,
+    desktopBuildWorkflow,
     'steps.windows_signing.outputs.signed }}" == "true"',
     3,
-    "Release workflow must condition Windows signing and verification on the resolved mode.",
+    "Desktop build workflow must condition Windows signing and verification on the resolved mode.",
   );
   for (const credential of ["APPLE_ID", "APPLE_APP_SPECIFIC_PASSWORD", "APPLE_TEAM_ID"]) {
     assertContains(
-      releaseWorkflow,
+      desktopBuildWorkflow,
       `${credential}: \${{ matrix.platform == 'mac' && secrets.${credential} || '' }}`,
-      `Release matrix builds must scope ${credential} to macOS.`,
+      `Desktop matrix builds must scope ${credential} to macOS.`,
     );
   }
-  if (releaseWorkflow.includes("AZURE_TRUSTED_SIGNING")) {
-    throw new Error("Release workflow must keep Windows artifacts unsigned.");
+  if (
+    releaseWorkflow.includes("AZURE_TRUSTED_SIGNING") ||
+    desktopBuildWorkflow.includes("AZURE_TRUSTED_SIGNING")
+  ) {
+    throw new Error("Release workflows must not use Azure Trusted Signing.");
   }
   if (ciWorkflow.includes("secrets.APPLE_") || ciWorkflow.includes("--signed")) {
     throw new Error("CI must remain unsigned and free of Apple signing credentials.");
