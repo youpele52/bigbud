@@ -1,18 +1,19 @@
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import { currentV2RequestContext, runV2RequestContext } from "./Client.guard.ts";
+import { V2ActivationPhysicalOperations } from "./PluginSetup.activation.physical.ts";
 
 /** Short gate observation is separate from physical lifetime. Its expiry cannot release the
  * job's permit/connection while any already-issued operation still needs settlement. */
-export class V2ActivationWindow {
+export class V2ActivationWindow extends V2ActivationPhysicalOperations {
   readonly controller = new AbortController();
   readonly signal: AbortSignal;
-  private readonly pending = new Set<Promise<unknown>>();
   private readonly timer: ReturnType<typeof setTimeout>;
   constructor(
     readonly deadline: number,
     jobSignal: AbortSignal,
     releaseGate: () => void,
   ) {
+    super();
     this.signal = AbortSignal.any([jobSignal, this.controller.signal]);
     this.timer = setTimeout(
       () => {
@@ -26,14 +27,6 @@ export class V2ActivationWindow {
   assertCurrent = () => {
     this.signal.throwIfAborted();
     if (Date.now() >= this.deadline) throw new Error("V2 short activation gate deadline expired.");
-  };
-  observe = (operation: Promise<unknown>) => {
-    if (this.pending.has(operation)) return;
-    this.pending.add(operation);
-    void operation.then(
-      () => this.pending.delete(operation),
-      () => this.pending.delete(operation),
-    );
   };
   async run<T>(run: () => Promise<T>): Promise<T> {
     this.assertCurrent();
@@ -59,11 +52,5 @@ export class V2ActivationWindow {
   }
   release() {
     clearTimeout(this.timer);
-  }
-  hasPending() {
-    return this.pending.size > 0;
-  }
-  async drain() {
-    while (this.pending.size) await Promise.allSettled(this.pending);
   }
 }

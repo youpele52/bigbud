@@ -18,7 +18,12 @@ import type { BlockHandlers } from "./Adapter.stream.blocks.ts";
 import { asRecord, decodeClaudeUserToolResult } from "./Adapter.sdk.messages.ts";
 import { claudeSdkDiagnostic, claudeSdkRuntimeRaw } from "./Adapter.sdk.projections.ts";
 import { updateClaudeTaskPlan } from "./Adapter.stream.tasks.ts";
-import { isClaudeAgentTool, type SubagentHandlers } from "./Adapter.stream.subagents.ts";
+import {
+  findClaudeSubagentTask,
+  isClaudeAgentTool,
+  type SubagentHandlers,
+} from "./Adapter.stream.subagents.ts";
+import { boundSubagentText } from "@bigbud/shared/providerSubagents";
 import { taskCreateResultId } from "./Adapter.tasks.reducer.parse.ts";
 import type { TurnHandlers } from "./Adapter.stream.turn.ts";
 import { normalizeClaudeTokenUsage, claudeCanonicalUsage } from "./Adapter.usage.ts";
@@ -51,7 +56,7 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       context.queuedUserMessageIds.delete(message.uuid);
     }
 
-    if (message.parent_tool_use_id) {
+    if (message.parent_tool_use_id || (message as { agent_id?: string }).agent_id) {
       // A subagent's own tool results update its steps; they never touch main-thread tools.
       yield* subagents.handleSubagentUser(context, message);
       return;
@@ -182,8 +187,13 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
       return;
     }
 
-    if (message.parent_tool_use_id) {
-      const summary = Array.isArray(message.message?.content)
+    if (message.parent_tool_use_id || message.agent_id) {
+      const task = findClaudeSubagentTask(context, {
+        agentId: message.agent_id,
+        toolUseId: message.parent_tool_use_id,
+      });
+      const toolUseId = task?.sourceToolUseId;
+      const text = Array.isArray(message.message?.content)
         ? message.message.content
             .flatMap((block) => {
               const text = asRecord(block)?.text;
@@ -191,8 +201,11 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
             })
             .join("\n")
         : "";
-      yield* subagents.handleSubagentAssistant(context, message, summary);
-      if (summary.length > 0) {
+      yield* subagents.handleSubagentAssistant(context, message, text);
+      const summary = context.forwardSubagentText
+        ? boundSubagentText(text, "progressSummary")
+        : undefined;
+      if (summary && toolUseId) {
         const stamp = yield* makeEventStamp();
         yield* offerRuntimeEvent(context, {
           type: "tool.progress",
@@ -200,14 +213,14 @@ export const makeMessageSpecificHandlers = (deps: MessageSpecificHandlerDeps) =>
           provider: PROVIDER,
           createdAt: stamp.createdAt,
           threadId: context.session.threadId,
-          ...(context.turnState ? { turnId: asCanonicalTurnId(context.turnState.turnId) } : {}),
+          ...(task?.turnId ? { turnId: TurnId.makeUnsafe(task.turnId) } : {}),
           payload: {
-            toolUseId: message.parent_tool_use_id,
+            toolUseId,
             ...(message.subagent_type ? { toolName: message.subagent_type } : {}),
             summary,
           },
           providerRefs: nativeProviderRefs(context, {
-            providerItemId: message.parent_tool_use_id,
+            providerItemId: toolUseId,
           }),
           raw: claudeSdkRuntimeRaw(message, "claude/assistant/subagent"),
         });

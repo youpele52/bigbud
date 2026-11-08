@@ -19,9 +19,10 @@ describe("Claude task update decoding", () => {
         uuid: `task-update-${status}`,
         session_id: "session-1",
         task_id: "task-1",
+        run_id: "opaque-run",
         patch: { status },
       }),
-    ).toMatchObject({ taskId: "task-1", patch: { status } });
+    ).toMatchObject({ taskId: "task-1", runId: "opaque-run", patch: { status } });
   });
 
   it("rejects unknown task statuses", () => {

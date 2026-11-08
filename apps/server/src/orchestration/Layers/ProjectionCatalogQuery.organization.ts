@@ -14,11 +14,12 @@ import {
   threadSummaryColumnsSql,
   threadSummaryJoinsSql,
 } from "./ProjectionCatalogQuery.summaryColumns.ts";
+import { nextSortedThreadCursor, threadSortKeySql } from "./ProjectionCatalogQuery.threadPages.ts";
 
 const OrganizationPageRequest = Schema.Struct({
   state: Schema.String,
   limit: Schema.Number,
-  cursorUpdatedAt: Schema.NullOr(Schema.String),
+  cursorSortKey: Schema.NullOr(Schema.String),
   cursorThreadId: Schema.NullOr(Schema.String),
 });
 
@@ -31,8 +32,8 @@ const activeOrganizationThreadsSql = (sql: SqlClient.SqlClient, state: string) =
 `;
 
 /**
- * One keyset page of active threads in an Inyosira state across every project, served by the
- * partial index from migration 142.
+ * One keyset page of active threads in an Inyosira state across every project, in the displayed
+ * order (latest user message, falling back to creation), served by the migration 154 partial index.
  */
 export function makeGetOrganizationThreadSummaries(
   sql: SqlClient.SqlClient,
@@ -41,19 +42,22 @@ export function makeGetOrganizationThreadSummaries(
   const readThreads = SqlSchema.findAll({
     Request: OrganizationPageRequest,
     Result: ThreadSummaryDbRow,
-    execute: ({ state, limit, cursorUpdatedAt, cursorThreadId }) => sql`
-      SELECT ${threadSummaryColumnsSql(sql)}
-      FROM projection_threads t
-      ${threadSummaryJoinsSql(sql)}
-      WHERE ${activeOrganizationThreadsSql(sql, state)}
-        AND (
-          ${cursorUpdatedAt} IS NULL
-          OR t.updated_at < ${cursorUpdatedAt}
-          OR (t.updated_at = ${cursorUpdatedAt} AND t.thread_id > ${cursorThreadId})
-        )
-      ORDER BY t.updated_at DESC, t.thread_id ASC
-      LIMIT ${limit}
-    `,
+    execute: ({ state, limit, cursorSortKey, cursorThreadId }) => {
+      const sortKey = threadSortKeySql(sql, "updated_at");
+      return sql`
+        SELECT ${threadSummaryColumnsSql(sql)}
+        FROM projection_threads t
+        ${threadSummaryJoinsSql(sql)}
+        WHERE ${activeOrganizationThreadsSql(sql, state)}
+          AND (
+            ${cursorSortKey} IS NULL
+            OR ${sortKey} < ${cursorSortKey}
+            OR (${sortKey} = ${cursorSortKey} AND t.thread_id < ${cursorThreadId})
+          )
+        ORDER BY ${sortKey} DESC, t.thread_id DESC
+        LIMIT ${limit}
+      `;
+    },
   });
 
   const readCount = SqlSchema.findOne({
@@ -78,7 +82,8 @@ export function makeGetOrganizationThreadSummaries(
           rows: readThreads({
             state: input.state,
             limit: limit + 1,
-            cursorUpdatedAt: input.cursor?.updatedAt ?? null,
+            // Legacy cursors carry no sort key; their `updatedAt` is the closest bound.
+            cursorSortKey: input.cursor ? (input.cursor.sortKey ?? input.cursor.updatedAt) : null,
             cursorThreadId: input.cursor?.threadId ?? null,
           }),
         }),
@@ -93,7 +98,7 @@ export function makeGetOrganizationThreadSummaries(
             threads,
             ...(count ? { totalCount: count.totalCount } : {}),
             ...(rows.length > limit && last
-              ? { nextCursor: { updatedAt: last.updatedAt, threadId: last.id } }
+              ? { nextCursor: nextSortedThreadCursor(last, "updated_at") }
               : {}),
           };
         }),

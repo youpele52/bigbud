@@ -22,6 +22,8 @@ import {
   type V2NativeEligibilityVerifier,
 } from "./NativeCompatibility.runtime.ts";
 import { v2ThreadRegistration } from "./Orchestration.registration.ts";
+import { V2ActivationRecovery } from "./PluginSetup.activation.recovery.ts";
+import type { V2BackendInstance } from "./Orchestration.instances.ts";
 
 export interface V2ActivationParticipant {
   readonly diagnostics?: () =>
@@ -57,10 +59,13 @@ export class V2ThreadToolsActivation {
   private readonly issued = new Map<string, { scope: V2ActivationJobScope; directory: string }>();
   private closed = false;
   private readonly unsubscribe: () => void;
+  private readonly recovery: V2ActivationRecovery;
   constructor(
     private readonly settings: ServerSettingsShape,
     private readonly eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
+    backend?: V2BackendInstance,
   ) {
+    this.recovery = new V2ActivationRecovery(backend);
     this.consent = new V2ConsentAuthority(settings);
     this.jobs = new V2ActivationJobs(this.consent, (job) => this.activate(job));
     let revision = this.consent.currentRevision();
@@ -261,6 +266,7 @@ export class V2ThreadToolsActivation {
         this.consent,
         (signal) => readV2ActivationIdle(job, proposal, signal),
         this.eligibility,
+        this.recovery,
       );
     } finally {
       if (this.proposals.get(this.key(job.scope)) === proposal)

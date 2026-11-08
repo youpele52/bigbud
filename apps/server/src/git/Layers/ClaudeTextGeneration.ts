@@ -1,20 +1,8 @@
-/**
- * ClaudeTextGeneration – Text generation layer using the Claude CLI.
- *
- * Implements the same TextGenerationShape contract as CodexTextGeneration but
- * delegates to the `claude` CLI (`claude -p`) with structured JSON output
- * instead of the `codex exec` CLI.
- *
- * @module ClaudeTextGeneration
- */
-import { Effect, Layer, Option, Schema, Stream } from "effect";
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
-
-import { ClaudeModelSelection } from "@bigbud/contracts";
-import { resolveApiModelId } from "@bigbud/shared/model";
+/** Structured text generation through the shared Claude CLI, including its CLIProxy harness. */
+import { Effect, Layer } from "effect";
+import { ChildProcessSpawner } from "effect/unstable/process";
+import { TextGenerationError, ThreadId } from "@bigbud/contracts";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@bigbud/shared/git";
-
-import { TextGenerationError } from "@bigbud/contracts";
 import { type TextGenerationShape, TextGeneration } from "../Services/TextGeneration.ts";
 import {
   buildBranchNamePrompt,
@@ -25,192 +13,22 @@ import {
 } from "../Prompts.ts";
 import {
   sanitizeElevatorSummary,
-  normalizeCliError,
   sanitizeCommitSubject,
   sanitizePrTitle,
   sanitizeThreadTitle,
-  toJsonSchemaObject,
 } from "../Utils.ts";
-import { normalizeClaudeModelOptionsWithCapabilities } from "@bigbud/shared/model";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
-import { getClaudeModelCapabilities } from "../../provider/Layers/Claude/Provider.ts";
+import { CliProxyLifecycle } from "../../provider/Services/CliProxy/Lifecycle.ts";
+import { CliProxyLifecycleLive } from "../../provider/Layers/CliProxy/Lifecycle.ts";
+import { resolveCliProxyRuntimeConfig } from "../../provider/Layers/CliProxy/RuntimeConfig.ts";
 import { makeGeneratePromptSuggestion } from "./TextGeneration.promptSuggestion.ts";
-
-const CLAUDE_TIMEOUT_MS = 180_000;
-
-/**
- * Schema for the wrapper JSON returned by `claude -p --output-format json`.
- * We only care about `structured_output`.
- */
-const ClaudeOutputEnvelope = Schema.Struct({
-  structured_output: Schema.Unknown,
-});
+import { makeClaudeJsonRunner } from "./ClaudeTextGeneration.runner.ts";
 
 const makeClaudeTextGeneration = Effect.gen(function* () {
   const commandSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const serverSettingsService = yield* Effect.service(ServerSettingsService);
-
-  const readStreamAsString = <E>(
-    operation: string,
-    stream: Stream.Stream<Uint8Array, E>,
-  ): Effect.Effect<string, TextGenerationError> =>
-    stream.pipe(
-      Stream.decodeText(),
-      Stream.runFold(
-        () => "",
-        (acc, chunk) => acc + chunk,
-      ),
-      Effect.mapError((cause) =>
-        normalizeCliError("claude", operation, cause, "Failed to collect process output"),
-      ),
-    );
-
-  /**
-   * Spawn the Claude CLI with structured JSON output and return the parsed,
-   * schema-validated result.
-   */
-  const runClaudeJson = Effect.fn("runClaudeJson")(function* <S extends Schema.Top>({
-    operation,
-    cwd,
-    prompt,
-    outputSchemaJson,
-    modelSelection,
-  }: {
-    operation:
-      | "generateCommitMessage"
-      | "generatePrContent"
-      | "generateBranchName"
-      | "generateThreadTitle"
-      | "generateThreadElevatorSummary"
-      | "generatePromptSuggestion";
-    cwd: string;
-    prompt: string;
-    outputSchemaJson: S;
-    modelSelection: ClaudeModelSelection;
-  }): Effect.fn.Return<S["Type"], TextGenerationError, S["DecodingServices"]> {
-    const jsonSchemaStr = JSON.stringify(toJsonSchemaObject(outputSchemaJson));
-    const normalizedOptions = normalizeClaudeModelOptionsWithCapabilities(
-      getClaudeModelCapabilities(modelSelection.model),
-      modelSelection.options,
-    );
-    const settings = {
-      ...(typeof normalizedOptions?.thinking === "boolean"
-        ? { alwaysThinkingEnabled: normalizedOptions.thinking }
-        : {}),
-      ...(normalizedOptions?.fastMode ? { fastMode: true } : {}),
-    };
-
-    const claudeSettings = yield* Effect.map(
-      serverSettingsService.getSettings,
-      (settings) => settings.providers.claudeAgent,
-    ).pipe(Effect.catch(() => Effect.undefined));
-
-    const runClaudeCommand = Effect.fn("runClaudeJson.runClaudeCommand")(function* () {
-      const command = ChildProcess.make(
-        claudeSettings?.binaryPath || "claude",
-        [
-          "-p",
-          prompt,
-          "--output-format",
-          "json",
-          "--json-schema",
-          jsonSchemaStr,
-          "--model",
-          resolveApiModelId(modelSelection),
-          ...(normalizedOptions?.effort ? ["--effort", normalizedOptions.effort] : []),
-          ...(Object.keys(settings).length > 0 ? ["--settings", JSON.stringify(settings)] : []),
-          "--dangerously-skip-permissions",
-        ],
-        {
-          cwd,
-          shell: process.platform === "win32",
-          stdin: {
-            stream: Stream.encodeText(Stream.make(prompt)),
-          },
-        },
-      );
-
-      const child = yield* commandSpawner
-        .spawn(command)
-        .pipe(
-          Effect.mapError((cause) =>
-            normalizeCliError("claude", operation, cause, "Failed to spawn Claude CLI process"),
-          ),
-        );
-
-      const [stdout, stderr, exitCode] = yield* Effect.all(
-        [
-          readStreamAsString(operation, child.stdout),
-          readStreamAsString(operation, child.stderr),
-          child.exitCode.pipe(
-            Effect.mapError((cause) =>
-              normalizeCliError("claude", operation, cause, "Failed to read Claude CLI exit code"),
-            ),
-          ),
-        ],
-        { concurrency: "unbounded" },
-      );
-
-      if (exitCode !== 0) {
-        const stderrDetail = stderr.trim();
-        const stdoutDetail = stdout.trim();
-        const detail = stderrDetail.length > 0 ? stderrDetail : stdoutDetail;
-        return yield* new TextGenerationError({
-          operation,
-          detail:
-            detail.length > 0
-              ? `Claude CLI command failed: ${detail}`
-              : `Claude CLI command failed with code ${exitCode}.`,
-        });
-      }
-
-      return stdout;
-    });
-
-    const rawStdout = yield* runClaudeCommand().pipe(
-      Effect.scoped,
-      Effect.timeoutOption(CLAUDE_TIMEOUT_MS),
-      Effect.flatMap(
-        Option.match({
-          onNone: () =>
-            Effect.fail(
-              new TextGenerationError({ operation, detail: "Claude CLI request timed out." }),
-            ),
-          onSome: (value) => Effect.succeed(value),
-        }),
-      ),
-    );
-
-    const envelope = yield* Schema.decodeEffect(Schema.fromJsonString(ClaudeOutputEnvelope))(
-      rawStdout,
-    ).pipe(
-      Effect.catchTag("SchemaError", (cause) =>
-        Effect.fail(
-          new TextGenerationError({
-            operation,
-            detail: "Claude CLI returned unexpected output format.",
-            cause,
-          }),
-        ),
-      ),
-    );
-
-    return yield* Schema.decodeEffect(outputSchemaJson)(envelope.structured_output).pipe(
-      Effect.catchTag("SchemaError", (cause) =>
-        Effect.fail(
-          new TextGenerationError({
-            operation,
-            detail: "Claude returned invalid structured output.",
-            cause,
-          }),
-        ),
-      ),
-    );
-  });
-
-  // ---------------------------------------------------------------------------
-  // TextGenerationShape methods
-  // ---------------------------------------------------------------------------
+  const serverSettingsService = yield* ServerSettingsService;
+  const lifecycle = yield* CliProxyLifecycle;
+  const runClaudeJson = makeClaudeJsonRunner(commandSpawner, serverSettingsService);
 
   const generateCommitMessage: TextGenerationShape["generateCommitMessage"] = Effect.fn(
     "ClaudeTextGeneration.generateCommitMessage",
@@ -222,14 +40,12 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       includeBranch: input.includeBranch === true,
       ...(input.skillContent !== undefined ? { skillContent: input.skillContent } : {}),
     });
-
     if (input.modelSelection.provider !== "claudeAgent") {
       return yield* new TextGenerationError({
         operation: "generateCommitMessage",
         detail: "Invalid model selection.",
       });
     }
-
     const generated = yield* runClaudeJson({
       operation: "generateCommitMessage",
       cwd: input.cwd,
@@ -237,7 +53,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       outputSchemaJson: outputSchema,
       modelSelection: input.modelSelection,
     });
-
     return {
       subject: sanitizeCommitSubject(generated.subject),
       body: generated.body.trim(),
@@ -257,14 +72,12 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       diffSummary: input.diffSummary,
       diffPatch: input.diffPatch,
     });
-
     if (input.modelSelection.provider !== "claudeAgent") {
       return yield* new TextGenerationError({
         operation: "generatePrContent",
         detail: "Invalid model selection.",
       });
     }
-
     const generated = yield* runClaudeJson({
       operation: "generatePrContent",
       cwd: input.cwd,
@@ -272,11 +85,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       outputSchemaJson: outputSchema,
       modelSelection: input.modelSelection,
     });
-
-    return {
-      title: sanitizePrTitle(generated.title),
-      body: generated.body.trim(),
-    };
+    return { title: sanitizePrTitle(generated.title), body: generated.body.trim() };
   });
 
   const generateBranchName: TextGenerationShape["generateBranchName"] = Effect.fn(
@@ -286,14 +95,12 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       message: input.message,
       attachments: input.attachments,
     });
-
     if (input.modelSelection.provider !== "claudeAgent") {
       return yield* new TextGenerationError({
         operation: "generateBranchName",
         detail: "Invalid model selection.",
       });
     }
-
     const generated = yield* runClaudeJson({
       operation: "generateBranchName",
       cwd: input.cwd,
@@ -301,10 +108,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       outputSchemaJson: outputSchema,
       modelSelection: input.modelSelection,
     });
-
-    return {
-      branch: sanitizeBranchFragment(generated.branch),
-    };
+    return { branch: sanitizeBranchFragment(generated.branch) };
   });
 
   const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
@@ -314,25 +118,45 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       message: input.message,
       attachments: input.attachments,
     });
-
-    if (input.modelSelection.provider !== "claudeAgent") {
+    const selection = input.modelSelection;
+    if (selection.provider !== "claudeAgent" && selection.provider !== "cliProxy") {
       return yield* new TextGenerationError({
         operation: "generateThreadTitle",
         detail: "Invalid model selection.",
       });
     }
-
+    const harness =
+      selection.provider === "cliProxy"
+        ? (yield* resolveCliProxyRuntimeConfig({
+            threadId: ThreadId.makeUnsafe(`internal-title:${crypto.randomUUID()}`),
+            provider: "cliProxy",
+            modelSelection: selection,
+            cwd: input.cwd,
+            runtimeMode: "approval-required",
+          }).pipe(
+            Effect.provideService(ServerSettingsService, serverSettingsService),
+            Effect.provideService(CliProxyLifecycle, lifecycle),
+            // Runtime resolution may inspect credentials; do not propagate its raw cause.
+            Effect.mapError(
+              () =>
+                new TextGenerationError({
+                  operation: "generateThreadTitle",
+                  kind: "provider",
+                  detail: "CLIProxy Claude harness is unavailable for the selected model.",
+                }),
+            ),
+          )).harness
+        : undefined;
     const generated = yield* runClaudeJson({
       operation: "generateThreadTitle",
       cwd: input.cwd,
       prompt,
       outputSchemaJson: outputSchema,
-      modelSelection: input.modelSelection,
+      modelSelection:
+        selection.provider === "cliProxy" ? { ...selection, provider: "claudeAgent" } : selection,
+      ...(harness ? { harness } : {}),
     });
-
-    return {
-      title: sanitizeThreadTitle(generated.title),
-    };
+    return { title: sanitizeThreadTitle(generated.title) };
   });
 
   const generateThreadElevatorSummary: TextGenerationShape["generateThreadElevatorSummary"] =
@@ -341,14 +165,12 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
         transcript: input.transcript,
         attachments: input.attachments,
       });
-
       if (input.modelSelection.provider !== "claudeAgent") {
         return yield* new TextGenerationError({
           operation: "generateThreadElevatorSummary",
           detail: "Invalid model selection.",
         });
       }
-
       const generated = yield* runClaudeJson({
         operation: "generateThreadElevatorSummary",
         cwd: input.cwd,
@@ -356,10 +178,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
         outputSchemaJson: outputSchema,
         modelSelection: input.modelSelection,
       });
-
-      return {
-        summary: sanitizeElevatorSummary(generated.summary),
-      };
+      return { summary: sanitizeElevatorSummary(generated.summary) };
     });
 
   return {
@@ -380,4 +199,6 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
   } satisfies TextGenerationShape;
 });
 
-export const ClaudeTextGenerationLive = Layer.effect(TextGeneration, makeClaudeTextGeneration);
+export const ClaudeTextGenerationLive = Layer.effect(TextGeneration, makeClaudeTextGeneration).pipe(
+  Layer.provide(CliProxyLifecycleLive),
+);

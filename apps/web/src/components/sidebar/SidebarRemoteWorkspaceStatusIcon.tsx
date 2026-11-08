@@ -2,12 +2,22 @@ import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.sto
 import type { AppCheckStatus } from "../../lib/checkStatus";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 
-type RemoteWorkspaceConnectionState = "connected" | "connecting" | "disconnected";
+/** `paused` is a user-initiated disconnect; `disconnected` is a failed or unverified connection. */
+type RemoteWorkspaceConnectionState = "connected" | "connecting" | "disconnected" | "paused";
 
 export function resolveRemoteWorkspaceConnectionState(input: {
   checkStatus: AppCheckStatus | undefined;
   isVerified: boolean;
+  isUserDisconnected: boolean;
+  /** Before the server's disconnect list loads, an unverified target is shown as connecting. */
+  disconnectedTargetsLoaded: boolean;
 }): RemoteWorkspaceConnectionState {
+  if (input.isUserDisconnected) {
+    return "paused";
+  }
+  if (!input.disconnectedTargetsLoaded && !input.isVerified && input.checkStatus !== "verified") {
+    return "connecting";
+  }
   if (input.checkStatus === "checking") {
     return "connecting";
   }
@@ -23,7 +33,9 @@ const STATUS_STYLES: Record<
 > = {
   connected: { indicatorClass: "text-emerald-500", label: "Connected" },
   connecting: { indicatorClass: "text-amber-500", label: "Connecting" },
-  disconnected: { indicatorClass: "text-red-500", label: "Disconnected" },
+  disconnected: { indicatorClass: "text-red-500", label: "Unavailable" },
+  // Red like other unreachable workspaces; a muted dot is invisible against the icon.
+  paused: { indicatorClass: "text-red-500", label: "Disconnected" },
 };
 
 export function SidebarRemoteWorkspaceStatusIcon({
@@ -39,7 +51,18 @@ export function SidebarRemoteWorkspaceStatusIcon({
   const isVerified = useRemoteAccessStore(
     (store) => store.verifiedExecutionTargetIds[executionTargetId] === true,
   );
-  const state = resolveRemoteWorkspaceConnectionState({ checkStatus, isVerified });
+  const isUserDisconnected = useRemoteAccessStore(
+    (store) => store.disconnectedExecutionTargetIds[executionTargetId] === true,
+  );
+  const disconnectedTargetsLoaded = useRemoteAccessStore(
+    (store) => store.disconnectedTargetsLoaded,
+  );
+  const state = resolveRemoteWorkspaceConnectionState({
+    checkStatus,
+    isVerified,
+    isUserDisconnected,
+    disconnectedTargetsLoaded,
+  });
   const status = STATUS_STYLES[state];
   const label = `${remoteTargetLabel ?? executionTargetId}: ${status.label}`;
 

@@ -1,8 +1,14 @@
 import type { OrchestrationEvent } from "@bigbud/contracts";
 
 import type { Thread } from "../../models/types";
+import type { AppState } from "./main.store";
 import { sanitizeThreadErrorMessage } from "../../rpc/transportError";
 import { buildLatestTurn, MAX_THREAD_MESSAGES } from "./helpers.store";
+import {
+  boundMessageText,
+  resolveUpsertedMessageText,
+  withoutTextBounds,
+} from "./messageText.store";
 
 export function getProviderTurnStartFailureDetail(
   activity: Thread["activities"][number],
@@ -29,15 +35,8 @@ export function upsertThreadMessage(
         entry.id !== message.id
           ? entry
           : {
-              ...entry,
-              text:
-                event.payload.replace === true
-                  ? message.text
-                  : message.streaming
-                    ? `${entry.text}${message.text}`
-                    : message.text.length > 0
-                      ? message.text
-                      : entry.text,
+              ...withoutTextBounds(entry),
+              ...resolveUpsertedMessageText(entry, message, event.payload.replace === true),
               streaming: message.streaming,
               ...(message.turnId !== undefined ? { turnId: message.turnId } : {}),
               ...(message.streaming
@@ -60,7 +59,7 @@ export function upsertThreadMessage(
                   : {}),
             },
       )
-    : [...thread.messages, message];
+    : [...thread.messages, { ...message, ...boundMessageText(message.text) }];
   return messages.slice(-MAX_THREAD_MESSAGES);
 }
 
@@ -98,4 +97,25 @@ export function buildThreadMessageLatestTurn(
       : event.payload.updatedAt,
     assistantMessageId: event.payload.messageId,
   });
+}
+
+/**
+ * A thread known only from its summary records a user message as its latest activity without
+ * storing the transcript; opening it re-hydrates the transcript from the server.
+ */
+export function bumpSummaryLatestUserMessageAt(
+  state: AppState,
+  event: Extract<OrchestrationEvent, { type: "thread.message-sent" }>,
+): AppState {
+  const summary = state.sidebarThreadsById[event.payload.threadId];
+  if (event.payload.role !== "user" || !summary) return state;
+  const previous = summary.latestUserMessageAt;
+  if (previous !== null && previous >= event.payload.createdAt) return state;
+  return {
+    ...state,
+    sidebarThreadsById: {
+      ...state.sidebarThreadsById,
+      [event.payload.threadId]: { ...summary, latestUserMessageAt: event.payload.createdAt },
+    },
+  };
 }

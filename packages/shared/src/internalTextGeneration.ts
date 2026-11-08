@@ -28,7 +28,8 @@ export function supportsInternalTextGeneration(
 ): boolean {
   return (
     FULL_TEXT_GENERATION_PROVIDERS.includes(provider) ||
-    (operation === "generateThreadTitle" && (provider === "pi" || provider === "copilot"))
+    (operation === "generateThreadTitle" &&
+      (provider === "pi" || provider === "copilot" || provider === "cliProxy"))
   );
 }
 

@@ -1,3 +1,4 @@
+import { THREAD_RETENTION_POLICY_LABELS } from "@bigbud/contracts/core/settings.threadRetention";
 import type {
   ServerThreadRetentionResult,
   ServerThreadRetentionRun,
@@ -76,6 +77,58 @@ export function getRetentionMaintenanceMessage(
 
 export function formatRetentionExclusionReason(reason: string): string {
   return reason.replaceAll("_", " ");
+}
+
+const RETENTION_EXCLUSION_REASON_LABELS: Readonly<Record<string, string>> = {
+  already_deleted: "already deleted",
+  deleting: "being deleted",
+  pinned: "pinned",
+  project_unavailable: "project removed",
+  project_deleting: "project being deleted",
+  remote_cleanup_unavailable: "on a remote workspace",
+  // A turn in progress, a live terminal or shell, or an active browser or computer-use lease.
+  running: "work in progress",
+  pending_work: "queued or pending work",
+  waiting_for_user: "waiting for your reply",
+  active_task: "unfinished task",
+  automation_owned: "owned by an automation",
+  scheduled: "scheduled automation",
+  activity_changed: "new activity since selection",
+  policy_changed: "cleanup period changed",
+  blocked_by_descendant: "held by a newer or busy child thread",
+};
+
+export function getRetentionExclusionReasonLabel(reason: string): string {
+  return RETENTION_EXCLUSION_REASON_LABELS[reason] ?? formatRetentionExclusionReason(reason);
+}
+
+/**
+ * Why a finished run deleted what it did, e.g. "216 older than 3 days · 26 skipped: on a
+ * remote workspace". Soft-deleted rows are not threads the user sees, so they are not listed.
+ * Empty for runs recorded before the breakdown existed.
+ */
+export function formatRetentionRunBreakdown(run: ServerThreadRetentionRun): string {
+  if (run.olderThanCutoffCount === undefined) return "";
+  const skipped = (run.exclusionCounts ?? [])
+    .filter((exclusion) => exclusion.reason !== "already_deleted" && exclusion.count > 0)
+    .toSorted((left, right) => right.count - left.count)
+    .map(
+      (exclusion) =>
+        `${exclusion.count} skipped: ${getRetentionExclusionReasonLabel(exclusion.reason)}`,
+    );
+  return [
+    `${run.olderThanCutoffCount} older than ${THREAD_RETENTION_POLICY_LABELS[run.policy]}`,
+    ...skipped,
+  ].join(" · ");
+}
+
+export function formatLatestRetentionCleanup(run: ServerThreadRetentionRun): string {
+  const breakdown = formatRetentionRunBreakdown(run);
+  return [
+    `Latest cleanup: ${run.completedCount} threads deleted`,
+    ...(breakdown ? [breakdown] : []),
+    formatRetentionRunStatus(run.status),
+  ].join(" · ");
 }
 
 export function formatRetentionCutoff(cutoffAt: string): string {

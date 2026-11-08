@@ -1,3 +1,7 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import type {
   ModelInfo as ClaudeModelInfo,
   OnElicitation,
@@ -31,6 +35,7 @@ interface BuildClaudeQueryOptionsInput {
   readonly forwardSubagentText: boolean;
   readonly settingSources?: ReadonlyArray<"user" | "project" | "local">;
   readonly environment?: Readonly<Record<string, string | undefined>>;
+  readonly protectedSettingsEnvironment?: Readonly<Record<string, string>>;
   /** User-configured subagent caps (6.6); null or absent keeps the CLI default. */
   readonly subagentCaps?: ClaudeSubagentCaps;
   /** Native prompt suggestions after each turn (Phase 7). */
@@ -102,6 +107,26 @@ export function resolveClaudeRuntimeTraits(
   };
 }
 
+/** Keep protected credentials out of SDK --settings argv/debug spawn diagnostics. */
+export async function materializeClaudeQuerySettings(options: ClaudeQueryOptions): Promise<{
+  readonly options: ClaudeQueryOptions;
+  readonly cleanup: () => Promise<void>;
+}> {
+  if (typeof options.settings !== "object" || !options.settings?.env) {
+    return { options, cleanup: async () => undefined };
+  }
+  const directory = await mkdtemp(join(tmpdir(), "bigbud-claude-settings-"));
+  const cleanup = () => rm(directory, { recursive: true, force: true });
+  try {
+    const settingsPath = join(directory, "settings.json");
+    await writeFile(settingsPath, JSON.stringify(options.settings), { mode: 0o600 });
+    return { options: { ...options, settings: settingsPath }, cleanup };
+  } catch (error) {
+    await cleanup();
+    throw error;
+  }
+}
+
 export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
   readonly apiModelId: string | undefined;
   readonly effectiveEffort: ClaudeNativeEffort | null;
@@ -120,6 +145,12 @@ export function buildClaudeQueryOptions(input: BuildClaudeQueryOptionsInput): {
   );
   const permissionMode = resolveBasePermissionMode(input.input.runtimeMode);
   const settings = {
+    ...(input.protectedSettingsEnvironment
+      ? {
+          env: withClaudeSubagentCaps(input.protectedSettingsEnvironment, input.subagentCaps),
+          apiKeyHelper: "",
+        }
+      : {}),
     ...(typeof thinking === "boolean" ? { alwaysThinkingEnabled: thinking } : {}),
     ...(fastMode ? { fastMode: true } : {}),
     ...(ultracode ? { ultracode: true } : {}),

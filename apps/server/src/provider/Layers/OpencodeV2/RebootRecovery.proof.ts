@@ -5,6 +5,7 @@ import type { V2RetirementIdentity } from "./Orchestration.enrollment.retirement
 import { recoveryOwner } from "./RebootRecovery.evidence.ts";
 import { decodeV2EnrollmentRecord } from "./Orchestration.enrollment.record.ts";
 import { decodeV2ThreadReceipt } from "./Orchestration.receipts.schema.ts";
+import { hasOnlyV2LockedInstallationArchives } from "./PluginSetup.revalidation.archive.ts";
 import {
   readV2RecoveryHost,
   assertV2RebootBoundary,
@@ -28,7 +29,10 @@ export async function readV2RebootCheckpoint(records: V2ThreadRecords) {
   }
   const store = await records.sibling("recovery"),
     signed = await store.read(checkpointKey);
-  if (!signed) throw new Error("V2 reboot recovery checkpoint is incomplete; retain evidence.");
+  if (!signed) {
+    if (await hasOnlyV2LockedInstallationArchives(store)) return undefined;
+    throw new Error("V2 reboot recovery checkpoint is incomplete; retain evidence.");
+  }
   const checkpoint = decodeCheckpoint(signed.value);
   if (checkpoint.stateRoot !== path.dirname(records.directory))
     throw new Error("V2 reboot recovery state root changed.");

@@ -6,6 +6,7 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
 
+import { deriveTurnRequestUsage } from "../../persistence/ProjectionTurnRequestUsage.ts";
 import {
   ORCHESTRATION_PROJECTOR_NAMES,
   type AttachmentSideEffects,
@@ -29,10 +30,13 @@ export function makeThreadTurnsProjector(
         return;
 
       case "thread.turn-start-requested": {
+        // A request without `usageAttribution` (written before migration 133, or a forked first
+        // turn) is attributed by the same rule migration 157 used to backfill older turns, so
+        // replaying those requests reproduces the backfilled rows.
         yield* projectionTurnRepository.replacePendingTurnStart({
           ...(event.payload.usageAttribution
             ? { usageAttribution: event.payload.usageAttribution }
-            : {}),
+            : { storedUsage: deriveTurnRequestUsage(event.payload) }),
           threadId: event.payload.threadId,
           messageId: event.payload.messageId,
           sourceProposedPlanThreadId: event.payload.sourceProposedPlan?.threadId ?? null,
@@ -55,6 +59,10 @@ export function makeThreadTurnsProjector(
         const pendingTurnStart = yield* projectionTurnRepository.getPendingTurnStartByThreadId({
           threadId: event.payload.threadId,
         });
+        // The pending start's raw columns, so partial recovered attribution is inherited too.
+        const pendingUsage = Option.isSome(pendingTurnStart)
+          ? pendingTurnStart.value.storedUsage
+          : undefined;
         if (Option.isSome(existingTurn)) {
           const nextState =
             existingTurn.value.state === "completed" || existingTurn.value.state === "error"
@@ -65,6 +73,9 @@ export function makeThreadTurnsProjector(
             usageAttribution:
               existingTurn.value.usageAttribution ??
               (Option.isSome(pendingTurnStart) ? pendingTurnStart.value.usageAttribution : null),
+            ...(existingTurn.value.usageAttribution == null && pendingUsage !== undefined
+              ? { storedUsage: pendingUsage }
+              : {}),
             state: nextState,
             pendingMessageId:
               existingTurn.value.pendingMessageId ??
@@ -95,6 +106,7 @@ export function makeThreadTurnsProjector(
             usageAttribution: Option.isSome(pendingTurnStart)
               ? pendingTurnStart.value.usageAttribution
               : null,
+            ...(pendingUsage !== undefined ? { storedUsage: pendingUsage } : {}),
             threadId: event.payload.threadId,
             pendingMessageId: Option.isSome(pendingTurnStart)
               ? pendingTurnStart.value.messageId
@@ -269,6 +281,8 @@ export function makeThreadTurnsProjector(
         yield* projectionTurnRepository.deleteByThreadId({
           threadId: event.payload.threadId,
         });
+        // Listed turns carry `storedUsage`, so kept turns are reinserted with exactly the usage
+        // attribution they had, including attribution backfilled by migration 157.
         yield* Effect.forEach(
           keptTurns,
           (turn) =>

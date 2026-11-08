@@ -13,11 +13,8 @@ import { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
 import { toastManager } from "../components/ui/toast";
 import { useSettings } from "./useSettings";
-import {
-  prepareSeedMessagesForBranch,
-  ThreadBranchError,
-  type SeedMessageOutput,
-} from "../lib/threadBranch";
+import { type SeedMessageOutput } from "../lib/threadBranch";
+import { runServerBranchCopy } from "./useThreadActions.branchCopy";
 import {
   waitForThreadDeletionToSettle,
   waitForThreadToExist,
@@ -184,31 +181,8 @@ export function useThreadActions() {
 
       const branchedThreadId = newThreadId();
       const createdAt = new Date().toISOString();
-      let seedMessages;
-      try {
-        seedMessages =
-          options?.seedMessages ??
-          prepareSeedMessagesForBranch(
-            sourceThread.messages,
-            options?.upToMessageId !== undefined
-              ? { upToMessageId: options.upToMessageId }
-              : undefined,
-          );
-      } catch (err) {
-        toastManager.add({
-          type: "error",
-          title: "Cannot branch thread",
-          description:
-            err instanceof ThreadBranchError
-              ? err.message
-              : err instanceof Error
-                ? err.message
-                : "Could not prepare branched messages.",
-        });
-        return null;
-      }
-
-      if (seedMessages.length === 0) {
+      const seedMessages = options?.seedMessages;
+      if (seedMessages && seedMessages.length === 0) {
         toastManager.add({
           type: "error",
           title: "Cannot branch thread",
@@ -224,33 +198,57 @@ export function useThreadActions() {
           .map((entry) => entry.title),
       );
 
+      let copiedCount = seedMessages?.length ?? 0;
       try {
         const executionTargets = buildExplicitExecutionTargets({
           providerRuntimeExecutionTargetId: sourceThread.providerRuntimeExecutionTargetId,
           workspaceExecutionTargetId: sourceThread.workspaceExecutionTargetId,
         });
-        await dispatchCommandWithOutcomeRecovery(api, {
-          type: "thread.create",
-          commandId: newCommandId(),
-          threadId: branchedThreadId,
-          projectId: sourceThread.projectId,
-          title: branchedThreadTitle,
-          ...executionTargets,
-          modelSelection: requireActiveModelSelection(
-            options?.modelSelection ?? sourceThread.modelSelection,
-          ),
-          runtimeMode: sourceThread.runtimeMode,
-          interactionMode: sourceThread.interactionMode,
-          branch: sourceThread.branch,
-          worktreePath: sourceThread.worktreePath,
-          parentThread: {
-            threadId: sourceThreadId,
-            title: sourceThread.title,
+        const modelSelection = requireActiveModelSelection(
+          options?.modelSelection ?? sourceThread.modelSelection,
+        );
+        if (seedMessages) {
+          // A handoff branch carries its one seed message and keeps its lineage.
+          await dispatchCommandWithOutcomeRecovery(api, {
+            type: "thread.create",
+            commandId: newCommandId(),
+            threadId: branchedThreadId,
             projectId: sourceThread.projectId,
-          },
-          seedMessages,
-          createdAt,
-        });
+            title: branchedThreadTitle,
+            ...executionTargets,
+            modelSelection,
+            runtimeMode: sourceThread.runtimeMode,
+            interactionMode: sourceThread.interactionMode,
+            branch: sourceThread.branch,
+            worktreePath: sourceThread.worktreePath,
+            parentThread: {
+              threadId: sourceThreadId,
+              title: sourceThread.title,
+              projectId: sourceThread.projectId,
+            },
+            seedMessages,
+            createdAt,
+          });
+        } else {
+          // The server copies every message up to the branch point, in full, and the branch
+          // keeps no link to its source.
+          copiedCount = await runServerBranchCopy({
+            api,
+            branch: {
+              sourceThreadId,
+              branchThreadId: branchedThreadId,
+              upToMessageId: options?.upToMessageId ?? null,
+              title: branchedThreadTitle,
+              modelSelection,
+              runtimeMode: sourceThread.runtimeMode,
+              interactionMode: sourceThread.interactionMode,
+              branch: sourceThread.branch,
+              worktreePath: sourceThread.worktreePath,
+              ...executionTargets,
+              createdAt,
+            },
+          });
+        }
       } catch (err) {
         toastManager.add({
           type: "error",
@@ -313,7 +311,7 @@ export function useThreadActions() {
       toastManager.add({
         type: "success",
         title: "Thread branched",
-        description: `${seedMessages.length} message${seedMessages.length === 1 ? "" : "s"} copied.`,
+        description: `${copiedCount} message${copiedCount === 1 ? "" : "s"} copied.`,
       });
 
       return branchedThreadId;

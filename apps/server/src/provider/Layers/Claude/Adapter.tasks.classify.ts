@@ -2,8 +2,8 @@
  * Classification and model resolution for Claude native tasks.
  *
  * Only agent task types become provider subagents. Shell, workflow, MCP and monitor tasks,
- * ambient housekeeping tasks and every task of an unsupported harness (CLIProxy) stay ordinary
- * tasks.
+ * ambient housekeeping tasks and every task of an unsupported harness stay ordinary tasks.
+ * Native Claude Code classification is shared by direct and proxy model connections.
  *
  * @module ClaudeAdapter.tasks.classify
  */

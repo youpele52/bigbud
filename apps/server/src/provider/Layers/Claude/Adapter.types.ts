@@ -38,6 +38,9 @@ export type { ClaudeQueryRuntime } from "./Adapter.sdk.ts";
 
 export const PROVIDER = "claudeAgent" as const;
 
+/** Native Claude Code task events are harness features, independent of the model connection. */
+export const CLAUDE_HARNESS_CAPABILITIES = Object.freeze({ providerSubagents: true });
+
 type WithoutSessionEpoch<T> = T extends unknown ? Omit<T, "sessionEpoch"> : never;
 export type UnstampedProviderRuntimeEvent = WithoutSessionEpoch<ProviderRuntimeEvent>;
 
@@ -166,7 +169,7 @@ export interface ClaudeSessionContext {
   mcpStatuses: Array<McpServerStatusEntry>;
   readonly requiredMcpServerNames: ReadonlySet<string>;
   readonly modernTaskExposure: boolean;
-  /** Resolved alternate harnesses (CLIProxyAPI) have no verified child event contract. */
+  /** Explicit harness support for native Claude Code child-task events. */
   readonly providerSubagentsSupported: boolean;
   /** Whether the query forwards subagent text; only then does text become a progress summary. */
   readonly forwardSubagentText: boolean;
@@ -195,9 +198,13 @@ export interface ClaudeAdapterLiveOptions {
 
 export interface ClaudeHarnessConfig {
   readonly binaryPath: string;
+  /** Explicit qualification of native child events; absent alternate harnesses fail closed. */
+  readonly capabilities?: { readonly providerSubagents: boolean };
   /** Fixed-model harness capabilities, isolated from the native Claude catalog. */
   readonly modelCapabilities?: ModelCapabilities;
   readonly environment?: Readonly<Record<string, string | undefined>>;
+  /** Highest-priority settings environment protecting an alternate connection from user settings. */
+  readonly protectedSettingsEnvironment?: Readonly<Record<string, string>>;
   readonly settingSources?: ReadonlyArray<"user" | "project" | "local">;
   /** Harness-local rollout controls; native Claude settings must not leak into adapters. */
   readonly boundedHookProgress?: boolean;

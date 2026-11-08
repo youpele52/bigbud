@@ -55,7 +55,9 @@ export const makeServerHandoffJobs = Effect.gen(function* () {
             }),
           ),
         )
-      : deps.projectionSnapshotQuery.getSnapshot();
+      : Effect.fail(
+          new ServerHandoffJobError({ message: "Thread history is unavailable on this server." }),
+        );
   const jobs = new Map<string, ServerHandoffJob>();
   const runningJobsByThreadId = new Map<string, string>();
 

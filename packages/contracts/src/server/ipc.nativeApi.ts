@@ -24,13 +24,15 @@ import type {
   OrchestrationBaselineAckInput,
   OrchestrationBaselineAckResult,
   OrchestrationDeliveryStreamItem,
-  OrchestrationReadModel,
   OrchestrationReplayEventsResult,
   ThinkingActivityDeltaEvent,
 } from "../orchestration/orchestration";
 import type { EditorId } from "../workspace/editor";
 import type { TerminalApplicationId } from "../workspace/terminalApplication";
 import type * as Git from "../workspace/git";
+import type * as DetailPaging from "../orchestration/orchestration.detail.paging";
+import type * as BranchCopy from "../orchestration/orchestration.branchCopy";
+import type { DatabaseCompactionNativeApi } from "./databaseCompaction";
 import type * as Worktrees from "../workspace/worktrees";
 import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
@@ -47,6 +49,7 @@ import type * as Notes from "./notes";
 import type * as PinnedThreads from "./pinnedThreads";
 import type * as Server from "./server";
 import type * as RemoteRestart from "./server.remoteRestart";
+import type * as RemoteConnection from "./server.remoteConnection";
 import type * as SshConfig from "./server.sshConfig";
 import type * as RemoteFolders from "./server.remoteFolders";
 import type * as Handoff from "./server.handoff";
@@ -198,7 +201,7 @@ export interface NativeApi {
       position?: { x: number; y: number },
     ) => Promise<T | null>;
   };
-  server: {
+  server: DatabaseCompactionNativeApi & {
     getConfig: () => Promise<Server.ServerConfig>;
     refreshProviders: () => Promise<Server.ServerProviderUpdatedPayload>;
     refreshUsageLimits: () => Promise<Server.ServerProviderUpdatedPayload>;
@@ -227,6 +230,13 @@ export interface NativeApi {
     getRemoteAgentUpdateStatus: (
       input: Server.ServerGetRemoteAgentUpdateStatusInput,
     ) => Promise<Server.ServerRemoteAgentUpdateStatus>;
+    disconnectExecutionTarget: (
+      input: RemoteConnection.ServerRemoteConnectionInput,
+    ) => Promise<RemoteConnection.ServerRemoteConnectionResult>;
+    connectExecutionTarget: (
+      input: RemoteConnection.ServerRemoteConnectionInput,
+    ) => Promise<RemoteConnection.ServerRemoteConnectionResult>;
+    listDisconnectedExecutionTargets: () => Promise<RemoteConnection.ServerListDisconnectedExecutionTargetsResult>;
     unlockSshKey: (
       input: Server.ServerUnlockSshKeyInput,
     ) => Promise<Server.ServerUnlockSshKeyResult>;
@@ -326,7 +336,7 @@ export interface NativeApi {
       input: ConnectionDiagnostics.ServerGetWsConnectionDiagnosticsInput,
     ) => Promise<ConnectionDiagnostics.ServerWsConnectionDiagnosticsSnapshot>;
   };
-  orchestration: {
+  orchestration: BranchCopy.ThreadBranchNativeApi & {
     getSidebarThreadCatalog: () => Promise<GetSidebarThreadCatalogResult>;
     getStartupProjectCatalog: (
       input: GetStartupProjectCatalogInput,
@@ -345,7 +355,15 @@ export interface NativeApi {
     ) => Promise<GetSelectedThreadDetailResult>;
     resolveThreadOwnership: (input: GetThreadOwnershipInput) => Promise<GetThreadOwnershipResult>;
     getCommandOutcome: (input: GetCommandOutcomeInput) => Promise<GetCommandOutcomeResult>;
-    getSnapshot: () => Promise<OrchestrationReadModel>;
+    getTurnActivities: (
+      input: DetailPaging.GetTurnActivitiesInput,
+    ) => Promise<DetailPaging.GetTurnActivitiesResult>;
+    getMessageTextChunk: (
+      input: DetailPaging.GetMessageTextChunkInput,
+    ) => Promise<DetailPaging.GetMessageTextChunkResult>;
+    getProjectWorktreePaths: (
+      input: DetailPaging.GetProjectWorktreePathsInput,
+    ) => Promise<DetailPaging.GetProjectWorktreePathsResult>;
     dispatchCommand: (command: ClientOrchestrationCommand) => Promise<{ sequence: number }>;
     getTurnDiff: (input: OrchestrationGetTurnDiffInput) => Promise<OrchestrationGetTurnDiffResult>;
     getFullThreadDiff: (

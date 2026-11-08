@@ -95,6 +95,27 @@ describe("sleep recovery after a backend restart", () => {
     ),
   );
 
+  it.effect("a restart after a crash prompts with its own reason, never sends", () =>
+    provided(
+      Effect.gen(function* () {
+        const h = yield* makeRecoveryHarness();
+        yield* h.seedRunningTurn;
+        // The backend died (for example out of memory): no stopAll ran, the intent is active.
+        yield* handleBackendStart(h.ctx, {
+          startReason: "unexpected-exit-restart",
+          processStartedAtMs: WOKE_AT_MS + 5_000,
+        });
+        const intent = yield* h.intent();
+        assert.strictEqual(intent.disposition, "active");
+        assert.strictEqual(intent.recoveryStatus, "awaiting-user");
+        assert.strictEqual(intent.detail.reason, "backend-restarted");
+        assert.strictEqual(h.thread().recovery?.reason, "backend-restarted");
+        yield* runRecoveryPass(h.ctx);
+        assert.strictEqual(h.turnStarts().length, 0);
+      }),
+    ),
+  );
+
   it.effect("an ordinary restart keeps today's behavior: suspended, no prompt", () =>
     provided(
       Effect.gen(function* () {

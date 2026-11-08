@@ -16,7 +16,8 @@ const snapshot = (provider: ProviderKind) =>
 
 it("advertises per-subagent Stop from the capability declaration only", () => {
   expect(snapshot("claudeAgent").subagentStop).toBe(true);
-  for (const provider of ["cliProxy", "codex", "copilot", "pi", "opencodeV2"] as const) {
+  expect(snapshot("cliProxy").subagentStop).toBe(true);
+  for (const provider of ["codex", "copilot", "pi", "opencodeV2"] as const) {
     expect(snapshot(provider).subagentStop).toBeUndefined();
   }
   expect(Schema.encodeSync(ServerProvider)(snapshot("claudeAgent"))).toMatchObject({

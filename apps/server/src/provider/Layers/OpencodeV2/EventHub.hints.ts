@@ -1,16 +1,34 @@
 import type { OpenCodeEvent } from "@opencode/client";
 
-/** Both pinned contracts permit this payload-free durable notification without Location.
- * Ignore it, rather than guessing a Location or preempting the prompt whose ack it precedes.
- * No output/terminal/permission inference: ordinary authoritative polling repairs status.
+const durableHints = new Set<string>([
+  "session.execution.started",
+  "session.execution.succeeded",
+  "session.execution.failed",
+  "session.execution.interrupted",
+  "session.permissions",
+  "session.metadata.updated",
+  "session.agent.selected",
+  "session.model.selected",
+]);
+
+/** Native host-scoped notifications may omit Location. They only request authoritative reads;
+ * their content never proves output, permission, admission or completion. Unknown events fail closed.
  */
-export function isV2LocationlessExecutionStart(event: OpenCodeEvent, sessionID: string): boolean {
+export function isV2LocationlessSessionHint(event: OpenCodeEvent, sessionID: string): boolean {
+  if (
+    event.location !== undefined ||
+    !("sessionID" in event.data) ||
+    event.data.sessionID !== sessionID
+  )
+    return false;
+  const durable = "durable" in event ? event.durable : undefined;
+  // Usage is a documented ephemeral notification, not a durable completion claim.
+  if (event.type === "session.usage.updated" && durable === undefined) return true;
   return (
-    event.type === "session.execution.started" &&
-    event.location === undefined &&
-    event.durable?.version === 1 &&
-    event.durable.aggregateID === sessionID &&
-    Number.isSafeInteger(event.durable.seq) &&
-    event.durable.seq >= 0
+    durableHints.has(event.type) &&
+    durable?.version === 1 &&
+    durable.aggregateID === sessionID &&
+    Number.isSafeInteger(durable.seq) &&
+    durable.seq >= 0
   );
 }

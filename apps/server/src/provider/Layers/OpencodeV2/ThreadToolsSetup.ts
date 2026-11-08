@@ -180,6 +180,7 @@ export const makeV2ThreadToolsSetup = Effect.fn("makeV2ThreadToolsSetup")(functi
           });
           if (issue) return { ...result, status: "incompatible-history", message: issue };
           artifact = await selectV2SetupArtifact(artifact, {
+            journal: Option.isSome(journal) ? journal.value : undefined,
             threadId: input.threadId,
             directory,
             binding,

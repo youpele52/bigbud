@@ -12,6 +12,7 @@ import { runThreadRetentionSchedule } from "./ThreadRetention.scheduler.ts";
 import { makeThreadRetentionExecutionCoordinator } from "./ThreadRetention.coordinator.ts";
 import { cutoffForRetentionPolicy } from "./ThreadRetention.logic.ts";
 import { toServerThreadRetentionRun } from "./ThreadRetention.public.ts";
+import { makeThreadRetentionMaintenance } from "./ThreadRetention.maintenance.ts";
 
 const retentionError = (code: ServerThreadRetentionError["code"], message: string) =>
   new ServerThreadRetentionError({ code, message });
@@ -30,6 +31,7 @@ const makeThreadRetention = Effect.gen(function* () {
   );
   const preview = makeThreadRetentionPreview({ repository });
   const coordinator = yield* makeThreadRetentionExecutionCoordinator({ repository, orchestration });
+  const maintenance = yield* makeThreadRetentionMaintenance;
 
   const enqueue: ThreadRetentionShape["enqueue"] = ({ challengeToken }) =>
     Effect.gen(function* () {
@@ -157,6 +159,7 @@ const makeThreadRetention = Effect.gen(function* () {
     }),
     runScheduledOnce,
     start: Effect.gen(function* () {
+      yield* Effect.forkChild(maintenance.run);
       yield* Effect.repeat(
         coordinator.drain().pipe(
           Effect.catch((error) =>

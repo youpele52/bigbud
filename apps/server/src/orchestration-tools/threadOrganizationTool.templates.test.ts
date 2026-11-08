@@ -38,7 +38,7 @@ it("generated MCP move_thread and snooze_thread keep the caller and forward targ
     }>;
     expect(tools.find((tool) => tool.name === "move_thread")?.inputSchema).toMatchObject({
       required: ["state"],
-      properties: { state: { enum: ["present", "needs-you", "later", "done"] } },
+      properties: { state: { enum: ["needs-you", "present", "later", "done"] } },
     });
     expect(tools.find((tool) => tool.name === "snooze_thread")?.inputSchema).toMatchObject({
       required: ["minutes"],

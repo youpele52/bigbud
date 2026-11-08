@@ -19,6 +19,10 @@ import { restoreV2StartSelection } from "./ProviderService.modelSelection.v2.ts"
 import { assertProviderWorktreeIdentity } from "./ProviderService.worktreeIdentity.ts";
 import { hasCodexRewindMarker } from "../Services/ProviderRewind.ts";
 import { hasPendingInspectionTerminal } from "../Services/ProviderInspectionTerminal.ts";
+import {
+  isSshTargetDisconnected,
+  RemoteTargetDisconnectedError,
+} from "../../ssh/sshTargetDisconnects.ts";
 
 const PROVIDER_SESSION_START_TIMEOUT = Duration.seconds(45);
 
@@ -170,6 +174,21 @@ export function makeStartSessionInternal(input: {
           return yield* toValidationError(
             "ProviderService.startSession",
             `Adapter/provider mismatch: requested '${adapter.provider}', received '${adapterSession.provider}'.`,
+          );
+        }
+        // Adapters register a session only after spawning, so a Disconnect may have listed
+        // sessions before this one existed. Failing here rolls the adapter session back.
+        const disconnectedTarget = [
+          startInput.providerRuntimeExecutionTargetId,
+          startInput.workspaceExecutionTargetId,
+          startInput.executionTargetId,
+        ].find((target) => isSshTargetDisconnected(target));
+        if (disconnectedTarget !== undefined) {
+          const disconnected = new RemoteTargetDisconnectedError(disconnectedTarget);
+          return yield* toValidationError(
+            "ProviderService.startSession",
+            disconnected.message,
+            disconnected,
           );
         }
         const session: ProviderSession = {

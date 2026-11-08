@@ -11,6 +11,8 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigateMock,
 }));
 
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { UserThreadReferenceChips } from "./MessagesTimeline.userAttachments";
 
 describe("UserThreadReferenceChips", () => {
@@ -48,6 +50,9 @@ describe("UserThreadReferenceChips", () => {
     const button = Array.isArray(element?.props.children)
       ? element.props.children[0]
       : element?.props.children;
+
+    expect(button.props.children[0].type).toBe(HugeiconsIcon);
+    expect(button.props.children[0].props.icon).toBe(Comment03Icon);
 
     button.props.onClick();
 

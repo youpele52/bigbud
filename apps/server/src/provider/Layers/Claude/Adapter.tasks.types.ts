@@ -25,7 +25,7 @@ export interface ClaudeTask {
   readonly taskType?: string | undefined;
   /** Housekeeping task that hosts must exclude from activity indicators. */
   readonly ambient?: boolean | undefined;
-  /** Native run ID; run IDs of one task sort lexically in run order. */
+  /** Native run identity; SDK 0.3.310 guarantees plain-string run order within a task. */
   readonly runId?: string | undefined;
   readonly prompt?: string | undefined;
   /** Agent tool input `model` (highest-priority model source). */

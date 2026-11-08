@@ -22,12 +22,8 @@ export const INYOSIRA_STATE_LABELS: Record<ThreadOrganizationState, string> = {
   done: "Done",
 };
 
-/** Needs you, Later, and Done sit together at the bottom of the sidebar. */
-export const INYOSIRA_BOTTOM_STATES: readonly ThreadOrganizationState[] = [
-  "needs-you",
-  "later",
-  "done",
-];
+/** Later and Done remain below the attention and active-work sections. */
+export const INYOSIRA_BOTTOM_STATES: readonly ThreadOrganizationState[] = ["later", "done"];
 
 export type InyosiraGroups = Record<ThreadOrganizationState, ThreadId[]>;
 

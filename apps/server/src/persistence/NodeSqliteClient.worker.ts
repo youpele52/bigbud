@@ -4,7 +4,8 @@
  * event loop is never blocked by query execution.
  *
  * Bridge failures (crash, exit, failed or timed-out open) surface as a
- * `ConnectionError`; failed statements keep their SQLite classification.
+ * `ConnectionError`; failed statements keep their SQLite classification. A
+ * crash after a successful open also reaches `hooks.onUnexpectedFailure`.
  *
  * @module NodeSqliteClient.worker
  */
@@ -23,6 +24,7 @@ import { ConnectionError, SqlError, classifySqliteError } from "effect/unstable/
 import {
   DEFAULT_NODE_SQLITE_WORKER_TIMEOUTS,
   NodeSqliteWorkerBridge,
+  type NodeSqliteWorkerBridgeHooks,
   type NodeSqliteWorkerBridgeTimeouts,
   type NodeSqliteWorkerResult,
 } from "./NodeSqliteClient.worker.bridge.ts";
@@ -71,8 +73,9 @@ export const makeWorkerConnection = Effect.fn("makeWorkerConnection")(function* 
   entry: string,
   options: NodeSqliteWorkerOpenOptions,
   timeouts: NodeSqliteWorkerBridgeTimeouts = DEFAULT_NODE_SQLITE_WORKER_TIMEOUTS,
+  hooks: NodeSqliteWorkerBridgeHooks = {},
 ): Effect.fn.Return<Connection, never, Scope.Scope> {
-  const bridge = new NodeSqliteWorkerBridge(entry, options, timeouts);
+  const bridge = new NodeSqliteWorkerBridge(entry, options, timeouts, hooks);
   const bridgeError = () => {
     const failure = bridge.failure;
     return failure ? connectionError(failure.message, failure.cause) : undefined;

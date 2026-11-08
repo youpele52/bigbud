@@ -14,6 +14,10 @@ import {
 } from "../Services/ProviderTurnAdmissions.ts";
 import { readAdmissionPayload, compactAdmissionPayload } from "./ProviderTurnAdmissions.payload.ts";
 import {
+  activeProviderWorkspaceAdmissions,
+  effectiveProviderWorkspaceLocation,
+} from "./ProviderWorkspaceActiveView.ts";
+import {
   admissionOwnerAvailable,
   assertAdmissionOwnerAvailable,
 } from "./ProviderTurnAdmissions.owner.ts";
@@ -184,6 +188,7 @@ const make = Effect.gen(function* () {
   )(function* (threadId) {
     const rows = yield* sql<Row>`SELECT ${columns} FROM provider_turn_admissions
       WHERE CASE WHEN json_valid(binding_json) THEN json_extract(binding_json, '$.threadId') END = ${threadId}
+      ${yield* activeProviderWorkspaceAdmissions(sql)}
       ORDER BY created_at DESC, updated_at DESC, request_message_id DESC LIMIT 1`.pipe(
       Effect.mapError(toPersistenceSqlError("admissions.latestBound")),
     );
@@ -196,6 +201,7 @@ const make = Effect.gen(function* () {
       return yield* new ProviderTurnAdmissionConflict({ detail: "Scan limit must be 1–1000." });
     const rows = yield* sql<Row>`SELECT ${columns} FROM provider_turn_admissions
       WHERE CASE WHEN json_valid(binding_json) THEN json_extract(binding_json, '$.threadId') END = ${threadId}
+      ${yield* activeProviderWorkspaceAdmissions(sql)}
       ORDER BY created_at, updated_at, request_message_id LIMIT ${limit}`.pipe(
       Effect.mapError(toPersistenceSqlError("admissions.listBound")),
     );
@@ -209,6 +215,7 @@ const make = Effect.gen(function* () {
     const after = input.after;
     const rows = yield* sql<Row>`SELECT ${columns} FROM provider_turn_admissions
       WHERE CASE WHEN json_valid(binding_json) THEN json_extract(binding_json, '$.threadId') END = ${input.threadId}
+      ${yield* activeProviderWorkspaceAdmissions(sql)}
       ${input.unresolvedOnly ? sql`AND state != 'terminal'` : sql``}
       ${after ? sql`AND (created_at, namespace, owner_thread_id, request_message_id) > (${after.createdAt}, ${after.namespace}, ${after.ownerThreadId}, ${after.requestMessageId})` : sql``}
       ORDER BY created_at, namespace, owner_thread_id, request_message_id LIMIT ${input.limit}`.pipe(
@@ -256,6 +263,7 @@ const make = Effect.gen(function* () {
     return count;
   }, compactPermit.withPermits(1));
   const service = {
+    effectiveWorkspaceLocation: (binding) => effectiveProviderWorkspaceLocation(sql, binding),
     assertOwnerAvailable: (threadId) => assertAdmissionOwnerAvailable(sql, threadId),
     listBoundPage,
     compactTerminal,

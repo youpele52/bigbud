@@ -12,7 +12,8 @@ const projectId = ProjectId.makeUnsafe("project-counts");
 
 function SidebarThreadCountHarness() {
   const [expanded, setExpanded] = useState(false);
-  const [loadedCount, setLoadedCount] = useState(5);
+  // The first server page holds 4 threads, matching the 4-row preview.
+  const [loadedCount, setLoadedCount] = useState(4);
   const loadedThreadIds = Array.from({ length: loadedCount }, (_, index) =>
     ThreadId.makeUnsafe(`loaded-thread-${index + 1}`),
   );
@@ -50,29 +51,36 @@ function SidebarThreadCountHarness() {
       showEmptyThreadState={false}
       hasHiddenThreads={true}
       hasMoreThreads={loadedCount < 94}
-      threadCounts={{ collapsedHiddenCount: 90, unloadedCount: 94 - loadedCount }}
+      threadCounts={{
+        collapsedHiddenCount: 90,
+        unloadedCount: 94 - loadedCount,
+        hiddenLoadedCount: expanded ? 0 : loadedCount - 4,
+      }}
       isThreadListExpanded={expanded}
       isLoadingMoreThreads={false}
       expandThreadListForProject={() => setExpanded(true)}
       collapseThreadListForProject={() => setExpanded(false)}
-      loadMoreThreadsForProject={() => setLoadedCount((count) => count + 5)}
+      loadMoreThreadsForProject={() => setLoadedCount((count) => count + 4)}
       projectExpanded={true}
     />
   );
 }
 
 describe("authoritative sidebar thread counts", () => {
-  it("renders collapsed and unloaded counts and decrements after pagination", async () => {
+  it("shows 4 more per click, fetching the next page each time, with honest counts", async () => {
     await render(<SidebarThreadCountHarness />);
 
-    await expect.element(page.getByText("See more (90)")).toBeInTheDocument();
-    await page.getByText("See more (90)").click();
-    await expect.element(page.getByText("Show less")).toBeInTheDocument();
-    await expect.element(page.getByText("Load more (89)")).toBeInTheDocument();
+    await expect.element(page.getByText("Show 4 more")).toBeInTheDocument();
+    await expect.element(page.getByText("Show less")).not.toBeInTheDocument();
+    await page.getByText("Show 4 more").click();
 
-    await page.getByText("Load more (89)").click();
-
-    await expect.element(page.getByText("Load more (84)")).toBeInTheDocument();
+    // Expanded with 8 loaded: the next click fetches another page of 4.
     await expect.element(page.getByText("Show less")).toBeInTheDocument();
+    await page.getByText("Show 4 more").click();
+    await expect.element(page.getByText("Show 4 more")).toBeInTheDocument();
+
+    await page.getByText("Show less").click();
+    // Collapsed with loaded rows hidden: reveal those first, without fetching.
+    await expect.element(page.getByText("Show 8 more")).toBeInTheDocument();
   });
 });

@@ -10,7 +10,7 @@ import {
 import { inferImageExtension, SAFE_IMAGE_FILE_EXTENSIONS } from "./imageMime.ts";
 import { inferFileExtension, SAFE_FILE_EXTENSIONS } from "./fileMime.ts";
 
-const ATTACHMENT_FILENAME_EXTENSIONS = [
+export const ATTACHMENT_FILENAME_EXTENSIONS: ReadonlyArray<string> = [
   ...SAFE_IMAGE_FILE_EXTENSIONS,
   ...SAFE_FILE_EXTENSIONS,
   ".bin",

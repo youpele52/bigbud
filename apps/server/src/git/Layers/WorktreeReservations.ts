@@ -51,6 +51,7 @@ export function makeWorktreeReservations(sql: SqlClient.SqlClient) {
     recoveryOperation?: string,
     expectedPath?: { readonly value: string | null },
     expectedIdentity?: { readonly path: string; readonly identity: string },
+    authorizedNativeOperationId?: string,
   ) =>
     Effect.gen(function* () {
       if (
@@ -70,7 +71,12 @@ export function makeWorktreeReservations(sql: SqlClient.SqlClient) {
       )
         return;
       const operations = (yield* pending()).filter(
-        (operation) => operation.kind !== "access" || operation.branch === "workspace-mutation",
+        (operation) =>
+          (operation.kind !== "access" || operation.branch === "workspace-mutation") &&
+          !(
+            command.type === "project.reconfigure" &&
+            operation.operationId === authorizedNativeOperationId
+          ),
       );
       if (
         !operations.length &&
@@ -114,7 +120,8 @@ export function makeWorktreeReservations(sql: SqlClient.SqlClient) {
         const owned = yield* sql`SELECT 1 FROM worktree_operation_items i
           JOIN worktree_operations o ON o.operation_id = i.operation_id
           JOIN projection_threads t ON t.thread_id = i.thread_id
-          WHERE t.project_id = ${command.projectId} AND o.phase NOT IN ('completed','rejected') LIMIT 1`;
+          WHERE t.project_id = ${command.projectId} AND o.phase NOT IN ('completed','rejected')
+            AND o.operation_id <> ${command.type === "project.reconfigure" ? (authorizedNativeOperationId ?? "") : ""} LIMIT 1`;
         if (owned.length)
           return yield* new OrchestrationCommandInvariantError({
             commandType: command.type,

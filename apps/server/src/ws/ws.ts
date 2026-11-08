@@ -21,6 +21,7 @@ import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
 import { makeWsRpcConnectionDiagnosticsHandlers } from "./wsRpcHandlers.connectionDiagnostics.ts";
 import { makeWsRpcComputerUseHandlers } from "./wsRpcHandlers.computerUse.ts";
 import { makeWsRpcCopilotRuntimeHandlers } from "./wsRpcHandlers.copilotRuntime.ts";
+import { makeWsRpcDatabaseCompactionHandlers } from "./wsRpcHandlers.databaseCompaction.ts";
 import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
@@ -40,6 +41,7 @@ const makeWsRpcLayer = (
     Effect.gen(function* () {
       const context = yield* makeWsRpcContext(withBootstrapCommandLock, monitorInstanceId);
       const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
+      const databaseCompactionHandlers = yield* makeWsRpcDatabaseCompactionHandlers;
 
       return WsRpcGroup.of({
         ...makeWsRpcCopilotRuntimeHandlers(context),
@@ -57,6 +59,7 @@ const makeWsRpcLayer = (
         ...makeWsRpcWorktreeHandlers(context, worktreeScope),
         ...makeWsRpcConnectionDiagnosticsHandlers(context),
         ...computerUseHandlers,
+        ...databaseCompactionHandlers,
       });
     }),
   );

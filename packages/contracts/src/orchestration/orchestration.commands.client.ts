@@ -22,6 +22,7 @@ import {
   RuntimeMode,
 } from "./orchestration.provider";
 import { ProjectScript } from "./orchestration.project";
+import { ProjectReconfigureCommand } from "./orchestration.commands.client.projectReconfigure";
 import { ElevatorSummary, SourceProposedPlanReference } from "./orchestration.thread";
 import { ThreadTurnStartBootstrap } from "./orchestration.commands.client.bootstrap";
 import * as MessageOrigin from "./orchestration.messageOrigin";
@@ -46,7 +47,7 @@ export const ProjectCreateCommand = Schema.Struct({
   providerRuntimeExecutionTargetId: Schema.optional(ExecutionTargetId),
   workspaceExecutionTargetId: Schema.optional(ExecutionTargetId),
   executionTargetId: Schema.optional(ExecutionTargetId),
-  workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
+  workspaceRoot: Schema.NullOr(TrimmedNonEmptyString).pipe(Schema.withDecodingDefault(() => null)),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   createdAt: IsoDateTime,
 });
@@ -62,19 +63,6 @@ const ProjectMetaUpdateCommand = Schema.Struct({
   workspaceRoot: Schema.optional(Schema.NullOr(TrimmedNonEmptyString)),
   defaultModelSelection: Schema.optional(Schema.NullOr(ModelSelection)),
   scripts: Schema.optional(Schema.Array(ProjectScript)),
-});
-
-const ProjectReconfigureCommand = Schema.Struct({
-  type: Schema.Literal("project.reconfigure"),
-  commandId: CommandId,
-  projectId: ProjectId,
-  title: TrimmedNonEmptyString,
-  providerRuntimeExecutionTargetId: ExecutionTargetId,
-  workspaceExecutionTargetId: ExecutionTargetId,
-  executionTargetId: ExecutionTargetId,
-  workspaceRoot: Schema.NullOr(TrimmedNonEmptyString),
-  expectedUpdatedAt: IsoDateTime,
-  verifiedWorktreePaths: Schema.Array(TrimmedNonEmptyString),
 });
 
 const ProjectDeleteCommand = Schema.Struct({

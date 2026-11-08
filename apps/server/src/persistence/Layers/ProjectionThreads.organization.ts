@@ -3,6 +3,8 @@ import type {
   ListPendingThreadSnoozesInput,
   PendingThreadSnooze,
 } from "../Services/ProjectionThreads.ts";
+import { isDeliberateOrganizationChange } from "../../orchestration/threadOrganization.aging.ts";
+import type { ThreadOrganizationUpdatedPayload } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import * as Effect from "effect/Effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -14,9 +16,22 @@ import { toPersistenceSqlError } from "../Errors.ts";
  * events and unarchive change them, so the general thread upsert leaves them untouched.
  */
 export function makeSetThreadOrganization(sql: SqlClient.SqlClient) {
-  return (input: { readonly threadId: ThreadId; readonly organization: ThreadOrganization }) =>
+  return (input: {
+    readonly threadId: ThreadId;
+    readonly organization: ThreadOrganization;
+    readonly reason?: ThreadOrganizationUpdatedPayload["reason"];
+    readonly source?: ThreadOrganizationUpdatedPayload["source"];
+  }) =>
     sql`UPDATE projection_threads
-      SET organization_state = ${input.organization.state},
+      SET organization_activity_at = NULLIF(MAX(
+          COALESCE(CASE WHEN organization_age_provenance = 'pending'
+            THEN organization_changed_at ELSE organization_activity_at END, ''),
+          ${isDeliberateOrganizationChange({ reason: input.reason ?? "move", ...(input.source ? { source: input.source } : {}) }) ? (input.organization.changedAt ?? "") : ""}
+        ), ''),
+        organization_age_provenance = CASE WHEN organization_age_provenance = 'pending'
+          THEN CASE WHEN organization_revision = 0 THEN 'known' ELSE 'fallback' END
+          ELSE organization_age_provenance END,
+        organization_state = ${input.organization.state},
         organization_revision = ${input.organization.revision},
         organization_changed_at = ${input.organization.changedAt},
         organization_snooze_id = ${input.organization.snooze?.id ?? null},
@@ -62,6 +77,10 @@ export function threadOrganizationJsonSqlText(alias?: string): string {
     'state', ${column("organization_state")},
     'revision', ${column("organization_revision")},
     'changedAt', ${column("organization_changed_at")},
+    'activityAt', NULLIF(CASE WHEN ${column("organization_age_provenance")} = 'pending'
+      THEN ${column("organization_changed_at")} ELSE ${column("organization_activity_at")} END, ''),
+    'ageProvenance', CASE WHEN ${column("organization_revision")} = 0 THEN 'known'
+      ELSE ${column("organization_age_provenance")} END,
     'snooze', CASE WHEN ${column("organization_snooze_id")} IS NULL THEN NULL
       ELSE json_object(
         'id', ${column("organization_snooze_id")},

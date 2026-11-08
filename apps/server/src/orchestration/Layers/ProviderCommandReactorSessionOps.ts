@@ -168,6 +168,11 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       thread.session && thread.session.status !== "stopped" && activeSession ? thread.id : null;
     if (existingSessionThreadId) {
       const runtimeModeChanged = desiredRuntimeMode !== activeSession?.runtimeMode;
+      // V2's canonical Location assertion above accepts equivalent path aliases.
+      const workspaceChanged =
+        currentProvider !== "opencodeV2" &&
+        activeSession?.cwd !== undefined &&
+        activeSession.cwd !== effectiveCwd;
       const providerChanged =
         requestedModelSelection !== undefined &&
         requestedModelSelection.provider !== currentProvider;
@@ -194,6 +199,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
 
       if (
         !runtimeModeChanged &&
+        !workspaceChanged &&
         !providerChanged &&
         !shouldRestartForModelChange &&
         !shouldRestartForModelSelectionChange
@@ -210,7 +216,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       if (ongoingWorkError) return yield* ongoingWorkError;
 
       const resumeCursor =
-        providerChanged || shouldRestartForModelChange
+        workspaceChanged || providerChanged || shouldRestartForModelChange
           ? undefined
           : (activeSession?.resumeCursor ?? undefined);
       yield* Effect.logInfo("provider command reactor restarting provider session", {
@@ -228,7 +234,7 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
         hasResumeCursor: resumeCursor !== undefined,
       });
       const restartedSession = yield* start({
-        preserveExistingBinding: true,
+        ...(workspaceChanged ? { fresh: true } : { preserveExistingBinding: true }),
         ...(resumeCursor !== undefined ? { resumeCursor } : {}),
       });
       capabilityContextStates.delete(threadId);

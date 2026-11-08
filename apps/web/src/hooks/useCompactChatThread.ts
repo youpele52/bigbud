@@ -73,6 +73,11 @@ export function useCompactChatThread() {
   const hydrationStatus = useStore(
     (state) => state.threadHydrationById[threadId]?.status ?? "unloaded",
   );
+  const hasServerThread = serverThread !== undefined;
+  useEffect(() => {
+    // The compact chat's thread counts as viewed, so it keeps its detail like an open route.
+    if (hasServerThread) useStore.getState().markThreadViewed(threadId);
+  }, [hasServerThread, threadId]);
   const prompt = useComposerDraftStore((state) => state.draftsByThreadId[threadId]?.prompt ?? "");
   const replacementDraftThreadId = useComposerDraftStore(
     (state) => state.projectDraftThreadIdByProjectId[selectedProjectId] ?? null,

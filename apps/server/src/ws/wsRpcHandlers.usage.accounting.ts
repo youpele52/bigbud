@@ -11,7 +11,22 @@ type Entry = {
   readonly usedTokens: number;
   readonly source?: "estimated" | "provider-reported";
   readonly accountingJson?: string | null;
+  readonly canonicalAccounting?: UsageAccountingV2 | null;
 };
+
+/** Prepare once before the same contribution is aggregated into multiple breakdowns. */
+export function prepareUsageAccounting<T extends Entry>(entry: T) {
+  let canonicalAccounting: UsageAccountingV2 | null = null;
+  if (entry.accountingJson) {
+    try {
+      const value: unknown = JSON.parse(entry.accountingJson);
+      if (Schema.is(UsageAccountingV2)(value)) canonicalAccounting = value;
+    } catch {
+      /* Old or malformed metadata must not manufacture a breakdown. */
+    }
+  }
+  return { ...entry, canonicalAccounting };
+}
 const keys = [
   "inputTokens",
   "outputTokens",
@@ -43,17 +58,12 @@ export function summarizeUsageAccounting(entries: readonly Entry[], includeToken
   let estimated = false;
   let reported = false;
   for (const entry of entries) {
-    let canonical: UsageAccountingV2 | undefined;
-    if (entry.accountingJson) {
-      try {
-        const value: unknown = JSON.parse(entry.accountingJson);
-        if (Schema.is(UsageAccountingV2)(value)) canonical = value;
-      } catch {
-        /* Old or malformed metadata must not manufacture a breakdown. */
-      }
-    }
+    const canonical =
+      entry.canonicalAccounting === undefined
+        ? prepareUsageAccounting(entry).canonicalAccounting
+        : entry.canonicalAccounting;
     if (tokenMix) {
-      const mix = contributionTokenMix(entry.usedTokens, canonical);
+      const mix = contributionTokenMix(entry.usedTokens, canonical ?? undefined);
       for (const key of usageTokenMixKeys) {
         tokenMix[key] += mix[key];
         if (!Number.isSafeInteger(tokenMix[key]))

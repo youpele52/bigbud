@@ -86,6 +86,15 @@ function awaitingUserNotice(recovery: ThreadRecovery): SleepRecoveryNotice {
       actions: CONTINUE_OR_DISMISS,
     };
   }
+  if (recovery.reason === "backend-restarted") {
+    // The backend process died mid-turn; nothing can say whether the provider finished.
+    return {
+      kind: "backend-restarted",
+      tone: "warning",
+      description: "bigbud restarted unexpectedly. This turn's outcome is unknown.",
+      actions: CONTINUE_OR_DISMISS,
+    };
+  }
   if (recovery.reason === "continuation-failed") {
     // The user's own Continue or Retry did not start: a failure, in red.
     return {

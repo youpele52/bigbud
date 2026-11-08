@@ -1,4 +1,5 @@
 import type { ThreadId } from "@bigbud/contracts";
+import { MUSE_WORKSPACE_RESET_NOTICE } from "../ProjectWorkspace.nativeSessions.ts";
 import { Cause, Effect } from "effect";
 
 import type { ProviderServiceError } from "../../provider/Errors.ts";
@@ -33,16 +34,26 @@ export function makeProcessThreadExecutionTargetsUpdated(input: {
       return;
     }
     const thread = yield* input.resolveThread(event.payload.threadId);
-    if (!thread?.session || thread.session.status === "stopped") {
+    if (!thread?.session) {
       return;
     }
+    // A committed Muse archive is deliberately lazy: next explicit use chooses the fresh model.
+    if (
+      thread.session.status === "stopped" &&
+      thread.session.providerName === "muse" &&
+      thread.session.lastError === MUSE_WORKSPACE_RESET_NOTICE
+    )
+      return;
+    const wasStopped = thread.session.status === "stopped";
     const expectedSessionEpoch = thread.session.sessionEpoch ?? 0;
     const expectedActiveTurnId = thread.session.activeTurnId;
     yield* Effect.gen(function* () {
-      yield* input.providerService.stopSession({
-        threadId: thread.id,
-        sessionEpoch: expectedSessionEpoch,
-      });
+      if (!wasStopped) {
+        yield* input.providerService.stopSession({
+          threadId: thread.id,
+          sessionEpoch: expectedSessionEpoch,
+        });
+      }
       const current = yield* input.resolveThread(thread.id);
       if (
         !current?.session ||

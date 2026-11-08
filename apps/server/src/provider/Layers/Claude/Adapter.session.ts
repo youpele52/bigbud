@@ -30,7 +30,10 @@ import {
 } from "../../../orchestration-tools/orchestrationMcpBridge.session.ts";
 import { emitSessionRuntimeEvents, startSessionRuntimeStream } from "./Adapter.session.runtime.ts";
 import { readClaudeResumeState, toMessage, validateClaudeResumeBoundary } from "./Adapter.utils.ts";
-import { buildClaudeQueryOptions } from "./Adapter.session.options.ts";
+import {
+  buildClaudeQueryOptions,
+  materializeClaudeQuerySettings,
+} from "./Adapter.session.options.ts";
 import { buildClaudeSessionRolloutOptions } from "./Adapter.session.rollout.ts";
 import { makeClaudeTaskState } from "./Adapter.tasks.ts";
 import type { ClaudeRequestLedger } from "./Adapter.requestLedger.ts";
@@ -200,7 +203,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
           )
         : undefined;
     const orchestrationConfig = buildClaudeSessionOrchestrationConfig(orchestrationBridge);
-    const cleanupBridge = composeBridgeCleanups(
+    let cleanupBridge = composeBridgeCleanups(
       remoteWorkspaceBridge?.cleanup,
       orchestrationBridge.cleanup,
     );
@@ -231,11 +234,22 @@ export const makeStartSession = (deps: SessionStartDeps) => {
       onElicitation,
       ...rolloutOptions,
     });
+    const protectedSettings = yield* Effect.tryPromise({
+      try: () => materializeClaudeQuerySettings(queryOptions),
+      catch: (cause) =>
+        new ProviderAdapterProcessError({
+          provider: PROVIDER,
+          threadId,
+          detail: "Failed to prepare protected Claude settings.",
+          cause,
+        }),
+    }).pipe(Effect.tapError(() => Effect.promise(cleanupBridge).pipe(Effect.ignore)));
+    cleanupBridge = composeBridgeCleanups(protectedSettings.cleanup, cleanupBridge);
     const queryRuntime = yield* Effect.try({
       try: () =>
         createQuery({
           prompt,
-          options: queryOptions,
+          options: protectedSettings.options,
         }),
       catch: (cause) =>
         new ProviderAdapterProcessError({
@@ -244,13 +258,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
           detail: toMessage(cause, "Failed to start Claude runtime session."),
           cause,
         }),
-    }).pipe(
-      Effect.tapError(() =>
-        Effect.sync(() => {
-          void cleanupBridge().catch(() => undefined);
-        }),
-      ),
-    );
+    }).pipe(Effect.tapError(() => Effect.promise(cleanupBridge).pipe(Effect.ignore)));
 
     const session: ProviderSession = {
       threadId,
@@ -327,7 +335,7 @@ export const makeStartSession = (deps: SessionStartDeps) => {
         ...(remoteWorkspaceBridge ? ["bigbud_remote_workspace"] : []),
       ]),
       modernTaskExposure: claudeSettings.rollout.modernTaskExposure,
-      providerSubagentsSupported: deps.resolveHarness === undefined,
+      providerSubagentsSupported: harness ? harness.capabilities?.providerSubagents === true : true,
       forwardSubagentText,
       agentModels: undefined,
       agentToolInputs: new Map(),

@@ -164,7 +164,11 @@ export function useSidebarRenderedProjects({
         return {
           hasHiddenThreads,
           hasMoreThreads,
-          threadCounts: { collapsedHiddenCount, unloadedCount },
+          threadCounts: {
+            collapsedHiddenCount,
+            unloadedCount,
+            hiddenLoadedCount: preview.hiddenThreads.length,
+          },
           hiddenThreadStatus,
           orderedProjectThreadIds,
           project,

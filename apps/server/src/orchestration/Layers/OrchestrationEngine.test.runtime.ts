@@ -23,7 +23,9 @@ import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
 import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
 
-export function createRuntime(dbPath: string) {
+import { TerminalManager, type TerminalManagerShape } from "../../terminal/Services/Manager.ts";
+
+export function createRuntime(dbPath: string, terminalManager?: TerminalManagerShape) {
   const layer = OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
     Layer.provide(ProjectionOperationalStateQueryLive),
@@ -34,6 +36,9 @@ export function createRuntime(dbPath: string) {
     Layer.provideMerge(ComputerUseDisabledTestLayer),
     Layer.provideMerge(ServerConfig.layerTest(process.cwd(), process.cwd())),
     Layer.provideMerge(ServerSettingsService.layerTest()),
+    Layer.provideMerge(
+      terminalManager ? Layer.succeed(TerminalManager, terminalManager) : Layer.empty,
+    ),
     Layer.provideMerge(NodeServices.layer),
   );
   return ManagedRuntime.make(layer);

@@ -8,6 +8,11 @@ import {
   captureLocalRuntimePathIdentity,
   reconcileWorktreeRuntimeLeases,
 } from "../../retention/worktreeRuntimeLease.ts";
+import {
+  holdThreadLease,
+  releaseThreadLease,
+  threadLeaseExpiresAt,
+} from "../../retention/threadLeaseHeartbeat.ts";
 
 export const ThreadShellRunnerLive = Layer.effect(
   ThreadShellRunner,
@@ -24,18 +29,25 @@ export const ThreadShellRunnerLive = Layer.effect(
         await runPromise(
           sql`
           INSERT INTO worktree_runtime_leases (
-            lease_id, thread_id, runtime_kind, canonical_path, device, inode, acquired_at, updated_at
+            lease_id, thread_id, runtime_kind, canonical_path, device, inode, acquired_at, updated_at,
+            expires_at
           ) VALUES (${`shell:${threadId}`}, ${threadId}, 'shell', ${identity.canonicalPath},
-            ${identity.device}, ${identity.inode}, ${new Date().toISOString()}, ${new Date().toISOString()})
+            ${identity.device}, ${identity.inode}, ${new Date().toISOString()}, ${new Date().toISOString()},
+            ${threadLeaseExpiresAt()})
           ON CONFLICT (lease_id) DO UPDATE SET canonical_path = excluded.canonical_path,
-            device = excluded.device, inode = excluded.inode, updated_at = excluded.updated_at
+            device = excluded.device, inode = excluded.inode, updated_at = excluded.updated_at,
+            expires_at = excluded.expires_at
         `.pipe(Effect.asVoid),
         );
+        holdThreadLease(`shell:${threadId}`);
       },
       releaseLease: (threadId) =>
         runPromise(
           sql`DELETE FROM worktree_runtime_leases
-          WHERE lease_id = ${`shell:${threadId}`}`.pipe(Effect.asVoid),
+          WHERE lease_id = ${`shell:${threadId}`}`.pipe(
+            Effect.asVoid,
+            Effect.ensuring(Effect.sync(() => releaseThreadLease(`shell:${threadId}`))),
+          ),
         ),
       markLeaseStarted: (threadId, processId) =>
         runPromise(
@@ -49,6 +61,8 @@ export const ThreadShellRunnerLive = Layer.effect(
 
     return {
       isActive: (threadId) => Effect.sync(() => runner.isActive(threadId)),
+      hasRunningCommand: (threadId) => Effect.sync(() => runner.hasRunningCommand(threadId)),
+      workingThreadIds: () => Effect.sync(() => runner.workingThreadIds()),
       run: (input) =>
         Effect.tryPromise({
           try: () => runner.run(input),

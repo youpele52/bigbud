@@ -1,6 +1,7 @@
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 import { correlatedProjection, readV2Messages } from "./Runtime.projection.ts";
 import { Effect } from "effect";
+import { effectiveV2WorkspaceLocation } from "./Runtime.workspaceLocation.ts";
 import type { ProviderTurnAdmissionsShape } from "../../../persistence/Services/ProviderTurnAdmissions.ts";
 import type { ProviderTurnAdmission } from "@bigbud/contracts/orchestration/providerTurnAdmission.ts";
 
@@ -28,14 +29,25 @@ export async function readV2Thread(
     if (page >= 2499)
       throw new Error("V2 history journal snapshot bound exceeded; use bigbud history replay.");
   }
+  const cache = new Map<string, Promise<string>>();
+  const locations = await Promise.all(
+    rows.map((row) => {
+      const key = JSON.stringify(row.binding);
+      const existing = cache.get(key);
+      if (existing) return existing;
+      const result = effectiveV2WorkspaceLocation(journal, row.binding);
+      cache.set(key, result);
+      return result;
+    }),
+  );
   if (
     session.stopped ||
     rows.some(
-      (row) =>
+      (row, index) =>
         row.binding.provider !== "opencodeV2" ||
         row.binding.nativeSessionId !== session.native.id ||
         row.binding.storageIdentity !== session.storageIdentity ||
-        row.binding.location !== session.native.location.directory ||
+        locations[index] !== session.native.location.directory ||
         row.binding.runtimeTargetId !==
           (session.session.providerRuntimeExecutionTargetId ?? "local") ||
         row.binding.workspaceTargetId !== (session.session.workspaceExecutionTargetId ?? "local"),

@@ -1,4 +1,5 @@
 import { Effect, Option } from "effect";
+import { invalidateTerminalWorkAssessment } from "./Manager.idleWork.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { detectTerminalAgentForShell } from "./Manager.agentDetection.ts";
@@ -58,12 +59,18 @@ export function pollRemoteProcessesWith(
           Effect.catch(() => Effect.succeed(Option.none())),
         );
         // Fail closed for inspection only: keep prior identity and do not interrupt the terminal.
-        if (Option.isNone(result)) return;
+        if (Option.isNone(result)) {
+          yield* invalidateTerminalWorkAssessment(ctx, sessions);
+          return;
+        }
         const processes = result.value;
         const pids = new Set(processes.map((process) => process.pid));
         for (const session of sessions) {
           // Missing shell is not proof of idle (e.g. a transient remote process visibility failure).
-          if (!pids.has(session.remotePid)) continue;
+          if (!pids.has(session.remotePid)) {
+            yield* invalidateTerminalWorkAssessment(ctx, [session]);
+            continue;
+          }
           const detection = detectTerminalAgentForShell(session.remotePid, processes, "posix");
           yield* applyAgentIdentitiesWith(ctx, [session], new Map([[session.pid, detection]]));
           const active = processes.some((process) => process.parentPid === session.remotePid);
@@ -75,10 +82,12 @@ export function pollRemoteProcessesWith(
               current.pid !== session.pid ||
               current.runtimeEpoch !== session.runtimeEpoch ||
               current.runtimeGeneration !== session.runtimeGeneration ||
-              current.executionTargetId !== session.executionTargetId ||
-              current.hasRunningSubprocess === active
+              current.executionTargetId !== session.executionTargetId
             )
               return [null, state] as const;
+            current.subprocessAssessedGeneration = session.runtimeGeneration;
+            current.subprocessAssessedEpoch = session.runtimeEpoch;
+            if (current.hasRunningSubprocess === active) return [null, state] as const;
             current.hasRunningSubprocess = active;
             current.updatedAt = nextTerminalTimestamp(current.updatedAt);
             return [
@@ -96,5 +105,5 @@ export function pollRemoteProcessesWith(
         }
       }),
     { concurrency: 4, discard: true },
-  );
+  ).pipe(Effect.andThen(ctx.refreshIdleWork ?? Effect.void));
 }

@@ -6,6 +6,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../../protocol/system-monitor/metrics.proto");
     println!("cargo:rerun-if-changed=../../protocol/system-monitor/process.proto");
 
+    for name in ["v1", "facts", "policy", "scheduling"] {
+        println!("cargo:rerun-if-changed=../../protocol/thread-organization/{name}.proto");
+    }
+
     let protoc = protoc_bin_vendored::protoc_bin_path()
         .map_err(|error| format!("failed to resolve the vendored protobuf compiler: {error}"))?;
     let mut config = prost_build::Config::new();
@@ -17,6 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "../../protocol/desktop-supervisor/v1.proto",
                 "../../protocol/desktop-supervisor/process_identity.proto",
                 "../../protocol/system-monitor/v1.proto",
+                "../../protocol/thread-organization/v1.proto",
             ],
             &["../../protocol"],
         )

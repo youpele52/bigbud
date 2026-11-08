@@ -13,13 +13,16 @@ import { render } from "vitest-browser-react";
 
 const { getUsageSummary, state } = vi.hoisted(() => ({
   getUsageSummary: vi.fn(),
-  state: { providers: [] as ServerProvider[] },
+  state: { providers: [] as ServerProvider[], configLoaded: true },
 }));
 vi.mock("~/rpc/nativeApi", () => {
   const api = { server: { getUsageSummary, refreshUsageLimits: vi.fn() } };
   return { readNativeApi: () => api, ensureNativeApi: () => api };
 });
-vi.mock("~/rpc/serverState", () => ({ useServerProviders: () => state.providers }));
+vi.mock("~/rpc/serverState", () => ({
+  useServerProviders: () => state.providers,
+  useServerConfig: () => (state.configLoaded ? {} : null),
+}));
 
 import { UsagePanel } from "./UsagePanel";
 import { STANDALONE_PAGE_WIDTH_CLASS } from "../standalone/StandalonePageContent";
@@ -60,6 +63,7 @@ function makeRouter() {
 describe("Usage panel", () => {
   beforeEach(() => {
     getUsageSummary.mockReset().mockResolvedValue(summary);
+    state.configLoaded = true;
     state.providers = (
       [
         ["codex", "codex-app-server"],
@@ -163,6 +167,18 @@ describe("Usage panel", () => {
     await mounted.rerender(content(true));
     await expect.element(mounted.getByText("12,345")).toBeVisible();
     expect(tick).toBeDefined();
+    let finishRefresh!: (value: ServerUsageSummaryResult) => void;
+    getUsageSummary.mockReturnValueOnce(
+      new Promise<ServerUsageSummaryResult>((resolve) => {
+        finishRefresh = resolve;
+      }),
+    );
+    tick!();
+    await expect.element(mounted.getByRole("status")).toHaveTextContent("Refreshing usage");
+    await expect.element(mounted.getByText("12,345")).toBeVisible();
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
+    finishRefresh(summary);
+    await expect.element(mounted.getByRole("status")).not.toBeInTheDocument();
     getUsageSummary.mockRejectedValueOnce(new Error("offline"));
     tick!();
     await expect
@@ -184,7 +200,7 @@ describe("Usage panel", () => {
     expect(mounted.getByText("999", { exact: true }).all()).toHaveLength(0);
   });
 
-  it("fills the panel with the bigbud logo until the first summary arrives", async () => {
+  it("centers the overview loader without blocking ready subscription limits", async () => {
     let finish!: (value: ServerUsageSummaryResult) => void;
     getUsageSummary.mockReturnValueOnce(
       new Promise<ServerUsageSummaryResult>((resolve) => {
@@ -199,11 +215,18 @@ describe("Usage panel", () => {
       </RouterContextProvider>,
     );
     const loader = mounted.getByRole("status");
-    await expect.element(loader).toHaveTextContent("Loading usage");
-    expect(loader.element().querySelector(".animate-pulse-slow")).not.toBeNull();
-    const surface = mounted.getByTestId("surface").element().getBoundingClientRect();
-    expect(loader.element().getBoundingClientRect().height).toBeCloseTo(surface.height);
-    expect(mounted.getByRole("heading", { name: "Usage", exact: true }).all()).toHaveLength(0);
+    await expect.element(loader).toHaveTextContent("Loading usage overview");
+    const logo = loader.element().querySelector(".animate-pulse-slow")!.getBoundingClientRect();
+    const bounds = loader.element().getBoundingClientRect();
+    expect(bounds.height).toBeGreaterThanOrEqual(320);
+    expect(logo.left + logo.width / 2).toBeCloseTo(bounds.left + bounds.width / 2, 0);
+    expect(logo.top + logo.height / 2).toBeCloseTo(bounds.top + bounds.height / 2, 0);
+    await expect
+      .element(mounted.getByRole("heading", { name: "Usage", exact: true }))
+      .toBeVisible();
+    await expect
+      .element(mounted.getByRole("region", { name: "Codex subscription limits" }))
+      .toBeVisible();
     finish(summary);
     await expect.element(mounted.getByText("12,345")).toBeVisible();
     expect(document.querySelector(".animate-pulse-slow")).toBeNull();
@@ -288,6 +311,31 @@ describe("Usage panel", () => {
     visibility.mockReturnValue("visible");
     document.dispatchEvent(new Event("visibilitychange"));
     await expect.poll(() => getUsageSummary.mock.calls.length).toBe(2);
+  });
+
+  it("distinguishes provider hydration from loaded but unavailable limits", async () => {
+    state.providers = [];
+    state.configLoaded = false;
+    const router = makeRouter();
+    const content = () => (
+      <RouterContextProvider router={router}>
+        <UsagePanel visible />
+      </RouterContextProvider>
+    );
+    mounted = await render(content());
+    await expect.element(mounted.getByText("12,345")).toBeVisible();
+    await expect
+      .element(mounted.getByRole("status"))
+      .toHaveTextContent("Loading subscription limits");
+    expect(
+      mounted.getByText("Subscription limits unavailable for enabled providers.").all(),
+    ).toHaveLength(0);
+    state.configLoaded = true;
+    await mounted.rerender(content());
+    await expect
+      .element(mounted.getByText("Subscription limits unavailable for enabled providers."))
+      .toBeVisible();
+    expect(document.querySelector(".animate-pulse-slow")).toBeNull();
   });
 
   it("does not invent allowances for disabled or unavailable providers", async () => {

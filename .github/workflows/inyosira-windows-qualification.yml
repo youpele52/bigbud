@@ -1,0 +1,149 @@
+name: Inyosira Windows x64 qualification (no publish)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inyosira-windows-qualification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  qualify:
+    name: Native Windows x64 packaged organiser
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      BIGBUD_DESKTOP_SIGNED: "false"
+      BIGBUD_DESKTOP_MOCK_UPDATES: "false"
+    steps:
+      - name: Checkout exact dispatched snapshot
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Require disposable hosted runner and record provenance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
+            throw 'Requires a disposable GitHub-hosted native Windows x64 runner'
+          }
+          $keys = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          if (Get-ItemProperty $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'bigbud*' }) {
+            throw 'Refusing to qualify over an existing bigbud installation'
+          }
+          New-Item -ItemType Directory -Force qualification-evidence | Out-Null
+          git rev-parse HEAD | Set-Content qualification-evidence/source-sha.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-Content qualification-evidence/source-sha.txt).Trim() -ne $env:GITHUB_SHA) { throw 'Checkout SHA mismatch' }
+          Get-ComputerInfo -Property WindowsProductName,WindowsVersion,OsArchitecture | ConvertTo-Json | Set-Content qualification-evidence/host.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Install protobuf compiler on disposable runner
+        shell: pwsh
+        run: |
+          choco install protoc --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Exercise native organiser unit and process fixtures
+        run: |
+          set -euo pipefail
+          cargo test --locked --package bigbud-desktop-supervisor organization:: \
+            2>&1 | tee qualification-evidence/native-unit.log
+          cargo test --locked --package bigbud-desktop-supervisor --test organization_fixtures --test organization_process \
+            2>&1 | tee qualification-evidence/native-process.log
+
+      - name: Build unsigned NSIS artifact without publishing
+        run: |
+          set -euo pipefail
+          node scripts/build-desktop-artifact.ts --platform win --target nsis --arch x64 \
+            --build-version "0.0.0-preview.${GITHUB_RUN_NUMBER}" --output-dir release --verbose \
+            2>&1 | tee qualification-evidence/build.log
+
+      - name: Verify packaged workspace and organiser protocol
+        run: |
+          set -euo pipefail
+          node scripts/verify-packaged-workspace-agent.ts release win x64 release-publish \
+            2>&1 | tee qualification-evidence/workspace-organiser.log
+
+      - name: Verify packaged supervisor recovery and monitor
+        run: |
+          set -euo pipefail
+          bun run scripts/verify-packaged-desktop-supervisor.ts release win \
+            2>&1 | tee qualification-evidence/supervisor.log
+
+      - name: Verify packaged backend engagement and full native deadline
+        timeout-minutes: 8
+        run: |
+          set -euo pipefail
+          node scripts/verify-packaged-inyosira-windows.ts release qualification-evidence \
+            2>&1 | tee qualification-evidence/backend-harness.log
+
+      - name: Verify NSIS install and update with held helper
+        timeout-minutes: 15
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & powershell -NoProfile -ExecutionPolicy Bypass -File scripts/nsis-update-smoke.ps1 -ReleaseDir release 2>&1 | Tee-Object qualification-evidence/installer.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $keys = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+          if (Get-ItemProperty $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like 'bigbud*' }) {
+            throw 'Installer smoke left a registered bigbud installation'
+          }
+
+      - name: Record artifact digests
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force qualification-evidence | Out-Null
+          $artifacts = @(Get-ChildItem release -Filter '*.exe' -File -ErrorAction SilentlyContinue) + @(Get-ChildItem release-publish -File -ErrorAction SilentlyContinue)
+          @($artifacts | Get-FileHash -Algorithm SHA256 | Select-Object Path,Hash) | ConvertTo-Json -Depth 3 | Set-Content qualification-evidence/artifact-digests.json
+
+      - name: Upload qualification evidence and sidecars
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inyosira-windows-x64-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            qualification-evidence/
+            release-publish/
+            release/*.exe
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Record bounded qualification result
+        if: success()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          Windows x64 unsigned packaged qualification passed: organiser protocol, supervisor recovery,
+          packaged Electron Node backend, independent engagement/disconnect/reconnect, full two-minute
+          canonical snooze expiry, bounded Windows termination/native EOF cleanup, and NSIS update.
+          No publication or signing was performed. This does not qualify Windows ARM64, other operating
+          systems, Electron GUI interactions, complete standalone prepack, or real large userdata.
+          Source SHA, hashes and logs are attached to this run.
+          EOF

@@ -123,12 +123,17 @@ export function decodeClaudeTaskNotificationMessage(
   };
 }
 
-export function decodeClaudeTaskUpdatedMessage(value: unknown): ClaudeSdkTaskUpdate | undefined {
+export function decodeClaudeTaskUpdatedMessage(
+  value: unknown,
+): (ClaudeSdkTaskUpdate & { readonly runId?: string }) | undefined {
   const base = identity(value, "system", "task_updated");
   const record = asRecord(value);
   const taskId = string(record?.task_id);
   const patch = taskPatch(record?.patch);
-  return base && taskId && patch ? { ...base, taskId, patch } : undefined;
+  const runId = label(record?.run_id);
+  return base && taskId && patch
+    ? { ...base, taskId, patch, ...(runId ? { runId } : {}) }
+    : undefined;
 }
 
 export function decodeClaudeBackgroundTasksChangedMessage(

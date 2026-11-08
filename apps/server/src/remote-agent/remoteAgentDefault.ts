@@ -67,6 +67,16 @@ export function getConfiguredRemoteAgentComposition(): RemoteAgentComposition | 
   return composition;
 }
 
+/** Fails the target's live connections in every configured composition; remote work keeps running. */
+export function disconnectConfiguredRemoteAgentTarget(
+  executionTargetId: string,
+  error: Error,
+): void {
+  for (const composition of compositions.values()) {
+    composition.pool.disconnect(executionTargetId, error);
+  }
+}
+
 export function closeConfiguredRemoteAgentCompositions(): void {
   for (const composition of compositions.values()) composition.pool.closeAll();
   compositions.clear();

@@ -18,6 +18,11 @@
     "../apps/web/src/components/terminal/TerminalWriteBatcher.pacing.ts",
     "../apps/web/src/components/terminal/TerminalWriteWatchdog.ts",
     "../apps/web/src/components/terminal/TerminalOutputScheduler.ts",
-    "../apps/web/src/components/terminal/TerminalOutputBudget.ts"
+    "../apps/web/src/components/terminal/TerminalOutputBudget.ts",
+    "../apps/server/src/attachments/attachmentMaintenance.layout.ts",
+    "../apps/server/src/attachments/attachmentStore.ts",
+    "../apps/server/src/attachments/attachmentPaths.ts",
+    "../apps/server/src/attachments/imageMime.ts",
+    "../apps/server/src/attachments/fileMime.ts"
   ]
 }

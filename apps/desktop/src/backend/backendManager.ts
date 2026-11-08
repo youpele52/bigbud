@@ -49,6 +49,7 @@ import {
   buildBackendBootstrapEnvelope,
   type ComputerUseOwnerAccess,
   consumeBackendStartReason,
+  hasPendingBackendStartReason,
   markNextBackendStartReason,
   takeComputerUseOwnerAccess,
 } from "./backendBootstrapEnvelope";
@@ -121,6 +122,9 @@ export function scheduleBackendRestart(reason: string): void {
     restartTimer
   )
     return;
+  // The replacement must treat the dead process's unsettled turns as outcome unknown. A
+  // resume-probe restart has already recorded the more specific reason for the same start.
+  if (!hasPendingBackendStartReason()) markNextBackendStartReason("unexpected-exit-restart");
   const delayMs = Math.min(500 * 2 ** restartAttempt, 10_000);
   restartAttempt += 1;
   logBackendLifecycle(

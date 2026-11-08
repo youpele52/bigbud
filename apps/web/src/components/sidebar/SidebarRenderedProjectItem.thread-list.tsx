@@ -150,6 +150,7 @@ export function SidebarRenderedProjectItemThreadList({
           hasMoreThreads={hasMoreThreads}
           collapsedHiddenCount={threadCounts.collapsedHiddenCount}
           unloadedCount={threadCounts.unloadedCount}
+          hiddenLoadedCount={threadCounts.hiddenLoadedCount ?? 0}
           isExpanded={isThreadListExpanded}
           isLoading={isLoadingMoreThreads}
           onExpandedChange={(expanded) => {

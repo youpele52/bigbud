@@ -1,5 +1,5 @@
 diff --git a/dist/unstable/rpc/RpcClient.js b/dist/unstable/rpc/RpcClient.js
-index 351d00b40ba5be07e38ad8571e9e8efb6cce6eac..b1e6da452829bff347a85c2e89aba59cd48a6989 100644
+index 351d00b40ba5be07e38ad8571e9e8efb6cce6eac..4880ac28dc9c8edca6418f6470d0cbcf4ed493e1 100644
 --- a/dist/unstable/rpc/RpcClient.js
 +++ b/dist/unstable/rpc/RpcClient.js
 @@ -48,14 +48,16 @@ export const makeNoSerialization = /*#__PURE__*/Effect.fnUntraced(function* (gro
@@ -156,6 +156,18 @@ index 351d00b40ba5be07e38ad8571e9e8efb6cce6eac..b1e6da452829bff347a85c2e89aba59c
          }
        default:
          {
+@@ -564,8 +571,9 @@ export const makeProtocolSocket = options => Protocol.make(Effect.fnUntraced(fun
+     }, {
+       onOpen: clearCurrentError
+     }).pipe(Effect.raceFirst(Effect.flatMap(pinger.timeout, () => Effect.fail(new Socket.SocketError({
+-      reason: new Socket.SocketOpenError({
+-        kind: "Timeout",
++      // A missed Pong means the open socket is dead, not that opening it failed. Reporting it
++      // as a read failure makes the client fail in-flight requests so callers resubscribe.
++      reason: new Socket.SocketReadError({
+         cause: new Error("ping timeout")
+       })
+     })))));
 diff --git a/dist/unstable/rpc/RpcServer.js b/dist/unstable/rpc/RpcServer.js
 index cb90572dd87bdba73380185b061c00a612ddbe20..d36b2f8ff7c974d0b5ca7f2073133c46cf526edd 100644
 --- a/dist/unstable/rpc/RpcServer.js
@@ -233,7 +245,7 @@ index cb90572dd87bdba73380185b061c00a612ddbe20..d36b2f8ff7c974d0b5ca7f2073133c46
    const sendRequestDefect = (client, requestId, encodeDefect, defect) => Effect.catchCause(Effect.flatMap(encodeDefect(defect), encodedDefect => send(client.id, {
      _tag: "Exit",
 diff --git a/src/unstable/rpc/RpcClient.ts b/src/unstable/rpc/RpcClient.ts
-index c129eecdfbc851956129de6a340b4c334cc55c51..78f4c7433f1342110c51edcdee41aa4c43409fe8 100644
+index c129eecdfbc851956129de6a340b4c334cc55c51..aa079f1bb6d4282fc0c4adc983b7964b809e11b2 100644
 --- a/src/unstable/rpc/RpcClient.ts
 +++ b/src/unstable/rpc/RpcClient.ts
 @@ -247,6 +247,8 @@ export const makeNoSerialization: <Rpcs extends Rpc.Any, E, const Flatten extend
@@ -411,6 +423,18 @@ index c129eecdfbc851956129de6a340b4c334cc55c51..78f4c7433f1342110c51edcdee41aa4c
          )
        }
        default: {
+@@ -981,8 +1001,9 @@ export const makeProtocolSocket = (options?: {
+           () =>
+             Effect.fail(
+               new Socket.SocketError({
+-                reason: new Socket.SocketOpenError({
+-                  kind: "Timeout",
++                // A missed Pong means the open socket is dead, not that opening it failed.
++                // Reporting it as a read failure makes the client fail in-flight requests.
++                reason: new Socket.SocketReadError({
+                   cause: new Error("ping timeout")
+                 })
+               })
 diff --git a/src/unstable/rpc/RpcServer.ts b/src/unstable/rpc/RpcServer.ts
 index b142b07c217512d740e27d8614b3efe880286cf3..0966e1f1447b5d412eb012be5e326066e262a633 100644
 --- a/src/unstable/rpc/RpcServer.ts

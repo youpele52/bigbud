@@ -6,6 +6,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { insertProjectionThreadParent } from "./ProjectionThread.test.helpers.ts";
 import { makeGetUsageEntries } from "../../orchestration/Layers/ProjectionSnapshotQuery.usage.ts";
+import backfillTurnUsageAttribution from "../Migrations/157_ProjectionTurnUsageAttribution.ts";
 
 it.layer(SqlitePersistenceMemory)("historical usage attribution", (it) => {
   it.effect("recovers only exact, unambiguous requests and preserves unattributed totals", () =>
@@ -44,10 +45,18 @@ it.layer(SqlitePersistenceMemory)("historical usage attribution", (it) => {
           model: "unknown",
         },
         {
+          // Two requests for the same prompt and time that disagree: neither is used.
           id: "ambiguous",
           payload: { modelSelection: { provider: "codex", model: "ambiguous-model" } },
           provider: "unknown",
           model: "unknown",
+        },
+        {
+          // Identical duplicates recover the same usage, as a replay of either would.
+          id: "duplicate",
+          payload: { modelSelection: { provider: "codex", model: "duplicate-model" } },
+          provider: "codex",
+          model: "duplicate-model",
         },
         {
           id: "wrong-time",
@@ -77,15 +86,22 @@ it.layer(SqlitePersistenceMemory)("historical usage attribution", (it) => {
           (message_id, thread_id, turn_id, role, text, is_streaming, created_at, updated_at, observable_token_count, observable_estimator_version)
           VALUES (${entry.id}, ${threadId}, ${entry.id}, 'user', 'text', 0, ${requestedAt}, ${requestedAt}, 1, 'observable-text-v1')`;
         if (entry.id === "missing") continue;
-        const copies = entry.id === "ambiguous" ? 2 : 1;
+        const copies = entry.id === "ambiguous" || entry.id === "duplicate" ? 2 : 1;
         for (let copy = 0; copy < copies; copy++) {
           sequence++;
+          const payload =
+            entry.id === "ambiguous"
+              ? { modelSelection: { provider: "codex", model: `ambiguous-model-${copy}` } }
+              : entry.payload;
           yield* sql`INSERT INTO orchestration_events
             (event_id, aggregate_kind, stream_id, stream_version, event_type, occurred_at, actor_kind, payload_json, metadata_json)
             VALUES (${`request-${sequence}`}, 'thread', ${threadId}, ${sequence}, 'thread.turn-start-requested',
-              ${requestedAt}, 'user', ${JSON.stringify({ threadId, messageId: entry.id, createdAt: requestedAt, ...entry.payload })}, '{}')`;
+              ${requestedAt}, 'user', ${JSON.stringify({ threadId, messageId: entry.id, createdAt: requestedAt, ...payload })}, '{}')`;
         }
       }
+      // Migration 157 persists the recovered attribution; compaction then removes the requests.
+      yield* backfillTurnUsageAttribution;
+      yield* sql`DELETE FROM orchestration_events`;
       const query = makeGetUsageEntries(sql);
       const rows = yield* query(null);
       assert.equal(rows.length, cases.length);

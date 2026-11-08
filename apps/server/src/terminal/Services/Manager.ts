@@ -90,11 +90,25 @@ export interface TerminalSubscribeOptions {
 /**
  * TerminalManagerShape - Service API for terminal session lifecycle operations.
  */
+export interface TerminalIdleWork {
+  readonly state: "busy" | "unknown" | "idle";
+  readonly quietSince: number | null;
+}
+
 export interface TerminalManagerShape {
+  /** Server-owned sampled work facts; a shell alone is not work. */
+  readonly getThreadIdleWork?: (threadId: string) => Effect.Effect<TerminalIdleWork>;
+  /** Cached owner facts only; no OS/global process rescan. */
+  readonly snapshotThreadIdleWork?: () => Effect.Effect<ReadonlyMap<string, TerminalIdleWork>>;
+  readonly forgetThreadIdleWork?: (threadId: string) => Effect.Effect<void>;
   readonly recovery?: (
     input: TerminalRecoveryInput,
   ) => Effect.Effect<TerminalRecoveryResult, TerminalError>;
   readonly hasActiveThread?: (threadId: string) => Effect.Effect<boolean>;
+  /** Terminal sessions currently tracked for one execution target, for targeted shutdown. */
+  readonly listExecutionTargetSessions?: (
+    executionTargetId: string,
+  ) => Effect.Effect<ReadonlyArray<{ readonly threadId: string; readonly terminalId: string }>>;
   /**
    * Open or attach to a terminal session.
    *

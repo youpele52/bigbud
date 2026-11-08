@@ -5,7 +5,6 @@ import {
   THREAD_DETAIL_APPROVAL_MAX_LIMIT,
   THREAD_DETAIL_CHECKPOINT_DEFAULT_LIMIT,
   THREAD_DETAIL_CHECKPOINT_MAX_LIMIT,
-  THREAD_DETAIL_MESSAGE_ATTACHMENT_MAX_LIMIT,
   THREAD_DETAIL_MESSAGE_DEFAULT_LIMIT,
   THREAD_DETAIL_MESSAGE_MAX_LIMIT,
   THREAD_DETAIL_TASK_DEFAULT_LIMIT,
@@ -14,7 +13,6 @@ import {
   THREAD_DETAIL_USER_INPUT_MAX_LIMIT,
   THREAD_DETAIL_USER_INPUT_QUESTION_MAX_LIMIT,
   type GetSelectedThreadDetailInput,
-  type ThreadDetailMessage,
 } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
 import { compareTaskOrder } from "@bigbud/shared/providerRuntime";
 import { Effect, Option, Schema } from "effect";
@@ -47,6 +45,11 @@ import {
   makeThreadDetailActivityReaders,
   normalizeDetailActivity,
 } from "./ProjectionCatalogQuery.detail.activities.ts";
+import {
+  applyMessagePageTextBudget,
+  boundedMessageTextColumnsSql,
+  normalizeDetailMessage,
+} from "./ProjectionCatalogQuery.boundedText.ts";
 
 const ThreadIdentityRequest = Schema.Struct({ threadId: Schema.String });
 const ThreadPageRequest = Schema.Struct({
@@ -63,23 +66,6 @@ const ThreadMessagePageRequest = ThreadPageRequest.pipe(
 const ThreadTurnPageRequest = ThreadPageRequest.pipe(
   Schema.fieldsAssign({ turnId: Schema.NullOr(Schema.String) }),
 );
-
-function normalizeMessage(row: ThreadDetailMessageDbRow): ThreadDetailMessage {
-  const attachments = row.attachments ?? [];
-  return {
-    id: row.messageId,
-    role: row.role,
-    text: row.text,
-    attachments: attachments.slice(0, THREAD_DETAIL_MESSAGE_ATTACHMENT_MAX_LIMIT),
-    attachmentsTruncated: attachments.length > THREAD_DETAIL_MESSAGE_ATTACHMENT_MAX_LIMIT,
-    ...(row.replyTo !== null ? { replyTo: row.replyTo } : {}),
-    ...(row.originSegments !== null ? { originSegments: row.originSegments } : {}),
-    turnId: row.turnId,
-    streaming: row.isStreaming === 1,
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  };
-}
 
 export function makeGetSelectedThreadDetail(
   sql: SqlClient.SqlClient,
@@ -107,7 +93,7 @@ export function makeGetSelectedThreadDetail(
         thread_id AS "threadId",
         turn_id AS "turnId",
         role,
-        text,
+        ${boundedMessageTextColumnsSql(sql)},
         attachments_json AS "attachments",
         reply_to_json AS "replyTo",
         origin_segments_json AS "originSegments",
@@ -291,10 +277,11 @@ export function makeGetSelectedThreadDetail(
               }),
             }),
           ]);
-          const messages = rows.messages.slice(0, messageLimit).map(normalizeMessage);
+          const page = applyMessagePageTextBudget(rows.messages, messageLimit);
+          const messages = page.rows.map(normalizeDetailMessage);
           const newestMessage = messages[0];
           const oldestMessage = messages.at(-1);
-          const hasOlder = rows.messages.length > messageLimit;
+          const hasOlder = page.hasOlder;
           const activePlan = rows.activePlan[0];
           const userInputHistory = yield* readUserInputHistory({
             threadId: input.threadId,

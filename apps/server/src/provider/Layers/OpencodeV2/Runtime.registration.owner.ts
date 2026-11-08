@@ -2,6 +2,7 @@ import type { OpencodeV2Runtime } from "./Runtime.ts";
 import type { V2RuntimeSession } from "./Runtime.types.ts";
 import { consumeV2RuntimeEvent } from "./Runtime.stream.ts";
 import { noteV2ChildHint } from "./Runtime.subagents.ts";
+import { logV2SettlementDiagnostic } from "./Runtime.settlement.log.ts";
 
 /** Root deliveries retain their original owner, dirty generation and abort fence. */
 export function registerV2RuntimeOwner(
@@ -31,8 +32,16 @@ export function registerV2RuntimeOwner(
       };
       return serialize(() => consumeV2RuntimeEvent(runtime, owner, event, validate));
     },
-    onDirty: () => runtime.scheduleRepair(owner),
+    onDirty: (reason) => {
+      logV2SettlementDiagnostic("OpenCode v2 stream requires reconciliation", {
+        threadId: owner.threadId,
+        nativeSessionId: owner.native.id,
+        reason,
+      });
+      runtime.scheduleRepair(owner);
+    },
     onDrained: () => runtime.scheduleRepair(owner, false),
+    onSessionHint: () => runtime.scheduleRepair(owner, false),
     onChildHint: () => noteV2ChildHint(runtime, owner),
   });
 }

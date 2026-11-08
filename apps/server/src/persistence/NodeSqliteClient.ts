@@ -9,21 +9,19 @@ import { DatabaseSync } from "node:sqlite";
 import * as Config from "effect/Config";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
-import * as Semaphore from "effect/Semaphore";
 import * as ServiceMap from "effect/ServiceMap";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as Client from "effect/unstable/sql/SqlClient";
 import type { Connection } from "effect/unstable/sql/SqlConnection";
-import * as Statement from "effect/unstable/sql/Statement";
+import { makeSqliteClient } from "./SqliteClient.connection.ts";
 
 import { openNodeSqliteDatabase } from "./NodeSqliteClient.files.ts";
 import { makeInProcessConnection } from "./NodeSqliteClient.inProcess.ts";
 import { makeWorkerConnection, resolveNodeSqliteWorkerEntry } from "./NodeSqliteClient.worker.ts";
-
-const ATTR_DB_SYSTEM_NAME = "db.system.name";
+import { exitProcessOnSqliteWorkerFailure } from "./NodeSqliteClient.worker.exit.ts";
+import type { NodeSqliteWorkerBridgeFailure } from "./NodeSqliteClient.worker.bridge.ts";
 
 export const TypeId: TypeId = "~local/sqlite-node/SqliteClient";
 
@@ -45,6 +43,12 @@ export interface SqliteClientConfig {
   readonly transformQueryNames?: ((str: string) => string) | undefined;
   /** Run the connection in a worker thread (default false); see `shouldUseWorker`. */
   readonly worker?: boolean | undefined;
+  /**
+   * Called once when an open worker crashes or exits on its own. The bridge never restarts,
+   * so by default the process exits (`exitProcessOnSqliteWorkerFailure`) instead of serving
+   * every later query a connection error while it looks alive.
+   */
+  readonly onWorkerFailure?: ((failure: NodeSqliteWorkerBridgeFailure) => void) | undefined;
 }
 
 export interface SqliteMemoryClientConfig extends Omit<
@@ -93,12 +97,17 @@ const makeConnection = Effect.fn("makeConnection")(function* (
   if (shouldUseWorker(options)) {
     const entry = resolveNodeSqliteWorkerEntry();
     if (entry) {
-      return yield* makeWorkerConnection(entry, {
-        filename: options.filename,
-        readonly: options.readonly ?? false,
-        allowExtension: options.allowExtension ?? false,
-        prepareCacheSize: options.prepareCacheSize ?? 200,
-      });
+      return yield* makeWorkerConnection(
+        entry,
+        {
+          filename: options.filename,
+          readonly: options.readonly ?? false,
+          allowExtension: options.allowExtension ?? false,
+          prepareCacheSize: options.prepareCacheSize ?? 200,
+        },
+        undefined,
+        { onUnexpectedFailure: options.onWorkerFailure ?? exitProcessOnSqliteWorkerFailure },
+      );
     }
     yield* Effect.logWarning(
       "SQLite worker entry not found; running SQLite on the main thread instead.",
@@ -113,34 +122,7 @@ const makeWithDatabase = Effect.fn("makeWithDatabase")(function* (
 ): Effect.fn.Return<Client.SqlClient, never, Scope.Scope | Reactivity.Reactivity> {
   yield* checkNodeSqliteCompat();
 
-  const compiler = Statement.makeCompilerSqlite(options.transformQueryNames);
-  const transformRows = options.transformResultNames
-    ? Statement.defaultTransforms(options.transformResultNames).array
-    : undefined;
-
-  const semaphore = yield* Semaphore.make(1);
-  const connection = yield* makeConnection(options, openDatabase);
-
-  const acquirer = semaphore.withPermits(1)(Effect.succeed(connection));
-  const transactionAcquirer = Effect.uninterruptibleMask((restore) => {
-    const fiber = Fiber.getCurrent()!;
-    const scope = ServiceMap.getUnsafe(fiber.services, Scope.Scope);
-    return Effect.as(
-      Effect.tap(restore(semaphore.take(1)), () => Scope.addFinalizer(scope, semaphore.release(1))),
-      connection,
-    );
-  });
-
-  return yield* Client.make({
-    acquirer,
-    compiler,
-    transactionAcquirer,
-    spanAttributes: [
-      ...(options.spanAttributes ? Object.entries(options.spanAttributes) : []),
-      [ATTR_DB_SYSTEM_NAME, "sqlite"],
-    ],
-    transformRows,
-  });
+  return yield* makeSqliteClient(options, makeConnection(options, openDatabase));
 });
 
 const make = (

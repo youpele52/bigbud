@@ -1,4 +1,5 @@
 import { projectDeleteConfirmationCopy } from "./Sidebar.projectActions.delete.copy";
+import { describeDisconnectConfirmation } from "./Sidebar.projectActions.connection.logic";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { SettingsSidebarNav } from "../settings/SettingsSidebarNav";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
@@ -7,6 +8,7 @@ import { SidebarAppHeader } from "./SidebarHeader";
 import { SidebarFooterBar } from "./Sidebar.footer";
 import { SidebarNavigation } from "./Sidebar.navigation";
 import { SidebarRemoteWorkspaceDialog } from "./SidebarRemoteWorkspaceDialog";
+import { SidebarProjectEditDialog } from "./SidebarProjectEditDialog";
 import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import { SidebarInyosiraSnoozeDialog } from "./Sidebar.inyosiraSnoozeDialog";
@@ -20,6 +22,7 @@ export default function Sidebar() {
   return (
     <>
       <SidebarAppHeader />
+      <SidebarProjectEditDialog />
 
       {s.isOnSettings ? (
         <SettingsSidebarNav pathname={s.pathname} />
@@ -46,6 +49,26 @@ export default function Sidebar() {
                   confirmVariant="destructive"
                   onCancel={s.dismissReconnect}
                   onConfirm={() => void s.confirmReconnect()}
+                />
+              ) : null}
+            </AlertDialogPopup>
+          </AlertDialog>
+
+          <AlertDialog
+            open={s.pendingDisconnect !== null}
+            onOpenChange={(open) => {
+              if (!open) s.dismissDisconnect();
+            }}
+          >
+            <AlertDialogPopup className="max-w-sm p-0" bottomStickOnMobile={false}>
+              {s.pendingDisconnect ? (
+                <ConfirmationPanel
+                  {...describeDisconnectConfirmation(s.pendingDisconnect)}
+                  cancelLabel="Cancel"
+                  confirmLabel="Disconnect"
+                  confirmVariant="destructive"
+                  onCancel={s.dismissDisconnect}
+                  onConfirm={() => void s.confirmDisconnect()}
                 />
               ) : null}
             </AlertDialogPopup>

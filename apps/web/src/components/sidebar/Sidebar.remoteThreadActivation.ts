@@ -7,6 +7,10 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import type { SidebarThreadSummary } from "../../models/types";
 import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
 import { useTerminalStateStore } from "../../stores/terminal";
+import {
+  areDisconnectedTargetsLoaded,
+  isExecutionTargetDisconnected,
+} from "../../stores/remoteAccess/remoteAccess.store";
 import { toastManager } from "../ui/toast";
 import { useRemoteExecutionAccessGate } from "../../hooks/useRemoteExecutionAccessGate";
 import { isRemoteExecutionTargetId } from "./Sidebar.remoteWorkspaces.logic";
@@ -59,7 +63,11 @@ export function useSidebarRemoteThreadActivation({
 
   const reconnectRemoteThreadTerminals = useCallback(
     async (activation: PendingRemoteThreadActivation) => {
-      if (!activation.cwd) {
+      if (
+        !activation.cwd ||
+        !areDisconnectedTargetsLoaded() ||
+        isExecutionTargetDisconnected(activation.executionTargetId)
+      ) {
         return;
       }
 

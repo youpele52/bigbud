@@ -4,12 +4,13 @@ import { NonNegativeInt, PositiveInt, TrimmedNonEmptyString } from "../core/base
 import { ThreadSummary, ThreadSummaryCursor } from "./orchestration.catalog";
 import { ThreadOrganizationState } from "./orchestration.organization";
 
-export const ORGANIZATION_THREAD_SUMMARY_DEFAULT_LIMIT = 20;
+export const ORGANIZATION_THREAD_SUMMARY_DEFAULT_LIMIT = 4;
 export const ORGANIZATION_THREAD_SUMMARY_MAX_LIMIT = 50;
 
 /**
- * One keyset page of active threads in an Inyosira state, across every project. Pages are ordered by
- * `updatedAt` descending, then thread id, like project thread pages.
+ * One keyset page of active threads in an Inyosira state, across every project. Pages follow the
+ * displayed order: latest user message (falling back to creation) descending, then thread id
+ * descending.
  */
 export const GetOrganizationThreadSummariesInput = Schema.Struct({
   state: ThreadOrganizationState,

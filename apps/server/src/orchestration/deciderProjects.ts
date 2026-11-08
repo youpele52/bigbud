@@ -25,6 +25,7 @@ import {
   requireProjectWorktreesVerified,
 } from "./commandInvariants.ts";
 import { nowIso, withEventBase } from "./deciderHelpers.ts";
+import { requireProjectWorkspaceChangeSafe } from "./ProjectWorkspace.invariants.ts";
 import { resolveProjectDeletionRequests } from "../deletion/Services/ThreadDeletion.ts";
 
 export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* ({
@@ -87,6 +88,30 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
     }
 
     case "project.meta.update": {
+      const project = readModel.projects.find((entry) => entry.id === command.projectId);
+      const targetChanged =
+        (command.providerRuntimeExecutionTargetId !== undefined &&
+          command.providerRuntimeExecutionTargetId !== project?.providerRuntimeExecutionTargetId) ||
+        (command.workspaceExecutionTargetId !== undefined &&
+          command.workspaceExecutionTargetId !== project?.workspaceExecutionTargetId) ||
+        (command.executionTargetId !== undefined &&
+          command.executionTargetId !== project?.executionTargetId);
+      if (targetChanged) {
+        return yield* Effect.fail(
+          new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: "Use project.reconfigure to change project execution targets safely.",
+          }),
+        );
+      }
+      if (command.workspaceRoot !== undefined) {
+        yield* requireProjectWorkspaceChangeSafe({
+          command,
+          readModel,
+          projectId: command.projectId,
+          workspaceRoot: command.workspaceRoot,
+        });
+      }
       yield* requireProjectNotDeleting({
         readModel,
         command,
@@ -125,6 +150,17 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
     }
 
     case "project.reconfigure": {
+      yield* requireProjectWorkspaceChangeSafe({
+        command,
+        readModel,
+        projectId: command.projectId,
+        workspaceRoot: command.workspaceRoot,
+      });
+      const previousProject = readModel.projects.find((entry) => entry.id === command.projectId);
+      const workspaceChanged =
+        previousProject?.workspaceRoot !== command.workspaceRoot ||
+        command.workspaceExecutionTargetId !==
+          (previousProject?.workspaceExecutionTargetId ?? previousProject?.executionTargetId);
       yield* requireProjectNotDeleting({
         readModel,
         command,
@@ -174,6 +210,15 @@ export const decideProjectCommand = Effect.fn("decideProjectCommand")(function* 
             workspaceExecutionTargetId: command.workspaceExecutionTargetId,
             executionTargetId: command.executionTargetId,
             workspaceRoot: command.workspaceRoot,
+            ...(workspaceChanged
+              ? {
+                  workspaceKind: "external" as const,
+                  previousWorkspaceRoot:
+                    previousProject?.previousWorkspaceRoot ??
+                    previousProject?.workspaceRoot ??
+                    null,
+                }
+              : {}),
             updatedAt: occurredAt,
           },
         },

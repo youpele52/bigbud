@@ -6,7 +6,10 @@ import { fallbackThreadTitleFromPrompt } from "@bigbud/shared/String";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
 import { maybeGenerateThreadTitleForFirstTurn } from "./ProviderCommandReactorSessionOps.title.ts";
-import { readTitleStage } from "./ProviderCommandReactorSessionOps.title.state.ts";
+import {
+  readTitleStage,
+  hasUnresolvedTitleGeneration,
+} from "./ProviderCommandReactorSessionOps.title.state.ts";
 import { maybeGenerateAndRenameWorktreeBranchForFirstTurn } from "./ProviderCommandReactorSessionOps.firstTurn.ts";
 import { resolveWorkspaceExecutionTargetId } from "../../workspace-target/workspaceTarget.ts";
 import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
@@ -120,7 +123,11 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
       for (const operation of ["title", "summary"] as const) {
         if (recovery && operation !== "title") continue;
         if (retry && requested !== operation) continue;
-        if (hasTextGenerationUncertainty(thread.activities, operation)) {
+        if (
+          operation === "title"
+            ? hasUnresolvedTitleGeneration(thread)
+            : hasTextGenerationUncertainty(thread.activities, operation)
+        ) {
           if (
             !thread.activities.some(
               (item) =>

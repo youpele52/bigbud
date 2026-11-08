@@ -98,6 +98,8 @@ export function mapProjectRow(row: ProjectionProjectRow): OrchestrationProject {
       row.workspaceExecutionTargetId ?? row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     executionTargetId: row.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     workspaceRoot: row.workspaceRoot,
+    workspaceKind: row.workspaceKind ?? "external",
+    previousWorkspaceRoot: row.previousWorkspaceRoot ?? null,
     defaultModelSelection: row.defaultModelSelection,
     scripts: row.scripts,
     createdAt: row.createdAt,

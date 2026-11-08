@@ -53,8 +53,8 @@ describe("Snooze submenu", () => {
     expect(snooze.children?.some((item) => item.separator)).toBe(false);
     for (const organization of [undefined, null]) {
       expect(buildInyosiraMoveMenuItem(organization).children?.map((item) => item.label)).toEqual([
-        "Present",
         "Needs you",
+        "Present",
         "Later",
         "Done",
       ]);

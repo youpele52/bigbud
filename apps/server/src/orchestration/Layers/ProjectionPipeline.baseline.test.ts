@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import { CommandId, EventId, ProjectId } from "@bigbud/contracts";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { assert, it } from "@effect/vitest";
@@ -10,6 +8,11 @@ import { OrchestrationEventStore } from "../../persistence/Services/Orchestratio
 import { ProjectionBaselineRepository } from "../../persistence/Services/ProjectionBaselines.ts";
 import { ProjectionBaselineRepositoryLive } from "../../persistence/Layers/ProjectionBaselines.ts";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
+import {
+  captureBaselinePayloadJson,
+  insertCapturedBaseline,
+  jsonBaselinePayloadSource,
+} from "../../persistence/Layers/ProjectionBaselines.test.helpers.ts";
 import { insertProjectionThreadParent } from "../../persistence/Layers/ProjectionThread.test.helpers.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { makeProjectionPipelinePrefixedTestLayer } from "./ProjectionPipeline.test.helpers.ts";
@@ -124,9 +127,11 @@ layer("projection baseline compaction", (it) => {
       `;
         assert.deepEqual(repaired, [{ count: 0 }]);
 
+        // Tamper with the stored rows: restore must reject them by hash before writing.
         yield* sql`
-        UPDATE projection_baselines SET payload_json = payload_json || ' '
-        WHERE sequence = 2
+        INSERT INTO projection_baseline_rows (baseline_id, table_name, ordinal, row_json)
+        SELECT baseline_id, 'projection_projects', 1000000, '{"project_id":"tampered"}'
+        FROM projection_baselines WHERE sequence = 2
       `;
         yield* sql`DELETE FROM projection_state`;
         const tamperedBootstrap = yield* Effect.exit(pipeline.bootstrap);
@@ -160,8 +165,8 @@ baselineRepositoryLayer("ProjectionBaselineRepository", (it) => {
           'message-baseline', 'active', ${createdAt}
         )
       `;
-      const payload = yield* baselines.capturePayload();
-      yield* baselines.restorePayload(payload, 0, []);
+      const payload = yield* captureBaselinePayloadJson;
+      yield* baselines.restorePayload(jsonBaselinePayloadSource(payload), 0, []);
 
       const watches = yield* sql<{
         readonly watcherThreadId: string;
@@ -179,22 +184,15 @@ baselineRepositoryLayer("ProjectionBaselineRepository", (it) => {
   it.effect("does not reject a candidate after it has become verified", () =>
     Effect.gen(function* () {
       const baselines = yield* ProjectionBaselineRepository;
-      const sql = yield* SqlClient.SqlClient;
-      const payloadJson = yield* baselines.capturePayload();
-      const payloadHash = createHash("sha256").update(payloadJson).digest("hex");
       const createdAt = "2026-08-03T00:00:00.000Z";
-      const inserted = yield* sql<{ readonly baselineId: number }>`
-        INSERT INTO projection_baselines (
-          sequence, format_version, payload_json, payload_hash,
-          verification_status, verification_detail, created_at, verified_at
-        ) VALUES (0, 1, ${payloadJson}, ${payloadHash}, 'candidate', NULL, ${createdAt}, NULL)
-        RETURNING baseline_id AS "baselineId"
-      `;
-      const baselineId = inserted[0]?.baselineId;
-      assert.isNumber(baselineId);
+      const { baselineId } = yield* insertCapturedBaseline({
+        sequence: 0,
+        status: "candidate",
+        createdAt,
+      });
 
-      yield* baselines.markVerified(baselineId as number, 0, createdAt);
-      yield* baselines.markRejected(baselineId as number, "stale verification failure");
+      yield* baselines.markVerified(baselineId, 0, createdAt);
+      yield* baselines.markRejected(baselineId, "stale verification failure");
 
       const verified = yield* baselines.latestVerified();
       assert.equal(verified._tag, "Some");
@@ -210,17 +208,11 @@ it.layer(
     Effect.gen(function* () {
       const baselines = yield* ProjectionBaselineRepository;
       const sql = yield* SqlClient.SqlClient;
-      const payloadJson = yield* baselines.capturePayload();
-      const payloadHash = createHash("sha256").update(payloadJson).digest("hex");
-      yield* sql`
-        INSERT INTO projection_baselines (
-          sequence, format_version, payload_json, payload_hash,
-          verification_status, verification_detail, created_at, verified_at
-        ) VALUES (
-          0, 1, ${payloadJson}, ${payloadHash}, 'candidate', NULL,
-          '2026-08-03T00:00:00.000Z', NULL
-        )
-      `;
+      yield* insertCapturedBaseline({
+        sequence: 0,
+        status: "candidate",
+        createdAt: "2026-08-03T00:00:00.000Z",
+      });
       yield* sql`DROP TABLE projection_usage_contributions`;
 
       const existing = yield* baselines.createCandidate([]);

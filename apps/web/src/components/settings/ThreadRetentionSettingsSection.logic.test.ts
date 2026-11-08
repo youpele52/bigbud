@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  formatLatestRetentionCleanup,
   formatRetentionCutoff,
+  formatRetentionRunBreakdown,
+  getRetentionExclusionReasonLabel,
   getRetentionCleanupSuccessToast,
   getRetentionMaintenanceMessage,
   getRetentionPollIntervalMs,
@@ -113,5 +116,40 @@ describe("ThreadRetentionSettingsSection logic", () => {
       title: "Thread cleanup needs attention",
       description: "Deleted 0 threads and skipped 0. 4 deletion outcomes could not be confirmed.",
     });
+  });
+
+  it("explains why the latest cleanup deleted nothing", () => {
+    const finished = {
+      ...RUN,
+      trigger: "scheduled",
+      policy: "3-days",
+      status: "completed",
+      olderThanCutoffCount: 212,
+      exclusionCounts: [
+        { reason: "already_deleted", count: 248 },
+        { reason: "active_task", count: 1 },
+        { reason: "blocked_by_descendant", count: 11 },
+        { reason: "running", count: 200 },
+      ],
+    } as const;
+
+    expect(formatLatestRetentionCleanup(finished)).toBe(
+      "Latest cleanup: 0 threads deleted · 212 older than 3 days · 200 skipped: work in progress · 11 skipped: held by a newer or busy child thread · 1 skipped: unfinished task · completed",
+    );
+    expect(formatRetentionRunBreakdown({ ...finished, exclusionCounts: [] })).toBe(
+      "212 older than 3 days",
+    );
+  });
+
+  it("keeps the previous line for runs recorded before the breakdown existed", () => {
+    expect(formatLatestRetentionCleanup({ ...RUN, status: "completed_with_failures" })).toBe(
+      "Latest cleanup: 0 threads deleted · completed with failures",
+    );
+    expect(formatRetentionRunBreakdown(RUN)).toBe("");
+  });
+
+  it("labels every selector reason and falls back for unknown ones", () => {
+    expect(getRetentionExclusionReasonLabel("waiting_for_user")).toBe("waiting for your reply");
+    expect(getRetentionExclusionReasonLabel("some_new_reason")).toBe("some new reason");
   });
 });

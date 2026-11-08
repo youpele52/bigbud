@@ -108,7 +108,11 @@ export function verifyAssembledDesktopReleaseAssets(
     throw new Error(`Unexpected update manifest: ${unexpectedManifest}`);
   }
 
-  const desktopArtifactNames = names.filter((name) => !name.startsWith("server-workspace-agent-"));
+  const desktopArtifactNames = names.filter(
+    (name) =>
+      !name.startsWith("server-workspace-agent-") &&
+      !name.startsWith("server-organization-supervisor-"),
+  );
   for (const suffix of [
     "-arm64.dmg",
     "-x64.dmg",
@@ -134,6 +138,17 @@ export function verifyAssembledDesktopReleaseAssets(
     "server-workspace-agent-win32-arm64.exe",
   ]) {
     if (!names.includes(name)) throw new Error(`Missing packaged workspace agent: ${name}`);
+  }
+
+  for (const target of [
+    "darwin-arm64",
+    "darwin-x64",
+    "linux-x64",
+    "win32-x64.exe",
+    "win32-arm64.exe",
+  ]) {
+    if (!names.includes(`server-organization-supervisor-${target}`))
+      throw new Error(`Missing packaged organisation supervisor: ${target}`);
   }
 
   const manifestRequirements = [

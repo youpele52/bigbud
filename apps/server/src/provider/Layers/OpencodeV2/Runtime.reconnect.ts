@@ -14,6 +14,7 @@ import { suspendV2BorrowedOwner } from "./Runtime.transport.ts";
 import { attachV2OwnedFamily } from "./Runtime.family.ts";
 import { isV2AssistantSettled } from "./Projection.ts";
 import { isV2CancelledReservation } from "./Admission.cancelled.ts";
+import { assertV2Model } from "./Runtime.sessions.ts";
 
 /** Read retained identity/history before swapping transport; this path never creates or prompts. */
 export async function reconnectV2BorrowedOwner(
@@ -80,6 +81,7 @@ export async function reconnectV2BorrowedOwner(
         ),
       );
       validate();
+      assertV2Model(native.model, owner.model);
       if (
         native.id !== owner.native.id ||
         native.location.directory !== binding.directory ||
@@ -88,7 +90,6 @@ export async function reconnectV2BorrowedOwner(
         native.parentID ||
         native.fork ||
         !isDeepStrictEqual(native.metadata, owner.native.metadata) ||
-        !isDeepStrictEqual(native.model, owner.model) ||
         !isDeepStrictEqual(native.permissions, owner.toolPolicy)
       )
         throw new Error(

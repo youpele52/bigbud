@@ -1,0 +1,23 @@
+/* Pointing hand after a waiting "Needs you" heading: breathe while poking 2px toward it. */
+.inyosira-needs-you-hand {
+  animation: inyosira-needs-you-point 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inyosira-needs-you-hand {
+    animation: none;
+  }
+}
+
+@keyframes inyosira-needs-you-point {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: translateX(0);
+  }
+
+  50% {
+    opacity: 1;
+    transform: translateX(-2px);
+  }
+}

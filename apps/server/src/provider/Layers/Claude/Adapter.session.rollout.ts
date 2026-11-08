@@ -10,27 +10,24 @@ interface ClaudeRolloutSettings {
   readonly maxConcurrentSubagents?: number | null | undefined;
 }
 
-/** Alternate harnesses keep fixed rollout defaults; product sessions follow Claude settings. */
+/** Model connections share Claude Code rollout settings unless explicitly overridden. */
 export function buildClaudeSessionRolloutOptions(
   harness: ClaudeHarnessConfig | undefined,
   settings: ClaudeRolloutSettings,
 ) {
   return {
-    boundedHookProgress:
-      harness?.boundedHookProgress ?? (harness ? false : settings.rollout.boundedHookProgress),
-    forwardSubagentText:
-      harness?.forwardSubagentText ?? (harness ? false : settings.rollout.forwardedSubagentText),
+    boundedHookProgress: harness?.boundedHookProgress ?? settings.rollout.boundedHookProgress,
+    forwardSubagentText: harness?.forwardSubagentText ?? settings.rollout.forwardedSubagentText,
     ...(harness?.settingSources ? { settingSources: harness.settingSources } : {}),
     ...(harness?.environment ? { environment: harness.environment } : {}),
+    ...(harness?.protectedSettingsEnvironment
+      ? { protectedSettingsEnvironment: harness.protectedSettingsEnvironment }
+      : {}),
     ...(harness?.modelCapabilities ? { modelCapabilities: harness.modelCapabilities } : {}),
-    ...(harness
-      ? {}
-      : {
-          promptSuggestions: settings.promptSuggestions,
-          subagentCaps: {
-            maxSpawnDepth: settings.maxSubagentSpawnDepth ?? null,
-            maxConcurrent: settings.maxConcurrentSubagents ?? null,
-          },
-        }),
+    promptSuggestions: settings.promptSuggestions,
+    subagentCaps: {
+      maxSpawnDepth: settings.maxSubagentSpawnDepth ?? null,
+      maxConcurrent: settings.maxConcurrentSubagents ?? null,
+    },
   };
 }

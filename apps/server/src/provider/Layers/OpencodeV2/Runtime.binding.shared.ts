@@ -1,5 +1,9 @@
 import { Effect } from "effect";
 import { decodeV2Cursor } from "./Runtime.cursor.ts";
+import {
+  effectiveV2WorkspaceCursor,
+  effectiveV2WorkspaceLocation,
+} from "./Runtime.workspaceLocation.ts";
 import { v2RetainedRegistrationFamily } from "./Runtime.registration.ts";
 import type { V2IsolatedRuntimeOptions, V2StartInput } from "./Runtime.types.ts";
 
@@ -13,7 +17,18 @@ export async function retainedSharedIdentity(
     throw new Error("V2 shared binding repository unavailable; no native dispatch.");
   const row = await Effect.runPromise(options.sharedBindings.find(input.threadId));
   const journal = await Effect.runPromise(options.journal.latestBound(input.threadId));
-  const cursor = input.resumeCursor === undefined ? undefined : decodeV2Cursor(input.resumeCursor);
+  const cursor = await effectiveV2WorkspaceCursor(
+    options.journal,
+    input.resumeCursor === undefined ? undefined : decodeV2Cursor(input.resumeCursor),
+    {
+      threadId: input.threadId,
+      runtimeTarget: target.runtimeTarget,
+      workspaceTarget: target.workspaceTarget,
+    },
+  );
+  const journalDirectory = journal
+    ? await effectiveV2WorkspaceLocation(options.journal, journal.binding)
+    : undefined;
   if (cursor?.connectionMode === "isolated")
     throw new Error("V2 retired-isolated history is read-only; no shared replacement or replay.");
   if (
@@ -27,7 +42,7 @@ export async function retainedSharedIdentity(
     );
   const candidates = [
     ...(row ? [row] : []),
-    ...(journal ? [{ ...journal.binding, directory: journal.binding.location }] : []),
+    ...(journal ? [{ ...journal.binding, directory: journalDirectory! }] : []),
     ...(cursor ? [cursor] : []),
   ];
   const first = candidates[0];

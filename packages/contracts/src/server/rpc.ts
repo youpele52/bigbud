@@ -1,3 +1,4 @@
+import { WsOrganizationStatusRpc, WsOrganizationEngagementRpc } from "./rpc.organizationAutomation";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import {
   WsWorktreeOperationsRpc,
@@ -12,6 +13,15 @@ import { WS_METHODS } from "../constants/websocket.constant";
 import { WsTerminalSnapshotRpc } from "./rpc.terminalSnapshot";
 import { WsTerminalRecoveryRpc } from "./rpc.terminalRecovery";
 import { WsOrchestrationGetOrganizationThreadSummariesRpc } from "./rpc.organization";
+import {
+  WsOrchestrationGetMessageTextChunkRpc,
+  WsOrchestrationGetProjectWorktreePathsRpc,
+  WsOrchestrationGetTurnActivitiesRpc,
+} from "./rpc.detailPaging";
+import {
+  WsOrchestrationGetThreadBranchCopyRpc,
+  WsOrchestrationStartThreadBranchRpc,
+} from "./rpc.branchCopy";
 import {
   WsSubscribeTerminalSessionRpc,
   WsTerminalOutputAckRpc,
@@ -121,6 +131,9 @@ import {
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,
   WsServerGetRemoteAgentRestartStatusRpc,
+  WsServerDisconnectExecutionTargetRpc,
+  WsServerConnectExecutionTargetRpc,
+  WsServerListDisconnectedExecutionTargetsRpc,
 } from "./rpc.remoteAgent";
 import { WsServerListSshConfigHostsRpc } from "./rpc.sshConfig";
 import { WsServerSampleSshMonitorRpc, WsServerListConnectedSshMonitorsRpc } from "./rpc.sshMonitor";
@@ -132,7 +145,6 @@ import {
   WsOrchestrationDispatchCommandRpc,
   WsOrchestrationGetCommandOutcomeRpc,
   WsOrchestrationGetFullThreadDiffRpc,
-  WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetSidebarThreadCatalogRpc,
   WsOrchestrationGetStartupProjectCatalogRpc,
   WsOrchestrationSearchConversationMessagesRpc,
@@ -156,9 +168,16 @@ import {
 
 export { WS_METHODS };
 import { WsServerOpencodeV2ThreadToolsSetupRpc } from "./rpc.opencodeV2ThreadToolsSetup";
+import {
+  WsServerGetDatabaseCompactionStatusRpc,
+  WsServerPreviewDatabaseCompactionRpc,
+  WsServerStartDatabaseCompactionRpc,
+} from "./rpc.databaseCompaction";
 export * from "./rpc.automation";
 export * from "./rpc.browser";
 export * from "./rpc.core";
+export * from "./rpc.detailPaging";
+export * from "./rpc.branchCopy";
 export * from "./rpc.retention";
 export * from "./rpc.stream";
 export * from "./rpc.usage";
@@ -196,6 +215,9 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,
   WsServerGetRemoteAgentRestartStatusRpc,
+  WsServerDisconnectExecutionTargetRpc,
+  WsServerConnectExecutionTargetRpc,
+  WsServerListDisconnectedExecutionTargetsRpc,
   WsServerUnlockSshKeyRpc,
   WsServerUnlockSshPasswordRpc,
   WsServerTrustSshHostRpc,
@@ -295,13 +317,19 @@ export const WsRpcGroup = RpcGroup.make(
   WsCompleteVisibleBrowserCommandRpc,
   WsRevokeVisibleBrowserLeaseRpc,
   WsGetVisibleBrowserLeasesRpc,
-  WsOrchestrationGetSnapshotRpc,
   WsOrchestrationGetSidebarThreadCatalogRpc,
   WsOrchestrationGetStartupProjectCatalogRpc,
   WsOrchestrationSearchConversationMessagesRpc,
   WsOrchestrationGetProjectThreadSummariesRpc,
   WsOrchestrationGetOrganizationThreadSummariesRpc,
+  WsOrganizationStatusRpc,
+  WsOrganizationEngagementRpc,
   WsOrchestrationGetSelectedThreadDetailRpc,
+  WsOrchestrationGetTurnActivitiesRpc,
+  WsOrchestrationGetMessageTextChunkRpc,
+  WsOrchestrationGetProjectWorktreePathsRpc,
+  WsOrchestrationStartThreadBranchRpc,
+  WsOrchestrationGetThreadBranchCopyRpc,
   WsOrchestrationGetThreadOwnershipRpc,
   WsOrchestrationGetCommandOutcomeRpc,
   WsOrchestrationDispatchCommandRpc,
@@ -310,4 +338,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationReplayEventsRpc,
   WsOrchestrationAcknowledgeDeliveryRpc,
   WsOrchestrationAcknowledgeDeliveryBaselineRpc,
+  WsServerGetDatabaseCompactionStatusRpc,
+  WsServerPreviewDatabaseCompactionRpc,
+  WsServerStartDatabaseCompactionRpc,
 );

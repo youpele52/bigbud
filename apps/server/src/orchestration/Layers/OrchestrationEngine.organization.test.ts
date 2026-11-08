@@ -64,6 +64,8 @@ describe("OrchestrationEngine thread organization", () => {
         state: "present",
         revision: 0,
         changedAt: null,
+        activityAt: null,
+        ageProvenance: "known",
         snooze: null,
       });
 
@@ -88,7 +90,8 @@ describe("OrchestrationEngine thread organization", () => {
       const second = createRuntime(dbPath);
       const secondEngine = await engineFor(second);
       const restored = await persistedOrganization(second);
-      expect(restored).toMatchObject({ state: "later", revision: 2, snooze: { id: "cmd-snooze" } });
+      // The repeated deliberate move renews its override and therefore advances revision too.
+      expect(restored).toMatchObject({ state: "later", revision: 3, snooze: { id: "cmd-snooze" } });
       const changedAt = Date.parse(restored!.changedAt!);
       expect(Date.parse(restored!.snooze!.until) - changedAt).toBe(30 * 60_000);
 
@@ -108,19 +111,19 @@ describe("OrchestrationEngine thread organization", () => {
           command("cmd-move-later", {
             type: "thread.organization.move",
             state: "later",
-            expectedRevision: 2,
+            expectedRevision: 3,
           }),
         ),
       );
       expect(await persistedOrganization(second)).toMatchObject({
         state: "later",
-        revision: 3,
+        revision: 4,
         snooze: null,
       });
       const readModel = await second.runPromise(secondEngine.getReadModel());
       expect(
         readModel.threads.find((thread) => thread.id === threadId)?.organization,
-      ).toMatchObject({ state: "later", revision: 3 });
+      ).toMatchObject({ state: "later", revision: 4 });
       await second.dispose();
     }));
 

@@ -25,6 +25,8 @@ export const ProjectionProject = Schema.Struct({
   workspaceExecutionTargetId: ExecutionTargetId,
   executionTargetId: ExecutionTargetId,
   workspaceRoot: Schema.NullOr(Schema.String),
+  workspaceKind: Schema.optional(Schema.Literals(["managed", "external"])),
+  previousWorkspaceRoot: Schema.optional(Schema.NullOr(Schema.String)),
   defaultModelSelection: Schema.NullOr(HistoricalModelSelection),
   scripts: Schema.Array(ProjectScript),
   createdAt: IsoDateTime,

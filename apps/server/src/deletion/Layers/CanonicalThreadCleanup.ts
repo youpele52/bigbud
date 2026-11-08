@@ -37,10 +37,24 @@ export interface DeferredCanonicalThreadCleanupResult {
   >;
 }
 
+/**
+ * Narrows the candidates for the automatic retry: deletions older than `deletedBefore`, not in
+ * backoff at `dueAt`, and not owned by direct resource cleanup (an open or blocked intent, or a
+ * proof whose canonical pruning that recovery still owes).
+ */
+export interface DeferredCanonicalThreadCleanupFilter {
+  readonly dueAt: string;
+  readonly deletedBefore: string;
+}
+
 export function listDeferredCanonicalThreadCleanupCandidates(
   sql: SqlClient.SqlClient,
   limit = CANONICAL_THREAD_CLEANUP_LIMIT,
+  filter?: DeferredCanonicalThreadCleanupFilter,
 ) {
+  const automatic = filter === undefined ? 0 : 1;
+  const dueAt = filter?.dueAt ?? "";
+  const deletedBefore = filter?.deletedBefore ?? "";
   return sql<DeferredCanonicalThreadCleanupCandidateRow>`
     WITH roots AS (
       SELECT marker.entity_id AS "threadId",
@@ -52,6 +66,23 @@ export function listDeferredCanonicalThreadCleanupCandidates(
        AND deletion.stream_id = marker.entity_id
        AND deletion.event_type = 'thread.deleted'
       WHERE marker.entity_kind = 'thread'
+        AND (${automatic} = 0 OR (marker.deleted_at <= ${deletedBefore}
+          AND NOT EXISTS (
+            SELECT 1 FROM deferred_canonical_cleanup_retries AS retry
+            WHERE retry.thread_id = marker.entity_id
+              AND retry.deletion_sequence = marker.deletion_sequence
+              AND retry.next_attempt_at > ${dueAt}
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM direct_resource_cleanup_intents AS intent
+            WHERE intent.entity_kind = 'thread' AND intent.entity_id = marker.entity_id
+              AND intent.state IN ('open', 'blocked')
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM direct_resource_cleanup_proofs AS proof
+            WHERE proof.aggregate_kind = 'thread' AND proof.aggregate_id = marker.entity_id
+              AND proof.canonical_pruned_at IS NULL
+          )))
     )
     SELECT roots."threadId", roots."deletionSequence", 1 AS covered
     FROM roots

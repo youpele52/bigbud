@@ -91,6 +91,25 @@ function fixture(selection: ModelSelection | null = preference) {
 }
 
 describe("central internal-generation routing policy", () => {
+  it("routes verified CLIProxy titles through shared Claude generation without changing provider identity", async () => {
+    const test = fixture(null);
+    const selection: ModelSelection = {
+      provider: "cliProxy",
+      model: "proxy-exact-model",
+      options: { effort: "high" },
+    };
+    const generated = await Effect.runPromise(
+      test.router.generateThreadTitle({
+        ...test.input,
+        modelSelection: selection,
+        successfulModelSelection: selection,
+      }),
+    );
+    expect(test.failed).not.toHaveBeenCalled();
+    expect(test.passed).toHaveBeenCalledTimes(1);
+    expect(test.passed.mock.calls[0]?.[0].modelSelection).toEqual(selection);
+    expect(generated).toMatchObject({ actualModelSelection: selection });
+  });
   it("staged title recovery ignores the override and attempts only its verified thread pair", async () => {
     const test = fixture();
     test.passed.mockReturnValueOnce(

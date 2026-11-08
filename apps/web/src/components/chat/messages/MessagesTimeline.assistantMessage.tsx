@@ -3,20 +3,16 @@ import { TerminalIcon } from "lucide-react";
 import { stableVerbFromId } from "../../../utils/copy";
 import { formatElapsed } from "../../../logic/session";
 import { type TurnDiffSummary } from "../../../models/types";
-import { summarizeTurnDiffStats } from "../../../lib/turnDiffTree";
 import { activitySectionLabelTypography } from "../common/ActivityAccordion";
 import ChatMarkdown from "../common/ChatMarkdown";
-import { Button } from "../../ui/button";
-import { MessageCopyButton } from "../common/MessageCopyButton";
 import { MessageBranchButton } from "../common/MessageBranchButton";
 import { MessageReplyButton } from "../common/MessageReplyButton";
 import { MessageReplyPreview } from "../common/MessageReplyPreview";
-import { DiffStatLabel, hasNonZeroStat } from "../diff-display/DiffStatLabel";
-import { ChangedFilesTree } from "../diff-display/ChangedFilesTree";
 import type { MessagesTimelineRow } from "./MessagesTimeline.logic";
 import { type TimestampFormat } from "@bigbud/contracts/settings";
 import { useMemo } from "react";
 import { useSettings } from "../../../hooks/useSettings";
+import { useLocalDay } from "../../../hooks/useLocalDay";
 import { terminalFontFamilyFromSettings } from "../../terminal/terminalTypography";
 import { cn } from "~/lib/utils";
 import { deriveAutomationAssistantDisplayState } from "~/lib/automation";
@@ -24,6 +20,16 @@ import type { MarkdownAnchorClick } from "../../common/BaseMarkdown";
 
 import { formatMessageMeta } from "./MessagesTimeline.assistantMessage.meta";
 import { MessagesTimelineAutomationRequest } from "./MessagesTimeline.automationRequest";
+import { AssistantTurnChangedFiles } from "./MessagesTimeline.changedFiles";
+import { OlderTurnWorkLogButton } from "./MessagesTimeline.turnActivitiesButton";
+import {
+  TimelineMessageCopyButton,
+  TruncatedMessageNotice,
+} from "./MessagesTimeline.truncatedMessageNotice";
+import type {
+  ActivityAccordionOpenById,
+  SetActivityAccordionOpen,
+} from "../common/ActivityAccordion.state";
 
 const SHELL_OUTPUT_MIN_WIDTH = "48rem";
 const SHELL_OUTPUT_MAX_WIDTH = "960px";
@@ -42,6 +48,8 @@ interface AssistantMessageBodyProps {
   turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
   changedFilesExpandedByTurnId: Record<string, boolean>;
   onSetChangedFilesExpanded: (turnId: TurnId, expanded: boolean) => void;
+  activityAccordionOpenById: ActivityAccordionOpenById;
+  onSetActivityAccordionOpen: SetActivityAccordionOpen;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
   markdownCwd: string | undefined;
   onMarkdownAnchorClick?: ((input: MarkdownAnchorClick) => void) | undefined;
@@ -95,12 +103,27 @@ function ShellOutputCard(props: {
   );
 }
 
+function AssistantMessageMeta({
+  createdAt,
+  duration,
+  timestampFormat,
+}: {
+  createdAt: string;
+  duration: string | null;
+  timestampFormat: TimestampFormat;
+}) {
+  const day = useLocalDay();
+  return <>{formatMessageMeta(createdAt, duration, timestampFormat, new Date(day))}</>;
+}
+
 export function AssistantMessageBody({
   row,
   completionSummary,
   turnDiffSummaryByAssistantMessageId,
   changedFilesExpandedByTurnId,
   onSetChangedFilesExpanded,
+  activityAccordionOpenById,
+  onSetActivityAccordionOpen,
   onOpenTurnDiff,
   markdownCwd,
   onMarkdownAnchorClick,
@@ -177,18 +200,24 @@ export function AssistantMessageBody({
             ) : null}
           </>
         )}
-        <AssistantTurnDiffCard
+        <TruncatedMessageNotice message={row.message} />
+        <AssistantTurnChangedFiles
           messageId={row.message.id}
           turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
           changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
           onSetChangedFilesExpanded={onSetChangedFilesExpanded}
+          activityAccordionOpenById={activityAccordionOpenById}
+          onSetActivityAccordionOpen={onSetActivityAccordionOpen}
           onOpenTurnDiff={onOpenTurnDiff}
           resolvedTheme={resolvedTheme}
         />
         <div className="mt-1.5 flex justify-start">
-          <div className="flex min-w-0 items-center gap-2 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
+          <div
+            data-message-footer="assistant"
+            className="flex min-w-0 max-w-full flex-wrap items-center gap-2 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100"
+          >
             {row.showAssistantCopyButton && messageText.length > 0 ? (
-              <MessageCopyButton text={messageText} />
+              <TimelineMessageCopyButton message={row.message} text={messageText} />
             ) : null}
             {row.showAssistantCopyButton ? (
               <MessageReplyButton onClick={() => onReplyToMessage(row.message.id)} />
@@ -196,88 +225,21 @@ export function AssistantMessageBody({
             {onBranchThread ? (
               <MessageBranchButton onClick={() => onBranchThread(row.message.id)} />
             ) : null}
-            <p className="shrink-0 text-[10px] text-muted-foreground/30">
-              {formatMessageMeta(
-                row.message.createdAt,
-                row.message.streaming
-                  ? formatElapsed(row.durationStart, nowIso)
-                  : formatElapsed(row.durationStart, row.message.completedAt),
-                timestampFormat,
-              )}
+            {row.showAssistantCopyButton ? <OlderTurnWorkLogButton message={row.message} /> : null}
+            <p className="min-w-0 max-w-full break-words text-[10px] text-muted-foreground/30">
+              <AssistantMessageMeta
+                createdAt={row.message.createdAt}
+                duration={
+                  row.message.streaming
+                    ? formatElapsed(row.durationStart, nowIso)
+                    : formatElapsed(row.durationStart, row.message.completedAt)
+                }
+                timestampFormat={timestampFormat}
+              />
             </p>
           </div>
         </div>
       </div>
     </>
-  );
-}
-
-interface AssistantTurnDiffCardProps {
-  messageId: MessageId;
-  turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
-  changedFilesExpandedByTurnId: Record<string, boolean>;
-  onSetChangedFilesExpanded: (turnId: TurnId, expanded: boolean) => void;
-  onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
-  resolvedTheme: "light" | "dark";
-}
-
-function AssistantTurnDiffCard({
-  messageId,
-  turnDiffSummaryByAssistantMessageId,
-  changedFilesExpandedByTurnId,
-  onSetChangedFilesExpanded,
-  onOpenTurnDiff,
-  resolvedTheme,
-}: AssistantTurnDiffCardProps) {
-  const turnSummary = turnDiffSummaryByAssistantMessageId.get(messageId);
-  if (!turnSummary) return null;
-  const checkpointFiles = turnSummary.files;
-  if (checkpointFiles.length === 0) return null;
-
-  const summaryStat = summarizeTurnDiffStats(checkpointFiles);
-  const changedFileCountLabel = String(checkpointFiles.length);
-  const allDirectoriesExpanded = changedFilesExpandedByTurnId[turnSummary.turnId] ?? false;
-
-  return (
-    <div className="mt-2 rounded-lg border border-border/80 bg-card/45 p-2.5">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <p className={activitySectionLabelTypography}>
-          <span>Changed files ({changedFileCountLabel})</span>
-          {hasNonZeroStat(summaryStat) && (
-            <>
-              <span className="mx-1">•</span>
-              <DiffStatLabel additions={summaryStat.additions} deletions={summaryStat.deletions} />
-            </>
-          )}
-        </p>
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="xs"
-            variant="text"
-            type="button"
-            data-scroll-anchor-ignore
-            onClick={() => onSetChangedFilesExpanded(turnSummary.turnId, !allDirectoriesExpanded)}
-          >
-            {allDirectoriesExpanded ? "Collapse all" : "Expand all"}
-          </Button>
-          <Button
-            size="xs"
-            variant="text"
-            type="button"
-            onClick={() => onOpenTurnDiff(turnSummary.turnId, checkpointFiles[0]?.path)}
-          >
-            View diff
-          </Button>
-        </div>
-      </div>
-      <ChangedFilesTree
-        key={`changed-files-tree:${turnSummary.turnId}`}
-        turnId={turnSummary.turnId}
-        files={checkpointFiles}
-        allDirectoriesExpanded={allDirectoriesExpanded}
-        resolvedTheme={resolvedTheme}
-        onOpenTurnDiff={onOpenTurnDiff}
-      />
-    </div>
   );
 }

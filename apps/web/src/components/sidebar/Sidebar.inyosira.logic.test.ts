@@ -193,16 +193,16 @@ describe("Inyosira drag and menu", () => {
   it("offers only destinations and checks the current state only for one thread", () => {
     const single = buildInyosiraMoveMenuItem(org("later"));
     expect(single.children?.map((item) => [item.label, item.checked])).toEqual([
-      ["Present", false],
       ["Needs you", false],
+      ["Present", false],
       ["Later", true],
       ["Done", false],
     ]);
     expect(single.children).toHaveLength(4);
     const many = buildInyosiraMoveMenuItem(null);
     expect(many.children?.map((item) => item.label)).toEqual([
-      "Present",
       "Needs you",
+      "Present",
       "Later",
       "Done",
     ]);

@@ -62,8 +62,14 @@ export interface OrchestrationEventStoreShape {
     commandId: CommandId,
   ) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, OrchestrationEventStoreError>;
 
-  /** Delete at most one bounded canonical prefix covered by a verified baseline. */
-  readonly compactVerifiedPrefix?: (batchSize?: number) => Effect.Effect<
+  /**
+   * Delete at most one bounded canonical prefix covered by a verified baseline. With
+   * `throughSequence`, nothing above it is deleted and gap rows are left to the caller.
+   */
+  readonly compactVerifiedPrefix?: (
+    batchSize?: number,
+    options?: { readonly throughSequence?: number },
+  ) => Effect.Effect<
     {
       readonly deletedCount: number;
       readonly retainedThroughSequence: number;

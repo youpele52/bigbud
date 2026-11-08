@@ -2,8 +2,9 @@
  * What a backend start does with intents a previous process left behind.
  *
  * - After `resume-probe-restart` (Electron main restarted a backend that refused connections
- *   after wake), every unsettled intent whose latest dispatch may have reached the provider
- *   becomes an "outcome unknown" prompt (`backend-restarted-after-wake`) instead of a silent
+ *   after wake) or `unexpected-exit-restart` (the backend crashed and main replaced it), every
+ *   unsettled intent whose latest dispatch may have reached the provider becomes an "outcome
+ *   unknown" prompt (`backend-restarted-after-wake` or `backend-restarted`) instead of a silent
  *   `stopped`.
  * - Any other start keeps today's behavior: the previous process's active intents are
  *   suspended, exactly as an app exit suspends them, and never resumed in this slice.
@@ -40,9 +41,24 @@ const isBefore = (iso: string, ms: number) => {
   return Number.isFinite(at) && at < ms;
 };
 
+/** The prompt reason for a restart that leaves turn outcomes unknown; null for ordinary starts. */
+function restartPromptReason(
+  startReason: DesktopBackendStartReason | undefined,
+): "backend-restarted-after-wake" | "backend-restarted" | null {
+  switch (startReason) {
+    case "resume-probe-restart":
+      return "backend-restarted-after-wake";
+    case "unexpected-exit-restart":
+      return "backend-restarted";
+    default:
+      return null;
+  }
+}
+
 const promptAfterRestart = Effect.fn("promptAfterRestart")(function* (
   ctx: RecoveryContext,
   intent: ThreadRecoveryIntent,
+  reason: "backend-restarted-after-wake" | "backend-restarted",
 ) {
   if (USER_PROMPT_STATUSES.has(intent.recoveryStatus)) {
     if (intent.disposition !== "active") {
@@ -53,7 +69,7 @@ const promptAfterRestart = Effect.fn("promptAfterRestart")(function* (
   yield* moveIntent(ctx, intent, {
     disposition: "active",
     recoveryStatus: "awaiting-user",
-    detail: { ...intent.detail, reason: "backend-restarted-after-wake", userAuthorized: false },
+    detail: { ...intent.detail, reason, userAuthorized: false },
   });
 });
 
@@ -67,7 +83,8 @@ export const handleBackendStart = Effect.fn("handleRecoveryBackendStart")(functi
 ) {
   const { processStartedAtMs } = input;
   const prompted = new Set<string>();
-  if (input.startReason === "resume-probe-restart") {
+  const reason = restartPromptReason(input.startReason);
+  if (reason !== null) {
     yield* forEachUncertainAfterRestart(ctx, (intent) => {
       const previous =
         intent.disposition === "active"
@@ -76,9 +93,10 @@ export const handleBackendStart = Effect.fn("handleRecoveryBackendStart")(functi
             !isBefore(intent.updatedAt, processStartedAtMs - PREVIOUS_SHUTDOWN_WINDOW_MS);
       if (!previous) return Effect.void;
       prompted.add(`${intent.threadId}\u0000${intent.messageId}`);
-      return promptAfterRestart(ctx, intent);
+      return promptAfterRestart(ctx, intent, reason);
     });
-    yield* Effect.logInfo("backend restarted after wake; uncertain turns are prompts", {
+    yield* Effect.logInfo("backend restarted; uncertain turns are prompts", {
+      startReason: input.startReason,
       count: prompted.size,
     });
   }

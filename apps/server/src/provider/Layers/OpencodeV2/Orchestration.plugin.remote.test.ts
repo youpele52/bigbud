@@ -10,8 +10,9 @@ import { renderV2ThreadIdentity } from "./Orchestration.plugin.identity.ts";
 it("pins current native identity bytes after the v4 bootstrap migration", () => {
   // Fixed placeholder avoids private keys/user state. Future changes require a separately
   // designed native bootstrap migration, not merely updating this expected digest.
+  // The websearch policy expansion retained the prior descriptor as V2_N7 (legacy.ts).
   expect(createHash("sha256").update(renderV2ThreadIdentity("public-key")).digest("hex")).toBe(
-    "f875f97767f1d6ebf87ebdc7f7e6fb9a7c46dfe5c968d69f2c944569bd4f449e",
+    "155eb230bac8f0e67b24b5f430c78d005a7413fba30005bb4fcc4537d4e6a4f2",
   );
 });
 

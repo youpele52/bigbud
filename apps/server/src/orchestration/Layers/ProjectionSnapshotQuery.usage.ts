@@ -2,7 +2,10 @@ import { IsoDateTime } from "@bigbud/contracts";
 import { Effect, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
-import { EFFECTIVE_USAGE_CTE } from "./ProjectionSnapshotQuery.usage.effective.ts";
+import {
+  EFFECTIVE_USAGE_CTE,
+  EFFECTIVE_USAGE_DAYS_CTE,
+} from "./ProjectionSnapshotQuery.usage.effective.ts";
 
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../../persistence/Errors.ts";
 import type {
@@ -125,7 +128,7 @@ export function makeGetUsageActiveDays(
     Request: Schema.Struct({ before: IsoDateTime }),
     Result: Schema.Struct({ day: Schema.String }),
     execute: ({ before }) => sql`
-      ${sql.literal(EFFECTIVE_USAGE_CTE)}
+      ${sql.literal(EFFECTIVE_USAGE_DAYS_CTE)}
       SELECT DISTINCT date(occurred_at) AS day
       FROM effective
       WHERE used_tokens > 0 AND occurred_at < ${before} AND date(occurred_at) IS NOT NULL

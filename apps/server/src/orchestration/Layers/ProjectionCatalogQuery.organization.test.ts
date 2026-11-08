@@ -1,3 +1,4 @@
+import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -30,13 +31,13 @@ const insertThread = (
   ) VALUES (
     ${row.id}, ${row.projectId}, ${row.id}, ${row.purpose ?? "standard"},
     '{"provider":"codex","model":"gpt-5-codex"}', 'full-access', 'default', NULL, NULL, NULL,
-    '2026-01-01', ${row.updatedAt}, ${row.archivedAt ?? null}, NULL, ${row.state}, 1,
+    ${row.updatedAt}, ${row.updatedAt}, ${row.archivedAt ?? null}, NULL, ${row.state}, 1,
     '2026-01-01', ${row.snoozeUntil ? `snooze-${row.id}` : null}, ${row.snoozeUntil ?? null}
   )
 `;
 
 layer("ProjectionCatalogQuery organization pages", (it) => {
-  it.effect("pages one state across projects by recency with a stable keyset", () =>
+  it.effect("pages one state across projects in displayed order with a stable keyset", () =>
     Effect.gen(function* () {
       const query = yield* ProjectionCatalogQuery;
       const sql = yield* SqlClient.SqlClient;
@@ -74,9 +75,10 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
       `;
 
       const first = yield* query.getOrganizationThreadSummaries({ state: "later", limit: 2 });
+      // No user messages yet: the sort key is creation time, ties broken by thread id descending.
       assert.deepEqual(
         first.threads.map((thread) => thread.id),
-        ["later-a", "later-b"],
+        ["later-b", "later-a"],
       );
       assert.equal(first.state, "later");
       assert.equal(first.totalCount, undefined);
@@ -87,7 +89,12 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
       });
       assert.equal(counted.threads.length, 1);
       assert.equal(counted.totalCount, 3);
-      assert.deepEqual(first.nextCursor, { updatedAt: "2026-01-03", threadId: "later-b" });
+      assert.deepEqual(first.nextCursor, {
+        updatedAt: "2026-01-03",
+        threadId: ThreadId.makeUnsafe("later-a"),
+        sortKey: "2026-01-03",
+        sortOrder: "updated_at",
+      });
 
       const second = yield* query.getOrganizationThreadSummaries({
         state: "later",
@@ -105,6 +112,8 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
         state: "later",
         revision: 1,
         changedAt: "2026-01-01",
+        activityAt: "2026-01-01",
+        ageProvenance: "pending",
         snooze: { id: "snooze-1", until: "2026-01-06" },
       });
 
@@ -117,7 +126,7 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
     }),
   );
 
-  it.effect("uses the active organization index", () =>
+  it.effect("uses the display-order organization index", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const plan = yield* sql<{ readonly detail: string }>`
@@ -125,13 +134,17 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
         SELECT thread_id FROM projection_threads t
         WHERE t.organization_state = 'later'
           AND t.deleted_at IS NULL AND t.archived_at IS NULL AND t.deleting_at IS NULL
-        ORDER BY t.updated_at DESC, t.thread_id ASC
+          AND t.purpose = 'standard'
+        ORDER BY COALESCE(t.latest_user_message_at, t.created_at) DESC, t.thread_id DESC
         LIMIT 21
       `;
       assert.ok(
-        plan.some((row) => row.detail.includes("idx_projection_threads_active_organization_state")),
+        plan.some((row) =>
+          row.detail.includes("idx_projection_threads_organization_activity_page"),
+        ),
         JSON.stringify(plan),
       );
+      assert.ok(!plan.some((row) => row.detail.includes("TEMP B-TREE")), JSON.stringify(plan));
       const countPlan = yield* sql<{ readonly detail: string }>`
         EXPLAIN QUERY PLAN
         SELECT COUNT(*) FROM projection_threads t
@@ -140,7 +153,9 @@ layer("ProjectionCatalogQuery organization pages", (it) => {
       `;
       assert.ok(
         countPlan.some((row) =>
-          row.detail.includes("idx_projection_threads_active_organization_state"),
+          /idx_projection_threads_(active_organization_state|organization_activity_page)/.test(
+            row.detail,
+          ),
         ),
         JSON.stringify(countPlan),
       );

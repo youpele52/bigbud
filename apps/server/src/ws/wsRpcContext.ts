@@ -63,6 +63,8 @@ import { makeCoalescedPromiseEffect } from "./wsRpcContext.helpers";
 import { observeConfigStage, validateServerConfig } from "./wsConfigDiagnostics";
 import { DesktopSupervisorDelivery } from "../desktop-supervisor/desktopSupervisorDelivery.ts";
 import { ConnectionDiagnostics } from "../connection-diagnostics/Services/ConnectionDiagnostics.ts";
+import { EventLogMaintenance } from "../persistence/Services/EventLogMaintenance.ts";
+import { ThreadBranchCopy } from "../orchestration/Services/ThreadBranchCopy.ts";
 import { CommandGateway } from "../command-gateway/Services/CommandGateway.ts";
 import { makeWsRpcCommandDispatch } from "./wsRpcContext.commandDispatch.ts";
 import { makeV2ThreadToolsSetup } from "../provider/Layers/OpencodeV2/ThreadToolsSetup.ts";
@@ -124,6 +126,8 @@ export const makeWsRpcContext = (
     const mobileRemoteControl = yield* MobileRemoteControl;
     const desktopSupervisorDelivery = yield* DesktopSupervisorDelivery;
     const connectionDiagnostics = yield* ConnectionDiagnostics;
+    const eventLogMaintenance = yield* Effect.serviceOption(EventLogMaintenance);
+    const threadBranchCopy = yield* Effect.serviceOption(ThreadBranchCopy);
     const fileSystem = yield* FileSystem.FileSystem;
     const resolveBootstrapWorktreeIdentity = yield* makeBootstrapWorktreeIdentityResolver;
     const handoffJobs = yield* makeServerHandoffJobs;
@@ -302,6 +306,8 @@ export const makeWsRpcContext = (
       discoveryRegistry,
       desktopSupervisorDelivery,
       connectionDiagnostics,
+      eventLogMaintenance,
+      threadBranchCopy,
       fileSystem,
       git,
       gitManager,

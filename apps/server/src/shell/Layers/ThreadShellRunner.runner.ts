@@ -73,6 +73,18 @@ export class PersistentThreadPtyShellRunner {
     });
   }
 
+  /** Retaining an unused shell is not work. Locks cover queued/spawning/running commands. */
+  hasRunningCommand(threadId: string): boolean {
+    return (
+      this.threadLocks.has(threadId) ||
+      this.sessions.get(threadId)?.activeCapture?.kind === "command"
+    );
+  }
+
+  workingThreadIds(): ReadonlyArray<string> {
+    return Array.from(this.threadLocks.keys());
+  }
+
   isActive(threadId: string): boolean {
     return this.sessions.has(threadId) || this.threadLocks.has(threadId);
   }

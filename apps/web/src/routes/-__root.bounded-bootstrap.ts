@@ -11,13 +11,17 @@ import {
 
 import type { readNativeApi } from "../rpc/nativeApi";
 import { useStore } from "../stores/main";
+import { MAX_THREAD_MESSAGES } from "../stores/main/helpers.store";
 import {
   applyReleasedThreadHydrationEvents,
   threadHydrationEventBuffer,
 } from "../logic/orchestration/thread-hydration-events.logic";
+import { readSidebarThreadSortOrder } from "./-__root.bounded-bootstrap.sort";
 
 type Api = NonNullable<ReturnType<typeof readNativeApi>>;
 const STARTUP_LOCAL_PROJECT_CATALOG_LIMIT = 2;
+/** Opening a thread loads its newest 15 messages; each scroll to the top loads 15 older ones. */
+export const THREAD_VIEW_MESSAGE_PAGE_SIZE = 15;
 export {
   loadAllProjectCatalog,
   loadMoreProjectCatalog,
@@ -57,7 +61,10 @@ export async function runBoundedBootstrap(input: {
     input.selectedThreadId === null
       ? null
       : (useStore.getState().setThreadHydration(input.selectedThreadId, { status: "loading" }),
-        input.api.orchestration.getSelectedThreadDetail({ threadId: input.selectedThreadId }));
+        input.api.orchestration.getSelectedThreadDetail({
+          threadId: input.selectedThreadId,
+          messageLimit: THREAD_VIEW_MESSAGE_PAGE_SIZE,
+        }));
 
   try {
     if (selectedDetailPromise !== null) {
@@ -117,6 +124,7 @@ export async function runBoundedBootstrap(input: {
             projectId: selectedProjectId,
             limit: PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT,
             priorityThreadId: input.selectedThreadId!,
+            sortOrder: readSidebarThreadSortOrder(selectedProjectId),
           })
         : null;
     if (selectedProjectPage) {
@@ -125,6 +133,8 @@ export async function runBoundedBootstrap(input: {
 
     if (!input.disposed()) {
       const store = useStore.getState();
+      // A bounded bootstrap is also the baseline reset: other hydrated threads may be stale now.
+      store.unloadHydratedThreads(input.selectedThreadId);
       store.syncBoundedCatalog(
         catalogs,
         catalogErrors,
@@ -189,12 +199,19 @@ export async function loadOlderThreadMessages(input: {
   if (nextCursor === null) {
     return;
   }
+  // The store keeps at most MAX_THREAD_MESSAGES per thread (newest first); a page past that cap
+  // would be trimmed straight away, so scroll-up stops there instead of fetching pages it drops.
+  const thread = useStore.getState().threads.find((entry) => entry.id === input.threadId);
+  if (thread && thread.messages.length >= MAX_THREAD_MESSAGES) {
+    return;
+  }
   const hydrationToken = threadHydrationEventBuffer.begin(input.threadId);
   useStore.getState().setThreadHydration(input.threadId, { status: "loadingOlder" });
   try {
     const detail = await input.api.orchestration.getSelectedThreadDetail({
       threadId: input.threadId,
       messageCursor: nextCursor,
+      messageLimit: THREAD_VIEW_MESSAGE_PAGE_SIZE,
     });
     const events = threadHydrationEventBuffer.finish(
       input.threadId,
@@ -232,6 +249,8 @@ export async function loadMoreProjectThreadSummaries(input: {
   const page = await input.api.orchestration.getProjectThreadSummaries({
     projectId: input.projectId,
     limit: PROJECT_THREAD_SUMMARY_DEFAULT_LIMIT,
+    // Pages follow the displayed order, so "Show 4 more" adds the next 4 rows the user expects.
+    sortOrder: readSidebarThreadSortOrder(input.projectId),
     ...(cursor ? { cursor } : {}),
   });
   useStore.getState().appendProjectThreadSummaries(page);
@@ -250,6 +269,7 @@ export async function hydrateSelectedThread(input: {
   try {
     const detail = await input.api.orchestration.getSelectedThreadDetail({
       threadId: input.threadId,
+      messageLimit: THREAD_VIEW_MESSAGE_PAGE_SIZE,
     });
     const events = threadHydrationEventBuffer.finish(
       input.threadId,

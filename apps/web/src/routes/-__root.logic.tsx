@@ -1,3 +1,4 @@
+import { createOrganizationNotifications } from "../lib/organizationNotifications.delivery";
 import {
   BUILT_IN_CHATS_PROJECT_ID,
   type ThreadId,
@@ -27,6 +28,7 @@ import {
   useServerWelcomeSubscription,
 } from "../rpc/serverState";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
+import { useDisconnectedExecutionTargetsSync } from "../hooks/useDisconnectedExecutionTargetsSync";
 import { useStore } from "../stores/main";
 import { useThreadSelectionStore } from "../stores/thread";
 import { useThinkingStreamStore } from "../stores/thinkingStream/thinkingStream.store";
@@ -246,6 +248,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       applyTerminalEvent: (event) => applyTerminalEvents([event]),
     });
     const deliveryApplicationQueue = createAsyncOperationQueue();
+    const organizationNotifications = createOrganizationNotifications();
 
     let selectedThreadId: ThreadId | null = readOwnedThreadId();
     const deliveryBaselineAbort = new AbortController();
@@ -268,12 +271,17 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
             if (disposed) return;
             if (item.type === "lifecycle") {
               setOrchestrationDeliveryLifecycle(item);
+              // Toasts are armed only once replay has finished on this connection.
+              if (item.state === "live")
+                organizationNotifications.arm(eventRecovery.getAppliedSequence());
+              else organizationNotifications.disarm();
               if (item.state === "fallback" && item.reasonCode === "replay_gap") {
                 await fallbackToBoundedRecovery();
               }
               return;
             }
             if (item.type === "recovery") {
+              organizationNotifications.disarm();
               selectedThreadId = ownsThread
                 ? readOwnedThreadId()
                 : resolveSelectedThreadIdFromPath(readPathname(), selectedThreadId);
@@ -291,8 +299,15 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
               batch: item,
               classify: eventRecovery.classifyDomainEvent,
               recover: fallbackToBoundedRecovery,
-              apply: (events) =>
-                eventRecovery.applyEventBatch(events, { disposed: () => disposed }),
+              apply: async (events) => {
+                const previousSequence = eventRecovery.getAppliedSequence();
+                await eventRecovery.applyEventBatch(events, { disposed: () => disposed });
+                if (!disposed && !ownsThread) {
+                  organizationNotifications.add(
+                    events.filter((event) => event.sequence > previousSequence),
+                  );
+                }
+              },
               getAppliedSequence: eventRecovery.getAppliedSequence,
               acknowledge: api.orchestration.acknowledgeDelivery,
             });
@@ -319,6 +334,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     });
     return () => {
       disposed = true;
+      organizationNotifications.dispose();
       deliveryBaselineAbort.abort();
       disposedRef.current = true;
       eventRecovery.cancel();
@@ -342,6 +358,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
     syncThreads,
   ]);
 
+  useDisconnectedExecutionTargetsSync();
   useServerWelcomeSubscription(handleWelcome);
   useServerConfigUpdatedSubscription(handleServerConfigUpdated);
 

@@ -10,6 +10,7 @@ import {
   makeProjectionBaselineCoordinator,
   PROJECTION_BASELINE_FAILURE_COOLDOWN_MS,
 } from "./ProjectionPipeline.baseline.coordination.ts";
+import { emptyBaselinePayloadSource } from "../../persistence/ProjectionBaselineRows.ts";
 import type {
   ProjectionBaseline,
   ProjectionBaselineRepositoryShape,
@@ -103,8 +104,7 @@ it.layer(BaseTestLayer)("projection baseline cooldown", (it) => {
 const baselineAt = (sequence: number): ProjectionBaseline => ({
   baselineId: sequence,
   sequence,
-  formatVersion: 1,
-  payloadJson: "{}",
+  formatVersion: 2,
   payloadHash: `hash-${sequence}`,
   verificationStatus: "verified",
   verificationDetail: null,
@@ -115,12 +115,15 @@ const baselineAt = (sequence: number): ProjectionBaseline => ({
 const coordinatorBaselines = (
   latest: () => Option.Option<ProjectionBaseline>,
 ): ProjectionBaselineRepositoryShape => ({
-  capturePayload: () => Effect.succeed("{}"),
+  captureDigest: () => Effect.succeed("digest"),
   createCandidate: () => Effect.succeed(Option.none()),
   getById: () => Effect.succeed(Option.none()),
   latestVerified: () => Effect.succeed(latest()),
+  latestVerifiedSequence: () =>
+    Effect.succeed(Option.map(latest(), (baseline) => baseline.sequence)),
   markRejected: () => Effect.void,
   markVerified: () => Effect.void,
+  payloadSource: () => emptyBaselinePayloadSource,
   restorePayload: () => Effect.void,
 });
 

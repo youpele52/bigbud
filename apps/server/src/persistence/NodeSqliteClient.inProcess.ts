@@ -61,12 +61,22 @@ export const makeInProcessConnection = Effect.fn("makeInProcessConnection")(func
       }),
   });
 
-  const runStatement = (statement: StatementSync, params: ReadonlyArray<unknown>, raw: boolean) =>
+  const runStatement = (
+    statement: StatementSync,
+    params: ReadonlyArray<unknown>,
+    raw: boolean,
+    toCompletion = false,
+  ) =>
     Effect.withFiber<ReadonlyArray<any>, SqlError>((fiber) => {
       statement.setReadBigInts(Boolean(ServiceMap.get(fiber.services, Client.SafeIntegers)));
       try {
         if (hasRows(statement)) {
           return Effect.succeed(statement.all(...(params as any)));
+        }
+        // See the worker: `incremental_vacuum` needs every step, and `run()` takes only one.
+        if (toCompletion) {
+          statement.all(...(params as any));
+          return Effect.succeed([]);
         }
         const result = statement.run(...(params as any));
         return Effect.succeed(raw ? (result as unknown as ReadonlyArray<any>) : []);
@@ -128,7 +138,7 @@ export const makeInProcessConnection = Effect.fn("makeInProcessConnection")(func
       return runValues(sql, params);
     },
     executeUnprepared(sql, params, rowTransform) {
-      const effect = runStatement(db.prepare(sql), params ?? [], false);
+      const effect = runStatement(db.prepare(sql), params ?? [], false, true);
       return rowTransform ? Effect.map(effect, rowTransform) : effect;
     },
     executeStream(_sql, _params) {

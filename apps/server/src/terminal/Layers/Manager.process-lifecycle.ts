@@ -29,6 +29,8 @@ export interface ProcessLifecycleContext {
     f: (state: TerminalManagerState) => readonly [A, TerminalManagerState],
   ) => Effect.Effect<A>;
   readManagerState: Effect.Effect<TerminalManagerState>;
+  refreshIdleWork?: Effect.Effect<void>;
+  refreshThreadIdleWork?: (threadId: string) => Effect.Effect<void>;
   publishEvent: (event: TerminalEvent) => Effect.Effect<void>;
   queuePtyOutput: (
     session: TerminalSessionState,

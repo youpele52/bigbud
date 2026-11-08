@@ -7,8 +7,10 @@ import type { OrchestrationEventStoreShape } from "../Services/OrchestrationEven
 export function makeCompactVerifiedPrefix(
   sql: SqlClient.SqlClient,
 ): NonNullable<OrchestrationEventStoreShape["compactVerifiedPrefix"]> {
-  return (requestedBatchSize = 500) => {
+  return (requestedBatchSize = 500, options) => {
     const batchSize = Math.max(1, Math.min(10_000, Math.floor(requestedBatchSize)));
+    // A capped caller (background maintenance) also owns incremental gap-row removal.
+    const cap = options?.throughSequence;
     return sql
       .withTransaction(
         Effect.gen(function* () {
@@ -24,35 +26,44 @@ export function makeCompactVerifiedPrefix(
             retainedThroughSequence: 0,
             compactThroughSequence: 0,
           };
-          const selected = yield* sql<{ sequence: number }>`
-            SELECT sequence FROM orchestration_events
-            WHERE sequence > ${state.retainedThroughSequence}
-              AND sequence <= ${state.compactThroughSequence}
-              AND EXISTS (
-                SELECT 1 FROM projection_baselines
-                WHERE verification_status = 'verified'
-                  AND sequence >= orchestration_events.sequence
-              )
-            ORDER BY sequence ASC LIMIT ${batchSize}
+          const target =
+            cap === undefined
+              ? state.compactThroughSequence
+              : Math.min(state.compactThroughSequence, Math.max(0, Math.floor(cap)));
+          // Aggregated, so a large batch never ships its sequences to the caller.
+          const selected = yield* sql<{ lastDeleted: number | null; count: number }>`
+            SELECT MAX(sequence) AS "lastDeleted", COUNT(*) AS "count" FROM (
+              SELECT sequence FROM orchestration_events
+              WHERE sequence > ${state.retainedThroughSequence}
+                AND sequence <= ${target}
+                AND EXISTS (
+                  SELECT 1 FROM projection_baselines
+                  WHERE verification_status = 'verified'
+                    AND sequence >= orchestration_events.sequence
+                )
+              ORDER BY sequence ASC LIMIT ${batchSize}
+            )
           `;
-          const lastDeleted = selected.at(-1)?.sequence;
+          const lastDeleted = selected[0]?.lastDeleted ?? undefined;
           if (lastDeleted === undefined) {
-            if (state.retainedThroughSequence < state.compactThroughSequence) {
+            if (state.retainedThroughSequence < target) {
               const updatedAt = new Date().toISOString();
               yield* sql`
                 UPDATE orchestration_retention_state
-                SET retained_through_sequence = ${state.compactThroughSequence},
+                SET retained_through_sequence = ${target},
                   updated_at = ${updatedAt}
                 WHERE singleton_id = 1
               `;
-              yield* sql`
-                DELETE FROM orchestration_event_gaps
-                WHERE sequence <= ${state.compactThroughSequence}
-              `;
+              if (cap === undefined) {
+                yield* sql`
+                  DELETE FROM orchestration_event_gaps
+                  WHERE sequence <= ${target}
+                `;
+              }
             }
             return {
               ...state,
-              retainedThroughSequence: state.compactThroughSequence,
+              retainedThroughSequence: Math.max(state.retainedThroughSequence, target),
               deletedCount: 0,
               complete: true,
             };
@@ -69,10 +80,10 @@ export function makeCompactVerifiedPrefix(
             WHERE singleton_id = 1
           `;
           return {
-            deletedCount: selected.length,
+            deletedCount: selected[0]?.count ?? 0,
             retainedThroughSequence: lastDeleted,
             compactThroughSequence: state.compactThroughSequence,
-            complete: lastDeleted >= state.compactThroughSequence,
+            complete: lastDeleted >= target,
           };
         }),
       )

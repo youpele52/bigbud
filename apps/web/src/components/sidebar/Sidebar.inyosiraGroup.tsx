@@ -97,6 +97,7 @@ export function SidebarInyosiraGroup({
       <SidebarInyosiraGroupLabel
         state={state}
         result={count}
+        hasThreads={threadIds.length > 0}
         isExpanded={expanded}
         onExpandedChange={(next) => setStateCollapsed(state, !next)}
       />
@@ -117,6 +118,7 @@ export function SidebarInyosiraGroup({
             hasMoreThreads={hasMoreThreads}
             collapsedHiddenCount={collapsedHiddenCount}
             unloadedCount={unloadedCount}
+            hiddenLoadedCount={preview.hiddenCount}
             isExpanded={showAll}
             isLoading={page.status === "loading"}
             loadError={page.status === "error"}

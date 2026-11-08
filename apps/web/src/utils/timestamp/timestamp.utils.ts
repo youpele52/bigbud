@@ -46,11 +46,24 @@ export function getHumanReadableDateFormatOptions(
 
 const timestampFormatterCache = new Map<string, Intl.DateTimeFormat>();
 const humanReadableDateFormatterCache = new Map<HumanReadableDateFormat, Intl.DateTimeFormat>();
+const messageDateFormatterCache = new Map<boolean, Intl.DateTimeFormat>();
+let formatterTimeZone: string | undefined;
+
+/** Default-zone Intl formatters do not follow system timezone changes. */
+function refreshTimestampFormatters(): void {
+  const timeZone = new Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (timeZone === formatterTimeZone) return;
+  formatterTimeZone = timeZone;
+  timestampFormatterCache.clear();
+  humanReadableDateFormatterCache.clear();
+  messageDateFormatterCache.clear();
+}
 
 function getTimestampFormatter(
   timestampFormat: TimestampFormat,
   includeSeconds: boolean,
 ): Intl.DateTimeFormat {
+  refreshTimestampFormatters();
   const cacheKey = `${timestampFormat}:${includeSeconds ? "seconds" : "minutes"}`;
   const cachedFormatter = timestampFormatterCache.get(cacheKey);
   if (cachedFormatter) {
@@ -66,6 +79,7 @@ function getTimestampFormatter(
 }
 
 function getHumanReadableDateFormatter(format: HumanReadableDateFormat): Intl.DateTimeFormat {
+  refreshTimestampFormatters();
   const cachedFormatter = humanReadableDateFormatterCache.get(format);
   if (cachedFormatter) {
     return cachedFormatter;
@@ -84,8 +98,31 @@ export function formatHumanReadableDate(
   return getHumanReadableDateFormatter(format).format(date);
 }
 
-export function formatTimestamp(isoDate: string, timestampFormat: TimestampFormat): string {
-  return getTimestampFormatter(timestampFormat, true).format(new Date(isoDate));
+/** Format chat timestamps by local calendar day, preserving the configured time and seconds. */
+export function formatTimestamp(
+  isoDate: string,
+  timestampFormat: TimestampFormat,
+  now: Date = new Date(),
+): string {
+  const date = new Date(isoDate);
+  const time = getTimestampFormatter(timestampFormat, true).format(date);
+  if (date.toDateString() === now.toDateString()) return time;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return `Yesterday ${time}`;
+
+  const includeYear = date.getFullYear() !== now.getFullYear();
+  let dateFormatter = messageDateFormatterCache.get(includeYear);
+  if (!dateFormatter) {
+    dateFormatter = new Intl.DateTimeFormat(undefined, {
+      month: "long",
+      day: "numeric",
+      ...(includeYear ? { year: "numeric" } : {}),
+    });
+    messageDateFormatterCache.set(includeYear, dateFormatter);
+  }
+  return `${dateFormatter.format(date)} ${time}`;
 }
 
 export function formatShortTimestamp(isoDate: string, timestampFormat: TimestampFormat): string {

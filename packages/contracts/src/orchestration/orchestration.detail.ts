@@ -37,6 +37,12 @@ export const THREAD_DETAIL_TASK_MAX_LIMIT = 100;
 export const THREAD_DETAIL_CHECKPOINT_DEFAULT_LIMIT = 10;
 export const THREAD_DETAIL_CHECKPOINT_MAX_LIMIT = 50;
 export const THREAD_DETAIL_MESSAGE_ATTACHMENT_MAX_LIMIT = 20;
+/** A message page stops adding older messages once its text exceeds this (always >= 1 message). */
+export const THREAD_DETAIL_PAGE_TEXT_BUDGET = 512 * 1024;
+/** Message text or activity payload longer than this is sent truncated with its full length. */
+export const THREAD_DETAIL_TEXT_TRUNCATE_THRESHOLD = 256 * 1024;
+/** Characters kept from a truncated message; the rest loads through `getMessageTextChunk`. */
+export const THREAD_DETAIL_TEXT_PREVIEW_LENGTH = 64 * 1024;
 
 export const ThreadDetailMessage = Schema.Struct({
   id: MessageId,
@@ -50,6 +56,10 @@ export const ThreadDetailMessage = Schema.Struct({
   streaming: Schema.Boolean,
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
+  /** Set when `text` is only the first `THREAD_DETAIL_TEXT_PREVIEW_LENGTH` characters. */
+  textTruncated: Schema.optional(Schema.Boolean),
+  /** Full stored text length in characters; present when `textTruncated` is set. */
+  textLength: Schema.optional(NonNegativeInt),
 });
 export type ThreadDetailMessage = typeof ThreadDetailMessage.Type;
 

@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 
 import type { ProjectId } from "@bigbud/contracts";
 import { readNativeApi } from "../../rpc/nativeApi";
+import { connectExecutionTargetForSetup } from "../../stores/remoteAccess/remoteAccess.connect";
 import {
   applyRemoteWorkspaceDraftChange,
   createDefaultRemoteWorkspaceDraft,
@@ -150,6 +151,10 @@ export function useSidebarRemoteWorkspaceAddActions({
     setIsVerifyingRemoteWorkspace(true);
     setRemoteWorkspaceError(null);
     try {
+      await connectExecutionTargetForSetup(
+        api,
+        createRemoteWorkspaceExecutionTargetId(remoteWorkspaceDraft),
+      );
       const result = await api.server.verifyExecutionTarget({
         executionTargetId: createRemoteWorkspaceExecutionTargetId(remoteWorkspaceDraft),
         cwd: remoteWorkspaceDraft.workspaceRoot.trim(),

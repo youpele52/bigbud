@@ -39,6 +39,11 @@ export function makeProjectionBaselineOperations(input: {
     if (candidate.verificationStatus === "verified") return true;
     const verificationExit = yield* Effect.exit(
       Effect.gen(function* () {
+        // Compare sequences first; only a candidate that can still win loads the full source.
+        const previousSequence = yield* input.baselines.latestVerifiedSequence();
+        if (Option.isSome(previousSequence) && previousSequence.value >= candidate.sequence) {
+          return false;
+        }
         const previousOption = yield* input.baselines.latestVerified();
         const previous = Option.getOrUndefined(previousOption);
         if (previous && previous.sequence >= candidate.sequence) return false;

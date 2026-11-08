@@ -2,7 +2,6 @@ import { useCallback, useRef, useState, type RefObject } from "react";
 
 import type { ProjectId } from "@bigbud/contracts";
 
-import { isElectron } from "../../config/env";
 import type { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { buildExplicitExecutionTargets } from "../../lib/providerExecutionTargets";
 import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
@@ -11,7 +10,6 @@ import type { Project } from "../../models/types";
 import { getDefaultModelSelection } from "../../models/provider/provider.models";
 import { readNativeApi } from "../../rpc/nativeApi";
 import type { useServerProviders } from "../../rpc/serverState";
-import { toastManager } from "../ui/toast";
 import {
   deriveProjectTitleFromCwd,
   isRemoteExecutionTargetId,
@@ -39,7 +37,7 @@ export interface SidebarProjectAddActionsOutput {
   setNewCwd: (cwd: string) => void;
   setAddProjectError: (error: string | null) => void;
   handleStartAddProject: () => void;
-  handleAddProject: () => void;
+  handleAddProject: (title?: string) => void;
   handlePickFolder: () => Promise<void>;
   cancelAddProject: () => void;
   isRemoteWorkspaceDialogOpen: SidebarRemoteWorkspaceAddActionsOutput["isRemoteWorkspaceDialogOpen"];
@@ -102,8 +100,11 @@ export function useSidebarProjectAddActions({
       const itemLabel = isRemoteExecutionTargetId(workspaceExecutionTargetId)
         ? "Remote workspace"
         : "Project";
-      if (!cwd || isAddingProject) {
-        return { ok: false, error: `${itemLabel} path is required.` };
+      if (isAddingProject || !title.trim()) {
+        return { ok: false, error: `${itemLabel} name is required.` };
+      }
+      if (!cwd && isRemoteExecutionTargetId(workspaceExecutionTargetId)) {
+        return { ok: false, error: "Remote workspace path is required." };
       }
 
       const executionTargets = buildExplicitExecutionTargets({
@@ -137,7 +138,7 @@ export function useSidebarProjectAddActions({
           projectId,
           title,
           ...executionTargets,
-          workspaceRoot: cwd,
+          workspaceRoot: cwd || null,
           defaultModelSelection: getDefaultModelSelection(serverProviders),
           createdAt,
         });
@@ -169,21 +170,24 @@ export function useSidebarProjectAddActions({
     ],
   );
 
-  const handleAddProject = useCallback(async () => {
-    const result = await createProject({
-      rawCwd: newCwd,
-      providerRuntimeLocation: "local",
-      workspaceExecutionTargetId: "local",
-      title: deriveProjectTitleFromCwd(newCwd),
-    });
+  const handleAddProject = useCallback(
+    async (title?: string) => {
+      const result = await createProject({
+        rawCwd: newCwd,
+        providerRuntimeLocation: "local",
+        workspaceExecutionTargetId: "local",
+        title: title?.trim() || deriveProjectTitleFromCwd(newCwd),
+      });
 
-    if (!result.ok) {
-      setAddProjectError(result.error);
-      return;
-    }
+      if (!result.ok) {
+        setAddProjectError(result.error);
+        return;
+      }
 
-    resetLocalProjectFlow();
-  }, [createProject, newCwd, resetLocalProjectFlow]);
+      resetLocalProjectFlow();
+    },
+    [createProject, newCwd, resetLocalProjectFlow],
+  );
 
   const handlePickFolder = useCallback(async () => {
     const api = readNativeApi();
@@ -201,40 +205,20 @@ export function useSidebarProjectAddActions({
         return;
       }
 
-      const result = await createProject({
-        rawCwd: pickedPath,
-        providerRuntimeLocation: "local",
-        workspaceExecutionTargetId: "local",
-        title: deriveProjectTitleFromCwd(pickedPath),
-      });
-
-      if (!result.ok) {
-        if (addingProject) {
-          setAddProjectError(result.error);
-        } else {
-          toastManager.add({
-            type: "error",
-            title: "Failed to add project",
-            description: result.error,
-          });
-        }
-        return;
-      }
-
-      resetLocalProjectFlow();
+      setNewCwd(pickedPath);
+      setAddingProject(true);
+      setAddProjectError(null);
+    } catch (cause) {
+      setAddProjectError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setIsPickingFolder(false);
     }
-  }, [addingProject, createProject, isPickingFolder, resetLocalProjectFlow]);
+  }, [addingProject, isPickingFolder]);
 
   const handleStartAddProject = useCallback(() => {
     setAddProjectError(null);
-    if (isElectron) {
-      void handlePickFolder();
-      return;
-    }
     setAddingProject((current) => !current);
-  }, [handlePickFolder]);
+  }, []);
 
   const cancelAddProject = useCallback(() => {
     resetLocalProjectFlow();
@@ -256,8 +240,8 @@ export function useSidebarProjectAddActions({
     setNewCwd,
     setAddProjectError,
     handleStartAddProject,
-    handleAddProject: () => {
-      void handleAddProject();
+    handleAddProject: (title) => {
+      void handleAddProject(title);
     },
     handlePickFolder,
     cancelAddProject,

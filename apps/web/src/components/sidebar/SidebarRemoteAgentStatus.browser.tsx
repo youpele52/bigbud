@@ -1,5 +1,5 @@
 import "../../index.css";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { SidebarRemoteAgentStatus } from "./SidebarRemoteAgentStatus";
@@ -9,14 +9,46 @@ const api = vi.hoisted(() => ({ current: null as never }));
 const toast = vi.hoisted(() => ({ add: vi.fn() }));
 vi.mock("../../rpc/nativeApi", () => ({ readNativeApi: () => api.current }));
 vi.mock("../ui/toast.manager", () => ({ toastManager: toast }));
+beforeEach(() => {
+  useRemoteAccessStore.setState({ disconnectedTargetsLoaded: true });
+});
 afterEach(() => {
   toast.add.mockClear();
   api.current = null as never;
-  useRemoteAccessStore.setState({ remoteConnections: {} });
+  useRemoteAccessStore.setState({ remoteConnections: {}, disconnectedExecutionTargetIds: {} });
   document.body.innerHTML = "";
 });
 
 describe("explicit remote admission outcome", () => {
+  it("waits for the disconnect list before verifying on mount", async () => {
+    const target = "ssh:loading?transport=agent";
+    const verifyExecutionTarget = vi.fn().mockResolvedValue({ message: "ok" });
+    useRemoteAccessStore.setState({ disconnectedTargetsLoaded: false });
+    api.current = { server: { verifyExecutionTarget, connectRemoteAgent: vi.fn() } } as never;
+
+    await render(<SidebarRemoteAgentStatus executionTargetId={target} cwd="/workspace" />);
+    await expect.element(page.getByRole("region", { name: "Remote agent versions" })).toBeVisible();
+    expect(verifyExecutionTarget).not.toHaveBeenCalled();
+
+    useRemoteAccessStore.getState().markDisconnectedTargetsLoaded();
+    await expect.poll(() => verifyExecutionTarget.mock.calls.length).toBe(1);
+  });
+
+  it("does not verify a user-disconnected target and disables manual connection", async () => {
+    const target = "ssh:paused?transport=agent";
+    const verifyExecutionTarget = vi.fn();
+    useRemoteAccessStore.getState().markExecutionTargetDisconnected(target);
+    api.current = { server: { verifyExecutionTarget, connectRemoteAgent: vi.fn() } } as never;
+
+    await render(<SidebarRemoteAgentStatus executionTargetId={target} cwd="/workspace" />);
+
+    await expect
+      .element(page.getByRole("status"))
+      .toHaveTextContent("Remote workspace is disconnected. Connect it to continue.");
+    await expect.element(page.getByRole("button", { name: "Connect new session" })).toBeDisabled();
+    expect(verifyExecutionTarget).not.toHaveBeenCalled();
+  });
+
   it("preserves the verification failure and guides manual transport selection", async () => {
     const connectRemoteAgent = vi.fn();
     api.current = {

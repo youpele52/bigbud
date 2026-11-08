@@ -11,7 +11,8 @@ export const PROJECTION_BASELINE_FAILURE_COOLDOWN_MS = 15 * 60 * 1000;
 
 export const makeProjectionBaselineCoordinator = Effect.fn("makeProjectionBaselineCoordinator")(
   function* (input: {
-    readonly baselines: ProjectionBaselineRepositoryShape;
+    /** Coverage only compares sequences; the coordinator never loads a baseline payload. */
+    readonly baselines: Pick<ProjectionBaselineRepositoryShape, "latestVerifiedSequence">;
     readonly compact: Effect.Effect<void, ProjectionRepositoryError>;
   }) {
     type Flight = {
@@ -60,23 +61,22 @@ export const makeProjectionBaselineCoordinator = Effect.fn("makeProjectionBaseli
                 return yield* previousFailure.error;
               }
 
-              const verified = yield* input.baselines.latestVerified();
-              if (
-                Option.isSome(verified) &&
-                (yield* markCovered(deferred, verified.value.sequence))
-              ) {
+              // Coverage needs only the sequence. Loading the verified row would read,
+              // hash and parse the entire baseline payload on every check.
+              const verified = yield* input.baselines.latestVerifiedSequence();
+              if (Option.isSome(verified) && (yield* markCovered(deferred, verified.value))) {
                 yield* Ref.set(failure, null);
                 return;
               }
 
               yield* input.compact;
-              const afterCompact = yield* input.baselines.latestVerified();
+              const afterCompact = yield* input.baselines.latestVerifiedSequence();
               const updated = yield* Ref.get(flight);
               const currentRequested =
                 updated?.deferred === deferred ? updated.requestedSequence : requestedSequence;
               if (
                 Option.isSome(afterCompact) &&
-                (yield* markCovered(deferred, afterCompact.value.sequence))
+                (yield* markCovered(deferred, afterCompact.value))
               ) {
                 yield* Ref.set(failure, null);
                 return;
@@ -84,7 +84,7 @@ export const makeProjectionBaselineCoordinator = Effect.fn("makeProjectionBaseli
               if (
                 currentRequested > requestedSequence &&
                 Option.isSome(afterCompact) &&
-                afterCompact.value.sequence >= requestedSequence
+                afterCompact.value >= requestedSequence
               ) {
                 continue;
               }

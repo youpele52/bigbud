@@ -13,7 +13,9 @@ export function recordedWorktreePathsOverlap(
   };
   const a = normalize(left);
   const b = normalize(right);
-  return a === b || a.startsWith(`${b}${pathOps.sep}`) || b.startsWith(`${a}${pathOps.sep}`);
+  const prefix = (value: string) =>
+    value.endsWith(pathOps.sep) ? value : `${value}${pathOps.sep}`;
+  return a === b || a.startsWith(prefix(b)) || b.startsWith(prefix(a));
 }
 
 /** Classify a recorded path using the host platform's path rules before any file access. */

@@ -1,7 +1,8 @@
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { isPersistenceError, toPersistenceSqlError } from "../../persistence/Errors.ts";
+import { UsageSqlClient } from "../../persistence/Services/UsageSqlClient.ts";
 import {
   ProjectionSnapshotQuery,
   type ProjectionSnapshotQueryShape,
@@ -27,6 +28,8 @@ export { toPersistenceSqlOrDecodeError } from "./ProjectionSnapshotQueryAssembly
 
 const makeProjectionSnapshotQuery = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
+  // Bare SQL / in-memory test layers intentionally share their only connection.
+  const usageSql = Option.getOrElse(yield* Effect.serviceOption(UsageSqlClient), () => sql);
   const queries = makeProjectionSnapshotQuerySql(sql);
   const mobileQueries = makeMobileProjectionSnapshotQuerySql(sql);
 
@@ -60,9 +63,9 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getSnapshot,
     getMobileRecoveryBaseline,
     getCounts: makeGetCounts(queries),
-    getUsageEntries: makeGetUsageEntries(sql),
-    getUsageHistoryStatus: makeGetUsageHistoryStatus(sql),
-    getUsageActiveDays: makeGetUsageActiveDays(sql),
+    getUsageEntries: makeGetUsageEntries(usageSql),
+    getUsageHistoryStatus: makeGetUsageHistoryStatus(usageSql),
+    getUsageActiveDays: makeGetUsageActiveDays(usageSql),
     getActiveProjectByWorkspaceRoot: makeGetActiveProjectByWorkspaceRoot(queries),
     getFirstActiveThreadIdByProjectId: makeGetFirstActiveThreadIdByProjectId(queries),
     getThreadCheckpointContext: makeGetThreadCheckpointContext(queries),

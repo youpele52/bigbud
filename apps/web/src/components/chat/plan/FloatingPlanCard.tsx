@@ -14,7 +14,7 @@ import {
   stripDisplayedPlanMarkdown,
 } from "../../../logic/proposed-plan";
 import { readNativeApi } from "../../../rpc/nativeApi";
-import { formatTimestamp } from "../../../utils/timestamp";
+import { ChatTimestamp } from "../common/ChatTimestamp";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { Button } from "../../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
@@ -130,7 +130,7 @@ export const FloatingPlanCard = memo(function FloatingPlanCard({
             <span className="text-sm font-medium text-foreground/92">{label}</span>
             {cardTimestamp ? (
               <span className="truncate text-sm text-muted-foreground/55">
-                {formatTimestamp(cardTimestamp, timestampFormat)}
+                <ChatTimestamp createdAt={cardTimestamp} timestampFormat={timestampFormat} />
               </span>
             ) : null}
           </div>

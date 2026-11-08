@@ -1,3 +1,4 @@
+import { smokeTestThreadOrganizationBinary } from "../thread-organization-smoke.ts";
 import { accessSync, constants } from "node:fs";
 import { join } from "node:path";
 
@@ -63,6 +64,7 @@ export const assertDesktopSupervisorBinary = Effect.fn("assertDesktopSupervisorB
     try: async () => {
       await smokeTestDesktopSupervisorBinary(binaryPath);
       await smokeTestDesktopSupervisorRecovery(binaryPath);
+      await smokeTestThreadOrganizationBinary(binaryPath);
     },
     catch: (cause) => new BuildScriptError({ message: `${label}: handshake failed`, cause }),
   });

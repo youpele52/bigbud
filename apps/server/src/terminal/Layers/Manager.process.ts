@@ -1,4 +1,5 @@
-// TODO: Split by concern when this file is next touched.
+import { makeInactiveSessionEviction } from "./Manager.process.eviction.ts";
+import { makeTerminalIdleWorkTracker } from "./Manager.idleWork.ts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker";
 import * as Effect from "effect/Effect";
@@ -134,8 +135,17 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       processId: number;
     }) => options.markWorktreeLeaseStarted?.(input) ?? Effect.void;
 
+    const idleWork = makeTerminalIdleWorkTracker();
+    const refreshIdleWork = Effect.suspend(() =>
+      readManagerState.pipe(Effect.map((state) => idleWork.refresh(state.sessions.values()))),
+    );
+    const refreshThreadIdleWork = (threadId: string) =>
+      sessionsForThread(threadId).pipe(
+        Effect.map((sessions) => idleWork.refreshThread(threadId, sessions)),
+      );
     const publishEvent = (event: TerminalEvent) =>
       Effect.gen(function* () {
+        if (event.type !== "output") yield* refreshThreadIdleWork(event.threadId);
         for (const listener of terminalEventListeners) {
           yield* listener(event).pipe(Effect.ignoreCause({ log: true }));
         }
@@ -229,42 +239,14 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       });
     const assertValidCwd = makeAssertValidCwd(fileSystem);
 
-    const evictInactiveSessionsIfNeeded = Effect.fn("terminal.evictInactiveSessionsIfNeeded")(
-      function* () {
-        yield* modifyManagerState((state) => {
-          const inactiveSessions = [...state.sessions.values()].filter(
-            // A starting session is about to own a process; evicting it would orphan that PTY.
-            (session) =>
-              !session.process &&
-              !session.lifecyclePending &&
-              session.status !== "running" &&
-              session.status !== "starting",
-          );
-          if (inactiveSessions.length <= maxRetainedInactiveSessions) {
-            return [undefined, state] as const;
-          }
-
-          inactiveSessions.sort(
-            (left, right) =>
-              left.updatedAt.localeCompare(right.updatedAt) ||
-              left.threadId.localeCompare(right.threadId) ||
-              left.terminalId.localeCompare(right.terminalId),
-          );
-
-          const sessions = new Map(state.sessions);
-
-          const toEvict = inactiveSessions.length - maxRetainedInactiveSessions;
-          for (const session of inactiveSessions.slice(0, toEvict)) {
-            const key = toSessionKey(session.threadId, session.terminalId);
-            sessions.delete(key);
-          }
-
-          return [undefined, { ...state, sessions }] as const;
-        });
-      },
+    const evictInactiveSessionsIfNeeded = makeInactiveSessionEviction(
+      modifyManagerState,
+      maxRetainedInactiveSessions,
     );
 
     const lifecycleCtx: ProcessLifecycleContext = {
+      refreshIdleWork,
+      refreshThreadIdleWork,
       modifyManagerState,
       readManagerState,
       publishEvent,
@@ -354,7 +336,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       }).pipe(Effect.ignoreCause({ log: true })),
     );
 
-    return buildSessionApi({
+    const api = buildSessionApi({
       publishEvent,
       modifyManagerState,
       getSession,
@@ -379,5 +361,17 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       releaseWorktreeLease,
       terminalEventListeners,
     });
+    return {
+      ...api,
+      getThreadIdleWork: (threadId: string) =>
+        refreshThreadIdleWork(threadId).pipe(Effect.map(() => idleWork.get(threadId))),
+      forgetThreadIdleWork: (threadId: string) => Effect.sync(() => idleWork.forget(threadId)),
+      snapshotThreadIdleWork: () => Effect.sync(() => idleWork.snapshot()),
+      close: (input: Parameters<typeof api.close>[0]) =>
+        refreshThreadIdleWork(input.threadId).pipe(
+          Effect.andThen(api.close(input)),
+          Effect.ensuring(refreshThreadIdleWork(input.threadId)),
+        ),
+    };
   },
 );

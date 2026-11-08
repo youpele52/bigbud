@@ -17,6 +17,11 @@ import {
   captureLocalRuntimePathIdentity,
   reconcileWorktreeRuntimeLeases,
 } from "../../retention/worktreeRuntimeLease.ts";
+import {
+  holdThreadLease,
+  releaseThreadLease,
+  threadLeaseExpiresAt,
+} from "../../retention/threadLeaseHeartbeat.ts";
 
 export { makeTerminalManagerWithOptions } from "./Manager.process";
 
@@ -47,18 +52,21 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
             cause,
           }),
       }));
+    const leaseId = `terminal:${input.threadId}:${input.terminalId}`;
     yield* sql`
       INSERT INTO worktree_runtime_leases (
-        lease_id, thread_id, runtime_kind, canonical_path, device, inode, acquired_at, updated_at
+        lease_id, thread_id, runtime_kind, canonical_path, device, inode, acquired_at, updated_at,
+        expires_at
       ) VALUES (
-        ${`terminal:${input.threadId}:${input.terminalId}`}, ${input.threadId}, 'terminal',
+        ${leaseId}, ${input.threadId}, 'terminal',
         ${identity.canonicalPath}, ${identity.device}, ${identity.inode},
-        ${new Date().toISOString()}, ${new Date().toISOString()}
+        ${new Date().toISOString()}, ${new Date().toISOString()}, ${threadLeaseExpiresAt()}
       ) ON CONFLICT (lease_id) DO UPDATE SET
         canonical_path = excluded.canonical_path, device = excluded.device,
-        inode = excluded.inode, updated_at = excluded.updated_at
+        inode = excluded.inode, updated_at = excluded.updated_at, expires_at = excluded.expires_at
     `.pipe(
       Effect.asVoid,
+      Effect.tap(() => Effect.sync(() => holdThreadLease(leaseId))),
       Effect.catch((cause) =>
         Effect.gen(function* () {
           const cwd = input.worktreePath ?? input.cwd;
@@ -79,6 +87,9 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
     sql`DELETE FROM worktree_runtime_leases
       WHERE lease_id = ${`terminal:${input.threadId}:${input.terminalId}`}`.pipe(
       Effect.asVoid,
+      Effect.ensuring(
+        Effect.sync(() => releaseThreadLease(`terminal:${input.threadId}:${input.terminalId}`)),
+      ),
       Effect.catch(() => Effect.void),
     );
   const markWorktreeLeaseStarted = (input: {

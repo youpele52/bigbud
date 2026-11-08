@@ -10,6 +10,12 @@ import { type TerminalContextSelection } from "~/lib/terminalContext";
 
 import { readNativeApi } from "../../rpc/nativeApi";
 import { useTerminalStateStore } from "../../stores/terminal";
+import {
+  areDisconnectedTargetsLoaded,
+  isExecutionTargetDisconnected,
+  REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE,
+} from "../../stores/remoteAccess/remoteAccess.store";
+import { isSshExecutionTargetId } from "../sidebar/Sidebar.remoteWorkspaces.logic";
 import { canTerminalAutoFocus } from "~/lib/terminalFocus";
 import {
   getTerminalSelectionRect,
@@ -234,6 +240,10 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
   if (!api) {
     return false;
   }
+  // Remote terminals wait (startup recovery retries) until the disconnect list has loaded.
+  if (isSshExecutionTargetId(input.executionTargetId) && !areDisconnectedTargetsLoaded()) {
+    return false;
+  }
   const activeTerminal = input.terminalRef.current;
   if (!activeTerminal || !input.fitAddonRef.current) return true;
   await input.waitForTypography();
@@ -260,6 +270,9 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
       "View-only recovery is unavailable. Upgrade the server; the running process was not restarted.",
     );
   }
+  // Never auto-open a terminal on a user-disconnected SSH target; Connect clears the flag.
+  if (!viewOnly && isExecutionTargetDisconnected(input.executionTargetId))
+    throw new Error(REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE);
   const opened = viewOnly
     ? await api.terminal.snapshot!({ threadId: input.threadId, terminalId: input.terminalId })
     : await api.terminal.open({

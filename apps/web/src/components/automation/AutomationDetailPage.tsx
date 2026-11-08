@@ -6,7 +6,8 @@ import { toastManager } from "~/components/ui/toast";
 import { usePageTitle } from "~/hooks/usePageTitle";
 import {
   AUTOMATION_SKILL_PROMPT,
-  extractAutomationRequest,
+  peekAutomationRequest,
+  readAutomationRequest,
   findLatestAutomationAssistantMessage,
   getDeviceTimeZone,
   resolveAutomationStatus,
@@ -113,11 +114,11 @@ export function AutomationDetailPage({ automationId }: AutomationDetailPageProps
   }, [editorThreadId, thread?.modelSelection]);
 
   useEffect(() => {
-    const automationRequest = latestAssistantMessage
-      ? extractAutomationRequest(latestAssistantMessage.text)
+    const peekedRequest = latestAssistantMessage
+      ? peekAutomationRequest(latestAssistantMessage)
       : null;
 
-    if (!api || !automation || !editorThreadId || !latestAssistantMessage || !automationRequest) {
+    if (!api || !automation || !editorThreadId || !latestAssistantMessage || !peekedRequest) {
       return;
     }
 
@@ -129,6 +130,13 @@ export function AutomationDetailPage({ automationId }: AutomationDetailPageProps
 
     void (async () => {
       try {
+        const automationRequest =
+          peekedRequest === "unread"
+            ? await readAutomationRequest(editorThreadId, latestAssistantMessage)
+            : peekedRequest;
+        if (!automationRequest) {
+          return;
+        }
         const validationError = validateAutomationSkillRequest(automationRequest);
         if (validationError) {
           throw new Error(validationError);

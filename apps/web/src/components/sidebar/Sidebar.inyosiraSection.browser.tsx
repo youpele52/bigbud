@@ -43,6 +43,8 @@ vi.mock("./Sidebar.inyosira.catalog", () => ({
 }));
 vi.mock("./Sidebar.inyosira.actions", () => ({ moveThreadsToState: vi.fn() }));
 
+vi.mock("./Sidebar.inyosiraStatus", () => ({ InyosiraStatus: () => null }));
+
 const states = ["present", "needs-you", "later", "done"] as const;
 const shared = {
   routeThreadId: ThreadId.makeUnsafe("present"),
@@ -109,6 +111,17 @@ it.each(["light", "dark"])(
         <SidebarFixedActions onNewChat={vi.fn()} newThreadShortcutLabel={null} />
         <SidebarInyosiraSection shared={shared} />
       </div>,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /^Needs you / })
+        .element()
+        .getBoundingClientRect().top,
+    ).toBeLessThan(
+      screen
+        .getByRole("button", { name: /^Present / })
+        .element()
+        .getBoundingClientRect().top,
     );
     const reference = screen.getByText("New chat", { exact: true }).element();
     const textLeft = reference.getBoundingClientRect().left;
@@ -178,12 +191,12 @@ it("keeps preview and paging controls outside the thread-only horizontal inset",
       provider.getBoundingClientRect().left - 8,
     );
   };
-  const seeMore = screen.getByRole("button", { name: "See more", exact: true });
-  await expect.element(seeMore).toBeVisible();
-  checkControl(seeMore.element());
-  await seeMore.click();
+  const showMore = screen.getByRole("button", { name: "Show 4 more", exact: true });
+  await expect.element(showMore).toBeVisible();
+  checkControl(showMore.element());
+  await showMore.click();
   checkControl(screen.getByRole("button", { name: "Show less", exact: true }).element());
-  checkControl(screen.getByRole("button", { name: "Load more", exact: true }).element());
+  checkControl(screen.getByRole("button", { name: "Show 4 more", exact: true }).element());
 });
 
 it.each(["light", "dark"])(
@@ -311,5 +324,37 @@ it.each(["unknown", null] as const)(
     expect(location.getBoundingClientRect().left).toBe(
       title.element().getBoundingClientRect().left,
     );
+  },
+);
+
+it.each(["light", "dark"])(
+  "keeps Inyosira row heights stable while thread jump hints show in %s mode",
+  async (theme) => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    const withHints = (show: boolean): SharedProjectItemProps => ({
+      ...shared,
+      showThreadJumpHints: show,
+      threadJumpLabelById: new Map([[ThreadId.makeUnsafe("present"), "⌘1"]]),
+    });
+    const screen = await render(
+      <div style={{ width: 280 }}>
+        <SidebarInyosiraSection shared={withHints(false)} />
+      </div>,
+    );
+    const row = screen.getByTestId("thread-row-present").element();
+    const before = row.getBoundingClientRect();
+    await screen.rerender(
+      <div style={{ width: 280 }}>
+        <SidebarInyosiraSection shared={withHints(true)} />
+      </div>,
+    );
+    await expect.element(screen.getByTitle("⌘1")).toBeVisible();
+    const after = row.getBoundingClientRect();
+    expect(after.height).toBe(before.height);
+    expect(after.top).toBe(before.top);
+    const pill = screen.getByTitle("⌘1").element().getBoundingClientRect();
+    const title = screen.getByText("Thread in present", { exact: true }).element();
+    const titleBox = title.getBoundingClientRect();
+    expect(pill.top + pill.height / 2).toBeCloseTo(titleBox.top + titleBox.height / 2, 0);
   },
 );

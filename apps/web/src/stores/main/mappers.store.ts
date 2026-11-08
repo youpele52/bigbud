@@ -88,7 +88,12 @@ export function mapSession(session: OrchestrationSession): NonNullable<Thread["s
   };
 }
 
-export function mapMessage(message: OrchestrationMessage): ChatMessage {
+export function mapMessage(
+  message: OrchestrationMessage & {
+    readonly textTruncated?: boolean | undefined;
+    readonly textLength?: number | undefined;
+  },
+): ChatMessage {
   const attachments = message.attachments?.map((attachment) => {
     if (attachment.type === "thread") {
       return {
@@ -144,6 +149,9 @@ export function mapMessage(message: OrchestrationMessage): ChatMessage {
     streaming: message.streaming,
     ...(message.streaming ? {} : { completedAt: message.updatedAt }),
     ...(attachments && attachments.length > 0 ? { attachments } : {}),
+    ...(message.textTruncated === true && message.textLength !== undefined
+      ? { textTruncated: true, textLength: message.textLength }
+      : {}),
   };
 }
 
@@ -244,6 +252,8 @@ export function mapProject(project: OrchestrationReadModel["projects"][number]):
       project.workspaceExecutionTargetId ?? project.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     executionTargetId: project.executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
     cwd: project.workspaceRoot,
+    workspaceKind: project.workspaceKind ?? "external",
+    previousWorkspaceRoot: project.previousWorkspaceRoot ?? null,
     defaultModelSelection: project.defaultModelSelection
       ? normalizeModelSlug(project.defaultModelSelection)
       : null,

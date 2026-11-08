@@ -1,6 +1,28 @@
 import type { OrchestrationThread } from "@bigbud/contracts";
 import type { ProviderSessionRuntimeListCursor } from "../../persistence/Services/ProviderSessionRuntime.ts";
 
+/** Runtime events that may change a thread's session, so its reconciliation is due again. */
+export const RECONCILIATION_RUNTIME_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "session.started",
+  "session.configured",
+  "session.state.changed",
+  "session.exited",
+  "turn.started",
+  "turn.completed",
+  "turn.aborted",
+  "runtime.error",
+]);
+
+/** Domain events that may change a thread's session, so its reconciliation is due again. */
+export const RECONCILIATION_DOMAIN_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "thread.turn-start-requested",
+  "thread.turn-start-failed",
+  "thread.turn-interrupt-requested",
+  "thread.turn-control-set",
+  "thread.session-stop-requested",
+  "thread.session-set",
+]);
+
 export const PERIODIC_RECONCILIATION_BATCH_SIZE = 100;
 export const PERIODIC_RECONCILIATION_RECENT_WINDOW_MS = 15 * 60 * 1000;
 const MAX_DIRTY_RECONCILIATION_THREADS = 10_000;

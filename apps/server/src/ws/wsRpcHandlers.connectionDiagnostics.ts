@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type {
   ServerGetWsConnectionDiagnosticsInput,
   WsConnectionDiagnosticsReport,
@@ -21,7 +21,17 @@ export function makeWsRpcConnectionDiagnosticsHandlers(context: WsRpcContext) {
     [WS_METHODS.serverGetWsConnectionDiagnostics]: (input: ServerGetWsConnectionDiagnosticsInput) =>
       observeRpcEffect(
         WS_METHODS.serverGetWsConnectionDiagnostics,
-        context.connectionDiagnostics.snapshot(input.limit),
+        Effect.all([
+          context.connectionDiagnostics.snapshot(input.limit),
+          Option.match(context.eventLogMaintenance, {
+            onNone: () => Effect.succeed(null),
+            onSome: (maintenance) => maintenance.progress,
+          }),
+        ]).pipe(
+          Effect.map(([snapshot, eventLogMaintenance]) =>
+            Object.assign({}, snapshot, { eventLogMaintenance }),
+          ),
+        ),
         { "rpc.aggregate": "server" },
       ),
   };

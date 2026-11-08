@@ -52,6 +52,17 @@ export interface ThreadRetentionRepositoryShape {
       readonly ageCriterion: ThreadRetentionAgeCriterion;
     },
   ) => Effect.Effect<ThreadRetentionPreview, ProjectionRepositoryError>;
+  /**
+   * Records the selector's exclusion breakdown on an active run, at selection start, using the
+   * run's own cutoff, selection mode and age rule. Returns false once the run left its slot.
+   */
+  readonly recordRunExclusionSummary: (input: {
+    readonly runId: string;
+    readonly cutoffAt: string;
+    readonly selectionMode: "legacy-subtree" | "per-thread";
+    readonly ageCriterion: ThreadRetentionAgeCriterion;
+    readonly updatedAt: string;
+  }) => Effect.Effect<boolean, ProjectionRepositoryError>;
   readonly listDeletionOwnedThreadIds: (
     threadIds: ReadonlyArray<string>,
   ) => Effect.Effect<ReadonlyArray<string>, ProjectionRepositoryError>;
