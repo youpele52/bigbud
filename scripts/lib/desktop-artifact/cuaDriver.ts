@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import {
-  cuaDriverReleaseUrl,
+  CUA_DRIVER_RELEASE_TAG,
+  CUA_DRIVER_REPOSITORY,
   resolveCuaDriverReleaseArtifact,
 } from "@bigbud/shared/cua-driver/release";
 import { CUA_DRIVER_POLICY_YAML } from "@bigbud/shared/cua-driver/policy";
@@ -17,6 +18,7 @@ import {
   runCommand,
 } from "./shared.ts";
 import { shellOptionForPlatform } from "./platform.ts";
+import { downloadGitHubReleaseAsset, gitHubReleaseAssetUrl } from "../github-release-asset.ts";
 
 function resolveArchive(platform: typeof BuildPlatform.Type, arch: typeof BuildArch.Type) {
   const runtimePlatform = platform === "mac" ? "darwin" : platform === "win" ? "win32" : "linux";
@@ -50,18 +52,26 @@ export const stagePackagedCuaDriverRuntime = Effect.fn("stagePackagedCuaDriverRu
     const downloadDir = path.join(input.stageRoot, "cua-driver-download");
     const extractDir = path.join(downloadDir, "extract");
     const archivePath = path.join(downloadDir, archive.archiveName);
-    const url = cuaDriverReleaseUrl(archive);
+    const assetRef = {
+      repository: CUA_DRIVER_REPOSITORY,
+      tag: CUA_DRIVER_RELEASE_TAG,
+      assetName: archive.archiveName,
+    };
 
     yield* fs.makeDirectory(downloadDir, { recursive: true });
     yield* fs.makeDirectory(extractDir, { recursive: true });
 
-    yield* runCommand(
-      ChildProcess.make({
-        cwd: downloadDir,
-        ...commandOutputOptions(input.verbose),
-        shell: shellOptionForPlatform(input.platform),
-      })`curl -fsSL -o ${archivePath} ${url}`,
-    );
+    yield* Effect.tryPromise({
+      try: () =>
+        downloadGitHubReleaseAsset(assetRef, archivePath, {
+          log: (message) => console.warn(`[cua-driver] ${message}`),
+        }),
+      catch: (cause) =>
+        new BuildScriptError({
+          message: `Failed to download ${gitHubReleaseAssetUrl(assetRef)}.`,
+          cause,
+        }),
+    });
     yield* verifySha256(archivePath, archive.sha256);
 
     if (input.platform === "win") {
