@@ -40,7 +40,7 @@ jobs:
           node-version-file: package.json
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: node scripts/bun-install-with-retry.ts
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
