@@ -1,4 +1,4 @@
-/** v2.2.5 packages/schema/src/config/policy.ts; unknown security actions remain fail-closed. */
+/** v2.2.6 packages/schema/src/config/policy.ts; unknown security actions remain fail-closed. */
 export const V2_NATIVE_POLICY_ACTIONS = [
   "provider.use",
   "tool.use",
@@ -7,6 +7,7 @@ export const V2_NATIVE_POLICY_ACTIONS = [
   "mcp.use",
   "skill.use",
   "plugin.use",
+  "websearch.use",
 ] as const;
 
 export const V2_NATIVE_POLICY_PROJECTION = `policies:${V2_NATIVE_POLICY_ACTIONS.join("|")}:allow|deny`;

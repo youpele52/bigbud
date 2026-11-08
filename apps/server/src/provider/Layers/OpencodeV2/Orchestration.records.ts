@@ -118,7 +118,12 @@ export class V2ThreadRecords {
       if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
       throw error;
     }
-    const record = JSON.parse(content) as SignedRecord;
+    return this.verifySignedRecord(JSON.parse(content));
+  }
+
+  /** Verify nested archival evidence with this namespace's signer; this grants no retirement authority. */
+  verifySignedRecord(value: unknown): SignedRecord {
+    const record = value as SignedRecord;
     if (
       !record ||
       Object.keys(record).toSorted().join() !== "revision,signature,value" ||

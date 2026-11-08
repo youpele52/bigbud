@@ -18,6 +18,8 @@ import { assertV2NativeRuntimePolicy } from "./NativeCompatibility.policy.ts";
 import { V2ActivationWindow } from "./PluginSetup.activation.window.ts";
 import { V2ActivationBusy } from "./PluginSetup.activation.errors.ts";
 import { makeV2IdentityPublication } from "./PluginSetup.activation.identity.ts";
+import type { V2ActivationRecovery } from "./PluginSetup.activation.recovery.ts";
+import { V2ActivationPhysicalOperations } from "./PluginSetup.activation.physical.ts";
 
 interface Proposal {
   readonly artifact: V2PluginSetupArtifact;
@@ -36,12 +38,13 @@ export async function runV2ActivationTransaction(
   consent: V2ConsentAuthority,
   idle: (signal?: AbortSignal) => Promise<boolean>,
   eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
+  recovery?: V2ActivationRecovery,
 ) {
   let backoff = 2000;
   for (;;) {
     job.assertCurrent();
     try {
-      return await activationAttempt(job, proposal, settings, consent, idle, eligibility);
+      return await activationAttempt(job, proposal, settings, consent, idle, eligibility, recovery);
     } catch (error) {
       if (!(error instanceof V2ActivationBusy)) throw error;
       job.assertCurrent();
@@ -62,8 +65,10 @@ async function activationAttempt(
   consent: V2ConsentAuthority,
   idle: (signal?: AbortSignal) => Promise<boolean>,
   eligibility: V2NativeEligibilityVerifier,
+  recovery?: V2ActivationRecovery,
 ) {
   const gate = proposal.scope.gate;
+  const preparation = new V2ActivationPhysicalOperations();
   let closed = false,
     publicationPrepared = false,
     physicalFsMutationIssued = false,
@@ -96,6 +101,7 @@ async function activationAttempt(
     gate,
     proposal.scope.participants,
     freshAuthority,
+    recovery ? () => recovery.assertInstallationOwner(proposal.artifact) : undefined,
   );
   const publication = {
     identityRevalidation: identity.authority,
@@ -113,12 +119,19 @@ async function activationAttempt(
       gate.assertGate(job.id);
       physicalFsMutationIssued = true;
     },
-    observePhysical: (operation: Promise<unknown>) => window?.observe(operation),
+    observePhysical: (operation: Promise<unknown>) => (window ?? preparation).observe(operation),
     joinPhysical: async () => {
+      await preparation.drain();
       await window?.drain();
     },
     prepare: async () => {
       job.phase("prepared");
+      try {
+        await recovery?.retire(job, proposal.artifact, proposal.scope.participants, job.signal);
+      } finally {
+        // Keep the shared publisher reserved even when a deadline outlives its native request.
+        await preparation.drain();
+      }
       let backoff = 2000;
       while (!(await idle(job.signal))) {
         job.phase("waiting-for-idle");
@@ -248,7 +261,9 @@ async function activationAttempt(
       physicalFsMutationIssued ||
       publicationPrepared ||
       (!(error instanceof V2ActivationBusy) &&
-        (window?.hasPending() || (window?.signal.aborted && !job.signal.aborted)))
+        (preparation.hasPending() ||
+          window?.hasPending() ||
+          (window?.signal.aborted && !job.signal.aborted)))
     )
       job.phase(
         "uncertain",
@@ -266,6 +281,7 @@ async function activationAttempt(
       gate.releaseGate(job.id);
     }
     window?.release();
+    await preparation.drain();
     await window?.drain();
     await identity.close();
   }

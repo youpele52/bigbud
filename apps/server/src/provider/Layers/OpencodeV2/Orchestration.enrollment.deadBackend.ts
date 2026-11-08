@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { v2OwnerRegistration } from "./Orchestration.registration.ts";
 import { runV2Cleanup } from "./Client.guard.ts";
 import { logV2SettlementDiagnostic } from "./Runtime.settlement.log.ts";
+import { v2SafeFailureSuffix } from "./Client.diagnostics.ts";
 import { callV2ThreadRpc } from "./Client.guard.orchestration.ts";
 import { v2Request, type OpencodeV2Client } from "./Client.ts";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
@@ -44,6 +45,7 @@ export const V2_DEAD_BACKEND_MESSAGES = {
     "V2 dead-backend recovery is disabled for this bigbud backend because its receipt fence could not be written at startup; check the bigbud state directory is writable, then restart bigbud. Nothing was replayed.",
 } as const;
 const DEADLINE_MS = 15000;
+type ReleaseStage = "native-activity" | "inspect" | "detach" | "detach-acknowledgement";
 
 export interface V2DeadBackendContext {
   readonly instance: V2BackendInstance;
@@ -188,6 +190,11 @@ async function retireDeadBackend(
 ) {
   const previous = decodeV2EnrollmentRecord(saved.value),
     owner = previous.owner;
+  const unconfirmed = (stage: ReleaseStage, cause: unknown) =>
+    new Error(
+      `${V2_DEAD_BACKEND_MESSAGES.nativeUnconfirmed} [owner=${previous.digest.slice(0, 12)}; stage=${stage}]${v2SafeFailureSuffix(cause)}`,
+      { cause },
+    );
   try {
     await context.instance.assertHeld();
   } catch {
@@ -223,21 +230,24 @@ async function retireDeadBackend(
           try {
             active = await context.nativeSessionActive(owner.nativeSessionId, signal);
           } catch (cause) {
-            throw new Error(V2_DEAD_BACKEND_MESSAGES.nativeUnconfirmed, { cause });
+            throw unconfirmed("native-activity", cause);
           }
           if (active) throw new Error(V2_DEAD_BACKEND_MESSAGES.nativeActive);
           signal.throwIfAborted();
           if (stalledReboot) await retirement.supersedeStalledReboot(identity);
           const phase = await retirement.begin(identity, saved);
-          if (phase === "retiring")
+          if (phase === "retiring") {
+            let stage: ReleaseStage = "inspect";
             try {
               const inspected = validateV2LeaseInspection(
                 (await context.rpc("inspect", owner, signal)) as V2EnrollmentAcknowledgement,
                 { digest: previous.digest, nonce: owner.enrollmentNonce },
                 [previous.acknowledged, previous.pending],
               );
+              stage = "detach";
               const ack = await context.rpc("detach", owner, signal);
               signal.throwIfAborted();
+              stage = "detach-acknowledgement";
               await retirement.acknowledge(
                 identity,
                 ack,
@@ -246,8 +256,9 @@ async function retireDeadBackend(
                 owner.transportGeneration,
               );
             } catch (cause) {
-              throw new Error(V2_DEAD_BACKEND_MESSAGES.nativeUnconfirmed, { cause });
+              throw unconfirmed(stage, cause);
             }
+          }
           signal.throwIfAborted();
           await retirement.settle(identity, {
             kind: V2_DEAD_BACKEND_PROOF,

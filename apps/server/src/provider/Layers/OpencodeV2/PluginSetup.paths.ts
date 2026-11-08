@@ -17,6 +17,8 @@ export interface V2PluginSetupAuthority {
   readonly publication?: {
     /** Separate admission-only authority: exact signed metadata maintenance, never native publication. */
     readonly identityRevalidation?: NonNullable<V2PluginSetupAuthority["publication"]>;
+    /** Exact locked same-profile/host provenance for unchanged installation metadata only. */
+    readonly assertInstallationOwner?: () => Promise<void>;
     readonly prepare: () => Promise<void>;
     readonly locked: () => Promise<() => void>;
     readonly beforeMutation: () => Promise<void>;
