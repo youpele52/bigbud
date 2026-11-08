@@ -9,6 +9,7 @@ import * as savedIdentity from "../../git/Layers/WorktreeSavedIdentity.ts";
 import * as reactorTestHelpers from "./ProviderCommandReactor.test.helpers.ts";
 import * as firstTurn from "./ProviderCommandReactorSessionOps.firstTurn.ts";
 import * as titleGeneration from "./ProviderCommandReactorSessionOps.title.ts";
+import { hasUnresolvedTitleGeneration } from "./ProviderCommandReactorSessionOps.title.state.ts";
 import { maybeGenerateAndRenameWorktreeBranchForFirstTurn } from "./ProviderCommandReactorSessionOps.firstTurn.ts";
 import { makeTextGenerationActivityHandler } from "./ProviderCommandReactorHandlers.textGeneration.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
@@ -257,6 +258,14 @@ describe("deferred worktree branch generation", () => {
     );
     await waitFor(() => harness.generateThreadTitle.mock.calls.length > 0);
     // The staged title pipeline can exhaust its provider attempts on the first success.
+    // Let that job settle: a success handled while a stage is "started" is skipped as unresolved.
+    await waitFor(
+      async () =>
+        !isThreadTextGenerationJobActive(harness.engine, threadId, "title") &&
+        !hasUnresolvedTitleGeneration(
+          (await Effect.runPromise(harness.engine.getReadModel())).threads[0]!,
+        ),
+    );
     const titleCalls = generateThreadTitle.mock.calls.length;
     await success(harness, "fixture:success-2");
     await waitFor(() => generateThreadTitle.mock.calls.length > titleCalls);
