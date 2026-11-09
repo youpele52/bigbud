@@ -21,6 +21,7 @@ export function collectOrganizationNotifications(
     (event): event is Move =>
       event.type === "thread.organization-updated" &&
       event.payload.automaticMove !== undefined &&
+      event.payload.organization.state !== "present" &&
       event.sequence > frontier,
   );
 }

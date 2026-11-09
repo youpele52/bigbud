@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { makeEvent } from "../stores/main/main.store.test.helpers";
 import { ThreadId } from "@bigbud/contracts";
+import type { ThreadOrganizationState } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import {
   collectOrganizationNotifications,
   groupOrganizationNotifications,
@@ -9,7 +10,7 @@ import {
 } from "./organizationNotifications";
 
 const serverNow = Date.parse("2026-11-05T12:00:10.000Z");
-const move = (sequence: number, state: "later" | "done" = "later", at = serverNow) => ({
+const move = (sequence: number, state: ThreadOrganizationState = "later", at = serverNow) => ({
   ...makeEvent("thread.organization-updated", {
     threadId: ThreadId.makeUnsafe(`thread-${sequence}`),
     reason: "idle",
@@ -41,6 +42,17 @@ describe("confirmed organisation notifications", () => {
       payload: { ...payload, reason: "move" as const, source: "deliberate" as const },
     };
     expect(collectOrganizationNotifications([automatic, manual], 0)).toEqual([automatic]);
+  });
+  it("omits Present destinations without dropping other moves in the same batch", () => {
+    const later = move(1);
+    const present = move(2, "present");
+    const done = move(3, "done");
+    const needsYou = move(4, "needs-you");
+    expect(collectOrganizationNotifications([later, present, done, needsYou], 0)).toEqual([
+      later,
+      done,
+      needsYou,
+    ]);
   });
   it("groups by destination, most recent first", () => {
     const a = move(1);

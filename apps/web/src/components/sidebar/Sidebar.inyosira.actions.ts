@@ -56,7 +56,7 @@ export async function moveThreadsToState(
     (threadId, index) =>
       results[index]?.status === "fulfilled" && summaries[threadId]?.organization?.state !== state,
   );
-  if (moved.length > 0)
+  if (state !== "present" && moved.length > 0)
     toastManager.add({
       type: "success",
       title:
