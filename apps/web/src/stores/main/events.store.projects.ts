@@ -19,6 +19,7 @@ import { removeDeletedDelegatedChildren } from "./events.store.delegations";
 import { mapCreatedProjectThread } from "./events.store.projects.threadCreated";
 import { prependSidebarRecentThreadId } from "./helpers.sidebar.store";
 import { applyActiveThreadCountTransition } from "./helpers.projectThreadCount.store";
+import { promoteProjectToCatalog } from "./helpers.projectDependencies.store";
 import type { Project } from "../../models/types";
 import { getDeletedThreadIds } from "../../logic/orchestration/thread-deletion.logic";
 
@@ -111,6 +112,7 @@ export function applyProjectEvent(
       return {
         ...state,
         projects,
+        projectDependencyOnlyIds: promoteProjectToCatalog(state, event.payload.projectId),
         latestProjectEventSequenceById: recordProjectEventSequence(
           state,
           event.payload.projectId,

@@ -15,6 +15,7 @@ import { create } from "zustand";
 import { type Project, type SidebarThreadSummary, type Thread } from "../../models/types";
 import { applyOrchestrationEvent, applyOrchestrationEvents } from "./events.store";
 import { syncServerReadModel } from "./helpers.snapshot.store";
+import { resetProjectCatalogState } from "./helpers.projectEpoch.store";
 import { mergeSearchMessageDetail } from "./helpers.searchMessage.store";
 import {
   setThreadHydration,
@@ -59,6 +60,11 @@ export interface AppState {
   projectCatalogErrorByScope: Record<ProjectCatalogScope, string | undefined>;
   projectCatalogRetryHeadByScope: Record<ProjectCatalogScope, boolean>;
   projectCatalogRestartProjectIdByScope: Record<ProjectCatalogScope, ProjectId | null>;
+  /** Mounted chat dependencies survive bounded catalog replacement, not deletion events. */
+  projectDependencyRefCounts?: Record<string, number>;
+  projectDependencyOnlyIds?: Record<string, true>;
+  projectServerEpoch?: string | undefined;
+  projectCatalogSequenceById?: Record<string, number>;
   latestProjectEventSequenceById?: Record<string, number>;
   deletedProjectSequenceById?: Record<string, number>;
   pendingUnloadedProjectPatchById?: Record<
@@ -96,6 +102,10 @@ const initialState: AppState = {
   projectCatalogErrorByScope: { local: undefined, remote: undefined },
   projectCatalogRetryHeadByScope: { local: false, remote: false },
   projectCatalogRestartProjectIdByScope: { local: null, remote: null },
+  projectDependencyRefCounts: {},
+  projectDependencyOnlyIds: {},
+  projectServerEpoch: undefined,
+  projectCatalogSequenceById: {},
   latestProjectEventSequenceById: {},
   deletedProjectSequenceById: {},
   pendingUnloadedProjectPatchById: {},
@@ -127,6 +137,7 @@ export {
 
 interface AppStore extends AppState {
   syncServerReadModel: (readModel: OrchestrationReadModel) => void;
+  resetProjectCatalogEpoch: (serverEpoch: string) => void;
   syncBoundedCatalog: (
     catalogs: Partial<Record<ProjectCatalogScope, GetStartupProjectCatalogResult>>,
     catalogErrors: Partial<Record<ProjectCatalogScope, string>>,
@@ -168,6 +179,12 @@ interface AppStore extends AppState {
 export const useStore = create<AppStore>((set) => ({
   ...initialState,
   syncServerReadModel: (readModel) => set((state) => syncServerReadModel(state, readModel)),
+  resetProjectCatalogEpoch: (serverEpoch) =>
+    set((state) =>
+      state.projectServerEpoch === serverEpoch
+        ? state
+        : resetProjectCatalogState(state, serverEpoch),
+    ),
   syncBoundedCatalog: (catalogs, catalogErrors, catalogRestartProjectIds, sidebarCatalog, pages) =>
     set((state) =>
       syncBoundedCatalog(

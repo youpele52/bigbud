@@ -32,9 +32,9 @@ export async function submitPlanFollowUp(input: {
     draftText: input.trimmed,
     planMarkdown: input.proposedPlan.planMarkdown,
   });
-  input.resetComposerDraft();
-  await input.onSubmitPlanFollowUp({
+  const accepted = await input.onSubmitPlanFollowUp({
     text: followUp.text,
     interactionMode: followUp.interactionMode,
   });
+  if (accepted) input.resetComposerDraft();
 }

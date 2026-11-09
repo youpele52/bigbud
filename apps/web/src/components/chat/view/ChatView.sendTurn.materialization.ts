@@ -33,7 +33,7 @@ interface MaterializationInput {
 
 export type MaterializationSendGate =
   | { readonly proceed: true; readonly attempt: MaterializationAttempt | null }
-  | { readonly proceed: false };
+  | { readonly proceed: false; readonly accepted: boolean };
 
 async function reconcileAcceptedAttempt(
   input: Pick<MaterializationInput, "threadId" | "onThreadMaterialized">,
@@ -50,7 +50,7 @@ export async function prepareMaterializationForSend(
   });
   if (result.status === "blocked") {
     input.setThreadError(input.threadId, result.reason);
-    return { proceed: false };
+    return { proceed: false, accepted: false };
   }
   if (result.status === "already-accepted") {
     await reconcileAcceptedAttempt(input);
@@ -59,14 +59,15 @@ export async function prepareMaterializationForSend(
       title: "Your message was sent",
       description: "bigbud confirmed the earlier send and synchronized this chat.",
     });
-    return { proceed: false };
+    // Confirming an older command must not consume a different current submission.
+    return { proceed: false, accepted: result.attempt.requestDigest === input.requestDigest };
   }
   if (result.status === "ready") return { proceed: true, attempt: result.attempt };
   if (result.ownership.status === "active" && input.isDraft) {
     clearPromotedDraftThread(input.threadId);
     await input.onThreadMaterialized?.(input.threadId);
     input.setThreadError(input.threadId, "This chat already exists and has been synchronized.");
-    return { proceed: false };
+    return { proceed: false, accepted: false };
   }
 
   const draft = useComposerDraftStore.getState().getDraftThread(input.threadId);
@@ -84,7 +85,7 @@ export async function prepareMaterializationForSend(
       description: "That thread ID already belongs to the server. Your draft is safe to send.",
     });
   }
-  return { proceed: false };
+  return { proceed: false, accepted: false };
 }
 
 export async function markMaterializationDispatching(

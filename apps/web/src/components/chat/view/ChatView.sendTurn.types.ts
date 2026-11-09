@@ -85,7 +85,7 @@ export interface UseOnSendInput {
   onSubmitPlanFollowUp: (input: {
     text: string;
     interactionMode: ProviderInteractionMode;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
   onRespondToUserInput: (
     requestId: ApprovalRequestId,

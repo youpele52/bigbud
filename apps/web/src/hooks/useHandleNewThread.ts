@@ -32,9 +32,7 @@ import {
   type NewThreadActivationOptions,
 } from "./useHandleNewThread.activation";
 import { preservePendingSendForNewThread } from "./useHandleNewThread.pendingSend";
-import { loadProjectForNewThread } from "./useHandleNewThread.project";
-
-export { loadProjectForNewThread } from "./useHandleNewThread.project";
+import { loadProjectById } from "../lib/projectCatalog";
 
 export function resolveContextualNewThreadOptions(input: {
   activeDraftThread:
@@ -137,7 +135,7 @@ export function useHandleNewThread() {
       }
       const loadProject = loadedProject
         ? Promise.resolve(loadedProject)
-        : loadProjectForNewThread({
+        : loadProjectById({
             api: api!,
             projectId,
             getProject,

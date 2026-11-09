@@ -10,6 +10,8 @@ import {
   replaceCanonicalOwnershipCollision,
 } from "~/stores/ownership/ownershipLedger.reconcile";
 import { createOwnershipReplacementThreadId } from "./useHandleNewThread.ownership";
+import { withReadDeadline } from "../lib/readDeadline";
+import { useWsConnectionStatus } from "../rpc/wsConnectionState";
 
 interface CompactThreadState {
   readonly projectId: ProjectId;
@@ -23,6 +25,7 @@ export function useCompactChatOwnershipRestoration(input: {
   readonly bootstrapComplete: boolean;
   readonly persistedMaterialized: boolean;
   readonly restoring: boolean;
+  readonly retryAttempt: number;
   readonly setThreadState: Dispatch<SetStateAction<CompactThreadState>>;
   readonly setThreadSyncError: Dispatch<SetStateAction<string | null>>;
   readonly threadId: ThreadId;
@@ -36,6 +39,7 @@ export function useCompactChatOwnershipRestoration(input: {
     setThreadSyncError,
     threadId,
   } = input;
+  const connection = useWsConnectionStatus();
 
   useEffect(() => {
     if (!restoring || !bootstrapComplete) return;
@@ -46,9 +50,13 @@ export function useCompactChatOwnershipRestoration(input: {
     }
 
     let disposed = false;
+    setThreadSyncError(null);
     void (async () => {
       try {
-        const ownership = await api.orchestration.resolveThreadOwnership({ threadId });
+        const ownership = await withReadDeadline(
+          () => api.orchestration.resolveThreadOwnership({ threadId }),
+          10_000,
+        );
         if (disposed) return;
         if (ownership.status === "unavailable") {
           setThreadSyncError(ownership.reason);
@@ -70,7 +78,9 @@ export function useCompactChatOwnershipRestoration(input: {
         }
         if (ownership.status === "active") {
           await initializeOwnershipFromComposer({ scope: "compact" });
+          if (disposed) return;
           await applyCanonicalOwnership(ownership, "compact");
+          if (disposed) return;
           await runBoundedBootstrap({ api, selectedThreadId: threadId, disposed: () => disposed });
           if (disposed) return;
           setThreadSyncError(null);
@@ -93,7 +103,9 @@ export function useCompactChatOwnershipRestoration(input: {
           return;
         }
         await initializeOwnershipFromComposer({ scope: "compact" });
+        if (disposed) return;
         const candidateThreadId = await createOwnershipReplacementThreadId(ownership);
+        if (disposed) return;
         const nextThreadId = await replaceCanonicalOwnershipCollision({
           ownership,
           createThreadId: () => candidateThreadId,
@@ -121,6 +133,10 @@ export function useCompactChatOwnershipRestoration(input: {
   }, [
     abandonCurrentThread,
     bootstrapComplete,
+    connection.attemptCount,
+    connection.connectedAt,
+    connection.phase,
+    input.retryAttempt,
     persistedMaterialized,
     restoring,
     setThreadState,

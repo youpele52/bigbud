@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mockNavigate = vi.fn();
 const routeState = vi.hoisted(() => ({
   purpose: "standard" as "standard" | "side-chat",
+  projectLoaded: true,
   hydrationStatus: "complete" as
     | "unloaded"
     | "loading"
@@ -48,15 +49,22 @@ vi.mock("../stores/main", () => ({
       bootstrapComplete: boolean;
       projects: Array<{ id: string }>;
       sidebarPinnedThreadIds: ThreadId[];
-      threads: Array<{ id: ThreadId; title: string; purpose: "standard" | "side-chat" }>;
+      threads: Array<{
+        id: ThreadId;
+        projectId: string;
+        title: string;
+        purpose: "standard" | "side-chat";
+      }>;
       threadHydrationById: Record<string, { status: typeof routeState.hydrationStatus }>;
     }) => unknown,
   ) =>
     selector({
       bootstrapComplete: true,
-      projects: [],
+      projects: routeState.projectLoaded ? [{ id: "project-1" }] : [],
       sidebarPinnedThreadIds: [],
-      threads: [{ id: threadId, purpose: routeState.purpose, title: "Thread" }],
+      threads: [
+        { id: threadId, projectId: "project-1", purpose: routeState.purpose, title: "Thread" },
+      ],
       threadHydrationById: { [threadId]: { status: routeState.hydrationStatus } },
     }),
 }));
@@ -90,6 +98,7 @@ import {
 describe("/_chat/$threadId route", () => {
   beforeEach(() => {
     routeState.purpose = "standard";
+    routeState.projectLoaded = true;
     routeState.hydrationStatus = "complete";
   });
 
@@ -174,6 +183,13 @@ describe("/_chat/$threadId route", () => {
     expect(markup).toContain('data-testid="sidebar-inset"');
     expect(markup).toContain('data-testid="chat-view"');
     expect(markup).not.toContain("Loading checkpoint diff...");
+  });
+
+  it("gates a fully hydrated canonical thread until its owning project is ready", () => {
+    routeState.projectLoaded = false;
+    const markup = renderToStaticMarkup(<ChatThreadRouteView />);
+    expect(markup).toContain("Loading chat project");
+    expect(markup).not.toContain('data-testid="chat-view"');
   });
 
   it("does not render Sidecar as a full-page thread", () => {

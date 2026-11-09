@@ -288,7 +288,11 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
               await recoverAndAcknowledgeDeliveryBaseline({
                 recovery: item,
                 recover: () =>
-                  eventRecovery.runDeliveryBaselineRecovery(selectedThreadId, () => disposed),
+                  eventRecovery.runDeliveryBaselineRecovery(
+                    selectedThreadId,
+                    () => disposed,
+                    item.serverEpoch,
+                  ),
                 acknowledge: api.orchestration.acknowledgeDeliveryBaseline,
                 signal: deliveryBaselineAbort.signal,
                 shouldAbort: () => disposed,

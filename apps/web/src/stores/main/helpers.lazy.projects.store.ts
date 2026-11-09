@@ -2,6 +2,7 @@ import type { GetStartupProjectCatalogResult, ProjectCatalogScope } from "@bigbu
 
 import type { AppState } from "./main.store";
 import { mapProjectSummary } from "./mappers.lazy.store";
+import { projectDependencyMembership } from "./helpers.projectDependencies.store";
 
 function applyActiveThreadCount(
   project: AppState["projects"][number],
@@ -17,9 +18,11 @@ export function mergeProjectCatalog(
   projectThreadCountsById: AppState["projectThreadCountsById"],
   preserveUnlistedProjects: boolean,
   scope?: ProjectCatalogScope,
+  lookup = false,
 ) {
   const latestEventSequences = state.latestProjectEventSequenceById ?? {};
   const deletionSequences = state.deletedProjectSequenceById ?? {};
+  const catalogSequences = { ...state.projectCatalogSequenceById };
   const pendingPatches = { ...state.pendingUnloadedProjectPatchById };
   const existingProjects = new Map(state.projects.map((project) => [project.id, project]));
   const projectsById = new Map(
@@ -28,9 +31,11 @@ export function mergeProjectCatalog(
       : state.projects
           .filter(
             (project) =>
+              (state.projectDependencyRefCounts?.[project.id] ?? 0) > 0 ||
               (scope !== undefined &&
                 (project.workspaceExecutionTargetId === "local") !== (scope === "local")) ||
-              ((latestEventSequences[project.id] ?? 0) > page.projectionSequence &&
+              (Math.max(latestEventSequences[project.id] ?? 0, catalogSequences[project.id] ?? 0) >
+                page.projectionSequence &&
                 (deletionSequences[project.id] ?? 0) <= page.projectionSequence),
           )
           .map((project) => [project.id, project]),
@@ -46,7 +51,8 @@ export function mergeProjectCatalog(
     const existingProject = existingProjects.get(project.id);
     const pendingPatch = pendingPatches[project.id];
     const baseProject =
-      existingProject && latestEventSequence > page.projectionSequence
+      existingProject &&
+      Math.max(latestEventSequence, catalogSequences[project.id] ?? 0) > page.projectionSequence
         ? existingProject
         : mapProjectSummary(project);
     const mergedProject = {
@@ -55,12 +61,21 @@ export function mergeProjectCatalog(
         ? pendingPatch.patch
         : {}),
     };
+    catalogSequences[project.id] = Math.max(
+      catalogSequences[project.id] ?? 0,
+      page.projectionSequence,
+    );
     projectsById.set(project.id, applyActiveThreadCount(mergedProject, projectThreadCountsById));
     delete pendingPatches[project.id];
   }
 
+  const projects = [...projectsById.values()];
   return {
-    projects: [...projectsById.values()],
+    projects,
+    projectDependencyOnlyIds: projectDependencyMembership(state, projects, page, lookup, scope),
     pendingUnloadedProjectPatchById: pendingPatches,
+    projectCatalogSequenceById: Object.fromEntries(
+      [...projectsById.keys()].map((id) => [id, catalogSequences[id] ?? 0]),
+    ),
   };
 }

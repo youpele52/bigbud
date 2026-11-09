@@ -1,15 +1,10 @@
-import { useRef } from "react";
 import type { MessageId, ThreadId } from "@bigbud/contracts";
 
 import { isSessionHealthUnconfirmed } from "~/logic/session";
 import type { DraftThreadEnvMode } from "~/stores/composer";
 
 import type { usePlanHandlers } from "../ChatView.planHandlers.logic";
-import {
-  usePromptQueue,
-  type QueuedPromptSubmission,
-  type QueuePromptResult,
-} from "../ChatView.promptQueue.logic";
+import { usePromptQueue } from "../ChatView.promptQueue.logic";
 import { useOnSend } from "../ChatView.sendTurn.logic";
 import type { ChatViewBaseState } from "./chat-view-base-state.hooks";
 import type { ChatViewComposerDerivedState } from "./chat-view-composer-derived.hooks";
@@ -64,9 +59,6 @@ export function useChatViewPromptQueue({
   planHandlers,
   transformPromptForSend,
 }: UseChatViewPromptQueueInput) {
-  const submitQueuedPromptRef = useRef<
-    (submission: QueuedPromptSubmission) => Promise<QueuePromptResult>
-  >(async () => "full");
   const activeTurnInProgress = isPromptQueueTurnInProgress({
     activeSessionTurnRunning: thread.activeSessionTurnRunning,
     isSendBusy: thread.isSendBusy,
@@ -78,6 +70,26 @@ export function useChatViewPromptQueue({
   const shouldQueuePrompts = shouldQueuePromptWhileWorking({
     isWorking: activeTurnInProgress,
     forceSendQueuedPrompt: false,
+  });
+
+  const promptQueue = usePromptQueue({
+    threadId: base.threadId,
+    projectedPrompts: base.activeThread?.queuedPrompts ?? [],
+    activeTurnInProgress,
+    activeTurnId: base.activeThread?.session?.activeTurnId,
+    sessionEpoch: base.activeThread?.session?.sessionEpoch,
+    controlOperation: base.activeThread?.pendingTurnControlOperation,
+    // Steer never interrupts, so it exists only where the provider steers natively. An
+    // already-sent redelivery at the head is never steered; Send now still covers it.
+    canSteer: nativeSteer && base.activeThread?.queuedPrompts?.[0]?.alreadySent !== true,
+    nativeSteer,
+    onError: (message) => runtime.setThreadError(base.threadId, message),
+    newId: base.randomUUID,
+    releaseSettings: {
+      ...(composer.selectedModel ? { modelSelection: composer.selectedModelSelection } : {}),
+      runtimeMode: base.runtimeMode,
+      interactionMode: base.interactionMode,
+    },
   });
 
   const onSend = useOnSend({
@@ -142,31 +154,10 @@ export function useChatViewPromptQueue({
     onRespondToUserInput: runtime.turnActions.onRespondToUserInput,
     onOptimisticUserMessage,
     onThreadMaterialized,
-    submitQueuedComposerPrompt: (submission) => submitQueuedPromptRef.current(submission),
+    // The send snapshots this thread-bound callback before async prompt/attachment preparation.
+    submitQueuedComposerPrompt: promptQueue.submitQueuedPrompt,
     transformPromptForSend,
   });
-
-  const promptQueue = usePromptQueue({
-    threadId: base.threadId,
-    projectedPrompts: base.activeThread?.queuedPrompts ?? [],
-    activeTurnInProgress,
-    activeTurnId: base.activeThread?.session?.activeTurnId,
-    sessionEpoch: base.activeThread?.session?.sessionEpoch,
-    controlOperation: base.activeThread?.pendingTurnControlOperation,
-    // Steer never interrupts, so it exists only where the provider steers natively. An
-    // already-sent redelivery at the head is never steered; Send now still covers it.
-    canSteer: nativeSteer && base.activeThread?.queuedPrompts?.[0]?.alreadySent !== true,
-    nativeSteer,
-    onError: (message) => runtime.setThreadError(base.threadId, message),
-    newId: base.randomUUID,
-    releaseSettings: {
-      ...(composer.selectedModel ? { modelSelection: composer.selectedModelSelection } : {}),
-      runtimeMode: base.runtimeMode,
-      interactionMode: base.interactionMode,
-    },
-  });
-
-  submitQueuedPromptRef.current = promptQueue.submitQueuedPrompt;
 
   return {
     onSend,

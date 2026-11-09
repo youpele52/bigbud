@@ -5,6 +5,7 @@ import { buildSidebarThreadsById, buildThreadIdsByProjectId } from "./helpers.st
 import { deriveProjectActiveThreadCounts } from "./helpers.projectThreadCount.store";
 import type { AppState } from "./main.store";
 import { mapProject, mapThread } from "./mappers.store";
+import { resetProjectCatalogState } from "./helpers.projectEpoch.store";
 
 export function syncServerReadModel(state: AppState, readModel: OrchestrationReadModel): AppState {
   const mappedProjects = readModel.projects
@@ -14,7 +15,7 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
   const visibleThreads = threads.filter((thread) => thread.purpose !== "side-chat");
   const projects = deriveProjectActiveThreadCounts(mappedProjects, threads);
   return {
-    ...state,
+    ...resetProjectCatalogState(state),
     projects,
     threads,
     sidebarThreadsById: buildSidebarThreadsById(visibleThreads),

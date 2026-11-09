@@ -12,7 +12,8 @@ import { useComposerDraftStore } from "~/stores/composer";
 import { useStore } from "~/stores/main";
 import { useUiStateStore } from "~/stores/ui";
 import { newThreadId } from "~/lib/utils";
-import { loadProjectForNewThread } from "~/hooks/useHandleNewThread";
+import { useProjectReadiness } from "./useProjectReadiness";
+import { useThreadSurfaceLifetime } from "../components/chat/view/ChatView.threadLifetime";
 import { createSidebarCatalogRefresher } from "~/routes/-__root.sidebar-catalog";
 import {
   getCompactChatModelPreference,
@@ -62,17 +63,19 @@ export function useCompactChatThread() {
     };
   });
   const { projectId: selectedProjectId, restoring, threadId, persistedMaterialized } = threadState;
+  const captureSurface = useThreadSurfaceLifetime(threadId);
   const bootstrapComplete = useStore((state) => state.bootstrapComplete);
   const serverThread = useStore((state) => state.threads.find((thread) => thread.id === threadId));
   const seenOnServerRef = useRef(false);
   // Only the thread id is persisted; use the catalog's project after restoring an existing thread.
   const projectId = serverThread?.projectId ?? selectedProjectId;
-  const compactProject = useStore((state) =>
-    state.projects.find((project) => project.id === projectId),
-  );
-  const hydrationStatus = useStore(
-    (state) => state.threadHydrationById[threadId]?.status ?? "unloaded",
-  );
+  const {
+    project: compactProject,
+    error: projectLoadError,
+    retry: retryProjectLoad,
+  } = useProjectReadiness(projectId, bootstrapComplete && !restoring);
+  const hydration = useStore((state) => state.threadHydrationById[threadId]);
+  const hydrationStatus = hydration?.status ?? "unloaded";
   const hasServerThread = serverThread !== undefined;
   useEffect(() => {
     // The compact chat's thread counts as viewed, so it keeps its detail like an open route.
@@ -88,9 +91,8 @@ export function useCompactChatThread() {
   const defaultChatCwd = useDefaultChatCwd();
   const providers = useServerProviders() ?? [];
   const [initialSelection, setInitialSelection] = useState(getInitialSelection);
-  const [projectLoadAttempt, setProjectLoadAttempt] = useState(0);
-  const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
   const [threadSyncError, setThreadSyncError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const selectionUnavailable = Boolean(
     initialSelection && !isCompactChatModelPreferenceAvailable(initialSelection, providers),
   );
@@ -106,8 +108,9 @@ export function useCompactChatThread() {
   }, [serverThread]);
 
   useEffect(() => {
-    persistCompactChatState(threadId, serverThread != null && serverThread.deletingAt === null);
-  }, [serverThread, threadId]);
+    if (!restoring)
+      persistCompactChatState(threadId, serverThread != null && serverThread.deletingAt === null);
+  }, [restoring, serverThread, threadId]);
 
   const startFreshThread = useCallback(
     (nextProjectId: ProjectId) => {
@@ -133,6 +136,7 @@ export function useCompactChatThread() {
     bootstrapComplete,
     persistedMaterialized,
     restoring,
+    retryAttempt: restoreAttempt,
     setThreadState,
     setThreadSyncError,
     threadId,
@@ -181,39 +185,6 @@ export function useCompactChatThread() {
   ]);
 
   useEffect(() => {
-    if (!bootstrapComplete || restoring || compactProject) return;
-    const api = readNativeApi();
-    if (!api) {
-      setProjectLoadError("bigbud is not connected to the server.");
-      return;
-    }
-
-    let disposed = false;
-    setProjectLoadError(null);
-    void loadProjectForNewThread({
-      api,
-      projectId,
-      getProject: () => useStore.getState().projects.find((project) => project.id === projectId),
-      mergeProjectCatalogPage: useStore.getState().mergeProjectCatalogPage,
-    })
-      .then((project) => {
-        if (!disposed && !project) {
-          setProjectLoadError("The selected project is unavailable.");
-        }
-      })
-      .catch((error: unknown) => {
-        if (!disposed) {
-          setProjectLoadError(
-            error instanceof Error ? error.message : "The selected project could not be loaded.",
-          );
-        }
-      });
-    return () => {
-      disposed = true;
-    };
-  }, [bootstrapComplete, compactProject, projectId, projectLoadAttempt, restoring]);
-
-  useEffect(() => {
     if (!bootstrapComplete || restoring || !compactProject || serverThread) return;
     if (seenOnServerRef.current || persistedMaterialized) return;
     setDraftThreadContext(threadId, {
@@ -248,7 +219,7 @@ export function useCompactChatThread() {
       restoring ||
       !serverThread ||
       serverThread.deletingAt !== null ||
-      (hydrationStatus !== "unloaded" && hydrationStatus !== "failed")
+      hydrationStatus !== "unloaded"
     ) {
       return;
     }
@@ -314,12 +285,10 @@ export function useCompactChatThread() {
     ]);
   }, []);
 
-  const retryProjectLoad = useCallback(() => {
-    setProjectLoadAttempt((attempt) => attempt + 1);
-  }, []);
-
   const synchronizeMaterializedThread = useCallback(
     async (materializedThreadId: ThreadId) => {
+      const isCurrent = captureSurface();
+      if (materializedThreadId !== threadId || !isCurrent()) return;
       const api = readNativeApi();
       if (!api) {
         setThreadSyncError("bigbud is not connected to the server.");
@@ -331,24 +300,30 @@ export function useCompactChatThread() {
         await runBoundedBootstrap({
           api,
           selectedThreadId: materializedThreadId,
-          disposed: () => false,
+          disposed: () => !isCurrent(),
         });
         if (!useStore.getState().threads.some((thread) => thread.id === materializedThreadId)) {
           throw new Error("The new chat was not found after it was created.");
         }
-        clearDraftThread(materializedThreadId);
+        // Bootstrap only synchronizes canonical state. The ownership coordinator
+        // retires draft metadata; synchronization must never erase unsent content.
       } catch (error) {
+        if (!isCurrent()) return;
         setThreadSyncError(
           error instanceof Error ? error.message : "The new chat could not be synchronized.",
         );
       }
     },
-    [clearDraftThread],
+    [captureSurface, threadId],
   );
 
   const retryThreadSync = useCallback(() => {
-    void synchronizeMaterializedThread(threadId);
-  }, [synchronizeMaterializedThread, threadId]);
+    if (restoring) {
+      setRestoreAttempt((attempt) => attempt + 1);
+    } else {
+      void synchronizeMaterializedThread(threadId);
+    }
+  }, [restoring, synchronizeMaterializedThread, threadId]);
 
   return {
     isMaterialized: serverThread != null && serverThread.deletingAt === null,
@@ -364,7 +339,7 @@ export function useCompactChatThread() {
     selectionUnavailable,
     selectThread,
     synchronizeMaterializedThread,
-    threadSyncError,
+    threadSyncError: threadSyncError ?? (hydration?.status === "failed" ? hydration.error : null),
     threadTitle: serverThread?.title ?? null,
     threadId,
     workspaceRoot: serverThread?.worktreePath ?? compactProject?.cwd ?? defaultChatCwd ?? undefined,

@@ -86,6 +86,26 @@ export function markThreadViewed(state: AppState, threadId: ThreadId): AppState 
   return unloadThreads({ ...state, recentlyViewedThreadIds }, (id) => retained.has(id));
 }
 
+/** Revoked epoch tokens cannot finish their loads; drop stale detail and allow a fresh request. */
+export function invalidateInFlightThreadHydrations(state: AppState): AppState {
+  const threadHydrationById = { ...state.threadHydrationById };
+  const invalidated = new Set<string>();
+  for (const [id, hydration] of Object.entries(threadHydrationById)) {
+    if (hydration.status === "loading" || hydration.status === "loadingOlder") {
+      invalidated.add(id);
+      threadHydrationById[id] = { status: "unloaded" };
+    }
+  }
+  if (invalidated.size === 0) return state;
+  return {
+    ...state,
+    threadHydrationById,
+    threads: state.threads.map((thread) =>
+      invalidated.has(thread.id) ? unloadThreadDetail(thread) : thread,
+    ),
+  };
+}
+
 /** After a baseline reset every hydrated thread but the selected one is stale: re-hydrate on open. */
 export function unloadHydratedThreads(state: AppState, keepThreadId: ThreadId | null): AppState {
   return unloadThreads(state, (id) => id === keepThreadId);

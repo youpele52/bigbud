@@ -11,6 +11,7 @@ import {
   wsConnectionDiagnosticsLifecycle,
 } from "./wsConnectionDiagnosticsReporter";
 import { requestServerConfig } from "./wsRpcClient.config";
+import { requestProjectCatalog } from "./wsRpcClient.projectCatalog";
 import { requestWsConnectionDiagnostics } from "./wsRpcClient.diagnostics";
 import { requestConnectedSshMonitors, requestSshMonitorSample } from "./wsRpcClient.monitor";
 import { requestRemoteFolders, requestSshConfigHosts } from "./wsRpcClient.remoteSetup";
@@ -328,10 +329,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     orchestration: {
       getSidebarThreadCatalog: () =>
         transport.request((client) => client[ORCHESTRATION_WS_METHODS.getSidebarThreadCatalog]({})),
-      getStartupProjectCatalog: (input) =>
-        transport.request((client) =>
-          client[ORCHESTRATION_WS_METHODS.getStartupProjectCatalog](input),
-        ),
+      getStartupProjectCatalog: (input) => requestProjectCatalog(transport, input),
       searchConversationMessages: (input) =>
         transport.request((client) =>
           client[ORCHESTRATION_WS_METHODS.searchConversationMessages](input),

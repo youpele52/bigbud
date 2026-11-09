@@ -108,7 +108,13 @@ export async function prepareComposerPrompt(input: {
     }
     return null;
   }
-  if (!sendInput.activeProject) return null;
+  if (!sendInput.activeProject) {
+    sendInput.setThreadError(
+      thread.id,
+      "The chat project is not loaded. Wait for project loading or retry opening this chat. Your unsent draft is safe.",
+    );
+    return null;
+  }
 
   const promptTextForSend = readDocumentCommand
     ? await api.server

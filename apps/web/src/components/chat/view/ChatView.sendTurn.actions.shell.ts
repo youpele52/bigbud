@@ -75,7 +75,13 @@ export async function sendShellCommand({
     input.setThreadError(thread.id, "Enter a shell command.");
     return;
   }
-  if (!project) return;
+  if (!project) {
+    input.setThreadError(
+      thread.id,
+      "The selected project is not loaded. Retry loading it before sending.",
+    );
+    return;
+  }
 
   const sendContext = await prepareSendContext({
     input,

@@ -7,6 +7,7 @@ import { BUILT_IN_CHATS_PROJECT_ID } from "@bigbud/contracts/constants/project.c
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
 import { isElectron } from "../../config/env";
 import { useStore } from "../../stores/main";
+import { useSidebarProjectMetadata } from "./Sidebar.state.projectMetadata";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { useDesktopUpdateState } from "../../hooks/useDesktopUpdateState";
@@ -40,7 +41,7 @@ import { useAutomationThreadIds } from "../automation/useAutomationThreadIds";
 import type { SharedProjectItemProps, SidebarProjectSnapshot, SidebarState } from "./Sidebar.types";
 
 export function useSidebarState(): SidebarState {
-  const projects = useStore((store) => store.projects);
+  const { projects, metadataProjects, projectCwdById } = useSidebarProjectMetadata();
   const bootstrapComplete = useStore((store) => store.bootstrapComplete);
   const sidebarThreadsById = useStore((store) => store.sidebarThreadsById);
   const threadIdsByProjectId = useStore((store) => store.threadIdsByProjectId);
@@ -132,11 +133,7 @@ export function useSidebarState(): SidebarState {
 
   const sidebarThreads = useMemo(() => Object.values(sidebarThreadsById), [sidebarThreadsById]);
 
-  const projectCwdById = useMemo(
-    () => new Map(projects.map((project) => [project.id, project.cwd] as const)),
-    [projects],
-  );
-  const prByThreadId = useSidebarProjectGitStatus(projects, sidebarThreads, projectCwdById);
+  const prByThreadId = useSidebarProjectGitStatus(metadataProjects, sidebarThreads, projectCwdById);
 
   const dragInProgressRef = useRef(false);
   const suppressProjectClickAfterDragRef = useRef(false);

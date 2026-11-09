@@ -20,6 +20,7 @@ import type { ChatMessage, Project, Thread } from "../../../models/types";
 import { toastManager } from "../../ui/toast";
 import { waitForStartedServerThread } from "./ChatView.logic";
 import { formatOutgoingPrompt } from "./ChatView.logic";
+import { usePlanFollowUp } from "./ChatView.planFollowUp";
 
 export interface UsePlanHandlersInput {
   activeThread: Thread | undefined;
@@ -58,165 +59,33 @@ export interface UsePlanHandlersResult {
   onSubmitPlanFollowUp: (params: {
     text: string;
     interactionMode: "default" | "plan";
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   onImplementPlanInNewThread: () => Promise<void>;
 }
 
 /** Handles plan follow-up submission and new-thread plan implementation. */
-export function usePlanHandlers({
-  activeThread,
-  activeProject,
-  activeProposedPlan,
-  isServerThread,
-  isSendBusy,
-  isConnecting,
-  sendInFlightRef,
-  planCardDismissedForTurnRef,
-  planCardOpenOnNextThreadRef,
-  selectedProvider,
-  selectedModel,
-  selectedProviderModels,
-  selectedPromptEffort,
-  selectedModelSelection,
-  runtimeMode,
-  shouldAutoScrollRef,
-  setOptimisticUserMessages,
-  setPlanCardOpen,
-  setThreadError,
-  setComposerDraftInteractionMode,
-  beginLocalDispatch,
-  resetLocalDispatch,
-  forceStickToBottom,
-  persistThreadSettingsForNextTurn,
-}: UsePlanHandlersInput): UsePlanHandlersResult {
+export function usePlanHandlers(input: UsePlanHandlersInput): UsePlanHandlersResult {
+  const {
+    activeThread,
+    activeProject,
+    activeProposedPlan,
+    isServerThread,
+    isSendBusy,
+    isConnecting,
+    sendInFlightRef,
+    planCardOpenOnNextThreadRef,
+    selectedProvider,
+    selectedModel,
+    selectedProviderModels,
+    selectedPromptEffort,
+    selectedModelSelection,
+    runtimeMode,
+    beginLocalDispatch,
+    resetLocalDispatch,
+  } = input;
   const navigate = useNavigate();
 
-  const onSubmitPlanFollowUp = useCallback(
-    async ({
-      text,
-      interactionMode: nextInteractionMode,
-    }: {
-      text: string;
-      interactionMode: "default" | "plan";
-    }) => {
-      const api = readNativeApi();
-      if (!api || !activeThread || !isServerThread || isConnecting || sendInFlightRef.current) {
-        return;
-      }
-
-      const trimmed = text.trim();
-      if (!trimmed) {
-        return;
-      }
-
-      const threadIdForSend = activeThread.id;
-      const messageIdForSend = newMessageId();
-      const messageCreatedAt = new Date().toISOString();
-      const outgoingMessageText = formatOutgoingPrompt({
-        provider: selectedProvider,
-        model: selectedModel,
-        models: selectedProviderModels,
-        effort: selectedPromptEffort,
-        text: trimmed,
-      });
-
-      sendInFlightRef.current = true;
-      beginLocalDispatch({ preparingWorktree: false });
-      setThreadError(threadIdForSend, null);
-      setOptimisticUserMessages((existing) => [
-        ...existing,
-        {
-          id: messageIdForSend,
-          role: "user",
-          text: outgoingMessageText,
-          createdAt: messageCreatedAt,
-          streaming: false,
-        },
-      ]);
-      shouldAutoScrollRef.current = true;
-      forceStickToBottom();
-
-      try {
-        await persistThreadSettingsForNextTurn({
-          threadId: threadIdForSend,
-          createdAt: messageCreatedAt,
-          modelSelection: selectedModelSelection,
-          runtimeMode,
-          interactionMode: nextInteractionMode,
-        });
-
-        // Keep the mode toggle and plan-follow-up banner in sync immediately
-        // while the same-thread implementation turn is starting.
-        setComposerDraftInteractionMode(threadIdForSend, nextInteractionMode);
-
-        await api.orchestration.dispatchCommand({
-          type: "thread.turn.start",
-          commandId: newCommandId(),
-          threadId: threadIdForSend,
-          message: {
-            messageId: messageIdForSend,
-            role: "user",
-            text: outgoingMessageText,
-            attachments: [],
-          },
-          modelSelection: selectedModelSelection,
-          titleSeed: activeThread.title,
-          runtimeMode,
-          interactionMode: nextInteractionMode,
-          ...(nextInteractionMode === "default" && activeProposedPlan
-            ? {
-                sourceProposedPlan: {
-                  threadId: activeThread.id,
-                  planId: activeProposedPlan.id,
-                },
-              }
-            : {}),
-          createdAt: messageCreatedAt,
-        });
-        // Optimistically open the floating plan card when implementing (not refining).
-        // "default" mode here means the agent is executing the plan, which produces
-        // step-tracking activities that the card will display.
-        if (nextInteractionMode === "default") {
-          planCardDismissedForTurnRef.current = null;
-          setPlanCardOpen(true);
-        }
-        sendInFlightRef.current = false;
-      } catch (err) {
-        setOptimisticUserMessages((existing) =>
-          existing.filter((message) => message.id !== messageIdForSend),
-        );
-        setThreadError(
-          threadIdForSend,
-          err instanceof Error ? err.message : "Failed to send plan follow-up.",
-        );
-        sendInFlightRef.current = false;
-        resetLocalDispatch();
-      }
-    },
-    [
-      activeThread,
-      activeProposedPlan,
-      beginLocalDispatch,
-      forceStickToBottom,
-      isConnecting,
-      isServerThread,
-      persistThreadSettingsForNextTurn,
-      planCardDismissedForTurnRef,
-      resetLocalDispatch,
-      runtimeMode,
-      selectedPromptEffort,
-      selectedModelSelection,
-      selectedProvider,
-      selectedProviderModels,
-      setOptimisticUserMessages,
-      setComposerDraftInteractionMode,
-      setThreadError,
-      selectedModel,
-      sendInFlightRef,
-      shouldAutoScrollRef,
-      setPlanCardOpen,
-    ],
-  );
+  const onSubmitPlanFollowUp = usePlanFollowUp(input);
 
   const onImplementPlanInNewThread = useCallback(async () => {
     const api = readNativeApi();
