@@ -61,10 +61,11 @@ describe("getThreadStatusViaOrchestration", () => {
     });
 
     expect(status.threadId).toBe(childThreadId);
-    expect(repository.findDirectByChild).toHaveBeenCalledWith({ childThreadId });
+    // Reads are open across projects, so delegation is never consulted.
+    expect(repository.findDirectByChild).not.toHaveBeenCalled();
   });
 
-  it("rejects an unrelated cross-project thread", async () => {
+  it("reads an unrelated cross-project thread with no confirmation", async () => {
     const repository = makeRepository(unrelatedThreadId, unrelatedThreadId);
     const engine = {
       getReadModel: () =>
@@ -84,7 +85,8 @@ describe("getThreadStatusViaOrchestration", () => {
         callerThreadId,
         threadId: childThreadId,
       }),
-    ).rejects.toThrow("not accessible");
+    ).resolves.toMatchObject({ threadId: childThreadId, workflowStatus: "idle" });
+    expect(repository.findDirectByChild).not.toHaveBeenCalled();
   });
 
   it("keeps archived and same-project threads readable, but rejects deleted threads", async () => {

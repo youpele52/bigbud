@@ -25,7 +25,7 @@ import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog
 import { BIGBUD_ORCHESTRATION_NAMESPACE } from "./codexThreadDynamicTools.specs.ts";
 import { normalizeListThreadsStatus } from "./ThreadOrchestrationTools.listThreads.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES, type AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
-import { RenameThreadArguments } from "./threadRenameTool.shared.ts";
+import { formatRenameThreadToolResult, RenameThreadArguments } from "./threadRenameTool.shared.ts";
 import { runThreadOrganizationTool } from "./threadOrganizationTool.run.ts";
 import {
   decodeComputerUseToolRequest,
@@ -177,7 +177,7 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
           }),
         );
         return {
-          contentItems: [inputText(`Renamed thread to "${result.title}".`)],
+          contentItems: [inputText(formatRenameThreadToolResult(result, title))],
           success: true,
         };
       }

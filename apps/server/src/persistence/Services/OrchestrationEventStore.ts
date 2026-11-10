@@ -63,6 +63,32 @@ export interface OrchestrationEventStoreShape {
   ) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, OrchestrationEventStoreError>;
 
   /**
+   * Read one bounded, ordered page of a thread's confirmation-proof candidates after a sequence:
+   * user-input responses, `user-input.requested` activities, queued prompts and user-role messages.
+   * Optional so full-shape test stores keep compiling; absent means proof fails closed.
+   */
+  readonly readThreadProofEventsAfter?: (input: {
+    readonly threadId: ThreadId;
+    readonly afterSequence: number;
+    readonly limit: number;
+  }) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, OrchestrationEventStoreError>;
+
+  /**
+   * The latest `limit` events of one thread's user turns, in ascending order: user-role messages,
+   * queued prompts, queue flushes and turn-start requests. Optional like the proof reader; absent
+   * means implicit approval is never granted.
+   */
+  readonly readThreadRecentUserTurnEvents?: (input: {
+    readonly threadId: ThreadId;
+    readonly limit: number;
+  }) => Effect.Effect<ReadonlyArray<OrchestrationEvent>, OrchestrationEventStoreError>;
+
+  /** Highest stored sequence of one thread stream, or 0 when it has none. */
+  readonly readThreadMaxSequence?: (
+    threadId: ThreadId,
+  ) => Effect.Effect<number, OrchestrationEventStoreError>;
+
+  /**
    * Delete at most one bounded canonical prefix covered by a verified baseline. With
    * `throughSequence`, nothing above it is deleted and gap rows are left to the caller.
    */

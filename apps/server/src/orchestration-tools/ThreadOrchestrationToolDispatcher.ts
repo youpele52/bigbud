@@ -28,7 +28,8 @@ import type {
 import type { AgentWorkspaceToolInput } from "./AgentWorkspaceTools.ts";
 import type { ComputerUseV2Dispatch } from "./computerUseToolRequest.ts";
 import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
-import type { ThreadOrganizationToolResult } from "./ThreadOrchestrationTools.organization.ts";
+import type { ThreadOrganizationToolOutcome } from "./ThreadOrchestrationTools.organization.ts";
+import type { ThreadCoordinationRefusal } from "./ThreadCoordinationConfirmation.result.ts";
 
 export interface ThreadOrchestrationToolDispatcherShape {
   readonly renderHtml?: (input: {
@@ -54,22 +55,26 @@ export interface ThreadOrchestrationToolDispatcherShape {
     readonly invocationId?: string;
     readonly sourceMessageId?: MessageId;
   }) => Effect.Effect<
-    { readonly title: string; readonly threadId?: ThreadId; readonly commandId?: string },
+    | { readonly title: string; readonly threadId?: ThreadId; readonly commandId?: string }
+    | ThreadCoordinationRefusal,
     Error
   >;
-  /** Inyosira organization. Optional so transports report "not ready" until it is installed. */
+  /**
+   * Inyosira organization. Optional so transports report "not ready" until it is installed.
+   * Writes into another project may return a confirmation refusal on the success path.
+   */
   readonly move?: (input: {
     readonly threadId: ThreadId;
     readonly targetThreadId?: ThreadId;
     readonly state: string;
     readonly invocationId?: string;
-  }) => Effect.Effect<ThreadOrganizationToolResult, Error>;
+  }) => Effect.Effect<ThreadOrganizationToolOutcome, Error>;
   readonly snooze?: (input: {
     readonly threadId: ThreadId;
     readonly targetThreadId?: ThreadId;
     readonly minutes: number;
     readonly invocationId?: string;
-  }) => Effect.Effect<ThreadOrganizationToolResult, Error>;
+  }) => Effect.Effect<ThreadOrganizationToolOutcome, Error>;
   readonly archive: (input: {
     readonly threadId: ThreadId;
   }) => Effect.Effect<{ readonly archived: true }, Error>;

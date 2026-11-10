@@ -14,6 +14,8 @@ export async function withFixture(
     config: ThreadOrchestrationHttpConfig,
     requests: Array<Record<string, unknown>>,
   ) => Promise<void>,
+  /** Response body for each recorded request; defaults to a successful rename. */
+  respond: (body: Record<string, unknown>) => unknown = () => ({ ok: true, title: "ohno" }),
 ) {
   const directory = await mkdtemp(join(tmpdir(), "canonical-rename-template-"));
   const requests: Array<Record<string, unknown>> = [];
@@ -21,9 +23,10 @@ export async function withFixture(
     let body = "";
     for await (const chunk of request) body += String(chunk);
     expect(request.headers["x-bigbud-thread-tool-token"]).toBe("owned-fixture-token");
-    requests.push(JSON.parse(body));
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    requests.push(parsed);
     response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify({ ok: true, title: "ohno" }));
+    response.end(JSON.stringify(respond(parsed)));
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");

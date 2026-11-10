@@ -1,4 +1,6 @@
+import { ProjectId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { expect, it } from "vitest";
+import { confirmationRequiredResult } from "./ThreadCoordinationConfirmation.result.ts";
 import { renderOrchestrationMcpServerSource } from "./orchestrationMcpBridge.template.ts";
 import { renderPiOrchestrationBridgeSource } from "./PiOrchestrationBridge.template.ts";
 import {
@@ -114,4 +116,61 @@ await renameThread({ title: 'own' });
     });
     expect(requests[1]).not.toHaveProperty("targetThreadId");
   });
+});
+
+const refusal = confirmationRequiredResult({
+  code: "BB-BRIDGE00",
+  projectId: ProjectId.makeUnsafe("project-b"),
+  projectTitle: "B",
+  targetIsRemote: false,
+});
+// The HTTP route spreads the rename result at top level beside `ok`.
+const refusingRoute = () => ({ ok: true, ...refusal });
+
+/** Each generated bridge prints the confirmation payload (without `ok`) instead of a rename. */
+const expectRefusalText = (text: string) => {
+  expect(text).not.toContain("Renamed thread");
+  expect(JSON.parse(text)).toEqual(refusal);
+};
+
+it("generated MCP, Pi and legacy OpenCode renames print a confirmation_required payload", async () => {
+  await withFixture(async (config) => {
+    const mcp = (
+      await runSource(
+        renderOrchestrationMcpServerSource(config),
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "rename_thread", arguments: { title: "x", targetThreadId: "foreign" } },
+        }) + "\n",
+      )
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+      .find((response) => response.id === 1);
+    expectRefusalText(mcp.result.content[0].text);
+
+    const pi = await runSource(
+      resolvePiExtensionSource(renderPiOrchestrationBridgeSource(config)) +
+        `
+const tools = [];
+bigbudOrchestrationBridge({ registerTool(tool) { tools.push(tool); } });
+const rename = tools.find(tool => tool.name === 'rename_thread');
+const result = await rename.execute('refused-call', { title: 'x', targetThreadId: 'foreign' });
+process.stdout.write(result.content[0].text);
+`,
+    );
+    expectRefusalText(pi);
+
+    const legacy = await runSource(
+      renderOpencodeOrchestrationRuntimeSource(config) +
+        `
+const result = await renameThread({ title: 'x', targetThreadId: 'foreign' });
+process.stdout.write(result.message);
+`,
+    );
+    expectRefusalText(legacy);
+  }, refusingRoute);
 });

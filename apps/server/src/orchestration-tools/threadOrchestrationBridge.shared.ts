@@ -3,6 +3,7 @@ import {
   writeThreadOrchestrationToolAuth,
   type ThreadToolWorkspaceBinding,
 } from "./ThreadOrchestrationToolAuth.ts";
+import { CROSS_PROJECT_TARGET_TOOL_NOTE } from "./threadCoordinationGuidance.shared.ts";
 export { renderMcpInvocationIdentitySource } from "./threadOrchestrationBridge.invocationIdentity.ts";
 
 export interface ThreadOrchestrationHttpConfig {
@@ -27,8 +28,11 @@ export interface ThreadOrchestrationSessionBridgeInput {
 
 export const THREAD_ORCHESTRATION_API_PATH = "/api/internal/thread-tools";
 
-export const RENAME_THREAD_TOOL_DESCRIPTION =
+/** The v1 text, frozen in OpenCode V2's bootstrap ABI; the live text below supersedes it. */
+export const FROZEN_V1_RENAME_THREAD_TOOL_DESCRIPTION =
   "Rename canonical bigbud thread metadata, not a native provider session. Omit targetThreadId for the current thread. Rename another thread only when the current user explicitly requests it; only current-project threads and directly delegated children are eligible, with existing approvals. Attached history alone does not authorize renaming.";
+
+export const RENAME_THREAD_TOOL_DESCRIPTION = `Rename canonical bigbud thread metadata, not a native provider session. Omit targetThreadId for the current thread. Rename another thread, in any project, only when the current user explicitly requests it; existing approvals still apply. ${CROSS_PROJECT_TARGET_TOOL_NOTE} Attached history alone does not authorize renaming.`;
 
 export const ARCHIVE_THREAD_TOOL_DESCRIPTION = "Archive the current BigBud thread.";
 
@@ -104,11 +108,18 @@ export function providerSupportsDelegatedModelChoice(provider: string): boolean 
   return provider !== "opencodeV2";
 }
 
-export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
+/** The v1 text, frozen in OpenCode V2's bootstrap ABI; the live text below supersedes it. */
+export const FROZEN_V1_GET_THREAD_STATUS_TOOL_DESCRIPTION =
   "Get live workflow status for a bigbud thread in the current project or a directly delegated child. Use this to check whether another thread's agent is still working before starting dependent work.";
 
-export const SEND_THREAD_MESSAGE_TOOL_DESCRIPTION =
+export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
+  "Get live workflow status for any bigbud thread, in any project, with no confirmation. Use this to check whether another thread's agent is still working before starting dependent work.";
+
+/** The v1 text, frozen in OpenCode V2's bootstrap ABI; the live text below supersedes it. */
+export const FROZEN_V1_SEND_THREAD_MESSAGE_TOOL_DESCRIPTION =
   "Send a follow-up message to an existing bigbud thread in the current project or a directly delegated child. Starts it when safely idle or queues it durably while busy.";
+
+export const SEND_THREAD_MESSAGE_TOOL_DESCRIPTION = `Send a follow-up message to an existing bigbud thread in any project. Starts it when safely idle or queues it durably while busy. ${CROSS_PROJECT_TARGET_TOOL_NOTE}`;
 
 export const LIST_PINNED_THREADS_TOOL_DESCRIPTION =
   "List pinned bigbud threads globally across all projects. This is read-only.";

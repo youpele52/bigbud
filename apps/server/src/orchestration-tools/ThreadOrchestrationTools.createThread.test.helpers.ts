@@ -37,8 +37,8 @@ export function makeSystem(
     getReadModel: () =>
       Effect.succeed({
         projects: [
-          { id: callerProjectId, deletedAt: null, deletingAt: null },
-          { id: targetProjectId, deletedAt: null, deletingAt: null },
+          { id: callerProjectId, title: "Caller project", deletedAt: null, deletingAt: null },
+          { id: targetProjectId, title: "Target project", deletedAt: null, deletingAt: null },
         ],
         threads: [parent],
       }),

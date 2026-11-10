@@ -45,7 +45,12 @@ import {
 } from "./threadPlanTrackingTool.shared.ts";
 import type { AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
 import { createCopilotAgentWorkspaceTools } from "./copilotAgentWorkspaceTools.ts";
-import { RenameThreadArguments, RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
+import {
+  formatRenameThreadToolResult,
+  RenameThreadArguments,
+  RENAME_THREAD_TOOL_PARAMETERS,
+} from "./threadRenameTool.shared.ts";
+import type { ThreadCoordinationRefusal } from "./ThreadCoordinationConfirmation.result.ts";
 import {
   MOVE_THREAD_TOOL_DESCRIPTION,
   MOVE_THREAD_TOOL_PARAMETERS,
@@ -93,7 +98,7 @@ export function createCopilotThreadOrchestrationTools(
       title: string,
       targetThreadId?: string,
       invocationId?: string,
-    ) => Promise<{ readonly title: string }>;
+    ) => Promise<{ readonly title: string } | ThreadCoordinationRefusal>;
     readonly archiveThread: () => Promise<void>;
     /** Inyosira `move_thread` / `snooze_thread`; absent until organization is installed. */
     readonly organizeThread?: (
@@ -165,7 +170,7 @@ export function createCopilotThreadOrchestrationTools(
         try {
           const { title, targetThreadId } = Schema.decodeUnknownSync(RenameThreadArguments)(args);
           const result = await input.renameThread(title, targetThreadId, invocation.toolCallId);
-          return successResult(`Renamed thread to "${result.title}".`);
+          return successResult(formatRenameThreadToolResult(result, title));
         } catch (error) {
           const message = error instanceof Error ? error.message : "Failed to rename thread.";
           return failureResult(message);

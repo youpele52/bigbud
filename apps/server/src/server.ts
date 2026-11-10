@@ -15,6 +15,7 @@ import { withEngineTerminal } from "./server.engineTerminal.ts";
 import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
 import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerManager";
 import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEngine";
+import { ThreadCoordinationGrantsLive } from "./orchestration-tools/Layers/ThreadCoordinationGrants.ts";
 import { CommandGatewayLive } from "./command-gateway/Layers/CommandGateway.ts";
 import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
 import { OrchestrationEventStoreLive } from "./persistence/Layers/OrchestrationEventStore";
@@ -155,6 +156,8 @@ const OrchestrationEngineLayerLive = withEngineTerminal(
   Layer.provide(OrchestrationInfrastructureLayerLive),
   Layer.provide(ComputerUseLayerLive),
   Layer.provide(VisibleBrowserControlLive),
+  // One shared in-memory grant store; grants and challenges are lost on restart by design.
+  Layer.provide(ThreadCoordinationGrantsLive),
 );
 
 const OrchestrationCommandLayerLive = CommandGatewayLive.pipe(

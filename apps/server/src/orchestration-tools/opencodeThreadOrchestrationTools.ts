@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { HTML_RENDER_TOOL_DESCRIPTION } from "./htmlRenderTool.shared.ts";
+import { renderRenameThreadResultTextSource } from "./threadRenameTool.shared.ts";
 
 import { LIST_THREADS_MAX_LIMIT } from "./ThreadOrchestrationTools.listThreads.ts";
 import {
@@ -161,6 +162,7 @@ export function renderOpencodeOrchestrationRuntimeSource(
     renderCallOrchestrationToolSource(),
     "",
     renderResolveCurrentThreadIdSource(),
+    renderRenameThreadResultTextSource(),
     "export async function renderHtml(htmlArguments, invocationId) {",
     "  const result = await callOrchestrationTool({ action: 'render_html', htmlArguments, invocationId });",
     "  return JSON.stringify(result.result);",
@@ -175,7 +177,7 @@ export function renderOpencodeOrchestrationRuntimeSource(
     "    title,",
     "    ...(input.targetThreadId !== undefined ? { targetThreadId: input.targetThreadId } : {}),",
     "  });",
-    '  return { message: `Renamed thread to "${result.title ?? title}".` };',
+    "  return { message: renameThreadResultText(result, title) };",
     "}",
     "",
     "export async function archiveThread() {",

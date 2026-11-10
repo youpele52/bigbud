@@ -5,6 +5,7 @@ import {
 } from "./htmlRenderTool.shared.ts";
 import { renderPiBrowserToolSource } from "./orchestrationBrowserTool.shared.ts";
 import { renderPiOrganizationToolsSource } from "./PiOrchestrationBridge.template.organization.ts";
+import { renderRenameThreadResultTextSource } from "./threadRenameTool.shared.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   CREATE_THREAD_WITH_MODEL_CHOICE_TOOL_DESCRIPTION,
@@ -54,6 +55,8 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     renderCallOrchestrationToolSource(),
     "",
     renderResolveCurrentThreadIdSource(),
+    "",
+    renderRenameThreadResultTextSource(),
     "",
     `const workspaceToolSpecs = ${JSON.stringify(AGENT_WORKSPACE_TOOL_SPECS)};`,
     "const workspaceTools = workspaceToolSpecs.map((spec) => defineTool({",
@@ -173,7 +176,7 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "      invocationId: toolCallId,",
     "      sourceMessageId: SOURCE_MESSAGE_ID,",
     "    });",
-    '    return textResult(`Renamed thread to "${result.title ?? trimmed}".`);',
+    "    return textResult(renameThreadResultText(result, trimmed));",
     "  },",
     "});",
     "",

@@ -4,15 +4,13 @@ import {
   ensureOrchestrationThreadState,
   type OrchestrationEngineShape,
 } from "../orchestration/Services/OrchestrationEngine.ts";
-import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
-import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
 
-/** Startup is intentionally sparse. Resolve only the two exact durable participants,
- * then authorize the authenticated caller; hydration never makes a target the caller. */
+/** Startup is intentionally sparse. Resolve only the two exact durable participants; hydration
+ * never makes a target the caller. Resolution is read access, open across projects; write tools
+ * then apply `requireThreadCoordinationAccess` after their committed-outcome replay check. */
 export const resolveThreadToolParticipants = Effect.fn("resolveThreadToolParticipants")(
   function* (input: {
     readonly orchestrationEngine: OrchestrationEngineShape;
-    readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
     readonly operation: "send" | "status" | "rename" | "organize";
@@ -48,11 +46,6 @@ export const resolveThreadToolParticipants = Effect.fn("resolveThreadToolPartici
           `Thread '${input.threadId}' is ${input.operation === "send" ? "not available" : "being deleted"}.`,
         ),
       );
-    yield* requireThreadCoordinationAccess({
-      threadDelegationRepository: input.threadDelegationRepository,
-      callerThread,
-      targetThread,
-    });
     return { callerThread, targetThread };
   },
 );

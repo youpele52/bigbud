@@ -84,6 +84,8 @@ function queueTurnStart(input: {
     ...(event.payload.sourceProposedPlan !== undefined
       ? { sourceProposedPlan: event.payload.sourceProposedPlan }
       : {}),
+    // Keep provenance: a merged flush labels a prompt without segments as user-typed.
+    ...(message.originSegments ? { originSegments: message.originSegments } : {}),
     // The message is already in the transcript; the flush redelivers it under the same ID.
     redeliverSentMessage: true,
     delivery: "queue",

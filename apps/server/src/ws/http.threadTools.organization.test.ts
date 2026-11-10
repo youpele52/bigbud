@@ -78,10 +78,15 @@ it.layer(serverTestLayer)("authenticated Inyosira organization HTTP", (it) => {
         expect((yield* post({ action: "move", organizationState: "archived" })).status).toBe(400);
         expect((yield* post({ action: "snooze", durationMinutes: 1 })).status).toBe(400);
         expect((yield* post({ action: "snooze", durationMinutes: 1441 })).status).toBe(400);
-        expect(
-          (yield* post({ action: "move", organizationState: "done", targetThreadId: foreign }))
-            .status,
-        ).toBe(400);
+        // A foreign target is refused on the success path (no grants in this runtime) and unchanged.
+        const foreignMove = yield* post({
+          action: "move",
+          organizationState: "done",
+          targetThreadId: foreign,
+        });
+        expect(foreignMove.status).toBe(200);
+        expect(foreignMove.body.result).toMatchObject({ status: "confirmation_required" });
+        expect((yield* organizationOf(foreign))?.state).not.toBe("done");
         expect(
           (yield* engine.getReadModel()).threads.every((thread) => thread.archivedAt === null),
         ).toBe(true);

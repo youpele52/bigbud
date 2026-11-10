@@ -2,7 +2,7 @@ import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { Effect, Schema } from "effect";
 
 import type { ThreadOrchestrationToolDispatcherShape } from "./ThreadOrchestrationToolDispatcher.ts";
-import type { ThreadOrganizationToolResult } from "./ThreadOrchestrationTools.organization.ts";
+import type { ThreadOrganizationToolOutcome } from "./ThreadOrchestrationTools.organization.ts";
 import { MoveThreadArguments, SnoozeThreadArguments } from "./threadOrganizationTool.shared.ts";
 
 export const THREAD_ORGANIZATION_TOOL_NAMES = ["move_thread", "snooze_thread"] as const;
@@ -13,7 +13,8 @@ export const isThreadOrganizationToolName = (name: string): name is ThreadOrgani
 
 /**
  * Runs `move_thread` or `snooze_thread` for in-process transports (Codex dynamic tools,
- * Copilot). The caller is always the transport's authenticated thread.
+ * Copilot). The caller is always the transport's authenticated thread. A cross-project target
+ * may resolve to a confirmation refusal, which callers print unmodified like any result.
  */
 export function runThreadOrganizationTool(input: {
   readonly dispatcher: ThreadOrchestrationToolDispatcherShape;
@@ -21,7 +22,7 @@ export function runThreadOrganizationTool(input: {
   readonly args: unknown;
   readonly threadId: ThreadId;
   readonly invocationId: string;
-}): Promise<ThreadOrganizationToolResult> {
+}): Promise<ThreadOrganizationToolOutcome> {
   const { dispatcher } = input;
   if (!dispatcher.move || !dispatcher.snooze) {
     return Promise.reject(new Error("Thread organization is not ready."));

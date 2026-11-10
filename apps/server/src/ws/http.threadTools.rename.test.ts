@@ -23,6 +23,13 @@ import {
   isThreadTitleLocked,
   resetThreadTitleLockForTests,
 } from "../orchestration-tools/ThreadTitleLock.ts";
+import { createThreadViaOrchestration } from "../orchestration-tools/ThreadOrchestrationTools.createThread.ts";
+import { isThreadCoordinationRefusal } from "../orchestration-tools/ThreadCoordinationConfirmation.result.ts";
+import { makeTestCoordination } from "../orchestration-tools/ThreadCoordinationConfirmation.test.helpers.ts";
+import { ProjectionThreadWatchRepositoryLive } from "../persistence/Layers/ProjectionThreadWatches.ts";
+import { ThreadDelegationRepositoryLive } from "../persistence/Layers/ThreadDelegations.ts";
+import { ProjectionThreadWatchRepository } from "../persistence/Services/ProjectionThreadWatches.ts";
+import { ThreadDelegationRepository } from "../persistence/Services/ThreadDelegations.ts";
 
 afterEach(() => {
   setThreadOrchestrationToolDispatcher(null);
@@ -81,11 +88,20 @@ it.layer(serverTestLayer)("authenticated canonical rename HTTP", (it) => {
           });
 
         expect((yield* post({ threadId: target, targetThreadId: caller })).status).toBe(401);
-        expect((yield* post({ callerThreadId: foreign, targetThreadId: foreign })).status).toBe(
-          400,
-        );
+        // A forged body caller never replaces the token-bound caller: still a foreign target.
+        expect(
+          (yield* post({ callerThreadId: foreign, targetThreadId: foreign })).body,
+        ).toMatchObject({ status: "confirmation_required" });
         expect((yield* post({ targetThreadId: target }, "wrong-token")).status).toBe(401);
-        for (const targetThreadId of [foreign, "missing", " "]) {
+        // A foreign target is refused on the success path; this runtime has no grants (fail closed).
+        const refused = yield* post({ targetThreadId: foreign });
+        expect(refused).toMatchObject({
+          status: 200,
+          body: { ok: true, status: "confirmation_required" },
+        });
+        expect(refused.body).not.toHaveProperty("title");
+        expect(isThreadTitleLocked(foreign)).toBe(false);
+        for (const targetThreadId of ["missing", " "]) {
           expect((yield* post({ targetThreadId })).status).toBe(400);
         }
         for (const title of ["", " ", "x".repeat(201), 123, null]) {
@@ -138,7 +154,7 @@ it.layer(serverTestLayer)("authenticated canonical rename HTTP", (it) => {
         expect(
           (yield* engine.getReadModel()).threads.find((thread) => thread.id === caller)?.title,
         ).toBe("own-title");
-        const delegated = yield* getThreadOrchestrationToolDispatcher()!.createThread!({
+        const delegation = {
           callerThreadId: caller,
           sourceMessageId: MessageId.makeUnsafe("delegate-source"),
           invocationId: "delegate-call",
@@ -146,7 +162,34 @@ it.layer(serverTestLayer)("authenticated canonical rename HTTP", (it) => {
           title: "Delegated child",
           task: "Owned fixture only; no provider invocation.",
           watchForCompletion: false,
+        };
+        // A foreign create_thread needs its own confirmation and reserves nothing when refused.
+        expect(
+          yield* getThreadOrchestrationToolDispatcher()!.createThread!(delegation),
+        ).toMatchObject({ status: "confirmation_required" });
+        const repositories = yield* Effect.promise(() =>
+          runtime.runPromise(
+            Effect.all({
+              delegations: Effect.service(ThreadDelegationRepository),
+              watches: Effect.service(ProjectionThreadWatchRepository),
+            }).pipe(
+              Effect.provide(
+                Layer.mergeAll(ThreadDelegationRepositoryLive, ProjectionThreadWatchRepositoryLive),
+              ),
+            ),
+          ),
+        );
+        const granted = makeTestCoordination();
+        yield* granted.grants.grant(caller, delegation.projectId);
+        const delegated = yield* createThreadViaOrchestration({
+          ...delegation,
+          orchestrationEngine: engine,
+          threadDelegationRepository: repositories.delegations,
+          projectionThreadWatchRepository: repositories.watches,
+          coordination: granted.coordination,
         });
+        if (isThreadCoordinationRefusal(delegated)) throw new Error("granted create was refused");
+        // The confirmed child is a direct child, so it is controlled without asking again.
         expect(
           (yield* post({ targetThreadId: delegated.childThreadId, title: "child-title" })).status,
         ).toBe(200);

@@ -3,6 +3,8 @@ import { Effect } from "effect";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
+import type { ThreadCoordinationDeps } from "./ThreadCoordinationConfirmation.ts";
+import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
 import { resolveThreadToolParticipants } from "./ThreadOrchestrationTools.participants.ts";
 import { stableThreadToolId } from "./ThreadOrchestrationTools.origins.ts";
 
@@ -32,6 +34,8 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
   function* (input: {
     readonly orchestrationEngine: OrchestrationEngineShape;
     readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
+    /** Cross-project confirmation handles; absent means cross-project sends are refused. */
+    readonly coordination?: ThreadCoordinationDeps | undefined;
     readonly callerThreadId: ThreadId;
     readonly threadId: ThreadId;
     readonly message: string;
@@ -60,7 +64,16 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
       commandId,
       events: yield* readEventsByCommandId(commandId),
     });
+    // Replay first: a committed send returns its outcome without a new confirmation.
     if (committedOutcome) return committedOutcome;
+    const access = yield* requireThreadCoordinationAccess({
+      ...input,
+      mode: "write",
+      callerThread: caller,
+      targetThread: target,
+      targetProjectId: target.projectId,
+    });
+    if (access.kind !== "allowed") return access.result;
     yield* input.orchestrationEngine.dispatch({
       type: "thread.message.submit",
       commandId,

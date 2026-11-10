@@ -9,6 +9,7 @@ import {
   setThreadOrchestrationToolDispatcher,
 } from "../../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { threadOrchestrationToolsRouteLayer } from "../../../ws/http.threadTools.ts";
+import { isThreadCoordinationRefusal } from "../../../orchestration-tools/ThreadCoordinationConfirmation.result.ts";
 import { ServerConfig } from "../../../startup/config.ts";
 import { OrchestrationEngineService } from "../../../orchestration/Services/OrchestrationEngine.ts";
 
@@ -73,6 +74,7 @@ export const makeV2NativeDelegationFixture = Effect.fn("makeV2NativeDelegationFi
         Effect.gen(function* () {
           dispatched.push(request);
           const result = yield* Effect.promise(() => system.run(installed.createThread!(request)));
+          if (isThreadCoordinationRefusal(result)) return result;
           if (!result.replayed && input.consumeChildren !== false) {
             if (!adapter) throw new Error("provider consumer missing");
             const readModel = yield* Effect.promise(() => system.run(system.engine.getReadModel()));

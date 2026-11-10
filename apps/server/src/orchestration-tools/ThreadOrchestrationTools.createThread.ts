@@ -20,6 +20,8 @@ import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStat
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../persistence/Services/ProjectionThreadWatches.ts";
 import type { ThreadToolModelSources } from "./ThreadOrchestrationToolDispatcher.ts";
+import type { ThreadCoordinationDeps } from "./ThreadCoordinationConfirmation.ts";
+import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
 import {
   decisionRecord,
   decisionThreadModel,
@@ -42,6 +44,8 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     readonly orchestrationEngine: OrchestrationEngineShape;
     readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
     readonly projectionThreadWatchRepository: ProjectionThreadWatchRepositoryShape;
+    /** Cross-project confirmation handles; absent means foreign-project creates are refused. */
+    readonly coordination?: ThreadCoordinationDeps | undefined;
     readonly callerThreadId: ThreadId;
     readonly sourceMessageId: MessageId;
     readonly invocationId: string;
@@ -101,6 +105,23 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
         invocationId,
       })
       .pipe(Effect.mapError(delegationError));
+    // An existing delegation replays with no confirmation, but only for its own project: a
+    // retry naming another project would otherwise create there without the gate.
+    if (Option.isSome(existing) && existing.value.targetProjectId !== targetProjectId) {
+      return yield* Effect.fail(
+        new Error("This create_thread invocation already targets a different project."),
+      );
+    }
+    // A refused create reserves nothing.
+    if (Option.isNone(existing)) {
+      const access = yield* requireThreadCoordinationAccess({
+        ...input,
+        mode: "write",
+        callerThread,
+        targetProjectId,
+      });
+      if (access.kind !== "allowed") return access.result;
+    }
     const delegation = Option.isSome(existing)
       ? existing.value
       : yield* input.threadDelegationRepository

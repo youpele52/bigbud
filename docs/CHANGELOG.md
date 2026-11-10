@@ -4,11 +4,21 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 
 ## What's new?
 
+- **[Work across projects from one chat](#work-across-projects-from-one-chat):** Let an agent message and organize chats in your other projects, including remote ones. Attach a chat and ask, and it just happens.
 - **[Focus on what matters with Inyosira](#keep-present-focused-with-inyosira):** A gentle nudge in **Needs you** draws attention to chats waiting for you. Keep current work in **Present**, while inactive chats move automatically to **Later** or **Done**.
 - **[See how your computer and servers are performing](#resource-warnings-without-watching-the-monitor):** Get warnings when CPU or memory use stays high or disk space runs low on your computer, and view live resource usage on connected Linux servers.
 - **[Start your project your way](#start-a-project-with-just-a-name):** Start with a folder or just a name—bigbud makes room for your ideas and handles the workspace setup.
 - **[Edit files without leaving bigbud](#edit-files-without-leaving-bigbud):** Update code, Markdown, and text files directly in the Files panel, with automatic saving and clear feedback when something needs your attention.
 - **[Move swiftly, browse easily](#lighter-loading-for-larger-chat-histories):** Browse large chat histories with less memory use. Older messages load as you scroll, and long replies expand when you need them.
+
+## v0.3.4 (10 November, 2026)
+
+### Work Across Projects From One Chat
+
+- **Ask a chat to help in another project:** Have an agent message, rename, move, or snooze chats in any of your projects, including remote ones, or start a new chat there. Checking another chat's status works anywhere, with no prompt.
+- **Point it at a chat and it just happens:** Attach a chat from another project and ask, and the agent does it with no extra question. bigbud only asks when an agent wants to change a chat you didn't point it to: click **Allow** or **Deny**, or just reply yes or no. A yes lets that chat work in that project until bigbud restarts, and a no stops only that one change. Chats in the same project, and chats it started for you, work as before.
+- **Stay in control:** bigbud checks your answer itself, so an agent cannot approve on your behalf, even with full access. The other chat keeps its own access settings and approvals.
+- **Keep messages correctly labeled:** A message from another agent that waits while a chat is busy now stays marked as coming from that agent, rather than looking like something you typed.
 
 ## v0.3.3 (8 November, 2026)
 

@@ -1,4 +1,5 @@
 import { MCP_SERVER_TEMPLATE_PRELUDE } from "../remote-workspace-bridge/remoteWorkspaceMcpBridge.template.shared.ts";
+import { renderRenameThreadResultTextSource } from "./threadRenameTool.shared.ts";
 import {
   ORCHESTRATION_MCP_TOOL_DEFINITIONS,
   renderOrchestrationMcpConfig,
@@ -63,6 +64,8 @@ export function renderOrchestrationMcpServerSource(input: ThreadOrchestrationHtt
     "",
     renderResolveCurrentThreadIdSource(),
     "",
+    renderRenameThreadResultTextSource(),
+    "",
     "async function callTool(name, args, request) {",
     "  const threadId = resolveCurrentThreadId();",
     "  const id = await resolveMcpInvocationId(request);",
@@ -106,7 +109,7 @@ export function renderOrchestrationMcpServerSource(input: ThreadOrchestrationHtt
     "      const title = String(args?.title ?? '').trim();",
     "      if (title.length === 0) throw new Error('Thread title cannot be empty.');",
     "      const result = await callOrchestrationTool({ action: 'rename', threadId, title, ...(args?.targetThreadId !== undefined ? { targetThreadId: args.targetThreadId } : {}), invocationId, sourceMessageId: sourceMessageId(invocationId) });",
-    '      return { content: textContent(`Renamed thread to "${result.title ?? title}".`) };',
+    "      return { content: textContent(renameThreadResultText(result, title)) };",
     "    }",
     "    case 'move_thread':",
     "    case 'snooze_thread': {",

@@ -35,6 +35,7 @@ import {
 } from "../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import type { ProjectionKanbanRepositoryShape } from "../../persistence/Services/ProjectionKanban.ts";
 import type { ProjectionNoteRepositoryShape } from "../../persistence/Services/ProjectionNotes.ts";
+import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../../persistence/Services/ProjectionThreadWatches.ts";
 import type { ThreadDelegationRepositoryShape } from "../../persistence/Services/ThreadDelegations.ts";
 import type { ServerConfigShape } from "../../startup/config.ts";
@@ -46,8 +47,17 @@ import {
   moveThreadViaOrchestration,
   snoozeThreadViaOrchestration,
 } from "../../orchestration-tools/ThreadOrchestrationTools.organization.ts";
+import { ThreadCoordinationGrants } from "../../orchestration-tools/Services/ThreadCoordinationGrants.ts";
+import type { ThreadCoordinationDeps } from "../../orchestration-tools/ThreadCoordinationConfirmation.ts";
 
-export function installOrchestrationEngineToolDispatchers(input: {
+/**
+ * Installs the process-wide tool dispatcher. It yields the event store (proof reads) and the
+ * optional single shared `ThreadCoordinationGrants` itself, so the engine layer needs no edit;
+ * without grants every cross-project write is refused (fail closed).
+ */
+export const installOrchestrationEngineToolDispatchers = Effect.fn(
+  "installOrchestrationEngineToolDispatchers",
+)(function* (input: {
   readonly browser: BrowserManagerShape;
   readonly computerUse: ComputerUseShape;
   readonly computerUseActivity: Option.Option<ComputerUseActivityShape>;
@@ -64,6 +74,12 @@ export function installOrchestrationEngineToolDispatchers(input: {
   readonly threadWatchRepository: ProjectionThreadWatchRepositoryShape;
   readonly visibleBrowser: VisibleBrowserControlShape;
 }) {
+  const eventStore = yield* OrchestrationEventStore;
+  const grants = yield* Effect.serviceOption(ThreadCoordinationGrants);
+  const coordination: ThreadCoordinationDeps = {
+    grants: Option.getOrUndefined(grants),
+    eventStore,
+  };
   setThreadOrchestrationToolDispatcher({
     renderHtml: (request) => publishHtmlRender({ engine: input.engine, ...request }),
     getSystemResources,
@@ -82,18 +98,24 @@ export function installOrchestrationEngineToolDispatchers(input: {
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,
+        // Server-owned; placed after the request so no request field can replace it.
+        coordination,
       }),
     move: (request) =>
       moveThreadViaOrchestration({
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,
+        // Server-owned; placed after the request so no request field can replace it.
+        coordination,
       }),
     snooze: (request) =>
       snoozeThreadViaOrchestration({
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,
+        // Server-owned; placed after the request so no request field can replace it.
+        coordination,
       }),
     archive: (request) =>
       archiveThreadViaThreadTools({
@@ -137,6 +159,8 @@ export function installOrchestrationEngineToolDispatchers(input: {
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         ...request,
+        // Server-owned; placed after the request so no request field can replace it.
+        coordination,
       }),
     computerUse: (request) =>
       Effect.gen(function* () {
@@ -190,6 +214,7 @@ export function installOrchestrationEngineToolDispatchers(input: {
         orchestrationEngine: input.engine,
         threadDelegationRepository: input.threadDelegationRepository,
         projectionThreadWatchRepository: input.threadWatchRepository,
+        coordination,
         callerThreadId: request.callerThreadId,
         sourceMessageId: request.sourceMessageId,
         invocationId: request.invocationId,
@@ -210,11 +235,11 @@ export function installOrchestrationEngineToolDispatchers(input: {
       }),
   });
   setVisibleBrowserControl(input.visibleBrowser);
-  return Effect.addFinalizer(() =>
+  return yield* Effect.addFinalizer(() =>
     Effect.gen(function* () {
       setThreadOrchestrationToolDispatcher(null);
       setVisibleBrowserControl(null);
       yield* input.computerUse.dispose;
     }),
   );
-}
+});
