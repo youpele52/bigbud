@@ -1,3 +1,4 @@
+import { ACTIVITY_LAYOUT } from "~/constants/activityLayout";
 import { buildExpandedImagePreview } from "../common/ExpandedImagePreview";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { Button } from "../../ui/button";
@@ -79,7 +80,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
   );
   return (
     <div
-      className="pb-4"
+      className={ACTIVITY_LAYOUT.row}
       data-timeline-row-id={row.id}
       data-timeline-row-kind={row.kind}
       data-message-id={row.kind === "message" ? row.message.id : undefined}
@@ -240,7 +241,6 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
                       variant="compact"
                       title="Extracted contents"
                       className="mt-2"
-                      panelClassName="pt-2"
                     >
                       <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/40 bg-background/45 p-2 font-mono text-[11px] leading-relaxed text-foreground/80">
                         {displayedUserMessage.readDocument.text}
@@ -331,7 +331,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
         />
       )}
       {row.kind === "proposed-plan" && (
-        <div className="min-w-0 px-1 py-0.5">
+        <div className="min-w-0 px-1">
           <ProposedPlanCard
             planMarkdown={row.proposedPlan.planMarkdown}
             cwd={markdownCwd}
@@ -344,7 +344,7 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
 
       {row.kind === "user-input-question" && (
         // Answered questions are accordions, which share the work log's left edge.
-        <div className={cn("min-w-0 py-0.5", !row.answers && "px-1")}>
+        <div className={cn("min-w-0", !row.answers && "px-1")}>
           {row.answers ? (
             <AnsweredUserInput
               input={row.pendingUserInput}

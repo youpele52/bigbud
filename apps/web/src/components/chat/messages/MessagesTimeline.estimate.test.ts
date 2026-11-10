@@ -69,11 +69,11 @@ describe("timeline accordion state", () => {
 describe("accordion row height estimates", () => {
   it("sizes collapsed accordions as a header and open ones with their panel", () => {
     const finishedWork = workRow([entry("a"), entry("b"), entry("c")]);
-    expect(estimate(finishedWork)).toBe(80);
-    expect(estimate(finishedWork, { "work:work-1": true })).toBe(128);
-    expect(estimate(thinkingRow(false))).toBe(56);
-    expect(estimate(thinkingRow(true))).toBe(56);
-    expect(estimate(thinkingRow(false), { "thinking:thinking-1": true })).toBeGreaterThan(56);
+    expect(estimate(finishedWork)).toBe(52);
+    expect(estimate(finishedWork, { "work:work-1": true })).toBe(100);
+    expect(estimate(thinkingRow(false))).toBe(52);
+    expect(estimate(thinkingRow(true))).toBe(52);
+    expect(estimate(thinkingRow(false), { "thinking:thinking-1": true })).toBeGreaterThan(52);
   });
 
   it("adds the work-entry Details toggle and its open panel", () => {
@@ -82,7 +82,7 @@ describe("accordion row height estimates", () => {
     const plain = workRow([entry("a", { command: "ls" })]);
     const open = { "work:work-1": true };
     expect(estimate(withDetails)).toBe(estimate(plain));
-    expect(estimate(withDetails, open) - estimate(plain, open)).toBe(15);
+    expect(estimate(withDetails, open) - estimate(plain, open)).toBe(21);
     expect(estimate(withDetails, { ...open, "work-entry:a": true })).toBeGreaterThan(
       estimate(withDetails, open),
     );

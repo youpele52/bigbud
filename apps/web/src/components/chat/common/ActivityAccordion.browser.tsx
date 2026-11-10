@@ -191,7 +191,7 @@ it("pins header actions to the top right, only while open, without toggling the 
   const title = screen.getByText("Work log (3)", { exact: true });
   const details = title.element().closest("details")!;
   // Closed details content is outside the accessibility tree, so query the DOM directly.
-  const actionElement = details.querySelector<HTMLButtonElement>(
+  const actionElement = details.parentElement!.querySelector<HTMLButtonElement>(
     "[data-slot=activity-accordion-actions] button",
   )!;
   expect(actionElement.checkVisibility()).toBe(false);
@@ -200,7 +200,7 @@ it("pins header actions to the top right, only while open, without toggling the 
   await expect.element(action).toBeVisible();
   const summary = details.querySelector("summary")!.getBoundingClientRect();
   const slot = details
-    .querySelector<HTMLElement>("[data-slot=activity-accordion-actions]")!
+    .parentElement!.querySelector<HTMLElement>("[data-slot=activity-accordion-actions]")!
     .getBoundingClientRect();
   const button = action.element().getBoundingClientRect();
   expect(slot.right).toBeCloseTo(details.getBoundingClientRect().right, 1);

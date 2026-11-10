@@ -1,7 +1,10 @@
 import { Virtualizer } from "@tanstack/react-virtual";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { measureVisibleTimelineElement } from "./MessagesTimeline.measurement";
+import {
+  measureVisibleTimelineElement,
+  resetTimelineMeasurements,
+} from "./MessagesTimeline.measurement";
 
 function createVirtualizer() {
   return new Virtualizer<HTMLDivElement, HTMLDivElement>({
@@ -21,6 +24,37 @@ function createRow(visible: boolean, height: number) {
     offsetHeight: height,
   } as unknown as HTMLDivElement;
 }
+
+describe("timeline measurement invalidation", () => {
+  it("restores mounted sizes while scrolling without measuring hidden or offscreen history", () => {
+    const instance = createVirtualizer();
+    instance.setOptions({
+      ...instance.options,
+      count: 4,
+      measureElement: measureVisibleTimelineElement,
+    });
+    instance.getTotalSize();
+    instance.resizeItem(0, 312);
+    instance.resizeItem(3, 500);
+    instance.getTotalSize();
+    const visible = Object.assign(createRow(true, 312), { isConnected: true });
+    const hidden = Object.assign(createRow(false, 0), { isConnected: true });
+    const detached = Object.assign(createRow(true, 999), { isConnected: false });
+    instance.elementsCache.set(0, visible);
+    instance.elementsCache.set(1, hidden);
+    instance.elementsCache.set(2, detached);
+    instance.isScrolling = true;
+    const measure = vi.spyOn(instance.options, "measureElement");
+
+    resetTimelineMeasurements(instance);
+
+    expect(measure).toHaveBeenCalledExactlyOnceWith(visible, undefined, instance);
+
+    // The mounted row must not be left at its 96px estimate after cache reset.
+    expect(instance.getTotalSize()).toBe(312 + 3 * 96);
+    expect(instance.measurementsCache.map(({ size }) => size)).toEqual([312, 96, 96, 96]);
+  });
+});
 
 describe("hidden timeline row measurements", () => {
   it("retains the cached height when a hidden row reports zero", () => {

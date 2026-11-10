@@ -17,6 +17,23 @@ export function measureVisibleTimelineElement<
   return measureElement(element, entry, instance);
 }
 
+/** Invalidate offscreen estimates, then restore only mounted rows before paint. */
+export function resetTimelineMeasurements<
+  TScrollElement extends Element | Window,
+  TItemElement extends Element,
+>(instance: Virtualizer<TScrollElement, TItemElement>): void {
+  // TanStack's measure() clears sizes; it does not read any DOM elements.
+  instance.measure();
+  // Rebuild the estimate baseline before resizeItem compares actual sizes with it.
+  instance.getTotalSize();
+  for (const element of new Set(instance.elementsCache.values())) {
+    if (!element.isConnected || element.getClientRects().length === 0) continue;
+    const index = instance.indexFromElement(element);
+    // Unlike measureElement(), resizeItem() also updates during user scrolling.
+    instance.resizeItem(index, instance.options.measureElement(element, undefined, instance));
+  }
+}
+
 export function useTimelineWidth(hasTimelineRoot: boolean) {
   const timelineRootRef = useRef<HTMLDivElement | null>(null);
   const [timelineWidthPx, setTimelineWidthPx] = useState<number | null>(null);

@@ -30,7 +30,7 @@ describe("estimateTimelineMessageHeight", () => {
         text: "hello",
         attachments: [{ id: "1" }],
       }),
-    ).toBe(346);
+    ).toBe(324.75);
 
     expect(
       estimateTimelineMessageHeight({
@@ -38,7 +38,7 @@ describe("estimateTimelineMessageHeight", () => {
         text: "hello",
         attachments: [{ id: "1" }, { id: "2" }],
       }),
-    ).toBe(346);
+    ).toBe(324.75);
   });
 
   it("adds a second attachment row for three or four user attachments", () => {
@@ -48,7 +48,7 @@ describe("estimateTimelineMessageHeight", () => {
         text: "hello",
         attachments: [{ id: "1" }, { id: "2" }, { id: "3" }],
       }),
-    ).toBe(574);
+    ).toBe(552.75);
 
     expect(
       estimateTimelineMessageHeight({
@@ -56,7 +56,7 @@ describe("estimateTimelineMessageHeight", () => {
         text: "hello",
         attachments: [{ id: "1" }, { id: "2" }, { id: "3" }, { id: "4" }],
       }),
-    ).toBe(574);
+    ).toBe(552.75);
   });
 
   it("does not cap long user message estimates", () => {
@@ -65,7 +65,7 @@ describe("estimateTimelineMessageHeight", () => {
         role: "user",
         text: "a".repeat(56 * 120),
       }),
-    ).toBe(2736);
+    ).toBe(2804);
   });
 
   it("counts explicit newlines for user message estimates", () => {
@@ -74,7 +74,7 @@ describe("estimateTimelineMessageHeight", () => {
         role: "user",
         text: "first\nsecond\nthird",
       }),
-    ).toBe(162);
+    ).toBe(142.25);
   });
 
   it("adds terminal context chrome without counting the hidden block as message text", () => {
@@ -129,8 +129,8 @@ describe("estimateTimelineMessageHeight", () => {
       text: "a".repeat(52),
     };
 
-    expect(estimateTimelineMessageHeight(message, { timelineWidthPx: 320 })).toBe(140);
-    expect(estimateTimelineMessageHeight(message, { timelineWidthPx: 768 })).toBe(118);
+    expect(estimateTimelineMessageHeight(message, { timelineWidthPx: 320 })).toBe(119.5);
+    expect(estimateTimelineMessageHeight(message, { timelineWidthPx: 768 })).toBe(96.75);
   });
 
   it("does not clamp user wrapping too aggressively on very narrow layouts", () => {
@@ -139,9 +139,26 @@ describe("estimateTimelineMessageHeight", () => {
       text: "a".repeat(20),
     };
 
-    expect(estimateTimelineMessageHeight(message, { timelineWidthPx: 100 })).toBe(184);
-    expect(estimateTimelineMessageHeight(message, { timelineWidthPx: 320 })).toBe(118);
+    expect(estimateTimelineMessageHeight(message, { timelineWidthPx: 100 })).toBe(165);
+    expect(estimateTimelineMessageHeight(message, { timelineWidthPx: 320 })).toBe(96.75);
   });
+
+  it.each([
+    { timelineWidthPx: 768, lines: 40 },
+    { timelineWidthPx: 714, lines: 44 },
+    { timelineWidthPx: 314, lines: 107 },
+  ])(
+    "models long proportional user text at width $timelineWidthPx",
+    ({ timelineWidthPx, lines }) => {
+      // 80% bubble minus px-4 and borders; 14px DM Sans is about 7.2px per glyph.
+      expect(
+        estimateTimelineMessageHeight(
+          { role: "user", text: "x".repeat(3_200) },
+          { timelineWidthPx },
+        ),
+      ).toBe(74 + lines * 22.75);
+    },
+  );
 
   it("uses narrower width to increase assistant line wrapping", () => {
     const message = {

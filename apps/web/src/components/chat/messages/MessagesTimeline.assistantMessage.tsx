@@ -201,16 +201,6 @@ export function AssistantMessageBody({
           </>
         )}
         <TruncatedMessageNotice message={row.message} />
-        <AssistantTurnChangedFiles
-          messageId={row.message.id}
-          turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
-          changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
-          onSetChangedFilesExpanded={onSetChangedFilesExpanded}
-          activityAccordionOpenById={activityAccordionOpenById}
-          onSetActivityAccordionOpen={onSetActivityAccordionOpen}
-          onOpenTurnDiff={onOpenTurnDiff}
-          resolvedTheme={resolvedTheme}
-        />
         <div className="mt-1.5 flex justify-start">
           <div
             data-message-footer="assistant"
@@ -240,6 +230,16 @@ export function AssistantMessageBody({
           </div>
         </div>
       </div>
+      <AssistantTurnChangedFiles
+        messageId={row.message.id}
+        turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
+        changedFilesExpandedByTurnId={changedFilesExpandedByTurnId}
+        onSetChangedFilesExpanded={onSetChangedFilesExpanded}
+        activityAccordionOpenById={activityAccordionOpenById}
+        onSetActivityAccordionOpen={onSetActivityAccordionOpen}
+        onOpenTurnDiff={onOpenTurnDiff}
+        resolvedTheme={resolvedTheme}
+      />
     </>
   );
 }

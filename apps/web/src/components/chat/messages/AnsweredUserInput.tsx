@@ -28,13 +28,13 @@ export function AnsweredUserInput({
       <ActivityAccordion
         title="Question"
         meta={<ActivityAccordionTime dateTime={answeredAt} timestampFormat={timestampFormat} />}
+        persistentActions={
+          <MessageCopyButton text={formatUserInputHistoryForCopy(input, answers)} />
+        }
         {...accordion}
       >
         <UserInputQuestions questions={input.questions} answers={answers} />
       </ActivityAccordion>
-      <div className="mt-1 flex items-center opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/user-input:opacity-100">
-        <MessageCopyButton text={formatUserInputHistoryForCopy(input, answers)} />
-      </div>
     </div>
   );
 }

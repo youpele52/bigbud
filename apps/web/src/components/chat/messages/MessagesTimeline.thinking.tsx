@@ -28,7 +28,7 @@ export function ThinkingMessageBody({
   const title = row.entry.label.trim().length > 0 ? row.entry.label : "Thinking";
 
   return (
-    <div className="min-w-0 py-0.5">
+    <div className="min-w-0">
       <ActivityAccordion
         title={title}
         meta={<ActivityAccordionTime dateTime={row.createdAt} timestampFormat={timestampFormat} />}

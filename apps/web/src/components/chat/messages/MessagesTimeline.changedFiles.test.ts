@@ -43,8 +43,8 @@ describe("assistant changed files accordion", () => {
 
   it("estimates only the header row while collapsed", () => {
     const withoutFiles = estimate({ withFiles: false });
-    // `mt-2` plus the collapsed section header.
-    expect(estimate({ withFiles: true }) - withoutFiles).toBe(44);
+    // Shared 16px boundary plus the collapsed section header.
+    expect(estimate({ withFiles: true }) - withoutFiles).toBe(52);
   });
 
   it("adds the panel and root tree rows once opened", () => {

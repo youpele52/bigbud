@@ -148,12 +148,7 @@ export function MessagesTimelineAutomationRequest(props: {
       </table>
 
       {requestPayload ? (
-        <ActivityAccordion
-          variant="compact"
-          title="Automation request data"
-          className="mt-3"
-          panelClassName="pt-2"
-        >
+        <ActivityAccordion variant="compact" title="Automation request data">
           <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/50 bg-background/45 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/80">
             {requestPayload}
           </pre>

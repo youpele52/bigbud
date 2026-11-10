@@ -4,7 +4,6 @@ import type { OrchestrationTask } from "@bigbud/contracts/orchestration/orchestr
 import { ActivityAccordion } from "~/components/chat/common/ActivityAccordion";
 import type { ActivityAccordionControl } from "~/components/chat/common/ActivityAccordion.state";
 import { ActivityOverflowToggle } from "~/components/chat/common/ActivityOverflowToggle";
-import { CompactActivityGroup } from "~/components/chat/common/CompactActivityGroup";
 import { SubagentRow } from "./SubagentRow";
 import type { SubagentStopHandler } from "./SubagentRow.stop";
 import { hierarchicalSubagents } from "./SubagentsCard.hierarchy";
@@ -63,9 +62,13 @@ export function SubagentsCard(props: {
           {rows}
         </ActivityAccordion>
       ) : (
-        <CompactActivityGroup label="Subagents" count={props.agents.length} overflow={overflow}>
+        <ActivityAccordion
+          title={`Subagents (${props.agents.length})`}
+          open
+          actions={overflow ? <ActivityOverflowToggle {...overflow} /> : undefined}
+        >
           {rows}
-        </CompactActivityGroup>
+        </ActivityAccordion>
       )}
     </section>
   );
