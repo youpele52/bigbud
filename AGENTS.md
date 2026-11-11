@@ -36,6 +36,22 @@ Long term maintainability is a core priority. Before adding new functionality, c
 
 ## Developer Commands
 
+See [docs/COMMANDS.md](docs/COMMANDS.md) for the central command reference: all root/workspace Bun commands, their just equivalents, and focused invocation examples. Save new or changed commands there and keep the root `justfile` in sync. Bun scripts remain the source of truth for workflow implementation. Run `just` or `just --list` to discover commands. Aliases do not bypass the approval and check-scope rules above.
+
+| Common task                  | Bun                       | just                   |
+| ---------------------------- | ------------------------- | ---------------------- |
+| Install dependencies         | `bun install`             | `just install`         |
+| Start development stack      | `bun run dev`             | `just dev`             |
+| Start desktop development    | `bun run dev:desktop`     | `just dev-desktop`     |
+| Start server development     | `bun run dev:server`      | `just dev-server`      |
+| Start web development        | `bun run dev:web`         | `just dev-web`         |
+| Start mobile web development | `bun run dev:mobile-web`  | `just dev-mobile-web`  |
+| Build contracts              | `bun run build:contracts` | `just build-contracts` |
+| Check formatting             | `bun run fmt:check`       | `just fmt-check`       |
+| Lint                         | `bun run lint`            | `just lint`            |
+| Check types                  | `bun run typecheck`       | `just typecheck`       |
+| Run Vitest suite             | `bun run test`            | `just test`            |
+
 Rust-specific instructions are in [crates/AGENTS.md](crates/AGENTS.md).
 
 ```sh

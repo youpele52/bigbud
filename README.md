@@ -199,12 +199,31 @@ The feature uses your own OpenAI API key — you must have one configured to use
 - [docs/CHANGELOG.md](./docs/CHANGELOG.md) — Recent project changes and grouped release history
 - [Contributing](./docs/development/CONTRIBUTING.md) — Contribution guidelines
 - [docs/KEYBINDINGS.md](./docs/KEYBINDINGS.md) — Keyboard defaults and configuration
+- [docs/COMMANDS.md](./docs/COMMANDS.md) — Complete Bun and just command reference
 - [docs/REMOTE_ACCESS.md](./docs/REMOTE_ACCESS.md) — Mobile pairing and remote server access
 - [docs/THREAD_RETENTION.md](./docs/THREAD_RETENTION.md) — Cleanup, protections, and recovery
 - [Release guide](./docs/development/release.md) — Release workflow & signing
 - [Observability](./docs/development/observability.md) — Diagnostic setup and workflows
 
 ## Development
+
+Common commands are listed below. See [Commands](./docs/COMMANDS.md) for every root and workspace script, focused invocation examples, and the Bun-to-just mapping.
+
+Use Bun directly or install just and use the equivalent recipes. Run `just` or `just --list` to see available commands; Bun scripts remain unchanged underneath.
+
+| Task                         | Bun                      | just                  |
+| ---------------------------- | ------------------------ | --------------------- |
+| Install dependencies         | `bun install`            | `just install`        |
+| Start development stack      | `bun run dev`            | `just dev`            |
+| Start desktop development    | `bun run dev:desktop`    | `just dev-desktop`    |
+| Start server development     | `bun run dev:server`     | `just dev-server`     |
+| Start web development        | `bun run dev:web`        | `just dev-web`        |
+| Start mobile web development | `bun run dev:mobile-web` | `just dev-mobile-web` |
+| Build desktop                | `bun run build:desktop`  | `just build-desktop`  |
+| Check formatting             | `bun run fmt:check`      | `just fmt-check`      |
+| Lint                         | `bun run lint`           | `just lint`           |
+| Check types                  | `bun run typecheck`      | `just typecheck`      |
+| Run Vitest suite             | `bun run test`           | `just test`           |
 
 ```bash
 # Full dev stack (contracts + server + web + mobile web)
