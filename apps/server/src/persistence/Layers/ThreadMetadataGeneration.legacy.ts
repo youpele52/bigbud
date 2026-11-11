@@ -224,7 +224,17 @@ export function legacyMetadataEvidenceQuery(
                 OR NOT EXISTS (SELECT 1 FROM projection_thread_activities request
                   WHERE request.activity_id = substr(c.command_id, length('server:text-generation-request-started:') + 1))
               ))
-              OR c.command_id LIKE 'server:text-generation-status:%'
+              OR (c.command_id LIKE 'server:text-generation-status:%' AND NOT EXISTS (
+                SELECT 1 FROM thread_metadata_legacy_claim_boundary boundary
+                JOIN orchestration_thread_identity identity ON identity.thread_id = ${input.threadId}
+                WHERE boundary.command_id = c.command_id
+                  AND boundary.payload_digest_version = c.payload_digest_version
+                  AND boundary.payload_digest = c.payload_digest
+                  AND boundary.claimed_at = c.claimed_at
+                  AND identity.created_sequence > boundary.through_sequence
+                  AND NOT EXISTS (SELECT 1 FROM thread_metadata_legacy_prior_threads prior
+                    WHERE prior.thread_id = ${input.threadId})
+              ))
             )
             AND NOT EXISTS (SELECT 1 FROM orchestration_command_receipts r
               WHERE r.command_id = c.command_id)

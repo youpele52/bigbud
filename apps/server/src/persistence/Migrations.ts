@@ -81,6 +81,10 @@ import Migration0165 from "./Migrations/165_ThreadMetadataNativeRequests.ts";
 import Migration0166 from "./Migrations/166_ThreadMetadataWarningFailures.ts";
 import Migration0167 from "./Migrations/167_ThreadMetadataDeadlineCancellation.ts";
 
+import Migration0171 from "./Migrations/171_ThreadMetadataLegacyClaimBoundary.ts";
+
+import Migration0172 from "./Migrations/172_ThreadMetadataPurgedIdentityBoundary.ts";
+
 export const migrationEntries = [
   ...baseMigrationEntries,
   [101, "ProviderRuntimeEpochAndTurnControl", Migration0101],
@@ -150,6 +154,8 @@ export const migrationEntries = [
   [165, "ThreadMetadataNativeRequests", Migration0165],
   [166, "ThreadMetadataWarningFailures", Migration0166],
   [167, "ThreadMetadataDeadlineCancellation", Migration0167],
+  [171, "ThreadMetadataLegacyClaimBoundary", Migration0171],
+  [172, "ThreadMetadataPurgedIdentityBoundary", Migration0172],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;
