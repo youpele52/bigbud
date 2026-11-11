@@ -23,9 +23,6 @@ import {
 import { DEFAULT_THREAD_TITLE, draftTitleFromMessage } from "./ChatView.threadTitle.logic";
 import { desktopAttachmentPath, isRealAttachmentPath } from "./ChatView.attachments.logic";
 
-export const IMAGE_ONLY_BOOTSTRAP_PROMPT =
-  "[User attached one or more images without additional text. Respond using the conversation context and the attached image(s).]";
-
 export function resolveSendContext(input: {
   readonly thread: Thread;
   readonly isServer: boolean;

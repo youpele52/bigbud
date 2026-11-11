@@ -14,7 +14,7 @@ import {
   deriveComposerSendState,
   formatOutgoingPrompt,
 } from "./ChatView.logic";
-import { IMAGE_ONLY_BOOTSTRAP_PROMPT } from "./ChatView.sendTurn.helpers";
+import { IMAGE_ONLY_BOOTSTRAP_PROMPT } from "~/constants/chatPrompt";
 import { formatReadDocumentPrompt, parseReadDocumentCommand } from "./ChatView.sendTurn.read";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
 

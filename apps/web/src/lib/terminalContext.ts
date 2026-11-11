@@ -1,4 +1,14 @@
-// TODO: Split by concern when this file is next touched.
+import { applyClaudePromptEffortPrefix } from "@bigbud/shared/model";
+import { parseTerminalContextEntries } from "./terminalContext.entries";
+import { IMAGE_ONLY_BOOTSTRAP_PROMPT } from "~/constants/chatPrompt";
+import {
+  extractLeadingDelegatedThreadProvenance,
+  extractTrailingReadDocument,
+} from "./terminalContext.metadata";
+export {
+  extractLeadingDelegatedThreadProvenance,
+  extractTrailingReadDocument,
+} from "./terminalContext.metadata";
 import { type ThreadId } from "@bigbud/contracts";
 import {
   extractTrailingAnnotations,
@@ -67,14 +77,10 @@ const TRAILING_TERMINAL_CONTEXT_BLOCK_PATTERN =
 
 const TRAILING_ATTACHED_FILES_BLOCK_PATTERN =
   /\n*<attached_files>\n[\s\S]*?\n<\/attached_files>\s*$/;
-const TRAILING_READ_DOCUMENT_BLOCK_PATTERN =
-  /\n*<read_document_result>\n([\s\S]*?)\n<\/read_document_result>\s*$/;
-const READ_DOCUMENT_SOURCE_URL_PATTERN = /^Source URL:\s*(.+)$/m;
-const READ_DOCUMENT_RESOLVED_URL_PATTERN = /^Resolved URL:\s*(.+)$/m;
-const READ_DOCUMENT_TITLE_PATTERN = /^Title:\s*(.+)$/m;
-const READ_DOCUMENT_TEXT_PATTERN = /<document_contents>\n([\s\S]*?)\n<\/document_contents>/;
-const DELEGATED_THREAD_PROVENANCE_OPEN_TAG = "<delegated_thread_provenance>\n";
-const DELEGATED_THREAD_PROVENANCE_CLOSE_TAG = "\n</delegated_thread_provenance>";
+const IMAGE_ONLY_EFFORT_PROMPT = applyClaudePromptEffortPrefix(
+  IMAGE_ONLY_BOOTSTRAP_PROMPT,
+  "ultrathink",
+);
 
 export function normalizeTerminalContextText(text: string): string {
   return text.replace(/\r\n/g, "\n").replace(/^\n+|\n+$/g, "");
@@ -278,10 +284,16 @@ export function deriveDisplayedUserMessageState(prompt: string): DisplayedUserMe
   const extractedProvenance = extractLeadingDelegatedThreadProvenance(
     extractedReadDocument.promptText,
   );
-  const visibleText = extractedProvenance.promptText.replace(
+  const promptText = extractedProvenance.promptText.replace(
     TRAILING_ATTACHED_FILES_BLOCK_PATTERN,
     "",
   );
+  const trimmedPromptText = promptText.trim();
+  const visibleText =
+    trimmedPromptText === IMAGE_ONLY_BOOTSTRAP_PROMPT ||
+    trimmedPromptText === IMAGE_ONLY_EFFORT_PROMPT
+      ? ""
+      : promptText;
   return {
     visibleText,
     copyText: prompt,
@@ -292,103 +304,6 @@ export function deriveDisplayedUserMessageState(prompt: string): DisplayedUserMe
     annotations: extractedAnnotations.annotations,
     readDocument: extractedReadDocument.document,
   };
-}
-
-export function extractLeadingDelegatedThreadProvenance(prompt: string): {
-  promptText: string;
-  provenance: ParsedDelegatedThreadProvenance | null;
-} {
-  if (!prompt.startsWith(DELEGATED_THREAD_PROVENANCE_OPEN_TAG)) {
-    return { promptText: prompt, provenance: null };
-  }
-
-  const closeTagIndex = prompt.indexOf(
-    DELEGATED_THREAD_PROVENANCE_CLOSE_TAG,
-    DELEGATED_THREAD_PROVENANCE_OPEN_TAG.length,
-  );
-  if (closeTagIndex === -1) {
-    return { promptText: prompt, provenance: null };
-  }
-
-  const body = prompt.slice(DELEGATED_THREAD_PROVENANCE_OPEN_TAG.length, closeTagIndex);
-  const blockEnd = closeTagIndex + DELEGATED_THREAD_PROVENANCE_CLOSE_TAG.length;
-  const separatorLength = prompt.startsWith("\n\n", blockEnd) ? 2 : 0;
-  return {
-    promptText: prompt.slice(blockEnd + separatorLength),
-    provenance: { body },
-  };
-}
-
-export function extractTrailingReadDocument(prompt: string): {
-  promptText: string;
-  document: ParsedReadDocumentEntry | null;
-} {
-  const match = TRAILING_READ_DOCUMENT_BLOCK_PATTERN.exec(prompt);
-  if (!match) {
-    return { promptText: prompt, document: null };
-  }
-
-  const block = match[1] ?? "";
-  const promptText = prompt.slice(0, match.index).replace(/\n+$/, "");
-  const sourceUrl = READ_DOCUMENT_SOURCE_URL_PATTERN.exec(block)?.[1]?.trim() ?? "";
-  const resolvedUrl = READ_DOCUMENT_RESOLVED_URL_PATTERN.exec(block)?.[1]?.trim() ?? "";
-  const title = READ_DOCUMENT_TITLE_PATTERN.exec(block)?.[1]?.trim() ?? "";
-  const text = READ_DOCUMENT_TEXT_PATTERN.exec(block)?.[1]?.trim() ?? "";
-
-  if (!sourceUrl || !resolvedUrl || !text) {
-    return { promptText: prompt, document: null };
-  }
-
-  return {
-    promptText,
-    document: {
-      sourceUrl,
-      resolvedUrl,
-      title: title.length > 0 ? title : null,
-      text,
-    },
-  };
-}
-
-function parseTerminalContextEntries(block: string): ParsedTerminalContextEntry[] {
-  const entries: ParsedTerminalContextEntry[] = [];
-  let current: { header: string; bodyLines: string[] } | null = null;
-
-  const commitCurrent = () => {
-    if (!current) {
-      return;
-    }
-    entries.push({
-      header: current.header,
-      body: current.bodyLines.join("\n").trimEnd(),
-    });
-    current = null;
-  };
-
-  for (const rawLine of block.split("\n")) {
-    const headerMatch = /^- (.+):$/.exec(rawLine);
-    if (headerMatch) {
-      commitCurrent();
-      current = {
-        header: headerMatch[1]!,
-        bodyLines: [],
-      };
-      continue;
-    }
-    if (!current) {
-      continue;
-    }
-    if (rawLine.startsWith("  ")) {
-      current.bodyLines.push(rawLine.slice(2));
-      continue;
-    }
-    if (rawLine.length === 0) {
-      current.bodyLines.push("");
-    }
-  }
-
-  commitCurrent();
-  return entries;
 }
 
 export function countInlineTerminalContextPlaceholders(prompt: string): number {
