@@ -3,6 +3,10 @@ import { it } from "@effect/vitest";
 import { Effect, Fiber, FileSystem, Layer, Path } from "effect";
 import { TestClock } from "effect/testing";
 import { expect, vi } from "vitest";
+import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
+import { TextGenerationError } from "@bigbud/contracts/workspace/git.errors.ts";
+import { makeInternalTextGenerationRouter } from "./RoutingTextGeneration.ts";
+import type { OpencodeServerManager } from "../../provider/Services/Opencode/ServerManager.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
 import { TextGeneration } from "../Services/TextGeneration.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
@@ -147,6 +151,73 @@ it.layer(TestLayer)("CLIProxy titles reuse structured Claude generation", (it) =
       }),
     ),
   );
+
+  for (const outcome of ["success", "rejected", "failed"] as const) {
+    it.effect(`durable no-override routing uses the real CLIProxy runner: ${outcome}`, () =>
+      withFakeHarness(outcome === "failed" ? 7 : 0, (capture) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const claude = yield* TextGeneration;
+          const settings = yield* ServerSettingsService;
+          const providers = {
+            ...DEFAULT_SERVER_SETTINGS.providers,
+            cliProxy: { ...DEFAULT_SERVER_SETTINGS.providers.cliProxy, enabled: true },
+          };
+          const unexpected = vi.fn(() => Effect.die("Unexpected second provider"));
+          const other = { ...claude, generateThreadTitle: unexpected };
+          const router = makeInternalTextGenerationRouter({
+            claude,
+            codex: other,
+            cursor: other,
+            serverSettingsService: settings,
+            opencodeServerManager: {} as typeof OpencodeServerManager.Service,
+          });
+          const fence = vi.fn(() =>
+            outcome === "rejected"
+              ? Effect.fail(
+                  new TextGenerationError({
+                    operation: "generateThreadTitle",
+                    detail: "Capture stale",
+                    metadataOutcome: "unavailable",
+                  }),
+                )
+              : Effect.void,
+          );
+          const result = yield* router
+            .generateThreadTitle({
+              cwd: process.cwd(),
+              message: "Investigate proxy titles",
+              modelSelection: selection,
+              successfulModelSelection: { provider: "codex", model: "never-substitute" },
+              metadataAttempt: {
+                selection,
+                executionTarget: "local",
+                providerSettings: providers,
+                beforeDispatch: fence,
+              },
+            })
+            .pipe(Effect.result);
+          expect(fence).toHaveBeenCalledTimes(1);
+          expect(unexpected).not.toHaveBeenCalled();
+          expect(yield* fs.exists(capture)).toBe(outcome !== "rejected");
+          if (outcome === "success") {
+            expect(result._tag).toBe("Success");
+            if (result._tag === "Success")
+              expect(result.success).toMatchObject({
+                title: "Investigate proxy title generation",
+                actualModelSelection: selection,
+              });
+          } else {
+            expect(result._tag).toBe("Failure");
+            if (result._tag === "Failure")
+              expect(result.failure.metadataOutcome).toBe(
+                outcome === "rejected" ? "unavailable" : "failed",
+              );
+          }
+        }),
+      ),
+    );
+  }
 
   it.effect("fails closed if the configured proxy harness cannot be resolved", () =>
     Effect.gen(function* () {

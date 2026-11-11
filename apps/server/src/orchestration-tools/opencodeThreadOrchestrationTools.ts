@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION } from "./threadSummaryTool.shared.ts";
 import { HTML_RENDER_TOOL_DESCRIPTION } from "./htmlRenderTool.shared.ts";
 import { renderRenameThreadResultTextSource } from "./threadRenameTool.shared.ts";
 
@@ -40,6 +41,18 @@ function renderOrchestrationToolSource(input: {
     "  },",
     "});",
   ].join("\n");
+}
+
+export function renderOpencodeSummaryToolSource(): string {
+  return renderOrchestrationToolSource({
+    description: SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+    argsSource: "summary: tool.schema.string().min(1),",
+    executeBody: [
+      "if (!context.sessionID || !context.messageID || !context.callID) throw new Error('Summary requires provider invocation identity.');",
+      "if (Object.keys(args).some(key => key !== 'summary')) throw new Error('Only summary is accepted.');",
+      "return runtime.setElevatorSummary(args.summary, JSON.stringify([context.sessionID, context.messageID, context.callID]));",
+    ],
+  });
 }
 
 export function renderOpencodeRenameThreadToolSource(): string {
@@ -168,6 +181,11 @@ export function renderOpencodeOrchestrationRuntimeSource(
     "  return JSON.stringify(result.result);",
     "}",
     "",
+    "export async function setElevatorSummary(summary, invocationId) {",
+    "  const result = await callOrchestrationTool({ action: 'set_elevator_summary', threadId: resolveCurrentThreadId(), summary, invocationId, sourceMessageId: invocationId });",
+    "  return JSON.stringify(result);",
+    "}",
+    "",
     "export async function renameThread(input) {",
     "  const title = input.title.trim();",
     "  if (title.length === 0) throw new Error('Thread title cannot be empty.');",
@@ -259,6 +277,11 @@ export async function writeOpencodeOrchestrationTools(input: {
   await Promise.all([
     writeFile(path.join(toolsDir, "render_html.ts"), renderOpencodeHtmlRenderToolSource(), "utf8"),
     writeFile(
+      path.join(toolsDir, "set_elevator_summary.ts"),
+      renderOpencodeSummaryToolSource(),
+      "utf8",
+    ),
+    writeFile(
       path.join(toolsDir, "rename_thread.ts"),
       renderOpencodeRenameThreadToolSource(),
       "utf8",
@@ -303,6 +326,7 @@ export async function writeOpencodeOrchestrationTools(input: {
 
 export const OPENCODE_ORCHESTRATION_TOOL_FILES = {
   ".opencode/tools/render_html.ts": renderOpencodeHtmlRenderToolSource,
+  ".opencode/tools/set_elevator_summary.ts": renderOpencodeSummaryToolSource,
   ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource,
   ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource,
   ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource,
@@ -317,6 +341,7 @@ export function renderOpencodeOrchestrationBridgeFiles(
 ): Record<string, string> {
   return {
     ".opencode/tools/render_html.ts": renderOpencodeHtmlRenderToolSource(),
+    ".opencode/tools/set_elevator_summary.ts": renderOpencodeSummaryToolSource(),
     ".opencode/tools/rename_thread.ts": renderOpencodeRenameThreadToolSource(),
     ".opencode/tools/archive_thread.ts": renderOpencodeArchiveThreadToolSource(),
     ".opencode/tools/get_thread_status.ts": renderOpencodeGetThreadStatusToolSource(),

@@ -29,6 +29,7 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { OrchestrationEventStoreError } from "../../persistence/Errors.ts";
 import type { OrchestrationCommandReceiptRepositoryError } from "../../persistence/Errors.ts";
 import type { ThreadDeletionShape } from "../../deletion/Services/ThreadDeletion.ts";
+import type { MetadataCommitIdentity } from "../Layers/ThreadMetadataGeneration.identity.ts";
 import type { BootstrapSubmissionDispatch } from "../Layers/OrchestrationEngine.bootstrapIdentity.ts";
 
 /**
@@ -37,6 +38,11 @@ import type { BootstrapSubmissionDispatch } from "../Layers/OrchestrationEngine.
 export interface OrchestrationEngineShape {
   /** Internal short preparation barrier; never await providers or dispatch inside it. */
   readonly withWorkspaceBarrier?: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
+  /** Hydrate full SQL history and prepare under one command barrier. No providers or dispatch. */
+  readonly withThreadHistoryBarrier?: <A, E>(
+    threadId: ThreadId,
+    effect: Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E>;
   /** Stable identity for this server process, used to fence recovery frames. */
   readonly serverEpoch?: string;
   /** Last sequence persisted before this process started; later events are this process's. */
@@ -105,6 +111,8 @@ export interface OrchestrationEngineShape {
     command: OrchestrationCommand,
     options?: {
       readonly bootstrapSubmission?: BootstrapSubmissionDispatch;
+      /** Trusted retained-result fence; never decoded from a client or provider command. */
+      readonly metadataCommit?: MetadataCommitIdentity;
       readonly worktreeOperationId?: string;
       /** Server-only exact verified native workspace journal identity; never accepted over the wire. */
       readonly nativeWorkspaceOperationId?: string;

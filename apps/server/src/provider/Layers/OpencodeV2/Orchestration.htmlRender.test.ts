@@ -26,7 +26,7 @@ it("keeps the historical closure/descriptor frozen and admits HTML only through 
   ).not.toThrow();
   expect(() => assertV2ImplementationCompatible(retained)).toThrow();
   const current = v2ThreadImplementation();
-  expect(current.bootstrapAbi).toBe("bigbud.thread.bootstrap.v4");
+  expect(current.bootstrapAbi).toBe("bigbud.thread.bootstrap.v5");
   const input = { title: "Chart", html: "<p>Chart</p>" };
   expect(
     validateV2PreparedBody(

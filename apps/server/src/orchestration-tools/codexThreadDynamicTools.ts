@@ -26,6 +26,7 @@ import { BIGBUD_ORCHESTRATION_NAMESPACE } from "./codexThreadDynamicTools.specs.
 import { normalizeListThreadsStatus } from "./ThreadOrchestrationTools.listThreads.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES, type AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
 import { formatRenameThreadToolResult, RenameThreadArguments } from "./threadRenameTool.shared.ts";
+import { decodeSetElevatorSummaryArguments } from "./threadSummaryTool.shared.ts";
 import { runThreadOrganizationTool } from "./threadOrganizationTool.run.ts";
 import {
   decodeComputerUseToolRequest,
@@ -158,6 +159,19 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
           ],
           success: true,
         };
+      }
+      case "set_elevator_summary": {
+        if (!dispatcher.setElevatorSummary) throw new Error("Thread summary tools are not ready.");
+        const { summary } = decodeSetElevatorSummaryArguments(args);
+        const result = await Effect.runPromise(
+          dispatcher.setElevatorSummary({
+            threadId,
+            summary,
+            invocationId: String(requestId),
+            sourceMessageId: MessageId.makeUnsafe(requestSource ?? sourceMessageId),
+          }),
+        );
+        return { contentItems: [inputText(JSON.stringify(result))], success: true };
       }
       case "rename_thread": {
         const renameArgs = Schema.decodeUnknownSync(RenameThreadArguments)(args);

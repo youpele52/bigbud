@@ -48,6 +48,15 @@ export interface ThreadOrchestrationToolDispatcherShape {
   readonly workspace?: (
     input: AgentWorkspaceToolInput,
   ) => Effect.Effect<Record<string, unknown>, Error>;
+  readonly setElevatorSummary?: (input: {
+    readonly threadId: ThreadId;
+    readonly summary: string;
+    readonly invocationId: string;
+    readonly sourceMessageId: MessageId;
+  }) => Effect.Effect<
+    { readonly summary: string; readonly threadId: ThreadId; readonly commandId: string },
+    Error
+  >;
   readonly rename: (input: {
     readonly threadId: ThreadId;
     readonly targetThreadId?: ThreadId;

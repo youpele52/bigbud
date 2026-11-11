@@ -1,6 +1,7 @@
 import type { OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { makeWorktreeReservations } from "../../git/Layers/WorktreeReservations.ts";
+import { withMetadataTransaction } from "../../persistence/Layers/ThreadMetadataGeneration.transaction.ts";
 import { assertWorkspaceCommandAdmission } from "../ProjectWorkspace.engineTransition.ts";
 import { reconcileProjectWorkspaceStartup } from "../ProjectWorkspace.nativeStartup.ts";
 import {
@@ -285,6 +286,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
       }
       const result = yield* Deferred.make<{ sequence: number }, OrchestrationDispatchError>();
       yield* commandAdmission.offer({
+        ...(options?.metadataCommit ? { metadataCommit: options.metadataCommit } : {}),
         ...(options?.nativeOrganizationOperation
           ? { nativeOrganizationOperation: options.nativeOrganizationOperation }
           : {}),
@@ -326,6 +328,15 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     ...(threadStateHydrator === null
       ? {}
       : {
+          withThreadHistoryBarrier: (threadId, effect) =>
+            commandSemaphore.withPermits(1)(
+              // Hydration itself uses SQL transactions. Reserve interruptibly before
+              // those masked acquisitions; release SQL before identity/dispatch preparation.
+              withMetadataTransaction(
+                workspaceSql,
+                threadStateHydrator.load(threadId, "history"),
+              ).pipe(Effect.orDie, Effect.andThen(effect)),
+            ),
           ensureThreadState: (threadId: ThreadId, level: "operational" | "history") =>
             commandSemaphore
               .withPermits(1)(threadStateHydrator.load(threadId, level))

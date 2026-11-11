@@ -2,6 +2,7 @@ import type { OrganizationRpcClient } from "./wsRpcClient.organization.ts";
 import type { BranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
 import type { DetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import type { DatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
+import type { MetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
 import {
   type GitActionProgressEvent,
   type GitGetCommitDetailsInput,
@@ -342,7 +343,8 @@ export interface WsRpcClient {
     readonly subscribeConfig: RpcStreamMethod<typeof WS_METHODS.subscribeServerConfig>;
     readonly subscribeLifecycle: RpcStreamMethod<typeof WS_METHODS.subscribeServerLifecycle>;
   } & WsRpcMonitorMethods &
-    WsRpcRemoteAgentMethods;
+    WsRpcRemoteAgentMethods &
+    MetadataWarningRpcMethods;
   readonly orchestration: DetailPagingRpcMethods &
     BranchCopyRpcMethods & {
       readonly getSidebarThreadCatalog: RpcUnaryMethod<

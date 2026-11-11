@@ -175,6 +175,8 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     readDocumentUrl: vi.fn(),
     writeHandoffDocument: vi.fn(),
     retryTextGeneration: vi.fn(),
+    claimMetadataWarnings: vi.fn(),
+    acknowledgeMetadataWarning: vi.fn(),
     startHandoffJob: vi.fn(),
     getHandoffJob: vi.fn(),
     getOpencodeV2ThreadToolsSetup: vi.fn(),

@@ -54,7 +54,11 @@ export function useSidebarThreadActions({
     hasRenameCommitted,
     markRenameCommitted,
     commitRename,
-  } = useSidebarThreadRenameActions();
+  } = useSidebarThreadRenameActions({
+    sidebarThreadsById,
+    navigateToThreadRoute,
+    cancelProjectRename,
+  });
   const {
     pendingDeleteConfirmation,
     setPendingDeleteConfirmation,

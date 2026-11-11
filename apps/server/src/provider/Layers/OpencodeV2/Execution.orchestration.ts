@@ -11,6 +11,7 @@ import { beginThreadToolDispatch } from "../../../orchestration-tools/threadTool
 export const V2_ORCHESTRATION_ACTIONS = [
   "render_html",
   "rename",
+  "set_elevator_summary",
   "archive",
   "get_status",
   "list_pinned",

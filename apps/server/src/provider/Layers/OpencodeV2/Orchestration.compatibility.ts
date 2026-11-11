@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import {
+  V2_N8_BOOTSTRAP_COMPATIBILITY,
+  V2_N8_COMPATIBILITY_DIGEST,
+} from "./Orchestration.compatibility.n8.ts";
 import { V2_BOOTSTRAP_ABI } from "./Orchestration.plugin.specs.ts";
 import { V2_IMPLEMENTATION_MANIFEST } from "./Orchestration.implementation.manifest.generated.ts";
 import { V2_ENROLLMENT_PROTOCOL } from "./Orchestration.protocol.ts";
@@ -22,7 +26,7 @@ import {
   V2_N7_COMPATIBILITY_DIGEST,
 } from "./Orchestration.compatibility.legacy.ts";
 import { V2_SCOPED_BOOTSTRAP_ABI, V2_SCOPED_REGISTRATION } from "./Orchestration.registration.ts";
-import type { V2ThreadImplementation } from "./Orchestration.implementation.types.v3.ts";
+import type { V2ThreadImplementation } from "./Orchestration.implementation.types.v5.ts";
 
 /** Native compatibility excludes app default/version/code; actual module bytes have a separate noncircular digest. */
 export const V2_BOOTSTRAP_COMPATIBILITY = Object.freeze({
@@ -31,8 +35,8 @@ export const V2_BOOTSTRAP_COMPATIBILITY = Object.freeze({
   registration: V2_SCOPED_REGISTRATION,
   enrollmentProtocol: V2_ENROLLMENT_PROTOCOL,
   callbackProtocol: "bigbud.thread.callback.v1",
-  schemaDigest: V2_IMPLEMENTATION_MANIFEST.v3.schemaDigest,
-  canonicalRequestAbi: "bigbud.thread.canonical.v2",
+  schemaDigest: V2_IMPLEMENTATION_MANIFEST.v5.schemaDigest,
+  canonicalRequestAbi: "bigbud.thread.canonical.v3",
   resultEncoding: "bigbud.thread.final-json.v1",
   nativeContractDigest: V2_NATIVE_CONTRACT_DIGEST,
 });
@@ -48,6 +52,7 @@ export type V2BootstrapCompatibility =
   | typeof V2_N4_BOOTSTRAP_COMPATIBILITY
   | typeof V2_N5_BOOTSTRAP_COMPATIBILITY
   | typeof V2_N6_BOOTSTRAP_COMPATIBILITY
+  | typeof V2_N8_BOOTSTRAP_COMPATIBILITY
   | typeof V2_N7_BOOTSTRAP_COMPATIBILITY
   | typeof V2_N0_BOOTSTRAP_COMPATIBILITY;
 
@@ -58,6 +63,7 @@ export function knownV2BootstrapCompatibility(
 ): V2BootstrapCompatibility {
   for (const [descriptor, expected] of [
     [V2_BOOTSTRAP_COMPATIBILITY, V2_COMPATIBILITY_DIGEST],
+    [V2_N8_BOOTSTRAP_COMPATIBILITY, V2_N8_COMPATIBILITY_DIGEST],
     [V2_N0_BOOTSTRAP_COMPATIBILITY, V2_N0_COMPATIBILITY_DIGEST],
     [V2_N1_BOOTSTRAP_COMPATIBILITY, V2_N1_COMPATIBILITY_DIGEST],
     [V2_N2_BOOTSTRAP_COMPATIBILITY, V2_N2_COMPATIBILITY_DIGEST],

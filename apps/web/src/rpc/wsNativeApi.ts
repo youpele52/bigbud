@@ -281,6 +281,8 @@ export function createWsNativeApi(): NativeApi {
       readDocumentUrl: rpcClient.server.readDocumentUrl,
       writeHandoffDocument: rpcClient.server.writeHandoffDocument,
       retryTextGeneration: rpcClient.server.retryTextGeneration,
+      claimMetadataWarnings: rpcClient.server.claimMetadataWarnings,
+      acknowledgeMetadataWarning: rpcClient.server.acknowledgeMetadataWarning,
       startHandoffJob: rpcClient.server.startHandoffJob,
       getHandoffJob: rpcClient.server.getHandoffJob,
       getOpencodeV2ThreadToolsSetup: rpcClient.server.getOpencodeV2ThreadToolsSetup,

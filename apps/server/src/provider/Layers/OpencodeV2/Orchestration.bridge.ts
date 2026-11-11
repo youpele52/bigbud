@@ -14,7 +14,7 @@ import {
   V2ThreadImplementationRegistry,
   v2ImplementationForBootstrap,
 } from "./Orchestration.implementation.ts";
-import type { V2ThreadImplementation } from "./Orchestration.implementation.types.v3.ts";
+import type { V2ThreadImplementation } from "./Orchestration.implementation.types.v5.ts";
 import type { V2NativeRuntimeProof } from "./NativeCompatibility.types.ts";
 import { invokeV2ThreadOwner } from "./Orchestration.bridge.invoke.ts";
 import type { OpencodeV2Runtime } from "./Runtime.ts";

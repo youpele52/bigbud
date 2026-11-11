@@ -95,7 +95,7 @@ it("default switching/rollback never alters captured handler references and sour
   registry.select("v2");
   const b = registry.acquire();
   registry.select("v1");
-  expect(a.handler).toBe(v2ThreadImplementation("v3"));
+  expect(a.handler).toBe(v2ThreadImplementation("v5"));
   expect(b.handler).toBe(v2ThreadImplementation("v2"));
   a.release();
   a.release();

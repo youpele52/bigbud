@@ -21,6 +21,7 @@ import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.t
 import type { ProviderCapabilityContextState } from "./ProviderCommandReactorSessionOps.capabilityContext.ts";
 
 export interface SessionOpServices {
+  readonly metadataGeneration?: import("./ThreadMetadataGeneration.requests.ts").ThreadMetadataGenerationRequests;
   readonly threadDelegationRepository?: import("../../persistence/Services/ThreadDelegations.ts").ThreadDelegationRepositoryShape;
   readonly orchestrationEngine: OrchestrationEngineShape;
   readonly providerService: ProviderServiceShape;

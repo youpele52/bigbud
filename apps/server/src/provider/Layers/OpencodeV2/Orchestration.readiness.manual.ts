@@ -86,8 +86,9 @@ export async function readV2CompatibleManualBootstrap(
   // Manual entries still require an explicit update; never create an autoload alias for them.
   if (
     managed &&
-    artifact.bootstrapAbi === "bigbud.thread.bootstrap.v3" &&
-    preferred.bootstrapAbi === "bigbud.thread.bootstrap.v4"
+    ["bigbud.thread.bootstrap.v3", "bigbud.thread.bootstrap.v4"].includes(artifact.bootstrapAbi) &&
+    ["bigbud.thread.bootstrap.v4", "bigbud.thread.bootstrap.v5"].includes(preferred.bootstrapAbi) &&
+    artifact.bootstrapAbi !== preferred.bootstrapAbi
   )
     return undefined;
   if (artifact.bootstrapAbi !== preferred.bootstrapAbi)

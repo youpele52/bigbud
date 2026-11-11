@@ -68,6 +68,10 @@ export interface ServerSettingsShape extends ThreadRetentionSettingsOperations {
   readonly getSettings: Effect.Effect<ServerSettings, ServerSettingsError>;
   readonly currentSnapshot?: () => SettingsSnapshot | undefined;
   readonly onSnapshotChange?: (listener: (snapshot: SettingsSnapshot) => void) => () => void;
+  /** Hold accepted settings stable during short internal preparation; no providers or settings writes. */
+  readonly withSnapshotBarrier?: <A, E>(
+    prepare: (snapshot: SettingsSnapshot) => Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | ServerSettingsError>;
 
   /** Patch settings and persist. Returns the new full settings object. */
   readonly updateSettings: (
@@ -299,6 +303,22 @@ const makeServerSettings = Effect.gen(function* () {
     getSettings: getSettingsFromCache.pipe(Effect.map(resolveTextGenerationProvider)),
     currentSnapshot: snapshot.read,
     onSnapshotChange: snapshot.subscribe,
+    withSnapshotBarrier: (prepare) =>
+      Deferred.await(startedDeferred).pipe(
+        Effect.andThen(
+          writeSemaphore.withPermits(1)(
+            Effect.gen(function* () {
+              const accepted = snapshot.read();
+              if (!accepted)
+                return yield* new ServerSettingsError({
+                  settingsPath,
+                  detail: "Accepted settings are unavailable.",
+                });
+              return yield* prepare(accepted);
+            }),
+          ),
+        ),
+      ),
     updateSettings: (patch) =>
       writeSemaphore.withPermits(1)(
         Effect.gen(function* () {

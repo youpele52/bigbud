@@ -1,3 +1,7 @@
+import {
+  SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+  SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
+} from "./threadSummaryTool.shared.ts";
 import { renderPiComputerUseTool } from "./orchestrationComputerUseTool.selected.ts";
 import {
   HTML_RENDER_TOOL_DESCRIPTION,
@@ -154,6 +158,15 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "      ...(Number.isFinite(limit) ? { limit: Number(limit) } : {}),",
     "    });",
     "    return textResult(JSON.stringify(result.result ?? {}, null, 2));",
+    "  },",
+    "});",
+    "",
+    "const summaryTool = defineTool({",
+    `  name: 'set_elevator_summary', label: 'set_elevator_summary', description: ${JSON.stringify(SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION)}, parameters: ${JSON.stringify(SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS)},`,
+    "  async execute(toolCallId, args) {",
+    "    if (!args || typeof args.summary !== 'string' || Object.keys(args).some(key => key !== 'summary')) throw new Error('Only summary is accepted.');",
+    "    const result = await callOrchestrationTool({ action: 'set_elevator_summary', threadId: resolveCurrentThreadId(), summary: args.summary, invocationId: toolCallId, sourceMessageId: SOURCE_MESSAGE_ID });",
+    "    return textResult(JSON.stringify(result));",
     "  },",
     "});",
     "",
@@ -324,6 +337,7 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "  pi.registerTool(readCapabilityGuideTool);",
     "  pi.registerTool(createThreadTool);",
     "  pi.registerTool(listAvailableModelsTool);",
+    "  pi.registerTool(summaryTool);",
     "  pi.registerTool(renameThreadTool);",
     "  pi.registerTool(moveThreadTool);",
     "  pi.registerTool(snoozeThreadTool);",

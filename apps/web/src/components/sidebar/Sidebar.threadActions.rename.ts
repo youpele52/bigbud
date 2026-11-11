@@ -4,12 +4,29 @@ import { newCommandId } from "../../lib/utils";
 import { dispatchCommandWithOutcomeRecovery } from "../../lib/orchestrationCommandRecovery";
 import { readNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
+import type { SidebarThreadActionsInput } from "./Sidebar.threadActions.types";
+import { useSidebarThreadRenameRequest } from "./Sidebar.threadActions.renameRequest";
 
-export function useSidebarThreadRenameActions() {
+export function useSidebarThreadRenameActions(
+  input: Pick<
+    SidebarThreadActionsInput,
+    "sidebarThreadsById" | "navigateToThreadRoute" | "cancelProjectRename"
+  >,
+) {
   const [renamingThreadId, setRenamingThreadId] = useState<ThreadId | null>(null);
   const [renamingTitle, setRenamingTitle] = useState("");
   const renamingCommittedRef = useRef(false);
   const renamingInputRef = useRef<HTMLInputElement | null>(null);
+
+  useSidebarThreadRenameRequest({
+    ...input,
+    startRename: (thread) => {
+      input.cancelProjectRename();
+      renamingCommittedRef.current = false;
+      setRenamingTitle(thread.title);
+      setRenamingThreadId(thread.id);
+    },
+  });
 
   const cancelRename = useCallback(() => {
     setRenamingThreadId(null);

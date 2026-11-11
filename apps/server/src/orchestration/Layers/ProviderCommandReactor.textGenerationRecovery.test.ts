@@ -5,7 +5,7 @@ import {
   ThreadId,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   asMessageId,
   createHarness,
@@ -18,6 +18,10 @@ import { requestTextGenerationRetry } from "../../ws/wsRetryTextGeneration.ts";
 import { resetThreadTitleLockForTests } from "../../orchestration-tools/ThreadTitleLock.ts";
 import { recordTitleStage } from "./ProviderCommandReactorSessionOps.title.state.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
+import * as metadataGeneration from "./ThreadMetadataGeneration.ts";
+import type { MetadataTitleRequest } from "./ThreadMetadataGeneration.requests.ts";
+
+const titleAdmission = vi.fn((_request: MetadataTitleRequest) => Effect.void);
 
 const threadId = ThreadId.makeUnsafe("thread-1");
 type Harness = Awaited<ReturnType<typeof createHarness>>;
@@ -67,7 +71,21 @@ async function acceptedRequest() {
 
 describe("durable metadata request recovery", () => {
   registerProviderCommandReactorTestCleanup();
-  afterEach(resetThreadTitleLockForTests);
+  beforeEach(() => {
+    titleAdmission.mockReset().mockReturnValue(Effect.void);
+    vi.spyOn(metadataGeneration, "makeThreadMetadataGeneration").mockReturnValue(
+      Effect.succeed({
+        title: titleAdmission,
+        summary: () => Effect.void,
+        start: () => Effect.void,
+        step: () => Effect.void,
+      }),
+    );
+  });
+  afterEach(() => {
+    resetThreadTitleLockForTests();
+    vi.restoreAllMocks();
+  });
   it("retains final-fallback failure eligibility when a manual retry's delivery is ambiguous after restart", async () => {
     const { harness, request } = await acceptedRequest();
     await Effect.runPromise(
@@ -159,19 +177,14 @@ describe("durable metadata request recovery", () => {
       );
     }
     const release: Array<() => void> = [];
-    harness.generateThreadTitle.mockImplementation(() =>
-      Effect.promise(
-        () =>
-          new Promise<{ title: string }>((resolve) =>
-            release.push(() => resolve({ title: "Recovered bounded request" })),
-          ),
-      ),
+    titleAdmission.mockImplementation(() =>
+      Effect.promise(() => new Promise<void>((resolve) => release.push(resolve))),
     );
     await harness.startReactor();
-    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 2);
+    await waitFor(() => titleAdmission.mock.calls.length === 2);
     expect(release).toHaveLength(2);
     release[0]!();
-    await waitFor(() => harness.generateThreadTitle.mock.calls.length === 3);
+    await waitFor(() => titleAdmission.mock.calls.length === 3);
     release.forEach((finish) => finish());
     await waitFor(
       async () =>
@@ -182,7 +195,7 @@ describe("durable metadata request recovery", () => {
     expect(harness.sendTurn).not.toHaveBeenCalled();
   });
 
-  it("recovers accepted-before-start requests once, including duplicate delivery after completion, without replaying chat", async () => {
+  it("admits accepted-before-start requests once, including duplicate delivery after settlement, without replaying chat", async () => {
     const { harness, input, request } = await acceptedRequest();
     expect(
       (await readThread(harness)).activities.filter(
@@ -190,16 +203,18 @@ describe("durable metadata request recovery", () => {
       ),
     ).toHaveLength(1);
     expect(harness.generateThreadTitle).not.toHaveBeenCalled();
-    harness.generateThreadTitle.mockReturnValue(
-      Effect.succeed({ title: "Recovered metadata title" }),
-    );
+    const originalTitle = (await readThread(harness)).title;
     await harness.startReactor();
     await waitFor(async () =>
       (await readThread(harness)).activities.some(
         (item) => item.kind === "text-generation.request-settled",
       ),
     );
-    expect((await readThread(harness)).title).toBe("Recovered metadata title");
+    // Reactor recovery only admits durable work; canonical result application is separate.
+    expect((await readThread(harness)).title).toBe(originalTitle);
+    expect(titleAdmission).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId, retryKey: request.id }),
+    );
     await Effect.runPromise(requestTextGenerationRetry(harness.engine, input));
     await Effect.runPromise(
       harness.engine.dispatch({
@@ -211,7 +226,8 @@ describe("durable metadata request recovery", () => {
       }),
     );
     await harness.drain();
-    expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
+    expect(titleAdmission).toHaveBeenCalledTimes(1);
+    expect(harness.generateThreadTitle).not.toHaveBeenCalled();
     expect(harness.sendTurn).not.toHaveBeenCalled();
     expect(harness.startSession).not.toHaveBeenCalled();
   });

@@ -1,3 +1,8 @@
+import {
+  decodeSetElevatorSummaryArguments,
+  SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+  SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
+} from "./threadSummaryTool.shared.ts";
 import type { Tool } from "@github/copilot-sdk";
 import {
   HTML_RENDER_TOOL_DESCRIPTION,
@@ -94,6 +99,7 @@ export function createCopilotThreadOrchestrationTools(
       tool: AgentWorkspaceToolName,
       args: Record<string, unknown>,
     ) => Promise<Record<string, unknown>>;
+    readonly setElevatorSummary?: (summary: string, invocationId: string) => Promise<unknown>;
     readonly renameThread: (
       title: string,
       targetThreadId?: string,
@@ -158,6 +164,24 @@ export function createCopilotThreadOrchestrationTools(
         } catch (error) {
           return failureResult(
             error instanceof Error ? error.message : "monitor settings unavailable",
+          );
+        }
+      },
+    },
+    {
+      name: "set_elevator_summary",
+      description: SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+      parameters: SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
+      handler: async (args, invocation) => {
+        try {
+          const { summary } = decodeSetElevatorSummaryArguments(args);
+          if (!input.setElevatorSummary) throw new Error("Thread summary tools are not ready.");
+          return successResult(
+            JSON.stringify(await input.setElevatorSummary(summary, invocation.toolCallId)),
+          );
+        } catch (error) {
+          return failureResult(
+            error instanceof Error ? error.message : "Failed to set thread summary.",
           );
         }
       },

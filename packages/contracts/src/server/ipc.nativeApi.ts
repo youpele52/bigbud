@@ -33,6 +33,7 @@ import type * as Git from "../workspace/git";
 import type * as DetailPaging from "../orchestration/orchestration.detail.paging";
 import type * as BranchCopy from "../orchestration/orchestration.branchCopy";
 import type { DatabaseCompactionNativeApi } from "./databaseCompaction";
+import type { MetadataWarningsNativeApi } from "./metadataWarnings";
 import type * as Worktrees from "../workspace/worktrees";
 import type * as Project from "../workspace/project";
 import type * as Terminal from "../workspace/terminal";
@@ -201,141 +202,142 @@ export interface NativeApi {
       position?: { x: number; y: number },
     ) => Promise<T | null>;
   };
-  server: DatabaseCompactionNativeApi & {
-    getConfig: () => Promise<Server.ServerConfig>;
-    refreshProviders: () => Promise<Server.ServerProviderUpdatedPayload>;
-    refreshUsageLimits: () => Promise<Server.ServerProviderUpdatedPayload>;
-    activateCliProxy: () => Promise<Server.ServerProviderUpdatedPayload>;
-    verifyExecutionTarget: (
-      input: Server.ServerVerifyExecutionTargetInput,
-    ) => Promise<Server.ServerVerifyExecutionTargetResult>;
-    listSshConfigHosts: (
-      input: SshConfig.ServerListSshConfigHostsInput,
-    ) => Promise<SshConfig.ServerListSshConfigHostsResult>;
-    listRemoteFolders: (
-      input: RemoteFolders.ServerListRemoteFoldersInput,
-    ) => Promise<RemoteFolders.ServerListRemoteFoldersResult>;
-    installRemoteAgent: (
-      input: Server.ServerInstallRemoteAgentInput,
-    ) => Promise<Server.ServerInstallRemoteAgentResult>;
-    connectRemoteAgent: (
-      input: Server.ServerConnectRemoteAgentInput,
-    ) => Promise<Server.ServerConnectRemoteAgentResult>;
-    restartRemoteAgent: (
-      input: RemoteRestart.ServerRestartRemoteAgentInput,
-    ) => Promise<RemoteRestart.ServerRestartRemoteAgentResult>;
-    getRemoteAgentRestartStatus: (
-      input: RemoteRestart.ServerGetRemoteAgentRestartStatusInput,
-    ) => Promise<RemoteRestart.ServerRestartRemoteAgentResult>;
-    getRemoteAgentUpdateStatus: (
-      input: Server.ServerGetRemoteAgentUpdateStatusInput,
-    ) => Promise<Server.ServerRemoteAgentUpdateStatus>;
-    disconnectExecutionTarget: (
-      input: RemoteConnection.ServerRemoteConnectionInput,
-    ) => Promise<RemoteConnection.ServerRemoteConnectionResult>;
-    connectExecutionTarget: (
-      input: RemoteConnection.ServerRemoteConnectionInput,
-    ) => Promise<RemoteConnection.ServerRemoteConnectionResult>;
-    listDisconnectedExecutionTargets: () => Promise<RemoteConnection.ServerListDisconnectedExecutionTargetsResult>;
-    unlockSshKey: (
-      input: Server.ServerUnlockSshKeyInput,
-    ) => Promise<Server.ServerUnlockSshKeyResult>;
-    unlockSshPassword: (
-      input: Server.ServerUnlockSshPasswordInput,
-    ) => Promise<Server.ServerUnlockSshPasswordResult>;
-    trustSshHost: (input: ServerTrustSshHostInput) => Promise<ServerTrustSshHostResult>;
-    upsertKeybinding: (
-      input: Server.ServerUpsertKeybindingInput,
-    ) => Promise<Server.ServerUpsertKeybindingResult>;
-    getSettings: () => Promise<ServerSettings>;
-    updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
-    previewThreadRetention: (
-      input: Retention.ServerPreviewThreadRetentionInput,
-    ) => Promise<Retention.ServerThreadRetentionPreview>;
-    startThreadRetention: (
-      input: Retention.ServerStartThreadRetentionInput,
-    ) => Promise<Retention.ServerThreadRetentionRun>;
-    getThreadRetentionRun: (
-      input: Retention.ServerGetThreadRetentionRunInput,
-    ) => Promise<Retention.ServerThreadRetentionRun>;
-    listThreadRetentionRuns: (
-      input: Retention.ServerListThreadRetentionRunsInput,
-    ) => Promise<Retention.ServerListThreadRetentionRunsResult>;
-    setThreadRetentionPolicy: (
-      input: Retention.ServerSetThreadRetentionPolicyInput,
-    ) => Promise<ServerSettings>;
-    setThreadPinned: (
-      input: PinnedThreads.ServerSetThreadPinnedInput,
-    ) => Promise<PinnedThreads.ServerSetThreadPinnedResult>;
-    readDocumentUrl: (
-      input: Server.ServerReadDocumentUrlInput,
-    ) => Promise<Server.ServerReadDocumentUrlResult>;
-    writeHandoffDocument: (
-      input: Server.ServerWriteHandoffDocumentInput,
-    ) => Promise<Server.ServerWriteHandoffDocumentResult>;
-    retryTextGeneration: (
-      input: import("./rpc.textGeneration").RetryThreadTextGenerationInput,
-    ) => Promise<void>;
-    startHandoffJob: (
-      input: Handoff.ServerStartHandoffJobInput,
-    ) => Promise<Handoff.ServerHandoffJob>;
-    getHandoffJob: (input: Handoff.ServerGetHandoffJobInput) => Promise<Handoff.ServerHandoffJob>;
-    getOpencodeV2ThreadToolsSetup: (
-      input: ServerOpencodeV2ThreadToolsSetupInput,
-    ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
-    copilotRuntime?: (
-      input: import("./copilotRuntime").CopilotRuntimeInput,
-    ) => Promise<import("./copilotRuntime").CopilotRuntimeState>;
-    createMobileRemotePairing: (
-      input: Mobile.ServerCreateMobileRemotePairingInput,
-    ) => Promise<Mobile.ServerMobileRemotePairing>;
-    listMobileRemoteSessions: () => Promise<Mobile.ServerListMobileRemoteSessionsResult>;
-    revokeMobileRemoteSession: (
-      input: Mobile.ServerRevokeMobileRemoteSessionInput,
-    ) => Promise<void>;
-    exportThreadContext: (
-      input: Server.ServerExportThreadContextInput,
-    ) => Promise<Server.ServerExportThreadContextResult>;
-    getAutomation: (
-      input: Automation.ServerGetAutomationInput,
-    ) => Promise<Automation.ServerGetAutomationResult>;
-    listAutomations: (
-      input: Automation.ServerListAutomationsInput,
-    ) => Promise<Automation.ServerListAutomationsResult>;
-    listAllAutomations: (
-      input?: Automation.ServerListAllAutomationsInput,
-    ) => Promise<Automation.ServerListAllAutomationsResult>;
-    createAutomation: (
-      input: Automation.ServerCreateAutomationInput,
-    ) => Promise<Automation.ServerAutomationResult>;
-    createOwnedAutomation: (
-      input: Automation.ServerCreateOwnedAutomationInput,
-    ) => Promise<Automation.ServerAutomationResult>;
-    updateAutomation: (
-      input: Automation.ServerUpdateAutomationInput,
-    ) => Promise<Automation.ServerAutomationResult>;
-    pauseAutomation: (input: Automation.ServerPauseAutomationInput) => Promise<void>;
-    resumeAutomation: (input: Automation.ServerResumeAutomationInput) => Promise<void>;
-    deleteAutomation: (input: Automation.ServerDeleteAutomationInput) => Promise<void>;
-    triggerAutomation: (
-      input: Automation.ServerTriggerAutomationInput,
-    ) => Promise<Automation.ServerTriggerAutomationResult>;
-    listAutomationRuns: (
-      input: Automation.ServerListAutomationRunsInput,
-    ) => Promise<Automation.ServerListAutomationRunsResult>;
-    getUsageSummary: (
-      input: Usage.ServerGetUsageSummaryInput,
-    ) => Promise<Usage.ServerUsageSummaryResult>;
-    /** Stop one running provider subagent; Stop-all is unchanged. */
-    stopSubagent: (input: Subagents.ProviderStopSubagentInput) => Promise<void>;
-    providerControls?: (
-      input: import("./providerControls").ProviderControlsInput,
-    ) => Promise<import("./providerControls").ProviderControlsSnapshot>;
-    /** Recent connection reports and server stalls; optional until every transport wires it. */
-    getWsConnectionDiagnostics?: (
-      input: ConnectionDiagnostics.ServerGetWsConnectionDiagnosticsInput,
-    ) => Promise<ConnectionDiagnostics.ServerWsConnectionDiagnosticsSnapshot>;
-  };
+  server: DatabaseCompactionNativeApi &
+    MetadataWarningsNativeApi & {
+      getConfig: () => Promise<Server.ServerConfig>;
+      refreshProviders: () => Promise<Server.ServerProviderUpdatedPayload>;
+      refreshUsageLimits: () => Promise<Server.ServerProviderUpdatedPayload>;
+      activateCliProxy: () => Promise<Server.ServerProviderUpdatedPayload>;
+      verifyExecutionTarget: (
+        input: Server.ServerVerifyExecutionTargetInput,
+      ) => Promise<Server.ServerVerifyExecutionTargetResult>;
+      listSshConfigHosts: (
+        input: SshConfig.ServerListSshConfigHostsInput,
+      ) => Promise<SshConfig.ServerListSshConfigHostsResult>;
+      listRemoteFolders: (
+        input: RemoteFolders.ServerListRemoteFoldersInput,
+      ) => Promise<RemoteFolders.ServerListRemoteFoldersResult>;
+      installRemoteAgent: (
+        input: Server.ServerInstallRemoteAgentInput,
+      ) => Promise<Server.ServerInstallRemoteAgentResult>;
+      connectRemoteAgent: (
+        input: Server.ServerConnectRemoteAgentInput,
+      ) => Promise<Server.ServerConnectRemoteAgentResult>;
+      restartRemoteAgent: (
+        input: RemoteRestart.ServerRestartRemoteAgentInput,
+      ) => Promise<RemoteRestart.ServerRestartRemoteAgentResult>;
+      getRemoteAgentRestartStatus: (
+        input: RemoteRestart.ServerGetRemoteAgentRestartStatusInput,
+      ) => Promise<RemoteRestart.ServerRestartRemoteAgentResult>;
+      getRemoteAgentUpdateStatus: (
+        input: Server.ServerGetRemoteAgentUpdateStatusInput,
+      ) => Promise<Server.ServerRemoteAgentUpdateStatus>;
+      disconnectExecutionTarget: (
+        input: RemoteConnection.ServerRemoteConnectionInput,
+      ) => Promise<RemoteConnection.ServerRemoteConnectionResult>;
+      connectExecutionTarget: (
+        input: RemoteConnection.ServerRemoteConnectionInput,
+      ) => Promise<RemoteConnection.ServerRemoteConnectionResult>;
+      listDisconnectedExecutionTargets: () => Promise<RemoteConnection.ServerListDisconnectedExecutionTargetsResult>;
+      unlockSshKey: (
+        input: Server.ServerUnlockSshKeyInput,
+      ) => Promise<Server.ServerUnlockSshKeyResult>;
+      unlockSshPassword: (
+        input: Server.ServerUnlockSshPasswordInput,
+      ) => Promise<Server.ServerUnlockSshPasswordResult>;
+      trustSshHost: (input: ServerTrustSshHostInput) => Promise<ServerTrustSshHostResult>;
+      upsertKeybinding: (
+        input: Server.ServerUpsertKeybindingInput,
+      ) => Promise<Server.ServerUpsertKeybindingResult>;
+      getSettings: () => Promise<ServerSettings>;
+      updateSettings: (patch: ServerSettingsPatch) => Promise<ServerSettings>;
+      previewThreadRetention: (
+        input: Retention.ServerPreviewThreadRetentionInput,
+      ) => Promise<Retention.ServerThreadRetentionPreview>;
+      startThreadRetention: (
+        input: Retention.ServerStartThreadRetentionInput,
+      ) => Promise<Retention.ServerThreadRetentionRun>;
+      getThreadRetentionRun: (
+        input: Retention.ServerGetThreadRetentionRunInput,
+      ) => Promise<Retention.ServerThreadRetentionRun>;
+      listThreadRetentionRuns: (
+        input: Retention.ServerListThreadRetentionRunsInput,
+      ) => Promise<Retention.ServerListThreadRetentionRunsResult>;
+      setThreadRetentionPolicy: (
+        input: Retention.ServerSetThreadRetentionPolicyInput,
+      ) => Promise<ServerSettings>;
+      setThreadPinned: (
+        input: PinnedThreads.ServerSetThreadPinnedInput,
+      ) => Promise<PinnedThreads.ServerSetThreadPinnedResult>;
+      readDocumentUrl: (
+        input: Server.ServerReadDocumentUrlInput,
+      ) => Promise<Server.ServerReadDocumentUrlResult>;
+      writeHandoffDocument: (
+        input: Server.ServerWriteHandoffDocumentInput,
+      ) => Promise<Server.ServerWriteHandoffDocumentResult>;
+      retryTextGeneration: (
+        input: import("./rpc.textGeneration").RetryThreadTextGenerationInput,
+      ) => Promise<void>;
+      startHandoffJob: (
+        input: Handoff.ServerStartHandoffJobInput,
+      ) => Promise<Handoff.ServerHandoffJob>;
+      getHandoffJob: (input: Handoff.ServerGetHandoffJobInput) => Promise<Handoff.ServerHandoffJob>;
+      getOpencodeV2ThreadToolsSetup: (
+        input: ServerOpencodeV2ThreadToolsSetupInput,
+      ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
+      copilotRuntime?: (
+        input: import("./copilotRuntime").CopilotRuntimeInput,
+      ) => Promise<import("./copilotRuntime").CopilotRuntimeState>;
+      createMobileRemotePairing: (
+        input: Mobile.ServerCreateMobileRemotePairingInput,
+      ) => Promise<Mobile.ServerMobileRemotePairing>;
+      listMobileRemoteSessions: () => Promise<Mobile.ServerListMobileRemoteSessionsResult>;
+      revokeMobileRemoteSession: (
+        input: Mobile.ServerRevokeMobileRemoteSessionInput,
+      ) => Promise<void>;
+      exportThreadContext: (
+        input: Server.ServerExportThreadContextInput,
+      ) => Promise<Server.ServerExportThreadContextResult>;
+      getAutomation: (
+        input: Automation.ServerGetAutomationInput,
+      ) => Promise<Automation.ServerGetAutomationResult>;
+      listAutomations: (
+        input: Automation.ServerListAutomationsInput,
+      ) => Promise<Automation.ServerListAutomationsResult>;
+      listAllAutomations: (
+        input?: Automation.ServerListAllAutomationsInput,
+      ) => Promise<Automation.ServerListAllAutomationsResult>;
+      createAutomation: (
+        input: Automation.ServerCreateAutomationInput,
+      ) => Promise<Automation.ServerAutomationResult>;
+      createOwnedAutomation: (
+        input: Automation.ServerCreateOwnedAutomationInput,
+      ) => Promise<Automation.ServerAutomationResult>;
+      updateAutomation: (
+        input: Automation.ServerUpdateAutomationInput,
+      ) => Promise<Automation.ServerAutomationResult>;
+      pauseAutomation: (input: Automation.ServerPauseAutomationInput) => Promise<void>;
+      resumeAutomation: (input: Automation.ServerResumeAutomationInput) => Promise<void>;
+      deleteAutomation: (input: Automation.ServerDeleteAutomationInput) => Promise<void>;
+      triggerAutomation: (
+        input: Automation.ServerTriggerAutomationInput,
+      ) => Promise<Automation.ServerTriggerAutomationResult>;
+      listAutomationRuns: (
+        input: Automation.ServerListAutomationRunsInput,
+      ) => Promise<Automation.ServerListAutomationRunsResult>;
+      getUsageSummary: (
+        input: Usage.ServerGetUsageSummaryInput,
+      ) => Promise<Usage.ServerUsageSummaryResult>;
+      /** Stop one running provider subagent; Stop-all is unchanged. */
+      stopSubagent: (input: Subagents.ProviderStopSubagentInput) => Promise<void>;
+      providerControls?: (
+        input: import("./providerControls").ProviderControlsInput,
+      ) => Promise<import("./providerControls").ProviderControlsSnapshot>;
+      /** Recent connection reports and server stalls; optional until every transport wires it. */
+      getWsConnectionDiagnostics?: (
+        input: ConnectionDiagnostics.ServerGetWsConnectionDiagnosticsInput,
+      ) => Promise<ConnectionDiagnostics.ServerWsConnectionDiagnosticsSnapshot>;
+    };
   orchestration: BranchCopy.ThreadBranchNativeApi & {
     getSidebarThreadCatalog: () => Promise<GetSidebarThreadCatalogResult>;
     getStartupProjectCatalog: (

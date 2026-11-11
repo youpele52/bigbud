@@ -28,6 +28,7 @@ import { ComputerUseStartupRepairCoordinator } from "../components/computer-use/
 import { DatabaseCompactionCoordinator } from "../components/settings/DatabaseCompactionCoordinator";
 import { GamesWorkToastCoordinator } from "../components/games/GamesWorkToastCoordinator";
 import { ProviderRecoveryToastCoordinator } from "../components/ProviderRecoveryToastCoordinator";
+import { MetadataWarningToastCoordinator } from "../components/MetadataWarningToastCoordinator";
 import { useSettings } from "../hooks/useSettings";
 import { useWindowMaterial } from "../hooks/useWindowMaterial";
 import { useServerConfig } from "../rpc/serverState";
@@ -132,6 +133,7 @@ export function RootRouteView() {
         <DesktopBackendStartupCoordinator />
         <GamesWorkToastCoordinator />
         <ProviderRecoveryToastCoordinator />
+        <MetadataWarningToastCoordinator />
         <PendingApprovalCoordinator />
         <TaskCompletionNotifications />
         <WebSocketConnectionSurface>
@@ -173,6 +175,7 @@ function CompactChatRoot() {
       <AnchoredToastProvider>
         <ServerStateBootstrap />
         <ChatFocusShortcutCoordinator />
+        <MetadataWarningToastCoordinator />
         <DraftOwnershipCoordinator
           repairOnStartup={DRAFT_OWNERSHIP_REPAIR_BY_RENDERER.compact}
           scope="compact"

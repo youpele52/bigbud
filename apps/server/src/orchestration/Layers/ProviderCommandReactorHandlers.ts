@@ -66,6 +66,7 @@ import { makeHandleTurnStartFailure } from "./ProviderCommandReactorHandlers.tur
 import { makeRequestAutomaticFork } from "./ProviderCommandReactorHandlers.fork.ts";
 import { makeTextGenerationActivityHandler } from "./ProviderCommandReactorHandlers.textGeneration.ts";
 import { processRuntimeModeSet } from "./ProviderCommandReactorHandlers.runtimeMode.ts";
+import { makeThreadMetadataGeneration } from "./ThreadMetadataGeneration.ts";
 
 export const makeProviderCommandHandlers = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
@@ -112,6 +113,11 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     git,
     gitStatusBroadcaster,
     textGeneration,
+    metadataGeneration: yield* makeThreadMetadataGeneration({
+      engine: orchestrationEngine,
+      settings: serverSettingsService,
+      textGeneration,
+    }),
     serverSettingsService,
     serverConfig,
     threadModelSelections,
@@ -206,19 +212,11 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
     );
 
     if (isFirstUserMessageTurn) {
-      const serverSettings = yield* serverSettingsService.getSettings.pipe(
-        Effect.catch(() => Effect.succeed(DEFAULT_SERVER_SETTINGS)),
-      );
       const resolvedTitleSeed = resolveThreadTitleSeed({
         currentTitle: thread.title,
         messageText: message.text,
         ...(event.payload.titleSeed !== undefined ? { titleSeed: event.payload.titleSeed } : {}),
       });
-      const generationCwd =
-        resolveThreadWorkspaceCwd({
-          thread,
-          projects: (yield* orchestrationEngine.getReadModel()).projects,
-        }) ?? resolveDefaultChatCwd(serverSettings);
       const generationInput = {
         messageText: message.text,
         ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
@@ -249,11 +247,8 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
           });
         }
 
-        const titleModelSelection = event.payload.modelSelection ?? thread.modelSelection;
         yield* maybeGenerateThreadTitleForFirstTurn(sessionOpServices)({
           threadId: event.payload.threadId,
-          cwd: generationCwd,
-          modelSelection: requireActiveModelSelection(titleModelSelection),
           ...generationInput,
         }).pipe(Effect.forkScoped);
       }
@@ -393,5 +388,6 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   return {
     processTextGenerationActivity,
     processDomainEvent,
+    startMetadataGeneration: sessionOpServices.metadataGeneration!.start,
   };
 });

@@ -153,7 +153,7 @@ describe("ProviderCommandReactorHandlers.elevatorSummary", () => {
     ).toBe(false);
   });
 
-  it("does not replace the title-based default summary when provider generation fails", async () => {
+  it("does not replace the title-based default summary when durable admission fails", async () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const threadId = ThreadId.makeUnsafe("thread-1");
@@ -174,6 +174,14 @@ describe("ProviderCommandReactorHandlers.elevatorSummary", () => {
           activities: [],
         };
         const services = {
+          metadataGeneration: {
+            title: () => Effect.void,
+            start: () => Effect.void,
+            summary: () =>
+              Effect.fail(
+                new TextGenerationError({ operation: "metadata", detail: "Admission unavailable" }),
+              ),
+          },
           resolveThread: () => Effect.succeed(thread),
           serverSettingsService: {
             getSettings: Effect.succeed({
@@ -200,15 +208,8 @@ describe("ProviderCommandReactorHandlers.elevatorSummary", () => {
 
         yield* maybeGenerateThreadElevatorSummary(services)({ threadId });
 
-        expect(dispatch).toHaveBeenCalledWith(
-          expect.objectContaining({
-            type: "thread.activity.append",
-            activity: expect.objectContaining({
-              kind: "text-generation.failed",
-              payload: { operation: "summary" },
-            }),
-          }),
-        );
+        expect(dispatch).not.toHaveBeenCalled();
+        expect(thread.elevatorSummary).toBe("Tooltip missing");
         expect(dispatch).not.toHaveBeenCalledWith(
           expect.objectContaining({ type: "thread.meta.update" }),
         );

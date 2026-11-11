@@ -1,5 +1,6 @@
 const TOOL_LABELS: Readonly<Record<string, string>> = {
   rename_thread: "renamer",
+  set_elevator_summary: "summary writer",
   move_thread: "thread mover",
   snooze_thread: "thread snoozer",
   create_thread: "thread creator",

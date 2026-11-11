@@ -5,7 +5,11 @@ import type { OpencodeV2ModelSelection } from "@bigbud/contracts/orchestration/o
 import { resolveOpencodeV2ConnectionMode } from "@bigbud/shared/serverSettings";
 import { hasOpencodeV2NativeTrust } from "@bigbud/shared/opencodeNativeTrust";
 import { sanitizeBranchFragment, sanitizeFeatureBranchName } from "@bigbud/shared/git";
-import { TextGeneration, type TextGenerationShape } from "../Services/TextGeneration.ts";
+import {
+  TextGeneration,
+  type TextGenerationShape,
+  type MetadataTextGenerationAttempt,
+} from "../Services/TextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
@@ -39,6 +43,7 @@ export interface V2StructuredGenerationRequest<S extends Schema.Top> {
   readonly prompt: string;
   readonly outputSchema: S;
   readonly modelSelection: OpencodeV2ModelSelection;
+  readonly metadataAttempt?: MetadataTextGenerationAttempt;
 }
 type Runner = <S extends Schema.Top>(
   input: V2StructuredGenerationRequest<S>,
@@ -63,22 +68,24 @@ export function makeV2StructuredTextRunner(
             signal,
           ),
         catch: (error) =>
-          new TextGenerationError({
-            operation: input.operation,
-            ...(Schema.is(V2TextGenerationUncertain)(error)
-              ? { uncertaintyId: error.nativeSessionId }
-              : {}),
-            kind: Schema.is(V2TextGenerationUncertain)(error)
-              ? "uncertain"
-              : error instanceof DOMException && error.name === "AbortError"
-                ? "cancelled"
-                : "provider",
-            detail: Schema.is(V2TextGenerationUncertain)(error)
-              ? "OpenCode v2 generation dispatch is unconfirmed. No automatic retry; verify original work before starting another request."
-              : error instanceof DOMException && error.name === "AbortError"
-                ? "OpenCode v2 auxiliary generation cancelled."
-                : "OpenCode v2 auxiliary generation failed or timed out; uncertain native history was retained.",
-          }),
+          Schema.is(TextGenerationError)(error)
+            ? error
+            : new TextGenerationError({
+                operation: input.operation,
+                ...(Schema.is(V2TextGenerationUncertain)(error)
+                  ? { uncertaintyId: error.nativeSessionId }
+                  : {}),
+                kind: Schema.is(V2TextGenerationUncertain)(error)
+                  ? "uncertain"
+                  : error instanceof DOMException && error.name === "AbortError"
+                    ? "cancelled"
+                    : "provider",
+                detail: Schema.is(V2TextGenerationUncertain)(error)
+                  ? "OpenCode v2 generation dispatch is unconfirmed. No automatic retry; verify original work before starting another request."
+                  : error instanceof DOMException && error.name === "AbortError"
+                    ? "OpenCode v2 auxiliary generation cancelled."
+                    : "OpenCode v2 auxiliary generation failed or timed out; uncertain native history was retained.",
+              }),
       });
       return yield* Schema.decodeEffect(Schema.fromJsonString(input.outputSchema))(text).pipe(
         Effect.mapError(
@@ -96,7 +103,11 @@ export function makeV2StructuredTextRunner(
 export function makeOpencodeV2TextGeneration(run: Runner): TextGenerationShape {
   const generate = <S extends Schema.Top>(
     operation: keyof TextGenerationShape,
-    input: { cwd: string; modelSelection: { provider: string } },
+    input: {
+      cwd: string;
+      modelSelection: { provider: string };
+      metadataAttempt?: MetadataTextGenerationAttempt;
+    },
     prompt: { prompt: string; outputSchema: S },
   ) =>
     input.modelSelection.provider !== "opencodeV2"
@@ -106,6 +117,7 @@ export function makeOpencodeV2TextGeneration(run: Runner): TextGenerationShape {
           operation,
           cwd: input.cwd,
           modelSelection: input.modelSelection as OpencodeV2ModelSelection,
+          ...(input.metadataAttempt ? { metadataAttempt: input.metadataAttempt } : {}),
         });
   return {
     generateCommitMessage: (input) =>
@@ -188,6 +200,17 @@ const makeLive = Effect.gen(function* () {
               selection: input.modelSelection,
               signal,
               prompt: input.prompt,
+              ...(input.metadataAttempt
+                ? {
+                    beforeDispatch: async () => {
+                      const result = await Effect.runPromise(
+                        Effect.result(input.metadataAttempt!.beforeDispatch()),
+                        { signal },
+                      );
+                      if (result._tag === "Failure") throw result.failure;
+                    },
+                  }
+                : {}),
             }),
           );
         } catch (error) {

@@ -1,9 +1,11 @@
-import { Data, Schema } from "effect";
+import { Data, Effect, Schema } from "effect";
+import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES } from "../orchestration-tools/AgentWorkspaceTools.ts";
 
 export const ThreadToolRequest = Schema.Struct({
   action: Schema.Literals([
     "rename",
+    "set_elevator_summary",
     "render_html",
     "archive",
     "get_status",
@@ -35,6 +37,7 @@ export const ThreadToolRequest = Schema.Struct({
   /** `snooze`: whole minutes. */
   durationMinutes: Schema.optional(Schema.Number),
   title: Schema.optional(Schema.String),
+  summary: Schema.optional(Schema.String),
   computerUseAction: Schema.optional(Schema.Unknown),
   browserAction: Schema.optional(Schema.Unknown),
   task: Schema.optional(Schema.String),
@@ -66,6 +69,25 @@ export const ThreadToolRequest = Schema.Struct({
   remoteMaxOutputBytes: Schema.optional(Schema.Number),
   remoteOutputMode: Schema.optional(Schema.Literals(["error", "truncate"])),
 });
+
+const OwnThreadSummaryRequest = Schema.Struct({
+  action: Schema.Literal("set_elevator_summary"),
+  threadId: ThreadId,
+  summary: Schema.String,
+  invocationId: Schema.String.check(Schema.isMinLength(1), Schema.isTrimmed()),
+  sourceMessageId: Schema.String.check(Schema.isMinLength(1), Schema.isTrimmed()),
+});
+
+/** Summary has no targeting/forwarding envelope; other actions retain their existing decoding. */
+export const decodeThreadToolRequest = (
+  value: unknown,
+): Effect.Effect<typeof ThreadToolRequest.Type, Schema.SchemaError> =>
+  typeof value === "object" &&
+  value !== null &&
+  "action" in value &&
+  value.action === "set_elevator_summary"
+    ? Schema.decodeUnknownEffect(OwnThreadSummaryRequest)(value, { onExcessProperty: "error" })
+    : Schema.decodeUnknownEffect(ThreadToolRequest)(value);
 
 export class ThreadToolRequestError extends Data.TaggedError("ThreadToolRequestError")<{
   readonly status: number;

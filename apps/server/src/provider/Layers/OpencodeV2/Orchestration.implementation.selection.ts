@@ -15,7 +15,7 @@ import {
 
 const Selection = Schema.Struct({
   protocol: Schema.Literal("bigbud.thread.implementation.selection.v1"),
-  version: Schema.Literals(["v1", "v2", "v3", "v4"]),
+  version: Schema.Literals(["v1", "v2", "v3", "v4", "v5"]),
   implementationDigest: Schema.String,
   bootstrapAbi: Schema.String,
   schemaDigest: Schema.String,
@@ -55,7 +55,12 @@ export class V2ImplementationSelection {
   }
   async refresh() {
     const signed = await this.records.read("default");
-    const preferred = this.artifact.bootstrapAbi === "bigbud.thread.bootstrap.v4" ? "v3" : "v1";
+    const preferred =
+      this.artifact.bootstrapAbi === "bigbud.thread.bootstrap.v5"
+        ? "v5"
+        : this.artifact.bootstrapAbi === "bigbud.thread.bootstrap.v4"
+          ? "v3"
+          : "v1";
     if (!signed) {
       this.registry.select(preferred);
       return this.registry.current();

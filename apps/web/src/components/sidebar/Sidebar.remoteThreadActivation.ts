@@ -29,7 +29,7 @@ export interface SidebarRemoteThreadActivationInput {
 }
 
 export interface SidebarRemoteThreadActivationOutput {
-  readonly navigateToThread: (threadId: ThreadId) => void;
+  readonly navigateToThread: (threadId: ThreadId) => void | Promise<boolean>;
 }
 
 export function resolveRemoteThreadActivation(
@@ -111,23 +111,21 @@ export function useSidebarRemoteThreadActivation({
         return;
       }
 
-      void (async () => {
-        await beginRemoteExecutionTargetAccessCheck({
-          executionTargetId: activation.executionTargetId,
-          ...(activation.cwd ? { cwd: activation.cwd } : {}),
-          onVerified: async () => {
-            navigateToThreadRoute(threadId);
-            await reconnectRemoteThreadTerminals(activation).catch((error) => {
-              toastManager.add({
-                type: "error",
-                title: "Failed to refresh remote terminal",
-                description:
-                  error instanceof Error ? error.message : "An error occurred while reconnecting.",
-              });
+      return beginRemoteExecutionTargetAccessCheck({
+        executionTargetId: activation.executionTargetId,
+        ...(activation.cwd ? { cwd: activation.cwd } : {}),
+        onVerified: async () => {
+          navigateToThreadRoute(threadId);
+          await reconnectRemoteThreadTerminals(activation).catch((error) => {
+            toastManager.add({
+              type: "error",
+              title: "Failed to refresh remote terminal",
+              description:
+                error instanceof Error ? error.message : "An error occurred while reconnecting.",
             });
-          },
-        });
-      })();
+          });
+        },
+      });
     },
     [
       beginRemoteExecutionTargetAccessCheck,

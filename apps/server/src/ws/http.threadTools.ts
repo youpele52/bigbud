@@ -16,7 +16,7 @@ import {
   type CapabilityGuideSection,
 } from "../capabilities/CapabilityCatalog.operations.ts";
 import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog.dynamic.ts";
-import { ThreadToolRequest, ThreadToolRequestError } from "./http.threadTools.schema.ts";
+import { decodeThreadToolRequest, ThreadToolRequestError } from "./http.threadTools.schema.ts";
 import { handleCreateThreadAction } from "./http.threadTools.createThread.ts";
 import {
   handleGetThreadStatusAction,
@@ -26,6 +26,7 @@ import {
 } from "./http.threadTools.reads.ts";
 import { findRemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
 import { runRemoteWorkspaceProcess } from "./http.threadTools.remoteWorkspace.ts";
+import { handleSetElevatorSummaryAction } from "./http.threadTools.summary.ts";
 import { handleRenameThreadAction } from "./http.threadTools.rename.ts";
 import { handleOrganizationThreadAction } from "./http.threadTools.organization.ts";
 import { enterThreadToolInvocation } from "../orchestration-tools/threadToolInvocationFlights.ts";
@@ -59,9 +60,7 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       }
 
       const body = yield* request.json.pipe(
-        Effect.flatMap((value) =>
-          Schema.decodeEffect(ThreadToolRequest)(value as typeof ThreadToolRequest.Type),
-        ),
+        Effect.flatMap(decodeThreadToolRequest),
         Effect.mapError(
           () =>
             new ThreadToolRequestError({
@@ -293,6 +292,13 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
           );
         return yield* HttpServerResponse.json({ ok: true, result });
       }
+
+      if (body.action === "set_elevator_summary")
+        return yield* handleSetElevatorSummaryAction({
+          dispatcher,
+          callerThreadId: threadId,
+          body,
+        });
 
       if (body.action === "rename") {
         return yield* handleRenameThreadAction({ dispatcher, callerThreadId: threadId, body });

@@ -1,3 +1,7 @@
+import {
+  SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+  SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
+} from "./threadSummaryTool.shared.ts";
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 import {
   HTML_RENDER_TOOL_DESCRIPTION,
@@ -47,6 +51,7 @@ export const DEFAULT_ORCHESTRATION_MCP_SERVER_NAME = "bigbud_orchestration";
 
 export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
   "const TOOLS = [",
+  `  ${JSON.stringify({ name: "set_elevator_summary", description: SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION, inputSchema: SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS })},`,
   `  ${JSON.stringify({ name: "render_html", description: HTML_RENDER_TOOL_DESCRIPTION, inputSchema: HTML_RENDER_TOOL_PARAMETERS })},`,
   ...AGENT_WORKSPACE_TOOL_SPECS.map(
     (spec) =>

@@ -21,6 +21,7 @@ import {
 } from "../../orchestration-tools/ThreadOrchestrationTools.ts";
 import { createThreadViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.createThread.ts";
 import { listAvailableModelsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listAvailableModels.ts";
+import { setElevatorSummaryViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.summary.ts";
 import { renameThreadViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.rename.ts";
 import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.listThreads.ts";
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
@@ -93,6 +94,8 @@ export const installOrchestrationEngineToolDispatchers = Effect.fn(
           }),
         }
       : {}),
+    setElevatorSummary: (request) =>
+      setElevatorSummaryViaOrchestration({ ...request, orchestrationEngine: input.engine }),
     rename: (request) =>
       renameThreadViaOrchestration({
         orchestrationEngine: input.engine,

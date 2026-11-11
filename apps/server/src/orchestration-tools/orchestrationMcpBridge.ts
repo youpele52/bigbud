@@ -158,6 +158,7 @@ export function buildClaudeOrchestrationBridgeConfig(
       `mcp__${bridge.serverName}__browser`,
       `mcp__${bridge.serverName}__computer_use`,
       `mcp__${bridge.serverName}__rename_thread`,
+      `mcp__${bridge.serverName}__set_elevator_summary`,
       `mcp__${bridge.serverName}__move_thread`,
       `mcp__${bridge.serverName}__snooze_thread`,
       `mcp__${bridge.serverName}__archive_thread`,

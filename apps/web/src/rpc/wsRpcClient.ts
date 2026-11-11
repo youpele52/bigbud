@@ -21,6 +21,7 @@ import { createComputerUseRpcClient } from "./wsRpcClient.computerUse";
 import { createBranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
 import { createDetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import { createDatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
+import { createMetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
 
 let sharedWsRpcClient: WsRpcClient | null = null;
@@ -203,6 +204,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     },
     server: {
       ...createDatabaseCompactionRpcMethods(transport),
+      ...createMetadataWarningRpcMethods(transport),
       ping: () => transport.request((client) => client[WS_METHODS.serverPing]({})),
       getConfig: () => requestServerConfig(transport),
       refreshProviders: () =>

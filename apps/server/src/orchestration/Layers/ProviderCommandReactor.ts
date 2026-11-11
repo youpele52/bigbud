@@ -131,6 +131,7 @@ const make = Effect.gen(function* () {
     );
     // Generated prompt suggestions (Phase 7) run beside, never inside, the intent workers.
     yield* startPromptSuggestions();
+    yield* handlers.startMetadataGeneration();
     yield* Effect.yieldNow;
     yield* recoverTextGenerationRequests(handlers.processTextGenerationActivity);
     yield* recoverTitleStages(handlers.processTextGenerationActivity).pipe(

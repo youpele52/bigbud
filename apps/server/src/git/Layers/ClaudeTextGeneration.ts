@@ -111,6 +111,44 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
     return { branch: sanitizeBranchFragment(generated.branch) };
   });
 
+  const resolveHarness = Effect.fn("ClaudeTextGeneration.resolveHarness")(function* (
+    operation: "generateThreadTitle" | "generateThreadElevatorSummary",
+    input:
+      | Parameters<TextGenerationShape["generateThreadTitle"]>[0]
+      | Parameters<TextGenerationShape["generateThreadElevatorSummary"]>[0],
+  ) {
+    if (input.modelSelection.provider !== "cliProxy") return undefined;
+    return (yield* resolveCliProxyRuntimeConfig({
+      threadId: ThreadId.makeUnsafe(`internal-metadata:${crypto.randomUUID()}`),
+      provider: "cliProxy",
+      modelSelection: input.modelSelection,
+      cwd: input.cwd,
+      runtimeMode: "approval-required",
+    }).pipe(
+      Effect.provideService(ServerSettingsService, {
+        ...serverSettingsService,
+        getSettings: input.metadataAttempt
+          ? serverSettingsService.getSettings.pipe(
+              Effect.map((settings) => ({
+                ...settings,
+                providers: input.metadataAttempt!.providerSettings,
+              })),
+            )
+          : serverSettingsService.getSettings,
+      }),
+      Effect.provideService(CliProxyLifecycle, lifecycle),
+      Effect.mapError(
+        () =>
+          new TextGenerationError({
+            operation,
+            kind: "provider",
+            detail: "CLIProxy Claude harness is unavailable for the selected model.",
+            metadataOutcome: "unavailable",
+          }),
+      ),
+    )).harness;
+  });
+
   const generateThreadTitle: TextGenerationShape["generateThreadTitle"] = Effect.fn(
     "ClaudeTextGeneration.generateThreadTitle",
   )(function* (input) {
@@ -125,28 +163,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
         detail: "Invalid model selection.",
       });
     }
-    const harness =
-      selection.provider === "cliProxy"
-        ? (yield* resolveCliProxyRuntimeConfig({
-            threadId: ThreadId.makeUnsafe(`internal-title:${crypto.randomUUID()}`),
-            provider: "cliProxy",
-            modelSelection: selection,
-            cwd: input.cwd,
-            runtimeMode: "approval-required",
-          }).pipe(
-            Effect.provideService(ServerSettingsService, serverSettingsService),
-            Effect.provideService(CliProxyLifecycle, lifecycle),
-            // Runtime resolution may inspect credentials; do not propagate its raw cause.
-            Effect.mapError(
-              () =>
-                new TextGenerationError({
-                  operation: "generateThreadTitle",
-                  kind: "provider",
-                  detail: "CLIProxy Claude harness is unavailable for the selected model.",
-                }),
-            ),
-          )).harness
-        : undefined;
+    const harness = yield* resolveHarness("generateThreadTitle", input);
     const generated = yield* runClaudeJson({
       operation: "generateThreadTitle",
       cwd: input.cwd,
@@ -155,6 +172,7 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
       modelSelection:
         selection.provider === "cliProxy" ? { ...selection, provider: "claudeAgent" } : selection,
       ...(harness ? { harness } : {}),
+      ...(input.metadataAttempt ? { metadataAttempt: input.metadataAttempt } : {}),
     });
     return { title: sanitizeThreadTitle(generated.title) };
   });
@@ -165,18 +183,23 @@ const makeClaudeTextGeneration = Effect.gen(function* () {
         transcript: input.transcript,
         attachments: input.attachments,
       });
-      if (input.modelSelection.provider !== "claudeAgent") {
+      const selection = input.modelSelection;
+      if (selection.provider !== "claudeAgent" && selection.provider !== "cliProxy") {
         return yield* new TextGenerationError({
           operation: "generateThreadElevatorSummary",
           detail: "Invalid model selection.",
         });
       }
+      const harness = yield* resolveHarness("generateThreadElevatorSummary", input);
       const generated = yield* runClaudeJson({
         operation: "generateThreadElevatorSummary",
         cwd: input.cwd,
         prompt,
         outputSchemaJson: outputSchema,
-        modelSelection: input.modelSelection,
+        modelSelection:
+          selection.provider === "cliProxy" ? { ...selection, provider: "claudeAgent" } : selection,
+        ...(harness ? { harness } : {}),
+        ...(input.metadataAttempt ? { metadataAttempt: input.metadataAttempt } : {}),
       });
       return { summary: sanitizeElevatorSummary(generated.summary) };
     });

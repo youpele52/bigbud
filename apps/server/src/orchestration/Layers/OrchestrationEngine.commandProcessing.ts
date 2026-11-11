@@ -1,12 +1,5 @@
-import {
-  recordAppendedEventMetrics,
-  recordCommandResultMetrics,
-} from "./OrchestrationEngine.commandMetrics.ts";
-import { makeOrganizationUndo } from "../../thread-organization/organizationUndo.ts";
-import { makeOrganizationAcceptance } from "../../thread-organization/organizationAcceptance.ts";
-import { recordOrganizationRuntimeEvent } from "../../thread-organization/organizationFacts.events.ts";
-import { makeThreadOrganizationOperations } from "../../persistence/Layers/ThreadOrganizationOperations.ts";
-import { ServerSettingsService } from "../../ws/serverSettings.ts";
+import { recordCommandResultMetrics } from "./OrchestrationEngine.commandMetrics.ts";
+import { makeCanonicalCommandCommit } from "./OrchestrationEngine.commit.ts";
 import { commandToAggregateRef } from "./OrchestrationEngine.commandAggregate.ts";
 import { makeTerminalIdleGuard } from "./OrchestrationEngine.terminalIdle.ts";
 import { QueueDecisionReason } from "@bigbud/contracts/orchestration/orchestration.queueDecision.ts";
@@ -20,7 +13,6 @@ import {
 } from "../ProjectWorkspace.engineTransition.ts";
 import { reconcileCommittedReadModel } from "./OrchestrationEngine.reconcileReadModel.ts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { persistWorktreeRuntimeCwd } from "../../git/Layers/WorktreeRuntimeCwd.ts";
 import { metricAttributes, orchestrationCommandAckDuration } from "../../observability/Metrics.ts";
 import {
   orchestrationCommandDigestConflictsTotal,
@@ -29,7 +21,6 @@ import {
 import { toPersistenceSqlError } from "../../persistence/Errors.ts";
 import { OrchestrationCommandReceiptRepository } from "../../persistence/Services/OrchestrationCommandReceipts.ts";
 import { OrchestrationEventStore } from "../../persistence/Services/OrchestrationEventStore.ts";
-import { ThreadRetentionRepository } from "../../persistence/Services/ThreadRetentionRepository.ts";
 import { VisibleBrowserControl } from "../../browser/Services/VisibleBrowserControl.ts";
 import { decideOrchestrationCommand } from "../decider.ts";
 import {
@@ -38,15 +29,12 @@ import {
   OrchestrationCommandPreviouslyRejectedError,
   type OrchestrationDispatchError,
 } from "../Errors.ts";
-import { projectEvent } from "../projector.ts";
 import * as ProjectWorkspace from "../ProjectWorkspace.files.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { enqueueLifecycleFlush } from "./OrchestrationEngine.lifecycleFlush.ts";
 import type { BoundedCommandAdmission } from "../../command-admission/CommandAdmission.ts";
-import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { persistRejectedCommandReceipt } from "./OrchestrationEngine.rejectionReceipt.ts";
-import { makeRecoveryIntentRecorder } from "./OrchestrationEngine.recoveryIntents.ts";
 
 export { commandToAggregateRef } from "./OrchestrationEngine.commandAggregate.ts";
 
@@ -59,15 +47,9 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
   const sql = yield* SqlClient.SqlClient;
   const eventStore = yield* OrchestrationEventStore;
   const commandReceiptRepository = yield* OrchestrationCommandReceiptRepository;
-  const projectionPipeline = yield* OrchestrationProjectionPipeline;
-  const retentionRepository = yield* Effect.serviceOption(ThreadRetentionRepository);
   const visibleBrowser = yield* VisibleBrowserControl;
-  const recordRecoveryIntent = yield* makeRecoveryIntentRecorder;
+  const commitCanonicalCommand = yield* makeCanonicalCommandCommit();
   const terminalIdleBlocked = yield* makeTerminalIdleGuard();
-  const undoOrganization = yield* makeOrganizationUndo;
-  const acceptOrganization = yield* makeOrganizationAcceptance;
-  const organizationOperations = yield* makeThreadOrganizationOperations;
-  const organizationSettings = yield* ServerSettingsService;
   const workspaceConfig = yield* ServerConfig;
   const workspaceTerminal = yield* Effect.serviceOption(TerminalManager);
 
@@ -165,77 +147,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               const committedCommand = yield* commitProjectWorkspaceApplication(
                 sql,
                 nativeIdentity,
-                Effect.gen(function* () {
-                  const retentionClaim =
-                    envelope.command.type === "thread.retention-delete" &&
-                    Option.isSome(retentionRepository)
-                      ? yield* retentionRepository.value.recheckAndClaimItem({
-                          runId: envelope.command.runId,
-                          threadId: envelope.command.threadId,
-                          expectedLastActivityAt: envelope.command.expectedLastActivityAt,
-                          cutoffAt: envelope.command.cutoffAt,
-                          claimedAt: envelope.command.createdAt,
-                        })
-                      : envelope.command.type === "thread.retention-delete"
-                        ? yield* Effect.die("ThreadRetentionRepository is unavailable")
-                        : null;
-                  const committedEvents: OrchestrationEvent[] = [];
-                  let nextReadModel = currentReadModel;
-                  const acceptedEvents = envelope.nativeOrganizationOperation
-                    ? yield* acceptOrganization(
-                        envelope.command,
-                        envelope.nativeOrganizationOperation,
-                      )
-                    : envelope.command.type === "thread.organization.move" &&
-                        envelope.command.undoAutomaticMoveId
-                      ? yield* undoOrganization(envelope.command)
-                      : eventBases;
-                  for (const nextEvent of retentionClaim?.claimed === false ? [] : acceptedEvents) {
-                    const savedEvent = yield* eventStore.append(nextEvent);
-                    yield* recordAppendedEventMetrics(savedEvent);
-                    nextReadModel = yield* projectEvent(nextReadModel, savedEvent);
-                    yield* projectionPipeline.projectEvent(savedEvent);
-                    yield* recordOrganizationRuntimeEvent(
-                      sql,
-                      savedEvent,
-                      (yield* organizationSettings.getSettings).inyosiraGraceMinutes * 60000,
-                    );
-                    yield* recordRecoveryIntent(savedEvent, envelope.command);
-                    yield* persistWorktreeRuntimeCwd(sql, savedEvent);
-                    committedEvents.push(savedEvent);
-                  }
-                  const lastSavedEvent = committedEvents.at(-1) ?? null;
-                  if (
-                    envelope.nativeOrganizationOperation &&
-                    lastSavedEvent?.type === "thread.organization-updated"
-                  ) {
-                    yield* organizationOperations.settle(
-                      envelope.nativeOrganizationOperation.operationId,
-                      {
-                        status: "applied",
-                        resultRevision: lastSavedEvent.payload.organization.revision,
-                        resultSequence: lastSavedEvent.sequence,
-                      },
-                    );
-                  }
-                  yield* commandReceiptRepository.upsert({
-                    commandId: envelope.command.commandId,
-                    aggregateKind: lastSavedEvent?.aggregateKind ?? aggregateRef.aggregateKind,
-                    aggregateId: lastSavedEvent?.aggregateId ?? aggregateRef.aggregateId,
-                    acceptedAt: lastSavedEvent?.occurredAt ?? new Date().toISOString(),
-                    resultSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
-                    status: "accepted",
-                    rejectionReason: null,
-                    error: null,
-                    payloadDigestVersion: envelope.payloadDigest.version,
-                    payloadDigest: envelope.payloadDigest.digest,
-                  });
-                  return {
-                    committedEvents,
-                    lastSequence: lastSavedEvent?.sequence ?? currentReadModel.snapshotSequence,
-                    nextReadModel,
-                  } as const;
-                }),
+                commitCanonicalCommand(envelope, currentReadModel, eventBases),
               ).pipe(
                 Effect.catchTag("SqlError", (sqlError) =>
                   Effect.fail(
@@ -340,7 +252,10 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
             );
             if (
               Schema.is(OrchestrationCommandInvariantError)(error) &&
-              !envelope.nativeWorkspaceOperationId
+              !envelope.nativeWorkspaceOperationId &&
+              // Internal ownership envelopes may be refreshed without changing the retained payload.
+              // Keep the durable digest claim, but do not poison persistence with a rejected receipt.
+              !envelope.metadataCommit
             ) {
               const persisted = yield* Effect.exit(
                 persistRejectedCommandReceipt({

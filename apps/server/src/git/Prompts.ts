@@ -6,10 +6,11 @@
  *
  * @module textGenerationPrompts
  */
-import { Schema } from "effect";
-import type { ChatAttachment } from "@bigbud/contracts";
+import * as Schema from "effect/Schema";
+import type { ChatAttachment } from "@bigbud/contracts/orchestration/orchestration.attachments.ts";
 
 import { limitSection } from "./Utils.ts";
+import { prepareMessageSource } from "./Prompts.messageSource.ts";
 
 // ---------------------------------------------------------------------------
 // Commit message
@@ -192,12 +193,7 @@ interface PromptFromMessageInput {
 }
 
 function buildPromptFromMessage(input: PromptFromMessageInput): string {
-  const attachmentLines = (input.attachments ?? [])
-    .filter((attachment) => attachment.type !== "thread")
-    .map(
-      (attachment) =>
-        `- ${attachment.name} (${attachment.mimeType}, ${attachment.sizeBytes} bytes)`,
-    );
+  const source = prepareMessageSource(input);
 
   const promptSections = [
     input.instruction,
@@ -206,14 +202,10 @@ function buildPromptFromMessage(input: PromptFromMessageInput): string {
     ...input.rules.map((rule) => `- ${rule}`),
     "",
     "User message:",
-    limitSection(input.message, 8_000),
+    source.message,
   ];
-  if (attachmentLines.length > 0) {
-    promptSections.push(
-      "",
-      "Attachment metadata:",
-      limitSection(attachmentLines.join("\n"), 4_000),
-    );
+  if (source.attachmentMetadata) {
+    promptSections.push("", "Attachment metadata:", source.attachmentMetadata);
   }
 
   return promptSections.join("\n");

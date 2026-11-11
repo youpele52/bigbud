@@ -43,6 +43,15 @@ export function createCopilotOrchestrationToolSurface(input: {
             asRecord(workspaceDispatch({ callerThreadId: threadId, tool, arguments: args })),
         }
       : {}),
+    setElevatorSummary: (summary, invocationId) =>
+      Effect.runPromise(
+        dispatcher.setElevatorSummary?.({
+          threadId,
+          summary,
+          invocationId,
+          sourceMessageId: MessageId.makeUnsafe(invocationId),
+        }) ?? Effect.fail(new Error("Thread summary tools are not ready.")),
+      ),
     renameThread: (title, targetThreadId, invocationId) =>
       Effect.runPromise(
         dispatcher.rename({

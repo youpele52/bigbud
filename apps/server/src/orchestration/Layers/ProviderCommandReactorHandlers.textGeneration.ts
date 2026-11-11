@@ -5,14 +5,12 @@ import { hasTextGenerationUncertainty } from "@bigbud/shared/internalTextGenerat
 import { fallbackThreadTitleFromPrompt } from "@bigbud/shared/String";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { resolveDefaultChatCwd } from "../../ws/serverSettings.ts";
-import { maybeGenerateThreadTitleForFirstTurn } from "./ProviderCommandReactorSessionOps.title.ts";
 import {
   readTitleStage,
   hasUnresolvedTitleGeneration,
 } from "./ProviderCommandReactorSessionOps.title.state.ts";
 import { maybeGenerateAndRenameWorktreeBranchForFirstTurn } from "./ProviderCommandReactorSessionOps.firstTurn.ts";
 import { resolveWorkspaceExecutionTargetId } from "../../workspace-target/workspaceTarget.ts";
-import { maybeGenerateThreadElevatorSummary } from "./ProviderCommandReactorHandlers.elevatorSummary.ts";
 import type { SessionOpServices } from "./ProviderCommandReactorSessionOps.types.ts";
 import {
   recordThreadTextGenerationStatus,
@@ -161,12 +159,8 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
             expected.worktreePath !== thread.worktreePath ||
             expected.title !== thread.title
           ) {
-            yield* recordThreadTextGenerationStatus(
-              services.orchestrationEngine,
-              threadId,
-              operation,
-              "unchanged",
-            );
+            // This request never entered generation. Only settle its bookkeeping;
+            // a legacy completed/unchanged status is treated as paid-work evidence.
             yield* recordTextGenerationRequestStage(
               services.orchestrationEngine,
               threadId,
@@ -232,27 +226,23 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
             );
           continue;
         }
+        if (!services.metadataGeneration) continue;
         if (request) executingRequests.add(request.requestId);
+        const retryIdentity = request ? { retryKey: request.requestId } : {};
         const job =
           operation === "summary"
-            ? maybeGenerateThreadElevatorSummary(services)({ threadId, force: retry })
-            : maybeGenerateThreadTitleForFirstTurn(services)({
+            ? services.metadataGeneration.summary({ threadId, force: retry, ...retryIdentity })
+            : services.metadataGeneration.title({
                 threadId,
-                cwd,
                 messageText: first!.text,
                 attachments: first!.attachments ?? [],
-                modelSelection: thread.modelSelection,
                 titleSeed: deferredSeed ?? fallbackThreadTitleFromPrompt(first!.text),
-                retry,
+                ...retryIdentity,
               });
         const execution = request
           ? Effect.gen(function* () {
-              yield* recordTextGenerationRequestStage(
-                services.orchestrationEngine,
-                threadId,
-                activity,
-                "started",
-              );
+              // The durable job is the admission record. A legacy "started" marker here
+              // would incorrectly fence this new job as unresolved legacy paid work.
               yield* job;
               yield* recordTextGenerationRequestStage(
                 services.orchestrationEngine,

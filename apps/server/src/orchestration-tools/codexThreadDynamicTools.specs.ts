@@ -38,6 +38,10 @@ import {
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
+import {
+  SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+  SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
+} from "./threadSummaryTool.shared.ts";
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 import {
   MOVE_THREAD_TOOL_DESCRIPTION,
@@ -139,6 +143,12 @@ export function createCodexThreadOrchestrationDynamicTools(
       name: "browser",
       description: BROWSER_TOOL_DESCRIPTION,
       inputSchema: BROWSER_TOOL_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "set_elevator_summary",
+      description: SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+      inputSchema: SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,

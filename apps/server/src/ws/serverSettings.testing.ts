@@ -1,6 +1,7 @@
 import { DEFAULT_SERVER_SETTINGS, type ServerSettings } from "@bigbud/contracts";
 import { deepMerge, type DeepPartial } from "@bigbud/shared/Struct";
 import { Effect, Ref, Stream } from "effect";
+import * as Semaphore from "effect/Semaphore";
 import { ServerSettingsSnapshot } from "./serverSettings.snapshot.ts";
 import type { ServerSettingsShape } from "./serverSettings.ts";
 
@@ -9,6 +10,7 @@ export function makeTestSettings(overrides: DeepPartial<ServerSettings>) {
   return Effect.gen(function* () {
     const initial = deepMerge(DEFAULT_SERVER_SETTINGS, overrides);
     const current = yield* Ref.make(initial);
+    const writes = yield* Semaphore.make(1);
     const snapshot = new ServerSettingsSnapshot();
     snapshot.accept(initial);
     const accept = (next: ServerSettings) =>
@@ -22,15 +24,23 @@ export function makeTestSettings(overrides: DeepPartial<ServerSettings>) {
       getSettings: Ref.get(current),
       currentSnapshot: snapshot.read,
       onSnapshotChange: snapshot.subscribe,
+      withSnapshotBarrier: (prepare) =>
+        writes.withPermits(1)(Effect.suspend(() => prepare(snapshot.read()!))),
       updateSettings: (patch) =>
-        Ref.get(current).pipe(Effect.flatMap((value) => accept(deepMerge(value, patch)))),
+        writes.withPermits(1)(
+          Ref.get(current).pipe(Effect.flatMap((value) => accept(deepMerge(value, patch)))),
+        ),
       setThreadRetentionPolicy: (policy) =>
-        Ref.get(current).pipe(
-          Effect.flatMap((value) => accept({ ...value, threadRetentionPolicy: policy })),
+        writes.withPermits(1)(
+          Ref.get(current).pipe(
+            Effect.flatMap((value) => accept({ ...value, threadRetentionPolicy: policy })),
+          ),
         ),
       initializeThreadRetentionPolicy: (policy, _source) =>
-        Ref.get(current).pipe(
-          Effect.flatMap((value) => accept({ ...value, threadRetentionPolicy: policy })),
+        writes.withPermits(1)(
+          Ref.get(current).pipe(
+            Effect.flatMap((value) => accept({ ...value, threadRetentionPolicy: policy })),
+          ),
         ),
       streamChanges: Stream.empty,
     } satisfies ServerSettingsShape;
