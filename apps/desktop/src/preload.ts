@@ -10,6 +10,7 @@ import {
 import { isDesktopMenuAction } from "./window/menuAction.validation";
 import { desktopIpcChannels } from "./main.channels";
 import { createWindowZoomObserver } from "./window/windowZoom.preload";
+import { windowMaterialBridge } from "./window/windowMaterial.preload";
 
 const PICK_FOLDER_CHANNEL = "desktop:pick-folder";
 const CONFIRM_CHANNEL = "desktop:confirm";
@@ -61,6 +62,7 @@ const allowDevelopmentDiagnostics = process.defaultApp === true;
 const windowZoom = createWindowZoomObserver(desktopIpcChannels.windowZoomChanged);
 
 contextBridge.exposeInMainWorld("desktopBridge", {
+  ...windowMaterialBridge,
   resourceAwarenessGet: () => ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessGet),
   resourceAwarenessAcknowledge: (ids) =>
     ipcRenderer.invoke(desktopIpcChannels.resourceAwarenessAcknowledge, ids),
@@ -198,8 +200,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   resolveCertificateChallenge: (resolution) =>
     ipcRenderer.invoke(RESOLVE_CERTIFICATE_CHALLENGE_CHANNEL, resolution),
   setTheme: (theme) => ipcRenderer.invoke(SET_THEME_CHANNEL, theme),
-  setWindowMaterial: (windowMaterial) =>
-    ipcRenderer.invoke(SET_WINDOW_MATERIAL_CHANNEL, windowMaterial),
+  setWindowMaterial: (windowMaterial, requestId) =>
+    ipcRenderer.invoke(SET_WINDOW_MATERIAL_CHANNEL, windowMaterial, requestId),
   showContextMenu: (items, position) => ipcRenderer.invoke(CONTEXT_MENU_CHANNEL, items, position),
   openExternal: (url: string) => ipcRenderer.invoke(OPEN_EXTERNAL_CHANNEL, url),
   onMenuAction: (listener) => {

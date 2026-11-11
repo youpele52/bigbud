@@ -16,6 +16,8 @@ export const desktopIpcChannels = {
   confirm: "desktop:confirm",
   setTheme: "desktop:set-theme",
   setWindowMaterial: "desktop:set-window-material",
+  getWindowMaterialState: "desktop:get-window-material-state",
+  windowMaterialState: "desktop:window-material-state",
   contextMenu: "desktop:context-menu",
   openExternal: "desktop:open-external",
   menuAction: "desktop:menu-action",

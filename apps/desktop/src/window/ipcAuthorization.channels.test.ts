@@ -105,9 +105,8 @@ describe("every-handler IPC authorization", () => {
   });
 
   it("registers the audited production channel set", () => {
-    // 39 audited registration sites; the floating-assistant helper registers
-    // 14 channels, so 49 invoke + 4 send/sync channels in total.
-    expect(registered.handle.size).toBe(49);
+    // Includes the window-material snapshot and floating-assistant helper channels.
+    expect(registered.handle.size).toBe(50);
     expect(registered.on.size).toBe(4);
     for (const credentialOrEffect of [
       "channel:GET_WS_URL_CHANNEL",

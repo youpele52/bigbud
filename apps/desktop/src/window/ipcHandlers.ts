@@ -22,7 +22,9 @@ import {
   registerComputerUseIpcHandlers,
   type ComputerUseIpcHandlerDeps,
 } from "./ipcHandlers.computerUse";
-import { applyWindowMaterial, getSafeWindowMaterial } from "./windowManager";
+import { applyWindowMaterial, getWindowMaterialState } from "./windowManager.material";
+import { getSafeWindowMaterial, isWindowMaterialRequestId } from "./windowMaterial.logic";
+import { desktopIpcChannels } from "../main.channels";
 import { registerCertificateChallengeHandlers } from "./ipcHandlers.certificateChallenge";
 import { registerContextMenuIpcHandler } from "./ipcHandlers.contextMenu";
 
@@ -200,20 +202,26 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   authorizedHandle(
     SET_WINDOW_MATERIAL_CHANNEL,
     BROAD_RENDERER_ROLES,
-    async (event, rawWindowMaterial: unknown) => {
+    async (event, rawWindowMaterial: unknown, requestId: unknown) => {
       const windowMaterial = getSafeWindowMaterial(rawWindowMaterial);
       if (!windowMaterial) {
         return;
       }
+      if (requestId !== undefined && !isWindowMaterialRequestId(requestId)) return;
 
       const window = BrowserWindow.fromWebContents(event.sender) ?? deps.getMainWindow();
       if (!window) {
         return;
       }
 
-      applyWindowMaterial(window, windowMaterial);
+      applyWindowMaterial(window, windowMaterial, requestId);
     },
   );
+
+  authorizedHandle(desktopIpcChannels.getWindowMaterialState, BROAD_RENDERER_ROLES, (event) => {
+    const window = BrowserWindow.fromWebContents(event.sender);
+    return window ? getWindowMaterialState(window) : null;
+  });
 
   registerContextMenuIpcHandler(CONTEXT_MENU_CHANNEL, deps.getMainWindow);
 

@@ -1,8 +1,7 @@
 import * as Path from "node:path";
 
-import { BrowserWindow, Menu, nativeTheme, shell } from "electron";
+import { BrowserWindow, Menu, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
-import type { DesktopWindowMaterial } from "@bigbud/contracts/settings";
 import { hardenBrowserGuestPreferences } from "./browserGuestPreferences";
 import { isAllowedBrowserNavigation } from "./browserNavigationPolicy";
 import { bindBrowserPopups } from "./browserPopups";
@@ -15,38 +14,7 @@ import { certificateChallengeManager } from "./certificateChallengeManager";
 import { isBrowserGuestFocusLocationShortcut } from "./browserGuestShortcuts";
 import { bindTrafficLightsToZoom, trafficLightPositionForZoom } from "./trafficLights";
 import { desktopIpcChannels } from "../main.channels";
-
-const MACOS_TRANSLUCENT_BACKGROUND_COLOR = "#00000000";
-const DEFAULT_WINDOW_MATERIAL: DesktopWindowMaterial = "automatic";
-const windowMaterials = new WeakMap<BrowserWindow, DesktopWindowMaterial>();
-
-function getOpaqueBackgroundColor(): string {
-  return nativeTheme.shouldUseDarkColors ? "#0a0a0a" : "#ffffff";
-}
-
-function resolveWindowMaterial(windowMaterial: DesktopWindowMaterial): "solid" | "translucent" {
-  if (process.platform !== "darwin") {
-    return "solid";
-  }
-
-  return windowMaterial === "solid" ? "solid" : "translucent";
-}
-
-export function getSafeWindowMaterial(rawWindowMaterial: unknown): DesktopWindowMaterial | null {
-  if (
-    rawWindowMaterial === "automatic" ||
-    rawWindowMaterial === "solid" ||
-    rawWindowMaterial === "translucent"
-  ) {
-    return rawWindowMaterial;
-  }
-
-  return null;
-}
-
-function getWindowMaterial(window: BrowserWindow): DesktopWindowMaterial {
-  return windowMaterials.get(window) ?? DEFAULT_WINDOW_MATERIAL;
-}
+import { bindWindowMaterial, getOpaqueBackgroundColor } from "./windowManager.material";
 
 function getDevelopmentWindowUrl(devServerUrl: string): string {
   if (process.env.BIGBUD_DESKTOP_UPDATE_PREVIEW !== "downloading") {
@@ -56,26 +24,6 @@ function getDevelopmentWindowUrl(devServerUrl: string): string {
   const url = new URL(devServerUrl);
   url.searchParams.set("previewUpdate", "downloading");
   return url.toString();
-}
-
-export function applyWindowMaterial(
-  window: BrowserWindow,
-  windowMaterial: DesktopWindowMaterial,
-): void {
-  windowMaterials.set(window, windowMaterial);
-
-  if (resolveWindowMaterial(windowMaterial) === "translucent") {
-    if (process.platform === "darwin") {
-      window.setVibrancy("sidebar");
-    }
-    window.setBackgroundColor(MACOS_TRANSLUCENT_BACKGROUND_COLOR);
-    return;
-  }
-
-  if (process.platform === "darwin") {
-    window.setVibrancy(null);
-  }
-  window.setBackgroundColor(getOpaqueBackgroundColor());
 }
 
 // ---------------------------------------------------------------------------
@@ -125,10 +73,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
     title: deps.appDisplayName,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: trafficLightPositionForZoom(1),
-    backgroundColor:
-      resolveWindowMaterial(DEFAULT_WINDOW_MATERIAL) === "translucent"
-        ? MACOS_TRANSLUCENT_BACKGROUND_COLOR
-        : getOpaqueBackgroundColor(),
+    backgroundColor: getOpaqueBackgroundColor(),
     ...(process.platform === "darwin"
       ? {
           transparent: true,
@@ -148,14 +93,7 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
   const hostWebContents = window.webContents;
   bindTrafficLightsToZoom(window, desktopIpcChannels.windowZoomChanged);
 
-  const syncBackgroundColorWithTheme = (): void => {
-    applyWindowMaterial(window, getWindowMaterial(window));
-  };
-  applyWindowMaterial(window, DEFAULT_WINDOW_MATERIAL);
-  nativeTheme.on("updated", syncBackgroundColorWithTheme);
-  window.on("closed", () => {
-    nativeTheme.off("updated", syncBackgroundColorWithTheme);
-  });
+  bindWindowMaterial(window);
 
   // Grant microphone permission requests from the renderer so that
   // navigator.mediaDevices.getUserMedia works inside Electron's sandboxed

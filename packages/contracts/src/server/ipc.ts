@@ -14,6 +14,7 @@ import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
 import type { DesktopSystemMonitorBridge } from "../system-monitor/types";
 import type { DesktopScreenshotBridge } from "./ipc.desktopScreenshot";
 import type { TerminalRenderingPolicy } from "./ipc.terminal";
+import type { DesktopWindowMaterialState } from "./ipc.windowMaterial";
 
 export type {
   DesktopRuntimeArch,
@@ -120,7 +121,9 @@ export interface DesktopBridge
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
-  setWindowMaterial: (windowMaterial: DesktopWindowMaterial) => Promise<void>;
+  setWindowMaterial: (windowMaterial: DesktopWindowMaterial, requestId?: string) => Promise<void>;
+  getWindowMaterialState?: () => Promise<DesktopWindowMaterialState | null>;
+  onWindowMaterialState?: (listener: (state: DesktopWindowMaterialState) => void) => () => void;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },
