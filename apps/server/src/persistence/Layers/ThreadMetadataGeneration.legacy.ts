@@ -65,6 +65,14 @@ function readEvidence(threadId: ThreadId, row: LegacyRow): LegacyMetadataEvidenc
     : Option.none();
   const retained = Option.getOrNull(activity);
   const canonical = Schema.decodeUnknownOption(CanonicalActivityPayload)(row.eventPayloadJson);
+  // User-turn bindings gain their canonical event sequence in the projector.
+  // Verify that enrichment before reconstructing the original command payload.
+  const commandActivity =
+    retained?.kind === "text-generation.user-turn-bound" &&
+    Option.isSome(canonical) &&
+    row.activitySequence === row.sequence
+      ? { ...retained, sequence: canonical.value.activity.sequence }
+      : retained;
   const accepted =
     retained !== null &&
     Option.isSome(canonical) &&
@@ -83,7 +91,7 @@ function readEvidence(threadId: ThreadId, row: LegacyRow): LegacyMetadataEvidenc
         commandId: CommandId.makeUnsafe(row.commandId),
         threadId,
         createdAt: row.commandCreatedAt,
-        activity: retained,
+        activity: commandActivity!,
       },
       { version: row.digestVersion, digest: row.digest },
     ) &&

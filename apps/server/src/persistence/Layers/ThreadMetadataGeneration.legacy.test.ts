@@ -8,6 +8,28 @@ import { makeLegacyMetadataEvidenceReader } from "./ThreadMetadataGeneration.leg
 import { at, seedActivity, seedThread } from "./ThreadMetadataGeneration.legacy.test-helpers.ts";
 
 it.layer(SqlitePersistenceMemory)("authoritative legacy metadata evidence", (it) => {
+  it.effect("accepts the projector sequence on user bindings but rejects altered evidence", () =>
+    Effect.gen(function* () {
+      const threadId = yield* seedThread("binding-sequence");
+      const command = yield* seedActivity(threadId, "binding", "text-generation.user-turn-bound", {
+        messageId: "first-user-message",
+      });
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`UPDATE projection_thread_activities SET sequence = (
+        SELECT result_sequence FROM orchestration_command_receipts
+        WHERE command_id = ${command.commandId}
+      ) WHERE activity_id = 'binding'`;
+      const read = yield* makeLegacyMetadataEvidenceReader();
+      assert.equal((yield* read({ threadId })).evidence[0]?.witness, "accepted");
+      yield* sql`UPDATE projection_thread_activities SET sequence = sequence + 1
+        WHERE activity_id = 'binding'`;
+      assert.equal((yield* read({ threadId })).evidence[0]?.witness, "unknown");
+      yield* sql`UPDATE projection_thread_activities SET sequence = sequence - 1,
+        summary = 'altered' WHERE activity_id = 'binding'`;
+      assert.equal((yield* read({ threadId })).evidence[0]?.witness, "unknown");
+    }),
+  );
+
   it.effect("finds accepted claims and settlements beyond 500 unrelated activities", () =>
     Effect.gen(function* () {
       const threadId = yield* seedThread("legacy-tail");
