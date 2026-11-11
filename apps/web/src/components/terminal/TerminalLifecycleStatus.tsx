@@ -43,7 +43,7 @@ export function TerminalLifecycleStatus({
     <div
       className={cn(
         "absolute z-10 flex items-center gap-2 rounded border bg-background/95 px-2 py-1 text-sm shadow-sm",
-        operation.phase === "closing"
+        !failed
           ? "left-1/2 top-1/2 w-max max-w-[calc(100%-0.5rem)] -translate-x-1/2 -translate-y-1/2"
           : "inset-x-1 top-1",
       )}

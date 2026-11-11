@@ -1,3 +1,4 @@
+import { normalizeTerminalSplitLayout } from "../../lib/terminalSplitLayout";
 /**
  * Pure state helpers for the terminal Zustand store.
  *
@@ -124,6 +125,9 @@ export function normalizeTerminalGroups(
     nextGroups.push({
       id: assignUniqueGroupId(baseGroupId, usedGroupIds),
       terminalIds: groupTerminalIds,
+      ...(group.layout
+        ? { layout: normalizeTerminalSplitLayout(group.layout, groupTerminalIds) }
+        : {}),
     });
   }
 
@@ -149,7 +153,7 @@ export function normalizeTerminalGroups(
 
 export function copyTerminalGroups(groups: ThreadTerminalGroup[]): ThreadTerminalGroup[] {
   return groups.map((group) => ({
-    id: group.id,
+    ...group,
     terminalIds: [...group.terminalIds],
   }));
 }
@@ -173,6 +177,7 @@ function terminalGroupsEqual(left: ThreadTerminalGroup[], right: ThreadTerminalG
     const rightGroup = right[index];
     if (!leftGroup || !rightGroup) return false;
     if (leftGroup.id !== rightGroup.id) return false;
+    if (JSON.stringify(leftGroup.layout) !== JSON.stringify(rightGroup.layout)) return false;
     if (!arraysEqual(leftGroup.terminalIds, rightGroup.terminalIds)) return false;
   }
   return true;

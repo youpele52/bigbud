@@ -5,6 +5,7 @@ import { removeTerminalTransientState } from "./terminal.store.cleanup";
 import { closeTerminalAgentIdentity } from "./terminal.store.identity";
 import type { TerminalStateStoreState } from "./terminal.store.types";
 import { resetClosedTerminalLayout } from "./terminal.store.layout";
+import { removeTerminalProfileLaunches } from "./terminal.store.profileLaunch";
 
 export function closeTerminalPaneInState(
   state: TerminalStateStoreState,
@@ -21,6 +22,10 @@ export function closeTerminalPaneInState(
   );
   return {
     ...state,
+    ...removeTerminalProfileLaunches(
+      state,
+      (thread, terminal) => thread === threadId && terminal === terminalId,
+    ),
     ...(!panel &&
       resetClosedTerminalLayout(
         state,

@@ -8,6 +8,7 @@ import { DEFAULT_TERMINAL_ID } from "../constants/terminal.constant";
 import { ProviderKind } from "../orchestration/orchestration.provider";
 import { TerminalWslIdentity } from "./terminal.wsl";
 import { TerminalAgentIdentity } from "./terminal.agentIdentity";
+import { ShellLaunchIdentity, ShellSelection, ShellUnconfirmedLaunch } from "./terminalShell";
 
 export { DEFAULT_TERMINAL_ID, LOCAL_EXECUTION_TARGET_ID };
 
@@ -45,6 +46,7 @@ export type TerminalSessionInput = Schema.Codec.Encoded<typeof TerminalSessionIn
 export const TerminalOpenInput = Schema.Struct({
   ...TerminalSessionInput.fields,
   executionTargetId: Schema.optional(ExecutionTargetId),
+  shellSelection: Schema.optional(ShellSelection),
   cwd: TrimmedNonEmptyStringSchema,
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
   cols: Schema.optional(TerminalColsSchema),
@@ -83,6 +85,7 @@ export const TerminalRestartInput = Schema.Struct({
   expectedGeneration: Schema.optional(TrimmedNonEmptyStringSchema),
   operationId: Schema.optional(TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(128))),
   executionTargetId: Schema.optional(ExecutionTargetId),
+  shellSelection: Schema.optional(ShellSelection),
   cwd: TrimmedNonEmptyStringSchema,
   worktreePath: Schema.optional(Schema.NullOr(TrimmedNonEmptyStringSchema)),
   cols: TerminalColsSchema,
@@ -114,6 +117,10 @@ export const TerminalLiveModes = Schema.Struct({
 export type TerminalLiveModes = typeof TerminalLiveModes.Type;
 
 export const TerminalSessionSnapshot = Schema.Struct({
+  // Missing in older snapshots: never infer historical identity from current preferences.
+  shellLaunchIdentity: Schema.optional(ShellLaunchIdentity),
+  // Requested profile is not actual identity, even when the transport reports a live PID.
+  shellUnconfirmedLaunch: Schema.optional(ShellUnconfirmedLaunch),
   wslIdentity: Schema.optional(TerminalWslIdentity),
   threadId: Schema.String.check(Schema.isNonEmpty()),
   terminalId: Schema.String.check(Schema.isNonEmpty()),
@@ -306,7 +313,8 @@ export class TerminalExecutionTargetError extends Schema.TaggedErrorClass<Termin
     terminalId: Schema.String,
     executionTargetId: ExecutionTargetId,
     detail: Schema.String,
-    reason: Schema.optional(Schema.Literal("staleGeneration")),
+    // restartNotStarted is emitted only before any stop/spawn mutation of the pane.
+    reason: Schema.optional(Schema.Literals(["staleGeneration", "restartNotStarted"])),
     cause: Schema.optional(Schema.Defect),
   },
 ) {

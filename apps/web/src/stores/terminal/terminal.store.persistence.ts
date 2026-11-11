@@ -1,4 +1,30 @@
 import { createJSONStorage } from "zustand/middleware";
+import * as Schema from "effect/Schema";
+import { ShellHostScope, ShellSelection } from "@bigbud/contracts/workspace/terminalShell.ts";
+
+const ProfileLaunches = Schema.Record(
+  Schema.String,
+  Schema.Struct({
+    shellSelection: Schema.optional(ShellSelection),
+    host: Schema.optional(ShellHostScope),
+    requiresChoice: Schema.optional(Schema.Boolean),
+    context: Schema.optional(
+      Schema.Struct({
+        cwd: Schema.String,
+        worktreePath: Schema.optional(Schema.NullOr(Schema.String)),
+        executionTargetId: Schema.optional(Schema.String),
+        runtimeEnv: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+      }),
+    ),
+  }),
+);
+function hydrateProfileLaunches(value: unknown) {
+  try {
+    return Schema.decodeUnknownSync(ProfileLaunches)(value);
+  } catch {
+    return {};
+  }
+}
 
 import { resolveStorage } from "../../lib/storage";
 import { skipUnchangedPersistWrites } from "../../lib/storage.persistGate";
@@ -27,6 +53,7 @@ function hydrateTerminalLayouts(value: unknown): Record<string, TerminalLayoutMo
 
 type PersistedTerminalState = Pick<
   TerminalStateStoreState,
+  | "terminalProfileLaunches"
   | "terminalLayoutByThreadId"
   | "terminalWslDistributionByThreadId"
   | "terminalStateByThreadId"
@@ -42,6 +69,7 @@ export const terminalPersistenceOptions = {
     createJSONStorage<PersistedTerminalState>(createTerminalStateStorage),
   ),
   partialize: (state: TerminalStateStoreState) => ({
+    terminalProfileLaunches: state.terminalProfileLaunches,
     terminalLayoutByThreadId: state.terminalLayoutByThreadId,
     terminalWslDistributionByThreadId: state.terminalWslDistributionByThreadId,
     terminalStateByThreadId: state.terminalStateByThreadId,
@@ -52,6 +80,9 @@ export const terminalPersistenceOptions = {
     return {
       ...current,
       ...saved,
+      terminalProfileLaunches: hydrateProfileLaunches(
+        "terminalProfileLaunches" in saved ? saved.terminalProfileLaunches : undefined,
+      ),
       terminalLayoutByThreadId: hydrateTerminalLayouts(
         "terminalLayoutByThreadId" in saved ? saved.terminalLayoutByThreadId : undefined,
       ),

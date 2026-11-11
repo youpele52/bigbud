@@ -1,6 +1,8 @@
 import { ThreadId, type TerminalEvent } from "@bigbud/contracts";
 import { terminalRunningSubprocessFromEvent } from "../../utils/terminal";
 import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { reconcileTerminalProfileLaunches } from "./terminal.store.snapshot";
+import type { TerminalStateStoreState } from "./terminal.store.types";
 import {
   appendTerminalEventEntry,
   createSingleThreadTerminalState,
@@ -79,6 +81,7 @@ export function ensurePanelTerminalInState(
 }
 
 interface TerminalEventStateSlice extends PanelTerminalStateSlice, TerminalAgentIdentityState {
+  terminalProfileLaunches: TerminalStateStoreState["terminalProfileLaunches"];
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
@@ -152,6 +155,10 @@ export function applyTerminalEventToState(
   );
 
   return {
+    terminalProfileLaunches:
+      event.type === "started" || event.type === "restarted"
+        ? reconcileTerminalProfileLaunches(state, event.snapshot).terminalProfileLaunches
+        : state.terminalProfileLaunches,
     terminalStateByThreadId: nextTerminalStateByThreadId,
     panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
     terminalLaunchContextByThreadId: state.terminalLaunchContextByThreadId,

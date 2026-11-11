@@ -1,7 +1,10 @@
 import { CaseSensitive, ChevronDown, ChevronUp, Regex, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
+import {
+  TerminalInlineBar,
+  TerminalInlineBarButton,
+  TerminalInlineBarInput,
+} from "./TerminalInlineBar";
 import {
   EMPTY_FIND_RESULTS,
   formatTerminalFindResults,
@@ -18,9 +21,7 @@ function ToggleButton(props: {
   children: React.ReactNode;
 }) {
   return (
-    <Button
-      size="icon-xs"
-      variant="toolbar"
+    <TerminalInlineBarButton
       aria-label={props.label}
       title={props.label}
       aria-pressed={props.pressed}
@@ -28,7 +29,7 @@ function ToggleButton(props: {
       onClick={props.onToggle}
     >
       {props.children}
-    </Button>
+    </TerminalInlineBarButton>
   );
 }
 
@@ -90,14 +91,12 @@ export function TerminalFindBar({ find }: { find: TerminalFindState }) {
   };
 
   return (
-    <div
-      className="absolute top-2 left-1/2 z-20 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-1 rounded-xl border border-border bg-popover p-1 shadow-md"
+    <TerminalInlineBar
+      className="absolute top-2 left-1/2 z-20 max-w-[calc(100%-1.5rem)] -translate-x-1/2"
       role="search"
     >
-      <Input
+      <TerminalInlineBarInput
         ref={inputRef}
-        size="sm"
-        className="w-52 min-w-0"
         aria-label="Find in terminal"
         placeholder="Find"
         value={query}
@@ -133,33 +132,23 @@ export function TerminalFindBar({ find }: { find: TerminalFindState }) {
       >
         <Regex />
       </ToggleButton>
-      <Button
-        size="icon-xs"
-        variant="toolbar"
+      <TerminalInlineBarButton
         aria-label="Previous match"
         title="Previous match (Shift+Enter)"
         onClick={() => step("previous")}
       >
         <ChevronUp />
-      </Button>
-      <Button
-        size="icon-xs"
-        variant="toolbar"
+      </TerminalInlineBarButton>
+      <TerminalInlineBarButton
         aria-label="Next match"
         title="Next match (Enter)"
         onClick={() => step("next")}
       >
         <ChevronDown />
-      </Button>
-      <Button
-        size="icon-xs"
-        variant="toolbar"
-        aria-label="Close find"
-        title="Close (Esc)"
-        onClick={find.close}
-      >
+      </TerminalInlineBarButton>
+      <TerminalInlineBarButton aria-label="Close find" title="Close (Esc)" onClick={find.close}>
         <X />
-      </Button>
-    </div>
+      </TerminalInlineBarButton>
+    </TerminalInlineBar>
   );
 }

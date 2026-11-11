@@ -25,6 +25,7 @@ interface ThreadTerminalDrawerSidebarProps {
   renameTerminalActionLabel: string;
   splitTerminalActionLabel: string;
   newTerminalActionLabel: string;
+  findShortcutLabel?: string | undefined;
   closeTerminalActionLabel: string;
   closeShortcutLabel?: string | undefined;
   onTerminalRenameDraftChange: (value: string) => void;
@@ -33,7 +34,9 @@ interface ThreadTerminalDrawerSidebarProps {
   onCancelTerminalRename: () => void;
   onResetTerminalRename: (terminalId: string) => void;
   onSplitTerminalAction: () => void;
-  onNewTerminalAction: () => void;
+  onNewTerminalAction: (
+    profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch,
+  ) => void;
   onActiveTerminalChange: (terminalId: string) => void;
   onCloseTerminal: (terminalId: string) => void;
   expanded?: boolean;
@@ -56,6 +59,7 @@ export function ThreadTerminalDrawerSidebar({
   renameTerminalActionLabel,
   splitTerminalActionLabel,
   newTerminalActionLabel,
+  findShortcutLabel,
   closeTerminalActionLabel,
   closeShortcutLabel,
   onTerminalRenameDraftChange,
@@ -83,6 +87,7 @@ export function ThreadTerminalDrawerSidebar({
           renameTerminalActionLabel={renameTerminalActionLabel}
           splitTerminalActionLabel={splitTerminalActionLabel}
           newTerminalActionLabel={newTerminalActionLabel}
+          findShortcutLabel={findShortcutLabel}
           closeTerminalActionLabel={closeTerminalActionLabel}
           resolvedActiveTerminalId={resolvedActiveTerminalId}
           onRenameTerminalAction={() => onStartTerminalRename(resolvedActiveTerminalId)}

@@ -1,10 +1,17 @@
 import type { TerminalSessionSnapshot } from "@bigbud/contracts/workspace/terminal.ts";
 import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
+import type {
+  ShellLaunchIdentity,
+  ShellUnconfirmedLaunch,
+} from "@bigbud/contracts/workspace/terminalShell.ts";
 
 export interface TerminalLaunchBinding {
   updatedAt?: string | undefined;
   runtimeGeneration?: string | undefined;
   wslIdentity?: TerminalWslIdentity | undefined;
+  /** Snapshot evidence only. Never populate from a menu choice or current default. */
+  shellLaunchIdentity?: ShellLaunchIdentity | undefined;
+  shellUnconfirmedLaunch?: ShellUnconfirmedLaunch | undefined;
   cwd: string;
   worktreePath?: string | null | undefined;
   executionTargetId?: string | undefined;
@@ -62,6 +69,9 @@ export function recordTerminalLaunch(snapshot: TerminalSessionSnapshot): boolean
     updatedAt: snapshot.updatedAt,
     runtimeGeneration: snapshot.runtimeGeneration,
     wslIdentity: snapshot.wslIdentity,
+    // Explicitly clear absent evidence on a new snapshot; old generations cannot donate identity.
+    shellLaunchIdentity: snapshot.shellLaunchIdentity,
+    shellUnconfirmedLaunch: snapshot.shellUnconfirmedLaunch,
     cwd: snapshot.cwd,
     worktreePath: snapshot.worktreePath,
     executionTargetId: snapshot.executionTargetId,

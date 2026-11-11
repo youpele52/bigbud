@@ -11,6 +11,10 @@ import type { TerminalAgentVersion } from "./terminal.store.identity";
 import type { TerminalLayoutMode, TerminalLayoutState } from "./terminal.store.layout";
 
 export interface TerminalStateStoreState extends TerminalLayoutState {
+  terminalProfileLaunches: Record<
+    string,
+    import("../../lib/terminalProfileLaunch").TerminalProfileLaunch
+  >;
   setTerminalLayout: (threadId: string, mode: TerminalLayoutMode) => void;
   terminalWslDistributionByThreadId: Record<string, string>;
   setTerminalWslDistribution: (threadId: ThreadId, distribution: string | null) => void;
@@ -25,8 +29,17 @@ export interface TerminalStateStoreState extends TerminalLayoutState {
   nextTerminalEventId: number;
   setTerminalOpen: (threadId: ThreadId, open: boolean) => void;
   setTerminalHeight: (threadId: ThreadId, height: number) => void;
-  splitTerminal: (threadId: ThreadId, terminalId: string) => void;
-  newTerminal: (threadId: ThreadId, terminalId: string) => void;
+  splitTerminal: (
+    threadId: ThreadId,
+    terminalId: string,
+    profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch,
+    direction?: import("../../lib/terminalSplitLayout").TerminalSplitDirection,
+  ) => void;
+  newTerminal: (
+    threadId: ThreadId,
+    terminalId: string,
+    profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch,
+  ) => void;
   ensureTerminal: (
     threadId: ThreadId,
     terminalId: string,
@@ -38,8 +51,17 @@ export interface TerminalStateStoreState extends TerminalLayoutState {
   clearTerminalLabelOverride: (threadId: ThreadId, terminalId: string) => void;
   setPanelTerminalOpen: (threadId: ThreadId, open: boolean) => void;
   setPanelTerminalHeight: (threadId: ThreadId, height: number) => void;
-  splitPanelTerminal: (threadId: ThreadId, terminalId: string) => void;
-  newPanelTerminal: (threadId: ThreadId, terminalId: string) => void;
+  splitPanelTerminal: (
+    threadId: ThreadId,
+    terminalId: string,
+    profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch,
+    direction?: import("../../lib/terminalSplitLayout").TerminalSplitDirection,
+  ) => void;
+  newPanelTerminal: (
+    threadId: ThreadId,
+    terminalId: string,
+    profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch,
+  ) => void;
   ensurePanelTerminal: (
     threadId: ThreadId,
     terminalId: string,

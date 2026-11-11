@@ -1,3 +1,4 @@
+import type { TerminalSplitLayout } from "../../lib/terminalSplitLayout";
 import type {
   ExecutionTargetId,
   HistoricalModelSelection,
@@ -52,6 +53,7 @@ export const MAX_TERMINALS_PER_GROUP = _MAX_TERMINALS_PER_GROUP;
 export type ProjectScript = ContractProjectScript;
 
 export interface ThreadTerminalGroup {
+  layout?: TerminalSplitLayout | undefined;
   id: string;
   terminalIds: string[];
 }

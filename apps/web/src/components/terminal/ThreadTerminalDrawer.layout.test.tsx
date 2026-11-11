@@ -1,4 +1,4 @@
-import { CollapseIcon, ExpandIcon, QuillWrite01Icon } from "@hugeicons/core-free-icons";
+import { CollapseIcon, ExpandIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./ThreadTerminalDrawerViewport", () => ({ ThreadTerminalDrawerViewport: () => null }));
 
+import { DEFAULT_BINDINGS } from "../../models/keybindings/keybindings.models.test.helpers";
 import ThreadTerminalDrawer from "./ThreadTerminalDrawer";
 
 const baseProps: ComponentProps<typeof ThreadTerminalDrawer> = {
@@ -35,16 +36,13 @@ const baseProps: ComponentProps<typeof ThreadTerminalDrawer> = {
 
 function expectToolbar(markup: string, labels: string[]) {
   // Sidebar row-close buttons can share the toolbar's accessible names.
-  const buttons = (markup.match(/<button[^>]+aria-label="[^"]+"[^>]*>/g) ?? []).filter((button) =>
-    button.includes("transition-colors"),
+  const buttons = (markup.match(/<button[^>]+aria-label="[^"]+"[^>]*>/g) ?? []).filter(
+    (button) =>
+      button.includes("transition-colors") && !button.includes('aria-label="Terminal actions"'),
   );
   expect(buttons.map((button) => button.match(/aria-label="([^"]+)"/)?.[1])).toEqual(labels);
   expect(markup).toContain("lucide-x");
-  expect(markup).toContain(
-    renderToStaticMarkup(
-      <HugeiconsIcon aria-hidden="true" icon={QuillWrite01Icon} className="size-3.25" />,
-    ),
-  );
+  expect(markup).toContain("lucide-settings-2");
   expect(markup).not.toContain("lucide-pencil");
   expect(markup).not.toContain("lucide-trash");
   for (const button of buttons) {
@@ -54,7 +52,7 @@ function expectToolbar(markup: string, labels: string[]) {
   }
   const dividers = markup.match(/<div class="[^"]*w-px bg-border\/[^"]+"><\/div>/g) ?? [];
   const closeIndex = labels.indexOf("Close Terminal");
-  const dividerAfterButtonIndices = closeIndex < labels.length - 1 ? [0, 2, closeIndex] : [0, 2];
+  const dividerAfterButtonIndices = closeIndex < labels.length - 1 ? [0, 1, closeIndex] : [0, 1];
   expect(dividers).toHaveLength(dividerAfterButtonIndices.length);
   for (const [index, buttonIndex] of dividerAfterButtonIndices.entries()) {
     // Identical divider markup needs a forward search to preserve its position.
@@ -94,7 +92,6 @@ describe.each([
       expectToolbar(markup, [
         "New Terminal",
         "Split Terminal",
-        "Rename Terminal",
         "Close Terminal",
         "Minimize terminal",
         label,
@@ -109,6 +106,14 @@ describe.each([
     expect(markup).not.toContain('aria-label="Expand terminal"');
     expect(markup).not.toContain('aria-label="Restore split view"');
     expect(markup).not.toContain('aria-label="Minimize terminal"');
-    expectToolbar(markup, ["New Terminal", "Split Terminal", "Rename Terminal", "Close Terminal"]);
+    expectToolbar(markup, ["New Terminal", "Split Terminal", "Close Terminal"]);
   });
+});
+
+it("shows both configured split shortcuts separated by a slash and restores the close shortcut", () => {
+  const markup = renderToStaticMarkup(
+    <ThreadTerminalDrawer {...baseProps} keybindings={DEFAULT_BINDINGS} />,
+  );
+  expect(markup).toMatch(/aria-label="Split Terminal \([^"]*D \/ [^"]*D\)"/);
+  expect(markup).toMatch(/aria-label="Close Terminal \([^"]*W\)"/);
 });

@@ -1,4 +1,4 @@
-import { CollapseIcon, ExpandIcon, QuillWrite01Icon } from "@hugeicons/core-free-icons";
+import { CollapseIcon, ExpandIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Minus, Plus, SquareSplitHorizontal, XIcon } from "lucide-react";
 
@@ -7,6 +7,8 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { TerminalActionButton } from "./TerminalActionButton";
 import type { ThreadId } from "@bigbud/contracts";
 import { TerminalTargetPicker } from "./TerminalTargetPicker";
+import { TerminalProfilePicker } from "./TerminalProfilePicker";
+import type { TerminalProfileLaunch } from "../../lib/terminalProfileLaunch";
 
 export interface ThreadTerminalDrawerToolbarProps {
   threadId?: ThreadId | undefined;
@@ -14,11 +16,12 @@ export interface ThreadTerminalDrawerToolbarProps {
   renameTerminalActionLabel: string;
   splitTerminalActionLabel: string;
   newTerminalActionLabel: string;
+  findShortcutLabel?: string | undefined;
   closeTerminalActionLabel: string;
   resolvedActiveTerminalId: string;
   onRenameTerminalAction: () => void;
   onSplitTerminalAction: () => void;
-  onNewTerminalAction: () => void;
+  onNewTerminalAction: (profile?: TerminalProfileLaunch) => void;
   onCloseTerminal: (terminalId: string) => void;
   expanded?: boolean;
   onToggleExpanded?: (() => void) | undefined;
@@ -30,9 +33,9 @@ export interface ThreadTerminalDrawerToolbarProps {
 export function ThreadTerminalDrawerToolbar({
   threadId,
   hasReachedSplitLimit,
-  renameTerminalActionLabel,
   splitTerminalActionLabel,
   newTerminalActionLabel,
+  findShortcutLabel,
   closeTerminalActionLabel,
   resolvedActiveTerminalId,
   onRenameTerminalAction,
@@ -64,28 +67,30 @@ export function ThreadTerminalDrawerToolbar({
       )}
       <TerminalActionButton
         className={buttonClassName}
-        onClick={onNewTerminalAction}
+        onClick={() => onNewTerminalAction()}
         label={newTerminalActionLabel}
       >
         <Plus className="size-3.25" />
       </TerminalActionButton>
+      {threadId && (
+        <TerminalProfilePicker
+          threadId={threadId}
+          terminalId={resolvedActiveTerminalId}
+          onNewTerminal={onNewTerminalAction}
+          findShortcutLabel={findShortcutLabel}
+          onRename={onRenameTerminalAction}
+        />
+      )}
       <div className={dividerClassName} />
       <TerminalActionButton
         className={cn(
           buttonClassName,
           hasReachedSplitLimit && "cursor-not-allowed opacity-45 hover:bg-transparent",
         )}
-        onClick={onSplitTerminalAction}
+        onClick={() => onSplitTerminalAction()}
         label={splitTerminalActionLabel}
       >
         <SquareSplitHorizontal className="size-3.25" />
-      </TerminalActionButton>
-      <TerminalActionButton
-        className={buttonClassName}
-        onClick={onRenameTerminalAction}
-        label={renameTerminalActionLabel}
-      >
-        <HugeiconsIcon aria-hidden="true" icon={QuillWrite01Icon} className="size-3.25" />
       </TerminalActionButton>
       <div className={dividerClassName} />
       <TerminalActionButton

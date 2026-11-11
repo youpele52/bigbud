@@ -31,6 +31,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "terminal.toggle",
   "terminalPanel.toggle",
   "terminal.split",
+  "terminal.splitDown",
   "terminal.new",
   "terminal.close",
   "terminal.find",

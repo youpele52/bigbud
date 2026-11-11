@@ -25,7 +25,8 @@ These are example overrides, not the defaults. The server merges custom rules wi
 | `mod+,`           | `settings.toggle`                 | Any              |
 | `mod+f`           | `search.toggle`                   | Outside terminal |
 | `mod+f`           | `terminal.find`                   | Terminal focused |
-| `mod+shift+g`     | `terminal.split`                  | Terminal focused |
+| `mod+d`           | `terminal.split`                  | Terminal focused |
+| `mod+shift+d`     | `terminal.splitDown`              | Terminal focused |
 | `mod+n`           | `terminal.new`                    | Terminal focused |
 | `mod+w`           | `terminal.close`                  | Terminal focused |
 | `mod+w`           | `rightPanel.closeTab`             | Outside terminal |
@@ -53,7 +54,8 @@ The authoritative defaults are [`DEFAULT_KEYBINDINGS`](../apps/server/src/keybin
 ## Available commands
 
 - `terminal.toggle`, `terminalPanel.toggle`: toggle the terminal drawer or terminal panel.
-- `terminal.split`, `terminal.new`, `terminal.close`, `terminal.find`: split, create, close, or search a terminal.
+- `terminal.split`, `terminal.splitDown`: split the focused terminal right or down.
+- `terminal.new`, `terminal.close`, `terminal.find`: create, close, or search a terminal.
 - `git.toggle`, `diff.toggle`, `browser.toggle`, `files.toggle`, `notes.toggle`: toggle the corresponding workspace panel.
 - `rightPanel.toggle`, `rightPanel.newTab`, `rightPanel.closeTab`: toggle the right panel, open its panel switcher, or close its active tab.
 - `commandPalette.toggle`, `sidebar.toggle`, `settings.toggle`, `search.toggle`: toggle the corresponding interface.
@@ -78,6 +80,8 @@ Supported modifiers include `mod`, `cmd`/`meta`, `ctrl`/`control`, `shift`, and 
 ## Conditions and precedence
 
 Available context keys are `terminalFocus` and `terminalOpen`. Expressions support `!`, `&&`, `||`, and parentheses. Unknown condition keys evaluate to `false`.
+
+Terminal editing shortcuts (`terminal.split`, `terminal.splitDown`, `terminal.new`, and `terminal.close`) must check actual terminal focus before consuming a key event or changing terminal state. The action handler enforces this even when a custom binding omits `when` or uses a broader condition. `terminal.find`, clear, cursor movement, and input-editing shortcuts are handled by the focused xterm instance. An open or visible terminal is insufficient: focus in the composer, rename field, find field, menus, or other controls does not count as terminal focus. Explicit toolbar and menu clicks remain available without terminal keyboard focus.
 
 Examples:
 

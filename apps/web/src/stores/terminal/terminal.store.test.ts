@@ -35,9 +35,9 @@ describe("terminalStateStore actions", () => {
     expect(terminalState.terminalOpen).toBe(true);
     expect(terminalState.terminalIds).toEqual(["default", "terminal-2"]);
     expect(terminalState.activeTerminalId).toBe("terminal-2");
-    expect(terminalState.terminalGroups).toEqual([
-      { id: "group-default", terminalIds: ["default", "terminal-2"] },
-    ]);
+    expect(
+      terminalState.terminalGroups.map(({ id, terminalIds }) => ({ id, terminalIds })),
+    ).toEqual([{ id: "group-default", terminalIds: ["default", "terminal-2"] }]);
   });
 
   it("caps splits at four terminals per group", () => {
@@ -57,7 +57,9 @@ describe("terminalStateStore actions", () => {
       "terminal-3",
       "terminal-4",
     ]);
-    expect(terminalState.terminalGroups).toEqual([
+    expect(
+      terminalState.terminalGroups.map(({ id, terminalIds }) => ({ id, terminalIds })),
+    ).toEqual([
       { id: "group-default", terminalIds: ["default", "terminal-2", "terminal-3", "terminal-4"] },
     ]);
   });
@@ -72,7 +74,9 @@ describe("terminalStateStore actions", () => {
     expect(terminalState.terminalIds).toEqual(["default", "terminal-2"]);
     expect(terminalState.activeTerminalId).toBe("terminal-2");
     expect(terminalState.activeTerminalGroupId).toBe("group-terminal-2");
-    expect(terminalState.terminalGroups).toEqual([
+    expect(
+      terminalState.terminalGroups.map(({ id, terminalIds }) => ({ id, terminalIds })),
+    ).toEqual([
       { id: "group-default", terminalIds: ["default"] },
       { id: "group-terminal-2", terminalIds: ["terminal-2"] },
     ]);
@@ -89,7 +93,9 @@ describe("terminalStateStore actions", () => {
     expect(terminalState.terminalOpen).toBe(true);
     expect(terminalState.terminalIds).toEqual(["default", "setup-setup"]);
     expect(terminalState.activeTerminalId).toBe("setup-setup");
-    expect(terminalState.terminalGroups).toEqual([
+    expect(
+      terminalState.terminalGroups.map(({ id, terminalIds }) => ({ id, terminalIds })),
+    ).toEqual([
       { id: "group-default", terminalIds: ["default"] },
       { id: "group-setup-setup", terminalIds: ["setup-setup"] },
     ]);
@@ -133,7 +139,9 @@ describe("terminalStateStore actions", () => {
       "terminal-5",
       "terminal-6",
     ]);
-    expect(terminalState.terminalGroups).toEqual([
+    expect(
+      terminalState.terminalGroups.map(({ id, terminalIds }) => ({ id, terminalIds })),
+    ).toEqual([
       { id: "group-default", terminalIds: ["default", "terminal-2", "terminal-3", "terminal-4"] },
       { id: "group-terminal-5", terminalIds: ["terminal-5"] },
       { id: "group-terminal-6", terminalIds: ["terminal-6"] },
@@ -179,9 +187,9 @@ describe("terminalStateStore actions", () => {
     );
     expect(terminalState.activeTerminalId).toBe("terminal-2");
     expect(terminalState.terminalIds).toEqual(["default", "terminal-2"]);
-    expect(terminalState.terminalGroups).toEqual([
-      { id: "group-default", terminalIds: ["default", "terminal-2"] },
-    ]);
+    expect(
+      terminalState.terminalGroups.map(({ id, terminalIds }) => ({ id, terminalIds })),
+    ).toEqual([{ id: "group-default", terminalIds: ["default", "terminal-2"] }]);
   });
 
   it("stores and clears custom terminal label overrides per thread", () => {

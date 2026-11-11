@@ -1,3 +1,6 @@
+import type { TerminalStateStoreState } from "../../../stores/terminal/terminal.store.types";
+import type { TerminalSplitDirection } from "../../../lib/terminalSplitLayout";
+import { canCreateProfileTerminal } from "../../terminal/TerminalProfilePicker.launch";
 import { type ProjectScript, type ThreadId, TerminalOpenInput } from "@bigbud/contracts";
 import { useCallback } from "react";
 import { projectScriptRuntimeEnv } from "@bigbud/shared/projectScripts";
@@ -26,7 +29,7 @@ export interface UseTerminalActionsInput {
     activeTerminalGroupId: string;
   };
   storeSetTerminalOpen: (threadId: ThreadId, open: boolean) => void;
-  storeSplitTerminal: (threadId: ThreadId, terminalId: string) => void;
+  storeSplitTerminal: TerminalStateStoreState["splitTerminal"];
   storeNewTerminal: (threadId: ThreadId, terminalId: string) => void;
   storeSetActiveTerminal: (threadId: ThreadId, terminalId: string) => void;
   storeCloseTerminal: (threadId: ThreadId, terminalId: string) => void;
@@ -43,7 +46,7 @@ export interface UseTerminalActionsInput {
 export interface UseTerminalActionsResult {
   setTerminalOpen: (open: boolean) => void;
   toggleTerminalVisibility: () => void;
-  splitTerminal: () => void;
+  splitTerminal: (direction?: TerminalSplitDirection) => void;
   createNewTerminal: () => void;
   closeTerminal: (terminalId: string) => void;
   runTerminalCommand: (
@@ -135,19 +138,30 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
     setTerminalOpen(!terminalState.terminalOpen);
   }, [activeThreadId, setTerminalOpen, terminalState.terminalOpen]);
 
-  const splitTerminal = useCallback(() => {
-    if (!activeThreadId || hasReachedSplitLimit) return;
-    const terminalId = `terminal-${randomUUID()}`;
-    storeSplitTerminal(activeThreadId, terminalId);
-    setTerminalFocusRequestId((value) => value + 1);
-  }, [activeThreadId, hasReachedSplitLimit, storeSplitTerminal, setTerminalFocusRequestId]);
+  const splitTerminal = useCallback(
+    (direction: TerminalSplitDirection = "right") => {
+      if (!activeThreadId || hasReachedSplitLimit) return;
+      if (!canCreateProfileTerminal(activeThreadId, terminalState.activeTerminalId)) return;
+      const terminalId = `terminal-${randomUUID()}`;
+      storeSplitTerminal(activeThreadId, terminalId, undefined, direction);
+      setTerminalFocusRequestId((value) => value + 1);
+    },
+    [
+      activeThreadId,
+      hasReachedSplitLimit,
+      storeSplitTerminal,
+      setTerminalFocusRequestId,
+      terminalState.activeTerminalId,
+    ],
+  );
 
   const createNewTerminal = useCallback(() => {
     if (!activeThreadId) return;
+    if (!canCreateProfileTerminal(activeThreadId, terminalState.activeTerminalId)) return;
     const terminalId = `terminal-${randomUUID()}`;
     storeNewTerminal(activeThreadId, terminalId);
     setTerminalFocusRequestId((value) => value + 1);
-  }, [activeThreadId, storeNewTerminal, setTerminalFocusRequestId]);
+  }, [activeThreadId, storeNewTerminal, setTerminalFocusRequestId, terminalState.activeTerminalId]);
 
   const closeTerminal = useCallback(
     (terminalId: string) => {
