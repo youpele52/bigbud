@@ -16,8 +16,7 @@ import { ProviderSessionRuntimeRepositoryLive } from "../../persistence/Layers/P
 import { ProviderSessionRuntimeRepository } from "../../persistence/Services/ProviderSessionRuntime.ts";
 import { makeSqlitePersistenceLive } from "../../persistence/Layers/Sqlite.ts";
 import { AnalyticsService } from "../../telemetry/Services/AnalyticsService.ts";
-import { buildBootstrapInput } from "@bigbud/shared/history";
-import { PROVIDER_SEND_TURN_MAX_INPUT_CHARS } from "@bigbud/contracts";
+import { buildBootstrapInput, DEFAULT_BOOTSTRAP_HISTORY_MAX_CHARS } from "@bigbud/shared/history";
 
 import {
   asThreadId,
@@ -41,7 +40,7 @@ routing.layer("ProviderServiceLive routing", (it) => {
         },
       ],
       "third",
-      PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
+      DEFAULT_BOOTSTRAP_HISTORY_MAX_CHARS,
     );
 
     assert.equal(result.text.includes("USER:\nfirst"), true);

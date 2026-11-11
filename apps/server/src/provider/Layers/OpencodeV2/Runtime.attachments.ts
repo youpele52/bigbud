@@ -138,8 +138,6 @@ export async function prepareV2TurnAttachments(
     files: prepared.files.map((file) => ({ uri: file.uri, name: file.name ?? "attachment" })),
     ...(prepared.references ? { references: prepared.references } : {}),
   };
-  if (value.text.length + (value.references?.length ?? 0) > 120000)
-    throw new Error("V2 prompt plus attachment context exceeds bound.");
   const bytes = Buffer.from(JSON.stringify(value));
   if (bytes.length > V2_MEDIA_RESPONSE_BYTES)
     throw new Error("V2 prepared attachment bound exceeded.");

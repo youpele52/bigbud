@@ -4,6 +4,60 @@ import { describe, expect, it } from "vitest";
 import { buildBootstrapInput } from "./history";
 
 describe("buildBootstrapInput", () => {
+  const hugePrompt = `CURRENT_START${"x".repeat(240_000)}CURRENT_END`;
+
+  it.each([0, 1, -1, NaN, Infinity, -Infinity, 0.9])(
+    "preserves the complete request with replay allowance %s",
+    (budget) => {
+      expect(buildBootstrapInput([], hugePrompt, budget)).toEqual({
+        text: hugePrompt,
+        includedCount: 0,
+        omittedCount: 0,
+        truncated: false,
+      });
+      expect(buildBootstrapInput([{ role: "user", text: "history" }], hugePrompt, budget)).toEqual({
+        text: hugePrompt,
+        includedCount: 0,
+        omittedCount: 1,
+        truncated: true,
+      });
+    },
+  );
+
+  it("selects the same newest contiguous history independently of current request size", () => {
+    const history = [
+      { role: "user" as const, text: "old".repeat(1_000) },
+      { role: "assistant" as const, text: "newer answer" },
+      { role: "user" as const, text: "recent question" },
+    ];
+    const short = buildBootstrapInput(history, "short", 350);
+    const large = buildBootstrapInput(history, hugePrompt, 350.9);
+    expect(large.includedCount).toBe(2);
+    expect(large.omittedCount).toBe(1);
+    expect(large.truncated).toBe(true);
+    expect(large.text.slice(0, -hugePrompt.length)).toBe(short.text.slice(0, -5));
+    expect(large.text.length - hugePrompt.length).toBeLessThanOrEqual(350);
+    expect(large.text.endsWith(hugePrompt)).toBe(true);
+    expect(large.text.indexOf("newer answer")).toBeLessThan(large.text.indexOf("recent question"));
+    expect(large.text.length).toBeGreaterThan(240_000);
+  });
+
+  it("does not skip a nonfitting recent block to replay an older small block", () => {
+    const result = buildBootstrapInput(
+      [
+        { role: "user", text: "old small" },
+        { role: "assistant", text: "large".repeat(1_000) },
+      ],
+      hugePrompt,
+      300,
+    );
+    expect(result.includedCount).toBe(0);
+    expect(result.omittedCount).toBe(2);
+    expect(result.text).toContain("2 earlier message(s) omitted");
+    expect(result.text).not.toContain("old small");
+    expect(result.text.length - hugePrompt.length).toBeLessThanOrEqual(300);
+    expect(result.text.endsWith(hugePrompt)).toBe(true);
+  });
   it("includes full transcript when under budget", () => {
     const result = buildBootstrapInput(
       [
@@ -46,14 +100,14 @@ describe("buildBootstrapInput", () => {
         },
       ],
       "final request",
-      320,
+      300,
     );
 
     expect(result.truncated).toBe(true);
     expect(result.omittedCount).toBeGreaterThan(0);
     expect(result.includedCount).toBeLessThan(3);
     expect(result.text).toContain("omitted to stay within input limits");
-    expect(result.text.length).toBeLessThanOrEqual(320);
+    expect(result.text.length - "final request".length).toBeLessThanOrEqual(300);
   });
 
   it("preserves the latest prompt when prompt-only fallback is required", () => {

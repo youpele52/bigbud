@@ -1,5 +1,4 @@
 import {
-  PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   type OrchestrationThread,
   type ServerDiscoveredAgent,
   type ServerDiscoveredSkill,
@@ -13,6 +12,7 @@ import { appendTeachSkillRuntimeContext } from "./ProviderCommandReactorInputExp
 
 const COMPACT_MENTION_REGEX = /(^|\s)@([^\s@]+)(?=\s|$)/g;
 const SLASH_SKILL_COMMAND_REGEX = /^\/skills?\s+([^\s]+)(?:\s+[\s\S]*)?$/i;
+const MAX_REFERENCE_CONTEXT_CHARS = 120_000;
 const MAX_REFERENCE_BLOCKS = 12;
 const MAX_DIRECTORY_ENTRIES = 80;
 const MAX_TEXT_BLOCK_CHARS = 16_000;
@@ -41,7 +41,7 @@ function truncateText(value: string, maxChars: number): string {
   if (value.length <= maxChars) {
     return value;
   }
-  const suffix = "\n\n[Truncated to fit provider input limit.]";
+  const suffix = "\n\n[Truncated to fit reference context limit.]";
   return `${value.slice(0, Math.max(0, maxChars - suffix.length)).trimEnd()}${suffix}`;
 }
 
@@ -323,14 +323,12 @@ export const expandProviderInputMentions = (
       });
     });
 
-    return truncateText(
+    const referenceContext = truncateText(
       [
-        "Original user message:",
-        input.messageText,
-        "",
         "Resolved compact references from the user message. Use them as active context when answering:",
         ...referenceBlocks,
       ].join("\n\n"),
-      PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
+      MAX_REFERENCE_CONTEXT_CHARS,
     );
+    return ["Original user message:", input.messageText, "", referenceContext].join("\n\n");
   });

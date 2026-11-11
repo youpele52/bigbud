@@ -190,7 +190,6 @@ export async function dispatchV2Turn(
   if (prepared) text = prepared.text;
   if (references)
     text += `\n\nbigbud workspace attachment references (target-bound metadata):\n${references}`;
-  if (text.length > 120000) throw new Error("V2 prompt plus context exceeds bound.");
   let fingerprint = runtimePromptFingerprint(
     text,
     requestedModel,

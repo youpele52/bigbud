@@ -55,6 +55,45 @@ function makeExpansion(catalog: ServerDiscoveryCatalog = { agents: [], skills: [
 }
 
 describe("compact reference expansion after marketplace retirement", () => {
+  it("passes through large messages without mentions unchanged", async () => {
+    const message = `START${"x".repeat(240_000)}END`;
+    const harness = makeExpansion();
+    expect(await harness.run(message)).toBe(message);
+    expect(harness.getCatalog).not.toHaveBeenCalled();
+  });
+
+  it.each(["@agent::review", "@skill::handoff", "@notes.txt"])(
+    "preserves a large original request with %s",
+    async (mention) => {
+      const message = `START ${mention} ${"x".repeat(240_000)} END`;
+      const result = await makeExpansion().run(message);
+      expect(result.startsWith(`Original user message:\n\n${message}\n\n`)).toBe(true);
+      expect(result.split(message)).toHaveLength(2);
+      expect(result).toContain("Resolved compact references");
+    },
+  );
+
+  it("bounds only generated references including truncation markers for twelve large sources", async () => {
+    const agents = Array.from({ length: 13 }, (_, index) => ({
+      id: `agent-${index}`,
+      name: `agent-${index}`,
+      provider: "codex" as const,
+      source: "user" as const,
+      sourcePath: `/agents/${index}.md`,
+    }));
+    const harness = makeExpansion({ agents, skills: [] });
+    harness.readFileString.mockImplementation(() => Effect.succeed("source".repeat(4_000)));
+    const message = `START ${agents.map((agent) => `@agent::${agent.name}`).join(" ")} ${"x".repeat(240_000)} END`;
+    const result = await harness.run(message);
+    const original = `Original user message:\n\n${message}\n\n\n\n`;
+    expect(result.startsWith(original)).toBe(true);
+    expect(result.split(message)).toHaveLength(2);
+    const references = result.slice(original.length);
+    expect(references.length).toBeLessThanOrEqual(120_000);
+    expect(references.endsWith("[Truncated to fit reference context limit.]")).toBe(true);
+    expect(harness.readFileString).toHaveBeenCalledTimes(12);
+    expect(result.length).toBeGreaterThan(360_000);
+  });
   it.each(["@plugin::example", "@plugin:example", "/plugins"])(
     "keeps %s literal without file or registry access",
     async (message) => {

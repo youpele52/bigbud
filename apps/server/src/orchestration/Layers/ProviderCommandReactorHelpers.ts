@@ -6,11 +6,10 @@ import {
   type OrchestrationMessage,
   type OrchestrationSession,
   type OrchestrationThread,
-  PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
   type RuntimeMode,
 } from "@bigbud/contracts";
 import { CommandId } from "@bigbud/contracts";
-import { buildBootstrapInput } from "@bigbud/shared/history";
+import { buildBootstrapInput, DEFAULT_BOOTSTRAP_HISTORY_MAX_CHARS } from "@bigbud/shared/history";
 import { fallbackThreadTitleFromPrompt } from "@bigbud/shared/String";
 import { Cause, Schema } from "effect";
 
@@ -231,6 +230,6 @@ export function buildResumedTurnInput(input: {
   return buildBootstrapInput(
     transcriptMessages,
     input.latestProviderInputText,
-    PROVIDER_SEND_TURN_MAX_INPUT_CHARS,
+    DEFAULT_BOOTSTRAP_HISTORY_MAX_CHARS,
   ).text;
 }

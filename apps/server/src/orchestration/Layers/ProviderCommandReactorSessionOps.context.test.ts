@@ -8,6 +8,26 @@ function message(role: "user" | "assistant", text: string, streaming = false) {
 }
 
 describe("provider transcript recovery", () => {
+  it("preserves expanded current input without replaying the persisted raw request", () => {
+    const raw = `CURRENT_START${"x".repeat(240_000)}CURRENT_END`;
+    const expanded = `<reply_to_message>reply</reply_to_message>\nOriginal user message:\n${raw}\nResolved compact references: reference\n<attached_file_contents>file</attached_file_contents>`;
+    const input = buildResumedTurnInput({
+      transcriptThread: {
+        messages: [
+          message("user", "old".repeat(50_000)),
+          message("assistant", `COMPLETED_HISTORY${"h".repeat(119_000)}`),
+          message("user", raw),
+        ],
+      } as never,
+      latestTranscriptMessageText: raw,
+      latestProviderInputText: expanded,
+    });
+    expect(input.endsWith(expanded)).toBe(true);
+    expect(input.split(raw)).toHaveLength(2);
+    expect(input).toContain("COMPLETED_HISTORY");
+    expect(input).not.toContain("oldoldold");
+    expect(input.length - expanded.length).toBeLessThanOrEqual(120_000);
+  });
   it("rebuilds context when a session is gone and prior transcript exists", () => {
     expect(
       shouldRebuildProviderContextFromTranscript({
