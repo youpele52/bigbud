@@ -6,6 +6,8 @@
  *
  * @module ComposerPromptEditor.suggestion
  */
+import { ArrowRight03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import type { ServerDiscoveredSkill } from "@bigbud/contracts";
 import {
@@ -67,7 +69,7 @@ export function ComposerPromptSuggestionPlugin(props: {
   return null;
 }
 
-/** The ghost text placeholder, with a Tab hint (pointer devices) or a tap chip (touch). */
+/** The ghost text placeholder, with an arrow hint (pointer devices) or a tap chip (touch). */
 export function ComposerPromptSuggestionGhost(props: {
   suggestion: string;
   discoveredSkills: ReadonlyArray<ServerDiscoveredSkill>;
@@ -79,8 +81,11 @@ export function ComposerPromptSuggestionGhost(props: {
       data-prompt-suggestion
     >
       <span className="text-muted-foreground/60">{props.suggestion}</span>{" "}
-      <kbd className="rounded border border-border/70 px-1 text-xs text-muted-foreground/70 pointer-coarse:hidden">
-        Tab
+      <kbd
+        className="ml-2 inline-flex h-5 items-center justify-center rounded border border-border/70 px-1.5 align-text-bottom text-muted-foreground/70 pointer-coarse:hidden"
+        aria-hidden="true"
+      >
+        <HugeiconsIcon icon={ArrowRight03Icon} className="size-4" />
       </kbd>
       <button
         type="button"
