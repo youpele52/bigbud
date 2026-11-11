@@ -82,7 +82,7 @@ export function ComposerPromptSuggestionGhost(props: {
     >
       <span className="text-muted-foreground/60">{props.suggestion}</span>{" "}
       <kbd
-        className="ml-2 inline-flex h-5 items-center justify-center rounded border border-border/70 px-1.5 align-text-bottom text-muted-foreground/70 pointer-coarse:hidden"
+        className="ml-2 inline-flex h-5 items-center justify-center rounded border border-foreground/40 bg-foreground/5 px-1.5 align-text-bottom text-foreground/90 motion-safe:animate-pulse pointer-coarse:hidden"
         aria-hidden="true"
       >
         <HugeiconsIcon icon={ArrowRight03Icon} className="size-4" />
