@@ -7,6 +7,7 @@ export type TerminalLifecycleOperation = {
   kind: "close" | "restart";
   phase: "closing" | "stopping" | "starting" | "error";
   error?: string | undefined;
+  canDismiss?: boolean;
   expectedGeneration?: string | undefined;
   restartRequest?: TerminalRestartInput;
 };
@@ -34,6 +35,7 @@ export function beginTerminalLifecycle(
     kind,
     phase: kind === "close" ? "closing" : "stopping",
     error: undefined,
+    canDismiss: false,
   };
   useTerminalLifecycleStore.setState((state) => ({
     operations: { ...state.operations, [key(threadId, terminalId)]: operation },

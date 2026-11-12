@@ -75,6 +75,10 @@ function PaneProfilePicker({
   }, [loader]);
   const actual = launch?.shellLaunchIdentity;
   const inventory = state.inventory;
+  const exactEnabled =
+    inventory?.exactProfileLaunchesEnabled === true &&
+    !!launch?.runtimeGeneration &&
+    inventory.runtimeGeneration === launch.runtimeGeneration;
   const hostMatches = !actual || !inventory || sameShellHost(actual.host, inventory.host);
   const actualProfile = hostMatches
     ? inventory?.profiles.find((profile) => profile.profileId === actual?.profileId)
@@ -92,6 +96,7 @@ function PaneProfilePicker({
     if (
       !mounted.current ||
       !inventory ||
+      !exactEnabled ||
       !hostMatches ||
       lifecycle ||
       readTerminalLaunch(threadId, terminalId)?.runtimeGeneration !== launch?.runtimeGeneration
@@ -173,8 +178,18 @@ function PaneProfilePicker({
           Refresh
         </MenuItem>
         <MenuSeparator />
+        <MenuItem
+          onClick={() =>
+            onNewTerminal({
+              shellSelection: { kind: "legacy-auto" },
+              source: { terminalId, runtimeGeneration: launch?.runtimeGeneration },
+            })
+          }
+        >
+          Open Automatic terminal
+        </MenuItem>
         <MenuSub>
-          <MenuSubTrigger disabled={!inventory || !hostMatches || !!lifecycle}>
+          <MenuSubTrigger disabled={!inventory || !exactEnabled || !hostMatches || !!lifecycle}>
             New terminal
           </MenuSubTrigger>
           <MenuSubPopup>
@@ -192,7 +207,13 @@ function PaneProfilePicker({
         </MenuSub>
         <MenuSub>
           <MenuSubTrigger
-            disabled={!inventory || !hostMatches || !!lifecycle || !launch?.runtimeGeneration}
+            disabled={
+              !inventory ||
+              !exactEnabled ||
+              !hostMatches ||
+              !!lifecycle ||
+              !launch?.runtimeGeneration
+            }
           >
             Change shell
           </MenuSubTrigger>
@@ -209,6 +230,12 @@ function PaneProfilePicker({
             ))}
           </MenuSubPopup>
         </MenuSub>
+        {inventory && !exactEnabled && (
+          <p className="px-2 py-1 text-xs text-muted-foreground">
+            Exact shell selection is unavailable for this session. Open Automatic terminal uses the
+            same target and folder in a new pane.
+          </p>
+        )}
         {state.loading && (
           <p className="px-2 py-1 text-xs text-muted-foreground">Loading this host's profiles…</p>
         )}

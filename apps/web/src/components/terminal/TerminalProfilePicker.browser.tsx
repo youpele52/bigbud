@@ -45,6 +45,8 @@ const snapshot: TerminalSessionSnapshot = {
   },
 };
 const inventory: TerminalShellProfileInventory = {
+  exactProfileLaunchesEnabled: true,
+  runtimeGeneration: "one",
   host,
   profiles: [
     {
@@ -231,6 +233,75 @@ describe("per-pane shell picker", () => {
     expect(p.onNewTerminal).not.toHaveBeenCalled();
     await screen.unmount();
   });
+  it("selects a new profile by keyboard and restores focus without replacing the source", async () => {
+    const p = props();
+    const restart = vi.fn();
+    const unregister = registerTerminalProfileRestart(threadId, "one", restart);
+    const screen = await render(<TerminalProfilePicker {...p} />);
+    try {
+      const trigger = page.getByRole("button", { name: "Terminal actions" });
+      (trigger.element() as HTMLElement).focus();
+      await userEvent.keyboard("{Enter}");
+      const submenu = page.getByRole("menuitem", { name: "New terminal", exact: true });
+      await expect.element(submenu).toBeEnabled();
+      (submenu.element() as HTMLElement).focus();
+      await userEvent.keyboard("{ArrowRight}{ArrowDown}{Enter}");
+      await expect.poll(() => p.onNewTerminal.mock.calls.length).toBe(1);
+      expect(p.onNewTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          shellSelection: { kind: "profile", profileId: "bash" },
+        }),
+      );
+      expect(restart).not.toHaveBeenCalled();
+      await expect.element(trigger).toHaveFocus();
+    } finally {
+      unregister();
+      await screen.unmount();
+    }
+  });
+
+  it("cannot apply a confirmation that resolves after the active pane changed", async () => {
+    let confirm!: (value: boolean) => void;
+    const restart = vi.fn();
+    const prepare = vi.fn();
+    const action = makeTerminalRestartAction({
+      api: {
+        dialogs: {
+          confirm: () =>
+            new Promise<boolean>((resolve) => {
+              confirm = resolve;
+            }),
+        },
+        terminal: { restart },
+      } as unknown as NativeApi,
+      terminal: { cols: 80, rows: 24 } as Terminal,
+      readSnapshot: () => snapshot,
+      disposed: () => false,
+      prepare,
+      isCurrent: () => true,
+      onSnapshot: vi.fn(),
+      onFailure: vi.fn(),
+    });
+    const unregister = registerTerminalProfileRestart(threadId, "one", action);
+    const p = props();
+    const screen = await render(<TerminalProfilePicker {...p} />);
+    try {
+      await open();
+      await choose("Change shell");
+      await expect.poll(() => typeof confirm).toBe("function");
+      recordTerminalLaunch({ ...snapshot, terminalId: "two" });
+      await screen.rerender(<TerminalProfilePicker {...p} terminalId="two" />);
+      confirm(true);
+      await expect.poll(() => useTerminalLifecycleStore.getState().operations).toEqual({});
+      expect(prepare).not.toHaveBeenCalled();
+      expect(restart).not.toHaveBeenCalled();
+      expect(p.onNewTerminal).not.toHaveBeenCalled();
+    } finally {
+      unregister();
+      await screen.unmount();
+    }
+  });
+
   it("supports keyboard opening, Escape dismissal and returns focus to its trigger", async () => {
     const screen = await render(<TerminalProfilePicker {...props()} />);
     const trigger = page.getByRole("button", { name: "Terminal actions" });

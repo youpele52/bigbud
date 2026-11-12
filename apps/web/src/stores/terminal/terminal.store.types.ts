@@ -11,6 +11,7 @@ import type { TerminalAgentVersion } from "./terminal.store.identity";
 import type { TerminalLayoutMode, TerminalLayoutState } from "./terminal.store.layout";
 
 export interface TerminalStateStoreState extends TerminalLayoutState {
+  dismissedTerminalPanes?: import("./terminal.store.dismiss").DismissedTerminalPanes | undefined;
   terminalProfileLaunches: Record<
     string,
     import("../../lib/terminalProfileLaunch").TerminalProfileLaunch

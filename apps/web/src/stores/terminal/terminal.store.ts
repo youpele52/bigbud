@@ -1,3 +1,4 @@
+import { excludeDismissedPanes } from "./terminal.store.dismiss";
 /** Terminal UI state and action wiring; pure transitions live in helpers.store.ts. */
 
 import { ThreadId } from "@bigbud/contracts";
@@ -61,7 +62,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         const nextTerminalStateByThreadId = updateTerminalStateByThreadId(
           state.terminalStateByThreadId,
           threadId,
-          updater,
+          (pane) => excludeDismissedPanes(state, threadId, updater(pane)),
         );
         if (nextTerminalStateByThreadId === state.terminalStateByThreadId) {
           return state;
@@ -86,7 +87,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         const nextPanelTerminalStateByThreadId = updateTerminalStateByThreadId(
           state.panelTerminalStateByThreadId,
           threadId,
-          updater,
+          (pane) => excludeDismissedPanes(state, threadId, updater(pane)),
         );
         if (nextPanelTerminalStateByThreadId === state.panelTerminalStateByThreadId) {
           return state;

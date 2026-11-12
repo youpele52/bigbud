@@ -5,6 +5,8 @@ import type { WsRpcClient } from "./wsRpcClient.types";
 
 export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["terminal"] {
   return {
+    shellProfiles: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalShellProfiles](input)),
     wslDistributions: () =>
       transport.request((client) => client[WS_METHODS.terminalWslDistributions]({})),
     snapshot: (input) => transport.request((client) => client[WS_METHODS.terminalSnapshot](input)),

@@ -4,6 +4,20 @@ import type { TerminalEventsStreamItem } from "@bigbud/contracts/workspace/termi
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import type { WsTransport } from "./wsTransport";
 
+it("requests shell profiles through the read-only pane endpoint exactly once", async () => {
+  const input = { threadId: "thread", terminalId: "pane" };
+  const inventory = { host: { kind: "local", hostId: "local" }, profiles: [] };
+  const request = vi.fn(async () => inventory);
+  const transport = {
+    request: vi.fn((connect: (client: unknown) => unknown) =>
+      connect({ [WS_METHODS.terminalShellProfiles]: request }),
+    ),
+  } as unknown as WsTransport;
+  await expect(createTerminalRpcClient(transport).shellProfiles(input)).resolves.toEqual(inventory);
+  expect(request).toHaveBeenCalledExactlyOnceWith(input);
+  expect(transport.request).toHaveBeenCalledTimes(1);
+});
+
 it("opts in only with an inventory consumer and separates control items from terminal events", () => {
   let deliver!: (item: TerminalEventsStreamItem) => void;
   const subscribeRpc = vi.fn();

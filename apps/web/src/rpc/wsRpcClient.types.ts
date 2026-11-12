@@ -138,6 +138,7 @@ export interface WsRpcClient {
     readonly stop: RpcUnaryNoArgMethod<typeof WS_METHODS.computerUseStop>;
   };
   readonly terminal: {
+    readonly shellProfiles: RpcUnaryMethod<typeof WS_METHODS.terminalShellProfiles>;
     readonly wslDistributions: RpcUnaryNoArgMethod<typeof WS_METHODS.terminalWslDistributions>;
     readonly snapshot: RpcUnaryMethod<typeof WS_METHODS.terminalSnapshot>;
     readonly recovery: RpcUnaryMethod<typeof WS_METHODS.terminalRecovery>;

@@ -1,3 +1,10 @@
+import {
+  excludeDismissedPanes,
+  dismissedPaneKey,
+  type DismissedTerminalPanes,
+} from "./terminal.store.dismiss";
+import { ThreadId } from "@bigbud/contracts";
+import { createDefaultThreadTerminalState } from "./helpers.store";
 import { createJSONStorage } from "zustand/middleware";
 import * as Schema from "effect/Schema";
 import { ShellHostScope, ShellSelection } from "@bigbud/contracts/workspace/terminalShell.ts";
@@ -53,6 +60,7 @@ function hydrateTerminalLayouts(value: unknown): Record<string, TerminalLayoutMo
 
 type PersistedTerminalState = Pick<
   TerminalStateStoreState,
+  | "dismissedTerminalPanes"
   | "terminalProfileLaunches"
   | "terminalLayoutByThreadId"
   | "terminalWslDistributionByThreadId"
@@ -69,6 +77,7 @@ export const terminalPersistenceOptions = {
     createJSONStorage<PersistedTerminalState>(createTerminalStateStorage),
   ),
   partialize: (state: TerminalStateStoreState) => ({
+    dismissedTerminalPanes: state.dismissedTerminalPanes,
     terminalProfileLaunches: state.terminalProfileLaunches,
     terminalLayoutByThreadId: state.terminalLayoutByThreadId,
     terminalWslDistributionByThreadId: state.terminalWslDistributionByThreadId,
@@ -77,7 +86,7 @@ export const terminalPersistenceOptions = {
   }),
   merge: (persisted: unknown, current: TerminalStateStoreState): TerminalStateStoreState => {
     const saved = persisted && typeof persisted === "object" ? persisted : {};
-    return {
+    const merged = {
       ...current,
       ...saved,
       terminalProfileLaunches: hydrateProfileLaunches(
@@ -87,5 +96,50 @@ export const terminalPersistenceOptions = {
         "terminalLayoutByThreadId" in saved ? saved.terminalLayoutByThreadId : undefined,
       ),
     };
+    const dismissed = Schema.Record(
+      Schema.String,
+      Schema.Struct({
+        threadId: Schema.String,
+        terminalId: Schema.String,
+        replacementId: Schema.String,
+      }),
+    );
+    let dismissedTerminalPanes: DismissedTerminalPanes = {};
+    try {
+      dismissedTerminalPanes = Schema.decodeUnknownSync(dismissed)(
+        merged.dismissedTerminalPanes ?? {},
+      );
+    } catch {
+      /* Ignore malformed presentation state. */
+    }
+    dismissedTerminalPanes = Object.fromEntries(
+      Object.entries(dismissedTerminalPanes).filter(
+        ([key, entry]) =>
+          entry.threadId.length > 0 &&
+          entry.terminalId.length > 0 &&
+          entry.replacementId.length > 0 &&
+          entry.replacementId !== entry.terminalId &&
+          key === dismissedPaneKey(entry.threadId, entry.terminalId),
+      ),
+    );
+    if (Object.keys(dismissedTerminalPanes).length === 0)
+      return { ...merged, dismissedTerminalPanes };
+    const next = {
+      ...merged,
+      dismissedTerminalPanes,
+      terminalStateByThreadId: { ...merged.terminalStateByThreadId },
+      panelTerminalStateByThreadId: { ...merged.panelTerminalStateByThreadId },
+    };
+    for (const entry of Object.values(dismissedTerminalPanes)) {
+      const id = ThreadId.makeUnsafe(entry.threadId);
+      for (const field of ["terminalStateByThreadId", "panelTerminalStateByThreadId"] as const) {
+        next[field][id] = excludeDismissedPanes(
+          next,
+          id,
+          next[field][id] ?? createDefaultThreadTerminalState(),
+        );
+      }
+    }
+    return next;
   },
 };

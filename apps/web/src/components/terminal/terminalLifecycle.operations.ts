@@ -96,6 +96,15 @@ export async function closeTerminalConfirmed(input: {
     }
     updateTerminalLifecycle(threadId, terminalId, operation, {
       phase: "error",
+      canDismiss:
+        typeof failure === "object" &&
+        failure !== null &&
+        "reason" in failure &&
+        failure.reason === "directShellUnconfirmed" &&
+        "threadId" in failure &&
+        failure.threadId === threadId &&
+        "terminalId" in failure &&
+        failure.terminalId === terminalId,
       error:
         failure instanceof Error
           ? failure.message

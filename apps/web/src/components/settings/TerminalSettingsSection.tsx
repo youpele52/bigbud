@@ -10,6 +10,7 @@ import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayo
 import { TerminalRenderingSettings } from "./TerminalRenderingSettings";
 import { TerminalThemeSettings } from "./TerminalThemeSettings";
 import { TerminalInteractionSettings } from "./TerminalInteractionSettings";
+import { TerminalShellSettings } from "./TerminalShellSettings";
 
 const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }> = [
   {
@@ -124,6 +125,7 @@ export function TerminalSettingsSection() {
         }
       />
 
+      <TerminalShellSettings />
       <TerminalThemeSettings />
       <TerminalInteractionSettings />
       <TerminalRenderingSettings />

@@ -42,6 +42,28 @@ export function captureTerminalProfileLaunch(
         explicit.source.runtimeGeneration !== recorded?.runtimeGeneration)
     )
       throw new Error("The source terminal changed. Refresh its profile menu.");
+    if (explicit.shellSelection?.kind === "legacy-auto") {
+      if (!source)
+        throw new Error(
+          "The original terminal context is unavailable. Reopen its workspace before creating a terminal.",
+        );
+      // Explicit recovery uses retained context only, never caller-supplied target/defaults.
+      return {
+        shellSelection: { kind: "legacy-auto" },
+        host:
+          actual?.host ??
+          recorded?.shellUnconfirmedLaunch?.requestedProfile.host ??
+          pendingIntent?.host,
+        context: {
+          cwd: source.cwd,
+          worktreePath: source.worktreePath,
+          executionTargetId: recorded?.wslIdentity
+            ? wslTerminalTargetId(recorded.wslIdentity.distribution)
+            : source.executionTargetId,
+          runtimeEnv: source.runtimeEnv ? { ...source.runtimeEnv } : undefined,
+        },
+      };
+    }
     if (!recorded?.updatedAt || !explicit.host || explicit.shellSelection?.kind !== "profile")
       throw new Error(
         "The source terminal is not confirmed. Refresh its view before choosing a profile.",

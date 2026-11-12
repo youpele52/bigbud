@@ -166,6 +166,7 @@ export function createWsNativeApi(): NativeApi {
       },
     },
     terminal: {
+      shellProfiles: (input) => rpcClient.terminal.shellProfiles(input),
       wslDistributions: () => rpcClient.terminal.wslDistributions(),
       snapshot: (input) => rpcClient.terminal.snapshot(input as never),
       recovery: (input) => rpcClient.terminal.recovery(input),
