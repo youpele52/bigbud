@@ -31,7 +31,7 @@ export function MetadataWarningToastCoordinator() {
             toastManager.add(
               metadataWarningToast(
                 warning,
-                () => void navigate({ to: "/settings/ai" }),
+                () => void navigate({ to: "/settings/ai", hash: "text-generation-model" }),
                 () => useThreadRenameRequest.getState().request(warning.threadId),
               ),
             ),

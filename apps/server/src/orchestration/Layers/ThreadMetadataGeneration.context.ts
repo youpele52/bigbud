@@ -30,6 +30,7 @@ const common = {
   expectedRevision: NonNegativeInt,
   configEpoch: Schema.String,
   configuredPrimary: Schema.Boolean,
+  legacyRecoveryRequestId: Schema.optionalKey(Schema.NonEmptyString),
   primaryPath: Schema.NullOr(MetadataCapturedPath),
   threadPath: Schema.NullOr(MetadataCapturedPath),
   workspace: Schema.Struct({

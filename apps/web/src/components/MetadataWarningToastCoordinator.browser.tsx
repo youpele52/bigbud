@@ -67,7 +67,10 @@ it.each([0, 1, 2, 3])(
     expect(toast.description).not.toContain("three attempts");
     expect(toast.actionProps?.children).toBe("Review AI settings");
     toast.actionProps?.onClick?.();
-    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({ to: "/settings/ai" });
+    expect(mocks.navigate).toHaveBeenCalledExactlyOnceWith({
+      to: "/settings/ai",
+      hash: "text-generation-model",
+    });
   },
 );
 

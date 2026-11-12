@@ -6,7 +6,9 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { commandPayloadDigestMatches } from "../../orchestration/commandDigest.ts";
+import { textGenerationStatusPrefix } from "../../git/Layers/InternalTextGeneration.statusIdentity.ts";
 import { toPersistenceSqlError } from "../Errors.ts";
+import type { LegacyMetadataClaim } from "./ThreadMetadataGeneration.legacy.authorization.ts";
 
 const PAGE_SIZE = 100;
 interface LegacyRow {
@@ -38,6 +40,7 @@ export interface LegacyMetadataEvidence {
   readonly witness: "accepted" | "unknown";
   readonly activity: OrchestrationThreadActivity | null;
   readonly sequence: number | null;
+  readonly orphanClaim?: LegacyMetadataClaim;
 }
 
 const CanonicalActivityPayload = Schema.fromJsonString(
@@ -111,6 +114,21 @@ function readEvidence(threadId: ThreadId, row: LegacyRow): LegacyMetadataEvidenc
     witness: accepted ? "accepted" : "unknown",
     activity: retained,
     sequence: row.sequence,
+    ...(row.key === `claim:${row.commandId}` &&
+    (row.commandId.startsWith("server:text-generation-status:") ||
+      row.commandId.startsWith(`server:${textGenerationStatusPrefix(threadId)}`)) &&
+    row.digestVersion &&
+    row.digest &&
+    row.createdAt
+      ? {
+          orphanClaim: {
+            commandId: row.commandId,
+            digestVersion: row.digestVersion,
+            digest: row.digest,
+            claimedAt: row.createdAt,
+          },
+        }
+      : {}),
   };
 }
 
@@ -145,6 +163,7 @@ export function legacyMetadataEvidenceQuery(
   input: { readonly threadId: ThreadId; readonly afterKey?: string },
 ) {
   const titlePrefix = `server:text-generation-title-stage:${input.threadId}:`;
+  const statusPrefix = `server:${textGenerationStatusPrefix(input.threadId)}`;
   return sql<LegacyRow>`
         SELECT * FROM (
           SELECT 'activity:' || a.activity_id AS key,
@@ -212,11 +231,12 @@ export function legacyMetadataEvidenceQuery(
                 ))
           UNION ALL
           SELECT 'claim:' || c.command_id, c.command_id, NULL, NULL, NULL, NULL,
-            NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+            NULL, NULL, NULL, c.claimed_at, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
             c.payload_digest_version, c.payload_digest
           FROM orchestration_command_receipt_claims c
           WHERE (
               substr(c.command_id, 1, length(${titlePrefix})) = ${titlePrefix}
+              OR substr(c.command_id, 1, length(${statusPrefix})) = ${statusPrefix}
               OR (c.command_id LIKE 'server:text-generation-request-started:%' AND (
                 EXISTS (SELECT 1 FROM projection_thread_activities request
                   WHERE request.thread_id = ${input.threadId}

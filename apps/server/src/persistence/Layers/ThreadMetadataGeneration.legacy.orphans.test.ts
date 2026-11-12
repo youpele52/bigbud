@@ -6,8 +6,45 @@ import { SqlitePersistenceMemory } from "./Sqlite.ts";
 import { makeLegacyMetadataAdmission } from "./ThreadMetadataGeneration.legacy.admission.ts";
 import { makeLegacyMetadataEvidenceReader } from "./ThreadMetadataGeneration.legacy.ts";
 import { at, seedActivity, seedThread } from "./ThreadMetadataGeneration.legacy.test-helpers.ts";
+import { recordThreadTextGenerationStatusRequired } from "../../git/Layers/InternalTextGeneration.status.ts";
+import { calculateCommandPayloadDigest } from "../../orchestration/commandDigest.ts";
+import { captureLegacyMetadataClaims } from "./ThreadMetadataGeneration.legacy.authorization.ts";
 
 it.layer(SqlitePersistenceMemory)("orphan legacy metadata safety", (it) => {
+  it.effect("an interrupted status write fences only its owner and remains recoverable", () =>
+    Effect.gen(function* () {
+      const owner = yield* seedThread("owner:with%separators");
+      const other = yield* seedThread("owner");
+      const sql = yield* SqlClient.SqlClient;
+      yield* recordThreadTextGenerationStatusRequired(
+        {
+          dispatch: (command) =>
+            Effect.gen(function* () {
+              const digest = calculateCommandPayloadDigest(command);
+              yield* sql`INSERT INTO orchestration_command_receipt_claims
+            (command_id, payload_digest_version, payload_digest, claimed_at)
+            VALUES (${command.commandId}, ${digest.version}, ${digest.digest}, ${at})`;
+              return { sequence: 1 };
+            }).pipe(Effect.orDie),
+        },
+        owner,
+        "title",
+        "started",
+      );
+      const admit = yield* makeLegacyMetadataAdmission();
+      assert.isFalse((yield* admit({ threadId: owner, operation: "title" })).allowed);
+      assert.isTrue((yield* admit({ threadId: other, operation: "title" })).allowed);
+      const read = yield* makeLegacyMetadataEvidenceReader();
+      const claims = yield* captureLegacyMetadataClaims(owner);
+      assert.equal(claims.length, 1);
+      assert.deepStrictEqual(
+        (yield* read({ threadId: owner })).evidence[0]?.orphanClaim,
+        claims[0],
+      );
+      assert.deepStrictEqual(yield* captureLegacyMetadataClaims(other), []);
+    }),
+  );
+
   it.effect("an arbitrary command claim cannot hide a canonical dispatch record", () =>
     Effect.gen(function* () {
       const threadId = yield* seedThread("legacy-orphan-claim-event");

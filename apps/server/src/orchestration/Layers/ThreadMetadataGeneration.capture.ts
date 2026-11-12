@@ -50,6 +50,13 @@ export function makeMetadataRequestHandlers(input: MetadataCaptureDependencies) 
     operation: "title" | "summary",
     request: MetadataTitleRequest | MetadataSummaryRequest,
   ) {
+    if (
+      request.legacyRecoveryRequestId !== undefined &&
+      request.legacyRecoveryRequestId !== request.retryKey
+    )
+      return yield* new MetadataCoordinatorError({
+        detail: "Metadata recovery must use its original authorized request identity.",
+      });
     const withSettings = input.settings.withSnapshotBarrier;
     const withHistory = input.engine.withThreadHistoryBarrier;
     if (!withSettings || !withHistory)
@@ -151,6 +158,9 @@ export function makeMetadataRequestHandlers(input: MetadataCaptureDependencies) 
             : null;
           const captured = {
             ...context,
+            ...(request.legacyRecoveryRequestId !== undefined
+              ? { legacyRecoveryRequestId: request.legacyRecoveryRequestId }
+              : {}),
             primaryPath,
             threadPath,
           };

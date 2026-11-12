@@ -10,11 +10,15 @@ export interface MetadataTitleRequest {
   readonly titleSeed?: string;
   /** Stable explicit retry request identity, not an automatically regenerated UUID. */
   readonly retryKey?: string;
+  /** Accepted explicit consent, bound to this same stable retry identity. */
+  readonly legacyRecoveryRequestId?: string;
 }
 export interface MetadataSummaryRequest {
   readonly threadId: ThreadId;
   readonly force?: boolean;
   readonly retryKey?: string;
+  /** Accepted explicit consent, bound to this same stable retry identity. */
+  readonly legacyRecoveryRequestId?: string;
 }
 export interface ThreadMetadataGenerationRequests {
   readonly title: (input: MetadataTitleRequest) => Effect.Effect<void, MetadataCoordinatorFailure>;

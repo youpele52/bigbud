@@ -1,4 +1,6 @@
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
+import { useLocation } from "@tanstack/react-router";
+import { useEffect, useRef } from "react";
 import { Equal } from "effect";
 import { FULL_TEXT_GENERATION_PROVIDERS } from "@bigbud/shared/internalTextGeneration";
 import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
@@ -21,6 +23,16 @@ export function AiSettingsSection() {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
   const serverProviders = useServerProviders();
+  const location = useLocation();
+  const modelControl = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (location.hash !== "text-generation-model") return;
+    modelControl.current?.scrollIntoView({ block: "center" });
+    modelControl.current
+      ?.querySelector<HTMLButtonElement>("button")
+      ?.focus({ preventScroll: true });
+  }, [location]);
 
   const textGenerationModelSelection = resolveAppModelSelectionState(settings, serverProviders);
   const textGenProvider = textGenerationModelSelection.provider;
@@ -102,6 +114,7 @@ export function AiSettingsSection() {
 
       <SettingsRow
         title="Text generation model"
+        forceVisible={location.hash === "text-generation-model"}
         description={
           settings.textGenerationModelSelection
             ? "Try this model first for internal text generation, then the thread’s last successful model."
@@ -121,7 +134,11 @@ export function AiSettingsSection() {
           ) : null
         }
         control={
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <div
+            id="text-generation-model"
+            ref={modelControl}
+            className="flex flex-wrap items-center justify-end gap-1.5"
+          >
             <ProviderModelPicker
               provider={textGenProvider}
               model={textGenSubProvider ? `${textGenModel}::${textGenSubProvider}` : textGenModel}

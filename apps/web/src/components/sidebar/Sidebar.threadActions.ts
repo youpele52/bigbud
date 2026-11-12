@@ -19,6 +19,7 @@ import {
   runInyosiraMenuAction,
 } from "./Sidebar.inyosira.menu";
 import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
+import { requestNewThreadTitle } from "./Sidebar.threadActions.generation";
 
 function normalizeSummaryText(value: string | null | undefined): string {
   return value?.trim().replace(/\s+/g, " ") ?? "";
@@ -221,6 +222,7 @@ export function useSidebarThreadActions({
       const clicked = await api.contextMenu.show(
         [
           { id: "rename", label: "Rename thread" },
+          { id: "generate-title", label: "Generate title…" },
           { id: "branch", label: "Branch thread" },
           buildInyosiraMoveMenuItem(thread.organization),
           buildInyosiraSnoozeMenuItem(thread.organization),
@@ -244,6 +246,7 @@ export function useSidebarThreadActions({
       );
 
       if (await runInyosiraMenuAction(clicked, [threadId])) return;
+      if (clicked === "generate-title") return requestNewThreadTitle(threadId);
 
       if (clicked === "rename") {
         cancelProjectRename();

@@ -228,7 +228,12 @@ export const makeTextGenerationActivityHandler = (services: SessionOpServices) =
         }
         if (!services.metadataGeneration) continue;
         if (request) executingRequests.add(request.requestId);
-        const retryIdentity = request ? { retryKey: request.requestId } : {};
+        const retryIdentity = request
+          ? {
+              retryKey: request.requestId,
+              ...(request.legacyRecovery ? { legacyRecoveryRequestId: request.requestId } : {}),
+            }
+          : {};
         const job =
           operation === "summary"
             ? services.metadataGeneration.summary({ threadId, force: retry, ...retryIdentity })

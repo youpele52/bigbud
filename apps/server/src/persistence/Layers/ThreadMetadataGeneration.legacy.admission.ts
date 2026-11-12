@@ -5,6 +5,12 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { toPersistenceSqlError } from "../Errors.ts";
+import {
+  LegacyMetadataAuthorization,
+  MAX_RECOVERY_CLAIMS,
+  sameLegacyMetadataClaim,
+  type LegacyMetadataClaim,
+} from "./ThreadMetadataGeneration.legacy.authorization.ts";
 import { withMetadataTransaction } from "./ThreadMetadataGeneration.transaction.ts";
 import {
   makeLegacyMetadataEvidenceReader,
@@ -28,6 +34,17 @@ const OperationPayload = Schema.Struct({
 });
 const UserTurnBinding = Schema.Struct({ messageId: Schema.NonEmptyString });
 const RequestReference = Schema.Struct({ requestId: Schema.NonEmptyString });
+const RecoveryRequest = Schema.Struct({
+  requestId: Schema.NonEmptyString,
+  sourceActivityId: Schema.NonEmptyString,
+  operation: Schema.Literals(["title", "summary"]),
+  legacyRecovery: LegacyMetadataAuthorization,
+});
+type AdmissionInput = {
+  readonly threadId: ThreadId;
+  readonly operation: Operation;
+  readonly legacyRecoveryRequestId?: string;
+};
 
 /** A receipt proves this record was accepted, not that any provider work stopped.
  * Legacy statuses lack immutable dispatch identity and terminal provider receipts. In
@@ -63,11 +80,13 @@ export function legacyMetadataEvidenceBlocks(
  */
 const scanLegacyMetadata = Effect.fn("scanLegacyMetadata")(function* (
   read: ReadPage,
-  input: { readonly threadId: ThreadId; readonly operation?: Operation },
+  input: Omit<AdmissionInput, "operation"> & { readonly operation?: Operation },
 ) {
   let afterKey: string | undefined;
   let successfulModel: typeof ModelSelection.Type | null = null;
   let successfulSequence = -1;
+  let authorization: typeof LegacyMetadataAuthorization.Type | null = null;
+  const unresolved: LegacyMetadataClaim[] = [];
   for (let pageIndex = 0; pageIndex < MAX_PAGES; pageIndex += 1) {
     const page = yield* read({ threadId: input.threadId, ...(afterKey ? { afterKey } : {}) });
     for (const evidence of page.evidence) {
@@ -75,9 +94,31 @@ const scanLegacyMetadata = Effect.fn("scanLegacyMetadata")(function* (
       // Model recovery is proof of a selection, NEVER permission to replay paid work.
       // Still require a complete, unambiguous canonical history. Dispatch admission
       // independently retains the operation-qualified legacy-paid-work barrier.
-      if (reason !== null && (input.operation !== undefined || reason !== "legacy-paid-work"))
-        return { allowed: false, reason } satisfies LegacyMetadataAdmission;
+      if (reason !== null && (input.operation !== undefined || reason !== "legacy-paid-work")) {
+        if (
+          input.operation !== undefined &&
+          input.legacyRecoveryRequestId &&
+          reason === "unknown-evidence" &&
+          evidence.orphanClaim &&
+          unresolved.length < MAX_RECOVERY_CLAIMS
+        )
+          unresolved.push(evidence.orphanClaim);
+        else return { allowed: false, reason } satisfies LegacyMetadataAdmission;
+      }
       const activity = evidence.activity;
+      if (
+        input.operation !== undefined &&
+        input.legacyRecoveryRequestId &&
+        evidence.witness === "accepted" &&
+        activity?.kind === "text-generation.retry-requested" &&
+        activity.id === input.legacyRecoveryRequestId &&
+        Schema.is(RecoveryRequest)(activity.payload) &&
+        activity.payload.requestId === activity.id &&
+        activity.id === `text-generation-recovery:${activity.payload.sourceActivityId}` &&
+        activity.payload.operation === input.operation &&
+        activity.payload.legacyRecovery.claims.length <= MAX_RECOVERY_CLAIMS
+      )
+        authorization = activity.payload.legacyRecovery;
       if (
         activity?.kind === "text-generation.model-succeeded" &&
         Schema.is(ModelSelection)(activity.payload) &&
@@ -88,8 +129,21 @@ const scanLegacyMetadata = Effect.fn("scanLegacyMetadata")(function* (
         successfulSequence = evidence.sequence;
       }
     }
-    if (page.nextKey === null)
+    if (page.nextKey === null) {
+      // Only exact, accepted user authorization can spend a separate budget around these
+      // snapshots. It does not settle or replay them; later/changed claims still block.
+      if (input.legacyRecoveryRequestId) {
+        const approvedClaims = authorization?.claims;
+        if (
+          !approvedClaims ||
+          unresolved.some(
+            (claim) => !approvedClaims.some((approved) => sameLegacyMetadataClaim(claim, approved)),
+          )
+        )
+          return { allowed: false, reason: "unknown-evidence" } satisfies LegacyMetadataAdmission;
+      }
       return { allowed: true, successfulModel } satisfies LegacyMetadataAdmission;
+    }
     // A stalled or regressing reader must not loop or accidentally qualify incomplete history.
     if (page.nextKey <= (afterKey ?? ""))
       return { allowed: false, reason: "scan-limit" } satisfies LegacyMetadataAdmission;
@@ -98,10 +152,8 @@ const scanLegacyMetadata = Effect.fn("scanLegacyMetadata")(function* (
   return { allowed: false, reason: "scan-limit" } satisfies LegacyMetadataAdmission;
 });
 
-export const scanLegacyMetadataAdmission = (
-  read: ReadPage,
-  input: { readonly threadId: ThreadId; readonly operation: Operation },
-) => scanLegacyMetadata(read, input);
+export const scanLegacyMetadataAdmission = (read: ReadPage, input: AdmissionInput) =>
+  scanLegacyMetadata(read, input);
 
 /** Full canonical evidence recovery only; this is not dispatch admission. */
 export const scanLegacyMetadataSuccessfulModel = (read: ReadPage, threadId: ThreadId) =>
@@ -110,10 +162,7 @@ export const scanLegacyMetadataSuccessfulModel = (read: ReadPage, threadId: Thre
 export const makeLegacyMetadataAdmission = Effect.fn("makeLegacyMetadataAdmission")(function* () {
   const sql = yield* SqlClient.SqlClient;
   const read = yield* makeLegacyMetadataEvidenceReader();
-  return Effect.fn("legacyMetadata.admission")(function* (input: {
-    readonly threadId: ThreadId;
-    readonly operation: Operation;
-  }) {
+  return Effect.fn("legacyMetadata.admission")(function* (input: AdmissionInput) {
     return yield* withMetadataTransaction(sql, scanLegacyMetadataAdmission(read, input)).pipe(
       Effect.mapError(toPersistenceSqlError("ThreadMetadataGeneration.legacy.admission")),
       Effect.timeoutOrElse({

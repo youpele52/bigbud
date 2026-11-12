@@ -5,6 +5,7 @@
  */
 import { type OrchestrationEvent } from "@bigbud/contracts";
 import { Effect, Option } from "effect";
+import { USER_TURN_BOUND } from "@bigbud/shared/internalTextGeneration";
 
 import {
   ORCHESTRATION_PROJECTOR_NAMES,
@@ -42,9 +43,11 @@ export function makeThreadActivitiesProjector(
           kind: event.payload.activity.kind,
           summary: event.payload.activity.summary,
           payload: event.payload.activity.payload,
-          ...(event.payload.activity.sequence !== undefined
-            ? { sequence: event.payload.activity.sequence }
-            : {}),
+          ...(event.payload.activity.kind === USER_TURN_BOUND
+            ? { sequence: event.sequence }
+            : event.payload.activity.sequence !== undefined
+              ? { sequence: event.payload.activity.sequence }
+              : {}),
           createdAt: event.payload.activity.createdAt,
         });
         {
