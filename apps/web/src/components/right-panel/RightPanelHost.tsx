@@ -62,7 +62,13 @@ export function RightPanelHost({ activeThreadId }: RightPanelHostProps) {
   const browserShortcutLabel = shortcutLabelForCommand(keybindings, "browser.toggle");
   const filesShortcutLabel = shortcutLabelForCommand(keybindings, "files.toggle");
   const gitShortcutLabel = shortcutLabelForCommand(keybindings, "git.toggle");
-  const terminalShortcutLabel = shortcutLabelForCommand(keybindings, "terminal.toggle");
+  const terminalShortcutLabel =
+    [
+      shortcutLabelForCommand(keybindings, "terminal.toggle"),
+      shortcutLabelForCommand(keybindings, "terminalPanel.toggle"),
+    ]
+      .filter(Boolean)
+      .join(" / ") || null;
   const diffShortcutLabel = shortcutLabelForCommand(keybindings, "diff.toggle");
   const notesShortcutLabel = shortcutLabelForCommand(keybindings, "notes.toggle");
 
