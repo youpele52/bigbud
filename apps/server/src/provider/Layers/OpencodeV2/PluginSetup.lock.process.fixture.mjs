@@ -60,7 +60,7 @@ try {
       input.artifact,
       new V2ThreadImplementationRegistry(),
     );
-    await selection.select("v4", authority);
+    await selection.select("v5", authority);
   } else {
     const { acquireV2PluginPublicationLock } = await import("./PluginSetup.lock.ts");
     const { v2NativePluginDirectory } = await import("./PluginSetup.fs.ts");

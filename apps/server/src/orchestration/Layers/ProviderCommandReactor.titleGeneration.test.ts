@@ -1,4 +1,10 @@
 import {
+  useTitleMetadataFixture,
+  waitForMetadata as waitFor,
+  readTitleJobs,
+  readTitleAttempts,
+} from "./ProviderCommandReactor.title.test.helpers.ts";
+import {
   CommandId,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   EventId,
@@ -12,7 +18,6 @@ import {
   asMessageId,
   createHarness,
   registerProviderCommandReactorTestCleanup,
-  waitFor,
 } from "./ProviderCommandReactor.test.helpers.ts";
 
 const threadId = ThreadId.makeUnsafe("thread-1");
@@ -52,6 +57,7 @@ const hasStatus = async (harness: Harness, kind: string) =>
 
 describe("ProviderCommandReactor title generation", () => {
   registerProviderCommandReactorTestCleanup();
+  useTitleMetadataFixture();
   afterEach(resetThreadTitleLockForTests);
 
   it("generates a first-turn title when an override is explicitly configured", async () => {
@@ -60,25 +66,33 @@ describe("ProviderCommandReactor title generation", () => {
     await start(harness);
     await waitFor(async () => (await readThread(harness)).title === "Generated title");
     expect(harness.generateThreadTitle).toHaveBeenCalledTimes(1);
-    await waitFor(() => hasStatus(harness, "text-generation.completed"));
+    await waitFor(async () =>
+      (await readTitleJobs(harness)).some((job) => job.state === "completed"),
+    );
+    expect(await readTitleAttempts(harness)).toEqual([
+      { stage: "primary", state: "completed", ordinal: 1 },
+    ]);
   });
 
   it("retries the normal policy once, then waits without warning or replaying chat", async () => {
     const harness = await configuredHarness();
     harness.generateThreadTitle.mockReturnValue(
       Effect.fail(
-        new TextGenerationError({ operation: "generateThreadTitle", detail: "Unsupported model" }),
+        new TextGenerationError({
+          operation: "generateThreadTitle",
+          detail: "Unsupported model",
+          metadataOutcome: "failed",
+        }),
       ),
     );
     await start(harness);
     await waitFor(async () =>
-      (await readThread(harness)).activities.some(
-        (item) =>
-          item.kind === "text-generation.title-stage" &&
-          (item.payload as { stage?: number; state?: string }).stage === 2 &&
-          (item.payload as { state?: string }).state === "failed",
-      ),
+      (await readTitleJobs(harness)).some((job) => job.state === "waiting-model"),
     );
+    expect(await readTitleAttempts(harness)).toEqual([
+      { stage: "primary", state: "failed", ordinal: 1 },
+      { stage: "primary", state: "failed", ordinal: 2 },
+    ]);
     expect(harness.generateThreadTitle).toHaveBeenCalledTimes(2);
     expect(await hasStatus(harness, "text-generation.failed")).toBe(false);
     expect((await readThread(harness)).title).toBe("Please investigate reconn...");
@@ -119,19 +133,23 @@ describe("ProviderCommandReactor title generation", () => {
       }),
     );
     await waitFor(async () => (await readThread(harness)).title === "Deferred title");
-    expect(harness.generateThreadTitle.mock.calls[0]?.[0].successfulModelSelection).toEqual({
+    expect(harness.generateThreadTitle.mock.calls[0]?.[0].metadataAttempt?.selection).toEqual({
       provider: "claudeAgent",
       model: "proven-model",
     });
     await waitFor(() => harness.sendTurn.mock.calls.length === 1);
   });
 
-  it("stops automatically after the immediate second attempt succeeds", async () => {
+  it("stops automatically after the bounded second attempt succeeds", async () => {
     const harness = await configuredHarness();
     harness.generateThreadTitle
       .mockReturnValueOnce(
         Effect.fail(
-          new TextGenerationError({ operation: "generateThreadTitle", detail: "Failure" }),
+          new TextGenerationError({
+            operation: "generateThreadTitle",
+            detail: "Failure",
+            metadataOutcome: "failed",
+          }),
         ),
       )
       .mockReturnValue(Effect.succeed({ title: "Recovered title" }));

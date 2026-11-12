@@ -34,8 +34,9 @@ export async function makeV2ApplicationOrchestration(
   eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
   configRoot?: string,
   backend?: V2BackendInstance,
+  exportArtifact: typeof exportV2ThreadArtifact = exportV2ThreadArtifact,
 ) {
-  const artifact = await exportV2ThreadArtifact(stateDir);
+  const artifact = await exportArtifact(stateDir);
   const implementations = new V2ThreadImplementationRegistry();
   const implementationSelection = await V2ImplementationSelection.open(artifact, implementations);
   const records = await V2ThreadRecords.open(

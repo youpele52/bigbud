@@ -4,6 +4,8 @@ import { readFile, lstat } from "node:fs/promises";
 import path from "node:path";
 import { ThreadId, MessageId } from "@bigbud/contracts/core/baseSchemas";
 import { withV2ProductionThreadTools } from "./Orchestration.production.fixture.ts";
+import { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
+import { makeV2HtmlRegistrationFixture } from "./Orchestration.registration.legacy.fixture.ts";
 import { v2ThreadImplementation } from "./Orchestration.implementation.ts";
 
 type Listed = { ok: true; result: { limit: number; returnedCount: number } };
@@ -101,6 +103,30 @@ export async function runV2ProductionGenerationsFixture() {
         bootstrapBytesAndInodesUnchanged: true,
       };
     },
+    "full-access",
+    undefined,
+    false,
+    async (stateDir) => makeV2HtmlRegistrationFixture(await exportV2ThreadArtifact(stateDir)),
   );
+  return report!;
+}
+
+/** Current preferred bootstrap must still use v5 and refuse an incompatible retained handler. */
+export async function runV2ProductionCurrentFixture() {
+  let report: Record<string, unknown> | undefined;
+  await withV2ProductionThreadTools(async ({ artifact, invoke, selectImplementation }) => {
+    assert.equal(artifact.bootstrapAbi, "bigbud.thread.bootstrap.v5");
+    const before = await snapshot(artifact.directory);
+    const listed = (await invoke("list_threads", {}, "current-list")) as Listed;
+    assert.equal(listed.result.returnedCount, 1);
+    await assert.rejects(selectImplementation("v4"), /incompatible/);
+    assert.deepEqual(await invoke("list_threads", {}, "current-list"), listed);
+    assert.deepEqual(await snapshot(artifact.directory), before);
+    report = {
+      bootstrapAbi: artifact.bootstrapAbi,
+      incompatibleRollbackRejected: true,
+      completedDuplicate: true,
+    };
+  });
   return report!;
 }

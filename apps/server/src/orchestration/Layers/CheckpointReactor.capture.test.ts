@@ -77,8 +77,9 @@ describe("CheckpointReactor", () => {
     await waitForEvent(harness.engine, (event) => event.type === "thread.turn-diff-completed");
     const thread = await waitForThread(
       harness.engine,
-      (entry) => entry.latestTurn?.turnId === "turn-1" && entry.checkpoints.length === 1,
+      (entry) => entry.checkpoints.length === 1 && entry.checkpoints[0]?.turnId === "turn-1",
     );
+    expect(thread.latestTurn).toBeNull();
     expect(thread.checkpoints[0]?.checkpointTurnCount).toBe(1);
     expect(
       gitRefExists(harness.cwd, checkpointRefForThreadTurn(ThreadId.makeUnsafe("thread-1"), 0)),
@@ -154,9 +155,10 @@ describe("CheckpointReactor", () => {
     await waitForEvent(harness.engine, (event) => event.type === "thread.turn-diff-completed");
     const thread = await waitForThread(
       harness.engine,
-      (entry) => entry.latestTurn?.turnId === "turn-claude-1" && entry.checkpoints.length === 1,
+      (entry) => entry.checkpoints.length === 1 && entry.checkpoints[0]?.turnId === "turn-claude-1",
     );
 
+    expect(thread.latestTurn).toBeNull();
     expect(thread.checkpoints[0]?.checkpointTurnCount).toBe(1);
     expect(
       gitRefExists(harness.cwd, checkpointRefForThreadTurn(ThreadId.makeUnsafe("thread-1"), 1)),

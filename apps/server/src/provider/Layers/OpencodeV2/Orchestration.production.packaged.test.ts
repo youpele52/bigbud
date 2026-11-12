@@ -69,6 +69,11 @@ it("the release compiler bundles genuine A/B handlers and the canonical HTTP/SQL
       aDigest: v2ThreadImplementation("v3").implementationDigest,
       bDigest: v2ThreadImplementation("v4").implementationDigest,
     });
+    expect(report.current).toEqual({
+      bootstrapAbi: "bigbud.thread.bootstrap.v5",
+      incompatibleRollbackRejected: true,
+      completedDuplicate: true,
+    });
     expect(report.upgrade).toMatchObject({
       nativeQualified: false,
       supported: ["v2-system-global-config-v1", "v2-system-global-config-v1"],

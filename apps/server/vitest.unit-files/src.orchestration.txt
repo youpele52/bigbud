@@ -11,7 +11,6 @@ src/orchestration/Layers/OrchestrationEngine.browser.test.ts
 src/orchestration/Layers/OrchestrationEngine.commandOutcome.test.ts
 src/orchestration/Layers/OrchestrationEngine.domainEvents.test.ts
 src/orchestration/Layers/OrchestrationEngine.ownership.test.ts
-src/orchestration/Layers/OrchestrationEngine.prepareCommandState.test.ts
 src/orchestration/Layers/OrchestrationReactor.test.ts
 src/orchestration/Layers/ProjectionPipeline.baseline.operations.test.ts
 src/orchestration/Layers/ProjectionPipeline.projector.projects.lastUsed.test.ts
@@ -65,7 +64,6 @@ src/orchestration/Layers/ProviderTurnSupervisor.policy.logic.test.ts
 src/orchestration/Layers/ProviderTurnSupervisor.state.test.ts
 src/orchestration/Layers/ProviderTurnSupervisor.test.ts
 src/orchestration/Layers/ProviderTurnSupervisor.tools.logic.test.ts
-src/orchestration/Layers/TerminalThreadTitleReactor.test.ts
 src/orchestration/Layers/ThreadWatchReactor.modelChoice.test.ts
 src/orchestration/Layers/readModelSettle.test.ts
 src/orchestration/Normalizer.attachments.restored.test.ts

@@ -27,7 +27,8 @@ export function assertV2SessionBootstrap(artifact: V2PluginSetupArtifact, native
   if (
     nativeSessionId.startsWith(V2_COMPACT_NATIVE_SESSION_PREFIX) &&
     artifact.bootstrapAbi !== V2_SCOPED_BOOTSTRAP_ABI &&
-    artifact.bootstrapAbi !== "bigbud.thread.bootstrap.v3"
+    artifact.bootstrapAbi !== "bigbud.thread.bootstrap.v3" &&
+    artifact.bootstrapAbi !== "bigbud.thread.bootstrap.v4"
   )
     throw new Error(
       "V2 compact native history requires its namespace-aware bootstrap; no downgrade or replacement.",

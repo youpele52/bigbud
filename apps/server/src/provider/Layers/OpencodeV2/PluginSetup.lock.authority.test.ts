@@ -117,7 +117,7 @@ it.each(["record", "default"] as const)(
               if (purpose === "record")
                 await records.replace("owned", undefined, { pending: true });
               else
-                await selection.select("v4", {
+                await selection.select("v5", {
                   signal: new AbortController().signal,
                   assertCurrent: () => {},
                 });
@@ -141,7 +141,7 @@ it.each(["record", "default"] as const)(
       expect((await lstat(filename)).ino).toBe(inode);
       expect(JSON.parse(await readFile(filename, "utf8"))).toMatchObject({ pid: process.pid });
       expect(await records.read("owned")).toBeUndefined();
-      expect(registry.current()).toBe(v2ThreadImplementation("v3"));
+      expect(registry.current()).toBe(v2ThreadImplementation("v5"));
     } finally {
       held.resolve();
       window.release();
@@ -220,7 +220,7 @@ it.each(["record", "default", "publisher"] as const)(
               async () => {
                 if (purpose === "record") {
                   await records.replace("owned", undefined, { pending: true }, authority);
-                } else if (purpose === "default") await selection.select("v4", authority);
+                } else if (purpose === "default") await selection.select("v5", authority);
                 else {
                   const release = await acquireV2PluginPublicationLock(
                     directory,
@@ -245,7 +245,7 @@ it.each(["record", "default", "publisher"] as const)(
             });
           }
           if (purpose === "record") expect(await records.read("owned")).toBeUndefined();
-          if (purpose === "default") expect(registry.current()).toBe(v2ThreadImplementation("v3"));
+          if (purpose === "default") expect(registry.current()).toBe(v2ThreadImplementation("v5"));
         } finally {
           hook.target = "";
           hook.lose = () => {};

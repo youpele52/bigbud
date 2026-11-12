@@ -21,6 +21,7 @@ import { makeV2LegacyRegistrationFixture } from "./Orchestration.registration.le
 export async function makeV2ThreadPluginFixture(
   options: {
     readonly stateRoot?: string;
+    readonly exportArtifact?: typeof exportV2ThreadArtifact;
     readonly invoke?: (value: Record<string, unknown>) => Promise<unknown>;
     readonly responseLease?: () => { readonly revision: number; readonly expiry: number };
     readonly implementationVersion?: "v1" | "v2" | "v3" | "v4" | "v5";
@@ -31,7 +32,9 @@ export async function makeV2ThreadPluginFixture(
   await mkdir(parent, { recursive: true, mode: 0o700 });
   const root = await realpath(await mkdtemp(path.join(parent, "thread-plugin-")));
   await ownV2WindowsFixture(root);
-  const preferred = await exportV2ThreadArtifact(options.stateRoot ?? root);
+  const preferred = await (options.exportArtifact ?? exportV2ThreadArtifact)(
+    options.stateRoot ?? root,
+  );
   const artifact = options.legacyRegistration
     ? await makeV2LegacyRegistrationFixture(preferred)
     : preferred;
@@ -114,7 +117,12 @@ export async function makeV2ThreadPluginFixture(
       bootstrapAbi: artifact.bootstrapAbi,
       compatibilityDigest: artifact.compatibilityDigest,
       implementationDigest: v2ThreadImplementation(
-        options.implementationVersion ?? (options.legacyRegistration ? "v1" : "v5"),
+        options.implementationVersion ??
+          (artifact.bootstrapAbi === "bigbud.thread.bootstrap.v5"
+            ? "v5"
+            : artifact.bootstrapAbi === "bigbud.thread.bootstrap.v4"
+              ? "v3"
+              : "v1"),
       ).implementationDigest,
       threadId: "disposable-canonical-thread",
       nativeSessionId,

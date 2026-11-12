@@ -33,7 +33,12 @@ it("the production V2 runtime import graph cannot retain private/SSH/development
       expect(target, `${filename} imported private SDK`).not.toMatch(/^@opencode-ai\/sdk(?:\/|$)/);
       if (!target.startsWith(".")) continue;
       let resolved = path.resolve(path.dirname(filename), target);
-      if (!path.extname(resolved)) {
+      if (
+        !(await stat(resolved).then(
+          (entry) => entry.isFile(),
+          () => false,
+        ))
+      ) {
         for (const suffix of [".ts", ".tsx", ".mjs"]) {
           if (
             await stat(resolved + suffix).then(

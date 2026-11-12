@@ -38,6 +38,7 @@ describe("createCopilotThreadOrchestrationTools", () => {
       "render_html",
       "get_system_resources",
       "configure_system_resource_rules",
+      "set_elevator_summary",
       "rename_thread",
       "archive_thread",
       "create_thread",

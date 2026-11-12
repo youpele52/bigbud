@@ -51,6 +51,7 @@ import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers
 import { EntityPurgeLive } from "../../deletion/Layers/EntityPurge.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
+import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
 import { makeReactorProvider } from "./ProviderCommandReactor.test.provider.ts";
 import { ProjectionNoteRepositoryLive } from "../../persistence/Layers/ProjectionNotes.ts";
@@ -255,6 +256,7 @@ export async function createHarness(input?: {
 
   const orchestrationLayer = OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
+    Layer.provide(ProjectionOperationalStateQueryLive),
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),

@@ -1,4 +1,5 @@
 import { CommandId, EventId, ThreadId } from "@bigbud/contracts";
+import { THREAD_FORK_ORIGIN_ACTIVITY_KIND } from "@bigbud/contracts/orchestration/orchestration.fork";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 
@@ -56,6 +57,13 @@ describe("ProviderCommandReactor automatic fork fallback", () => {
     expect(failure.payload).toMatchObject({ messageId: "user-second" });
     expect(fork.forkOrigin).toMatchObject({
       reason: "recovery-failed",
+      failureEventId: failure.id,
+    });
+    // Hydrated lineage keeps identity; delivery proof persists in the origin activity.
+    expect(
+      fork.activities.find((entry) => entry.kind === THREAD_FORK_ORIGIN_ACTIVITY_KIND)?.payload,
+    ).toMatchObject({
+      sourceThreadId: THREAD,
       failureEventId: failure.id,
       pendingDelivery: "sent",
     });

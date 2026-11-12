@@ -8,6 +8,11 @@ import {
   V2_N6_BOOTSTRAP_COMPATIBILITY,
   V2_N6_COMPATIBILITY_DIGEST,
 } from "./Orchestration.compatibility.legacy.ts";
+import {
+  V2_N8_BOOTSTRAP_COMPATIBILITY,
+  V2_N8_COMPATIBILITY_DIGEST,
+} from "./Orchestration.compatibility.n8.ts";
+import { V2_HTML_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v4.ts";
 import { V2_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.ts";
 import { V2_NATIVE_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.ts";
 import { V2_SUMMARY_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v5.ts";
@@ -34,21 +39,31 @@ export async function makeV2PreHtmlRegistrationFixture(preferred: V2PluginSetupA
   return makeRetainedRegistrationFixture(preferred, true, true);
 }
 
+/** Synthetic six-tool ABI-4 fixture; exercises retained handlers, not native qualification. */
+export async function makeV2HtmlRegistrationFixture(preferred: V2PluginSetupArtifact) {
+  return makeRetainedRegistrationFixture(preferred, true, false, true);
+}
+
 async function makeRetainedRegistrationFixture(
   preferred: V2PluginSetupArtifact,
   scopedHex: boolean,
   preHtml = false,
+  html = false,
 ) {
-  const compatibility = preHtml
-    ? V2_N6_BOOTSTRAP_COMPATIBILITY
-    : scopedHex
-      ? V2_N3_BOOTSTRAP_COMPATIBILITY
-      : V2_N2_BOOTSTRAP_COMPATIBILITY;
-  const compatibilityDigest = preHtml
-    ? V2_N6_COMPATIBILITY_DIGEST
-    : scopedHex
-      ? V2_N3_COMPATIBILITY_DIGEST
-      : V2_N2_COMPATIBILITY_DIGEST;
+  const compatibility = html
+    ? V2_N8_BOOTSTRAP_COMPATIBILITY
+    : preHtml
+      ? V2_N6_BOOTSTRAP_COMPATIBILITY
+      : scopedHex
+        ? V2_N3_BOOTSTRAP_COMPATIBILITY
+        : V2_N2_BOOTSTRAP_COMPATIBILITY;
+  const compatibilityDigest = html
+    ? V2_N8_COMPATIBILITY_DIGEST
+    : preHtml
+      ? V2_N6_COMPATIBILITY_DIGEST
+      : scopedHex
+        ? V2_N3_COMPATIBILITY_DIGEST
+        : V2_N2_COMPATIBILITY_DIGEST;
   const manifest = JSON.parse(
     await readV2ThreadPrivateFile(path.join(preferred.directory, "manifest.json")),
   );
@@ -59,7 +74,7 @@ async function makeRetainedRegistrationFixture(
       source = source
         .replaceAll('"bigbud.thread.v2."+issuer', '"bigbud.thread.v1"')
         .replace('.map(spec=>({...spec,name:"bb2_"+issuer.slice(0,32)+"_"+spec.action}))', "");
-    if (name === "registry.mjs" && !preHtml) {
+    if (name === "registry.mjs" && !preHtml && !html) {
       source = source
         .replace(/^  const compactPrefix=.*\n/m, "")
         .replace(/^    if\(owner\.nativeSessionId\.startsWith.*\n/m, "")
@@ -72,7 +87,7 @@ async function makeRetainedRegistrationFixture(
     source = source
       .replaceAll(
         JSON.stringify(V2_SUMMARY_BOOTSTRAP_SPECS),
-        JSON.stringify(V2_NATIVE_BOOTSTRAP_SPECS),
+        JSON.stringify(html ? V2_HTML_BOOTSTRAP_SPECS : V2_NATIVE_BOOTSTRAP_SPECS),
       )
       .replaceAll(V2_IMPLEMENTATION_MANIFEST.v5.schemaDigest, compatibility.schemaDigest)
       .replaceAll("bigbud.thread.bootstrap.v5", compatibility.bootstrapAbi)

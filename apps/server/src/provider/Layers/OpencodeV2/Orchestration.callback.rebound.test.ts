@@ -1,3 +1,4 @@
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { createServer } from "node:http";
 import { expect, it } from "vitest";
 import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
@@ -19,7 +20,9 @@ it("rebound listener cannot expose primary tools, forge invocation success, or r
   });
   try {
     await host.call("enroll", app.envelope("enroll", 1, Date.now() + 55000));
-    expect(Object.keys((await host.request(owner.nativeSessionId)).tools)).toHaveLength(6);
+    expect(Object.keys((await host.request(owner.nativeSessionId)).tools).toSorted()).toEqual(
+      [...v2ThreadRegistration(app.artifact).tools].toSorted(),
+    );
     await app.closeCallback(); // No native detach: the original native lease is intentionally still live.
     await new Promise<void>((resolve) =>
       replacement.listen(Number(new URL(owner.callbackUrl).port), "127.0.0.1", resolve),
