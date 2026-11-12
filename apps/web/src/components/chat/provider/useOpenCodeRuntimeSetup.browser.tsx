@@ -95,11 +95,16 @@ beforeEach(() => {
     socketUrl: "ws://localhost/ws",
   };
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 it.each(["cancel", "status"])(
   "coalesces double Cancel and fences delayed %s replies after switching chats",
   async (delayedOperation) => {
+    // Keep unrelated periodic polls from racing the physical double-click sequence.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const waiting = {
       ...ready,
       status: "required",
@@ -125,6 +130,12 @@ it.each(["cancel", "status"])(
     expect(
       mocks.get.mock.calls.filter(([request]) => request.operation === "cancel-interest"),
     ).toHaveLength(1);
+    // Cancellation must stop the old observer even while its RPC reply is delayed.
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(mocks.get.mock.calls.map(([request]) => request.operation ?? "setup")).toEqual([
+      "setup",
+      "cancel-interest",
+    ]);
     if (delayedOperation === "status") {
       cancellation.resolve(waiting);
       await vi.waitFor(() =>
@@ -136,7 +147,7 @@ it.each(["cancel", "status"])(
     cancellation.resolve(waiting);
     observation.resolve({ ...waiting, activationState: "failed", message: "Stale failure" });
     // Drain the deferred RPC continuations before asserting that old-scope results stayed fenced.
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await vi.advanceTimersByTimeAsync(0);
     await expect.element(screen.getByText("Runtime verified", { exact: true })).toBeVisible();
     await expect.element(screen.getByText("Stale failure")).not.toBeInTheDocument();
     expect(mocks.get.mock.calls.map(([request]) => request.operation ?? "setup")).toEqual(

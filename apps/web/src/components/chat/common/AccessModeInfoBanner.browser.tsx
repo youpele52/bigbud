@@ -1,13 +1,14 @@
 import "../../../index.css";
 
 import { page } from "vitest/browser";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { ACCESS_MODE_INFO_DURATION_MS, AccessModeInfoBanner } from "./AccessModeInfoBanner";
 
 describe("AccessModeInfoBanner", () => {
   afterEach(() => {
+    vi.useRealTimers();
     document.body.innerHTML = "";
   });
 
@@ -37,6 +38,8 @@ describe("AccessModeInfoBanner", () => {
   });
 
   it("gates on OpenCode v2 and hides when the provider or thread changes", async () => {
+    // Exercise the physical dismiss click without racing the independently tested expiry.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const props = {
       threadId: "thread-1",
       runtimeMode: "full-access" as const,
