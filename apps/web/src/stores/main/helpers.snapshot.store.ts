@@ -11,7 +11,16 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
   const mappedProjects = readModel.projects
     .filter((project) => project.deletedAt === null)
     .map(mapProject);
-  const threads = readModel.threads.filter((thread) => thread.deletedAt === null).map(mapThread);
+  const threads = readModel.threads
+    .filter((thread) => thread.deletedAt === null)
+    .map((source) => {
+      const thread = mapThread(source);
+      thread.notificationObservation = {
+        messages: [],
+        baselineSequence: readModel.snapshotSequence,
+      };
+      return thread;
+    });
   const visibleThreads = threads.filter((thread) => thread.purpose !== "side-chat");
   const projects = deriveProjectActiveThreadCounts(mappedProjects, threads);
   return {

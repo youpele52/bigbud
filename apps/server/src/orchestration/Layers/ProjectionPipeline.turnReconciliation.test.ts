@@ -157,7 +157,7 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
           requested_at ASC
       `;
         assert.deepEqual(turnRows, [
-          { turnId: "turn-completed", checkpointTurnCount: 1, status: "completed" },
+          { turnId: "turn-completed", checkpointTurnCount: 1, status: "running" },
           { turnId: "turn-interrupted", checkpointTurnCount: null, status: "interrupted" },
         ]);
       }),

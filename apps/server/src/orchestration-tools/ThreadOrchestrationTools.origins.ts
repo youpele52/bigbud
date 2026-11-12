@@ -1,4 +1,10 @@
-import { CommandId, EventId, type ProjectId, type ThreadId } from "@bigbud/contracts";
+import {
+  CommandId,
+  EventId,
+  type MessageId,
+  type ProjectId,
+  type ThreadId,
+} from "@bigbud/contracts";
 import type { DelegationModelChoiceLinkedSummary } from "@bigbud/contracts/orchestration/orchestration.delegationModelChoice";
 import { createHash } from "node:crypto";
 
@@ -13,6 +19,7 @@ export const delegationError = (error: unknown): Error =>
 function delegationLinkedActivityCommand(input: {
   callerThreadId: ThreadId;
   childThreadId: ThreadId;
+  requestMessageId: MessageId;
   childProjectId: ProjectId;
   childTitle: string;
   createdAt: string;
@@ -29,6 +36,7 @@ function delegationLinkedActivityCommand(input: {
       summary: `Delegated to ${input.childTitle}`,
       payload: {
         childThreadId: input.childThreadId,
+        requestMessageId: input.requestMessageId,
         childProjectId: input.childProjectId,
         childTitle: input.childTitle,
         ...(input.modelChoice !== undefined ? { modelChoice: input.modelChoice } : {}),
@@ -42,7 +50,7 @@ function delegationLinkedActivityCommand(input: {
 
 export function notifyDelegationLinked(
   input: { orchestrationEngine: OrchestrationEngineShape; callerThreadId: ThreadId },
-  delegation: { childThreadId: ThreadId },
+  delegation: { childThreadId: ThreadId; sourceMessageId: MessageId },
   childProjectId: ProjectId,
   childTitle: string,
   createdAt: string,
@@ -52,6 +60,7 @@ export function notifyDelegationLinked(
     delegationLinkedActivityCommand({
       callerThreadId: input.callerThreadId,
       childThreadId: delegation.childThreadId,
+      requestMessageId: delegation.sourceMessageId,
       childProjectId,
       childTitle,
       createdAt,

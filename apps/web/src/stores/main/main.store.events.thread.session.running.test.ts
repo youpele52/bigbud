@@ -54,6 +54,40 @@ describe("incremental running session updates", () => {
     expect(next.threads[0]?.session?.reason).toBe("turn.completed.awaiting_agent_end");
   });
 
+  it("does not normalize a newer session epoch using older native settlement proof", () => {
+    const turnId = TurnId.makeUnsafe("same-turn");
+    const thread = makeThread({
+      latestTurn: {
+        turnId,
+        state: "completed",
+        terminalOutcome: "completed",
+        requestedAt: "2026-02-27T00:00:00.000Z",
+        startedAt: "2026-02-27T00:00:00.000Z",
+        completedAt: "2026-02-27T00:00:01.000Z",
+        assistantMessageId: null,
+      },
+    });
+    const next = applyOrchestrationEvent(
+      makeState(thread),
+      makeEvent("thread.session-set", {
+        threadId: thread.id,
+        session: {
+          threadId: thread.id,
+          status: "running",
+          providerName: "codex",
+          runtimeMode: "full-access",
+          activeTurnId: turnId,
+          sessionEpoch: 1,
+          reason: null,
+          lastError: null,
+          updatedAt: "2026-02-27T00:00:02.000Z",
+        },
+      }),
+    );
+    expect(next.threads[0]?.session?.orchestrationStatus).toBe("running");
+    expect(next.threads[0]?.session?.activeTurnId).toBe(turnId);
+  });
+
   it("preserves running session updates without an active turn id", () => {
     const thread = makeThread();
     const state = makeState(thread);
@@ -131,7 +165,10 @@ describe("Stop stays available across a multi-message turn", () => {
     // Codex/Claude complete this message before their tool calls; the turn keeps going.
     const afterCommentary = applyOrchestrationEvent(running, assistantMessage(false, 3));
 
-    expect(afterCommentary.threads[0]?.latestTurn?.completedAt).not.toBeNull();
+    expect(afterCommentary.threads[0]?.latestTurn?.completedAt).toBeNull();
+    expect(isRunning(applyOrchestrationEvent(afterCommentary, sessionSet("running", 4)))).toBe(
+      true,
+    );
     expect(isRunning(afterCommentary)).toBe(true);
     expect(isRunning(applyOrchestrationEvent(afterCommentary, sessionSet("ready", 4)))).toBe(false);
   });

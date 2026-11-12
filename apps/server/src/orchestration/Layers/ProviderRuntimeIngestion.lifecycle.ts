@@ -74,7 +74,7 @@ export function isProvenSettledRecoveryTerminal(
   }
   const latest = thread.latestTurn;
   if (!latest || !sameId(latest.turnId, event.turnId)) return false;
-  if (latest.state === "running") return false;
+  if (latest.terminalOutcome == null) return false;
   const activeTurnId = thread.session?.activeTurnId ?? null;
   if (activeTurnId !== null && sameId(activeTurnId, event.turnId)) return false;
   return true;

@@ -228,6 +228,11 @@ export interface Thread {
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
   providerAgents?: OrchestrationTask[];
+  notificationSafety?: import("@bigbud/contracts/orchestration/orchestration.notificationSafety.ts").ThreadNotificationSafety;
+  /** Live-only, bounded observations; never reconstructed from hydrated history. */
+  notificationObservation?: import("../../notifications/taskCompletion.observations").ThreadNotificationObservation;
+  /** Latest live/catalog evidence sequence; older hydration cannot release a safety gate. */
+  notificationSafetySequence?: number;
   delegatedChildren?: DelegatedChildSummary[];
   queuedPrompts?: Array<OrchestrationQueuedPrompt>;
   pendingTurnControlOperation?: OrchestrationTurnControlOperation | null;

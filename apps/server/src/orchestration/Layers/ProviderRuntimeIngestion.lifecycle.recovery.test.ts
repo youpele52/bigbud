@@ -5,6 +5,7 @@ import { isProvenSettledRecoveryTerminal } from "./ProviderRuntimeIngestion.life
 
 function thread(input: {
   latestState?: string;
+  terminalOutcome?: "completed" | "failed";
   latestTurnId?: string;
   activeTurnId?: string | null;
 }): OrchestrationThread {
@@ -18,6 +19,7 @@ function thread(input: {
           startedAt: "2026-10-29T00:00:00.000Z",
           completedAt: "2026-10-29T00:01:00.000Z",
           assistantMessageId: null,
+          ...(input.terminalOutcome ? { terminalOutcome: input.terminalOutcome } : {}),
         }
       : null,
     session: { activeTurnId: input.activeTurnId ?? null },
@@ -39,8 +41,17 @@ function recoveryEvent(turnId = "turn-1"): ProviderRuntimeEvent {
 describe("isProvenSettledRecoveryTerminal", () => {
   it("proves settlement after canonical application (crash after application, before recovery ack)", () => {
     expect(
-      isProvenSettledRecoveryTerminal(recoveryEvent(), thread({ latestTurnId: "turn-1" })),
+      isProvenSettledRecoveryTerminal(
+        recoveryEvent(),
+        thread({ latestTurnId: "turn-1", terminalOutcome: "completed" }),
+      ),
     ).toBe(true);
+  });
+
+  it("does not treat legacy inferred completion as native settlement", () => {
+    expect(
+      isProvenSettledRecoveryTerminal(recoveryEvent(), thread({ latestTurnId: "turn-1" })),
+    ).toBe(false);
   });
 
   it("does not prove settlement while the canonical turn is still running (claim/publication crash windows)", () => {

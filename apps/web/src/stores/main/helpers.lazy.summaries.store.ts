@@ -1,19 +1,50 @@
 import type { AppState } from "./main.store";
 import { mapSidebarThreadSummary, mapThreadSummary } from "./mappers.lazy.store";
 import { newerOrganization } from "./helpers.organization.logic.store";
+import { mergeNotificationTasks } from "../../notifications/taskCompletion.tasks";
+import { capProviderAgents } from "./events.store.providerAgents";
+import { invalidateNotificationEpoch } from "../../notifications/taskCompletion.observations";
+
+export function mapSequencedThreadSummary(
+  summary: Parameters<typeof mapThreadSummary>[0],
+  projectionSequence: number,
+): AppState["threads"][number] {
+  const thread = mapThreadSummary(summary);
+  thread.notificationSafetySequence = projectionSequence;
+  thread.notificationObservation = { messages: [], baselineSequence: projectionSequence };
+  return thread;
+}
 
 export function mergeThreadSummary(
   thread: AppState["threads"][number],
   summary: Parameters<typeof mapThreadSummary>[0],
+  projectionSequence?: number,
 ): AppState["threads"][number] {
+  if (
+    projectionSequence !== undefined &&
+    projectionSequence < (thread.notificationSafetySequence ?? 0)
+  )
+    return thread;
   const mapped = mapThreadSummary(summary);
-  return {
+  const authoritative = projectionSequence !== undefined;
+
+  return invalidateNotificationEpoch(thread, {
     ...thread,
     ...mapped,
     organization: newerOrganization(thread.organization, mapped.organization),
-    session: thread.session ?? mapped.session,
-    latestTurn: thread.latestTurn ?? mapped.latestTurn,
+    ...(projectionSequence !== undefined ? { notificationSafetySequence: projectionSequence } : {}),
+    session: authoritative ? mapped.session : (thread.session ?? mapped.session),
+    latestTurn: authoritative ? mapped.latestTurn : (thread.latestTurn ?? mapped.latestTurn),
     error: thread.error ?? mapped.error,
+    providerAgents: capProviderAgents(
+      mergeNotificationTasks(thread.providerAgents ?? [], mapped.providerAgents ?? []),
+    ),
+    recovery: authoritative
+      ? (mapped.recovery ?? null)
+      : (thread.recovery ?? mapped.recovery ?? null),
+    pendingTurnControlOperation: authoritative
+      ? (mapped.pendingTurnControlOperation ?? null)
+      : (thread.pendingTurnControlOperation ?? mapped.pendingTurnControlOperation ?? null),
     elevatorSummaryMessageCount:
       thread.elevatorSummaryMessageCount ?? mapped.elevatorSummaryMessageCount ?? 0,
     archivedAt: thread.archivedAt,
@@ -25,7 +56,7 @@ export function mergeThreadSummary(
     ...(thread.pendingSourceProposedPlan !== undefined
       ? { pendingSourceProposedPlan: thread.pendingSourceProposedPlan }
       : {}),
-  };
+  });
 }
 
 export function mergeSidebarThreadSummary(

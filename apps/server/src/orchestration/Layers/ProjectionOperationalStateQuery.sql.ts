@@ -202,6 +202,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
         SELECT
           turns.thread_id AS "threadId",
           turns.turn_id AS "turnId",
+          turns.terminal_outcome AS "terminalOutcome",
           turns.state,
           turns.requested_at AS "requestedAt",
           turns.started_at AS "startedAt",
@@ -222,7 +223,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
           )
       )
       SELECT
-        "threadId", "turnId", state, "requestedAt", "startedAt", "completedAt",
+        "threadId", "turnId", "terminalOutcome", state, "requestedAt", "startedAt", "completedAt",
         "assistantMessageId", "sourceProposedPlanThreadId", "sourceProposedPlanId"
       FROM ranked
       WHERE row_number = 1

@@ -312,7 +312,7 @@ export function makeThreadsProjector(
         }
         yield* projectionThreadRepository.upsert({
           ...existingRow.value,
-          latestTurnId: event.payload.session.activeTurnId,
+          latestTurnId: event.payload.session.activeTurnId ?? existingRow.value.latestTurnId,
           updatedAt: event.occurredAt,
         });
         return;
@@ -333,7 +333,7 @@ export function makeThreadsProjector(
         return;
       }
 
-      case "thread.turn-diff-completed": {
+      case "thread.turn-settled": {
         const existingRow = yield* projectionThreadRepository.getById({
           threadId: event.payload.threadId,
         });

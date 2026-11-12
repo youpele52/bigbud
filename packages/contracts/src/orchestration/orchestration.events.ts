@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { ThreadTurnSettledPayload } from "./orchestration.turnSettled";
 import {
   ApprovalRequestId,
   CommandId,
@@ -138,6 +139,7 @@ export const OrchestrationEventType = Schema.Literals([
   "thread.session-stop-requested",
   "thread.session-set",
   "thread.proposed-plan-upserted",
+  "thread.turn-settled",
   "thread.turn-diff-completed",
   "thread.activity-appended",
   "thread.task-upserted",
@@ -350,6 +352,11 @@ export const OrchestrationEvent = Schema.Union([
     ...EventBaseFields,
     type: Schema.Literal("thread.proposed-plan-upserted"),
     payload: ThreadProposedPlanUpsertedPayload,
+  }),
+  Schema.Struct({
+    ...EventBaseFields,
+    type: Schema.Literal("thread.turn-settled"),
+    payload: ThreadTurnSettledPayload,
   }),
   Schema.Struct({
     ...EventBaseFields,

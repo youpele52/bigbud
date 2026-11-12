@@ -13,6 +13,7 @@ import {
 } from "../core/baseSchemas";
 import { ChatAttachment } from "./orchestration.attachments";
 import { MessageOriginSegment } from "./orchestration.messageOrigin";
+import { TurnTerminalOutcome } from "./orchestration.turnSettled";
 import { UserInputQuestion } from "./providerRuntime.payloads";
 import {
   OrchestrationCheckpointStatus,
@@ -124,6 +125,7 @@ export const ThreadDetailDelegatedChild = Schema.Struct({
   title: Schema.String,
   projectId: Schema.NullOr(ProjectId),
   workflowState: Schema.Literals(["working", "idle", "failed", "unavailable"]),
+  terminalOutcome: Schema.optional(TurnTerminalOutcome),
   updatedAt: IsoDateTime,
 });
 export type ThreadDetailDelegatedChild = typeof ThreadDetailDelegatedChild.Type;

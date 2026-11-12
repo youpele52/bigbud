@@ -1,5 +1,6 @@
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 
+import { notificationSafetySql } from "./ProjectionCatalogQuery.notificationSafety.ts";
 import { threadOrganizationJsonSqlText } from "../../persistence/Layers/ProjectionThreads.organization.ts";
 
 /**
@@ -31,7 +32,21 @@ const THREAD_SUMMARY_COLUMNS_SQL = `
   s.provider_name AS "providerName",
   s.active_turn_id AS "activeTurnId",
   s.retained_family AS "retainedFamily",
+  COALESCE(s.session_epoch, 0) AS "sessionEpoch",
+  s.reason AS "sessionReason",
+  ${notificationSafetySql} AS "notificationSafety",
+  t.recovery_json AS "recovery",
+  t.pending_turn_control_operation_json AS "pendingTurnControlOperation",
   turn.state AS "latestTurnState",
+  CASE WHEN turn.turn_id IS NOT NULL THEN json_patch(json_object(
+    'turnId', turn.turn_id, 'state', CASE WHEN turn.state = 'pending' THEN 'running' ELSE turn.state END,
+    'requestedAt', turn.requested_at, 'startedAt', turn.started_at,
+    'completedAt', turn.completed_at, 'assistantMessageId', turn.assistant_message_id
+  ), json_object('terminalOutcome', turn.terminal_outcome,
+    'sourceProposedPlan', CASE WHEN turn.source_proposed_plan_thread_id IS NOT NULL
+      AND turn.source_proposed_plan_id IS NOT NULL THEN json_object(
+        'threadId', turn.source_proposed_plan_thread_id, 'planId', turn.source_proposed_plan_id
+      ) END)) END AS "latestTurn",
   EXISTS (
     SELECT 1 FROM projection_thread_watches w
     WHERE w.watcher_thread_id = t.thread_id AND w.status = 'active'

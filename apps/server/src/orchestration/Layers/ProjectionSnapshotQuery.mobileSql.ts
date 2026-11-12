@@ -220,6 +220,7 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
         SELECT
           turns.thread_id AS "threadId",
           turns.turn_id AS "turnId",
+          turns.terminal_outcome AS "terminalOutcome",
           turns.state,
           turns.requested_at AS "requestedAt",
           turns.started_at AS "startedAt",
@@ -251,7 +252,7 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           checkpoint_status AS "status",
           checkpoint_files_json AS "files",
           assistant_message_id AS "assistantMessageId",
-          completed_at AS "completedAt"
+          COALESCE(checkpoint_completed_at, completed_at) AS "completedAt"
         FROM projection_turns
         WHERE thread_id = ${selectedThreadId}
           AND EXISTS (

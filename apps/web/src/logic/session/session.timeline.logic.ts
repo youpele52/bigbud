@@ -42,30 +42,26 @@ export function findLatestProposedPlan(
   proposedPlans: ReadonlyArray<ProposedPlan>,
   latestTurnId: TurnId | string | null | undefined,
 ): LatestProposedPlanState | null {
-  if (latestTurnId) {
-    const matchingTurnPlan = [...proposedPlans]
-      .filter((proposedPlan) => proposedPlan.turnId === latestTurnId)
-      .toSorted(
-        (left, right) =>
-          left.updatedAt.localeCompare(right.updatedAt) || left.id.localeCompare(right.id),
-      )
-      .at(-1);
-    if (matchingTurnPlan) {
-      return toLatestProposedPlanState(matchingTurnPlan);
-    }
-  }
+  const latestPlan = selectLatestProposedPlan(proposedPlans, latestTurnId);
+  return latestPlan ? toLatestProposedPlanState(latestPlan) : null;
+}
 
-  const latestPlan = [...proposedPlans]
-    .toSorted(
+/** Shared selection for transcript plans and bounded notification metadata. */
+export function selectLatestProposedPlan<
+  Plan extends Pick<ProposedPlan, "id" | "turnId" | "updatedAt">,
+>(
+  proposedPlans: ReadonlyArray<Plan>,
+  latestTurnId: TurnId | string | null | undefined,
+): Plan | null {
+  return (
+    [...proposedPlans].toSorted(
       (left, right) =>
-        left.updatedAt.localeCompare(right.updatedAt) || left.id.localeCompare(right.id),
-    )
-    .at(-1);
-  if (!latestPlan) {
-    return null;
-  }
-
-  return toLatestProposedPlanState(latestPlan);
+        Number(Boolean(latestTurnId) && right.turnId === latestTurnId) -
+          Number(Boolean(latestTurnId) && left.turnId === latestTurnId) ||
+        right.updatedAt.localeCompare(left.updatedAt) ||
+        right.id.localeCompare(left.id),
+    )[0] ?? null
+  );
 }
 
 export function findPlanCardProposedPlan(input: {

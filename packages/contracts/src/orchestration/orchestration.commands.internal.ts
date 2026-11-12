@@ -35,6 +35,8 @@ import {
   ThreadDelegationModelChoiceHoldCommand,
 } from "./orchestration.delegationModelChoice";
 
+import { ThreadTurnSettleCommand } from "./orchestration.turnSettled";
+
 const ThreadDeletionMode = Schema.Literals(["single", "subtree"]);
 
 const ProjectDeleteFinalizeCommand = Schema.Struct({
@@ -214,6 +216,7 @@ const ThreadRevertCompleteCommand = Schema.Struct({
 });
 
 export const InternalOrchestrationCommand = Schema.Union([
+  ThreadTurnSettleCommand,
   ProjectDeleteFinalizeCommand,
   ProjectDeleteAbortCommand,
   ThreadDeleteFinalizeCommand,

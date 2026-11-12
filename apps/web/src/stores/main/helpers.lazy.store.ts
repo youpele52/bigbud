@@ -9,12 +9,16 @@ import type {
 import type { GetSidebarThreadCatalogResult } from "@bigbud/contracts/orchestration/orchestration.catalog";
 
 import type { AppState, ThreadHydration } from "./main.store";
-import { mapThreadSummary, mergeThreadDetail } from "./mappers.lazy.store";
+import { mergeThreadDetail } from "./mappers.lazy.store";
 import { sidebarMembershipFromCatalog } from "./helpers.sidebar.store";
 import { applyAuthoritativeProjectThreadCounts } from "./helpers.projectThreadCount.store";
 import { mergeProjectCatalog } from "./helpers.lazy.projects.store";
 import { pruneProjectDependencies } from "./helpers.projectDependencies.store";
-import { mergeThreadSummary, mergeSidebarThreadSummary } from "./helpers.lazy.summaries.store";
+import {
+  mapSequencedThreadSummary,
+  mergeThreadSummary,
+  mergeSidebarThreadSummary,
+} from "./helpers.lazy.summaries.store";
 
 export { mergeThreadSummary, mergeSidebarThreadSummary } from "./helpers.lazy.summaries.store";
 
@@ -37,23 +41,35 @@ export function syncBoundedCatalog(
   sidebarCatalog: GetSidebarThreadCatalogResult,
   pages: ReadonlyArray<GetProjectThreadSummariesResult>,
 ): AppState {
+  // Later map entries win, so merge snapshots in projection order, not fetch order.
+  const sources = [sidebarCatalog, ...pages].toSorted(
+    (a, b) => a.projectionSequence - b.projectionSequence,
+  );
   const summaries = [
     ...new Map(
-      [...sidebarCatalog.threads, ...pages.flatMap((page) => page.threads)].map((summary) => [
-        summary.id,
-        summary,
-      ]),
+      sources.flatMap((source) => source.threads.map((summary) => [summary.id, summary] as const)),
     ).values(),
   ];
+  const summarySequenceById = new Map(
+    sources.flatMap((source) =>
+      source.threads.map((summary) => [summary.id, source.projectionSequence] as const),
+    ),
+  );
   const previousThreads = new Map(state.threads.map((thread) => [thread.id, thread]));
   const summaryById = new Map(summaries.map((summary) => [summary.id, summary]));
   const threads = state.threads
     .map((thread) => {
       const summary = summaryById.get(thread.id);
       if (!summary) return thread;
-      return mergeThreadSummary(thread, summary);
+      return mergeThreadSummary(thread, summary, summarySequenceById.get(thread.id));
     })
-    .concat(summaries.filter((summary) => !previousThreads.has(summary.id)).map(mapThreadSummary));
+    .concat(
+      summaries
+        .filter((summary) => !previousThreads.has(summary.id))
+        .map((summary) =>
+          mapSequencedThreadSummary(summary, summarySequenceById.get(summary.id) ?? 0),
+        ),
+    );
   const sidebarThreadsById = {
     ...state.sidebarThreadsById,
     ...Object.fromEntries(
@@ -182,9 +198,15 @@ export function syncSidebarCatalog(
   const threads = state.threads
     .map((thread) => {
       const summary = summaries.find((candidate) => candidate.id === thread.id);
-      return summary ? mergeThreadSummary(thread, summary) : thread;
+      return summary
+        ? mergeThreadSummary(thread, summary, sidebarCatalog.projectionSequence)
+        : thread;
     })
-    .concat(summaries.filter((summary) => !previousThreads.has(summary.id)).map(mapThreadSummary));
+    .concat(
+      summaries
+        .filter((summary) => !previousThreads.has(summary.id))
+        .map((summary) => mapSequencedThreadSummary(summary, sidebarCatalog.projectionSequence)),
+    );
   const sidebarThreadsById = {
     ...state.sidebarThreadsById,
     ...Object.fromEntries(
@@ -301,12 +323,12 @@ export function appendProjectThreadSummaries(
     threads: state.threads
       .map((thread) => {
         const summary = summaryById.get(thread.id);
-        return summary ? mergeThreadSummary(thread, summary) : thread;
+        return summary ? mergeThreadSummary(thread, summary, page.projectionSequence) : thread;
       })
       .concat(
         page.threads
           .filter((summary) => !state.threads.some((thread) => thread.id === summary.id))
-          .map(mapThreadSummary),
+          .map((summary) => mapSequencedThreadSummary(summary, page.projectionSequence)),
       ),
     sidebarThreadsById: {
       ...state.sidebarThreadsById,

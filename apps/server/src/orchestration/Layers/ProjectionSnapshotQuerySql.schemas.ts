@@ -21,6 +21,7 @@ import { ThreadForkOrigin } from "@bigbud/contracts/orchestration/orchestration.
 import { OrchestrationPendingTurnStart } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { ThreadRecovery } from "@bigbud/contracts/orchestration/orchestration.recovery.ts";
 import { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
+import { TurnTerminalOutcome } from "@bigbud/contracts/orchestration/orchestration.turnSettled.ts";
 import { Schema, Struct } from "effect";
 
 import { ProjectionCheckpoint } from "../../persistence/Services/ProjectionCheckpoints.ts";
@@ -101,6 +102,7 @@ export const ProjectionCheckpointDbRowSchema = ProjectionCheckpoint.mapFields(
 export const ProjectionLatestTurnDbRowSchema = Schema.Struct({
   threadId: ProjectionThread.fields.threadId,
   turnId: TurnId,
+  terminalOutcome: Schema.NullOr(TurnTerminalOutcome),
   state: Schema.String,
   requestedAt: IsoDateTime,
   startedAt: Schema.NullOr(IsoDateTime),

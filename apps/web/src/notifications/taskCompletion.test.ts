@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useStore } from "../stores/main";
 import type { Thread } from "../models/types";
-import { showSystemTaskCompletionNotification } from "./taskCompletion";
+import { showCompletionToast, showSystemTaskCompletionNotification } from "./taskCompletion";
+import { toastManager } from "../components/ui/toast";
 
 let latestNotification: { click: () => void } | undefined;
 let latestClick: (() => void) | undefined;
@@ -58,6 +59,45 @@ describe("system task completion notification clicks", () => {
     latestClick = undefined;
     useStore.setState({ threads: [], sidebarThreadsById: {} });
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("uses truthful Agent update copy through the desktop notification bridge", async () => {
+    const show = vi.fn().mockResolvedValue(true);
+    vi.stubGlobal("window", { desktopBridge: { notifications: { show } }, dispatchEvent: vi.fn() });
+    await expect(
+      showSystemTaskCompletionNotification({
+        ...candidate,
+        kind: "update",
+        assistantSummary: "Still working",
+      }),
+    ).resolves.toBe(true);
+    expect(show).toHaveBeenCalledWith({
+      title: "Agent update",
+      body: "Thread: Still working",
+      threadId: "thread-1",
+    });
+  });
+
+  it("upgrades a visible info update to success without losing View navigation", () => {
+    const add = vi.spyOn(toastManager, "add").mockReturnValue("update-toast");
+    const update = vi.spyOn(toastManager, "update").mockImplementation(() => {});
+    const navigate = vi.fn();
+    showCompletionToast({ ...candidate, kind: "update", messageId: "upgrade-message" }, navigate);
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "info", title: "Agent update" }),
+    );
+    add.mock.calls[0]![0].actionProps?.onClick?.({} as never);
+    expect(navigate).toHaveBeenCalledWith({ to: "/$threadId", params: { threadId: "thread-1" } });
+    showCompletionToast(
+      { ...candidate, kind: "completed", messageId: "upgrade-message" },
+      navigate,
+    );
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(
+      "update-toast",
+      expect.objectContaining({ type: "success", title: "Task completed" }),
+    );
   });
 
   it("routes the exact browser tab to the originating thread", async () => {

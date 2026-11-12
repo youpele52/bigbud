@@ -74,13 +74,7 @@ export function buildThreadMessageLatestTurn(
   return buildLatestTurn({
     previous: thread.latestTurn,
     turnId: event.payload.turnId,
-    state: event.payload.streaming
-      ? "running"
-      : thread.latestTurn?.state === "interrupted"
-        ? "interrupted"
-        : thread.latestTurn?.state === "error"
-          ? "error"
-          : "completed",
+    state: thread.latestTurn?.terminalOutcome ? thread.latestTurn.state : "running",
     requestedAt:
       thread.latestTurn?.turnId === event.payload.turnId
         ? thread.latestTurn.requestedAt
@@ -90,11 +84,7 @@ export function buildThreadMessageLatestTurn(
         ? (thread.latestTurn.startedAt ?? event.payload.createdAt)
         : event.payload.createdAt,
     sourceProposedPlan: thread.pendingSourceProposedPlan,
-    completedAt: event.payload.streaming
-      ? thread.latestTurn?.turnId === event.payload.turnId
-        ? (thread.latestTurn.completedAt ?? null)
-        : null
-      : event.payload.updatedAt,
+    completedAt: thread.latestTurn?.completedAt ?? null,
     assistantMessageId: event.payload.messageId,
   });
 }

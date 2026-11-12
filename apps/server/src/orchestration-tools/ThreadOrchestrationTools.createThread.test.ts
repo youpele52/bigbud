@@ -124,12 +124,19 @@ describe("createThreadViaOrchestration", () => {
       threadId: callerThreadId,
       activity: {
         kind: "delegation.child-linked",
-        payload: { childProjectId: callerProjectId, childTitle: "Child" },
+        payload: {
+          childProjectId: callerProjectId,
+          childTitle: "Child",
+          requestMessageId: sourceMessageId,
+        },
       },
     });
     expect(system.dispatch.mock.calls[2]?.[0]).toMatchObject({
       type: "thread.turn.start",
-      message: { text: expect.stringContaining("delegated standalone thread") },
+      message: {
+        messageId: sourceMessageId,
+        text: expect.stringContaining("delegated standalone thread"),
+      },
     });
   });
 

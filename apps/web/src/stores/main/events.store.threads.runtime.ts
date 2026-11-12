@@ -9,7 +9,6 @@ import { type AppState } from "./main.store";
 import {
   applyThreadReverted,
   buildLatestTurn,
-  checkpointStatusToLatestTurnState,
   compareActivities,
   MAX_THREAD_ACTIVITIES,
   MAX_THREAD_CHECKPOINTS,
@@ -36,6 +35,7 @@ import {
   upsertThreadMessage,
 } from "./events.store.threads.runtime.messages";
 import { isSummaryActivity, isSummaryOnlyThread } from "./helpers.lazy.eviction.store";
+import { applyThreadTurnSettlement } from "./events.store.threads.runtime.settlement";
 import { boundActivityPayload } from "./messageText.store";
 import {
   clearPendingTurnStartRequest,
@@ -49,6 +49,10 @@ export function applyThreadRuntimeEvent(
 ): AppState | undefined {
   state = applyDelegatedChildRuntimeEvent(state, event);
   switch (event.type) {
+    case "thread.turn-settled":
+      return updateThreadState(state, event.payload.threadId, (thread) =>
+        applyThreadTurnSettlement(thread, event),
+      );
     case "thread.task-upserted":
       if (event.payload.task.kind !== "providerSubagent") return state;
       return updateThreadState(state, event.payload.threadId, (thread) => ({
@@ -148,13 +152,15 @@ export function applyThreadRuntimeEvent(
               msg.streaming === false,
           );
 
-        const isStaleRunningSession = isStaleRunningSessionUpdate({
-          incomingStatus: incomingSession.status,
-          incomingActiveTurnId,
-          incomingReason: incomingSession.reason,
-          latestTurn: thread.latestTurn,
-          hasNonStreamingAssistantMessageForTurn,
-        });
+        const isStaleRunningSession =
+          incomingSession.sessionEpoch === (thread.session?.sessionEpoch ?? 0) &&
+          isStaleRunningSessionUpdate({
+            incomingStatus: incomingSession.status,
+            incomingActiveTurnId,
+            incomingReason: incomingSession.reason,
+            latestTurn: thread.latestTurn,
+            hasNonStreamingAssistantMessageForTurn,
+          });
 
         const normalizedSession = isStaleRunningSession
           ? { ...incomingSession, status: "ready" as const, activeTurnId: null, reason: null }
@@ -189,7 +195,7 @@ export function applyThreadRuntimeEvent(
                   turnId: incomingActiveTurnId,
                   state:
                     thread.latestTurn?.turnId === incomingActiveTurnId &&
-                    thread.latestTurn?.completedAt
+                    thread.latestTurn?.terminalOutcome
                       ? thread.latestTurn.state
                       : "running",
                   requestedAt:
@@ -321,19 +327,7 @@ export function applyThreadRuntimeEvent(
               (right.checkpointTurnCount ?? Number.MAX_SAFE_INTEGER),
           )
           .slice(-MAX_THREAD_CHECKPOINTS);
-        const latestTurn =
-          thread.latestTurn === null || thread.latestTurn.turnId === event.payload.turnId
-            ? buildLatestTurn({
-                previous: thread.latestTurn,
-                turnId: event.payload.turnId,
-                state: checkpointStatusToLatestTurnState(event.payload.status),
-                requestedAt: thread.latestTurn?.requestedAt ?? event.payload.completedAt,
-                startedAt: thread.latestTurn?.startedAt ?? event.payload.completedAt,
-                completedAt: event.payload.completedAt,
-                assistantMessageId: event.payload.assistantMessageId,
-                sourceProposedPlan: thread.pendingSourceProposedPlan,
-              })
-            : thread.latestTurn;
+        const latestTurn = thread.latestTurn;
         return {
           ...thread,
           turnDiffSummaries,

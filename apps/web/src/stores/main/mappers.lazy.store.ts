@@ -19,6 +19,7 @@ import {
 } from "./mappers.store";
 import { hydrateDelegatedChildModelChoices } from "./events.store.delegations";
 import { capProviderAgents } from "./events.store.providerAgents";
+import { mergeNotificationTasks } from "../../notifications/taskCompletion.tasks";
 import {
   buildLatestTurn,
   MAX_THREAD_ACTIVITIES,
@@ -65,6 +66,8 @@ function mapSummarySession(summary: ThreadSummary): Thread["session"] {
     provider: toLegacyProvider(summary.providerName),
     status: toLegacySessionStatus(summary.sessionStatus),
     orchestrationStatus: summary.sessionStatus,
+    reason: summary.sessionReason ?? null,
+    sessionEpoch: summary.sessionEpoch ?? 0,
     ...(summary.activeTurnId ? { activeTurnId: summary.activeTurnId } : {}),
     // Keeps the main composer's Stop for descendants that outlive the parent turn after reload.
     ...(summary.retainedFamily ? { retainedFamily: true } : {}),
@@ -74,6 +77,7 @@ function mapSummarySession(summary: ThreadSummary): Thread["session"] {
 }
 
 function mapSummaryLatestTurn(summary: ThreadSummary): Thread["latestTurn"] {
+  if (summary.latestTurn !== undefined) return summary.latestTurn;
   if (summary.latestTurnState === null || summary.activeTurnId === null) {
     return null;
   }
@@ -115,6 +119,17 @@ export function mapThreadSummary(summary: ThreadSummary): Thread {
     deletingAt: null,
     updatedAt: summary.updatedAt,
     latestTurn: mapSummaryLatestTurn(summary),
+    notificationSafety: summary.notificationSafety ?? {
+      turnId: null,
+      tasks: [],
+      childThreadIds: [],
+      pendingRequestIds: [],
+      queuedPromptIds: [],
+      overflow: true,
+    },
+    providerAgents: [...(summary.notificationSafety?.tasks ?? [])],
+    recovery: summary.recovery ?? null,
+    pendingTurnControlOperation: summary.pendingTurnControlOperation ?? null,
     branch: summary.branch,
     worktreePath: summary.worktreePath,
     turnDiffSummaries: [],
@@ -218,13 +233,10 @@ export function mergeThreadDetail(
       ? buildLatestTurn({
           previous: thread.latestTurn,
           turnId: completedAssistantMessage.turnId,
-          state:
-            thread.latestTurn?.state === "interrupted" || thread.latestTurn?.state === "error"
-              ? thread.latestTurn.state
-              : "completed",
+          state: thread.latestTurn?.state ?? "running",
           requestedAt: thread.latestTurn?.requestedAt ?? completedAssistantMessage.createdAt,
           startedAt: thread.latestTurn?.startedAt ?? completedAssistantMessage.createdAt,
-          completedAt: completedAssistantMessage.completedAt ?? completedAssistantMessage.createdAt,
+          completedAt: thread.latestTurn?.completedAt ?? null,
           assistantMessageId: completedAssistantMessage.id,
           sourceProposedPlan: thread.pendingSourceProposedPlan,
         })
@@ -262,11 +274,9 @@ export function mergeThreadDetail(
     providerAgents: loadingOlder
       ? (thread.providerAgents ?? [])
       : capProviderAgents(
-          [...(thread.providerAgents ?? []), ...(detail.recentAgents ?? [])]
-            .filter(
-              (agent, index, all) => all.findLastIndex((entry) => entry.id === agent.id) === index,
-            )
-            .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt)),
+          mergeNotificationTasks(thread.providerAgents ?? [], detail.recentAgents ?? []).toSorted(
+            (left, right) => left.createdAt.localeCompare(right.createdAt),
+          ),
         ),
     delegatedChildren: loadingOlder
       ? (thread.delegatedChildren ?? [])

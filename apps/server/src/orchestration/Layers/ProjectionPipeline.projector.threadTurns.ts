@@ -65,9 +65,7 @@ export function makeThreadTurnsProjector(
           : undefined;
         if (Option.isSome(existingTurn)) {
           const nextState =
-            existingTurn.value.state === "completed" || existingTurn.value.state === "error"
-              ? existingTurn.value.state
-              : "running";
+            existingTurn.value.terminalOutcome != null ? existingTurn.value.state : "running";
           yield* projectionTurnRepository.upsertByTurnId({
             ...existingTurn.value,
             usageAttribution:
@@ -151,16 +149,6 @@ export function makeThreadTurnsProjector(
           yield* projectionTurnRepository.upsertByTurnId({
             ...existingTurn.value,
             assistantMessageId: event.payload.messageId,
-            state: event.payload.streaming
-              ? existingTurn.value.state
-              : existingTurn.value.state === "interrupted"
-                ? "interrupted"
-                : existingTurn.value.state === "error"
-                  ? "error"
-                  : "completed",
-            completedAt: event.payload.streaming
-              ? existingTurn.value.completedAt
-              : (existingTurn.value.completedAt ?? event.payload.updatedAt),
             startedAt: existingTurn.value.startedAt ?? event.payload.createdAt,
             requestedAt: existingTurn.value.requestedAt ?? event.payload.createdAt,
           });
@@ -173,14 +161,43 @@ export function makeThreadTurnsProjector(
           sourceProposedPlanThreadId: null,
           sourceProposedPlanId: null,
           assistantMessageId: event.payload.messageId,
-          state: event.payload.streaming ? "running" : "completed",
+          state: "running",
           requestedAt: event.payload.createdAt,
           startedAt: event.payload.createdAt,
-          completedAt: event.payload.streaming ? null : event.payload.updatedAt,
+          completedAt: null,
           checkpointTurnCount: null,
           checkpointRef: null,
           checkpointStatus: null,
           checkpointFiles: [],
+        });
+        return;
+      }
+
+      case "thread.turn-settled": {
+        const existing = yield* projectionTurnRepository.getByTurnId(event.payload);
+        if (Option.isSome(existing) && existing.value.terminalOutcome != null) return;
+        yield* projectionTurnRepository.upsertByTurnId({
+          threadId: event.payload.threadId,
+          turnId: event.payload.turnId,
+          pendingMessageId: null,
+          sourceProposedPlanThreadId: null,
+          sourceProposedPlanId: null,
+          assistantMessageId: null,
+          requestedAt: event.occurredAt,
+          startedAt: event.occurredAt,
+          checkpointTurnCount: null,
+          checkpointRef: null,
+          checkpointStatus: null,
+          checkpointFiles: [],
+          ...(Option.isSome(existing) ? existing.value : {}),
+          terminalOutcome: event.payload.outcome,
+          state:
+            event.payload.outcome === "completed"
+              ? "completed"
+              : event.payload.outcome === "failed"
+                ? "error"
+                : "interrupted",
+          completedAt: event.payload.completedAt,
         });
         return;
       }
@@ -194,6 +211,7 @@ export function makeThreadTurnsProjector(
           turnId: event.payload.turnId,
         });
         if (Option.isSome(existingTurn)) {
+          if (existingTurn.value.terminalOutcome != null) return;
           yield* projectionTurnRepository.upsertByTurnId({
             ...existingTurn.value,
             state: "interrupted",
@@ -227,7 +245,7 @@ export function makeThreadTurnsProjector(
           threadId: event.payload.threadId,
           turnId: event.payload.turnId,
         });
-        const nextState = event.payload.status === "error" ? "error" : "completed";
+        const nextState = "running";
         yield* projectionTurnRepository.clearCheckpointTurnConflict({
           threadId: event.payload.threadId,
           turnId: event.payload.turnId,
@@ -238,14 +256,13 @@ export function makeThreadTurnsProjector(
           yield* projectionTurnRepository.upsertByTurnId({
             ...existingTurn.value,
             assistantMessageId: event.payload.assistantMessageId,
-            state: nextState,
+            checkpointCompletedAt: event.payload.completedAt,
             checkpointTurnCount: event.payload.checkpointTurnCount,
             checkpointRef: event.payload.checkpointRef,
             checkpointStatus: event.payload.status,
             checkpointFiles: event.payload.files,
             startedAt: existingTurn.value.startedAt ?? event.payload.completedAt,
             requestedAt: existingTurn.value.requestedAt ?? event.payload.completedAt,
-            completedAt: event.payload.completedAt,
           });
           return;
         }
@@ -259,7 +276,8 @@ export function makeThreadTurnsProjector(
           state: nextState,
           requestedAt: event.payload.completedAt,
           startedAt: event.payload.completedAt,
-          completedAt: event.payload.completedAt,
+          completedAt: null,
+          checkpointCompletedAt: event.payload.completedAt,
           checkpointTurnCount: event.payload.checkpointTurnCount,
           checkpointRef: event.payload.checkpointRef,
           checkpointStatus: event.payload.status,

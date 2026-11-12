@@ -287,6 +287,7 @@ export const sendTurnAttempt = (
       threadId: input.threadId,
       ...(input.requestMessageId ? { requestMessageId: input.requestMessageId } : {}),
       turnId: turn.turnId,
+      sessionEpoch: sessionBeforeTurn?.sessionEpoch ?? 0,
       createdAt: input.createdAt,
       providerIdle,
     });
