@@ -18,21 +18,23 @@ export function applyOrchestrationEvent(state: AppState, event: OrchestrationEve
   if (!("threadId" in event.payload)) return next;
   const threadId = event.payload.threadId;
   const previous = state.threads.find((thread) => thread.id === threadId);
-  return {
-    ...next,
-    threads: next.threads.map((thread) =>
-      observeDelegatedTurnBinding(
-        thread.id === threadId && previous
-          ? observeThreadNotification(
-              previous,
-              observeNotificationSafety(previous, thread, event),
-              event,
-            )
-          : thread,
-        event,
-      ),
+  const threads = next.threads.map((thread) =>
+    observeDelegatedTurnBinding(
+      thread.id === threadId &&
+        previous &&
+        (thread !== previous || event.type === "thread.turn-settled")
+        ? observeThreadNotification(
+            previous,
+            observeNotificationSafety(previous, thread, event),
+            event,
+          )
+        : thread,
+      event,
     ),
-  };
+  );
+  return threads.every((thread, index) => thread === next.threads[index])
+    ? next
+    : { ...next, threads };
 }
 
 export function applyOrchestrationEvents(

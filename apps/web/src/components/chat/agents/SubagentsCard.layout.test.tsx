@@ -55,26 +55,32 @@ function workRow(groupedEntries: unknown[]): never {
   } as never;
 }
 
-/** Markup of the accordion's top-right actions slot, which precedes the panel. */
+/** Header actions are a sibling after details, outside its collapsible panel. */
 function headerActions(markup: string): string {
-  return markup.slice(
-    markup.indexOf('data-slot="activity-accordion-actions"'),
-    markup.indexOf('data-slot="activity-accordion-panel"'),
-  );
+  const start = markup.indexOf('data-slot="activity-accordion-actions"');
+  return start < 0 ? "" : markup.slice(start);
+}
+
+function accordionPanel(markup: string): string {
+  const start = markup.indexOf('data-slot="activity-accordion-panel"');
+  return markup.slice(start, markup.indexOf("</details>", start));
 }
 
 describe("compact Subagents presentation", () => {
-  it("keeps the live card shell with a right-aligned overflow toggle", () => {
+  it("keeps the live section open with a right-aligned overflow toggle", () => {
     const subagents = renderToStaticMarkup(
       <SubagentsCard
         agents={[{ ...agent("one"), progressSummary: "Reviewing UI components" }, agent("two")]}
       />,
     );
-    expect(subagents).toContain("rounded-xl border border-border/45 bg-card/25 px-2 py-1.5");
-    expect(subagents).not.toContain("<details");
+    expect(subagents).toContain('data-variant="section"');
+    expect(subagents).toMatch(/<details[^>]*\sopen=""/);
+    expect(subagents).toContain("border-b border-border/60");
+    expect(subagents).not.toContain("rounded-xl border border-border/45 bg-card/25");
     expect(subagents).toContain("Subagents (2)");
     expect(subagents).toContain("Show 1 more");
-    expect(subagents).toContain("items-center justify-between");
+    expect(headerActions(subagents)).toContain("Show 1 more");
+    expect(accordionPanel(subagents)).not.toContain("Show 1 more");
     expect(subagents.match(/text-xs/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(subagents).toContain("text-[9px]");
     expect(subagents).toContain("sm:text-[9px]");
@@ -95,9 +101,9 @@ describe("compact Subagents presentation", () => {
     expect(history).not.toMatch(/<details[^>]*\sopen=""/);
     expect(history).toContain("Subagents (2)");
     expect(history).not.toContain("rounded-xl border border-border/45 bg-card/25");
-    // The overflow toggle sits in the header's top-right actions slot, outside the panel.
+    // The overflow toggle is a sibling after details, outside the collapsible panel.
     expect(headerActions(history)).toContain("Show 1 more");
-    const panel = history.slice(history.indexOf('data-slot="activity-accordion-panel"'));
+    const panel = accordionPanel(history);
     expect(panel).toContain('data-subagent-row="one"');
     expect(panel).not.toContain("Show 1 more");
     expect(live).toContain('data-subagent-row="one"');
@@ -118,9 +124,7 @@ describe("compact Subagents presentation", () => {
     expect(workLog).toMatch(/<details data-slot="activity-accordion" data-variant="section"/);
     expect(workLog).toContain("Work log (2)");
     expect(headerActions(workLog)).toContain("Show 1 more");
-    expect(workLog.slice(workLog.indexOf('data-slot="activity-accordion-panel"'))).not.toContain(
-      "Show 1 more",
-    );
+    expect(accordionPanel(workLog)).not.toContain("Show 1 more");
     expect(workLog).not.toContain("rounded-xl border border-border/45 bg-card/25");
 
     const single = renderToStaticMarkup(
@@ -133,16 +137,17 @@ describe("compact Subagents presentation", () => {
     );
     expect(single).toMatch(/<details data-slot="activity-accordion" data-variant="section"/);
     expect(single).toContain("Tool calls (1)");
-    expect(single).not.toContain('data-slot="activity-accordion-actions"');
-    expect(single.slice(single.indexOf('data-slot="activity-accordion-panel"'))).toContain(
-      "Read file",
-    );
-    expect(single).toContain("group-hover/work-log:opacity-100");
+    expect(headerActions(single)).toContain('title="Copy message"');
+    expect(headerActions(single)).not.toContain("Show 1 more");
+    expect(accordionPanel(single)).toContain("Read file");
+    expect(accordionPanel(single)).not.toContain('title="Copy message"');
+    expect(single).not.toContain("group-hover/work-log:opacity-100");
   });
 
   it("keeps the live card in the shared conversation column used by timeline rows", () => {
     const markup = renderToStaticMarkup(<ChatAgentActivityFeed agents={[agent("live")]} />);
-    expect(markup).toContain(`class="${CHAT_COLUMN_CLASS_NAME} mt-2 mb-8"`);
+    expect(markup).toContain(`class="${CHAT_COLUMN_CLASS_NAME}"`);
+    expect(markup).not.toContain("mt-2 mb-8");
   });
 
   it("anchors completion to its turn before later user and assistant messages", () => {
@@ -155,7 +160,8 @@ describe("compact Subagents presentation", () => {
     };
     const activeMarkup = renderToStaticMarkup(<ChatAgentActivityFeed agents={[activeAgent]} />);
     expect(activeMarkup).toContain('data-agent-feed-placement="timeline-end"');
-    expect(activeMarkup).toContain("mb-8");
+    expect(activeMarkup).toContain(`class="${CHAT_COLUMN_CLASS_NAME}"`);
+    expect(activeMarkup).not.toContain("mb-8");
     expect(activeMarkup).not.toContain("violet");
     expect(renderToStaticMarkup(<ChatAgentActivityFeed agents={[completedAgent]} />)).toBe("");
 

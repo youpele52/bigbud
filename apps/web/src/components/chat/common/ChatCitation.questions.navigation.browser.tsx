@@ -1,3 +1,4 @@
+import { THREAD_VIEW_MESSAGE_PAGE_SIZE } from "../../../routes/-__root.bounded-bootstrap";
 import "../../../index.css";
 import { ApprovalRequestId, EventId, MessageId } from "@bigbud/contracts/core/baseSchemas";
 import type { GetSelectedThreadDetailResult } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
@@ -163,8 +164,20 @@ it("loads missing question history through real cursor pagination before reveali
     await page.getByRole("button", { name: "Go to citation from Question: Which theme" }).click();
     await expect.poll(() => mocks.getDetail.mock.calls.length, { timeout: 10_000 }).toBe(2);
     expect(mocks.getDetail.mock.calls).toEqual([
-      [{ threadId: CITE_THREAD_ID, messageCursor: firstCursor }],
-      [{ threadId: CITE_THREAD_ID, messageCursor: secondCursor }],
+      [
+        {
+          threadId: CITE_THREAD_ID,
+          messageCursor: firstCursor,
+          messageLimit: THREAD_VIEW_MESSAGE_PAGE_SIZE,
+        },
+      ],
+      [
+        {
+          threadId: CITE_THREAD_ID,
+          messageCursor: secondCursor,
+          messageLimit: THREAD_VIEW_MESSAGE_PAGE_SIZE,
+        },
+      ],
     ]);
     await expect.poll(() => CSS.highlights.get("bigbud-chat-citation")?.size).toBe(1);
     expect(highlightedRange().toString()).toBe("Which theme");
@@ -198,6 +211,7 @@ it("retains an unavailable question snapshot without issuing a message-anchor qu
     expect(mocks.getDetail).toHaveBeenCalledExactlyOnceWith({
       threadId: CITE_THREAD_ID,
       messageCursor: firstCursor,
+      messageLimit: THREAD_VIEW_MESSAGE_PAGE_SIZE,
     });
     expect(CSS.highlights.get("bigbud-chat-citation")).toBeUndefined();
     expect(useSearchStore.getState().focusRequest).toBeNull();

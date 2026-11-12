@@ -14,7 +14,8 @@ import type { ProjectId } from "@bigbud/contracts/core/baseSchemas.ts";
 
 vi.mock("./useRemoteMonitor", () => ({ useRemoteMonitor: () => undefined }));
 const listConnected = vi.hoisted(() => vi.fn());
-vi.mock("~/rpc/wsRpcClient", () => ({
+vi.mock("~/rpc/wsRpcClient", async (original) => ({
+  ...(await original<typeof import("~/rpc/wsRpcClient")>()),
   getWsRpcClient: () => ({ server: { listConnectedSshMonitors: listConnected } }),
 }));
 

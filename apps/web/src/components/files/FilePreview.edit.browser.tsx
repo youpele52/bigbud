@@ -18,16 +18,7 @@ describe("Files panel text editing", () => {
     const mounted = await render(preview("local.txt"));
     try {
       await vi.waitFor(() => expect(page.getByRole("button", { name: "Edit file" })).toBeVisible());
-      [...document.querySelectorAll<HTMLButtonElement>("[data-file-preview-header] button")]
-        .find((button) => button.getAttribute("aria-label") === "Edit file")!
-        .click();
-      await vi.waitFor(() =>
-        expect(
-          document
-            .querySelector("diffs-container")
-            ?.shadowRoot?.querySelector("[contenteditable]") ?? null,
-        ).not.toBeNull(),
-      );
+      await page.getByRole("button", { name: "Edit file" }).click();
       await page.getByRole("textbox", { name: "local.txt" }).click();
       await userEvent.keyboard("{End}!");
       await vi.waitFor(() => expect(document.body.textContent).toContain("Unsaved"));

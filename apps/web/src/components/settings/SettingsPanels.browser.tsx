@@ -1,3 +1,9 @@
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
 import "../../index.css";
 
 import {
@@ -74,13 +80,20 @@ function renderAiSettingsPanel(browserSettings = false) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <AppAtomRegistryProvider>
-        {browserSettings ? <BrowserSettingsSection /> : <AiSettingsPanel />}
-      </AppAtomRegistryProvider>
-    </QueryClientProvider>,
-  );
+  const root = createRootRoute({
+    component: () => (
+      <QueryClientProvider client={queryClient}>
+        <AppAtomRegistryProvider>
+          {browserSettings ? <BrowserSettingsSection /> : <AiSettingsPanel />}
+        </AppAtomRegistryProvider>
+      </QueryClientProvider>
+    ),
+  });
+  const router = createRouter({
+    routeTree: root,
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  return render(<RouterProvider router={router} />);
 }
 
 function renderAboutSettingsPanel() {

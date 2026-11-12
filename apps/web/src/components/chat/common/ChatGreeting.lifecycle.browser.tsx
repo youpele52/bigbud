@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 const mocks = vi.hoisted(() => ({ ready: true, choice: vi.fn() }));
-vi.mock("../../../rpc/serverState", () => ({ useServerConfig: () => (mocks.ready ? {} : null) }));
+vi.mock("../../../rpc/serverState", async (original) => ({
+  ...(await original<typeof import("../../../rpc/serverState")>()),
+  useServerConfig: () => (mocks.ready ? {} : null),
+}));
 vi.mock("../../../utils/copy/greeting.logic", async (original) => ({
   ...(await original<typeof import("../../../utils/copy/greeting.logic")>()),
   greetingForChat: mocks.choice,

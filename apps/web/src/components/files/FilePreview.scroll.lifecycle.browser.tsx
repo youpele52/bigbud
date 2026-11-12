@@ -119,12 +119,13 @@ describe("FilePreview scroll handoff lifecycle", () => {
         }
         container.scrollTop = 400;
         container.dispatchEvent(new Event("scroll"));
+        // Cancellation restores native anchoring. Isolate application ownership before
+        // any frames: a delayed image/font may otherwise move the native anchor first.
+        expect(container.style.overflowAnchor).toBe("");
+        container.style.overflowAnchor = "none";
         await animationFrames();
         expect(positions).toHaveBeenLastCalledWith(400);
         const image = refs.markdown.current!.querySelector("img")!;
-        // Cancellation restores native anchoring; disable it after the scroll event has canceled
-        // correction so the image reflow only tests application scroll ownership.
-        container.style.overflowAnchor = "none";
         image.style.height = "220px";
         image.dispatchEvent(new Event("load"));
         await animationFrames();
@@ -142,20 +143,26 @@ describe("FilePreview scroll handoff lifecycle", () => {
 
   it("preserves the reading context through viewport resizing and invalidates old pixels", async () => {
     const refs = createScrollRefs();
-    const mounted = await render(<ScrollHarness refs={refs} contents={CONTENTS} />);
+    const mounted = await render(<ScrollHarness refs={refs} contents={SCROLL_CONTENTS} />);
     try {
       await changeMode("raw");
       await readerScroll(refs, 690);
       await changeMode("preview");
-      const before = readingAnchor(refs, CONTENTS);
-      const initialTop = refs.container.current!.scrollTop;
-      await mounted.rerender(<ScrollHarness refs={refs} contents={CONTENTS} width={250} />);
+      // Image reflow/stalling is covered above; isolate viewport changes here.
+      await document.fonts.ready;
       await animationFrames();
-      expect(refs.container.current!.clientWidth).toBeLessThan(300);
-      expect(refs.container.current!.scrollTop).not.toBe(initialTop);
-      const after = readingAnchor(refs, CONTENTS);
-      expect(after.sourceStartLine).toBe(before.sourceStartLine);
-      expect(after.sourceProgress).toBeCloseTo(before.sourceProgress, 1);
+      await animationFrames();
+      const before = readingAnchor(refs, SCROLL_CONTENTS);
+      const initialTop = refs.container.current!.scrollTop;
+      await mounted.rerender(<ScrollHarness refs={refs} contents={SCROLL_CONTENTS} width={250} />);
+      await animationFrames();
+      await vi.waitFor(() => {
+        expect(refs.container.current!.clientWidth).toBeLessThan(300);
+        expect(refs.container.current!.scrollTop).not.toBe(initialTop);
+        const after = readingAnchor(refs, SCROLL_CONTENTS);
+        expect(after.sourceStartLine).toBe(before.sourceStartLine);
+        expect(after.sourceProgress).toBeCloseTo(before.sourceProgress, 1);
+      });
       await changeMode("raw");
       expect(Math.abs(refs.container.current!.scrollTop - 690)).toBeLessThanOrEqual(2);
     } finally {
