@@ -164,6 +164,22 @@ describe("decideModelChoice", () => {
         }),
       ),
     ).toBeNull();
+    // Remote workspaces apply the same health rules as local ones.
+    expect(
+      reasonOf(
+        { provider: "devin" },
+        context({
+          hasInteractiveClient: false,
+          providers: [
+            provider("devin", {
+              auth: { status: "unknown" },
+              supportsLocalRuntimeRemoteWorkspace: true,
+            }),
+          ],
+          target: { workspaceExecutionTargetId: "remote-1" },
+        }),
+      ),
+    ).toBeNull();
     expect(
       reasonOf(
         { provider: "opencodeV2" },

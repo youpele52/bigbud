@@ -174,4 +174,40 @@ describe("getProviderModelAvailability", () => {
       }).unavailable,
     ).toBe(false);
   });
+
+  it("shows the real health reason for a capable provider on a remote workspace", () => {
+    const snapshot = provider({
+      provider: "opencodeV2",
+      message: "No native models are available.",
+      supportsLocalRuntimeRemoteWorkspace: true,
+    });
+    expect(
+      getProviderModelAvailability({
+        providers: [snapshot],
+        provider: snapshot,
+        modelCount: 0,
+        workspaceExecutionTargetId: "ssh:devbox",
+      }),
+    ).toMatchObject({ unavailable: true, unavailableMessage: "No native models are available." });
+  });
+
+  it("applies local health rules on remote workspaces for unverified sign-in", () => {
+    const snapshot = provider({
+      provider: "devin",
+      status: "ready",
+      auth: { status: "unknown" },
+      message: undefined,
+      supportsLocalRuntimeRemoteWorkspace: true,
+    });
+    for (const workspaceExecutionTargetId of ["ssh:devbox", "local"]) {
+      expect(
+        getProviderModelAvailability({
+          providers: [snapshot],
+          provider: snapshot,
+          modelCount: 1,
+          workspaceExecutionTargetId,
+        }),
+      ).toEqual({ loading: false, unavailable: false, unavailableMessage: undefined });
+    }
+  });
 });

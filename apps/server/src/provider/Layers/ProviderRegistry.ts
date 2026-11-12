@@ -29,7 +29,7 @@ import { ProviderRegistry, type ProviderRegistryShape } from "../Services/Provid
 import type { ProviderRegistration } from "../ProviderRegistration.ts";
 import { haveProviderSnapshotsChanged } from "../providerSnapshot.equal";
 import { isProviderRetryable, needsProviderRefresh } from "../providerRecovery";
-import { providerAdvertisesRemoteWorkspaceSupport } from "../providerRemoteWorkspaceConformance.ts";
+import { resolveSnapshotRemoteWorkspaceSupport } from "../providerRemoteWorkspaceConformance.ts";
 import { refreshSubscriptionProviders, singleFlightUsageRefresh } from "../providerUsageRefresh.ts";
 import {
   currentProviderSnapshot,
@@ -69,7 +69,7 @@ const loadProviders = (
         Effect.map((snapshot) =>
           inheritProviderSnapshot(snapshot, {
             ...snapshot,
-            supportsLocalRuntimeRemoteWorkspace: providerAdvertisesRemoteWorkspaceSupport(snapshot),
+            supportsLocalRuntimeRemoteWorkspace: resolveSnapshotRemoteWorkspaceSupport(snapshot),
           }),
         ),
       ),

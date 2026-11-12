@@ -35,13 +35,17 @@ it("publishes the full catalog with no native model/account, then retains browsi
             true,
             load,
           );
-          expect((yield* provider.getSnapshot).initialProbeComplete).toBe(false);
+          const checking = yield* provider.getSnapshot;
+          expect(checking.initialProbeComplete).toBe(false);
+          expect(checking.supportsLocalRuntimeRemoteWorkspace).toBe(false);
           const result = yield* provider.refresh;
           expect(result.models).toEqual(models);
           expect(result).toMatchObject({
             installed: true,
             auth: { status: "unknown" },
             initialProbeComplete: true,
+            // Only the shared native service can serve remote workspaces.
+            supportsLocalRuntimeRemoteWorkspace: false,
           });
           expect(result.message).toContain("accounts are not verified");
           info.mockRejectedValue(new Error("private native details"));
@@ -49,6 +53,7 @@ it("publishes the full catalog with no native model/account, then retains browsi
           expect(failed.models).toEqual(models);
           expect(failed.status).toBe("warning");
           expect(failed.message).toContain("No fallback");
+          expect(failed.supportsLocalRuntimeRemoteWorkspace).toBe(false);
           expect(JSON.stringify(failed)).not.toContain("private native details");
         }).pipe(
           Effect.provideService(ServerSettingsService, {

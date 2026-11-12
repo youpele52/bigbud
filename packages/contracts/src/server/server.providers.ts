@@ -217,6 +217,11 @@ export const ServerProvider = Schema.Struct({
   usageLimits: Schema.optional(ServerProviderUsageLimits),
   slashCommands: ServerProviderSlashCommands,
   skills: ServerProviderSkills,
+  /**
+   * Capability only: whether a local provider runtime can serve a remote workspace. It does
+   * not encode health; readiness lives in `enabled`, `installed`, `initialProbeComplete`,
+   * `status`, and `auth`, which apply identically to local and remote workspaces.
+   */
   supportsLocalRuntimeRemoteWorkspace: Schema.optional(Schema.Boolean),
   /**
    * Access/interaction modes this provider is qualified to run. Absent means

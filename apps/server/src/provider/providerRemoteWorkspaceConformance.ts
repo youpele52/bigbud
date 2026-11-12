@@ -92,18 +92,17 @@ export function getProviderRemoteWorkspaceConformance(
   return conformance;
 }
 
-export function providerAdvertisesRemoteWorkspaceSupport(
-  snapshot: Pick<
-    ServerProvider,
-    "auth" | "enabled" | "initialProbeComplete" | "installed" | "provider" | "status"
-  >,
+/**
+ * Published snapshot capability: whether this provider can run a local runtime against a
+ * remote workspace. Health (enabled/installed/probe/status/auth) is deliberately excluded so
+ * clients apply the same health rules for local and remote workspaces and can show the real
+ * health reason. A provider snapshot may still opt out by declaring `false` explicitly.
+ */
+export function resolveSnapshotRemoteWorkspaceSupport(
+  snapshot: Pick<ServerProvider, "provider" | "supportsLocalRuntimeRemoteWorkspace">,
 ): boolean {
   return (
     getProviderRemoteWorkspaceConformance(snapshot.provider).supportsLocalRuntimeRemoteWorkspace &&
-    snapshot.enabled &&
-    snapshot.installed &&
-    snapshot.initialProbeComplete === true &&
-    snapshot.status === "ready" &&
-    snapshot.auth.status === "authenticated"
+    snapshot.supportsLocalRuntimeRemoteWorkspace !== false
   );
 }
