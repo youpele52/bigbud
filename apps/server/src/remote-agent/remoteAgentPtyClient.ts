@@ -1,3 +1,4 @@
+import { sendRemotePtyRequest } from "./remoteAgentPtyClient.request";
 import { randomUUID } from "node:crypto";
 
 import { RemoteAgentConnection, RemoteAgentConnectionError } from "./remoteAgentConnection.ts";
@@ -35,6 +36,7 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
   private reconnecting: Promise<void> | undefined;
   private reconnectAttempts = 0;
   private closing = false;
+  private readonly controlRequests = new AbortController();
   private inputUnknown = false;
   private inputTail: Promise<void> = Promise.resolve();
   private pendingInputBytes = 0;
@@ -86,9 +88,14 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
   }
   detach(): void {
     this.closing = true;
+    this.controlRequests.abort();
     this.removeFrameListener?.();
     this.removeFailureListener?.();
   }
+  retireControlRequests(): void {
+    this.controlRequests.abort();
+  }
+
   setDurability(durability: NonNullable<RemoteAgentPtyProcess["durability"]>): void {
     this.durability = durability;
   }
@@ -153,7 +160,7 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
 
   kill(signal = "SIGTERM"): void {
     if (this.didExit) return;
-    void this.sendSignal(signal);
+    void this.sendSignal(signal).catch((cause: unknown) => this.recover(cause));
   }
 
   onData(callback: (data: string) => void): () => void {
@@ -311,36 +318,23 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
     }
   }
 
-  private async sendSignal(signal: string): Promise<void> {
-    try {
-      await this.sendRequest(
-        {
-          type: "ptySignalRequest",
-          value: { requestId: randomUUID(), ptyId: this.ptyId, signal },
-        },
-        (frame) => frame.type === "ptySignalResponse" && frame.value.ptyId === this.ptyId,
-      );
-    } catch (cause) {
-      await this.recover(cause);
-    }
+  /** Exact remote PTY identity; request acknowledgement alone never proves exit. */
+  async sendSignal(signal: string): Promise<void> {
+    if (this.didExit) return;
+    await this.sendRequest(
+      {
+        type: "ptySignalRequest",
+        value: { requestId: randomUUID(), ptyId: this.ptyId, signal },
+      },
+      (frame) => frame.type === "ptySignalResponse" && frame.value.ptyId === this.ptyId,
+    );
   }
 
   private async sendRequest(
     frame: Parameters<RemoteAgentConnection["request"]>[0],
     matches: (frame: Awaited<ReturnType<RemoteAgentConnection["nextFrame"]>>) => boolean,
   ): Promise<void> {
-    const response = await this.currentConnection.request(frame, matches);
-    const value = response.value as {
-      readonly accepted?: boolean;
-      readonly errorCode?: string;
-      readonly errorMessage?: string;
-    };
-    if (value.accepted === false) {
-      throw new RemoteAgentPtyError(
-        value.errorCode ?? "PTY_REQUEST_REJECTED",
-        value.errorMessage || "Remote PTY request was rejected.",
-      );
-    }
+    await sendRemotePtyRequest(this.currentConnection, frame, matches, this.controlRequests.signal);
   }
 
   private async recover(cause: unknown): Promise<boolean> {

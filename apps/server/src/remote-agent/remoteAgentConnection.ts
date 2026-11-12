@@ -1,3 +1,4 @@
+import { requestRemoteFrame, type FrameWaiter } from "./remoteAgentConnection.request";
 import { randomUUID } from "node:crypto";
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 
@@ -66,12 +67,6 @@ export interface RemoteAgentSshProcessInput {
   readonly binaryPath: string;
   readonly maxFrameBytes?: number;
 }
-
-type FrameWaiter = {
-  readonly resolve: (frame: RemoteAgentFrame) => void;
-  readonly reject: (error: Error) => void;
-  readonly matches?: (frame: RemoteAgentFrame) => boolean;
-};
 
 type FrameListener = (frame: RemoteAgentFrame) => boolean | void;
 
@@ -231,22 +226,17 @@ export class RemoteAgentConnection {
   async request(
     frame: RemoteAgentFrame,
     matches: (response: RemoteAgentFrame) => boolean,
+    signal?: AbortSignal,
   ): Promise<RemoteAgentFrame> {
+    signal?.throwIfAborted();
     const queued = this.takeQueuedFrame(matches);
     if (queued) return this.assertRequestResponse(queued);
-    const response = await new Promise<RemoteAgentFrame>((resolve, reject) => {
-      const waiter: FrameWaiter = {
-        resolve,
-        reject,
-        matches,
-      };
-      this.waiters.push(waiter);
-      void this.send(frame).catch((error: unknown) => {
-        const index = this.waiters.indexOf(waiter);
-        if (index >= 0) this.waiters.splice(index, 1);
-        reject(error instanceof Error ? error : new RemoteAgentConnectionError(String(error)));
-      });
-    });
+    const response = await requestRemoteFrame(
+      this.waiters,
+      () => this.send(frame),
+      matches,
+      signal,
+    );
     return this.assertRequestResponse(response);
   }
 

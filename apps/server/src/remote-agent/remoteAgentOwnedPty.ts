@@ -189,7 +189,10 @@ export function makeOwnedRemoteAgentPty(
           outputSequence: Math.max(sequence, current.outputSequence),
         })).then(() => undefined),
     });
-    const restartBarrier = makeRemotePtyRestartBarrier(() => process.close(true));
+    const restartBarrier = makeRemotePtyRestartBarrier(
+      () => process.close(true),
+      () => process.sendSignal("SIGKILL"),
+    );
     process.onExit(() => {
       const persisted = update((current) => ({
         ...current,
@@ -226,7 +229,10 @@ export function makeOwnedRemoteAgentPty(
     return {
       pidDomain: "remote",
       recovered: !created,
-      prepareRestart: () => restartBarrier.prepareRestart(),
+      prepareRestart: async () => {
+        await restartBarrier.prepareRestart();
+        process.retireControlRequests();
+      },
       detach: () => process.detach(),
       get pid() {
         return process.pid;

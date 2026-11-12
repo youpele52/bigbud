@@ -1,7 +1,11 @@
 const RESTART_TIMEOUT_MS = 10_000;
+const TERMINATION_GRACE_MS = 1_500;
 
 /** A close acknowledgement is not exit, and exit is not durable owner release. */
-export function makeRemotePtyRestartBarrier(close: () => Promise<void>) {
+export function makeRemotePtyRestartBarrier(
+  close: () => Promise<void>,
+  forceTerminate?: () => Promise<void>,
+) {
   let resolveExit!: () => void;
   let rejectExit!: (error: unknown) => void;
   const exited = new Promise<void>((resolve, reject) => {
@@ -23,7 +27,27 @@ export function makeRemotePtyRestartBarrier(close: () => Promise<void>) {
       // Repeated user retries after a timeout share the outstanding termination,
       // rather than accumulating close requests and unresolved exit waiters.
       if (!termination) {
-        const current = close().then(() => exited);
+        const current = (async () => {
+          let graceTimer: ReturnType<typeof setTimeout> | undefined;
+          let cancelGrace: (() => void) | undefined;
+          try {
+            // Dispatch once. A missing control ACK must not mask independently
+            // verified exit or postpone escalation indefinitely.
+            const closed = Promise.resolve().then(close);
+            const escalation = forceTerminate
+              ? new Promise<boolean>((resolve) => {
+                  cancelGrace = () => resolve(false);
+                  graceTimer = setTimeout(() => resolve(true), TERMINATION_GRACE_MS);
+                }).then(async (expired) => {
+                  if (expired) await forceTerminate();
+                })
+              : Promise.resolve();
+            await Promise.race([exited, Promise.all([closed, escalation]).then(() => exited)]);
+          } finally {
+            clearTimeout(graceTimer);
+            cancelGrace?.();
+          }
+        })();
         termination = current;
         void current.catch(() => {
           if (termination === current) termination = undefined;
