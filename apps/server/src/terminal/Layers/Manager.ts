@@ -3,6 +3,9 @@ import {
   TerminalRuntimeLeaseError,
 } from "@bigbud/contracts/workspace/terminal.ts";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { ServerSettingsService } from "../../ws/serverSettings";
+import { localShellDefaultsEnabled } from "../../constants/terminalShells";
 import * as Layer from "effect/Layer";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
@@ -10,6 +13,10 @@ import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { ServerConfig } from "../../startup/config";
 import { TerminalManager } from "../Services/Manager";
 import { PtyAdapter } from "../Services/PTY";
+import { ShellLaunchPlanner } from "../Services/ShellLaunchPlanner";
+import { ShellProfiles } from "../Services/ShellProfiles";
+import { preflightRemoteTerminalShellProfile } from "./Manager.shell.remote";
+import { makeDirectShellLaunchOwners } from "../../persistence/Layers/DirectShellLaunchOwners";
 import { makeTerminalManagerWithOptions } from "./Manager.process";
 import { classifyTerminalRuntimeLeaseError } from "./Manager.leaseError.ts";
 import type { RuntimePathIdentity } from "./Manager.types";
@@ -28,6 +35,9 @@ export { makeTerminalManagerWithOptions } from "./Manager.process";
 const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
   const { terminalLogsDir } = yield* ServerConfig;
   const ptyAdapter = yield* PtyAdapter;
+  const shellLaunchPlanner = yield* ShellLaunchPlanner;
+  const shellProfiles = yield* ShellProfiles;
+  const settings = Option.getOrUndefined(yield* Effect.serviceOption(ServerSettingsService));
   const sql = yield* SqlClient.SqlClient;
   yield* reconcileWorktreeRuntimeLeases(sql, "terminal");
   const acquireWorktreeLease = Effect.fn("terminal.acquireWorktreeLease")(function* (input: {
@@ -111,7 +121,17 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
     );
   return yield* makeTerminalManagerWithOptions({
     logsDir: terminalLogsDir,
+    getLocalShellDefault: () =>
+      localShellDefaultsEnabled()
+        ? settings?.currentSnapshot?.()?.settings.terminalShells.hostDefaults.local
+        : undefined,
+    listLocalShellProfiles: () => shellProfiles.revalidate({ executionTargetId: "local" }),
     ptyAdapter,
+    directShellOwners: yield* makeDirectShellLaunchOwners(),
+    listShellProfiles: shellProfiles.list,
+    preflightRemoteShellProfile: preflightRemoteTerminalShellProfile,
+    resolveShellProfile: (selection, target) =>
+      shellLaunchPlanner.resolveProfile({ target, selection }),
     resolveRuntimePathIdentity: (cwd) =>
       Effect.tryPromise({
         try: () => captureLocalRuntimePathIdentity(cwd),

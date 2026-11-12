@@ -11,8 +11,6 @@
  */
 import {
   DEFAULT_SERVER_SETTINGS,
-  PersistedModelSelection,
-  PROVIDER_KINDS,
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
@@ -33,13 +31,12 @@ import {
   ServiceMap,
   Stream,
   Cause,
-  SchemaIssue,
 } from "effect";
 import * as Semaphore from "effect/Semaphore";
 import { ServerSettingsSnapshot, type SettingsSnapshot } from "./serverSettings.snapshot.ts";
 import { makeTestSettings } from "./serverSettings.testing.ts";
 import { ServerConfig } from "../startup/config";
-import { type DeepPartial, deepMerge } from "@bigbud/shared/Struct";
+import { type DeepPartial } from "@bigbud/shared/Struct";
 import { fromLenientJson } from "@bigbud/shared/schemaJson";
 import {
   decodeSettingsFieldWise,
@@ -60,8 +57,15 @@ import {
   EXISTING_SERVER_SETTINGS_FALLBACK,
 } from "./serverSettings.opencodePolicy.ts";
 
+import { normalizeServerSettingsPatch } from "./serverSettings.normalize.ts";
+import {
+  initializeTerminalShellSettings,
+  type TerminalShellInitialization,
+} from "./serverSettings.terminalShells.ts";
+
 export interface ServerSettingsShape extends ThreadRetentionSettingsOperations {
   readonly start: Effect.Effect<void, ServerSettingsError>;
+  readonly initializeTerminalShells?: TerminalShellInitialization;
 
   readonly ready: Effect.Effect<void, ServerSettingsError>;
 
@@ -288,7 +292,7 @@ const makeServerSettings = Effect.gen(function* () {
       yield* quarantineUnauthorizedRetention;
     });
 
-    const startupExit = yield* Effect.exit(startup);
+    const startupExit = yield* Effect.exit(writeSemaphore.withPermits(1)(startup));
     if (startupExit._tag === "Failure") {
       yield* Deferred.failCause(startedDeferred, startupExit.cause).pipe(Effect.orDie);
       return yield* Effect.failCause(startupExit.cause);
@@ -322,39 +326,24 @@ const makeServerSettings = Effect.gen(function* () {
     updateSettings: (patch) =>
       writeSemaphore.withPermits(1)(
         Effect.gen(function* () {
-          if (Object.prototype.hasOwnProperty.call(patch, "threadRetentionPolicy")) {
-            return yield* new ServerSettingsError({
-              settingsPath: "<memory>",
-              detail: "threadRetentionPolicy must be changed through the dedicated retention RPC",
-            });
-          }
           const current = yield* getSettingsFromCache;
-          const merged = deepMerge(current, patch);
-          const currentSelection = current.textGenerationModelSelection as unknown;
-          const preservePersistedSelection =
-            patch.textGenerationModelSelection === undefined &&
-            Schema.is(PersistedModelSelection)(currentSelection) &&
-            !PROVIDER_KINDS.includes(currentSelection.provider as (typeof PROVIDER_KINDS)[number]);
-          const candidate = preservePersistedSelection
-            ? {
-                ...merged,
-                textGenerationModelSelection: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection,
-              }
-            : merged;
-          const decoded = yield* Schema.decodeEffect(ServerSettings)(candidate).pipe(
-            Effect.mapError(
-              (cause) =>
-                new ServerSettingsError({
-                  settingsPath: "<memory>",
-                  detail: `failed to normalize server settings: ${SchemaIssue.makeFormatterDefault()(cause.issue)}`,
-                  cause,
-                }),
-            ),
-          );
-          const next = preservePersistedSelection
-            ? ({ ...decoded, textGenerationModelSelection: currentSelection } as ServerSettings)
-            : decoded;
+          const next = yield* normalizeServerSettingsPatch(current, patch);
           return yield* persistSettings(next);
+        }),
+      ),
+    initializeTerminalShells: (selection, origin) =>
+      writeSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* getSettingsFromCache;
+          if (current.terminalShells.version !== 0) return current;
+          return yield* persistSettings({
+            ...current,
+            terminalShells: initializeTerminalShellSettings(
+              current.terminalShells,
+              selection,
+              origin,
+            ),
+          });
         }),
       ),
     setThreadRetentionPolicy: (policy) =>

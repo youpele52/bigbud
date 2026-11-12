@@ -5,27 +5,14 @@ import type { RemoteAgentPtyExited } from "./remoteAgentProtocol.ts";
 import { remoteAgentPtyTerminalEvidence } from "./remoteAgentTerminalEvidence.ts";
 export { RemoteAgentPtyClient } from "./remoteAgentPtyClient.create.ts";
 
-export interface RemoteAgentPtyProcessLike {
-  readonly pid: number;
-  write(data: string): void;
-  resize(cols: number, rows: number): void;
-  kill(signal?: string): void;
-  onData(callback: (data: string) => void): () => void;
-  onExit(callback: (event: { exitCode: number; signal: number | null }) => void): () => void;
-  onError?(callback: (error: Error) => void): () => void;
-}
-
-export class RemoteAgentPtyError extends Error {
-  readonly _tag = "RemoteAgentPtyError";
-
-  constructor(
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-    this.name = "RemoteAgentPtyError";
-  }
-}
+import {
+  RemoteAgentPtyError,
+  type RemoteAgentPtyProcessLike,
+} from "./remoteAgentPtyClient.types.ts";
+export {
+  RemoteAgentPtyError,
+  type RemoteAgentPtyProcessLike,
+} from "./remoteAgentPtyClient.types.ts";
 
 type Reconnect = (() => Promise<RemoteAgentConnection>) | undefined;
 
@@ -44,6 +31,7 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
   private nextInputSequence = 1;
   private lastOutputSequence = 0;
   private didExit = false;
+  private _launchStatus: "unconfirmed" | undefined;
   private reconnecting: Promise<void> | undefined;
   private reconnectAttempts = 0;
   private closing = false;
@@ -88,6 +76,13 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
   }
   setPid(pid: number): void {
     this._pid = pid;
+  }
+  get launchStatus(): "unconfirmed" | undefined {
+    return this._launchStatus;
+  }
+  setLaunchStatus(status: "unconfirmed" | undefined): void {
+    // Omitted legacy evidence remains unknown; never infer confirmation from PID/state.
+    this._launchStatus = status;
   }
   detach(): void {
     this.closing = true;
@@ -184,7 +179,10 @@ export class RemoteAgentPtyProcess implements RemoteAgentPtyProcessLike {
       },
       (frame) => frame.type === "ptyAttachResponse" && frame.value.ptyId === this.ptyId,
     );
-    if (response.type === "ptyAttachResponse") this._pid = response.value.pid;
+    if (response.type === "ptyAttachResponse") {
+      this._pid = response.value.pid;
+      this.setLaunchStatus(response.value.launchStatus);
+    }
     if (response.type === "ptyAttachResponse" && response.value.replayGap) {
       this.report(
         new RemoteAgentPtyError(

@@ -11,6 +11,8 @@ import {
   normalizeExistingOpencodeSettings,
 } from "./serverSettings.opencodePolicy.ts";
 
+import { recoverTerminalShellSettings } from "./serverSettings.terminalShells.ts";
+
 const UnknownJson = fromLenientJson(Schema.Unknown);
 
 export function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
@@ -70,6 +72,10 @@ export function decodeSettingsFieldWise(raw: string): ServerSettings | null {
       continue;
     }
 
+    if (key === "terminalShells") {
+      next[key] = recoverTerminalShellSettings(value);
+      continue;
+    }
     const decoded = Schema.decodeUnknownExit(ServerSettings)({ [key]: value });
     if (decoded._tag === "Success") {
       next[key] = decoded.value[key as keyof ServerSettings];
@@ -83,7 +89,10 @@ export function decodeSettingsFieldWise(raw: string): ServerSettings | null {
   return next as ServerSettings;
 }
 
-const ATOMIC_SETTINGS_KEYS: ReadonlySet<string> = new Set(["textGenerationModelSelection"]);
+const ATOMIC_SETTINGS_KEYS: ReadonlySet<string> = new Set([
+  "textGenerationModelSelection",
+  "terminalShells",
+]);
 
 export function stripDefaultServerSettings(
   current: unknown,

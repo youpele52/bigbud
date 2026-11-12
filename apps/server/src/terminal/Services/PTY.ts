@@ -7,6 +7,8 @@
  * @module PtyAdapter
  */
 import { Effect, Schema, ServiceMap } from "effect";
+import type { RemoteAgentShellLaunch } from "../../remote-agent/remoteAgentShellLaunch.ts";
+import type { ShellUnconfirmedLaunch } from "@bigbud/contracts/workspace/terminalShell.ts";
 
 /**
  * PtyError - Error type for PTY adapter operations.
@@ -27,6 +29,10 @@ export interface PtyProcess {
   readonly pidDomain?: "remote";
   /** Attached to an existing process whose earlier output is not replayed by this adapter. */
   readonly recovered?: boolean;
+  /** Explicit remote launch evidence only; missing evidence is unknown, never confirmed. */
+  readonly launchStatus?: "unconfirmed" | undefined;
+  /** Requested intent plus matched launch evidence, never actual executable identity. */
+  readonly shellUnconfirmedLaunch?: ShellUnconfirmedLaunch | undefined;
   /** Explicit replacement must wait for definitive exit and durable ownership release. */
   readonly prepareRestart?: () => Promise<void>;
   readonly detach?: () => void;
@@ -49,6 +55,8 @@ export interface PtyProcess {
 export interface PtySpawnInput {
   readonly ownerKey?: string;
   readonly recoverOnly?: boolean;
+  /** Internal execution-host-validated intent; client input must never supply executable/argv. */
+  readonly shellLaunch?: RemoteAgentShellLaunch;
   shell: string;
   args?: string[];
   cwd: string;

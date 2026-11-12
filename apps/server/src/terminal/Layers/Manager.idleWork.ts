@@ -1,3 +1,4 @@
+import { hasUnconfirmedDirectShell } from "./Manager.shell.direct.policy";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import type { TerminalIdleWork } from "../Services/Manager.ts";
@@ -12,6 +13,7 @@ const RETENTION_MS = 30 * 24 * 60 * 60_000;
 
 export function terminalPaneWork(session: TerminalSessionState): TerminalIdleWork["state"] {
   if (
+    hasUnconfirmedDirectShell(session) ||
     session.remoteOwnerRecoveryRequired ||
     session.restartPreparation ||
     session.restartPending ||

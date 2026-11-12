@@ -1,6 +1,8 @@
 import { DEFAULT_TERMINAL_ID, resolveExecutionTargetId } from "@bigbud/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import { isLocalExecutionTarget } from "../../executionTargets";
+import { localShellDefaultsEnabled } from "../../constants/terminalShells";
 
 import { makeTerminalRestart } from "./Manager.session.restart.action";
 import { makeTerminalSessionControls } from "./Manager.session.controls.ts";
@@ -17,6 +19,19 @@ import { makeTerminalOutputHold } from "./Manager.session.outputHold";
 import { TerminalSearchIndex } from "./Manager.search";
 import { resizeWithRecovery } from "./Manager.recovery";
 import { captureTerminalRecovery } from "./Manager.recoveryRpc";
+import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
+import { makeListTerminalShellProfiles } from "./Manager.shell.inventory";
+import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
+import {
+  assertDirectShellLaunchAvailable,
+  preflightDirectShellLaunch,
+} from "./Manager.shell.direct";
+import { prepareTerminalLaunchHistory } from "./Manager.session.history";
+import {
+  assertTerminalShellReattach,
+  makeResolveTerminalShellProfile,
+  terminalShellSelectionForNewProcess,
+} from "./Manager.shell.profile";
 
 export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
   const {
@@ -47,6 +62,12 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
     ctx.resolveRuntimePathIdentity,
   );
 
+  const resolveShellProfile = makeResolveTerminalShellProfile(
+    ctx.resolveShellProfile,
+    ctx.preflightRemoteShellProfile,
+    ctx.directShellOwners,
+  );
+
   const open: TerminalManagerShape["open"] = (request) =>
     withThreadLock(
       request.threadId,
@@ -56,6 +77,11 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         // Open means reattach, never reinterpret mutable chat launch settings as a restart.
         if (Option.isSome(existing) && existing.value.process) {
           const session = existing.value;
+          yield* assertTerminalShellReattach(
+            session,
+            resolveExecutionTargetId(request.executionTargetId),
+            request.shellSelection,
+          );
           const cols = request.cols ?? session.cols;
           const rows = request.rows ?? session.rows;
           if (session.cols !== cols || session.rows !== rows) {
@@ -83,6 +109,16 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           return snapshot(session);
         }
         const executionTargetId = resolveExecutionTargetId(request.executionTargetId);
+        const recoverOnly =
+          isRemoteAgentExecutionTarget(executionTargetId) &&
+          (Option.isSome(existing)
+            ? existing.value.remoteOwnerRecoveryRequired === true
+            : yield* ctx.historyExists(request.threadId, terminalId));
+        yield* assertDirectShellLaunchAvailable(ctx.directShellOwners, {
+          threadId: request.threadId,
+          terminalId,
+          executionTargetId,
+        });
         const folder = yield* resolveFolder({
           threadId: request.threadId,
           terminalId,
@@ -90,6 +126,49 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           cwd: request.cwd,
           worktreePath: request.worktreePath,
           env: request.env,
+        });
+        const localDefault =
+          !request.shellSelection &&
+          Option.isNone(existing) &&
+          isLocalExecutionTarget(executionTargetId) &&
+          localShellDefaultsEnabled()
+            ? ctx.getLocalShellDefault?.()
+            : undefined;
+        const newDefault =
+          localDefault?.kind === "profile" &&
+          !(yield* ctx.historyExists(request.threadId, terminalId))
+            ? localDefault
+            : undefined;
+        const shellProfileLaunch = recoverOnly
+          ? null
+          : yield* resolveShellProfile({
+              threadId: request.threadId,
+              terminalId,
+              executionTargetId,
+              wslIdentity: folder.wslIdentity,
+              selection: yield* terminalShellSelectionForNewProcess({
+                threadId: request.threadId,
+                terminalId,
+                executionTargetId,
+                selection: request.shellSelection ?? newDefault,
+                existing: Option.getOrUndefined(existing),
+              }),
+            });
+        yield* preflightDirectShellLaunch(ctx.directShellOwners, {
+          threadId: request.threadId,
+          terminalId,
+          executionTargetId,
+          cwd: folder.cwd,
+          wslIdentity: folder.wslIdentity,
+          launch: shellProfileLaunch,
+        });
+        yield* resolveTerminalRemoteShellIntent({
+          threadId: request.threadId,
+          terminalId,
+          executionTargetId,
+          cwd: folder.cwd,
+          launch: shellProfileLaunch,
+          recoverOnly,
         });
         const input = {
           ...request,
@@ -120,10 +199,8 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           session.wslIdentity = folder.wslIdentity;
 
           const createdSession = session;
-          session.remoteOwnerRecoveryRequired = yield* ctx.historyExists(
-            input.threadId,
-            terminalId,
-          );
+          session.remoteOwnerRecoveryRequired = recoverOnly;
+          if (recoverOnly) session.history = yield* ctx.readHistory(input.threadId, terminalId);
           yield* modifyManagerState((state) => {
             const sessions = new Map(state.sessions);
             sessions.set(sessionKey, createdSession);
@@ -145,6 +222,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
               threadId: input.threadId,
               terminalId,
               executionTargetId,
+              shellProfileLaunch,
               cwd: input.cwd,
               ...(input.worktreePath !== undefined ? { worktreePath: input.worktreePath } : {}),
               cols,
@@ -155,6 +233,8 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           ).pipe(
             Effect.onError(() => releaseWorktreeLease({ threadId: input.threadId, terminalId })),
           );
+          if (recoverOnly && session.process)
+            yield* assertTerminalShellReattach(session, executionTargetId, request.shellSelection);
           if (session.pid !== null) {
             yield* markWorktreeLeaseStarted({
               threadId: input.threadId,
@@ -180,8 +260,6 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
           liveSession.runtimeEnv = nextRuntimeEnv;
           liveSession.directoryFallback = folder.directoryFallback;
           liveSession.wslIdentity = folder.wslIdentity;
-          resetSessionRuntimeState(liveSession);
-          yield* persistHistory(liveSession.threadId, liveSession.terminalId, liveSession.history);
         }
 
         if (!liveSession.process) {
@@ -193,12 +271,14 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             cwd: input.cwd,
             worktreePath: liveSession.worktreePath,
           });
+          const restoreFailedHistory = prepareTerminalLaunchHistory(liveSession, recoverOnly);
           yield* startSession(
             liveSession,
             {
               threadId: input.threadId,
               terminalId,
               executionTargetId,
+              shellProfileLaunch,
               cwd: input.cwd,
               worktreePath: liveSession.worktreePath,
               cols: targetCols,
@@ -208,7 +288,15 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
             "started",
           ).pipe(
             Effect.onError(() => releaseWorktreeLease({ threadId: input.threadId, terminalId })),
+            Effect.ensuring(Effect.sync(restoreFailedHistory)),
           );
+          yield* persistHistory(input.threadId, terminalId, liveSession.history);
+          if (recoverOnly && liveSession.process)
+            yield* assertTerminalShellReattach(
+              liveSession,
+              executionTargetId,
+              request.shellSelection,
+            );
           if (liveSession.pid !== null) {
             yield* markWorktreeLeaseStarted({
               threadId: input.threadId,
@@ -272,6 +360,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
         ),
       ),
     open,
+    listShellProfiles: makeListTerminalShellProfiles(ctx),
     // Retained lifecycle/identity is authoritative even after exit or a failed launch.
     snapshot: (input) =>
       requireSession(input.threadId, input.terminalId ?? DEFAULT_TERMINAL_ID).pipe(

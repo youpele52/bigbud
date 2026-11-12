@@ -66,6 +66,7 @@ export const WS_METHODS = {
   // Terminal methods
   terminalOpen: "terminal.open",
   terminalWslDistributions: "terminal.wslDistributions",
+  terminalShellProfiles: "terminal.shellProfiles",
   terminalSnapshot: "terminal.snapshot",
   terminalRecovery: "terminal.recovery",
   terminalWrite: "terminal.write",

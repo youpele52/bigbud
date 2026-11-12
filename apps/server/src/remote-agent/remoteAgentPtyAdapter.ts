@@ -13,9 +13,14 @@ import {
 import type { RemoteAgentPtyClient, RemoteAgentPtyProcess } from "./remoteAgentPtyClient.ts";
 import type { RemoteAgentWorkspaceClient } from "./remoteAgentWorkspaceClient.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
+import { remoteAgentLegacyTerminalLaunch } from "./remoteAgentTerminalLaunch.ts";
+import type { RemoteAgentRuntimeBinding } from "./remoteAgentConnectionPool.ts";
 
 export interface RemoteAgentPtyResolver {
-  readonly restoreOrCreate?: (input: PtySpawnInput) => Promise<PtyProcess>;
+  readonly restoreOrCreate?: (input: PtySpawnInput) => Promise<PtyProcess | undefined>;
+  readonly resolveProfileBinding?: (
+    target: string,
+  ) => Promise<RemoteAgentRuntimeBinding | undefined>;
   readonly resolvePty: (executionTargetId: string) => Promise<RemoteAgentPtyClient>;
   readonly resolveWorkspace: (
     executionTargetId: string,
@@ -87,24 +92,18 @@ export async function createRemoteAgentWorkspacePty(
   });
 }
 
-function terminalEnvironment(environment: NodeJS.ProcessEnv): ReadonlyArray<{
-  readonly name: string;
-  readonly value: string;
-}> {
-  return Object.entries(environment).flatMap(([name, value]) => {
-    if (value === undefined) return [];
-    if (!(name === "TERM" || name === "COLORTERM" || name === "LANG" || name.startsWith("LC_"))) {
-      return [];
-    }
-    return [{ name, value }];
-  });
-}
-
 async function spawnRemotePty(
   input: PtySpawnInput,
   resolver: RemoteAgentPtyResolver,
 ): Promise<PtyProcess> {
-  if (resolver.restoreOrCreate && input.ownerKey) return resolver.restoreOrCreate(input);
+  if (resolver.restoreOrCreate && input.ownerKey) {
+    const owned = await resolver.restoreOrCreate(input);
+    if (owned) return owned;
+  }
+  if (input.shellLaunch)
+    throw new Error(
+      "Explicit remote profiles require durable terminal ownership; no PTY was created.",
+    );
   const executionTargetId = input.executionTargetId;
   const root = input.remoteCwd;
   if (!executionTargetId || !root) {
@@ -113,15 +112,16 @@ async function spawnRemotePty(
       message: "Remote PTY requires an execution target and remote workspace root.",
     });
   }
+  const launch = remoteAgentLegacyTerminalLaunch(input.env);
   const process = await createRemoteAgentWorkspacePty(
     {
       executionTargetId,
       workspaceRoot: root,
-      command: "/bin/sh",
-      args: ["-lc", 'exec "${SHELL:-/bin/sh}" -l'],
+      command: launch.shell,
+      args: launch.args,
       cols: input.cols,
       rows: input.rows,
-      environment: terminalEnvironment(input.env),
+      environment: launch.environment,
     },
     resolver,
   );

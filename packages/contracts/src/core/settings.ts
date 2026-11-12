@@ -4,6 +4,7 @@ import {
   DEFAULT_BROWSER_SEARCH_ENGINE,
 } from "../constants/browser.constant";
 import { TerminalInteractionSettingsFields } from "./settings.terminal";
+import { DEFAULT_TERMINAL_SHELL_SETTINGS, TerminalShellSettings } from "./settings.terminalShell";
 import * as Schema from "effect/Schema";
 import * as SchemaTransformation from "effect/SchemaTransformation";
 import { TrimmedString } from "./baseSchemas";
@@ -263,6 +264,9 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "local" as const satisfies ThreadEnvMode),
   ),
   defaultChatCwd: TrimmedString.pipe(Schema.withDecodingDefault(() => DEFAULT_CHAT_CWD)),
+  terminalShells: TerminalShellSettings.pipe(
+    Schema.withDecodingDefault(() => ({ ...DEFAULT_TERMINAL_SHELL_SETTINGS, hostDefaults: {} })),
+  ),
   textGenerationModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(() => null),
   ),

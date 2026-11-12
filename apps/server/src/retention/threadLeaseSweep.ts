@@ -1,3 +1,4 @@
+import { retainedDirectOwnerKey } from "./directShellLease";
 /**
  * Bounded sweep of leases that no longer stand for real work, so retention stops skipping
  * threads for them. One tick deletes at most `limit` rows across every category:
@@ -49,10 +50,12 @@ export const sweepThreadLeases = Effect.fn("sweepThreadLeases")(function* (
   if (budget > 0) {
     const candidates = yield* sql<{
       readonly leaseId: string;
+      readonly threadId: string;
+      readonly runtimeKind: string;
       readonly processId: number | null;
       readonly expired: number;
     }>`
-      SELECT lease_id AS "leaseId", process_id AS "processId",
+      SELECT lease_id AS "leaseId", process_id AS "processId", thread_id AS "threadId", runtime_kind AS "runtimeKind",
         CASE WHEN expires_at IS NULL OR expires_at <= ${now} THEN 1 ELSE 0 END AS expired
       FROM worktree_runtime_leases
       WHERE runtime_kind IN ('terminal', 'shell')
@@ -65,14 +68,21 @@ export const sweepThreadLeases = Effect.fn("sweepThreadLeases")(function* (
         row.expired === 1 || (row.processId !== null && isDefinitelyTerminated(row.processId)),
     );
     if (stale.length > 0) {
+      const candidates = JSON.stringify(
+        stale.map((row) => ({ leaseId: row.leaseId, ownerKey: retainedDirectOwnerKey(row) })),
+      );
       runtime = (yield* sql`
         DELETE FROM worktree_runtime_leases
-        WHERE lease_id IN (SELECT value FROM json_each(${JSON.stringify(stale.map((row) => row.leaseId))}))
+        WHERE lease_id IN (
+          SELECT json_extract(value, '$.leaseId') FROM json_each(${candidates})
+          WHERE NOT EXISTS (SELECT 1 FROM direct_shell_launch_owners
+            WHERE owner_key = json_extract(value, '$.ownerKey'))
+        )
           AND lease_id NOT IN (SELECT value FROM json_each(${held}))
         RETURNING lease_id
       `).length;
-      budget -= runtime;
     }
+    budget -= runtime;
   }
 
   let activity = 0;

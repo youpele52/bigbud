@@ -81,6 +81,7 @@ import Migration0165 from "./Migrations/165_ThreadMetadataNativeRequests.ts";
 import Migration0166 from "./Migrations/166_ThreadMetadataWarningFailures.ts";
 import Migration0167 from "./Migrations/167_ThreadMetadataDeadlineCancellation.ts";
 
+import Migration0170 from "./Migrations/170_DirectShellLaunchOwners.ts";
 import Migration0171 from "./Migrations/171_ThreadMetadataLegacyClaimBoundary.ts";
 
 import Migration0172 from "./Migrations/172_ThreadMetadataPurgedIdentityBoundary.ts";
@@ -154,6 +155,7 @@ export const migrationEntries = [
   [165, "ThreadMetadataNativeRequests", Migration0165],
   [166, "ThreadMetadataWarningFailures", Migration0166],
   [167, "ThreadMetadataDeadlineCancellation", Migration0167],
+  [170, "DirectShellLaunchOwners", Migration0170],
   [171, "ThreadMetadataLegacyClaimBoundary", Migration0171],
   [172, "ThreadMetadataPurgedIdentityBoundary", Migration0172],
 ] as const;

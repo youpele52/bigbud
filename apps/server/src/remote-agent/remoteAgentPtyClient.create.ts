@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
-import { RemoteAgentPtyError, RemoteAgentPtyProcess } from "./remoteAgentPtyClient.ts";
+import { RemoteAgentPtyProcess } from "./remoteAgentPtyClient.ts";
+import { RemoteAgentPtyError } from "./remoteAgentPtyClient.types.ts";
 
 export class RemoteAgentPtyClient {
   constructor(
@@ -18,36 +19,49 @@ export class RemoteAgentPtyClient {
     readonly cols: number;
     readonly rows: number;
     readonly environment?: ReadonlyArray<{ readonly name: string; readonly value: string }>;
+    readonly profileLaunch?: boolean;
     readonly onRejected?: () => Promise<void>;
   }): Promise<RemoteAgentPtyProcess> {
     const ptyId = input.ptyId ?? randomUUID();
     const process = new RemoteAgentPtyProcess(this.connection, ptyId, this.reconnect);
-    const response = await this.connection.request(
-      {
-        type: "ptyCreateRequest",
-        value: {
-          requestId: randomUUID(),
-          ptyId,
-          requestDigest: input.requestDigest ?? new Uint8Array(),
-          workspaceHandle: input.workspaceHandle,
-          cwd: input.cwd,
-          shell: input.shell,
-          args: input.args ?? [],
-          cols: input.cols,
-          rows: input.rows,
-          ...(input.environment ? { environment: input.environment } : {}),
+    try {
+      const response = await this.connection.request(
+        {
+          type: "ptyCreateRequest",
+          value: {
+            requestId: randomUUID(),
+            ptyId,
+            requestDigest: input.requestDigest ?? new Uint8Array(),
+            workspaceHandle: input.workspaceHandle,
+            cwd: input.cwd,
+            shell: input.shell,
+            args: input.args ?? [],
+            cols: input.cols,
+            rows: input.rows,
+            ...(input.environment ? { environment: input.environment } : {}),
+            ...(input.profileLaunch ? { profileLaunch: true } : {}),
+          },
         },
-      },
-      (frame) => frame.type === "ptyCreateResponse" && frame.value.ptyId === ptyId,
-    );
-    if (response.type !== "ptyCreateResponse")
-      throw new RemoteAgentPtyError("PTY_OUTCOME_UNKNOWN", "PTY creation outcome is unknown.");
-    if (!response.value.accepted) {
-      await input.onRejected?.();
-      throw new RemoteAgentPtyError(response.value.errorCode, response.value.errorMessage);
+        (frame) => frame.type === "ptyCreateResponse" && frame.value.ptyId === ptyId,
+      );
+      if (response.type !== "ptyCreateResponse")
+        throw new RemoteAgentPtyError("PTY_OUTCOME_UNKNOWN", "PTY creation outcome is unknown.");
+      if (!response.value.accepted) {
+        await input.onRejected?.();
+        throw new RemoteAgentPtyError(response.value.errorCode, response.value.errorMessage);
+      }
+      process.setPid(response.value.pid);
+      process.setLaunchStatus(response.value.launchStatus);
+      if (input.profileLaunch && process.launchStatus !== "unconfirmed")
+        throw new RemoteAgentPtyError("PTY_OUTCOME_UNKNOWN", "Profile launch evidence is missing.");
+      await process.attach(0);
+      if (input.profileLaunch && process.launchStatus !== "unconfirmed")
+        throw new RemoteAgentPtyError("PTY_OUTCOME_UNKNOWN", "Profile attach evidence is missing.");
+      return process;
+    } catch (cause) {
+      // Detach listeners only. Unknown outcomes must not kill, retry, or release ownership.
+      process.detach();
+      throw cause;
     }
-    process.setPid(response.value.pid);
-    await process.attach(0);
-    return process;
   }
 }

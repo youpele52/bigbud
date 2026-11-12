@@ -12,7 +12,12 @@ const base = {
 
 describe("terminal restart refusal evidence", () => {
   it("preserves optional typed evidence through the terminal error codec", () => {
-    for (const reason of [undefined, "staleGeneration", "restartNotStarted"] as const) {
+    for (const reason of [
+      undefined,
+      "staleGeneration",
+      "restartNotStarted",
+      "directShellUnconfirmed",
+    ] as const) {
       const input = { ...base, ...(reason ? { reason } : {}) };
       const decoded = Schema.decodeUnknownSync(TerminalError)(input);
       expect(decoded).toBeInstanceOf(TerminalExecutionTargetError);

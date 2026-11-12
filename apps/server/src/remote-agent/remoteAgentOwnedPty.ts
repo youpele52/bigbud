@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { PtyProcess, PtySpawnInput } from "../terminal/Services/PTY.ts";
 import type { RemoteAgentConnectionPool } from "./remoteAgentConnectionPool.ts";
-import {
-  RemoteAgentPtyClient,
-  RemoteAgentPtyError,
-  RemoteAgentPtyProcess,
-} from "./remoteAgentPtyClient.ts";
+import { RemoteAgentPtyClient } from "./remoteAgentPtyClient.create.ts";
+import { RemoteAgentPtyProcess } from "./remoteAgentPtyClient.ts";
+import { RemoteAgentPtyError } from "./remoteAgentPtyClient.types.ts";
 import {
   RemoteAgentWorkspaceClient,
   RemoteAgentWorkspaceError,
@@ -17,17 +15,19 @@ import {
   type RemoteAgentOwnerStore,
   type RemoteAgentOwner,
 } from "./remoteAgentOwners.ts";
-import { remoteAgentRequestDigest } from "./remoteAgentRequestDigest.ts";
+import { remoteAgentOwnedPtyLaunch } from "./remoteAgentOwnedPty.launch.ts";
 import { openRemoteAgentControl } from "./remoteAgentControl.ts";
 import { pinRemoteAgentBuild } from "./remoteAgentInstall.registry.transitions.ts";
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
 import { currentRemoteAgentController } from "./remoteAgentController.ts";
 import { makeRemotePtyRestartBarrier } from "./remoteAgentOwnedPty.restart.ts";
+import { remoteAgentTerminalLaunch } from "./remoteAgentTerminalLaunch.ts";
 
 /** Application terminal identity is resolved durably BEFORE generating a PTY ID or opening a workspace. */
 export function makeOwnedRemoteAgentPty(
   pool: RemoteAgentConnectionPool,
   storeFor: () => RemoteAgentOwnerStore = remoteAgentOwners,
+  resolveBinding = remoteAgentAdmission.resolveBinding,
 ) {
   return async (input: PtySpawnInput): Promise<PtyProcess> => {
     if (!input.ownerKey || !input.executionTargetId || !input.remoteCwd)
@@ -36,18 +36,18 @@ export function makeOwnedRemoteAgentPty(
     const key = `terminal:${input.ownerKey}`;
     const controller = currentRemoteAgentController();
     let owner = await reclaimDeadPreparedOwner(store, await store.get(key));
-    if (!owner && input.recoverOnly)
+    // Recovery is attach-only, including after a dead prepared reservation was reclaimed.
+    if (input.recoverOnly && (!owner || owner.state === "terminal"))
       throw new Error(
         "Existing terminal history has no durable remote PTY identity. Its outcome is unknown; no replacement was spawned.",
       );
     let created = false;
-    const digest = Buffer.from(
-      remoteAgentRequestDigest({ target: input.executionTargetId, cwd: input.remoteCwd }),
-    ).toString("hex");
+    const launch = remoteAgentOwnedPtyLaunch(input, owner);
+    const { digest } = launch;
     if (!owner || owner.state === "terminal") {
       const binding = owner
         ? { runtime: owner.runtime, expectedEpoch: owner.epoch }
-        : await remoteAgentAdmission.resolveBinding(input.executionTargetId);
+        : await resolveBinding(input.executionTargetId);
       if (!binding) throw new Error("Connect a new remote session before opening a terminal.");
       const resourceId = randomUUID();
       const reservationId = randomUUID();
@@ -67,6 +67,7 @@ export function makeOwnedRemoteAgentPty(
               : binding.runtime.generation,
           resourceId,
           digest,
+          ...(launch.shellLaunch ? { shellLaunch: launch.shellLaunch } : {}),
           state: "prepared",
           outputSequence: 0,
           nextInputSequence: 1,
@@ -96,7 +97,11 @@ export function makeOwnedRemoteAgentPty(
     let connection: Awaited<ReturnType<typeof pool.getBound>>;
     let control: Awaited<ReturnType<typeof openRemoteAgentControl>>;
     try {
-      connection = await pool.getBound(owner.target, binding, ["terminal.pty", "workspace.files"]);
+      connection = await pool.getBound(owner.target, binding, [
+        "terminal.pty",
+        "workspace.files",
+        ...(created && owner.shellLaunch ? ["terminal.shell-profiles"] : []),
+      ]);
       control = await openRemoteAgentControl(owner.target);
     } catch (cause) {
       try {
@@ -154,15 +159,9 @@ export function makeOwnedRemoteAgentPty(
           requestDigest: Buffer.from(owner.digest, "hex"),
           workspaceHandle,
           cwd: "",
-          shell: "/bin/sh",
-          args: ["-lc", 'exec "${SHELL:-/bin/sh}" -l'],
+          ...remoteAgentTerminalLaunch(input.env, owner.shellLaunch),
           cols: input.cols,
           rows: input.rows,
-          environment: Object.entries(input.env).flatMap(([name, value]) =>
-            value !== undefined && /^(TERM|COLORTERM|LANG|LC_[A-Z_]+)$/.test(name)
-              ? [{ name, value }]
-              : [],
-          ),
           onRejected: releaseDefinitiveFailure,
         });
       }
@@ -205,6 +204,9 @@ export function makeOwnedRemoteAgentPty(
             "Remote terminal owner changed before durable termination; replacement is unsafe.",
           );
         }
+        // An interruption is not a terminal receipt. Retain the build pin with
+        // outcome-unknown ownership so both managed and external recovery stay safe.
+        if (process.interruptionReason) return;
         return control.registry.update((state) => ({
           ...state,
           revision: state.revision + 1,
@@ -220,6 +222,7 @@ export function makeOwnedRemoteAgentPty(
       process.interrupt("remote-service-restarted"),
     );
     process.onExit(removeRestartListener);
+    const requestedProfile = owner.shellLaunch?.requestedProfile;
     return {
       pidDomain: "remote",
       recovered: !created,
@@ -227,6 +230,14 @@ export function makeOwnedRemoteAgentPty(
       detach: () => process.detach(),
       get pid() {
         return process.pid;
+      },
+      get launchStatus() {
+        return process.launchStatus;
+      },
+      get shellUnconfirmedLaunch() {
+        return requestedProfile && process.launchStatus === "unconfirmed"
+          ? { status: "unconfirmed" as const, requestedProfile }
+          : undefined;
       },
       write: (data) => process.write(data),
       resize: (cols, rows) => process.resize(cols, rows),

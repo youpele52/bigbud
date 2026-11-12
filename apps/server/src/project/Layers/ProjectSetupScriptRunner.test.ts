@@ -64,6 +64,7 @@ describe("ProjectSetupScriptRunner", () => {
             Layer.provideMerge(
               Layer.succeed(TerminalManager, {
                 snapshot: () => Effect.die(new Error("unused")),
+                listShellProfiles: () => Effect.die(new Error("unused")),
                 open,
                 write,
                 resize: () => Effect.void,
@@ -147,6 +148,7 @@ describe("ProjectSetupScriptRunner", () => {
             Layer.provideMerge(
               Layer.succeed(TerminalManager, {
                 snapshot: () => Effect.die(new Error("unused")),
+                listShellProfiles: () => Effect.die(new Error("unused")),
                 open,
                 write,
                 resize: () => Effect.void,

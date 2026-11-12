@@ -30,8 +30,8 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       const opened = yield* manager.open(openInput());
       expect(opened.history).toBe("");
       expect(yield* readFileString(log)).toBe("old OpenCode\n".repeat(100_000));
-      // The ownership fence is independent of whether screen history is loaded.
-      expect(ptyAdapter.spawnInputs[0]?.recoverOnly).toBe(true);
+      // Local disk history does not imply a durable remote owner to recover.
+      expect(ptyAdapter.spawnInputs[0]?.recoverOnly).toBe(false);
       ptyAdapter.processes[0]!.emitData("current Pi\n");
       yield* waitFor(
         manager.snapshot(openInput()).pipe(Effect.map((s) => s.history === "current Pi\n")),

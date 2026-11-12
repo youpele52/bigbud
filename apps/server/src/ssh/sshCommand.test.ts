@@ -37,6 +37,35 @@ describe("buildSshCommandInvocation", () => {
     );
   });
 
+  it("opts trusted probes into an absolute nonlogin shell with a clean environment", () => {
+    const invocation = buildSshCommandInvocation({
+      executionTargetId: "ssh:host=devbox&user=root&auth=ssh-key",
+      shellMode: "clean-posix",
+      command: "/usr/bin/env",
+    });
+
+    expect(invocation.args.at(-1)).toMatch(
+      /^'\/usr\/bin\/env' '-i' 'PATH=\/usr\/bin:\/bin' 'LC_ALL=C' '\/bin\/sh' '-c' /,
+    );
+    expect(invocation.args.at(-1)).not.toContain("'-lc'");
+    expect(invocation.args).toContain("BatchMode=yes");
+    expect(invocation.args).toContain("-T");
+  });
+
+  it("can preserve the execution-account environment without an extra login wrapper", () => {
+    const invocation = buildSshCommandInvocation({
+      executionTargetId: "ssh:host=devbox&user=root&auth=ssh-key",
+      shellMode: "non-login-posix",
+      command: "/bin/zsh",
+      args: ["-o", "nopromptsp"],
+      allocateTty: true,
+    });
+    expect(invocation.args.at(-1)).toMatch(/^'\/bin\/sh' '-c' /);
+    expect(invocation.args.at(-1)).not.toContain("'-lc'");
+    expect(invocation.args.at(-1)).not.toContain("'-i'");
+    expect(invocation.args).toContain("-tt");
+  });
+
   it("does not place NUL bytes in process arguments", () => {
     const invocation = buildSshCommandInvocation({
       executionTargetId: "ssh:host=devbox&user=root&auth=ssh-key",

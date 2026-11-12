@@ -40,6 +40,15 @@ describe("existing-pane shell inventory contracts", () => {
       expect(Schema.is(TerminalShellProfilesInput)(input)).toBe(false);
     }
   });
+  it("allows only fixed local settings scope without client launch authority", () => {
+    expect(
+      Schema.decodeUnknownSync(TerminalShellProfilesInput)({
+        scope: "local-settings",
+        executionTargetId: "ssh:other",
+      }),
+    ).toEqual({ scope: "local-settings" });
+    expect(Schema.is(TerminalShellProfilesInput)({ scope: "remote-settings" })).toBe(false);
+  });
   it("accepts empty and complete bounded inventories", () => {
     expect(valid({ host, profiles: [] })).toBe(true);
     expect(valid({ host, profiles: [profile] })).toBe(true);
@@ -78,4 +87,17 @@ describe("existing-pane shell inventory contracts", () => {
     expect(valid({ host, profiles: [{ ...profile, args: Array(33).fill("x") }] })).toBe(false);
     expect(valid({ host, profiles: [null] })).toBe(false);
   });
+});
+
+it("retains server-declared admission and generation without inventing missing permission", () => {
+  const decode = Schema.decodeUnknownSync(TerminalShellProfileInventory);
+  expect(
+    decode({
+      host,
+      profiles: [],
+      exactProfileLaunchesEnabled: false,
+      runtimeGeneration: "current",
+    }),
+  ).toMatchObject({ exactProfileLaunchesEnabled: false, runtimeGeneration: "current" });
+  expect(decode({ host, profiles: [] }).exactProfileLaunchesEnabled).toBeUndefined();
 });

@@ -11,6 +11,8 @@ import { ownershipStateDir } from "@bigbud/shared/backendOwnership.paths";
 
 import type { DesktopBackendStartReason } from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 
+import type { TerminalShellInstallEvidence } from "./config.terminalShells.ts";
+
 import type { TraceMode } from "../observability/TracePolicy.ts";
 
 export { DEFAULT_SERVER_PORT as DEFAULT_PORT } from "@bigbud/shared/DevPorts";
@@ -72,6 +74,8 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   /** Child fd of Electron main's lifecycle hint pipe, when a desktop bootstrap envelope came. */
   readonly desktopLifecycleHintFd?: number;
   readonly desktopOwnershipHandoff?: boolean;
+  /** Evidence captured before startup creates any directories; absence is uncertainty. */
+  readonly terminalShellInstallEvidence?: TerminalShellInstallEvidence;
 }
 
 export const deriveServerPaths = Effect.fn(function* (

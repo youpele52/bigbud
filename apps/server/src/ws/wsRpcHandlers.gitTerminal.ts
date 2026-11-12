@@ -37,6 +37,7 @@ import { makeRemoteConnectionHandlers } from "./wsRemoteConnection.handlers.ts";
 import { verifyAndAdmitSshMonitorTarget } from "./wsSshMonitor.verify.ts";
 import { listRemoteFoldersEffect } from "./wsRemoteFolders.ts";
 import { trustSshHostEffect } from "./wsSshHostTrust.ts";
+import { makeShellProfileHandlers } from "./wsRpcHandlers.shellProfiles";
 
 function gitMutationOperationId(operationId: string | undefined, target?: string): string {
   if (!operationId && !isLocalExecutionTarget(target))
@@ -61,6 +62,7 @@ function withGitMutationOperationId<
 export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScope?: Scope.Scope) {
   return {
     ...makeSshMonitorHandlers(context),
+    ...makeShellProfileHandlers(context),
     ...makeRemoteConnectionHandlers(context),
     [WS_METHODS.serverTrustSshHost]: (input: Parameters<typeof trustSshHostEffect>[0]) =>
       observeRpcEffect(WS_METHODS.serverTrustSshHost, trustSshHostEffect(input), {

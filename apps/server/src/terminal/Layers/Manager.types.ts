@@ -1,4 +1,5 @@
 import type * as Effect from "effect/Effect";
+import type { DirectShellLaunchOwnerStore } from "./DirectShellLaunch.owner";
 import type * as Fiber from "effect/Fiber";
 import type { TerminalRecoveryModel } from "./TerminalRecoveryModel";
 import type { TerminalModeTracker } from "./TerminalModeTracker";
@@ -16,6 +17,21 @@ import type { RemoteTerminalProcessInspector } from "./Manager.remote-inspection
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
 import type { TerminalWslIdentity } from "@bigbud/contracts/workspace/terminal.wsl.ts";
 import type { TerminalAgentIdentity } from "@bigbud/contracts/workspace/terminal.agentIdentity.ts";
+import type {
+  ShellLaunchIdentity,
+  ShellUnconfirmedLaunch,
+  ShellSelection,
+} from "@bigbud/contracts/workspace/terminalShell.ts";
+import type { LocalShellDiscoveryError } from "../Services/LocalShellProfiles";
+import type {
+  ShellProfileDiscoveryError,
+  ShellProfileTarget,
+  ShellProfileInventory,
+} from "../Services/ShellProfiles";
+import type {
+  ResolvedShellProfileLaunch,
+  ShellProfileResolutionError,
+} from "./ShellProfiles.launch";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -41,6 +57,8 @@ export interface TerminalSessionState {
   hasDeliveryOutputHold?: (() => boolean) | undefined;
   recoveryResizeOutput?: { bytes: number; chunks: string[] } | undefined;
   wslIdentity?: TerminalWslIdentity | undefined;
+  shellLaunchIdentity?: ShellLaunchIdentity | undefined;
+  shellUnconfirmedLaunch?: ShellUnconfirmedLaunch | undefined;
   remoteShellPid?: number | undefined;
   remoteOwnerRecoveryRequired?: boolean;
   restartPending?: boolean;
@@ -123,6 +141,7 @@ export interface TerminalManagerState {
 }
 
 export interface TerminalStartInput {
+  shellProfileLaunch?: ResolvedShellProfileLaunch | null;
   threadId: string;
   terminalId: string;
   executionTargetId?: string;
@@ -134,6 +153,24 @@ export interface TerminalStartInput {
 }
 
 export interface TerminalManagerOptions {
+  getLocalShellDefault?: (() => ShellSelection | undefined) | undefined;
+  listLocalShellProfiles?:
+    | (() => Effect.Effect<ShellProfileInventory, ShellProfileDiscoveryError>)
+    | undefined;
+  directShellOwners?: DirectShellLaunchOwnerStore;
+  listShellProfiles?: (
+    target: ShellProfileTarget,
+  ) => Effect.Effect<ShellProfileInventory, ShellProfileDiscoveryError>;
+  preflightRemoteShellProfile?: (
+    executionTargetId: string,
+  ) => Effect.Effect<void, ShellProfileDiscoveryError>;
+  resolveShellProfile?: (
+    selection: ShellSelection,
+    target: ShellProfileTarget,
+  ) => Effect.Effect<
+    ResolvedShellProfileLaunch | null,
+    LocalShellDiscoveryError | ShellProfileDiscoveryError | ShellProfileResolutionError
+  >;
   resolveRuntimePathIdentity?: (
     cwd: string,
   ) => Effect.Effect<RuntimePathIdentity, TerminalCwdError>;

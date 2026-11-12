@@ -12,6 +12,8 @@ import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ServerConfig, type ServerConfigShape } from "../../startup/config.ts";
 import { TerminalManager } from "../Services/Manager.ts";
 import { PtyAdapter } from "../Services/PTY.ts";
+import { ShellLaunchPlanner } from "../Services/ShellLaunchPlanner.ts";
+import { ShellProfiles } from "../Services/ShellProfiles.ts";
 import { TerminalManagerLive } from "./Manager.ts";
 import { FakePtyAdapter, openInput } from "./Manager.test.helpers.ts";
 
@@ -61,6 +63,14 @@ const dependencies = Layer.mergeAll(
   SqlitePersistenceMemory,
   Layer.succeed(ServerConfig, config),
   Layer.succeed(PtyAdapter, new FakePtyAdapter()),
+  Layer.succeed(ShellLaunchPlanner, {
+    resolveProfile: () => Effect.succeed(null),
+  }),
+  Layer.succeed(ShellProfiles, {
+    list: () => Effect.die("unused inventory"),
+    revalidate: () => Effect.die("unused inventory"),
+    invalidate: () => Effect.void,
+  }),
 );
 const layer = Layer.provideMerge(TerminalManagerLive, dependencies);
 

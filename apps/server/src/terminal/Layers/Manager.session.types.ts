@@ -14,9 +14,16 @@ import {
   type TerminalSessionState,
   type TerminalStartInput,
   type RuntimePathIdentity,
+  type TerminalManagerOptions,
 } from "./Manager.types";
 
 export interface SessionApiContext {
+  getLocalShellDefault?: TerminalManagerOptions["getLocalShellDefault"];
+  listLocalShellProfiles?: TerminalManagerOptions["listLocalShellProfiles"];
+  directShellOwners?: TerminalManagerOptions["directShellOwners"];
+  resolveShellProfile?: TerminalManagerOptions["resolveShellProfile"];
+  preflightRemoteShellProfile?: TerminalManagerOptions["preflightRemoteShellProfile"];
+  listShellProfiles?: TerminalManagerOptions["listShellProfiles"];
   publishEvent: (event: TerminalEvent) => Effect.Effect<void>;
   modifyManagerState: <A>(
     f: (state: TerminalManagerState) => readonly [A, TerminalManagerState],

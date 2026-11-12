@@ -2,6 +2,7 @@ import { Schema } from "effect";
 import { RemoteAgentRuntimeSchema, validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import type { RemoteAgentRuntimeBinding } from "./remoteAgentConnectionPool.ts";
 import { isRemoteAgentControllerAlive } from "./remoteAgentController.ts";
+import { RemoteAgentShellLaunch, remoteAgentPtyRequestDigest } from "./remoteAgentShellLaunch.ts";
 
 const OwnerSchema = Schema.Struct({
   interruptionReason: Schema.optional(Schema.Literals(["restart"])),
@@ -17,6 +18,8 @@ const OwnerSchema = Schema.Struct({
   epoch: Schema.String,
   resourceId: Schema.String,
   digest: Schema.String,
+  // Immutable requested launch only; never interpret this as confirmed running identity.
+  shellLaunch: Schema.optional(RemoteAgentShellLaunch),
   state: Schema.Literals(["prepared", "may-have-been-sent", "terminal", "outcome-unknown"]),
   outputSequence: Schema.Number,
   nextInputSequence: Schema.Number,
@@ -94,6 +97,18 @@ export function parseRemoteAgentOwner(text: string): RemoteAgentOwner {
   ] as const)
     assertBoundedIdentity(value, label);
   if (!/^[a-f0-9]{64}$/.test(owner.digest)) throw new Error("Invalid durable owner identity.");
+  if (owner.shellLaunch) {
+    if (!owner.ownerKey.startsWith("terminal:"))
+      throw new Error("Shell launch intent requires a terminal owner.");
+    const digest = Buffer.from(
+      remoteAgentPtyRequestDigest({
+        target: owner.target,
+        cwd: owner.shellLaunch.cwd,
+        shellLaunch: owner.shellLaunch,
+      }),
+    ).toString("hex");
+    if (owner.digest !== digest) throw new Error("Durable shell launch identity conflict.");
+  }
   if (
     ![owner.outputSequence, owner.nextInputSequence, owner.inputAcknowledged].every(
       (sequence) => Number.isSafeInteger(sequence) && sequence >= 0,

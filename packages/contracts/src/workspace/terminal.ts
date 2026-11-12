@@ -314,7 +314,9 @@ export class TerminalExecutionTargetError extends Schema.TaggedErrorClass<Termin
     executionTargetId: ExecutionTargetId,
     detail: Schema.String,
     // restartNotStarted is emitted only before any stop/spawn mutation of the pane.
-    reason: Schema.optional(Schema.Literals(["staleGeneration", "restartNotStarted"])),
+    reason: Schema.optional(
+      Schema.Literals(["staleGeneration", "restartNotStarted", "directShellUnconfirmed"]),
+    ),
     cause: Schema.optional(Schema.Defect),
   },
 ) {

@@ -9,11 +9,9 @@ src/terminal/Layers/Manager.agentIdentity.generic.test.ts
 src/terminal/Layers/Manager.basic.test.ts
 src/terminal/Layers/Manager.cwd.test.ts
 src/terminal/Layers/Manager.history.retention.test.ts
-src/terminal/Layers/Manager.history.test.ts
 src/terminal/Layers/Manager.leaseError.test.ts
 src/terminal/Layers/Manager.lifecycle.test.ts
 src/terminal/Layers/Manager.outputDelivery.test.ts
-src/terminal/Layers/Manager.remote.test.ts
 src/terminal/Layers/Manager.search.test.ts
 src/terminal/Layers/Manager.shell.identity.test.ts
 src/terminal/Layers/Manager.shell.test.ts

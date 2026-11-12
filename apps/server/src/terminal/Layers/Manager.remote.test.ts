@@ -79,6 +79,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
       const snapshot = yield* manager.restart(
         restartInput({
           executionTargetId: updatedTarget,
+          shellSelection: { kind: "legacy-auto" },
           cwd: "/opt/new-project",
         }),
       );

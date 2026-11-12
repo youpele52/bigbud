@@ -7,7 +7,12 @@ function quote(value: string): string {
 /** A recovery proxy must never prepare, replace, or restart the runtime it is recovering. */
 export function buildPinnedRemoteAgentProxy(runtime: RemoteAgentRuntime): string {
   const descriptor = validateRemoteAgentRuntime(runtime);
-  return `BIGBUD_AGENT_STATE_DIR=${quote(descriptor.statePath)} exec ${quote(descriptor.binaryPath)} --proxy`;
+  const proxy = `BIGBUD_AGENT_STATE_DIR=${quote(descriptor.statePath)} exec ${quote(descriptor.binaryPath)} --proxy`;
+  // External paths are user-controlled, not protected by the managed installer.
+  // Refuse changed bytes before running even the proxy; hello also checks build/epoch.
+  return descriptor.origin === "legacy-external"
+    ? `test "$(sha256sum -- ${quote(descriptor.binaryPath)} | cut -d ' ' -f1)" = '${descriptor.sha256}' && ${proxy}`
+    : proxy;
 }
 
 /** Reserve a clean managed runtime before spawning its supervisor. */

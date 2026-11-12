@@ -16,6 +16,7 @@ import {
   RuntimeMode,
   type ServerConfigShape,
 } from "../startup/config";
+import { captureTerminalShellInstallEvidence } from "../startup/config.terminalShells.ts";
 import { readBootstrapEnvelope } from "../startup/bootstrap";
 import { expandHomePath, resolveBaseDir } from "../utils/os-jank";
 import { TraceModeSchema } from "../observability/TracePolicy.ts";
@@ -268,8 +269,12 @@ export const resolveServerConfig = (
     );
     const rawCwd = Option.getOrElse(flags.cwd, () => process.cwd());
     const cwd = path.resolve(yield* expandHomePath(rawCwd.trim()));
-    yield* fs.makeDirectory(cwd, { recursive: true });
     const derivedPaths = yield* deriveServerPaths(baseDir, devUrl);
+    const terminalShellInstallEvidence = yield* captureTerminalShellInstallEvidence(
+      derivedPaths.stateDir,
+      mode,
+    );
+    yield* fs.makeDirectory(cwd, { recursive: true });
     yield* ensureServerDirectories(derivedPaths);
     const persistedObservabilitySettings = yield* loadPersistedObservabilitySettings(
       derivedPaths.settingsPath,
@@ -365,6 +370,7 @@ export const resolveServerConfig = (
       cwd,
       baseDir,
       ...derivedPaths,
+      terminalShellInstallEvidence,
       serverTracePath,
       host,
       staticDir,

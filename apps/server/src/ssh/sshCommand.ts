@@ -19,6 +19,8 @@ export interface BuildSshCommandInput {
   readonly args?: ReadonlyArray<string>;
   readonly allocateTty?: boolean;
   readonly transportArgs?: ReadonlyArray<string>;
+  /** SSH may still invoke the account shell before this application-owned wrapper. */
+  readonly shellMode?: "login" | "clean-posix" | "non-login-posix";
 }
 
 const SSH_COMMAND = "ssh";
@@ -64,9 +66,14 @@ export function buildSshCommandInvocation(input: BuildSshCommandInput): SshComma
   const envAssignments = Object.entries(input.env ?? {})
     .filter(([key]) => key.trim().length > 0)
     .map(([key, value]) => `${key}=${value}`);
+  const shellPrefix =
+    input.shellMode === "clean-posix"
+      ? ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "LC_ALL=C", "/bin/sh", "-c"]
+      : input.shellMode === "non-login-posix"
+        ? ["/bin/sh", "-c"]
+        : ["sh", "-lc"];
   const remoteCommand = [
-    "sh",
-    "-lc",
+    ...shellPrefix,
     REMOTE_EXEC_SCRIPT,
     "sh",
     input.cwd ?? "",

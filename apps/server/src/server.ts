@@ -29,6 +29,9 @@ import { ProjectionOperationalStateQueryLive } from "./orchestration/Layers/Proj
 import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
 import { makeGitLayerLive } from "./git/Layers/GitComposition.ts";
 import { TerminalManagerLive } from "./terminal/Layers/Manager";
+import { LocalShellProfilesLive } from "./terminal/Layers/LocalShellProfiles.ts";
+import { ShellProfilesLive } from "./terminal/Layers/ShellProfiles.ts";
+import { ShellLaunchPlannerLive } from "./terminal/Layers/ShellLaunchPlanner.ts";
 import { PtyAdapter } from "./terminal/Services/PTY";
 import { KeybindingsLive } from "./keybindings/keybindings";
 import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./startup/serverRuntimeStartup";
@@ -80,9 +83,10 @@ import { ProcessLedgerLive } from "./process-ledger/Layers/ProcessLedger.ts";
 import { makeProviderInfrastructureLayerLive } from "./server.providerLayers.ts";
 import { BackgroundMaintenanceLayerLive } from "./server.maintenanceLayers.ts";
 import { ThreadBranchCopyLive } from "./orchestration/Layers/ThreadBranchCopy.ts";
+import { terminalPtyBackend } from "./terminal/Layers/PTY.backend.ts";
 const PtyAdapterLive = Layer.unwrap(
   Effect.gen(function* () {
-    if (typeof Bun !== "undefined") {
+    if (terminalPtyBackend(process.platform, typeof Bun !== "undefined") === "bun") {
       const BunPTY = yield* Effect.promise(() => import("./terminal/Layers/BunPTY"));
       return BunPTY.layer;
     } else {
@@ -147,7 +151,15 @@ const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
       }),
     ).pipe(Layer.provide(PtyAdapterLive))
   : PtyAdapterLive;
-const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(TerminalPtyLayerLive));
+const TerminalLayerLive = TerminalManagerLive.pipe(
+  Layer.provide(TerminalPtyLayerLive),
+  Layer.provide(
+    ShellLaunchPlannerLive.pipe(
+      Layer.provideMerge(ShellProfilesLive),
+      Layer.provide(LocalShellProfilesLive),
+    ),
+  ),
+);
 
 const OrchestrationEngineLayerLive = withEngineTerminal(
   OrchestrationEngineLive,

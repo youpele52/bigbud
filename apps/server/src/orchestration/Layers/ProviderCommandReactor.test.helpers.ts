@@ -242,6 +242,7 @@ export async function createHarness(input?: {
     closeAll: () => Effect.void,
   };
   const terminalService: TerminalManagerShape = {
+    listShellProfiles: () => unsupported(),
     snapshot: () => unsupported(),
     open: () => unsupported(),
     write: () => unsupported(),

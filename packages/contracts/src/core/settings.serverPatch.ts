@@ -2,6 +2,7 @@ import * as Schema from "effect/Schema";
 
 import { TrimmedNonEmptyString } from "./baseSchemas";
 import { GreetingName } from "./settings.greeting";
+import { TerminalShellSettingsPatch } from "./settings.terminalShell";
 import { ComputerUseDeliveryMode } from "./settings.computerUsePolicy";
 import { InyosiraIdleSettingsPatchFields } from "./settings.inyosira";
 import { OpencodeV2NativeServiceTrust, OpencodeV2PluginConfigRoot } from "./settings.opencodeV2";
@@ -134,6 +135,7 @@ export const ServerSettingsPatch = Schema.Struct({
   generatedPromptSuggestions: Schema.optionalKey(Schema.Boolean),
   defaultThreadEnvMode: Schema.optionalKey(ThreadEnvMode),
   defaultChatCwd: Schema.optionalKey(Schema.String),
+  terminalShells: Schema.optionalKey(TerminalShellSettingsPatch),
   textGenerationModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelectionPatch)),
   observability: Schema.optionalKey(
     Schema.Struct({

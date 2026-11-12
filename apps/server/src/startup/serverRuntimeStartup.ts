@@ -24,6 +24,7 @@ import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSna
 import { OrchestrationReactor } from "../orchestration/Services/OrchestrationReactor";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents";
 import { ServerSettingsService } from "../ws/serverSettings";
+import { runTerminalShellSettingsMigration } from "./serverRuntimeStartup.terminalShells.ts";
 import { AnalyticsService } from "../telemetry/Services/AnalyticsService";
 import { maybeOpenBrowser, runStartupPhase } from "./serverRuntimeStartup.browser.ts";
 import { autoBootstrapWelcome } from "./serverRuntimeStartup.bootstrap.ts";
@@ -248,6 +249,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       ),
     );
     yield* runStartupPhase("settings.ready", serverSettings.ready);
+    yield* runStartupPhase("terminalShells.migrate", runTerminalShellSettingsMigration());
 
     yield* Effect.logDebug("startup phase: migrating thread retention settings");
     yield* runStartupPhase("retention.settings.migrate", runThreadRetentionSettingsMigration());

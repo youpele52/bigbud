@@ -83,7 +83,11 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("WSL terminal sessio
           }),
         );
         const restarted = yield* manager.restart(
-          restartInput({ executionTargetId: wslTerminalTargetId("Other"), cwd: "/other" }),
+          restartInput({
+            executionTargetId: wslTerminalTargetId("Other"),
+            cwd: "/other",
+            shellSelection: { kind: "legacy-auto" },
+          }),
         );
         expect(restarted.wslIdentity?.username).toBe("bob");
         expect(ptyAdapter.spawnInputs[1]?.args?.slice(0, 4)).toEqual([
@@ -113,7 +117,12 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("WSL terminal sessio
       const active = yield* manager.open(openInput({ executionTargetId: "wsl:Ubuntu%20dev" }));
       vi.mocked(resolveWslTerminalFolder).mockReturnValue(Effect.fail(error));
       const restarted = yield* Effect.result(
-        manager.restart(restartInput({ executionTargetId: "wsl:missing" })),
+        manager.restart(
+          restartInput({
+            executionTargetId: "wsl:missing",
+            shellSelection: { kind: "legacy-auto" },
+          }),
+        ),
       );
       expect(restarted._tag).toBe("Failure");
       expect(ptyAdapter.processes[0]?.killed).toBe(false);

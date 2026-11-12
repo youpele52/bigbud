@@ -3,6 +3,8 @@ import { deepMerge, type DeepPartial } from "@bigbud/shared/Struct";
 import { Effect, Ref, Stream } from "effect";
 import * as Semaphore from "effect/Semaphore";
 import { ServerSettingsSnapshot } from "./serverSettings.snapshot.ts";
+import { initializeTerminalShellSettings } from "./serverSettings.terminalShells.ts";
+import { normalizeServerSettingsPatch } from "./serverSettings.normalize.ts";
 import type { ServerSettingsShape } from "./serverSettings.ts";
 
 /** Test settings use the production synchronous authority, even without a change stream. */
@@ -28,7 +30,27 @@ export function makeTestSettings(overrides: DeepPartial<ServerSettings>) {
         writes.withPermits(1)(Effect.suspend(() => prepare(snapshot.read()!))),
       updateSettings: (patch) =>
         writes.withPermits(1)(
-          Ref.get(current).pipe(Effect.flatMap((value) => accept(deepMerge(value, patch)))),
+          Ref.get(current).pipe(
+            Effect.flatMap((value) => normalizeServerSettingsPatch(value, patch)),
+            Effect.flatMap(accept),
+          ),
+        ),
+      initializeTerminalShells: (selection, origin) =>
+        writes.withPermits(1)(
+          Ref.get(current).pipe(
+            Effect.flatMap((value) =>
+              value.terminalShells.version !== 0
+                ? Effect.succeed(value)
+                : accept({
+                    ...value,
+                    terminalShells: initializeTerminalShellSettings(
+                      value.terminalShells,
+                      selection,
+                      origin,
+                    ),
+                  }),
+            ),
+          ),
         ),
       setThreadRetentionPolicy: (policy) =>
         writes.withPermits(1)(

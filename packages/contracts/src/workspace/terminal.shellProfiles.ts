@@ -2,15 +2,21 @@ import * as Schema from "effect/Schema";
 import { TrimmedNonEmptyString } from "../core/baseSchemas";
 import { ShellHostScope, TerminalShellProfile } from "./terminalShell";
 
-/** Existing-pane lookup only: the server owns execution target and account identity. */
-export const TerminalShellProfilesInput = Schema.Struct({
-  threadId: TrimmedNonEmptyString,
-  terminalId: TrimmedNonEmptyString.check(Schema.isMaxLength(128)),
-});
+/** Pane lookup or fixed server-local settings inventory; never client-selected target/account. */
+export const TerminalShellProfilesInput = Schema.Union([
+  Schema.Struct({
+    threadId: TrimmedNonEmptyString,
+    terminalId: TrimmedNonEmptyString.check(Schema.isMaxLength(128)),
+  }),
+  Schema.Struct({ scope: Schema.Literal("local-settings") }),
+]);
 export type TerminalShellProfilesInput = typeof TerminalShellProfilesInput.Type;
 
 /** One complete execution-host inventory. Never merge local/remote results. */
 export const TerminalShellProfileInventory = Schema.Struct({
+  exactProfileLaunchesEnabled: Schema.optionalKey(Schema.Boolean),
+  runtimeGeneration: Schema.optionalKey(TrimmedNonEmptyString),
+  localDefaultsEnabled: Schema.optionalKey(Schema.Boolean),
   host: ShellHostScope,
   profiles: Schema.Array(TerminalShellProfile).check(Schema.isMaxLength(64)),
 }).check(

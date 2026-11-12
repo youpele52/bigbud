@@ -3,7 +3,7 @@ import {
   type ProcessRunOptions,
   type ProcessRunResult,
 } from "../utils/processRunner.ts";
-import { buildSshCommandInvocation } from "./sshCommand.ts";
+import { buildSshCommandInvocation, type BuildSshCommandInput } from "./sshCommand.ts";
 import { assertSshExecutionTargetReadyAsync } from "./sshVerification.ts";
 import { inspectSshHostTrust, inspectSshHostTrustOnFailure } from "./sshHostTrust.ts";
 
@@ -14,6 +14,7 @@ export interface RunSshCommandInput {
   readonly command: string;
   readonly args?: ReadonlyArray<string>;
   readonly allocateTty?: boolean;
+  readonly shellMode?: NonNullable<BuildSshCommandInput["shellMode"]>;
   readonly stdin?: string;
   readonly signal?: AbortSignal | undefined;
   readonly allowNonZeroExit?: boolean;
