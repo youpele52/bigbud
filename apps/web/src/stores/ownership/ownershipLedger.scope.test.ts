@@ -77,6 +77,43 @@ describe("ownership ledger scopes", () => {
     expect(ledger.scopes.main.projectBindingsByProjectId[projectId]?.threadId).toBe(mainThreadId);
   });
 
+  it("rejects a queued registration after its surface loses authority", async () => {
+    const storage = createStorage();
+    const before = await initializeOwnershipLedger({
+      scope: "compact",
+      draftsByThreadId: {},
+      projectDraftThreadIdByProjectId: {},
+      options: { storage, lockManager: null },
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let current = true;
+    const registration = registerDraftOwnership({
+      scope: "compact",
+      threadId: compactThreadId,
+      draft: compactDraft,
+      bindProject: true,
+      assertCurrent: () => {
+        if (!current) throw new Error("Surface expired");
+      },
+      options: {
+        storage,
+        lockManager: {
+          request: async (_name, callback) => {
+            await gate;
+            return callback();
+          },
+        },
+      },
+    });
+    current = false;
+    release();
+    await expect(registration).rejects.toThrow("Surface expired");
+    expect(readOwnershipLedger(storage)).toEqual({ status: "ready", value: before });
+  });
+
   it("registers a draft in only the requested surface", async () => {
     const storage = createStorage();
     await initializeOwnershipLedger({

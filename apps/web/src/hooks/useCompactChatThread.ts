@@ -27,6 +27,9 @@ import {
   serializeCompactChatPersistedState,
   shouldAbandonCompactChatThread,
 } from "~/hooks/useCompactChatThread.logic";
+import { readOwnershipLedger } from "~/stores/ownership/ownershipLedger";
+import { findOwnershipReplacement } from "~/stores/ownership/ownershipLedger.replacements";
+import { useCompactChatDraftOwnership } from "./useCompactChatDraftOwnership";
 import { useCompactChatOwnershipRestoration } from "~/hooks/useCompactChatThread.restore";
 
 function getInitialSelection() {
@@ -85,8 +88,6 @@ export function useCompactChatThread() {
   const replacementDraftThreadId = useComposerDraftStore(
     (state) => state.projectDraftThreadIdByProjectId[selectedProjectId] ?? null,
   );
-  const setDraftThreadContext = useComposerDraftStore((state) => state.setDraftThreadContext);
-  const setModelSelection = useComposerDraftStore((state) => state.setModelSelection);
   const clearDraftThread = useComposerDraftStore((state) => state.clearDraftThread);
   const defaultChatCwd = useDefaultChatCwd();
   const providers = useServerProviders() ?? [];
@@ -152,6 +153,13 @@ export function useCompactChatThread() {
     ) {
       return;
     }
+    const ledger = readOwnershipLedger();
+    if (
+      ledger.status !== "ready" ||
+      findOwnershipReplacement(ledger.value, threadId, "compact")?.threadId !==
+        replacementDraftThreadId
+    )
+      return;
     setThreadState({
       projectId: selectedProjectId,
       restoring: false,
@@ -184,32 +192,20 @@ export function useCompactChatThread() {
     threadId,
   ]);
 
-  useEffect(() => {
-    if (!bootstrapComplete || restoring || !compactProject || serverThread) return;
-    if (seenOnServerRef.current || persistedMaterialized) return;
-    setDraftThreadContext(threadId, {
-      projectId,
-      branch: null,
-      worktreePath: null,
-      envMode: "local",
-      interactionMode: "default",
-      runtimeMode: "approval-required",
-    });
-    if (initialSelection) {
-      setModelSelection(threadId, initialSelection);
-    }
-  }, [
-    bootstrapComplete,
-    compactProject,
-    initialSelection,
-    persistedMaterialized,
-    restoring,
-    serverThread,
-    setDraftThreadContext,
-    projectId,
-    setModelSelection,
+  const retryDraftOwnership = useCompactChatDraftOwnership({
+    enabled:
+      bootstrapComplete &&
+      !restoring &&
+      Boolean(compactProject) &&
+      !serverThread &&
+      !seenOnServerRef.current &&
+      !persistedMaterialized,
     threadId,
-  ]);
+    projectId,
+    initialSelection,
+    captureSurface,
+    setThreadSyncError,
+  });
 
   useEffect(() => {
     const api = readNativeApi();
@@ -320,10 +316,12 @@ export function useCompactChatThread() {
   const retryThreadSync = useCallback(() => {
     if (restoring) {
       setRestoreAttempt((attempt) => attempt + 1);
+    } else if (!serverThread) {
+      retryDraftOwnership();
     } else {
       void synchronizeMaterializedThread(threadId);
     }
-  }, [restoring, synchronizeMaterializedThread, threadId]);
+  }, [restoring, retryDraftOwnership, serverThread, synchronizeMaterializedThread, threadId]);
 
   return {
     isMaterialized: serverThread != null && serverThread.deletingAt === null,

@@ -118,11 +118,13 @@ export async function registerDraftOwnership(input: {
   readonly threadId: ThreadId;
   readonly draft: DraftThreadState;
   readonly bindProject: boolean;
+  readonly assertCurrent?: () => void;
   readonly expectedGeneration?: number | undefined;
   readonly expectedWorktreePath?: { readonly value: string | null };
   readonly options?: MutationOptions | undefined;
 }): Promise<OwnershipDraftRecord> {
   return mutate(input.options, (ledger, mutationId) => {
+    input.assertCurrent?.();
     const scope = input.scope ?? "main";
     const currentScope = getScopeState(ledger, scope);
     const existing = currentScope.draftsByThreadId[input.threadId];
