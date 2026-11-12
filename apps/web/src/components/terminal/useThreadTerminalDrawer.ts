@@ -201,20 +201,36 @@ export function useThreadTerminalDrawer(
 
   const splitTerminal = useCallback(
     (direction: TerminalSplitDirection = "right") => {
-      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId)) return;
-      storeSplitTerminal(threadId, `terminal-${randomUUID()}`, undefined, direction);
+      const profile = { newExecutionTargetId: executionTargetId ?? LOCAL_EXECUTION_TARGET_ID };
+      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId, profile)) return;
+      storeSplitTerminal(threadId, `terminal-${randomUUID()}`, profile, direction);
       bumpFocusRequestId();
     },
-    [bumpFocusRequestId, storeSplitTerminal, threadId, terminalState.activeTerminalId],
+    [
+      bumpFocusRequestId,
+      storeSplitTerminal,
+      threadId,
+      terminalState.activeTerminalId,
+      executionTargetId,
+    ],
   );
 
   const createNewTerminal = useCallback(
     (profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch) => {
-      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId, profile)) return;
-      storeNewTerminal(threadId, `terminal-${randomUUID()}`, profile);
+      const requested = profile ?? {
+        newExecutionTargetId: executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      };
+      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId, requested)) return;
+      storeNewTerminal(threadId, `terminal-${randomUUID()}`, requested);
       bumpFocusRequestId();
     },
-    [bumpFocusRequestId, storeNewTerminal, threadId, terminalState.activeTerminalId],
+    [
+      bumpFocusRequestId,
+      storeNewTerminal,
+      threadId,
+      terminalState.activeTerminalId,
+      executionTargetId,
+    ],
   );
 
   const activateTerminal = useCallback(

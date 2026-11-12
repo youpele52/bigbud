@@ -142,7 +142,7 @@ function PaneProfilePicker({
       <MenuTrigger
         aria-label="Terminal actions"
         title="Terminal actions"
-        className="inline-flex items-center p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="inline-flex items-center p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         <Settings2 aria-hidden="true" className="size-3.25" />
       </MenuTrigger>

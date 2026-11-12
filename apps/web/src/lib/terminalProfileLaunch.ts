@@ -5,6 +5,8 @@ import { wslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 /** A request is not actual shell evidence. Persist only this launch context, never menu state. */
 export interface TerminalProfileLaunch {
   shellSelection?: ShellSelection | undefined;
+  /** New-pane target preference; never changes the source or supplies shell authority. */
+  newExecutionTargetId?: string;
   host?: ShellHostScope | undefined;
   context?:
     | Pick<TerminalLaunchBinding, "cwd" | "worktreePath" | "executionTargetId" | "runtimeEnv">
@@ -28,13 +30,35 @@ export function sameShellHost(a: ShellHostScope, b: ShellHostScope): boolean {
 export function captureTerminalProfileLaunch(
   threadId: string,
   sourceId: string,
-  explicit?: TerminalProfileLaunch,
+  request?: TerminalProfileLaunch,
   pending?: TerminalProfileLaunch,
 ): TerminalProfileLaunch {
+  let explicit = request;
   const recorded = readTerminalLaunch(threadId, sourceId);
   const source = recorded ?? pending?.context;
   const pendingIntent = !recorded?.updatedAt ? pending : undefined;
   const actual = recorded?.shellLaunchIdentity;
+  if (explicit?.newExecutionTargetId !== undefined) {
+    if (explicit.host || explicit.shellSelection || explicit.source)
+      throw new Error("Choose the new terminal target separately from a shell profile.");
+    if (!source)
+      throw new Error("The source terminal context is unavailable. Reopen its workspace.");
+    const sourceTarget = recorded?.wslIdentity
+      ? wslTerminalTargetId(recorded.wslIdentity.distribution)
+      : (source.executionTargetId ?? "local");
+    if (sourceTarget !== explicit.newExecutionTargetId) {
+      // A target choice requests that host's normal default, not the old host's profile.
+      return {
+        context: {
+          cwd: source.cwd,
+          worktreePath: source.worktreePath,
+          executionTargetId: explicit.newExecutionTargetId,
+          runtimeEnv: source.runtimeEnv ? { ...source.runtimeEnv } : undefined,
+        },
+      };
+    }
+    explicit = undefined;
+  }
   if (explicit) {
     if (
       explicit.source &&
