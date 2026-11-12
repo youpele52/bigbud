@@ -1,3 +1,4 @@
+import { parseRemoteFindRecord } from "./WorkspaceEntries.remote.records.ts";
 import { Effect } from "effect";
 
 import { type ProjectEntry } from "@bigbud/contracts";
@@ -57,7 +58,7 @@ export function listRemoteWorkspaceDirectory(
 }
 
 function normalizeRemoteRelativeDirectory(relativeDir: string): string {
-  const normalized = toPosixPath(relativeDir.trim());
+  const normalized = toPosixPath(relativeDir);
   if (normalized.includes("\u0000") || normalized.startsWith("/")) {
     throw new Error("Remote workspace directory must stay within the workspace root.");
   }
@@ -124,12 +125,13 @@ export const listRemoteWorkspaceDirectoryFromSsh = Effect.fn("listRemoteWorkspac
 
     const entries = splitNullSeparatedOutput(result.stdout, result.stdoutTruncated ?? false)
       .map((entry) => {
-        const [kindRaw = "", pathRaw = ""] = entry.split("\t");
-        const childPath = toPosixPath(pathRaw.replace(/^\.\//, "").trim());
+        const record = parseRemoteFindRecord(entry);
+        if (!record) return null;
+        const { path: childPath, kind } = record;
         if (!childPath || childPath === ".") return null;
         return {
           path: relativeDir ? `${relativeDir}/${childPath}` : childPath,
-          kind: kindRaw === "d" ? ("directory" as const) : ("file" as const),
+          kind,
         };
       })
       .filter((entry): entry is { path: string; kind: "file" | "directory" } => entry !== null);
@@ -311,14 +313,15 @@ export const buildRemoteWorkspaceIndex = Effect.fn("buildRemoteWorkspaceIndex")(
   const entries = toRemoteProjectEntries(
     splitNullSeparatedOutput(findResult.stdout, findResult.stdoutTruncated ?? false)
       .map((entry) => {
-        const [kindRaw = "", pathRaw = ""] = entry.split("\t");
-        const normalizedPath = toPosixPath(pathRaw.replace(/^\.\//, "").trim());
+        const record = parseRemoteFindRecord(entry);
+        if (!record) return null;
+        const { path: normalizedPath, kind } = record;
         if (!normalizedPath || normalizedPath === ".") {
           return null;
         }
         return {
           path: normalizedPath,
-          kind: kindRaw === "d" ? ("directory" as const) : ("file" as const),
+          kind,
         };
       })
       .filter((entry): entry is { path: string; kind: "file" | "directory" } => entry !== null),

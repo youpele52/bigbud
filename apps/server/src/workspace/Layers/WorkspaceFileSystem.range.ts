@@ -74,6 +74,7 @@ export function makeWorkspaceFileRange(
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
     const target = yield* workspacePaths.resolveRelativePathWithinRoot({
       workspaceRoot: input.cwd,
+      executionTargetId,
       relativePath: input.relativePath,
     });
 

@@ -16,8 +16,7 @@ interface WorkspaceExecutionTargetFields {
 }
 
 function normalizeCwd(cwd: string | null | undefined): string | undefined {
-  const trimmed = cwd?.trim();
-  return trimmed && trimmed.length > 0 ? trimmed : undefined;
+  return cwd && cwd.length > 0 ? cwd : undefined;
 }
 
 export function resolveWorkspaceTarget(input: {

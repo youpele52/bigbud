@@ -1,5 +1,5 @@
+import { FilesystemPath } from "./filesystemPath";
 import { Schema } from "effect";
-import { TrimmedNonEmptyString } from "../core/baseSchemas";
 
 export const EditorLaunchStyle = Schema.Literals(["direct-path", "goto", "line-column"]);
 export type EditorLaunchStyle = typeof EditorLaunchStyle.Type;
@@ -107,13 +107,13 @@ export const CODE_EDITORS = EDITORS.filter(
 ) as ReadonlyArray<Extract<(typeof EDITORS)[number], { readonly id: CodeEditorId }>>;
 
 export const OpenInEditorInput = Schema.Struct({
-  cwd: TrimmedNonEmptyString,
+  cwd: FilesystemPath,
   editor: EditorId,
 });
 export type OpenInEditorInput = typeof OpenInEditorInput.Type;
 
 export const OpenPathInput = Schema.Struct({
-  path: TrimmedNonEmptyString,
+  path: FilesystemPath,
 });
 export type OpenPathInput = typeof OpenPathInput.Type;
 

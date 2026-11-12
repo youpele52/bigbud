@@ -44,13 +44,13 @@ it.layer(TestLayer)("WorkspaceFileSystem remote fallback", (it) => {
 
         const workspaceFileSystem = yield* WorkspaceFileSystem;
         const result = yield* workspaceFileSystem.readFilePreview({
-          cwd: "/srv/project",
-          relativePath: "src/index.ts",
+          cwd: "/srv/project ",
+          relativePath: "-file\t ",
           executionTargetId: "ssh:dev",
         });
 
         expect(result).toEqual({
-          relativePath: "src/index.ts",
+          relativePath: "-file\t ",
           contents: "export const remote = true;\n",
           sizeBytes: 28,
           truncated: false,
@@ -58,7 +58,7 @@ it.layer(TestLayer)("WorkspaceFileSystem remote fallback", (it) => {
         expect(runToolCommand).toHaveBeenCalledWith(
           expect.objectContaining({
             command: "cat",
-            args: ["src/index.ts"],
+            args: ["--", "-file\t "],
             timeoutMs: 30_000,
           }),
         );
