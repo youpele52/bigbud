@@ -75,7 +75,7 @@ pub(super) fn run(reader: impl Read + Send + 'static, mut writer: impl Write) ->
                 let response = match frame.payload {
                     Some(v1::frame::Payload::ClientHello(hello)) if !ready => {
                         if hello.protocol_major != bigbud_protocol::PROTOCOL_MAJOR
-                            || hello.protocol_minor < bigbud_protocol::PROTOCOL_MINOR
+                            || hello.protocol_minor < super::MIN_CLIENT_PROTOCOL_MINOR
                             || hello.client_instance_id.is_empty()
                         {
                             Some(protocol_error(

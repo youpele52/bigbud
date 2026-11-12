@@ -1,4 +1,5 @@
 import {
+  RemoteAgentProtocolDecodeError,
   type RemoteAgentFrame,
   type RemoteAgentPtyAttachResponse,
   type RemoteAgentPtyControlResponse,
@@ -10,7 +11,14 @@ import {
 } from "./remoteAgentProtocol.ts";
 import { decodeMessage, requireWireType } from "./remoteAgentProtocol.codec.wire.ts";
 
+function decodeLaunchStatus(value: string): "unconfirmed" | undefined {
+  if (value === "") return undefined;
+  if (value === "unconfirmed") return value;
+  throw new RemoteAgentProtocolDecodeError("unsupported PTY launch status");
+}
+
 function decodeCreate(bytes: Uint8Array): RemoteAgentPtyCreateResponse {
+  let launchStatus: "unconfirmed" | undefined;
   const value = {
     requestId: "",
     ptyId: "",
@@ -45,11 +53,15 @@ function decodeCreate(bytes: Uint8Array): RemoteAgentPtyCreateResponse {
         requireWireType(wireType, 2);
         value.errorMessage = reader.string();
         break;
+      case 7:
+        requireWireType(wireType, 2);
+        launchStatus = decodeLaunchStatus(reader.string());
+        break;
       default:
         reader.skip(wireType);
     }
   });
-  return value;
+  return { ...value, ...(launchStatus === undefined ? {} : { launchStatus }) };
 }
 
 function decodeOutput(bytes: Uint8Array): RemoteAgentPtyOutput {
@@ -101,6 +113,7 @@ function decodeResponse(bytes: Uint8Array): RemoteAgentPtyControlResponse {
 }
 
 function decodeAttach(bytes: Uint8Array): RemoteAgentPtyAttachResponse {
+  let launchStatus: "unconfirmed" | undefined;
   const value = {
     requestId: "",
     ptyId: "",
@@ -136,11 +149,15 @@ function decodeAttach(bytes: Uint8Array): RemoteAgentPtyAttachResponse {
         requireWireType(wireType, 0);
         value.replayGap = reader.uint() !== 0;
         break;
+      case 8:
+        requireWireType(wireType, 2);
+        launchStatus = decodeLaunchStatus(reader.string());
+        break;
       default:
         reader.skip(wireType);
     }
   });
-  return value;
+  return { ...value, ...(launchStatus === undefined ? {} : { launchStatus }) };
 }
 
 function decodeExited(bytes: Uint8Array): RemoteAgentPtyExited {

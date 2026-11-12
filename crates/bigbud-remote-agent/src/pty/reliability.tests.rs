@@ -114,7 +114,7 @@ fn output_ack_and_replay_reject_beyond_produced_and_overflowing_cursor() {
 
 #[test]
 fn failed_child_chdir_never_runs_shell_in_an_unintended_directory() {
-    let job = PtyHandle::spawn(
+    let result = PtyHandle::spawn(
         "chdir".to_owned(),
         Path::new("/bigbud-missing-cwd-fixture"),
         "sh",
@@ -122,20 +122,13 @@ fn failed_child_chdir_never_runs_shell_in_an_unintended_directory() {
         80,
         24,
         &[],
-    )
-    .unwrap();
-    let events = read_events(job.reader, &job.handle);
-    assert!(
-        !events
-            .iter()
-            .any(|event| matches!(event, PtyEvent::Output(_)))
     );
-    assert!(events.iter().any(|event| matches!(
-        event,
-        PtyEvent::Exited {
-            exit_code: Some(126),
-            ..
-        }
-    )));
-    job.handle.close(false).unwrap();
+    assert!(matches!(
+        result,
+        Err(PtyError::LaunchFailed {
+            stage: LaunchStage::Chdir,
+            errno: libc::ENOENT
+        })
+    ));
+    cleanup::poll();
 }

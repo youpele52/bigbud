@@ -39,6 +39,29 @@ pub enum PtyState {
     Closed,
 }
 
+/// No native exec proof is currently qualified. This must not be used to
+/// advertise authoritative remote profile identity, even for a live PID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchOutcome {
+    Unconfirmed(LaunchUnknown),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaunchUnknown {
+    ChannelClosed,
+    Timeout,
+    PartialReceipt,
+    MalformedReceipt,
+    ChannelError,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum LaunchStage {
+    Chdir = 1,
+    Exec = 2,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum PtyError {
     #[error("PTY support is unavailable on this platform")]
@@ -63,6 +86,10 @@ pub enum PtyError {
     ReplayGap { first_retained_sequence: u64 },
     #[error("PTY is unknown")]
     Unknown,
+    #[error("PTY child launch failed at {stage:?} (errno {errno})")]
+    LaunchFailed { stage: LaunchStage, errno: i32 },
+    #[error("PTY launch outcome unknown ({0:?}); cleanup retained, do not retry/fallback")]
+    LaunchUnknown(LaunchUnknown),
     #[error("PTY operation failed: {0}")]
     Io(#[source] io::Error),
 }
@@ -71,6 +98,7 @@ pub enum PtyError {
 struct PtyInner {
     master: Mutex<Option<std::fs::File>>,
     child: Arc<child::Child>,
+    launch_outcome: LaunchOutcome,
     input: input::InputWriter,
     state: Mutex<PtyStateRecord>,
 }
@@ -110,6 +138,11 @@ pub enum PtyEvent {
 
 #[path = "handle.rs"]
 mod handle;
+#[cfg(unix)]
+#[path = "launch.rs"]
+mod launch;
+#[path = "handle.spawn.rs"]
+mod spawn;
 
 #[cfg(unix)]
 #[path = "child.rs"]

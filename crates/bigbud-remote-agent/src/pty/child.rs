@@ -40,10 +40,22 @@ impl Child {
                 Ok(())
             } else {
                 let error = io::Error::last_os_error();
-                if error.raw_os_error() == Some(libc::ESRCH) {
+                if error.raw_os_error() != Some(libc::ESRCH) {
+                    return Err(error);
+                }
+                // forkpty may not have established the child's process group yet
+                // on an early setup failure. The unreaped leader still anchors
+                // the positive PID, so retain a direct-child cancellation path.
+                // SAFETY: same exclusive live-child authority as the group call.
+                if unsafe { libc::kill(pid, signal) } == 0 {
                     Ok(())
                 } else {
-                    Err(error)
+                    let error = io::Error::last_os_error();
+                    if error.raw_os_error() == Some(libc::ESRCH) {
+                        Ok(())
+                    } else {
+                        Err(error)
+                    }
                 }
             }
         })

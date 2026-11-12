@@ -14,6 +14,8 @@ use bigbud_protocol::{read_frame, write_frame};
 use super::contract::{validate_bootstrap, validate_request};
 
 const REPLAY_CAPACITY: usize = 1;
+// PTY launch evidence added in 1.4 does not raise cleanup's existing client minimum.
+const MIN_CLIENT_PROTOCOL_MINOR: u32 = 3;
 
 struct AcceptedRequest {
     request: v1::ResourceCleanupRequest,
@@ -40,7 +42,7 @@ fn run(reader: impl Read, writer: impl Write, activity: Option<&AtomicU64>) -> i
         let response = match frame.payload {
             Some(v1::frame::Payload::ClientHello(hello)) if !ready => {
                 if hello.protocol_major != PROTOCOL_MAJOR
-                    || hello.protocol_minor < PROTOCOL_MINOR
+                    || hello.protocol_minor < MIN_CLIENT_PROTOCOL_MINOR
                     || hello.client_instance_id.is_empty()
                 {
                     protocol_error("UNSUPPORTED_PROTOCOL", "incompatible cleanup client")

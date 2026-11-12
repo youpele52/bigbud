@@ -15,6 +15,9 @@ message PtyCreateRequest {
   uint32 cols = 8;
   uint32 rows = 9;
   repeated ProcessEnvironment environment = 10;
+  // Added in 1.5. Requires terminal.shell-profiles v1; validates exact profile
+  // executable/argv before admission. False retains unrestricted legacy PTYs.
+  bool profile_launch = 11;
 }
 
 message PtyCreateResponse {
@@ -24,6 +27,8 @@ message PtyCreateResponse {
   uint64 pid = 4;
   string error_code = 5;
   string error_message = 6;
+  // Added in 1.4. Empty means unknown; "unconfirmed" is not exec confirmation.
+  string launch_status = 7;
 }
 
 message PtyInput {
@@ -88,6 +93,8 @@ message PtyAttachResponse {
   uint64 next_sequence = 5;
   uint64 first_retained_sequence = 6;
   bool replay_gap = 7;
+  // Retained launch evidence, independent of current PTY state or PID.
+  string launch_status = 8;
 }
 
 message PtyCloseRequest {

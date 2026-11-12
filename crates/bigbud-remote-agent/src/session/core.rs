@@ -30,8 +30,12 @@ mod process_handlers;
 mod protocol_helpers;
 #[path = "pty_controls.rs"]
 mod pty_controls;
+#[path = "pty_create.rs"]
+mod pty_create;
 #[path = "pty_handlers.rs"]
 mod pty_handlers;
+#[path = "pty_profile.rs"]
+mod pty_profile;
 pub use pty_controls::{PreparedPtyControl, is_pty_control};
 use pty_handlers::PtySession;
 #[path = "retirement.rs"]
@@ -126,6 +130,7 @@ pub struct AgentSession {
     process_journal: Option<OperationJournal>,
     process_cancellations: HashMap<String, Arc<AtomicBool>>,
     pty_sessions: HashMap<String, PtySession>,
+    pty_create_failures: HashMap<String, pty_create::PtyCreateFailure>,
     workspace_roots: HashMap<String, WorkspaceRoot>,
     agent_instance_id: String,
     agent_epoch: String,
@@ -202,6 +207,7 @@ impl AgentSession {
             process_journal,
             process_cancellations: HashMap::new(),
             pty_sessions: HashMap::new(),
+            pty_create_failures: HashMap::new(),
             workspace_roots: HashMap::new(),
             agent_instance_id: format!("agent-{}", std::process::id()),
             agent_epoch: epoch,

@@ -1,5 +1,5 @@
 import { generateKeyPairSync, verify } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -58,6 +58,27 @@ describe("buildRemoteAgentReleaseManifest", () => {
     expect(manifest.schemaVersion).toBe(1);
     for (const artifact of manifest.artifacts) {
       expect(artifact.version).toBe(release.version);
+      expect(artifact.protocolMajor).toBe(1);
+      expect(artifact.protocolMinor).toBe(5);
+      // Read declarations rather than importing server code across the scripts
+      // package's composite TypeScript boundary. Both sources must match signed metadata.
+      const rustProtocol = readFileSync(
+        new URL("../crates/bigbud-protocol/src/lib.rs", import.meta.url),
+        "utf8",
+      );
+      const serverProtocol = readFileSync(
+        new URL("../apps/server/src/remote-agent/remoteAgentProtocol.ts", import.meta.url),
+        "utf8",
+      );
+      for (const [name, version] of [
+        ["MAJOR", artifact.protocolMajor],
+        ["MINOR", artifact.protocolMinor],
+      ] as const) {
+        expect(rustProtocol).toMatch(new RegExp(`pub const PROTOCOL_${name}: u32 = ${version};`));
+        expect(serverProtocol).toMatch(
+          new RegExp(`export const REMOTE_AGENT_PROTOCOL_${name} = ${version};`),
+        );
+      }
       expect(artifact.url).toBe(
         `https://github.com/youpele52/bigbud/releases/download/${tag}/bigbud-remote-agent-${release.version}-${artifact.targetTriple}`,
       );

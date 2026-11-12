@@ -5,5 +5,8 @@ pub use codec::{decode_frame, encode_frame, encoded_frame_length, read_frame, wr
 pub use error::FrameError;
 
 #[cfg(test)]
+#[path = "pty.tests.rs"]
+mod pty_tests;
+#[cfg(test)]
 #[path = "resource_cleanup.tests.rs"]
 mod resource_cleanup_tests;

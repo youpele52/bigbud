@@ -35,6 +35,7 @@ impl AgentSession {
                     ("process.run", 1),
                     ("process.attach", 1),
                     ("terminal.pty", 1),
+                    ("terminal.shell-profiles", 1),
                     ("supervisor.shutdown", 1),
                     ("supervisor.restart", 1),
                 ]

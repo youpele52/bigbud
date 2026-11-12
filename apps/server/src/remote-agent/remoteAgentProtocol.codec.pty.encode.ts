@@ -40,6 +40,7 @@ function encodeCreate(value: RemoteAgentPtyCreateRequest): Uint8Array {
   for (const environment of value.environment ?? []) {
     writer.fieldMessage(10, encodeEnvironment(environment));
   }
+  writer.fieldBool(11, value.profileLaunch ?? false);
   return writer.finish();
 }
 
@@ -51,6 +52,7 @@ function encodeCreateResponse(value: RemoteAgentPtyCreateResponse): Uint8Array {
   writer.fieldUint(4, value.pid);
   writer.fieldString(5, value.errorCode);
   writer.fieldString(6, value.errorMessage);
+  writer.fieldString(7, value.launchStatus ?? "");
   return writer.finish();
 }
 
@@ -133,6 +135,7 @@ function encodeAttachResponse(value: RemoteAgentPtyAttachResponse): Uint8Array {
   writer.fieldUint(5, value.nextSequence);
   writer.fieldUint(6, value.firstRetainedSequence);
   writer.fieldBool(7, value.replayGap);
+  writer.fieldString(8, value.launchStatus ?? "");
   return writer.finish();
 }
 

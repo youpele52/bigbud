@@ -7,6 +7,8 @@ export interface RemoteAgentPtyCreateRequest {
   readonly workspaceHandle: string;
   readonly cwd: string;
   readonly shell: string;
+  /** Requires terminal.shell-profiles v1. Absent/false retains legacy command semantics. */
+  readonly profileLaunch?: boolean;
   readonly args: ReadonlyArray<string>;
   readonly cols: number;
   readonly rows: number;
@@ -18,6 +20,8 @@ export interface RemoteAgentPtyCreateResponse {
   readonly ptyId: string;
   readonly accepted: boolean;
   readonly pid: number;
+  /** Absent means unknown; a PID or running state is not launch confirmation. */
+  readonly launchStatus?: "unconfirmed";
   readonly errorCode: string;
   readonly errorMessage: string;
 }
@@ -81,6 +85,8 @@ export interface RemoteAgentPtyAttachResponse {
   readonly ptyId: string;
   readonly state: string;
   readonly pid: number;
+  /** Absent means unknown; a PID or running state is not launch confirmation. */
+  readonly launchStatus?: "unconfirmed";
   readonly nextSequence: number;
   readonly firstRetainedSequence: number;
   readonly replayGap: boolean;

@@ -2,7 +2,12 @@ import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR } from "@bigbud/shared/remoteAgentArtifact";
+
 import { resolveReleaseMetadata } from "./lib/release-metadata.ts";
+
+// Artifact identity, not the minimum compatible client minor. Kept in sync by tests.
+const REMOTE_AGENT_RELEASE_PROTOCOL_MINOR = 5;
 
 export type RemoteAgentReleaseTarget = "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu";
 
@@ -24,8 +29,8 @@ export interface RemoteAgentReleaseManifest {
   readonly artifacts: ReadonlyArray<{
     readonly version: string;
     readonly buildDigest: string;
-    readonly protocolMajor: 1;
-    readonly protocolMinor: 3;
+    readonly protocolMajor: typeof REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR;
+    readonly protocolMinor: typeof REMOTE_AGENT_RELEASE_PROTOCOL_MINOR;
     readonly targetTriple: RemoteAgentReleaseTarget;
     readonly sizeBytes: number;
     readonly sha256: string;
@@ -111,11 +116,11 @@ export function buildRemoteAgentReleaseManifest(
     const bytes = readFileSync(path);
     if (bytes.byteLength === 0) throw new Error(`Remote-agent asset '${path}' is empty.`);
     const assetName = `bigbud-remote-agent-${input.version}-${targetTriple}`;
-    const artifact = {
+    const artifact: UnsignedRemoteAgentArtifact = {
       version: input.version,
       buildDigest: input.buildDigest,
-      protocolMajor: 1 as const,
-      protocolMinor: 3 as const,
+      protocolMajor: REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR,
+      protocolMinor: REMOTE_AGENT_RELEASE_PROTOCOL_MINOR,
       targetTriple,
       sizeBytes: bytes.byteLength,
       sha256: createHash("sha256").update(bytes).digest("hex"),

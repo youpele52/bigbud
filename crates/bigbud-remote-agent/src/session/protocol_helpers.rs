@@ -185,20 +185,18 @@ pub(super) fn process_attach_response_frame(
 
 pub(super) fn pty_create_response_frame(
     request: &v1::PtyCreateRequest,
-    accepted: bool,
-    pid: u64,
-    error_code: &str,
-    error_message: &str,
+    handle: &pty::PtyHandle,
 ) -> v1::Frame {
     v1::Frame {
         payload: Some(v1::frame::Payload::PtyCreateResponse(
             v1::PtyCreateResponse {
                 request_id: request.request_id.clone(),
                 pty_id: request.pty_id.clone(),
-                accepted,
-                pid,
-                error_code: error_code.to_owned(),
-                error_message: error_message.to_owned(),
+                accepted: true,
+                pid: handle.pid as u64,
+                error_code: String::new(),
+                error_message: String::new(),
+                launch_status: pty_launch_status(handle.launch_outcome()).to_owned(),
             },
         )),
     }
@@ -218,6 +216,7 @@ pub(super) fn pty_attach_response_frame(
     request_id: &str,
     pty_id: &str,
     snapshot: &pty::PtySnapshot,
+    launch_outcome: pty::LaunchOutcome,
     replay_gap: bool,
 ) -> v1::Frame {
     v1::Frame {
@@ -230,8 +229,15 @@ pub(super) fn pty_attach_response_frame(
                 next_sequence: snapshot.next_sequence,
                 first_retained_sequence: snapshot.first_retained_sequence,
                 replay_gap,
+                launch_status: pty_launch_status(launch_outcome).to_owned(),
             },
         )),
+    }
+}
+
+fn pty_launch_status(outcome: pty::LaunchOutcome) -> &'static str {
+    match outcome {
+        pty::LaunchOutcome::Unconfirmed(_) => "unconfirmed",
     }
 }
 
