@@ -34,6 +34,10 @@ export function usePendingUserInputComposerSync(
   } = base;
   const requestId = thread.activePendingUserInput?.requestId ?? null;
   const question = thread.activePendingProgress?.activeQuestion ?? null;
+  // ChatView is not remounted per thread, so promptRef can still hold the previous thread's text
+  // when this effect runs; the current render's draft is the arriving thread's own text.
+  const currentPrompt = useRef("");
+  currentPrompt.current = base.prompt;
   const nextCustomAnswer = useRef("");
   nextCustomAnswer.current = thread.activePendingProgress?.customAnswer ?? "";
   const visited = useRef<VisitedQuestion | null>(null);
@@ -44,7 +48,7 @@ export function usePendingUserInputComposerSync(
     if (!requestId || !question) return;
     if (left?.requestId !== requestId) {
       // An unsent draft becomes the arriving question's context, so Next/Submit reflect it.
-      const draftText = promptRef.current;
+      const draftText = currentPrompt.current;
       if (!draftText.trim()) return;
       setPendingUserInputAnswersByRequestId((existing) =>
         existing[requestId]?.[question.id]?.customAnswer

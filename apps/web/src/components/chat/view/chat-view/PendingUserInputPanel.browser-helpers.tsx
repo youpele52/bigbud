@@ -139,6 +139,7 @@ export function PendingAnswerFlowHarness({
     {
       collapseExpandedComposerCursor,
       detectComposerTrigger,
+      prompt,
       promptRef: sendInput.promptRef,
       setComposerCursor: noop,
       setComposerHighlightedItemId: noop,

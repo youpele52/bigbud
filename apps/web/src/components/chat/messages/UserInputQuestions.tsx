@@ -1,7 +1,6 @@
 import type { PendingUserInput } from "~/logic/session/session.logic";
 import { formatUserInputAnswer } from "~/logic/session/session.userInputHistory.logic";
 import { visibleUserInputOptionDescription } from "~/logic/user-input/option.logic";
-import { UserInputFieldHint } from "./UserInputFieldHint";
 
 interface UserInputQuestionsProps {
   questions: PendingUserInput["questions"];
@@ -16,7 +15,6 @@ export function UserInputQuestions({ questions, answers }: UserInputQuestionsPro
     <div className="space-y-4">
       {questions.map((question, index) => (
         <div key={question.id} data-chat-cite-question-id={question.id}>
-          {!answers && <UserInputFieldHint question={question} />}
           <div data-chat-cite-content data-chat-cite-region="prompt">
             {/* Keep DOM offsets stable when history hides the redundant heading. */}
             <p

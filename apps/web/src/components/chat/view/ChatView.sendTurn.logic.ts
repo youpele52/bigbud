@@ -92,7 +92,8 @@ export function useOnSend(input: UseOnSendInput) {
           claim.consume();
           // Acknowledgements must not erase edits made while a preflight or answer was pending.
           if (!matchesComposerContent(submittedInput, claim.content)) return;
-          // Structured answers cannot carry attachments. Keep quotes for a later chat turn.
+          // Answers are text-only (attachments follow in a labelled queued prompt); keep quotes
+          // for a later chat turn.
           const citations = preserveCitations
             ? submittedInput.composerAnnotations.filter(isChatCitationAttachment)
             : [];
