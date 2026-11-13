@@ -86,7 +86,7 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     ],
     risk: "reversible-write",
     workflow:
-      "Call render_html with title and a self-contained HTML fragment (up to 24000 characters). Prefer HTML/CSS; inline JavaScript is supported. Publication is immediate, not a preview. Recipe: a heading, then source cards or a comparison table, with a one-line takeaway per item. bigbud supplies theme variables and 14px typography; inherit fonts and use var(--background), var(--foreground), var(--card), var(--muted), var(--muted-foreground), var(--border), var(--primary), var(--accent), var(--secondary), var(--destructive), var(--radius) for corners and var(--chart-1) to var(--chart-5) for series colours. Link sources with ordinary <a href> to http or https URLs; they open in the user's browser when the user clicks them, and #fragment links scroll within the visual. Keep under the 24000-character limit, use no external assets, and embed images as data URLs.",
+      "Call render_html with title and a self-contained HTML fragment (up to 24000 characters). Prefer HTML/CSS; inline JavaScript is supported. Publication is immediate, not a preview. Recipe: a heading, then source cards or a comparison table, with a one-line takeaway per item. bigbud supplies 14px typography; inherit fonts. Colours, pick one: (A, recommended) bigbud's theme variables, which follow light and dark mode: var(--background), var(--foreground), var(--card), var(--muted), var(--muted-foreground), var(--border), var(--primary), var(--accent), var(--secondary), var(--destructive), var(--radius) for corners and var(--chart-1) to var(--chart-5) for series colours; or (B) any palette and design you like, setting background, text colour and color-scheme together on your outer container so it reads on any app theme. Link sources with ordinary <a href> to http or https URLs; they open in the user's browser when the user clicks them, and #fragment links scroll within the visual. Keep under the 24000-character limit, use no external assets, and embed images as data URLs.",
     permissions:
       "Only the authenticated current thread and active turn. Sandbox has no host access, popups or forms. External navigation and ordinary external resources are blocked, but this is not zero-network isolation: browser APIs such as WebRTC remain available. Do not include credentials. Images must be embedded data URLs.",
     examples: [
@@ -97,6 +97,7 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     antiPatterns: [
       "Do not use external scripts, remote assets, filesystem paths or host APIs.",
       "Never use render_html to ask the user a question or collect input. Use your native question tool; bigbud renders it with clickable options and a free-text field with attachments.",
+      "Never mix your own text colours with bigbud's background, or invent variable names with fallback colours such as var(--text-primary, #1f2937); they break in dark mode.",
     ],
   }),
   threadToolTrack({

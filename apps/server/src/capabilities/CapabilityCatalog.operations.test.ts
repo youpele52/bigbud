@@ -96,6 +96,10 @@ describe("capability catalog operations", () => {
     expect(guide.content).toContain("comparison across options, providers or products");
     expect(guide.content).toContain("var(--radius)");
     expect(guide.content).toContain("var(--chart-1) to var(--chart-5)");
+    expect(guide.content).toContain("(A, recommended) bigbud's theme variables");
+    expect(guide.content).toContain("(B) any palette and design you like");
+    expect(guide.content).toContain("background, text colour and color-scheme together");
+    expect(guide.content).toContain("Never mix your own text colours with bigbud's background");
     expect(guide.content).toContain("they open in the user's browser when the user clicks them");
     expect(guide.content).toContain("#fragment links scroll within the visual");
     expect(guide.content).toContain("Summarise five search results as source cards");

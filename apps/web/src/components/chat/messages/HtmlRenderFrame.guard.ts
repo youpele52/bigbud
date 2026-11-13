@@ -1,10 +1,11 @@
 import { buildHtmlRenderDocument, HTML_RENDER_CSP } from "./HtmlRenderFrame.document";
+import type { HtmlRenderScheme } from "./HtmlRenderFrame.scheme";
 
 /** The trusted embedder's frame-src policy governs inner-frame navigations, not just resources.
  * CSP is not zero-network isolation: browser APIs such as WebRTC remain available.
  */
-export function buildHtmlRenderGuard(html: string): string {
-  const document = JSON.stringify(buildHtmlRenderDocument(html)).replaceAll("<", "\\u003c");
+export function buildHtmlRenderGuard(html: string, scheme: HtmlRenderScheme | null = null): string {
+  const document = JSON.stringify(buildHtmlRenderDocument(html, scheme)).replaceAll("<", "\\u003c");
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${HTML_RENDER_CSP}">
 <meta name="referrer" content="no-referrer">

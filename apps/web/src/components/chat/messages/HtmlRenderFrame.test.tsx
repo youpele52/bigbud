@@ -10,6 +10,8 @@ import {
 } from "./HtmlRenderFrame.document";
 import { buildHtmlRenderGuard } from "./HtmlRenderFrame.guard";
 import { resolveHtmlRenderLink } from "./HtmlRenderFrame.links";
+import { HTML_RENDER_TOKEN_ALIASES } from "./HtmlRenderFrame.aliases";
+import { resolveHtmlRenderScheme } from "./HtmlRenderFrame.scheme";
 import {
   deriveVisibleWorkLogEntries,
   deriveTimelineEntries,
@@ -78,6 +80,49 @@ it("forwards the extended theme tokens with inner defaults and routes links outw
   expect(guard).toContain("event.data?.type === 'bigbud:open-link'");
   expect(guard).toContain("navigator.userActivation?.isActive !== true");
   expect(guard).toContain("effectiveDirective !== 'frame-src'");
+});
+
+it("maps commonly invented token names onto bigbud tokens before agent styles", () => {
+  const document = buildHtmlRenderDocument("<p>Visual</p>");
+  const aliasRule = document.indexOf("--text-primary:var(--foreground);");
+  expect(aliasRule).toBeGreaterThan(-1);
+  expect(aliasRule).toBeLessThan(document.indexOf("<p>Visual</p>"));
+  for (const [name, value] of Object.entries(HTML_RENDER_TOKEN_ALIASES)) {
+    expect(value).toMatch(/^var\(--[a-z-]+\)$/);
+    expect(HTML_RENDER_THEME_PROPERTIES).toContain(value.slice(4, -1));
+    expect(document).toContain(`${name}:${value};`);
+  }
+});
+
+it("emits an inner runtime that parses as JavaScript", () => {
+  for (const scheme of ["dark", "light", null] as const) {
+    const document = buildHtmlRenderDocument("<p>Visual</p>", scheme);
+    const script = document.slice(document.indexOf("<script>") + 8, document.indexOf("</script>"));
+    // Parse only: escaping slips in template-literal regexes silently disable the whole runtime.
+    // oxlint-disable-next-line no-new-func
+    expect(() => new Function(script)).not.toThrow();
+  }
+});
+
+it("seeds the app scheme, isolates the runtime and guards agent-owned surfaces", () => {
+  expect(resolveHtmlRenderScheme("dark")).toBe("dark");
+  expect(resolveHtmlRenderScheme(" light ")).toBe("light");
+  for (const value of ["light dark", "normal", "", null, undefined])
+    expect(resolveHtmlRenderScheme(value)).toBeNull();
+  const dark = buildHtmlRenderDocument("<p>Visual</p>", "dark");
+  expect(dark).toContain(":root { color-scheme: dark;");
+  expect(dark).toContain('let bigbudScheme = "dark";');
+  expect(dark).toContain("window.matchMedia = function(query)");
+  const undecided = buildHtmlRenderDocument("<p>Visual</p>");
+  expect(undecided).toContain(":root { color-scheme: light dark;");
+  expect(undecided).toContain("let bigbudScheme = null;");
+  expect(undecided).toContain("<script>(function() {");
+  expect(undecided).toContain("})();</script></head>");
+  expect(undecided).toContain("<style data-bigbud>");
+  expect(undecided).toContain(":root, [data-bigbud-theme-surface] {");
+  expect(undecided).toContain("'[data-bigbud-own-surface]{' + resets + '}'");
+  expect(undecided).toContain("attributeFilter:['class']");
+  expect(buildHtmlRenderGuard("<p>Visual</p>", "dark")).toContain('let bigbudScheme = \\"dark\\";');
 });
 
 it("opens only absolute http and https links from rendered visuals", () => {

@@ -4,13 +4,18 @@ import { openLinkFromClick } from "~/lib/openLink";
 import { HTML_RENDER_THEME_PROPERTIES } from "./HtmlRenderFrame.document";
 import { buildHtmlRenderGuard } from "./HtmlRenderFrame.guard";
 import { HTML_RENDER_LINK_INTERVAL_MS, resolveHtmlRenderLink } from "./HtmlRenderFrame.links";
+import { readHostHtmlRenderScheme, resolveHtmlRenderScheme } from "./HtmlRenderFrame.scheme";
 
 /** Opaque-origin frame: scripts never receive application state or a credential-bearing URL. */
 export function HtmlRenderFrame({ content }: { content: HtmlRenderInput }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const lastLinkOpenedAt = useRef(Number.NEGATIVE_INFINITY);
   const [height, setHeight] = useState(360);
-  const document = useMemo(() => buildHtmlRenderGuard(content.html), [content.html]);
+  // The build-time scheme only seeds the first paint; later theme changes arrive as messages.
+  const document = useMemo(
+    () => buildHtmlRenderGuard(content.html, readHostHtmlRenderScheme()),
+    [content.html],
+  );
   function sendTheme() {
     const styles = getComputedStyle(window.document.documentElement);
     const body = getComputedStyle(window.document.body);
@@ -20,7 +25,8 @@ export function HtmlRenderFrame({ content }: { content: HtmlRenderInput }) {
       "--font-mono": styles.getPropertyValue("--font-mono"),
     };
     for (const key of HTML_RENDER_THEME_PROPERTIES) theme[key] = styles.getPropertyValue(key);
-    frame.current?.contentWindow?.postMessage({ type: "bigbud:html-theme", theme }, "*");
+    const scheme = resolveHtmlRenderScheme(styles.colorScheme);
+    frame.current?.contentWindow?.postMessage({ type: "bigbud:html-theme", theme, scheme }, "*");
   }
   useEffect(() => {
     const observer = new MutationObserver(sendTheme);
