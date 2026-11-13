@@ -65,6 +65,23 @@ it("hides the context hint where text cannot travel with a choice", () => {
   );
 });
 
+it("says only one pick is sent when a single-choice question asks for several", () => {
+  const question = "Which layers? Select all that apply.";
+  const pi = {
+    ...deploy,
+    question,
+    options: [
+      { id: "Roads", label: "Roads", description: "Roads" },
+      { id: "Buildings", label: "Buildings", description: "Buildings" },
+    ],
+  };
+  expect(model([pi], 0).hint).toBe("Only one option can be picked here.");
+  expect(model([{ ...deploy, question }], 0).hint).toBe(
+    "Only one option can be picked here. Name any others in the message box.",
+  );
+  expect(model([{ ...deploy, question, multiSelect: true }], 0).hint).not.toContain("Only one");
+});
+
 it("offers Next/Submit whenever a question is pending, regardless of provider mode", () => {
   expect(
     derivePendingComposerAction({ progress: null, isResponding: false, resolvedAnswers: null }),

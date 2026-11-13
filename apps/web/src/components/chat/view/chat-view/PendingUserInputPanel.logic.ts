@@ -6,6 +6,7 @@ import {
   pendingUserInputAcceptsContext,
   type PendingUserInputProgress,
 } from "../../../../logic/user-input/pending.logic";
+import { singleChoiceQuestionAsksForMultiple } from "../../../../logic/user-input/option.logic";
 
 export interface PendingUserInputPanelOption {
   readonly key: string;
@@ -46,9 +47,13 @@ export function pendingUserInputComposerPlaceholder(
 
 function composerHint(question: UserInputQuestion): string | null {
   if (question.options.length === 0) return "Type your answer in the message box and send.";
-  return pendingUserInputAcceptsContext(question)
-    ? "Add context in the message box, or just send your selection."
-    : null;
+  const acceptsContext = pendingUserInputAcceptsContext(question);
+  if (singleChoiceQuestionAsksForMultiple(question)) {
+    return acceptsContext
+      ? "Only one option can be picked here. Name any others in the message box."
+      : "Only one option can be picked here.";
+  }
+  return acceptsContext ? "Add context in the message box, or just send your selection." : null;
 }
 
 export function derivePendingUserInputPanelModel(input: {

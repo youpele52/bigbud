@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 
 import { cn } from "~/lib/utils";
 import type { PendingUserInput } from "../../../../logic/session/session.logic";
+import { visibleUserInputOptionDescription } from "../../../../logic/user-input/option.logic";
 import type { PendingUserInputProgress } from "../../../../logic/user-input/pending.logic";
 import { Badge } from "../../../ui/badge";
 import { Button, buttonVariants } from "../../../ui/button";
@@ -152,10 +153,10 @@ export function PendingUserInputPanel({
                       }}
                     />
                     <span>{option.label}</span>
-                    {option.description ? (
+                    {visibleUserInputOptionDescription(option) ? (
                       <span className="text-xs font-normal opacity-75">
                         {" "}
-                        — {option.description}
+                        — {visibleUserInputOptionDescription(option)}
                       </span>
                     ) : null}
                   </label>

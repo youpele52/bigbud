@@ -1,5 +1,6 @@
 import type { PendingUserInput } from "~/logic/session/session.logic";
 import { formatUserInputAnswer } from "~/logic/session/session.userInputHistory.logic";
+import { visibleUserInputOptionDescription } from "~/logic/user-input/option.logic";
 import { UserInputFieldHint } from "./UserInputFieldHint";
 
 interface UserInputQuestionsProps {
@@ -42,8 +43,11 @@ export function UserInputQuestions({ questions, answers }: UserInputQuestionsPro
                     className="text-sm text-muted-foreground/70"
                   >
                     <span className="font-medium text-foreground/70">{option.label}</span>
-                    {option.description && (
-                      <span className="text-muted-foreground/55"> — {option.description}</span>
+                    {visibleUserInputOptionDescription(option) && (
+                      <span className="text-muted-foreground/55">
+                        {" "}
+                        — {visibleUserInputOptionDescription(option)}
+                      </span>
                     )}
                   </li>
                 ))}
