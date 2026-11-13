@@ -61,7 +61,7 @@ describe("SidebarNewProjectFlow", () => {
       .toHaveAttribute("placeholder", "Choose a folder");
     await expect
       .element(page.getByRole("dialog"))
-      .toHaveTextContent("Give your project a name and optionally choose a folder.");
+      .not.toHaveTextContent("Give your project a name and optionally choose a folder.");
     expect(page.getByRole("dialog").element().textContent).not.toMatch(/managed|storage|server/iu);
     const folderControl = page
       .getByLabelText("Folder (optional)")
