@@ -162,9 +162,38 @@ export function normalizeCodexModelSlug(
   return normalized;
 }
 
+/**
+ * Default mode when the running Codex enables `default_mode_request_user_input`: questions go
+ * through the tool, which bigbud renders as a native question with clickable options. A tool
+ * result that asks for the user's confirmation (cross-project thread control) is never an
+ * assumption Codex may make, so it always goes through the tool.
+ */
+export const CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS =
+  CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS.replace(
+    /## request_user_input availability[\s\S]*?(?=<\/collaboration_mode>)/,
+    `## request_user_input availability
+
+Use the \`request_user_input\` tool only when it is listed in the available tools for this turn.
+
+In Default mode, strongly prefer making reasonable assumptions and executing the user's request rather than stopping to ask questions.
+
+Use the \`request_user_input\` tool only for optional questions where the answer would materially improve the quality of the work, or when a tool result asks for the user's confirmation (see below).
+
+If \`request_user_input\` returns no answers, continue with best judgment instead of asking again or treating the turn as blocked.
+
+Never use the \`request_user_input\` tool for sandbox, command-execution, or file-change permission escalations; Codex has its own approval flow for those.
+
+When you ask the user to choose between options, use \`request_user_input\` instead of listing the choices in a message; bigbud shows it as a question with clickable options and a free-text answer. Each \`request_user_input\` question is single-choice: never word it as "select all that apply" or ask for several picks; to collect several, ask for a written list or ask one question per item.
+
+When a tool result asks you to get the user's confirmation (for example \`status: "confirmation_required"\`), always ask it with \`request_user_input\` as that result's instructions describe, and never assume the answer.
+`,
+  );
+
 /** Builds the collaboration-mode payload for a Codex turn, or `undefined` when no interaction mode is set. */
 export function buildCodexCollaborationMode(input: {
   readonly interactionMode?: "default" | "plan";
+  /** Whether this Codex process enables `request_user_input` in Default mode. */
+  readonly userInputAvailable?: boolean;
   readonly model?: string;
   readonly effort?: string;
 }):
@@ -189,7 +218,9 @@ export function buildCodexCollaborationMode(input: {
       developer_instructions:
         input.interactionMode === "plan"
           ? CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS
-          : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
+          : input.userInputAvailable
+            ? CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS
+            : CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
     },
   };
 }

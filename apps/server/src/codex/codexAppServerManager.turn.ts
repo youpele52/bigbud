@@ -29,6 +29,7 @@ import {
   mapCodexTurnSandboxPolicy,
   readResumeThreadId,
 } from "./codexAppServerManager.utils";
+import { supportsCodexDefaultModeUserInput } from "./codexQuestionTool.ts";
 
 export interface TurnOps {
   readonly sendRequest: <T>(
@@ -160,6 +161,7 @@ export async function sendTurn(
   }
   const collaborationMode = buildCodexCollaborationMode({
     ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
+    userInputAvailable: supportsCodexDefaultModeUserInput(context.runtimeVersion),
     ...(modelSelection.model !== undefined ? { model: modelSelection.model } : {}),
     ...(modelSelection.effort !== undefined ? { effort: modelSelection.effort } : {}),
   });

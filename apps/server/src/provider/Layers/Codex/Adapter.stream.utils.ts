@@ -262,47 +262,30 @@ export function toUserInputQuestions(payload: Record<string, unknown> | undefine
     return undefined;
   }
 
-  const parsedQuestions = questions
-    .map((entry) => {
-      const question = asObject(entry);
-      if (!question) return undefined;
-      const options = asArray(question.options)
-        ?.map((option) => {
-          const optionRecord = asObject(option);
-          if (!optionRecord) return undefined;
-          const label = asString(optionRecord.label)?.trim();
-          const description = asString(optionRecord.description)?.trim();
-          if (!label || !description) {
-            return undefined;
-          }
-          return { label, description };
-        })
-        .filter((option): option is { label: string; description: string } => option !== undefined);
-      const id = asString(question.id)?.trim();
-      const header = asString(question.header)?.trim();
-      const prompt = asString(question.question)?.trim();
-      if (!id || !header || !prompt || !options || options.length === 0) {
-        return undefined;
-      }
-      return {
+  // Codex allows `options: null` (a free-text question) and empty option descriptions; dropping
+  // them would hide the question while Codex waits for an answer, so only id and text are required.
+  const parsedQuestions = questions.flatMap((entry) => {
+    const question = asObject(entry);
+    if (!question) return [];
+    const options = (asArray(question.options) ?? []).flatMap((option) => {
+      const optionRecord = asObject(option);
+      const label = asString(optionRecord?.label)?.trim();
+      if (!label) return [];
+      return [{ label, description: asString(optionRecord?.description)?.trim() || label }];
+    });
+    const id = asString(question.id)?.trim();
+    const prompt = asString(question.question)?.trim();
+    if (!id || !prompt) return [];
+    return [
+      {
         id,
-        header,
+        header: asString(question.header)?.trim() || prompt,
         question: prompt,
         options,
         multiSelect: question.multiSelect === true,
-      };
-    })
-    .filter(
-      (
-        question,
-      ): question is {
-        id: string;
-        header: string;
-        question: string;
-        options: Array<{ label: string; description: string }>;
-        multiSelect: boolean;
-      } => question !== undefined,
-    );
+      },
+    ];
+  });
 
   return parsedQuestions.length > 0 ? parsedQuestions : undefined;
 }

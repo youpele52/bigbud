@@ -8,6 +8,7 @@ import {
 } from "./codexAppServerManager.process.remote.ts";
 import { recordEarlySpawnError } from "./codexAppServerManager.process.spawnError.ts";
 import { bindCodexProcessVersion } from "./codexAppServerManager.process.version.ts";
+import { codexQuestionToolConfigArgs } from "./codexQuestionTool.ts";
 import type { CodexAppServerStartSessionInput } from "./codexAppServerManager.types.ts";
 
 function resolveProviderRuntimeExecutionTargetId(input: CodexAppServerStartSessionInput): string {
@@ -33,15 +34,19 @@ export function startCodexAppServerProcess(
 
   return bindCodexProcessVersion(
     recordEarlySpawnError(
-      spawn(input.binaryPath, ["app-server", ...(input.configArgs ?? [])], {
-        cwd,
-        env: {
-          ...process.env,
-          ...(input.homePath ? { CODEX_HOME: input.homePath } : {}),
+      spawn(
+        input.binaryPath,
+        ["app-server", ...(input.configArgs ?? []), ...codexQuestionToolConfigArgs(version)],
+        {
+          cwd,
+          env: {
+            ...process.env,
+            ...(input.homePath ? { CODEX_HOME: input.homePath } : {}),
+          },
+          stdio: ["pipe", "pipe", "pipe"],
+          shell: process.platform === "win32",
         },
-        stdio: ["pipe", "pipe", "pipe"],
-        shell: process.platform === "win32",
-      }),
+      ),
     ),
     version,
   );
