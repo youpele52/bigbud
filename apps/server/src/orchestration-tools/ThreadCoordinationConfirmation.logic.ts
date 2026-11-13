@@ -57,13 +57,12 @@ function answerValues(answer: unknown): ReadonlyArray<string> {
   return values.filter((value): value is string => typeof value === "string");
 }
 
+type ProofOption = ProofQuestion["options"][number];
+
 const optionLabelled = (question: ProofQuestion, label: string) =>
   question.options.find((option) => normalized(option.label) === normalized(label));
 
-const answerSelects = (
-  values: ReadonlyArray<string>,
-  option: { readonly label: string; readonly id?: string } | undefined,
-) =>
+const answerSelects = (values: ReadonlyArray<string>, option: ProofOption | undefined) =>
   option !== undefined &&
   values.some(
     (value) =>
@@ -71,21 +70,55 @@ const answerSelects = (
       (option.id !== undefined && value === option.id),
   );
 
+/**
+ * One answer value from bigbud's question panel. It is a bare option (label or id), a chip with
+ * typed context (`"Allow\n<context>"`, the panel's format when the question accepts context), or
+ * text typed without a chip. A chip decides unless its context refuses; typed text alone is
+ * judged like a chat reply.
+ */
+function answerValueVerdict(
+  value: string,
+  allow: ProofOption,
+  deny: ProofOption | undefined,
+  shownQuestion: string | undefined,
+): ThreadCoordinationProofVerdict {
+  if (answerSelects([value], deny)) return "denied";
+  if (answerSelects([value], allow)) return "allowed";
+  const [firstLine = "", ...contextLines] = value.split("\n");
+  const chip = answerSelects([firstLine], deny)
+    ? "denied"
+    : answerSelects([firstLine], allow)
+      ? "allowed"
+      : undefined;
+  if (chip === "denied") return "denied";
+  if (chip === "allowed") {
+    const context = contextLines.join("\n");
+    return classifyConfirmationReply(context, { question: shownQuestion }) === "denied"
+      ? "denied"
+      : "allowed";
+  }
+  return classifyConfirmationReply(value, { question: shownQuestion });
+}
+
 /** The random code binds the question to the challenge; an `Allow` option must be offered. */
 function questionVerdict(
   question: ProofQuestion,
   answers: Readonly<Record<string, unknown>>,
   code: string,
+  shownQuestion: string | undefined,
 ): ThreadCoordinationProofVerdict {
   if (!normalized(question.text).includes(normalized(code))) return "none";
   const allow = optionLabelled(question, THREAD_COORDINATION_ALLOW_LABEL);
   if (allow === undefined) return "none";
-  const values = answerValues(answers[question.id]);
-  // A Deny selection wins over an Allow in the same (multi-select) answer.
-  if (answerSelects(values, optionLabelled(question, THREAD_COORDINATION_DENY_LABEL))) {
-    return "denied";
+  const deny = optionLabelled(question, THREAD_COORDINATION_DENY_LABEL);
+  let allowed = false;
+  // A Deny anywhere in the answer (a second multi-select value, or typed refusal) wins.
+  for (const value of answerValues(answers[question.id])) {
+    const verdict = answerValueVerdict(value, allow, deny, shownQuestion);
+    if (verdict === "denied") return "denied";
+    if (verdict === "allowed") allowed = true;
   }
-  return answerSelects(values, allow) ? "allowed" : "none";
+  return allowed ? "allowed" : "none";
 }
 
 const CODE_PATTERN = /\bBB-[A-Z2-7]{8}\b/gi;
@@ -123,7 +156,8 @@ function replyTargets(input: {
 /**
  * Decides a challenge from the caller thread's events (ascending) after its floor.
  * - Card: a client answer to a question asked earlier in the same caller-thread scan that
- *   contains the code and offers `Allow`.
+ *   contains the code and offers `Allow`. The answer is a chip (with optional typed context) or
+ *   text typed into bigbud's question panel, which is judged like a chat reply.
  * - Chat: trusted user-typed replies about this challenge (see `replyTargets`). The latest one
  *   decides an Allow.
  * Any decisive Deny, card or chat, stands for the whole challenge: a later "yes" or chatter
@@ -174,7 +208,12 @@ export function matchThreadCoordinationProof(input: {
     if (event.type === "thread.user-input-response-requested") {
       if (isUntrustedCommandId(event.commandId)) continue;
       for (const question of askedBefore.get(event.payload.requestId) ?? []) {
-        const verdict = questionVerdict(question, event.payload.answers, challenge.code);
+        const verdict = questionVerdict(
+          question,
+          event.payload.answers,
+          challenge.code,
+          input.question,
+        );
         if (verdict === "denied") return "denied";
         if (verdict === "allowed") cardAllowed = true;
       }

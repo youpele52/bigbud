@@ -1,10 +1,10 @@
 # Cross-project thread control with user confirmation
 
 **Date:** 10 November, 2026
-**Status:** Implemented on `dev` (uncommitted), revision 4 (a clear user request with the target attached is the approval; otherwise plain yes/no or card); live-provider checks pending
+**Status:** Implemented on `dev` (uncommitted), revision 5 (confirmation goes through each provider's question tool and bigbud's docked question panel, now including Codex Default mode, Pi and Devin; panel answers with typed context or typed text count); live-provider checks pending
 **Owner:** bigbud server (orchestration tools)
 **Created:** 2026-11-10 13:55 CET
-**Last modified:** 2026-11-10 20:00 CET
+**Last modified:** 2026-11-13 CET
 **Project root:** `/Users/youpele/DevWorld/bigbud`
 **Inspected:** branch `dev`, commit `68902753c1`, worktree with ~213 uncommitted entries from other work (see Plan validity)
 
@@ -130,15 +130,16 @@ The user owns every project, so the project boundary is arbitrary from their poi
 
 ### Question-tool availability per provider
 
-| Provider       | Question tool in default mode                                     | Auto-answered in full access              | Confirmation path                                                                                                                      |
-| -------------- | ----------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude         | Yes (`Claude/Adapter.approval.ts:129-134`)                        | No                                        | Question                                                                                                                               |
-| Codex          | **No**, Plan mode only (`codex/codexModeInstructions.ts:139-141`) | No                                        | Chat code (or question in Plan mode)                                                                                                   |
-| Copilot        | Yes (`Copilot/Adapter.session.config.ts:148-184`)                 | No                                        | Question                                                                                                                               |
-| Cursor         | Yes (`Cursor/Adapter.startSession.extensions.ts:47-90`)           | No                                        | Question                                                                                                                               |
-| Pi             | Extension UI only                                                 | **`confirm` auto-"Yes" after 5 s**        | Question outside full access (the user's click in bigbud produces a client event); chat code in full access (auto-answer never counts) |
-| OpenCode v1/V2 | Yes                                                               | No (V2 accepts provider-reported answers) | Question (client event required)                                                                                                       |
-| Muse           | Yes                                                               | Not applicable (no full access)           | Question                                                                                                                               |
+| Provider       | Question tool in default mode                                                                                   | Auto-answered in full access              | Confirmation path                              |
+| -------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------- |
+| Claude         | Yes, `AskUserQuestion` (`Claude/Adapter.approval.ts`)                                                           | No                                        | Question                                       |
+| Codex          | Yes on CLI 0.167.0+ via `default_mode_request_user_input` (`codex/codexQuestionTool.ts`); older: Plan mode only | No                                        | Question (0.167.0+); chat yes/no on older CLIs |
+| Copilot        | Yes (`Copilot/Adapter.session.config.ts`)                                                                       | No                                        | Question                                       |
+| Cursor         | Yes (`Cursor/Adapter.startSession.extensions.ts`)                                                               | No                                        | Question                                       |
+| Pi             | Yes, bigbud's `ask_user` bridge tool over Pi `select` (`PiOrchestrationBridge.template.question.ts`)            | Only `confirm` (auto-"Yes" after 5 s)     | Question (`select` is never auto-answered)     |
+| Devin          | Yes, `ask_user_question` via form elicitation (`Devin/Adapter.elicitation.logic.ts`)                            | No                                        | Question                                       |
+| OpenCode v1/V2 | Yes                                                                                                             | No (V2 accepts provider-reported answers) | Question (client event required)               |
+| Muse           | Yes                                                                                                             | Not applicable (no full access)           | Question                                       |
 
 ### Line budgets (400-line hard limit)
 
@@ -351,7 +352,7 @@ Thread `mode` and the outcome through `resolveThreadToolParticipants`: `status` 
   - Residual, pre-existing and out of scope: a full-access agent with shell access sits outside this guarantee. The WebSocket token is optional (`ws/ws.ts:95-101`), per-thread tool tokens are files under the state directory (`ThreadOrchestrationToolAuth.ts:34-39`), and SQLite is writable on disk. Such an agent could submit client commands or write events itself. Record this in the handoff; do not fix it here.
   - Fixed as part of this work: the busy re-queue provenance leak (Current State, chat-message provenance).
 - **Agent writes misleading question text.** Mitigated by requiring the code and the target project title in the question. The user still sees the agent-authored text; the server-prescribed wording is the default the guidance tells agents to use verbatim.
-- **Codex Default mode and Pi have no usable question tool.** The chat-code fallback covers them. Pi's auto-"Yes" can never satisfy proof because it produces no client response event.
+- **A provider without a usable question tool** (Codex CLI older than 0.167.0) falls back to a chat yes/no reply. Pi's `confirm` auto-"Yes" can never satisfy proof because it produces no client response event; the `ask_user` tool uses `select`, which is not auto-answered.
 - **Server restart.** Grants and challenges are lost, by design (decision 5). A retry after restart issues a new code; an old answer with the old code doesn't match. Committed commands still replay through the replay-first ordering.
 - **Concurrency.** Atomic `Ref` updates; parallel calls share one challenge. A grant is idempotent.
 - **Performance.** The proof query is bounded by `stream_id` and a sequence floor, and runs only when no grant exists.
@@ -411,3 +412,25 @@ Per `AGENTS.md`: focused checks only; never `bun test`; ask before any repositor
 ## Open Questions
 
 None blocking. Possible follow-ups the user may request later: a settings toggle to disable cross-project writes, persisting grants across restart, and updating OpenCode V2 native tool descriptions through a new bootstrap ABI.
+
+## Revision 5: the docked question panel (2026-11-13)
+
+Codex Default mode (CLI 0.167.0+), Pi (`ask_user`) and Devin (`ask_user_question`) now have question tools, and every question renders in bigbud's docked question panel with one answer path: text typed in the composer while a question is pending becomes that question's answer instead of a chat message. The confirmation flow stays agent-asked and server-verified; this revision wires it to the panel:
+
+- **Panel answers count.** In `ThreadCoordinationConfirmation.logic.ts`, a card answer value is decided as follows, still only for a code-bearing question that offers `Allow`:
+  - A bare option (label or id) decides as before.
+  - A chip with typed context (`"Allow\n<context>"`, the panel's format when the question accepts context) is decided by the chip, unless the context refuses (`classifyConfirmationReply` returns denied).
+  - Text typed without a chip is judged like a chat reply.
+  - A Deny anywhere in the answer still wins.
+  - Previously, a typed "yes" in the panel, or Allow plus a note, matched nothing. Because the panel's typed text is no longer a chat message, the chat fallback could not see it either.
+- **Guidance names the tools.** The `confirmation_required` instructions and the per-turn guidance tell agents to use their question tool (`AskUserQuestion`, `request_user_input`, `ask_user`, `ask_user_question`, and others) with exactly one single-choice question and `Allow`/`Deny`, not plain chat or `render_html`. Chat yes/no remains the fallback only without a question tool.
+- **Codex Default mode** with `request_user_input` is told that a `confirmation_required` result is always asked through the tool, never assumed. Its usual "prefer assumptions over questions" rule does not cover approvals.
+- **Pi `ask_user`** is described as the tool for bigbud confirmations as well.
+- Tests: `ThreadCoordinationConfirmation.logic.panel.test.ts` (Codex, Pi and Devin answer shapes, chip plus context, typed text, quote-back, Deny precedence, Allow-option requirement) and a gate-level case in `ThreadCoordinationConfirmation.test.ts`.
+- Not changed: there is still no server-raised question. The agent asks and the server verifies the client answer on retry. OpenCode V2 native tool descriptions are unchanged (bootstrap ABI, Phase 5).
+
+### Revision 5a: name the caller's question tool (2026-11-13, after live trials)
+
+- **Live finding (dev app):** OpenCode V2 asked through its `question` tool in 2 of 2 trials, with one full Allow round trip verified. Codex Default mode (CLI 0.167.0, feature flag and revised instructions confirmed in the provider log) took the generic "If you have no question tool… ask in chat" sentence in the result and asked in plain chat, even though `request_user_input` was available.
+- **Change:** `ThreadOrchestrationTools.access.ts` passes the caller thread's provider (`session.providerName`, else `modelSelection.provider`). `ThreadCoordinationConfirmation.questionTool.ts` maps providers to verified question tools: Claude `AskUserQuestion`, Codex `request_user_input`, Devin `ask_user_question`, OpenCode v1/V2 `question`, Pi `ask_user`. For these, the `instructions` make that named tool the next step and drop the generic chat escape. Codex alone keeps a fallback, "Only if `request_user_input` is not in your tool list…", because the server cannot see the CLI version. Copilot, Cursor, Muse and CLIProxy keep the generic wording until their tool names are verified.
+- Tests: `ThreadCoordinationConfirmation.questionTool.test.ts`. Re-test with about 5 Codex trials, including one Deny.

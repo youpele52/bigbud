@@ -20,6 +20,7 @@ import {
   matchImplicitThreadCoordinationApproval,
   type ThreadCoordinationTargetReference,
 } from "./ThreadCoordinationConfirmation.implicit.ts";
+import { threadCoordinationQuestionTool } from "./ThreadCoordinationConfirmation.questionTool.ts";
 import {
   matchThreadCoordinationProof,
   type ThreadCoordinationProofVerdict,
@@ -155,8 +156,11 @@ export const requireCrossProjectConfirmation = Effect.fn("requireCrossProjectCon
     readonly project: ThreadCoordinationTargetProject;
     /** Which attached threads name this write's target; absent disables implicit approval. */
     readonly referencesTarget?: ThreadCoordinationTargetReference | undefined;
+    /** The caller thread's provider, so the question names its question tool. */
+    readonly callerProvider?: string | null | undefined;
   }): Effect.fn.Return<ThreadCoordinationAccess, Error> {
     const { callerThreadId, project } = input;
+    const questionTool = threadCoordinationQuestionTool(input.callerProvider);
     const unavailable = (): ThreadCoordinationAccess => ({
       kind: "confirmation_required",
       result: confirmationRequiredResult(
@@ -222,7 +226,10 @@ export const requireCrossProjectConfirmation = Effect.fn("requireCrossProjectCon
         return { kind: "denied", result: confirmationDeniedResult(challenge) };
       }
       if (verdict === "none" && !isSupersededChallenge(challenge, issuedChallenges)) {
-        return { kind: "confirmation_required", result: confirmationRequiredResult(challenge) };
+        return {
+          kind: "confirmation_required",
+          result: confirmationRequiredResult(challenge, { questionTool }),
+        };
       }
       // Overflow fails closed. A superseded challenge would lose every reply to the newer one,
       // so asking again issues it afresh as the latest. Both get a new code and floor.
@@ -241,6 +248,9 @@ export const requireCrossProjectConfirmation = Effect.fn("requireCrossProjectCon
       targetIsRemote: project.targetIsRemote,
       streamSequenceFloor,
     });
-    return { kind: "confirmation_required", result: confirmationRequiredResult(challenge) };
+    return {
+      kind: "confirmation_required",
+      result: confirmationRequiredResult(challenge, { questionTool }),
+    };
   },
 );

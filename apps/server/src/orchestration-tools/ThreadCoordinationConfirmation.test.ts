@@ -70,6 +70,19 @@ describe("requireCrossProjectConfirmation", () => {
     expect(otherProject.kind).toBe("confirmation_required");
   });
 
+  it("grants from question-panel text: an Allow chip with context, or a typed yes", async () => {
+    for (const answer of ["Allow\nThanks, send it", "yes, go ahead"]) {
+      const { coordination, log } = makeTestCoordination();
+      const { question } = requiredCode(await gate(coordination));
+      pushClientAnswer(log, { callerThreadId: caller, question, answer });
+      expect((await gate(coordination)).kind).toBe("allowed");
+    }
+    const { coordination, log } = makeTestCoordination();
+    const { question } = requiredCode(await gate(coordination));
+    pushClientAnswer(log, { callerThreadId: caller, question, answer: "no, leave it" });
+    expect((await gate(coordination)).kind).toBe("denied");
+  });
+
   it("returns denied, clears the challenge, and issues a new code next time", async () => {
     const { coordination, log } = makeTestCoordination();
     const first = requiredCode(await gate(coordination));

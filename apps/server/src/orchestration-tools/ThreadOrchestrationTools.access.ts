@@ -64,6 +64,8 @@ export const requireThreadCoordinationConfirmation = Effect.fn(
   return yield* requireCrossProjectConfirmation({
     coordination: input.coordination,
     callerThreadId: input.callerThread.id,
+    callerProvider:
+      input.callerThread.session?.providerName ?? input.callerThread.modelSelection?.provider,
     referencesTarget,
     project: {
       id: project.id,
