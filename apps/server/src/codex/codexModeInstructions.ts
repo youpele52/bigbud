@@ -8,6 +8,8 @@
 
 import { normalizeModelSlug } from "@bigbud/shared/model";
 
+import { CODEX_DEFAULT_MODEL } from "../provider/codexAccount.ts";
+
 export const CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS = `<collaboration_mode># Plan Mode (Conversational)
 
 You work in 3 phases, and you should *chat your way* to a great plan before finalizing it. A great plan is very detailed-intent- and implementation-wise-so that it can be handed to another engineer or agent to be implemented right away. It must be **decision complete**, where the implementer does not need to make any decisions.
@@ -178,7 +180,7 @@ export function buildCodexCollaborationMode(input: {
   if (input.interactionMode === undefined) {
     return undefined;
   }
-  const model = normalizeCodexModelSlug(input.model) ?? "gpt-5.5";
+  const model = normalizeCodexModelSlug(input.model) ?? CODEX_DEFAULT_MODEL;
   return {
     mode: input.interactionMode,
     settings: {

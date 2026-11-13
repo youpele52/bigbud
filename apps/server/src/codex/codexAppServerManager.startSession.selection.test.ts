@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import type { ServerProviderModel } from "@bigbud/contracts/server/server.providers.ts";
 import { describe, expect, it, vi } from "vitest";
 
-import { CODEX_SPARK_MODEL } from "../provider/codexAccount";
+import { CODEX_DEFAULT_MODEL, CODEX_SPARK_MODEL } from "../provider/codexAccount";
 import { CodexPendingStarts } from "./codexAppServerManager.pendingStarts";
 import { startSession, type StartSessionOps } from "./codexAppServerManager.startSession";
 import type {
@@ -31,7 +31,7 @@ vi.mock("./codexAppServerManager.process", () => processMocks);
 const models = [
   model("gpt-current-codex", "medium", ["medium", "max", "ultra", "future-depth"]),
   model("gpt-next-codex", "high", ["high", "ultra"]),
-  model("gpt-5.5", "high", ["high"]),
+  model(CODEX_DEFAULT_MODEL, "high", ["high"]),
   model(CODEX_SPARK_MODEL, "high", ["high"]),
 ] satisfies ReadonlyArray<ServerProviderModel>;
 
@@ -369,8 +369,8 @@ describe("Codex start-session model selection", () => {
 
   it.each([
     ["pro account", { account: { type: "chatgpt", planType: "pro" } }, CODEX_SPARK_MODEL],
-    ["plus account", { account: { type: "chatgpt", planType: "plus" } }, "gpt-5.5"],
-    ["API key", { account: { type: "apiKey" } }, "gpt-5.5"],
+    ["plus account", { account: { type: "chatgpt", planType: "plus" } }, CODEX_DEFAULT_MODEL],
+    ["API key", { account: { type: "apiKey" } }, CODEX_DEFAULT_MODEL],
   ] as const)("resolves Spark for a %s", async (_label, accountResponse, expectedModel) => {
     const { ops, sendRequest } = createHarness({ accountResponse });
 
@@ -388,6 +388,8 @@ describe("Codex start-session model selection", () => {
 
     await startSession(baseInput({ model: CODEX_SPARK_MODEL }), ops);
 
-    expect(requestParams(sendRequest, "thread/start")).toMatchObject({ model: "gpt-5.5" });
+    expect(requestParams(sendRequest, "thread/start")).toMatchObject({
+      model: CODEX_DEFAULT_MODEL,
+    });
   });
 });
