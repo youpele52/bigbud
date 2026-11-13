@@ -11,4 +11,8 @@ export function hardenBrowserGuestPreferences(webPreferences: WebPreferences): v
   webPreferences.allowRunningInsecureContent = false;
   webPreferences.sandbox = true;
   webPreferences.webviewTag = false;
+  // Guests default to a transparent base background, so pages that never paint one showed the
+  // app panel behind them. Opaque guests paint their own canvas from the page's color scheme,
+  // matching a normal browser tab regardless of app theme, OS appearance or window material.
+  webPreferences.transparent = false;
 }

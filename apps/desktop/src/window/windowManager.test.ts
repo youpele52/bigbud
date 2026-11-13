@@ -253,6 +253,7 @@ describe("windowManager context menu", () => {
       nodeIntegrationInWorker: false,
       plugins: true,
       sandbox: true,
+      transparent: false,
       webSecurity: true,
       webviewTag: false,
     });

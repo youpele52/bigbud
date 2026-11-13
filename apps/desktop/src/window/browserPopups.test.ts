@@ -72,6 +72,7 @@ describe("browser popup boundary", () => {
             nodeIntegrationInSubFrames: false,
             nodeIntegrationInWorker: false,
             webviewTag: false,
+            transparent: false,
             webSecurity: true,
             allowRunningInsecureContent: false,
           },
