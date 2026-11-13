@@ -268,8 +268,11 @@ it("reveals and visibly highlights only the cited generic heading after the ques
     <CitationBrowserHarness messages={[]} pendingUserInputs={[prompt]} />,
   );
   try {
-    const headings = document.querySelectorAll<HTMLElement>('[data-chat-cite-region="header"]');
-    selectChatText(headings[1]!, 3, 11);
+    // The pending panel shows one question at a time; move to the second one before citing.
+    await page.getByRole("button", { name: "Next question" }).click();
+    const heading = document.querySelector<HTMLElement>('[data-chat-cite-region="header"]')!;
+    expect(heading.textContent).toBe("2. Question");
+    selectChatText(heading, 3, 11);
     await page.getByRole("button", { name: "Cite", exact: true }).click();
     const saved = useComposerDraftStore.getState().draftsByThreadId[CITE_THREAD_ID]!.annotations[0];
     expect(saved).toMatchObject({

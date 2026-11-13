@@ -106,12 +106,24 @@ export function useOnSend(input: UseOnSendInput) {
         };
         const trimmed = pRef.current.trim();
         if (isOpencodePendingUserInputMode && activePendingUserInputRequestId) {
+          const progress = submittedInput.activePendingProgress;
+          // Multi-question requests: send advances until the last question, which resolves all.
+          if (progress && !progress.isLastQuestion) {
+            if (progress.canAdvance)
+              submittedInput.setActivePendingUserInputQuestionIndex?.(progress.questionIndex + 1);
+            return;
+          }
           await respondToPendingUserInput({
             activePendingUserInput,
             activePendingUserInputRequestId,
+            activePendingDraftAnswers: submittedInput.activePendingDraftAnswers,
+            activeQuestionId: progress?.activeQuestion?.id,
+            promptText: pRef.current,
+            images: submittedInput.composerImagesRef.current,
+            files: submittedInput.composerFilesRef.current,
             onRespondToUserInput: submittedInput.onRespondToUserInput,
+            submitQueuedComposerPrompt: submittedInput.submitQueuedComposerPrompt,
             resetComposerDraft: () => resetComposerDraft(true),
-            trimmed,
           });
           return;
         }

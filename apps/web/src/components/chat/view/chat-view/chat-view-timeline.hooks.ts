@@ -19,6 +19,8 @@ import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hook
 import { useChatGreeting } from "../../common/ChatGreeting.hooks";
 import { deriveAnsweredUserInputs } from "~/logic/session/session.userInputHistory.logic";
 
+const NO_PENDING_TIMELINE_INPUTS: never[] = [];
+
 interface ChatViewTimelineStateInput {
   base: ChatViewBaseState;
   thread: ChatViewThreadDerivedState;
@@ -217,7 +219,6 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
     settledOptimisticIds,
   ]);
 
-  const { pendingUserInputs } = thread;
   const answeredUserInputs = useMemo(
     () => deriveAnsweredUserInputs(activeThread?.activities ?? []),
     [activeThread?.activities],
@@ -229,16 +230,11 @@ export function useChatViewTimelineState({ base, thread }: ChatViewTimelineState
         timelineMessages,
         activeThread?.proposedPlans ?? [],
         workLogEntries,
-        pendingUserInputs,
+        // Pending questions render in the composer panel; only answered ones join the timeline.
+        NO_PENDING_TIMELINE_INPUTS,
         answeredUserInputs,
       ),
-    [
-      activeThread?.proposedPlans,
-      pendingUserInputs,
-      answeredUserInputs,
-      timelineMessages,
-      workLogEntries,
-    ],
+    [activeThread?.proposedPlans, answeredUserInputs, timelineMessages, workLogEntries],
   );
   const { turnDiffSummaries, inferredCheckpointTurnCountByTurnId } =
     useTurnDiffSummaries(activeThread);

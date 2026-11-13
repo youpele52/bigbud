@@ -29,7 +29,6 @@ export function ReplacementFixture() {
     setComposerTrigger: () => {},
     activePendingProgress: derivePendingUserInputProgress([question], answers.frm_replace!, 0),
     activePendingUserInput: { requestId: "frm_replace" },
-    isOpencodePendingUserInputMode: false,
     setPendingUserInputAnswersByRequestId: setAnswers,
     composerEditorRef: editor,
   });

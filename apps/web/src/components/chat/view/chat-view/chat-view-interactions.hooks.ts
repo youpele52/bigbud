@@ -29,6 +29,7 @@ import type { ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { useChatViewExpandedImage } from "./chat-view-expanded-image.hooks";
 import { useChatViewInteractionFiles } from "./chat-view-interactions.files.hooks";
 import { useChatViewPromptQueue } from "./chat-view-prompt-queue.hooks";
+import { derivePendingComposerAction } from "./PendingUserInputPanel.logic";
 import { useChatViewProviderSwitch } from "./chat-view-provider-switch.hooks";
 
 interface ChatViewInteractionsInput {
@@ -132,7 +133,6 @@ export function useChatViewInteractions({
     setComposerTrigger: base.setComposerTrigger,
     activePendingProgress: thread.activePendingProgress,
     activePendingUserInput: thread.activePendingUserInput,
-    isOpencodePendingUserInputMode: thread.isOpencodePendingUserInputMode,
     setPendingUserInputAnswersByRequestId: base.setPendingUserInputAnswersByRequestId,
     composerEditorRef: base.composerEditorRef,
   });
@@ -140,13 +140,8 @@ export function useChatViewInteractions({
   const pendingUserInputHandlers = usePendingUserInputHandlers({
     activePendingUserInput: thread.activePendingUserInput,
     activePendingProgress: thread.activePendingProgress,
-    activePendingResolvedAnswers: thread.activePendingResolvedAnswers,
-    promptRef: base.promptRef,
-    setComposerCursor: base.setComposerCursor,
-    setComposerTrigger: base.setComposerTrigger,
     setPendingUserInputAnswersByRequestId: base.setPendingUserInputAnswersByRequestId,
     setPendingUserInputQuestionIndexByRequestId: base.setPendingUserInputQuestionIndexByRequestId,
-    onRespondToUserInput: runtime.turnActions.onRespondToUserInput,
   });
 
   const planHandlers = usePlanHandlers({
@@ -182,6 +177,7 @@ export function useChatViewInteractions({
     runtime,
     envMode,
     planHandlers,
+    pendingUserInputHandlers,
     onOptimisticUserMessage,
     onThreadMaterialized,
     transformPromptForSend,
@@ -219,7 +215,6 @@ export function useChatViewInteractions({
     interactionMode: base.interactionMode,
     activePendingProgress: thread.activePendingProgress,
     activePendingUserInput: thread.activePendingUserInput,
-    isOpencodePendingUserInputMode: thread.isOpencodePendingUserInputMode,
     setComposerCursor: base.setComposerCursor,
     setComposerTrigger: base.setComposerTrigger,
     setComposerHighlightedItemId: base.setComposerHighlightedItemId,
@@ -262,16 +257,11 @@ export function useChatViewInteractions({
       composer.workspaceEntriesQuery.isLoading ||
       composer.workspaceEntriesQuery.isFetching);
 
-  const pendingAction =
-    !thread.isOpencodePendingUserInputMode && thread.activePendingProgress
-      ? {
-          questionIndex: thread.activePendingProgress.questionIndex,
-          isLastQuestion: thread.activePendingProgress.isLastQuestion,
-          canAdvance: thread.activePendingProgress.canAdvance,
-          isResponding: runtime.activePendingIsResponding,
-          isComplete: Boolean(thread.activePendingResolvedAnswers),
-        }
-      : null;
+  const pendingAction = derivePendingComposerAction({
+    progress: thread.activePendingProgress,
+    isResponding: runtime.activePendingIsResponding,
+    resolvedAnswers: thread.activePendingResolvedAnswers,
+  });
 
   const onOpenTurnDiff = useCallback(
     (turnId: TurnId, filePath?: string) => {

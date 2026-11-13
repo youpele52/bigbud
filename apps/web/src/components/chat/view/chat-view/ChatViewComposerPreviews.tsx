@@ -35,14 +35,15 @@ export function ChatViewComposerPreviews({
               onOpenSource={() => onOpenReplySource(replyTarget.messageId)}
             />
           )}
-          <ComposerImagePreviews
-            composerImages={base.composerImages}
-            nonPersistedComposerImageIdSet={composer.nonPersistedComposerImageIdSet}
-            onRemoveImage={base.removeComposerImageFromDraft}
-            onExpandImage={base.setExpandedImage}
-          />
         </>
       )}
+      {/* Attachments stay visible while answering: they follow the answer as a labelled message. */}
+      <ComposerImagePreviews
+        composerImages={base.composerImages}
+        nonPersistedComposerImageIdSet={composer.nonPersistedComposerImageIdSet}
+        onRemoveImage={base.removeComposerImageFromDraft}
+        onExpandImage={base.setExpandedImage}
+      />
       <ComposerAnnotationPreviews
         annotations={
           pendingAnswer
@@ -53,14 +54,12 @@ export function ChatViewComposerPreviews({
         onRemoveAnnotation={base.removeComposerAnnotationFromDraft}
         onClearAnnotations={() => clearComposerSurfaceAnnotations(base)}
       />
-      {!pendingAnswer && (
-        <ComposerFilePreviews
-          composerFiles={base.composerFiles}
-          resolvedTheme={base.resolvedTheme}
-          onRemoveFile={base.removeComposerFileFromDraft}
-          onToggleWatchForCompletion={base.toggleComposerFileWatchForCompletion}
-        />
-      )}
+      <ComposerFilePreviews
+        composerFiles={base.composerFiles}
+        resolvedTheme={base.resolvedTheme}
+        onRemoveFile={base.removeComposerFileFromDraft}
+        onToggleWatchForCompletion={base.toggleComposerFileWatchForCompletion}
+      />
     </>
   );
 }

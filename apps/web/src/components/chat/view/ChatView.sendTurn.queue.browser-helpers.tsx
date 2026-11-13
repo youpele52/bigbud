@@ -44,6 +44,7 @@ export function QueueSendHarness(props: Parameters<typeof useSendHarnessInput>[0
       turnActions: { onRespondToUserInput: input.onRespondToUserInput },
     } as unknown as QueueInput["runtime"],
     envMode: "local",
+    pendingUserInputHandlers: { setActivePendingUserInputQuestionIndex: () => {} },
     planHandlers: { onSubmitPlanFollowUp: input.onSubmitPlanFollowUp },
     transformPromptForSend: input.transformPromptForSend,
   });

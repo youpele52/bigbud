@@ -9,7 +9,6 @@ import type {
 } from "../../../models/types/app.types";
 import { SubagentsCard } from "../agents/SubagentsCard";
 import { ProposedPlanCard } from "../plan/ProposedPlanCard";
-import { UserInputQuestions } from "./UserInputQuestions";
 import { AnsweredUserInput } from "./AnsweredUserInput";
 import {
   TimelineMessageCopyButton,
@@ -36,7 +35,7 @@ import { ChatTimestamp } from "../common/ChatTimestamp";
 import { cn } from "~/lib/utils";
 import { type MessagesTimelineRowContentProps } from "./MessagesTimeline.shared";
 import { timelineRowAccordionControl } from "./MessagesTimeline.accordion";
-import { ActivityAccordion, activitySectionLabelTypography } from "../common/ActivityAccordion";
+import { ActivityAccordion } from "../common/ActivityAccordion";
 import {
   UserFileReferenceChips,
   UserFileSourcePaths,
@@ -342,26 +341,16 @@ export function MessagesTimelineRowContent(props: MessagesTimelineRowContentProp
         </div>
       )}
 
-      {row.kind === "user-input-question" && (
-        // Answered questions are accordions, which share the work log's left edge.
-        <div className={cn("min-w-0", !row.answers && "px-1")}>
-          {row.answers ? (
-            <AnsweredUserInput
-              input={row.pendingUserInput}
-              answers={row.answers}
-              answeredAt={row.answeredAt ?? row.createdAt}
-              timestampFormat={timestampFormat}
-              accordion={accordion}
-            />
-          ) : (
-            <div className="rounded-xl border border-border/60 bg-card/40 px-4 py-3">
-              <p className={cn("mb-2.5", activitySectionLabelTypography)}>Input required</p>
-              <UserInputQuestions questions={row.pendingUserInput.questions} />
-              <p className="mt-3 text-[11px] text-muted-foreground/45">
-                Type your answer below and press send to continue.
-              </p>
-            </div>
-          )}
+      {/* Pending questions live in the panel above the composer; answered ones are accordions. */}
+      {row.kind === "user-input-question" && row.answers && (
+        <div className="min-w-0">
+          <AnsweredUserInput
+            input={row.pendingUserInput}
+            answers={row.answers}
+            answeredAt={row.answeredAt ?? row.createdAt}
+            timestampFormat={timestampFormat}
+            accordion={accordion}
+          />
         </div>
       )}
     </div>

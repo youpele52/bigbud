@@ -11,6 +11,10 @@ import type {
 import type { ComposerTrigger } from "../../../logic/composer";
 import type { QueuedPromptSubmission, QueuePromptResult } from "./ChatView.promptQueue.logic";
 import type { PendingUserInput } from "../../../logic/session";
+import type {
+  PendingUserInputDraftAnswer,
+  PendingUserInputProgress,
+} from "../../../logic/user-input/pending.logic";
 import type { TerminalContextDraft } from "../../../lib/terminalContext";
 import type { ChatMessage, Project, ProposedPlan, Thread } from "../../../models/types";
 import type {
@@ -53,6 +57,10 @@ export interface UseOnSendInput {
   isOpencodePendingUserInputMode: boolean;
   activePendingUserInputRequestId: ApprovalRequestId | null;
   activePendingUserInput: PendingUserInput | null;
+  /** Per-question navigation and draft answers; absent in callers without a question panel. */
+  activePendingProgress?: PendingUserInputProgress | null | undefined;
+  activePendingDraftAnswers?: Record<string, PendingUserInputDraftAnswer> | undefined;
+  setActivePendingUserInputQuestionIndex?: ((questionIndex: number) => void) | undefined;
   shouldAutoScrollRef: React.MutableRefObject<boolean>;
   setOptimisticUserMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
   setPrompt: (prompt: string) => void;

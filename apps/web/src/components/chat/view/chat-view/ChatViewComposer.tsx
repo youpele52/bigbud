@@ -20,6 +20,7 @@ import { describeThreadBackgroundWork } from "../ChatView.subagents.logic";
 
 import { useChatViewComposerActions } from "./ChatViewComposer.actions";
 import { ChatViewComposerHeader } from "./ChatViewComposerHeader";
+import { pendingUserInputComposerPlaceholder } from "./PendingUserInputPanel.logic";
 import { ChatViewComposerMenuLayer } from "./ChatViewComposerMenuLayer";
 import { useChatViewComposerSyntheticMenu } from "./ChatViewComposer.syntheticMenu";
 import { type ChatViewBaseState } from "./chat-view-base-state.hooks";
@@ -137,13 +138,12 @@ export function ChatViewComposer({
             composer.composerProviderState.composerSurfaceClassName,
           )}
         >
-          {!compact && (
-            <ChatViewComposerHeader
-              threadId={base.threadId}
-              thread={thread}
-              interactions={interactions}
-            />
-          )}
+          <ChatViewComposerHeader
+            threadId={base.threadId}
+            thread={thread}
+            interactions={interactions}
+            compact={compact}
+          />
 
           <div
             className={cn(
@@ -200,7 +200,9 @@ export function ChatViewComposer({
                   : base.composerDraft.shellMode
                     ? "Enter shell command"
                     : thread.isOpencodePendingUserInputMode
-                      ? "Type your answer to continue..."
+                      ? pendingUserInputComposerPlaceholder(
+                          thread.activePendingProgress?.activeQuestion,
+                        )
                       : thread.showPlanFollowUpPrompt && thread.activeProposedPlan
                         ? "Add feedback to refine the plan, or leave this blank to implement it"
                         : thread.phase === "disconnected"

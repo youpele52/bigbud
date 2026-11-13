@@ -9,7 +9,7 @@ interface UserInputQuestionsProps {
 
 const LABEL_CLASS_NAME = "mb-1 text-sm font-medium text-foreground/90";
 
-/** Shared read-only question content for pending prompts and answered history. */
+/** Read-only question content for answered history; pending questions use the composer panel. */
 export function UserInputQuestions({ questions, answers }: UserInputQuestionsProps) {
   return (
     <div className="space-y-4">

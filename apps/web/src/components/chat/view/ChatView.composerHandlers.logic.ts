@@ -14,7 +14,8 @@ import {
 import {
   setPendingUserInputCustomAnswer,
   togglePendingUserInputOptionSelection,
-} from "../../../logic/user-input";
+  withPendingUserInputDraftAnswer,
+} from "../../../logic/user-input/pending.logic";
 import { toastManager } from "../../ui/toast";
 import { randomUUID } from "~/lib/utils";
 import { desktopAttachmentPath } from "./ChatView.attachments.logic";
@@ -202,7 +203,6 @@ export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput)
     setComposerTrigger,
     activePendingProgress,
     activePendingUserInput,
-    isOpencodePendingUserInputMode,
     setPendingUserInputAnswersByRequestId,
     composerEditorRef,
   } = input;
@@ -226,21 +226,23 @@ export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput)
       const next = replaceTextRange(promptRef.current, rangeStart, rangeEnd, replacement);
       const nextCursor = collapseExpandedComposerCursor(next.text, next.cursor);
       promptRef.current = next.text;
-      const activePendingQuestion = activePendingProgress?.activeQuestion;
-      if (activePendingQuestion && activePendingUserInput && !isOpencodePendingUserInputMode) {
-        setPendingUserInputAnswersByRequestId((existing) => ({
-          ...existing,
-          [activePendingUserInput.requestId]: {
-            ...existing[activePendingUserInput.requestId],
-            [activePendingQuestion.id]: setPendingUserInputCustomAnswer(
-              existing[activePendingUserInput.requestId]?.[activePendingQuestion.id],
+      setPrompt(next.text);
+      // The editor stays the composer draft; a pending question mirrors it as its custom answer.
+      const question = activePendingProgress?.activeQuestion;
+      if (question && activePendingUserInput) {
+        const requestId = activePendingUserInput.requestId;
+        setPendingUserInputAnswersByRequestId((existing) =>
+          withPendingUserInputDraftAnswer(
+            existing,
+            requestId,
+            question.id,
+            setPendingUserInputCustomAnswer(
+              existing[requestId]?.[question.id],
               next.text,
-              activePendingQuestion,
+              question,
             ),
-          },
-        }));
-      } else {
-        setPrompt(next.text);
+          ),
+        );
       }
       setComposerCursor(nextCursor);
       setComposerTrigger(
@@ -260,25 +262,19 @@ export function useApplyPromptReplacement(input: UseApplyPromptReplacementInput)
       setComposerTrigger,
       activePendingProgress,
       activePendingUserInput,
-      isOpencodePendingUserInputMode,
       setPendingUserInputAnswersByRequestId,
       composerEditorRef,
     ],
   );
 }
 
-/** Returns handlers for interacting with pending user-input prompts. */
+/** Returns handlers for interacting with pending user-input prompts. Sending lives in onSend. */
 export function usePendingUserInputHandlers(input: UsePendingUserInputHandlersInput) {
   const {
     activePendingUserInput,
     activePendingProgress,
-    activePendingResolvedAnswers,
-    promptRef,
-    setComposerCursor,
-    setComposerTrigger,
     setPendingUserInputAnswersByRequestId,
     setPendingUserInputQuestionIndexByRequestId,
-    onRespondToUserInput,
   } = input;
 
   const setActivePendingUserInputQuestionIndex = useCallback(
@@ -297,82 +293,41 @@ export function usePendingUserInputHandlers(input: UsePendingUserInputHandlersIn
       if (!activePendingUserInput) return;
       const question = activePendingUserInput.questions.find((entry) => entry.id === questionId);
       if (!question) return;
-      setPendingUserInputAnswersByRequestId((existing) => ({
-        ...existing,
-        [activePendingUserInput.requestId]: {
-          ...existing[activePendingUserInput.requestId],
-          [questionId]: togglePendingUserInputOptionSelection(
+      const requestId = activePendingUserInput.requestId;
+      setPendingUserInputAnswersByRequestId((existing) =>
+        withPendingUserInputDraftAnswer(
+          existing,
+          requestId,
+          questionId,
+          togglePendingUserInputOptionSelection(
             question,
-            existing[activePendingUserInput.requestId]?.[questionId],
+            existing[requestId]?.[questionId],
             option,
             optionIndex,
           ),
-        },
-      }));
-      promptRef.current = "";
-      setComposerCursor(0);
-      setComposerTrigger(null);
-    },
-    [
-      activePendingUserInput,
-      promptRef,
-      setComposerCursor,
-      setComposerTrigger,
-      setPendingUserInputAnswersByRequestId,
-    ],
-  );
-
-  const onChangeActivePendingUserInputCustomAnswer = useCallback(
-    (
-      questionId: string,
-      value: string,
-      nextCursor: number,
-      expandedCursor: number,
-      cursorAdjacentToMention: boolean,
-    ) => {
-      if (!activePendingUserInput) return;
-      promptRef.current = value;
-      setPendingUserInputAnswersByRequestId((existing) => ({
-        ...existing,
-        [activePendingUserInput.requestId]: {
-          ...existing[activePendingUserInput.requestId],
-          [questionId]: setPendingUserInputCustomAnswer(
-            existing[activePendingUserInput.requestId]?.[questionId],
-            value,
-            activePendingUserInput.questions.find((question) => question.id === questionId),
-          ),
-        },
-      }));
-      setComposerCursor(nextCursor);
-      setComposerTrigger(
-        cursorAdjacentToMention ? null : detectComposerTrigger(value, expandedCursor),
+        ),
       );
     },
-    [
-      activePendingUserInput,
-      promptRef,
-      setComposerCursor,
-      setComposerTrigger,
-      setPendingUserInputAnswersByRequestId,
-    ],
+    [activePendingUserInput, setPendingUserInputAnswersByRequestId],
   );
 
-  const onAdvanceActivePendingUserInput = useCallback(() => {
-    if (!activePendingUserInput || !activePendingProgress) return;
-    if (activePendingProgress.isLastQuestion) {
-      if (activePendingResolvedAnswers) {
-        void onRespondToUserInput(activePendingUserInput.requestId, activePendingResolvedAnswers);
-      }
-      return;
-    }
-    setActivePendingUserInputQuestionIndex(activePendingProgress.questionIndex + 1);
-  }, [
-    activePendingProgress,
-    activePendingResolvedAnswers,
-    activePendingUserInput,
-    onRespondToUserInput,
-    setActivePendingUserInputQuestionIndex,
-  ]);
+  /** Mirrors editor text into the active question's draft; the editor itself owns the text. */
+  const onChangeActivePendingUserInputCustomAnswer = useCallback(
+    (questionId: string, value: string) => {
+      if (!activePendingUserInput) return;
+      const requestId = activePendingUserInput.requestId;
+      const question = activePendingUserInput.questions.find((entry) => entry.id === questionId);
+      setPendingUserInputAnswersByRequestId((existing) =>
+        withPendingUserInputDraftAnswer(
+          existing,
+          requestId,
+          questionId,
+          setPendingUserInputCustomAnswer(existing[requestId]?.[questionId], value, question),
+        ),
+      );
+    },
+    [activePendingUserInput, setPendingUserInputAnswersByRequestId],
+  );
 
   const onPreviousActivePendingUserInputQuestion = useCallback(() => {
     if (!activePendingProgress) return;
@@ -383,7 +338,6 @@ export function usePendingUserInputHandlers(input: UsePendingUserInputHandlersIn
     setActivePendingUserInputQuestionIndex,
     onToggleActivePendingUserInputOption,
     onChangeActivePendingUserInputCustomAnswer,
-    onAdvanceActivePendingUserInput,
     onPreviousActivePendingUserInputQuestion,
   };
 }

@@ -3,6 +3,7 @@ import type { MessageId, ThreadId } from "@bigbud/contracts";
 import { isSessionHealthUnconfirmed } from "~/logic/session";
 import type { DraftThreadEnvMode } from "~/stores/composer";
 
+import type { usePendingUserInputHandlers } from "../ChatView.composerHandlers.logic";
 import type { usePlanHandlers } from "../ChatView.planHandlers.logic";
 import { usePromptQueue } from "../ChatView.promptQueue.logic";
 import { useOnSend } from "../ChatView.sendTurn.logic";
@@ -20,6 +21,10 @@ interface UseChatViewPromptQueueInput {
   onOptimisticUserMessage?: ((messageId: MessageId) => void) | undefined;
   onThreadMaterialized?: ((threadId: ThreadId) => Promise<void> | void) | undefined;
   planHandlers: Pick<ReturnType<typeof usePlanHandlers>, "onSubmitPlanFollowUp">;
+  pendingUserInputHandlers: Pick<
+    ReturnType<typeof usePendingUserInputHandlers>,
+    "setActivePendingUserInputQuestionIndex"
+  >;
   transformPromptForSend?: ((prompt: string) => string) | undefined;
 }
 
@@ -57,6 +62,7 @@ export function useChatViewPromptQueue({
   onOptimisticUserMessage,
   onThreadMaterialized,
   planHandlers,
+  pendingUserInputHandlers,
   transformPromptForSend,
 }: UseChatViewPromptQueueInput) {
   const activeTurnInProgress = isPromptQueueTurnInProgress({
@@ -126,6 +132,10 @@ export function useChatViewPromptQueue({
     isOpencodePendingUserInputMode: thread.isOpencodePendingUserInputMode,
     activePendingUserInputRequestId: thread.activePendingUserInput?.requestId ?? null,
     activePendingUserInput: thread.activePendingUserInput,
+    activePendingProgress: thread.activePendingProgress,
+    activePendingDraftAnswers: thread.activePendingDraftAnswers,
+    setActivePendingUserInputQuestionIndex:
+      pendingUserInputHandlers.setActivePendingUserInputQuestionIndex,
     shouldAutoScrollRef: runtime.scrollBehavior.shouldAutoScrollRef,
     setOptimisticUserMessages: base.setOptimisticUserMessages,
     setPrompt: base.setPrompt,

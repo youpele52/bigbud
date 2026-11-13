@@ -7,6 +7,7 @@ import { type ChatViewComposerDerivedState } from "./chat-view-composer-derived.
 import { type ChatViewRuntimeState } from "./chat-view-runtime.hooks";
 import { type ChatViewThreadDerivedState } from "./chat-view-thread-derived.hooks";
 import { usePersistComposerImageAttachments } from "./chat-view-effects.attachments.hooks";
+import { usePendingUserInputComposerSync } from "./chat-view-effects.pendingInput.hooks";
 import { shouldTickElapsedClock } from "./chat-view-agent-activity.logic";
 
 interface ChatViewEffectsInput {
@@ -69,60 +70,11 @@ export function useChatViewEffects({
   const composerMenuItemsRef = useRef(composerMenuItems);
   composerMenuItemsRef.current = composerMenuItems;
   const composerMenuItemIds = composerMenuItems.map((item) => item.id).join("|");
-  const {
-    activePendingProgress,
-    activePendingUserInput,
-    isOpencodePendingUserInputMode,
-    resetLocalDispatch,
-  } = thread;
+  const { resetLocalDispatch } = thread;
   const { closePullRequestDialog, focusComposer } = runtime;
-  const lastSyncedPendingInputRef = useRef<{
-    requestId: string | null;
-    questionId: string | null;
-  } | null>(null);
 
   usePersistComposerImageAttachments(base);
-
-  useEffect(() => {
-    const nextCustomAnswer = activePendingProgress?.customAnswer;
-    if (isOpencodePendingUserInputMode || typeof nextCustomAnswer !== "string") {
-      lastSyncedPendingInputRef.current = null;
-      return;
-    }
-
-    const nextRequestId = activePendingUserInput?.requestId ?? null;
-    const nextQuestionId = activePendingProgress?.activeQuestion?.id ?? null;
-    const questionChanged =
-      lastSyncedPendingInputRef.current?.requestId !== nextRequestId ||
-      lastSyncedPendingInputRef.current?.questionId !== nextQuestionId;
-    const textChangedExternally = promptRef.current !== nextCustomAnswer;
-
-    lastSyncedPendingInputRef.current = {
-      requestId: nextRequestId,
-      questionId: nextQuestionId,
-    };
-
-    if (!questionChanged && !textChangedExternally) {
-      return;
-    }
-
-    promptRef.current = nextCustomAnswer;
-    const nextCursor = collapseExpandedComposerCursor(nextCustomAnswer, nextCustomAnswer.length);
-    setComposerCursor(nextCursor);
-    setComposerTrigger(detectComposerTrigger(nextCustomAnswer, nextCustomAnswer.length));
-    setComposerHighlightedItemId(null);
-  }, [
-    activePendingProgress?.activeQuestion?.id,
-    activePendingProgress?.customAnswer,
-    activePendingUserInput?.requestId,
-    isOpencodePendingUserInputMode,
-    collapseExpandedComposerCursor,
-    detectComposerTrigger,
-    promptRef,
-    setComposerCursor,
-    setComposerHighlightedItemId,
-    setComposerTrigger,
-  ]);
+  usePendingUserInputComposerSync(base, thread);
 
   useEffect(() => {
     setExpandedWorkGroups({});

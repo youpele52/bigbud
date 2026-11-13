@@ -33,7 +33,6 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
     isComposerShellMode,
     activePendingProgress,
     activePendingUserInput,
-    isOpencodePendingUserInputMode,
     setComposerCursor,
     setComposerTrigger,
     setComposerHighlightedItemId,
@@ -254,19 +253,12 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
       cursorAdjacentToMention: boolean,
       terminalContextIds: string[],
     ) => {
-      if (
-        activePendingProgress?.activeQuestion &&
-        activePendingUserInput &&
-        !isOpencodePendingUserInputMode
-      ) {
+      // While a question is pending the editor text is also its active question's context.
+      if (activePendingProgress?.activeQuestion && activePendingUserInput) {
         onChangeActivePendingUserInputCustomAnswer(
           activePendingProgress.activeQuestion.id,
           nextPrompt,
-          nextCursor,
-          expandedCursor,
-          cursorAdjacentToMention,
         );
-        return;
       }
       const bangInput =
         isComposerShellMode || nextPrompt.startsWith("!") ? readBangShellInput(nextPrompt) : null;
@@ -305,7 +297,6 @@ export function useComposerCommandHandlers(input: UseComposerCommandHandlersInpu
     [
       activePendingProgress?.activeQuestion,
       activePendingUserInput,
-      isOpencodePendingUserInputMode,
       composerTerminalContexts,
       onChangeActivePendingUserInputCustomAnswer,
       setPrompt,

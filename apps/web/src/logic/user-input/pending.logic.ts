@@ -51,6 +51,18 @@ function optionIdentity(option: UserInputQuestion["options"][number], optionInde
   return option.id ? `id:${option.id}` : `index:${optionIndex}`;
 }
 
+/**
+ * Whether composer text can travel with a chosen option. Selections and text always coexist in the
+ * draft; this only decides the answer. Id-valued options (Cursor) and fields that refuse custom
+ * strings keep the bare selection, because appended text would no longer match an option.
+ */
+export function pendingUserInputAcceptsContext(question: UserInputQuestion): boolean {
+  if ((question.options ?? []).some((option) => option.id)) return false;
+  return (
+    !question.field || (question.field.type === "string" && question.field.allowCustom === true)
+  );
+}
+
 function normalizeSelectedOptionKeys(value: string[] | undefined): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -122,53 +134,54 @@ export function isPendingUserInputOptionSelected(
   return selectedOptionEntries(question, draft).some((entry) => entry.key === key);
 }
 
+/**
+ * One answer per question within today's provider shapes: the selection, the text, or both, as
+ * the label(s) then the text on a new line. Plain multi-select labels are one comma-separated
+ * string (Claude's AskUserQuestion takes strings only); typed multiselect form fields stay arrays.
+ */
 export function resolvePendingUserInputAnswer(
   question: UserInputQuestion,
   draft: PendingUserInputDraftAnswer | undefined,
 ): string | string[] | null {
-  const customAnswer =
+  const text =
     question.field?.type === "string" && draft?.customAnswer
       ? draft.customAnswer
       : normalizeDraftAnswer(draft?.customAnswer);
-  if (customAnswer) {
-    let answer: string | string[] = customAnswer;
-    if (question.field?.type === "multiselect") {
-      try {
-        const entries: unknown = JSON.parse(customAnswer);
-        if (
-          !Array.isArray(entries) ||
-          entries.length > 64 ||
-          entries.some((value) => typeof value !== "string")
-        )
-          return null;
-        answer = [...new Set([...selectedOptionValues(question, draft), ...(entries as string[])])];
-      } catch {
+  const selected = (question.options ?? []).length > 0 ? selectedOptionValues(question, draft) : [];
+  if (text && question.field?.type === "multiselect" && question.field.allowCustom) {
+    // Typed multiselect fields take custom entries as a JSON string array, merged with selections.
+    try {
+      const entries: unknown = JSON.parse(text);
+      if (
+        !Array.isArray(entries) ||
+        entries.length > 64 ||
+        entries.some((value) => typeof value !== "string")
+      )
         return null;
-      }
+      const answer = [...new Set([...selected, ...(entries as string[])])];
+      return validUserInputAnswer(question, answer) ? answer : null;
+    } catch {
+      return null;
     }
-    return validUserInputAnswer(question, answer) ? answer : null;
   }
-
-  const selectedOptions = selectedOptionValues(question, draft);
-  if (question.multiSelect) {
-    return selectedOptions.length > 0 && validUserInputAnswer(question, selectedOptions)
-      ? selectedOptions
-      : null;
+  let answer: string | string[] | null;
+  if (selected.length === 0) answer = text;
+  else if (question.field?.type === "multiselect") answer = selected;
+  else {
+    const choice = question.multiSelect ? selected.join(", ") : selected[0]!;
+    const context = normalizeDraftAnswer(text ?? undefined);
+    answer = context && pendingUserInputAcceptsContext(question) ? `${choice}\n${context}` : choice;
   }
-
-  const answer = selectedOptions[0] ?? null;
+  if (answer === null) return null;
   return validUserInputAnswer(question, answer) ? answer : null;
 }
 
 export function setPendingUserInputCustomAnswer(
   draft: PendingUserInputDraftAnswer | undefined,
   customAnswer: string,
-  question?: UserInputQuestion,
+  _question?: UserInputQuestion,
 ): PendingUserInputDraftAnswer {
-  if (customAnswer.trim().length > 0 && question?.field?.type !== "multiselect") {
-    return { customAnswer };
-  }
-
+  // Typed text is context for the active question; it never discards selected options.
   const selectedOptionKeys = normalizeSelectedOptionKeys(draft?.selectedOptionKeys);
   const selectedOptionIds = normalizeSelectedOptionLabels(draft?.selectedOptionIds);
   const selectedOptionLabels = normalizeSelectedOptionLabels(draft?.selectedOptionLabels);
@@ -219,10 +232,7 @@ export function togglePendingUserInputOptionSelection(
   );
 
   return {
-    customAnswer:
-      question.field?.type === "multiselect" && question.field.allowCustom
-        ? (draft?.customAnswer ?? "")
-        : "",
+    customAnswer: draft?.customAnswer ?? "",
     ...(selectedOptionIds.length > 0 ? { selectedOptionIds } : {}),
     ...(selectedOptionLabels.length > 0 ? { selectedOptionLabels } : {}),
     ...(hasDuplicateLabels ? { selectedOptionKeys: nextEntries.map((entry) => entry.key) } : {}),
@@ -320,4 +330,14 @@ export function derivePendingUserInputProgress(
       Boolean(resolvedAnswer) ||
       (activeQuestion ? optionalAndBlank(activeQuestion, activeDraft) : false),
   };
+}
+
+/** Immutable update of one question's draft inside the per-request draft map. */
+export function withPendingUserInputDraftAnswer(
+  existing: Record<string, Record<string, PendingUserInputDraftAnswer>>,
+  requestId: string,
+  questionId: string,
+  draft: PendingUserInputDraftAnswer,
+): Record<string, Record<string, PendingUserInputDraftAnswer>> {
+  return { ...existing, [requestId]: { ...existing[requestId], [questionId]: draft } };
 }

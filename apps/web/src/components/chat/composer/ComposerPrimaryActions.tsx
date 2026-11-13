@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { ChevronDownIcon, ChevronLeftIcon } from "lucide-react";
+import { ArrowUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Button } from "../../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
@@ -32,16 +32,12 @@ interface ComposerPrimaryActionsProps {
 }
 
 const formatPendingPrimaryActionLabel = (input: {
-  compact: boolean;
   isLastQuestion: boolean;
   isResponding: boolean;
   questionIndex: number;
 }) => {
   if (input.isResponding) {
     return "Submitting...";
-  }
-  if (input.compact) {
-    return input.isLastQuestion ? "Submit" : "Next";
   }
   return input.isLastQuestion
     ? input.questionIndex > 0
@@ -109,21 +105,27 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             </Button>
           )
         ) : null}
+        {/* Narrow footers get an icon with the full label as its accessible name. */}
         <Button
           type="submit"
-          size="sm"
-          className={cn("rounded-full", compact ? "px-3" : "px-4")}
+          size={compact ? "icon-sm" : "sm"}
+          className={cn("rounded-full", !compact && "px-4")}
+          aria-label={compact ? formatPendingPrimaryActionLabel(pendingAction) : undefined}
+          aria-busy={pendingAction.isResponding || undefined}
           disabled={
             pendingAction.isResponding ||
             (pendingAction.isLastQuestion ? !pendingAction.isComplete : !pendingAction.canAdvance)
           }
         >
-          {formatPendingPrimaryActionLabel({
-            compact,
-            isLastQuestion: pendingAction.isLastQuestion,
-            isResponding: pendingAction.isResponding,
-            questionIndex: pendingAction.questionIndex,
-          })}
+          {compact ? (
+            pendingAction.isLastQuestion ? (
+              <ArrowUpIcon className="size-3.5" />
+            ) : (
+              <ChevronRightIcon className="size-3.5" />
+            )
+          ) : (
+            formatPendingPrimaryActionLabel(pendingAction)
+          )}
         </Button>
       </div>
     );
