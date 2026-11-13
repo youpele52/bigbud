@@ -78,14 +78,26 @@ export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     availability: [
       "Available through provider orchestration bridges. OpenCode V2 requires bootstrap ABI 4; retained earlier bootstraps keep their original tool surface.",
     ],
-    triggers: ["A chart, diagram, table or interactive visual would explain the answer better."],
+    triggers: [
+      "A chart, diagram, table or interactive visual would explain the answer better.",
+      "Results gathered from several web sources or searches.",
+      "A comparison across options, providers or products.",
+      "A small set of metrics that reads better as tiles or a chart.",
+    ],
     risk: "reversible-write",
     workflow:
-      "Call render_html with title and a self-contained HTML fragment (up to 24000 characters). bigbud supplies theme variables and 14px typography. Prefer inherited fonts and var(--background), var(--foreground), var(--primary), var(--border), var(--muted) and var(--muted-foreground). Prefer HTML/CSS; inline JavaScript is supported. Publication is immediate, not a preview.",
+      "Call render_html with title and a self-contained HTML fragment (up to 24000 characters). Prefer HTML/CSS; inline JavaScript is supported. Publication is immediate, not a preview. Recipe: a heading, then source cards or a comparison table, with a one-line takeaway per item. bigbud supplies theme variables and 14px typography; inherit fonts and use var(--background), var(--foreground), var(--card), var(--muted), var(--muted-foreground), var(--border), var(--primary), var(--accent), var(--secondary), var(--destructive), var(--radius) for corners and var(--chart-1) to var(--chart-5) for series colours. Link sources with ordinary <a href> to http or https URLs; they open in the user's browser when the user clicks them, and #fragment links scroll within the visual. Keep under the 24000-character limit, use no external assets, and embed images as data URLs.",
     permissions:
       "Only the authenticated current thread and active turn. Sandbox has no host access, popups or forms. External navigation and ordinary external resources are blocked, but this is not zero-network isolation: browser APIs such as WebRTC remain available. Do not include credentials. Images must be embedded data URLs.",
-    examples: ["Publish a comparison table or a self-contained interactive chart."],
-    antiPatterns: ["Do not use external scripts, remote assets, filesystem paths or host APIs."],
+    examples: [
+      "Publish a comparison table or a self-contained interactive chart.",
+      "Summarise five search results as source cards with a one-line takeaway each.",
+      "Compare three providers in a table with a recommendation row.",
+    ],
+    antiPatterns: [
+      "Do not use external scripts, remote assets, filesystem paths or host APIs.",
+      "Never use render_html to ask the user a question or collect input. Use your native question tool; bigbud renders it with clickable options and a free-text field with attachments.",
+    ],
   }),
   threadToolTrack({
     id: "system.resources",

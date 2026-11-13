@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HtmlRenderInput } from "@bigbud/contracts/orchestration/htmlRender.ts";
+import { openLinkFromClick } from "~/lib/openLink";
 import { HTML_RENDER_THEME_PROPERTIES } from "./HtmlRenderFrame.document";
 import { buildHtmlRenderGuard } from "./HtmlRenderFrame.guard";
+import { HTML_RENDER_LINK_INTERVAL_MS, resolveHtmlRenderLink } from "./HtmlRenderFrame.links";
 
 /** Opaque-origin frame: scripts never receive application state or a credential-bearing URL. */
 export function HtmlRenderFrame({ content }: { content: HtmlRenderInput }) {
   const frame = useRef<HTMLIFrameElement>(null);
+  const lastLinkOpenedAt = useRef(Number.NEGATIVE_INFINITY);
   const [height, setHeight] = useState(360);
   const document = useMemo(() => buildHtmlRenderGuard(content.html), [content.html]);
   function sendTheme() {
@@ -29,12 +32,17 @@ export function HtmlRenderFrame({ content }: { content: HtmlRenderInput }) {
       attributes: true,
       attributeFilter: ["class", "style"],
     });
+    function openRequestedLink(value: unknown) {
+      const href = resolveHtmlRenderLink(value);
+      const now = Date.now();
+      if (!href || now - lastLinkOpenedAt.current < HTML_RENDER_LINK_INTERVAL_MS) return;
+      lastLinkOpenedAt.current = now;
+      openLinkFromClick(href);
+    }
     function receive(event: MessageEvent) {
-      if (
-        event.source !== frame.current?.contentWindow ||
-        event.data?.type !== "bigbud:html-height"
-      )
-        return;
+      if (event.source !== frame.current?.contentWindow) return;
+      if (event.data?.type === "bigbud:open-link") return openRequestedLink(event.data.href);
+      if (event.data?.type !== "bigbud:html-height") return;
       const value = event.data.height;
       if (typeof value === "number" && Number.isFinite(value))
         setHeight(Math.max(120, Math.min(1200, Math.ceil(value))));

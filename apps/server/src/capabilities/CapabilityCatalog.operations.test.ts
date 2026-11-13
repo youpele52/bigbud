@@ -89,4 +89,20 @@ describe("capability catalog operations", () => {
     expect(guide.content).toContain("Do not archive a thread merely because its task is complete");
     expect(guide.content).not.toContain("targetThreadId");
   });
+
+  it("steers render_html toward research visuals with a style recipe and away from questions", () => {
+    const guide = readCapabilityGuide({ capabilityId: "chat.render.html", section: "full" });
+    expect(guide.content).toContain("several web sources or searches");
+    expect(guide.content).toContain("comparison across options, providers or products");
+    expect(guide.content).toContain("var(--radius)");
+    expect(guide.content).toContain("var(--chart-1) to var(--chart-5)");
+    expect(guide.content).toContain("they open in the user's browser when the user clicks them");
+    expect(guide.content).toContain("#fragment links scroll within the visual");
+    expect(guide.content).toContain("Summarise five search results as source cards");
+    expect(guide.content).toContain("Compare three providers in a table with a recommendation row");
+    expect(guide.content).toContain(
+      "Never use render_html to ask the user a question or collect input",
+    );
+    expect(guide.content.length).toBeLessThanOrEqual(CAPABILITY_GUIDE_CHARACTER_LIMIT);
+  });
 });

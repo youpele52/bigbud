@@ -21,6 +21,11 @@ addEventListener('message', function(event) {
     frame.contentWindow?.postMessage(theme, '*');
   } else if (event.source === frame.contentWindow && event.data?.type === 'bigbud:html-height') {
     parent.postMessage({type:'bigbud:html-height',height:event.data.height}, '*');
+  } else if (event.source === frame.contentWindow && event.data?.type === 'bigbud:open-link') {
+    // Only a real gesture inside this visual activates the guard; scripts cannot self-activate,
+    // and activity elsewhere in the app does not reach this opaque-origin frame.
+    if (typeof event.data.href !== 'string' || navigator.userActivation?.isActive !== true) return;
+    parent.postMessage({type:'bigbud:open-link',href:event.data.href}, '*');
   }
 });
 frame.addEventListener('load', () => { if (theme) frame.contentWindow?.postMessage(theme, '*'); });

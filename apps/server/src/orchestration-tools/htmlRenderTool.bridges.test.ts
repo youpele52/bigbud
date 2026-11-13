@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { HTML_RENDER_TOOL_DESCRIPTION } from "./htmlRenderTool.shared.ts";
 import { renderPiOrchestrationBridgeSource } from "./PiOrchestrationBridge.template.ts";
 import {
   renderOpencodeOrchestrationBridgeFiles,
@@ -19,5 +20,19 @@ it("includes legacy OpenCode publication in emitted files and managed inventory"
   );
   expect(files[".bigbud/opencode-orchestration-runtime.ts"]).toContain(
     "action: 'render_html', htmlArguments, invocationId",
+  );
+});
+it("tells every provider bridge that render_html is never a question channel", () => {
+  expect(HTML_RENDER_TOOL_DESCRIPTION).toContain(
+    "Never use render_html to ask the user a question or collect input",
+  );
+  expect(HTML_RENDER_TOOL_DESCRIPTION).toContain(
+    "links to http or https URLs open in the user's browser when clicked",
+  );
+  const source = renderPiOrchestrationBridgeSource(config);
+  expect(source).toContain(JSON.stringify(HTML_RENDER_TOOL_DESCRIPTION));
+  const files = renderOpencodeOrchestrationBridgeFiles(config);
+  expect(files[".opencode/tools/render_html.ts"]).toContain(
+    JSON.stringify(HTML_RENDER_TOOL_DESCRIPTION),
   );
 });
