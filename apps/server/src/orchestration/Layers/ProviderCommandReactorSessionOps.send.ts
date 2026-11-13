@@ -199,9 +199,13 @@ export const sendTurnAttempt = (
       ]),
     );
     const normalizedInput = toNonEmptyProviderInput(
-      resourceContext.block
-        ? `${resourceContext.block}\n\n${providerInputWithReferencedThreads}`
-        : providerInputWithReferencedThreads,
+      [
+        "Always use full absolute filesystem paths on the file's host for Markdown file-link targets, inline file references, and HTML file-link hrefs (including render_html); never use relative paths.",
+        resourceContext.block,
+        providerInputWithReferencedThreads,
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
     );
 
     const providerAttachments = normalizedAttachments.filter(
