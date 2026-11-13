@@ -9,6 +9,7 @@ import {
 } from "./htmlRenderTool.shared.ts";
 import { renderPiBrowserToolSource } from "./orchestrationBrowserTool.shared.ts";
 import { renderPiOrganizationToolsSource } from "./PiOrchestrationBridge.template.organization.ts";
+import { renderPiAskUserToolSource } from "./PiOrchestrationBridge.template.question.ts";
 import { renderRenameThreadResultTextSource } from "./threadRenameTool.shared.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
@@ -322,6 +323,8 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "",
     renderPiComputerUseTool(),
     "",
+    renderPiAskUserToolSource(),
+    "",
     renderPiBrowserToolSource(),
     "",
     "export default function bigbudOrchestrationBridge(pi) {",
@@ -349,6 +352,7 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "  pi.registerTool(pinThreadTool);",
     "  pi.registerTool(unpinThreadTool);",
     "  pi.registerTool(updatePlanTool);",
+    "  pi.registerTool(askUserTool);",
     "  pi.registerTool(computerUseTool);",
     "  pi.registerTool(browserTool);",
     "}",

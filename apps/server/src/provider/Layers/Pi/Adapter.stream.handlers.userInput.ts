@@ -15,6 +15,12 @@ import { normalizeString, toMessage } from "./Adapter.utils.ts";
 import { emitWithTurnAppend } from "./Adapter.stream.handlers.ts";
 import { mapPiAsyncSubagentWidget } from "./Adapter.stream.asyncSubagents.ts";
 
+/**
+ * Pi dialogs must return exactly one listed option, so options carry ids equal to their labels:
+ * bigbud then answers with the bare choice and never appends composer text to it.
+ */
+const piOption = (label: string) => ({ id: label, label, description: label });
+
 function buildQuestion(message: PiRpcExtensionUIRequest): UserInputQuestion | undefined {
   switch (message.method) {
     case "select": {
@@ -22,7 +28,7 @@ function buildQuestion(message: PiRpcExtensionUIRequest): UserInputQuestion | un
       const options = message.options
         .map((entry) => normalizeString(entry))
         .filter((entry): entry is string => entry !== undefined)
-        .map((entry) => ({ label: entry, description: entry }));
+        .map(piOption);
       return {
         id: USER_INPUT_FALLBACK_QUESTION_ID,
         header: title,
@@ -37,10 +43,7 @@ function buildQuestion(message: PiRpcExtensionUIRequest): UserInputQuestion | un
         id: USER_INPUT_FALLBACK_QUESTION_ID,
         header: title,
         question: body ?? title,
-        options: [
-          { label: "Yes", description: "Yes" },
-          { label: "No", description: "No" },
-        ],
+        options: [piOption("Yes"), piOption("No")],
       };
     }
     case "input": {
