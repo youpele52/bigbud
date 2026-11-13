@@ -31,6 +31,8 @@ import {
   selectAutoApprovedPermissionOption,
 } from "./Adapter.helpers.ts";
 import { forkNotificationFiber, logNative } from "./Adapter.startSession.events.ts";
+import { DEVIN_ELICITATION_CAPABILITIES } from "./Adapter.elicitation.logic.ts";
+import { registerDevinElicitationHandler } from "./Adapter.startSession.elicitation.ts";
 
 interface StartSessionDeps {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
@@ -130,9 +132,11 @@ export function makeStartSessionEffect(
       childProcessSpawner: deps.childProcessSpawner,
       cwd: workspaceSession.sessionCwd,
       spawnCwd: workspaceSession.processCwd,
-      ...(workspaceSession.remoteBridge
-        ? { clientCapabilities: workspaceSession.remoteBridge.clientCapabilities }
-        : {}),
+      // Devin only offers ask_user_question to clients that advertise form elicitation.
+      clientCapabilities: {
+        ...workspaceSession.remoteBridge?.clientCapabilities,
+        elicitation: DEVIN_ELICITATION_CAPABILITIES,
+      },
       ...(resumeSessionId ? { resumeSessionId } : {}),
       mcpServers: orchestration.mcpServers,
       clientInfo: { name: "bigbud", version: "0.0.0" },
@@ -216,6 +220,16 @@ export function makeStartSessionEffect(
           };
         }),
       );
+      yield* registerDevinElicitationHandler({
+        acp,
+        threadId: input.threadId,
+        sessionEpoch,
+        pendingUserInputs,
+        nativeEventLogger: deps.nativeEventLogger,
+        getActiveTurnId: () => ctx?.activeTurnId,
+        makeEventStamp: deps.makeEventStamp,
+        offerRuntimeEvent: deps.offerRuntimeEvent,
+      });
       return yield* acp.start();
     }).pipe(
       Effect.mapError((error) =>
