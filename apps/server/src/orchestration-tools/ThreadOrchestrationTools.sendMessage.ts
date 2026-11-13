@@ -68,7 +68,7 @@ export const sendThreadMessageViaOrchestration = Effect.fn("sendThreadMessageVia
     if (committedOutcome) return committedOutcome;
     const access = yield* requireThreadCoordinationAccess({
       ...input,
-      mode: "write",
+      mode: "message",
       callerThread: caller,
       targetThread: target,
       targetProjectId: target.projectId,

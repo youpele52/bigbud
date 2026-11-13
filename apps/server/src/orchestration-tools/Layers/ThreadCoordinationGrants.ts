@@ -23,6 +23,8 @@ interface GrantsState {
   readonly grants: ReadonlyMap<ThreadId, ReadonlySet<ProjectId>>;
   readonly challenges: ReadonlyMap<string, ThreadCoordinationChallenge>;
   readonly history: ReadonlyMap<ThreadId, ReadonlyArray<IssuedRecord>>;
+  /** Unordered thread pairs (`lineKey`) with an open two-way messaging line. */
+  readonly lines: ReadonlySet<string>;
   readonly issueCounter: number;
 }
 
@@ -33,6 +35,10 @@ interface IssuedChallenge {
 
 const pairKey = (callerThreadId: ThreadId, projectId: ProjectId) =>
   `${callerThreadId}\n${projectId}`;
+
+/** Order-independent, so a line opened by either thread is found from the other. */
+const lineKey = (threadA: ThreadId, threadB: ThreadId) =>
+  threadA < threadB ? `${threadA}\n${threadB}` : `${threadB}\n${threadA}`;
 
 const withoutExpired = (
   challenges: ReadonlyMap<string, ThreadCoordinationChallenge>,
@@ -83,6 +89,7 @@ export const makeThreadCoordinationGrants = (
       grants: new Map(),
       challenges: new Map(),
       history: new Map(),
+      lines: new Set(),
       issueCounter: 0,
     });
 
@@ -189,6 +196,18 @@ export const makeThreadCoordinationGrants = (
         ),
       grant,
       clearChallenge,
+      openLine: (threadA, threadB) =>
+        Ref.update(state, (current) => {
+          const key = lineKey(threadA, threadB);
+          if (threadA === threadB || current.lines.has(key)) return current;
+          return { ...current, lines: new Set([...current.lines, key]) };
+        }),
+      hasLine: (threadA, threadB) =>
+        Ref.get(state).pipe(
+          Effect.map(
+            (current) => threadA !== threadB && current.lines.has(lineKey(threadA, threadB)),
+          ),
+        ),
     });
   });
 

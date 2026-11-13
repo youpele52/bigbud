@@ -1,16 +1,10 @@
-import {
-  ApprovalRequestId,
-  CommandId,
-  EventId,
-  MessageId,
-  type ThreadId,
-} from "@bigbud/contracts/core/baseSchemas.ts";
-import type { OrchestrationCommand } from "@bigbud/contracts";
+import { CommandId, MessageId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
 
 import { makeThreadCoordinationGrants } from "./Layers/ThreadCoordinationGrants.ts";
 import { isThreadCoordinationRefusal } from "./ThreadCoordinationConfirmation.result.ts";
+import { askQuestion, respond } from "./ThreadOrchestrationTools.crossProject.test.helpers.ts";
 import { renameThreadViaOrchestration } from "./ThreadOrchestrationTools.rename.ts";
 import { sendThreadMessageViaOrchestration } from "./ThreadOrchestrationTools.sendMessage.ts";
 import {
@@ -21,49 +15,6 @@ import {
 import { resetThreadTitleLockForTests } from "./ThreadTitleLock.ts";
 
 const at = "2026-11-10T12:00:00.000Z";
-
-const askQuestion = (threadId: ThreadId, requestId: string, question: string, kind: string) =>
-  ({
-    type: "thread.activity.append",
-    commandId: CommandId.makeUnsafe(`provider:activity:${requestId}:${kind}`),
-    threadId,
-    activity: {
-      id: EventId.makeUnsafe(`activity-${requestId}-${kind}`),
-      tone: "info",
-      kind,
-      summary: kind,
-      payload:
-        kind === "user-input.requested"
-          ? {
-              requestId,
-              questions: [
-                {
-                  id: question,
-                  header: "Confirm",
-                  question,
-                  options: [
-                    { label: "Allow", description: "Allow it" },
-                    { label: "Deny", description: "Deny it" },
-                  ],
-                },
-              ],
-            }
-          : { requestId, answers: { [question]: "Allow" } },
-      turnId: null,
-      createdAt: at,
-    },
-    createdAt: at,
-  }) as OrchestrationCommand;
-
-const respond = (threadId: ThreadId, requestId: string, answers: Record<string, unknown>) =>
-  ({
-    type: "thread.user-input.respond",
-    commandId: CommandId.makeUnsafe(`client-respond-${requestId}`),
-    threadId,
-    requestId: ApprovalRequestId.makeUnsafe(requestId),
-    answers,
-    createdAt: at,
-  }) as OrchestrationCommand;
 
 it("grants a cross-project pair only from a recorded client answer in SQLite", async () => {
   await withDormantThreads(

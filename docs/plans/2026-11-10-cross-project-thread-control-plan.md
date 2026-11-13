@@ -434,3 +434,21 @@ Codex Default mode (CLI 0.167.0+), Pi (`ask_user`) and Devin (`ask_user_question
 - **Live finding (dev app):** OpenCode V2 asked through its `question` tool in 2 of 2 trials, with one full Allow round trip verified. Codex Default mode (CLI 0.167.0, feature flag and revised instructions confirmed in the provider log) took the generic "If you have no question tool… ask in chat" sentence in the result and asked in plain chat, even though `request_user_input` was available.
 - **Change:** `ThreadOrchestrationTools.access.ts` passes the caller thread's provider (`session.providerName`, else `modelSelection.provider`). `ThreadCoordinationConfirmation.questionTool.ts` maps providers to verified question tools: Claude `AskUserQuestion`, Codex `request_user_input`, Devin `ask_user_question`, OpenCode v1/V2 `question`, Pi `ask_user`. For these, the `instructions` make that named tool the next step and drop the generic chat escape. Codex alone keeps a fallback, "Only if `request_user_input` is not in your tool list…", because the server cannot see the CLI version. Copilot, Cursor, Muse and CLIProxy keep the generic wording until their tool names are verified.
 - Tests: `ThreadCoordinationConfirmation.questionTool.test.ts`. Re-test with about 5 Codex trials, including one Deny.
+
+## Revision 6: two-way messaging line (2026-11-13)
+
+**Bug (reproduced in dev data):** thread `df1e1712` in project bigbud got the user's Allow and messaged `ed7a158b` in project clawded (events 549148 and 549199, a verified `crossThreadAgent` origin). When `ed7a158b` replied with `send_thread_message`, bigbud asked again. Approvals were keyed only one way, as (calling thread → target project), so the reply was a new, unapproved pair. The user's own attached request (decision 3a) recorded nothing at all, so its replies were always asked.
+
+**User decisions:** a line between the two threads only, not their projects; messaging only; it lasts until bigbud restarts.
+
+**Fix:**
+
+- `ThreadCoordinationGrants` stores unordered thread pairs with `openLine` and `hasLine`, in memory like grants.
+- `requireThreadCoordinationAccess` has a `message` mode, used only by `send_thread_message`. A cross-project message is allowed without asking when the two threads share an open line, or when the target is the thread that created the caller (its direct delegation parent, so a child created in another project can always report back).
+- Any allowed cross-project message opens the line, whether allowed by a grant, a verified answer or the user's attached request.
+- Rename, move, snooze and create keep the project-grant rule. A line never covers other threads in either project, and it is not a project grant.
+- Guidance tells agents the line exists and its limits.
+
+**Why not whole projects both ways:** one Allow for "A may control project B" would also let every thread in B, including ones the user never looked at, send instructions into any thread in A. The line opens exactly the conversation the user approved.
+
+**Tests:** `ThreadOrchestrationTools.messagingLine.integration.test.ts` covers the Allow-opened line both ways, an untouched third thread, rename still gated, no project grant, a fresh service after restart, Deny opening no line, an attached request opening a line, and a child messaging its creator. The grants unit test covers lines. The shared question and answer builders moved to `ThreadOrchestrationTools.crossProject.test.helpers.ts`.

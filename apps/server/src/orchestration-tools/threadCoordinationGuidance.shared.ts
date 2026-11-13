@@ -13,9 +13,15 @@ export const CROSS_PROJECT_THREAD_WRITE_GUIDANCE = [
   "When that happens, ask the user about one project at a time, showing the exact `question` text, which names the project: use your question tool with the options `Allow` and `Deny` (one single-choice question; bigbud shows it in its question panel), or, only if you have no question tool, ask the user in chat to reply yes or no. If several calls need it, retry the one you ask about first and use the `question` from that new result. Never ask the user to type a code; the code in the question is only a reference.",
   "After the user answers, retry the same call with the same arguments. If a retry still returns `confirmation_required` after they answered (for example, in a provider's own prompt rather than bigbud's question card), ask them to reply yes or no in chat, then retry.",
   "Never answer on the user's behalf. `confirmation_denied` means the user said no to that request: do not retry it or ask about it again unless the user brings it up. A different, later request may ask again.",
-  "One confirmation lets this thread change any thread in that project until bigbud restarts; the other thread keeps its own runtime mode and approvals. Reading a thread grants nothing, and a request the user attached covers only that request.",
+  "One confirmation lets this thread change any thread in that project until bigbud restarts; the other thread keeps its own runtime mode and approvals.",
+  "Once a message between you and a thread in another project is allowed, you two can keep messaging each other in both directions without asking until bigbud restarts, and a thread you created in another project can always message you back. This covers `send_thread_message` between those two threads only, never renaming, moving, snoozing or creating threads, and never other threads in either project.",
+  "Reading a thread grants nothing, and a request the user attached covers only that request, plus the messaging line it opens.",
   "This rule supersedes older tool descriptions that say cross-project targets are unavailable.",
 ].join(" ");
+
+/** `send_thread_message` only: the two-way messaging line never covers other thread changes. */
+export const CROSS_PROJECT_MESSAGING_LINE_TOOL_NOTE =
+  "Once a message between two threads in different projects is allowed, those two threads can message each other in both directions without asking until bigbud restarts.";
 
 /** Short form for tool descriptions. */
 export const CROSS_PROJECT_TARGET_TOOL_NOTE =

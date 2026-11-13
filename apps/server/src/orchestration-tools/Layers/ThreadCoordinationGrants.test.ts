@@ -144,4 +144,21 @@ describe("ThreadCoordinationGrants", () => {
     ).toEqual([projectC]);
     expect(await Effect.runPromise(grants.listIssuedChallenges(otherCaller))).toEqual([]);
   });
+
+  it("opens a two-way line between exactly two threads, independent of a project grant", async () => {
+    const grants = Effect.runSync(makeThreadCoordinationGrants());
+    const has = (a: ThreadId, b: ThreadId) => Effect.runPromise(grants.hasLine(a, b));
+    expect(await has(caller, otherCaller)).toBe(false);
+    await Effect.runPromise(grants.openLine(caller, otherCaller));
+    await Effect.runPromise(grants.openLine(otherCaller, caller));
+    expect(await has(caller, otherCaller)).toBe(true);
+    expect(await has(otherCaller, caller)).toBe(true);
+    const third = ThreadId.makeUnsafe("third");
+    expect(await has(caller, third)).toBe(false);
+    expect(await has(otherCaller, third)).toBe(false);
+    // A line is not a project grant, and a thread never has a line with itself.
+    expect(await Effect.runPromise(grants.hasGrant(caller, projectB))).toBe(false);
+    await Effect.runPromise(grants.openLine(third, third));
+    expect(await has(third, third)).toBe(false);
+  });
 });

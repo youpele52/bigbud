@@ -46,7 +46,8 @@ export interface ThreadCoordinationChallengeRequest {
 
 /**
  * In-memory record of user confirmations that let a caller thread write to threads in another
- * project. Grants and challenges live until the server process restarts, by design.
+ * project, and of the messaging lines those approvals open between two threads. Grants,
+ * challenges and lines live until the server process restarts, by design.
  */
 export interface ThreadCoordinationGrantsShape {
   readonly hasGrant: (callerThreadId: ThreadId, projectId: ProjectId) => Effect.Effect<boolean>;
@@ -79,6 +80,13 @@ export interface ThreadCoordinationGrantsShape {
     code?: string,
     resolution?: ThreadCoordinationResolution,
   ) => Effect.Effect<void>;
+  /**
+   * Opens a two-way messaging line between two threads in different projects, after the user
+   * approved a message between them. Order does not matter. Idempotent.
+   */
+  readonly openLine: (threadA: ThreadId, threadB: ThreadId) => Effect.Effect<void>;
+  /** Whether an open line lets these two threads message each other, in either direction. */
+  readonly hasLine: (threadA: ThreadId, threadB: ThreadId) => Effect.Effect<boolean>;
 }
 
 export class ThreadCoordinationGrants extends ServiceMap.Service<

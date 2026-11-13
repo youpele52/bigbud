@@ -3,7 +3,10 @@ import {
   writeThreadOrchestrationToolAuth,
   type ThreadToolWorkspaceBinding,
 } from "./ThreadOrchestrationToolAuth.ts";
-import { CROSS_PROJECT_TARGET_TOOL_NOTE } from "./threadCoordinationGuidance.shared.ts";
+import {
+  CROSS_PROJECT_MESSAGING_LINE_TOOL_NOTE,
+  CROSS_PROJECT_TARGET_TOOL_NOTE,
+} from "./threadCoordinationGuidance.shared.ts";
 export { renderMcpInvocationIdentitySource } from "./threadOrchestrationBridge.invocationIdentity.ts";
 
 export interface ThreadOrchestrationHttpConfig {
@@ -119,7 +122,7 @@ export const GET_THREAD_STATUS_TOOL_DESCRIPTION =
 export const FROZEN_V1_SEND_THREAD_MESSAGE_TOOL_DESCRIPTION =
   "Send a follow-up message to an existing bigbud thread in the current project or a directly delegated child. Starts it when safely idle or queues it durably while busy.";
 
-export const SEND_THREAD_MESSAGE_TOOL_DESCRIPTION = `Send a follow-up message to an existing bigbud thread in any project. Starts it when safely idle or queues it durably while busy. ${CROSS_PROJECT_TARGET_TOOL_NOTE}`;
+export const SEND_THREAD_MESSAGE_TOOL_DESCRIPTION = `Send a follow-up message to an existing bigbud thread in any project. Starts it when safely idle or queues it durably while busy. ${CROSS_PROJECT_TARGET_TOOL_NOTE} ${CROSS_PROJECT_MESSAGING_LINE_TOOL_NOTE}`;
 
 export const LIST_PINNED_THREADS_TOOL_DESCRIPTION =
   "List pinned bigbud threads globally across all projects. This is read-only.";
