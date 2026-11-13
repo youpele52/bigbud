@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { lstat, readFile, writeFile, rename, unlink, mkdir, rmdir } from "node:fs/promises";
+import { lstat, readFile, writeFile, rename, unlink } from "node:fs/promises";
 import { Schema } from "effect";
+
+import { acquireProviderMigrationLock } from "./providerConfigMigration.lock.ts";
 
 export type ProviderConfig = Record<string, unknown>;
 const decodeConfig = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown));
@@ -82,20 +84,12 @@ export async function withProviderConfigMigration(key: string, migrate: () => Pr
   const pending = pendingMigrations.get(key);
   if (pending) return pending;
   const task = (async () => {
-    const lock = `${key}.bigbud-migration.lock`;
-    try {
-      await mkdir(lock, { mode: 0o700 });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-      throw new Error(
-        `Provider migration lock unavailable: ${lock}. Check for another server or a stale lock before retrying.`,
-        { cause: error },
-      );
-    }
+    const release = await acquireProviderMigrationLock(`${key}.bigbud-migration.lock`);
+    if (!release) return;
     try {
       await migrate();
     } finally {
-      await rmdir(lock);
+      await release();
     }
   })();
   pendingMigrations.set(key, task);
