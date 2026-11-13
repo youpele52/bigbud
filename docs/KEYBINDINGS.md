@@ -51,6 +51,12 @@ These are example overrides, not the defaults. The server merges custom rules wi
 
 The authoritative defaults are [`DEFAULT_KEYBINDINGS`](../apps/server/src/keybindings/keybindings.ts). Existing user overrides can differ from these defaults.
 
+## Double Escape to stop
+
+While the main chat, a side chat, or the compact assistant window shows its Stop button, pressing `Esc` twice within 500 ms stops the thread exactly like clicking Stop, including the confirmation when background subagents are running. A hint appears, and is announced to screen readers, after the first press. This gesture is built in and not configurable through `keybindings.json`; Automations composers and settings do not use it.
+
+It acts on the chat area that has focus, otherwise the main chat composer. A single `Esc` keeps its usual meaning: Escapes that close a menu, dialog, popup, toast, or editor, or that reach the terminal, an unrelated text field, or the browser panel's page, do not count. Auto-repeat is ignored; modified Escapes, Escapes during IME composition, any other key, and any click or tap reset the first press.
+
 ## Available commands
 
 - `terminal.toggle`, `terminalPanel.toggle`: toggle the terminal drawer or terminal panel.
