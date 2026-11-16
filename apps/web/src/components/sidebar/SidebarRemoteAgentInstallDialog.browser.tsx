@@ -34,6 +34,18 @@ function installRequest(): SidebarRemoteAgentInstallRequest {
   };
 }
 
+function manualInstallResult() {
+  return {
+    executionTargetId: "ssh:example",
+    version: "0.3.4",
+    command: "curl -fsSL https://bigbud.app/remote-agent.sh | BIGBUD_AGENT_VERSION=0.3.4 sh",
+    scriptUrl: "https://bigbud.app/remote-agent.sh",
+    releaseScriptUrl:
+      "https://github.com/youpele52/bigbud/releases/download/v0.3.4/remote-agent.sh",
+    inboxRelativePath: "~/.bigbud/agent/inbox",
+  };
+}
+
 describe("SidebarRemoteAgentInstallDialog", () => {
   it("warns when setup connects using the prior healthy agent", async () => {
     const request = installRequest();
@@ -76,7 +88,10 @@ describe("SidebarRemoteAgentInstallDialog", () => {
     const request = installRequest();
     const installRemoteAgent = vi.fn().mockRejectedValue(new Error("Checksum verification failed"));
     const connectRemoteAgent = vi.fn();
-    api.current = { server: { installRemoteAgent, connectRemoteAgent } } as never;
+    const getRemoteAgentManualInstall = vi.fn().mockResolvedValue(manualInstallResult());
+    api.current = {
+      server: { installRemoteAgent, connectRemoteAgent, getRemoteAgentManualInstall },
+    } as never;
     const onDecline = vi.fn();
     const onInstalled = vi.fn();
     await render(
@@ -98,7 +113,8 @@ describe("SidebarRemoteAgentInstallDialog", () => {
     expect(connectRemoteAgent).not.toHaveBeenCalled();
     expect(onDecline).not.toHaveBeenCalled();
     expect(onInstalled).not.toHaveBeenCalled();
-    await expect.element(page.getByRole("button", { name: "Download update" })).toBeEnabled();
+    await expect.element(page.getByText(manualInstallResult().command)).toBeVisible();
+    await expect.element(page.getByRole("button", { name: "Finish install/update" })).toBeEnabled();
   });
 
   it("waits for runtime preparation and health verification before reporting a connection", async () => {

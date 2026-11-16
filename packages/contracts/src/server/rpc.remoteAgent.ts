@@ -2,6 +2,11 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 
 import { WS_METHODS } from "../constants/websocket.constant";
 import {
+  ServerGetRemoteAgentManualInstallInput,
+  ServerGetRemoteAgentManualInstallResult,
+} from "./server.remoteAgentInstall";
+import {
+  ServerInstallRemoteAgentError,
   ServerGetRemoteAgentUpdateStatusError,
   ServerGetRemoteAgentUpdateStatusInput,
   ServerRemoteAgentUpdateStatus,
@@ -65,5 +70,14 @@ export const WsServerListDisconnectedExecutionTargetsRpc = Rpc.make(
     payload: ServerListDisconnectedExecutionTargetsInput,
     success: ServerListDisconnectedExecutionTargetsResult,
     error: ServerRemoteConnectionError,
+  },
+);
+
+export const WsServerGetRemoteAgentManualInstallRpc = Rpc.make(
+  WS_METHODS.serverGetRemoteAgentManualInstall,
+  {
+    payload: ServerGetRemoteAgentManualInstallInput,
+    success: ServerGetRemoteAgentManualInstallResult,
+    error: ServerInstallRemoteAgentError,
   },
 );

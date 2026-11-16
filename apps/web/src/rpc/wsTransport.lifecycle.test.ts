@@ -115,6 +115,7 @@ describe("WsTransport dispose ordering", () => {
     });
     const transport = {
       disposed: false,
+      scope: { dispose: () => callOrder.push("owner:dispose") },
       disposalController: new AbortController(),
       subscriptionControllers: new Set<AbortController>(),
       session: {
@@ -139,7 +140,7 @@ describe("WsTransport dispose ordering", () => {
       expect(runtime.dispose).toHaveBeenCalledTimes(1);
     });
 
-    expect(callOrder).toEqual(["close:start", "close:done", "runtime:dispose"]);
+    expect(callOrder).toEqual(["close:start", "close:done", "runtime:dispose", "owner:dispose"]);
     expect(closeSession).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,6 +8,9 @@
  * @see APP_SERVER_NAME
  */
 export const WS_METHODS = {
+  serverListRemoteBackendRelayProfiles: "server.listRemoteBackendRelayProfiles",
+  serverOpenRemoteBackendRelay: "server.openRemoteBackendRelay",
+  serverCloseRemoteBackendRelay: "server.closeRemoteBackendRelay",
   // Project registry methods
   projectsList: "projects.list",
   projectsAdd: "projects.add",
@@ -68,6 +71,10 @@ export const WS_METHODS = {
   terminalWslDistributions: "terminal.wslDistributions",
   terminalShellProfiles: "terminal.shellProfiles",
   terminalSnapshot: "terminal.snapshot",
+  terminalRemoteInventory: "terminal.remoteInventory",
+  terminalRemoteAttach: "terminal.remoteAttach",
+  terminalRemoteDetach: "terminal.remoteDetach",
+  terminalRemoteStop: "terminal.remoteStop",
   terminalRecovery: "terminal.recovery",
   terminalWrite: "terminal.write",
   terminalResize: "terminal.resize",
@@ -91,6 +98,7 @@ export const WS_METHODS = {
   serverListConnectedSshMonitors: "server.listConnectedSshMonitors",
   serverListRemoteFolders: "server.listRemoteFolders",
   serverInstallRemoteAgent: "server.installRemoteAgent",
+  serverGetRemoteAgentManualInstall: "server.getRemoteAgentManualInstall",
   serverConnectRemoteAgent: "server.connectRemoteAgent",
   serverRestartRemoteAgent: "server.restartRemoteAgent",
   serverGetRemoteAgentRestartStatus: "server.getRemoteAgentRestartStatus",

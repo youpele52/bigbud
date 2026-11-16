@@ -10,6 +10,7 @@ import type {
   DesktopUpdateStatus,
 } from "./ipc.desktop";
 import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate";
+import type { DesktopCommandLineBridge } from "./ipc.desktopCommandLine";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
 import type { DesktopSystemMonitorBridge } from "../system-monitor/types";
 import type { DesktopScreenshotBridge } from "./ipc.desktopScreenshot";
@@ -26,6 +27,7 @@ export type {
   DesktopUpdateStatus,
 } from "./ipc.desktop";
 export * from "./ipc.desktopComputerUse";
+export type * from "./ipc.desktopCommandLine";
 export type { NativeApi } from "./ipc.nativeApi";
 
 export interface ContextMenuItem<T extends string = string> {
@@ -76,6 +78,7 @@ export interface DesktopTailscaleRemoteAccessStatus {
 
 export interface DesktopBridge
   extends
+    DesktopCommandLineBridge,
     DesktopComputerUseBridge,
     DesktopCertificateChallengeBridge,
     DesktopScreenshotBridge,

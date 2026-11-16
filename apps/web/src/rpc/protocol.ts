@@ -4,22 +4,8 @@ import { RpcClient, RpcSerialization } from "effect/unstable/rpc";
 import * as Socket from "effect/unstable/socket/Socket";
 
 import { APP_SERVER_NAME } from "../config/branding";
-import { resolveServerUrl } from "../lib/utils";
-import {
-  acknowledgeRpcRequest,
-  clearAllTrackedRpcRequests,
-  trackRpcRequestSent,
-} from "./requestLatencyState";
 import { WsOptionalRpcTracker } from "./protocol.optionalRpc";
-import { waitForDesktopBackendReady } from "./desktopBackendReady";
-import {
-  getWsConnectionStatus,
-  recordWsConnectionAttempt,
-  recordWsConnectionClosed,
-  recordWsConnectionErrored,
-  recordWsConnectionOpened,
-  recordWsReconnectScheduled,
-} from "./wsConnectionState";
+import { localWsTransportScope, type WsTransportScope } from "./wsTransport.scope";
 import { WsReconnectBackoff } from "./wsReconnectPolicy";
 import { WS_OPEN_TIMEOUT_MS, WsUpgradeGate } from "./wsUpgradeGate";
 
@@ -53,23 +39,13 @@ export function createWsConnectionControls(): WsConnectionControls {
   return { backoff: new WsReconnectBackoff(), upgradeGate: new WsUpgradeGate() };
 }
 
-function defaultLifecycleHandlers(): Required<WsProtocolLifecycleHandlers> {
+function defaultLifecycleHandlers(scope: WsTransportScope): Required<WsProtocolLifecycleHandlers> {
   return {
     isActive: () => true,
-    onAttempt: (socketUrl) => {
-      recordWsConnectionAttempt(socketUrl);
-    },
-    onOpen: () => {
-      recordWsConnectionOpened();
-    },
-    onError: (message) => {
-      clearAllTrackedRpcRequests();
-      recordWsConnectionErrored(message);
-    },
-    onClose: (details) => {
-      clearAllTrackedRpcRequests();
-      recordWsConnectionClosed(details);
-    },
+    onAttempt: scope.onAttempt,
+    onOpen: scope.onOpen,
+    onError: scope.onError,
+    onClose: scope.onClose,
     onProtocolFailure: () => undefined,
   };
 }
@@ -79,9 +55,10 @@ type ComposedLifecycleHandlers = Omit<Required<WsProtocolLifecycleHandlers>, "on
 };
 
 function composeLifecycleHandlers(
-  handlers?: WsProtocolLifecycleHandlers,
+  handlers: WsProtocolLifecycleHandlers | undefined,
+  scope: WsTransportScope,
 ): ComposedLifecycleHandlers {
-  const defaults = defaultLifecycleHandlers();
+  const defaults = defaultLifecycleHandlers(scope);
   const isActive = handlers?.isActive ?? (() => true);
 
   return {
@@ -93,7 +70,7 @@ function composeLifecycleHandlers(
     },
     onOpen: () => {
       if (!isActive()) return;
-      const details = { reconnectAttempt: getWsConnectionStatus().reconnectAttemptCount };
+      const details = { reconnectAttempt: scope.reconnectAttempt() };
       defaults.onOpen(details);
       handlers?.onOpen?.(details);
     },
@@ -117,8 +94,9 @@ export function createWsRpcProtocolLayer(
   url?: string,
   handlers?: WsProtocolLifecycleHandlers,
   controls: WsConnectionControls = createWsConnectionControls(),
+  scope: WsTransportScope = localWsTransportScope,
 ) {
-  const lifecycle = composeLifecycleHandlers(handlers);
+  const lifecycle = composeLifecycleHandlers(handlers, scope);
   const { backoff, upgradeGate } = controls;
   const optionalRpcs = new WsOptionalRpcTracker();
   const trackingWebSocketConstructorLayer = Layer.succeed(
@@ -161,14 +139,8 @@ export function createWsRpcProtocolLayer(
   // can take longer than the reconnect backoff; don't dial a known-unready backend.
   const guardedUrl = Effect.promise(async (signal) => {
     await upgradeGate.whenSettled();
-    await waitForDesktopBackendReady(undefined, signal, { waitForRestart: true });
-    // Main may publish a replacement endpoint while we're waiting. Resolve it now,
-    // preserving explicit URLs and authentication instead of pinning the old target.
-    return resolveServerUrl({
-      url,
-      protocol: window.location.protocol === "https:" ? "wss" : "ws",
-      pathname: "/ws",
-    });
+    signal.throwIfAborted();
+    return scope.resolveUrl(url, signal);
   }).pipe(
     // Socket acquisition is uninterruptible by default. A readiness wait must not
     // hold session disposal or manual reconnect hostage while the backend is down.
@@ -181,7 +153,7 @@ export function createWsRpcProtocolLayer(
   const retryPolicy = Schedule.addDelay(Schedule.forever, () =>
     Effect.promise((signal) => {
       const delayMs = backoff.nextDelayMs();
-      if (lifecycle.isActive()) recordWsReconnectScheduled(delayMs);
+      if (lifecycle.isActive()) scope.recordReconnectScheduled(delayMs);
       return backoff.sleep(delayMs, signal);
     }).pipe(Effect.as(Duration.zero)),
   );
@@ -197,7 +169,7 @@ export function createWsRpcProtocolLayer(
         run: (writeResponse) =>
           protocol.run((response) => {
             if (response._tag === "Chunk" || response._tag === "Exit") {
-              acknowledgeRpcRequest(response.requestId);
+              if (lifecycle.isActive()) scope.acknowledgeRpcRequest(response.requestId);
               if (response._tag === "Exit") optionalRpcs.settle(response.requestId);
             } else if (response._tag === "ClientProtocolError" || response._tag === "Defect") {
               // An older server rejecting an optional diagnostics RPC fails only that request.
@@ -210,13 +182,13 @@ export function createWsRpcProtocolLayer(
                   scoped,
                   (exit) =>
                     Effect.suspend(() => {
-                      acknowledgeRpcRequest(exit.requestId);
+                      if (lifecycle.isActive()) scope.acknowledgeRpcRequest(exit.requestId);
                       return writeResponse(exit);
                     }),
                   { discard: true },
                 );
               }
-              clearAllTrackedRpcRequests();
+              if (lifecycle.isActive()) scope.clearAllTrackedRpcRequests();
               optionalRpcs.clear();
               if (response._tag === "Defect" || response.error.reason._tag === "RpcClientDefect") {
                 return Effect.suspend(() => writeResponse(response)).pipe(
@@ -232,7 +204,7 @@ export function createWsRpcProtocolLayer(
           }),
         send: (request, transferables) => {
           if (request._tag === "Request") {
-            trackRpcRequestSent(request.id, request.tag);
+            if (lifecycle.isActive()) scope.trackRpcRequestSent(request.id, request.tag);
           }
           optionalRpcs.trackSent(request);
           return protocol.send(request, transferables);

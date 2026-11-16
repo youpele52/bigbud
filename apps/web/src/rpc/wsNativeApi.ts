@@ -1,5 +1,9 @@
-import { type ContextMenuItem, type NativeApi } from "@bigbud/contracts";
-
+import { createNativeTerminalApi } from "./wsNativeApi.terminal";
+import {
+  type ContextMenuItem,
+  type NativeApi,
+  type OrchestrationDeliveryLifecycle,
+} from "@bigbud/contracts";
 import { openLink } from "../lib/openLink";
 import { showContextMenuFallback } from "../utils/context-menu";
 import { resetRequestLatencyStateForTests } from "./requestLatencyState";
@@ -9,20 +13,17 @@ import {
   resetOrchestrationDeliveryLifecycleForTests,
   setOrchestrationDeliveryLifecycle,
 } from "./orchestrationDeliveryState";
-import { persistDeliveryCursor, readPersistedDeliveryCursor } from "./orchestrationDeliveryCursor";
-import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
 import {
-  isWsSubscriptionListenerFailure,
-  isWsTransportDisconnectedError,
-  wsSubscriptionErrorCause,
-} from "./wsTransport.errors";
-import { cappedExponentialRetryDelay } from "./wsTransport.retry";
-import { resolveDeliveryConsumerId } from "./orchestrationDeliveryCursor";
+  persistDeliveryCursor,
+  readPersistedDeliveryCursor,
+  resolveDeliveryConsumerId,
+} from "./orchestrationDeliveryCursor";
+import type { NativeDeliveryCursor } from "./orchestrationDeliveryCursor.scoped";
+import { createNativeDelivery } from "./wsNativeApi.delivery";
+import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
+import type { WsRpcClient } from "./wsRpcClient.types";
 
 let instance: { api: NativeApi } | null = null;
-const MAX_ORCHESTRATION_NO_PROGRESS_FAILURES = 3;
-const ORCHESTRATION_RETRY_BASE_DELAY_MS = 250;
-const ORCHESTRATION_RETRY_MAX_DELAY_MS = 8_000;
 
 export function __resetWsNativeApiForTests() {
   instance = null;
@@ -33,117 +34,35 @@ export function __resetWsNativeApiForTests() {
   resetOrchestrationDeliveryLifecycleForTests();
 }
 
+/** Existing local entrypoint retains its singleton and legacy cursor storage. */
 export function createWsNativeApi(): NativeApi {
-  if (instance) {
-    return instance.api;
-  }
-
+  if (instance) return instance.api;
   const rpcClient = getWsRpcClient();
-  const deliveryConsumerId = resolveDeliveryConsumerId();
-  let deliveryAppliedSequence = readPersistedDeliveryCursor(deliveryConsumerId);
-  type DomainEventCallback = Parameters<NativeApi["orchestration"]["onDomainEvent"]>[0];
-  const domainEventCallbacks = new Set<DomainEventCallback>();
-  const domainResubscribeCallbacks = new Set<() => void>();
-  let activeBaselineRecovery: {
-    readonly recoveryId: string;
-    readonly consumerId: string;
-    readonly consumerGeneration: number;
-    readonly serverEpoch: string;
-  } | null = null;
-  let unsubscribeDomainEvents: (() => void) | null = null;
-  let orchestrationApplicationFailures = 0;
-  let latestDeliveryIdentity: {
-    readonly route: "direct-unmanaged" | "supervisor" | "fallback-fenced";
-    readonly consumerGeneration: number;
-    readonly acknowledgedSequence: number;
-  } | null = null;
+  const consumerId = resolveDeliveryConsumerId();
+  instance = createWsNativeApiContext({
+    rpcClient,
+    deliveryCursor: {
+      consumerId,
+      read: () => readPersistedDeliveryCursor(consumerId),
+      write: (sequence) => persistDeliveryCursor(consumerId, sequence),
+    },
+    onDeliveryLifecycle: setOrchestrationDeliveryLifecycle,
+  });
+  return instance.api;
+}
 
-  const markDeliveryProgress = () => {
-    orchestrationApplicationFailures = 0;
-  };
-  // An acknowledgement refused mid-batch because the socket dropped is not an application
-  // failure; the resubscription replays from `deliveryAppliedSequence` and admission dedupes.
-  const isApplicationFailure = (error: unknown) =>
-    isWsSubscriptionListenerFailure(error) &&
-    !isWsTransportDisconnectedError(wsSubscriptionErrorCause(error));
-
-  const isActiveBaselineRecovery = (input: {
-    readonly recoveryId: string;
-    readonly consumerId: string;
-    readonly consumerGeneration: number;
-    readonly serverEpoch: string;
-  }) =>
-    activeBaselineRecovery?.recoveryId === input.recoveryId &&
-    activeBaselineRecovery.consumerId === input.consumerId &&
-    activeBaselineRecovery.consumerGeneration === input.consumerGeneration &&
-    activeBaselineRecovery.serverEpoch === input.serverEpoch;
-
-  const ensureDomainEventSubscription = () => {
-    if (unsubscribeDomainEvents) return;
-    unsubscribeDomainEvents = rpcClient.orchestration.onDomainEvent(
-      () => ({ consumerId: deliveryConsumerId, appliedSequence: deliveryAppliedSequence }),
-      (item) => {
-        latestDeliveryIdentity = {
-          route: item.route,
-          consumerGeneration: item.consumerGeneration,
-          acknowledgedSequence:
-            item.type === "batch" ? deliveryAppliedSequence : item.acknowledgedSequence,
-        };
-        if (item.type === "recovery") {
-          activeBaselineRecovery = {
-            recoveryId: item.recoveryId,
-            consumerId: item.consumerId,
-            consumerGeneration: item.consumerGeneration,
-            serverEpoch: item.serverEpoch,
-          };
-        } else if (item.type === "batch") {
-          activeBaselineRecovery = null;
-        }
-        return Promise.all(Array.from(domainEventCallbacks, (callback) => callback(item))).then(
-          () => undefined,
-        );
-      },
-      {
-        retryDelay: ({ error }) =>
-          isApplicationFailure(error)
-            ? cappedExponentialRetryDelay({
-                attempt: orchestrationApplicationFailures,
-                baseMs: ORCHESTRATION_RETRY_BASE_DELAY_MS,
-                maxMs: ORCHESTRATION_RETRY_MAX_DELAY_MS,
-              })
-            : ORCHESTRATION_RETRY_BASE_DELAY_MS,
-        onResubscribe: () => {
-          activeBaselineRecovery = null;
-          for (const callback of domainResubscribeCallbacks) callback();
-        },
-        shouldRetry: (error) => {
-          if (!isApplicationFailure(error)) return true;
-          orchestrationApplicationFailures += 1;
-          const identity = latestDeliveryIdentity;
-          if (
-            orchestrationApplicationFailures === MAX_ORCHESTRATION_NO_PROGRESS_FAILURES &&
-            identity
-          ) {
-            setOrchestrationDeliveryLifecycle({
-              type: "lifecycle",
-              route: identity.route,
-              consumerId: deliveryConsumerId,
-              consumerGeneration: identity.consumerGeneration,
-              state: "degraded",
-              acknowledgedSequence: identity.acknowledgedSequence,
-              restartAttempt: 0,
-              reasonCode: "application_no_progress",
-            });
-          }
-          // The supervisor retains the authoritative cursor and will issue a
-          // replay or baseline reset on the next generation. Stopping here
-          // leaves persisted messages invisible until the renderer restarts.
-          return true;
-        },
-      },
-    );
-  };
-
+/** Explicit owner boundary; the caller supplies an authenticated backend client and cursor scope.
+ * This factory neither selects a backend nor establishes trust or activates remote UI state. */
+export function createWsNativeApiContext({
+  rpcClient,
+  deliveryCursor,
+  onDeliveryLifecycle = () => {},
+}: {
+  readonly rpcClient: WsRpcClient;
+  readonly deliveryCursor: NativeDeliveryCursor;
+  readonly onDeliveryLifecycle?: (event: OrchestrationDeliveryLifecycle) => void;
+}) {
+  const delivery = createNativeDelivery(rpcClient, deliveryCursor, onDeliveryLifecycle);
   const api: NativeApi = {
     dialogs: {
       pickFolder: async () => {
@@ -165,23 +84,7 @@ export function createWsNativeApi(): NativeApi {
         return window.desktopBridge.requestFileAccess(level);
       },
     },
-    terminal: {
-      shellProfiles: (input) => rpcClient.terminal.shellProfiles(input),
-      wslDistributions: () => rpcClient.terminal.wslDistributions(),
-      snapshot: (input) => rpcClient.terminal.snapshot(input as never),
-      recovery: (input) => rpcClient.terminal.recovery(input),
-      open: (input) => rpcClient.terminal.open(input as never),
-      write: (input) => rpcClient.terminal.write(input as never),
-      resize: (input) => rpcClient.terminal.resize(input as never),
-      clear: (input) => rpcClient.terminal.clear(input as never),
-      restart: (input) => rpcClient.terminal.restart(input as never),
-      close: (input) => rpcClient.terminal.close(input as never),
-      onEvent: (callback, options) => rpcClient.terminal.onEvent(callback, options),
-      subscribeSession: (input, callback, options) =>
-        rpcClient.terminal.subscribeSession(input as never, callback, options),
-      ackOutput: (input) => rpcClient.terminal.ackOutput(input),
-      search: (input) => rpcClient.terminal.search(input),
-    },
+    terminal: createNativeTerminalApi(rpcClient.terminal),
     projects: {
       listDirectory: rpcClient.projects.listDirectory,
       onDirectoryChange: (input, callback, options) =>
@@ -249,6 +152,9 @@ export function createWsNativeApi(): NativeApi {
       },
     },
     server: {
+      listRemoteBackendRelayProfiles: rpcClient.server.listRemoteBackendRelayProfiles,
+      openRemoteBackendRelay: rpcClient.server.openRemoteBackendRelay,
+      closeRemoteBackendRelay: rpcClient.server.closeRemoteBackendRelay,
       getConfig: rpcClient.server.getConfig,
       refreshProviders: rpcClient.server.refreshProviders,
       refreshUsageLimits: rpcClient.server.refreshUsageLimits,
@@ -257,6 +163,7 @@ export function createWsNativeApi(): NativeApi {
       listSshConfigHosts: rpcClient.server.listSshConfigHosts,
       listRemoteFolders: rpcClient.server.listRemoteFolders,
       installRemoteAgent: rpcClient.server.installRemoteAgent,
+      getRemoteAgentManualInstall: rpcClient.server.getRemoteAgentManualInstall,
       connectRemoteAgent: rpcClient.server.connectRemoteAgent,
       restartRemoteAgent: rpcClient.server.restartRemoteAgent,
       getRemoteAgentRestartStatus: rpcClient.server.getRemoteAgentRestartStatus,
@@ -339,48 +246,23 @@ export function createWsNativeApi(): NativeApi {
       getFullThreadDiff: rpcClient.orchestration.getFullThreadDiff,
       replayEvents: (fromSequenceExclusive) =>
         rpcClient.orchestration.replayEvents({ fromSequenceExclusive }),
-      acknowledgeDelivery: async (input) => {
-        const result = await rpcClient.orchestration.acknowledgeDelivery(input);
-        if (result.accepted && !result.fenced) {
-          deliveryAppliedSequence = Math.max(deliveryAppliedSequence, result.acknowledgedSequence);
-          persistDeliveryCursor(deliveryConsumerId, deliveryAppliedSequence);
-          markDeliveryProgress();
-        }
-        return result;
-      },
-      acknowledgeDeliveryBaseline: async (input) => {
-        if (!isActiveBaselineRecovery(input)) {
-          return { accepted: false, fenced: true, acknowledgedSequence: deliveryAppliedSequence };
-        }
-        const result = await rpcClient.orchestration.acknowledgeDeliveryBaseline(input);
-        if (result.accepted && !result.fenced && isActiveBaselineRecovery(input)) {
-          deliveryAppliedSequence = Math.max(deliveryAppliedSequence, result.acknowledgedSequence);
-          persistDeliveryCursor(deliveryConsumerId, deliveryAppliedSequence);
-          markDeliveryProgress();
-        } else if (result.accepted && !result.fenced) {
-          return { accepted: false, fenced: true, acknowledgedSequence: deliveryAppliedSequence };
-        }
-        return result;
-      },
-      onDomainEvent: (callback, options) => {
-        domainEventCallbacks.add(callback);
-        if (options?.onResubscribe) domainResubscribeCallbacks.add(options.onResubscribe);
-        ensureDomainEventSubscription();
-        return () => {
-          domainEventCallbacks.delete(callback);
-          if (options?.onResubscribe) domainResubscribeCallbacks.delete(options.onResubscribe);
-          if (domainEventCallbacks.size === 0) {
-            activeBaselineRecovery = null;
-            unsubscribeDomainEvents?.();
-            unsubscribeDomainEvents = null;
-          }
-        };
-      },
+      ...delivery.methods,
       onThinkingDelta: (callback, options) =>
         rpcClient.orchestration.onThinkingDelta(callback, options),
     },
   };
 
-  instance = { api };
-  return api;
+  let disposal: Promise<void> | undefined;
+  return {
+    api,
+    dispose: () => {
+      return (disposal ??= (async () => {
+        try {
+          delivery.dispose();
+        } finally {
+          await rpcClient.dispose();
+        }
+      })());
+    },
+  };
 }

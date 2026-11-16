@@ -1,12 +1,18 @@
 import type { UserInputQuestion } from "@bigbud/contracts/orchestration/providerRuntime.payloads.ts";
+import {
+  pendingUserInputAcceptsContext,
+  singleChoiceQuestionAsksForMultiple,
+} from "@bigbud/shared/providerUserInput";
+import {
+  describePendingUserInputQuestion,
+  pendingUserInputComposerHint,
+} from "@bigbud/ui/pendingUserInputPresentation";
 
 import {
   getPendingUserInputOptionIdentity,
   isPendingUserInputOptionSelected,
-  pendingUserInputAcceptsContext,
   type PendingUserInputProgress,
 } from "../../../../logic/user-input/pending.logic";
-import { singleChoiceQuestionAsksForMultiple } from "../../../../logic/user-input/option.logic";
 
 export interface PendingUserInputPanelOption {
   readonly key: string;
@@ -46,14 +52,11 @@ export function pendingUserInputComposerPlaceholder(
 }
 
 function composerHint(question: UserInputQuestion): string | null {
-  if (question.options.length === 0) return "Type your answer in the message box and send.";
-  const acceptsContext = pendingUserInputAcceptsContext(question);
-  if (singleChoiceQuestionAsksForMultiple(question)) {
-    return acceptsContext
-      ? "Only one option can be picked here. Name any others in the message box."
-      : "Only one option can be picked here.";
-  }
-  return acceptsContext ? "Add context in the message box, or just send your selection." : null;
+  return pendingUserInputComposerHint({
+    hasOptions: question.options.length > 0,
+    acceptsContext: pendingUserInputAcceptsContext(question),
+    singleChoiceAsksForMultiple: singleChoiceQuestionAsksForMultiple(question),
+  });
 }
 
 export function derivePendingUserInputPanelModel(input: {
@@ -64,15 +67,16 @@ export function derivePendingUserInputPanelModel(input: {
   if (!question) return null;
   const count = input.questions.length;
   const index = input.progress.questionIndex;
-  const title = `${count > 1 ? `${index + 1}. ` : ""}${question.header || question.question}`;
-  const detail =
-    question.header && question.question !== question.header ? question.question : null;
+  const presentation = describePendingUserInputQuestion({
+    header: question.header,
+    question: question.question,
+    questionCount: count,
+    questionIndex: index,
+  });
   return {
     question,
     questionIndex: index,
-    counterLabel: count > 1 ? `${index + 1} of ${count}` : null,
-    title,
-    detail,
+    ...presentation,
     multiple: Boolean(question.multiSelect) || question.field?.type === "multiselect",
     options: question.options.map((option, optionIndex) => ({
       key: getPendingUserInputOptionIdentity(option, optionIndex),

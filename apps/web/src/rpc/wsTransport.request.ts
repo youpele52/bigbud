@@ -52,6 +52,7 @@ export function scopedWsFiniteRequest<TValue, TClient>(
   connect: (client: TClient) => Stream.Stream<TValue, Error, never>,
   listener: (value: TValue) => void | Promise<void>,
   isActive: () => boolean,
+  markInboundActivity: () => void = markWsInboundActivity,
 ) {
   return Effect.scoped(
     Effect.promise(() => clientPromise).pipe(
@@ -60,7 +61,7 @@ export function scopedWsFiniteRequest<TValue, TClient>(
           Effect.promise(() =>
             Promise.resolve().then(() => {
               if (!isActive()) return;
-              markWsInboundActivity();
+              markInboundActivity();
               return listener(value);
             }),
           ),

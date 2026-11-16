@@ -1,3 +1,4 @@
+import { RemoteTerminalControls } from "./RemoteTerminalControls";
 import { CollapseIcon, ExpandIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Minus, Plus, SquareSplitHorizontal, XIcon } from "lucide-react";
@@ -64,6 +65,9 @@ export function ThreadTerminalDrawerToolbar({
           terminalId={resolvedActiveTerminalId}
           compact={sidebar}
         />
+      )}
+      {threadId && (
+        <RemoteTerminalControls threadId={threadId} terminalId={resolvedActiveTerminalId} />
       )}
       <TerminalActionButton
         className={buttonClassName}

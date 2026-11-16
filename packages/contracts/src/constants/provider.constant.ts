@@ -1,8 +1,8 @@
 /**
- * All available provider kinds in the bigbud application.
+ * All persisted provider kinds, including retired history IDs.
  *
- * Providers represent different AI coding assistant backends that can be used
- * for code generation, chat, and other AI-powered features.
+ * New runtime choices use SELECTABLE_PROVIDER_KINDS and still require
+ * provider readiness and feature admission.
  *
  * Provider display order is derived alphabetically by name.
  */
@@ -45,7 +45,12 @@ export function sortProviderKindsByDisplayName<T extends readonly ProviderKind[]
   ) as unknown as T;
 }
 
+/** Historical decoding set: retired IDs must remain readable in persisted records. */
 export const PROVIDER_KINDS = sortProviderKindsByDisplayName(UNSORTED_PROVIDER_KINDS);
+
+/** New runtime selections; this does not waive provider readiness or preview restrictions. */
+export const SELECTABLE_PROVIDER_KINDS: ReadonlyArray<Exclude<ProviderKind, "opencode">> =
+  PROVIDER_KINDS.filter((provider) => provider !== "opencode");
 
 /**
  * Labels that may appear in the `provider` field of a `ServerDiscoveredSkill`
@@ -53,9 +58,8 @@ export const PROVIDER_KINDS = sortProviderKindsByDisplayName(UNSORTED_PROVIDER_K
  * pseudo-label used for skills discovered under `.bigbud/skills/` — a directory
  * the bigbud app itself ships with (or that the user adds to a bigbud project).
  *
- * The runtime provider system (model selection, capabilities, adapters) only
- * uses `PROVIDER_KINDS`; `bigbud` is purely a discovery label that has no
- * associated AI runtime.
+ * Discovery labels do not imply selectable runtime support. `bigbud` is
+ * purely a discovery label with no associated AI runtime.
  */
 export const SERVER_DISCOVERY_PROVIDER_LABELS = [...PROVIDER_KINDS, "bigbud"] as const;
 

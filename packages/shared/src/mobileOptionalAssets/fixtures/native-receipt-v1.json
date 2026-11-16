@@ -1,0 +1,123 @@
+{
+  "vectors": [
+    {
+      "relative": "",
+      "kind": "directory",
+      "digest": "827f6952c3ef9aeb457ef6316e1ee36cccb0e74594e238979050fe9e54e24342"
+    },
+    {
+      "relative": "index.html",
+      "kind": "file",
+      "digest": "ede7079b7f2399c68e057e3505d606b0504577228b4a660e26eac0e2b3691cd2"
+    },
+    {
+      "relative": "assets/app.js",
+      "kind": "file",
+      "digest": "6504a277985aa1897edb448198591bce52c92fb2dd45104e615327103dba0520"
+    },
+    {
+      "relative": "assets/app.js",
+      "kind": "directory",
+      "digest": "3f48edb37c4583b35d4b672033aea43e8f314a79a905ff86bae608fe7d3efa55"
+    },
+    {
+      "relative": "café/app.js",
+      "kind": "file",
+      "digest": "7e0f030359cda6617ad818d244ce47b19435f6105b59e558d78b0304b8775047"
+    },
+    {
+      "relative": "café/app.js",
+      "kind": "file",
+      "digest": "5f4603a416de7c21dc811ff0b970fba39ec6885c8b74df94a8fbff916e2d3cda"
+    }
+  ],
+  "receipt": {
+    "schemaVersion": 1,
+    "kind": "mobile-native-assets",
+    "namespace": "remote-mobile-runtime-v1",
+    "generation": "assets-00000000000000000000000000000000",
+    "owner": {
+      "authority": {
+        "authorityId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "keyFingerprint": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "keyEpoch": 1
+      },
+      "installationFingerprint": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "controller": {
+      "id": "fixture-node",
+      "pid": 101,
+      "startedAt": "process-start-v1:fixture"
+    },
+    "controllerHost": {
+      "hostname": "fixture-host",
+      "machineId": "fixture-machine"
+    },
+    "publication": {
+      "stageId": "fixture-stage",
+      "releaseId": "mobile-release:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "consentRevision": 1,
+      "preparationNonce": "fixture-attempt",
+      "archiveSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "anchors": {
+      "state": {
+        "dev": "1",
+        "ino": "2",
+        "uid": "1000",
+        "gid": "1000",
+        "mode": "16832"
+      },
+      "namespace": {
+        "dev": "1",
+        "ino": "3",
+        "uid": "1000",
+        "gid": "1000",
+        "mode": "16832"
+      },
+      "root": {
+        "dev": "1",
+        "ino": "4",
+        "uid": "1000",
+        "gid": "1000",
+        "mode": "16832"
+      }
+    },
+    "contentBytes": 5,
+    "entries": [
+      {
+        "kind": "directory",
+        "pathDigest": "827f6952c3ef9aeb457ef6316e1ee36cccb0e74594e238979050fe9e54e24342",
+        "stat": {
+          "dev": "1",
+          "ino": "4",
+          "uid": "1000",
+          "gid": "1000",
+          "mode": "16832",
+          "nlink": "2",
+          "size": "4096",
+          "mtimeNs": "100",
+          "ctimeNs": "200"
+        }
+      },
+      {
+        "kind": "file",
+        "pathDigest": "ede7079b7f2399c68e057e3505d606b0504577228b4a660e26eac0e2b3691cd2",
+        "stat": {
+          "dev": "1",
+          "ino": "5",
+          "uid": "1000",
+          "gid": "1000",
+          "mode": "33152",
+          "nlink": "1",
+          "size": "5",
+          "mtimeNs": "100",
+          "ctimeNs": "200"
+        },
+        "sha256": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+      }
+    ]
+  },
+  "canonicalUtf8": "{\"schemaVersion\":1,\"kind\":\"mobile-native-assets\",\"namespace\":\"remote-mobile-runtime-v1\",\"generation\":\"assets-00000000000000000000000000000000\",\"owner\":{\"authority\":{\"authorityId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"keyFingerprint\":\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"keyEpoch\":1},\"installationFingerprint\":\"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"},\"controller\":{\"id\":\"fixture-node\",\"pid\":101,\"startedAt\":\"process-start-v1:fixture\"},\"controllerHost\":{\"hostname\":\"fixture-host\",\"machineId\":\"fixture-machine\"},\"publication\":{\"stageId\":\"fixture-stage\",\"releaseId\":\"mobile-release:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"consentRevision\":1,\"preparationNonce\":\"fixture-attempt\",\"archiveSha256\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\"},\"anchors\":{\"state\":{\"dev\":\"1\",\"ino\":\"2\",\"uid\":\"1000\",\"gid\":\"1000\",\"mode\":\"16832\"},\"namespace\":{\"dev\":\"1\",\"ino\":\"3\",\"uid\":\"1000\",\"gid\":\"1000\",\"mode\":\"16832\"},\"root\":{\"dev\":\"1\",\"ino\":\"4\",\"uid\":\"1000\",\"gid\":\"1000\",\"mode\":\"16832\"}},\"contentBytes\":5,\"entries\":[{\"kind\":\"directory\",\"pathDigest\":\"827f6952c3ef9aeb457ef6316e1ee36cccb0e74594e238979050fe9e54e24342\",\"stat\":{\"dev\":\"1\",\"ino\":\"4\",\"uid\":\"1000\",\"gid\":\"1000\",\"mode\":\"16832\",\"nlink\":\"2\",\"size\":\"4096\",\"mtimeNs\":\"100\",\"ctimeNs\":\"200\"}},{\"kind\":\"file\",\"pathDigest\":\"ede7079b7f2399c68e057e3505d606b0504577228b4a660e26eac0e2b3691cd2\",\"stat\":{\"dev\":\"1\",\"ino\":\"5\",\"uid\":\"1000\",\"gid\":\"1000\",\"mode\":\"33152\",\"nlink\":\"1\",\"size\":\"5\",\"mtimeNs\":\"100\",\"ctimeNs\":\"200\"},\"sha256\":\"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\"}]}",
+  "sha256": "c07a637ccf5cbef80a4c8a890d963b9020e62fd1af23bd59aa54d473d99cd4b4"
+}

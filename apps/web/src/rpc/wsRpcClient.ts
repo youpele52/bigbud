@@ -14,7 +14,8 @@ import { requestServerConfig } from "./wsRpcClient.config";
 import { requestProjectCatalog } from "./wsRpcClient.projectCatalog";
 import { requestWsConnectionDiagnostics } from "./wsRpcClient.diagnostics";
 import { requestConnectedSshMonitors, requestSshMonitorSample } from "./wsRpcClient.monitor";
-import { requestRemoteFolders, requestSshConfigHosts } from "./wsRpcClient.remoteSetup";
+import { createServerRemoteRpcMethods } from "./wsRpcClient.serverRemote";
+import { createRemoteBackendRelayRpcMethods } from "./wsRpcClient.remoteBackendRelay";
 import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import { createComputerUseRpcClient } from "./wsRpcClient.computerUse";
@@ -52,7 +53,10 @@ function subscribeEmptyInput<TEvent>(
   return transport.subscribe((client) => method(client)({}), listener, options);
 }
 
-export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
+export function createWsRpcClient(
+  transport = new WsTransport(),
+  resetReconnectBackoff: () => void = resetWsReconnectBackoff,
+): WsRpcClient {
   return {
     organization: {
       status: () =>
@@ -62,7 +66,7 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
     },
     dispose: () => transport.dispose(),
     reconnect: async () => {
-      resetWsReconnectBackoff();
+      resetReconnectBackoff();
       await transport.reconnect();
     },
     reconnectNow: () => transport.reconnectNow(),
@@ -217,32 +221,8 @@ export function createWsRpcClient(transport = new WsTransport()): WsRpcClient {
         transport.request((client) => client[WS_METHODS.serverVerifyExecutionTarget](input)),
       sampleSshMonitor: (input) => requestSshMonitorSample(transport, input),
       listConnectedSshMonitors: () => requestConnectedSshMonitors(transport),
-      listSshConfigHosts: (input) => requestSshConfigHosts(transport, input),
-      listRemoteFolders: (input) => requestRemoteFolders(transport, input),
-      installRemoteAgent: (input) =>
-        transport.request((client) => client[WS_METHODS.serverInstallRemoteAgent](input)),
-      connectRemoteAgent: (input) =>
-        transport.request((client) => client[WS_METHODS.serverConnectRemoteAgent](input)),
-      restartRemoteAgent: (input) =>
-        transport.request((client) => client[WS_METHODS.serverRestartRemoteAgent](input)),
-      getRemoteAgentRestartStatus: (input) =>
-        transport.request((client) => client[WS_METHODS.serverGetRemoteAgentRestartStatus](input)),
-      disconnectExecutionTarget: (input) =>
-        transport.request((client) => client[WS_METHODS.serverDisconnectExecutionTarget](input)),
-      connectExecutionTarget: (input) =>
-        transport.request((client) => client[WS_METHODS.serverConnectExecutionTarget](input)),
-      listDisconnectedExecutionTargets: () =>
-        transport.request((client) =>
-          client[WS_METHODS.serverListDisconnectedExecutionTargets]({}),
-        ),
-      getRemoteAgentUpdateStatus: (input) =>
-        transport.request((client) => client[WS_METHODS.serverGetRemoteAgentUpdateStatus](input)),
-      unlockSshKey: (input) =>
-        transport.request((client) => client[WS_METHODS.serverUnlockSshKey](input)),
-      unlockSshPassword: (input) =>
-        transport.request((client) => client[WS_METHODS.serverUnlockSshPassword](input)),
-      trustSshHost: (input) =>
-        transport.request((client) => client[WS_METHODS.serverTrustSshHost](input)),
+      ...createServerRemoteRpcMethods(transport),
+      ...createRemoteBackendRelayRpcMethods(transport),
       upsertKeybinding: (input) =>
         transport.request((client) => client[WS_METHODS.serverUpsertKeybinding](input)),
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),

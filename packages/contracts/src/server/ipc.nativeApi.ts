@@ -1,3 +1,4 @@
+import type { RemoteBackendRelayNativeApi } from "./remoteBackendRelay";
 import type { ServerSettings, ServerSettingsPatch } from "../core/settings";
 import type { ServerTrustSshHostInput, ServerTrustSshHostResult } from "./server.sshHostTrust";
 import type {
@@ -46,6 +47,7 @@ import type * as Notes from "./notes";
 import type * as PinnedThreads from "./pinnedThreads";
 import type * as Server from "./server";
 import type * as RemoteRestart from "./server.remoteRestart";
+import type * as RemoteAgentInstall from "./server.remoteAgentInstall";
 import type * as RemoteConnection from "./server.remoteConnection";
 import type * as SshConfig from "./server.sshConfig";
 import type * as RemoteFolders from "./server.remoteFolders";
@@ -164,7 +166,8 @@ export interface NativeApi {
       position?: { x: number; y: number },
     ) => Promise<T | null>;
   };
-  server: DatabaseCompactionNativeApi &
+  server: RemoteBackendRelayNativeApi &
+    DatabaseCompactionNativeApi &
     MetadataWarningsNativeApi & {
       getConfig: () => Promise<Server.ServerConfig>;
       refreshProviders: () => Promise<Server.ServerProviderUpdatedPayload>;
@@ -182,6 +185,9 @@ export interface NativeApi {
       installRemoteAgent: (
         input: Server.ServerInstallRemoteAgentInput,
       ) => Promise<Server.ServerInstallRemoteAgentResult>;
+      getRemoteAgentManualInstall: (
+        input: RemoteAgentInstall.ServerGetRemoteAgentManualInstallInput,
+      ) => Promise<RemoteAgentInstall.ServerGetRemoteAgentManualInstallResult>;
       connectRemoteAgent: (
         input: Server.ServerConnectRemoteAgentInput,
       ) => Promise<Server.ServerConnectRemoteAgentResult>;

@@ -7,6 +7,8 @@
 @import "./components/terminal/terminalTypography.css";
 @import "./components/ui/agent-working-blob.css";
 
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
+
 @custom-variant dark (&:is(.dark, .dark *));
 
 @theme inline {

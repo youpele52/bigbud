@@ -1,4 +1,9 @@
 import type { UserInputQuestion } from "@bigbud/contracts/orchestration/providerRuntime.payloads.ts";
+import {
+  pendingUserInputAttentionLabel,
+  pendingUserInputPresentationStyles,
+} from "@bigbud/ui/pendingUserInputPresentation";
+import { PendingUserInputChoice } from "@bigbud/ui/pendingUserInputChoice";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
 
@@ -75,7 +80,7 @@ export function PendingUserInputPanel({
       <div data-chat-cite-request-id={requestId}>
         <div className="mb-1.5 flex min-h-6 items-center gap-2">
           <Badge variant="outline" size="sm" className="text-xs font-normal">
-            Needs you
+            {pendingUserInputAttentionLabel}
           </Badge>
           {model.counterLabel ? (
             <>
@@ -110,13 +115,13 @@ export function PendingUserInputPanel({
         <div key={question.id} data-chat-cite-question-id={question.id}>
           <UserInputFieldHint question={question} />
           <div data-chat-cite-content data-chat-cite-region="prompt">
-            <p data-chat-cite-region="header" className="text-sm font-medium text-foreground">
+            <p data-chat-cite-region="header" className={pendingUserInputPresentationStyles.title}>
               {model.title}
             </p>
             {model.detail ? (
               <p
                 data-chat-cite-region="question"
-                className="mt-0.5 whitespace-pre-wrap break-words text-sm text-muted-foreground"
+                className={pendingUserInputPresentationStyles.detail}
               >
                 {model.detail}
               </p>
@@ -129,8 +134,13 @@ export function PendingUserInputPanel({
                 className="mt-2 flex flex-wrap gap-1.5"
               >
                 {model.options.map(({ key, option, optionIndex, selected }) => (
-                  <label
+                  <PendingUserInputChoice
                     key={key}
+                    type={model.multiple ? "checkbox" : "radio"}
+                    name={`pending-${requestId}-${question.id}`}
+                    checked={selected}
+                    disabled={disabled}
+                    onToggle={() => onToggleOption(question.id, option, optionIndex)}
                     className={cn(
                       buttonVariants({ variant: selected ? "default" : "outline", size: "sm" }),
                       "h-auto max-w-full select-text whitespace-normal rounded-full py-1 text-left text-sm sm:h-auto",
@@ -138,20 +148,6 @@ export function PendingUserInputPanel({
                       disabled && "pointer-events-none opacity-64",
                     )}
                   >
-                    {/* Native inputs give radio/checkbox semantics; label text stays citable. */}
-                    <input
-                      type={model.multiple ? "checkbox" : "radio"}
-                      name={`pending-${requestId}-${question.id}`}
-                      className="sr-only"
-                      checked={selected}
-                      disabled={disabled}
-                      onChange={() => onToggleOption(question.id, option, optionIndex)}
-                      // A checked radio fires no change event; clicking it again deselects.
-                      onClick={() => {
-                        if (!model.multiple && selected)
-                          onToggleOption(question.id, option, optionIndex);
-                      }}
-                    />
                     <span>{option.label}</span>
                     {visibleUserInputOptionDescription(option) ? (
                       <span className="text-xs font-normal opacity-75">
@@ -159,13 +155,15 @@ export function PendingUserInputPanel({
                         — {visibleUserInputOptionDescription(option)}
                       </span>
                     ) : null}
-                  </label>
+                  </PendingUserInputChoice>
                 ))}
               </div>
             ) : null}
           </div>
         </div>
-        {model.hint ? <p className="mt-2 text-xs text-muted-foreground">{model.hint}</p> : null}
+        {model.hint ? (
+          <p className={pendingUserInputPresentationStyles.hint}>{model.hint}</p>
+        ) : null}
         {model.textIgnored ? (
           <p role="status" className="mt-2 text-xs text-amber-600 dark:text-amber-400">
             This question sends only the chosen option; your typed text will not be included.

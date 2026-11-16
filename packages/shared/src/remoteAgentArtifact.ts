@@ -1,8 +1,36 @@
-import { createHash, createPublicKey, verify } from "node:crypto";
+import { createHash } from "node:crypto";
+import { verifyPinnedArtifactSignature } from "./artifactSignature.ts";
 
 export const REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR = 1;
 
-export type RemoteAgentTargetTriple = "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu";
+/**
+ * Recognised Linux targets. Static musl builds run on any supported distribution; glibc builds
+ * stay recognised for historic manifests, pinned releases and installed-build cleanup (D4).
+ */
+export const REMOTE_AGENT_TARGET_TRIPLES = [
+  "x86_64-unknown-linux-musl",
+  "aarch64-unknown-linux-musl",
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+] as const;
+
+export type RemoteAgentTargetTriple = (typeof REMOTE_AGENT_TARGET_TRIPLES)[number];
+export type RemoteAgentTargetArchitecture = "x86_64" | "aarch64";
+export type RemoteAgentHostLibc = "glibc" | "musl" | "unknown";
+
+export function isRemoteAgentTargetTriple(value: unknown): value is RemoteAgentTargetTriple {
+  return (REMOTE_AGENT_TARGET_TRIPLES as ReadonlyArray<unknown>).includes(value);
+}
+
+export function remoteAgentTargetArchitecture(
+  targetTriple: RemoteAgentTargetTriple,
+): RemoteAgentTargetArchitecture {
+  return targetTriple.startsWith("aarch64-") ? "aarch64" : "x86_64";
+}
+
+export function isRemoteAgentMuslTarget(targetTriple: RemoteAgentTargetTriple): boolean {
+  return targetTriple.endsWith("-musl");
+}
 
 export interface RemoteAgentArtifactSignature {
   readonly algorithm: "ed25519";
@@ -39,6 +67,7 @@ export class RemoteAgentArtifactError extends Error {
   }
 }
 
+/** Host baseline triple (glibc form); use {@link remoteAgentTargetCandidates} to select. */
 export function resolveRemoteAgentTargetTriple(
   operatingSystem: string,
   architecture: string,
@@ -51,6 +80,20 @@ export function resolveRemoteAgentTargetTriple(
     return "aarch64-unknown-linux-gnu";
   }
   return null;
+}
+
+/**
+ * Ordered artifact preference for a host: the static musl build first, then the glibc build
+ * unless the host is known to use musl (a glibc build cannot run there).
+ */
+export function remoteAgentTargetCandidates(
+  hostTriple: RemoteAgentTargetTriple,
+  hostLibc: RemoteAgentHostLibc = "unknown",
+): ReadonlyArray<RemoteAgentTargetTriple> {
+  const architecture = remoteAgentTargetArchitecture(hostTriple);
+  const musl: RemoteAgentTargetTriple = `${architecture}-unknown-linux-musl`;
+  const gnu: RemoteAgentTargetTriple = `${architecture}-unknown-linux-gnu`;
+  return hostLibc === "musl" ? [musl] : [musl, gnu];
 }
 
 function assertString(value: unknown, label: string): asserts value is string {
@@ -94,10 +137,7 @@ function parseArtifact(value: unknown): RemoteAgentArtifact {
   if (typeof artifact.protocolMinor !== "number" || !Number.isInteger(artifact.protocolMinor)) {
     throw new RemoteAgentArtifactError("Artifact protocolMinor must be an integer.");
   }
-  if (
-    artifact.targetTriple !== "x86_64-unknown-linux-gnu" &&
-    artifact.targetTriple !== "aarch64-unknown-linux-gnu"
-  ) {
+  if (!isRemoteAgentTargetTriple(artifact.targetTriple)) {
     throw new RemoteAgentArtifactError("Artifact target triple is unsupported.");
   }
   if (
@@ -144,28 +184,44 @@ export function parseRemoteAgentArtifactManifest(value: unknown): RemoteAgentArt
   if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length === 0) {
     throw new RemoteAgentArtifactError("Remote agent artifact manifest has no artifacts.");
   }
-  const artifacts = manifest.artifacts.map(parseArtifact);
+  // Skip targets this client does not know so a later release can add triples without
+  // breaking it; every retained artifact is still fully validated and signature-checked later.
+  const artifacts = manifest.artifacts
+    .filter(
+      (artifact) =>
+        typeof artifact !== "object" ||
+        artifact === null ||
+        isRemoteAgentTargetTriple((artifact as { targetTriple?: unknown }).targetTriple),
+    )
+    .map(parseArtifact);
+  if (artifacts.length === 0) {
+    throw new RemoteAgentArtifactError(
+      "Remote agent artifact manifest has no artifacts for a supported target.",
+    );
+  }
   if (new Set(artifacts.map((artifact) => artifact.targetTriple)).size !== artifacts.length) {
     throw new RemoteAgentArtifactError("Remote agent artifact manifest has duplicate targets.");
   }
   return { schemaVersion: 1, artifacts };
 }
 
+/** Select the first compatible artifact in preference order (one triple or an ordered list). */
 export function selectRemoteAgentArtifact(
   manifest: RemoteAgentArtifactManifest,
-  targetTriple: RemoteAgentTargetTriple,
+  targetTriples: RemoteAgentTargetTriple | ReadonlyArray<RemoteAgentTargetTriple>,
   protocolMajor = REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR,
 ): RemoteAgentArtifact {
-  const artifact = manifest.artifacts.find(
-    (candidate) =>
-      candidate.targetTriple === targetTriple && candidate.protocolMajor === protocolMajor,
-  );
-  if (!artifact) {
-    throw new RemoteAgentArtifactError(
-      `No compatible remote agent artifact exists for ${targetTriple} and protocol ${protocolMajor}.`,
+  const preference = typeof targetTriples === "string" ? [targetTriples] : targetTriples;
+  for (const targetTriple of preference) {
+    const artifact = manifest.artifacts.find(
+      (candidate) =>
+        candidate.targetTriple === targetTriple && candidate.protocolMajor === protocolMajor,
     );
+    if (artifact) return artifact;
   }
-  return artifact;
+  throw new RemoteAgentArtifactError(
+    `No compatible remote agent artifact exists for ${preference.join(" or ")} and protocol ${protocolMajor}.`,
+  );
 }
 
 export function verifyRemoteAgentArtifactBytes(
@@ -207,17 +263,11 @@ export function verifyRemoteAgentArtifactSignature(
       `No trusted public key exists for artifact key '${artifact.signature.keyId}'.`,
     );
   }
-  let valid = false;
-  try {
-    valid = verify(
-      null,
-      Buffer.from(canonicalizeRemoteAgentArtifact(artifact)),
-      createPublicKey(publicKey),
-      Buffer.from(artifact.signature.value, "base64"),
-    );
-  } catch {
-    valid = false;
-  }
+  const valid = verifyPinnedArtifactSignature({
+    payload: Buffer.from(canonicalizeRemoteAgentArtifact(artifact)),
+    publicKey,
+    signature: artifact.signature.value,
+  });
   if (!valid) {
     throw new RemoteAgentArtifactError("Remote agent artifact signature verification failed.");
   }

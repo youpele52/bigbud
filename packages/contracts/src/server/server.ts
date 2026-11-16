@@ -218,10 +218,7 @@ export class ServerVerifyExecutionTargetError extends Schema.TaggedErrorClass<Se
   },
 ) {}
 
-export const ServerInstallRemoteAgentInput = Schema.Struct({
-  executionTargetId: ExecutionTargetId,
-});
-export type ServerInstallRemoteAgentInput = typeof ServerInstallRemoteAgentInput.Type;
+export { ServerInstallRemoteAgentInput } from "./server.remoteAgentInstall";
 
 export const ServerConnectRemoteAgentInput = Schema.Struct({
   executionTargetId: ExecutionTargetId,
@@ -238,7 +235,11 @@ export type ServerConnectRemoteAgentResult = typeof ServerConnectRemoteAgentResu
 
 export const ServerInstallRemoteAgentResult = Schema.Struct({
   executionTargetId: ExecutionTargetId,
-  version: TrimmedNonEmptyString,
+  outcome: Schema.optional(
+    Schema.Literals(["active", "staged", "deferred", "failed", "uncertain"]),
+  ),
+  cleanupDeferred: Schema.optional(Schema.Boolean),
+  version: Schema.optional(TrimmedNonEmptyString),
   message: TrimmedNonEmptyString,
   runtimeSummary: Schema.optional(ServerRemoteAgentRuntimeSummary),
 });

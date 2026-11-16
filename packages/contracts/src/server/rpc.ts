@@ -1,3 +1,14 @@
+import {
+  WsServerListRemoteBackendRelayProfilesRpc,
+  WsServerOpenRemoteBackendRelayRpc,
+  WsServerCloseRemoteBackendRelayRpc,
+} from "./rpc.remoteBackendRelay";
+import {
+  WsTerminalRemoteInventoryRpc,
+  WsTerminalRemoteAttachRpc,
+  WsTerminalRemoteDetachRpc,
+  WsTerminalRemoteStopRpc,
+} from "./rpc.terminalRemote";
 import { WsOrganizationStatusRpc, WsOrganizationEngagementRpc } from "./rpc.organizationAutomation";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import {
@@ -129,6 +140,7 @@ import {
   WsTerminalWriteRpc,
 } from "./rpc.core";
 import {
+  WsServerGetRemoteAgentManualInstallRpc,
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,
   WsServerGetRemoteAgentRestartStatusRpc,
@@ -195,6 +207,9 @@ import {
 } from "./rpc.metadataWarnings";
 
 export const WsRpcGroup = RpcGroup.make(
+  WsServerListRemoteBackendRelayProfilesRpc,
+  WsServerOpenRemoteBackendRelayRpc,
+  WsServerCloseRemoteBackendRelayRpc,
   WsCopilotRuntimeRpc,
   WsServerRetryTextGenerationRpc,
   WsServerClaimMetadataWarningsRpc,
@@ -218,6 +233,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerListConnectedSshMonitorsRpc,
   WsServerListRemoteFoldersRpc,
   WsServerInstallRemoteAgentRpc,
+  WsServerGetRemoteAgentManualInstallRpc,
   WsServerConnectRemoteAgentRpc,
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,
@@ -306,6 +322,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalOpenRpc,
   WsTerminalWriteRpc,
   WsTerminalSnapshotRpc,
+  WsTerminalRemoteInventoryRpc,
+  WsTerminalRemoteAttachRpc,
+  WsTerminalRemoteDetachRpc,
+  WsTerminalRemoteStopRpc,
   WsTerminalRecoveryRpc,
   WsTerminalOutputAckRpc,
   WsTerminalSearchRpc,

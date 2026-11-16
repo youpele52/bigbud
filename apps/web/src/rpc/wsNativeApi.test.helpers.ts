@@ -61,6 +61,10 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   reconnectNow: vi.fn(() => false),
   computerUse: { subscribeActivity: vi.fn(), stop: vi.fn() },
   terminal: {
+    remoteInventory: vi.fn(),
+    remoteAttach: vi.fn(),
+    remoteDetach: vi.fn(),
+    remoteStop: vi.fn(),
     shellProfiles: vi.fn(),
     wslDistributions: vi.fn(),
     snapshot: vi.fn(),
@@ -140,6 +144,9 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     onStatus: vi.fn(),
   },
   server: {
+    listRemoteBackendRelayProfiles: vi.fn(),
+    openRemoteBackendRelay: vi.fn(),
+    closeRemoteBackendRelay: vi.fn(),
     ping: vi.fn(),
     getConfig: vi.fn(),
     refreshProviders: vi.fn(),
@@ -151,6 +158,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     listSshConfigHosts: vi.fn(),
     listRemoteFolders: vi.fn(),
     installRemoteAgent: vi.fn(),
+    getRemoteAgentManualInstall: vi.fn(),
     connectRemoteAgent: vi.fn(),
     restartRemoteAgent: vi.fn(),
     getRemoteAgentRestartStatus: vi.fn(),
