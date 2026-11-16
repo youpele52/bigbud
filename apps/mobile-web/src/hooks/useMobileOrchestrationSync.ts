@@ -1,3 +1,4 @@
+import { getMobileSessionAuthority, mobileSessionStateScope } from "../lib/mobileSessionAuthority";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
@@ -10,6 +11,7 @@ import {
   clearReplacedMobileSessionCaches,
   type MobileRecoverySessionIdentity,
 } from "../logic/mobileRecovery.session";
+import { createMobileRecoveryRejection } from "../logic/mobileRecovery.rejection";
 import { initialMobileRecoveryState } from "../logic/mobileRecovery.types";
 import type { StoredMobileSession } from "../lib/mobileSession";
 import type { MobileRpcClient } from "../lib/mobileRpc";
@@ -21,22 +23,46 @@ export function useMobileOrchestrationSync(
   const queryClient = useQueryClient();
   const previousSession = useRef<MobileRecoverySessionIdentity | null>(null);
   const sessionId = session?.sessionId;
+  const stateScope = session ? mobileSessionStateScope(session, "query") : undefined;
+  const cacheIdentity = useMemo(
+    () =>
+      session && stateScope
+        ? { sessionId: session.sessionId, backendBaseUrl: session.backendBaseUrl, stateScope }
+        : null,
+    [session, stateScope],
+  );
+  const rejectionRef = useRef<{
+    session: StoredMobileSession | null;
+    state: ReturnType<typeof createMobileRecoveryRejection>;
+  } | null>(null);
+  const prior = rejectionRef.current?.session;
+  if (
+    !rejectionRef.current ||
+    prior?.sessionId !== sessionId ||
+    getMobileSessionAuthority(prior) !== getMobileSessionAuthority(session) ||
+    prior?.backendBaseUrl !== session?.backendBaseUrl ||
+    prior?.sessionToken !== session?.sessionToken
+  ) {
+    rejectionRef.current = { session, state: createMobileRecoveryRejection() };
+  }
+  const rejection = rejectionRef.current.state;
   const controller = useMemo(
     () =>
-      client && sessionId
+      client && stateScope
         ? createMobileRecoveryController({
             client,
             queryClient,
-            sessionId,
+            sessionId: stateScope,
+            rejection,
           })
         : null,
-    [client, queryClient, sessionId],
+    [client, queryClient, stateScope, rejection],
   );
 
   useEffect(() => {
-    clearReplacedMobileSessionCaches(queryClient, previousSession.current, session);
-    previousSession.current = session;
-  }, [queryClient, session]);
+    clearReplacedMobileSessionCaches(queryClient, previousSession.current, cacheIdentity);
+    previousSession.current = cacheIdentity;
+  }, [queryClient, cacheIdentity]);
 
   useEffect(() => {
     if (!controller) {
@@ -55,7 +81,8 @@ export function useMobileOrchestrationSync(
     controller?.getState ?? (() => emptyState),
   );
 
-  return { controller, recoveryState } as {
+  return { controller, recoveryState, clearBaselineRejection: rejection.clear } as {
+    readonly clearBaselineRejection: () => void;
     readonly controller: MobileRecoveryController | null;
     readonly recoveryState: MobileRecoveryState;
   };

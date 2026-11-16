@@ -1,3 +1,4 @@
+import { mobileComposerDraftKey } from "../lib/mobileComposerDraft.identity";
 import type { ModelSelection, ThreadId } from "@bigbud/contracts";
 import {
   useCallback,
@@ -9,14 +10,12 @@ import {
   type SetStateAction,
 } from "react";
 
-import type { PendingUserInputDraftAnswer } from "~/logic/user-input";
+import type { PendingUserInputDraftAnswer } from "@bigbud/shared/pendingUserInput";
 
 import {
   advanceMobileComposerDraft,
-  beginMobileComposerDraftLease,
   createMobileComposerDraft,
   clearSubmittedMobileComposerDraftIfRevision,
-  invalidateMobileComposerDraftLease,
   readMobileComposerDraft,
   writeMobileComposerDraftWithLease,
   type MobileCommandDeliveryStatus,
@@ -25,6 +24,7 @@ import {
   type MobileDraftThread,
 } from "../lib/mobileComposerDraft";
 import type { MobileCommandDeliveryState } from "../lib/mobileCommandDelivery.logic";
+import { useMobileDraftLease } from "./MobileThread.state.lease";
 
 type AnswersByRequestId = Record<string, Record<string, PendingUserInputDraftAnswer>>;
 type QuestionIndexByRequestId = Record<string, number>;
@@ -43,6 +43,8 @@ export interface MobileThreadState {
   readonly revision: number;
   readonly storageWarning: string | null;
   readonly setDeliveryState: (state: MobileCommandDeliveryState) => void;
+  readonly decisionSubmitted: MobileComposerDraft["submitted"];
+  readonly setDecisionDeliveryState: (state: MobileCommandDeliveryState) => void;
   readonly clearSubmittedIfRevision: (submittedRevision: number) => void;
   readonly clearNewThread: () => void;
 }
@@ -62,9 +64,22 @@ function asSubmittedState(state: MobileCommandDeliveryState): MobileComposerDraf
     submittedRevision: state.operation.submittedRevision,
     submittedAt: state.operation.submittedAt,
     deadlineAt: state.operation.deadlineAt,
+    ...(state.operation.receiptSource ? { receiptSource: state.operation.receiptSource } : {}),
     status: state.status as Exclude<MobileCommandDeliveryStatus, "idle">,
     ...(state.rejectionReason ? { rejectionReason: state.rejectionReason } : {}),
   };
+}
+
+/**
+ * The stored form of an approval, answer or interrupt. Only an unsettled one is
+ * kept: once accepted or rejected there is nothing left to reconcile.
+ */
+export function toPersistedDecision(
+  state: MobileCommandDeliveryState,
+): MobileComposerDraft["submitted"] {
+  const unsettled =
+    state.status === "pending" || state.status === "reconciling" || state.status === "uncertain";
+  return unsettled ? asSubmittedState(state) : null;
 }
 
 export function useMobileThreadState(input: {
@@ -72,18 +87,9 @@ export function useMobileThreadState(input: {
   readonly threadId: ThreadId;
   readonly fallbackDraft?: MobileDraftThread | null;
 }): MobileThreadState {
-  const identityKey = input.identity
-    ? `${input.identity.backendOrigin}:${input.identity.sessionId}:${input.identity.threadId}`
-    : input.threadId;
-  const draftLease = useMemo(
-    () => (input.identity ? beginMobileComposerDraftLease(input.identity) : null),
-    [
-      identityKey,
-      input.identity?.backendOrigin,
-      input.identity?.sessionId,
-      input.identity?.threadId,
-    ],
-  );
+  const identityKey = input.identity ? mobileComposerDraftKey(input.identity) : input.threadId;
+  const readDraftLease = useMobileDraftLease(input.identity);
+  const requiresLease = input.identity !== null;
   const initial = useMemo(() => {
     if (input.identity) {
       const stored = readMobileComposerDraft(input.identity);
@@ -123,41 +129,34 @@ export function useMobileThreadState(input: {
 
   const persist = useCallback(
     (next: MobileComposerDraft) => {
+      const draftLease = readDraftLease();
       if (!draftLease) return;
       const result = writeMobileComposerDraftWithLease(draftLease, next);
       setStorageWarning(result.ok ? null : describeStorageIssue(result.issue ?? "unavailable"));
     },
-    [draftLease],
+    [readDraftLease],
   );
-
-  useEffect(() => {
-    return () => {
-      if (!draftLease) return;
-      // The lease is invalidated by the next identity/route owner or Forget.
-      // This cleanup only prevents callbacks from the unmounted owner from
-      // writing after navigation; it does not remove the persisted draft.
-      invalidateMobileComposerDraftLease(draftLease.identity);
-    };
-  }, [draftLease]);
 
   const update = useCallback(
     (change: (current: MobileComposerDraft) => MobileComposerDraft) => {
+      if (requiresLease && !readDraftLease()) return;
       const next = change(compositionRef.current);
       compositionRef.current = next;
       setComposition(next);
       persist(next);
     },
-    [persist],
+    [persist, readDraftLease, requiresLease],
   );
 
   const replace = useCallback(
     (change: (current: MobileComposerDraft) => MobileComposerDraft) => {
+      if (requiresLease && !readDraftLease()) return;
       const next = change(compositionRef.current);
       compositionRef.current = next;
       setComposition(next);
       persist(next);
     },
-    [persist],
+    [persist, readDraftLease, requiresLease],
   );
 
   const setPrompt: Dispatch<SetStateAction<string>> = useCallback(
@@ -218,6 +217,17 @@ export function useMobileThreadState(input: {
     [replace],
   );
 
+  const setDecisionDeliveryState = useCallback(
+    (state: MobileCommandDeliveryState) => {
+      replace((current) => ({
+        ...current,
+        decisionSubmitted: toPersistedDecision(state),
+        updatedAt: new Date().toISOString(),
+      }));
+    },
+    [replace],
+  );
+
   const clearSubmittedIfRevision = useCallback(
     (submittedRevision: number) => {
       update((current) => clearSubmittedMobileComposerDraftIfRevision(current, submittedRevision));
@@ -232,10 +242,12 @@ export function useMobileThreadState(input: {
   return {
     clearNewThread,
     clearSubmittedIfRevision,
+    decisionSubmitted: composition.decisionSubmitted ?? null,
     draftThread: composition.newThread,
     pendingModelSelection: composition.modelSelection,
     prompt: composition.prompt,
     revision: composition.revision,
+    setDecisionDeliveryState,
     setDeliveryState,
     setPendingModelSelection,
     setPrompt,

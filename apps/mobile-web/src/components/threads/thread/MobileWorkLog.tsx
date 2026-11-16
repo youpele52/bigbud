@@ -1,6 +1,6 @@
 import { type WorkLogEntry } from "@bigbud/shared/workLog";
 import { ChevronDownIcon } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { cn } from "../../../lib/cn";
 
@@ -12,6 +12,7 @@ interface MobileWorkLogProps {
 }
 
 export function MobileWorkLog({ entries, defaultExpanded = true }: MobileWorkLogProps) {
+  const contentId = useId();
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   if (entries.length === 0) {
@@ -21,7 +22,9 @@ export function MobileWorkLog({ entries, defaultExpanded = true }: MobileWorkLog
   return (
     <div className="rounded-lg border border-border/60 bg-card/40 px-3 py-2">
       <button
-        className="flex w-full items-center justify-between gap-2 text-left"
+        aria-expanded={expanded}
+        aria-controls={expanded ? contentId : undefined}
+        className="flex min-h-11 w-full items-center justify-between gap-2 text-left"
         onClick={() => setExpanded((current) => !current)}
         type="button"
       >
@@ -36,7 +39,7 @@ export function MobileWorkLog({ entries, defaultExpanded = true }: MobileWorkLog
         />
       </button>
       {expanded ? (
-        <div className="mt-1 flex flex-col">
+        <div id={contentId} className="mt-1 flex flex-col">
           {entries.map((entry) => (
             <MobileWorkLogEntry key={entry.id} entry={entry} />
           ))}

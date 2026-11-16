@@ -36,6 +36,7 @@ describe("mobile existing-thread command builder", () => {
     } as OrchestrationThread;
     const commands = createMobileThreadCommands({
       actionsAvailable: true,
+      sessionScope: "thread-control",
       activePendingUserInput: null,
       activeUserInputAnswers: {},
       activeUserInputQuestionIndex: 0,
@@ -123,6 +124,7 @@ describe("mobile existing-thread command builder", () => {
     );
     const commands = createMobileThreadCommands({
       actionsAvailable: true,
+      sessionScope: "thread-control",
       activePendingUserInput: null,
       activeUserInputAnswers: {},
       activeUserInputQuestionIndex: 0,

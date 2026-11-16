@@ -96,7 +96,8 @@ try {
 
   const dispatches = requests.filter((request) => request.tag === "orchestration.dispatchCommand");
   assert.equal(dispatches.length, 1, "rapid activation must dispatch one command");
-  assert.equal(dispatches[0].payload.type, "thread.turn.start");
+  // Existing threads send `thread.message.submit` (delivery "auto") since queued follow-ups.
+  assert.equal(dispatches[0].payload.type, "thread.message.submit");
   assert.deepEqual(dispatches[0].payload.modelSelection, thread.modelSelection);
   assert.equal(dispatches[0].payload.runtimeMode, thread.runtimeMode);
   assert.equal(dispatches[0].payload.interactionMode, thread.interactionMode);

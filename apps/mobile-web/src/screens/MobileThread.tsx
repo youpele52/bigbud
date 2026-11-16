@@ -1,3 +1,4 @@
+import { getMobileSessionAuthority } from "../lib/mobileSessionAuthority";
 import { type ModelSelection, type ThreadId } from "@bigbud/contracts";
 import { deriveWorkLogEntries } from "@bigbud/shared/workLog";
 import { useEffect, useMemo, useState } from "react";
@@ -16,11 +17,7 @@ import {
   resolveMobileComposerModelSelection,
   resolveMobileLockedProvider,
 } from "../logic/mobileModelSelection.logic";
-import {
-  derivePendingApprovals,
-  derivePendingUserInputs,
-  resolveThreadWorkspaceRoot,
-} from "../lib/mobileModels";
+import { derivePendingApprovals, derivePendingUserInputs } from "../lib/mobileModels";
 import { deriveUserTurnAnchorsFromThreadMessages } from "../logic/mobileReaderPosition.logic";
 import { createMobileThreadCommands } from "./MobileThread.commands";
 import { markThreadVisited } from "../lib/mobileThreadVisit";
@@ -28,17 +25,15 @@ import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTarget
 import { useMobileSessionState } from "../context/MobileSessionContext";
 import { useMobileThreadScroll } from "./MobileThread.scroll";
 import { MobileThreadView } from "./MobileThread.view";
+import { hasOlderMobileHistory } from "./MobileThread.view.logic";
 import { MobileQueueNotice } from "../components/threads/thread/MobileQueueNotice";
 import { createMobileUserInputHandlers } from "./MobileThread.userInput";
 import { describeRecoveryReason } from "../logic/mobileRecovery.types";
 import { isMobileConnectionActionsBlocked } from "../components/shell/MobileConnectionNotice.logic";
 import { redactMobileText } from "../lib/mobileRedaction";
 import { useMobileThreadState } from "./MobileThread.state";
-import {
-  resolveDraftWorkspaceRoot,
-  resolveMobileThreadWorkspaceRoot,
-} from "./MobileThread.workspace";
-import { useMobileThreadDelivery } from "./MobileThread.delivery";
+import { resolveMobileThreadWorkspaceRoot } from "./MobileThread.workspace";
+import { buildMobileComposerDeliveryProps, useMobileThreadDelivery } from "./MobileThread.delivery";
 import { getReadOnlyThreadProvider } from "@bigbud/shared/providerLifecycle";
 
 export function MobileThread({ threadId }: { threadId: ThreadId }) {
@@ -46,7 +41,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   const { client, connection, recovery, recoveryState, restart, snapshotQuery } =
     useMobileSnapshot(session);
   const { threadQuery, threadError } = useMobileThread(session, threadId);
-  const { providers } = useMobileServerConfig(session);
+  const { providers, serverConfig } = useMobileServerConfig(session);
   const { startNewThread } = useMobileNewThread();
   const [isRespondingToUserInput, setIsRespondingToUserInput] = useState(false);
   const [providerUnlocked, setProviderUnlocked] = useState(false);
@@ -56,19 +51,21 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
         ? makeMobileComposerDraftIdentity({
             backendBaseUrl: session.backendBaseUrl,
             sessionId: session.sessionId,
+            authorityId: getMobileSessionAuthority(session),
             threadId,
           })
         : null,
     [session, threadId],
   );
   const composerState = useMobileThreadState({ identity: composerIdentity, threadId });
-  const composerIdentityKey = composerIdentity
-    ? `${composerIdentity.backendOrigin}:${composerIdentity.sessionId}:${composerIdentity.threadId}`
-    : threadId;
-  const { delivery, decisionDelivery } = useMobileThreadDelivery({
-    identity: composerIdentityKey,
+  const { delivery, decisionDelivery, recheckRef } = useMobileThreadDelivery({
+    identity: composerIdentity,
+    threadId,
+    freshness: recoveryState.freshness,
     onStateChange: composerState.setDeliveryState,
+    onDecisionStateChange: composerState.setDecisionDeliveryState,
     submitted: composerState.submitted,
+    decisionSubmitted: composerState.decisionSubmitted,
   });
   const draftThread = composerState.draftThread;
   const prompt = composerState.prompt;
@@ -93,23 +90,18 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     return snapshot.projects.find((candidate) => candidate.id === projectId) ?? null;
   }, [draftThread, snapshotQuery.data, thread]);
 
-  const composerWorkspaceRoot = useMemo(() => {
-    const snapshot = snapshotQuery.data;
-    if (!snapshot) {
-      return undefined;
-    }
-    if (thread) {
-      return resolveThreadWorkspaceRoot(snapshot, thread);
-    }
-    if (draftThread) {
-      return resolveDraftWorkspaceRoot(snapshot, draftThread);
-    }
-    return undefined;
-  }, [draftThread, snapshotQuery.data, thread]);
+  const composerWorkspaceRoot = useMemo(
+    () =>
+      snapshotQuery.data
+        ? resolveMobileThreadWorkspaceRoot(snapshotQuery.data, thread, draftThread)
+        : undefined,
+    [draftThread, snapshotQuery.data, thread],
+  );
 
   const gitStatusQuery = useMobileGitStatus(
     composerWorkspaceRoot ?? null,
     composerProject ? resolveWorkspaceExecutionTargetId(composerProject) : null,
+    session,
   );
 
   const approvals = useMemo(
@@ -151,9 +143,9 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   useEffect(() => {
     if (thread) {
       clearNewThread();
-      markThreadVisited(threadId);
+      markThreadVisited(threadId, undefined, session);
     }
-  }, [clearNewThread, thread, threadId]);
+  }, [clearNewThread, thread, threadId, session]);
 
   useEffect(() => {
     setProviderUnlocked(false);
@@ -289,6 +281,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
   };
 
   const commands = createMobileThreadCommands({
+    sessionScope: session?.scope,
     actionsAvailable: recoveryState.actionsAvailable,
     activePendingUserInput,
     activeUserInputAnswers,
@@ -314,6 +307,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     thread,
     threadId,
   });
+  recheckRef.current = { prompt: commands.checkDelivery, decision: commands.checkDecisionDelivery };
 
   const userInputHandlers = createMobileUserInputHandlers({
     activeAnswers: activeUserInputAnswers,
@@ -336,8 +330,14 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
     <div className="relative h-full">
       <MobileQueueNotice queuedPromptCount={thread?.queuedPrompts?.length ?? 0} />
       <MobileThreadView
+        greetingContext={{
+          identity: composerIdentity ? JSON.stringify(composerIdentity) : null,
+          name: serverConfig?.settings.greetingName ?? "",
+          settingsReady: serverConfig !== null,
+        }}
         readOnlyProvider={getReadOnlyThreadProvider(thread)}
         activeWorkStartedAt={activeWorkStartedAt}
+        hasOlderHistory={hasOlderMobileHistory(recoveryState, threadId)}
         isFollowing={isFollowing}
         messages={messages}
         messagesScrollRef={messagesScrollRef}
@@ -356,6 +356,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
         workLogEntries={workLogEntries}
         workspaceRoot={workspaceRoot}
         composerProps={{
+          sessionScope: session?.scope,
           availableProviders: providers,
           isRespondingToUserInput: isRespondingToUserInput,
           isRunning,
@@ -363,7 +364,7 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
           modelSelection: selectedModelSelection,
           onAdvanceUserInput: userInputHandlers.advance,
           onChange: handleComposerChange,
-          onCheckDelivery: () => void commands.checkDelivery(),
+          ...buildMobileComposerDeliveryProps({ delivery, decisionDelivery, commands }),
           onModelSelectionChange: handleModelSelectionChange,
           onPreviousUserInputQuestion: userInputHandlers.previous,
           onProviderUnlock: () => setProviderUnlocked(true),
@@ -377,7 +378,6 @@ export function MobileThread({ threadId }: { threadId: ThreadId }) {
           stateDependentActionsDisabled:
             isMobileConnectionActionsBlocked(connection, recoveryState) ||
             !recoveryState.actionsAvailable,
-          deliveryState: delivery.getState().status,
           storageWarning: composerState.storageWarning,
           placeholder: "What are we working on?",
           projectTitle,

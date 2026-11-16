@@ -23,7 +23,12 @@ import {
   createMobileRpcProtocolLayer,
   type MobileWsProtocolLifecycleHandlers,
 } from "./mobileRpc.protocol";
-import { MobileRecoveryUnsupportedError, normalizeRecoveryRpcError } from "./mobileRpc.errors";
+import {
+  MobileRecoveryRejectedBaselineError,
+  MobileRecoveryUnsupportedError,
+  normalizeRecoveryRpcError,
+  formatRpcError,
+} from "./mobileRpc.errors";
 import {
   runCancellable,
   startMobileRpcClientInitialization,
@@ -68,13 +73,6 @@ interface MobileRpcClientOptions {
   readonly startDomainEventStream?: DomainEventStreamStarter;
   readonly startServerConfigStream?: ServerConfigStreamStarter;
   readonly startMobileRecoveryStream?: MobileRecoveryStreamStarter;
-}
-
-function formatRpcError(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  return String(error);
 }
 
 export class MobileRpcClient {
@@ -281,6 +279,7 @@ export class MobileRpcClient {
       });
     } catch (error) {
       const normalized = normalizeRecoveryRpcError(error, MOBILE_RECOVERY_WS_METHODS.getBaseline);
+      if (normalized instanceof MobileRecoveryRejectedBaselineError) throw normalized;
       if (normalized instanceof MobileRecoveryUnsupportedError) {
         this.expectedUnsupportedClose = true;
         throw normalized;

@@ -1,4 +1,6 @@
-import type { OrchestrationMessage } from "@bigbud/contracts";
+import type { OrchestrationMessage, ThreadId } from "@bigbud/contracts";
+
+import type { MobileRecoveryState } from "../logic/mobileRecovery.types";
 
 interface MobileEmptyStateInput {
   readonly messages: ReadonlyArray<Pick<OrchestrationMessage, "role">>;
@@ -24,4 +26,12 @@ export function shouldShowMobileEmptyState(input: MobileEmptyStateInput): boolea
     !input.hasPendingUserInput &&
     !input.hasConnectionNotice
   );
+}
+
+/** Whether the recovery baseline left older messages of this thread on the desktop. */
+export function hasOlderMobileHistory(
+  recoveryState: Pick<MobileRecoveryState, "selectedThreadId" | "selectedThreadHasOlderHistory">,
+  threadId: ThreadId,
+): boolean {
+  return recoveryState.selectedThreadId === threadId && recoveryState.selectedThreadHasOlderHistory;
 }

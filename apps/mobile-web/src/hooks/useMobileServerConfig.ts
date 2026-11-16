@@ -1,57 +1,30 @@
-import type { ServerConfig, ServerConfigStreamEvent, ServerProvider } from "@bigbud/contracts";
+import { mobileSessionStateScope } from "../lib/mobileSessionAuthority";
 import { useEffect, useState } from "react";
 
 import { useMobileRpcClient } from "../context/MobileRpcContext";
-
-function asStreamEvent(value: unknown): ServerConfigStreamEvent | null {
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-  const candidate = value as { type?: unknown };
-  return typeof candidate.type === "string" ? (value as ServerConfigStreamEvent) : null;
-}
-
-function applyConfigEvent(
-  previous: ServerConfig | null,
-  event: ServerConfigStreamEvent,
-): ServerConfig | null {
-  if (event.type === "snapshot") {
-    return event.config;
-  }
-  if (event.type === "providerStatuses") {
-    if (!previous) {
-      return null;
-    }
-    return { ...previous, providers: [...event.payload.providers] };
-  }
-  return previous;
-}
-
-function pickProviders(config: ServerConfig | null): ReadonlyArray<ServerProvider> {
-  return config?.providers ?? [];
-}
+import {
+  subscribeMobileServerConfig,
+  currentMobileServerConfig,
+  type ScopedMobileServerConfig,
+} from "./useMobileServerConfig.logic";
 
 export function useMobileServerConfig(session: { sessionId: string } | null) {
   const { client } = useMobileRpcClient();
-  const [config, setConfig] = useState<ServerConfig | null>(null);
+  const [state, setState] = useState<ScopedMobileServerConfig | null>(null);
+  const scope = session ? mobileSessionStateScope(session, "query") : undefined;
+  const config = currentMobileServerConfig(state, client, scope);
 
   useEffect(() => {
     if (!client || !session) {
-      setConfig(null);
+      setState(null);
       return;
     }
-    return client.onServerConfigEvent((event) => {
-      const streamEvent = asStreamEvent(event);
-      if (!streamEvent) {
-        return;
-      }
-      setConfig((existing) => applyConfigEvent(existing, streamEvent));
-    });
-  }, [client, session]);
+    return subscribeMobileServerConfig(client, scope!, setState);
+  }, [client, session, scope]);
 
   return {
     serverConfig: config,
-    providers: pickProviders(config),
+    providers: config?.providers ?? [],
     isLoading: client !== null && session !== null && config === null,
   };
 }

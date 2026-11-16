@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldShowMobileEmptyState } from "./MobileThread.view.logic";
+import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
+
+import { initialMobileRecoveryState } from "../logic/mobileRecovery.types";
+import { hasOlderMobileHistory, shouldShowMobileEmptyState } from "./MobileThread.view.logic";
 
 const idleInput = {
   hasConnectionNotice: false,
@@ -27,5 +30,22 @@ describe("shouldShowMobileEmptyState", () => {
     ["connection notice", { hasConnectionNotice: true }],
   ])("hides the logo when %s is visible", (_name, update) => {
     expect(shouldShowMobileEmptyState({ ...idleInput, ...update })).toBe(false);
+  });
+});
+
+describe("hasOlderMobileHistory", () => {
+  const threadId = ThreadId.makeUnsafe("thread-a");
+  const state = {
+    ...initialMobileRecoveryState("current"),
+    selectedThreadId: threadId,
+    selectedThreadHasOlderHistory: true,
+  };
+
+  it("shows the note only for the selected thread the baseline flagged", () => {
+    expect(hasOlderMobileHistory(state, threadId)).toBe(true);
+    expect(hasOlderMobileHistory(state, ThreadId.makeUnsafe("thread-b"))).toBe(false);
+    expect(
+      hasOlderMobileHistory({ ...state, selectedThreadHasOlderHistory: false }, threadId),
+    ).toBe(false);
   });
 });

@@ -1,5 +1,4 @@
 import { isBuiltInChatsProject, ProjectId, ThreadId } from "@bigbud/contracts";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -8,12 +7,16 @@ import {
   createRouter,
   useRouterState,
 } from "@tanstack/react-router";
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useLayoutEffect, useMemo, type Dispatch, type SetStateAction } from "react";
 
+import { isMobileStartupWaiting } from "./components/shell/MobileSessionGate.logic";
 import { MobileAppFrame } from "./components/shell/MobileAppFrame";
 import { MobileStartupSplash } from "./components/shell/MobileStartupSplash";
+import {
+  MobileConnectingStatus,
+  MobileSessionConnectionDetails,
+} from "./components/shell/MobileConnectingStatus";
 import { useMobileSnapshot } from "./hooks/useMobileSnapshot";
-import { useTheme } from "./theme/useTheme";
 
 import {
   clearMobileDraftThreads,
@@ -26,8 +29,10 @@ import {
   isMobileLaunchRoute,
   resolveMobileHeaderState,
 } from "./logic/mobileHeader.logic";
-import { MobileRpcProvider } from "./context/MobileRpcContext";
-import { MobileSessionContext } from "./context/MobileSessionContext";
+import { MobileSessionRuntime } from "./context/MobileSessionRuntime";
+import { writeMobileSelectedThread } from "./lib/mobileHostSelection";
+import { getMobileSessionAuthority } from "./lib/mobileSessionAuthority";
+import { useMobileHosts } from "./context/MobileHostsContext";
 import { MobileChats } from "./screens/MobileChats";
 import { MobileDiff } from "./screens/MobileDiff";
 import { MobileLaunch } from "./screens/MobileLaunch";
@@ -37,12 +42,8 @@ import { MobileProjectThreads } from "./screens/MobileProjectThreads";
 import { MobileThread } from "./screens/MobileThread";
 import { MobileThreadProviderIcon } from "./components/threads/MobileThreadProviderIcon";
 import { useMobileNewThread } from "./hooks/useMobileNewThread";
-import {
-  clearMobileSession,
-  isMobileSessionExpired,
-  readMobileSession,
-  type StoredMobileSession,
-} from "./lib/mobileSession";
+import { useMobileViewport } from "./hooks/useMobileViewport";
+import { clearMobileSession, type StoredMobileSession } from "./lib/mobileSession";
 
 function AppFrameContent({
   session,
@@ -51,16 +52,25 @@ function AppFrameContent({
   readonly session: StoredMobileSession | null;
   readonly setSession: Dispatch<SetStateAction<StoredMobileSession | null>>;
 }) {
+  const hostContext = useMobileHosts();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const { recoveryState, restart, snapshotQuery, connectionError } = useMobileSnapshot(session);
+  const { connection, recovery, recoveryState, restart, snapshotQuery, connectionError } =
+    useMobileSnapshot(session);
   const { startNewChat, startNewThread } = useMobileNewThread();
   const threadId = extractMobileThreadId(pathname);
+  // A real route deselection changes recovery scope. Client replacement cleanup must not.
+  useEffect(() => {
+    if (!threadId && recovery?.getState().selectedThreadId) {
+      void recovery.selectThread(null).catch(() => undefined);
+    }
+  }, [threadId, recovery]);
   const draftThread =
     threadId && session
       ? getMobileDraftThread(
           makeMobileComposerDraftIdentity({
             backendBaseUrl: session.backendBaseUrl,
             sessionId: session.sessionId,
+            authorityId: getMobileSessionAuthority(session),
             threadId,
           }),
         )
@@ -70,14 +80,20 @@ function AppFrameContent({
   const conversationThread = threadId
     ? (snapshotQuery.data?.threads.find((candidate) => candidate.id === threadId) ?? null)
     : null;
+  const ownsSelectedThread = !!(conversationThread || draftThread);
+  const reportHostIssue = hostContext?.hosts.reportIssue;
+  useLayoutEffect(() => {
+    if (!session || !getMobileSessionAuthority(session) || !threadId || !ownsSelectedThread) return;
+    if (!writeMobileSelectedThread(session, ThreadId.makeUnsafe(threadId)))
+      reportHostIssue?.(
+        "This thread could not be remembered. Your draft and current connection are preserved.",
+      );
+  }, [session, threadId, ownsSelectedThread, reportHostIssue]);
   const showLaunchSplash =
     isMobileLaunchRoute(pathname) &&
     session !== null &&
     !snapshotQuery.data &&
-    (recoveryState.freshness === "refreshing" ||
-      (recoveryState.freshness === "unavailable" &&
-        recoveryState.reason === null &&
-        snapshotQuery.isPending));
+    isMobileStartupWaiting(connection, recoveryState, snapshotQuery.isPending);
   const showLaunchRecoveryError =
     isMobileLaunchRoute(pathname) && session !== null && !snapshotQuery.data && !showLaunchSplash;
 
@@ -96,7 +112,9 @@ function AppFrameContent({
   return (
     <>
       {showLaunchSplash ? (
-        <MobileStartupSplash />
+        <MobileStartupSplash>
+          {session ? <MobileConnectingStatus session={session} /> : null}
+        </MobileStartupSplash>
       ) : showLaunchRecoveryError ? (
         <div className="grid gap-3 px-4 py-8">
           <p className="text-sm font-medium text-foreground">Unable to connect</p>
@@ -116,13 +134,15 @@ function AppFrameContent({
             <button
               className="min-h-11 rounded-md bg-secondary px-3 text-sm"
               onClick={() => {
-                if (session) {
+                if (hostContext && !hostContext.forgetSelected()) return;
+                if (session && !hostContext?.hosts.selected) {
                   clearMobileDraftThreads({
                     backendBaseUrl: session.backendBaseUrl,
                     sessionId: session.sessionId,
+                    authorityId: getMobileSessionAuthority(session),
                   });
                 }
-                clearMobileSession();
+                if (!hostContext) clearMobileSession();
                 setSession(null);
                 window.location.assign("/mobile");
               }}
@@ -131,6 +151,7 @@ function AppFrameContent({
               Clear session
             </button>
           </div>
+          {session ? <MobileSessionConnectionDetails session={session} /> : null}
         </div>
       ) : (
         <MobileAppFrame
@@ -158,23 +179,10 @@ function AppFrameContent({
 }
 
 function AppFrame() {
-  useTheme();
-  const [session, setSession] = useState(() => {
-    const current = readMobileSession();
-    if (current && isMobileSessionExpired(current)) {
-      clearMobileSession();
-      return null;
-    }
-    return current;
-  });
-  const sessionContextValue = useMemo(() => ({ session, setSession }), [session, setSession]);
-
   return (
-    <MobileSessionContext.Provider value={sessionContextValue}>
-      <MobileRpcProvider>
-        <AppFrameContent session={session} setSession={setSession} />
-      </MobileRpcProvider>
-    </MobileSessionContext.Provider>
+    <MobileSessionRuntime>
+      {(session, setSession) => <AppFrameContent session={session} setSession={setSession} />}
+    </MobileSessionRuntime>
   );
 }
 
@@ -229,7 +237,7 @@ const mobileThreadRoute = createRoute({
   path: "/mobile/thread/$threadId",
   component: () => {
     const { threadId } = mobileThreadRoute.useParams();
-    return <MobileThread threadId={ThreadId.makeUnsafe(threadId)} />;
+    return <MobileThread key={threadId} threadId={ThreadId.makeUnsafe(threadId)} />;
   },
 });
 
@@ -257,12 +265,8 @@ const routeTree = rootRoute.addChildren([
   mobileDiffRoute,
 ]);
 
-const queryClient = new QueryClient();
 const router = createRouter({
   routeTree,
-  Wrap: ({ children }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  ),
 });
 
 declare module "@tanstack/react-router" {
@@ -272,6 +276,7 @@ declare module "@tanstack/react-router" {
 }
 
 export function App() {
+  useMobileViewport();
   const nextRouter = useMemo(() => router, []);
   return <RouterProvider router={nextRouter} />;
 }

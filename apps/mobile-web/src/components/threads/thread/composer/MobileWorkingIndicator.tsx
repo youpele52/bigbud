@@ -1,5 +1,5 @@
-import { SpinnerVerbShimmer } from "~/components/chat/common/SpinnerVerbShimmer";
-import { formatWorkingTimer } from "~/components/chat/messages/MessagesTimeline.assistantMessage.meta";
+import { SpinnerVerbShimmer } from "@bigbud/ui/SpinnerVerbShimmer";
+import { formatWorkingTimer } from "@bigbud/ui/formatWorkingTimer";
 
 interface MobileWorkingIndicatorProps {
   verb: string;

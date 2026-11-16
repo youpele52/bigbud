@@ -14,21 +14,25 @@ import {
   derivePendingUserInputProgress,
   type PendingUserInputDraftAnswer,
   setPendingUserInputCustomAnswer,
-} from "~/logic/user-input";
-import { composerSurfaceStyles } from "~/components/chat/composer/ComposerSurface.styles";
+} from "@bigbud/shared/pendingUserInput";
+import { composerSurfaceStyles } from "@bigbud/ui/composerSurface";
+import { pendingApprovalSurfaceStyles } from "@bigbud/ui/pendingApprovalSurface";
 
 import type { MobilePendingApproval, MobilePendingUserInput } from "../../../../lib/mobileModels";
 import { cn } from "../../../../lib/cn";
 import type { MobileCommandDeliveryStatus } from "../../../../lib/mobileCommandDelivery.logic";
 import { MobileComposerContextBar } from "./MobileComposerContextBar";
 import { MobileComposerApproval } from "./MobileComposer.approval";
-import { MobileComposerDeliveryNotice } from "./MobileComposerDeliveryNotice";
+import {
+  MobileComposerDeliveryNotice,
+  type MobileDecisionDeliveryNotice,
+} from "./MobileComposerDeliveryNotice";
 import { shouldHandleMobileComposerEnter } from "./MobileComposer.logic";
 import { MobileComposerModelPicker } from "./MobileComposerModelPicker";
 import { MobileComposerPendingUserInput } from "./MobileComposerPendingUserInput";
 import { MobileComposerSendIcon } from "./MobileComposerSendIcon";
 import { MobileComposerStopIcon } from "./MobileComposerStopIcon";
-import { Button } from "../../../ui/button";
+import { MobileComposerApprovalActions } from "./MobileComposerApprovalActions";
 
 interface MobileComposerProps {
   value: string;
@@ -63,7 +67,10 @@ interface MobileComposerProps {
   onModelSelectionChange?: (next: ModelSelection) => void;
   lockedProvider?: ProviderKind | null;
   onProviderUnlock?: () => void;
-  onCheckDelivery?: () => void;
+  onCheckDelivery?: (() => void) | undefined;
+  deliveryFromPreviousAuthorization?: boolean;
+  onResendDelivery?: (() => void) | undefined;
+  decisionDelivery?: MobileDecisionDeliveryNotice | undefined;
   deliveryState?: MobileCommandDeliveryStatus;
   storageWarning?: string | null;
 }
@@ -98,9 +105,16 @@ export function MobileComposer({
   lockedProvider = null,
   onProviderUnlock,
   onCheckDelivery,
+  deliveryFromPreviousAuthorization,
+  onResendDelivery,
+  decisionDelivery,
   deliveryState = "idle",
   storageWarning = null,
 }: MobileComposerProps) {
+  const decisionBlocked = ["pending", "uncertain", "reconciling"].includes(
+    decisionDelivery?.status ?? "idle",
+  );
+  stateDependentActionsDisabled ||= decisionBlocked;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isApprovalMode = pendingApproval !== null;
   const isLearningSkillProposal = pendingApproval?.requestId.startsWith("learning-skill:") ?? false;
@@ -208,7 +222,10 @@ export function MobileComposer({
       <div className="mx-auto min-w-0 w-full max-w-3xl px-3 py-2">
         <MobileComposerDeliveryNotice
           deliveryState={deliveryState}
+          deliveryFromPreviousAuthorization={deliveryFromPreviousAuthorization}
           {...(onCheckDelivery ? { onCheckDelivery } : {})}
+          {...(onResendDelivery ? { onResendDelivery } : {})}
+          decision={decisionDelivery}
           storageWarning={storageWarning}
         />
         <div className={cn(composerSurfaceStyles.frame, "rounded-[22px]")}>
@@ -216,16 +233,12 @@ export function MobileComposer({
             className={cn(
               composerSurfaceStyles.surface,
               composerSurfaceStyles.surfaceFocus,
-              "rounded-[20px] flex min-h-0 min-w-0 max-h-[min(52dvh,26rem)] flex-col overflow-hidden",
+              isApprovalMode && pendingApprovalSurfaceStyles.frame,
+              "rounded-[20px] flex min-h-0 min-w-0 max-h-[min(calc(var(--mobile-viewport-height,100dvh)*0.52),26rem)] flex-col overflow-hidden",
             )}
             data-mobile-composer-surface="true"
           >
-            {pendingApproval ? (
-              <MobileComposerApproval
-                approval={pendingApproval}
-                isLearningSkillProposal={isLearningSkillProposal}
-              />
-            ) : null}
+            {pendingApproval ? <MobileComposerApproval approval={pendingApproval} /> : null}
 
             {pendingUserInput && onToggleUserInputOption && onAdvanceUserInput ? (
               <MobileComposerPendingUserInput
@@ -247,6 +260,7 @@ export function MobileComposer({
                 )}
               >
                 <textarea
+                  aria-label={isUserInputMode ? "Your answer" : "Message"}
                   ref={textareaRef}
                   className="max-h-40 min-h-12 w-full resize-none overflow-y-auto bg-transparent text-sm leading-5 text-foreground outline-none placeholder:text-muted-foreground/70"
                   disabled={composerDisabled}
@@ -276,25 +290,12 @@ export function MobileComposer({
               </div>
 
               {isApprovalMode && pendingApproval && onRespondToApproval ? (
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-                  <Button
-                    className="min-h-11 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                    disabled={disabled || stateDependentActionsDisabled}
-                    onClick={() => onRespondToApproval(pendingApproval.requestId, "decline")}
-                    size="sm"
-                    variant="outline"
-                  >
-                    {isLearningSkillProposal ? "Reject patch" : "Deny"}
-                  </Button>
-                  <Button
-                    className="min-h-11"
-                    disabled={disabled || stateDependentActionsDisabled}
-                    onClick={() => onRespondToApproval(pendingApproval.requestId, "accept")}
-                    size="sm"
-                  >
-                    {isLearningSkillProposal ? "Approve patch" : "Approve"}
-                  </Button>
-                </div>
+                <MobileComposerApprovalActions
+                  approval={pendingApproval}
+                  disabled={disabled || stateDependentActionsDisabled}
+                  isLearningSkillProposal={isLearningSkillProposal}
+                  onRespond={onRespondToApproval}
+                />
               ) : (
                 <div className="flex shrink-0 items-center gap-1.5">
                   {isUserInputMode &&
@@ -315,6 +316,7 @@ export function MobileComposer({
                   {isRunning ? (
                     <button
                       aria-label="Stop generation"
+                      disabled={decisionBlocked}
                       className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-rose-500/90 text-white transition-all duration-150 hover:scale-105 hover:bg-rose-500"
                       onClick={handlePrimaryAction}
                       type="button"

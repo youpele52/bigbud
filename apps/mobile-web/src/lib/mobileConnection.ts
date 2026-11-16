@@ -3,6 +3,11 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { MobileRpcClient } from "./mobileRpc";
 import { isMobileSessionExpired, type StoredMobileSession } from "./mobileSession";
 import {
+  canRestartMobileConnection,
+  installMobileResumeListeners,
+  resolveMobileResumeAction,
+} from "../logic/mobileConnection.resume";
+import {
   createMobileConnectionLifecycle,
   scheduleMobileConnectionExpiry,
   type MobileConnectionLifecycle,
@@ -10,8 +15,11 @@ import {
 } from "../logic/mobileConnection.logic";
 
 interface MobileConnectionOptions {
+  readonly beforeConnect?: (signal: AbortSignal) => Promise<void>;
   readonly onOpen?: () => void;
   readonly onClose?: () => void;
+  /** A visible resume found the socket still open. */
+  readonly onResumeOpen?: () => void;
 }
 
 export function useMobileConnection(
@@ -25,11 +33,15 @@ export function useMobileConnection(
   const [client, setClient] = useState<MobileRpcClient | null>(null);
   const [restartVersion, setRestartVersion] = useState(0);
   const restartPendingRef = useRef(false);
+  const sessionIdentityRef = useRef<string | null>(null);
   const clientRef = useRef<MobileRpcClient | null>(null);
   const onOpenRef = useRef(options?.onOpen);
   const onCloseRef = useRef(options?.onClose);
   onOpenRef.current = options?.onOpen;
   onCloseRef.current = options?.onClose;
+  const beforeConnect = options?.beforeConnect;
+  const onResumeOpenRef = useRef(options?.onResumeOpen);
+  onResumeOpenRef.current = options?.onResumeOpen;
 
   const connection = useSyncExternalStore(
     lifecycle.subscribe,
@@ -38,7 +50,7 @@ export function useMobileConnection(
   );
 
   const restart = useCallback(() => {
-    if (lifecycle.getState().expired) return;
+    if (!canRestartMobileConnection(lifecycle.getState())) return;
     if (restartPendingRef.current) return;
     restartPendingRef.current = true;
     setRestartVersion((current) => current + 1);
@@ -55,6 +67,14 @@ export function useMobileConnection(
       return;
     }
 
+    const identity = JSON.stringify([
+      session.backendBaseUrl,
+      session.sessionId,
+      session.sessionToken,
+    ]);
+    if (sessionIdentityRef.current !== identity) lifecycle.reset();
+    sessionIdentityRef.current = identity;
+    if (!canRestartMobileConnection(lifecycle.getState())) return;
     const lease = lifecycle.begin(session.expiresAt);
     restartPendingRef.current = false;
     if (isMobileSessionExpired(session)) {
@@ -65,6 +85,7 @@ export function useMobileConnection(
     let disposed = false;
     const nextClient = new MobileRpcClient(wsUrl, {
       ...lease.handlers,
+      ...(beforeConnect ? { beforeConnect } : {}),
       onOpen: () => {
         lease.handlers.onOpen?.();
         if (lease.isActive()) onOpenRef.current?.();
@@ -90,38 +111,46 @@ export function useMobileConnection(
       expiresAt: session.expiresAt,
       onExpired: expire,
     });
-    const onOnline = () => {
-      lifecycle.setBrowserOffline(false);
-      onResume();
-    };
-    const onOffline = () => lifecycle.setBrowserOffline(true);
     const onResume = () => {
       lifecycle.setBrowserOffline(typeof navigator !== "undefined" && navigator.onLine === false);
-      if (isMobileSessionExpired(session)) {
-        expire();
-        return;
+      const action = resolveMobileResumeAction({
+        visible: document.visibilityState !== "hidden",
+        sessionExpired: isMobileSessionExpired(session),
+        transport: lifecycle.getState().transport,
+        authorization: lifecycle.getState().authorization,
+      });
+      if (action === "expire") expire();
+      else if (action === "restart") restart();
+      else if (
+        document.visibilityState !== "hidden" &&
+        lifecycle.getState().transport === "open" &&
+        lease.isActive()
+      ) {
+        onResumeOpenRef.current?.();
       }
-      const transport = lifecycle.getState().transport;
-      if (transport === "closed" || transport === "exhausted") restart();
     };
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    window.addEventListener("focus", onResume);
-    document.addEventListener("visibilitychange", onResume);
+    const removeResumeListeners = installMobileResumeListeners(
+      { window, document },
+      {
+        onOnline: () => {
+          lifecycle.setBrowserOffline(false);
+          onResume();
+        },
+        onOffline: () => lifecycle.setBrowserOffline(true),
+        onResume,
+      },
+    );
 
     return () => {
       disposed = true;
       cancelExpiry();
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-      window.removeEventListener("focus", onResume);
-      document.removeEventListener("visibilitychange", onResume);
+      removeResumeListeners();
       lease.dispose();
       if (clientRef.current === nextClient) clientRef.current = null;
       setClient((current) => (current === nextClient ? null : current));
       void nextClient.dispose();
     };
-  }, [lifecycle, restart, restartVersion, session, wsUrl]);
+  }, [beforeConnect, lifecycle, restart, restartVersion, session, wsUrl]);
 
   return {
     client,

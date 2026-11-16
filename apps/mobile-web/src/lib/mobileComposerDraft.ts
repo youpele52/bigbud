@@ -1,26 +1,33 @@
+import { getMobileComposerDraftStorage as getStorage } from "./mobileComposerDraft.storage";
 import {
-  ClientOrchestrationCommand,
+  type ClientOrchestrationCommand,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   DEFAULT_RUNTIME_MODE,
-  ModelSelection,
-  ProviderInteractionMode,
-  RuntimeMode,
-  IsoDateTime,
-  NonNegativeInt,
-  ProjectId,
-  ThreadId,
-  TrimmedNonEmptyString,
+  type ModelSelection,
+  type ProviderInteractionMode,
+  type RuntimeMode,
+  type ProjectId,
+  type ThreadId,
 } from "@bigbud/contracts";
-import { Schema } from "effect";
-import { OrchestrationCommandRejectionReason } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
+import * as Schema from "effect/Schema";
+import { MobileComposerDraftSchema } from "./mobileComposerDraft.schema";
+import type { MobileCommandReceiptSourceValue } from "./mobileCommandReceiptSource";
+import type { OrchestrationCommandRejectionReason } from "@bigbud/contracts/orchestration/orchestration.rpc.ts";
 
-import type { PendingUserInputDraftAnswer } from "~/logic/user-input";
+import type { PendingUserInputDraftAnswer } from "@bigbud/shared/pendingUserInput";
 
-export interface MobileComposerDraftIdentity {
-  readonly backendOrigin: string;
-  readonly sessionId: string;
-  readonly threadId: string;
-}
+import {
+  type MobileComposerDraftIdentity,
+  type MobileComposerDraftSessionIdentity,
+  mobileComposerDraftKey as storageKey,
+  mobileComposerDraftSessionPrefix,
+  makeMobileComposerDraftIdentity as makeIdentity,
+} from "./mobileComposerDraft.identity";
+export type { MobileComposerDraftIdentity } from "./mobileComposerDraft.identity";
+export {
+  makeMobileComposerDraftIdentity,
+  normalizeMobileBackendOrigin,
+} from "./mobileComposerDraft.identity";
 
 export interface MobileComposerDraftLease {
   readonly key: string;
@@ -53,10 +60,11 @@ export interface MobileSubmittedCommand {
   readonly deadlineAt: number;
   readonly status: MobileCommandDeliveryStatus;
   readonly rejectionReason?: OrchestrationCommandRejectionReason;
+  readonly receiptSource?: MobileCommandReceiptSourceValue;
 }
 
 export interface MobileComposerDraft {
-  readonly version: 1;
+  readonly version: 1 | 2;
   readonly threadId: ThreadId;
   readonly prompt: string;
   readonly modelSelection: ModelSelection | null;
@@ -65,53 +73,11 @@ export interface MobileComposerDraft {
   readonly userInputQuestionIndexByRequestId: Record<string, number>;
   readonly revision: number;
   readonly submitted: MobileSubmittedCommand | null;
+  /** An unsettled approval, answer or interrupt, kept so a reload reuses its command ID. */
+  readonly decisionSubmitted?: MobileSubmittedCommand | null;
   readonly updatedAt: string;
 }
 
-const MobileDraftThreadSchema = Schema.Struct({
-  threadId: ThreadId,
-  projectId: ProjectId,
-  createdAt: IsoDateTime,
-  branch: Schema.NullOr(TrimmedNonEmptyString),
-  worktreePath: Schema.NullOr(TrimmedNonEmptyString),
-  runtimeMode: RuntimeMode,
-  interactionMode: ProviderInteractionMode,
-  modelSelection: Schema.NullOr(ModelSelection),
-});
-
-const MobileDraftAnswerSchema = Schema.Struct({
-  selectedOptionKeys: Schema.optional(Schema.Array(Schema.String)),
-  selectedOptionIds: Schema.optional(Schema.Array(Schema.String)),
-  selectedOptionLabels: Schema.optional(Schema.Array(Schema.String)),
-  customAnswer: Schema.optional(Schema.String),
-});
-
-const MobileSubmittedCommandSchema = Schema.Struct({
-  command: ClientOrchestrationCommand,
-  submittedRevision: NonNegativeInt,
-  submittedAt: IsoDateTime,
-  deadlineAt: Schema.Number,
-  status: Schema.Literals(["pending", "accepted", "rejected", "uncertain", "reconciling"]),
-  rejectionReason: Schema.optional(OrchestrationCommandRejectionReason),
-});
-
-const MobileComposerDraftSchema = Schema.Struct({
-  version: Schema.Literal(1),
-  threadId: ThreadId,
-  prompt: Schema.String,
-  modelSelection: Schema.NullOr(ModelSelection),
-  newThread: Schema.NullOr(MobileDraftThreadSchema),
-  userInputAnswersByRequestId: Schema.Record(
-    Schema.String,
-    Schema.Record(Schema.String, MobileDraftAnswerSchema),
-  ),
-  userInputQuestionIndexByRequestId: Schema.Record(Schema.String, NonNegativeInt),
-  revision: NonNegativeInt,
-  submitted: Schema.NullOr(MobileSubmittedCommandSchema),
-  updatedAt: IsoDateTime,
-});
-
-const STORAGE_PREFIX = "bigbud:mobile-composition:v1";
 const inMemoryDrafts = new Map<string, MobileComposerDraft>();
 const draftEpochs = new Map<string, number>();
 const invalidatedDraftKeys = new Set<string>();
@@ -126,32 +92,6 @@ export interface MobileDraftReadResult {
 export interface MobileDraftWriteResult {
   readonly ok: boolean;
   readonly issue?: Exclude<MobileDraftStorageIssue, "malformed">;
-}
-
-export function normalizeMobileBackendOrigin(backendBaseUrl: string): string {
-  try {
-    return new URL(backendBaseUrl).origin;
-  } catch {
-    return backendBaseUrl.trim().replace(/\/$/, "").toLowerCase();
-  }
-}
-
-export function makeMobileComposerDraftIdentity(input: {
-  readonly backendBaseUrl: string;
-  readonly sessionId: string;
-  readonly threadId: string;
-}): MobileComposerDraftIdentity {
-  return {
-    backendOrigin: normalizeMobileBackendOrigin(input.backendBaseUrl),
-    sessionId: input.sessionId,
-    threadId: input.threadId,
-  };
-}
-
-function storageKey(identity: MobileComposerDraftIdentity): string {
-  return [STORAGE_PREFIX, identity.backendOrigin, identity.sessionId, identity.threadId]
-    .map((part) => encodeURIComponent(part))
-    .join(":");
 }
 
 function nextDraftEpoch(key: string): number {
@@ -173,22 +113,39 @@ export function beginMobileComposerDraftLease(
   return { key, epoch: nextDraftEpoch(key), identity };
 }
 
+/** Retire writers without hiding durable state from the next committed route/host owner. */
 export function invalidateMobileComposerDraftLease(identity: MobileComposerDraftIdentity): void {
-  const key = storageKey(identity);
-  invalidatedDraftKeys.add(key);
-  nextDraftEpoch(key);
+  nextDraftEpoch(storageKey(identity));
 }
 
 export function isMobileComposerDraftLeaseCurrent(lease: MobileComposerDraftLease): boolean {
   return leaseIsCurrent(lease);
 }
 
-function getStorage(): Storage | null {
-  try {
-    return typeof sessionStorage === "undefined" ? null : sessionStorage;
-  } catch {
-    return null;
+/** Tab-local renewal fences all existing writers before taking the durable snapshot. */
+export function snapshotMobileComposerSession(input: MobileComposerDraftSessionIdentity) {
+  const storage = getStorage();
+  if (!storage || storage.length > 4096) throw new Error("Draft storage is unavailable.");
+  const prefix = `${mobileComposerDraftSessionPrefix(input)}:`;
+  const keys = new Set<string>();
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (key?.startsWith(prefix)) keys.add(key);
   }
+  for (const key of inMemoryDrafts.keys()) if (key.startsWith(prefix)) keys.add(key);
+  if (keys.size > 512) throw new Error("Too many saved drafts.");
+  return [...keys].map((key) => {
+    nextDraftEpoch(key);
+    const identity = makeIdentity({
+      ...input,
+      threadId: decodeURIComponent(key.slice(prefix.length)),
+    });
+    const result = readMobileComposerDraft(identity);
+    const raw = storage.getItem(key);
+    if (!result.draft || raw === null || inMemoryDrafts.has(key))
+      throw new Error("A saved draft is not durable or valid.");
+    return { identity, draft: result.draft };
+  });
 }
 
 function isQuotaError(error: unknown): boolean {
@@ -278,6 +235,7 @@ export function writeMobileComposerDraftWithLease(
 
 export function forgetMobileComposerDraft(identity: MobileComposerDraftIdentity): boolean {
   const key = storageKey(identity);
+  invalidatedDraftKeys.add(key);
   invalidateMobileComposerDraftLease(identity);
   inMemoryDrafts.delete(key);
   const storage = getStorage();
@@ -290,17 +248,10 @@ export function forgetMobileComposerDraft(identity: MobileComposerDraftIdentity)
   }
 }
 
-export function forgetMobileComposerDraftsForSession(input: {
-  readonly backendBaseUrl: string;
-  readonly sessionId: string;
-}): boolean {
-  const prefix = [
-    STORAGE_PREFIX,
-    normalizeMobileBackendOrigin(input.backendBaseUrl),
-    input.sessionId,
-  ]
-    .map((part) => encodeURIComponent(part))
-    .join(":");
+export function forgetMobileComposerDraftsForSession(
+  input: MobileComposerDraftSessionIdentity,
+): boolean {
+  const prefix = mobileComposerDraftSessionPrefix(input);
   for (const key of inMemoryDrafts.keys()) {
     if (key.startsWith(`${prefix}:`)) {
       inMemoryDrafts.delete(key);

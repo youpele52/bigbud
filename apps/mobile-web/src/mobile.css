@@ -1,5 +1,8 @@
+@import "../../web/src/index.css";
+
+@source "../../../packages/ui/src/**/*.{ts,tsx}";
 @source "./**/*.{ts,tsx}";
-@source "../web/src/**/*.{ts,tsx}";
+@source "../../web/src/**/*.{ts,tsx}";
 
 html,
 body,
@@ -18,11 +21,17 @@ body {
 }
 
 #root {
-  height: 100dvh;
-  min-height: 100dvh;
+  height: var(--mobile-viewport-height, 100dvh);
+  min-height: var(--mobile-viewport-height, 100dvh);
 }
 
 .mobile-shell {
+  position: fixed;
+  inset-inline: 0;
+  top: var(--mobile-viewport-top, 0px);
+  height: var(--mobile-viewport-height, 100dvh);
+  min-height: 0;
+  max-height: var(--mobile-viewport-height, 100dvh);
   min-width: 0;
   max-width: 100%;
   padding-top: env(safe-area-inset-top);
@@ -30,7 +39,14 @@ body {
   padding-left: env(safe-area-inset-left);
 }
 
+.mobile-drawer-viewport {
+  top: var(--mobile-viewport-top, 0px);
+  bottom: auto;
+  height: var(--mobile-viewport-height, 100dvh);
+}
+
 .mobile-drawer-popup {
+  max-height: calc(var(--mobile-viewport-height, 100dvh) - 2rem - env(safe-area-inset-top));
   translate: 0 var(--drawer-swipe-movement-y, 0px);
 }
 

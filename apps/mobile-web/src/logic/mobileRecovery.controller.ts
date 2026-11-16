@@ -1,22 +1,20 @@
+import { MobileRecoveryRejectedBaselineError } from "../lib/mobileRpc.errors";
 import type { OrchestrationEvent, OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
 
 import {
   createMobileOrchestrationSyncController,
   type MobileOrchestrationSyncController,
 } from "./mobileOrchestrationSync.logic";
-import { installMobileSelectedThread } from "./mobileRecovery.cache";
+import { installMobileSelectedThread, selectedThreadRecoveryState } from "./mobileRecovery.cache";
 import { readLegacyMobileBaseline } from "./mobileRecovery.legacy";
 import { applyMobileRecoveryFrame } from "./mobileRecovery.frames";
 import {
   defaultRecoveryScheduler,
-  initialMobileRecoveryState,
   isMobileRecoveryBaselineConsistent,
   isUnsupportedRecoveryError,
   makeAttemptId,
   MOBILE_RECOVERY_ATTEMPT_TIMEOUT_MS,
-  MAX_RETRY_ATTEMPTS,
   recoveryErrorMessage,
-  RETRY_DELAYS_MS,
   snapshotKey,
   type MobileRecoveryBaseline,
   type MobileRecoveryController,
@@ -26,6 +24,8 @@ import {
   type RecoveryQueryClient,
   type RecoveryScheduler,
 } from "./mobileRecovery.types";
+import { createMobileRecoveryRejection } from "./mobileRecovery.rejection";
+import { createMobileRecoveryRetry } from "./mobileRecovery.retry";
 import { createMobileRecoveryStabilityTimer } from "./mobileRecovery.stability";
 import { createMobileRecoveryEventTracker } from "./mobileRecovery.tracking";
 
@@ -37,7 +37,9 @@ export function createMobileRecoveryController(input: {
   readonly sessionId: string;
   readonly scheduler?: RecoveryScheduler;
   readonly makeAttemptId?: (generation: number) => string;
+  readonly rejection?: ReturnType<typeof createMobileRecoveryRejection>;
 }): MobileRecoveryController {
+  const rejection = input.rejection ?? createMobileRecoveryRejection();
   const scheduler = input.scheduler ?? defaultRecoveryScheduler();
   const sync: MobileOrchestrationSyncController = createMobileOrchestrationSyncController({
     queryClient: input.queryClient,
@@ -51,16 +53,21 @@ export function createMobileRecoveryController(input: {
     onQueueOverflow: () => failCurrentAttempt("overflow"),
   });
   const listeners = new Set<() => void>();
-  let state = initialMobileRecoveryState("refreshing");
+  let state = rejection.initialState();
   let active = false;
   let disposed = false;
   let generation = 0;
-  let selectedThreadId: ThreadId | null = null;
-  let retryOrdinal = 0;
+  let selectedThreadId: ThreadId | null = rejection.selectedThreadId;
+  let transportClosed = false;
+  let hasOpened = false;
+  const retry = createMobileRecoveryRetry(
+    scheduler,
+    () => !disposed && !transportClosed && !rejection.error,
+    beginAttempt,
+  );
   const stability = createMobileRecoveryStabilityTimer(scheduler, () => {
-    retryOrdinal = 0;
+    retry.reset();
   });
-  let retryTimer: number | null = null;
   let baselineAbort: AbortController | null = null;
   let streamCancel: (() => void) | null = null;
   let attemptDeadlineAt = 0;
@@ -104,7 +111,7 @@ export function createMobileRecoveryController(input: {
     sync.reset();
     eventTracker.reset();
     markStale(reason);
-    scheduleRetry();
+    retry.schedule();
   }
   function armAttemptTimeout(runGeneration: number) {
     attemptTimeoutTimer = scheduler.setTimeout(
@@ -119,12 +126,6 @@ export function createMobileRecoveryController(input: {
     scheduler.clearTimeout(attemptTimeoutTimer);
     attemptTimeoutTimer = null;
   }
-  function clearRetry() {
-    if (retryTimer !== null) {
-      scheduler.clearTimeout(retryTimer);
-      retryTimer = null;
-    }
-  }
 
   function markStale(reason: string) {
     if (disposed) return;
@@ -133,16 +134,6 @@ export function createMobileRecoveryController(input: {
       reason,
       actionsAvailable: false,
     });
-  }
-
-  function scheduleRetry() {
-    if (disposed || retryTimer !== null || retryOrdinal >= MAX_RETRY_ATTEMPTS) return;
-    const delay = RETRY_DELAYS_MS[retryOrdinal] ?? RETRY_DELAYS_MS.at(-1)!;
-    retryOrdinal += 1;
-    retryTimer = scheduler.setTimeout(() => {
-      retryTimer = null;
-      void beginAttempt().catch(() => undefined);
-    }, delay);
   }
 
   function installBaseline(baseline: MobileRecoveryBaseline) {
@@ -157,8 +148,7 @@ export function createMobileRecoveryController(input: {
       freshness: "refreshing",
       snapshotSequence: baseline.snapshotSequence,
       throughSequence: baseline.snapshotSequence,
-      selectedThreadStatus:
-        selectedThreadId === null ? "none" : (baseline.selectedThread?.status ?? "unknown"),
+      ...selectedThreadRecoveryState(selectedThreadId, baseline),
       reason: null,
       actionsAvailable: false,
     });
@@ -219,10 +209,7 @@ export function createMobileRecoveryController(input: {
       lastRefreshedAt: Date.now(),
       snapshotSequence: baseline.snapshotSequence,
       throughSequence: null,
-      selectedThreadStatus:
-        requestedSelectedThreadId === null
-          ? "none"
-          : (baseline.selectedThread?.status ?? "unknown"),
+      ...selectedThreadRecoveryState(requestedSelectedThreadId, baseline),
       reason: "recovery-unsupported",
       actionsAvailable: true,
     });
@@ -275,7 +262,7 @@ export function createMobileRecoveryController(input: {
   }
 
   async function beginAttempt(): Promise<MobileRecoveryBaseline> {
-    clearRetry();
+    retry.clear();
     const runGeneration = ++generation;
     cancelTransport();
     sync.reset();
@@ -312,13 +299,14 @@ export function createMobileRecoveryController(input: {
           if (!active || disposed || runGeneration !== generation) throw legacyError;
           clearAttemptTimeout();
           markStale("legacy-fallback-failed");
-          scheduleRetry();
+          retry.schedule();
           throw legacyError;
         }
       }
       clearAttemptTimeout();
+      if (error instanceof MobileRecoveryRejectedBaselineError) rejection.reject(error);
       markStale(recoveryErrorMessage(error));
-      scheduleRetry();
+      retry.schedule();
       throw error;
     } finally {
       if (runGeneration === generation) baselineAbort = null;
@@ -327,15 +315,18 @@ export function createMobileRecoveryController(input: {
 
   function requestRecovery(nextSelectedThreadId: ThreadId | null, resetRetries: boolean) {
     if (disposed) return Promise.reject(new Error("Mobile recovery controller is disposed."));
+    rejection.select(nextSelectedThreadId);
+    if (rejection.error) return Promise.reject(rejection.error);
     selectedThreadId = nextSelectedThreadId;
     setState({
       selectedThreadId: nextSelectedThreadId,
       selectedThreadStatus: nextSelectedThreadId === null ? "none" : "unknown",
+      selectedThreadHasOlderHistory: false,
     });
     if (inFlight !== null && inFlight.selectedThreadId === nextSelectedThreadId) {
       return inFlight.promise;
     }
-    if (resetRetries) retryOrdinal = 0;
+    if (resetRetries) retry.reset();
     const promise = beginAttempt();
     inFlight = { selectedThreadId: nextSelectedThreadId, promise };
     void promise.then(
@@ -351,12 +342,23 @@ export function createMobileRecoveryController(input: {
 
   return {
     transportOpened() {
-      if (active && !disposed && state.freshness !== "refreshing") scheduleRetry();
+      transportClosed = false;
+      if (!hasOpened) retry.reset();
+      hasOpened = true;
+      if (active && !disposed && state.freshness !== "refreshing") retry.schedule();
     },
     transportClosed() {
+      transportClosed = true;
+      retry.clear();
       if (state.freshness !== "stale" && state.freshness !== "unavailable") {
         failCurrentAttempt("transport-closed");
       }
+    },
+    resumed() {
+      const stuck = state.freshness === "stale" || state.freshness === "unavailable";
+      if (rejection.error || !active || disposed || !stuck || inFlight !== null || retry.pending)
+        return;
+      void requestRecovery(selectedThreadId, true).catch(() => undefined);
     },
     start() {
       if (active || disposed) return;
@@ -364,12 +366,13 @@ export function createMobileRecoveryController(input: {
       void requestRecovery(selectedThreadId, true).catch(() => undefined);
     },
     refresh(nextSelectedThreadId?: ThreadId | null) {
+      if (!disposed) rejection.clear();
       return requestRecovery(
         nextSelectedThreadId === undefined ? selectedThreadId : nextSelectedThreadId,
         true,
       );
     },
-    selectThread(threadId: ThreadId) {
+    selectThread(threadId: ThreadId | null) {
       return requestRecovery(threadId, true);
     },
     subscribe(listener: () => void) {
@@ -383,7 +386,7 @@ export function createMobileRecoveryController(input: {
       if (disposed) return;
       disposed = true;
       active = false;
-      clearRetry();
+      retry.clear();
       cancelTransport();
       sync.reset();
       sync.dispose();

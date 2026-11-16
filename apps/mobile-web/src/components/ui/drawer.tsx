@@ -23,7 +23,7 @@ function DrawerViewport({ className, ...props }: DrawerPrimitive.Viewport.Props)
   return (
     <DrawerPrimitive.Viewport
       className={cn(
-        "fixed inset-0 z-50 flex items-end justify-center px-2 pt-[calc(2rem+env(safe-area-inset-top))]",
+        "mobile-drawer-viewport fixed inset-0 z-50 flex items-end justify-center px-2 pt-[calc(2rem+env(safe-area-inset-top))]",
         className,
       )}
       data-slot="drawer-viewport"

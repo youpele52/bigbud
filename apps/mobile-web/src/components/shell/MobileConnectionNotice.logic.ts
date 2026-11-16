@@ -60,14 +60,21 @@ export function resolveMobileConnectionPresentation({
     resolved = model(
       "destructive",
       "Pairing required",
-      "The desktop server rejected this connection. Pair this phone again before sending commands.",
+      "The selected host rejected this connection. Pair this phone again before sending commands.",
       { actionsDisabled: true },
+    );
+  } else if (connection.hostAccessOff && connection.transport !== "open") {
+    resolved = model(
+      "warning",
+      "Mobile access is off on this host",
+      "Enable mobile access on the selected host, then retry. Your saved connection and drafts are kept; a fresh pairing link from that host may be needed.",
+      { showRetry: true, actionsDisabled: true },
     );
   } else if (connection.transport === "exhausted" || connection.incidentLevel === "escalated") {
     resolved = model(
       "destructive",
       "Unable to connect",
-      "The desktop server did not reconnect. Retry or open a new pairing link.",
+      "The selected host did not reconnect. Retry or open a new pairing link.",
       { showRetry: true, actionsDisabled: true },
     );
   } else if (connection.browserOffline && connection.transport !== "open") {
@@ -81,7 +88,7 @@ export function resolveMobileConnectionPresentation({
     resolved = model(
       "info",
       "Reconnecting",
-      "Typing is preserved while the desktop server reconnects.",
+      "Typing is preserved while the selected host reconnects.",
       { actionsDisabled: true },
     );
   } else if (connection.incidentLevel === "short") {
@@ -90,7 +97,7 @@ export function resolveMobileConnectionPresentation({
     resolved = model(
       "info",
       "Refreshing chats",
-      "New activity will appear when the desktop server responds.",
+      "New activity will appear when the selected host responds.",
       { actionsDisabled: true },
     );
   } else if (recoveryState.freshness === "stale") {
@@ -111,7 +118,7 @@ export function resolveMobileConnectionPresentation({
     resolved = model(
       "destructive",
       "Unable to connect",
-      "Retry when the desktop server is available.",
+      "Retry when the selected host is available.",
       {
         showRetry: true,
         actionsDisabled: true,
@@ -146,7 +153,7 @@ export function resolveMobileConnectionNotice(
       return model(
         "info",
         "Refreshing chats",
-        "New activity will appear when the desktop server responds.",
+        "New activity will appear when the selected host responds.",
       );
     case "stale":
       return model(
@@ -168,7 +175,7 @@ export function resolveMobileConnectionNotice(
         : model(
             "destructive",
             "Unable to connect",
-            "Your draft is kept in this tab. Retry when the desktop server is available.",
+            "Your draft is kept in this tab. Retry when the selected host is available.",
             { showRetry: true, actionsDisabled: true },
           );
     case "current":

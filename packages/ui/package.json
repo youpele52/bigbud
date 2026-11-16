@@ -1,0 +1,41 @@
+{
+  "name": "@bigbud/ui",
+  "version": "0.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./alert": "./src/alert.tsx",
+    "./statusSurface": "./src/statusSurface.ts",
+    "./notificationTypography.css": "./src/notificationTypography.css",
+    "./composerSurface": "./src/composerSurface.ts",
+    "./cn": "./src/cn.ts",
+    "./SpinnerVerbShimmer": "./src/SpinnerVerbShimmer.tsx",
+    "./formatWorkingTimer": "./src/formatWorkingTimer.ts",
+    "./spinnerVerbs": "./src/spinnerVerbs.ts",
+    "./spinnerVerbConstants": "./src/constants/spinnerVerbs.ts",
+    "./pendingApprovalCopy": "./src/pendingApprovalCopy.ts",
+    "./pendingApprovalSurface": "./src/pendingApprovalSurface.tsx",
+    "./pendingUserInputPresentation": "./src/pendingUserInputPresentation.ts",
+    "./pendingUserInputChoice": "./src/pendingUserInputChoice.tsx",
+    "./chatGreetingSurface": "./src/chatGreetingSurface.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "lucide-react": "^0.564.0",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  }
+}

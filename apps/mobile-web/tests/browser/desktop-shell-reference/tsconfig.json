@@ -1,0 +1,15 @@
+{
+  "extends": "../../../../web/tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "baseUrl": "../../../../web",
+    "types": ["vite/client", "node"]
+  },
+  "include": [
+    "./*.ts",
+    "./*.tsx",
+    "../../../../web/src/vite-env.d.ts",
+    "../../../../web/src/components/terminal/xtermAddonLigatures.d.ts"
+  ]
+}

@@ -5,6 +5,11 @@ import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 import { chromium } from "../../../web/node_modules/playwright/index.mjs";
 import { session, snapshot, thread } from "./recovery.fixture.mjs";
+import { assertMobileOutlineLifecycle } from "./outline-lifecycle.fixture.mjs";
+import {
+  assertMobileQuestionLifecycle,
+  questionLifecycleThread,
+} from "./question-lifecycle.fixture.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const server = await createServer({
@@ -112,8 +117,15 @@ await page.addInitScript(
   { ...session, backendBaseUrl: "http://127.0.0.1:15748" },
 );
 
-async function openThread() {
+async function openThread(controlledClock = false) {
   await page.goto(`http://127.0.0.1:15748/mobile/thread/${selectedThread.id}`);
+  if (controlledClock) {
+    for (let step = 0; step < 200; step += 1) {
+      if (await page.locator('[data-mobile-transcript="true"]').isVisible()) break;
+      await page.clock.runFor(10);
+      await page.waitForTimeout(20);
+    }
+  }
   try {
     await page.locator('[data-mobile-transcript="true"]').waitFor({ timeout: 15_000 });
   } catch (error) {
@@ -127,7 +139,11 @@ async function openThread() {
 }
 
 try {
-  await openThread();
+  // Hold the startup settle timer until the reader has deliberately left latest.
+  // Otherwise a slow harness can miss the 96ms window and conceal this regression.
+  await page.clock.install();
+  await page.clock.pauseAt(new Date(Date.now() + 1_000));
+  await openThread(true);
   const transcript = page.locator('[data-mobile-transcript="true"]');
   await page.waitForFunction(() => document.querySelectorAll("[data-message-id]").length >= 30);
   const widthGeometry = await page.evaluate(() => {
@@ -175,12 +191,14 @@ try {
     late.dataset.geometryLateContent = "true";
     element.querySelector('[data-mobile-transcript-content="true"]')?.append(late);
   });
-  await page.waitForTimeout(120);
+  await page.clock.runFor(120);
   const afterGrowth = await transcript.evaluate((element) => element.scrollTop);
   assert.ok(
     Math.abs(afterGrowth - beforeGrowth) <= 2,
     `reader position must survive content growth (${beforeGrowth} -> ${afterGrowth})`,
   );
+  await page.clock.resume();
+  await assertMobileOutlineLifecycle(page, "geometry-message-1");
   await page.getByRole("button", { name: "Scroll to latest", exact: true }).click();
   await page.waitForFunction(
     () => {
@@ -218,15 +236,37 @@ try {
   for (const name of ["Approve", "Deny"]) {
     const box = await page.getByRole("button", { name, exact: true }).boundingBox();
     assert.ok(box && box.y >= 0 && box.y + box.height <= 320, `${name} must be reachable`);
+    assert.ok(box && box.height >= 44 && box.width >= 44, `${name} needs a 44px touch target`);
   }
+  selectedThread = questionLifecycleThread(emptyThread, false);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openThread();
+  await page.getByRole("radiogroup").waitFor();
+  const questionPanel = page.locator('[aria-labelledby="mobile-question-geometry-choice"]');
+  const questionOverflow = await questionPanel.evaluate((element) => ({
+    visible: element.clientHeight,
+    content: element.scrollHeight,
+  }));
+  assert.ok(
+    questionOverflow.content <= questionOverflow.visible,
+    "ordinary question choices and guidance should fit without clipping at 390x844",
+  );
+  selectedThread = questionLifecycleThread(emptyThread);
+  await page.setViewportSize({ width: 390, height: 320 });
+  await openThread();
+  await assertMobileQuestionLifecycle(page);
   assert.deepEqual(errors, []);
   console.log(
     JSON.stringify(
       {
         readerPositionSurvivesGrowth: true,
+        outlineGeometryKeyboardAndTouch: true,
         latestRestoresFollowing: true,
         idleLogoCenteredInTranscript: true,
         approvalControlsReachableAt390x320: true,
+        approvalTouchTargetsAtLeast44px: true,
+        questionTouchFocusAndDraftProgressAt390x320: true,
+        ordinaryQuestionGuidanceUnclippedAt390x844: true,
         consoleErrors: errors,
       },
       null,

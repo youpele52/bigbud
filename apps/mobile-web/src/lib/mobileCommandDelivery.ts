@@ -1,3 +1,4 @@
+import { settleMobileDispatchFailure } from "./mobileCommandDelivery.errors";
 import type { ClientOrchestrationCommand } from "@bigbud/contracts";
 
 import {
@@ -20,7 +21,7 @@ export interface MobileCommandDeliveryController {
     readonly command: ClientOrchestrationCommand;
     readonly submittedRevision: number;
     readonly dispatch: (command: ClientOrchestrationCommand) => Promise<unknown>;
-  }) => Promise<MobileCommandDeliveryState>;
+  }) => Promise<MobileCommandDeliveryState & { readonly admitted: boolean }>;
   readonly reconcile: (
     readOutcome: () => Promise<MobileCommandOutcome>,
   ) => Promise<MobileCommandDeliveryState>;
@@ -120,13 +121,13 @@ export function createMobileCommandDeliveryController(
       let dispatched: Promise<unknown>;
       try {
         dispatched = dispatch(operation.command);
-      } catch {
-        finish(markMobileCommandUncertain(state), resolve);
+      } catch (error) {
+        finish(settleMobileDispatchFailure(state, error), resolve);
         return;
       }
       void Promise.resolve(dispatched).then(
         () => finish(settleMobileCommandAccepted(state), resolve),
-        () => finish(markMobileCommandUncertain(state), resolve),
+        (error) => finish(settleMobileDispatchFailure(state, error), resolve),
       );
     });
   };
@@ -136,9 +137,11 @@ export function createMobileCommandDeliveryController(
     submittedRevision,
     dispatch,
   }) => {
-    if (locked || disposed) return state;
+    if (locked || disposed || ["pending", "uncertain", "reconciling"].includes(state.status)) {
+      return { ...state, admitted: false };
+    }
     const operation = operationFromCommand(command, submittedRevision, deadlineMs, timer.now());
-    return submitOperation(operation, dispatch);
+    return { ...(await submitOperation(operation, dispatch)), admitted: true };
   };
 
   const reconcile: MobileCommandDeliveryController["reconcile"] = async (readOutcome) => {
@@ -174,7 +177,14 @@ export function createMobileCommandDeliveryController(
   const retrySameOperation: MobileCommandDeliveryController["retrySameOperation"] = async (
     dispatch,
   ) => {
-    if (locked || disposed || state.status !== "uncertain" || !state.operation) return state;
+    if (
+      locked ||
+      disposed ||
+      state.status !== "uncertain" ||
+      !state.operation ||
+      state.operation.receiptSource
+    )
+      return state;
     const operation = {
       ...state.operation,
       deadlineAt: timer.now() + deadlineMs,
@@ -202,13 +212,13 @@ export function createMobileCommandDeliveryController(
       let dispatched: Promise<unknown>;
       try {
         dispatched = dispatch(operation.command);
-      } catch {
-        finish(markMobileCommandUncertain(retryState));
+      } catch (error) {
+        finish(settleMobileDispatchFailure(retryState, error));
         return;
       }
       void Promise.resolve(dispatched).then(
         () => finish(settleMobileCommandAccepted(retryState)),
-        () => finish(markMobileCommandUncertain(retryState)),
+        (error) => finish(settleMobileDispatchFailure(retryState, error)),
       );
     });
   };

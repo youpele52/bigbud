@@ -37,7 +37,7 @@ describe("mobile command delivery", () => {
 
     expect(dispatch).toHaveBeenCalledOnce();
     expect(controller.getState().status).toBe("pending");
-    expect(await second).toBe(controller.getState());
+    expect(await second).toEqual({ ...controller.getState(), admitted: false });
     resolveDispatch?.();
     await expect(first).resolves.toMatchObject({ status: "accepted" });
   });
@@ -99,6 +99,27 @@ describe("mobile command delivery", () => {
     expect(state).toMatchObject({ status: "rejected", rejectionReason: "queue_held" });
     const restored = createMobileCommandDeliveryController({ initialState: state });
     expect(restored.getState()).toEqual(state);
+  });
+
+  it("marks an unknown outcome so the same operation can be resent after the check", async () => {
+    const controller = createMobileCommandDeliveryController();
+    await controller.submit({
+      command: makeCommand("command-unknown"),
+      submittedRevision: 1,
+      dispatch: async () => {
+        throw new Error("response lost");
+      },
+    });
+    expect(controller.getState().outcomeUnknown).toBeUndefined();
+    const checked = await controller.reconcile(async () => ({ status: "unknown" }));
+    expect(checked).toMatchObject({ status: "uncertain", outcomeUnknown: true });
+    const resent: ClientOrchestrationCommand[] = [];
+    const retried = await controller.retrySameOperation(async (command) => {
+      resent.push(command);
+    });
+    expect(retried.status).toBe("accepted");
+    expect(retried.outcomeUnknown).toBeUndefined();
+    expect(resent.map((command) => command.commandId)).toEqual(["command-unknown"]);
   });
 
   it("retries only the original immutable operation when explicitly requested", async () => {
@@ -168,5 +189,36 @@ describe("mobile command delivery", () => {
     await expect(pending).resolves.toMatchObject({ status: "uncertain" });
     expect(controller.getState().status).toBe("uncertain");
     resolveDispatch?.();
+  });
+
+  it("serializes an automatic check with manual check and resend without replacing its ID", async () => {
+    const controller = createMobileCommandDeliveryController();
+    await controller.submit({
+      command: makeCommand("original"),
+      submittedRevision: 1,
+      dispatch: async () => {
+        throw new Error("backend stopped after acceptance");
+      },
+    });
+    let answer!: (outcome: { status: "unknown" }) => void;
+    const automatic = controller.reconcile(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const manualRead = vi.fn(async () => ({ status: "accepted" as const }));
+    const dispatch = vi.fn(async () => undefined);
+    await controller.reconcile(manualRead);
+    await controller.retrySameOperation(dispatch);
+    expect(manualRead).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(controller.getState().operation?.command.commandId).toBe("original");
+    answer({ status: "unknown" });
+    await automatic;
+    expect(controller.getState().status).toBe("uncertain");
+    expect(dispatch).not.toHaveBeenCalled();
+    await controller.retrySameOperation(dispatch);
+    expect(dispatch).toHaveBeenCalledWith(makeCommand("original"));
   });
 });

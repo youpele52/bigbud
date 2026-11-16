@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { MobileConnectionNotice } from "./MobileConnectionNotice";
+import {
+  initialMobileConnectionState,
+  type MobileConnectionState,
+} from "../../logic/mobileConnection.logic";
 import { initialMobileRecoveryState } from "../../logic/mobileRecovery.types";
 import { MobileQueueNotice } from "../threads/thread/MobileQueueNotice";
 import { MobileComposerDeliveryNotice } from "../threads/thread/composer/MobileComposerDeliveryNotice";
@@ -13,6 +17,37 @@ function expectSmallBannerText(markup: string) {
 }
 
 describe("mobile status banners", () => {
+  it.each(["disabled", "reconnecting", "rejected"] as const)(
+    "keeps %s guidance usable without assuming the selected backend is a desktop",
+    (scenario) => {
+      const connection: MobileConnectionState = {
+        ...initialMobileConnectionState(),
+        transport: "closed",
+        hostAccessOff: scenario === "disabled",
+        incidentLevel: scenario === "reconnecting" ? "reconnecting" : "none",
+        authorization: scenario === "rejected" ? "explicitly-rejected" : "unknown",
+      };
+      const markup = renderToStaticMarkup(
+        <MobileConnectionNotice
+          state={initialMobileRecoveryState("stale")}
+          connection={connection}
+          onRetry={vi.fn()}
+        />,
+      );
+      expect(markup).not.toMatch(/\bdesktop\b|\blaptop\b/i);
+      if (scenario === "disabled") {
+        expect(markup).not.toContain("stays paired");
+        expect(markup).toContain("fresh pairing link");
+      }
+      const status =
+        scenario === "disabled" ? "warning" : scenario === "reconnecting" ? "loading" : "error";
+      expect(markup).toContain(`data-status="${status}"`);
+      expect(markup).toContain('role="status"');
+      expect(markup.includes(">Retry<")).toBe(scenario === "disabled");
+      expectSmallBannerText(markup);
+    },
+  );
+
   it("shares blue progress and aligned title/description slots with the main app", () => {
     const markup = renderToStaticMarkup(<MobileConnectionNotice state={state} />);
     expect(markup).toContain('data-status="loading"');
@@ -63,6 +98,51 @@ describe("mobile status banners", () => {
     expect(checking).toContain("border-l-info-foreground");
     expect(checking).toContain("animate-spin");
     expectSmallBannerText(checking);
+  });
+
+  it("offers Send again only once a check found no record of the message", () => {
+    const unchecked = renderToStaticMarkup(
+      <MobileComposerDeliveryNotice
+        deliveryState="uncertain"
+        storageWarning={null}
+        onCheckDelivery={vi.fn()}
+      />,
+    );
+    expect(unchecked).not.toContain("Send again");
+    const unknown = renderToStaticMarkup(
+      <MobileComposerDeliveryNotice
+        deliveryState="uncertain"
+        storageWarning={null}
+        onCheckDelivery={vi.fn()}
+        onResendDelivery={vi.fn()}
+      />,
+    );
+    expect(unknown).toContain("Send again");
+    expect(unknown).toContain("no record of this message");
+    expectSmallBannerText(unknown);
+  });
+
+  it("shows an uncertain approval/answer/interrupt with its own check and resend", () => {
+    const pending = renderToStaticMarkup(
+      <MobileComposerDeliveryNotice
+        deliveryState="idle"
+        storageWarning={null}
+        decision={{ status: "uncertain", onCheck: vi.fn(), onResend: undefined }}
+      />,
+    );
+    expect(pending).toContain("Check response");
+    expect(pending).not.toContain("Send response again");
+    expect(pending).toContain("border-l-warning");
+    const unknown = renderToStaticMarkup(
+      <MobileComposerDeliveryNotice
+        deliveryState="idle"
+        storageWarning={null}
+        decision={{ status: "uncertain", onCheck: vi.fn(), onResend: vi.fn() }}
+      />,
+    );
+    expect(unknown).toContain("Send response again");
+    expect(unknown).toContain("no record of your response");
+    expectSmallBannerText(unknown);
   });
 
   it("keeps storage warning text at 14px without changing its severity", () => {
