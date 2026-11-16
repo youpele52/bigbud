@@ -1,3 +1,4 @@
+import type { RuntimeMode } from "../startup/config.ts";
 /**
  * v2 desktop computer_use through orchestration (selected only when the pinned
  * Driver is 0.38.0). Applies the same thread gates as the legacy path
@@ -82,7 +83,7 @@ export const computerUseV2ViaOrchestration = Effect.fn("computerUseV2ViaOrchestr
   function* (input: {
     readonly orchestrationEngine: OrchestrationEngineShape;
     readonly computerUseEnabled: boolean;
-    readonly serverMode: "web" | "desktop";
+    readonly serverMode: RuntimeMode;
     readonly threadId: ThreadId;
     readonly request: ComputerUseV2ToolRequest;
     readonly supervised?: SupervisedComputerUsePort;

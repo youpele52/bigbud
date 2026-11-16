@@ -9,6 +9,8 @@
 import { Effect, Schema, ServiceMap } from "effect";
 import type { RemoteAgentShellLaunch } from "../../remote-agent/remoteAgentShellLaunch.ts";
 import type { ShellUnconfirmedLaunch } from "@bigbud/contracts/workspace/terminalShell.ts";
+import type { ShellLaunchIdentity } from "@bigbud/contracts/workspace/terminalShell.ts";
+import type { OwnedPtyRuntime } from "./OwnedPtyRuntime.ts";
 
 /**
  * PtyError - Error type for PTY adapter operations.
@@ -25,10 +27,12 @@ export interface PtyExitEvent {
 }
 
 export interface PtyProcess {
-  /** pid belongs to the remote host, never to the local ssh transport. */
+  /** PID belongs to the Rust execution host, never its proxy; ownedRuntime declares its namespace. */
   readonly pidDomain?: "remote";
   /** Attached to an existing process whose earlier output is not replayed by this adapter. */
   readonly recovered?: boolean;
+  /** Durable resource identity for generation-fenced attach-only discovery. */
+  readonly remoteResourceId?: string;
   /** Explicit remote launch evidence only; missing evidence is unknown, never confirmed. */
   readonly launchStatus?: "unconfirmed" | undefined;
   /** Requested intent plus matched launch evidence, never actual executable identity. */
@@ -36,6 +40,10 @@ export interface PtyProcess {
   /** Explicit replacement must wait for definitive exit and durable ownership release. */
   readonly prepareRestart?: () => Promise<void>;
   readonly detach?: () => void;
+  /** Fresh same-resource confirmation; cancellation retires only this observer. */
+  readonly reconnectRemote?: ((signal?: AbortSignal) => Promise<void>) | undefined;
+  /** Acknowledged per-resource unsubscribe; leaves the remote process alive. */
+  readonly detachRemote?: () => Promise<void>;
   readonly pid: number;
   write(data: string): void;
   /**
@@ -55,8 +63,13 @@ export interface PtyProcess {
 export interface PtySpawnInput {
   readonly ownerKey?: string;
   readonly recoverOnly?: boolean;
+  /** Caller cancellation for attach-only recovery; never authority to stop the child. */
+  readonly recoverySignal?: AbortSignal;
+  readonly expectedRemoteResourceId?: string | undefined;
   /** Internal execution-host-validated intent; client input must never supply executable/argv. */
   readonly shellLaunch?: RemoteAgentShellLaunch;
+  /** Server-owned profile selection, never client-supplied executable/argv. */
+  readonly shellProfile?: ShellLaunchIdentity;
   shell: string;
   args?: string[];
   cwd: string;
@@ -71,6 +84,7 @@ export interface PtySpawnInput {
  * PtyAdapterShape - Service API for spawning and controlling PTY processes.
  */
 export interface PtyAdapterShape {
+  readonly ownedRuntimeForTarget?: (executionTargetId: string) => OwnedPtyRuntime | undefined;
   /**
    * Spawn a PTY process for a terminal session.
    */

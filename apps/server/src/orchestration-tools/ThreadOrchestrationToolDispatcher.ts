@@ -26,6 +26,7 @@ import type {
   listThreadsViaOrchestration,
 } from "./ThreadOrchestrationTools.listThreads.ts";
 import type { AgentWorkspaceToolInput } from "./AgentWorkspaceTools.ts";
+import type { RemoteAgentToolInput } from "./remoteAgentTools.shared.ts";
 import type { ComputerUseV2Dispatch } from "./computerUseToolRequest.ts";
 import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import type { ThreadOrganizationToolOutcome } from "./ThreadOrchestrationTools.organization.ts";
@@ -41,6 +42,9 @@ export interface ThreadOrchestrationToolDispatcherShape {
     { readonly artifactId: string; readonly turnId: string | null; readonly published: boolean },
     Error
   >;
+  readonly remoteAgent?: (
+    input: RemoteAgentToolInput,
+  ) => Effect.Effect<Record<string, unknown>, Error>;
   readonly getSystemResources?: (input?: unknown) => Effect.Effect<Record<string, unknown>, Error>;
   readonly configureSystemResourceRules?: (
     input: unknown,

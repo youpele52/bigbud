@@ -1,3 +1,4 @@
+import { makeTerminalHandlers } from "./wsRpcHandlers.terminal";
 import { Effect, Queue, Stream, type Scope } from "effect";
 import { randomUUID } from "node:crypto";
 import {
@@ -23,6 +24,7 @@ import { makeRemoteGitStatusStream } from "../git/remoteGitStatusStream.ts";
 import { removePublicWorktree } from "./wsWorktreeRemoval.ts";
 import { runOwnedWorktreeOperation } from "./wsWorktreeOwnedOperation.ts";
 import {
+  getRemoteAgentManualInstallEffect,
   installRemoteAgentEffect,
   unlockSshKeyEffect,
   unlockSshPasswordEffect,
@@ -112,7 +114,15 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
     ) =>
       observeRpcEffect(
         WS_METHODS.serverInstallRemoteAgent,
-        installRemoteAgentEffect(input, context.remoteAgentInstaller),
+        installRemoteAgentEffect(input, context),
+        { "rpc.aggregate": "server" },
+      ),
+    [WS_METHODS.serverGetRemoteAgentManualInstall]: (
+      input: Parameters<typeof getRemoteAgentManualInstallEffect>[0],
+    ) =>
+      observeRpcEffect(
+        WS_METHODS.serverGetRemoteAgentManualInstall,
+        getRemoteAgentManualInstallEffect(input, context.remoteAgentInstaller),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverUnlockSshKey]: (input: Parameters<typeof unlockSshKeyEffect>[0]) =>
@@ -351,40 +361,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
           .pipe(Effect.tap(() => context.refreshGitStatus(input.cwd, input.executionTargetId))),
         { "rpc.aggregate": "git" },
       ),
-    [WS_METHODS.terminalOpen]: (input: Parameters<WsRpcContext["terminalManager"]["open"]>[0]) =>
-      observeRpcEffect(WS_METHODS.terminalOpen, context.terminalManager.open(input), {
-        "rpc.aggregate": "terminal",
-      }),
-    [WS_METHODS.terminalSnapshot]: (
-      input: Parameters<WsRpcContext["terminalManager"]["snapshot"]>[0],
-    ) =>
-      observeRpcEffect(WS_METHODS.terminalSnapshot, context.terminalManager.snapshot(input), {
-        "rpc.aggregate": "terminal",
-      }),
-    [WS_METHODS.terminalWrite]: (input: Parameters<WsRpcContext["terminalManager"]["write"]>[0]) =>
-      observeRpcEffect(WS_METHODS.terminalWrite, context.terminalManager.write(input), {
-        "rpc.aggregate": "terminal",
-      }),
-    [WS_METHODS.terminalResize]: (
-      input: Parameters<WsRpcContext["terminalManager"]["resize"]>[0],
-    ) =>
-      observeRpcEffect(WS_METHODS.terminalResize, context.terminalManager.resize(input), {
-        "rpc.aggregate": "terminal",
-      }),
-    [WS_METHODS.terminalClear]: (input: Parameters<WsRpcContext["terminalManager"]["clear"]>[0]) =>
-      observeRpcEffect(WS_METHODS.terminalClear, context.terminalManager.clear(input), {
-        "rpc.aggregate": "terminal",
-      }),
-    [WS_METHODS.terminalRestart]: (
-      input: Parameters<WsRpcContext["terminalManager"]["restart"]>[0],
-    ) =>
-      observeRpcEffect(WS_METHODS.terminalRestart, context.terminalManager.restart(input), {
-        "rpc.aggregate": "terminal",
-      }),
-    [WS_METHODS.terminalClose]: (input: Parameters<WsRpcContext["terminalManager"]["close"]>[0]) =>
-      observeRpcEffect(WS_METHODS.terminalClose, context.terminalManager.close(input), {
-        "rpc.aggregate": "terminal",
-      }),
+    ...makeTerminalHandlers(context),
   };
 }
 import { runThreadAwareGitAction } from "./wsGitTextGenerationContext.ts";

@@ -61,10 +61,10 @@ const CONFORMANCE: Record<ProviderKind, ProviderRemoteWorkspaceConformance> = {
   },
   opencode: {
     provider: "opencode",
-    backend: "agent-runtime",
-    supportsLocalRuntimeRemoteWorkspace: true,
+    backend: "unsupported",
+    supportsLocalRuntimeRemoteWorkspace: false,
     reason:
-      "OpenCode's local built-in overrides dispatch through the configured remote workspace transport.",
+      "Legacy OpenCode is read-only history; create a new OpenCode v2 chat. No session migration is implied.",
   },
   pi: {
     provider: "pi",

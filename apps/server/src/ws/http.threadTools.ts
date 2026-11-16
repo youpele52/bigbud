@@ -6,6 +6,10 @@ import { BrowserAction, ThreadId } from "@bigbud/contracts";
 import { ServerConfig } from "../startup/config.ts";
 import { handleHtmlRenderAction } from "./http.threadTools.htmlRender.ts";
 import {
+  handleRemoteAgentAction,
+  handleSystemResourceAction,
+} from "./http.threadTools.systemAndRemote.ts";
+import {
   isThreadOrchestrationToolAuthorized,
   readThreadOrchestrationToolAuthByToken,
 } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
@@ -107,33 +111,13 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
       if (body.action === "render_html")
         return yield* handleHtmlRenderAction({ dispatcher, threadId, body });
 
-      if (body.action === "configure_system_resource_rules") {
-        if (!dispatcher.configureSystemResourceRules)
-          return yield* new ThreadToolRequestError({
-            status: 503,
-            message: "monitor settings unavailable",
-          });
-        const result = yield* dispatcher
-          .configureSystemResourceRules(body.resourceArguments)
-          .pipe(
-            Effect.mapError(
-              (error) => new ThreadToolRequestError({ status: 409, message: error.message }),
-            ),
-          );
-        return yield* HttpServerResponse.json({ ok: true, result });
-      }
-      if (body.action === "get_system_resources") {
-        const result = dispatcher.getSystemResources
-          ? yield* dispatcher
-              .getSystemResources(body.resourceArguments ?? {})
-              .pipe(
-                Effect.catch(() =>
-                  Effect.succeed({ available: false, reason: "desktop monitor unavailable" }),
-                ),
-              )
-          : { available: false, reason: "desktop monitor unavailable" };
-        return yield* HttpServerResponse.json({ ok: true, result });
-      }
+      if (
+        body.action === "configure_system_resource_rules" ||
+        body.action === "get_system_resources"
+      )
+        return yield* handleSystemResourceAction({ dispatcher, body });
+      if (body.action === "remote_agent")
+        return yield* handleRemoteAgentAction({ dispatcher, body });
 
       if (body.action === "remote_workspace_process") {
         const result = yield* runRemoteWorkspaceProcess({

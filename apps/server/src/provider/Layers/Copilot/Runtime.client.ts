@@ -1,4 +1,5 @@
-import { CopilotClient } from "@github/copilot-sdk";
+import type { CopilotClient } from "@github/copilot-sdk";
+import { copilotSdk } from "./copilotSdk.lazy.ts";
 import { makeCopilotClientOptions } from "./Adapter.types.cli.ts";
 import { copilotRuntimeRoot } from "@bigbud/shared/copilotRuntime.paths";
 import { acquireCopilotLease } from "@bigbud/shared/copilotRuntime.storage";
@@ -13,7 +14,7 @@ export async function createLeasedCopilotClient(
   if (factory) return factory(makeCopilotClientOptions(input));
   const release = await acquireCopilotLease(root);
   try {
-    const client = new CopilotClient(makeCopilotClientOptions(input));
+    const client = new (copilotSdk().CopilotClient)(makeCopilotClientOptions(input));
     const stop = client.stop.bind(client);
     const forceStop = client.forceStop.bind(client);
     client.stop = async () => {

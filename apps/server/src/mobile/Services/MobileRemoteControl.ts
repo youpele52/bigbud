@@ -28,6 +28,9 @@ export interface MobileRemoteSessionRecord {
   readonly label: string;
 }
 
+/** Why an open session socket must close: its session ended, or the host turned mobile access off. */
+export type MobileRemoteSessionEndReason = "revoked" | "expired" | "disabled";
+
 export interface MobileRemoteControlShape {
   readonly createPairing: (input: {
     readonly scope: MobileRemoteControlScope;
@@ -47,6 +50,14 @@ export interface MobileRemoteControlShape {
   readonly validateSessionToken: (
     token: string,
   ) => Effect.Effect<MobileRemoteSessionRecord | null, Error>;
+  /**
+   * Completes once the session is revoked or expires, or mobile remote control
+   * is turned off, so open sockets can be closed immediately. Optional: implementations without it leave open
+   * sockets to per-request checks.
+   */
+  readonly watchSessionEnd?: (
+    session: MobileRemoteSessionRecord,
+  ) => Effect.Effect<MobileRemoteSessionEndReason>;
 }
 
 export class MobileRemoteControl extends ServiceMap.Service<

@@ -127,7 +127,10 @@ it("reclaims a crashed pre-dispatch action but never replaces a live prepared ac
       runtime: binding.runtime,
       epoch: binding.expectedEpoch,
       digest,
-      controllerId: "controller:dead",
+      controllerId: controller.id.replace(
+        /:[0-9]+:[^:]+$/,
+        ":99999999:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      ),
       controllerPid: 99_999_999,
       controllerStartedAt: "dead-start",
       state: "prepared",

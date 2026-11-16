@@ -34,6 +34,10 @@ import {
 } from "effect";
 import * as Semaphore from "effect/Semaphore";
 import { ServerSettingsSnapshot, type SettingsSnapshot } from "./serverSettings.snapshot.ts";
+import {
+  guardMobileSettingsAcceptance,
+  ServerSettingsMobileConsentGuard,
+} from "./serverSettings.mobileConsent.ts";
 import { makeTestSettings } from "./serverSettings.testing.ts";
 import { ServerConfig } from "../startup/config";
 import { type DeepPartial } from "@bigbud/shared/Struct";
@@ -97,7 +101,10 @@ export class ServerSettingsService extends ServiceMap.Service<
 const ServerSettingsJson = fromLenientJson(ServerSettings);
 
 const makeServerSettings = Effect.gen(function* () {
-  const { settingsPath } = yield* ServerConfig;
+  const { settingsPath, mode } = yield* ServerConfig;
+  const mobileConsent = yield* Effect.serviceOption(ServerSettingsMobileConsentGuard);
+  const guardMobile = (settings: ServerSettings) =>
+    guardMobileSettingsAcceptance(mode, settingsPath, mobileConsent, settings);
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
   const writeSemaphore = yield* Semaphore.make(1);
@@ -222,6 +229,7 @@ const makeServerSettings = Effect.gen(function* () {
     options?: { readonly preserveThreadRetentionPolicy?: boolean },
   ) =>
     Effect.gen(function* () {
+      yield* guardMobile(settings);
       yield* writeSettingsAtomically(settings, options);
       yield* Effect.sync(() => snapshot.accept(resolveTextGenerationProvider(settings)));
       yield* Cache.set(settingsCache, cacheKey, settings);
@@ -234,6 +242,7 @@ const makeServerSettings = Effect.gen(function* () {
       yield* Cache.invalidate(settingsCache, cacheKey);
       yield* quarantineUnauthorizedRetention;
       const settings = yield* getSettingsFromCache;
+      yield* guardMobile(settings);
       yield* Effect.sync(() => snapshot.accept(resolveTextGenerationProvider(settings)));
       yield* emitChange(settings);
     }),
@@ -288,6 +297,7 @@ const makeServerSettings = Effect.gen(function* () {
       yield* startWatcher;
       yield* Cache.invalidate(settingsCache, cacheKey);
       const initial = yield* getSettingsFromCache;
+      yield* guardMobile(initial);
       yield* Effect.sync(() => snapshot.accept(resolveTextGenerationProvider(initial)));
       yield* quarantineUnauthorizedRetention;
     });

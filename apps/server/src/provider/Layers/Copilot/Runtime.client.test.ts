@@ -6,18 +6,22 @@ import { createLeasedCopilotClient } from "./Runtime.client.ts";
 import { activeCopilotLeases, withCopilotRuntimeLock } from "@bigbud/shared/copilotRuntime.storage";
 
 const control = vi.hoisted(() => ({ errors: [] as Error[], constructError: false }));
-vi.mock("@github/copilot-sdk", async (original) => ({
-  ...(await original<typeof import("@github/copilot-sdk")>()),
-  CopilotClient: class {
-    constructor() {
-      if (control.constructError) throw new Error("constructor failed");
-    }
-    async stop() {
-      return control.errors;
-    }
-    async forceStop() {}
-  },
-}));
+vi.mock("./copilotSdk.lazy.ts", async () => {
+  const sdk = await import("@github/copilot-sdk");
+  const fake = {
+    ...sdk,
+    CopilotClient: class {
+      constructor() {
+        if (control.constructError) throw new Error("constructor failed");
+      }
+      async stop() {
+        return control.errors;
+      }
+      async forceStop() {}
+    },
+  };
+  return { copilotSdk: () => fake };
+});
 const roots: string[] = [];
 afterEach(async () => {
   control.errors = [];

@@ -2,28 +2,62 @@ import { Effect, Layer } from "effect";
 
 import { ServerConfig } from "./startup/config.ts";
 
+function tcpHttpServerLive(port: number, host: string | undefined) {
+  return Layer.unwrap(
+    Effect.gen(function* () {
+      if (typeof Bun !== "undefined") {
+        const BunHttpServer = yield* Effect.promise(
+          () => import("@effect/platform-bun/BunHttpServer"),
+        );
+        return BunHttpServer.layer({
+          port,
+          ...(host ? { hostname: host } : {}),
+        });
+      }
+      const [NodeHttpServer, NodeHttp] = yield* Effect.all([
+        Effect.promise(() => import("@effect/platform-node/NodeHttpServer")),
+        Effect.promise(() => import("node:http")),
+      ]);
+      return NodeHttpServer.layer(NodeHttp.createServer, {
+        host,
+        port,
+      });
+    }),
+  );
+}
+
 export const HttpServerLive = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;
-    if (typeof Bun !== "undefined") {
-      const BunHttpServer = yield* Effect.promise(
-        () => import("@effect/platform-bun/BunHttpServer"),
-      );
-      return BunHttpServer.layer({
-        port: config.port,
-        ...(config.host ? { hostname: config.host } : {}),
-      });
-    }
-    const [NodeHttpServer, NodeHttp] = yield* Effect.all([
-      Effect.promise(() => import("@effect/platform-node/NodeHttpServer")),
-      Effect.promise(() => import("node:http")),
-    ]);
-    return NodeHttpServer.layer(NodeHttp.createServer, {
-      host: config.host,
-      port: config.port,
-    });
+    return tcpHttpServerLive(config.port, config.host);
   }),
 );
+
+/** Intrinsic binding policy: even direct composition callers cannot expose callbacks publicly. */
+export const RemoteCallbackHttpServerLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const config = yield* ServerConfig;
+    return tcpHttpServerLive(config.port, "127.0.0.1");
+  }),
+);
+
+export function remoteUnixHttpServerLive(path: string) {
+  return Layer.unwrap(
+    Effect.gen(function* () {
+      if (typeof Bun !== "undefined") {
+        const BunHttpServer = yield* Effect.promise(
+          () => import("@effect/platform-bun/BunHttpServer"),
+        );
+        return BunHttpServer.layer({ unix: path });
+      }
+      const [NodeHttpServer, NodeHttp] = yield* Effect.all([
+        Effect.promise(() => import("@effect/platform-node/NodeHttpServer")),
+        Effect.promise(() => import("node:http")),
+      ]);
+      return NodeHttpServer.layer(NodeHttp.createServer, { path });
+    }),
+  );
+}
 
 export const PlatformServicesLive = Layer.unwrap(
   Effect.gen(function* () {

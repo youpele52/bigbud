@@ -10,6 +10,7 @@ import {
 import { renderPiBrowserToolSource } from "./orchestrationBrowserTool.shared.ts";
 import { renderPiOrganizationToolsSource } from "./PiOrchestrationBridge.template.organization.ts";
 import { renderPiAskUserToolSource } from "./PiOrchestrationBridge.template.question.ts";
+import { renderPiRemoteAgentToolsSource } from "./PiOrchestrationBridge.template.remoteAgent.ts";
 import { renderRenameThreadResultTextSource } from "./threadRenameTool.shared.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
@@ -196,6 +197,8 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "",
     renderPiOrganizationToolsSource(),
     "",
+    renderPiRemoteAgentToolsSource(),
+    "",
     "const archiveThreadTool = defineTool({",
     '  name: "archive_thread",',
     '  label: "archive_thread",',
@@ -336,6 +339,7 @@ export function renderPiOrchestrationBridgeSource(input: ThreadOrchestrationHttp
     "    },",
     "  }));",
     "  for (const tool of workspaceTools) pi.registerTool(tool);",
+    "  for (const tool of remoteAgentTools) pi.registerTool(tool);",
     "  pi.registerTool(searchCapabilitiesTool);",
     "  pi.registerTool(readCapabilityGuideTool);",
     "  pi.registerTool(createThreadTool);",

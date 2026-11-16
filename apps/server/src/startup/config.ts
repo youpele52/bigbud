@@ -11,13 +11,14 @@ import { ownershipStateDir } from "@bigbud/shared/backendOwnership.paths";
 
 import type { DesktopBackendStartReason } from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 
+import type { RemoteMobileConfiguration } from "./config.remoteMobile.ts";
 import type { TerminalShellInstallEvidence } from "./config.terminalShells.ts";
 
 import type { TraceMode } from "../observability/TracePolicy.ts";
 
 export { DEFAULT_SERVER_PORT as DEFAULT_PORT } from "@bigbud/shared/DevPorts";
 
-export const RuntimeMode = Schema.Literals(["web", "desktop"]);
+export const RuntimeMode = Schema.Literals(["web", "desktop", "remote"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
 
 /**
@@ -59,6 +60,10 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly otlpServiceName: string;
   readonly mode: RuntimeMode;
   readonly port: number;
+  /** Owner-only client endpoint for the Linux remote composition. */
+  readonly remoteSocketPath?: string;
+  /** Explicit optional Rust mobile gateway upstream configuration. */
+  readonly remoteMobile?: RemoteMobileConfiguration;
   readonly host: string | undefined;
   readonly cwd: string;
   readonly baseDir: string;

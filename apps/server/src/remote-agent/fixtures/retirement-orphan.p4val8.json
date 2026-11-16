@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 2,
+  "revision": 52,
+  "promotionSequence": 2,
+  "builds": [
+    {
+      "id": "0.3.2:21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8:aarch64-unknown-linux-gnu",
+      "runtime": {
+        "generation": "g-21e83f641262df3272142833",
+        "version": "0.3.2",
+        "sha256": "21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8",
+        "buildDigest": "b474cbdb07ed9ce84658288fe64eed10e384d5c4",
+        "targetTriple": "aarch64-unknown-linux-gnu",
+        "binaryPath": "/home/bb/.bigbud/agent/bin/0.3.2/21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8/bigbud-remote-agent",
+        "statePath": "/home/bb/.bigbud/agent/runtimes/g-21e83f641262df3272142833",
+        "socketPath": "/home/bb/.bigbud/agent/runtimes/g-21e83f641262df3272142833/supervisor.sock",
+        "logPath": "/home/bb/.bigbud/agent/runtimes/g-21e83f641262df3272142833/supervisor.log",
+        "origin": "managed"
+      },
+      "health": "healthy",
+      "promotion": 1,
+      "binary": "absent",
+      "authenticated": true
+    },
+    {
+      "id": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu",
+      "runtime": {
+        "generation": "g-97399d8fe216eb4b6b1ec9f0",
+        "version": "0.3.3",
+        "sha256": "97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8",
+        "buildDigest": "97cc2dab8765c6fafa4ce33b52b498a93acc955f",
+        "targetTriple": "aarch64-unknown-linux-gnu",
+        "binaryPath": "/home/bb/.bigbud/agent/bin/0.3.3/97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8/bigbud-remote-agent",
+        "statePath": "/home/bb/.bigbud/agent/runtimes/g-97399d8fe216eb4b6b1ec9f0",
+        "socketPath": "/home/bb/.bigbud/agent/runtimes/g-97399d8fe216eb4b6b1ec9f0/supervisor.sock",
+        "logPath": "/home/bb/.bigbud/agent/runtimes/g-97399d8fe216eb4b6b1ec9f0/supervisor.log",
+        "origin": "managed"
+      },
+      "health": "healthy",
+      "promotion": 2,
+      "binary": "present",
+      "authenticated": true
+    }
+  ],
+  "pins": [
+    {
+      "owner": "connection:8b3dd2a9-6ebb-4a3d-88d1-3c71dad47d0d",
+      "buildId": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu"
+    }
+  ],
+  "stages": [
+    {
+      "id": "update-97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8",
+      "buildId": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu",
+      "phase": "published",
+      "controllerId": "controller-v2:4b2dba0d7b00743e7023e5cbfc2afb4d8988775737139ba7df34ea5585ab8f3a:13806:76b48f16-8e51-4ab9-9d00-893334a5c793",
+      "controllerPid": 13806,
+      "controllerStartedAt": "start-v2:ps-utc:Fri_Nov_13_21:50:54_2026",
+      "reservedAt": 1794606658706,
+      "leaseExpiresAt": 1794606958706
+    }
+  ],
+  "launches": [
+    {
+      "attemptId": "launch-g-21e83f641262df3272142833",
+      "id": "g-21e83f641262df3272142833",
+      "buildId": "0.3.2:21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8:aarch64-unknown-linux-gnu",
+      "phase": "proven-dead",
+      "epoch": "1794606623879711906"
+    },
+    {
+      "attemptId": "launch-g-97399d8fe216eb4b6b1ec9f0",
+      "id": "g-97399d8fe216eb4b6b1ec9f0",
+      "buildId": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu",
+      "phase": "ready",
+      "epoch": "1794606661971409658"
+    }
+  ],
+  "admissions": [
+    {
+      "requestedVersion": "0.3.3",
+      "id": "8b3dd2a9-6ebb-4a3d-88d1-3c71dad47d0d",
+      "buildId": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu",
+      "phase": "ready",
+      "epoch": "1794606661971409658",
+      "outcome": "selected",
+      "requestedBuildId": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu"
+    }
+  ],
+  "admissionRetirements": [
+    {
+      "requestedVersion": "0.3.2",
+      "id": "663698b0-a2df-4be3-8ea6-1070bd20139f",
+      "buildId": "0.3.2:21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8:aarch64-unknown-linux-gnu",
+      "epoch": "1794606623879711906",
+      "outcome": "selected",
+      "requestedBuildId": "0.3.2:21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8:aarch64-unknown-linux-gnu"
+    },
+    {
+      "requestedVersion": "0.3.3",
+      "id": "46945d4d-2bd6-43af-9255-98fb50495615",
+      "buildId": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu",
+      "epoch": "1794606661971409658",
+      "outcome": "selected",
+      "requestedBuildId": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu"
+    }
+  ],
+  "slotReservations": [
+    {
+      "id": "slot-0:update-21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8:1",
+      "slotId": "slot-0",
+      "requestId": "update-21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8",
+      "buildId": "0.3.2:21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8:aarch64-unknown-linux-gnu",
+      "phase": "released",
+      "controllerId": "controller-v2:4b2dba0d7b00743e7023e5cbfc2afb4d8988775737139ba7df34ea5585ab8f3a:4119:26ddcf6a-ce8b-49a7-b032-8feaa8d15c23"
+    },
+    {
+      "id": "slot-1:update-97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:15",
+      "slotId": "slot-1",
+      "requestId": "update-97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8",
+      "buildId": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu",
+      "phase": "occupied",
+      "controllerId": "controller-v2:4b2dba0d7b00743e7023e5cbfc2afb4d8988775737139ba7df34ea5585ab8f3a:13806:76b48f16-8e51-4ab9-9d00-893334a5c793"
+    }
+  ],
+  "updates": [
+    {
+      "requestId": "update-21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8",
+      "buildId": "0.3.2:21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8:aarch64-unknown-linux-gnu",
+      "phase": "ready-for-reconnect",
+      "outcome": "ready",
+      "identity": {
+        "version": "0.3.2",
+        "sha256": "21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8",
+        "buildDigest": "b474cbdb07ed9ce84658288fe64eed10e384d5c4",
+        "targetTriple": "aarch64-unknown-linux-gnu"
+      },
+      "epoch": "1794606623879711906"
+    },
+    {
+      "requestId": "retire-replace-g-21e83f641262df3272142833",
+      "buildId": "0.3.2:21e83f641262df3272142833d522a9c76f52008208537e2ccc6eb384047ba3f8:aarch64-unknown-linux-gnu",
+      "phase": "reserved",
+      "outcome": "capacity"
+    },
+    {
+      "requestId": "update-97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8",
+      "buildId": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu",
+      "phase": "checking",
+      "identity": {
+        "version": "0.3.3",
+        "sha256": "97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8",
+        "buildDigest": "97cc2dab8765c6fafa4ce33b52b498a93acc955f",
+        "targetTriple": "aarch64-unknown-linux-gnu"
+      },
+      "epoch": "1794606661971409658"
+    }
+  ],
+  "retirementReservations": [],
+  "restartReservations": [],
+  "pending": null,
+  "current": "0.3.3:97399d8fe216eb4b6b1ec9f0970cbd45563db020d15aafbe900e64e6f11b83b8:aarch64-unknown-linux-gnu",
+  "predecessor": null,
+  "currentConnectionId": "8b3dd2a9-6ebb-4a3d-88d1-3c71dad47d0d"
+}

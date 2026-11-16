@@ -1,3 +1,5 @@
+import type { RuntimeMode } from "./config.ts";
+
 import { lstat } from "node:fs/promises";
 import * as Effect from "effect/Effect";
 
@@ -5,14 +7,10 @@ export type TerminalShellInstallEvidence = "fresh" | "existing-or-uncertain";
 
 /** Capture before any mkdir, including cwd creation. A dangling link is prior state. */
 export const captureTerminalShellInstallEvidence = Effect.fn("captureTerminalShellInstallEvidence")(
-  (
-    stateDir: string,
-    mode: "web" | "desktop",
-    inspect: (path: string) => Promise<unknown> = lstat,
-  ) =>
+  (stateDir: string, mode: RuntimeMode, inspect: (path: string) => Promise<unknown> = lstat) =>
     Effect.promise(async (): Promise<TerminalShellInstallEvidence> => {
-      // Electron may reuse legacy state outside this root. No reliable legacy evidence is supplied.
-      if (mode === "desktop") return "existing-or-uncertain";
+      // Only web installs have reliable fresh-root shell migration evidence.
+      if (mode !== "web") return "existing-or-uncertain";
       try {
         await inspect(stateDir);
         return "existing-or-uncertain";

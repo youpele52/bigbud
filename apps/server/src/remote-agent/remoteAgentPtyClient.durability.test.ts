@@ -4,10 +4,12 @@ import { RemoteAgentPtyProcess } from "./remoteAgentPtyClient.ts";
 import type { RemoteAgentFrame } from "./remoteAgentProtocol.ts";
 
 function fixture() {
-  const request = vi.fn(async (_frame: RemoteAgentFrame) => ({
-    type: "ptyInputResponse",
-    value: { accepted: true },
-  }));
+  const request = vi.fn(
+    async (_frame: RemoteAgentFrame): Promise<RemoteAgentFrame> => ({
+      type: "ptyInputResponse",
+      value: { requestId: "reply", ptyId: "pty", accepted: true, errorCode: "", errorMessage: "" },
+    }),
+  );
   const connection = {
     request,
     onFrame: () => () => undefined,
@@ -32,7 +34,7 @@ describe("durable remote terminal input ordering", () => {
     const acknowledged = vi.fn(async () => undefined);
     f.process.setDurability({ allocated, acknowledged, output: async () => undefined });
     f.process.write("input");
-    await vi.waitFor(() => expect(allocated).toHaveBeenCalledWith(1));
+    await vi.waitFor(() => expect(allocated).toHaveBeenCalledWith(1, expect.any(Uint8Array)));
     expect(f.request).not.toHaveBeenCalled();
     expect(acknowledged).not.toHaveBeenCalled();
     release();
@@ -66,6 +68,50 @@ describe("durable remote terminal input ordering", () => {
     f.process.write("must not reuse sequence 2 or invent sequence 3");
     expect(f.request).not.toHaveBeenCalled();
     expect(f.errors[0]).toMatchObject({ code: "PTY_INPUT_OUTCOME_UNKNOWN" });
+  });
+
+  it("successful same-PID attach and backend reconstruction cannot clear ambiguous input", async () => {
+    const f = fixture();
+    let next = 1;
+    const acknowledged = 0;
+    f.process.setDurability({
+      allocated: async (sequence) => {
+        next = sequence + 1;
+      },
+      acknowledged: async () => {
+        throw new Error("Lost response cannot acknowledge");
+      },
+      output: async () => {},
+    });
+    f.request.mockRejectedValueOnce(new Error("lost input acknowledgement"));
+    f.process.write("unknown");
+    await vi.waitFor(() => expect(f.errors.length).toBeGreaterThan(0));
+    const attachResponse: RemoteAgentFrame = {
+      type: "ptyAttachResponse",
+      value: {
+        requestId: "attach",
+        ptyId: "pty",
+        pid: 42,
+        state: "running",
+        replayGap: false,
+        firstRetainedSequence: 1,
+        nextSequence: 1,
+      },
+    };
+    // The fixture only models input replies by default; attach is deliberately legacy.
+    f.request.mockResolvedValue(attachResponse);
+    await f.process.attach();
+    f.process.write("still unknown");
+    expect(f.request).toHaveBeenCalledTimes(2);
+    expect(f.errors.at(-1)).toMatchObject({ code: "PTY_INPUT_OUTCOME_UNKNOWN" });
+    const restarted = fixture();
+    restarted.process.restoreSequences(0, next, acknowledged);
+    restarted.request.mockResolvedValue(attachResponse);
+    await restarted.process.attach();
+    restarted.process.write("no replay on backend restart");
+    expect(restarted.request).toHaveBeenCalledOnce();
+    expect(restarted.errors.at(-1)).toMatchObject({ code: "PTY_INPUT_OUTCOME_UNKNOWN" });
+    expect(restarted.process.pid).toBe(42);
   });
 
   it("keeps allocating and acknowledging healthy legacy input past 4096 completions", async () => {

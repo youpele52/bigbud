@@ -44,18 +44,19 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("TerminalManager", (
 
       expect(spawnInput.shell).toBe("ssh");
       expect(spawnInput.cwd).toBe(homedir());
-      expect(spawnArgs.slice(0, 6)).toEqual([
+      expect(spawnArgs.slice(0, 7)).toEqual([
         "-tt",
         "-o",
         "BatchMode=yes",
         "-p",
         "22",
+        "--",
         "root@devbox",
       ]);
-      expect(spawnArgs[6]).toContain("'sh' '-lc'");
-      expect(spawnArgs[6]).toContain("'/root/project'");
-      expect(spawnArgs[6]).toContain("'FOO=bar'");
-      expect(spawnArgs[6]).toContain("'--'");
+      expect(spawnArgs[7]).toContain("'sh' '-lc'");
+      expect(spawnArgs[7]).toContain("'/root/project'");
+      expect(spawnArgs[7]).toContain("'FOO=bar'");
+      expect(spawnArgs[7]).toContain("'--'");
     }),
   );
 

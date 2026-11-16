@@ -29,3 +29,10 @@ describe("provider capabilities", () => {
     expect(resolve("codex")).toEqual(getProviderCapabilities("codex"));
   });
 });
+
+it("never advertises remote execution for the retired legacy OpenCode ID", () => {
+  expect(getProviderCapabilities("opencode")).toMatchObject({
+    supportsRemoteProviderRuntime: false,
+    supportsLocalRuntimeRemoteWorkspace: false,
+  });
+});

@@ -1,43 +1,34 @@
+import { buildRemoteAgentSupervisorObservation } from "./remoteAgentSupervisorLiveness.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import { isRemoteAgentControllerAlive } from "./remoteAgentController.ts";
 import { buildRemoteAgentStageFenceRevokeCommand } from "./remoteAgentInstall.stageFence.ts";
 import { releaseRemoteAgentStage } from "./remoteAgentInstall.registry.transitions.ts";
 
-function quote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
-
-/** A matching durable child-exit receipt plus a free inherited launch lock proves managed runtime death. */
-export async function reconcileRemoteAgentLaunchExits(control: RemoteAgentControl): Promise<void> {
+/** A matching launch with a free lock and exit receipt or distinct prior-boot proof is dead. */
+export async function reconcileRemoteAgentLaunchExits(
+  control: RemoteAgentControl,
+  options: { readonly buildId?: string } = {},
+): Promise<void> {
   const snapshot = await control.registry.read();
   for (const launch of snapshot.launches
-    .filter((entry) => entry.attemptId && entry.phase !== "proven-dead")
+    .filter(
+      (entry) =>
+        entry.attemptId &&
+        entry.phase !== "proven-dead" &&
+        (options.buildId === undefined || entry.buildId === options.buildId),
+    )
     .slice(0, 8)) {
     const build = snapshot.builds.find((entry) => entry.id === launch.buildId);
     if (!build || build.runtime.origin !== "managed") continue;
     const result = await control.run(`set -eu
-state=${quote(build.runtime.statePath)}
-if test ! -d "$state" || test -L "$state"; then printf unknown; exit 0; fi
-test "$(readlink -f -- "$state")" = "$state"
-test "$(stat -c '%u' -- "$state")" = "$(id -u)"
-test "$(stat -c '%a' -- "$state")" = 700
-for name in launch.lock launch.intent launch.exit; do
-  file="$state/$name"
-  if test ! -f "$file" || test -L "$file"; then printf unknown; exit 0; fi
-  test "$(stat -c '%u' -- "$file")" = "$(id -u)"
-  test "$(stat -c '%a' -- "$file")" = 600
-  test "$(stat -c '%h' -- "$file")" = 1
-  test "$(wc -c < "$file")" -le 64
-done
-exec 8< "$state/launch.lock"
-if ! flock -n -x 8; then printf live; exit 0; fi
-test "$(cat "$state/launch.intent")" = ${quote(launch.attemptId!)}
-case "$(cat "$state/launch.exit")" in
-  [0-9]|[0-9][0-9]|[0-9][0-9][0-9]) printf dead ;;
+${buildRemoteAgentSupervisorObservation(build.runtime, launch.attemptId!)}
+case "$(observe_supervisor)" in
+  exited:*) printf dead ;;
+  prior-boot-dead) printf prior-boot-dead ;;
   *) printf unknown ;;
 esac
 `);
-    if (result !== "dead") continue;
+    if (result !== "dead" && result !== "prior-boot-dead") continue;
     await control.registry.update((current) => {
       const entry = current.launches.find((value) => value.id === launch.id);
       if (!entry || entry.attemptId !== launch.attemptId || entry.epoch !== launch.epoch)

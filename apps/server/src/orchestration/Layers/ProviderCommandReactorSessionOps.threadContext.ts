@@ -1,3 +1,4 @@
+import type { RuntimeMode } from "../../startup/config.ts";
 import { Effect } from "effect";
 import type { AgentBrowserPreference } from "@bigbud/contracts/settings";
 import {
@@ -25,7 +26,7 @@ export function prependThreadContextToProviderInput(input: {
   readonly threadTitle: string;
   readonly computerUseEnabled?: boolean;
   readonly agentBrowserPreference?: AgentBrowserPreference;
-  readonly serverMode?: "web" | "desktop";
+  readonly serverMode?: RuntimeMode;
   /** False where the bridge has no model choice yet (OpenCode V2 until plan Phase 5). */
   readonly supportsDelegatedModelChoice?: boolean;
 }): string {
@@ -51,28 +52,35 @@ export function prependThreadContextToProviderInput(input: {
     .map((name) => `\`${name}\``)
     .join(", ");
   const computerUseLines =
-    input.computerUseEnabled === false
+    input.serverMode === "remote"
       ? [
-          "Desktop computer use is disabled in bigbud settings, so native app automation (Calendar, Reminders, screen control, etc.) is unavailable.",
-          "Use the `browser` tool for bigbud's built-in visible or background browser; it does not require desktop automation.",
+          "Desktop computer use and built-in visible/background browsers are unavailable on this remote backend. Provider-native web search is separate and unaffected.",
         ]
-      : input.serverMode === "web"
+      : input.computerUseEnabled === false
         ? [
-            'To automate native desktop apps (Calendar, Reminders, etc.), call the `computer_use` tool with `surface: "desktop"`. Desktop automation requires the bigbud desktop app.',
-            "Use the `browser` tool for bigbud's built-in visible or background browser.",
+            "Desktop computer use is disabled in bigbud settings, so native app automation (Calendar, Reminders, screen control, etc.) is unavailable.",
+            "Use the `browser` tool for bigbud's built-in visible or background browser; it does not require desktop automation.",
           ]
-        : [
-            'To automate native desktop apps (Calendar, Reminders, etc.), call the `computer_use` tool with `surface: "desktop"`.',
-            "Use the `browser` tool for bigbud's built-in visible or background browser.",
-            "Use `check_permissions` or `doctor` first if desktop automation fails.",
-          ];
+        : input.serverMode === "web"
+          ? [
+              'To automate native desktop apps (Calendar, Reminders, etc.), call the `computer_use` tool with `surface: "desktop"`. Desktop automation requires the bigbud desktop app.',
+              "Use the `browser` tool for bigbud's built-in visible or background browser.",
+            ]
+          : [
+              'To automate native desktop apps (Calendar, Reminders, etc.), call the `computer_use` tool with `surface: "desktop"`.',
+              "Use the `browser` tool for bigbud's built-in visible or background browser.",
+              "Use `check_permissions` or `doctor` first if desktop automation fails.",
+            ];
   const browserPreference = input.agentBrowserPreference ?? "bigbud";
-  const browserPreferenceLines = [
-    `The default agent browser is the ${browserPreference === "bigbud" ? "bigbud browser" : "system default browser"}. This is a preference, not a restriction; an explicit user request for the other browser always overrides it.`,
-    'Use the `browser` tool for the bigbud browser. Use `computer_use` with `action: "navigate"` and `surface: "desktop"` for the system default browser.',
-    "System-browser interaction requires the desktop app, full-access runtime mode, and enabled desktop computer use; surface the existing tool error when unavailable.",
-    "Provider-native web search is separate and unaffected.",
-  ];
+  const browserPreferenceLines =
+    input.serverMode === "remote"
+      ? []
+      : [
+          `The default agent browser is the ${browserPreference === "bigbud" ? "bigbud browser" : "system default browser"}. This is a preference, not a restriction; an explicit user request for the other browser always overrides it.`,
+          'Use the `browser` tool for the bigbud browser. Use `computer_use` with `action: "navigate"` and `surface: "desktop"` for the system default browser.',
+          "System-browser interaction requires the desktop app, full-access runtime mode, and enabled desktop computer use; surface the existing tool error when unavailable.",
+          "Provider-native web search is separate and unaffected.",
+        ];
 
   const contextBlock = [
     "Current thread context:",

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildRemoteAgentLaunchPreparation } from "./remoteAgentRuntime.launch.prepare.ts";
 import { buildIsolatedRemoteAgentLaunch } from "./remoteAgentRuntime.launch.ts";
 import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import {
@@ -34,6 +35,31 @@ describe.runIf(linuxControlAvailable)("Linux launch reservation parent/child han
     );
   });
   afterAll(() => fixture?.close());
+
+  it("prepares the exact private service intent and boot without spawning a supervisor", async () => {
+    const statePath = `${fixture.root}/runtimes/service-prepared`;
+    const prepared = {
+      ...runtime,
+      generation: "service-prepared",
+      statePath,
+      socketPath: `${statePath}/supervisor.sock`,
+      logPath: `${statePath}/supervisor.log`,
+    };
+    expect(await fixture.run(buildRemoteAgentLaunchPreparation(prepared, "service-attempt"))).toBe(
+      "",
+    );
+    expect(await fixture.run(`cat '${statePath}/launch.intent'`)).toBe("service-attempt");
+    expect(await fixture.run(`cat '${statePath}/launch.boot'`)).toMatch(/^[0-9a-f-]{36}$/);
+    expect(
+      await fixture.run(
+        `test ! -e '${statePath}/writers'; test ! -e '${statePath}/epoch'; test ! -e '${statePath}/supervisor.sock'; flock -n '${statePath}/launch.lock' printf ready-for-service`,
+      ),
+    ).toBe("ready-for-service");
+    expect(await fixture.run(buildRemoteAgentLaunchPreparation(prepared, "another-attempt"))).toBe(
+      "launch-uncertain",
+    );
+    expect(await fixture.run(`cat '${statePath}/launch.intent'`)).toBe("service-attempt");
+  });
 
   it("controller death postspawn/prebind cannot start a second writer", async () => {
     const launch = buildIsolatedRemoteAgentLaunch(runtime, "attempt1");

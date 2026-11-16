@@ -1,4 +1,10 @@
 import { runSshCommand } from "../ssh/sshProcess.ts";
+import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
+import {
+  buildRemoteAgentPreflightScript,
+  parseRemoteAgentPreflight,
+  type RemoteAgentPreflightReport,
+} from "./remoteAgentInstall.preflight.ts";
 import {
   resolveRemoteAgentTargetTriple,
   type RemoteAgentTargetTriple,
@@ -8,6 +14,8 @@ export interface RemoteAgentPlatformInfo {
   readonly operatingSystem: string;
   readonly architecture: string;
   readonly targetTriple: RemoteAgentTargetTriple | null;
+  /** Install prerequisites gathered in the same round trip; absent from older probe doubles. */
+  readonly preflight?: RemoteAgentPreflightReport;
 }
 
 export class RemoteAgentPlatformProbeError extends Error {
@@ -20,7 +28,7 @@ export class RemoteAgentPlatformProbeError extends Error {
 }
 
 export function parseRemoteAgentPlatformProbe(output: string): RemoteAgentPlatformInfo {
-  const [operatingSystem, architecture] = output
+  const [operatingSystem, architecture, ...preflightLines] = output
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
@@ -34,19 +42,28 @@ export function parseRemoteAgentPlatformProbe(output: string): RemoteAgentPlatfo
       operatingSystem.toLowerCase(),
       architecture.toLowerCase(),
     ),
+    ...(preflightLines.length > 0 ? { preflight: parseRemoteAgentPreflight(preflightLines) } : {}),
   };
 }
 
 export async function probeRemoteAgentPlatform(
   executionTargetId: string,
 ): Promise<RemoteAgentPlatformInfo> {
-  const result = await runSshCommand({
+  const result = await runRemoteAgentDiagnosedCommand(runSshCommand, "platform", {
     executionTargetId,
     command: "sh",
-    args: ["-lc", 'printf \'%s\\n%s\\n\' "$(uname -s)" "$(uname -m)"'],
+    args: [
+      "-lc",
+      [
+        'printf \'%s\\n%s\\n\' "$(uname -s)" "$(uname -m)"',
+        // Prerequisite facts are Linux-specific; other systems stop at the unsupported triple.
+        'if [ "$(uname -s)" = Linux ]; then',
+        buildRemoteAgentPreflightScript(),
+        "fi",
+      ].join("\n"),
+    ],
     timeoutMs: 8_000,
-    maxBufferBytes: 1024,
-    outputMode: "error",
+    maxBufferBytes: 4096,
   });
   return parseRemoteAgentPlatformProbe(result.stdout);
 }

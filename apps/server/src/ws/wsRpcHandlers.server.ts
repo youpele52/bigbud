@@ -1,3 +1,4 @@
+import { createLegacyMobilePairing } from "../remote-backend/mobileOwnerPairing.legacy.ts";
 import { Effect, Option, Schema, Stream } from "effect";
 import {
   ServerCliProxyActivationError,
@@ -248,7 +249,11 @@ export function makeServerWsRpcHandlers(context: WsRpcContext) {
     }) =>
       observeRpcEffect(
         WS_METHODS.serverCreateMobileRemotePairing,
-        context.mobileRemoteControl.createPairing(input).pipe(
+        createLegacyMobilePairing(
+          context.config.mode,
+          (value) => context.mobileRemoteControl.createPairing(value),
+          input,
+        ).pipe(
           Effect.mapError(
             (cause) =>
               new ServerMobileRemoteError({

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { candidateHello as hello } from "./remoteAgentUpdate.prepare.test.helpers.ts";
 
 import {
   RemoteAgentAdmissionError,
@@ -15,32 +16,6 @@ import {
 } from "./remoteAgentInstallManager.fixtures.ts";
 import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
-
-function hello() {
-  return {
-    protocolMajor: 1,
-    protocolMinor: 2,
-    agentVersion: artifact.version,
-    buildDigest: artifact.buildDigest,
-    os: "linux",
-    architecture: "aarch64",
-    agentInstanceId: "candidate",
-    agentEpoch: "candidate-epoch",
-    capabilities: [
-      "diagnostic",
-      "workspace.files",
-      "workspace.search",
-      "workspace.write",
-      "workspace.watch",
-      "process.run",
-      "process.attach",
-      "terminal.pty",
-    ].map((name) => ({ name, major: 1, minor: 0 })),
-    maxFrameBytes: 1024,
-    maxOperationOutputBytes: 1024,
-    maxJournalBytes: 1024,
-  };
-}
 
 describe("remote agent candidate preparation", () => {
   it("launches and checks the candidate before marking it ready", async () => {
@@ -189,7 +164,7 @@ describe("remote agent candidate preparation", () => {
       sha256: artifact.sha256,
       buildDigest: artifact.buildDigest,
       targetTriple: artifact.targetTriple,
-      binaryPath: "/home/me/.bigbud/agent/bin/0.2.207/hash/bigbud-remote-agent",
+      binaryPath: `/home/me/.bigbud/agent/bin/${artifact.version}/${artifact.sha256}/bigbud-remote-agent`,
       statePath: "/home/me/.bigbud/agent/runtimes/g-candidate",
       socketPath: "/home/me/.bigbud/agent/runtimes/g-candidate/supervisor.sock",
       logPath: "/home/me/.bigbud/agent/runtimes/g-candidate/supervisor.log",

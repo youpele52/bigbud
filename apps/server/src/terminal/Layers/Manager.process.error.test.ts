@@ -3,6 +3,8 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { expect } from "vitest";
 
+import { RemoteAgentPtyError } from "../../remote-agent/remoteAgentPtyClient.types";
+
 import type { PtySpawnInput } from "../Services/PTY";
 import {
   FakePtyAdapter,
@@ -38,9 +40,11 @@ class ErrorPtyAdapter extends FakePtyAdapter {
     );
   }
 
-  fail(process: FakePtyProcess) {
-    for (const callback of this.listeners.get(process) ?? [])
-      callback(new Error("Terminal PTY read failed: EBADF. Shutdown is not yet confirmed."));
+  fail(
+    process: FakePtyProcess,
+    error = new Error("Terminal PTY read failed: EBADF. Shutdown is not yet confirmed."),
+  ) {
+    for (const callback of this.listeners.get(process) ?? []) callback(error);
   }
 }
 
@@ -99,6 +103,43 @@ it.layer(NodeServices.layer, { excludeTestServices: true })(
           yield* waitFor(Effect.sync(() => releases.length === 1));
           expect(ptyAdapter.listeners.get(process)?.size).toBe(0);
         }),
+    );
+
+    it.effect("reports distinct replay loss after earlier errors without repeating one gap", () =>
+      Effect.gen(function* () {
+        const ptyAdapter = new ErrorPtyAdapter();
+        const { manager, getEvents } = yield* createManager(5, { ptyAdapter });
+        yield* manager.open(openInput());
+        const process = ptyAdapter.processes[0]!;
+        ptyAdapter.fail(process);
+        yield* waitFor(
+          getEvents.pipe(
+            Effect.map((events) => events.filter((e) => e.type === "error").length === 1),
+          ),
+        );
+        for (const sequence of [100, 100, 200, 200]) {
+          ptyAdapter.fail(
+            process,
+            new RemoteAgentPtyError(
+              "PTY_REPLAY_GAP",
+              `PTY output replay begins at sequence ${sequence}.`,
+            ),
+          );
+        }
+        yield* waitFor(
+          getEvents.pipe(
+            Effect.map((events) => events.filter((e) => e.type === "error").length >= 3),
+          ),
+        );
+        const errors = (yield* getEvents).filter((e) => e.type === "error");
+        expect(errors.map((e) => e.message)).toEqual([
+          "Terminal PTY read failed: EBADF. Shutdown is not yet confirmed.",
+          "PTY output replay begins at sequence 100.",
+          "PTY output replay begins at sequence 200.",
+        ]);
+        expect(ptyAdapter.processes).toHaveLength(1);
+        process.emitExit({ exitCode: 0, signal: null });
+      }),
     );
 
     it.effect("replays a failure that occurred before the manager subscribed", () =>

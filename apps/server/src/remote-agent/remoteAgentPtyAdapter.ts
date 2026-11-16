@@ -135,6 +135,9 @@ export function makeRemoteAgentPtyAdapter(
     !isLocalExecutionTarget(executionTargetId),
 ): PtyAdapterShape {
   return {
+    ...(base.ownedRuntimeForTarget
+      ? { ownedRuntimeForTarget: (target: string) => base.ownedRuntimeForTarget?.(target) }
+      : {}),
     spawn: Effect.fn("remoteAgentPtyAdapter.spawn")(function* (input) {
       if (
         !input.executionTargetId ||
@@ -144,7 +147,17 @@ export function makeRemoteAgentPtyAdapter(
         return yield* base.spawn(input);
       }
       return yield* Effect.tryPromise({
-        try: () => spawnRemotePty(input, resolver),
+        try: async (signal) => {
+          const process = await spawnRemotePty(
+            input.recoverOnly ? { ...input, recoverySignal: signal } : input,
+            resolver,
+          );
+          if (input.recoverOnly && signal.aborted) {
+            process.detach?.();
+            signal.throwIfAborted();
+          }
+          return process;
+        },
         catch: (cause) =>
           new PtySpawnError({
             adapter: "remote-agent-pty",

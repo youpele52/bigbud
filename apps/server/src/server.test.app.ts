@@ -120,6 +120,8 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
             listSessions: Effect.succeed([]),
             revokeSession: () => Effect.void,
             validateSessionToken: () => Effect.succeed(null),
+            // Sessions in seam tests never end on their own.
+            watchSessionEnd: () => Effect.never,
             ...options?.layers?.mobileRemoteControl,
           }),
           Layer.succeed(CommandGateway, {

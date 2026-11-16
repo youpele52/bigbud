@@ -5,7 +5,14 @@ import {
   pinRemoteAgentBuild,
   promoteRemoteAgentBuild,
 } from "./remoteAgentInstall.registry.transitions.ts";
-import { MAX_REMOTE_AGENT_ADMISSION_RETIREMENTS } from "./remoteAgentInstall.registry.ts";
+import {
+  MAX_REMOTE_AGENT_ADMISSION_RETIREMENTS,
+  type RemoteAgentRegistry,
+} from "./remoteAgentInstall.registry.ts";
+import {
+  assertPreparedRemoteAgentAdmission,
+  reconcileFailedRemoteAgentAdmission,
+} from "./remoteAgentAdmission.reconcile.ts";
 import type { RemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import type { RemoteAgentRuntimeBinding } from "./remoteAgentConnectionPool.ts";
 import { observeLegacyRemoteAgentBinding } from "./remoteAgentLegacyBinding.ts";
@@ -223,7 +230,8 @@ export function makeRemoteAgentAdmission(
       const choices = [prepared.buildId, ...fallbackIds];
       const failures: string[] = [];
       let failureCode = prepared.failureCode;
-      for (const buildId of choices) {
+      let failedVerification: RemoteAgentRegistry | undefined;
+      for (const [choiceIndex, buildId] of choices.entries()) {
         state = await control.registry.read();
         const preparedNow = state.admissions.find((entry) => entry.id === requestId);
         if (!preparedNow || preparedNow.phase !== "prepared")
@@ -239,18 +247,22 @@ export function makeRemoteAgentAdmission(
           continue;
         }
         let committed = false;
+        let verified = false;
+        let attemptState: RemoteAgentRegistry | undefined;
         try {
-          await control.registry.update((current) =>
-            pinRemoteAgentBuild(
+          attemptState = await control.registry.update((current) => {
+            assertPreparedRemoteAgentAdmission(current, state, requestId, buildId);
+            return pinRemoteAgentBuild(
               current,
               `activation:${requestId}:${build.runtime.generation}`,
               buildId,
-            ),
-          );
+            );
+          });
           // The launch epoch is the pin. Do not repair or launch here: health
           // preparation owns candidate startup, while fresh admission only
           // rechecks the exact ready runtime immediately before promotion.
           const epoch = await verify(target, build.runtime, selected.epoch);
+          verified = true;
           const commitState = await control.registry.read();
           const commitAdmission = commitState.admissions.find((entry) => entry.id === requestId);
           const commitLaunch = commitState.launches.find(
@@ -268,18 +280,16 @@ export function makeRemoteAgentAdmission(
               "ADMISSION_CONFLICT",
               "This fresh connection changed concurrently; retry the same request.",
             );
-          await control.registry.update((current) =>
-            pinRemoteAgentBuild(current, `connection:${requestId}`, buildId),
-          );
           const previousConnectionId = commitState.currentConnectionId;
           state = await control.registry.update((current) => {
-            const admission = current.admissions.find((entry) => entry.id === requestId);
-            if (admission?.phase !== "prepared" || admission.buildId !== buildId)
-              throw new RemoteAgentAdmissionError(
-                "ADMISSION_CONFLICT",
-                "Admission changed concurrently.",
-              );
-            return promoteRemoteAgentBuild(current, buildId, {
+            const admission = assertPreparedRemoteAgentAdmission(
+              current,
+              attemptState!,
+              requestId,
+              buildId,
+            );
+            const pinned = pinRemoteAgentBuild(current, `connection:${requestId}`, buildId);
+            return promoteRemoteAgentBuild({ ...pinned, revision: current.revision }, buildId, {
               id: requestId,
               epoch,
               ...(admission.requestedBuildId
@@ -303,10 +313,14 @@ export function makeRemoteAgentAdmission(
           });
           return await finishRemoteAgentAdmission(control, requestId, build.runtime);
         } catch (cause) {
+          failedVerification = verified ? undefined : attemptState;
           if (committed)
             throw new RemoteAgentAdmissionError(
               "BINDING_UNAVAILABLE",
               `Remote readiness was committed but local connection persistence failed (${cause instanceof Error ? cause.message : String(cause)}). Retry this connection request; no work was admitted.`,
+              false,
+              { cause },
+              requestId,
             );
           failures.push(
             `${build.runtime.version}: ${cause instanceof RemoteAgentAdmissionError ? cause.code : "UNREACHABLE"}`,
@@ -318,9 +332,12 @@ export function makeRemoteAgentAdmission(
             );
           }
 
-          const nextBuildId = state.current === buildId ? state.predecessor : state.current;
-          const fallback = readySelection(await control.registry.read(), nextBuildId);
-          if (fallback && fallback.buildId !== prepared.buildId) {
+          const fallbackState = await control.registry.read();
+          const fallback = choices
+            .slice(choiceIndex + 1)
+            .map((id) => readySelection(fallbackState, id))
+            .find((selection) => selection !== undefined);
+          if (fallback) {
             await control.registry.update((current) => {
               const admission = current.admissions.find((entry) => entry.id === requestId);
               if (!admission || admission.phase !== "prepared") return current;
@@ -341,9 +358,10 @@ export function makeRemoteAgentAdmission(
           }
         }
       }
+      await reconcileFailedRemoteAgentAdmission(control, failedVerification, requestId);
       throw new RemoteAgentAdmissionError(
         "ADMISSION_UNAVAILABLE",
-        `${failures.length ? failures.join("; ") : "No verified remote runtime is available"}. Existing work remains pinned.`,
+        `${failures.length ? failures.join("; ") : "No verified remote runtime is available"}. Existing work remains pinned. Check SSH access. For a saved project, Reconnect in its menu requests a managed service restart.`,
       );
     },
   };

@@ -61,6 +61,7 @@ export interface TerminalSessionState {
   shellUnconfirmedLaunch?: ShellUnconfirmedLaunch | undefined;
   remoteShellPid?: number | undefined;
   remoteOwnerRecoveryRequired?: boolean;
+  expectedRemoteResourceId?: string | undefined;
   restartPending?: boolean;
   stopPending?: boolean;
   reconcileOutputHold?: (() => void) | undefined;

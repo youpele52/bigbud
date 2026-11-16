@@ -1,4 +1,7 @@
-import { Effect, Layer, Option, Scope } from "effect";
+import { makeRemoteBackendRelayRoute } from "../remote-backend/clientRelay.route.ts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import { randomUUID } from "node:crypto";
 import { WsRpcGroup } from "@bigbud/contracts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -30,6 +33,7 @@ import {
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 import { makeWsRpcHttpEffectWithSshMonitorCleanup } from "./wsSshMonitor.protocol.ts";
 import { forgetSshMonitorInstance } from "../ssh/sshMonitor.connections.ts";
+import { authorizeWebsocketRpcConnection } from "./wsConnectionAuthorization.ts";
 
 const retentionMutationAuthorization = makeRetentionMutationAuthorization();
 
@@ -37,6 +41,9 @@ const makeWsRpcLayer = (
   withBootstrapCommandLock: BootstrapCommandLock,
   worktreeScope: Scope.Scope,
   monitorInstanceId: string,
+  relayHandlers: Awaited<
+    Effect.Success<ReturnType<typeof makeRemoteBackendRelayRoute>>
+  >["handlers"],
 ) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
@@ -46,6 +53,7 @@ const makeWsRpcLayer = (
       const metadataWarningHandlers = yield* makeWsRpcMetadataWarningHandlers;
 
       return WsRpcGroup.of({
+        ...relayHandlers,
         ...makeWsRpcCopilotRuntimeHandlers(context),
         ...makeWsRpcAutomationHandlers(context),
         ...makeWsRpcOrchestrationServerHandlers(context),
@@ -77,13 +85,15 @@ export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCo
         worktreeScope,
         Effect.sync(() => forgetSshMonitorInstance(monitorInstanceId)),
       );
+      const relay = yield* makeRemoteBackendRelayRoute(monitorInstanceId, worktreeScope);
       const wsRpcRuntimeLayer = Layer.mergeAll(
-        makeWsRpcLayer(withBootstrapCommandLock, worktreeScope, monitorInstanceId),
+        makeWsRpcLayer(withBootstrapCommandLock, worktreeScope, monitorInstanceId, relay.handlers),
         RpcSerialization.layerJson,
         retentionMutationAuthorization.layer,
       );
       const rpcWebSocketHttpEffect = yield* makeWsRpcHttpEffectWithSshMonitorCleanup(
         monitorInstanceId,
+        relay.lifecycle,
       ).pipe(Effect.provide(wsRpcRuntimeLayer));
 
       return HttpRouter.add(
@@ -92,16 +102,21 @@ export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCo
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
           const config = yield* ServerConfig;
-          if (config.authToken) {
-            const url = HttpServerRequest.toURL(request);
-            if (Option.isNone(url)) {
-              return HttpServerResponse.text("Invalid WebSocket URL", { status: 400 });
-            }
-            const token = url.value.searchParams.get("token");
-            if (token !== config.authToken) {
-              return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
-            }
-          }
+          const authorization = authorizeWebsocketRpcConnection({
+            mode: config.mode,
+            authToken: config.authToken,
+            url: request.url,
+            headers: request.headers,
+          });
+          if (authorization !== "authorized")
+            return HttpServerResponse.text("WebSocket connection unavailable", {
+              status:
+                authorization === "incompatible"
+                  ? 426
+                  : authorization === "invalid-url"
+                    ? 400
+                    : 401,
+            });
           const requestWithAuthorization = request.modify({
             headers: retentionMutationAuthorization.authorizeHeaders(
               request.headers,

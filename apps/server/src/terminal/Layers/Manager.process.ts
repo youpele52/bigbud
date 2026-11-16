@@ -1,6 +1,7 @@
 import { hasUnconfirmedDirectShell } from "./Manager.shell.direct.policy";
 import { makeInactiveSessionEviction } from "./Manager.process.eviction.ts";
 import { makeTerminalIdleWorkTracker } from "./Manager.idleWork.ts";
+import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker";
 import * as Effect from "effect/Effect";
@@ -339,6 +340,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     );
 
     const api = buildSessionApi({
+      resolveOwnedRuntime: (target) => resolveOwnedPtyRuntime(options.ptyAdapter, target),
       getLocalShellDefault: options.getLocalShellDefault,
       listLocalShellProfiles: options.listLocalShellProfiles,
       publishEvent,

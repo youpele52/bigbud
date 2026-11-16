@@ -2,6 +2,7 @@ import { type TerminalEvent, type TerminalSessionSnapshot } from "@bigbud/contra
 import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import type * as Effect from "effect/Effect";
 import type * as Option from "effect/Option";
+import type { OwnedPtyRuntime } from "../Services/OwnedPtyRuntime.ts";
 
 import {
   type TerminalCwdError,
@@ -18,6 +19,7 @@ import {
 } from "./Manager.types";
 
 export interface SessionApiContext {
+  resolveOwnedRuntime?: ((target: string) => OwnedPtyRuntime | undefined) | undefined;
   getLocalShellDefault?: TerminalManagerOptions["getLocalShellDefault"];
   listLocalShellProfiles?: TerminalManagerOptions["listLocalShellProfiles"];
   directShellOwners?: TerminalManagerOptions["directShellOwners"];

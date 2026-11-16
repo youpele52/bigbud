@@ -35,10 +35,12 @@ class RemoteFakeAdapter extends FakePtyAdapter {
   override spawn(input: PtySpawnInput) {
     return super.spawn(input).pipe(
       Effect.map((process) =>
-        Object.assign(process, {
-          pidDomain: "remote" as const,
-          recovered: true,
-        }),
+        input.executionTargetId === "local"
+          ? process
+          : Object.assign(process, {
+              pidDomain: "remote" as const,
+              recovered: true,
+            }),
       ),
     );
   }

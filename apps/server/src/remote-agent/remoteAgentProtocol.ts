@@ -1,29 +1,14 @@
-import type {
-  RemoteAgentPtyAttachRequest,
-  RemoteAgentPtyAttachResponse,
-  RemoteAgentPtyCloseRequest,
-  RemoteAgentPtyCloseResponse,
-  RemoteAgentPtyControlResponse,
-  RemoteAgentPtyCreateRequest,
-  RemoteAgentPtyCreateResponse,
-  RemoteAgentPtyExited,
-  RemoteAgentPtyInput,
-  RemoteAgentPtyOutput,
-  RemoteAgentPtyOutputAck,
-  RemoteAgentPtyResizeRequest,
-  RemoteAgentPtyResizeResponse,
-  RemoteAgentPtySignalRequest,
-  RemoteAgentPtySignalResponse,
-} from "./remoteAgentProtocol.pty.ts";
+import type { RemoteAgentPtyFrame } from "./remoteAgentProtocol.pty.ts";
 import type { RemoteAgentWorkspaceWatchFrame } from "./remoteAgentProtocol.workspaceWatch.ts";
 import type { RemoteAgentResourceCleanupFrame } from "./remoteAgentProtocol.resourceCleanup.ts";
+import type { RemoteAgentServiceLeaseFrame } from "./remoteAgentProtocol.serviceLease.ts";
 import type { RemoteAgentControlFrame } from "./remoteAgentProtocol.control.ts";
 export type {
   RemoteAgentSupervisorShutdownRequest,
   RemoteAgentSupervisorShutdownResponse,
 } from "./remoteAgentProtocol.control.ts";
 export const REMOTE_AGENT_PROTOCOL_MAJOR = 1;
-export const REMOTE_AGENT_PROTOCOL_MINOR = 5;
+export const REMOTE_AGENT_PROTOCOL_MINOR = 8;
 export const REMOTE_AGENT_DEFAULT_MAX_FRAME_BYTES = 1024 * 1024;
 export interface RemoteAgentClientHello {
   readonly protocolMajor: number;
@@ -319,6 +304,7 @@ export type {
 } from "./remoteAgentProtocol.workspaceWatch.ts";
 
 export type RemoteAgentFrame =
+  | RemoteAgentServiceLeaseFrame
   | RemoteAgentResourceCleanupFrame
   | RemoteAgentControlFrame
   | RemoteAgentWorkspaceWatchFrame
@@ -373,22 +359,7 @@ export type RemoteAgentFrame =
   | { readonly type: "processOutputAck"; readonly value: RemoteAgentProcessOutputAck }
   | { readonly type: "processAckResponse"; readonly value: RemoteAgentProcessAckResponse }
   | { readonly type: "processAttachResponse"; readonly value: RemoteAgentProcessAttachResponse }
-  | { readonly type: "ptyCreateRequest"; readonly value: RemoteAgentPtyCreateRequest }
-  | { readonly type: "ptyCreateResponse"; readonly value: RemoteAgentPtyCreateResponse }
-  | { readonly type: "ptyInput"; readonly value: RemoteAgentPtyInput }
-  | { readonly type: "ptyOutput"; readonly value: RemoteAgentPtyOutput }
-  | { readonly type: "ptyOutputAck"; readonly value: RemoteAgentPtyOutputAck }
-  | { readonly type: "ptyResizeRequest"; readonly value: RemoteAgentPtyResizeRequest }
-  | { readonly type: "ptyResizeResponse"; readonly value: RemoteAgentPtyResizeResponse }
-  | { readonly type: "ptySignalRequest"; readonly value: RemoteAgentPtySignalRequest }
-  | { readonly type: "ptySignalResponse"; readonly value: RemoteAgentPtySignalResponse }
-  | { readonly type: "ptyAttachRequest"; readonly value: RemoteAgentPtyAttachRequest }
-  | { readonly type: "ptyAttachResponse"; readonly value: RemoteAgentPtyAttachResponse }
-  | { readonly type: "ptyCloseRequest"; readonly value: RemoteAgentPtyCloseRequest }
-  | { readonly type: "ptyCloseResponse"; readonly value: RemoteAgentPtyCloseResponse }
-  | { readonly type: "ptyExited"; readonly value: RemoteAgentPtyExited }
-  | { readonly type: "ptyInputResponse"; readonly value: RemoteAgentPtyControlResponse }
-  | { readonly type: "ptyOutputAckResponse"; readonly value: RemoteAgentPtyControlResponse };
+  | RemoteAgentPtyFrame;
 
 export class RemoteAgentProtocolDecodeError extends Error {
   readonly _tag = "RemoteAgentProtocolDecodeError";

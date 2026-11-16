@@ -1,3 +1,5 @@
+import { encodePtyInventoryFrame } from "./remoteAgentProtocol.codec.pty.inventory.ts";
+import { encodePtyInputReconcileFrame } from "./remoteAgentProtocol.codec.pty.input.ts";
 import {
   type RemoteAgentFrame,
   type RemoteAgentProcessEnvironment,
@@ -181,6 +183,14 @@ export function encodePtyFrame(
   frame: RemoteAgentFrame,
 ): { readonly field: number; readonly value: Uint8Array } | undefined {
   switch (frame.type) {
+    case "ptyDetachRequest": {
+      const writer = new WireWriter();
+      writer.fieldString(1, frame.value.requestId);
+      writer.fieldString(2, frame.value.ptyId);
+      return { field: 62, value: writer.finish() };
+    }
+    case "ptyDetachResponse":
+      return { field: 63, value: encodeControlResponse(frame.value) };
     case "ptyCreateRequest":
       return { field: 42, value: encodeCreate(frame.value) };
     case "ptyCreateResponse":
@@ -214,6 +224,6 @@ export function encodePtyFrame(
     case "ptyOutputAckResponse":
       return { field: 57, value: encodeControlResponse(frame.value) };
     default:
-      return undefined;
+      return encodePtyInventoryFrame(frame) ?? encodePtyInputReconcileFrame(frame);
   }
 }

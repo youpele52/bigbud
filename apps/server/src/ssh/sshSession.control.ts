@@ -17,6 +17,8 @@ export function buildSshControlArgs(
     "-o",
     `ControlPath=${session.controlPath}`,
     ...(target.port ? ["-p", target.port] : []),
+    // End option parsing: a destination can never be read as an ssh option.
+    "--",
     session.destination,
   ];
 }

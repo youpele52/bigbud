@@ -30,6 +30,7 @@ describe("remote agent install integrity boundary", () => {
     const readArtifactBytes = vi.fn(async () => bytes);
     const installArtifact = vi.fn();
     const manager = makeRemoteAgentInstallManager({
+      probePlacedArtifact: async () => "absent",
       probePlatform: platform,
       readArtifactBytes,
       installArtifact,
@@ -49,6 +50,7 @@ describe("remote agent install integrity boundary", () => {
     const readArtifactBytes = vi.fn(async () => new Uint8Array([3, 2, 1]));
     const installArtifact = vi.fn();
     const manager = makeRemoteAgentInstallManager({
+      probePlacedArtifact: async () => "absent",
       probePlatform: platform,
       readArtifactBytes,
       installArtifact,

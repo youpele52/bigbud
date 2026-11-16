@@ -33,6 +33,7 @@ function fakeProcess() {
     attach: f.attach,
     restoreSequences: vi.fn(),
     setDurability: vi.fn(),
+    reconcileInput: vi.fn(async () => {}),
     get interruptionReason() {
       return f.interruption;
     },
@@ -103,8 +104,12 @@ vi.mock("./remoteAgentController.ts", () => ({
   isRemoteAgentControllerAlive: async () => f.controllerAlive,
 }));
 import { makeOwnedRemoteAgentPty } from "./remoteAgentOwnedPty.ts";
+import { openRemoteAgentControl } from "./remoteAgentControl.ts";
 
-function harness(resolveBinding?: Parameters<typeof makeOwnedRemoteAgentPty>[2]) {
+function harness(
+  resolveBinding?: Parameters<typeof makeOwnedRemoteAgentPty>[2],
+  options?: Parameters<typeof makeOwnedRemoteAgentPty>[3],
+) {
   const store = {
     get: async () => f.owner,
     reserve: async (owner: RemoteAgentOwner) => {
@@ -128,7 +133,7 @@ function harness(resolveBinding?: Parameters<typeof makeOwnedRemoteAgentPty>[2])
     getBound: f.getBound,
     onRuntimeRestart: () => () => undefined,
   } as unknown as RemoteAgentConnectionPool;
-  return makeOwnedRemoteAgentPty(pool, () => store, resolveBinding);
+  return makeOwnedRemoteAgentPty(pool, () => store, resolveBinding, options);
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -153,6 +158,32 @@ beforeEach(() => {
 });
 
 describe("owned exact-profile PTY dispatch and recovery", () => {
+  it("uses injected local control for durable pins without resolving an SSH control endpoint", async () => {
+    const localControl = await openRemoteAgentControl("fixture-local");
+    f.control.mockClear();
+    const openControl = vi.fn(async () => localControl);
+    const process = await harness(undefined, { openControl })(spawnInput(profileLaunch()));
+    expect(openControl).toHaveBeenCalledExactlyOnceWith(f.owner!.target);
+    expect(f.control).not.toHaveBeenCalled();
+    expect(f.pinned).toBe(true);
+    expect(f.events).toEqual(["reserve", "may-have-been-sent", "workspace", "create"]);
+    expect(process.remoteResourceId).toBe(f.owner!.resourceId);
+  });
+
+  it("rolls back an unsent reservation if injected local registry control is unavailable", async () => {
+    const openControl = vi.fn(async () => {
+      throw new Error("Local registry unavailable");
+    });
+    await expect(harness(undefined, { openControl })(spawnInput(profileLaunch()))).rejects.toThrow(
+      "Local registry unavailable",
+    );
+    expect(f.control).not.toHaveBeenCalled();
+    expect(f.rollback).toHaveBeenCalledOnce();
+    expect(f.owner).toBeUndefined();
+    expect(f.create).not.toHaveBeenCalled();
+    expect(f.pinned).toBe(false);
+  });
+
   for (const explicitProfile of [false, true]) {
     it.each(["missing", "terminal", "dead-prepared"] as const)(
       `recoverOnly rejects %s ownership without protocol traffic (${explicitProfile ? "profile" : "legacy"})`,
@@ -220,7 +251,8 @@ describe("owned exact-profile PTY dispatch and recovery", () => {
       const process = await harness()({ ...spawnInput(), recoverOnly: true });
       expect(f.create).not.toHaveBeenCalled();
       expect(f.open).not.toHaveBeenCalled();
-      expect(f.attach).toHaveBeenCalledExactlyOnceWith(0);
+      expect(f.attach).toHaveBeenCalledExactlyOnceWith(0, expect.any(AbortSignal));
+      expect(f.attach.mock.calls[0]?.[1].aborted).toBe(false);
       expect(f.owner).toBe(original);
       expect(process.recovered).toBe(true);
       expect(process.shellUnconfirmedLaunch?.requestedProfile).toEqual(

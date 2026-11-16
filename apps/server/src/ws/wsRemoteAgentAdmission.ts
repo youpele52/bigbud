@@ -7,11 +7,9 @@ import {
   type ServerGetRemoteAgentUpdateStatusInput,
   type ServerRemoteAgentUpdateStatus,
 } from "@bigbud/contracts/server/server.ts";
-import { remoteAgentAdmission } from "../remote-agent/remoteAgentAdmission.ts";
+import { activateRemoteAgentFresh } from "../remote-agent/remoteAgentActivation.ts";
 import { isRemoteAgentConfigured } from "../remote-agent/remoteAgentServerLayer.ts";
 import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
-import { scheduleRemoteAgentCleanup } from "../remote-agent/remoteAgentInstall.maintenance.ts";
-import { remoteAgentRuntimeSummary } from "../remote-agent/remoteAgentStatus.ts";
 import type { RemoteAgentUpdateCoordinatorShape } from "../remote-agent/remoteAgentUpdate.coordinator.ts";
 import { remoteAgentFailureMessage } from "../remote-agent/remoteAgentFailure.ts";
 
@@ -27,16 +25,12 @@ export const connectRemoteAgentEffect = Effect.fn("connectRemoteAgentEffect")(fu
     return yield* new ServerInstallRemoteAgentError({
       message: "This project uses Direct SSH. Select bigbud remote agent before connecting it.",
     });
-  const result = yield* Effect.tryPromise({
+  return yield* Effect.tryPromise({
     try: () =>
-      remoteAgentAdmission.fresh(
+      activateRemoteAgentFresh(
         input.executionTargetId,
         input.requestId,
-        async () =>
-          (await remoteAgentUpdateCoordinator?.prepareForAdmission(
-            input.executionTargetId,
-            input.requestId,
-          )) ?? {},
+        remoteAgentUpdateCoordinator,
       ),
     catch: (cause) =>
       new ServerInstallRemoteAgentError({
@@ -44,23 +38,6 @@ export const connectRemoteAgentEffect = Effect.fn("connectRemoteAgentEffect")(fu
         cause,
       }),
   });
-  remoteAgentUpdateCoordinator?.enqueue({
-    target: input.executionTargetId,
-    trigger: "authenticated",
-    authenticated: true,
-  });
-  const owner = result.state.admissions.find((entry) => entry.id === result.connectionId)!;
-  scheduleRemoteAgentCleanup(input.executionTargetId);
-  return {
-    ...remoteAgentRuntimeSummary({
-      ...result.state,
-      current: owner.buildId,
-      currentConnectionId: result.connectionId,
-    }),
-    connectionId: result.connectionId,
-    currentVersion: result.state.builds.find((entry) => entry.id === owner.buildId)!.runtime
-      .version,
-  };
 });
 
 export const getRemoteAgentUpdateStatusEffect = Effect.fn("getRemoteAgentUpdateStatusEffect")(

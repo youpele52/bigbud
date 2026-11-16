@@ -33,6 +33,9 @@ export function createCopilotOrchestrationToolSurface(input: {
       dispatcher.configureSystemResourceRules
         ? asRecord(dispatcher.configureSystemResourceRules(args))
         : Promise.reject(new Error("monitor settings unavailable")),
+    ...(dispatcher.remoteAgent
+      ? { remoteAgent: (request) => asRecord(dispatcher.remoteAgent!(request)) }
+      : {}),
     getSystemResources: (args) =>
       dispatcher.getSystemResources
         ? asRecord(dispatcher.getSystemResources(args))

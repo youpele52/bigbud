@@ -1,7 +1,11 @@
+import {
+  trackRemoteAgentProcess,
+  closeAndConfirmRemoteAgentProcess,
+  finishRemoteAgentGracefulClose,
+} from "./remoteAgentConnection.process.ts";
 import { requestRemoteFrame, type FrameWaiter } from "./remoteAgentConnection.request";
 import { randomUUID } from "node:crypto";
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
-
 import { type KillProcessTreeOptions, killProcessTree } from "../utils/killProcessTree.ts";
 
 import { buildSshCommandInvocation } from "../ssh/sshCommand.ts";
@@ -75,6 +79,7 @@ export { buildRemoteAgentIdentityProbeCommand } from "./remoteAgentConnection.id
 export class RemoteAgentConnection {
   private readonly maxFrameBytes: number;
   private readonly child: ChildProcessWithoutNullStreams;
+  private readonly processLifecycle: ReturnType<typeof trackRemoteAgentProcess>;
   private stderrTail = "";
   private readBuffer = Buffer.alloc(0);
   private readonly queuedFrames: RemoteAgentFrame[] = [];
@@ -83,9 +88,17 @@ export class RemoteAgentConnection {
   private readonly failureListeners = new Set<(error: Error) => void>();
   private failure: Error | null = null;
   private closed = false;
+  private negotiatedCapabilities: RemoteAgentHello["capabilities"] = [];
+
+  supportsCapability(name: string): boolean {
+    return this.negotiatedCapabilities.some(
+      (capability) => capability.name === name && capability.major === 1,
+    );
+  }
 
   private constructor(child: ChildProcessWithoutNullStreams, maxFrameBytes: number) {
     this.child = child;
+    this.processLifecycle = trackRemoteAgentProcess(child);
     this.maxFrameBytes = maxFrameBytes;
     child.stdout.on("data", (chunk: Buffer) => this.consume(chunk));
     child.stdout.on("error", (error) => this.fail(error));
@@ -176,6 +189,7 @@ export class RemoteAgentConnection {
         "UNSUPPORTED_PROTOCOL_MAJOR",
       );
     }
+    this.negotiatedCapabilities = frame.value.capabilities;
     return frame.value;
   }
 
@@ -278,19 +292,15 @@ export class RemoteAgentConnection {
   async gracefulClose(timeoutMs = 2_000): Promise<void> {
     if (this.closed) return;
     this.closed = true;
-    const closed = new Promise<void>((resolve) => this.child.once("close", () => resolve()));
-    this.child.stdin.end();
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    const settled = await Promise.race([
-      closed.then(() => true),
-      new Promise<false>((resolve) => {
-        timeout = setTimeout(() => resolve(false), timeoutMs);
-      }),
-    ]);
-    if (timeout) clearTimeout(timeout);
-    if (!settled) closeRemoteAgentProcess(this.child);
+    await finishRemoteAgentGracefulClose(this.child, timeoutMs, () =>
+      closeRemoteAgentProcess(this.child),
+    );
     const error = new RemoteAgentConnectionError("Remote agent connection is closed.");
     for (const waiter of this.waiters.splice(0)) waiter.reject(error);
+  }
+
+  closeConfirmed(timeoutMs = 2_000): Promise<void> {
+    return closeAndConfirmRemoteAgentProcess(() => this.close(), this.processLifecycle, timeoutMs);
   }
 
   onFailure(listener: (error: Error) => void): () => void {
@@ -341,7 +351,17 @@ export class RemoteAgentConnection {
       if (index >= 0) this.waiters.splice(index, 1);
     }
     if (waiter) waiter.resolve(frame);
-    else if (!consumed) this.queuedFrames.push(frame);
+    else if (!consumed) {
+      // PTY consumers install listeners/waiters before dispatch. Unclaimed late frames
+      // belong to retired observations; output/exit are recovered from agent replay.
+      if (
+        frame.type === "ptyOutput" ||
+        frame.type === "ptyExited" ||
+        frame.type === "ptyAttachResponse"
+      )
+        return;
+      this.queuedFrames.push(frame);
+    }
   }
 
   private takeQueuedFrame(

@@ -4,6 +4,23 @@ import type { RemoteAgentRuntimeBinding } from "./remoteAgentConnectionPool.ts";
 import { isRemoteAgentControllerAlive } from "./remoteAgentController.ts";
 import { RemoteAgentShellLaunch, remoteAgentPtyRequestDigest } from "./remoteAgentShellLaunch.ts";
 
+const InputIdentitySchema = Schema.Struct({
+  sequence: Schema.Number,
+  sha256: Schema.String,
+  byteLength: Schema.Number,
+});
+const InputAuthoritySchema = Schema.Struct({
+  id: Schema.String,
+  pid: Schema.Number,
+  startedAt: Schema.String,
+  nonce: Schema.String,
+});
+const InputResolutionSchema = Schema.Struct({
+  ...InputIdentitySchema.fields,
+  outcome: Schema.Literals(["written", "failed-before-write", "not-admitted"]),
+  writerUsable: Schema.Boolean,
+});
+
 const OwnerSchema = Schema.Struct({
   interruptionReason: Schema.optional(Schema.Literals(["restart"])),
   controllerId: Schema.optional(Schema.String),
@@ -20,13 +37,20 @@ const OwnerSchema = Schema.Struct({
   digest: Schema.String,
   // Immutable requested launch only; never interpret this as confirmed running identity.
   shellLaunch: Schema.optional(RemoteAgentShellLaunch),
+  terminalCwd: Schema.optional(Schema.String),
   state: Schema.Literals(["prepared", "may-have-been-sent", "terminal", "outcome-unknown"]),
   outputSequence: Schema.Number,
   nextInputSequence: Schema.Number,
   inputAcknowledged: Schema.Number,
+  inputAuthority: Schema.optional(InputAuthoritySchema),
+  pendingInput: Schema.optional(InputIdentitySchema),
+  inputResolved: Schema.optional(Schema.Number),
+  inputResolution: Schema.optional(InputResolutionSchema),
 });
 export type RemoteAgentOwner = typeof OwnerSchema.Type;
 export type RemoteAgentInterruptionReason = "restart";
+export type RemoteAgentInputIdentity = typeof InputIdentitySchema.Type;
+export type RemoteAgentInputResolution = typeof InputResolutionSchema.Type;
 
 function assertBoundedIdentity(value: string, label: string, max = 256): void {
   if (value.length === 0 || value.length > max || !/^[\x21-\x7e]+$/.test(value))
@@ -43,23 +67,38 @@ export interface RemoteAgentConnectionBindings {
   readonly listConnectionIds?: (target: string) => Promise<ReadonlyArray<string>>;
 }
 export interface RemoteAgentOwnerStore extends RemoteAgentConnectionBindings {
+  /** Read-only keyset discovery. Missing routes or live resources never imply exit. */
+  readonly listTerminalOwners?: (
+    target: string,
+    after?: string,
+    limit?: number,
+  ) => Promise<{
+    readonly owners: ReadonlyArray<RemoteAgentOwner>;
+    readonly nextCursor: string;
+  }>;
   readonly get: (ownerKey: string) => Promise<RemoteAgentOwner | undefined>;
   readonly reserve: (
     owner: RemoteAgentOwner,
     replaceTerminal?: boolean,
+    expectedTarget?: string,
   ) => Promise<RemoteAgentOwner>;
-  readonly rollbackPrepared?: (ownerKey: string, resourceId: string) => Promise<boolean>;
+  readonly rollbackPrepared?: (
+    ownerKey: string,
+    resourceId: string,
+    expectedTarget?: string,
+  ) => Promise<boolean>;
   readonly update: (
     ownerKey: string,
     transition: (owner: RemoteAgentOwner) => RemoteAgentOwner,
+    expectedTarget?: string,
   ) => Promise<RemoteAgentOwner>;
   readonly referencedBuildIds: (target: string) => Promise<ReadonlySet<string>>;
   /** Targets with a durable selected connection, used for restart discovery. */
   readonly knownTargets?: () => Promise<ReadonlyArray<string>>;
   /** Remove only bounded, terminal history; active and uncertain routes are never eligible. */
-  readonly pruneTerminal?: () => Promise<number>;
-  /** Mark every non-terminal resource on an old runtime as outcome-unknown. */
-  readonly reconcileRuntime?: (generation: string, epoch: string) => Promise<void>;
+  readonly pruneTerminal?: (expectedTarget?: string) => Promise<number>;
+  /** Mark only this target’s non-terminal resources on an old runtime as outcome-unknown. */
+  readonly reconcileRuntime?: (target: string, generation: string, epoch: string) => Promise<void>;
 }
 
 export function parseRemoteAgentBinding(text: string): RemoteAgentRuntimeBinding {
@@ -97,6 +136,23 @@ export function parseRemoteAgentOwner(text: string): RemoteAgentOwner {
   ] as const)
     assertBoundedIdentity(value, label);
   if (!/^[a-f0-9]{64}$/.test(owner.digest)) throw new Error("Invalid durable owner identity.");
+  if (owner.terminalCwd !== undefined) {
+    if (
+      !owner.ownerKey.startsWith("terminal:") ||
+      !owner.terminalCwd.startsWith("/") ||
+      Buffer.byteLength(owner.terminalCwd) > 4096 ||
+      owner.terminalCwd.includes("\0")
+    )
+      throw new Error("Invalid durable terminal directory.");
+    const digest = Buffer.from(
+      remoteAgentPtyRequestDigest({
+        target: owner.target,
+        cwd: owner.terminalCwd,
+        ...(owner.shellLaunch ? { shellLaunch: owner.shellLaunch } : {}),
+      }),
+    ).toString("hex");
+    if (digest !== owner.digest) throw new Error("Durable terminal directory identity conflict.");
+  }
   if (owner.shellLaunch) {
     if (!owner.ownerKey.startsWith("terminal:"))
       throw new Error("Shell launch intent requires a terminal owner.");
@@ -124,7 +180,50 @@ export function parseRemoteAgentOwner(text: string): RemoteAgentOwner {
     ).size > 1
   )
     throw new Error("Incomplete durable controller identity.");
+  validateInputMetadata(owner);
   return owner;
+}
+
+function validateInputMetadata(owner: RemoteAgentOwner): void {
+  const authority = owner.inputAuthority;
+  if (authority) {
+    assertBoundedIdentity(authority.id, "input controller");
+    assertBoundedIdentity(authority.startedAt, "input controller start");
+    assertBoundedIdentity(authority.nonce, "input observer", 128);
+    if (!Number.isSafeInteger(authority.pid) || authority.pid <= 0)
+      throw new Error("Invalid input controller PID.");
+  }
+  for (const identity of [owner.pendingInput, owner.inputResolution]) {
+    if (!identity) continue;
+    if (
+      !Number.isSafeInteger(identity.sequence) ||
+      identity.sequence < 1 ||
+      !Number.isSafeInteger(identity.byteLength) ||
+      identity.byteLength < 0 ||
+      identity.byteLength > 64 * 1024 ||
+      !/^[a-f0-9]{64}$/.test(identity.sha256)
+    )
+      throw new Error("Invalid durable input identity.");
+  }
+  if (owner.inputResolved === undefined) {
+    if (owner.pendingInput || owner.inputResolution)
+      throw new Error("Input receipt metadata requires a resolved watermark.");
+    return; // Legacy gaps remain unknown; never synthesize their missing identity.
+  }
+  const resolved = owner.inputResolved;
+  if (
+    !authority ||
+    !Number.isSafeInteger(resolved) ||
+    resolved < owner.inputAcknowledged ||
+    owner.nextInputSequence !== resolved + (owner.pendingInput ? 2 : 1) ||
+    (owner.pendingInput && owner.pendingInput.sequence !== resolved + 1) ||
+    (owner.inputResolution && owner.inputResolution.sequence !== resolved) ||
+    (owner.inputResolution?.outcome === "written" && owner.inputAcknowledged !== resolved) ||
+    (owner.inputResolution &&
+      owner.inputResolution.outcome !== "written" &&
+      owner.inputAcknowledged >= resolved)
+  )
+    throw new Error("Invalid durable input receipt ordering.");
 }
 
 let configured: RemoteAgentOwnerStore | undefined;

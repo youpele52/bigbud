@@ -98,6 +98,7 @@ export async function inspectSshHostTrust(
         "-o",
         "ConnectionAttempts=1",
         ...(target.port ? ["-p", target.port] : []),
+        "--",
         formatSshDestination(target),
         "true",
       ],

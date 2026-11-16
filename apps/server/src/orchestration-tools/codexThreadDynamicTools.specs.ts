@@ -38,6 +38,7 @@ import {
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
+import { REMOTE_AGENT_TOOL_SPECS } from "./remoteAgentTools.shared.ts";
 import {
   SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
   SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
@@ -107,6 +108,12 @@ export function createCodexThreadOrchestrationDynamicTools(
       name: spec.name,
       description: spec.description,
       inputSchema: spec.inputSchema,
+    })),
+    ...REMOTE_AGENT_TOOL_SPECS.map((spec) => ({
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: spec.name,
+      description: spec.description,
+      inputSchema: spec.parameters,
     })),
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,

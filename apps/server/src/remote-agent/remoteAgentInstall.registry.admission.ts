@@ -1,3 +1,4 @@
+import { withoutCompletedRetirementClaims } from "./remoteAgentInstall.registry.orphans.ts";
 import {
   MAX_REMOTE_AGENT_ADMISSION_RETIREMENTS,
   MAX_REMOTE_AGENT_BUILDS,
@@ -167,8 +168,10 @@ export function pruneRemoteAgentHistory(state: RemoteAgentRegistry): RemoteAgent
   // Include evidence created by this same prune pass before selecting the
   // bounded build history. Otherwise retiring an admission could remove its
   // build in the same CAS that records the replay fence.
+  const updates = withoutCompletedRetirementClaims(state);
   const retained = retainedRemoteAgentBuilds({
     ...state,
+    updates,
     admissionRetirements,
   });
   const builds = state.builds.filter(
@@ -181,6 +184,7 @@ export function pruneRemoteAgentHistory(state: RemoteAgentRegistry): RemoteAgent
   if (builds.length > MAX_REMOTE_AGENT_BUILDS) return state;
   return changed(state, {
     builds,
+    updates,
     pins: state.pins.filter(
       (pin) =>
         !(

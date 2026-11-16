@@ -1,3 +1,4 @@
+import { REMOTE_AGENT_CAPABILITY_TRACKS } from "./BigbudCapabilityTracks.remoteAgent.ts";
 import {
   ARCHIVE_THREAD_TOOL_DESCRIPTION,
   CREATE_THREAD_TOOL_DESCRIPTION,
@@ -28,6 +29,7 @@ import {
 
 export const BIGBUD_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
   ...WORKSPACE_CAPABILITY_TRACKS,
+  ...REMOTE_AGENT_CAPABILITY_TRACKS,
   threadToolTrack({
     id: "thread.rename",
     displayName: "Rename thread",

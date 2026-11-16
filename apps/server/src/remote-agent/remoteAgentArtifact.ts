@@ -1,8 +1,13 @@
 export {
   REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR,
   RemoteAgentArtifactError,
+  REMOTE_AGENT_TARGET_TRIPLES,
   canonicalizeRemoteAgentArtifact,
+  isRemoteAgentMuslTarget,
+  isRemoteAgentTargetTriple,
   parseRemoteAgentArtifactManifest,
+  remoteAgentTargetArchitecture,
+  remoteAgentTargetCandidates,
   resolveRemoteAgentTargetTriple,
   selectRemoteAgentArtifact,
   verifyRemoteAgentArtifactBytes,
@@ -13,5 +18,7 @@ export type {
   RemoteAgentArtifactManifest,
   RemoteAgentArtifactSignature,
   RemoteAgentArtifactTrustStore,
+  RemoteAgentHostLibc,
+  RemoteAgentTargetArchitecture,
   RemoteAgentTargetTriple,
 } from "@bigbud/shared/remoteAgentArtifact";

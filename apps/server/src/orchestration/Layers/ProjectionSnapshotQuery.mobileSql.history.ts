@@ -4,14 +4,18 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import {
+  THREAD_DETAIL_ACTIVITY_DEFAULT_LIMIT,
   THREAD_DETAIL_APPROVAL_DEFAULT_LIMIT,
+  THREAD_DETAIL_MESSAGE_DEFAULT_LIMIT,
   THREAD_DETAIL_USER_INPUT_DEFAULT_LIMIT,
 } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
 
 import {
-  ProjectionThreadActivityDbRowSchema,
-  ProjectionThreadMessageDbRowSchema,
-} from "./ProjectionSnapshotQuerySql.ts";
+  MobileThreadActivityDbRowSchema,
+  MobileThreadMessageDbRowSchema,
+  mobileActivityPayloadColumnsSql,
+  mobileMessageTextColumnsSql,
+} from "./ProjectionSnapshotQuery.mobileSql.bounds.ts";
 
 /**
  * Approval and user-input history per thread and kind, matching the desktop detail windows
@@ -21,6 +25,18 @@ import {
 const MOBILE_HISTORY_ACTIVITY_LIMIT =
   Math.max(THREAD_DETAIL_APPROVAL_DEFAULT_LIMIT, THREAD_DETAIL_USER_INPUT_DEFAULT_LIMIT) * 2;
 
+/**
+ * The selected thread's newest messages, plus one so assembly can tell whether older history
+ * exists. Assembly trims back to `THREAD_DETAIL_MESSAGE_DEFAULT_LIMIT` and the page text budget.
+ */
+export const MOBILE_SELECTED_MESSAGE_FETCH_LIMIT = THREAD_DETAIL_MESSAGE_DEFAULT_LIMIT + 1;
+
+/**
+ * Newest activities kept for the selected thread, and for each active thread's latest turn. The
+ * approval/user-input history window and pending requests are unioned in on top of this.
+ */
+export const MOBILE_ACTIVITY_WINDOW_LIMIT = THREAD_DETAIL_ACTIVITY_DEFAULT_LIMIT;
+
 const MobileRecoveryHistoryQueryInput = Schema.Struct({
   selectedThreadId: Schema.NullOr(ThreadId),
 });
@@ -28,7 +44,7 @@ const MobileRecoveryHistoryQueryInput = Schema.Struct({
 export function makeMobileHistoryQueries(sql: SqlClient.SqlClient) {
   const listMessageRows = SqlSchema.findAll({
     Request: MobileRecoveryHistoryQueryInput,
-    Result: ProjectionThreadMessageDbRowSchema,
+    Result: MobileThreadMessageDbRowSchema,
     execute: ({ selectedThreadId }) =>
       sql`
         WITH selected_thread AS (
@@ -36,10 +52,14 @@ export function makeMobileHistoryQueries(sql: SqlClient.SqlClient) {
           FROM projection_threads
           WHERE thread_id = ${selectedThreadId} AND deleted_at IS NULL
         ), message_ids AS (
-          SELECT messages.message_id
-          FROM projection_thread_messages AS messages
-          INNER JOIN selected_thread
-            ON selected_thread.thread_id = messages.thread_id
+          SELECT message_id FROM (
+            SELECT messages.message_id
+            FROM projection_thread_messages AS messages
+            INNER JOIN selected_thread
+              ON selected_thread.thread_id = messages.thread_id
+            ORDER BY messages.created_at DESC, messages.message_id DESC
+            LIMIT ${MOBILE_SELECTED_MESSAGE_FETCH_LIMIT}
+          )
           UNION
           SELECT messages.message_id
           FROM projection_threads AS threads
@@ -58,7 +78,7 @@ export function makeMobileHistoryQueries(sql: SqlClient.SqlClient) {
           messages.thread_id AS "threadId",
           messages.turn_id AS "turnId",
           messages.role,
-          messages.text,
+          ${mobileMessageTextColumnsSql(sql)},
           messages.attachments_json AS "attachments",
           messages.reply_to_json AS "replyTo",
           messages.origin_segments_json AS "originSegments",
@@ -73,7 +93,7 @@ export function makeMobileHistoryQueries(sql: SqlClient.SqlClient) {
 
   const listActivityRows = SqlSchema.findAll({
     Request: MobileRecoveryHistoryQueryInput,
-    Result: ProjectionThreadActivityDbRowSchema,
+    Result: MobileThreadActivityDbRowSchema,
     execute: ({ selectedThreadId }) =>
       sql`
         WITH selected_thread AS (
@@ -81,17 +101,30 @@ export function makeMobileHistoryQueries(sql: SqlClient.SqlClient) {
           FROM projection_threads
           WHERE thread_id = ${selectedThreadId} AND deleted_at IS NULL
         ), activity_ids AS (
-          SELECT activities.activity_id
-          FROM projection_thread_activities AS activities
-          INNER JOIN selected_thread
-            ON selected_thread.thread_id = activities.thread_id
+          SELECT activity_id FROM (
+            SELECT activities.activity_id
+            FROM projection_thread_activities AS activities
+            INNER JOIN selected_thread
+              ON selected_thread.thread_id = activities.thread_id
+            ORDER BY activities.sequence DESC, activities.created_at DESC,
+              activities.activity_id DESC
+            LIMIT ${MOBILE_ACTIVITY_WINDOW_LIMIT}
+          )
           UNION
-          SELECT activities.activity_id
-          FROM projection_threads AS threads
-          INNER JOIN projection_thread_activities AS activities
-            ON activities.thread_id = threads.thread_id
-           AND activities.turn_id = threads.latest_turn_id
-          WHERE threads.archived_at IS NULL AND threads.deleted_at IS NULL
+          SELECT activity_id FROM (
+            SELECT activities.activity_id,
+              ROW_NUMBER() OVER (
+                PARTITION BY activities.thread_id
+                ORDER BY activities.sequence DESC, activities.created_at DESC,
+                  activities.activity_id DESC
+              ) AS turn_rank
+            FROM projection_threads AS threads
+            INNER JOIN projection_thread_activities AS activities
+              ON activities.thread_id = threads.thread_id
+             AND activities.turn_id = threads.latest_turn_id
+            WHERE threads.archived_at IS NULL AND threads.deleted_at IS NULL
+          )
+          WHERE turn_rank <= ${MOBILE_ACTIVITY_WINDOW_LIMIT}
           UNION
           SELECT activity_id FROM (
             SELECT activities.activity_id,
@@ -138,7 +171,7 @@ export function makeMobileHistoryQueries(sql: SqlClient.SqlClient) {
           activities.tone,
           activities.kind,
           activities.summary,
-          activities.payload_json AS "payload",
+          ${mobileActivityPayloadColumnsSql(sql)},
           activities.sequence,
           activities.created_at AS "createdAt"
         FROM projection_thread_activities AS activities

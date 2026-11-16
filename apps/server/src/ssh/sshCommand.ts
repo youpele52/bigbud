@@ -93,6 +93,8 @@ export function buildSshCommandInvocation(input: BuildSshCommandInput): SshComma
         ...(input.allocateTty !== undefined ? { allocateTty: input.allocateTty } : {}),
       }),
       ...(input.transportArgs ?? []),
+      // End option parsing: a destination can never be read as an ssh option.
+      "--",
       formatSshDestination(target),
       remoteCommand,
     ],

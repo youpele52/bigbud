@@ -1,3 +1,4 @@
+import { withoutCompletedRetirementClaims } from "./remoteAgentInstall.registry.orphans.ts";
 import type {
   RemoteAgentRegistry,
   RemoteAgentRegistryBuild,
@@ -92,7 +93,9 @@ export function reserveRemoteAgentUpdate(input: {
   readonly inventory: RemoteAgentInventory;
   readonly controllerId?: string;
 }): RemoteAgentCapacityDecision {
-  const { state, requestId, build, inventory } = input;
+  const { requestId, build, inventory } = input;
+  const updates = withoutCompletedRetirementClaims(input.state, build.id);
+  const state = updates === input.state.updates ? input.state : { ...input.state, updates };
   const priorReservation = state.slotReservations.find(
     (reservation) =>
       reservation.requestId === requestId &&

@@ -1,3 +1,5 @@
+import { encodeServiceLeaseFrame } from "./remoteAgentProtocol.codec.serviceLease.ts";
+import type { RemoteAgentServiceLeaseFrame } from "./remoteAgentProtocol.serviceLease.ts";
 import {
   type RemoteAgentCapability,
   type RemoteAgentCancelRequest,
@@ -105,6 +107,11 @@ function encodeProtocolError(value: RemoteAgentProtocolError): Uint8Array {
 
 export function encodeFramePayload(frame: RemoteAgentFrame): Uint8Array {
   const writer = new WireWriter();
+  if (frame.type.startsWith("serviceLease")) {
+    const encoded = encodeServiceLeaseFrame(frame as RemoteAgentServiceLeaseFrame);
+    writer.fieldBytes(encoded.field, encoded.value);
+    return writer.finish();
+  }
   if (frame.type.startsWith("resourceCleanup")) {
     const cleanupFrame = encodeResourceCleanupFrame(
       frame as import("./remoteAgentProtocol.resourceCleanup.ts").RemoteAgentResourceCleanupFrame,

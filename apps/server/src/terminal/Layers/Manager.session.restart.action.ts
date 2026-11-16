@@ -21,7 +21,8 @@ import {
   makeResolveTerminalShellProfile,
   terminalShellSelectionForNewProcess,
 } from "./Manager.shell.profile";
-import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
+import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
+import { releaseTerminalLeaseAfterLaunchFailure } from "./Manager.owned-runtime.lease.ts";
 
 export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShape["restart"] {
   const resolveFolder = makeResolveTerminalFolder(
@@ -92,7 +93,7 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
           });
         }
         const recoverOnly =
-          isRemoteAgentExecutionTarget(executionTargetId) &&
+          Boolean(sessionOwnedPtyRuntime(ctx, executionTargetId)) &&
           (Option.isSome(existing)
             ? existing.value.remoteOwnerRecoveryRequired === true
             : yield* ctx.historyExists(request.threadId, terminalId));
@@ -230,12 +231,21 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
           )
           .pipe(
             Effect.onError(() =>
-              ctx.releaseWorktreeLease({ threadId: input.threadId, terminalId }),
+              releaseTerminalLeaseAfterLaunchFailure(ctx, {
+                threadId: input.threadId,
+                terminalId,
+                executionTargetId,
+              }),
             ),
             Effect.ensuring(Effect.sync(restoreFailedHistory)),
           );
         if (recoverOnly && session.process)
-          yield* assertTerminalShellReattach(session, executionTargetId, request.shellSelection);
+          yield* assertTerminalShellReattach(
+            session,
+            executionTargetId,
+            request.shellSelection,
+            ctx,
+          );
         yield* ctx.persistHistory(input.threadId, terminalId, session.history);
         if (session.pid !== null) {
           yield* ctx.markWorktreeLeaseStarted({

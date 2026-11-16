@@ -42,6 +42,9 @@ export default defineConfig({
   // beside the bundle, where `NodeSqliteClient.worker.ts` resolves it.
   entry: { bin: "src/bin.ts", NodeSqliteWorker: "src/persistence/NodeSqliteWorker.ts" },
   format: ["esm"],
+  // A worker entry has startup side effects. Never promote shared helpers into its
+  // public exports: main-thread chunks would import and execute the worker entry.
+  inputOptions: { preserveEntrySignatures: "strict" },
   outDir: "dist",
   // import.meta.url resolves beside the bundled server, not the original source tree.
   copy: [

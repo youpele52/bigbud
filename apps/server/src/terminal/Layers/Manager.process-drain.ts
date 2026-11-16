@@ -27,7 +27,7 @@ import { TerminalDeviceQueries } from "./TerminalDeviceQueries";
 import { observeTerminalProcessError } from "./Manager.process.error";
 import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
-import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
+import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
 import { startRecoveryModel, feedRecoveryModel } from "./Manager.recovery";
 export { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
@@ -38,6 +38,16 @@ export {
 
 import { trySpawnWith } from "./Manager.process.spawn";
 export { trySpawnWith } from "./Manager.process.spawn";
+
+export function cleanupFailedTerminalObserver(
+  process: PtyProcess | null,
+  kill: (process: PtyProcess) => Effect.Effect<void>,
+): Effect.Effect<void> {
+  if (!process) return Effect.void;
+  if (process.detach)
+    return Effect.sync(() => process.detach?.()).pipe(Effect.ignoreCause({ log: true }));
+  return kill(process);
+}
 
 // ---------------------------------------------------------------------------
 // stopProcessWith
@@ -115,6 +125,7 @@ export function startSessionWith(
     });
 
     yield* ctx.modifyManagerState((state) => {
+      if (eventType === "restarted") session.expectedRemoteResourceId = undefined;
       session.status = "starting";
       session.cwd = input.cwd;
       session.worktreePath = input.worktreePath ?? null;
@@ -279,13 +290,13 @@ export function startSessionWith(
     {
       const error = startResult.failure;
       session.recoveryModel?.dispose("launch-failed");
-      if (ptyProcess) {
-        yield* startKillEscalation(ptyProcess, session.threadId, session.terminalId);
-      }
+      yield* cleanupFailedTerminalObserver(ptyProcess, (process) =>
+        startKillEscalation(process, session.threadId, session.terminalId),
+      );
 
       yield* ctx.modifyManagerState((state) => {
         session.status = "error";
-        if (isRemoteAgentExecutionTarget(session.executionTargetId))
+        if (resolveOwnedPtyRuntime(ctx.ptyAdapter, session.executionTargetId))
           session.remoteOwnerRecoveryRequired = true;
         session.pid = null;
         session.process = null;

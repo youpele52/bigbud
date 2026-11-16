@@ -1,9 +1,11 @@
+import { THREAD_DETAIL_MESSAGE_DEFAULT_LIMIT } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
 import type { MobileRecoverySelectedThread } from "@bigbud/contracts/server/mobile.recovery";
 import { OrchestrationReadModel } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { Effect, Option, Schema } from "effect";
 
 import { trimOrchestrationSnapshotForMobile } from "../../mobile/mobileSnapshot.trim.ts";
 import { toPersistenceDecodeError, toPersistenceSqlError } from "../../persistence/Errors.ts";
+import { applyMessagePageTextBudget } from "./ProjectionCatalogQuery.boundedText.ts";
 import { ORCHESTRATION_PROJECTOR_NAMES } from "./ProjectionPipeline.helpers.ts";
 import {
   assembleSnapshotRows,
@@ -15,6 +17,15 @@ import {
   type MobileRecoveryQueryInput,
 } from "./ProjectionSnapshotQuery.mobileSql.ts";
 import { type ProjectionSnapshotQuerySql } from "./ProjectionSnapshotQuerySql.ts";
+import {
+  fitMobileBaselineBudget,
+  mobileBaselineTooLargeError,
+} from "./ProjectionSnapshotQuery.mobileBudget.ts";
+import {
+  applyMobileRecordBounds,
+  applyMobileRecordBoundsToThread,
+  collectMobileRecordBounds,
+} from "./ProjectionSnapshotQuery.mobileRecordBounds.ts";
 
 const decodeReadModel = Schema.decodeUnknownEffect(OrchestrationReadModel);
 const MOBILE_PROJECTOR_NAMES = Object.values(ORCHESTRATION_PROJECTOR_NAMES);
@@ -52,6 +63,18 @@ function onlyThread<T extends { readonly threadId: string }>(
   threadId: string,
 ): ReadonlyArray<T> {
   return rows.filter((row) => row.threadId === threadId);
+}
+
+/**
+ * Bounds the selected thread's oldest-first message rows like a desktop detail page: the newest
+ * `THREAD_DETAIL_MESSAGE_DEFAULT_LIMIT` within the page text budget, always keeping the newest one.
+ * The SQL fetches one extra row so a full window still reports older history.
+ */
+function boundSelectedThreadMessages<T extends { readonly text: string }>(
+  rows: ReadonlyArray<T>,
+): { readonly rows: ReadonlyArray<T>; readonly hasOlderHistory: boolean } {
+  const page = applyMessagePageTextBudget(rows.toReversed(), THREAD_DETAIL_MESSAGE_DEFAULT_LIMIT);
+  return { rows: page.rows.toReversed(), hasOlderHistory: page.hasOlder };
 }
 
 function mapMobileBaselineError(operation: string) {
@@ -119,6 +142,11 @@ export function makeGetMobileRecoveryBaseline(
           )(cause),
       });
 
+      const recordBounds = collectMobileRecordBounds({
+        messageRows,
+        proposedPlanRows,
+        activityRows,
+      });
       const summaryRows = assembleSnapshotRows({
         projectRows,
         threadRows: activeThreadRows,
@@ -139,6 +167,7 @@ export function makeGetMobileRecoveryBaseline(
           ),
         ),
         Effect.map(trimOrchestrationSnapshotForMobile),
+        Effect.map((model) => applyMobileRecordBounds(model, recordBounds)),
       );
 
       let selectedThread: MobileRecoverySelectedThread | null = null;
@@ -146,10 +175,13 @@ export function makeGetMobileRecoveryBaseline(
         if (selectedThreadRow.value.deletedAt !== null) {
           selectedThread = { status: "deleted" };
         } else {
+          const selectedMessages = boundSelectedThreadMessages(
+            onlyThread(messageRows, selectedThreadRow.value.threadId),
+          );
           const selectedRows = {
             projectRows,
             threadRows: [selectedThreadRow.value],
-            messageRows: onlyThread(messageRows, selectedThreadRow.value.threadId),
+            messageRows: selectedMessages.rows,
             proposedPlanRows: onlyThread(proposedPlanRows, selectedThreadRow.value.threadId),
             activityRows: onlyThread(activityRows, selectedThreadRow.value.threadId),
             taskRows: onlyThread(taskRows, selectedThreadRow.value.threadId),
@@ -170,13 +202,26 @@ export function makeGetMobileRecoveryBaseline(
             ),
           );
           const thread = selectedModel.threads[0];
-          selectedThread = thread ? { status: "present", thread } : { status: "missing" };
+          selectedThread = thread
+            ? {
+                status: "present",
+                thread: applyMobileRecordBoundsToThread(thread, recordBounds),
+                ...(selectedMessages.hasOlderHistory ? { hasOlderHistory: true } : {}),
+              }
+            : { status: "missing" };
         }
       } else if (selectedThreadId !== null) {
         selectedThread = { status: "missing" };
       }
 
-      return { snapshot: summary, snapshotSequence, selectedThread };
+      const baseline = fitMobileBaselineBudget(
+        { snapshot: summary, snapshotSequence, selectedThread },
+        recordBounds,
+      );
+      if (baseline === null) {
+        return yield* mobileBaselineTooLargeError();
+      }
+      return baseline;
     }).pipe(
       Effect.mapError((cause) => {
         if (Schema.isSchemaError(cause) || cause._tag === "PersistenceSqlError") {

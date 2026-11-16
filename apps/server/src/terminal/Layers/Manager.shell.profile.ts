@@ -6,6 +6,9 @@ import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
 import { remoteShellHost } from "./ShellProfiles.remote.identity";
 import { sameShellHost } from "./ShellProfiles.launch";
+import type { SessionApiContext } from "./Manager.session.types";
+import { localSupervisorShellHost } from "../../remote-backend/localSupervisorIdentity.ts";
+import { shellProfileId } from "./ShellProfiles.identity";
 import { LOCAL_SHELL_HOST } from "./ShellProfiles.identity";
 import type { TerminalManagerOptions, TerminalSessionState } from "./Manager.types";
 
@@ -14,6 +17,7 @@ export const assertTerminalShellReattach = Effect.fn("terminal.assertShellReatta
   session: TerminalSessionState,
   executionTargetId: string,
   selection: ShellSelection | undefined,
+  context?: Pick<SessionApiContext, "resolveOwnedRuntime">,
 ) {
   if (selection?.kind !== "profile") return;
   const actual = session.shellLaunchIdentity;
@@ -26,7 +30,37 @@ export const assertTerminalShellReattach = Effect.fn("terminal.assertShellReatta
   )
     return;
   const requested = session.shellUnconfirmedLaunch?.requestedProfile;
-  if (
+  if (isLocalExecutionTarget(executionTargetId)) {
+    const runtime = context?.resolveOwnedRuntime?.(executionTargetId);
+    if (
+      executionTargetId === session.executionTargetId &&
+      requested &&
+      runtime?.pidNamespace === "backend-host" &&
+      sameShellHost(requested.host, localSupervisorShellHost(runtime.targetId)) &&
+      session.process?.remoteResourceId
+    ) {
+      const owner = yield* Effect.tryPromise(() =>
+        runtime.owners().get(`terminal:${JSON.stringify([session.threadId, session.terminalId])}`),
+      ).pipe(Effect.catch(() => Effect.succeed(undefined)));
+      const launch = owner?.shellLaunch;
+      if (
+        owner?.target === runtime.targetId &&
+        owner.resourceId === session.process.remoteResourceId &&
+        owner.state !== "terminal" &&
+        launch?.platform === "linux" &&
+        launch.requestedProfile &&
+        sameShellHost(launch.requestedProfile.host, requested.host) &&
+        launch.requestedProfile.profileId === requested.profileId &&
+        launch.requestedProfile.kind === requested.kind &&
+        shellProfileId(LOCAL_SHELL_HOST, launch.executable, launch.args, launch.platform) ===
+          selection.profileId &&
+        shellProfileId(requested.host, launch.executable, launch.args, launch.platform) ===
+          requested.profileId
+      )
+        return;
+    }
+    // A UI-local target is never an SSH host, including when retained intent is unconfirmed.
+  } else if (
     executionTargetId === session.executionTargetId &&
     requested?.profileId === selection.profileId &&
     sameShellHost(

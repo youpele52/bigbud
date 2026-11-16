@@ -8,6 +8,12 @@ import {
   isRemoteAgentControllerAlive,
 } from "./remoteAgentController.ts";
 
+function localId(pid: number) {
+  return currentRemoteAgentController().id.replace(
+    /:[0-9]+:[^:]+$/,
+    `:${pid}:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa`,
+  );
+}
 let child: ChildProcess | undefined;
 afterEach(() => {
   child?.kill("SIGKILL");
@@ -31,23 +37,40 @@ describe.skipIf(process.platform === "win32")("isRemoteAgentControllerAlive", ()
   it("keeps a live controller whose real start token matches", async () => {
     const pid = await liveProcess();
     const startedAt = processStartToken(pid)!;
-    expect(await isRemoteAgentControllerAlive({ id: "other", pid, startedAt })).toBe(true);
+    expect(await isRemoteAgentControllerAlive({ id: localId(pid), pid, startedAt })).toBe(true);
   });
 
   it("proves PID reuse only from a comparable token that differs", async () => {
     const pid = await liveProcess();
     const real = processStartToken(pid)!;
     const reused = `${real.slice(0, real.lastIndexOf(":") + 1)}earlier-owner`;
-    expect(await isRemoteAgentControllerAlive({ id: "other", pid, startedAt: reused })).toBe(false);
+    expect(await isRemoteAgentControllerAlive({ id: localId(pid), pid, startedAt: reused })).toBe(
+      false,
+    );
   });
 
   it.each(["Thu_Oct_15_05:47:29_2026", "pid:41"])(
     "fails closed for a live PID with a legacy or placeholder token (%s)",
     async (startedAt) => {
       const pid = await liveProcess();
-      expect(await isRemoteAgentControllerAlive({ id: "other", pid, startedAt })).toBe(true);
+      expect(await isRemoteAgentControllerAlive({ id: localId(pid), pid, startedAt })).toBe(true);
     },
   );
+
+  it.each(["legacy", "foreign", "wrong-pid"])("keeps an unproven %s owner", async (kind) => {
+    const pid = await liveProcess();
+    const startedAt = processStartToken(pid)!;
+    const exited = new Promise((resolve) => child!.once("exit", resolve));
+    child!.kill("SIGKILL");
+    await exited;
+    const id =
+      kind === "legacy"
+        ? "controller:old"
+        : kind === "foreign"
+          ? localId(pid).replace(/controller-v2:[a-f0-9]{64}/, `controller-v2:${"f".repeat(64)}`)
+          : localId(pid + 1);
+    expect(await isRemoteAgentControllerAlive({ id, pid, startedAt })).toBe(true);
+  });
 
   it("reclaims a controller whose process is gone", async () => {
     const pid = await liveProcess();
@@ -55,6 +78,6 @@ describe.skipIf(process.platform === "win32")("isRemoteAgentControllerAlive", ()
     const exited = new Promise((resolve) => child!.once("exit", resolve));
     child!.kill("SIGKILL");
     await exited;
-    expect(await isRemoteAgentControllerAlive({ id: "other", pid, startedAt })).toBe(false);
+    expect(await isRemoteAgentControllerAlive({ id: localId(pid), pid, startedAt })).toBe(false);
   });
 });

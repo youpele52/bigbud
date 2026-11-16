@@ -2,13 +2,18 @@ import type { PtySpawnInput } from "../terminal/Services/PTY.ts";
 import { sameShellHost } from "../terminal/Layers/ShellProfiles.launch.ts";
 import { remoteShellHost } from "../terminal/Layers/ShellProfiles.remote.identity.ts";
 import type { RemoteAgentOwner } from "./remoteAgentOwners.ts";
+import type { ShellHostScope } from "@bigbud/contracts/workspace/terminalShell.ts";
 import {
   parseRemoteAgentShellLaunch,
   remoteAgentPtyRequestDigest,
 } from "./remoteAgentShellLaunch.ts";
 
 /** Recovery uses stored intent, never a new default or a newly discovered executable. */
-export function remoteAgentOwnedPtyLaunch(input: PtySpawnInput, owner?: RemoteAgentOwner) {
+export function remoteAgentOwnedPtyLaunch(
+  input: PtySpawnInput,
+  owner?: RemoteAgentOwner,
+  resolveShellHost?: (target: string) => ShellHostScope,
+) {
   if (!input.executionTargetId || !input.remoteCwd)
     throw new Error("Remote terminal execution target and cwd are required.");
   const retained = owner && owner.state !== "terminal" ? owner : undefined;
@@ -23,8 +28,13 @@ export function remoteAgentOwnedPtyLaunch(input: PtySpawnInput, owner?: RemoteAg
       }),
     ).toString("hex");
   if (shellLaunch) {
-    const host = remoteShellHost({ executionTargetId: input.executionTargetId });
-    if (host.kind !== "ssh" || !sameShellHost(host, shellLaunch.requestedProfile.host))
+    const host = resolveShellHost
+      ? resolveShellHost(input.executionTargetId)
+      : remoteShellHost({ executionTargetId: input.executionTargetId });
+    if (
+      host.kind !== (resolveShellHost ? "agent" : "ssh") ||
+      !sameShellHost(host, shellLaunch.requestedProfile.host)
+    )
       throw new Error("Remote terminal profile belongs to another execution host.");
   }
   const digest = digestFor(shellLaunch);

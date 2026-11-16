@@ -1,4 +1,5 @@
-import { CopilotClient, RuntimeConnection } from "@github/copilot-sdk";
+import type { CopilotClient } from "@github/copilot-sdk";
+import { copilotSdk } from "../../provider/Layers/Copilot/copilotSdk.lazy.ts";
 import type { ServerSettings } from "@bigbud/contracts/core/settings.ts";
 import type { ModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider";
 import { metadataProviderConfiguration } from "./ThreadMetadataGeneration.configuration.ts";
@@ -85,6 +86,7 @@ export function makeMetadataCopilotClient(
   environment: NodeJS.ProcessEnv,
   cwd: string,
 ): CopilotClient {
+  const { CopilotClient, RuntimeConnection } = copilotSdk();
   return new CopilotClient({
     connection: RuntimeConnection.forStdio({
       path: invocation.path,

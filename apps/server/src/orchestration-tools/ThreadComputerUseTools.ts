@@ -1,3 +1,4 @@
+import type { RuntimeMode } from "../startup/config.ts";
 import type { ComputerUseAction, ThreadId } from "@bigbud/contracts";
 import {
   DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
@@ -160,7 +161,7 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     readonly fileSystem: FileSystem.FileSystem;
     readonly orchestrationEngine: OrchestrationEngineShape;
     readonly path: Path.Path;
-    readonly serverMode: "web" | "desktop";
+    readonly serverMode: RuntimeMode;
     readonly threadId: ThreadId;
     readonly action: ComputerUseAction;
     readonly checkInIntervalMs?: number;
@@ -195,7 +196,7 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     if (isDesktopSurfaceAction(input.action) && input.serverMode !== "desktop") {
       return yield* Effect.fail(
         new Error(
-          "Desktop computer-use actions are only available when bigbud is running in desktop mode. The current runtime mode is 'web'.",
+          `Desktop computer-use actions are only available when bigbud is running in desktop mode. The current runtime mode is '${input.serverMode}'.`,
         ),
       );
     }

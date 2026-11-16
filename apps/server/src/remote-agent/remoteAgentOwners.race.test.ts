@@ -138,7 +138,10 @@ describe("durable remote owner reservation races", () => {
       for (const key of ["process:prepared", "terminal:prepared", "workspace-write:prepared"]) {
         await store.reserve({
           ...owner(key, "dead-resource"),
-          controllerId: "controller:dead",
+          controllerId: current.id.replace(
+            /:[0-9]+:[^:]+$/,
+            ":99999999:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+          ),
           controllerPid: 99_999_999,
           controllerStartedAt: "dead-start",
         });
@@ -150,6 +153,23 @@ describe("durable remote owner reservation races", () => {
         });
         expect(recovered.resourceId).toBe("recovered-resource");
       }
+
+      const legacy = await store.reserve({
+        ...owner("process:legacy", "legacy-resource"),
+        controllerId: "controller:dead",
+        controllerPid: 99_999_999,
+        controllerStartedAt: "dead-start",
+      });
+      expect(
+        (
+          await store.reserve({
+            ...owner("process:legacy", "replacement-resource"),
+            controllerId: current.id,
+            controllerPid: current.pid,
+            controllerStartedAt: current.startedAt,
+          })
+        ).resourceId,
+      ).toBe(legacy.resourceId);
 
       const live = await store.reserve({
         ...owner("process:live", "live-resource"),

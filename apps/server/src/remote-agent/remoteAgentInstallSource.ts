@@ -14,7 +14,13 @@ import {
 import { REMOTE_AGENT_METADATA_DOWNLOAD_POLICY } from "./remoteAgentHttpDownload.policy.ts";
 import type { RemoteAgentDownloadLogger } from "./remoteAgentHttpDownload.diagnostics.ts";
 
-const DEFAULT_RELEASE_REPOSITORY = "youpele52/bigbud";
+export const DEFAULT_RELEASE_REPOSITORY = "youpele52/bigbud";
+/**
+ * Musl-aware install source. Releases also publish the glibc-only legacy file during the D4
+ * transition so clients whose parser rejects unknown triples keep working.
+ */
+export const REMOTE_AGENT_INSTALL_SOURCE_FILE = "remote-agent-install-source.v2.json";
+export const LEGACY_REMOTE_AGENT_INSTALL_SOURCE_FILE = "remote-agent-install-source.json";
 const MAX_INSTALL_SOURCE_BYTES = REMOTE_AGENT_METADATA_DOWNLOAD_POLICY.maxBytes;
 
 interface InstallSourceLoadOptions {
@@ -57,10 +63,10 @@ export function resolveInstallSourceUrl(
     if (!/^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(configuredVersion)) {
       throw new RemoteAgentInstallManagerError("The remote agent release version is invalid.");
     }
-    return `https://github.com/${repository}/releases/download/v${configuredVersion}/remote-agent-install-source.json`;
+    return `https://github.com/${repository}/releases/download/v${configuredVersion}/${REMOTE_AGENT_INSTALL_SOURCE_FILE}`;
   }
   if (environment.BIGBUD_DESKTOP_PACKAGED !== "1") {
-    return `https://github.com/${repository}/releases/latest/download/remote-agent-install-source.json`;
+    return `https://github.com/${repository}/releases/latest/download/${REMOTE_AGENT_INSTALL_SOURCE_FILE}`;
   }
   const tag = packageMetadata.bigbudReleaseTag ?? `v${packageMetadata.version}`;
   if (
@@ -70,7 +76,7 @@ export function resolveInstallSourceUrl(
   ) {
     throw new RemoteAgentInstallManagerError("The packaged remote agent release tag is invalid.");
   }
-  return `https://github.com/${repository}/releases/download/${tag}/remote-agent-install-source.json`;
+  return `https://github.com/${repository}/releases/download/${tag}/${REMOTE_AGENT_INSTALL_SOURCE_FILE}`;
 }
 
 function parseInstallSourceJson(bytes: Uint8Array, label: string): RemoteAgentInstallSource {
@@ -135,6 +141,14 @@ async function downloadMetadata(
   );
 }
 
+function isNotFound(error: unknown): boolean {
+  return error instanceof RemoteAgentDownloadError && error.details.status === 404;
+}
+
+function legacyInstallSourceUrl(url: string): string {
+  return `${url.slice(0, url.lastIndexOf("/") + 1)}${LEGACY_REMOTE_AGENT_INSTALL_SOURCE_FILE}`;
+}
+
 export async function loadRemoteAgentInstallSource(
   environment: NodeJS.ProcessEnv = process.env,
   options: InstallSourceLoadOptions = {},
@@ -145,10 +159,14 @@ export async function loadRemoteAgentInstallSource(
   const url = resolveInstallSourceUrl(environment);
   const explicitUrl = Boolean(environment.BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL?.trim());
   try {
-    const bytes = await downloadMetadata(url, explicitUrl, options);
+    const bytes = await downloadMetadata(url, explicitUrl, options).catch((error: unknown) => {
+      // Releases older than the musl transition publish only the legacy file name.
+      if (explicitUrl || !isNotFound(error)) throw error;
+      return downloadMetadata(legacyInstallSourceUrl(url), false, options);
+    });
     return parseInstallSourceJson(bytes, "the configured release host");
   } catch (error) {
-    if (error instanceof RemoteAgentDownloadError && error.details.status === 404) {
+    if (isNotFound(error)) {
       throw new RemoteAgentInstallManagerError(
         "Remote agent install source is unavailable (HTTP 404). Publish the matching release, configure BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH or BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL with a signed install source, or choose Direct SSH in the project's connection settings.",
       );

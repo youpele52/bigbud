@@ -84,7 +84,9 @@ export function trySpawnWith(
           : ctx.ptyAdapter.spawn({
               ownerKey: JSON.stringify([session.threadId, session.terminalId]),
               recoverOnly: session.remoteOwnerRecoveryRequired === true,
+              expectedRemoteResourceId: session.expectedRemoteResourceId,
               ...(candidate.shellLaunch ? { shellLaunch: candidate.shellLaunch } : {}),
+              ...(candidate.identity ? { shellProfile: candidate.identity } : {}),
               shell: candidate.shell,
               ...(candidate.args ? { args: candidate.args } : {}),
               cwd: isLocalExecutionTarget(session.executionTargetId) ? session.cwd : homedir(),
@@ -115,7 +117,9 @@ export function trySpawnWith(
         shellLabel: formatShellCandidate(candidate),
         dropPathMode: candidate.dropPathMode,
         identity:
-          isLocalExecutionTarget(session.executionTargetId) && candidate.dropPathMode !== "wsl"
+          attempt.success.pidDomain !== "remote" &&
+          isLocalExecutionTarget(session.executionTargetId) &&
+          candidate.dropPathMode !== "wsl"
             ? (candidate.identity ?? {
                 host: LOCAL_SHELL_HOST,
                 selection: { kind: "legacy-auto" },

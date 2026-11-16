@@ -185,6 +185,8 @@ function toSigned32(value: number): number {
 
 export function decodePtyResponse(field: number, bytes: Uint8Array): RemoteAgentFrame | undefined {
   switch (field) {
+    case 63:
+      return { type: "ptyDetachResponse", value: decodeResponse(bytes) };
     case 43:
       return { type: "ptyCreateResponse", value: decodeCreate(bytes) };
     case 45:

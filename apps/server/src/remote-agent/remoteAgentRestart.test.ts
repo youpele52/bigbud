@@ -1,106 +1,197 @@
-import { describe, expect, it, vi } from "vitest";
-import { makeRemoteAgentRestart } from "./remoteAgentRestart.ts";
 import type {
   RemoteAgentRestartRecord,
   RemoteAgentRestartStore,
 } from "./remoteAgentRestart.types.ts";
+import { makeRemoteAgentAdmission } from "./remoteAgentAdmission.ts";
+import {
+  RemoteAgentConnectionPool,
+  type RemoteAgentRuntimeBinding,
+} from "./remoteAgentConnectionPool.ts";
+import type { RemoteAgentConnection } from "./remoteAgentConnection.ts";
+import { describe, expect, it, vi } from "vitest";
+import { makeRemoteAgentRestart } from "./remoteAgentRestart.ts";
+import { runtime, store, restartRecord } from "./remoteAgentRestart.test.helpers.ts";
 import { joinRestartOperation, makeMemoryStore } from "./remoteAgentRestart.store.ts";
-import { emptyRemoteAgentRegistry } from "./remoteAgentInstall.registry.ts";
-
-function runtime(generation: string) {
-  const sha = (generation === "g1" ? "a" : "b").repeat(64);
-  return {
-    generation,
-    version: "0.2.207",
-    sha256: sha,
-    buildDigest: "digest",
-    targetTriple: "x86_64-unknown-linux-gnu" as const,
-    origin: "managed" as const,
-    binaryPath: `/tmp/agent/bin/0.2.207/${sha}/bigbud-remote-agent`,
-    statePath: `/tmp/agent/runtimes/${generation}`,
-    socketPath: `/tmp/agent/runtimes/${generation}/supervisor.sock`,
-    logPath: `/tmp/agent/runtimes/${generation}/supervisor.log`,
-  };
-}
-
-function store(): RemoteAgentRestartStore {
-  const records = new Map<string, RemoteAgentRestartRecord>();
-  return {
-    get: async (id) => records.get(id),
-    put: async (record) => {
-      records.set(record.requestId, record);
-    },
-    update: async (id, transition) => {
-      const current = records.get(id);
-      if (!current) throw new Error("missing");
-      const next = transition(current);
-      records.set(id, next);
-      return next;
-    },
-  };
-}
-
-function restartRecord(
-  overrides: Partial<RemoteAgentRestartRecord> = {},
-): RemoteAgentRestartRecord {
-  return {
-    requestId: "restart-status",
-    projectId: "project-status",
-    target: "ssh:fixture",
-    runtime: runtime("g1"),
-    oldEpoch: "g1",
-    phase: "stopping",
-    message: "Stopping",
-    ...overrides,
-  };
-}
+import {
+  emptyRemoteAgentRegistry,
+  parseRemoteAgentRegistry,
+} from "./remoteAgentInstall.registry.ts";
 
 describe("remote agent restart coordinator", () => {
-  it("performs one replacement and returns the durable result on retry", async () => {
-    let bindingReads = 0;
-    let stopCommands = 0;
-    const verifyReadiness = vi.fn(async () => "g2");
+  it.each(
+    ["ready", "prior-boot-dead", "exited:0"].flatMap((observation) =>
+      [false, true].map((serviceOwned) => ({ observation, serviceOwned })),
+    ),
+  )(
+    "performs one replacement from $observation (service: $serviceOwned) and returns the durable result on retry",
+    async ({ observation, serviceOwned }) => {
+      let stopCommands = 0;
+      const verifyReadiness = vi.fn(async () => "g2");
+      const buildId = `0.2.207:${"a".repeat(64)}:x86_64-unknown-linux-gnu`;
+      let registry = parseRemoteAgentRegistry(
+        JSON.stringify({
+          ...emptyRemoteAgentRegistry(),
+          launches: [
+            { id: "g1", buildId, attemptId: "original-attempt", phase: "ready", epoch: "g1" },
+          ],
+          builds: [
+            {
+              id: buildId,
+              runtime: runtime("g1"),
+              health: "healthy",
+              promotion: 1,
+              binary: "present",
+              authenticated: true,
+            },
+          ],
+          promotionSequence: 1,
+          current: buildId,
+          currentConnectionId: "old-connection",
+          admissions: [{ id: "old-connection", buildId, phase: "ready", epoch: "g1" }],
+          pins: [{ owner: "connection:old-connection", buildId }],
+        }),
+      );
+      const control = {
+        root: "/tmp/agent",
+        run: vi.fn(async (command: string) => {
+          if (command.endsWith("observe_supervisor\n")) return observation;
+          if (command.includes("--restart-supervisor")) stopCommands++;
+          if (command.includes("launch-reserved")) return "launch-reserved";
+          if (command.includes("printf dead")) return "dead";
+          if (command.includes("printf ready")) return "ready";
+          return "";
+        }),
+        registry: {
+          read: async () => registry,
+          update: async (transition: (state: typeof registry) => typeof registry) => {
+            registry = parseRemoteAgentRegistry(JSON.stringify(transition(registry)));
+            return registry;
+          },
+        },
+      };
+      let durableBinding: RemoteAgentRuntimeBinding = {
+        runtime: runtime("g1"),
+        expectedEpoch: "g1",
+      };
+      const bindReplacement = async (
+        _target: string,
+        _id: string,
+        binding: RemoteAgentRuntimeBinding,
+      ) => {
+        durableBinding = binding;
+      };
+      const admission = makeRemoteAgentAdmission({
+        control: async () => control,
+        bindings: {
+          getBinding: async () => durableBinding,
+          bindConnection: bindReplacement,
+        },
+      });
+      const pool = new RemoteAgentConnectionPool({
+        resolveBinding: admission.resolveBinding,
+        create: async (_target, binding) =>
+          ({
+            close: vi.fn(),
+            handshake: async () => ({
+              protocolMajor: 1,
+              protocolMinor: 0,
+              agentVersion: "0.2.207",
+              buildDigest: "digest",
+              os: "linux",
+              architecture: "x86_64",
+              agentInstanceId: "fixture",
+              agentEpoch: binding!.expectedEpoch,
+              capabilities: [],
+              maxFrameBytes: 1024,
+              maxOperationOutputBytes: 1024,
+              maxJournalBytes: 1024,
+            }),
+          }) as unknown as RemoteAgentConnection,
+      });
+      await pool.get("ssh:fixture");
+      const launchReplacement = vi.fn(async (selected, attempt, epoch, previousAttempt) => {
+        expect(selected).toEqual(runtime("g1"));
+        expect(epoch).toBe("g1");
+        expect(previousAttempt).toBe("original-attempt");
+        expect(registry.restartReservations[0]?.phase).toBe("starting");
+        expect(registry.launches[0]).toMatchObject({
+          attemptId: attempt,
+          phase: "spawn-uncertain",
+        });
+        expect(registry.admissions).toEqual([]);
+        return "launch-reserved";
+      });
+      const restart = makeRemoteAgentRestart({
+        ...(serviceOwned ? { launchReplacement } : {}),
+        close: (target, binding) => {
+          if (binding) pool.closeBound(target, binding);
+        },
+        bindReplacement,
+        reconnect: async (target, replacement, retired) => {
+          expect(registry.restartReservations[0]?.phase).toBe("starting");
+          await pool.admitReplacement(target, replacement!, retired!);
+        },
+        verifySsh: async () => undefined,
+        verifyReadiness,
+        control: async () => control,
+        resolveBinding: admission.resolveBinding,
+        store: store(),
+      });
+      const request = {
+        requestId: "restart-1",
+        projectId: "project-1" as never,
+        expectedWorkspaceExecutionTargetId: "ssh:fixture" as never,
+      };
+      const first = restart.restart(request);
+      const result = await first;
+      expect(result.phase).toBe("ready");
+      expect((await admission.resolveBinding("ssh:fixture"))?.expectedEpoch).toBe("g2");
+      await expect(pool.get("ssh:fixture")).resolves.toBeDefined();
+      expect(verifyReadiness).toHaveBeenCalledOnce();
+      expect(launchReplacement).toHaveBeenCalledTimes(serviceOwned ? 1 : 0);
+      expect(control.run.mock.calls.some(([command]) => command.includes("nohup"))).toBe(
+        !serviceOwned,
+      );
+      expect(stopCommands).toBe(observation === "ready" ? 1 : 0);
+      expect(registry.launches[0]).toMatchObject({
+        attemptId: expect.stringMatching(/^restart-[a-f0-9]{48}$/),
+        phase: "ready",
+        epoch: "g2",
+      });
+      expect(control.run.mock.calls.some(([command]) => command.includes("original-attempt"))).toBe(
+        true,
+      );
+      expect(await restart.restart(request)).toEqual(result);
+      expect(stopCommands).toBe(observation === "ready" ? 1 : 0);
+    },
+  );
+
+  it("refuses to stop a runtime without matching durable launch evidence", async () => {
     const registry = emptyRemoteAgentRegistry();
-    const control = {
-      root: "/tmp/agent",
-      run: vi.fn(async (command: string) => {
-        if (command.includes("--restart-supervisor")) stopCommands++;
-        if (command.includes("launch-reserved")) return "launch-reserved";
-        if (command.includes("printf dead")) return "dead";
-        if (command.includes("printf ready")) return "ready";
-        return "";
-      }),
-      registry: {
-        read: async () => registry,
-        update: async (transition: (state: typeof registry) => typeof registry) =>
-          transition(registry),
-      },
-    };
+    const run = vi.fn(async () => "");
     const restart = makeRemoteAgentRestart({
       close: vi.fn(),
       reconnect: async () => undefined,
       verifySsh: async () => undefined,
-      verifyReadiness,
-      control: async () => control,
-      resolveBinding: async () => {
-        bindingReads += 1;
-        const value = bindingReads === 1 ? runtime("g1") : runtime("g2");
-        return { runtime: value, expectedEpoch: value.generation };
-      },
+      resolveBinding: async () => ({ runtime: runtime("g1"), expectedEpoch: "g1" }),
+      control: async () => ({
+        root: "/tmp/agent",
+        run,
+        registry: {
+          read: async () => registry,
+          update: async (transition) => transition(registry),
+        },
+      }),
       store: store(),
     });
-    const request = {
-      requestId: "restart-1",
-      projectId: "project-1" as never,
-      expectedWorkspaceExecutionTargetId: "ssh:fixture" as never,
-    };
-    const first = restart.restart(request);
-    const result = await first;
-    expect(result.phase).toBe("ready");
-    expect(verifyReadiness).toHaveBeenCalledOnce();
-    expect(stopCommands).toBe(1);
-    expect(await restart.restart(request)).toEqual(result);
-    expect(stopCommands).toBe(1);
+    await expect(
+      restart.restart({
+        requestId: "missing-proof",
+        projectId: "project-1" as never,
+        expectedWorkspaceExecutionTargetId: "ssh:fixture" as never,
+      }),
+    ).rejects.toThrow("matching launch identity");
+    expect(run).not.toHaveBeenCalled();
   });
 
   it("does not stop a service when SSH authentication preflight fails", async () => {

@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 import { type MobileRemoteControlScope, DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
-import { Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
+import { Effect, FileSystem, Layer, Option, Path, PubSub, Semaphore } from "effect";
 
 import { ServerConfig } from "../../startup/config";
 import { ServerSettingsService } from "../../ws/serverSettings";
@@ -9,6 +11,19 @@ import {
   type MobileRemotePairingStatus,
   type MobileRemoteSessionRecord,
 } from "../Services/MobileRemoteControl";
+import {
+  decodePairingRecord,
+  decodeSessionRecord,
+  toSessionRecord,
+  type PairingRecord,
+  type SessionRecord,
+} from "./MobileRemoteControl.records.ts";
+import {
+  currentMobileRecordAdmission,
+  mobileRecordAdmissionFields,
+  matchesMobileRecordAdmission,
+} from "./MobileRemoteControl.admission.ts";
+import { makeWatchSessionEnd } from "./MobileRemoteControl.sessionWatch";
 
 const PAIRING_TTL_MS = 10 * 60 * 1000;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -19,30 +34,6 @@ function toError(cause: unknown, fallbackMessage: string): Error {
   }
   return new Error(fallbackMessage, { cause });
 }
-
-const PairingRecord = Schema.Struct({
-  pairingId: Schema.String,
-  secret: Schema.String,
-  scope: Schema.Literals(["read-only", "approve-only", "thread-control"] as const),
-  baseUrl: Schema.String,
-  backendBaseUrl: Schema.String,
-  createdAt: Schema.String,
-  expiresAt: Schema.String,
-  exchangedAt: Schema.NullOr(Schema.String),
-});
-type PairingRecord = typeof PairingRecord.Type;
-
-const SessionRecord = Schema.Struct({
-  sessionId: Schema.String,
-  token: Schema.String,
-  scope: Schema.Literals(["read-only", "approve-only", "thread-control"] as const),
-  createdAt: Schema.String,
-  expiresAt: Schema.String,
-  lastUsedAt: Schema.NullOr(Schema.String),
-  revokedAt: Schema.NullOr(Schema.String),
-  label: Schema.String,
-});
-type SessionRecord = typeof SessionRecord.Type;
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -56,17 +47,9 @@ function isExpired(expiresAt: string): boolean {
   return Date.parse(expiresAt) <= Date.now();
 }
 
-function toSessionRecord(record: SessionRecord): MobileRemoteSessionRecord {
-  return {
-    sessionId: record.sessionId,
-    token: record.token,
-    scope: record.scope,
-    createdAt: record.createdAt,
-    expiresAt: record.expiresAt,
-    lastUsedAt: record.lastUsedAt,
-    revokedAt: record.revokedAt,
-    label: record.label,
-  };
+/** Record files only; skips in-progress `*.tmp-*` writes. */
+function isRecordFileName(entry: string): boolean {
+  return entry.endsWith(".json");
 }
 
 function stripTrailingSlash(value: string): string {
@@ -100,12 +83,19 @@ const makeMobileRemoteControl = Effect.gen(function* () {
     { concurrency: "unbounded" },
   ).pipe(Effect.asVoid);
 
-  const decodePairingRecord = Schema.decodeUnknownSync(PairingRecord as never) as (
-    value: unknown,
-  ) => PairingRecord;
-  const decodeSessionRecord = Schema.decodeUnknownSync(SessionRecord as never) as (
-    value: unknown,
-  ) => SessionRecord;
+  // Revocations are user actions (rare); every open session socket waits here.
+  const revocations = yield* PubSub.unbounded<string>();
+  // Sessions revoked by this process. Cleanup may delete a revoked record
+  // before a socket's watcher reads it, so the file alone cannot prove a
+  // revocation. Revocations are rare user actions, so the set stays small.
+  const revokedSessionIds = new Set<string>();
+
+  // Every read-modify-write of pairing and session files runs under this lock,
+  // so a token validation stamping `lastUsedAt` cannot overwrite a concurrent
+  // revocation (or resurrect a removed session), and one pairing secret
+  // cannot be exchanged twice. Mobile sessions are few; holds are short.
+  const storeLock = yield* Semaphore.make(1);
+  const exclusive = storeLock.withPermits(1);
 
   const readJsonFile = <A>(filePath: string, decode: (value: unknown) => A) =>
     fs.readFileString(filePath).pipe(
@@ -118,8 +108,14 @@ const makeMobileRemoteControl = Effect.gen(function* () {
       Effect.catch(() => Effect.succeed(Option.none<A>())),
     );
 
-  const writeJsonFile = (filePath: string, value: unknown) =>
-    fs.writeFileString(filePath, `${JSON.stringify(value, null, 2)}\n`);
+  // Write-then-rename, so a concurrent reader never sees a truncated record
+  // (which would look like a missing or revoked session).
+  const writeJsonFile = (filePath: string, value: unknown) => {
+    const temporaryPath = `${filePath}.tmp-${randomUUID()}`;
+    return fs
+      .writeFileString(temporaryPath, `${JSON.stringify(value, null, 2)}\n`)
+      .pipe(Effect.andThen(fs.rename(temporaryPath, filePath)));
+  };
 
   const pairingFilePath = (pairingId: string) => path.join(pairingsDir, `${pairingId}.json`);
   const sessionFilePath = (sessionId: string) => path.join(sessionsDir, `${sessionId}.json`);
@@ -130,9 +126,10 @@ const makeMobileRemoteControl = Effect.gen(function* () {
   );
 
   const cleanupExpired = Effect.gen(function* () {
-    const pairingEntries = yield* fs
-      .readDirectory(pairingsDir)
-      .pipe(Effect.orElseSucceed(() => []));
+    const pairingEntries = yield* fs.readDirectory(pairingsDir).pipe(
+      Effect.orElseSucceed(() => []),
+      Effect.map((entries) => entries.filter(isRecordFileName)),
+    );
     for (const entry of pairingEntries) {
       const record = yield* readJsonFile(path.join(pairingsDir, entry), decodePairingRecord);
       if (Option.isSome(record) && isExpired(record.value.expiresAt)) {
@@ -140,9 +137,10 @@ const makeMobileRemoteControl = Effect.gen(function* () {
       }
     }
 
-    const sessionEntries = yield* fs
-      .readDirectory(sessionsDir)
-      .pipe(Effect.orElseSucceed(() => []));
+    const sessionEntries = yield* fs.readDirectory(sessionsDir).pipe(
+      Effect.orElseSucceed(() => []),
+      Effect.map((entries) => entries.filter(isRecordFileName)),
+    );
     for (const entry of sessionEntries) {
       const record = yield* readJsonFile(path.join(sessionsDir, entry), decodeSessionRecord);
       if (
@@ -154,10 +152,24 @@ const makeMobileRemoteControl = Effect.gen(function* () {
     }
   });
 
+  // Expired-record cleanup scans both directories, so it runs at most once a
+  // minute rather than on every validated command.
+  const CLEANUP_INTERVAL_MS = 60_000;
+  let lastCleanupAtMs = Number.NEGATIVE_INFINITY;
+  const cleanupExpiredThrottled = Effect.suspend(() => {
+    const nowMs = Date.now();
+    if (nowMs - lastCleanupAtMs < CLEANUP_INTERVAL_MS) return Effect.void;
+    lastCleanupAtMs = nowMs;
+    return cleanupExpired;
+  });
+
   const listSessions = Effect.gen(function* () {
     yield* ensureDirectories;
     yield* cleanupExpired;
-    const entries = yield* fs.readDirectory(sessionsDir).pipe(Effect.orElseSucceed(() => []));
+    const entries = yield* fs.readDirectory(sessionsDir).pipe(
+      Effect.orElseSucceed(() => []),
+      Effect.map((entries) => entries.filter(isRecordFileName)),
+    );
     const sessions: MobileRemoteSessionRecord[] = [];
     for (const entry of entries) {
       const record = yield* readJsonFile(path.join(sessionsDir, entry), decodeSessionRecord);
@@ -167,7 +179,7 @@ const makeMobileRemoteControl = Effect.gen(function* () {
     }
     sessions.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
     return sessions;
-  });
+  }).pipe(exclusive);
 
   return {
     createPairing: (input: {
@@ -180,6 +192,7 @@ const makeMobileRemoteControl = Effect.gen(function* () {
         if (!(yield* mobileEnabled)) {
           return yield* Effect.fail(new Error("Mobile remote control is disabled."));
         }
+        const admission = yield* currentMobileRecordAdmission;
         const createdAt = nowIso();
         const pairingId = crypto.randomUUID();
         const secret = crypto.randomUUID();
@@ -194,6 +207,7 @@ const makeMobileRemoteControl = Effect.gen(function* () {
           createdAt,
           expiresAt: addMs(createdAt, PAIRING_TTL_MS),
           exchangedAt: null,
+          ...mobileRecordAdmissionFields(admission),
         };
         yield* writeJsonFile(pairingFilePath(pairingId), record);
 
@@ -215,7 +229,8 @@ const makeMobileRemoteControl = Effect.gen(function* () {
       Effect.gen(function* () {
         yield* ensureDirectories;
         const record = yield* readJsonFile(pairingFilePath(pairingId), decodePairingRecord);
-        if (Option.isNone(record)) {
+        const admission = yield* currentMobileRecordAdmission;
+        if (Option.isNone(record) || !matchesMobileRecordAdmission(record.value, admission)) {
           return null;
         }
         const enabled = yield* mobileEnabled;
@@ -240,7 +255,8 @@ const makeMobileRemoteControl = Effect.gen(function* () {
           return yield* Effect.fail(new Error("Mobile remote control is disabled."));
         }
         const record = yield* readJsonFile(pairingFilePath(input.pairingId), decodePairingRecord);
-        if (Option.isNone(record)) {
+        const admission = yield* currentMobileRecordAdmission;
+        if (Option.isNone(record) || !matchesMobileRecordAdmission(record.value, admission)) {
           return yield* Effect.fail(new Error("Pairing was not found."));
         }
         if (record.value.secret !== input.secret || record.value.exchangedAt !== null) {
@@ -262,6 +278,7 @@ const makeMobileRemoteControl = Effect.gen(function* () {
           lastUsedAt: null,
           revokedAt: null,
           label: input.label.trim(),
+          ...mobileRecordAdmissionFields(admission),
         };
         yield* writeJsonFile(sessionFilePath(sessionId), session);
         yield* writeJsonFile(pairingFilePath(input.pairingId), {
@@ -269,7 +286,10 @@ const makeMobileRemoteControl = Effect.gen(function* () {
           exchangedAt: createdAt,
         } satisfies PairingRecord);
         return toSessionRecord(session);
-      }).pipe(Effect.mapError((cause) => toError(cause, "Failed to exchange mobile pairing."))),
+      }).pipe(
+        exclusive,
+        Effect.mapError((cause) => toError(cause, "Failed to exchange mobile pairing.")),
+      ),
     listSessions: listSessions.pipe(
       Effect.mapError((cause) => toError(cause, "Failed to list mobile sessions.")),
     ),
@@ -284,20 +304,39 @@ const makeMobileRemoteControl = Effect.gen(function* () {
           ...record.value,
           revokedAt: nowIso(),
         } satisfies SessionRecord);
-      }).pipe(Effect.mapError((cause) => toError(cause, "Failed to revoke mobile session."))),
+        revokedSessionIds.add(sessionId);
+        yield* PubSub.publish(revocations, sessionId);
+      }).pipe(
+        exclusive,
+        Effect.mapError((cause) => toError(cause, "Failed to revoke mobile session.")),
+      ),
+    watchSessionEnd: makeWatchSessionEnd({
+      revocations,
+      serverSettings,
+      wasRevoked: (sessionId) => revokedSessionIds.has(sessionId),
+      readRevokedAt: (sessionId) =>
+        readJsonFile(sessionFilePath(sessionId), decodeSessionRecord).pipe(
+          Effect.map(Option.map((record) => record.revokedAt)),
+        ),
+    }),
     validateSessionToken: (token: string) =>
       Effect.gen(function* () {
         yield* ensureDirectories;
-        yield* cleanupExpired;
+        yield* cleanupExpiredThrottled;
         if (!(yield* mobileEnabled)) {
           return null;
         }
-        const entries = yield* fs.readDirectory(sessionsDir).pipe(Effect.orElseSucceed(() => []));
+        const entries = yield* fs.readDirectory(sessionsDir).pipe(
+          Effect.orElseSucceed(() => []),
+          Effect.map((entries) => entries.filter(isRecordFileName)),
+        );
+        const admission = yield* currentMobileRecordAdmission;
         for (const entry of entries) {
           const record = yield* readJsonFile(path.join(sessionsDir, entry), decodeSessionRecord);
           if (
             Option.isSome(record) &&
             record.value.token === token &&
+            matchesMobileRecordAdmission(record.value, admission) &&
             record.value.revokedAt === null &&
             !isExpired(record.value.expiresAt)
           ) {
@@ -311,6 +350,7 @@ const makeMobileRemoteControl = Effect.gen(function* () {
         }
         return null;
       }).pipe(
+        exclusive,
         Effect.mapError((cause) => toError(cause, "Failed to validate mobile session token.")),
       ),
   };

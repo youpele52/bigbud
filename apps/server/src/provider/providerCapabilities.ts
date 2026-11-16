@@ -51,7 +51,8 @@ const CORE_PROVIDER_CAPABILITIES: Partial<Record<ProviderKind, ProviderCapabilit
     sessionHistorySemantics: "unknown",
   },
   opencode: {
-    supportsRemoteProviderRuntime: true,
+    // Historical ID only: its adapter is retired, so neither remote execution mode is available.
+    supportsRemoteProviderRuntime: false,
     supportsLocalRuntimeRemoteWorkspace: supportsLocalRuntimeRemoteWorkspace("opencode"),
     toolInjectionMode: "builtin-override",
     needsBuiltinsDisabled: false,

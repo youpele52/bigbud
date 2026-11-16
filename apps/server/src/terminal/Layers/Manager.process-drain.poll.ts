@@ -2,7 +2,7 @@ import { Effect, Option } from "effect";
 import { invalidateTerminalWorkAssessment } from "./Manager.idleWork.ts";
 
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
-import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { terminalPidIsOnBackendHost } from "./OwnedPtyRuntime.identity.ts";
 import { pollRemoteProcessesWith } from "./Manager.process-drain.remote.ts";
 import { toSessionKey } from "./Manager.shell";
 import { pollAgentIdentityWith } from "./Manager.process-drain.identity";
@@ -134,8 +134,11 @@ export function pollSubprocessActivityWith(
         Effect.forEach(
           runningSessions.filter(
             (session) =>
-              isLocalExecutionTarget(session.executionTargetId) ||
-              isWslTerminalTargetId(session.executionTargetId),
+              terminalPidIsOnBackendHost(
+                ctx.ptyAdapter,
+                session.executionTargetId,
+                session.process,
+              ) || isWslTerminalTargetId(session.executionTargetId),
           ),
           checkSubprocessActivity,
           {

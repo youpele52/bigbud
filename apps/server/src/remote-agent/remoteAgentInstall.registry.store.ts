@@ -7,6 +7,7 @@ import {
   buildRemoteAgentRegistryCas,
   buildRemoteAgentRegistryRead,
 } from "./remoteAgentInstall.registry.shell.ts";
+import { assertMobileRegistryTransition } from "./remoteAgentInstall.mobile.invariants.ts";
 
 export interface RemoteAgentRegistryCommand {
   readonly run: (command: string) => Promise<string>;
@@ -26,12 +27,18 @@ export function makeRemoteAgentRegistryStore(root: string, command: RemoteAgentR
     update: async (transition: (state: RemoteAgentRegistry) => RemoteAgentRegistry) => {
       for (let attempt = 0; attempt < 8; attempt++) {
         const before = await read();
+        const beforeCanonical = JSON.stringify(before.state);
+        const beforeRevision = before.state.revision;
         const next = transition(before.state);
-        if (next === before.state) return next;
-        if (next.revision !== before.state.revision + 1)
-          throw new Error("Invalid registry transition revision.");
         const text = JSON.stringify(next);
-        parseRemoteAgentRegistry(text);
+        const canonical = parseRemoteAgentRegistry(text);
+        assertMobileRegistryTransition(beforeCanonical, canonical);
+        if (next === before.state) {
+          if (text !== beforeCanonical) throw new Error("In-place registry transition mutation.");
+          return canonical;
+        }
+        if (canonical.revision !== beforeRevision + 1)
+          throw new Error("Invalid registry transition revision.");
         let result: string;
         try {
           result = (
@@ -45,7 +52,7 @@ export function makeRemoteAgentRegistryStore(root: string, command: RemoteAgentR
           if (observed.text === text) return observed.state;
           throw cause;
         }
-        if (result === "committed") return next;
+        if (result === "committed") return canonical;
         if (result !== "conflict")
           throw new Error("Unknown registry publication result; reconcile intent before retry.");
       }

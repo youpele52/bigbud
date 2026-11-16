@@ -1,3 +1,9 @@
+import type {
+  TerminalRemoteInventoryInput,
+  TerminalRemoteInventory,
+  TerminalRemoteAttachInput,
+  TerminalRemoteDetachInput,
+} from "@bigbud/contracts/workspace/terminal.remote.ts";
 /**
  * TerminalManager - Terminal session orchestration service interface.
  *
@@ -100,6 +106,14 @@ export interface TerminalIdleWork {
 }
 
 export interface TerminalManagerShape {
+  readonly remoteInventory?: (
+    input: TerminalRemoteInventoryInput,
+  ) => Effect.Effect<TerminalRemoteInventory, TerminalError>;
+  readonly remoteAttach?: (
+    input: TerminalRemoteAttachInput,
+  ) => Effect.Effect<TerminalSessionSnapshot, TerminalError>;
+  readonly remoteDetach?: (input: TerminalRemoteDetachInput) => Effect.Effect<void, TerminalError>;
+  readonly remoteStop?: (input: TerminalRemoteAttachInput) => Effect.Effect<void, TerminalError>;
   readonly listShellProfiles: (
     input: TerminalShellProfilesInput,
   ) => Effect.Effect<TerminalShellProfileInventory, TerminalError>;

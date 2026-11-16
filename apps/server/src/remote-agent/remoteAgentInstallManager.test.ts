@@ -57,6 +57,7 @@ describe("remote agent production staging manager", () => {
       stdout: "bigbud-remote-agent 0.2.207 1 2 fixture linux aarch64",
     }));
     const manager = makeRemoteAgentInstallManager({
+      probePlacedArtifact: async () => "absent",
       openControl: async () => control,
       runRemoteCommand,
       probePlatform: async () => ({

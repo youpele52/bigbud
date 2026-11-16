@@ -1,3 +1,4 @@
+import { REMOTE_AGENT_TOOL_SPECS, type RemoteAgentToolInput } from "./remoteAgentTools.shared.ts";
 import {
   decodeSetElevatorSummaryArguments,
   SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
@@ -94,6 +95,7 @@ export function createCopilotThreadOrchestrationTools(
   input: CopilotThreadToolsInput & {
     readonly renderHtml?: (args: unknown, invocationId: string) => Promise<unknown>;
     readonly getSystemResources?: (input?: unknown) => Promise<Record<string, unknown>>;
+    readonly remoteAgent?: (input: RemoteAgentToolInput) => Promise<Record<string, unknown>>;
     readonly configureSystemResourceRules?: (input: unknown) => Promise<Record<string, unknown>>;
     readonly workspace?: (
       tool: AgentWorkspaceToolName,
@@ -136,6 +138,22 @@ export function createCopilotThreadOrchestrationTools(
       },
     },
     ...(input.workspace ? createCopilotAgentWorkspaceTools(input.workspace) : []),
+    ...REMOTE_AGENT_TOOL_SPECS.map((spec) => ({
+      name: spec.name,
+      description: spec.description,
+      parameters: spec.parameters,
+      handler: async (args: unknown) => {
+        try {
+          if (!input.remoteAgent) throw new Error("Remote agent tools are not ready.");
+          const result = await input.remoteAgent({ tool: spec.name, arguments: args ?? {} });
+          return successResult(JSON.stringify(result, null, 2));
+        } catch (error) {
+          return failureResult(
+            error instanceof Error ? error.message : "Remote agent tool failed.",
+          );
+        }
+      },
+    })),
     {
       name: "get_system_resources",
       description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,

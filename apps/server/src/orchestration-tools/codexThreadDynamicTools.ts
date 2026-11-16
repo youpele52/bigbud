@@ -1,3 +1,4 @@
+import { isRemoteAgentToolName } from "./remoteAgentTools.shared.ts";
 import { createHash } from "node:crypto";
 
 import {
@@ -83,6 +84,11 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     const dispatcher = requireDispatcher();
     const capabilityCatalog = getEffectiveCapabilityCatalog(threadId);
 
+    if (isRemoteAgentToolName(tool)) {
+      if (!dispatcher.remoteAgent) throw new Error("Remote agent tools are not ready.");
+      const result = await Effect.runPromise(dispatcher.remoteAgent({ tool, arguments: args }));
+      return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
+    }
     if (AGENT_WORKSPACE_TOOL_NAMES.includes(tool as AgentWorkspaceToolName)) {
       if (!dispatcher.workspace) throw new Error("Workspace tools are not ready.");
       const result = await Effect.runPromise(

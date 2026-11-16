@@ -11,6 +11,12 @@ export function readyRemoteAgentSelection(
   buildId: string | null,
 ): ReadyRemoteAgentSelection | undefined {
   if (!buildId) return undefined;
+  if (
+    state.restartReservations.some(
+      (entry) => entry.buildId === buildId && !["ready", "failed"].includes(entry.phase),
+    )
+  )
+    return undefined;
   const build = state.builds.find((entry) => entry.id === buildId);
   const launch = state.launches.find(
     (entry) => entry.buildId === buildId && entry.phase === "ready" && entry.epoch,

@@ -5,6 +5,8 @@ import {
   type RemoteAgentArtifactTrustStore,
 } from "./remoteAgentArtifact.ts";
 import { runSshCommand } from "../ssh/sshProcess.ts";
+import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
+import { REMOTE_AGENT_UNSAFE_DIRECTORY_MARKER } from "./remoteAgentFailure.classify.ts";
 
 const SAFE_REMOTE_PATH_VERSION = /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/;
 const SAFE_ARTIFACT_SHA256 = /^[a-f0-9]{64}$/;
@@ -87,6 +89,30 @@ validate_agent_target() {
 `;
 }
 
+/**
+ * Refuse unsafe existing directories with a marker the failure classifier can explain. Paths are
+ * reported relative to the home directory so diagnostics do not leak the account's home path.
+ */
+export function buildRemoteAgentDirectoryGuard(paths: string): string {
+  return `for path in ${paths}; do
+  if [ -e "$path" ] || [ -L "$path" ]; then
+    label=\${path#"$HOME"/}
+    if [ -L "$path" ] || [ ! -d "$path" ]; then
+      printf '%s %s kind=not-a-directory\\n' '${REMOTE_AGENT_UNSAFE_DIRECTORY_MARKER}' "$label" >&2
+      exit 78
+    fi
+    owner=$(stat -c '%u' "$path")
+    mode=$(stat -c '%a' "$path")
+    if [ "$owner" != "$(id -u)" ] || [ "$mode" != "700" ]; then
+      owner_label=self
+      [ "$owner" = "$(id -u)" ] || owner_label=other
+      printf '%s %s mode=%s owner=%s\\n' '${REMOTE_AGENT_UNSAFE_DIRECTORY_MARKER}' "$label" "$mode" "$owner_label" >&2
+      exit 78
+    fi
+  fi
+done`;
+}
+
 export function buildRemoteAgentInstallPaths(
   identity: RemoteAgentBuildIdentity,
 ): RemoteAgentInstallPaths {
@@ -111,26 +137,22 @@ export function buildRemoteAgentInstallPaths(
   };
 }
 
-export function buildRemoteAgentInstallScript(input: RemoteAgentInstallScriptInput): {
-  readonly command: string;
-  readonly stdin: string;
-  readonly paths: RemoteAgentInstallPaths;
-} {
-  if (input.artifact.targetTriple !== input.targetTriple) {
-    throw new Error("Remote agent artifact target does not match the detected target.");
-  }
-  if (input.stagedBase64.length === 0) {
-    throw new Error("Remote agent installation payload cannot be empty.");
-  }
-  if (input.reservationId !== undefined && !SAFE_RESERVATION_ID.test(input.reservationId)) {
+/**
+ * Shared opening for every script that publishes managed bytes: refuse unsafe directories,
+ * create the owner-only layout, then hold the durable staging fence for the command lifetime.
+ */
+export function buildRemoteAgentStagePrologue(
+  paths: RemoteAgentInstallPaths,
+  reservationId: string | undefined,
+): string {
+  if (reservationId !== undefined && !SAFE_RESERVATION_ID.test(reservationId)) {
     throw new Error("Invalid remote agent staging reservation.");
   }
-  const paths = buildRemoteAgentInstallPaths(input.artifact);
-  const reservation = input.reservationId
+  const reservation = reservationId
     ? `
 staging_root=${paths.root}/staging
 install -d -m 700 "$staging_root"
-reservation_id='${input.reservationId}'
+reservation_id='${reservationId}'
 reservation_lock="$staging_root/$reservation_id.lock"
 reservation_fence="$staging_root/$reservation_id.fence"
 if test ! -e "$reservation_lock" && test ! -L "$reservation_lock"; then
@@ -150,7 +172,7 @@ test ! -L "$reservation_fence"
 test "$(cat "$reservation_fence")" = active
 `
     : "";
-  const command = `
+  return `
 set -eu
 umask 077
   root=${paths.root}
@@ -159,16 +181,24 @@ umask 077
   version_root=${paths.versionRoot}
   build_root=${paths.buildRoot}
   installed=${paths.installedBinary}
-for path in "$root" "$bin_root" "$staging_root" "$version_root" "$build_root"; do
-  if [ -e "$path" ] || [ -L "$path" ]; then
-    test ! -L "$path"
-    test -d "$path"
-    test "$(stat -c '%u' "$path")" = "$(id -u)"
-    test "$(stat -c '%a' "$path")" = "700"
-  fi
-done
+${buildRemoteAgentDirectoryGuard('"$root" "$bin_root" "$staging_root" "$version_root" "$build_root"')}
 install -d -m 700 "$root" "$bin_root" "$staging_root" "$version_root" "$build_root"
-${reservation}
+${reservation}`;
+}
+
+export function buildRemoteAgentInstallScript(input: RemoteAgentInstallScriptInput): {
+  readonly command: string;
+  readonly stdin: string;
+  readonly paths: RemoteAgentInstallPaths;
+} {
+  if (input.artifact.targetTriple !== input.targetTriple) {
+    throw new Error("Remote agent artifact target does not match the detected target.");
+  }
+  if (input.stagedBase64.length === 0) {
+    throw new Error("Remote agent installation payload cannot be empty.");
+  }
+  const paths = buildRemoteAgentInstallPaths(input.artifact);
+  const command = `${buildRemoteAgentStagePrologue(paths, input.reservationId)}
 staged=$(mktemp "$build_root/.bigbud-remote-agent.stage.XXXXXX")
 trap 'rm -f "$staged"' EXIT HUP INT TERM
 base64 --decode > "$staged"
@@ -223,14 +253,13 @@ export async function installRemoteAgentArtifact(input: {
     stagedBase64: Buffer.from(input.bytes).toString("base64"),
     ...(input.reservationId ? { reservationId: input.reservationId } : {}),
   });
-  await runSshCommand({
+  await runRemoteAgentDiagnosedCommand(runSshCommand, "install", {
     executionTargetId: input.executionTargetId,
     command: "sh",
     args: ["-lc", script.command],
     stdin: script.stdin,
     timeoutMs: 60_000,
     maxBufferBytes: 64 * 1024,
-    outputMode: "truncate",
   });
   return script.paths;
 }

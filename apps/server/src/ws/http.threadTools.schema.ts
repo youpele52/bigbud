@@ -1,6 +1,7 @@
 import { Data, Effect, Schema } from "effect";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES } from "../orchestration-tools/AgentWorkspaceTools.ts";
+import { REMOTE_AGENT_TOOL_NAMES } from "../orchestration-tools/remoteAgentTools.shared.ts";
 
 export const ThreadToolRequest = Schema.Struct({
   action: Schema.Literals([
@@ -24,6 +25,7 @@ export const ThreadToolRequest = Schema.Struct({
     "remote_workspace_process",
     "get_system_resources",
     "configure_system_resource_rules",
+    "remote_agent",
     "move",
     "snooze",
   ]),
@@ -60,6 +62,8 @@ export const ThreadToolRequest = Schema.Struct({
   ),
   workspaceTool: Schema.optional(Schema.Literals(AGENT_WORKSPACE_TOOL_NAMES)),
   workspaceArguments: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  remoteAgentTool: Schema.optional(Schema.Literals(REMOTE_AGENT_TOOL_NAMES)),
+  remoteAgentArguments: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   remoteCommand: Schema.optional(Schema.String),
   remoteInvocationId: Schema.optional(Schema.String),
   remoteArgs: Schema.optional(Schema.Array(Schema.String)),

@@ -36,6 +36,8 @@ describe("createCopilotThreadOrchestrationTools", () => {
 
     expect(tools.map((tool) => tool.name)).toEqual([
       "render_html",
+      "remote_agent_status",
+      "remote_agent_install",
       "get_system_resources",
       "configure_system_resource_rules",
       "set_elevator_summary",

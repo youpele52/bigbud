@@ -3,24 +3,35 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
 import { ThreadId } from "@bigbud/contracts";
+import { THREAD_DETAIL_CHECKPOINT_DEFAULT_LIMIT } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
 
 import {
   ProjectionCheckpointDbRowSchema,
   ProjectionLatestTurnDbRowSchema,
   ProjectionStateDbRowSchema,
   ProjectionThreadDbRowSchema,
-  ProjectionThreadProposedPlanDbRowSchema,
   ProjectionThreadSessionDbRowSchema,
   ProjectionThreadTaskDbRowSchema,
   ProjectionThreadWatchDbRowSchema,
 } from "./ProjectionSnapshotQuerySql.ts";
 import { makeMobileHistoryQueries } from "./ProjectionSnapshotQuery.mobileSql.history.ts";
+import {
+  MobileProposedPlanDbRowSchema,
+  mobileCheckpointFilesColumnSql,
+  mobilePlanMarkdownColumnsSql,
+} from "./ProjectionSnapshotQuery.mobileSql.bounds.ts";
 import { threadOrganizationJsonSql } from "../../persistence/Layers/ProjectionThreads.organization.ts";
 
 export const MobileRecoveryQueryInput = Schema.Struct({
   selectedThreadId: Schema.NullOr(ThreadId),
 });
 export type MobileRecoveryQueryInput = typeof MobileRecoveryQueryInput.Type;
+
+/**
+ * Older proposed plans kept for the selected thread, newest first. Plans on each thread's latest
+ * turn are always kept; a handful of earlier ones covers recent plan references in the transcript.
+ */
+export const MOBILE_SELECTED_PROPOSED_PLAN_LIMIT = 10;
 
 function makeEligibleThreadsCte(sql: SqlClient.SqlClient, selectedThreadId: string | null) {
   return sql`
@@ -142,7 +153,7 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
 
   const listProposedPlanRows = SqlSchema.findAll({
     Request: MobileRecoveryQueryInput,
-    Result: ProjectionThreadProposedPlanDbRowSchema,
+    Result: MobileProposedPlanDbRowSchema,
     execute: ({ selectedThreadId }) =>
       sql`
         ${makeEligibleThreadsCte(sql, selectedThreadId)}
@@ -150,7 +161,7 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
           plan_id AS "planId",
           thread_id AS "threadId",
           turn_id AS "turnId",
-          plan_markdown AS "planMarkdown",
+          ${mobilePlanMarkdownColumnsSql(sql)},
           implemented_at AS "implementedAt",
           implementation_thread_id AS "implementationThreadId",
           created_at AS "createdAt",
@@ -158,10 +169,16 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
         FROM projection_thread_proposed_plans
         WHERE thread_id IN (SELECT thread_id FROM eligible_threads)
           AND (
-            thread_id = ${selectedThreadId}
-            OR turn_id = (
+            turn_id = (
               SELECT latest_turn_id FROM projection_threads
               WHERE projection_threads.thread_id = projection_thread_proposed_plans.thread_id
+            )
+            OR plan_id IN (
+              SELECT recent.plan_id
+              FROM projection_thread_proposed_plans AS recent
+              WHERE recent.thread_id = ${selectedThreadId}
+              ORDER BY recent.created_at DESC, recent.plan_id DESC
+              LIMIT ${MOBILE_SELECTED_PROPOSED_PLAN_LIMIT}
             )
           )
         ORDER BY thread_id ASC, created_at ASC, plan_id ASC
@@ -244,24 +261,28 @@ export function makeMobileProjectionSnapshotQuerySql(sql: SqlClient.SqlClient) {
     Result: ProjectionCheckpointDbRowSchema,
     execute: ({ selectedThreadId }) =>
       sql`
-        SELECT
-          thread_id AS "threadId",
-          turn_id AS "turnId",
-          checkpoint_turn_count AS "checkpointTurnCount",
-          checkpoint_ref AS "checkpointRef",
-          checkpoint_status AS "status",
-          checkpoint_files_json AS "files",
-          assistant_message_id AS "assistantMessageId",
-          COALESCE(checkpoint_completed_at, completed_at) AS "completedAt"
-        FROM projection_turns
-        WHERE thread_id = ${selectedThreadId}
-          AND EXISTS (
-            SELECT 1
-            FROM projection_threads
-            WHERE thread_id = ${selectedThreadId} AND deleted_at IS NULL
-          )
-          AND checkpoint_turn_count IS NOT NULL
-        ORDER BY checkpoint_turn_count ASC
+        SELECT * FROM (
+          SELECT
+            thread_id AS "threadId",
+            turn_id AS "turnId",
+            checkpoint_turn_count AS "checkpointTurnCount",
+            checkpoint_ref AS "checkpointRef",
+            checkpoint_status AS "status",
+            ${mobileCheckpointFilesColumnSql(sql)},
+            assistant_message_id AS "assistantMessageId",
+            COALESCE(checkpoint_completed_at, completed_at) AS "completedAt"
+          FROM projection_turns
+          WHERE thread_id = ${selectedThreadId}
+            AND EXISTS (
+              SELECT 1
+              FROM projection_threads
+              WHERE thread_id = ${selectedThreadId} AND deleted_at IS NULL
+            )
+            AND checkpoint_turn_count IS NOT NULL
+          ORDER BY checkpoint_turn_count DESC
+          LIMIT ${THREAD_DETAIL_CHECKPOINT_DEFAULT_LIMIT}
+        )
+        ORDER BY "checkpointTurnCount" ASC
       `,
   });
 

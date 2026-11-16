@@ -3,6 +3,11 @@ import { remoteAgentOwnedPtyLaunch } from "./remoteAgentOwnedPty.launch.ts";
 import { parseRemoteAgentOwner } from "./remoteAgentOwners.ts";
 import { remoteAgentRequestDigest } from "./remoteAgentRequestDigest.ts";
 import {
+  localSupervisorTarget,
+  localSupervisorShellHost,
+} from "../remote-backend/localSupervisorIdentity.ts";
+import { localSupervisorLaunch } from "../remote-backend/localSupervisorLaunch.ts";
+import {
   profileLaunch,
   profileOwner,
   spawnInput,
@@ -10,6 +15,45 @@ import {
 } from "./remoteAgentOwnedPty.profile.testUtils.ts";
 
 describe("durable terminal requested launch resolution", () => {
+  it("requires a trusted agent-host resolver for a backend-local profile and restores only its stored intent", () => {
+    const targetId = localSupervisorTarget("a".repeat(32));
+    const local = {
+      ...spawnInput(),
+      cwd: "/srv/project",
+      remoteCwd: "/srv/project",
+      executionTargetId: targetId,
+      shell: "/bin/bash",
+      args: ["--noprofile"],
+    };
+    const launch = localSupervisorLaunch(local, targetId);
+    const request = { ...local, shellLaunch: launch };
+    expect(() => remoteAgentOwnedPtyLaunch(request)).toThrow();
+    const prepared = remoteAgentOwnedPtyLaunch(request, undefined, localSupervisorShellHost);
+    const owner = parseRemoteAgentOwner(
+      JSON.stringify({
+        ...profileOwner(),
+        target: targetId,
+        terminalCwd: local.cwd,
+        shellLaunch: launch,
+        digest: prepared.digest,
+      }),
+    );
+    expect(remoteAgentOwnedPtyLaunch(local, owner, localSupervisorShellHost)).toEqual(prepared);
+    expect(() =>
+      remoteAgentOwnedPtyLaunch(
+        { ...request, executionTargetId: localSupervisorTarget("b".repeat(32)) },
+        owner,
+        localSupervisorShellHost,
+      ),
+    ).toThrow();
+    expect(() =>
+      remoteAgentOwnedPtyLaunch(request, undefined, () => ({
+        kind: "agent",
+        hostId: "another-authority",
+      })),
+    ).toThrow("another execution host");
+  });
+
   it("keeps the legacy target/cwd digest byte-for-byte unchanged", () => {
     const input = spawnInput();
     expect(remoteAgentOwnedPtyLaunch(input)).toEqual({

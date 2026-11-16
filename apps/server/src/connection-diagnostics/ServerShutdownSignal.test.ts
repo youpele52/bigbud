@@ -11,6 +11,7 @@ import { makeOrchestrationDeliveryStream } from "../ws/wsOrchestrationDelivery.t
 import { makeConnectionDiagnostics } from "./Layers/ConnectionDiagnostics.ts";
 import { withServerShutdownSignal } from "./Layers/ServerShutdownSignal.ts";
 import { ConnectionDiagnostics } from "./Services/ConnectionDiagnostics.ts";
+import { RemoteDeliveryLive } from "../remote-backend/unavailable.services.ts";
 
 const emptyReplay = (fromSequenceExclusive: number) => ({
   requestedFromSequenceExclusive: fromSequenceExclusive,
@@ -54,10 +55,13 @@ const RoutesWithOpenDeliveryStream = Layer.effectDiscard(
 );
 
 /** Builds the server-shaped layer stack, lets it run briefly, then closes its scope. */
-async function endReasonsAfterTeardown(options: { readonly withSignal: boolean }) {
+async function endReasonsAfterTeardown(options: {
+  readonly withSignal: boolean;
+  readonly remote?: boolean;
+}) {
   const diagnostics = makeConnectionDiagnostics();
   const runtimeServices = Layer.mergeAll(
-    DesktopSupervisorDeliveryLive,
+    options.remote ? RemoteDeliveryLive : DesktopSupervisorDeliveryLive,
     Layer.succeed(ConnectionDiagnostics, diagnostics),
   );
   const application = options.withSignal
@@ -85,12 +89,15 @@ describe("server shutdown signal", () => {
     vi.unstubAllEnvs();
   });
 
-  it("records a delivery stream closed by full server teardown as a server shutdown", async () => {
-    const result = await endReasonsAfterTeardown({ withSignal: true });
+  it.each([false, true])(
+    "records teardown as server shutdown before delivery finalizes (remote=%s)",
+    async (remote) => {
+      const result = await endReasonsAfterTeardown({ withSignal: true, remote });
 
-    expect(result.shuttingDown).toBe(true);
-    expect(result.reasons).toEqual(["server-shutdown"]);
-  });
+      expect(result.shuttingDown).toBe(true);
+      expect(result.reasons).toEqual(["server-shutdown"]);
+    },
+  );
 
   it("would read as a client close without the signal, because routes close first", async () => {
     const result = await endReasonsAfterTeardown({ withSignal: false });
@@ -99,19 +106,29 @@ describe("server shutdown signal", () => {
     expect(result.reasons).toEqual(["client-close"]);
   });
 
-  it("is wired around the real routes in makeServerLayer, inside the runtime services", () => {
+  it("wraps both real application compositions inside runtime services", () => {
     // Layers are opaque at runtime and the real server layer opens SQLite and binds a
     // port, so this guards the composition in server.ts itself against a reorder.
     const source = readFileSync(new URL("../server.ts", import.meta.url), "utf8");
-    const makeServerLayer = source.slice(source.indexOf("export const makeServerLayer"));
-    const application = makeServerLayer.slice(
-      makeServerLayer.indexOf("const serverApplicationLayer"),
-      makeServerLayer.indexOf("return "),
+    const local = source.slice(
+      source.indexOf("function localServerLayer"),
+      source.indexOf("type ServerApplicationLayer"),
+    );
+    const application = local.slice(
+      local.indexOf("const serverApplicationLayer"),
+      local.indexOf("return "),
     );
 
     expect(application).toContain("HttpRouter.serve(makeRoutesLayer");
-    expect(makeServerLayer).toMatch(
+    expect(local).toMatch(
       /return withServerShutdownSignal\(serverApplicationLayer\)\.pipe\(\s*(?:\/\/[^\n]*\n\s*)*Layer\.provideMerge\(RuntimeServicesLive\)/,
     );
+    expect(source).toMatch(
+      /const RemoteServerLive = withRemoteCallbackRuntime\(\s*withServerShutdownSignal\(RemoteServerApplicationLive\),\s*RuntimeServicesLive,/,
+    );
+    const remote = readFileSync(new URL("../server.remote.ts", import.meta.url), "utf8");
+    expect(remote).toContain("serveIsolatedRemoteRoutes(makeRemoteClientRoutesLayer)");
+    expect(remote).toContain("serveIsolatedRemoteRoutes(RemoteCallbackRoutesLive)");
+    expect(remote).toContain("Layer.provideMerge(serving)");
   });
 });
