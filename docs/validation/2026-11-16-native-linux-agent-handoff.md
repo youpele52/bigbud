@@ -58,6 +58,14 @@ Run the first library command on both R6 and R7 commits/source states as appropr
 
 This checkout-based path verifies Rust tests, but it does not reproduce the original transient systemd sandbox, private network, memory/task limits, staged-binary hash collection, or post-run cgroup assertions. For equivalent isolated evidence, preserve or recreate the reviewed runner and inputs described above. A fresh positive managed-service acquisition is a separate test: use a new immutable graph and account, and exercise the real backend owner/SQL context and managed lease channel. Never repurpose the pinned accounts/configurations from earlier runs.
 
+## What the OrbStack run did (informational)
+
+OrbStack was used as one way to provide a disposable Linux ARM64 execution environment from the macOS development host. It is not a project requirement; a Linux VPS or another suitable Linux ARM64 machine can run the focused commands above.
+
+For the recorded R6/R7 qualification, the host built each frozen native revision with the already-installed Rust 1.95 toolchain sources and offline Cargo cache, targeting `aarch64-unknown-linux-gnu` with a local Linux sysroot/linker. The custom `build-std` setup was test-fixture infrastructure, not an official release toolchain. The host then sent hash-verified same-build executables to the VM. Inside Linux, Python launched each test group under a separate transient systemd unit with a bounded runtime, memory, task count, CPU quota, private network, protected home directories, and a restrictive umask. The runner collected stdout/stderr and case exit codes, then checked each transient unit had disappeared and its cgroup was gone. The VM boot ID and every transferred executable hash were recorded.
+
+The Linux VM was `bb-p7-service-20261116-root1`; test artifacts were staged under the VM's task-owned `/tmp/bb-p7-native-r67-20261116-lead1` directory. Those names explain the historical receipts only. They are not prerequisites for a new run, and existing service accounts/configurations were left untouched. The exact per-case results, artifact hashes, boot ID, and cleanup receipts are in `run-r6.json`, `run-r7.json`, `SUMMARY.json`, and the full OrbStack collection described above when those temporary receipts are available.
+
 ## Continue from here
 
 The next native qualification is a positive managed-service test on a **new immutable graph and fresh account**. The current VM accounts/configurations and signed graphs are pinned evidence and must not be edited or reused for this. Exercise the real finite owner/SQL context and `acquireManagedNativeLeaseChannel`; controlled injected channels do not qualify the managed path.
