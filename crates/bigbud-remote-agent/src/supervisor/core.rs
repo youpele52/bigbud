@@ -23,6 +23,9 @@ mod admission;
 #[path = "attach.rs"]
 mod attach;
 #[cfg(unix)]
+#[path = "detach.rs"]
+mod detach;
+#[cfg(unix)]
 #[path = "drain.rs"]
 mod drain;
 #[cfg(unix)]
@@ -104,6 +107,8 @@ fn serve_connection_loop(
     watch_ids: &mut HashSet<String>,
     connection: (Writer, frame_reader::HandshakePermit),
 ) -> io::Result<()> {
+    // Ordinary connections remain available if managed-only peer evidence cannot be obtained.
+    let service_peer = crate::service_lease::Peer::read(&stream).ok();
     let (writer, handshake) = connection;
     let control_only = handshake.control_only;
     let mut reader = if control_only {
@@ -145,6 +150,29 @@ fn serve_connection_loop(
                     .ok_or_else(|| io::Error::other("supervisor publication fenced"))?,
             )
         };
+        if frame
+            .payload
+            .as_ref()
+            .is_some_and(crate::service_lease::is_request)
+        {
+            let prepared = match service_peer.clone() {
+                Some(peer) => sessions
+                    .lock()
+                    .map_err(|_| io::Error::other("agent session poisoned"))?
+                    .prepare_service_lease(
+                        frame
+                            .payload
+                            .ok_or_else(|| io::Error::other("missing payload"))?,
+                        peer,
+                    ),
+                None => Err(crate::SessionError::ServiceLeaseUnavailable),
+            };
+            match prepared {
+                Ok(work) => write_responses(&writer, vec![work.execute()])?,
+                Err(error) => write_protocol_error(&writer, &error)?,
+            }
+            continue;
+        }
         if frame.payload.as_ref().is_some_and(crate::is_pty_control) {
             let prepared = sessions
                 .lock()
@@ -270,6 +298,9 @@ fn serve_connection_loop(
                     Err(error) => write_protocol_error(&writer, &error)?,
                 }
             }
+            Some(v1::frame::Payload::PtyDetachRequest(request)) => {
+                detach::detach(&subscribers, &writer, request)?;
+            }
             Some(bigbud_protocol::v1::frame::Payload::PtyAttachRequest(request)) => {
                 attach::attach(
                     &sessions,
@@ -317,8 +348,14 @@ fn serve_connection_loop(
                     .map_err(|_| io::Error::other("agent session lock was poisoned"))?
                     .handle(frame);
                 match response {
-                    Ok(response) => {
-                        if matches!(&response.payload, Some(v1::frame::Payload::AgentHello(_))) {
+                    Ok(mut response) => {
+                        if let Some(v1::frame::Payload::AgentHello(hello)) = &mut response.payload {
+                            // Detach is a supervisor connection capability, not stdio session control.
+                            hello.capabilities.push(v1::Capability {
+                                name: "terminal.pty-detach".to_owned(),
+                                major: 1,
+                                minor: 0,
+                            });
                             handshake.take();
                         }
                         write_responses(&writer, vec![response])?;
@@ -332,6 +369,8 @@ fn serve_connection_loop(
 
 #[path = "proxy.rs"]
 mod proxy;
+#[cfg(target_os = "linux")]
+pub(crate) use proxy::forward_authenticated_proxy;
 
 pub use proxy::run_proxy;
 

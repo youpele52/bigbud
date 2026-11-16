@@ -229,3 +229,138 @@ fn pre_1_4_readers_ignore_status_and_old_writers_leave_status_unknown() {
     assert!(decoded.launch_status.is_empty());
     assert_eq!(decoded.next_sequence, 2);
 }
+
+#[test]
+fn pty_inventory_matches_shared_typescript_goldens() {
+    let request = v1::Frame {
+        payload: Some(v1::frame::Payload::PtyListRequest(v1::PtyListRequest {
+            request_id: "list-1".to_owned(),
+            expected_epoch: "epoch-1".to_owned(),
+            limit: 100,
+            ..Default::default()
+        })),
+    };
+    let response = v1::Frame {
+        payload: Some(v1::frame::Payload::PtyListResponse(v1::PtyListResponse {
+            request_id: "list-1".to_owned(),
+            agent_epoch: "epoch-1".to_owned(),
+            accepted: true,
+            snapshot_id: "a".repeat(64),
+            entries: vec![v1::PtyInventoryEntry {
+                pty_id: "pty-1".to_owned(),
+                request_digest: vec![1, 2],
+                state: "running".to_owned(),
+                pid: 42,
+                next_sequence: 2,
+                first_retained_sequence: 1,
+                verified_exit: false,
+                launch_status: "unconfirmed".to_owned(),
+            }],
+            ..Default::default()
+        })),
+    };
+    for (name, frame) in [
+        ("pty_list_request", request),
+        ("pty_list_response", response),
+    ] {
+        let bytes = golden(name);
+        assert_eq!(
+            encode_frame(&frame, DEFAULT_MAX_FRAME_BYTES).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            decode_frame(&bytes, DEFAULT_MAX_FRAME_BYTES).unwrap(),
+            frame
+        );
+    }
+}
+
+#[test]
+fn pty_detach_matches_shared_typescript_goldens() {
+    for (name, payload) in [
+        (
+            "pty_detach_request",
+            v1::frame::Payload::PtyDetachRequest(v1::PtyDetachRequest {
+                request_id: "detach".into(),
+                pty_id: "pty".into(),
+            }),
+        ),
+        (
+            "pty_detach_response",
+            v1::frame::Payload::PtyDetachResponse(v1::PtyDetachResponse {
+                request_id: "detach".into(),
+                pty_id: "pty".into(),
+                accepted: true,
+                ..Default::default()
+            }),
+        ),
+    ] {
+        let frame = v1::Frame {
+            payload: Some(payload),
+        };
+        let bytes = golden(name);
+        assert_eq!(
+            encode_frame(&frame, DEFAULT_MAX_FRAME_BYTES).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            decode_frame(&bytes, DEFAULT_MAX_FRAME_BYTES).unwrap(),
+            frame
+        );
+    }
+}
+
+#[test]
+fn pty_input_reconciliation_matches_shared_typescript_goldens() {
+    let request = v1::PtyInputReconcileRequest {
+        request_id: "receipt".into(),
+        expected_epoch: "epoch".into(),
+        pty_id: "pty".into(),
+        create_digest: vec![1; 32],
+        sequence: 1,
+        payload_digest: vec![2; 32],
+        byte_length: 4,
+    };
+    let mut frames = vec![(
+        "pty_input_reconcile_request",
+        v1::frame::Payload::PtyInputReconcileRequest(request),
+    )];
+    for (name, outcome, bytes_written) in [
+        ("pty_input_reconcile_written", "written", 4),
+        ("pty_input_reconcile_retired", "not-admitted", 0),
+    ] {
+        frames.push((
+            name,
+            v1::frame::Payload::PtyInputReconcileResponse(v1::PtyInputReconcileResponse {
+                request_id: "receipt".into(),
+                agent_epoch: "epoch".into(),
+                pty_id: "pty".into(),
+                create_digest: vec![1; 32],
+                sequence: 1,
+                payload_digest: vec![2; 32],
+                byte_length: 4,
+                outcome: outcome.into(),
+                bytes_written,
+                writer_usable: true,
+                accepted: true,
+                ..Default::default()
+            }),
+        ));
+    }
+    for (name, payload) in frames {
+        let frame = v1::Frame {
+            payload: Some(payload),
+        };
+        let bytes = golden(name);
+        assert_eq!(
+            encode_frame(&frame, DEFAULT_MAX_FRAME_BYTES).unwrap(),
+            bytes
+        );
+        assert_eq!(
+            decode_frame(&bytes, DEFAULT_MAX_FRAME_BYTES).unwrap(),
+            frame
+        );
+    }
+    let default = v1::PtyInputReconcileResponse::default();
+    assert!(!default.accepted && !default.writer_usable);
+}

@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex, mpsc};
+use std::sync::{Arc, Mutex};
+
+#[path = "jobs.output.rs"]
+mod output;
 
 use super::Subscribers;
 use super::io_helpers::{broadcast_response, broadcast_responses, remove_all_subscribers};
@@ -46,7 +49,7 @@ pub(super) fn spawn_process_job(
     std::thread::spawn(move || {
         let _completion = completion;
         let operation_id = job.operation_id.clone();
-        let (output_sender, output_receiver) = mpsc::channel();
+        let (output_sender, output_receiver) = output::channel();
         let process_thread = std::thread::spawn({
             let process_job = job.clone();
             move || {
@@ -62,11 +65,15 @@ pub(super) fn spawn_process_job(
                         cancellation: Some(&process_job.cancellation),
                     },
                     Arc::new(move |stream, bytes| {
-                        let _ = output_sender.send((stream, bytes.to_vec()));
+                        // Only loss of this job's consumer can disconnect this
+                        // handoff; client detach never drops the receiver.
+                        let _consumer_gone = output_sender.send(stream, bytes);
                     }),
                 )
             }
         });
+        // Keep draining even after cancellation: the runner must join its
+        // readers, and completion must follow all admitted output chunks.
         for (stream, bytes) in output_receiver {
             let response = sessions.lock().ok().and_then(|mut session| {
                 session

@@ -33,27 +33,14 @@ pub(super) fn known_bytes_at(parent: RawFd, name: &CStr) -> io::Result<u64> {
 
 #[cfg(target_os = "linux")]
 pub(super) fn mount_id(fd: RawFd) -> io::Result<u64> {
-    // SAFETY: zeroed is a valid initial state for libc::statx.
-    let mut stat: libc::statx = unsafe { std::mem::zeroed() };
-    let empty = c"";
-    // SAFETY: AT_EMPTY_PATH requests metadata for the live descriptor and stat is writable.
-    if unsafe {
-        libc::statx(
-            fd,
-            empty.as_ptr(),
-            libc::AT_EMPTY_PATH | libc::AT_SYMLINK_NOFOLLOW,
-            libc::STATX_MNT_ID,
-            &mut stat,
-        )
-    } != 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    if stat.stx_mask & libc::STATX_MNT_ID == 0 {
-        return Err(io::Error::other("unsupported mount identity"));
-    }
-    Ok(stat.stx_mnt_id)
+    statx::mount_id(fd)
 }
+
+/// Raw `statx(2)` so glibc and static musl builds share one path; the libc crate exposes no
+/// `statx` wrapper or struct on musl targets.
+#[cfg(target_os = "linux")]
+#[path = "unix.statx.rs"]
+mod statx;
 
 #[cfg(target_os = "macos")]
 pub(super) fn mount_id(fd: RawFd) -> io::Result<u64> {

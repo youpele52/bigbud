@@ -1,0 +1,138 @@
+{
+  "spec": {
+    "version": 2,
+    "file": "/private/agent/control-v1/registry.json",
+    "anchors": [
+      {
+        "path": "/private/agent",
+        "dev": "1",
+        "ino": "2",
+        "uid": "501",
+        "mode": 448
+      },
+      {
+        "path": "/private/agent/control-v1",
+        "dev": "1",
+        "ino": "3",
+        "uid": "501",
+        "mode": 448
+      }
+    ],
+    "all": [
+      {
+        "path": [
+          "schemaVersion"
+        ],
+        "values": [
+          3
+        ]
+      },
+      {
+        "path": [
+          "mobile",
+          "consent",
+          "enabled"
+        ],
+        "values": [
+          true
+        ]
+      }
+    ],
+    "select": [
+      {
+        "path": [
+          "mobile",
+          "gatewayLifecycle",
+          "attempts"
+        ],
+        "key": "nonce",
+        "value": "original-nonce",
+        "maxRows": 32,
+        "all": [
+          {
+            "path": [
+              "phase"
+            ],
+            "values": [
+              "attempted",
+              "child-owned"
+            ]
+          },
+          {
+            "path": [
+              "nativeOwnership",
+              "binding",
+              "configurationSha256"
+            ],
+            "valueFrom": "configurationSha256"
+          },
+          {
+            "path": [
+              "nativeOwnership",
+              "binding",
+              "guardSha256"
+            ],
+            "valueFrom": "guardSha256"
+          }
+        ]
+      },
+      {
+        "path": [
+          "pins"
+        ],
+        "key": "owner",
+        "value": "original-pin",
+        "maxRows": 128,
+        "all": [
+          {
+            "path": [
+              "buildId"
+            ],
+            "values": [
+              "original-build"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "rawUtf8": "{\"version\":2,\"file\":\"/private/agent/control-v1/registry.json\",\"anchors\":[{\"path\":\"/private/agent\",\"dev\":\"1\",\"ino\":\"2\",\"uid\":\"501\",\"mode\":448},{\"path\":\"/private/agent/control-v1\",\"dev\":\"1\",\"ino\":\"3\",\"uid\":\"501\",\"mode\":448}],\"all\":[{\"path\":[\"schemaVersion\"],\"values\":[3]},{\"path\":[\"mobile\",\"consent\",\"enabled\"],\"values\":[true]}],\"select\":[{\"path\":[\"mobile\",\"gatewayLifecycle\",\"attempts\"],\"key\":\"nonce\",\"value\":\"original-nonce\",\"maxRows\":32,\"all\":[{\"path\":[\"phase\"],\"values\":[\"attempted\",\"child-owned\"]},{\"path\":[\"nativeOwnership\",\"binding\",\"configurationSha256\"],\"valueFrom\":\"configurationSha256\"},{\"path\":[\"nativeOwnership\",\"binding\",\"guardSha256\"],\"valueFrom\":\"guardSha256\"}]},{\"path\":[\"pins\"],\"key\":\"owner\",\"value\":\"original-pin\",\"maxRows\":128,\"all\":[{\"path\":[\"buildId\"],\"values\":[\"original-build\"]}]}]}",
+  "guardSha256": "733eb05bc57dc24119aa3930979ef762c74b0da6375c728efe857d97f3f896f8",
+  "configurationSha256": "0707070707070707070707070707070707070707070707070707070707070707",
+  "source": {
+    "schemaVersion": 3,
+    "mobile": {
+      "consent": {
+        "enabled": true
+      },
+      "gatewayLifecycle": {
+        "attempts": [
+          {
+            "nonce": "unrelated",
+            "phase": "exit-confirmed"
+          },
+          {
+            "nonce": "original-nonce",
+            "phase": "attempted",
+            "nativeOwnership": {
+              "binding": {
+                "guardSha256": "733eb05bc57dc24119aa3930979ef762c74b0da6375c728efe857d97f3f896f8",
+                "configurationSha256": "0707070707070707070707070707070707070707070707070707070707070707"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "pins": [
+      {
+        "owner": "other",
+        "buildId": "other"
+      },
+      {
+        "owner": "original-pin",
+        "buildId": "original-build"
+      }
+    ]
+  }
+}

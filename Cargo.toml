@@ -1,7 +1,9 @@
 [workspace]
 members = [
+  "crates/bigbud-cli-launcher",
   "crates/bigbud-computer-use",
   "crates/bigbud-desktop-supervisor",
+  "crates/bigbud-mobile-gateway",
   "crates/bigbud-protocol",
   "crates/bigbud-system",
   "crates/bigbud-remote-agent",
@@ -21,6 +23,8 @@ prost = "0.14"
 prost-build = "0.14"
 protoc-bin-vendored = "3.2.0"
 sha2 = "0.10"
+serde_json = "1"
+serde_core = { version = "1", default-features = false, features = ["std"] }
 thiserror = "2"
 notify = "8.2"
 sysinfo = { version = "=0.39.6", default-features = false, features = [

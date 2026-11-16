@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "stateDir": "/private/state",
+  "executable": "/private/gateway",
+  "args": [
+    "",
+    "--assets-dir",
+    "/private/state/remote-mobile-runtime-v1/assets-00000000000000000000000000000000"
+  ],
+  "environment": [
+    {
+      "name": "UPSTREAM_CREDENTIAL",
+      "value": "synthetic-only"
+    }
+  ],
+  "guardUtf8": "{\"version\":1,\"file\":\"/private/control/registry.json\",\"anchors\":[{\"path\":\"/private/control\",\"dev\":\"1\",\"ino\":\"2\",\"uid\":\"501\",\"mode\":448}],\"all\":[{\"path\":[\"enabled\"],\"values\":[true]}],\"select\":[]}",
+  "assetsGeneration": "assets-00000000000000000000000000000000",
+  "assetsReceiptSize": 1234,
+  "assetsReceiptSha256": "0606060606060606060606060606060606060606060606060606060606060606",
+  "assetsArgument": "--assets-dir",
+  "executableSha256": "0202020202020202020202020202020202020202020202020202020202020202",
+  "sha256": "ead07f09a9306795f7d3adcf9fbe8a4d8c7174715a95544498c61ac76689f346"
+}

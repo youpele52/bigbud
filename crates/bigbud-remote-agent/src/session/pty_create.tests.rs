@@ -76,7 +76,14 @@ fn failed_real_launch_is_not_dispatched_again_after_executable_appears() {
     let mut request = fixture.request("failed");
     let original = failure(fixture.session.prepare_pty_create(request.clone()));
     assert!(original.contains("Exec"), "{original}");
-    std::os::unix::fs::symlink("/bin/sh", &request.shell).unwrap();
+    // An exec wrapper, not a symlink: busybox (Alpine) picks its applet from argv[0], so a link
+    // named `shell` would fail with "applet not found" on musl hosts.
+    fs::write(&request.shell, "#!/bin/sh\nexec /bin/sh \"$@\"\n").unwrap();
+    fs::set_permissions(
+        &request.shell,
+        std::os::unix::fs::PermissionsExt::from_mode(0o755),
+    )
+    .unwrap();
     request.request_id = "retry".to_owned();
     assert_eq!(
         failure(fixture.session.prepare_pty_create(request.clone())),
@@ -336,7 +343,7 @@ fn shell_profile_capability_is_independent_and_versioned() {
     let Some(v1::frame::Payload::AgentHello(hello)) = frame.payload else {
         panic!("expected agent hello");
     };
-    assert_eq!(hello.protocol_minor, 5);
+    assert_eq!(hello.protocol_minor, PROTOCOL_MINOR);
     for name in ["terminal.pty", "terminal.shell-profiles"] {
         let capabilities: Vec<_> = hello
             .capabilities

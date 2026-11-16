@@ -35,15 +35,23 @@ impl AgentSession {
                     ("process.run", 1),
                     ("process.attach", 1),
                     ("terminal.pty", 1),
+                    ("terminal.pty-inventory", 1),
+                    ("terminal.pty-input-reconcile", 1),
                     ("terminal.shell-profiles", 1),
                     ("supervisor.shutdown", 1),
                     ("supervisor.restart", 1),
+                    ("service.lease", 1),
                 ]
                 .into_iter()
+                .filter(|(name, _)| {
+                    (*name != "terminal.pty-input-reconcile" || cfg!(unix))
+                        && (*name != "service.lease" || self.has_managed_service_account())
+                })
                 .map(|(name, major)| v1::Capability {
                     name: name.to_owned(),
                     major,
-                    minor: 0,
+                    // 1.2 adds computed guard-v2 bindings and post-request refresh.
+                    minor: if name == "service.lease" { 2 } else { 0 },
                 })
                 .collect(),
                 max_frame_bytes: bigbud_protocol::DEFAULT_MAX_FRAME_BYTES as u64,

@@ -4,6 +4,7 @@ package bigbud.remote_agent.v1;
 
 import "remote-agent/common.proto";
 import "remote-agent/process.proto";
+import "remote-agent/service_lease.proto";
 import "remote-agent/pty.proto";
 import "remote-agent/resource_cleanup.proto";
 import "remote-agent/workspace.proto";
@@ -62,6 +63,12 @@ message Frame {
     PtyExited pty_exited = 55;
     PtyInputResponse pty_input_response = 56;
     PtyOutputAckResponse pty_output_ack_response = 57;
+    PtyListRequest pty_list_request = 60;
+    PtyListResponse pty_list_response = 61;
+    PtyDetachRequest pty_detach_request = 62;
+    PtyDetachResponse pty_detach_response = 63;
+    PtyInputReconcileRequest pty_input_reconcile_request = 64;
+    PtyInputReconcileResponse pty_input_reconcile_response = 65;
     ResourceCleanupRootBootstrapRequest resource_cleanup_root_bootstrap_request = 100;
     ResourceCleanupRootBootstrapResponse resource_cleanup_root_bootstrap_response = 101;
     ResourceCleanupRequest resource_cleanup_request = 102;
@@ -70,5 +77,13 @@ message Frame {
     ResourceCleanupKeepAliveResponse resource_cleanup_keep_alive_response = 105;
     ResourceCleanupCancelRequest resource_cleanup_cancel_request = 106;
     ResourceCleanupCancelResponse resource_cleanup_cancel_response = 107;
+    .bigbud.remote_agent.service_lease.v1.StartRequest service_lease_start_request = 120;
+    .bigbud.remote_agent.service_lease.v1.Response service_lease_start_response = 121;
+    .bigbud.remote_agent.service_lease.v1.QueryRequest service_lease_status_request = 122;
+    .bigbud.remote_agent.service_lease.v1.Response service_lease_status_response = 123;
+    .bigbud.remote_agent.service_lease.v1.QueryRequest service_lease_resume_request = 124;
+    .bigbud.remote_agent.service_lease.v1.Response service_lease_resume_response = 125;
+    .bigbud.remote_agent.service_lease.v1.ControlRequest service_lease_control_request = 126;
+    .bigbud.remote_agent.service_lease.v1.Response service_lease_control_response = 127;
   }
 }

@@ -1,0 +1,65 @@
+syntax = "proto3";
+package bigbud.remote_agent.service_lease.v1;
+import "remote-agent/process.proto";
+
+// Private managed-account capability. Never exposed to a renderer or journal.
+message Binding {
+  string authority = 1;
+  string installation = 2;
+  string native_epoch = 3;
+  string nonce = 4;
+  bytes publication_sha256 = 5;
+  bytes executable_sha256 = 6;
+  bytes assets_sha256 = 7;
+  bytes configuration_sha256 = 8;
+  bytes guard_sha256 = 9;
+}
+message StartRequest {
+  string request_id = 1;
+  Binding binding = 2;
+  string executable = 3;
+  repeated string args = 4;
+  repeated bigbud.remote_agent.v1.ProcessEnvironment environment = 5;
+  bytes capability = 6;
+  // Guard-v2 JSON uses native-derived valueFrom hashes; service.lease1.2 required.
+  bytes guard = 7;
+  // Immutable receipt at trusted state/fixed namespace, never a caller absolute path.
+  string assets_generation = 8;
+  uint64 assets_receipt_size = 9;
+  bytes assets_receipt_sha256 = 10;
+  string assets_argument = 11;
+}
+// Status only: absent binding+empty capability requests redacted current inventory.
+// Empty inventory is never an exit/death proof for an older native epoch.
+message QueryRequest {
+  string request_id = 1;
+  Binding binding = 2;
+  bytes capability = 3;
+}
+message ControlRequest {
+  string request_id = 1;
+  Binding binding = 2;
+  bytes capability = 3;
+  uint64 generation = 4;
+  // detach, stop, cancel-pending, or teardown-only stop-original.
+  string action = 5;
+}
+message Controller {
+  uint32 pid = 1;
+  string boot = 2;
+  string started = 3;
+}
+message Response {
+  string request_id = 1;
+  bool accepted = 2;
+  string state = 3;
+  string error_code = 4;
+  Binding binding = 5;
+  uint64 generation = 6;
+  uint32 original_child_pid = 7;
+  // Only a successful authenticated resume may return original bootstrap.
+  repeated bigbud.remote_agent.v1.ProcessEnvironment bootstrap = 8;
+  Controller original_controller = 9;
+  Controller current_controller = 10;
+  Controller previous_controller = 11;
+}

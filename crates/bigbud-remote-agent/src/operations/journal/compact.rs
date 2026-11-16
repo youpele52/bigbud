@@ -13,8 +13,27 @@ fn pressure_relief_target(maximum_bytes: usize) -> usize {
 }
 
 impl OperationJournal {
+    #[cfg(test)]
     pub(super) fn compact(&self) -> Result<(), OperationJournalError> {
-        let operations = fold_records(self.records()?);
+        let guard = JournalGuard::acquire(&self.path)?;
+        self.compact_under_guard(&guard)
+    }
+
+    pub(super) fn compact_under_guard(
+        &self,
+        guard: &JournalGuard,
+    ) -> Result<(), OperationJournalError> {
+        #[cfg(unix)]
+        let recovery = guard.inspect_temporaries(self.maximum_bytes)?;
+        #[cfg(unix)]
+        let validate_authority = recovery.has_candidates();
+        #[cfg(not(unix))]
+        let validate_authority = false;
+        let operations = fold_records(self.records_under_guard(guard, validate_authority)?);
+        #[cfg(unix)]
+        let current = guard.current(false)?;
+        #[cfg(unix)]
+        guard.recover(recovery)?;
         let current_unix_ms = unix_now_ms()?;
         let running = self.running_operations().clone();
         let mut encoded = Vec::new();
@@ -49,9 +68,17 @@ impl OperationJournal {
                 maximum: self.maximum_bytes,
             });
         }
-        self.replace_contents(&compacted)
+        #[cfg(unix)]
+        {
+            guard.replace(&current, &compacted, self.maximum_bytes)
+        }
+        #[cfg(not(unix))]
+        {
+            self.replace_contents(&compacted)
+        }
     }
 
+    #[cfg(not(unix))]
     fn replace_contents(&self, compacted: &[Vec<u8>]) -> Result<(), OperationJournalError> {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)

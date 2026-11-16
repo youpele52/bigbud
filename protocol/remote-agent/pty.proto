@@ -127,7 +127,76 @@ message PtyInputResponse {
   string error_message = 5;
 }
 
+// Added in 1.7; requires terminal.pty-input-reconcile v1. This may atomically
+// retire the next never-admitted sequence WITHOUT writing any input bytes.
+message PtyInputReconcileRequest {
+  string request_id = 1;
+  string expected_epoch = 2;
+  string pty_id = 3;
+  bytes create_digest = 4;
+  uint64 sequence = 5;
+  bytes payload_digest = 6;
+  uint64 byte_length = 7;
+}
+
+message PtyInputReconcileResponse {
+  string request_id = 1;
+  string agent_epoch = 2;
+  string pty_id = 3;
+  bytes create_digest = 4;
+  uint64 sequence = 5;
+  bytes payload_digest = 6;
+  uint64 byte_length = 7;
+  // accepted, writing, written, failed-before-write, partial-unknown, not-admitted.
+  // Empty/unknown values confer no input authority. Written is PTY syscall delivery,
+  // not shell execution. Native writability is a separate observation.
+  string outcome = 8;
+  uint64 bytes_written = 9;
+  bool writer_usable = 10;
+  bool accepted = 11;
+  string error_code = 12;
+}
+
 message PtyOutputAckResponse {
+  string request_id = 1;
+  string pty_id = 2;
+  bool accepted = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+// Added in 1.6; requires terminal.pty-inventory v1. Read-only live inventory.
+message PtyListRequest {
+  string request_id = 1;
+  string expected_epoch = 2;
+  string after_pty_id = 3;
+  uint32 limit = 4;
+  // Membership fingerprint from the preceding page; empty starts a new scan.
+  string snapshot_id = 5;
+}
+message PtyInventoryEntry {
+  string pty_id = 1;
+  bytes request_digest = 2;
+  string state = 3;
+  uint64 pid = 4;
+  uint64 next_sequence = 5;
+  uint64 first_retained_sequence = 6;
+  bool verified_exit = 7;
+  string launch_status = 8;
+}
+message PtyListResponse {
+  string request_id = 1;
+  string agent_epoch = 2;
+  repeated PtyInventoryEntry entries = 3;
+  string next_after_pty_id = 4;
+  string snapshot_id = 5;
+  bool accepted = 6;
+  string error_code = 7;
+}
+
+// Removes only this connection's subscription, leaving the PTY and retention intact.
+message PtyDetachRequest { string request_id = 1; string pty_id = 2; }
+message PtyDetachResponse {
   string request_id = 1;
   string pty_id = 2;
   bool accepted = 3;

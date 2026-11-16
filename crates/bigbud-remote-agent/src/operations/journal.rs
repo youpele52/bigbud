@@ -1,6 +1,10 @@
 use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::fs;
+#[cfg(not(unix))]
+use std::fs::File;
+#[cfg(any(not(unix), test))]
+use std::fs::OpenOptions;
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -15,6 +19,11 @@ mod compact;
 mod inspect;
 #[path = "journal/recovery.rs"]
 mod recovery;
+#[cfg(unix)]
+#[path = "journal/temporary.rs"]
+mod temporary;
+#[cfg(unix)]
+use temporary::Guard as JournalGuard;
 
 pub use inspect::{JournalInspection, inspect_active_operations, validate_journal_read_only};
 
@@ -64,13 +73,15 @@ pub enum JournalRecord {
 #[derive(Debug, thiserror::Error)]
 pub enum OperationJournalError {
     #[error("operation journal I/O failed: {0}")]
-    Io(#[source] io::Error),
+    Io(#[from] io::Error),
     #[error("operation journal is corrupt: {0}")]
     Corrupt(&'static str),
     #[error("operation journal exceeded its {maximum} byte limit")]
     Full { maximum: usize },
     #[error("operation journal record is too large")]
     RecordTooLarge,
+    #[error("operation journal compaction deferred: {0}")]
+    CompactionDeferred(&'static str),
 }
 
 #[derive(Debug)]
@@ -93,6 +104,7 @@ impl OperationJournal {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(OperationJournalError::Io)?;
         }
+        #[cfg(not(unix))]
         if path.exists()
             && fs::symlink_metadata(&path)
                 .map_err(OperationJournalError::Io)?
@@ -101,12 +113,12 @@ impl OperationJournal {
         {
             return Err(OperationJournalError::Corrupt("journal path is a symlink"));
         }
-        let mut file = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .append(true)
-            .open(&path)
-            .map_err(OperationJournalError::Io)?;
+        let guard = JournalGuard::acquire(&path)?;
+        #[cfg(unix)]
+        let recovery = guard.inspect_temporaries(maximum_bytes)?;
+        #[cfg(unix)]
+        guard.require_current_for_recovery(&recovery)?;
+        let mut file = guard.current(true)?;
         let length = file.metadata().map_err(OperationJournalError::Io)?.len() as usize;
         if length == 0 {
             file.write_all(MAGIC).map_err(OperationJournalError::Io)?;
@@ -117,9 +129,8 @@ impl OperationJournal {
             });
         } else {
             let mut magic = [0; MAGIC.len()];
-            let mut reader = File::open(&path).map_err(OperationJournalError::Io)?;
-            reader
-                .read_exact(&mut magic)
+            file.rewind().map_err(OperationJournalError::Io)?;
+            file.read_exact(&mut magic)
                 .map_err(OperationJournalError::Io)?;
             if magic != MAGIC {
                 return Err(OperationJournalError::Corrupt("invalid journal header"));
@@ -131,24 +142,53 @@ impl OperationJournal {
             maximum_bytes,
             running: Mutex::new(HashSet::new()),
         };
-        journal.records()?;
+        #[cfg(unix)]
+        let validate_authority = recovery.has_candidates();
+        #[cfg(not(unix))]
+        let validate_authority = false;
+        journal.records_under_guard(&guard, validate_authority)?;
+        #[cfg(unix)]
+        guard.recover(recovery)?;
         Ok(journal)
     }
 
     pub fn records(&self) -> Result<Vec<JournalRecord>, OperationJournalError> {
-        let mut file = File::open(&self.path).map_err(OperationJournalError::Io)?;
+        let guard = JournalGuard::acquire(&self.path)?;
+        #[cfg(unix)]
+        let validate_authority = guard
+            .inspect_temporaries(self.maximum_bytes)?
+            .has_candidates();
+        #[cfg(not(unix))]
+        let validate_authority = false;
+        self.records_under_guard(&guard, validate_authority)
+    }
+
+    fn records_under_guard(
+        &self,
+        guard: &JournalGuard,
+        validate_authority: bool,
+    ) -> Result<Vec<JournalRecord>, OperationJournalError> {
+        let mut file = guard.current(false)?;
         let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)
+        (&mut file)
+            .take((self.maximum_bytes as u64).saturating_add(1))
+            .read_to_end(&mut bytes)
             .map_err(OperationJournalError::Io)?;
+        if bytes.len() > self.maximum_bytes {
+            return Err(OperationJournalError::Full {
+                maximum: self.maximum_bytes,
+            });
+        }
         if bytes.get(..MAGIC.len()) != Some(MAGIC) {
             return Err(OperationJournalError::Corrupt("invalid journal header"));
         }
         let (records, valid_length) = decode_complete_records(&bytes)?;
+        if validate_authority {
+            // Cleanup authority requires a valid complete prefix BEFORE any
+            // tail repair. Keep ordinary no-candidate restore semantics intact.
+            let _unmatched_history = inspect::validate_record_relationships(&records)?;
+        }
         if valid_length != bytes.len() {
-            let file = OpenOptions::new()
-                .write(true)
-                .open(&self.path)
-                .map_err(OperationJournalError::Io)?;
             file.set_len(valid_length as u64)
                 .map_err(OperationJournalError::Io)?;
             file.sync_all().map_err(OperationJournalError::Io)?;
@@ -157,19 +197,32 @@ impl OperationJournal {
     }
 
     pub fn append(&self, record: &JournalRecord) -> Result<(), OperationJournalError> {
+        let guard = JournalGuard::acquire(&self.path)?;
+        self.append_under_guard(record, &guard)
+    }
+
+    fn append_under_guard(
+        &self,
+        record: &JournalRecord,
+        guard: &JournalGuard,
+    ) -> Result<(), OperationJournalError> {
         let encoded = encode_record(record)?;
         let record_size = 4usize
             .checked_add(encoded.len())
             .ok_or(OperationJournalError::RecordTooLarge)?;
-        let current_size = fs::metadata(&self.path)
+        let current_size = guard
+            .current(false)?
+            .metadata()
             .map_err(OperationJournalError::Io)?
             .len() as usize;
         if current_size
             .checked_add(record_size)
             .is_none_or(|size| size > self.maximum_bytes)
         {
-            self.compact()?;
-            let compacted_size = fs::metadata(&self.path)
+            self.compact_under_guard(guard)?;
+            let compacted_size = guard
+                .current(false)?
+                .metadata()
                 .map_err(OperationJournalError::Io)?
                 .len() as usize;
             if compacted_size
@@ -181,9 +234,8 @@ impl OperationJournal {
                 });
             }
         }
-        let mut file = OpenOptions::new()
-            .append(true)
-            .open(&self.path)
+        let mut file = guard.current(false)?;
+        file.seek(SeekFrom::End(0))
             .map_err(OperationJournalError::Io)?;
         file.write_all(&(encoded.len() as u32).to_be_bytes())
             .map_err(OperationJournalError::Io)?;
@@ -211,6 +263,28 @@ impl OperationJournal {
         // The set only widens what compaction keeps; a panic while it was held
         // cannot leave it in a state that would drop retained work.
         self.running.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+// This phase does not add cleanup or Unix locking claims on other platforms.
+#[cfg(not(unix))]
+struct JournalGuard {
+    path: PathBuf,
+}
+#[cfg(not(unix))]
+impl JournalGuard {
+    fn acquire(path: &Path) -> Result<Self, OperationJournalError> {
+        Ok(Self {
+            path: path.to_owned(),
+        })
+    }
+    fn current(&self, create: bool) -> Result<File, OperationJournalError> {
+        OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(create)
+            .open(&self.path)
+            .map_err(OperationJournalError::Io)
     }
 }
 

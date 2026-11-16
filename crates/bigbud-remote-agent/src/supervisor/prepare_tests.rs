@@ -260,6 +260,7 @@ fn blocks_takeover_while_a_real_supervisor_owns_an_active_pty() {
             cols: 80,
             rows: 24,
             environment: Vec::new(),
+            profile_launch: false,
         }),
     );
     let _ = read_until(

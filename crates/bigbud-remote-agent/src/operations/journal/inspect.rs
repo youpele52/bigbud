@@ -8,6 +8,12 @@ use super::{JournalRecord, MAGIC, MAX_OPERATION_JOURNAL_BYTES, OperationJournalE
 #[path = "inspect.relationships.rs"]
 mod relationships;
 
+pub(super) fn validate_record_relationships(
+    records: &[JournalRecord],
+) -> Result<bool, OperationJournalError> {
+    relationships::validate(records)
+}
+
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 

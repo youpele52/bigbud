@@ -34,8 +34,15 @@ mod pty_controls;
 mod pty_create;
 #[path = "pty_handlers.rs"]
 mod pty_handlers;
+#[path = "pty_input_reconcile.rs"]
+mod pty_input_reconcile;
+#[path = "pty_inventory.rs"]
+mod pty_inventory;
 #[path = "pty_profile.rs"]
 mod pty_profile;
+#[cfg(unix)]
+#[path = "service_lease.rs"]
+mod service_lease;
 pub use pty_controls::{PreparedPtyControl, is_pty_control};
 use pty_handlers::PtySession;
 #[path = "retirement.rs"]
@@ -120,6 +127,8 @@ pub enum SessionError {
     UnexpectedMessage,
     #[error("supervisor is stopping and is not accepting new work")]
     Restarting,
+    #[error("managed service lease is unavailable")]
+    ServiceLeaseUnavailable,
 }
 
 pub struct AgentSession {
@@ -134,6 +143,8 @@ pub struct AgentSession {
     workspace_roots: HashMap<String, WorkspaceRoot>,
     agent_instance_id: String,
     agent_epoch: String,
+    #[cfg(unix)]
+    managed_service_lease: Option<Arc<crate::service_lease::Bridge>>,
 }
 
 struct AcceptedOperation {
@@ -211,9 +222,37 @@ impl AgentSession {
             workspace_roots: HashMap::new(),
             agent_instance_id: format!("agent-{}", std::process::id()),
             agent_epoch: epoch,
+            #[cfg(unix)]
+            managed_service_lease: None,
         }
     }
 
+    fn has_managed_service_account(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.managed_service_lease.is_some()
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    }
+    fn has_active_service_lease(&self) -> bool {
+        #[cfg(unix)]
+        {
+            self.managed_service_lease
+                .as_ref()
+                .is_some_and(|lease| lease.active())
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    }
+    #[cfg(unix)]
+    pub(crate) fn service_lease_for_retirement(&self) -> Option<Arc<crate::service_lease::Bridge>> {
+        self.managed_service_lease.as_ref().map(Arc::clone)
+    }
     pub fn handle(&mut self, frame: v1::Frame) -> Result<v1::Frame, SessionError> {
         match frame.payload {
             Some(v1::frame::Payload::ClientHello(hello)) => self.handle_client_hello(hello),
@@ -222,6 +261,12 @@ impl AgentSession {
             }
             Some(v1::frame::Payload::CancelRequest(request)) if self.ready => {
                 self.handle_cancel_request(request)
+            }
+            Some(v1::frame::Payload::PtyListRequest(request)) if self.ready => {
+                Ok(self.handle_pty_list(request))
+            }
+            Some(v1::frame::Payload::PtyInputReconcileRequest(request)) if self.ready => {
+                Ok(self.handle_pty_input_reconcile(request))
             }
             _ if self.ready && !self.accepting_work => Err(SessionError::Restarting),
             Some(v1::frame::Payload::WorkspaceOpenRequest(request)) if self.ready => {

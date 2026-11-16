@@ -7,6 +7,12 @@ impl PtyHandle {
         self.inner.launch_outcome
     }
 
+    #[cfg(not(unix))]
+    pub fn launch_outcome(&self) -> LaunchOutcome {
+        // Non-Unix PTY creation is unsupported; never report verified launch evidence.
+        LaunchOutcome::Unconfirmed(LaunchUnknown::ChannelError)
+    }
+
     #[cfg(unix)]
     pub fn write_input(&self, sequence: u64, bytes: &[u8]) -> Result<bool, PtyError> {
         if self.snapshot()?.state != PtyState::Running {
@@ -22,6 +28,23 @@ impl PtyHandle {
     #[cfg(unix)]
     pub fn input_status(&self, sequence: u64) -> Result<InputOutcome, PtyError> {
         self.inner.input.status(sequence)
+    }
+
+    #[cfg(unix)]
+    pub fn reconcile_input(
+        &self,
+        sequence: u64,
+        sha256: [u8; 32],
+        byte_length: usize,
+        allow_retire: bool,
+    ) -> Result<InputReceipt, PtyError> {
+        let running = self.snapshot()?.state == PtyState::Running;
+        let mut receipt =
+            self.inner
+                .input
+                .reconcile(sequence, sha256, byte_length, allow_retire && running)?;
+        receipt.writer_usable &= running;
+        Ok(receipt)
     }
 
     #[cfg(not(unix))]

@@ -15,16 +15,20 @@ enum Authority {
 
 /// The unreaped direct leader anchors this PID/PGID's identity. No other path
 /// may waitpid it. Signals and authority invalidation/reap share one permit.
-/// Group signalling does not certify escaped/job-control descendant cleanup.
+/// Linux termination also retains this anchor until session jobs have exited.
 pub(super) struct Child {
     pid: i32,
     authority: Mutex<Authority>,
+    #[cfg(target_os = "linux")]
+    stopping: Mutex<Option<session::Session>>,
 }
 impl Child {
     pub fn new(pid: i32) -> Self {
         Self {
             pid,
             authority: Mutex::new(Authority::Live),
+            #[cfg(target_os = "linux")]
+            stopping: Mutex::new(None),
         }
     }
     pub fn reaped(&self) -> bool {
@@ -34,6 +38,18 @@ impl Child {
     }
     pub fn signal(&self, signal: i32) -> io::Result<()> {
         self.signal_with(|pid| {
+            #[cfg(target_os = "linux")]
+            if matches!(signal, libc::SIGTERM | libc::SIGKILL | libc::SIGHUP) {
+                let mut stopping = self
+                    .stopping
+                    .lock()
+                    .map_err(|_| io::Error::other("PTY session cleanup poisoned"))?;
+                // Install the fence BEFORE fallible discovery/signalling. Failure
+                // cannot turn a later direct-child reap into tree-exit evidence.
+                return stopping
+                    .get_or_insert_with(session::Session::new)
+                    .signal(pid, signal);
+            }
             // SAFETY: permit holds an unreaped, exclusively owned forkpty leader;
             // its positive PID cannot be reused until our serialized reap.
             if unsafe { libc::kill(-pid, signal) } == 0 {
@@ -73,6 +89,34 @@ impl Child {
     }
     pub fn poll(&self) -> io::Result<Option<Exit>> {
         self.poll_with(|pid| {
+            #[cfg(target_os = "linux")]
+            {
+                let mut stopping = self
+                    .stopping
+                    .lock()
+                    .map_err(|_| io::Error::other("PTY session cleanup poisoned"))?;
+                if stopping.is_none() {
+                    if !session::leader_exited(pid)? {
+                        // Do not race this observation with a reaping waitpid:
+                        // the leader could exit/fork a final job between calls.
+                        return Ok(None);
+                    }
+                    // Natural shell exit is not session completion either. Keep
+                    // the SID anchor for surviving jobs and a later explicit Stop;
+                    // observation mode never signals them. No /proc scan is needed
+                    // on the ordinary running-shell polling path.
+                    *stopping = Some(session::Session::new());
+                }
+                if let Some(stopping) = stopping.as_mut() {
+                    match stopping.settled(pid) {
+                        Ok(true) => {}
+                        // Discovery/identity failure is explicitly NOT exit evidence.
+                        // Retain the unreaped anchor and retry observation; callers'
+                        // bounded Stop wait stays uncertain, with escalation available.
+                        Ok(false) | Err(_) => return Ok(None),
+                    }
+                }
+            }
             let mut status = 0;
             // SAFETY: this is the only reaper, under the same signal permit.
             // Authority is invalidated BEFORE waitpid can release/reuse the PID.
@@ -145,3 +189,7 @@ impl Child {
 #[cfg(test)]
 #[path = "child.tests.rs"]
 mod tests;
+
+#[cfg(target_os = "linux")]
+#[path = "child.session.rs"]
+mod session;

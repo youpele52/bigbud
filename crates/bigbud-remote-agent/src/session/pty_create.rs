@@ -1,8 +1,8 @@
 use super::*;
 
 pub(super) struct PtyCreateFailure {
-    request_digest: Vec<u8>,
-    error: String,
+    pub(super) request_digest: Vec<u8>,
+    pub(super) error: String,
 }
 
 impl AgentSession {

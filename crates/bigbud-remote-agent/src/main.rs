@@ -133,7 +133,13 @@ fn run_check(capabilities: bool) {
         std::env::consts::OS,
         std::env::consts::ARCH,
         if capabilities {
-            "\tinspect-local=1"
+            if cfg!(windows) {
+                "\tinspect-local=1\tlocal-control-pipe=1"
+            } else if cfg!(target_os = "linux") {
+                "\tinspect-local=1\tbackend-service=2\tbackend-service-graph=1"
+            } else {
+                "\tinspect-local=1"
+            }
         } else {
             ""
         },
@@ -141,34 +147,70 @@ fn run_check(capabilities: bool) {
 }
 
 #[cfg(unix)]
-fn run_supervisor_mode(root: std::path::PathBuf) -> Result<()> {
+fn run_supervisor_mode(
+    root: std::path::PathBuf,
+    managed: Option<bigbud_remote_agent::backend_service::ManagedAccountContext>,
+) -> Result<()> {
     let state = AgentState::open_for_supervisor(&root)
         .with_context(|| format!("failed to open supervisor state at {}", root.display()))?;
-    run_supervisor(
-        AgentSession::with_epoch_and_journal(
+    let logging = bigbud_remote_agent::supervisor::SupervisorLogging::start(&root)
+        .context("failed to start bounded supervisor logging")?;
+    let result = (|| {
+        let mut session = AgentSession::with_epoch_and_journal(
             state.epoch().to_owned(),
             state.operation_journal_path(),
         )
-        .context("failed to restore the supervisor session journal")?,
-        &supervisor_socket_path(root),
-    )
-    .context("remote agent supervisor failed")
+        .context("failed to restore the supervisor session journal")?;
+        if let Some(context) = managed {
+            session
+                .set_managed_service_account(context)
+                .context("managed service lease unavailable")?;
+        }
+        run_supervisor(session, &supervisor_socket_path(root))
+            .context("remote agent supervisor failed")
+    })();
+    if let Err(error) = &result {
+        eprintln!("{error}");
+    }
+    let log_result = logging
+        .finish()
+        .context("supervisor logging did not settle");
+    result.and(log_result)
 }
 
 #[cfg(not(unix))]
-fn run_supervisor_mode(_root: std::path::PathBuf) -> Result<()> {
+fn run_supervisor_mode(
+    _root: std::path::PathBuf,
+    _managed: Option<bigbud_remote_agent::backend_service::ManagedAccountContext>,
+) -> Result<()> {
     anyhow::bail!("the remote agent supervisor requires Unix-domain sockets on this platform")
 }
 
 fn main() -> Result<()> {
     match std::env::args().nth(1).as_deref() {
+        #[cfg(unix)]
+        Some("--service-lease-monitor") => bigbud_remote_agent::service_lease::run_monitor()
+            .context("private service lease monitor failed"),
+        #[cfg(unix)]
+        Some("--backend-service-command-monitor") => {
+            bigbud_remote_agent::backend_service::run_command_monitor(std::env::args_os().skip(2))
+                .context("bounded command monitor failed")
+        }
+        Some("--backend-service") => bigbud_remote_agent::backend_service::run_cli_with_supervisor(
+            std::env::args().skip(2),
+            |root, managed| {
+                run_supervisor_mode(root, Some(managed))
+                    .map_err(|_| bigbud_remote_agent::backend_service::ServiceError::Supervisor)
+            },
+        )
+        .context("account-service operation failed"),
         Some("--check") => {
             run_check(std::env::args().nth(2).as_deref() == Some("--capabilities"));
             Ok(())
         }
         Some("--supervisor") => {
             let root = state_root().context("HOME is required for supervisor mode")?;
-            run_supervisor_mode(root)
+            run_supervisor_mode(root, None)
         }
         Some("--prepare-supervisor") => {
             let root = state_root().context("HOME is required to prepare the supervisor")?;
@@ -220,6 +262,12 @@ fn main() -> Result<()> {
         }
         Some("--resource-cleanup") => bigbud_remote_agent::resource_cleanup::run_stdio()
             .context("resource cleanup stdio mode failed"),
+        Some("--local-control-server") => {
+            bigbud_remote_agent::local_control::run_server().context("local pipe server failed")
+        }
+        Some("--local-control-client") => {
+            bigbud_remote_agent::local_control::run_client().context("local pipe client failed")
+        }
         Some("--inspect-local") => {
             bigbud_remote_agent::inspect_local::run_stdio().context("local inspection mode failed")
         }

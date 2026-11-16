@@ -359,3 +359,6 @@ fn real_supervisor_expires_half_frames_and_no_hello_without_expiring_established
         let (_peer, _) = rig.connect();
     }
 }
+
+#[path = "detach.tests.rs"]
+mod detach_tests;

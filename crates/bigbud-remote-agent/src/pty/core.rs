@@ -159,7 +159,7 @@ mod platform;
 #[cfg(unix)]
 pub use cleanup::{CleanupOwner, settled as pending_cleanup_settled};
 #[cfg(unix)]
-pub use input::InputOutcome;
+pub use input::{InputOutcome, InputReceipt};
 
 #[cfg(unix)]
 #[path = "environment.rs"]
