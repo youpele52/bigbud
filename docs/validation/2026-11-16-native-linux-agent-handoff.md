@@ -29,6 +29,35 @@ The R6 build needed two public TypeScript files referenced by `include_str!`: `a
 
 The exact original `vm.py`, build-driver invocation, dependency cache, and emitted test input tar are not checked in. Until those are restored or a replacement runner is independently reviewed, do not present a rerun as identical to the recorded run. The original result remains supported by `run-r6.json`, `run-r7.json`, and `SUMMARY.json` when those evidence files are available.
 
+## Run focused tests on a Linux VPS from the repository checkout
+
+This is the portable way for another agent to start the tests without the OrbStack runner or any of its `/tmp` files. Start from the repository commit containing R6/R7, on an ARM64 Linux VPS with the Rust toolchain and locked dependencies available. Run from the repository root. Cargo writes build products under the checkout's normal `target/` directory; set `CARGO_TARGET_DIR` to another persistent path if desired. Do not use `--workspace`.
+
+```sh
+cargo build --locked -p bigbud-remote-agent
+cargo test --locked -p bigbud-remote-agent --test service_lease -- --test-threads=1
+cargo test --locked -p bigbud-remote-agent --test service_lease_guard -- --test-threads=1
+cargo test --locked -p bigbud-protocol --test service_lease -- --test-threads=1
+```
+
+The library integration cases that launch the actual monitor need the just-built executable. On the normal Cargo layout, set the variable to `target/debug/bigbud-remote-agent`, then run the filtered library tests:
+
+```sh
+BIGBUD_SERVICE_LEASE_TEST_BINARY="$PWD/target/debug/bigbud-remote-agent" \
+  cargo test --locked -p bigbud-remote-agent --lib service_lease:: -- --test-threads=1
+BIGBUD_SERVICE_LEASE_TEST_BINARY="$PWD/target/debug/bigbud-remote-agent" \
+  cargo test --locked -p bigbud-remote-agent --lib \
+  service_lease::assets::tests::native_original_child_exits_after_assets_modify_while_controller_is_detached \
+  -- --ignored --exact --test-threads=1
+BIGBUD_SERVICE_LEASE_TEST_BINARY="$PWD/target/debug/bigbud-remote-agent" \
+  cargo test --locked -p bigbud-remote-agent --lib \
+  backend_service::lease_proxy::tests -- --test-threads=1
+```
+
+Run the first library command on both R6 and R7 commits/source states as appropriate. The second command runs the ignored detached-assets process case. The final proxy filter applies to R7. If using a custom Cargo target directory, update the executable path to the corresponding `debug/bigbud-remote-agent` output. On non-ARM64 Linux, these commands qualify only that machine architecture; they do not reproduce ARM64 evidence.
+
+This checkout-based path verifies Rust tests, but it does not reproduce the original transient systemd sandbox, private network, memory/task limits, staged-binary hash collection, or post-run cgroup assertions. For equivalent isolated evidence, preserve or recreate the reviewed runner and inputs described above. A fresh positive managed-service acquisition is a separate test: use a new immutable graph and account, and exercise the real backend owner/SQL context and managed lease channel. Never repurpose the pinned accounts/configurations from earlier runs.
+
 ## Continue from here
 
 The next native qualification is a positive managed-service test on a **new immutable graph and fresh account**. The current VM accounts/configurations and signed graphs are pinned evidence and must not be edited or reused for this. Exercise the real finite owner/SQL context and `acquireManagedNativeLeaseChannel`; controlled injected channels do not qualify the managed path.
