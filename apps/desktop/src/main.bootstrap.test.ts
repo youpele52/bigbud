@@ -1,3 +1,4 @@
+vi.mock("./commandLine/commandLineTool.ipc", () => ({ registerCommandLineToolIpc: vi.fn() }));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let resolvePendingPort: (port: number) => void = () => undefined;

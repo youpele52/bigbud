@@ -32,6 +32,7 @@ export const desktopIpcChannels = {
   getComputerUsePermissionsStatus: "desktop:get-computer-use-permissions-status",
   requestComputerUsePermissions: "desktop:request-computer-use-permissions",
   installComputerUseRuntime: "desktop:install-computer-use-runtime",
+  installCommandLineTool: "desktop:install-command-line-tool",
   runComputerUseDoctor: "desktop:run-computer-use-doctor",
   getTailscaleRemoteAccessStatus: "desktop:get-tailscale-remote-access-status",
   enableTailscaleRemoteAccess: "desktop:enable-tailscale-remote-access",

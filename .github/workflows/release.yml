@@ -142,70 +142,11 @@ jobs:
     secrets: inherit
 
   remote_agent_build:
-    name: Build remote agent ${{ matrix.label }}
     needs: preflight
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: Linux x86_64
-            target: x86_64-unknown-linux-gnu
-            strip: strip
-          - label: Linux arm64
-            target: aarch64-unknown-linux-gnu
-            strip: aarch64-linux-gnu-strip
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.preflight.outputs.ref }}
-          fetch-depth: 0
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-          targets: ${{ matrix.target }}
-
-      - name: Install build dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          packages=(protobuf-compiler)
-          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-            packages+=(gcc-aarch64-linux-gnu)
-          fi
-          sudo apt-get update
-          sudo apt-get install --yes "${packages[@]}"
-
-      - name: Build remote agent
-        shell: bash
-        env:
-          BIGBUD_AGENT_BUILD_VERSION: ${{ needs.preflight.outputs.version }}
-          BIGBUD_AGENT_BUILD_DIGEST: ${{ github.sha }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-        run: cargo build --locked --release --package bigbud-remote-agent --target "${{ matrix.target }}"
-
-      - name: Prepare remote agent release asset
-        shell: bash
-        run: |
-          set -euo pipefail
-          version='${{ needs.preflight.outputs.version }}'
-          target='${{ matrix.target }}'
-          asset_name="bigbud-remote-agent-${version}-${target}"
-          mkdir -p release-publish
-          cp "target/${target}/release/bigbud-remote-agent" "release-publish/${asset_name}"
-          '${{ matrix.strip }}' "release-publish/${asset_name}"
-          chmod 755 "release-publish/${asset_name}"
-          (cd release-publish && sha256sum "${asset_name}" > "${asset_name}.sha256")
-
-      - name: Upload remote agent artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: remote-agent-${{ matrix.target }}
-          path: release-publish/*
-          if-no-files-found: error
+    uses: ./.github/workflows/release-remote-agent-build.yml
+    with:
+      ref: ${{ needs.preflight.outputs.ref }}
+      version: ${{ needs.preflight.outputs.version }}
 
   workspace_agent_windows_arm64:
     name: Build Windows ARM64 server workspace agent
@@ -293,8 +234,9 @@ jobs:
         run: |
           cp apps/marketing/public/install.sh release-assets/install.sh
           cp apps/marketing/public/install.ps1 release-assets/install.ps1
+          cp apps/marketing/public/remote-agent.sh release-assets/remote-agent.sh
 
-      - name: Build signed remote agent manifest
+      - name: Build signed remote agent manifests
         env:
           BIGBUD_REMOTE_AGENT_SIGNING_KEY: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY }}
           BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID }}
@@ -302,15 +244,20 @@ jobs:
         run: |
           set -euo pipefail
           version='${{ needs.preflight.outputs.version }}'
-          node scripts/build-remote-agent-release-manifest.ts \
-             --version "$version" \
-            --tag "${{ needs.preflight.outputs.tag }}" \
-            --build-digest "$GITHUB_SHA" \
-            --repository "$GITHUB_REPOSITORY" \
+          asset() { printf -- '--asset=%s=release-assets/bigbud-remote-agent-%s-%s' "$1" "$version" "$1"; }
+          common=(--version "$version" --tag "${{ needs.preflight.outputs.tag }}"
+            --build-digest "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY")
+          # Legacy names stay glibc-only: older clients reject manifests with unknown triples.
+          node scripts/build-remote-agent-release-manifest.ts "${common[@]}" \
             --output release-assets/remote-agent-manifest.json \
             --install-source-output release-assets/remote-agent-install-source.json \
-            --asset="x86_64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-x86_64-unknown-linux-gnu" \
-            --asset="aarch64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-aarch64-unknown-linux-gnu"
+            "$(asset x86_64-unknown-linux-gnu)" "$(asset aarch64-unknown-linux-gnu)"
+          # Musl-aware clients read v2 and prefer the static builds.
+          node scripts/build-remote-agent-release-manifest.ts "${common[@]}" \
+            --output release-assets/remote-agent-manifest.v2.json \
+            --install-source-output release-assets/remote-agent-install-source.v2.json \
+            "$(asset x86_64-unknown-linux-musl)" "$(asset aarch64-unknown-linux-musl)" \
+            "$(asset x86_64-unknown-linux-gnu)" "$(asset aarch64-unknown-linux-gnu)"
 
       - name: Verify packaged remote agent assets
         env:
@@ -320,11 +267,16 @@ jobs:
         run: |
           set -euo pipefail
           version='${{ needs.preflight.outputs.version }}'
+          asset() { printf -- '--asset=%s=release-assets/bigbud-remote-agent-%s-%s' "$1" "$version" "$1"; }
           node scripts/verify-remote-agent-release-assets.ts \
             --manifest release-assets/remote-agent-manifest.json \
             --install-source release-assets/remote-agent-install-source.json \
-            --asset="x86_64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-x86_64-unknown-linux-gnu" \
-            --asset="aarch64-unknown-linux-gnu=release-assets/bigbud-remote-agent-${version}-aarch64-unknown-linux-gnu"
+            "$(asset x86_64-unknown-linux-gnu)" "$(asset aarch64-unknown-linux-gnu)"
+          node scripts/verify-remote-agent-release-assets.ts \
+            --manifest release-assets/remote-agent-manifest.v2.json \
+            --install-source release-assets/remote-agent-install-source.v2.json \
+            "$(asset x86_64-unknown-linux-musl)" "$(asset aarch64-unknown-linux-musl)" \
+            "$(asset x86_64-unknown-linux-gnu)" "$(asset aarch64-unknown-linux-gnu)"
 
       - name: Verify assembled release payload
         run: >-
@@ -350,9 +302,12 @@ jobs:
             release-assets/${{ needs.preflight.outputs.update_channel }}*.yml
             release-assets/install.sh
             release-assets/install.ps1
+            release-assets/remote-agent.sh
             release-assets/bigbud-remote-agent-*
             release-assets/remote-agent-install-source.json
             release-assets/remote-agent-manifest.json
+            release-assets/remote-agent-install-source.v2.json
+            release-assets/remote-agent-manifest.v2.json
             release-assets/server-workspace-agent-*
             release-assets/server-organization-supervisor-*
           fail_on_unmatched_files: true

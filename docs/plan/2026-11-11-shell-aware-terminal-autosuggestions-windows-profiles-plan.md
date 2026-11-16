@@ -543,6 +543,15 @@ Do not assume the conversation's original Git-status attachment is the latest wo
 
 ## 12. Handoff and readiness
 
+### P6 ownership release — 2026-11-14
+
+Smart Terminal Suggestions continuation `169e7657-5910-46bd-adfd-f6fb866a1051` has no active implementation jobs, edits, or retained ownership conflict. It explicitly releases its coordination claims over P6 remote persistence integration to sole coordinator `fe67c97ebcf916f78fd2fa23eaf989362db7a39b2f3ebad20515accbd9e87536` and successor implementer `2b18444a0c1f82638a68183c887d6211368aa7ed8282a558ec7163160a7c780b`:
+
+- `crates/bigbud-remote-agent/src/supervisor/`, `crates/bigbud-remote-agent/src/pty/`, and `crates/bigbud-remote-agent/src/session/`: P6 supervisor/PTY inventory, replay, stop, protocol-helper, and persistence integration, including the previously released non-Unix accessor compatibility fix.
+- `apps/web/src/components/terminal/` and terminal-specific hooks, state/store, and persistence modules under `apps/web/src/`: P6 inventory, replay, stop, attach/recovery, and persisted-pane integration.
+
+This releases this continuation's ownership only; it does not override other contributors' claims or authorize expansion beyond the coordinator's applicable P4 gate. Preserve existing dirty changes, shell-profile selection/default semantics, explicit Automatic recovery, dismissal persistence, direct-owner admission/termination fences, and smart-suggestion qualification work. Production suggestions remain off; native-clock/helper work is not resumed. No implementation edits, checks, installs, Git actions, or new agents were started for this release. Only this handoff entry was added; no validation is claimed for it.
+
 ### Recommended execution order
 
 1. Independent re-review of the two corrections and the applicable broader compatibility/safety requirements; no empirical proof is implied by review.

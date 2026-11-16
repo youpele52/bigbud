@@ -1,7 +1,5 @@
-import { GITHUB_REPO_SLUG } from "./app";
-
-const INSTALLER_BASE_URL =
-  `https://raw.githubusercontent.com/${GITHUB_REPO_SLUG}/main/apps/marketing/public` as const;
+// Served from this site's public directory (D3), not the repository's moving main branch.
+const INSTALLER_BASE_URL = "https://bigbud.app" as const;
 
 export const INSTALL_COMMANDS = {
   unix: `curl -fsSL ${INSTALLER_BASE_URL}/install.sh | sh`,

@@ -9,6 +9,7 @@ import {
 } from "./window/certificateChallenge.channels";
 import { isDesktopMenuAction } from "./window/menuAction.validation";
 import { desktopIpcChannels } from "./main.channels";
+import { isCommandLineToolOffered } from "./commandLine/commandLineTool.gate";
 import { createWindowZoomObserver } from "./window/windowZoom.preload";
 import { windowMaterialBridge } from "./window/windowMaterial.preload";
 
@@ -181,6 +182,11 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(GET_COMPUTER_USE_PERMISSIONS_STATUS_CHANNEL),
   requestComputerUsePermissions: () => ipcRenderer.invoke(REQUEST_COMPUTER_USE_PERMISSIONS_CHANNEL),
   installComputerUseRuntime: () => ipcRenderer.invoke(INSTALL_COMPUTER_USE_RUNTIME_CHANNEL),
+  ...(isCommandLineToolOffered(process.platform)
+    ? {
+        installCommandLineTool: () => ipcRenderer.invoke(desktopIpcChannels.installCommandLineTool),
+      }
+    : {}),
   runComputerUseDoctor: () => ipcRenderer.invoke(RUN_COMPUTER_USE_DOCTOR_CHANNEL),
   getTailscaleRemoteAccessStatus: () =>
     ipcRenderer.invoke(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL),

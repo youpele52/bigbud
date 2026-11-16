@@ -57,16 +57,60 @@ Bun scripts remain the source of truth for workflow implementation. The just rec
 
 ## Root: builds
 
-| Bun                                | just                            |
-| ---------------------------------- | ------------------------------- |
-| `bun run build`                    | `just build`                    |
-| `bun run build:marketing`          | `just build-marketing`          |
-| `bun run build:mobile-web`         | `just build-mobile-web`         |
-| `bun run build:mobile-web:desktop` | `just build-mobile-web-desktop` |
-| `bun run build:desktop`            | `just build-desktop`            |
-| `bun run build:contracts`          | `just build-contracts`          |
-| `bun run build:workspace-agent`    | `just build-workspace-agent`    |
-| `bun run build:desktop-supervisor` | `just build-desktop-supervisor` |
+| Bun                                  | just                              |
+| ------------------------------------ | --------------------------------- |
+| `bun run build`                      | `just build`                      |
+| `bun run build:marketing`            | `just build-marketing`            |
+| `bun run build:mobile-web`           | `just build-mobile-web`           |
+| `bun run build:mobile-web:desktop`   | `just build-mobile-web-desktop`   |
+| `bun run package:mobile-components`  | `just package-mobile-components`  |
+| `bun run build:remote-backend-graph` | `just build-remote-backend-graph` |
+| `bun run build:desktop`              | `just build-desktop`              |
+| `bun run build:contracts`            | `just build-contracts`            |
+| `bun run build:workspace-agent`      | `just build-workspace-agent`      |
+| `bun run build:desktop-supervisor`   | `just build-desktop-supervisor`   |
+
+### Optional mobile artifact producer
+
+`bun run package:mobile-components --help` lists the required inputs. This build-time producer takes an already-built gateway executable and static mobile asset directory, then creates separate signed gateway and asset artifacts plus `manifest.json` in a fresh output directory. It does not build binaries, download tools, install components, publish a release, or enable mobile access on a host. Use the existing artifact/CAS lifecycle for eventual installation; each host still needs separate mobile consent.
+
+The producer requires Python 3 at build time through the existing deterministic tar/gzip helper. End users do not need Python to run the gateway. Signing currently requires a POSIX build host that can verify the key file's owner and permission bits. The private key must be an owner-only Ed25519 PEM file, outside the asset directory and output. Key material is read from that file only. Do not pass a private key in argv or environment variables.
+
+```sh
+bun run package:mobile-components \
+  --gateway-binary /build/bigbud-mobile-gateway \
+  --target aarch64-unknown-linux-musl \
+  --assets-directory /build/mobile-dist \
+  --agent-version 1.0.0 --backend-version 1.0.0 \
+  --gateway-version 1.0.0 --asset-version 1.0.0 \
+  --minimum-mobile-rpc 1 --maximum-mobile-rpc 1 \
+  --artifact-base-url https://github.com/example/releases/download/v1.0.0/ \
+  --key-id release-key --key-file /private-signing/mobile-ed25519.pem \
+  --output-directory /build/fresh-mobile-artifacts
+```
+
+All version and RPC compatibility fields are signed. Gateway headers are checked for the selected architecture without executing the binary; native execution testing remains a release gate. Asset input must contain `index.html` and only supported static files. Hidden files, source maps, credential filenames and PEM key material, links, special files, oversized inputs, nested output and input changes fail closed. The producer and runtime share static path/case policies and limits of 128 MiB content, 160 MiB total expanded tar bytes, 16,384 entries and 32 directory levels. Existing output is never overwritten. Failed output is marked `UNPUBLISHED.txt`; never publish partial staging files. This producer supplies no default signing key and does not establish production release trust or lifecycle readiness.
+
+### Backend executable graph producer
+
+`bun run build:remote-backend-graph --help` lists the inputs for signing an assembled private
+backend file tree. Supply `--root`, `--version`, `--build-digest`, `--target`, relative `--node`
+and `--entry` paths, `--key-file`, `--key-id`, and a fresh `--output` manifest path. Supported
+targets are `aarch64-unknown-linux-gnu` and `x86_64-unknown-linux-gnu`. The Node executable must
+be named `node`; the entry directory must also contain `NodeSqliteWorker.mjs` and
+`remote-client-relay/remoteBackendClientRelay.mjs`.
+
+The complete tree requires canonical owned private directories and regular single-link files.
+The explicit owner-only Ed25519 key file and output must be outside that tree; the existing
+output parent must be private. The producer hashes all members, signs the existing graph
+contract, and uses the runtime verifier to revalidate it before writing the manifest without
+overwriting an existing file. It executes no input and installs or publishes nothing.
+
+This producer currently supports a restricted static JavaScript dependency graph. It rejects
+the current full backend bundle's `node:module`/`createRequire` and native loaders. Complete
+SDK/native staging and a reviewed resolver policy are required before that bundle can use it.
+Static inventory and a successful signature check do not qualify providers, shared libraries,
+native execution or release-key authorization.
 
 ## Root: checks, tests, and cleanup
 
@@ -130,15 +174,35 @@ Source: [apps/marketing/package.json](../apps/marketing/package.json).
 
 Source: [apps/mobile-web/package.json](../apps/mobile-web/package.json).
 
-| Bun                                           | just                            |
-| --------------------------------------------- | ------------------------------- |
-| `bun run --cwd apps/mobile-web dev`           | `just mobile-web-dev`           |
-| `bun run --cwd apps/mobile-web build`         | `just mobile-web-build`         |
-| `bun run --cwd apps/mobile-web build:desktop` | `just mobile-web-build-desktop` |
-| `bun run --cwd apps/mobile-web preview`       | `just mobile-web-preview`       |
-| `bun run --cwd apps/mobile-web typecheck`     | `just mobile-web-typecheck`     |
-| `bun run --cwd apps/mobile-web test`          | `just mobile-web-test`          |
-| `bun run --cwd apps/mobile-web test:browser`  | `just mobile-web-test-browser`  |
+| Bun                                                            | just                                             |
+| -------------------------------------------------------------- | ------------------------------------------------ |
+| `bun run --cwd apps/mobile-web dev`                            | `just mobile-web-dev`                            |
+| `bun run --cwd apps/mobile-web build`                          | `just mobile-web-build`                          |
+| `bun run --cwd apps/mobile-web build:desktop`                  | `just mobile-web-build-desktop`                  |
+| `bun run --cwd apps/mobile-web preview`                        | `just mobile-web-preview`                        |
+| `bun run --cwd apps/mobile-web typecheck`                      | `just mobile-web-typecheck`                      |
+| `bun run --cwd apps/mobile-web typecheck:desktop-reference`    | `just mobile-web-typecheck-desktop-reference`    |
+| `bun run --cwd apps/mobile-web test`                           | `just mobile-web-test`                           |
+| `bun run --cwd apps/mobile-web test:browser`                   | `just mobile-web-test-browser`                   |
+| `bun run --cwd apps/mobile-web test:browser:isolation`         | `just mobile-web-test-browser-isolation`         |
+| `bun run --cwd apps/mobile-web test:browser:rejection-resume`  | `just mobile-web-test-browser-rejection-resume`  |
+| `bun run --cwd apps/mobile-web test:browser:visual-viewport`   | `just mobile-web-test-browser-visual-viewport`   |
+| `bun run --cwd apps/mobile-web test:browser:host-access:linux` | `just mobile-web-test-browser-host-access-linux` |
+
+The host-access browser harness runs only inside the existing disposable Linux Electron fixture.
+It requires its audited public source at `/parity/src`, installed fixture dependencies, a writable
+`/parity/results` directory, and `MOBILE_PARITY_ALIASES_PATH` pointing to the public package-alias
+JSON. It starts no host browser or account session and installs no tools. The recorded five-case
+checks use synthetic HTTPS hosts and do not qualify a real VPS or phone.
+Set `MOBILE_HOST_ACCESS_SURFACES=controls` to check host menus, blocked-host actions and settings.
+Optional comma-separated `MOBILE_HOST_CONTROL_CASES` (`blocked,settings,cross-host`) and
+`MOBILE_HOST_CONTROL_SIZES` (`360-portrait,390-portrait,430-portrait,landscape,keyboard`) narrow
+those checks. Keyboard mode simulates a scale-one visual viewport; it does not exercise a phone keyboard.
+Set `MOBILE_HOST_ACCESS_SURFACES=resume` for normal/StrictMode host-isolated recovery scenarios.
+These use controlled online/visibility events, intercepted sockets and an elapsed-time clock jump;
+they do not qualify physical suspension or real gateway/server execution.
+For the original five host-access scenarios, optional `MOBILE_HOST_ACCESS_CASES` selects exact
+case names recorded by the harness, separated by commas; empty or unknown names fail.
 
 ## Workspace: apps/server
 
@@ -238,3 +302,87 @@ Test paths above are placeholders. Web browser tests require the configured Play
 When adding, removing, or renaming a command, save its Bun and just invocations here and update the corresponding recipe in the root `justfile`. Keep common commands in [README.md](../README.md) and [AGENTS.md](../AGENTS.md) short and link here for the full inventory.
 
 This reference inventories named package scripts and common invocation patterns, not every arbitrary `bun <file>` command that could execute a source file. Rust-specific commands and guidance remain in [crates/AGENTS.md](../crates/AGENTS.md).
+
+## Workspace: packages/ui
+
+Source: [packages/ui/package.json](../packages/ui/package.json). Shared presentation only; tests use Vitest.
+
+| Bun                                   | just                |
+| ------------------------------------- | ------------------- |
+| `bun run --cwd packages/ui typecheck` | `just ui-typecheck` |
+| `bun run --cwd packages/ui test`      | `just ui-test`      |
+
+Focused presentation regression: `bun run --cwd packages/ui vitest run src/alert.test.tsx`.
+
+### Remote agent operation recovery
+
+`bigbud remote-agent install <target> [--replace] [--yes] [--json]` returns an operation ID.
+If an initial or follow reply is lost, retain the reported ID and use
+`bigbud remote-agent follow <operation-id> [--json]` with the same `--dev` / `--base-dir`
+options. Follow is read-only and never starts another install. IDs are retained by the running
+backend for a bounded period; unknown/expired after restart is not proof that no remote change
+occurred. Inspect `bigbud remote-agent status <target>` before starting a new operation.
+
+## Remote Linux account backend services
+
+Run these commands as the actual unprivileged Linux account. Setup requires a complete signed
+executable graph and separately supplied, owner-private JSON metadata. The trust file maps signing
+key IDs to pinned Ed25519 public PEM keys; downloaded metadata cannot supply its own trust.
+
+```sh
+bigbud backend setup \
+  --graph-root /home/account/runtime/backend \
+  --graph-manifest /home/account/install/graph.json \
+  --rust-manifest /home/account/install/remote-agent.json \
+  --trusted-keys /home/account/install/trusted-public-keys.json \
+  --backend-home /home/account/backend-data \
+  --request-id 11111111-1111-4111-8111-111111111111 \
+  --confirm-fresh-setup
+
+bigbud backend status --authority 00000000000000000000000000000000
+bigbud backend enable --authority 00000000000000000000000000000000 --confirm-startup
+bigbud backend disable-boot --authority 00000000000000000000000000000000
+```
+
+Replace the example paths, request UUID and authority. Keep executable files separate from backend
+data and account service state. Setup stages the units and admits the signed Rust runtime; backend
+startup remains disabled. `--restart never` opts out of the default failure restart policy.
+Enable verifies completed setup and finite preflight before requesting startup. Status reports unit
+state without claiming backend readiness. Disable-boot prevents automatic startup while current work
+continues. A partial setup must be preserved for inspection; repeating its request does not repair or
+overwrite it. These are installed CLI subcommands, with no separate Bun script or just recipe.
+
+## Remote account mobile pairing
+
+Run this on the Linux remote account with a compatible installed backend CLI. Replace the example
+identifier and hostname with that host's authority and configured private HTTPS gateway origin:
+
+```sh
+bigbud mobile pair \
+  --authority 00000000000000000000000000000000 \
+  --origin https://host.your-tailnet.ts.net \
+  --scope read-only
+```
+
+All three flags are required. Scopes are `read-only`, `approve-only` and `thread-control`.
+The command uses the account's authenticated backend client socket and displays the authority,
+scope, expiry and one-time pairing link. The backend requires current mobile consent and a ready
+gateway with that exact configured origin. Installation and mobile enablement remain separate.
+The installation-control socket cannot issue pairing links.
+
+## Focused optional-component CAS proof
+
+The isolated Linux CAS fixture requires an explicitly selected, already cached Node/Bun image.
+Set `BIGBUD_TEST_MOBILE_CAS_IMAGE` to its existing image ID before this focused run:
+
+```sh
+env -u BIGBUD_TEST_AGENT_FIXTURES BIGBUD_TEST_LINUX_DOCKER=1 \
+  BIGBUD_TEST_MOBILE_CAS_IMAGE="$BIGBUD_TEST_MOBILE_CAS_IMAGE" \
+  bun run --cwd apps/server vitest run --configLoader runner --project integration \
+  src/remote-agent/remoteAgentInstall.mobile.linux.test.ts
+```
+
+The fixture uses `--pull=never`, disables network and rejects fixture-state mounts. It tests the
+existing CAS protocol using disposable public inputs; it does not install a compiler or activate
+a host service. Without explicit fixture enablement/image availability these cases are skipped,
+which does not count as Linux qualification.

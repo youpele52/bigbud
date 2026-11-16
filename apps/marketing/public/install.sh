@@ -104,6 +104,23 @@ make_temp_dir() {
   mktemp -d -t bigbud-install
 }
 
+# D2: put a `bigbud` command on PATH through the installed app's own bundled CLI, so nothing
+# else is downloaded and shell startup files are never edited. Never fatal. Older apps without
+# the subcommand are skipped: their CLI would treat `command-line` as a directory and start a server.
+install_command_line_tool() {
+  runtime="$1"
+  script="$2"
+  [ "${BIGBUD_SKIP_COMMAND_LINE_TOOL:-}" = "1" ] && return 0
+  if ! ELECTRON_RUN_AS_NODE=1 "$runtime" "$script" --help 2>/dev/null |
+    grep -Eq '^[[:space:]]+command-line[[:space:]]'; then
+    log "This bigbud version cannot install the bigbud command yet; skipping it."
+    return 0
+  fi
+  if ! ELECTRON_RUN_AS_NODE=1 "$runtime" "$script" command-line install; then
+    log "The bigbud command was not installed. Try Settings > General > Install command-line tool."
+  fi
+}
+
 install_macos() {
   require_command hdiutil
   require_command ditto
@@ -156,6 +173,12 @@ install_macos() {
   fi
 
   log "Installed bigbud to $destination"
+
+  executable="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$destination/Contents/Info.plist" 2>/dev/null || true)"
+  if [ -n "$executable" ]; then
+    install_command_line_tool "$destination/Contents/MacOS/$executable" \
+      "$destination/Contents/Resources/server/dist/bin.mjs"
+  fi
 }
 
 install_linux() {
@@ -190,6 +213,17 @@ EOF
 
   log "Installed bigbud to $app_path"
   log "Desktop entry written to $desktop_path"
+
+  # The bundled CLI lives inside the AppImage mount, so a real bootstrap file imports it from
+  # $APPDIR (`node -e` would leak an "[eval]" __filename into bundled dependencies). The CLI then
+  # writes its own persistent launcher and bootstrap for the installed AppImage.
+  bootstrap="$tmp_dir/command-line-bootstrap.mjs"
+  cat >"$bootstrap" <<'BOOTSTRAP'
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+await import(pathToFileURL(join(process.env.APPDIR, "resources/server/dist/bin.mjs")).href);
+BOOTSTRAP
+  install_command_line_tool "$app_path" "$bootstrap"
 }
 
 main() {

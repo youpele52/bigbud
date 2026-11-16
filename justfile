@@ -47,6 +47,12 @@ build-mobile-web *args:
 build-mobile-web-desktop *args:
     bun run build:mobile-web:desktop "$@"
 
+package-mobile-components *args:
+    bun run package:mobile-components "$@"
+
+build-remote-backend-graph *args:
+    bun run build:remote-backend-graph "$@"
+
 build-desktop *args:
     bun run build:desktop "$@"
 
@@ -176,11 +182,26 @@ mobile-web-preview *args:
 mobile-web-typecheck *args:
     bun run --cwd apps/mobile-web typecheck "$@"
 
+mobile-web-typecheck-desktop-reference *args:
+    bun run --cwd apps/mobile-web typecheck:desktop-reference "$@"
+
 mobile-web-test *args:
     bun run --cwd apps/mobile-web test "$@"
 
 mobile-web-test-browser *args:
     bun run --cwd apps/mobile-web test:browser "$@"
+
+mobile-web-test-browser-isolation *args:
+    bun run --cwd apps/mobile-web test:browser:isolation "$@"
+
+mobile-web-test-browser-rejection-resume *args:
+    bun run --cwd apps/mobile-web test:browser:rejection-resume "$@"
+
+mobile-web-test-browser-visual-viewport *args:
+    bun run --cwd apps/mobile-web test:browser:visual-viewport "$@"
+
+mobile-web-test-browser-host-access-linux *args:
+    bun run --cwd apps/mobile-web test:browser:host-access:linux "$@"
 
 server-dev *args:
     bun run --cwd apps/server dev "$@"
@@ -299,3 +320,10 @@ install-frozen *args:
 # Require at least one test path or selector.
 server-test-file +args:
     bun run --cwd apps/server vitest run "$@"
+
+# Shared presentation package
+ui-typecheck *args:
+    bun run --cwd packages/ui typecheck "$@"
+
+ui-test *args:
+    bun run --cwd packages/ui test "$@"

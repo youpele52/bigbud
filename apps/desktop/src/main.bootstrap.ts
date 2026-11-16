@@ -9,16 +9,13 @@ import type { BrowserWindow, WebContents } from "electron";
 
 import {
   backendPort,
+  backendHost,
   backendWsUrl,
   setBackendConnectionInfo,
   startBackend,
   stopBackendAndWaitForExit,
 } from "./backend/backendManager";
-import {
-  disableDesktopTailscaleRemoteAccess,
-  enableDesktopTailscaleRemoteAccess,
-  getDesktopTailscaleRemoteAccessStatus,
-} from "./backend/tailscaleRemoteAccess";
+import { makeDesktopMobileRemoteAccess } from "./main.bootstrap.tailscale";
 import {
   getComputerUsePermissionsStatus,
   getComputerUseRuntimeStatus,
@@ -43,6 +40,7 @@ import {
 } from "./updater/autoUpdater";
 import { RestartRequiredUpdatePreparationError } from "./updater/autoUpdater.install";
 import { registerIpcHandlers } from "./window/ipcHandlers";
+import { registerCommandLineToolIpc } from "./commandLine/commandLineTool.ipc";
 import { initializeBrowserSession } from "./window/browserSession";
 import type { DesktopWindowRegistry } from "./window/DesktopWindowRegistry";
 import type { DesktopPreferencesStore } from "./window/desktopPreferences";
@@ -129,18 +127,17 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   } = options;
   // Before any handler registration: every IPC handler authorizes its sender.
   configureIpcAuthorization(windowRegistry);
-  let mobileBackendBaseUrl = "";
-  let localMobileBackendBaseUrl = "";
+  const mobileRemoteAccess = makeDesktopMobileRemoteAccess({
+    baseDir,
+    getBackendPort: () => backendPort,
+    getBackendHost: () => backendHost,
+    getIsQuitting,
+  });
   const cuaDriverLifecycle = makeCuaDriverLifecycle({
     stopBackendAndWaitForExit,
     stopCuaDriverDaemon,
     startBackend,
   });
-  const syncMobileBackendBaseUrlFromTailscaleRemoteAccess = async (): Promise<void> => {
-    const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
-    mobileBackendBaseUrl =
-      status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
-  };
 
   initializeBrowserSession();
   logHeader("bootstrap browser session initialized");
@@ -169,17 +166,19 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   const authToken = Crypto.randomBytes(24).toString("hex");
   const baseUrl = `ws://${formatHostForUrl(desktopMobileRemoteNetwork.clientHost)}:${port}`;
   const wsUrl = `${baseUrl}/?token=${encodeURIComponent(authToken)}`;
-  mobileBackendBaseUrl = `http://${formatHostForUrl(desktopMobileRemoteNetwork.advertisedHost)}:${port}`;
-  localMobileBackendBaseUrl = mobileBackendBaseUrl;
+  mobileRemoteAccess.setLocalBaseUrl(
+    `http://${formatHostForUrl(desktopMobileRemoteNetwork.advertisedHost)}:${port}`,
+  );
   setBackendConnectionInfo({
     port,
     authToken,
     wsUrl,
     host: desktopMobileRemoteNetwork.bindHost,
   });
-  await syncMobileBackendBaseUrlFromTailscaleRemoteAccess();
+  await mobileRemoteAccess.prepareGateway(serverSettingsPath, !isPackaged);
+  await mobileRemoteAccess.getTailscaleRemoteAccessStatus();
   logHeader(
-    `bootstrap resolved websocket endpoint baseUrl=${baseUrl} mobileBackendBaseUrl=${mobileBackendBaseUrl}`,
+    `bootstrap resolved websocket endpoint baseUrl=${baseUrl} mobileBackendBaseUrl=${mobileRemoteAccess.getMobileBackendBaseUrl()}`,
   );
 
   registerIpcHandlers({
@@ -221,7 +220,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     downloadAvailableUpdate,
     installDownloadedUpdate,
     resolveIconPath,
-    getMobileBackendBaseUrl: () => mobileBackendBaseUrl,
+    getMobileBackendBaseUrl: mobileRemoteAccess.getMobileBackendBaseUrl,
     getComputerUseRuntimeStatus: () => getComputerUseRuntimeStatus(baseDir),
     getComputerUsePermissionsStatus: () => getComputerUsePermissionsStatus(baseDir),
     requestHostAccessibilityPermission,
@@ -240,23 +239,9 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
       return { ok: !status.repairRequired, status };
     },
     runComputerUseDoctor: () => runComputerUseDoctor(baseDir),
-    getTailscaleRemoteAccessStatus: async () => {
-      const status = await getDesktopTailscaleRemoteAccessStatus(backendPort);
-      mobileBackendBaseUrl =
-        status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
-      return status;
-    },
-    enableTailscaleRemoteAccess: async () => {
-      const status = await enableDesktopTailscaleRemoteAccess(backendPort);
-      mobileBackendBaseUrl =
-        status.serving && status.remoteBaseUrl ? status.remoteBaseUrl : localMobileBackendBaseUrl;
-      return status;
-    },
-    disableTailscaleRemoteAccess: async () => {
-      const status = await disableDesktopTailscaleRemoteAccess(backendPort);
-      mobileBackendBaseUrl = localMobileBackendBaseUrl;
-      return status;
-    },
+    getTailscaleRemoteAccessStatus: mobileRemoteAccess.getTailscaleRemoteAccessStatus,
+    enableTailscaleRemoteAccess: mobileRemoteAccess.enableTailscaleRemoteAccess,
+    disableTailscaleRemoteAccess: mobileRemoteAccess.disableTailscaleRemoteAccess,
   });
   await startDesktopResourceAwareness(
     systemMonitor,
@@ -273,6 +258,11 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     return contents && windowRegistry.isTrusted(contents) ? contents : undefined;
   }, makeMainOwnershipRecovery(getIsQuitting));
   registerFloatingAssistantIpc();
+  registerCommandLineToolIpc({
+    channel: channels.installCommandLineTool,
+    isPackaged,
+    resourcesPath,
+  });
   registerComputerUseSafetySurface({
     registry: windowRegistry,
     desktopDir: computerUseGuard.desktopDir,

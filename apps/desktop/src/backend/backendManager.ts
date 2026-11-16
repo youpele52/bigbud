@@ -1,3 +1,9 @@
+import type { BackendManagerDeps } from "./backendManager.types";
+import {
+  ensureDesktopMobileGateway,
+  stopDesktopMobileGateway,
+  stopDesktopMobileGatewayAndWait,
+} from "./mobileGatewayOwner";
 import * as ChildProcess from "node:child_process";
 import * as FS from "node:fs";
 import { attachOwnershipHandoff, isOwnershipHandedOff } from "./ownershipHandoff";
@@ -6,7 +12,6 @@ import { recordOwnershipRecovery } from "./backendStartupState";
 import { app } from "electron";
 import {
   captureBackendOutput,
-  type LogSink,
   writeBackendLifecycleEvent,
   writeBackendSessionBoundary,
 } from "../logging/logging";
@@ -47,7 +52,6 @@ import { attachBackendChildLifecycle } from "./backendManager.child";
 import { captureBackendStderr, logBackendOutputPipeErrors } from "./backendManager.output";
 import {
   buildBackendBootstrapEnvelope,
-  type ComputerUseOwnerAccess,
   consumeBackendStartReason,
   hasPendingBackendStartReason,
   markNextBackendStartReason,
@@ -69,21 +73,7 @@ export let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let backendStartPending = false;
 const expectedBackendExitChildren = new WeakSet<ChildProcess.ChildProcess>();
 const swallowPipeError = () => {};
-interface BackendManagerDeps {
-  readonly rootDir: string;
-  readonly baseDir: string;
-  /** Legacy Cua runtime base; a dev-only state root in development (see main config). */
-  readonly cuaDriverBaseDir: string;
-  /** One-use owner access for this start; absent or null (today) leaves the envelope unchanged. */
-  readonly getComputerUseOwnerAccess?: () => ComputerUseOwnerAccess | null;
-  readonly backendMaxOldSpaceMb: number | null;
-  readonly cuaDriverHostBundleId: string;
-  readonly serverSettingsPath: string;
-  readonly getIsQuitting: () => boolean;
-  readonly getBackendLogSink: () => LogSink | null;
-  readonly isDevelopmentDiagnostics: boolean;
-  readonly runId: string;
-}
+
 let _deps: BackendManagerDeps | null = null;
 export function initBackendManager(deps: BackendManagerDeps): void {
   _deps = deps;
@@ -153,9 +143,14 @@ export async function startBackend(): Promise<void> {
   backendStartPending = true;
   let computerUseRuntimeEnv: NodeJS.ProcessEnv | undefined;
   try {
-    computerUseRuntimeEnv = await resolveBackendStartWhenAllowed(() =>
-      resolveComputerUseRuntimeEnv(_deps!.cuaDriverBaseDir, _deps!.cuaDriverHostBundleId),
-    );
+    computerUseRuntimeEnv = await resolveBackendStartWhenAllowed(async () => {
+      const env = await resolveComputerUseRuntimeEnv(
+        _deps!.cuaDriverBaseDir,
+        _deps!.cuaDriverHostBundleId,
+      );
+      if (!_deps!.getIsQuitting() && !isOwnershipHandedOff()) await ensureDesktopMobileGateway();
+      return env;
+    });
   } finally {
     backendStartPending = false;
   }
@@ -312,11 +307,12 @@ export async function startBackend(): Promise<void> {
   attachOwnershipHandoff(
     child,
     getOwnershipLaunch()!.stateDir,
-    () => {
+    async () => {
       expectedBackendExitChildren.add(child);
       if (restartTimer) clearTimeout(restartTimer);
       restartTimer = null;
       recordOwnershipRecovery(startupGeneration, { phase: "yielded" });
+      await stopDesktopMobileGatewayAndWait();
     },
     () =>
       backendProcess === child &&
@@ -370,6 +366,7 @@ export function restartUnresponsiveBackend(reason: string): void {
   else scheduleBackendRestart(reason);
 }
 export function stopBackend(): void {
+  stopDesktopMobileGateway();
   revokeSystemMonitorAgentToken();
   if (restartTimer) {
     clearTimeout(restartTimer);
@@ -389,9 +386,13 @@ export async function stopBackendAndWaitForExit(
     clearTimeout(restartTimer);
     restartTimer = null;
   }
-  await ProcessQuiescence.waitForInstalledProcessStarts();
-  const child = backendProcess;
-  if (!child) return;
-  await stopBackendChildAndWait(child, expectedBackendExitChildren, timeoutMs);
-  if (backendProcess === child) backendProcess = null;
+  try {
+    await ProcessQuiescence.waitForInstalledProcessStarts();
+    const child = backendProcess;
+    if (!child) return;
+    await stopBackendChildAndWait(child, expectedBackendExitChildren, timeoutMs);
+    if (backendProcess === child) backendProcess = null;
+  } finally {
+    await stopDesktopMobileGatewayAndWait();
+  }
 }

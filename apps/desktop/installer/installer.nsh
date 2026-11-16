@@ -57,3 +57,18 @@
   Pop $R1
   Pop $R0
 !macroend
+
+; Per-user PATH for the command-line launcher the app places in %USERPROFILE%\.local\bin.
+; Idempotent and failure-tolerant: a PATH problem must never fail the install.
+; Skipped for all-users installs, where HKCU would be the elevating account's, not the user's.
+!define BIGBUD_ADD_USER_PATH_SCRIPT "${__FILEDIR__}\addUserPath.ps1"
+
+!macro customInstall
+  !ifndef INSTALL_MODE_PER_ALL_USERS
+    InitPluginsDir
+    File "/oname=$PLUGINSDIR\bigbudAddUserPath.ps1" "${BIGBUD_ADD_USER_PATH_SCRIPT}"
+    DetailPrint "Adding the bigbud command-line directory to your PATH..."
+    nsExec::Exec `"$SYSDIR\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "$PLUGINSDIR\bigbudAddUserPath.ps1"`
+    Pop $0
+  !endif
+!macroend

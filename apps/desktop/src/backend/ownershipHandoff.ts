@@ -15,7 +15,7 @@ export function isOwnershipHandedOff(): boolean {
 export function attachOwnershipHandoff(
   child: ChildProcess,
   stateDir: string,
-  quiesce: () => void,
+  quiesce: () => void | Promise<void>,
   isCurrent: () => boolean = () => true,
 ): void {
   const input = (child.stdio as ReadonlyArray<unknown>)[6] as Readable | null;
@@ -24,6 +24,7 @@ export function attachOwnershipHandoff(
   let buffer = "";
   let operation: string | undefined;
   let processing = false;
+  let quiesced = false;
   let closed = false;
   input.on("error", () => {});
   output.on("error", () => {});
@@ -63,8 +64,12 @@ export function attachOwnershipHandoff(
       if (operation === undefined) {
         operation = request.operation;
         yielded = true;
-        quiesce();
       }
+      if (!quiesced) {
+        await quiesce();
+        quiesced = true;
+      }
+      if (closed || !isCurrent()) return;
       // The gate is sticky, but its acknowledgment may have been lost or delayed.
       output.write(`${JSON.stringify({ operation, quiesced: true })}\n`);
     })()

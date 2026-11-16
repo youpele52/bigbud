@@ -1,6 +1,7 @@
 import * as FS from "node:fs";
 import * as OS from "node:os";
 import * as Path from "node:path";
+import { packagedBackendEntry } from "./backendEntry";
 
 import { app, nativeImage } from "electron";
 import { BIGBUD_LINUX_EXECUTABLE_NAME } from "@bigbud/shared/platform";
@@ -162,9 +163,7 @@ export function resolveAboutCommitHash(rootDir: string): string | null {
 
 export function resolveBackendEntry(rootDir: string): string {
   if (app.isPackaged) {
-    // child_process.spawn cannot execute scripts from inside an asar archive.
-    // In packaged builds the server dist is placed outside via extraResources.
-    return Path.join(process.resourcesPath, "server/dist/bin.mjs");
+    return packagedBackendEntry(process.resourcesPath);
   }
   return Path.join(resolveAppRoot(rootDir), "apps/server/dist/bin.mjs");
 }
