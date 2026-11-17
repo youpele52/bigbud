@@ -13,7 +13,10 @@ type Kind = "start" | "status" | "resume" | "control";
 export type SuccessorReply = Partial<Response> | "lost";
 
 /** The default grant is a successor takeover at generation 2 with the original bootstrap. */
-export function successorFixture(script: Partial<Record<Kind, SuccessorReply[]>> = {}) {
+export function successorFixture(
+  script: Partial<Record<Kind, SuccessorReply[]>> = {},
+  options: { readonly epoch?: string } = {},
+) {
   const input = launch();
   const queues = new Map(Object.entries(script) as Array<[Kind, SuccessorReply[]]>);
   const sent: Array<{ kind: Kind; action?: string }> = [];
@@ -32,7 +35,7 @@ export function successorFixture(script: Partial<Record<Kind, SuccessorReply[]>>
   };
   const raw = {
     handshake: async () => ({
-      agentEpoch: "epoch",
+      agentEpoch: options.epoch ?? "epoch",
       protocolMinor: 8,
       capabilities: [{ name: "service.lease", major: 1, minor: 2 }],
     }),
@@ -49,7 +52,9 @@ export function successorFixture(script: Partial<Record<Kind, SuccessorReply[]>>
       sent.push({ kind, ...(action ? { action } : {}) });
       const next = queues.get(kind)?.shift() ?? {};
       if (next === "lost") return;
-      const answer: Response = { ...base, ...next, requestId: frame.value.requestId };
+      // Echo the requested original binding, as native does, so fresh attempts correlate too.
+      const binding = frame.value.binding ?? base.binding;
+      const answer: Response = { ...base, binding, ...next, requestId: frame.value.requestId };
       const type = `serviceLease${kind[0]!.toUpperCase()}${kind.slice(1)}Response` as const;
       const reply = { type, value: answer } as RemoteAgentFrame;
       queueMicrotask(() => {

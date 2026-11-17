@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import type { MobileGatewaySupervisor } from "@bigbud/shared/mobileGatewaySupervisor";
 import type { RemoteBackendMobileDescriptor } from "@bigbud/contracts/server/remoteBackendHandshake";
@@ -8,20 +7,19 @@ import type { VerifiedMobilePublication } from "../remote-agent/mobileOptionalPu
 import { withMobilePublicationOwner } from "../remote-agent/mobileGatewayLifecycle.publication.ts";
 import { currentMobileGatewayBinding } from "../remote-agent/mobileGatewayLifecycle.binding.ts";
 import { assertMobilePublicationAuthority } from "../remote-agent/mobileOptionalPublication.authority.ts";
-import {
-  MAX_REMOTE_AGENT_REGISTRY_BYTES,
-  parseRemoteAgentRegistry,
-} from "../remote-agent/remoteAgentInstall.registry.ts";
 import { mobileRegistryOwnerEqual } from "../remote-agent/remoteAgentInstall.mobile.schema.ts";
 import { mobileGatewayBuildPin } from "../remote-agent/mobileGatewayLifecycle.transitions.ts";
 import { remoteAgentBuildId } from "../remote-agent/remoteAgentRuntime.ts";
 import { localSupervisorTarget } from "./localSupervisorIdentity.ts";
-import { readLocalSupervisorServiceFile } from "./localSupervisorService.files.ts";
 import {
   verifyMobileGatewayAssets,
   type OwnedMobileGatewayAssets,
 } from "./mobileGatewayProcess.assets.ts";
 import { probeMobileGateway } from "./mobileGatewayProbe.ts";
+import {
+  mobileGatewayAdmissionBatch,
+  readMobileGatewayAdmissionRegistry,
+} from "./mobileGatewayAdmission.batch.ts";
 
 export async function mobileGatewayProcessAdmission(input: {
   readonly proof: VerifiedMobilePublication;
@@ -61,14 +59,6 @@ export async function mobileGatewayProcessAdmission(input: {
     input.signal,
   );
   let live = true;
-  interface Batch {
-    readonly promise: Promise<RemoteMobileAdmissionStamp>;
-    readonly resolve: (stamp: RemoteMobileAdmissionStamp) => void;
-    readonly reject: (cause: unknown) => void;
-    sealed: boolean;
-  }
-  let active: Batch | undefined, queued: Batch | undefined;
-  const accepted = new Set<Promise<RemoteMobileAdmissionStamp>>();
   const assertLive = () => {
     input.signal.throwIfAborted();
     assertMobilePublicationAuthority(captured.authority);
@@ -94,104 +84,40 @@ export async function mobileGatewayProcessAdmission(input: {
     )
       throw Error("Canonical gateway agent binding changed.");
   };
-  const createBatch = (): Batch => {
-    let resolve!: (stamp: RemoteMobileAdmissionStamp) => void, reject!: (cause: unknown) => void;
-    const promise = new Promise<RemoteMobileAdmissionStamp>((yes, no) => {
-      resolve = yes;
-      reject = no;
-    });
-    accepted.add(promise);
-    void promise.catch(() => {});
-    return { promise, resolve, reject, sealed: false };
-  };
-  const runBatch = (batch: Batch): void => {
-    void Promise.resolve()
-      .then(async () => {
-        batch.sealed = true; // Every member arrived before this batch's fresh async guards/read.
-        assertLive();
-        await captured.authority.assertAuthority();
-        await binding();
-        assertLive();
-        const text = await readLocalSupervisorServiceFile(
-          join(captured.authority.root, "control-v1", "registry.json"),
-          MAX_REMOTE_AGENT_REGISTRY_BYTES,
-        );
-        const state = parseRemoteAgentRegistry(text);
-        assertLive();
-        if (
-          state.schemaVersion !== 3 ||
-          !mobileRegistryOwnerEqual(state.mobile.owner, captured.paths.owner) ||
-          !state.mobile.consent.enabled ||
-          state.mobile.consent.revision !== captured.paths.consentRevision ||
-          JSON.stringify(state.mobile.stages.find((s) => s.id === captured.stage.id)) !==
-            JSON.stringify(captured.stage) ||
-          JSON.stringify(
-            state.mobile.gatewayLifecycle?.attempts.find((a) => a.nonce === input.nonce),
-          ) !== JSON.stringify(captured.attempt) ||
-          !state.pins.some(
-            (p) =>
-              p.owner === mobileGatewayBuildPin(input.nonce) &&
-              p.buildId === captured.attempt.binding.buildId,
-          )
-        )
-          throw Error("Current durable gateway admission ended.");
-        return Object.freeze({
-          authority: captured.paths.owner.authority,
-          installationFingerprint: captured.paths.owner.installationFingerprint,
-          consentRevision: captured.paths.consentRevision,
-          backendExternalOrigin: input.externalOrigin,
-        });
-      })
-      .then(batch.resolve, batch.reject)
-      .finally(() => {
-        accepted.delete(batch.promise);
-        if (active === batch) active = undefined;
-        if (queued) {
-          const next = queued;
-          queued = undefined;
-          active = next;
-          runBatch(next);
-        }
-      });
-  };
-  const read = (external?: AbortSignal): Promise<RemoteMobileAdmissionStamp> => {
-    try {
-      external?.throwIfAborted();
+  const batch = mobileGatewayAdmissionBatch<RemoteMobileAdmissionStamp>({
+    assertLive,
+    work: async () => {
       assertLive();
-    } catch (cause) {
-      return Promise.reject(cause);
-    }
-    let batch: Batch;
-    if (!active) {
-      batch = createBatch();
-      active = batch;
-      runBatch(batch);
-    } else if (!active.sealed) batch = active;
-    else {
-      queued ??= createBatch();
-      batch = queued;
-    }
-    const shared = batch.promise;
-    if (!external) return shared;
-    const waiter = new Promise<RemoteMobileAdmissionStamp>((resolve, reject) => {
-      const abort = () => reject(external.reason);
-      external.addEventListener("abort", abort, { once: true });
-      void shared.then(
-        (value) => {
-          external.removeEventListener("abort", abort);
-          if (external.aborted) reject(external.reason);
-          else resolve(value);
-        },
-        (cause) => {
-          external.removeEventListener("abort", abort);
-          reject(cause);
-        },
-      );
-      if (external.aborted) abort();
-    });
-    void waiter.catch(() => {});
-    return waiter;
-  };
+      await captured.authority.assertAuthority();
+      await binding();
+      assertLive();
+      const state = await readMobileGatewayAdmissionRegistry(captured.authority.root);
+      assertLive();
+      if (
+        state.schemaVersion !== 3 ||
+        !mobileRegistryOwnerEqual(state.mobile.owner, captured.paths.owner) ||
+        !state.mobile.consent.enabled ||
+        state.mobile.consent.revision !== captured.paths.consentRevision ||
+        JSON.stringify(state.mobile.stages.find((s) => s.id === captured.stage.id)) !==
+          JSON.stringify(captured.stage) ||
+        JSON.stringify(
+          state.mobile.gatewayLifecycle?.attempts.find((a) => a.nonce === input.nonce),
+        ) !== JSON.stringify(captured.attempt) ||
+        !state.pins.some(
+          (p) =>
+            p.owner === mobileGatewayBuildPin(input.nonce) &&
+            p.buildId === captured.attempt.binding.buildId,
+        )
+      )
+        throw Error("Current durable gateway admission ended.");
+      return Object.freeze({
+        authority: captured.paths.owner.authority,
+        installationFingerprint: captured.paths.owner.installationFingerprint,
+        consentRevision: captured.paths.consentRevision,
+        backendExternalOrigin: input.externalOrigin,
+      });
+    },
+  });
   const full = () =>
     withMobilePublicationOwner(
       input.proof,
@@ -215,11 +141,11 @@ export async function mobileGatewayProcessAdmission(input: {
       input.signal,
     );
   return {
-    read,
+    read: batch.read,
     full,
     close: async () => {
       live = false;
-      await Promise.allSettled(accepted);
+      await batch.settle();
     },
   };
 }

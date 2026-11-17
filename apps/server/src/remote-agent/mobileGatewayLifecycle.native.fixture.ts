@@ -26,18 +26,24 @@ export async function nativeOwnershipFixture(
   f: Awaited<ReturnType<typeof publicationFixture>>,
   proof: VerifiedMobilePublication,
   peer: string,
-  options: { readonly originalPidOffset?: number } = {},
+  options: {
+    readonly originalPidOffset?: number;
+    /** A scripted wire instead of the synthetic peer process (peer is then unused). */
+    readonly connection?: RemoteAgentConnection;
+  } = {},
 ) {
   const context = gatewayContext(f);
-  const connection = RemoteAgentConnection.local({
-    binaryPath: process.execPath,
-    args: [peer],
-    env: {
-      ...nativeOwnershipFixtureController(f.owner().startedAt),
-      BIGBUD_TEST_NATIVE_EPOCH: context.binding.epoch,
-      BIGBUD_TEST_NATIVE_ORIGINAL_PID_OFFSET: String(options.originalPidOffset ?? 0),
-    },
-  });
+  const connection =
+    options.connection ??
+    RemoteAgentConnection.local({
+      binaryPath: process.execPath,
+      args: [peer],
+      env: {
+        ...nativeOwnershipFixtureController(f.owner().startedAt),
+        BIGBUD_TEST_NATIVE_EPOCH: context.binding.epoch,
+        BIGBUD_TEST_NATIVE_ORIGINAL_PID_OFFSET: String(options.originalPidOffset ?? 0),
+      },
+    });
   const client = await connectNativeServiceLeaseClient(connection, {
     nativeEpoch: context.binding.epoch,
     stateDir: f.stateDir,

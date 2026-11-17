@@ -22,9 +22,9 @@ import {
 import { remoteMobileDescriptor } from "./mobileDescriptor.ts";
 import { mobileAdmissionStampEqual } from "../mobile/Services/MobileRemoteControlAdmission.ts";
 import {
-  withMobileGatewayProcess,
-  readVerifiedMobileGatewayProcess,
-} from "./mobileGatewayProcess.ts";
+  nodeMobileGatewayProcessPort,
+  mobileGatewayProcessPortRun,
+} from "./mobileGatewayOwner.port.ts";
 
 class MobileGatewayOwnerError extends Data.TaggedError("MobileGatewayOwnerError")<{
   readonly message: string;
@@ -49,104 +49,110 @@ export const RemoteMobileGatewayOwnerLive = Layer.unwrap(
         try: (signal) => readCurrentMobileGatewayAdmission(() => active, signal),
         catch: unavailable,
       }).pipe(Effect.orElseSucceed(() => null));
+    /** One shared lifetime body; the port only supplies the process and its liveness read. */
+    const runWith: typeof RemoteMobileGatewayOwner.Service.runWith = (proof, input, port) =>
+      Effect.gen(function* () {
+        const selected = yield* Effect.try({
+          try: () =>
+            Object.freeze(
+              Schema.decodeUnknownSync(MobileGatewayProcessInput)(input, {
+                onExcessProperty: "error",
+              }),
+            ),
+          catch: unavailable,
+        });
+        const runProcess = yield* Effect.try({
+          try: () => mobileGatewayProcessPortRun(port),
+          catch: unavailable,
+        });
+        const config = yield* ServerConfig;
+        const identity = yield* RemoteBackendIdentityService;
+        const settings = yield* ServerSettingsService;
+        if (
+          config.mode !== "remote" ||
+          !settings.onSnapshotChange ||
+          !settings.currentSnapshot ||
+          !settings.withSnapshotBarrier
+        )
+          return yield* Effect.fail(unavailable());
+        return yield* Effect.acquireUseRelease(
+          Effect.try({
+            try: () => {
+              const lease = state.begin();
+              try {
+                const unsubscribe = settings.onSnapshotChange!((snapshot) => {
+                  if (!snapshot.settings.mobileRemoteControl.enabled) lease.invalidate("disabled");
+                });
+                return { lease, unsubscribe };
+              } catch (cause) {
+                lease.settle(false);
+                throw cause;
+              }
+            },
+            catch: unavailable,
+          }),
+          ({ lease }) => {
+            if (!settings.currentSnapshot!()?.settings.mobileRemoteControl.enabled) {
+              lease.invalidate("disabled");
+              return Effect.void;
+            }
+            return runProcess(proof, selected, async (liveness, processSignal) => {
+              if (Option.isNone(routeOwner)) throw unavailable();
+              const signal = AbortSignal.any([lease.signal, processSignal]);
+              signal.throwIfAborted();
+              const initial = await liveness.read(signal);
+              if (
+                compareRemoteBackendIdentity(initial, identity) !== "match" ||
+                initial.backendExternalOrigin !== selected.externalOrigin
+              )
+                throw unavailable();
+              return routeOwner.value.withRoute(
+                {
+                  externalOrigin: initial.backendExternalOrigin,
+                  port: selected.port,
+                  expected: remoteMobileDescriptor(identity, version, false),
+                },
+                async (route, routeSignal) => {
+                  const combined = AbortSignal.any([signal, routeSignal]);
+                  const read = async (external: AbortSignal) => {
+                    const currentSignal = AbortSignal.any([combined, external]);
+                    currentSignal.throwIfAborted();
+                    if (!settings.currentSnapshot!()?.settings.mobileRemoteControl.enabled)
+                      throw unavailable();
+                    await route.assertCurrent(currentSignal);
+                    const stamp = await liveness.read(currentSignal);
+                    currentSignal.throwIfAborted();
+                    if (!settings.currentSnapshot!()?.settings.mobileRemoteControl.enabled)
+                      throw unavailable();
+                    return stamp;
+                  };
+                  const stamp = await read(combined);
+                  if (!mobileAdmissionStampEqual(initial, stamp)) throw unavailable();
+                  active = { lease, stamp, read };
+                  lease.admit();
+                  try {
+                    await waitForAbort(combined);
+                  } finally {
+                    lease.invalidate("disabled");
+                    if (active?.lease === lease) active = undefined;
+                  }
+                },
+                signal,
+              );
+            });
+          },
+          ({ lease, unsubscribe }, exit) =>
+            Effect.sync(() => {
+              unsubscribe();
+              if (active?.lease === lease) active = undefined;
+              lease.settle(mobileGatewayOwnerCleanupConfirmed(exit));
+            }),
+        );
+      });
     const owner: typeof RemoteMobileGatewayOwner.Service = {
       getPhase: state.getPhase,
-      run: (proof, input) =>
-        Effect.gen(function* () {
-          const selected = yield* Effect.try({
-            try: () =>
-              Object.freeze(
-                Schema.decodeUnknownSync(MobileGatewayProcessInput)(input, {
-                  onExcessProperty: "error",
-                }),
-              ),
-            catch: unavailable,
-          });
-          const config = yield* ServerConfig;
-          const identity = yield* RemoteBackendIdentityService;
-          const settings = yield* ServerSettingsService;
-          if (
-            config.mode !== "remote" ||
-            !settings.onSnapshotChange ||
-            !settings.currentSnapshot ||
-            !settings.withSnapshotBarrier
-          )
-            return yield* Effect.fail(unavailable());
-          return yield* Effect.acquireUseRelease(
-            Effect.try({
-              try: () => {
-                const lease = state.begin();
-                try {
-                  const unsubscribe = settings.onSnapshotChange!((snapshot) => {
-                    if (!snapshot.settings.mobileRemoteControl.enabled)
-                      lease.invalidate("disabled");
-                  });
-                  return { lease, unsubscribe };
-                } catch (cause) {
-                  lease.settle(false);
-                  throw cause;
-                }
-              },
-              catch: unavailable,
-            }),
-            ({ lease }) => {
-              if (!settings.currentSnapshot!()?.settings.mobileRemoteControl.enabled) {
-                lease.invalidate("disabled");
-                return Effect.void;
-              }
-              return withMobileGatewayProcess(proof, selected, async (token, processSignal) => {
-                if (Option.isNone(routeOwner)) throw unavailable();
-                const signal = AbortSignal.any([lease.signal, processSignal]);
-                signal.throwIfAborted();
-                const initial = await readVerifiedMobileGatewayProcess(token, signal);
-                if (
-                  compareRemoteBackendIdentity(initial, identity) !== "match" ||
-                  initial.backendExternalOrigin !== selected.externalOrigin
-                )
-                  throw unavailable();
-                return routeOwner.value.withRoute(
-                  {
-                    externalOrigin: initial.backendExternalOrigin,
-                    port: selected.port,
-                    expected: remoteMobileDescriptor(identity, version, false),
-                  },
-                  async (route, routeSignal) => {
-                    const combined = AbortSignal.any([signal, routeSignal]);
-                    const read = async (external: AbortSignal) => {
-                      const currentSignal = AbortSignal.any([combined, external]);
-                      currentSignal.throwIfAborted();
-                      if (!settings.currentSnapshot!()?.settings.mobileRemoteControl.enabled)
-                        throw unavailable();
-                      await route.assertCurrent(currentSignal);
-                      const stamp = await readVerifiedMobileGatewayProcess(token, currentSignal);
-                      currentSignal.throwIfAborted();
-                      if (!settings.currentSnapshot!()?.settings.mobileRemoteControl.enabled)
-                        throw unavailable();
-                      return stamp;
-                    };
-                    const stamp = await read(combined);
-                    if (!mobileAdmissionStampEqual(initial, stamp)) throw unavailable();
-                    active = { lease, stamp, read };
-                    lease.admit();
-                    try {
-                      await waitForAbort(combined);
-                    } finally {
-                      lease.invalidate("disabled");
-                      if (active?.lease === lease) active = undefined;
-                    }
-                  },
-                  signal,
-                );
-              });
-            },
-            ({ lease, unsubscribe }, exit) =>
-              Effect.sync(() => {
-                unsubscribe();
-                if (active?.lease === lease) active = undefined;
-                lease.settle(mobileGatewayOwnerCleanupConfirmed(exit));
-              }),
-          );
-        }),
+      run: (proof, input) => runWith(proof, input, nodeMobileGatewayProcessPort),
+      runWith,
     };
     const status: typeof RemoteMobileGatewayStatus.Service = {
       ready: readAdmission().pipe(Effect.map((stamp) => stamp !== null)),

@@ -8,6 +8,7 @@ import type { RemoteAgentRuntimeOwners } from "../persistence/Layers/RemoteAgent
 import type { VerifiedMobilePublication } from "../remote-agent/mobileOptionalPublication.ts";
 import type { MobileGatewayProcessInput } from "./mobileGatewayProcess.config.ts";
 import type { MobileGatewayOwnerPhase } from "./mobileGatewayOwner.state.ts";
+import type { MobileGatewayProcessPort } from "./mobileGatewayOwner.port.ts";
 
 export interface RemoteMobileGatewayOwnerShape {
   readonly getPhase: () => MobileGatewayOwnerPhase;
@@ -22,6 +23,17 @@ export interface RemoteMobileGatewayOwnerShape {
     | ServerConfig
     | ServerSettingsService
     | RemoteAgentRuntimeOwners
+  >;
+  /** Same admission body as `run` (route verification, stamp equality, revocation) over another
+   * opaque process port; `run` is exactly `runWith(proof, input, nodeMobileGatewayProcessPort)`. */
+  readonly runWith: <R>(
+    proof: VerifiedMobilePublication,
+    input: MobileGatewayProcessInput,
+    port: MobileGatewayProcessPort<R>,
+  ) => Effect.Effect<
+    void,
+    Error,
+    R | RemoteBackendIdentityService | ServerConfig | ServerSettingsService
   >;
 }
 

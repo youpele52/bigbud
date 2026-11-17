@@ -5,6 +5,12 @@ import {
 } from "../mobile/Services/MobileRemoteControlAdmission.ts";
 import type { MobileGatewayOwnerState } from "./mobileGatewayOwner.state.ts";
 
+/** A liveness read that observed a changed admission identity (for example a native generation or
+ * durable consent revision) rather than a failed or uncertain read. It retires as "revoked". */
+export class MobileGatewayAdmissionRevoked extends Error {
+  override readonly name = "MobileGatewayAdmissionRevoked";
+}
+
 export interface ActiveMobileGatewayAdmission {
   readonly lease: ReturnType<MobileGatewayOwnerState["begin"]>;
   readonly stamp: RemoteMobileAdmissionStamp;
@@ -26,8 +32,11 @@ export async function readCurrentMobileGatewayAdmission(
       return null;
     }
     return current() === selected && selected.lease.isAdmitted() ? stamp : null;
-  } catch {
-    if (!signal.aborted) selected.lease.invalidate("disabled");
+  } catch (cause) {
+    if (!signal.aborted)
+      selected.lease.invalidate(
+        cause instanceof MobileGatewayAdmissionRevoked ? "revoked" : "disabled",
+      );
     return null;
   }
 }
