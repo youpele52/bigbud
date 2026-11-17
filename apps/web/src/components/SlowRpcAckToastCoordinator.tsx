@@ -4,6 +4,8 @@ import { type SlowRpcAckRequest, useSlowRpcAckRequests } from "../rpc/requestLat
 import { getWsConnectionUiState, useWsConnectionStatus } from "../rpc/wsConnectionState";
 import { toastManager } from "./ui/toast";
 
+export const SLOW_RPC_ACK_TOAST_CONDITION = "slow-rpc-ack";
+
 function describeSlowRpcAckToast(requests: ReadonlyArray<SlowRpcAckRequest>): string {
   const count = requests.length;
   const thresholdSeconds = Math.round((requests[0]?.thresholdMs ?? 0) / 1000);
@@ -21,7 +23,10 @@ export function SlowRpcAckToastCoordinator() {
       toastIdRef.current = null;
       return;
     }
+    // An ongoing condition: the shared toast policy auto-dismisses it and keeps a
+    // dismissed notice quiet for a cool-down even though the count keeps changing.
     const toast = {
+      data: { conditionKey: SLOW_RPC_ACK_TOAST_CONDITION },
       description: describeSlowRpcAckToast(slowRequests),
       timeout: 0,
       title: "Some requests are slow",

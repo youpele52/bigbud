@@ -79,6 +79,7 @@ it("refreshes one unchanged run toast every five minutes and recovers immediatel
       id: "toast-id",
       type: "loading",
       title: "Cleanup: reconnecting for progress…",
+      data: { conditionKey: "thread-retention-progress:heartbeat-run" },
     }),
   );
   publishRunToast(run);
@@ -95,6 +96,7 @@ it("refreshes one unchanged run toast every five minutes and recovers immediatel
     expect.objectContaining({
       type: "success",
       title: "Cleanup finished: 3 threads deleted.",
+      data: { conditionKey: "thread-retention-progress:heartbeat-run" },
     }),
   );
   expect(toast.add).toHaveBeenCalledTimes(2);
