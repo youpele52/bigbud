@@ -1,14 +1,13 @@
-import * as fs from "node:fs/promises";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import {
-  withMobileOptionalPublisher,
-  type MobileOptionalPublisher,
-} from "../remote-agent/mobileOptionalPublication.ts";
 import type { MobileGatewayConfiguration } from "../remote-agent/mobileGatewayLifecycle.schema.ts";
 import { acquireMobileGatewayActivationAuthority } from "./mobileGatewayActivation.authority.ts";
 import type { RemoteMobileNativeInputsValue } from "./mobileGatewayActivation.inputs.ts";
+import {
+  verifiedNativeMobilePublication,
+  withNativeMobilePublication,
+} from "./mobileGatewayActivation.publication.ts";
 import { commitMobileGatewayDesiredSelection } from "./mobileGatewayActivation.selection.ts";
 import {
   runNativeMobileGatewaySession,
@@ -35,31 +34,6 @@ const failed = (cause: unknown, repairRequired = false): NativeMobileActivationO
   repairRequired,
   cause,
 });
-
-/** Publish once, or remint the already-published stage of the current durable consent. */
-async function verifiedPublication(
-  publisher: MobileOptionalPublisher,
-  inputs: RemoteMobileNativeInputsValue,
-  consentRevision: number,
-  published: boolean,
-  signal: AbortSignal,
-) {
-  const { artifacts } = inputs;
-  if (published) return publisher.remint(artifacts.stageId, consentRevision);
-  const [gatewayBytes, assetsBytes] = await Promise.all([
-    fs.readFile(artifacts.gatewayPath, { signal }),
-    fs.readFile(artifacts.assetsPath, { signal }),
-  ]);
-  signal.throwIfAborted();
-  return publisher.publish({
-    stageId: artifacts.stageId,
-    consentRevision,
-    gateway: artifacts.gateway,
-    assets: artifacts.assets,
-    gatewayBytes,
-    assetsBytes,
-  });
-}
 
 /**
  * One activation, owned by the attached controller: activation authority → durable consent read
@@ -98,32 +72,29 @@ export const runNativeMobileActivation = Effect.fn("runNativeMobileActivation")(
   );
   let selected = false;
   const settled = yield* Effect.exit(
-    withMobileOptionalPublisher(inputs.trustedKeys, async (publisher, lifetime) => {
-      const signal = AbortSignal.any([lifetime, retired]);
-      const proof = await verifiedPublication(
-        publisher,
-        inputs,
-        consentRevision,
-        published,
-        signal,
-      );
-      signal.throwIfAborted();
-      await run(
-        commitMobileGatewayDesiredSelection(proof, request.requestId, request.configuration),
-        { signal },
-      );
-      selected = true;
-      onSelected();
-      // Losing the publication lifetime hands the child to a successor; it never kills it.
-      return run(
-        Effect.exit(
-          runNativeMobileGatewaySession(proof, request.configuration, {
-            detach: AbortSignal.any([signals.detach, lifetime]),
-            stop: signals.stop,
-          }),
-        ),
-      );
-    }),
+    withNativeMobilePublication(
+      inputs.trustedKeys,
+      retired,
+      (publisher, signal) =>
+        verifiedNativeMobilePublication(publisher, inputs, consentRevision, published, signal),
+      async (proof, lifetime, signal) => {
+        await run(
+          commitMobileGatewayDesiredSelection(proof, request.requestId, request.configuration),
+          { signal },
+        );
+        selected = true;
+        onSelected();
+        // Losing the publication lifetime hands the child to a successor; it never kills it.
+        return run(
+          Effect.exit(
+            runNativeMobileGatewaySession(proof, request.configuration, {
+              detach: AbortSignal.any([signals.detach, lifetime]),
+              stop: signals.stop,
+            }),
+          ),
+        );
+      },
+    ),
   );
   if (Exit.isFailure(settled)) return failed(settled.cause, selected);
   const session = settled.value;

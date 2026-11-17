@@ -3,7 +3,7 @@ import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
 import { MOBILE_GATEWAY_CREDENTIAL_ENV } from "@bigbud/shared/mobileGatewaySupervisor.config";
 import { BackendInstance } from "../startup/backendInstance.ts";
-import { ServerConfig } from "../startup/config.ts";
+import { ServerConfig, type ServerConfigShape } from "../startup/config.ts";
 import {
   assertOriginalNativeServiceLeaseClient,
   type AttachingNativeLease,
@@ -55,6 +55,10 @@ export function nativeMobileSuccessorPort(
   });
 }
 
+/** A served, sealed successor upstream and the configuration its routes run with. */
+export interface NativeMobileSuccessorUpstream extends MobileSuccessorUpstream {
+  readonly config: ServerConfigShape;
+}
 type UpstreamServices = Exclude<
   Effect.Services<ReturnType<typeof serveSealedMobileUpstream>>,
   Scope.Scope
@@ -70,13 +74,17 @@ export const makeMobileSuccessorUpstream = Effect.fn("makeMobileSuccessorUpstrea
   const config = yield* ServerConfig,
     owner = yield* BackendInstance;
   const services = yield* Effect.services<UpstreamServices>();
-  return async (credential: string, signal: AbortSignal): Promise<MobileSuccessorUpstream> => {
+  return async (
+    credential: string,
+    signal: AbortSignal,
+  ): Promise<NativeMobileSuccessorUpstream> => {
     signal.throwIfAborted();
     const run = Effect.runPromiseWith(services);
     const scope = await run(Scope.make());
     const close = () => run(Scope.close(scope, Exit.void));
+    let selected: ServerConfigShape;
     try {
-      await run(
+      selected = await run(
         serveSealedMobileUpstream(config, owner, credential, assertAllowed).pipe(
           Scope.provide(scope),
         ),
@@ -87,6 +95,7 @@ export const makeMobileSuccessorUpstream = Effect.fn("makeMobileSuccessorUpstrea
       throw cause;
     }
     let released: Promise<void> | undefined;
-    return Object.freeze({ release: () => (released ??= close()) });
+    // `config` is the sealed upstream's selected configuration, as for a fresh session.
+    return Object.freeze({ config: selected, release: () => (released ??= close()) });
   };
 });

@@ -17,6 +17,11 @@ import type {
   MobileActivationController,
 } from "./mobileGatewayActivation.state.ts";
 import type { NativeMobileGatewaySessionSignals } from "./mobileGatewayNative.session.ts";
+import type { NativeMobileSuccessorOutcome } from "./mobileGatewayNative.successor.ts";
+import {
+  runNativeMobileSuccessor,
+  type NativeMobileSuccessorServices,
+} from "./mobileGatewayNative.successorSession.ts";
 
 const ActivationInput = Schema.Struct({
   requestId: MobileActivationRequestId,
@@ -28,13 +33,20 @@ export type MobileActivationLaunch = (
   onSelected: () => void,
 ) => Promise<NativeMobileActivationOutcome>;
 
+/** Successor recovery seam: `onAdopted` fires once a foreign original's intent is restored. */
+export type MobileActivationRecover = (
+  signals: NativeMobileGatewaySessionSignals,
+  onAdopted: () => void,
+) => Promise<NativeMobileSuccessorOutcome>;
+
 interface Running {
   readonly kind: "running";
-  readonly request: NativeMobileActivationRequest;
+  /** `null` while adopting a predecessor's original through successor recovery. */
+  readonly request: NativeMobileActivationRequest | null;
   readonly detach: AbortController;
   readonly stop: AbortController;
   readonly acknowledged: Promise<MobileActivationAcknowledgement>;
-  readonly done: Promise<NativeMobileActivationOutcome>;
+  readonly done: Promise<NativeMobileSuccessorOutcome>;
 }
 /** `uncertain`: a child may still run (detached) or ownership needs repair; never relaunch. */
 type Phase =
@@ -46,14 +58,16 @@ const ack = (
   requestId: string | null,
   status: MobileActivationAcknowledgement["status"],
 ): MobileActivationAcknowledgement => ({ requestId, status });
-/** Native ownership is settled: nothing launched, or the original exit was recorded. */
-const settledOwnership = (outcome: NativeMobileActivationOutcome) =>
+/** Native ownership is settled: nothing launched/adopted, or the original exit was recorded. */
+const settledOwnership = (outcome: NativeMobileSuccessorOutcome) =>
+  outcome.kind === "none" ||
   outcome.kind === "exit-recorded" ||
   outcome.kind === "unavailable" ||
   outcome.kind === "disabled" ||
   (outcome.kind === "failed" && !outcome.repairRequired);
-const uncertainty = (outcome: NativeMobileActivationOutcome) =>
+const uncertainty = (outcome: NativeMobileSuccessorOutcome) =>
   outcome.kind === "failed" ? outcome.cause : Error(`Native mobile gateway ${outcome.kind}.`);
+const unrecoverable: MobileActivationRecover = async () => ({ kind: "unavailable" });
 
 function decodeActivation(input: unknown): NativeMobileActivationRequest {
   const decoded = Schema.decodeUnknownSync(ActivationInput)(input, { onExcessProperty: "error" });
@@ -65,18 +79,29 @@ function decodeActivation(input: unknown): NativeMobileActivationRequest {
 }
 
 /**
- * One native activation at a time. Outcomes map honestly: a recorded exit (or work that never
- * reached Start) returns to idle; a detach or a repair-required failure leaves the controller
- * `uncertain`, which refuses relaunch and fails `stop` until successor recovery or repair. The
+ * One native ownership at a time: a fresh activation or a successor adoption. Outcomes map
+ * honestly: a recorded exit (or work that never reached Start/adoption) settles; a detach or a
+ * repair-required failure leaves the controller `uncertain`, which refuses relaunch and fails
+ * `stop` until a later successful `resume` or repair. Work that never selected/adopted anything
+ * restores the prior phase, so a `resume` with nothing foreign never clears uncertainty. The
  * controller itself never removes intent, pins or runtime assets.
  */
 export function createMobileActivationController(
   launch: MobileActivationLaunch,
   platform: NodeJS.Platform = process.platform,
+  recover: MobileActivationRecover = unrecoverable,
 ): MobileActivationController {
   let phase: Phase = { kind: "idle" };
 
-  const begin = (request: NativeMobileActivationRequest): Running => {
+  const begin = (
+    request: NativeMobileActivationRequest | null,
+    work: (
+      signals: NativeMobileGatewaySessionSignals,
+      onSelected: () => void,
+    ) => Promise<NativeMobileSuccessorOutcome>,
+  ): Running => {
+    const previous = phase;
+    const requestId = request?.requestId ?? null;
     const detach = new AbortController();
     const stop = new AbortController();
     let selected = false;
@@ -88,18 +113,20 @@ export function createMobileActivationController(
       };
     });
     const done = Promise.resolve()
-      .then(() => launch(request, { detach: detach.signal, stop: stop.signal }, onSelected))
+      .then(() => work({ detach: detach.signal, stop: stop.signal }, onSelected))
       .catch(
-        (cause: unknown): NativeMobileActivationOutcome => ({
+        (cause: unknown): NativeMobileSuccessorOutcome => ({
           kind: "failed",
           repairRequired: selected,
           cause,
         }),
       );
     const acknowledged = Promise.race([
-      selection.then(() => ack(request.requestId, "accepted")),
+      selection.then(() => ack(requestId, "accepted")),
       done.then((outcome) => {
-        if (selected) return ack(request.requestId, "accepted");
+        if (selected) return ack(requestId, "accepted");
+        // Nothing foreign remains to adopt: the predecessor's work is retired.
+        if (outcome.kind === "none") return ack(null, "retired");
         if (outcome.kind === "unavailable" || outcome.kind === "disabled")
           return ack(null, outcome.kind);
         throw uncertainty(outcome);
@@ -108,9 +135,11 @@ export function createMobileActivationController(
     const running: Running = { kind: "running", request, detach, stop, acknowledged, done };
     void done.then((outcome) => {
       if (phase !== running) return;
-      phase = settledOwnership(outcome)
-        ? { kind: "idle" }
-        : { kind: "uncertain", reason: outcome.kind === "detached" ? "detached" : "repair" };
+      phase = !settledOwnership(outcome)
+        ? { kind: "uncertain", reason: outcome.kind === "detached" ? "detached" : "repair" }
+        : selected
+          ? { kind: "idle" }
+          : previous;
     });
     return running;
   };
@@ -123,6 +152,7 @@ export function createMobileActivationController(
       if (phase.kind === "running") {
         const current = phase.request;
         if (
+          current &&
           current.requestId === request.requestId &&
           current.configuration.externalOrigin === request.configuration.externalOrigin &&
           current.configuration.port === request.configuration.port
@@ -130,12 +160,19 @@ export function createMobileActivationController(
           return phase.acknowledged;
         throw Error("Another mobile gateway activation owns the native lease.");
       }
-      const running = begin(request);
+      const running = begin(request, (signals, onSelected) => launch(request, signals, onSelected));
       phase = running;
       return running.acknowledged;
     },
-    // Successor adoption is increment 5; until then nothing foreign is ever adopted.
-    resume: async () => ack(null, "unavailable"),
+    // Adopts at most one foreign original; allowed from idle or uncertain, joined while resuming.
+    resume: async () => {
+      if (platform !== "linux") return ack(null, "unavailable");
+      if (phase.kind === "running")
+        return phase.request ? ack(null, "unavailable") : phase.acknowledged;
+      const running = begin(null, recover);
+      phase = running;
+      return running.acknowledged;
+    },
     stop: async () => {
       if (phase.kind === "idle") return;
       if (phase.kind === "uncertain")
@@ -158,8 +195,13 @@ export function createMobileActivationController(
 export const makeNativeMobileActivationController = Effect.fn(
   "makeNativeMobileActivationController",
 )(function* (inputs: RemoteMobileNativeInputsValue) {
-  const run = Effect.runPromiseWith(yield* Effect.services<NativeMobileActivationServices>());
-  return createMobileActivationController((request, signals, onSelected) =>
-    run(runNativeMobileActivation(inputs, request, signals, onSelected)),
+  const run = Effect.runPromiseWith(
+    yield* Effect.services<NativeMobileActivationServices | NativeMobileSuccessorServices>(),
+  );
+  return createMobileActivationController(
+    (request, signals, onSelected) =>
+      run(runNativeMobileActivation(inputs, request, signals, onSelected)),
+    process.platform,
+    (signals, onAdopted) => run(runNativeMobileSuccessor(inputs, signals, onAdopted)),
   );
 });

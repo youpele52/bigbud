@@ -7,6 +7,7 @@ import {
   type ConfirmedNativeLeaseExit,
   type ConfirmedNativeCancelFence,
   type OriginalNeverInvoked,
+  type NativeLeaseExitEvidence,
 } from "../remote-agent/remoteAgentServiceLeaseClient.ts";
 import { mobileGatewayBuildPin } from "../remote-agent/mobileGatewayLifecycle.transitions.ts";
 import { completeNativeMobileGatewayAttempt } from "../remote-agent/mobileGatewayLifecycle.native.transitions.ts";
@@ -102,6 +103,21 @@ async function confirm(
   });
 }
 
+/** Durable terminal evidence of a confirmed original native exit (shared with successor exit). */
+export function nativeExitCompletion(
+  evidence: NativeLeaseExitEvidence,
+): MobileNativeGatewayCompletion {
+  if (!evidence.originalController) throw Error("Original native exit controller required.");
+  return {
+    kind: "native-exit",
+    generation: evidence.generation,
+    originalChildPid: evidence.originalChildPid,
+    originalController: evidence.originalController,
+    ...(evidence.currentController ? { currentController: evidence.currentController } : {}),
+    ...(evidence.previousController ? { previousController: evidence.previousController } : {}),
+  };
+}
+
 /** No live lease/JSON/PID can pass the exit-only original client accessor. */
 export async function confirmNativeMobileGatewayAssetsExit(
   proof: VerifiedMobilePublication,
@@ -112,16 +128,12 @@ export async function confirmNativeMobileGatewayAssetsExit(
 ): Promise<VerifiedNativeMobileGatewayAssetsCleanup> {
   assertOriginalNativeServiceLeaseClient(client);
   const evidence = client.exitEvidence(exit);
-  if (!evidence.originalController)
-    return Promise.reject(Error("Original native exit controller required."));
-  const completion: MobileNativeGatewayCompletion = {
-    kind: "native-exit",
-    generation: evidence.generation,
-    originalChildPid: evidence.originalChildPid,
-    originalController: evidence.originalController,
-    ...(evidence.currentController ? { currentController: evidence.currentController } : {}),
-    ...(evidence.previousController ? { previousController: evidence.previousController } : {}),
-  };
+  let completion: MobileNativeGatewayCompletion;
+  try {
+    completion = nativeExitCompletion(evidence);
+  } catch (cause) {
+    return Promise.reject(cause);
+  }
   return confirm(proof, token, client, pending, { binding: evidence.binding, completion });
 }
 /** Kind is read from a private terminal map, never supplied by the caller. */

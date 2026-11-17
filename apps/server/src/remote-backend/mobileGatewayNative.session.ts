@@ -60,7 +60,7 @@ export interface NativeMobileGatewaySessionSignals {
  * (successor recovery can adopt the child) and the fiber waits, so the upstream/channel scope can
  * never close underneath accepted native work.
  */
-const settledWorker = <A>(run: (interrupted: AbortSignal) => Promise<A>) =>
+export const settledNativeMobileWork = <A>(run: (interrupted: AbortSignal) => Promise<A>) =>
   Effect.callback<A, NativeMobileGatewaySessionError>((resume, interrupted) => {
     const work = Promise.resolve().then(() => run(interrupted));
     work.then(
@@ -142,7 +142,7 @@ export const runNativeMobileGatewaySession = Effect.fn("runNativeMobileGatewaySe
           RemoteAgentRuntimeOwners | RemoteBackendIdentityService | ServerSettingsService
         >(),
       );
-      return yield* settledWorker((interrupted) =>
+      return yield* settledNativeMobileWork((interrupted) =>
         runMobileActivationWorker({
           ...nativeMobileActivationPorts(client, preparation, nativeMobileActivationAssets(proof)),
           detach: AbortSignal.any([signals.detach, interrupted]),

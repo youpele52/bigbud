@@ -14,8 +14,9 @@ import {
 } from "./remote-backend/mobileGatewayActivation.service.ts";
 
 /**
- * Attach the native controller for the app's lifetime. Release retires it through the activation
- * state: a pending stop settles first, then the controller detaches and awaits its session.
+ * Attach the native controller for the app's lifetime and run successor recovery once. Release
+ * retires it through the activation state: a pending stop settles first, then the controller
+ * detaches and awaits its session.
  *
  * `RemoteAgentRuntimeOwnersLive` is the same layer value the local-supervisor PTY and managed
  * agent layers provide, so the app's single layer build memoises one owners store (one in-memory
@@ -26,8 +27,20 @@ const attachNativeMobileActivation = (inputs: RemoteMobileNativeInputsValue) =>
     Effect.gen(function* () {
       const service = yield* RemoteMobileGatewayActivation;
       const controller = yield* makeNativeMobileActivationController(inputs);
+      const log = Effect.runForkWith(yield* Effect.services<never>());
       yield* Effect.acquireRelease(
-        Effect.sync(() => registeredMobileGatewayActivationState(service).attach(controller)),
+        Effect.sync(() => {
+          const state = registeredMobileGatewayActivationState(service);
+          const retire = state.attach(controller);
+          // Adopt at most one predecessor's original once per attach. Its settlement lives in the
+          // controller's phase; this waiter only logs a refused or uncertain recovery.
+          void state
+            .resume()
+            .catch((cause: unknown) =>
+              log(Effect.logWarning("Mobile successor recovery is uncertain.", cause)),
+            );
+          return retire;
+        }),
         (retire) =>
           Effect.tryPromise(retire).pipe(
             Effect.ignoreCause({ log: true }),

@@ -80,6 +80,24 @@ export function nativeMobileActivationLease(
   if (!held) throw Error("Held original native activation lease required.");
   return held;
 }
+/**
+ * Hold a lease that successor Resume #2 verified for exactly this retained original intent, so
+ * the owner's native process port can admit it. The returned retire runs before stop/detach.
+ */
+export function holdNativeMobileSuccessorLease(
+  client: NativeServiceLeaseClient,
+  pending: PendingOriginalNativeLease,
+  lease: VerifiedNativeLease,
+): () => void {
+  assertOriginalNativeServiceLeaseClient(client);
+  if (
+    heldLeases.has(lease) ||
+    JSON.stringify(client.evidence(lease).binding) !== JSON.stringify(client.binding(pending))
+  )
+    throw Error("Verified successor lease of the retained original intent required.");
+  heldLeases.set(lease, Object.freeze({ client, pending }));
+  return () => void heldLeases.delete(lease);
+}
 interface Progress<T, I> {
   readonly attempt: OriginalNativeLeaseAttempt;
   reserving: boolean;
