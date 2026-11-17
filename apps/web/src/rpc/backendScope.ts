@@ -101,10 +101,11 @@ export async function bootstrapBackendScope(
   let http: BoundBackendHttpEndpoint | null = null;
   let handles: Awaited<ReturnType<typeof openRemoteBackendClientOwner>> | null = null;
   const publish = () => {
-    if (http && handles && readBackendScope().kind !== "refused")
+    const owned = handles;
+    if (http && owned && readBackendScope().kind !== "refused")
       setBackendScope(
         { kind: "bound", profileId, label: profile.label, http },
-        { api: handles.api, rpcClient: handles.rpcClient },
+        { api: owned.api, rpcClient: owned.rpcClient, readHandshake: () => owned.handshake },
       );
   };
   const lease = createRelayLeaseEndpoint({

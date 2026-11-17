@@ -1,4 +1,5 @@
 import type { NativeApi } from "@bigbud/contracts";
+import type { RemoteBackendClientHandshake } from "@bigbud/contracts/server/remoteBackendClientHandshake.ts";
 import { RemoteBackendRelayProfileId } from "@bigbud/contracts/server/remoteBackendRelay.ts";
 import * as Schema from "effect/Schema";
 import type { RemoteClientRefusal } from "./remoteBackendClientEndpoint";
@@ -39,6 +40,8 @@ export type BackendScopeState =
 interface BoundHandles {
   readonly api: NativeApi;
   readonly rpcClient: WsRpcClient;
+  /** Latest admitted handshake; re-read on every reconnect (it changes after a runtime update). */
+  readonly readHandshake?: () => RemoteBackendClientHandshake;
 }
 
 const LOCAL: BackendScopeState = Object.freeze({ kind: "local" });
@@ -97,6 +100,11 @@ export function resolveBoundWsRpcClient(): WsRpcClient | undefined {
 
 export function readBoundNativeApi(): NativeApi | undefined {
   return handles?.api;
+}
+
+/** Admitted handshake of this window's backend, or null for a local or not-yet-bound window. */
+export function readBoundBackendHandshake(): RemoteBackendClientHandshake | null {
+  return handles?.readHandshake?.() ?? null;
 }
 
 export function readBoundHttpEndpoint(): BoundBackendHttpEndpoint | null {

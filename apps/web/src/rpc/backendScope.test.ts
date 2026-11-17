@@ -11,6 +11,7 @@ import {
   __resetBackendScopeForTests,
   BoundBackendNotReadyError,
   readBackendScope,
+  readBoundBackendHandshake,
   setBackendScope,
 } from "./backendScope.state";
 import {
@@ -70,6 +71,8 @@ describe("backend scope binding", () => {
     disposers.push(...harness.disposers);
 
     expect(state).toMatchObject({ kind: "bound", profileId: "vps-1", label: "Build VPS" });
+    // The update UI reads capabilities from the admitted handshake, never from the local backend.
+    expect(readBoundBackendHandshake()).toEqual(handshake);
     await waitFor(() => expect(sockets).toHaveLength(1));
     const socketUrl = new URL(sockets[0]!.url);
     expect(socketUrl.origin).toBe(LEASE_ORIGIN.replace("http:", "ws:"));

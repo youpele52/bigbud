@@ -4,6 +4,7 @@ import type { OrganizationRpcClient } from "./wsRpcClient.organization.ts";
 import type { BranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
 import type { DetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import type { DatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
+import type { RemoteRuntimeUpdateRpcMethods } from "./wsRpcClient.remoteBackendUpdate";
 import type { MetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
 import {
   type GitActionProgressEvent,
@@ -230,6 +231,7 @@ export interface WsRpcClient {
     >;
   };
   readonly server: RemoteBackendRelayNativeApi &
+    RemoteRuntimeUpdateRpcMethods &
     DatabaseCompactionRpcMethods & {
       readonly ping: RpcUnaryNoArgMethod<typeof WS_METHODS.serverPing>;
       readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;

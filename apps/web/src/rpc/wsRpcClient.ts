@@ -16,6 +16,7 @@ import { requestWsConnectionDiagnostics } from "./wsRpcClient.diagnostics";
 import { requestConnectedSshMonitors, requestSshMonitorSample } from "./wsRpcClient.monitor";
 import { createServerRemoteRpcMethods } from "./wsRpcClient.serverRemote";
 import { createRemoteBackendRelayRpcMethods } from "./wsRpcClient.remoteBackendRelay";
+import { createRemoteRuntimeUpdateRpcMethods } from "./wsRpcClient.remoteBackendUpdate";
 import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import { createComputerUseRpcClient } from "./wsRpcClient.computerUse";
@@ -227,6 +228,7 @@ export function createWsRpcClient(
       listConnectedSshMonitors: () => requestConnectedSshMonitors(transport),
       ...createServerRemoteRpcMethods(transport),
       ...createRemoteBackendRelayRpcMethods(transport),
+      ...createRemoteRuntimeUpdateRpcMethods(transport),
       upsertKeybinding: (input) =>
         transport.request((client) => client[WS_METHODS.serverUpsertKeybinding](input)),
       getSettings: () => transport.request((client) => client[WS_METHODS.serverGetSettings]({})),
