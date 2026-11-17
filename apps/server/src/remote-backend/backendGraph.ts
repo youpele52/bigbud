@@ -1,9 +1,8 @@
-import { createHash } from "node:crypto";
 import { join } from "node:path";
 import type { RemoteAgentTargetTriple } from "@bigbud/shared/remoteAgentArtifact";
 import {
   authenticateBackendGraphManifest,
-  canonicalBackendGraphPayload,
+  backendGraphManifestDigest,
 } from "./backendGraph.manifest.ts";
 import { verifyBackendGraphDirectory, type BackendGraphRoot } from "./backendGraph.files.ts";
 
@@ -46,9 +45,7 @@ export async function verifyBackendGraph(input: {
     snapshot: Object.freeze({
       root: input.root,
       rootIdentity,
-      manifestDigest: createHash("sha256")
-        .update(canonicalBackendGraphPayload(manifest))
-        .digest("hex"),
+      manifestDigest: backendGraphManifestDigest(manifest),
       nodePath: join(input.root, manifest.node),
       nodeSha256: manifest.files.find((file) => file.path === manifest.node)!.sha256,
       entryPath: join(input.root, manifest.entry),

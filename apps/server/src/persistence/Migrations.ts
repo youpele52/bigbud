@@ -12,6 +12,7 @@ import {
   readLatestAppliedMigrationId,
 } from "./MigrationProgress.ts";
 
+import { assertDatabaseSchemaNotNewer } from "./Migrations.downgradeGuard.ts";
 import { baseMigrationEntries } from "./Migrations.base.ts";
 import Migration0101 from "./Migrations/101_ProviderRuntimeEpochAndTurnControl.ts";
 import Migration0102 from "./Migrations/102_ThreadRuntimeLeaseTerminalMultiplicity.ts";
@@ -194,6 +195,8 @@ export const runMigrations = Effect.fn("runMigrations")(function* ({
       ? "Running all migrations..."
       : `Running migrations 1 through ${toMigrationInclusive}...`,
   );
+  // Refuse an older runtime on a newer schema before anything reads or migrates it.
+  yield* assertDatabaseSchemaNotNewer(latestMigrationId);
   let wrap: MigrationWrapper | undefined;
   if (onProgress) {
     const latestApplied = yield* readLatestAppliedMigrationId();

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { verifyPinnedArtifactSignature } from "@bigbud/shared/artifactSignature";
 import {
   isRemoteAgentTargetTriple,
@@ -132,6 +133,10 @@ export function canonicalBackendGraphPayload(manifest: BackendGraphManifest): Bu
   return Buffer.from(
     `bigbud.remote-backend.executable-graph.v1\0${JSON.stringify({ revision, version, buildDigest, target, node, entry, files })}`,
   );
+}
+/** The digest verification pins as `manifestDigest` (signature excluded). */
+export function backendGraphManifestDigest(manifest: BackendGraphManifest): string {
+  return createHash("sha256").update(canonicalBackendGraphPayload(manifest)).digest("hex");
 }
 export function authenticateBackendGraphManifest(
   value: unknown,
