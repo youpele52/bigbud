@@ -3,6 +3,7 @@ import { copilotSdk } from "./copilotSdk.lazy.ts";
 import { makeCopilotClientOptions } from "./Adapter.types.cli.ts";
 import { copilotRuntimeRoot } from "@bigbud/shared/copilotRuntime.paths";
 import { acquireCopilotLease } from "@bigbud/shared/copilotRuntime.storage";
+import { prepareCopilotVendorCache } from "./Runtime.vendorCache.ts";
 
 /** Leases precede resolution so uninstall cannot race a new probe, title request, or session. */
 export async function createLeasedCopilotClient(
@@ -14,6 +15,7 @@ export async function createLeasedCopilotClient(
   if (factory) return factory(makeCopilotClientOptions(input));
   const release = await acquireCopilotLease(root);
   try {
+    await prepareCopilotVendorCache(root);
     const client = new (copilotSdk().CopilotClient)(makeCopilotClientOptions(input));
     const stop = client.stop.bind(client);
     const forceStop = client.forceStop.bind(client);

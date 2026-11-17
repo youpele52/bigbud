@@ -1,7 +1,8 @@
 import { createReadStream } from "node:fs";
-import { mkdir, open, type FileHandle } from "node:fs/promises";
+import { open, type FileHandle } from "node:fs/promises";
 import Path from "node:path";
 import { createGunzip } from "node:zlib";
+import { runtimeDirectory } from "@bigbud/shared/copilotRuntime.storage";
 
 import type { CopilotRuntimeRelease } from "./Runtime.release.ts";
 
@@ -39,7 +40,7 @@ export async function extractCopilotRuntime(input: {
     "package/README.md",
   ]);
   const seen = new Set<string>();
-  await mkdir(Path.join(input.destination, "package"), { mode: 0o700 });
+  await runtimeDirectory(Path.join(input.destination, "package"), true);
   const source = createReadStream(input.archive);
   const unpacked = createGunzip();
   source.on("error", (error) => unpacked.destroy(error));
@@ -112,11 +113,10 @@ export async function extractCopilotRuntime(input: {
           }
           seen.add(name);
           padding = (512 - (remaining % 512)) % 512;
-          file = await open(
-            Path.join(input.destination, name),
-            "wx",
-            name === `package/${input.release.binaryName}` ? 0o755 : 0o644,
-          );
+          // Owner-only, umask-independent: the runtime is never shared with other local users.
+          const mode = name === `package/${input.release.binaryName}` ? 0o700 : 0o600;
+          file = await open(Path.join(input.destination, name), "wx", mode);
+          await file.chmod(mode);
         }
       }
     }

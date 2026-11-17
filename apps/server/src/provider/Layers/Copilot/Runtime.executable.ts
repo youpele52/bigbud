@@ -1,4 +1,4 @@
-import { realpathSync, statSync, existsSync } from "node:fs";
+import { readFileSync, realpathSync, statSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import Path from "node:path";
 import { resolveCommandPath } from "../../../utils/commandPath.ts";
@@ -47,6 +47,27 @@ export function sdkCopilotExecutable(target: string): string | undefined {
     return existsSync(binary) && existsSync(Path.join(Path.dirname(binary), "runtime.node"))
       ? binary
       : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const COPILOT_PACKAGE = /^@github\/copilot(-(darwin|linux|linuxmusl|win32)-(arm64|x64))?$/;
+
+/**
+ * Version of the npm package that owns an executable, read from its adjacent manifest.
+ * `copilot --version` on the self-extracting CLI materializes ~200 MB into the vendor pkg cache,
+ * so status discovery must prefer this side-effect-free read.
+ */
+export function packagedCopilotVersion(executable: string): string | undefined {
+  try {
+    const manifest: unknown = JSON.parse(
+      readFileSync(Path.join(Path.dirname(executable), "package.json"), "utf8"),
+    );
+    if (typeof manifest !== "object" || manifest === null) return undefined;
+    const { name, version } = manifest as { name?: unknown; version?: unknown };
+    if (typeof name !== "string" || !COPILOT_PACKAGE.test(name)) return undefined;
+    return typeof version === "string" ? /^\d+\.\d+\.\d+/.exec(version)?.[0] : undefined;
   } catch {
     return undefined;
   }

@@ -1,14 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, readdir, rename, rm } from "node:fs/promises";
+import { chmod, lstat, mkdir, open, readdir, rename, rm } from "node:fs/promises";
 import Path from "node:path";
 import { createDevPortCoordinator } from "./DevPortCoordinator.ts";
 import { readManagedCopilotVersion } from "./copilotRuntime.paths.ts";
 
-export async function runtimeDirectory(directory: string): Promise<void> {
-  await mkdir(directory, { recursive: true, mode: 0o700 });
+/**
+ * Creates or tightens a bigbud-owned runtime directory to exactly 0700, independent of umask.
+ * `exclusive` requires a fresh directory (staging), failing with EEXIST otherwise.
+ */
+export async function runtimeDirectory(directory: string, exclusive = false): Promise<void> {
+  await mkdir(directory, { recursive: !exclusive, mode: 0o700 });
   if (!(await lstat(directory)).isDirectory())
     throw new Error("Refusing symlinked Copilot storage.");
+  if (process.platform !== "win32") await chmod(directory, 0o700);
 }
 
 /** Call only under the long installation lock; unrecognized user data is never removed. */

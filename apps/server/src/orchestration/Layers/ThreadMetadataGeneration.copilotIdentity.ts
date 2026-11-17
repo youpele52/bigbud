@@ -14,6 +14,10 @@ import {
 } from "../../provider/Layers/Copilot/Adapter.types.cli.ts";
 import { copilotNativePackageName } from "../../provider/Layers/Copilot/Runtime.release.ts";
 import { sdkCopilotExecutable } from "../../provider/Layers/Copilot/Runtime.executable.ts";
+import {
+  copilotRuntimeEnvironment,
+  prepareCopilotVendorCache,
+} from "../../provider/Layers/Copilot/Runtime.vendorCache.ts";
 import { metadataFingerprint } from "./ThreadMetadataGeneration.policy.ts";
 import { closeMetadataRuntime, metadataAbortable } from "./ThreadMetadataGeneration.runtime.ts";
 
@@ -91,11 +95,13 @@ export function makeMetadataCopilotClient(
     connection: RuntimeConnection.forStdio({
       path: invocation.path,
       args: [...invocation.args],
-      env: Object.fromEntries(
-        Object.entries(environment).filter(
-          (entry): entry is [string, string] => entry[1] !== undefined,
+      env:
+        copilotRuntimeEnvironment(invocation, environment) ??
+        Object.fromEntries(
+          Object.entries(environment).filter(
+            (entry): entry is [string, string] => entry[1] !== undefined,
+          ),
         ),
-      ),
     }),
     mode: "empty",
     // Process cwd is a real empty directory; session paths are memory-only.
@@ -114,6 +120,7 @@ export const createMetadataCopilotClient: MetadataCopilotClientFactory = async (
   let ownedCwd: string | undefined;
   try {
     const invocation = copilotMetadataRuntime(binary, environment);
+    await prepareCopilotVendorCache();
     ownedCwd = await mkdtemp(join(tmpdir(), "bigbud-metadata-copilot-"));
     const cwd = await realpath(ownedCwd);
     const client = makeMetadataCopilotClient(invocation, environment, cwd);

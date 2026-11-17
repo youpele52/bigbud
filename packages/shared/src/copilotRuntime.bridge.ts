@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, lstat, mkdir, open, readFile, readdir, rm } from "node:fs/promises";
+import { copyFile, lstat, open, readFile, readdir, rm } from "node:fs/promises";
 import Path from "node:path";
 import {
   copilotRuntimeRoot,
@@ -11,6 +11,7 @@ import {
   publishCopilotRuntime,
   readRuntimeState,
   recoverCopilotStaging,
+  runtimeDirectory,
   withCopilotRuntimeLock,
   writeRuntimeState,
 } from "./copilotRuntime.storage.ts";
@@ -105,7 +106,8 @@ export async function preserveBundledCopilotRuntime(input: {
       const staging = Path.join(root, ".bridge-staging");
       await recoverCopilotStaging(staging);
       const temporary = Path.join(staging, `${process.pid}-${randomUUID()}`);
-      await mkdir(Path.join(temporary, "package"), { recursive: true, mode: 0o700 });
+      await runtimeDirectory(temporary, true);
+      await runtimeDirectory(Path.join(temporary, "package"), true);
       try {
         if (!readManagedCopilotVersion(root, relative)) {
           for (const name of members) {
@@ -117,7 +119,8 @@ export async function preserveBundledCopilotRuntime(input: {
             await copyFile(from, to);
             const file = await open(to, "r+");
             try {
-              if (name.startsWith("copilot")) await file.chmod(0o755);
+              // copyFile carries the source mode; managed copies are owner-only.
+              await file.chmod(name.startsWith("copilot") ? 0o700 : 0o600);
               await file.sync();
             } finally {
               await file.close();
