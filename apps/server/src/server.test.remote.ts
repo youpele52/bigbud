@@ -64,7 +64,7 @@ export const remoteClientRoutesUnderTest = Layer.unwrap(
       makeRemoteClientHandshakeRoute(version).pipe(
         HttpRouter.provideRequest(remoteIdentityFixture),
       ),
-      makeWebsocketRpcRouteLayer(withBootstrapCommandLock),
+      makeWebsocketRpcRouteLayer(withBootstrapCommandLock, { remoteClientRouter: true }),
     ).pipe(Layer.provide(remoteClientAuthorizationLive));
   }),
 );

@@ -27,6 +27,8 @@ import { makeWsRpcCopilotRuntimeHandlers } from "./wsRpcHandlers.copilotRuntime.
 import { makeWsRpcDatabaseCompactionHandlers } from "./wsRpcHandlers.databaseCompaction.ts";
 import { makeWsRpcMetadataWarningHandlers } from "./wsRpcHandlers.metadataWarnings.ts";
 import { makeWsRpcRemoteBackendDeploymentHandlers } from "./wsRpcHandlers.remoteBackendDeployment.ts";
+import { makeWsRpcRemoteBackendUpdateHandlers } from "./wsRpcHandlers.remoteBackendUpdate.ts";
+import { makeRuntimeUpdateSetupAuthority } from "../remote-backend/runtimeUpdate.authority.ts";
 import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
@@ -53,10 +55,12 @@ const makeWsRpcLayer = (
       const databaseCompactionHandlers = yield* makeWsRpcDatabaseCompactionHandlers;
       const metadataWarningHandlers = yield* makeWsRpcMetadataWarningHandlers;
       const deploymentHandlers = yield* makeWsRpcRemoteBackendDeploymentHandlers();
+      const runtimeUpdateHandlers = yield* makeWsRpcRemoteBackendUpdateHandlers();
 
       return WsRpcGroup.of({
         ...relayHandlers,
         ...deploymentHandlers,
+        ...runtimeUpdateHandlers,
         ...makeWsRpcCopilotRuntimeHandlers(context),
         ...makeWsRpcAutomationHandlers(context),
         ...makeWsRpcOrchestrationServerHandlers(context),
@@ -78,9 +82,14 @@ const makeWsRpcLayer = (
     }),
   );
 
-export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
+export const makeWebsocketRpcRouteLayer = (
+  withBootstrapCommandLock: BootstrapCommandLock,
+  /** Only the remote client Unix socket router sets this; it gates D10 setup authority. */
+  options: { readonly remoteClientRouter?: boolean } = {},
+) =>
   Layer.unwrap(
     Effect.gen(function* () {
+      const setupAuthority = makeRuntimeUpdateSetupAuthority();
       // Own accepted mutations for the HTTP server's lifetime, not the temporary RPC layer build.
       const worktreeScope = yield* Effect.scope;
       const monitorInstanceId = randomUUID();
@@ -93,6 +102,7 @@ export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCo
         makeWsRpcLayer(withBootstrapCommandLock, worktreeScope, monitorInstanceId, relay.handlers),
         RpcSerialization.layerJson,
         retentionMutationAuthorization.layer,
+        setupAuthority.layer,
       );
       const rpcWebSocketHttpEffect = yield* makeWsRpcHttpEffectWithSshMonitorCleanup(
         monitorInstanceId,
@@ -121,9 +131,16 @@ export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCo
                     : 401,
             });
           const requestWithAuthorization = request.modify({
-            headers: retentionMutationAuthorization.authorizeHeaders(
-              request.headers,
-              config.authToken !== undefined || isTrustedRetentionMutationOrigin(request.headers),
+            headers: setupAuthority.authorizeHeaders(
+              retentionMutationAuthorization.authorizeHeaders(
+                request.headers,
+                config.authToken !== undefined || isTrustedRetentionMutationOrigin(request.headers),
+              ),
+              {
+                mode: config.mode,
+                remoteClientRouter: options.remoteClientRouter === true,
+                authorized: authorization === "authorized",
+              },
             ),
           });
           return yield* rpcWebSocketHttpEffect.pipe(

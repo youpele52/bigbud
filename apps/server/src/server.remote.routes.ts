@@ -29,7 +29,8 @@ export const makeRemoteClientRoutesLayer = Layer.unwrap(
       mobileOwnerActivationRoute.pipe(
         Layer.provide(Layer.merge(RemoteMobileNativeInputsLive, RemoteMobileConsentJournalLive)),
       ),
-      makeWebsocketRpcRouteLayer(withBootstrapCommandLock),
+      // The authenticated client socket is the only route granting D10 setup authority.
+      makeWebsocketRpcRouteLayer(withBootstrapCommandLock, { remoteClientRouter: true }),
       attachmentsRouteLayer,
       projectFaviconRouteLayer,
       workspacePdfViewerRouteLayer,

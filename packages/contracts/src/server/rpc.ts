@@ -5,6 +5,12 @@ import {
 } from "./rpc.remoteBackendRelay";
 import { WsServerSetupRemoteBackendRpc } from "./rpc.remoteBackendDeployment";
 import {
+  WsServerCancelRemoteRuntimeUpdateRpc,
+  WsServerConsentRemoteRuntimeUpdateInterruptionRpc,
+  WsServerGetRemoteRuntimeUpdateStatusRpc,
+  WsServerRequestRemoteRuntimeUpdateRpc,
+} from "./rpc.remoteBackendUpdate";
+import {
   WsTerminalRemoteInventoryRpc,
   WsTerminalRemoteAttachRpc,
   WsTerminalRemoteDetachRpc,
@@ -212,6 +218,10 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerOpenRemoteBackendRelayRpc,
   WsServerCloseRemoteBackendRelayRpc,
   WsServerSetupRemoteBackendRpc,
+  WsServerRequestRemoteRuntimeUpdateRpc,
+  WsServerGetRemoteRuntimeUpdateStatusRpc,
+  WsServerConsentRemoteRuntimeUpdateInterruptionRpc,
+  WsServerCancelRemoteRuntimeUpdateRpc,
   WsCopilotRuntimeRpc,
   WsServerRetryTextGenerationRpc,
   WsServerClaimMetadataWarningsRpc,
