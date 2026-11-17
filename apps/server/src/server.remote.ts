@@ -18,6 +18,7 @@ import { ThreadToolModelSourcesLive } from "./orchestration-tools/ThreadOrchestr
 import { RemoteAgentLocalControlLive } from "./remote-agent/remoteAgentLocalControl.layer.ts";
 import { prepareRemoteClientSocket } from "./remote-backend/clientSocket.ts";
 import { RemoteBackendAuthorityError } from "./remote-backend/authority.record.ts";
+import { RemoteMobileActivationLive } from "./server.mobileActivation.ts";
 
 function socketOperation<A>(run: () => Promise<A>) {
   return Effect.tryPromise({
@@ -65,6 +66,8 @@ export const RemoteServerApplicationLive = Layer.unwrap(
       ),
       ThreadToolModelSourcesLive,
       RemoteAgentLocalControlLive,
+      // Default-off: attaches the native mobile controller only when proof inputs exist.
+      RemoteMobileActivationLive,
     ).pipe(Layer.provideMerge(BootstrapCommandLockLive));
 
     return Layer.effectDiscard(
