@@ -14,7 +14,11 @@ import {
 } from "../apps/server/src/remote-backend/backendGraph.manifest.ts";
 import { canonicalInput, fingerprint, readSigningKey } from "./lib/artifact-build/io.ts";
 import { inventoryBackendGraph } from "./build-remote-backend-graph.inventory.ts";
-import { validateBackendGraphClosure } from "./build-remote-backend-graph.closure.ts";
+import {
+  validateBackendGraphClosure,
+  type BackendGraphClosureReport,
+} from "./build-remote-backend-graph.closure.ts";
+import type { BackendGraphLoaderPolicy } from "./build-remote-backend-graph.policy.ts";
 
 export interface BuildBackendGraphInput {
   readonly root: string;
@@ -27,6 +31,9 @@ export interface BuildBackendGraphInput {
   readonly keyId: string;
   readonly output: string;
   readonly signal?: AbortSignal;
+  /** Defaults to the checked-in policy; its digest belongs in the caller's build provenance. */
+  readonly loaderPolicy?: BackendGraphLoaderPolicy;
+  readonly onClosureReport?: (report: BackendGraphClosureReport) => void;
 }
 const inside = (root: string, path: string) => {
   const rel = relative(root, path);
@@ -49,6 +56,11 @@ async function validateNode(path: string, target: string) {
     await file.close();
   }
 }
+/** Helper entries started beside the backend entry; they are closure roots too. */
+export const backendGraphRequiredRoots = (entry: string) => [
+  join(dirname(entry), "NodeSqliteWorker.mjs"),
+  join(dirname(entry), "remote-client-relay/remoteBackendClientRelay.mjs"),
+];
 /** Build/sign only. The caller's signing key is explicit; this does not establish release trust. */
 export async function buildRemoteBackendGraph(
   input: BuildBackendGraphInput,
@@ -82,16 +94,19 @@ export async function buildRemoteBackendGraph(
   const key = await readSigningKey(keyFile);
   const publicKey = createPublicKey(key).export({ format: "pem", type: "spki" }).toString();
   const files = await inventoryBackendGraph(root, input.signal);
-  const required = [
-    join(dirname(input.entry), "NodeSqliteWorker.mjs"),
-    join(dirname(input.entry), "remote-client-relay/remoteBackendClientRelay.mjs"),
-  ];
+  const required = backendGraphRequiredRoots(input.entry);
   if (required.some((path) => !files.some((file) => file.path === path)))
     throw new Error(
       "Backend graph must include its SQLite worker and standalone client relay helper.",
     );
   await validateNode(join(root, input.node), input.target);
-  await validateBackendGraphClosure(root, files);
+  const report = await validateBackendGraphClosure(root, files, {
+    entry: input.entry,
+    target: input.target,
+    roots: required,
+    ...(input.loaderPolicy ? { policy: input.loaderPolicy } : {}),
+  });
+  input.onClosureReport?.(report);
   const unsigned: BackendGraphManifest = {
     revision: 1,
     version: input.version,

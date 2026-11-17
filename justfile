@@ -53,6 +53,9 @@ package-mobile-components *args:
 build-remote-backend-graph *args:
     bun run build:remote-backend-graph "$@"
 
+remote-backend-graph *args:
+    bun run remote-backend-graph "$@"
+
 build-desktop *args:
     bun run build:desktop "$@"
 
@@ -115,6 +118,9 @@ dist-desktop-linux-deb *args:
 
 verify-desktop-linux-artifact *args:
     bun run verify:desktop:linux-artifact "$@"
+
+verify-published-remote-agent-script *args:
+    bun run verify:published-remote-agent-script "$@"
 
 dist-desktop-win *args:
     bun run dist:desktop:win "$@"

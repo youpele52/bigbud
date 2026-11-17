@@ -1,0 +1,11 @@
+{
+  "name": "bigbud-remote-backend-graph-externals",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinned Linux externals for the remote backend executable graph. Installed only with lifecycle scripts disabled.",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@github/copilot-sdk": "1.0.28"
+  }
+}

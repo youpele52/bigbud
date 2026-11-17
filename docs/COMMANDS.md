@@ -65,6 +65,7 @@ Bun scripts remain the source of truth for workflow implementation. The just rec
 | `bun run build:mobile-web:desktop`   | `just build-mobile-web-desktop`   |
 | `bun run package:mobile-components`  | `just package-mobile-components`  |
 | `bun run build:remote-backend-graph` | `just build-remote-backend-graph` |
+| `bun run remote-backend-graph`       | `just remote-backend-graph`       |
 | `bun run build:desktop`              | `just build-desktop`              |
 | `bun run build:contracts`            | `just build-contracts`            |
 | `bun run build:workspace-agent`      | `just build-workspace-agent`      |
@@ -106,11 +107,40 @@ output parent must be private. The producer hashes all members, signs the existi
 contract, and uses the runtime verifier to revalidate it before writing the manifest without
 overwriting an existing file. It executes no input and installs or publishes nothing.
 
-This producer currently supports a restricted static JavaScript dependency graph. It rejects
-the current full backend bundle's `node:module`/`createRequire` and native loaders. Complete
-SDK/native staging and a reviewed resolver policy are required before that bundle can use it.
-Static inventory and a successful signature check do not qualify providers, shared libraries,
-native execution or release-key authorization.
+Before signing, the producer validates the static closure against the checked-in loader policy
+(`scripts/build-remote-backend-graph.policy.data.ts`). Only the tsdown
+`createRequire(import.meta.url)` shim is trusted, and each literal `__require(...)` must resolve
+to a graph member. Non-literal loaders and generated code are allowed only in reviewed members,
+matched by bundle `//#region` marker or graph path plus a SHA-256 of that region or file.
+Listed absent externals (node-pty, Playwright, Bun-only adapters, optional accelerators) are
+allowed only when no eager edge reaches them from a statically reachable module. Every `.node`
+file must be listed for the target and match its ELF machine, and any other ELF member must match
+too. Static inventory and a successful signature check do not qualify providers, shared
+libraries, native execution or release-key authorization.
+
+### Remote backend graph (dev)
+
+`bun run remote-backend-graph` assembles, signs and archives a complete backend graph from a
+server build. It downloads the sha256-pinned Node 24.13.1 Linux runtime (or takes
+`--node-archive`), installs `scripts/remote-backend-graph/package-lock.json` with
+`npm ci --ignore-scripts --omit=dev --os=linux --cpu=<arch> --libc=glibc`, prunes
+other-platform payloads, source maps and type declarations, copies everything into a private
+`graph/` (directories 0700, files 0600/0700), writes `NOTICES.json`, signs with the producer
+above, then writes a deterministic `.tar.gz`, `manifest.json` and `provenance.json` (whose
+`buildDigest` covers the loader-policy hash) and verifies a test extraction. It needs network
+access, npm and Python 3. Use a dev or fixture key; release keys and CI publication are not part
+of this command.
+
+```sh
+(cd apps/server && bunx tsdown && bunx tsdown -c tsdown.clientRelay.config.ts)
+bun run remote-backend-graph --target aarch64-unknown-linux-gnu --dist apps/server/dist \
+  --output /tmp/bigbud-graph-$(date +%s) --key-file ~/dev-keys/graph-ed25519.pem \
+  --key-id dev-graph --version 0.1.613-dev
+```
+
+The output directory must not exist. After a dependency or bundle change, add
+`--list-loader-sites` (no key needed) to print each unreviewed loader site with its member and
+hash, plus any other refusal, and leave an unsigned graph for inspection.
 
 ## Root: checks, tests, and cleanup
 
@@ -127,20 +157,28 @@ native execution or release-key authorization.
 
 ## Root: packaging and release
 
-| Bun                                          | just                                      |
-| -------------------------------------------- | ----------------------------------------- |
-| `bun run smoke:desktop-supervisor`           | `just smoke-desktop-supervisor`           |
-| `bun run verify:packaged-desktop-supervisor` | `just verify-packaged-desktop-supervisor` |
-| `bun run dist:desktop:artifact`              | `just dist-desktop-artifact`              |
-| `bun run dist:desktop:dmg`                   | `just dist-desktop-dmg`                   |
-| `bun run dist:desktop:dmg:arm64`             | `just dist-desktop-dmg-arm64`             |
-| `bun run dist:desktop:dmg:x64`               | `just dist-desktop-dmg-x64`               |
-| `bun run dist:desktop:linux`                 | `just dist-desktop-linux`                 |
-| `bun run dist:desktop:linux:dir`             | `just dist-desktop-linux-dir`             |
-| `bun run dist:desktop:linux:deb`             | `just dist-desktop-linux-deb`             |
-| `bun run verify:desktop:linux-artifact`      | `just verify-desktop-linux-artifact`      |
-| `bun run dist:desktop:win`                   | `just dist-desktop-win`                   |
-| `bun run release:smoke`                      | `just release-smoke`                      |
+| Bun                                            | just                                        |
+| ---------------------------------------------- | ------------------------------------------- |
+| `bun run smoke:desktop-supervisor`             | `just smoke-desktop-supervisor`             |
+| `bun run verify:packaged-desktop-supervisor`   | `just verify-packaged-desktop-supervisor`   |
+| `bun run dist:desktop:artifact`                | `just dist-desktop-artifact`                |
+| `bun run dist:desktop:dmg`                     | `just dist-desktop-dmg`                     |
+| `bun run dist:desktop:dmg:arm64`               | `just dist-desktop-dmg-arm64`               |
+| `bun run dist:desktop:dmg:x64`                 | `just dist-desktop-dmg-x64`                 |
+| `bun run dist:desktop:linux`                   | `just dist-desktop-linux`                   |
+| `bun run dist:desktop:linux:dir`               | `just dist-desktop-linux-dir`               |
+| `bun run dist:desktop:linux:deb`               | `just dist-desktop-linux-deb`               |
+| `bun run verify:desktop:linux-artifact`        | `just verify-desktop-linux-artifact`        |
+| `bun run verify:published-remote-agent-script` | `just verify-published-remote-agent-script` |
+| `bun run dist:desktop:win`                     | `just dist-desktop-win`                     |
+| `bun run release:smoke`                        | `just release-smoke`                        |
+
+`verify:published-remote-agent-script` compares `https://bigbud.app/remote-agent.sh` with
+`apps/marketing/public/remote-agent.sh` by SHA-256; `--release v<x.y.z>` also checks that
+release's `remote-agent.sh` asset. Requests are bounded (15 s deadline, 256 KiB, at most 5
+redirects, HTTPS only to `bigbud.app`/`www.bigbud.app`, or GitHub's release download hosts for the
+asset); a redirect to `raw.githubusercontent.com` is reported as a D3 violation. Exit codes: 0
+match, 1 mismatch or disallowed redirect, 2 unreachable.
 
 ## Workspace: apps/desktop
 

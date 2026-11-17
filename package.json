@@ -42,6 +42,7 @@
     "build:mobile-web:desktop": "bun run --cwd apps/mobile-web build:desktop && node scripts/copy-mobile-web-desktop.mjs",
     "package:mobile-components": "bun run scripts/package-mobile-components.ts",
     "build:remote-backend-graph": "bun run scripts/build-remote-backend-graph.ts",
+    "remote-backend-graph": "bun run scripts/build-remote-backend-graph.stage.cli.ts",
     "build:desktop": "turbo run build --filter=@bigbud/desktop --filter=@bigbud/server",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint --report-unused-disable-directives && bun run scripts/check-test-file-length.ts",
@@ -63,6 +64,7 @@
     "dist:desktop:linux:dir": "node scripts/build-desktop-artifact.ts --platform linux --target dir --arch x64",
     "dist:desktop:linux:deb": "node scripts/build-desktop-artifact.ts --platform linux --target deb --arch x64",
     "verify:desktop:linux-artifact": "node scripts/verify-linux-desktop-artifact.ts",
+    "verify:published-remote-agent-script": "node scripts/verify-published-remote-agent-script.ts",
     "dist:desktop:win": "node scripts/build-desktop-artifact.ts --platform win --target nsis --arch x64",
     "release:smoke": "node scripts/release-smoke.ts",
     "clean": "rm -rf node_modules apps/*/node_modules packages/*/node_modules apps/*/dist apps/*/dist-electron packages/*/dist .turbo apps/*/.turbo packages/*/.turbo"
