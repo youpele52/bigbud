@@ -64,6 +64,18 @@ There is no production VPS deployment, release signing/publication, live provide
 
 ## Immediate next sequence
 
+### 17 November afternoon: P6 core passes; P4 native recovery added
+
+See the afternoon update in the
+[workspace status report](../reports/2026-11-17-remote-mobile-workspace-status.md). In short:
+remote P6 S1–S5 pass on corr3, including real prior-boot recovery in a Lima VM (only the
+Linux-client subset remains live-open); the exit-130 stop status, five stale restart fixtures
+and the restart status read-model defect are fixed in source; mobile P4 has a native readiness
+receipt, two-step successor Resume and a tested TS successor sequence that no production
+composition calls yet. `/tmp` evidence is archived at `~/DevWorld/bigbud-evidence/`. The coordinator
+roles named below no longer exist; a single session now owns both plans, so the shared-seam
+ownership rule is lifted.
+
 ### 17 November: Native original-child readiness prototype
 
 The Linux native monitor now gates Start acknowledgement on the mobile gateway's existing
