@@ -11,6 +11,7 @@ export const WS_METHODS = {
   serverListRemoteBackendRelayProfiles: "server.listRemoteBackendRelayProfiles",
   serverOpenRemoteBackendRelay: "server.openRemoteBackendRelay",
   serverCloseRemoteBackendRelay: "server.closeRemoteBackendRelay",
+  serverSetupRemoteBackend: "server.setupRemoteBackend",
   // Project registry methods
   projectsList: "projects.list",
   projectsAdd: "projects.add",

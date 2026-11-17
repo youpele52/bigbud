@@ -7,6 +7,7 @@ import {
   unavailableRemoteBackendRelayProfiles,
 } from "./clientRelay.profiles.ts";
 import { makeRemoteBackendRelayLeases } from "./clientRelay.leases.ts";
+import { clientRelayAllowedOrigins } from "./clientRelay.origins.ts";
 import { openRemoteBackendRelayProfileOwner } from "./clientRelay.profileOwner.ts";
 import { sshMonitorCallerId } from "../ssh/sshMonitor.connections.ts";
 import { makeWsRpcRemoteBackendRelayHandlers } from "../ws/wsRpcHandlers.remoteBackendRelay.ts";
@@ -21,8 +22,7 @@ export const makeRemoteBackendRelayRoute = Effect.fn("makeRemoteBackendRelayRout
   const config = yield* ServerConfig;
   const directory = yield* Effect.serviceOption(RemoteBackendRelayProfiles);
   let readClients: () => Promise<ReadonlySet<number>> = noProtocolClients;
-  const origins = [`http://127.0.0.1:${config.port}`, `http://localhost:${config.port}`];
-  if (config.devUrl) origins.push(config.devUrl.origin);
+  const origins = clientRelayAllowedOrigins(config);
   const leases = makeRemoteBackendRelayLeases({
     profiles: Option.getOrElse(directory, () => unavailableRemoteBackendRelayProfiles),
     isCallerActive: async (caller) => {

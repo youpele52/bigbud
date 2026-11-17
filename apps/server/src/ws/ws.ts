@@ -26,6 +26,7 @@ import { makeWsRpcComputerUseHandlers } from "./wsRpcHandlers.computerUse.ts";
 import { makeWsRpcCopilotRuntimeHandlers } from "./wsRpcHandlers.copilotRuntime.ts";
 import { makeWsRpcDatabaseCompactionHandlers } from "./wsRpcHandlers.databaseCompaction.ts";
 import { makeWsRpcMetadataWarningHandlers } from "./wsRpcHandlers.metadataWarnings.ts";
+import { makeWsRpcRemoteBackendDeploymentHandlers } from "./wsRpcHandlers.remoteBackendDeployment.ts";
 import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
@@ -51,9 +52,11 @@ const makeWsRpcLayer = (
       const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
       const databaseCompactionHandlers = yield* makeWsRpcDatabaseCompactionHandlers;
       const metadataWarningHandlers = yield* makeWsRpcMetadataWarningHandlers;
+      const deploymentHandlers = yield* makeWsRpcRemoteBackendDeploymentHandlers();
 
       return WsRpcGroup.of({
         ...relayHandlers,
+        ...deploymentHandlers,
         ...makeWsRpcCopilotRuntimeHandlers(context),
         ...makeWsRpcAutomationHandlers(context),
         ...makeWsRpcOrchestrationServerHandlers(context),

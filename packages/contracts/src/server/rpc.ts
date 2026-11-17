@@ -3,6 +3,7 @@ import {
   WsServerOpenRemoteBackendRelayRpc,
   WsServerCloseRemoteBackendRelayRpc,
 } from "./rpc.remoteBackendRelay";
+import { WsServerSetupRemoteBackendRpc } from "./rpc.remoteBackendDeployment";
 import {
   WsTerminalRemoteInventoryRpc,
   WsTerminalRemoteAttachRpc,
@@ -210,6 +211,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerListRemoteBackendRelayProfilesRpc,
   WsServerOpenRemoteBackendRelayRpc,
   WsServerCloseRemoteBackendRelayRpc,
+  WsServerSetupRemoteBackendRpc,
   WsCopilotRuntimeRpc,
   WsServerRetryTextGenerationRpc,
   WsServerClaimMetadataWarningsRpc,

@@ -26,7 +26,8 @@ export class RemoteBackendRelayProfiles extends ServiceMap.Service<
   RemoteBackendRelayProfileDirectory
 >()("bigbud/remote-backend/RelayProfiles") {}
 
-/** No verified persisted deployment producer exists yet. This is an explicit production refusal. */
+/** Fallback when no persisted profile directory is composed (remote mode, tests). Production local
+ * backends compose `makePersistedRemoteBackendRelayProfiles` through `RemoteBackendDeploymentLive`. */
 export const unavailableRemoteBackendRelayProfiles: RemoteBackendRelayProfileDirectory =
   Object.freeze<RemoteBackendRelayProfileDirectory>({
     list: async (_caller, signal) => {

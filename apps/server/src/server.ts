@@ -67,6 +67,7 @@ import { ServerSettingsLive } from "./ws/serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
 import { makeConfiguredRemoteAgentLayers } from "./remote-agent/remoteAgentServerLayer.ts";
 import { RemoteAgentLocalControlLive } from "./remote-agent/remoteAgentLocalControl.layer.ts";
+import { RemoteBackendDeploymentLive } from "./remote-backend/Layers/RemoteBackendDeployment.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability";
 import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
@@ -311,9 +312,10 @@ function localServerLayer(config: ServerConfigShape) {
   );
 
   const serverApplicationLayer = Layer.mergeAll(
+    // Persisted relay profiles replace the unavailable directory on the local backend (WP-3A).
     HttpRouter.serve(makeRoutesLayer, {
       disableLogger: !config.logWebSocketEvents,
-    }),
+    }).pipe(Layer.provide(RemoteBackendDeploymentLive)),
     httpListeningLayer,
     ThreadToolModelSourcesLive,
     RemoteAgentLocalControlLive,
