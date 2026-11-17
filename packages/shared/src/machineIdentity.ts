@@ -49,6 +49,11 @@ function linuxPlatformId(): string | undefined {
 
 let cached: string | null | undefined;
 
+/** The digest every record carries; remote shell probes must reproduce it byte for byte. */
+export function machineIdentityFromPlatformId(raw: string): string {
+  return `${PREFIX}${createHash("sha256").update(`bigbud.machine-identity.v1\0${raw}`).digest("hex")}`;
+}
+
 /** App-scoped digest of the platform machine id, or `null` when the platform offers none. */
 export function machineIdentity(): string | null {
   if (cached !== undefined) return cached;
@@ -58,8 +63,6 @@ export function machineIdentity(): string | null {
       : process.platform === "linux"
         ? linuxPlatformId()
         : undefined;
-  cached = raw
-    ? `${PREFIX}${createHash("sha256").update(`bigbud.machine-identity.v1\0${raw}`).digest("hex")}`
-    : null;
+  cached = raw ? machineIdentityFromPlatformId(raw) : null;
   return cached;
 }

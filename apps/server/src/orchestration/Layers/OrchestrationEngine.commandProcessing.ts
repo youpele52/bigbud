@@ -32,6 +32,7 @@ import {
 import * as ProjectWorkspace from "../ProjectWorkspace.files.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
+import { WorkspaceModeGate } from "../../remote-backend/workspaceMode.gate.ts";
 import { enqueueLifecycleFlush } from "./OrchestrationEngine.lifecycleFlush.ts";
 import type { BoundedCommandAdmission } from "../../command-admission/CommandAdmission.ts";
 import { persistRejectedCommandReceipt } from "./OrchestrationEngine.rejectionReceipt.ts";
@@ -52,6 +53,8 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
   const terminalIdleBlocked = yield* makeTerminalIdleGuard();
   const workspaceConfig = yield* ServerConfig;
   const workspaceTerminal = yield* Effect.serviceOption(TerminalManager);
+  // Optional so engine tests need no SSH; the server composition always provides it.
+  const workspaceModeGate = yield* Effect.serviceOption(WorkspaceModeGate);
 
   return (envelope: CommandEnvelope): Effect.Effect<boolean> => {
     const dispatchStartSequence = input.readModel().snapshotSequence;
@@ -124,6 +127,11 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
                       command: envelope.command,
                       readModel: currentReadModel,
                     });
+              if (
+                Option.isSome(workspaceModeGate) &&
+                (!Array.isArray(eventBase) || eventBase.length)
+              )
+                yield* workspaceModeGate.value.check(envelope.command, currentReadModel);
               const eventBases = yield* ProjectWorkspace.prepareProjectWorkspaceEvents(
                 envelope.command,
                 currentReadModel,
