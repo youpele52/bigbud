@@ -41,6 +41,9 @@ mod job_lifecycle;
 #[path = "jobs.rs"]
 mod jobs;
 #[cfg(unix)]
+#[path = "signals.rs"]
+mod signals;
+#[cfg(unix)]
 #[path = "subscription.rs"]
 mod subscription;
 #[cfg(unix)]

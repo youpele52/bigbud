@@ -123,9 +123,15 @@ pub fn request_restart(socket_path: &Path) -> io::Result<bool> {
     request_shutdown_with_mode(socket_path, true)
 }
 
-#[allow(clippy::exit)]
 pub(crate) fn exit_supervisor() -> ! {
-    std::process::exit(0)
+    exit_supervisor_with(0)
+}
+
+/// The supervisor's only process-exit seam: 0 after an accepted restart, 143
+/// after a settled signal drain, 1 when owned-work settlement is unknown.
+#[allow(clippy::exit)]
+pub(crate) fn exit_supervisor_with(code: i32) -> ! {
+    std::process::exit(code)
 }
 
 pub fn shutdown_response(

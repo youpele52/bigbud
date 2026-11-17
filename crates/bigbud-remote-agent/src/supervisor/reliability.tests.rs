@@ -3,6 +3,8 @@
 mod fixture;
 #[path = "shutdown.tests.rs"]
 mod shutdown_tests;
+#[path = "signals.tests.rs"]
+mod signal_tests;
 use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, PROTOCOL_MAJOR, PROTOCOL_MINOR, read_frame, v1};
 use fixture::*;
 use std::fs;

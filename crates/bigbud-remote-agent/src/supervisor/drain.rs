@@ -3,6 +3,17 @@ use std::io;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// One terminal drain owner per process. A signal arriving during an accepted
+/// restart waits here: the restart either exits the process or, when it could
+/// not settle, releases ownership so the signal path drains with exit 143/1.
+static DRAIN_OWNER: Mutex<()> = Mutex::new(());
+
+fn drain_owner() -> io::Result<std::sync::MutexGuard<'static, ()>> {
+    DRAIN_OWNER
+        .lock()
+        .map_err(|_| io::Error::other("supervisor drain owner poisoned"))
+}
+
 /// Own the accepted shutdown independently of response admission/delivery.
 /// Unknown child settlement never reaches the publication seal or process exit.
 pub(super) fn complete_restart(
@@ -10,6 +21,8 @@ pub(super) fn complete_restart(
     writer: &super::Writer,
     mut response: bigbud_protocol::v1::Frame,
 ) -> io::Result<()> {
+    // Held through finish_restart's process exit; released only when unsettled.
+    let _owner = drain_owner()?;
     if !settle_restart(sessions)? {
         if let Some(bigbud_protocol::v1::frame::Payload::SupervisorShutdownResponse(value)) =
             &mut response.payload
@@ -46,6 +59,35 @@ pub(super) fn settle_restart(sessions: &Arc<Mutex<AgentSession>>) -> io::Result<
     }
     if !settled {
         eprintln!("remote agent restart shutdown could not verify all owned work stopped");
+    }
+    Ok(settled)
+}
+
+/// Signal-initiated termination: the restart fence without a requester. Stops
+/// admission, issues the tree-aware Stop to owned work, then settles it with the
+/// same bounded wait and forced fallback as an accepted restart.
+pub(super) fn terminate_on_signal(
+    sessions: &Arc<Mutex<AgentSession>>,
+    deadline: Instant,
+) -> io::Result<bool> {
+    let _owner = drain_owner()?;
+    let evidence = sessions
+        .lock()
+        .map_err(|_| io::Error::other("agent session lock poisoned"))?
+        .interrupt_owned_work_for_restart();
+    if evidence.pty_failures > 0 {
+        // The forced fallback inside settle_restart still covers these PTYs.
+        eprintln!(
+            "remote agent signal stop could not signal {} PTY sessions",
+            evidence.pty_failures
+        );
+    }
+    let settled = settle_restart(sessions)?;
+    if settled {
+        let transport_deadline = deadline.min(Instant::now() + Duration::from_secs(5));
+        if let Err(error) = super::job_lifecycle::drain_all(transport_deadline) {
+            eprintln!("remote agent signal shutdown transport drain incomplete: {error}");
+        }
     }
     Ok(settled)
 }
