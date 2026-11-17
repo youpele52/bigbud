@@ -4,13 +4,15 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   events: [] as string[],
   program: undefined as unknown,
+  teardown: undefined as ((...args: any[]) => void) | undefined,
   fail: false,
   importFails: false,
 }));
 function setupMocks() {
   vi.doMock("@effect/platform-node/NodeRuntime", () => ({
-    runMain: (program: unknown) => {
+    runMain: (program: unknown, options?: { teardown?: (...args: any[]) => void }) => {
       state.program = program;
+      state.teardown = options?.teardown;
     },
   }));
   vi.doMock("./serverLifecycleDiagnostics.ts", () => ({
@@ -76,6 +78,7 @@ beforeEach(() => {
   state.fail = false;
   state.importFails = false;
   state.program = undefined;
+  state.teardown = undefined;
   delete process.env.BIGBUD_REMOTE_SERVICE_CONFIG;
   delete process.env.BIGBUD_REMOTE_SERVICE_PREFLIGHT_ONLY;
 });
@@ -86,7 +89,9 @@ afterEach(() => {
 });
 async function runEntry() {
   await import("./bin.ts");
-  return Effect.runPromiseExit(state.program as Effect.Effect<unknown>);
+  const exit = await Effect.runPromiseExit(state.program as Effect.Effect<unknown>);
+  state.teardown?.(exit, () => {});
+  return exit;
 }
 it("finishes preflight and removes credentials before loading the configured server", async () => {
   process.env.BIGBUD_REMOTE_SERVICE_CONFIG = "/private/config-v1";

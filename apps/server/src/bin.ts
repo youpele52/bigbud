@@ -7,6 +7,7 @@ import { NetService } from "@bigbud/shared/Net";
 import { version } from "../package.json" with { type: "json" };
 import { registerServerLifecycleDiagnostics } from "./serverLifecycleDiagnostics.ts";
 import { ServerConfig } from "./startup/config.ts";
+import { makeManagedServiceTeardown } from "./bin.serviceTeardown.ts";
 
 // Keep platform services behind the initialized entry. Static NodeServices imports can
 // form an emitted chunk cycle back to Effect bindings owned by this entry.
@@ -25,7 +26,17 @@ const servicePreflightOnly = process.env.BIGBUD_REMOTE_SERVICE_PREFLIGHT_ONLY;
 delete process.env.BIGBUD_REMOTE_SERVICE_CONFIG;
 delete process.env.BIGBUD_REMOTE_SERVICE_PREFLIGHT_ONLY;
 
-Effect.gen(function* () {
+let managedServiceSignal: NodeJS.Signals | undefined;
+const captureManagedServiceSignal = (signal: NodeJS.Signals) => {
+  managedServiceSignal = signal;
+};
+const isManagedServiceMain = serviceConfigPath !== undefined && servicePreflightOnly === undefined;
+if (isManagedServiceMain) {
+  process.on("SIGINT", captureManagedServiceSignal);
+  process.on("SIGTERM", captureManagedServiceSignal);
+}
+
+const program = Effect.gen(function* () {
   if (process.argv[2] === "--remote-service-capabilities") {
     if (
       process.argv.length !== 3 ||
@@ -72,4 +83,14 @@ Effect.gen(function* () {
   }
   const { cli } = yield* Effect.promise(() => import("./cli/cli"));
   return yield* Command.run(cli, { version });
-}).pipe(Effect.scoped, Effect.provide(CliRuntimeLayer), NodeRuntime.runMain);
+}).pipe(Effect.scoped, Effect.provide(CliRuntimeLayer));
+
+NodeRuntime.runMain(program, {
+  teardown: makeManagedServiceTeardown(
+    () => isManagedServiceMain && managedServiceSignal !== undefined,
+    () => {
+      process.off("SIGINT", captureManagedServiceSignal);
+      process.off("SIGTERM", captureManagedServiceSignal);
+    },
+  ),
+});
