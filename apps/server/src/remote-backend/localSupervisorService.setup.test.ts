@@ -191,7 +191,7 @@ it("holds accepted staging to settlement after cancellation before releasing the
   expect(await readOwnershipLock(lockPath)).toBeUndefined();
 });
 
-it("refuses preexisting P4 runtime state rather than adopting a standalone supervisor", async () => {
+it("refuses unregistered P4 runtime state before mutation rather than adopting it", async () => {
   const f = await fixture();
   await f.withContext(async (context) => {
     const control = f.dependencies.control(
@@ -208,7 +208,9 @@ it("refuses preexisting P4 runtime state rather than adopting a standalone super
   });
   await expect(
     f.withContext((context, signal) => f.setup(context, f.input, signal)),
-  ).rejects.toMatchObject({ cause: { phase: "claim", needsRepair: true } });
+  ).rejects.toMatchObject({
+    cause: { phase: "claim", needsRepair: false, cause: { code: "unknown-state" } },
+  });
   expect(f.events).not.toContain("install");
   expect(f.commands).toEqual([]);
 });

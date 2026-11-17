@@ -25,6 +25,20 @@ export const RemoteBackendDeploymentResult = Schema.Struct({
 });
 export type RemoteBackendDeploymentResult = typeof RemoteBackendDeploymentResult.Type;
 
+/** Why remote `backend setup` refused to adopt existing agent state (code `setup-failed`). */
+export const RemoteBackendSetupRefusalReason = Schema.Literals([
+  "foreign-owner",
+  "unknown-state",
+  "legacy-owner",
+  "unverifiable-registry",
+  "unverifiable-build",
+  "install-in-progress",
+  "ambiguous-state",
+  "stale-supervisor",
+  "no-capacity",
+]);
+export type RemoteBackendSetupRefusalReason = typeof RemoteBackendSetupRefusalReason.Type;
+
 export class RemoteBackendDeploymentError extends Schema.TaggedErrorClass<RemoteBackendDeploymentError>()(
   "RemoteBackendDeploymentError",
   {
@@ -41,5 +55,6 @@ export class RemoteBackendDeploymentError extends Schema.TaggedErrorClass<Remote
       "unavailable",
     ]),
     message: Schema.String,
+    reason: Schema.optional(RemoteBackendSetupRefusalReason),
   },
 ) {}

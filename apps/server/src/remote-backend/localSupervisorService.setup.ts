@@ -7,7 +7,6 @@ import { join } from "node:path";
 import type { LocalSupervisorPreflightContext } from "./localSupervisorService.preflight.ts";
 import { withVerifiedBackendGraphReceipt } from "./backendGraph.receipt.ts";
 import { revalidateBackendGraph } from "./backendGraph.ts";
-import * as fs from "node:fs/promises";
 import { readLocalSupervisorServiceFile } from "./localSupervisorService.files.ts";
 import { encodeLocalSupervisorServiceConfig } from "./localSupervisorService.config.ts";
 import {
@@ -15,6 +14,16 @@ import {
   publishServiceFile,
 } from "./localSupervisorService.setup.files.ts";
 import { validateServiceSetup } from "./localSupervisorService.setup.validation.ts";
+import {
+  confirmSetupAgentState,
+  inspectSetupAgentState,
+  preserveAdoptedConnections,
+  setupCandidateBuildIds,
+} from "./localSupervisorService.setup.adoption.ts";
+import {
+  findSetupAdoptionRefusal,
+  formatSetupRefusalLine,
+} from "./localSupervisorService.setup.adoption.rules.ts";
 import {
   localSupervisorServiceSetupDependencies,
   type LocalSupervisorServiceSetupDependencies,
@@ -65,25 +74,31 @@ export function makeLocalSupervisorServiceSetup(
       await revalidateBackendGraph(selected.graph, signal);
       await checkpoint();
       phase = "claim";
+      // Read-only gate: fresh, or fully verified managed P4 state to adopt, or a typed refusal.
+      const agentState = await inspectSetupAgentState({
+        control,
+        identity: context.identity,
+        backendStateDir: context.owner.stateDir,
+        candidateBuildIds: setupCandidateBuildIds(validated.rustSource, validated.graph.target),
+        signal,
+      });
+      await checkpoint();
       needsRepair = true;
       await dependencies.claim(control, context.identity, {
         confirmFreshSetup: true,
         backendHome: validated.backendHome,
         backendStateDir: context.owner.stateDir,
+        ...(agentState.mode === "adopt" ? { adoptExistingState: true as const } : {}),
       });
-      // Fresh setup cannot silently adopt a preexisting standalone or uncertain P4 lifetime.
-      const accountNames = await fs.readdir(control.root);
-      if (accountNames.length !== 1 || accountNames[0] !== "account-authority-v1")
-        throw new Error(
-          "Fresh account setup refuses existing runtime or registry state; preserve it for explicit migration.",
-        );
+      // Nothing else may have changed between the verified snapshot and the ownership claim.
+      await confirmSetupAgentState(control, agentState);
       await checkpoint();
       phase = "publish-config";
       // Durable namespace presence fences all later partial staging/publication retries.
       await createServiceNamespace(validated.configRoot, checkpoint);
       await checkpoint();
       phase = "stage-runtime";
-      const runtime = await dependencies.install(control, validated.rustSource, signal);
+      const runtime = await dependencies.install(control, validated.rustSource, signal, agentState);
       await checkpoint();
       phase = "publish-config";
       const boot = (
@@ -153,14 +168,17 @@ export function makeLocalSupervisorServiceSetup(
       phase = "admit-runtime";
       const scopedContext = {
         ...context,
-        owners: makeLocalSupervisorAuthorityOwners({
-          owners: context.owners,
-          targetId: validated.target,
-          assertAuthority: async () => {
-            await checkpoint();
-            await assertLocalSupervisorAuthorityReservation(control, context.identity);
-          },
-        }),
+        owners: preserveAdoptedConnections(
+          makeLocalSupervisorAuthorityOwners({
+            owners: context.owners,
+            targetId: validated.target,
+            assertAuthority: async () => {
+              await checkpoint();
+              await assertLocalSupervisorAuthorityReservation(control, context.identity);
+            },
+          }),
+          agentState,
+        ),
       };
       const epoch = await dependencies.admit(
         scopedContext,
@@ -191,6 +209,8 @@ export function makeLocalSupervisorServiceSetup(
         backendStarted: false,
       });
     } catch (cause) {
+      const refusal = findSetupAdoptionRefusal(cause);
+      if (refusal) dependencies.reportRefusal?.(formatSetupRefusalLine(refusal));
       throw new LocalSupervisorServiceSetupError({
         phase,
         needsRepair,

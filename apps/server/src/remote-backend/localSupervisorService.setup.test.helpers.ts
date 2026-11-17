@@ -124,6 +124,11 @@ export async function setupFixture(graphInsideState = false) {
   };
   const events: string[] = [],
     commands: string[] = [];
+  /** Adoption probes: installed `--check` identity and the existing supervisor observation. */
+  const probes = {
+    identity: `bigbud-remote-agent ${artifact.version} 1 0 ${artifact.buildDigest} linux aarch64`,
+    observation: "ready",
+  };
   const makeRuntime = async (
     control: ReturnType<typeof makeLocalSupervisorControl>,
   ): Promise<RemoteAgentRuntime> => {
@@ -177,13 +182,17 @@ export async function setupFixture(graphInsideState = false) {
             signal: null,
             timedOut: false,
             stderr: "",
-            stdout: script.includes("cat /proc/")
-              ? "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-              : script.includes("--check --capabilities")
-                ? "backend-service=2 backend-service-graph=1"
-                : script.includes("--backend-service status")
-                  ? "fixture observation"
-                  : "",
+            stdout: script.endsWith("\nobserve_supervisor")
+              ? probes.observation
+              : script.includes("cat /proc/")
+                ? "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+                : script.includes("--check --capabilities")
+                  ? "backend-service=2 backend-service-graph=1"
+                  : script.includes("--backend-service status")
+                    ? "fixture observation"
+                    : script.includes(" --check; else")
+                      ? probes.identity
+                      : "",
           };
         },
       }),
@@ -217,6 +226,9 @@ export async function setupFixture(graphInsideState = false) {
     input,
     events,
     commands,
+    probes,
+    artifact,
+    rustBytes,
     dependencies,
     makeRuntime,
     withContext,

@@ -4,6 +4,10 @@ import {
   RemoteBackendInstallationFingerprint,
 } from "@bigbud/contracts/server/remoteBackendHandshake.ts";
 import {
+  parseSetupRefusalCode,
+  type SetupAdoptionRefusalCode,
+} from "./localSupervisorService.setup.adoption.rules.ts";
+import {
   deploymentError,
   REMOTE_ABSOLUTE_PATH,
   type DeploymentRemoteRunner,
@@ -85,6 +89,20 @@ export async function probeRemoteBackendHost(
   };
 }
 
+const KEPT = "Nothing on the host was changed.";
+/** Laptop-owned, actionable text for each adoption refusal; all preserve host state. */
+export const SETUP_REFUSAL_MESSAGES: Readonly<Record<SetupAdoptionRefusalCode, string>> = {
+  "foreign-owner": `Another bigbud backend already owns this host account. ${KEPT}`,
+  "unknown-state": `The host has unrecognised files in ~/.bigbud/agent. Move them aside, then retry. ${KEPT}`,
+  "legacy-owner": `The host runs a legacy or externally placed agent. Update it to a managed build (Remote agent > Update/Replace), then retry. ${KEPT}`,
+  "unverifiable-registry": `The host's agent registry is unreadable or invalid. Inspect ~/.bigbud/agent before retrying. ${KEPT}`,
+  "unverifiable-build": `An installed agent build failed signature, hash or identity checks. Reinstall the agent, then retry. ${KEPT}`,
+  "install-in-progress": `An agent install, update or retirement is running on the host. Let it finish, then retry.`,
+  "ambiguous-state": `A previous agent operation on the host has an uncertain outcome. Reconnect to the host once so it settles, then retry. ${KEPT}`,
+  "stale-supervisor": `The host's agent supervisor has stopped (for example after a reboot). Reconnect to the host once so it restarts, then retry. ${KEPT}`,
+  "no-capacity": `Two other agent builds occupy the host. Retire the unused one (Remote agent > Update/Replace), then retry. ${KEPT}`,
+};
+
 export interface RemoteSetupPaths {
   readonly home: string;
   readonly installDir: string;
@@ -133,11 +151,16 @@ export async function runRemoteBackendSetup(input: {
     input.signal,
   );
   const authority = /^Configured authority: ([a-f0-9]{32})$/m.exec(result.stdout)?.[1];
-  if (result.code !== 0 || !authority)
-    throw deploymentError(
-      "setup-failed",
-      "Remote backend setup did not complete. Its state is preserved; inspect `bigbud backend status` on the host.",
-    );
+  if (result.code !== 0 || !authority) {
+    // Only a known refusal code crosses back; remote text is never echoed to the renderer.
+    const reason = result.code === 0 ? undefined : parseSetupRefusalCode(result.stderr);
+    throw reason
+      ? deploymentError("setup-failed", SETUP_REFUSAL_MESSAGES[reason], reason)
+      : deploymentError(
+          "setup-failed",
+          "Remote backend setup did not complete. Its state is preserved; inspect `bigbud backend status` on the host.",
+        );
+  }
   return authority;
 }
 

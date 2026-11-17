@@ -27,6 +27,7 @@ import type {
 } from "../remote-agent/remoteAgentInstallManager.ts";
 import type { LocalSupervisorPreflightContext } from "./localSupervisorService.preflight.ts";
 import type { SetupAccount } from "./localSupervisorService.setup.validation.ts";
+import type { SetupAgentState } from "./localSupervisorService.setup.adoption.ts";
 export interface LocalSupervisorServiceSetupDependencies {
   readonly account: () => SetupAccount;
   readonly control: (home: string, target: string, signal: AbortSignal) => LocalSupervisorControl;
@@ -35,6 +36,7 @@ export interface LocalSupervisorServiceSetupDependencies {
     control: LocalSupervisorControl,
     source: RemoteAgentInstallSource,
     signal: AbortSignal,
+    adoption?: SetupAgentState,
   ) => Promise<RemoteAgentRuntime>;
   readonly admit: (
     context: LocalSupervisorPreflightContext,
@@ -44,6 +46,18 @@ export interface LocalSupervisorServiceSetupDependencies {
     requestId: string,
     signal: AbortSignal,
   ) => Promise<string>;
+  /** CLI channel for the fixed typed refusal line the laptop deployment maps (stderr). */
+  readonly reportRefusal?: (line: string) => void;
+}
+/** A live adopted supervisor keeps its state; any other runtime starts from an empty generation. */
+export async function prepareSetupRuntimeState(
+  runtime: RemoteAgentRuntime,
+  adoption: SetupAgentState,
+  signal: AbortSignal,
+): Promise<void> {
+  if (adoption.mode !== "adopt" || !adoption.liveBuildIds.has(remoteAgentBuildId(runtime)))
+    await prepareManagedLocalSupervisorRuntime(runtime, signal);
+  await verifyManagedLocalSupervisor(runtime);
 }
 /**
  * D3: the backend graph is glibc-only, but the Rust launcher ships static musl. A gnu graph
@@ -64,6 +78,7 @@ async function install(
   control: LocalSupervisorControl,
   source: RemoteAgentInstallSource,
   signal: AbortSignal,
+  adoption: SetupAgentState = { mode: "fresh" },
 ) {
   const result = await makeLocalSupervisorInstaller({ control }).install({
     executionTargetId: control.targetId,
@@ -81,8 +96,7 @@ async function install(
     build.runtime.buildDigest !== result.artifact.buildDigest
   )
     throw new Error("Signed P4 staging did not publish the selected immutable managed runtime.");
-  await prepareManagedLocalSupervisorRuntime(build.runtime, signal);
-  await verifyManagedLocalSupervisor(build.runtime);
+  await prepareSetupRuntimeState(build.runtime, adoption, signal);
   const capability = (
     await control.run(
       control.targetId,
@@ -196,4 +210,7 @@ export const localSupervisorServiceSetupDependencies: LocalSupervisorServiceSetu
     claim: claimLocalSupervisorAuthorityReservation,
     install,
     admit,
+    reportRefusal: (line) => {
+      process.stderr.write(line);
+    },
   });

@@ -3,8 +3,11 @@ import type { RemoteBackendProfileRecord } from "../persistence/Services/RemoteB
 import type { BackendGraphManifest } from "./backendGraph.manifest.ts";
 
 export type DeploymentErrorCode = RemoteBackendDeploymentError["code"];
-export const deploymentError = (code: DeploymentErrorCode, message: string) =>
-  new RemoteBackendDeploymentError({ code, message });
+export const deploymentError = (
+  code: DeploymentErrorCode,
+  message: string,
+  reason?: RemoteBackendDeploymentError["reason"],
+) => new RemoteBackendDeploymentError({ code, message, ...(reason ? { reason } : {}) });
 
 /** One remote command. Scripts are fixed application constants; arguments are validated values. */
 export interface DeploymentRemoteCommand {

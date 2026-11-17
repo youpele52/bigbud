@@ -90,6 +90,13 @@ async function verifyStagedArtifact(value: RemoteAgentRuntime): Promise<RemoteAg
   return runtime;
 }
 
+/** Installed-bytes check only (ownership, mode, sha256); grants no runtime admission. */
+export async function verifyManagedLocalSupervisorArtifact(
+  value: RemoteAgentRuntime,
+): Promise<void> {
+  await verifyStagedArtifact(value);
+}
+
 /** Full runtime admission still requires BOTH the exact generation and verified installed bytes. */
 export async function verifyManagedLocalSupervisor(value: RemoteAgentRuntime): Promise<void> {
   const runtime = validateRemoteAgentRuntime(value);

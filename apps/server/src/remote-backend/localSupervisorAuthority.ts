@@ -161,7 +161,8 @@ async function unlinkOwnedTemporary(path: string, owned: BigIntStats): Promise<v
   await fs.unlink(path);
 }
 
-/** Explicit fresh setup only. Existing/legacy unreserved account state is never migrated. */
+/** Explicit setup only. Existing unreserved state is claimed only after the caller's verified
+ * adoption gate (`adoptExistingState`); legacy/unverified state is never migrated here. */
 export async function claimLocalSupervisorAuthorityReservation(
   control: LocalSupervisorControl,
   identity: LocalSupervisorAuthorityIdentity,
@@ -169,6 +170,7 @@ export async function claimLocalSupervisorAuthorityReservation(
     readonly confirmFreshSetup: true;
     readonly backendHome: string;
     readonly backendStateDir: string;
+    readonly adoptExistingState?: true;
   },
 ): Promise<void> {
   if (consent.confirmFreshSetup !== true)
@@ -201,7 +203,10 @@ export async function claimLocalSupervisorAuthorityReservation(
         );
       return awaitConcurrentClaim(control, identity, before, backend);
     }
-    if ((cause as NodeJS.ErrnoException).code !== "ENOENT" || existing.length !== 0)
+    if (
+      (cause as NodeJS.ErrnoException).code !== "ENOENT" ||
+      (existing.length !== 0 && consent.adoptExistingState !== true)
+    )
       throw new Error("Existing or unreadable account ownership cannot be auto-claimed.", {
         cause,
       });
