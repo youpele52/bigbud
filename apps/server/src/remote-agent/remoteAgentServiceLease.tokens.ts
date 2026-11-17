@@ -23,12 +23,17 @@ declare const pending: unique symbol,
   lease: unique symbol,
   exit: unique symbol,
   cancel: unique symbol,
-  never: unique symbol;
+  never: unique symbol,
+  attaching: unique symbol;
 export interface PendingOriginalNativeLease {
   readonly [pending]: true;
 }
 export interface VerifiedNativeLease {
   readonly [lease]: true;
+}
+/** Successor Resume #1 grant: bootstrap only, never readiness, until native verifies the socket. */
+export interface AttachingNativeLease {
+  readonly [attaching]: true;
 }
 export interface ConfirmedNativeLeaseExit {
   readonly [exit]: true;
@@ -53,6 +58,10 @@ export class NativeLeaseTokens {
   private readonly pending = new WeakMap<PendingOriginalNativeLease, Record>();
   private readonly grants = new WeakMap<
     VerifiedNativeLease,
+    { pending: PendingOriginalNativeLease; evidence: NativeLeaseEvidence }
+  >();
+  private readonly attachments = new WeakMap<
+    AttachingNativeLease,
     { pending: PendingOriginalNativeLease; evidence: NativeLeaseEvidence }
   >();
   private readonly exits = new WeakMap<ConfirmedNativeLeaseExit, NativeLeaseExitEvidence>();
@@ -136,19 +145,42 @@ export class NativeLeaseTokens {
     );
     return proof;
   }
-  grant(token: PendingOriginalNativeLease, response: Response): VerifiedNativeLease {
+  private hold(token: PendingOriginalNativeLease, response: Response) {
     const record = this.original(token);
     record.generation = response.generation;
     record.attached = true;
     record.bootstrap = (
       response.bootstrap.length ? response.bootstrap : (record.start?.environment ?? [])
     ).map((v) => ({ name: v.name, value: v.value }));
+    return { pending: token, evidence: nativeLeaseEvidence(response) };
+  }
+  grant(token: PendingOriginalNativeLease, response: Response): VerifiedNativeLease {
     const proof = Object.freeze({}) as VerifiedNativeLease;
-    this.grants.set(proof, { pending: token, evidence: nativeLeaseEvidence(response) });
+    this.grants.set(proof, this.hold(token, response));
     return proof;
   }
-  granted(proof: VerifiedNativeLease) {
-    const value = this.grants.get(proof);
+  /** A successor takeover: private bootstrap for the new upstream socket, no live grant. */
+  attaching(token: PendingOriginalNativeLease, response: Response): AttachingNativeLease {
+    if (!response.bootstrap.length) throw Error("Successor attach bootstrap is missing.");
+    const proof = Object.freeze({}) as AttachingNativeLease;
+    this.attachments.set(proof, this.hold(token, response));
+    return proof;
+  }
+  /** The attaching pending token for exactly this successor generation. */
+  attachingPending(proof: AttachingNativeLease) {
+    const value = this.attachments.get(proof);
+    if (!value) throw Error("Original successor attaching token required.");
+    this.granted(proof);
+    return value;
+  }
+  /** Readiness supersedes the attaching grant; it can never be replayed afterwards. */
+  retireAttaching(proof: AttachingNativeLease) {
+    this.attachments.delete(proof);
+  }
+  granted(proof: VerifiedNativeLease | AttachingNativeLease) {
+    const value =
+      this.grants.get(proof as VerifiedNativeLease) ??
+      this.attachments.get(proof as AttachingNativeLease);
     if (!value) throw Error("Original owner-client lease token required.");
     const record = this.original(value.pending);
     if (record.cancelled || record.generation !== value.evidence.generation)

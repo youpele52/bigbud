@@ -10,10 +10,12 @@ import type {
 import { NativeLeaseIo } from "./remoteAgentServiceLease.io.ts";
 import {
   NativeLeaseTokens,
+  type AttachingNativeLease,
   type PendingOriginalNativeLease,
   type VerifiedNativeLease,
 } from "./remoteAgentServiceLease.tokens.ts";
 export type {
+  AttachingNativeLease,
   PendingOriginalNativeLease,
   VerifiedNativeLease,
   ConfirmedNativeLeaseExit,
@@ -34,6 +36,10 @@ export type {
   NativeLeaseRestore,
 } from "./remoteAgentServiceLease.identity.ts";
 export type { OriginalNativeLeaseAttempt } from "./remoteAgentServiceLease.attempt.ts";
+/** Resume outcome. Only "live" is readiness; "attaching" needs a verified successor socket. */
+export type NativeLeaseResumption =
+  | { readonly state: "live"; readonly lease: VerifiedNativeLease }
+  | { readonly state: "attaching"; readonly attaching: AttachingNativeLease };
 const originalClients = new WeakSet<object>();
 async function actualController(): Promise<Controller> {
   const [stat, boot] = await Promise.all([
@@ -129,10 +135,10 @@ function makeClient(
       throw Error("Native lease operation was refused or remains uncertain.");
     return value;
   }
-  function live(token: PendingOriginalNativeLease, value: Response) {
+  function correlate(token: PendingOriginalNativeLease, value: Response, state: string) {
     reply(token, value, true);
     if (
-      value.state !== "spawned" ||
+      value.state !== state ||
       !Number.isSafeInteger(value.generation) ||
       value.generation < 1 ||
       value.originalChildPid <= 1 ||
@@ -140,7 +146,25 @@ function makeClient(
       !sameController(value.currentController, controller)
     )
       throw Error("Native lease grant is not correlated to the actual controller.");
+  }
+  function live(token: PendingOriginalNativeLease, value: Response) {
+    correlate(token, value, "spawned");
     return tokens.grant(token, value);
+  }
+  /** Native took over the original child for this controller; its socket is not verified yet. */
+  function successor(token: PendingOriginalNativeLease, value: Response) {
+    correlate(token, value, "attaching");
+    if (
+      !validController(value.previousController) ||
+      sameController(value.previousController, controller) ||
+      !value.bootstrap.length
+    )
+      throw Error("Native successor takeover lacks a distinct prior controller or bootstrap.");
+  }
+  function resumption(token: PendingOriginalNativeLease, value: Response): NativeLeaseResumption {
+    if (value.state !== "attaching") return { state: "live", lease: live(token, value) };
+    successor(token, value);
+    return { state: "attaching", attaching: tokens.attaching(token, value) };
   }
   async function query(
     token: PendingOriginalNativeLease,
@@ -223,9 +247,31 @@ function makeClient(
         return { state: "live" as const, lease: live(token, response) };
       throw Error("Original native acceptance remains uncertain; preserve its assets and pin.");
     },
-    async resume(token: PendingOriginalNativeLease, signal?: AbortSignal) {
+    /** Resume #1. A legacy native only knows "spawned"; any other state is refused. */
+    async resume(
+      token: PendingOriginalNativeLease,
+      signal?: AbortSignal,
+    ): Promise<NativeLeaseResumption> {
       requireActivation();
-      return live(token, await query(token, "serviceLeaseResumeRequest", signal));
+      return resumption(token, await query(token, "serviceLeaseResumeRequest", signal));
+    },
+    /** Resume #2 after sealing the new upstream socket; native verifies it before "spawned". */
+    async attach(
+      attaching: AttachingNativeLease,
+      signal?: AbortSignal,
+    ): Promise<NativeLeaseResumption> {
+      requireActivation();
+      const { pending, evidence } = tokens.attachingPending(attaching);
+      const value = reply(pending, await query(pending, "serviceLeaseResumeRequest", signal), true);
+      if (value.generation !== evidence.generation)
+        throw Error("Native successor generation changed while attaching.");
+      if (value.state === "attaching") {
+        successor(pending, value);
+        return { state: "attaching", attaching };
+      }
+      const lease = live(pending, value);
+      tokens.retireAttaching(attaching);
+      return { state: "live", lease };
     },
     async cancelPending(token: PendingOriginalNativeLease, signal?: AbortSignal) {
       const response = await control(token, "cancel-pending", 0, signal);
@@ -247,7 +293,7 @@ function makeClient(
         throw Error("Original native scope exit is unconfirmed.");
       return { state: "exited" as const, exit: tokens.terminal(token, response) };
     },
-    async detach(lease: VerifiedNativeLease, signal?: AbortSignal) {
+    async detach(lease: VerifiedNativeLease | AttachingNativeLease, signal?: AbortSignal) {
       const value = tokens.granted(lease);
       const response = await control(value.pending, "detach", value.evidence.generation, signal);
       if (response.state !== "detached" || response.generation !== value.evidence.generation)
@@ -256,7 +302,7 @@ function makeClient(
       value.record.attached = false;
     },
     withBootstrap<A>(
-      lease: VerifiedNativeLease,
+      lease: VerifiedNativeLease | AttachingNativeLease,
       consume: (environment: ReadonlyArray<{ readonly name: string; readonly value: string }>) => A,
     ): A {
       requireActivation();

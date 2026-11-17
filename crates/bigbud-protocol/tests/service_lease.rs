@@ -61,6 +61,9 @@ fn fixtures() -> Vec<(&'static str, v1::frame::Payload)> {
         started: "125".into(),
         ..controller()
     });
+    // Successor Resume #1: same grant shape, but not "spawned" until the socket is attached.
+    let mut attaching = resumed.clone();
+    attaching.state = "attaching".into();
     let mut stopped = started.clone();
     stopped.state = "exited".into();
     stopped.generation = 2;
@@ -116,6 +119,10 @@ fn fixtures() -> Vec<(&'static str, v1::frame::Payload)> {
         (
             "lease_resumed",
             ServiceLeaseResumeResponse(Box::new(resumed)),
+        ),
+        (
+            "lease_resumed_attaching",
+            ServiceLeaseResumeResponse(Box::new(attaching)),
         ),
         (
             "lease_stop",

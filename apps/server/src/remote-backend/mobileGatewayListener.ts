@@ -1,13 +1,10 @@
 import { randomBytes } from "node:crypto";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import * as Data from "effect/Data";
 import * as Schema from "effect/Schema";
 import { compareRemoteBackendIdentity } from "@bigbud/shared/remoteBackendIdentity";
-import { version } from "../../package.json" with { type: "json" };
 import { BackendInstance } from "../startup/backendInstance.ts";
 import { ServerConfig } from "../startup/config.ts";
-import { resolveRemoteMobileConfiguration } from "../startup/config.remoteMobile.ts";
 import { ServerSettingsService } from "../ws/serverSettings.ts";
 import { BootstrapCommandLockService } from "../ws/wsBootstrap.lock.ts";
 import { RemoteBackendIdentityService } from "./identity.service.ts";
@@ -16,10 +13,7 @@ import { MobileGatewayProcessInput } from "./mobileGatewayProcess.config.ts";
 import type { VerifiedMobilePublication } from "../remote-agent/mobileOptionalPublication.ts";
 import { withMobilePublicationOwner } from "../remote-agent/mobileGatewayLifecycle.publication.ts";
 import { validateMobileGatewayConfiguration } from "../remote-agent/mobileGatewayLifecycle.schema.ts";
-import { prepareRemoteMobileSocket } from "./mobileSocket.ts";
-import { makeRemoteMobileRoutesLayer } from "./mobileRoutes.ts";
-import { remoteUnixHttpServerLive } from "../server.platform.ts";
-import { serveIsolatedRemoteRoutes } from "../server.remote.listener.ts";
+import { serveSealedMobileUpstream } from "./mobileGatewayListener.upstream.ts";
 
 export class MobileGatewayListenerError extends Data.TaggedError("MobileGatewayListenerError")<{
   readonly message: string;
@@ -95,40 +89,12 @@ export const runMobileGatewayListener = Effect.fn("runMobileGatewayListener")(fu
           signal,
         ),
       );
-      const remoteMobile = yield* Effect.try({
-        try: () =>
-          resolveRemoteMobileConfiguration({
-            mode: config.mode,
-            enabled: true,
-            gatewayCredential: randomBytes(32).toString("hex"),
-            clientToken: config.authToken,
-          }),
-        catch: unavailable,
-      });
-      if (!remoteMobile) return yield* Effect.fail(unavailable());
-      const selectedConfig = Object.freeze({
-        ...config,
-        remoteMobile: Object.freeze(remoteMobile),
-      });
-      const socket = yield* Effect.acquireRelease(
-        operation(async () => {
-          await assertAllowed();
-          return prepareRemoteMobileSocket(owner.stateDir, owner.assertHeld, {
-            existing: "refuse-existing",
-          });
-        }),
-        (socket) => operation(socket.release).pipe(Effect.orDie),
+      const selectedConfig = yield* serveSealedMobileUpstream(
+        config,
+        owner,
+        randomBytes(32).toString("hex"),
+        assertAllowed,
       );
-      const serving = serveIsolatedRemoteRoutes(makeRemoteMobileRoutesLayer(version)).pipe(
-        Layer.provide(remoteUnixHttpServerLive(socket.bindPath)),
-        Layer.provide(Layer.succeed(ServerConfig, selectedConfig)),
-      );
-      // Scoped HTTP finalization is installed after socket ownership, so it closes first.
-      yield* Layer.build(serving);
-      yield* operation(async () => {
-        await assertAllowed();
-        await socket.seal();
-      });
       // run returns only after its owned child/accepted work/cleanup settles, including repair failure.
       // Closing the private HTTP/socket afterward is safe credential denial even for uncertain exits;
       // gateway asset/CAS pins remain owned by the process's repair fence.

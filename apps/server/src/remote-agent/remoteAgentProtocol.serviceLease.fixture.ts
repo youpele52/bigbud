@@ -33,6 +33,13 @@ const response = {
   currentController: controller,
   previousController: undefined,
 };
+const resumed = {
+  ...response,
+  bootstrap: [{ name: "UPSTREAM_CREDENTIAL", value: "synthetic-fixture-only" }],
+  currentController: { ...controller, pid: 44, started: "125" },
+  previousController: controller,
+  generation: 2,
+};
 export const serviceLeaseGoldenFrames: ReadonlyArray<
   readonly [string, RemoteAgentServiceLeaseFrame]
 > = [
@@ -74,18 +81,11 @@ export const serviceLeaseGoldenFrames: ReadonlyArray<
   ["lease_status", { type: "serviceLeaseStatusRequest", value: query }],
   ["lease_status_response", { type: "serviceLeaseStatusResponse", value: response }],
   ["lease_resume", { type: "serviceLeaseResumeRequest", value: query }],
+  ["lease_resumed", { type: "serviceLeaseResumeResponse", value: resumed }],
+  // Successor Resume #1: the original child is live but the upstream socket is not attached yet.
   [
-    "lease_resumed",
-    {
-      type: "serviceLeaseResumeResponse",
-      value: {
-        ...response,
-        bootstrap: [{ name: "UPSTREAM_CREDENTIAL", value: "synthetic-fixture-only" }],
-        currentController: { ...controller, pid: 44, started: "125" },
-        previousController: controller,
-        generation: 2,
-      },
-    },
+    "lease_resumed_attaching",
+    { type: "serviceLeaseResumeResponse", value: { ...resumed, state: "attaching" } },
   ],
   [
     "lease_stop",
