@@ -15,6 +15,7 @@ import {
 import type {
   MobileActivationAcknowledgement,
   MobileActivationController,
+  MobileActivationOutcomeSummary,
 } from "./mobileGatewayActivation.state.ts";
 import type { NativeMobileGatewaySessionSignals } from "./mobileGatewayNative.session.ts";
 import type { NativeMobileSuccessorOutcome } from "./mobileGatewayNative.successor.ts";
@@ -92,6 +93,7 @@ export function createMobileActivationController(
   recover: MobileActivationRecover = unrecoverable,
 ): MobileActivationController {
   let phase: Phase = { kind: "idle" };
+  let lastOutcome: MobileActivationOutcomeSummary | null = null;
 
   const begin = (
     request: NativeMobileActivationRequest | null,
@@ -134,6 +136,11 @@ export function createMobileActivationController(
     ]);
     const running: Running = { kind: "running", request, detach, stop, acknowledged, done };
     void done.then((outcome) => {
+      lastOutcome = Object.freeze({
+        kind: outcome.kind,
+        repairRequired: outcome.kind === "failed" && outcome.repairRequired,
+        at: new Date().toISOString(),
+      });
       if (phase !== running) return;
       phase = !settledOwnership(outcome)
         ? { kind: "uncertain", reason: outcome.kind === "detached" ? "detached" : "repair" }
@@ -188,6 +195,10 @@ export function createMobileActivationController(
       // A detach hands the child to a successor; only repair-required work is uncertain here.
       if (outcome.kind === "failed" && outcome.repairRequired) throw outcome.cause;
     },
+    status: () => ({
+      phase: phase.kind === "uncertain" ? (`uncertain-${phase.reason}` as const) : phase.kind,
+      lastOutcome,
+    }),
   });
 }
 

@@ -183,4 +183,25 @@ describe("native mobile activation controller", () => {
     expect(script.events).toEqual([`launch:${requestId}`, "stop-signal"]);
     expect((await state.activate(input())).status).toBe("unavailable");
   });
+
+  it("reports phase and last outcome for owner status without native evidence", async () => {
+    const script = scriptedLaunch();
+    const controller = await accepted(script);
+    expect(controller.status?.()).toEqual({ phase: "running", lastOutcome: null });
+    script.runs[0]!.settle({ kind: "detached" });
+    await tick();
+    expect(controller.status?.()).toMatchObject({
+      phase: "uncertain-detached",
+      lastOutcome: { kind: "detached", repairRequired: false },
+    });
+    const state = new MobileActivationState();
+    expect(state.status()).toEqual({
+      attached: false,
+      retiring: false,
+      stopping: false,
+      controller: null,
+    });
+    state.attach(controller);
+    expect(state.status().controller?.phase).toBe("uncertain-detached");
+  });
 });

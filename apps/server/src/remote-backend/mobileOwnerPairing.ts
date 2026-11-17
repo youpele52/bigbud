@@ -1,9 +1,6 @@
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
-import * as HttpIncomingMessage from "effect/unstable/http/HttpIncomingMessage";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
-import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import { ServerConfig } from "../startup/config.ts";
 import { ServerSettingsService } from "../ws/serverSettings.ts";
@@ -16,6 +13,7 @@ import {
   MOBILE_OWNER_PAIRING_MAX_BYTES,
   MOBILE_OWNER_PAIRING_PATH,
 } from "./mobileOwnerPairing.protocol.ts";
+import { readMobileOwnerJson } from "./mobileOwnerRequest.ts";
 
 /** Owner-client UDS only. Authentication is supplied by the enclosing client router. */
 export const mobileOwnerPairingRoute = HttpRouter.add(
@@ -34,33 +32,9 @@ export const mobileOwnerPairingRoute = HttpRouter.add(
     if (!externalOrigin)
       return HttpServerResponse.text("Mobile target is unavailable", { status: 503 });
     canonicalMobileOwnerOrigin(externalOrigin);
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const url = new URL(request.url, "http://owner.invalid");
-    if (
-      request.url.includes("?") ||
-      request.url.includes("#") ||
-      url.search ||
-      url.hash ||
-      request.headers["content-type"]?.split(";")[0]?.trim() !== "application/json"
-    )
-      return HttpServerResponse.text("Invalid pairing request", { status: 400 });
-    const input = yield* request.text.pipe(
-      Effect.provideService(
-        HttpIncomingMessage.MaxBodySize,
-        FileSystem.Size(MOBILE_OWNER_PAIRING_MAX_BYTES),
-      ),
-      Effect.timeout("5 seconds"),
-      Effect.flatMap((text) =>
-        Effect.try({
-          try: () => {
-            if (Buffer.byteLength(text) > MOBILE_OWNER_PAIRING_MAX_BYTES)
-              throw new Error("Oversized");
-            return decodeMobileOwnerPairingInput(JSON.parse(text));
-          },
-          catch: () => null,
-        }),
-      ),
-      Effect.catchCause(() => Effect.succeed(null)),
+    const input = yield* readMobileOwnerJson(
+      MOBILE_OWNER_PAIRING_MAX_BYTES,
+      decodeMobileOwnerPairingInput,
     );
     if (!input) return HttpServerResponse.text("Invalid pairing request", { status: 400 });
     if (input.backendOrigin !== externalOrigin)

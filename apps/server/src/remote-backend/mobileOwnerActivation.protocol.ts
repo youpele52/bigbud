@@ -1,0 +1,100 @@
+import * as Schema from "effect/Schema";
+import { RemoteBackendAuthorityId } from "@bigbud/contracts/server/remoteBackendHandshake.ts";
+import { MobileActivationRequestId } from "../remote-agent/mobileGatewayActivation.selection.schema.ts";
+import {
+  MobileGatewayConfiguration,
+  validateMobileGatewayConfiguration,
+} from "../remote-agent/mobileGatewayLifecycle.schema.ts";
+
+/** Owner-client UDS only, sibling of the pairing route; same bearer/revision authentication. */
+export const MOBILE_OWNER_ACTIVATION_PATH = "/api/remote-backend/mobile/owner";
+export const MOBILE_OWNER_ACTIVATION_MAX_BYTES = 16 * 1024;
+/** Sent only when the owner passed `--confirm-consent`; anything else is refused before IO. */
+export const MOBILE_CONSENT_CONFIRMATION = "grant-durable-mobile-consent";
+
+const Revision = Schema.Int.check(
+  Schema.isGreaterThanOrEqualTo(0),
+  Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER),
+);
+const Request = Schema.Union([
+  Schema.Struct({ action: Schema.Literal("status"), authorityId: RemoteBackendAuthorityId }),
+  Schema.Struct({
+    action: Schema.Literal("consent-enable"),
+    authorityId: RemoteBackendAuthorityId,
+    confirmation: Schema.Literal(MOBILE_CONSENT_CONFIRMATION),
+    /** CAS on the revision the owner observed in `status`. */
+    expectedRevision: Revision,
+  }),
+  Schema.Struct({
+    action: Schema.Literal("activate"),
+    authorityId: RemoteBackendAuthorityId,
+    requestId: MobileActivationRequestId,
+    configuration: MobileGatewayConfiguration,
+  }),
+  Schema.Struct({ action: Schema.Literal("stop"), authorityId: RemoteBackendAuthorityId }),
+]);
+export type MobileOwnerActivationRequest = typeof Request.Type;
+export function decodeMobileOwnerActivationRequest(value: unknown): MobileOwnerActivationRequest {
+  const request = Schema.decodeUnknownSync(Request)(value, { onExcessProperty: "error" });
+  if (request.action === "activate") validateMobileGatewayConfiguration(request.configuration);
+  return request;
+}
+
+const Outcome = Schema.Struct({
+  kind: Schema.String.check(Schema.isMaxLength(64)),
+  repairRequired: Schema.Boolean,
+  at: Schema.String.check(Schema.isMaxLength(64)),
+});
+export const MobileOwnerStatus = Schema.Struct({
+  authorityId: RemoteBackendAuthorityId,
+  controller: Schema.Struct({
+    attached: Schema.Boolean,
+    retiring: Schema.Boolean,
+    stopping: Schema.Boolean,
+    phase: Schema.NullOr(
+      Schema.Literals(["idle", "running", "uncertain-detached", "uncertain-repair"]),
+    ),
+    lastOutcome: Schema.NullOr(Outcome),
+  }),
+  consent: Schema.Struct({
+    state: Schema.Literals(["enabled", "disabled", "unavailable"]),
+    revision: Schema.NullOr(Revision),
+  }),
+  inputs: Schema.Struct({
+    state: Schema.Literals(["loaded", "absent", "invalid", "unsupported"]),
+    reason: Schema.NullOr(Schema.String.check(Schema.isMaxLength(64))),
+  }),
+  settingsEnabled: Schema.Boolean,
+});
+export type MobileOwnerStatus = typeof MobileOwnerStatus.Type;
+export const MobileOwnerConsentResult = Schema.Struct({
+  enabled: Schema.Literal(true),
+  revision: Revision,
+  changed: Schema.Boolean,
+});
+export const MobileOwnerActivateResult = Schema.Struct({
+  requestId: Schema.NullOr(Schema.String.check(Schema.isMaxLength(64))),
+  status: Schema.Literals(["disabled", "accepted", "selected", "retired", "unavailable"]),
+});
+export const MobileOwnerStopResult = Schema.Struct({ stopped: Schema.Literal(true) });
+
+/** Fixed refusal codes; clients map them to their own text and never echo server prose. */
+export const MobileOwnerRefusalCode = Schema.Literals([
+  "invalid-request",
+  "authority-mismatch",
+  "unavailable",
+  "stale-revision",
+  "not-installed",
+  "uncertain",
+]);
+export type MobileOwnerRefusalCode = typeof MobileOwnerRefusalCode.Type;
+export const MobileOwnerRefusal = Schema.Struct({ refused: MobileOwnerRefusalCode });
+
+export const mobileOwnerRefusalStatus: Record<MobileOwnerRefusalCode, number> = {
+  "invalid-request": 400,
+  "authority-mismatch": 409,
+  unavailable: 503,
+  "stale-revision": 409,
+  "not-installed": 409,
+  uncertain: 409,
+};

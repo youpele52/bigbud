@@ -4,6 +4,8 @@ import * as Flag from "effect/unstable/cli/Flag";
 import { RemoteBackendAuthorityId } from "@bigbud/contracts/server/remoteBackendHandshake.ts";
 import { MobileRemoteControlScope } from "@bigbud/contracts/server/mobile";
 import { createMobileOwnerPairing } from "./cli.mobile.client.ts";
+import { mobileInputsCommand } from "./cli.mobile.inputs.ts";
+import { mobileOwnerCommands } from "./cli.mobile.owner.ts";
 
 const pair = Command.make("pair", {
   authorityId: Flag.string("authority").pipe(Flag.withSchema(RemoteBackendAuthorityId)),
@@ -33,5 +35,5 @@ const pair = Command.make("pair", {
 );
 export const mobileCommand = Command.make("mobile").pipe(
   Command.withDescription("Manage optional mobile access on this remote host."),
-  Command.withSubcommands([pair]),
+  Command.withSubcommands([pair, ...mobileOwnerCommands, mobileInputsCommand]),
 );

@@ -5,6 +5,7 @@ import * as Data from "effect/Data";
 import {
   MobileActivationState,
   type MobileActivationAcknowledgement,
+  type MobileActivationStatus,
 } from "./mobileGatewayActivation.state.ts";
 
 export class MobileGatewayActivationError extends Data.TaggedError("MobileGatewayActivationError")<{
@@ -18,6 +19,8 @@ export interface RemoteMobileGatewayActivationShape {
   readonly resume: Effect.Effect<MobileActivationAcknowledgement, MobileGatewayActivationError>;
   /** Settles accepted controller work. Unattached/idle success is not native exit evidence. */
   readonly stop: Effect.Effect<void, MobileGatewayActivationError>;
+  /** Orchestration phase for owner status; never native readiness or exit evidence. */
+  readonly status: Effect.Effect<MobileActivationStatus>;
 }
 export class RemoteMobileGatewayActivation extends ServiceMap.Service<
   RemoteMobileGatewayActivation,
@@ -40,6 +43,7 @@ export const RemoteMobileGatewayActivationLive = Layer.sync(RemoteMobileGatewayA
       Effect.tryPromise({ try: () => state.activate(input), catch: failure }),
     resume: Effect.tryPromise({ try: () => state.resume(), catch: failure }),
     stop: Effect.tryPromise({ try: () => state.stop(), catch: failure }),
+    status: Effect.sync(() => state.status()),
   });
   states.set(service, state);
   return service;

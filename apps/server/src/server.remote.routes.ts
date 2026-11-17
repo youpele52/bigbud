@@ -1,4 +1,7 @@
 import { mobileOwnerPairingRoute } from "./remote-backend/mobileOwnerPairing.ts";
+import { mobileOwnerActivationRoute } from "./remote-backend/mobileOwnerActivation.ts";
+import { RemoteMobileConsentJournalLive } from "./remote-backend/mobileConsentEnable.ts";
+import { RemoteMobileNativeInputsLive } from "./remote-backend/mobileGatewayActivation.inputs.ts";
 import { Effect, Layer } from "effect";
 
 import { version } from "../package.json" with { type: "json" };
@@ -22,6 +25,10 @@ export const makeRemoteClientRoutesLayer = Layer.unwrap(
     return Layer.mergeAll(
       makeRemoteClientHandshakeRoute(version),
       mobileOwnerPairingRoute,
+      // The same inputs layer value the activation attach reads, so one build reads it once.
+      mobileOwnerActivationRoute.pipe(
+        Layer.provide(Layer.merge(RemoteMobileNativeInputsLive, RemoteMobileConsentJournalLive)),
+      ),
       makeWebsocketRpcRouteLayer(withBootstrapCommandLock),
       attachmentsRouteLayer,
       projectFaviconRouteLayer,

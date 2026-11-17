@@ -3,6 +3,24 @@ export interface MobileActivationAcknowledgement {
   readonly requestId: string | null;
   readonly status: "disabled" | "accepted" | "selected" | "retired" | "unavailable";
 }
+/** Owner status only; never readiness, exit or publication evidence. */
+export type MobileActivationPhase = "idle" | "running" | "uncertain-detached" | "uncertain-repair";
+export interface MobileActivationOutcomeSummary {
+  readonly kind: string;
+  readonly repairRequired: boolean;
+  readonly at: string;
+}
+export interface MobileActivationControllerStatus {
+  readonly phase: MobileActivationPhase;
+  readonly lastOutcome: MobileActivationOutcomeSummary | null;
+}
+export interface MobileActivationStatus {
+  readonly attached: boolean;
+  readonly retiring: boolean;
+  readonly stopping: boolean;
+  /** `null` while unattached, or for a controller that reports no status. */
+  readonly controller: MobileActivationControllerStatus | null;
+}
 export interface MobileActivationController {
   readonly activate: (input: unknown) => Promise<MobileActivationAcknowledgement>;
   readonly resume: () => Promise<MobileActivationAcknowledgement>;
@@ -10,6 +28,7 @@ export interface MobileActivationController {
   readonly stop: () => Promise<void>;
   /** App retirement detaches/settles Node work; it must not kill the native child. */
   readonly close: () => Promise<void>;
+  readonly status?: () => MobileActivationControllerStatus;
 }
 const unavailable = (): MobileActivationAcknowledgement => ({
   requestId: null,
@@ -39,6 +58,14 @@ export class MobileActivationState {
         ? controller.resume()
         : unavailable(),
     );
+  }
+  status(): MobileActivationStatus {
+    return {
+      attached: this.controller !== undefined,
+      retiring: this.retiring !== undefined,
+      stopping: this.stopping !== undefined,
+      controller: this.controller?.status?.() ?? null,
+    };
   }
   stop(): Promise<void> {
     if (this.retiring)
@@ -73,6 +100,7 @@ export class MobileActivationState {
       resume: input.resume.bind(input),
       stop: input.stop.bind(input),
       close: input.close.bind(input),
+      ...(input.status ? { status: input.status.bind(input) } : {}),
     });
     this.controller = controller;
     this.previouslyAttached = true;
