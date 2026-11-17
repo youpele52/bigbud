@@ -193,11 +193,20 @@ pub fn run_cli_with_supervisor(
         .first()
         .map(String::as_str)
         .ok_or(ServiceError::Invalid(
-            "expected render, stage, enable, disable, status or run",
+            "expected render, stage, enable, disable, start, stop, status or run",
         ))?;
     if !matches!(
         operation,
-        "render" | "stage" | "enable" | "disable" | "status" | "run" | "start-rust" | "proxy"
+        "render"
+            | "stage"
+            | "enable"
+            | "disable"
+            | "start"
+            | "stop"
+            | "status"
+            | "run"
+            | "start-rust"
+            | "proxy"
     ) {
         return Err(ServiceError::Invalid(
             "unsupported account-service operation",
@@ -300,6 +309,9 @@ pub fn run_cli_with_supervisor(
     }
     if !cfg!(target_os = "linux") || uid == 0 {
         return Err(ServiceError::Unsupported);
+    }
+    if let Some(explicit) = super::explicit::Explicit::parse(operation) {
+        return super::explicit::report(&config, explicit, consent, &manager, ready, uid);
     }
     if operation == "enable" && ready != Prerequisites::Ready {
         eprintln!("{}", ready.remediation(uid));

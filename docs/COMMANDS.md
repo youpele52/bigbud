@@ -342,6 +342,8 @@ bigbud backend setup \
 bigbud backend status --authority 00000000000000000000000000000000
 bigbud backend enable --authority 00000000000000000000000000000000 --confirm-startup
 bigbud backend disable-boot --authority 00000000000000000000000000000000
+bigbud backend start --authority 00000000000000000000000000000000
+bigbud backend stop --authority 00000000000000000000000000000000
 ```
 
 Replace the example paths, request UUID and authority. Keep executable files separate from backend
@@ -349,7 +351,9 @@ data and account service state. Setup stages the units and admits the signed Rus
 startup remains disabled. `--restart never` opts out of the default failure restart policy.
 Enable verifies completed setup and finite preflight before requesting startup. Status reports unit
 state without claiming backend readiness. Disable-boot prevents automatic startup while current work
-continues. A partial setup must be preserved for inspection; repeating its request does not repair or
+continues. Start launches the staged backend for this session without enabling boot startup or
+changing lingering; the backend then starts its Rust unit. Stop ends both units, including Rust
+terminals, and keeps configuration, data and boot policy. A partial setup must be preserved for inspection; repeating its request does not repair or
 overwrite it. These are installed CLI subcommands, with no separate Bun script or just recipe.
 
 ## Remote account mobile pairing

@@ -2,6 +2,8 @@
 #[cfg(unix)]
 use super::ServiceRole;
 use super::command::Manager;
+#[cfg(unix)]
+use super::command::systemctl_args as args;
 use super::status::Prerequisites;
 #[cfg(unix)]
 use super::unit::{render_definition, require_staged, unit_directory};
@@ -125,14 +127,6 @@ pub(super) fn enable(
         &args(&["start", &definition.names.backend]),
     )?;
     Ok(())
-}
-#[cfg(unix)]
-fn args(arguments: &[&str]) -> Vec<String> {
-    ["--user", "--no-pager", "--no-ask-password"]
-        .into_iter()
-        .chain(arguments.iter().copied())
-        .map(str::to_owned)
-        .collect()
 }
 #[cfg(not(unix))]
 pub(super) fn enable(

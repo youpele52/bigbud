@@ -23,8 +23,27 @@ pub(super) fn user_bus(command: &mut Command, directory: &std::path::Path) -> Re
     Ok(())
 }
 
+/// Non-interactive user-manager arguments shared by every account-service systemctl call.
+pub(super) fn systemctl_args(arguments: &[&str]) -> Vec<String> {
+    ["--user", "--no-pager", "--no-ask-password"]
+        .into_iter()
+        .chain(arguments.iter().copied())
+        .map(str::to_owned)
+        .collect()
+}
+
 pub(super) trait Manager {
     fn run(&self, program: &str, args: &[String]) -> Result<String>;
+    /// A manager call whose job may legitimately outlast the default 10 s bound, such as a stop
+    /// that waits for `TimeoutStopSec`. Test doubles record it like `run`.
+    fn run_bounded(
+        &self,
+        program: &str,
+        args: &[String],
+        _timeout: std::time::Duration,
+    ) -> Result<String> {
+        self.run(program, args)
+    }
     #[cfg(unix)]
     fn run_owned(&self, _command: Command, _timeout: std::time::Duration) -> Result<String> {
         Err(ServiceError::Unsupported)
@@ -41,12 +60,20 @@ impl Manager for SystemManager {
         Ok(output)
     }
     fn run(&self, program: &str, args: &[String]) -> Result<String> {
+        self.run_bounded(program, args, std::time::Duration::from_secs(10))
+    }
+    fn run_bounded(
+        &self,
+        program: &str,
+        args: &[String],
+        timeout: std::time::Duration,
+    ) -> Result<String> {
         if !cfg!(target_os = "linux") {
             return Err(ServiceError::Unsupported);
         }
         #[cfg(not(unix))]
         {
-            let _ = (program, args);
+            let _ = (program, args, timeout);
             Err(ServiceError::Unsupported)
         }
         #[cfg(unix)]
@@ -63,8 +90,7 @@ impl Manager for SystemManager {
                     &std::path::PathBuf::from(format!("/run/user/{}", super::files::uid()?)),
                 )?;
             }
-            let (text, status) =
-                owned::run(command, std::time::Duration::from_secs(10), 64 * 1024)?;
+            let (text, status) = owned::run(command, timeout, 64 * 1024)?;
             let absent_unit = program == "/usr/bin/systemctl"
                 && args
                     .iter()

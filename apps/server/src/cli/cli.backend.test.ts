@@ -88,3 +88,40 @@ it("reports observed unit status without claiming backend readiness", async () =
   expect(text).toContain('"active":false');
   expect(text).toContain("readiness is not assessed");
 });
+it.each(["start", "stop"] as const)(
+  "dispatches explicit %s without boot-startup consent and prints the native report",
+  async (action) => {
+    vi.mocked(runBackendNativeCli).mockReturnValue(
+      Effect.succeed({ authorityId: "a".repeat(32), action, output: `unit: ${action}-observed\n` }),
+    );
+    await run([action, "--authority", "a".repeat(32)]);
+    expect(runBackendNativeCli).toHaveBeenCalledWith({
+      authorityId: "a".repeat(32),
+      action,
+      confirmStartup: false,
+    });
+    expect(vi.mocked(process.stdout.write).mock.calls.flat().join("")).toBe(
+      `unit: ${action}-observed\n`,
+    );
+    expect(process.exitCode).not.toBe(1);
+  },
+);
+it.each(["start", "stop"] as const)(
+  "refuses %s with boot-startup consent before native work",
+  async (action) => {
+    await run([action, "--authority", "a".repeat(32), "--confirm-startup"]);
+    expect(vi.mocked(process.stderr.write).mock.calls.flat().join("")).toContain(
+      "use enable for boot startup",
+    );
+    expect(process.exitCode).toBe(1);
+    expect(runBackendNativeCli).not.toHaveBeenCalled();
+  },
+);
+it("reports a failed explicit stop privately as incomplete", async () => {
+  await run(["stop", "--authority", "a".repeat(32)]);
+  const text = vi.mocked(process.stderr.write).mock.calls.flat().join("");
+  expect(text).toContain("inspect status before retrying");
+  expect(text).not.toContain("PRIVATE");
+  expect(vi.mocked(process.stdout.write)).not.toHaveBeenCalled();
+  expect(process.exitCode).toBe(1);
+});

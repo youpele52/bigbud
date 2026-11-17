@@ -26,6 +26,13 @@ const confirmationRequired = (flag: string) =>
     process.stderr.write(`bigbud backend: Explicit ${flag} is required.\n`);
     process.exitCode = 1;
   });
+// Explicit start/stop never change boot policy, so boot-startup consent is refused, not ignored.
+const startupConsentRefused = Effect.sync(() => {
+  process.stderr.write(
+    "bigbud backend: start and stop take no --confirm-startup; use enable for boot startup.\n",
+  );
+  process.exitCode = 1;
+});
 const setup = Command.make("setup", {
   graphRoot: Flag.string("graph-root").pipe(
     Flag.withDescription(
@@ -67,7 +74,7 @@ const setup = Command.make("setup", {
 );
 const authority = () => Flag.string("authority").pipe(Flag.withSchema(RemoteBackendAuthorityId));
 function native(
-  name: "status" | "enable" | "disable-boot",
+  name: "status" | "enable" | "disable-boot" | "start" | "stop",
   action: BackendNativeAction,
   description: string,
 ) {
@@ -79,18 +86,23 @@ function native(
     Command.withHandler((input) =>
       action === "enable" && !input.confirmStartup
         ? confirmationRequired("--confirm-startup")
-        : report(runBackendNativeCli({ ...input, action }), (result) => {
-            if (action === "status")
-              process.stdout.write(
-                `${result.output.trim()}\nBackend readiness is not assessed by unit status.\n`,
-              );
-            else
-              process.stdout.write(
-                action === "enable"
-                  ? "Backend startup requested. Inspect status to confirm its state.\n"
-                  : "Automatic startup disabled. Running work continues.\n",
-              );
-          }),
+        : (action === "start" || action === "stop") && input.confirmStartup
+          ? startupConsentRefused
+          : report(runBackendNativeCli({ ...input, action }), (result) => {
+              if (action === "status")
+                process.stdout.write(
+                  `${result.output.trim()}\nBackend readiness is not assessed by unit status.\n`,
+                );
+              // The native launcher reports observed unit states and what was preserved.
+              else if (action === "start" || action === "stop")
+                process.stdout.write(`${result.output.trim()}\n`);
+              else
+                process.stdout.write(
+                  action === "enable"
+                    ? "Backend startup requested. Inspect status to confirm its state.\n"
+                    : "Automatic startup disabled. Running work continues.\n",
+                );
+            }),
     ),
   );
 }
@@ -109,5 +121,15 @@ export const backendCommand = Command.make("backend").pipe(
       "Explicitly enable and request backend startup after verified finite preflight.",
     ),
     native("disable-boot", "disable", "Disable automatic startup without stopping current work."),
+    native(
+      "start",
+      "start",
+      "Start the staged backend for this session without enabling boot startup or lingering.",
+    ),
+    native(
+      "stop",
+      "stop",
+      "Stop the backend and Rust units, ending their work; boot startup and data are unchanged.",
+    ),
   ]),
 );

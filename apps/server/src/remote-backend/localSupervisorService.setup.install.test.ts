@@ -27,7 +27,13 @@ afterEach(async () => {
   staged.result = undefined;
   for (const path of directories.splice(0)) await fs.rm(path, { recursive: true, force: true });
 });
-async function fixture() {
+type Target = RemoteAgentInstallResult["targetTriple"];
+async function fixture(
+  options: {
+    readonly targetTriple?: Target;
+    readonly libc?: "glibc" | "musl" | "unknown";
+  } = {},
+) {
   const home = await fs.realpath(await fs.mkdtemp("/tmp/bbs-"));
   directories.push(home);
   const root = join(home, ".bigbud/agent"),
@@ -38,7 +44,7 @@ async function fixture() {
     buildDigest: "fixture-build",
     protocolMajor: 1,
     protocolMinor: 0,
-    targetTriple: "aarch64-unknown-linux-gnu",
+    targetTriple: options.targetTriple ?? "aarch64-unknown-linux-gnu",
     sizeBytes: bytes.length,
     sha256,
     url: "https://fixture.invalid/artifact",
@@ -101,7 +107,16 @@ async function fixture() {
     platform: {
       operatingSystem: "linux",
       architecture: "aarch64",
-      targetTriple: artifact.targetTriple,
+      targetTriple: "aarch64-unknown-linux-gnu",
+      ...(options.libc
+        ? {
+            preflight: {
+              libc: { family: options.libc, version: null },
+              missingTools: [],
+              directories: [],
+            },
+          }
+        : {}),
     },
     runtimeSummary: remoteAgentRuntimeSummary(registry),
   };
@@ -198,5 +213,23 @@ it("refuses a preexisting generation containing foreign state without deleting o
   await expect(f.install()).rejects.toThrow("must be empty");
   expect(await fs.readFile(foreign, "utf8")).toBe("keep");
   expect((await fs.lstat(f.runtime.statePath)).ino).toBe(before.ino);
+  expect(f.commands).toEqual([]);
+});
+
+it("setup_accepts_musl_artifact_on_gnu_host", async () => {
+  const f = await fixture({ targetTriple: "aarch64-unknown-linux-musl", libc: "glibc" });
+  expect(await f.install()).toEqual(f.runtime);
+  expect(f.runtime.targetTriple).toBe("aarch64-unknown-linux-musl");
+  await expect(verifyManagedLocalSupervisor(f.runtime)).resolves.toBeUndefined();
+  expect(f.commands).toEqual([expect.stringContaining("--check --capabilities")]);
+});
+
+it.each([
+  ["musl host (Rust-only tier remains)", "aarch64-unknown-linux-musl", "musl"],
+  ["foreign architecture", "x86_64-unknown-linux-musl", "glibc"],
+] as const)("refuses a %s before generation state", async (_name, targetTriple, libc) => {
+  const f = await fixture({ targetTriple, libc });
+  await expect(f.install()).rejects.toThrow();
+  await expect(fs.lstat(join(f.root, "runtimes"))).rejects.toHaveProperty("code", "ENOENT");
   expect(f.commands).toEqual([]);
 });

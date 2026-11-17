@@ -63,7 +63,15 @@ export const runBackendSetupCli = Effect.fn("runBackendSetupCli")(function* (
   });
 });
 
-export type BackendNativeAction = "status" | "enable" | "disable";
+export type BackendNativeAction = "status" | "enable" | "disable" | "start" | "stop";
+const NATIVE_TIMEOUT_MS: Readonly<Record<BackendNativeAction, number>> = {
+  status: 60_000,
+  disable: 60_000,
+  enable: 180_000,
+  // Capability probe, reload and a bounded Type=exec start; stop waits for two stop timeouts.
+  start: 90_000,
+  stop: 90_000,
+};
 async function selectedNative(authorityId: string, signal: AbortSignal) {
   if (!/^[a-f0-9]{32}$/.test(authorityId)) throw new Error("Exact backend authority is required.");
   const account = actualAccount(),
@@ -118,14 +126,15 @@ export const runBackendNativeCli = Effect.fn("runBackendNativeCli")(function* (i
 }) {
   const fixed = Object.freeze({ ...input });
   if (
-    !["status", "enable", "disable"].includes(fixed.action) ||
+    !Object.hasOwn(NATIVE_TIMEOUT_MS, fixed.action) ||
     (fixed.action === "enable" && fixed.confirmStartup !== true)
   )
     return yield* Effect.fail(
       new BackendCliError({ message: "Explicit startup confirmation is required." }),
     );
   const selected = yield* backendCliOwned((signal) => selectedNative(fixed.authorityId, signal));
-  if (fixed.action === "enable") {
+  // Starting, like enabling, requires verified setup completion; stop never depends on it.
+  if (fixed.action === "enable" || fixed.action === "start") {
     const config = yield* configuration(selected.config.backend_home);
     const observed = yield* runLocalSupervisorServicePreflight({
       config,
@@ -165,7 +174,7 @@ export const runBackendNativeCli = Effect.fn("runBackendNativeCli")(function* (i
       {
         cwd: selected.home,
         signal,
-        timeoutMs: fixed.action === "enable" ? 180_000 : 60_000,
+        timeoutMs: NATIVE_TIMEOUT_MS[fixed.action],
         maxBufferBytes: 64 * 1024,
         env: { HOME: selected.home, PATH: "/usr/local/bin:/usr/bin:/bin", LANG: "C.UTF-8" },
       },

@@ -191,6 +191,11 @@ pub(crate) struct FakeManager {
     pub(crate) service_v1: bool,
     pub(crate) service_graphless: bool,
     pub(crate) fragment: Option<PathBuf>,
+    /// Reports `<dir>/<unit>` for each queried unit instead of one fixed fragment.
+    pub(crate) fragment_dir: Option<PathBuf>,
+    /// ActiveState reported for unit status queries.
+    pub(crate) unit_active: Option<&'static str>,
+    pub(crate) fail_jobs: bool,
 }
 impl Manager for FakeManager {
     fn run(&self, program: &str, args: &[String]) -> Result<String> {
@@ -214,6 +219,27 @@ impl Manager for FakeManager {
         }
         if program.ends_with("loginctl") {
             return Ok(if self.linger { "yes\n" } else { "no\n" }.into());
+        }
+        if self.fail_jobs && args.iter().any(|arg| arg == "start" || arg == "stop") {
+            return Err(ServiceError::Manager);
+        }
+        if let Some(active) = self.unit_active
+            && args
+                .iter()
+                .any(|arg| arg.starts_with("--property=LoadState,"))
+        {
+            return Ok(format!(
+                "LoadState=loaded\nActiveState={active}\nSubState={active}\nResult=success\nUnitFileState=disabled\nNRestarts=0\n"
+            ));
+        }
+        if let Some(directory) = &self.fragment_dir
+            && let Some(name) = args
+                .iter()
+                .position(|arg| arg == "--property=FragmentPath")
+                .and_then(|index| index.checked_sub(1))
+                .and_then(|index| args.get(index))
+        {
+            return Ok(format!("FragmentPath={}\n", directory.join(name).display()));
         }
         if args.iter().any(|arg| arg == "--property=FragmentPath") {
             return self

@@ -19,8 +19,12 @@ import {
   remoteAgentRuntimeEqual,
   type RemoteAgentRuntime,
 } from "../remote-agent/remoteAgentRuntime.ts";
+import { remoteAgentTargetCandidates } from "@bigbud/shared/remoteAgentArtifact";
 import { quoteRemoteAgentLaunchValue as quote } from "../remote-agent/remoteAgentRuntime.launch.prepare.ts";
-import type { RemoteAgentInstallSource } from "../remote-agent/remoteAgentInstallManager.ts";
+import type {
+  RemoteAgentInstallResult,
+  RemoteAgentInstallSource,
+} from "../remote-agent/remoteAgentInstallManager.ts";
 import type { LocalSupervisorPreflightContext } from "./localSupervisorService.preflight.ts";
 import type { SetupAccount } from "./localSupervisorService.setup.validation.ts";
 export interface LocalSupervisorServiceSetupDependencies {
@@ -41,6 +45,21 @@ export interface LocalSupervisorServiceSetupDependencies {
     signal: AbortSignal,
   ) => Promise<string>;
 }
+/**
+ * D3: the backend graph is glibc-only, but the Rust launcher ships static musl. A gnu graph
+ * therefore accepts the host's musl or gnu launcher; signature, bytes and `--check` identity
+ * stay enforced by the installer and the capability probe below.
+ */
+export function assertSetupRuntimeTarget(
+  result: Pick<RemoteAgentInstallResult, "platform" | "artifact">,
+): void {
+  const { platform, artifact } = result;
+  const libc = platform.preflight?.libc.family ?? "unknown";
+  if (platform.operatingSystem !== "linux" || !platform.targetTriple || libc === "musl")
+    throw new Error("The backend tier requires a glibc Linux host; the Rust-only tier remains.");
+  if (!remoteAgentTargetCandidates(platform.targetTriple, libc).includes(artifact.targetTriple))
+    throw new Error("The signed Rust artifact does not run on this Linux account platform.");
+}
 async function install(
   control: LocalSupervisorControl,
   source: RemoteAgentInstallSource,
@@ -51,6 +70,7 @@ async function install(
     source,
     signal,
   });
+  assertSetupRuntimeTarget(result);
   const state = await (await control.openControl(control.targetId)).registry.read();
   const id = `${result.artifact.version}:${result.artifact.sha256}:${result.artifact.targetTriple}`;
   const build = state.builds.find((entry) => entry.id === id);
