@@ -5,6 +5,7 @@ import {
   MobileGatewayConfiguration,
   validateMobileGatewayConfiguration,
 } from "../remote-agent/mobileGatewayLifecycle.schema.ts";
+import { MOBILE_RUNTIME_REPAIR_REASONS } from "./mobileGatewayAssets.orphan.reasons.ts";
 
 /** Owner-client UDS only, sibling of the pairing route; same bearer/revision authentication. */
 export const MOBILE_OWNER_ACTIVATION_PATH = "/api/remote-backend/mobile/owner";
@@ -32,6 +33,8 @@ const Request = Schema.Union([
     configuration: MobileGatewayConfiguration,
   }),
   Schema.Struct({ action: Schema.Literal("stop"), authorityId: RemoteBackendAuthorityId }),
+  /** Orphan runtime-asset GC: removes only journal-proven unowned trees, reports the rest. */
+  Schema.Struct({ action: Schema.Literal("repair"), authorityId: RemoteBackendAuthorityId }),
 ]);
 export type MobileOwnerActivationRequest = typeof Request.Type;
 export function decodeMobileOwnerActivationRequest(value: unknown): MobileOwnerActivationRequest {
@@ -45,6 +48,13 @@ const Outcome = Schema.Struct({
   repairRequired: Schema.Boolean,
   at: Schema.String.check(Schema.isMaxLength(64)),
 });
+const Count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1024 }));
+const RepairSummary = Schema.Struct({
+  at: Schema.String.check(Schema.isMaxLength(64)),
+  removed: Count,
+  kept: Count,
+  failed: Schema.Boolean,
+});
 export const MobileOwnerStatus = Schema.Struct({
   authorityId: RemoteBackendAuthorityId,
   controller: Schema.Struct({
@@ -55,6 +65,7 @@ export const MobileOwnerStatus = Schema.Struct({
       Schema.Literals(["idle", "running", "uncertain-detached", "uncertain-repair"]),
     ),
     lastOutcome: Schema.NullOr(Outcome),
+    lastRepair: Schema.NullOr(RepairSummary),
   }),
   consent: Schema.Struct({
     state: Schema.Literals(["enabled", "disabled", "unavailable"]),
@@ -77,6 +88,18 @@ export const MobileOwnerActivateResult = Schema.Struct({
   status: Schema.Literals(["disabled", "accepted", "selected", "retired", "unavailable"]),
 });
 export const MobileOwnerStopResult = Schema.Struct({ stopped: Schema.Literal(true) });
+export const MobileOwnerRepairResult = Schema.Struct({
+  removed: Count,
+  kept: Count,
+  entries: Schema.Array(
+    Schema.Struct({
+      generation: Schema.String.check(Schema.isPattern(/^(?:assets-[a-f0-9]{32}|unknown)$/)),
+      outcome: Schema.Literals(["removed", "kept"]),
+      reason: Schema.Literals(MOBILE_RUNTIME_REPAIR_REASONS),
+    }),
+  ).check(Schema.isMaxLength(512)),
+});
+export type MobileOwnerRepairResult = typeof MobileOwnerRepairResult.Type;
 
 /** Fixed refusal codes; clients map them to their own text and never echo server prose. */
 export const MobileOwnerRefusalCode = Schema.Literals([

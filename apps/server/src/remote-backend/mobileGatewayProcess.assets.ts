@@ -49,6 +49,9 @@ interface OwnedAssets {
   receiptWriting: boolean;
 }
 const owned = new WeakMap<OwnedMobileGatewayAssets, OwnedAssets>();
+/** Paths held by an original in-process token; orphan repair never touches them. */
+const held = new Set<string>();
+export const mobileGatewayAssetsPathHeld = (path: string): boolean => held.has(path);
 const identity = async (path: string) =>
   JSON.stringify(directoryIdentity(await privateDirectory(path)));
 async function assertParents(record: OwnedAssets) {
@@ -142,6 +145,7 @@ export function prepareMobileGatewayAssets(
       await authority.assertAuthority();
       const token = Object.freeze({}) as OwnedMobileGatewayAssets;
       owned.set(token, record);
+      held.add(path);
       return token;
     },
     external,
@@ -209,6 +213,7 @@ export function removeMobileGatewayAssets(
     await removeMobileRuntimeInventory(record.path, record.inventory);
     removeReceipt();
     owned.delete(token);
+    held.delete(record.path);
   }).finally(() => {
     record.removing = false;
   });

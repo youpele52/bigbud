@@ -6,6 +6,7 @@ import {
   activateMobileOwner,
   enableMobileOwnerConsent,
   readMobileOwnerStatus,
+  repairMobileOwner,
   stopMobileOwner,
 } from "./cli.mobile.owner.client.ts";
 import { mobileCommand } from "./cli.mobile.ts";
@@ -13,6 +14,7 @@ vi.mock("./cli.mobile.owner.client.ts", () => ({
   activateMobileOwner: vi.fn(),
   enableMobileOwnerConsent: vi.fn(),
   readMobileOwnerStatus: vi.fn(),
+  repairMobileOwner: vi.fn(),
   stopMobileOwner: vi.fn(),
 }));
 const previousExit = process.exitCode;
@@ -44,6 +46,7 @@ const status = {
     stopping: false,
     phase: "idle" as const,
     lastOutcome: { kind: "exit-recorded", repairRequired: false, at: "2026-11-17T00:00:00.000Z" },
+    lastRepair: { at: "2026-11-17T00:00:01.000Z", removed: 2, kept: 1, failed: false },
   },
   consent: { state: "enabled" as const, revision: 3 },
   inputs: { state: "loaded" as const, reason: null },
@@ -77,6 +80,7 @@ it("prints status as text or JSON", async () => {
   expect(io.out()).toContain("Consent: enabled (revision 3)");
   expect(io.out()).toContain("Proof inputs: loaded");
   expect(io.out()).toContain("Last outcome: exit-recorded at 2026-11-17T00:00:00.000Z");
+  expect(io.out()).toContain("Last asset repair: 2 removed, 1 kept at 2026-11-17T00:00:01.000Z");
   vi.restoreAllMocks();
   io = capture();
   await run(["status", "--authority", authority, "--json"]);
@@ -122,5 +126,33 @@ it("maps refusals and unreachable sockets to fixed text without echoing failures
   await run(["stop", "--authority", authority, "--json"]);
   expect(JSON.parse(io.out())).toEqual({ ok: false, error: "unreachable" });
   expect(io.out() + io.err()).not.toContain("PRIVATE_OWNER_TOKEN");
+  expect(process.exitCode).toBe(1);
+});
+
+it("repair prints kept/removed with fixed reasons; a non-owner refusal sets exit 1", async () => {
+  let io = capture();
+  const kept = `assets-${"2".repeat(32)}`;
+  vi.mocked(repairMobileOwner).mockResolvedValue({
+    ok: true,
+    value: {
+      removed: 1,
+      kept: 1,
+      entries: [
+        { generation: `assets-${"1".repeat(32)}`, outcome: "removed", reason: "proven-orphan" },
+        { generation: kept, outcome: "kept", reason: "pinned" },
+      ],
+    },
+  });
+  await run(["repair", "--authority", authority]);
+  expect(repairMobileOwner).toHaveBeenCalledWith(authority);
+  expect(io.out()).toContain("Runtime-asset repair: 1 removed, 1 kept.");
+  expect(io.out()).toContain(`kept ${kept}: pinned`);
+  expect(process.exitCode).toBe(previousExit);
+  vi.restoreAllMocks();
+  io = capture();
+  vi.mocked(repairMobileOwner).mockResolvedValue({ ok: false, refused: "authority-mismatch" });
+  await run(["repair", "--authority", "b".repeat(32)]);
+  expect(io.err()).toContain("The authority does not match");
+  expect(io.out()).toBe("");
   expect(process.exitCode).toBe(1);
 });

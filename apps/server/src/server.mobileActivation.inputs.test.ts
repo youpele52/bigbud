@@ -21,6 +21,7 @@ import { RemoteMobileActivationAttachLive } from "./server.mobileActivation.ts";
 const seen = vi.hoisted(() => ({
   inputs: [] as RemoteMobileNativeInputsValue[],
   recoveries: 0,
+  repairs: [] as number[],
 }));
 // The real controller state machine on Linux semantics; only the native pipeline is a seam.
 vi.mock("./remote-backend/mobileGatewayActivation.controller.ts", async (importOriginal) => {
@@ -39,6 +40,11 @@ vi.mock("./remote-backend/mobileGatewayActivation.controller.ts", async (importO
             seen.recoveries++;
             return { kind: "none" };
           },
+          async () => {
+            // Orphan repair runs once per attach, only after successor recovery settled.
+            seen.repairs.push(seen.recoveries);
+            return { removed: 0, kept: 0, entries: [] };
+          },
         );
       }),
   };
@@ -47,6 +53,7 @@ let close: (() => Promise<void>) | undefined;
 afterEach(async () => {
   seen.inputs.length = 0;
   seen.recoveries = 0;
+  seen.repairs.length = 0;
   await close?.();
   close = undefined;
 });
@@ -74,6 +81,7 @@ it("a valid owner inputs file attaches the controller and runs successor recover
       Effect.gen(function* () {
         const service = yield* RemoteMobileGatewayActivation;
         yield* Effect.promise(() => vi.waitFor(() => expect(seen.recoveries).toBe(1)));
+        yield* Effect.promise(() => vi.waitFor(() => expect(seen.repairs).toEqual([1])));
         return yield* service.status;
       }),
     ).pipe(Effect.provide(compose(f.home))),
@@ -82,6 +90,7 @@ it("a valid owner inputs file attaches the controller and runs successor recover
   expect(seen.inputs[0]!.artifacts.stageId).toBe("fixture-stage");
   expect(status.attached).toBe(true);
   expect(status.controller?.lastOutcome?.kind).toBe("none");
+  expect(status.controller?.lastRepair).toMatchObject({ removed: 0, kept: 0, failed: false });
 });
 
 it("an invalid inputs file attaches nothing and recovers nothing", async () => {
@@ -99,4 +108,5 @@ it("an invalid inputs file attaches nothing and recovers nothing", async () => {
   expect(status.attached).toBe(false);
   expect(seen.inputs).toHaveLength(0);
   expect(seen.recoveries).toBe(0);
+  expect(seen.repairs).toEqual([]);
 });

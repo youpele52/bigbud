@@ -6,6 +6,7 @@ import { sendMobileOwnerRequest } from "./cli.mobile.owner.client.ts";
 import {
   MOBILE_CONSENT_CONFIRMATION,
   MobileOwnerConsentResult,
+  MobileOwnerRepairResult,
   MobileOwnerStatus,
 } from "../remote-backend/mobileOwnerActivation.protocol.ts";
 import {
@@ -110,4 +111,30 @@ it("refuses an invalid request before sending, server prose, redirects and overs
     expect(String(error)).toBe("Error: Owner mobile control is unavailable.");
   }
   expect(requests).toBe(3);
+});
+
+it("repair through the real route refuses a non-owner authority and is off without a controller", async () => {
+  const credentials = await bridged();
+  expect(
+    await sendMobileOwnerRequest(
+      { action: "repair", authorityId: "b".repeat(32) },
+      MobileOwnerRepairResult,
+      credentials,
+    ),
+  ).toEqual({ ok: false, refused: "authority-mismatch" });
+  expect(
+    await sendMobileOwnerRequest(
+      { action: "repair", authorityId: ownerAuthority },
+      MobileOwnerRepairResult,
+      credentials,
+    ),
+  ).toEqual({ ok: false, refused: "unavailable" });
+  const wrong = { ...credentials, token: "someone-else" };
+  await expect(
+    sendMobileOwnerRequest(
+      { action: "repair", authorityId: ownerAuthority },
+      MobileOwnerRepairResult,
+      wrong,
+    ),
+  ).rejects.toThrow("Owner mobile control is unavailable.");
 });

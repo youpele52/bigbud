@@ -7,10 +7,15 @@ import {
   activateMobileOwner,
   enableMobileOwnerConsent,
   readMobileOwnerStatus,
+  repairMobileOwner,
   stopMobileOwner,
   type MobileOwnerReply,
 } from "./cli.mobile.owner.client.ts";
-import { formatMobileOwnerStatus, writeMobileOwnerReply } from "./cli.mobile.owner.format.ts";
+import {
+  formatMobileOwnerRepair,
+  formatMobileOwnerStatus,
+  writeMobileOwnerReply,
+} from "./cli.mobile.owner.format.ts";
 
 const authority = () =>
   Flag.string("authority").pipe(
@@ -112,4 +117,13 @@ const status = Command.make("status", { authorityId: authority(), json: json() }
   ),
 );
 
-export const mobileOwnerCommands = [enable, activate, stop, status] as const;
+const repair = Command.make("repair", { authorityId: authority(), json: json() }).pipe(
+  Command.withDescription(
+    "Remove runtime-asset trees the journal proves unowned; report what was kept and why.",
+  ),
+  Command.withHandler((input) =>
+    run(input.json, () => repairMobileOwner(input.authorityId), formatMobileOwnerRepair),
+  ),
+);
+
+export const mobileOwnerCommands = [enable, activate, stop, status, repair] as const;

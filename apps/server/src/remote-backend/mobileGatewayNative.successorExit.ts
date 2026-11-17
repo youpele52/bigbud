@@ -32,8 +32,8 @@ export interface NativeMobileSuccessorJournal {
  *
  * Residual (increment 7): the successor never re-adopts the original runtime assets tree; by
  * design an armed tree cannot be re-adopted after its controller died
- * (`mobileGatewayProcess.assets.ts`). The tree is left in place for the orphan runtime-asset
- * repair/GC path; this records the exit only and removes no files.
+ * (`mobileGatewayProcess.assets.ts`). The tree is left in place for the journal-proven orphan
+ * runtime-asset repair (`mobileGatewayAssets.orphan.ts`); this records the exit only.
  */
 export async function recordNativeMobileSuccessorExit(
   journal: NativeMobileSuccessorJournal,

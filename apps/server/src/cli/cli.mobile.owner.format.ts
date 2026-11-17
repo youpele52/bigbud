@@ -1,5 +1,6 @@
 import type {
   MobileOwnerRefusalCode,
+  MobileOwnerRepairResult,
   MobileOwnerStatus,
 } from "../remote-backend/mobileOwnerActivation.protocol.ts";
 import type { MobileOwnerReply } from "./cli.mobile.owner.client.ts";
@@ -33,6 +34,13 @@ export function formatMobileOwnerStatus(status: MobileOwnerStatus): string {
       controller.attached ? `attached, phase ${controller.phase ?? "unknown"}` : "not attached"
     }${flags.length ? ` (${flags.join(", ")})` : ""}`,
     `Last outcome: ${outcome}`,
+    `Last asset repair: ${
+      !controller.lastRepair
+        ? "none"
+        : controller.lastRepair.failed
+          ? `failed, nothing removed at ${controller.lastRepair.at}`
+          : `${controller.lastRepair.removed} removed, ${controller.lastRepair.kept} kept at ${controller.lastRepair.at}`
+    }`,
     `Consent: ${
       consent.state === "unavailable"
         ? "unavailable"
@@ -40,6 +48,15 @@ export function formatMobileOwnerStatus(status: MobileOwnerStatus): string {
     }`,
     `Proof inputs: ${inputs.state}${inputs.reason ? ` (${inputs.reason})` : ""}`,
     `Settings mobile access: ${status.settingsEnabled ? "on" : "off"}`,
+  ].join("\n");
+}
+
+/** One line per generation: what was removed or kept and the fixed reason. */
+export function formatMobileOwnerRepair(result: MobileOwnerRepairResult): string {
+  return [
+    `Runtime-asset repair: ${result.removed} removed, ${result.kept} kept.`,
+    ...result.entries.map((e) => `  ${e.outcome} ${e.generation}: ${e.reason}`),
+    ...(result.kept ? ["Kept entries were not proven unowned and were left untouched."] : []),
   ].join("\n");
 }
 

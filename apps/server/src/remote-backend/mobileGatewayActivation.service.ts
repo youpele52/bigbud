@@ -7,6 +7,7 @@ import {
   type MobileActivationAcknowledgement,
   type MobileActivationStatus,
 } from "./mobileGatewayActivation.state.ts";
+import type { MobileRuntimeRepairReport } from "./mobileGatewayAssets.orphan.ts";
 
 export class MobileGatewayActivationError extends Data.TaggedError("MobileGatewayActivationError")<{
   readonly message: string;
@@ -21,6 +22,8 @@ export interface RemoteMobileGatewayActivationShape {
   readonly stop: Effect.Effect<void, MobileGatewayActivationError>;
   /** Orchestration phase for owner status; never native readiness or exit evidence. */
   readonly status: Effect.Effect<MobileActivationStatus>;
+  /** Orphan runtime-asset GC on the attached controller; `null` when none is attached. */
+  readonly repair: Effect.Effect<MobileRuntimeRepairReport | null, MobileGatewayActivationError>;
 }
 export class RemoteMobileGatewayActivation extends ServiceMap.Service<
   RemoteMobileGatewayActivation,
@@ -44,6 +47,7 @@ export const RemoteMobileGatewayActivationLive = Layer.sync(RemoteMobileGatewayA
     resume: Effect.tryPromise({ try: () => state.resume(), catch: failure }),
     stop: Effect.tryPromise({ try: () => state.stop(), catch: failure }),
     status: Effect.sync(() => state.status()),
+    repair: Effect.tryPromise({ try: () => state.repair(), catch: failure }),
   });
   states.set(service, state);
   return service;

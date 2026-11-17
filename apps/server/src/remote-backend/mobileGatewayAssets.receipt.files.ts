@@ -81,6 +81,18 @@ export async function verifyMobileAssetsReceiptFile(
     !state.fingerprint
   )
     throw Error("Incomplete receipt ownership must be preserved.");
+  await readMobileAssetsReceiptFile(expectedPath, state.reference, state.fingerprint, signal);
+}
+/**
+ * Private single-link receipt bytes exactly matching a journal reference, read without following
+ * links. With `fingerprint`, the file must also be the exact inode/stamp observed at publication.
+ */
+export async function readMobileAssetsReceiptFile(
+  expectedPath: string,
+  reference: MobileAssetsReceiptReference,
+  fingerprint?: string,
+  signal?: AbortSignal,
+): Promise<{ readonly bytes: Buffer; readonly fingerprint: string }> {
   signal?.throwIfAborted();
   const file = await fs.open(
     expectedPath,
@@ -88,39 +100,48 @@ export async function verifyMobileAssetsReceiptFile(
   );
   try {
     const info = await file.stat({ bigint: true });
+    const observed = mobileRuntimeInventoryStamp(info);
     if (
       !info.isFile() ||
       info.uid !== BigInt(process.getuid?.() ?? -1) ||
       info.nlink !== 1n ||
       (info.mode & 0o7777n) !== 0o600n ||
-      info.size !== BigInt(state.reference.sizeBytes) ||
+      info.size !== BigInt(reference.sizeBytes) ||
       info.size > BigInt(MOBILE_ASSETS_RECEIPT_MAX_BYTES) ||
-      mobileRuntimeInventoryStamp(info) !== state.fingerprint
+      (fingerprint !== undefined && observed !== fingerprint)
     )
       throw Error("Receipt file was substituted; preserve bytes.");
-    const hash = createHash("sha256"),
-      buffer = Buffer.alloc(64 * 1024);
+    const bytes = Buffer.alloc(reference.sizeBytes);
     let total = 0;
-    while (true) {
+    while (total < bytes.length) {
       signal?.throwIfAborted();
-      const { bytesRead } = await file.read(buffer, 0, buffer.length, total);
+      const { bytesRead } = await file.read(bytes, total, bytes.length - total, total);
       if (!bytesRead) break;
       total += bytesRead;
-      if (total > state.reference.sizeBytes) throw Error("Receipt grew during verification.");
-      hash.update(buffer.subarray(0, bytesRead));
     }
+    const { bytesRead: extra } = await file.read(Buffer.alloc(1), 0, 1, total);
     if (
-      total !== state.reference.sizeBytes ||
-      hash.digest("hex") !== state.reference.sha256 ||
-      mobileRuntimeInventoryStamp(await file.stat({ bigint: true })) !== state.fingerprint ||
-      mobileRuntimeInventoryStamp(await fs.lstat(expectedPath, { bigint: true })) !==
-        state.fingerprint ||
+      total !== reference.sizeBytes ||
+      extra !== 0 ||
+      createHash("sha256").update(bytes).digest("hex") !== reference.sha256 ||
+      mobileRuntimeInventoryStamp(await file.stat({ bigint: true })) !== observed ||
+      mobileRuntimeInventoryStamp(await fs.lstat(expectedPath, { bigint: true })) !== observed ||
       (await fs.realpath(expectedPath)) !== expectedPath
     )
       throw Error("Receipt changed during verification.");
+    return { bytes, fingerprint: observed };
   } finally {
     await file.close();
   }
+}
+/** Unlinks only the exact canonical receipt inode observed during verification. */
+export function unlinkVerifiedMobileAssetsReceipt(expectedPath: string, fingerprint: string): void {
+  if (
+    sync.realpathSync(expectedPath) !== expectedPath ||
+    mobileRuntimeInventoryStamp(sync.lstatSync(expectedPath, { bigint: true })) !== fingerprint
+  )
+    throw Error("Foreign receipt must be preserved.");
+  sync.unlinkSync(expectedPath);
 }
 /** Caller supplies only a computed path under the original assets token's owned namespace. */
 export async function prepareMobileAssetsReceiptRemoval(
@@ -130,14 +151,10 @@ export async function prepareMobileAssetsReceiptRemoval(
   const state = files.get(token);
   if (!state) return () => {};
   await verifyMobileAssetsReceiptFile(state, expectedPath);
+  const fingerprint = state.fingerprint;
+  if (!fingerprint) throw Error("Incomplete receipt ownership must be preserved.");
   return () => {
-    if (
-      sync.realpathSync(expectedPath) !== expectedPath ||
-      mobileRuntimeInventoryStamp(sync.lstatSync(expectedPath, { bigint: true })) !==
-        state.fingerprint
-    )
-      throw Error("Foreign receipt must be preserved.");
-    sync.unlinkSync(expectedPath);
+    unlinkVerifiedMobileAssetsReceipt(expectedPath, fingerprint);
     files.delete(token);
   };
 }

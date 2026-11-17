@@ -17,6 +17,7 @@ import {
   MobileOwnerConsentResult,
   mobileOwnerRefusalStatus,
   MobileOwnerStatus,
+  MobileOwnerRepairResult,
   MobileOwnerStopResult,
   type MobileOwnerRefusalCode,
 } from "./mobileOwnerActivation.protocol.ts";
@@ -49,6 +50,7 @@ const status = Effect.fn("MobileOwnerActivation.status")(function* (authorityId:
       stopping: controller?.stopping ?? false,
       phase: controller?.controller?.phase ?? null,
       lastOutcome: controller?.controller?.lastOutcome ?? null,
+      lastRepair: controller?.controller?.lastRepair ?? null,
     },
     consent: Option.isSome(consent)
       ? {
@@ -115,6 +117,16 @@ export const mobileOwnerActivationRoute = HttpRouter.add(
         if (Option.isNone(activation)) return refuse("unavailable");
         return yield* activation.value.stop.pipe(
           Effect.as(reply(MobileOwnerStopResult, { stopped: true })),
+          Effect.catch(() => Effect.succeed(refuse("uncertain"))),
+        );
+      }
+      case "repair": {
+        const activation = yield* Effect.serviceOption(RemoteMobileGatewayActivation);
+        if (Option.isNone(activation)) return refuse("unavailable");
+        return yield* activation.value.repair.pipe(
+          Effect.map((report) =>
+            report ? reply(MobileOwnerRepairResult, report) : refuse("unavailable"),
+          ),
           Effect.catch(() => Effect.succeed(refuse("uncertain"))),
         );
       }

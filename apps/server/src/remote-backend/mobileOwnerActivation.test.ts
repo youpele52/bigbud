@@ -144,6 +144,7 @@ it("routes activate/stop to the attached controller and reports its phase in sta
           stopping: true,
           phase: "uncertain-repair",
           lastOutcome: { kind: "failed", repairRequired: true, at: "2026-11-17T00:00:00.000Z" },
+          lastRepair: null,
         },
         consent: { state: "enabled", revision: 4 },
         inputs: { state: "invalid", reason: "unsafe-file" },

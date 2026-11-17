@@ -41,7 +41,7 @@ export const mobileAssetsDirectoryAnchor = (info: BigIntStats): MobileAssetsDire
   gid: info.gid.toString(),
   mode: info.mode.toString(),
 });
-const entryStat = (info: BigIntStats): MobileAssetsEntryStat => ({
+export const mobileAssetsEntryStat = (info: BigIntStats): MobileAssetsEntryStat => ({
   ...mobileAssetsDirectoryAnchor(info),
   nlink: info.nlink.toString(),
   size: info.size.toString(),
@@ -76,7 +76,7 @@ export async function writeMobileGatewayAssetsReceipt(
       await walkMobileRuntimeInventory(
         data.path,
         async (entry) => {
-          const stat = entryStat(entry.stats),
+          const stat = mobileAssetsEntryStat(entry.stats),
             kind = entry.directory ? "directory" : "file";
           const pathDigest = mobileAssetsReceiptPathDigest(entry.relative, kind);
           const record: MobileAssetsReceiptEntry = entry.directory

@@ -33,11 +33,16 @@ const attachNativeMobileActivation = (inputs: RemoteMobileNativeInputsValue) =>
           const state = registeredMobileGatewayActivationState(service);
           const retire = state.attach(controller);
           // Adopt at most one predecessor's original once per attach. Its settlement lives in the
-          // controller's phase; this waiter only logs a refused or uncertain recovery.
+          // controller's phase; this waiter only logs a refused or uncertain recovery. Then run the
+          // orphan runtime-asset repair once: it removes only journal-proven unowned trees.
           void state
             .resume()
             .catch((cause: unknown) =>
               log(Effect.logWarning("Mobile successor recovery is uncertain.", cause)),
+            )
+            .then(() => state.repair())
+            .catch((cause: unknown) =>
+              log(Effect.logWarning("Mobile runtime-asset repair kept everything.", cause)),
             );
           return retire;
         }),

@@ -1,3 +1,4 @@
+import type { MobileRuntimeRepairReport } from "./mobileGatewayAssets.orphan.ts";
 /** Orchestration state only: neither acknowledgement nor stop() is native exit/readiness proof. */
 export interface MobileActivationAcknowledgement {
   readonly requestId: string | null;
@@ -10,9 +11,17 @@ export interface MobileActivationOutcomeSummary {
   readonly repairRequired: boolean;
   readonly at: string;
 }
+/** Counts of the last orphan runtime-asset repair run; `failed` means nothing was proven. */
+export interface MobileRuntimeRepairSummary {
+  readonly at: string;
+  readonly removed: number;
+  readonly kept: number;
+  readonly failed: boolean;
+}
 export interface MobileActivationControllerStatus {
   readonly phase: MobileActivationPhase;
   readonly lastOutcome: MobileActivationOutcomeSummary | null;
+  readonly lastRepair?: MobileRuntimeRepairSummary | null;
 }
 export interface MobileActivationStatus {
   readonly attached: boolean;
@@ -29,6 +38,8 @@ export interface MobileActivationController {
   /** App retirement detaches/settles Node work; it must not kill the native child. */
   readonly close: () => Promise<void>;
   readonly status?: () => MobileActivationControllerStatus;
+  /** Orphan runtime-asset GC; kept/removed with fixed reasons. Absent means unavailable. */
+  readonly repair?: () => Promise<MobileRuntimeRepairReport>;
 }
 const unavailable = (): MobileActivationAcknowledgement => ({
   requestId: null,
@@ -57,6 +68,15 @@ export class MobileActivationState {
       this.controller === controller && !this.retiring && !this.stopping
         ? controller.resume()
         : unavailable(),
+    );
+  }
+  /** `null` when no controller (or no repair seam) is attached: nothing ran. */
+  repair(): Promise<MobileRuntimeRepairReport | null> {
+    const controller = this.controller;
+    if (!controller?.repair || this.retiring || this.stopping) return Promise.resolve(null);
+    const repair = controller.repair;
+    return Promise.resolve().then(() =>
+      this.controller === controller && !this.retiring && !this.stopping ? repair() : null,
     );
   }
   status(): MobileActivationStatus {
@@ -101,6 +121,7 @@ export class MobileActivationState {
       stop: input.stop.bind(input),
       close: input.close.bind(input),
       ...(input.status ? { status: input.status.bind(input) } : {}),
+      ...(input.repair ? { repair: input.repair.bind(input) } : {}),
     });
     this.controller = controller;
     this.previouslyAttached = true;

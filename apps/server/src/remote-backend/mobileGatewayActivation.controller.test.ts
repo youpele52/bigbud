@@ -187,7 +187,11 @@ describe("native mobile activation controller", () => {
   it("reports phase and last outcome for owner status without native evidence", async () => {
     const script = scriptedLaunch();
     const controller = await accepted(script);
-    expect(controller.status?.()).toEqual({ phase: "running", lastOutcome: null });
+    expect(controller.status?.()).toEqual({
+      phase: "running",
+      lastOutcome: null,
+      lastRepair: null,
+    });
     script.runs[0]!.settle({ kind: "detached" });
     await tick();
     expect(controller.status?.()).toMatchObject({
