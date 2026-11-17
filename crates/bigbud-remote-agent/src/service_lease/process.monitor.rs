@@ -60,6 +60,7 @@ pub(super) fn run() -> Result<()> {
         owner.set_nonblocking(false)?;
     }
     let fd = executable.as_raw_fd();
+    let readiness = super::readiness::expected(&launch.args)?;
     // Execute the verified open inode, never re-resolve the caller's filename.
     let mut command = Command::new(format!("/proc/self/fd/{fd}"));
     command
@@ -67,7 +68,11 @@ pub(super) fn run() -> Result<()> {
         .args(&launch.args)
         .envs(launch.environment.0.iter().map(|(k, v)| (k, v)))
         .stdin(Stdio::piped())
-        .stdout(Stdio::null())
+        .stdout(if readiness.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stderr(Stdio::null())
         .process_group(0);
     // SAFETY: async-signal-safe fd operations before exec; fd3 must never reach a descendant.
@@ -84,6 +89,11 @@ pub(super) fn run() -> Result<()> {
     let mut lifeline = child.stdin.take();
     let mut cleanup_attempted = false;
     let result = (|| {
+        if let Some(expected) = readiness {
+            let child_pid = child.id();
+            let stdout = child.stdout.as_mut().ok_or(Error::Uncertain)?;
+            super::readiness::await_child(child_pid, stdout, expected)?;
+        }
         let mut ready = [b'R', 0, 0, 0, 0];
         ready[1..].copy_from_slice(&child.id().to_be_bytes());
         owner.write_all(&ready)?;

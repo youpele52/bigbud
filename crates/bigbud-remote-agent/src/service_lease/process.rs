@@ -12,6 +12,8 @@ use std::time::{Duration, Instant};
 
 #[path = "process.monitor.rs"]
 mod monitor;
+#[path = "process.readiness.rs"]
+mod readiness;
 #[path = "process.wire.rs"]
 mod wire;
 pub(super) fn run_monitor() -> Result<()> {
@@ -29,6 +31,11 @@ pub struct Launch {
     pub assets: Option<super::AssetsResource>,
 }
 impl Launch {
+    pub(crate) fn validate_gateway_readiness(&self) -> Result<()> {
+        readiness::expected(&self.args)?.ok_or(Error::Invalid)?;
+        Ok(())
+    }
+
     pub(super) fn fingerprint(&self, digest: &[u8; 32]) -> Result<[u8; 32]> {
         Ok(Sha256::digest(wire::encode(self, digest)?).into())
     }

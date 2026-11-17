@@ -90,6 +90,7 @@ impl Bridge {
                                     .collect(),
                             ),
                         };
+                        launch.validate_gateway_readiness()?;
                         if binding.configuration_sha256
                             != launch.fingerprint(&binding.executable_sha256)?
                         {

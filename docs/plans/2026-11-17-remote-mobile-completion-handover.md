@@ -64,11 +64,33 @@ There is no production VPS deployment, release signing/publication, live provide
 
 ## Immediate next sequence
 
-1. Integrate the native original-child readiness event with a bounded response correlated to the exact lease Start. Use the existing gateway’s post-bind ready output only if the native monitor validates it from the original child and cannot confuse an unrelated listener for that child.
-2. Run the configured server type check for any new readiness/client/identity source as one exact frozen union; run focused tests/static checks for changed files and affected packages.
-3. On a fresh immutable graph/account, prove managed native prepare → Start → original-child readiness → authenticated route admission → consent revocation → confirmed native exit → same-CAS cleanup. Record every source and artifact hash. Preserve unknown outcomes as uncertain.
-4. Add original socket receipt and successor attach/recovery, then prove controller crash/restart and laptop-independent VPS operation.
-5. Continue provider, P8, physical phone, update/rollback, and platform gates from the two source plans. Update those plans and the mobile ledger with bounded results as each gate closes.
+### 17 November: Native original-child readiness prototype
+
+The Linux native monitor now gates Start acknowledgement on the mobile gateway's existing
+post-bind stdout event. The managed bridge requires exactly one IPv4 loopback `--listen`
+argument; the monitor accepts only a bounded readiness object matching that address and
+confirms the listening socket inode is held by the original child. Readiness collection is
+limited to 10 seconds and 4 KiB of stdout; `/proc/net/tcp` and the child's fd table are also
+bounded. An unrelated process cannot satisfy the proof. The actual `bigbud-mobile-gateway`
+binary passed the ignored same-build Linux x86_64 Start/revoke integration test; seven
+focused readiness tests, the service-lease lifecycle (6), durable-off guard (2), protocol
+golden (1), proxy (3), and detached asset custody (1) also pass. Affected-crate Clippy,
+formatting, and the 400-line limit pass. The change has independent read-only review with no
+blocking findings.
+
+This is bounded native x86_64 evidence, not ARM64 qualification, configured server types,
+production managed activation, socket successor recovery, or a P2 phase exit. The next
+sequence remains:
+
+1. Run the configured server type check for any readiness/client/identity source as one exact frozen union; run focused tests/static checks for changed files and affected packages.
+2. On a fresh immutable graph/account, prove managed native prepare → Start → original-child readiness → authenticated route admission → consent revocation → confirmed native exit → same-CAS cleanup. Record every source and artifact hash. Preserve unknown outcomes as uncertain.
+3. Add original socket receipt and successor attach/recovery, then prove controller crash/restart and laptop-independent VPS operation.
+4. Continue provider, P8, physical phone, update/rollback, and platform gates from the two source plans. Update those plans and the mobile ledger with bounded results as each gate closes.
+
+Remote P6 remains open at affected S3/S4 and corrected Stop artifact/live acceptance, prior-boot
+proof, and the separately gated Linux-client run. Its exact accepted source/artifact snapshot,
+fresh isolated targets, and validator release are not available in this environment; do not
+substitute the current checkout or rerun already accepted rows.
 
 ## Handoff rules
 
