@@ -53,6 +53,8 @@ pub(super) fn response(id: String, snapshot: Snapshot, generation: u64) -> lease
         accepted: true,
         state: match snapshot.state {
             State::Spawned => "spawned",
+            // Not "spawned": existing clients fail closed until the successor attaches.
+            State::Attaching => "attaching",
             State::Exited => "exited",
             State::Uncertain => "uncertain",
             State::Cancelled => "cancelled",

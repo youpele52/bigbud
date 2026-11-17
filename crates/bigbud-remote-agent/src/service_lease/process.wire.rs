@@ -136,6 +136,46 @@ pub(super) fn read(input: &mut impl Read) -> Result<(Launch, [u8; 32])> {
         digest,
     ))
 }
+/// Private same-executable monitor reply: tag, child PID, start ticks, listener inode, port.
+pub(super) const READY_FRAME: usize = 23;
+pub(super) type Original = Option<(super::readiness::Proof, u64)>;
+pub(super) fn ready(pid: u32, original: Original) -> [u8; READY_FRAME] {
+    let mut frame = [0; READY_FRAME];
+    frame[0] = b'R';
+    frame[1..5].copy_from_slice(&pid.to_be_bytes());
+    if let Some((proof, started)) = original {
+        frame[5..13].copy_from_slice(&started.to_be_bytes());
+        frame[13..21].copy_from_slice(&proof.inode.to_be_bytes());
+        frame[21..23].copy_from_slice(&proof.address.port().to_be_bytes());
+    }
+    frame
+}
+/// A readiness launch must prove every field; a plain launch carries none.
+pub(super) fn parse_ready(frame: &[u8; READY_FRAME], readiness: bool) -> Result<(u32, Original)> {
+    let number = |range: std::ops::Range<usize>| frame.get(range).ok_or(Error::Invalid);
+    let pid = u32::from_be_bytes(number(1..5)?.try_into().map_err(|_| Error::Invalid)?);
+    let started = u64::from_be_bytes(number(5..13)?.try_into().map_err(|_| Error::Invalid)?);
+    let inode = u64::from_be_bytes(number(13..21)?.try_into().map_err(|_| Error::Invalid)?);
+    let port = u16::from_be_bytes(number(21..23)?.try_into().map_err(|_| Error::Invalid)?);
+    if frame[0] != b'R' || pid <= 1 {
+        return Err(Error::Uncertain);
+    }
+    if !readiness {
+        return if (started, inode, port) == (0, 0, 0) {
+            Ok((pid, None))
+        } else {
+            Err(Error::Uncertain)
+        };
+    }
+    if started == 0 || inode == 0 || port == 0 {
+        return Err(Error::Uncertain);
+    }
+    let address = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, port));
+    Ok((
+        pid,
+        Some((super::readiness::Proof { address, inode }, started)),
+    ))
+}
 #[cfg(test)]
 #[path = "process.wire.tests.rs"]
 mod tests;

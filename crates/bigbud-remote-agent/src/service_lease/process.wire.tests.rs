@@ -55,3 +55,24 @@ fn private_launch_fingerprint_matches_typescript_original_resource_binding() {
     changed.args.push("changed".into());
     assert_ne!(changed.fingerprint(&[2; 32]).unwrap(), fingerprint);
 }
+
+#[test]
+fn ready_frame_round_trips_only_complete_original_evidence() {
+    let proof = crate::service_lease::process::readiness::Proof {
+        address: "127.0.0.1:4774".parse().unwrap(),
+        inode: 991,
+    };
+    let frame = ready(42, Some((proof, 777)));
+    assert_eq!(parse_ready(&frame, true).unwrap(), (42, Some((proof, 777))));
+    assert!(parse_ready(&frame, false).is_err());
+    let plain = ready(42, None);
+    assert_eq!(parse_ready(&plain, false).unwrap(), (42, None));
+    assert!(parse_ready(&plain, true).is_err());
+    let mut refused = frame;
+    refused[0] = b'U';
+    assert!(parse_ready(&refused, true).is_err());
+    assert!(parse_ready(&ready(1, Some((proof, 777))), true).is_err());
+    let mut zero_inode = frame;
+    zero_inode[13..21].copy_from_slice(&0u64.to_be_bytes());
+    assert!(parse_ready(&zero_inode, true).is_err());
+}

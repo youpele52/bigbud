@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 #[path = "process.monitor.rs"]
 mod monitor;
 #[path = "process.readiness.rs"]
-mod readiness;
+pub(super) mod readiness;
 #[path = "process.wire.rs"]
 mod wire;
 pub(super) fn run_monitor() -> Result<()> {
@@ -103,6 +103,8 @@ pub(super) struct Monitor {
     child: Child,
     socket: UnixStream,
     pub child_pid: u32,
+    /// Original-child listener proof and kernel start ticks, for readiness launches only.
+    pub original: wire::Original,
     pub stopped: bool,
 }
 impl Monitor {
@@ -115,6 +117,7 @@ impl Monitor {
             return Err(Error::Unsupported);
         }
         launch.validate(&expected)?;
+        let gateway = readiness::expected(&launch.args)?.is_some();
         let frame = wire::encode(&launch, &expected)?;
         let (owner, peer) = UnixStream::pair()?;
         owner.set_read_timeout(Some(Duration::from_secs(12)))?;
@@ -152,6 +155,7 @@ impl Monitor {
             child,
             socket: owner,
             child_pid: 0,
+            original: None,
             stopped: false,
         };
         let readiness = (|| {
@@ -159,13 +163,9 @@ impl Monitor {
                 .socket
                 .write_all(&(frame.len() as u32).to_be_bytes())?;
             result.socket.write_all(&frame)?;
-            let mut reply = [0; 5];
+            let mut reply = [0; wire::READY_FRAME];
             result.socket.read_exact(&mut reply)?;
-            if reply[0] != b'R' {
-                return Err(Error::Uncertain);
-            }
-            result.child_pid =
-                u32::from_be_bytes(reply[1..].try_into().map_err(|_| Error::Invalid)?);
+            (result.child_pid, result.original) = wire::parse_ready(&reply, gateway)?;
             Ok(())
         })();
         let reset = result

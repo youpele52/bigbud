@@ -29,6 +29,8 @@ mod lease_context;
 mod lease_proxy;
 #[cfg(unix)]
 pub use lease_context::ManagedAccountContext;
+#[cfg(target_os = "linux")]
+pub(crate) use lease_proxy::bounded_connect;
 #[cfg(not(unix))]
 pub struct ManagedAccountContext {
     _private: (),

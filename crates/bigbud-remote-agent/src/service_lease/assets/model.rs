@@ -37,34 +37,34 @@ pub(super) struct Receipt {
     pub root: Anchor,
     pub entries: BTreeMap<[u8; 32], Entry>,
 }
-fn get<'a>(v: &'a Value, key: &str) -> Result<&'a Value> {
+pub(in crate::service_lease) fn get<'a>(v: &'a Value, key: &str) -> Result<&'a Value> {
     v.get(key).ok_or(Error::Invalid)
 }
-fn fields(v: &Value, names: &[&str]) -> Result<()> {
+pub(in crate::service_lease) fn fields(v: &Value, names: &[&str]) -> Result<()> {
     let v = v.as_object().ok_or(Error::Invalid)?;
     if v.len() != names.len() || v.keys().any(|k| !names.contains(&k.as_str())) {
         return Err(Error::Invalid);
     }
     Ok(())
 }
-fn text(v: &Value, max: usize) -> Result<&str> {
+pub(in crate::service_lease) fn text(v: &Value, max: usize) -> Result<&str> {
     v.as_str()
         .filter(|s| !s.is_empty() && s.len() <= max && !s.chars().any(char::is_control))
         .ok_or(Error::Invalid)
 }
-fn uint(v: &Value) -> Result<u64> {
+pub(in crate::service_lease) fn uint(v: &Value) -> Result<u64> {
     v.as_u64()
         .filter(|n| *n <= 9_007_199_254_740_991)
         .ok_or(Error::Invalid)
 }
-fn decimal(v: &Value) -> Result<u64> {
+pub(in crate::service_lease) fn decimal(v: &Value) -> Result<u64> {
     let s = text(v, 20)?;
     if (s.starts_with('0') && s.len() > 1) || !s.bytes().all(|b| b.is_ascii_digit()) {
         return Err(Error::Invalid);
     }
     s.parse().map_err(|_| Error::Invalid)
 }
-fn hash(v: &Value) -> Result<[u8; 32]> {
+pub(in crate::service_lease) fn hash(v: &Value) -> Result<[u8; 32]> {
     let s = text(v, 64)?;
     if s.len() != 64
         || !s

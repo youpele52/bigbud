@@ -20,6 +20,11 @@ impl Peer {
         Ok(Controller::read(self.identity.pid)? == self.identity
             && parent(self.identity.pid)? == self.parent)
     }
+    /// Kernel identity of the peer that created the connected or listening socket.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub(crate) fn identity(&self) -> &Controller {
+        &self.identity
+    }
     pub(crate) fn parent_pid(&self) -> u32 {
         self.parent
     }

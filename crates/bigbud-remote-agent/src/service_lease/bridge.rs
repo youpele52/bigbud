@@ -17,9 +17,10 @@ pub struct Bridge {
 }
 impl Bridge {
     pub(crate) fn new(context: ManagedAccountContext, epoch: String) -> Result<Self> {
+        let receipts = context.lease_receipts();
         Ok(Self {
             context,
-            owner: Mutex::new(LeaseOwner::new(epoch)?),
+            owner: Mutex::new(LeaseOwner::new(epoch)?.with_receipts(receipts)?),
             retiring: AtomicBool::new(false),
         })
     }

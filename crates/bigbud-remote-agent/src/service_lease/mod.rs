@@ -29,6 +29,10 @@ pub use peer::Peer;
 mod owner;
 #[cfg(unix)]
 mod process;
+#[cfg(unix)]
+mod receipt;
+#[cfg(unix)]
+mod recovery;
 
 pub use identity::{Binding, Controller};
 #[cfg(unix)]

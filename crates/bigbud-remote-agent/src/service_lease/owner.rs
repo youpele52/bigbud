@@ -24,6 +24,8 @@ impl Generation {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum State {
     Spawned,
+    /// A successor took over the original child but has not attached its upstream socket.
+    Attaching,
     Exited,
     Uncertain,
     Cancelled,
@@ -59,11 +61,14 @@ struct Entry {
     attached: bool,
     monitor: Monitor,
     uncertain: bool,
+    /// In-memory copy of the durable readiness receipt for gateway launches.
+    receipt: Option<super::receipt::Receipt>,
 }
 pub struct LeaseOwner {
     monitor_executable: PathBuf,
     native_epoch: String,
     entry: Option<Entry>,
+    receipts: Option<super::receipt::Store>,
     // Never evict a terminal nonce to permit accidental accepted-work replay.
     retired: super::retention::Retained,
 }
@@ -83,6 +88,7 @@ impl LeaseOwner {
             monitor_executable,
             native_epoch,
             entry: None,
+            receipts: None,
             retired: super::retention::Retained::default(),
         })
     }
@@ -129,6 +135,7 @@ impl LeaseOwner {
         if self.retired.contains(&binding.nonce) || self.retired.full() {
             return Err(Error::Occupied);
         }
+        let upstream = self.prepare_receipt(&launch)?;
         let generation = next_generation()?;
         let bootstrap = launch.environment.clone();
         let (monitor, readiness) =
@@ -145,8 +152,16 @@ impl LeaseOwner {
             attached: true,
             monitor,
             uncertain: readiness.is_err(),
+            receipt: None,
         });
         if readiness.is_err() {
+            return Err(Error::Uncertain);
+        }
+        // Proven readiness without durable evidence cannot be recovered; never report it ready.
+        if self.record_receipt(upstream).is_err() {
+            if let Some(entry) = self.entry.as_mut() {
+                entry.uncertain = true;
+            }
             return Err(Error::Uncertain);
         }
         self.grant()
@@ -177,6 +192,12 @@ impl LeaseOwner {
                 State::Uncertain
             } else if entry.monitor.stopped {
                 State::Exited
+            } else if entry
+                .receipt
+                .as_ref()
+                .is_some_and(super::receipt::Receipt::attaching)
+            {
+                State::Attaching
             } else {
                 State::Spawned
             },
@@ -219,16 +240,24 @@ impl LeaseOwner {
             if !entry.attached {
                 return Err(Error::Refused);
             }
+            // A successor's second Resume verifies its newly published upstream socket.
+            self.attach_receipt()?;
             return self.grant();
         }
         if !entry.controller.dead()? {
             return Err(Error::Refused);
         }
+        // Receipt-bound recovery precedes every takeover mutation.
+        let receipt = self.recover_receipt(&controller)?;
+        let entry = self.entry.as_mut().ok_or(Error::Refused)?;
         let generation = next_generation()?;
         entry.previous_controller = Some(entry.controller.clone());
         entry.controller = controller;
         entry.generation = generation;
         entry.attached = true;
+        if receipt.is_some() {
+            entry.receipt = receipt;
+        }
         self.grant()
     }
     /// Private owner-transport handoff only; status/journal never contains this data.
@@ -303,5 +332,7 @@ impl LeaseOwner {
     }
 }
 
+#[path = "owner.receipt.rs"]
+mod receipt;
 #[path = "owner.teardown.rs"]
 mod teardown;

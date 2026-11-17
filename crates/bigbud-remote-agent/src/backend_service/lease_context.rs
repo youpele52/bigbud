@@ -64,6 +64,10 @@ impl ManagedAccountContext {
         )
         .map_err(|_| ServiceError::Invalid("invalid original assets reference"))
     }
+    /// Private durable readiness receipts inside this Rust unit's verified 0700 state.
+    pub(crate) fn lease_receipts(&self) -> std::path::PathBuf {
+        self.config.rust_state.join("service-lease-receipts-v1")
+    }
     pub(crate) fn authority(&self) -> &str {
         &self.config.authority
     }

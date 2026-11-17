@@ -68,20 +68,26 @@ fn readiness_line_is_exact_and_names_the_expected_loopback_address() {
 }
 
 #[test]
+#[cfg(target_os = "linux")] // Reads /proc listener and descriptor tables.
 fn listener_proof_requires_the_socket_inode_in_the_named_child() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let address = listener.local_addr().unwrap();
-    assert!(owns_listener(std::process::id(), address).unwrap());
+    let inode = owns_listener(std::process::id(), address).unwrap().unwrap();
+    assert_eq!(listener_inode(address).unwrap(), Some(inode));
+    assert!(holds_socket(std::process::id(), inode).unwrap());
     drop(listener);
-    assert!(!owns_listener(std::process::id(), address).unwrap());
+    assert_eq!(owns_listener(std::process::id(), address).unwrap(), None);
 }
 
 #[test]
+#[cfg(target_os = "linux")] // Reads /proc listener and descriptor tables.
 fn original_child_ready_line_requires_its_socket_inode() {
     let (mut child, output_file) = spawn_readiness_child(None);
     let address = wait_for_address(&output_file);
     let mut stdout = child.stdout.take().unwrap();
-    await_child(child.id(), &mut stdout, "127.0.0.1:0".parse().unwrap()).unwrap();
+    let proof = await_child(child.id(), &mut stdout, "127.0.0.1:0".parse().unwrap()).unwrap();
+    assert_eq!(proof.address, address);
+    assert!(proof.inode != 0);
     assert!(child.wait().unwrap().success());
     std::fs::remove_file(output_file).unwrap();
     assert!(address.port() != 0);

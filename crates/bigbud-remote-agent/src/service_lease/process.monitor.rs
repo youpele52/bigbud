@@ -89,14 +89,21 @@ pub(super) fn run() -> Result<()> {
     let mut lifeline = child.stdin.take();
     let mut cleanup_attempted = false;
     let result = (|| {
-        if let Some(expected) = readiness {
-            let child_pid = child.id();
-            let stdout = child.stdout.as_mut().ok_or(Error::Uncertain)?;
-            super::readiness::await_child(child_pid, stdout, expected)?;
-        }
-        let mut ready = [b'R', 0, 0, 0, 0];
-        ready[1..].copy_from_slice(&child.id().to_be_bytes());
-        owner.write_all(&ready)?;
+        let proof = match readiness {
+            Some(expected) => {
+                let child_pid = child.id();
+                let stdout = child.stdout.as_mut().ok_or(Error::Uncertain)?;
+                let proof = super::readiness::await_child(child_pid, stdout, expected)?;
+                // The unreaped original child cannot be replaced by PID reuse here.
+                let started = crate::service_lease::Controller::read(child_pid)?
+                    .started
+                    .parse::<u64>()
+                    .map_err(|_| Error::Uncertain)?;
+                Some((proof, started))
+            }
+            None => None,
+        };
+        owner.write_all(&wire::ready(child.id(), proof))?;
         owner.set_nonblocking(true)?;
         let mut stopped = false;
         let mut refresh = None;

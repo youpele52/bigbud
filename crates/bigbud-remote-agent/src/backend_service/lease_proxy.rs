@@ -114,8 +114,9 @@ fn authenticate(config: &ServiceConfig, stream: &UnixStream, manager: &impl Mana
 }
 
 /// Nonblocking connect: a full accept backlog cannot retain a private proxy forever.
+/// Shared with service-lease successor recovery, which needs the same bounded refusal proof.
 #[cfg(target_os = "linux")]
-fn bounded_connect(path: &Path) -> Result<UnixStream> {
+pub(crate) fn bounded_connect(path: &Path) -> Result<UnixStream> {
     use std::os::{
         fd::{AsRawFd, FromRawFd, OwnedFd},
         unix::ffi::OsStrExt,

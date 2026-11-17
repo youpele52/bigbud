@@ -77,7 +77,7 @@ impl<'de> Visitor<'de> for Seed<'_> {
         Ok(Value::Array(result))
     }
 }
-pub(super) fn parse(raw: &[u8]) -> Result<Value> {
+pub(in crate::service_lease) fn parse(raw: &[u8]) -> Result<Value> {
     if raw.is_empty() || raw.len() > 8 * 1024 * 1024 {
         return Err(Error::Invalid);
     }

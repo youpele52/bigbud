@@ -65,6 +65,8 @@ impl LeaseOwner {
         if entry.controller != *controller && !entry.controller.dead()? {
             return Err(Error::Refused);
         }
+        // A successor may clear the proven-dead controller's exact stale upstream socket.
+        let successor = entry.controller != *controller;
         if entry.monitor.stop().is_err() {
             entry.uncertain = true;
             return Err(Error::Uncertain);
@@ -83,6 +85,7 @@ impl LeaseOwner {
             previous_controller: entry.previous_controller.clone(),
         };
         self.retired.exited(result.clone(), entry.capability)?;
+        self.release_receipt(successor);
         self.entry.take();
         Ok(result)
     }
@@ -105,6 +108,8 @@ impl LeaseOwner {
             previous_controller: entry.previous_controller.clone(),
         };
         self.retired.exited(result.clone(), entry.capability)?;
+        // The authenticated live controller owns its upstream socket; never touch it.
+        self.release_receipt(false);
         self.entry.take();
         Ok(result)
     }

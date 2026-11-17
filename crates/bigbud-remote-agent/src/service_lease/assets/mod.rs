@@ -1,6 +1,6 @@
 //! Receipt-bound original static tree custody; this is not publication approval.
-mod json;
-mod model;
+pub(in crate::service_lease) mod json;
+pub(in crate::service_lease) mod model;
 mod tree;
 use crate::service_lease::{Binding, Error, Result};
 use model::Receipt;

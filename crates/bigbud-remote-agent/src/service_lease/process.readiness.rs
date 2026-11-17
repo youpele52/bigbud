@@ -33,7 +33,19 @@ pub(super) fn expected(args: &[String]) -> Result<Option<SocketAddr>> {
     Ok(Some(address))
 }
 
-pub(super) fn await_child(pid: u32, stdout: &mut ChildStdout, expected: SocketAddr) -> Result<()> {
+/// Original-child listener evidence, recorded in the durable readiness receipt.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::service_lease) struct Proof {
+    pub address: SocketAddr,
+    /// Kernel socket inode of the listening socket held by the original child.
+    pub inode: u64,
+}
+
+pub(super) fn await_child(
+    pid: u32,
+    stdout: &mut ChildStdout,
+    expected: SocketAddr,
+) -> Result<Proof> {
     let deadline = Instant::now() + READY_TIMEOUT;
     let mut line = Vec::with_capacity(128);
     let mut total = 0usize;
@@ -75,11 +87,11 @@ pub(super) fn await_child(pid: u32, stdout: &mut ChildStdout, expected: SocketAd
                     || (expected.port() != 0 && address.port() != expected.port())
                     || address.port() == 0
                     || address.ip() != Ipv4Addr::LOCALHOST
-                    || !owns_listener(pid, address)?
                 {
                     return Err(Error::Uncertain);
                 }
-                return Ok(());
+                let inode = owns_listener(pid, address)?.ok_or(Error::Uncertain)?;
+                return Ok(Proof { address, inode });
             }
             line.clear();
             continue;
@@ -105,27 +117,48 @@ fn parse_line(line: &[u8]) -> Result<SocketAddr> {
         .map_err(|_| Error::Invalid)
 }
 
-fn owns_listener(pid: u32, address: SocketAddr) -> Result<bool> {
+/// The listening inode for `address`, only when `pid` holds it in its descriptor table.
+pub(in crate::service_lease) fn owns_listener(
+    pid: u32,
+    address: SocketAddr,
+) -> Result<Option<u64>> {
+    let Some(inode) = listener_inode(address)? else {
+        return Ok(None);
+    };
+    Ok(holds_socket(pid, inode)?.then_some(inode))
+}
+
+/// Bounded `/proc/net/tcp` scan for the IPv4 loopback listener on `address`.
+pub(in crate::service_lease) fn listener_inode(address: SocketAddr) -> Result<Option<u64>> {
+    if address.ip() != Ipv4Addr::LOCALHOST {
+        return Err(Error::Invalid);
+    }
     let local = format!(
         "{:08X}:{:04X}",
         u32::from_ne_bytes(Ipv4Addr::LOCALHOST.octets()),
         address.port()
     );
     let table = BufReader::new(std::fs::File::open("/proc/net/tcp")?).take(8 * 1024 * 1024);
-    let mut inode = None;
     let mut rows = table.lines();
     let _header = rows.next().ok_or(Error::Uncertain)??;
     for row_result in rows.take(MAX_TCP_ROWS) {
         let row = row_result?;
         let fields: Vec<_> = row.split_whitespace().collect();
         if fields.get(1) == Some(&local.as_str()) && fields.get(3) == Some(&"0A") {
-            inode = fields.get(9).map(|value| (*value).to_owned());
-            break;
+            let inode = fields
+                .get(9)
+                .and_then(|value| value.parse::<u64>().ok())
+                .filter(|inode| *inode != 0)
+                .ok_or(Error::Uncertain)?;
+            return Ok(Some(inode));
         }
     }
-    let Some(inode) = inode else {
-        return Ok(false);
-    };
+    Ok(None)
+}
+
+/// Whether `pid`'s bounded descriptor table holds kernel socket `inode`.
+pub(in crate::service_lease) fn holds_socket(pid: u32, inode: u64) -> Result<bool> {
+    let expected = format!("socket:[{inode}]");
     let descriptors = std::fs::read_dir(format!("/proc/{pid}/fd"))?;
     for descriptor in descriptors.take(MAX_CHILD_FDS) {
         let descriptor = descriptor?;
@@ -134,7 +167,7 @@ fn owns_listener(pid: u32, address: SocketAddr) -> Result<bool> {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
             Err(error) => return Err(error.into()),
         };
-        if target.to_string_lossy() == format!("socket:[{inode}]") {
+        if target.as_os_str() == expected.as_str() {
             return Ok(true);
         }
     }
