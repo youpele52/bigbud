@@ -151,23 +151,21 @@ fn explicit_service_start_requires_consent_capability_and_only_starts_rust_unit(
         )
         .is_err()
     );
-    assert!(
-        apply(
-            &fixture.config,
-            "start-rust",
-            true,
-            &manager,
-            Prerequisites::MissingLinger
-        )
-        .is_err()
-    );
+    for missing in [
+        Prerequisites::Unsupported,
+        Prerequisites::MissingUserManager,
+        Prerequisites::UnsupportedManagerVersion,
+    ] {
+        assert!(apply(&fixture.config, "start-rust", true, &manager, missing).is_err());
+    }
     assert!(manager.calls.borrow().is_empty());
+    // F3: like explicit start, a session without lingering may start Rust (it stops at logout).
     apply(
         &fixture.config,
         "start-rust",
         true,
         &manager,
-        Prerequisites::Ready,
+        Prerequisites::MissingLinger,
     )
     .unwrap();
     let calls = manager.calls.borrow();
@@ -294,4 +292,76 @@ fn running_launcher_must_match_both_pinned_path_and_kernel_inode() {
     assert!(evidence::same_executable(expected, &deleted, &original).is_err());
     fs::remove_file(expected).unwrap();
     assert!(evidence::same_executable(expected, expected, &original).is_err());
+}
+
+fn hold_lock(fixture: &Fixture) -> fs::File {
+    use std::os::fd::AsRawFd;
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .open(fixture.config.rust_state.join("launch.lock"))
+        .unwrap();
+    // SAFETY: flock on an owned open descriptor, as a backend liveness probe does.
+    assert_eq!(
+        unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) },
+        0
+    );
+    file
+}
+
+#[test]
+fn launch_waits_out_a_short_liveness_probe_but_refuses_a_lasting_owner() {
+    // F4: the backend's readiness probe briefly holds the lock right after `systemctl start`.
+    let fixture = prepared();
+    let probe = hold_lock(&fixture);
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        drop(probe);
+    });
+    let guard = LaunchGuard::with_boot(&fixture.config, &fixture.config.launch_boot);
+    release.join().unwrap();
+    assert!(
+        guard.is_ok(),
+        "a probe-length hold must not fail the launch"
+    );
+    drop(guard);
+    let owner = hold_lock(&fixture);
+    let error = LaunchGuard::with_boot(&fixture.config, &fixture.config.launch_boot)
+        .err()
+        .unwrap();
+    assert!(error.to_string().contains("already owned"), "{error}");
+    drop(owner);
+}
+
+#[test]
+fn settled_exit_seam_writes_verified_death_evidence_once_and_unsettled_writes_none() {
+    // F1: a settled signal drain (143) or accepted restart (0) exits without returning to `run`.
+    for (code, receipt) in [(143, Some(&b"143"[..])), (0, Some(&b"0"[..])), (1, None)] {
+        let fixture = prepared();
+        let guard = LaunchGuard::with_boot(&fixture.config, &fixture.config.launch_boot).unwrap();
+        guard.settle_exit(code);
+        // A later seam call (or the supervisor returning) never writes a second receipt.
+        guard.settle_exit(0);
+        let path = fixture.config.rust_state.join("launch.exit");
+        assert_eq!(fs::read(&path).ok().as_deref(), receipt, "exit {code}");
+    }
+}
+
+#[test]
+fn run_installs_its_exit_seam_only_for_its_own_lifetime() {
+    let first = prepared();
+    let guard = LaunchGuard::with_boot(&first.config, &first.config.launch_boot).unwrap();
+    assert!(guard.run(|_| Ok(())).is_ok());
+    // The seam was cleared, so a later launch in the same process can install its own.
+    let second = prepared();
+    let guard = LaunchGuard::with_boot(&second.config, &second.config.launch_boot).unwrap();
+    assert!(crate::supervisor::register_exit_receipt(Some(
+        std::sync::Arc::new(|_| ())
+    )));
+    let refused = guard.run(|_| Ok(()));
+    assert!(crate::supervisor::register_exit_receipt(None));
+    assert!(
+        refused.is_err(),
+        "one launch never inherits another's exit seam"
+    );
+    assert!(!second.config.rust_state.join("launch.exit").exists());
 }

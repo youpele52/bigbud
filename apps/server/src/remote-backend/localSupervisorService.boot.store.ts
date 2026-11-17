@@ -11,6 +11,43 @@ import type {
 } from "../remote-agent/remoteAgentRestart.runtime.types.ts";
 import type { LocalSupervisorControl } from "./localSupervisorControl.ts";
 
+/** One replacement per dead predecessor epoch, not per boot: after an explicit stop or a settled
+ * Rust exit on this boot, the next start must replace the new epoch as well. An unfinished
+ * replacement keeps its id (its binding is not published yet), so it resumes. */
+export function accountBootRequestId(
+  state: RemoteAgentRegistry,
+  target: string,
+  bootId: string,
+  binding: { readonly runtime: RemoteAgentRuntime; readonly expectedEpoch: string },
+): string {
+  const prefix = `account-boot:${target}:${bootId}:${binding.runtime.generation}:`;
+  return (
+    state.restartReservations.find(
+      (entry) => entry.id.startsWith(prefix) && !["failed", "ready"].includes(entry.phase),
+    )?.id ?? `${prefix}${binding.expectedEpoch}`
+  );
+}
+
+/** Account-boot reservations are keyed by boot and predecessor epoch, so they would otherwise
+ * grow with every replacement until the registry budget refuses all writes. A new reservation
+ * drops this account's finished history: every `ready` row, and `failed` rows from earlier boots
+ * (a reboot already proves their supervisors dead). A `failed` row of the current boot stays: it
+ * blocks retrying that exact replacement until it is repaired. Unfinished rows always stay. */
+export function settledBootReservationsRetained(
+  state: RemoteAgentRegistry,
+  target: string,
+  requestId: string,
+): RemoteAgentRegistry["restartReservations"] {
+  const account = `account-boot:${target}:`;
+  if (!requestId.startsWith(account)) return state.restartReservations;
+  const boot = `${account}${requestId.slice(account.length).split(":")[0]}:`;
+  return state.restartReservations.filter(
+    (entry) =>
+      !entry.id.startsWith(account) ||
+      !(entry.phase === "ready" || (entry.phase === "failed" && !entry.id.startsWith(boot))),
+  );
+}
+
 /** Boot progress is a view of the same P4 reservation, never a project or second owner database. */
 export function makeLocalSupervisorBootProgressStore(input: {
   readonly control: Pick<LocalSupervisorControl, "targetId" | "openControl">;
@@ -97,7 +134,7 @@ export function makeLocalSupervisorBootProgressStore(input: {
           ...state,
           revision: state.revision + 1,
           restartReservations: [
-            ...state.restartReservations,
+            ...settledBootReservationsRetained(state, input.control.targetId, input.requestId),
             {
               id: input.requestId,
               buildId,

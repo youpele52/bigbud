@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { localSupervisorServiceUnitReference } from "./localSupervisorService.references.unit.ts";
+import {
+  LOCAL_SERVICE_BACKEND_STOP_POST as stopPost,
+  localSupervisorServiceUnitReference,
+} from "./localSupervisorService.references.unit.ts";
 import { quoteServiceFixturePath as quote } from "./localSupervisorService.references.fixture.ts";
 
 const authority = "a".repeat(32);
@@ -23,7 +26,24 @@ describe("private generated service unit references", () => {
     text.replace(" rust\n", " backend\n"),
     text + "ExecStartPre=/unknown\n",
     text.replace("account-service v1", "account-service v2"),
+    // The clean-stop counter flush belongs to the backend unit only.
+    text + `${stopPost}\n`,
   ])("preserves unknown unit metadata instead of treating it as unreferenced", (changed) => {
     expect(() => localSupervisorServiceUnitReference(changed, name, home)).toThrow();
+  });
+  it("accepts only the exact generated backend stop-post command", () => {
+    const backendName = `bigbud-backend-${authority}.service`;
+    const backend = `# bigbud account-service v1; user scope only\n[Service]\nExecStart=${quote(binary)} --backend-service run ${quote(config)} backend\n${stopPost}\n`;
+    expect(localSupervisorServiceUnitReference(backend, backendName, home)).toEqual({
+      authority,
+      binaryPath: binary,
+      configPath: config,
+    });
+    for (const changed of [
+      backend + `${stopPost}\n`,
+      backend.replace("reset-failed", "start"),
+      backend.replace(stopPost, `${stopPost} extra`),
+    ])
+      expect(() => localSupervisorServiceUnitReference(changed, backendName, home)).toThrow();
   });
 });

@@ -13,6 +13,16 @@ pub(super) fn absent(path: &Path) -> Result<()> {
     }
 }
 
+/// Liveness observers (`observe_supervisor` in the backend) take this lock with `flock -n` for
+/// one short shell probe, and the backend starts polling as soon as `systemctl start` returns.
+/// A fresh launch may wait out such a probe; a real owner holds the lock for its whole lifetime,
+/// so it still refuses once this bound passes. Probes repeat only after a 100 ms pause.
+#[cfg(not(test))]
+const PROBE_SETTLE: std::time::Duration = std::time::Duration::from_secs(3);
+#[cfg(test)]
+const PROBE_SETTLE: std::time::Duration = std::time::Duration::from_millis(300);
+const PROBE_POLL: std::time::Duration = std::time::Duration::from_millis(10);
+
 #[cfg(unix)]
 pub(super) fn lock(path: &Path) -> Result<File> {
     use std::os::fd::AsRawFd;
@@ -31,9 +41,33 @@ pub(super) fn lock(path: &Path) -> Result<File> {
     {
         return Err(ServiceError::Invalid("unsafe managed launch lock"));
     }
-    // SAFETY: this descriptor is live and owned; nonblocking flock never dereferences pointers.
-    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-        return Err(ServiceError::Invalid("managed launch is already owned"));
+    let started = std::time::Instant::now();
+    let deadline = started + PROBE_SETTLE;
+    let mut contended = false;
+    loop {
+        // SAFETY: this descriptor is live and owned; nonblocking flock never dereferences pointers.
+        if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+            if contended {
+                eprintln!(
+                    "managed launch lock was briefly held by an observer; acquired after {} ms",
+                    started.elapsed().as_millis()
+                );
+            }
+            break;
+        }
+        contended = true;
+        let error = std::io::Error::last_os_error();
+        // Only contention is waited out; any other flock failure is refused immediately.
+        if !matches!(
+            error.kind(),
+            std::io::ErrorKind::WouldBlock | std::io::ErrorKind::Interrupted
+        ) {
+            return Err(error.into());
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err(ServiceError::Invalid("managed launch is already owned"));
+        }
+        std::thread::sleep(PROBE_POLL);
     }
     same_lock(&file, path)?;
     Ok(file)

@@ -2,7 +2,9 @@
  * Every entry is a reviewed exception. After a dependency or bundle change, run
  * `bun run remote-backend-graph --list-loader-sites ...` to print the member and hash of each
  * unreviewed site, review the code, then update the entry. A hash pins the whole bundle region
- * or file, so unrelated edits inside the same region also need a fresh review. */
+ * or file, so unrelated edits inside the same region also need a fresh review. Region hashes
+ * ignore rolldown's bundle-wide `$<n>` binding renames (see `build-remote-backend-graph.regionHash.ts`);
+ * the four region pins re-pinned on 18 Nov 2026 cover byte-identical reviewed code. */
 const loader = (member: string, sha256: string, reason: string, roots: string[] = []) => ({
   member,
   sha256,
@@ -35,22 +37,22 @@ export const BACKEND_GRAPH_LOADER_POLICY_DATA = {
     // Inlined third-party regions of the server bundle.
     loader(
       "msgpackr/unpack.js",
-      "50b0a72c2f40d6e6efdb45c4b9bf4f6349b7bc26ba353f752d6936ff2c1b0967",
+      "4168ccbbd478db942369c79212e5fe573b411af8562c216dfcf004ec90241420",
       "msgpackr record readers generated from decoded field names; generates object literals, loads no modules.",
     ),
     loader(
       "msgpackr/struct.js",
-      "6b001b466110da934ba7682c203d7217d64ce951f9912c3b83bda82786d0ce22",
+      "b45551c38aaa5bd83a2a4244b6688acc8f0271a822a76be5e8ae386639ecd021",
       "msgpackr struct accessor code generation and a CSP probe; loads no modules.",
     ),
     loader(
       "node-gyp-build-optional-packages/node-gyp-build.js",
-      "29ea3ea3db1c4444a2881f0535275b434f9ace00686294e86907c4edb66e8e43",
+      "b090934115d5a4e98d178615a2e80e81d21a99336ac3617c59b8af8b14cf4297",
       "msgpackr's optional msgpackr-extract native lookup; the package is absent and msgpackr falls back to JavaScript.",
     ),
     loader(
       "@anthropic-ai/claude-agent-sdk/sdk.mjs",
-      "462278c76adaefbf459b6b6a6d172f40e2a238f1732edb9ab5f9a8c6b631b0b0",
+      "1e2e54a38bad420ad78724f0b6d3540cdd6a4b1f204a951c4c99fbb8ac09a079",
       "Claude agent SDK: ajv schema-validator codegen, a globalThis probe, and a native CLI lookup used only without pathToClaudeCodeExecutable (absent here, typed error).",
     ),
     // Pi closure, reached through the reviewed Pi CLI root and its rpc-entry export.

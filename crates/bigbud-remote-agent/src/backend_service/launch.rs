@@ -1,6 +1,7 @@
 use super::{Result, ServiceConfig, ServiceError, ServiceRole, files};
 use std::fs::File;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 #[path = "launch.files.rs"]
 mod evidence;
 
@@ -10,6 +11,8 @@ pub(super) struct LaunchGuard {
     lock: File,
     attempt: String,
     boot: String,
+    /// Set once by whichever path settles this launch: the supervisor returning, or its exit seam.
+    settled: Mutex<bool>,
 }
 
 impl LaunchGuard {
@@ -48,6 +51,7 @@ impl LaunchGuard {
             lock,
             attempt: config.launch_attempt.clone(),
             boot: config.launch_boot.clone(),
+            settled: Mutex::new(false),
         };
         guard.same_reservation()?;
         if config.prior_epoch == "fresh" {
@@ -88,11 +92,66 @@ impl LaunchGuard {
     pub(super) fn run(self, supervisor: impl FnOnce(PathBuf) -> Result<()>) -> Result<()> {
         // Recheck the held lock/intent after potentially slow actual service-owner inspection.
         self.same_reservation()?;
+        let guard = Arc::new(self);
+        let exiting = Arc::clone(&guard);
+        // The supervisor ends the process from its exit seam (accepted restart, signal drain)
+        // without returning here, so that seam must settle the same receipt under this lock.
+        if !crate::supervisor::register_exit_receipt(Some(Arc::new(move |code| {
+            exiting.settle_exit(code)
+        }))) {
+            return Err(ServiceError::Invalid(
+                "managed launch exit evidence is already owned",
+            ));
+        }
         // The callback runs in this exact service process, retaining the lock until final receipt.
-        let result = supervisor(self.root.clone());
-        self.same_reservation()?;
-        evidence::receipt(&self.root, if result.is_ok() { 0 } else { 1 })?;
+        let result = supervisor(guard.root.clone());
+        let mut settled = guard.settled_flag();
+        if *settled {
+            // The exit seam has settled this launch and is ending the process with its own code.
+            drop(settled);
+            loop {
+                std::thread::park();
+            }
+        }
+        *settled = true;
+        let receipt = guard
+            .same_reservation()
+            .and_then(|()| evidence::receipt(&guard.root, if result.is_ok() { 0 } else { 1 }));
+        drop(settled);
+        // Clearing never fails; a refused install is the only false outcome.
+        let _cleared = crate::supervisor::register_exit_receipt(None);
+        receipt?;
         result
+    }
+
+    fn settled_flag(&self) -> MutexGuard<'_, bool> {
+        // A poisoned flag still records whether a receipt path already ran.
+        self.settled.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Exit-seam receipt. Only a settled signal drain (143) or an accepted, settled restart (0)
+    /// proves the supervisor and its owned work have ended. An unsettled exit (1) writes nothing,
+    /// so the backend keeps reporting unknown liveness and requires repair instead of a relaunch.
+    pub(super) fn settle_exit(&self, code: i32) {
+        let mut settled = self.settled_flag();
+        if *settled {
+            return;
+        }
+        *settled = true;
+        let status = match code {
+            0 => 0,
+            143 => 143,
+            _ => {
+                eprintln!("managed launch left no exit receipt: owned-work settlement is unknown");
+                return;
+            }
+        };
+        if let Err(error) = self
+            .same_reservation()
+            .and_then(|()| evidence::receipt(&self.root, status))
+        {
+            eprintln!("managed launch exit receipt was not written: {error}");
+        }
     }
 }
 

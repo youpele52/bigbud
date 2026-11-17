@@ -1,6 +1,6 @@
 use super::command::{Manager, SystemManager};
 use super::status::{Prerequisites, UnitStatus, unit_arguments};
-use super::unit::{UnitNames, render_definition, require_staged, stage_units};
+use super::unit::{UnitNames, reload_if_changed, render_definition, require_staged, stage_units};
 use super::{Result, ServiceConfig, ServiceError, ServiceRole, files, render_units};
 use std::path::Path;
 
@@ -105,22 +105,22 @@ pub(super) fn apply(
         if !consent {
             return Err(ServiceError::ConsentRequired);
         }
-        if readiness != Prerequisites::Ready {
-            return Err(ServiceError::Manager);
+        // Like explicit start, a session without lingering may run the units; they stop at
+        // logout, which the caller reports with the lingering remediation.
+        if !matches!(
+            readiness,
+            Prerequisites::Ready | Prerequisites::MissingLinger
+        ) {
+            return Err(ServiceError::Invalid(
+                "the Rust unit needs a working systemd user manager; run backend status for remediation",
+            ));
         }
         config.validate_role(ServiceRole::Rust)?;
         require_capability(config, manager, false)?;
         let rendered = render_definition(config)?;
         require_staged(config, &rendered)?;
-        manager.run(
-            "/usr/bin/systemctl",
-            &[
-                "--user".into(),
-                "--no-pager".into(),
-                "--no-ask-password".into(),
-                "daemon-reload".into(),
-            ],
-        )?;
+        // Never an unconditional reload: it would reset the backend's crash-loop start limit.
+        reload_if_changed(manager, &[&rendered.names.rust])?;
         let fragment = manager.run(
             "/usr/bin/systemctl",
             &[
@@ -300,9 +300,7 @@ pub fn run_cli_with_supervisor(
                 status.state, status.restarts
             );
             if status.state == super::status::ServiceState::NeedsRepair {
-                println!(
-                    "Inspect journalctl --user-unit={name} --no-pager -n 50; repair the cause, then explicitly systemctl --user reset-failed {name} and systemctl --user start {name}. Interrupted turns are not replayed by this launcher."
-                );
+                println!("{}", super::status::repair_steps(name, &names));
             }
         }
         return Ok(());
@@ -318,6 +316,9 @@ pub fn run_cli_with_supervisor(
     }
     apply(&config, operation, consent, &manager, ready)?;
     if operation == "start-rust" {
+        if ready != Prerequisites::Ready {
+            eprintln!("{}", ready.remediation(uid));
+        }
         println!(
             "Independent Rust unit start acknowledged; P4 readiness and authenticated admission must still verify the attempt and epoch."
         );

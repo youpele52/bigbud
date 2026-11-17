@@ -195,6 +195,12 @@ pub(crate) struct FakeManager {
     pub(crate) fragment_dir: Option<PathBuf>,
     /// ActiveState reported for unit status queries.
     pub(crate) unit_active: Option<&'static str>,
+    /// ActiveState reported once a start or stop job has been issued.
+    pub(crate) active_after_job: Option<&'static str>,
+    /// Result reported with unit status (default `success`).
+    pub(crate) unit_result: Option<&'static str>,
+    /// Reported as `NeedDaemonReload` for each unit.
+    pub(crate) need_reload: bool,
     pub(crate) fail_jobs: bool,
 }
 impl Manager for FakeManager {
@@ -223,13 +229,31 @@ impl Manager for FakeManager {
         if self.fail_jobs && args.iter().any(|arg| arg == "start" || arg == "stop") {
             return Err(ServiceError::Manager);
         }
+        if args
+            .iter()
+            .any(|arg| arg == "--property=NeedDaemonReload,LoadState")
+        {
+            let reload = if self.need_reload { "yes" } else { "no" };
+            return Ok(format!("NeedDaemonReload={reload}\nLoadState=loaded\n"));
+        }
+        let job_issued = || {
+            self.calls
+                .borrow()
+                .iter()
+                .any(|(_, args)| args.iter().any(|arg| arg == "start" || arg == "stop"))
+        };
         if let Some(active) = self.unit_active
             && args
                 .iter()
                 .any(|arg| arg.starts_with("--property=LoadState,"))
         {
+            let active = match self.active_after_job {
+                Some(after) if job_issued() => after,
+                _ => active,
+            };
+            let result = self.unit_result.unwrap_or("success");
             return Ok(format!(
-                "LoadState=loaded\nActiveState={active}\nSubState={active}\nResult=success\nUnitFileState=disabled\nNRestarts=0\n"
+                "LoadState=loaded\nActiveState={active}\nSubState={active}\nResult={result}\nUnitFileState=disabled\nNRestarts=0\n"
             ));
         }
         if let Some(directory) = &self.fragment_dir

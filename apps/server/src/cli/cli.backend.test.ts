@@ -125,3 +125,20 @@ it("reports a failed explicit stop privately as incomplete", async () => {
   expect(vi.mocked(process.stdout.write)).not.toHaveBeenCalled();
   expect(process.exitCode).toBe(1);
 });
+it("prints the native launcher's specific refusal without private messages", async () => {
+  vi.mocked(runBackendNativeCli).mockReturnValue(
+    Effect.fail(
+      new BackendCliError({
+        message: "PRIVATE",
+        cause: new Error(
+          "Local supervisor command failed (code=1). Error: account-service operation failed\n\nCaused by:\n    an account unit needs repair; run backend status and follow its repair steps before starting",
+        ),
+      }),
+    ),
+  );
+  await run(["start", "--authority", "a".repeat(32)]);
+  const text = vi.mocked(process.stderr.write).mock.calls.flat().join("");
+  expect(text).toContain("Native launcher refused: an account unit needs repair");
+  expect(text).not.toContain("PRIVATE");
+  expect(process.exitCode).toBe(1);
+});

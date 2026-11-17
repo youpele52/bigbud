@@ -127,10 +127,37 @@ pub(crate) fn exit_supervisor() -> ! {
     exit_supervisor_with(0)
 }
 
+/// Exit evidence owned by the process launcher (the account-service launch guard). It runs on
+/// the exiting thread before the process ends, while the launcher still holds its lock.
+pub(crate) type ExitReceipt = std::sync::Arc<dyn Fn(i32) + Send + Sync>;
+static EXIT_RECEIPT: std::sync::Mutex<Option<ExitReceipt>> = std::sync::Mutex::new(None);
+
+fn exit_receipt_slot() -> std::sync::MutexGuard<'static, Option<ExitReceipt>> {
+    // The slot holds one Arc and no invariant a panicking holder could break.
+    EXIT_RECEIPT
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Installs (`Some`) or clears (`None`) the exit-evidence writer for this process. Installing
+/// over a live writer is refused, so one launch never inherits another's evidence.
+pub(crate) fn register_exit_receipt(receipt: Option<ExitReceipt>) -> bool {
+    let mut slot = exit_receipt_slot();
+    if receipt.is_some() && slot.is_some() {
+        return false;
+    }
+    *slot = receipt;
+    true
+}
+
 /// The supervisor's only process-exit seam: 0 after an accepted restart, 143
 /// after a settled signal drain, 1 when owned-work settlement is unknown.
 #[allow(clippy::exit)]
 pub(crate) fn exit_supervisor_with(code: i32) -> ! {
+    let receipt = exit_receipt_slot().clone();
+    if let Some(receipt) = receipt {
+        receipt(code);
+    }
     std::process::exit(code)
 }
 

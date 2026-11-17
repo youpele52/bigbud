@@ -114,6 +114,21 @@ fn independent_units_limit_to_initial_plus_five_and_never_embed_credentials() {
     );
     assert!(units.backend.contains("Restart=on-failure"));
     assert!(units.rust.contains("Restart=no"));
+    // A settled signal stop (143) is clean for Rust only; crashes and exit 1 still fail.
+    assert!(units.rust.contains("\nSuccessExitStatus=143\n"));
+    assert!(!units.backend.contains("SuccessExitStatus"));
+    // Only a clean backend stop flushes its own start-rate counter.
+    assert_eq!(
+        units
+            .backend
+            .lines()
+            .filter(|line| line.starts_with("ExecStopPost="))
+            .collect::<Vec<_>>(),
+        [
+            "ExecStopPost=-/bin/sh -c 'case $$SERVICE_RESULT in success) exec /usr/bin/systemctl --user --no-ask-password reset-failed $$1;; esac' sh %n"
+        ]
+    );
+    assert!(!units.rust.contains("ExecStopPost="));
     assert!(!units.rust.contains("WantedBy="));
     assert!(units.backend.contains("WantedBy=default.target"));
     for unit in [&units.backend, &units.rust] {

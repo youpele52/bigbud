@@ -96,3 +96,12 @@ pub(super) fn unit_arguments(name: &str) -> Vec<String> {
     .map(str::to_owned)
     .collect()
 }
+
+/// Repair for a failed or start-limited unit. The Rust unit is never started directly: only the
+/// backend projects the fresh launch reservation it needs, so a direct start replays a spent one.
+pub(super) fn repair_steps(name: &str, names: &super::UnitNames) -> String {
+    format!(
+        "Inspect journalctl --user-unit={name} --no-pager -n 50 and repair the cause. Then run systemctl --user reset-failed {} {} and bigbud backend start; the backend relaunches its Rust unit itself. Do not start {} directly. If the backend then reports that the old supervisor has no verified live or dead identity, its terminal work did not settle: leave the state in place and reboot, which proves the old supervisor ended. Interrupted turns are not replayed by this launcher.",
+        names.backend, names.rust, names.rust
+    )
+}

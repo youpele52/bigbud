@@ -1,3 +1,4 @@
+use super::command::{Manager, systemctl_args};
 use super::{Result, ServiceConfig, ServiceError, files};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -34,6 +35,14 @@ fn quote(value: &str) -> String {
     )
 }
 
+/// The start limit should count crash restarts, not deliberate stop/start cycles. systemd 249 has
+/// no failure-only start limit, and `systemctl reset-failed` is its documented way to flush a
+/// unit's start-rate counter. So only after a clean stop (`SERVICE_RESULT=success`) does the unit
+/// flush its own counter; crashes and failed starts keep counting toward `StartLimitBurst`.
+/// The leading `-` keeps a failed flush from failing an otherwise clean stop. The backend's
+/// unit-reference parser accepts exactly this line, so the two must change together.
+pub(super) const BACKEND_STOP_POST: &str = "ExecStopPost=-/bin/sh -c 'case $$SERVICE_RESULT in success) exec /usr/bin/systemctl --user --no-ask-password reset-failed $$1;; esac' sh %n";
+
 pub fn render_units(config: &ServiceConfig) -> Result<UnitFiles> {
     config.validate()?;
     render_definition(config)
@@ -54,12 +63,13 @@ pub(super) fn render_definition(config: &ServiceConfig) -> Result<UnitFiles> {
             .ok_or(ServiceError::Invalid("non-UTF-8 config path"))?,
     );
     let backend = format!(
-        "# bigbud account-service v1; user scope only\n[Unit]\nDescription=bigbud remote backend\nAfter={}\nStartLimitIntervalSec=300\nStartLimitBurst=6\n\n[Service]\nType=exec\nExecStart={launcher} --backend-service run {path} backend\nRestart={}\nRestartSec=1\nKillMode=control-group\nTimeoutStopSec=15\nSendSIGKILL=yes\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
+        "# bigbud account-service v1; user scope only\n[Unit]\nDescription=bigbud remote backend\nAfter={}\nStartLimitIntervalSec=300\nStartLimitBurst=6\n\n[Service]\nType=exec\nExecStart={launcher} --backend-service run {path} backend\n{BACKEND_STOP_POST}\nRestart={}\nRestartSec=1\nKillMode=control-group\nTimeoutStopSec=15\nSendSIGKILL=yes\nUMask=0077\n\n[Install]\nWantedBy=default.target\n",
         names.rust,
         if config.restart { "on-failure" } else { "no" }
     );
+    // 143 is the supervisor's settled signal drain (WP-0A); 1 (unsettled) and crashes still fail.
     let rust = format!(
-        "# bigbud account-service v1; independent Rust terminal owner\n[Unit]\nDescription=bigbud Rust terminal supervisor\n\n[Service]\nType=exec\nExecStart={launcher} --backend-service run {path} rust\nRestart=no\nKillMode=control-group\nTimeoutStopSec=15\nSendSIGKILL=yes\nUMask=0077\n"
+        "# bigbud account-service v1; independent Rust terminal owner\n[Unit]\nDescription=bigbud Rust terminal supervisor\n\n[Service]\nType=exec\nExecStart={launcher} --backend-service run {path} rust\nSuccessExitStatus=143\nRestart=no\nKillMode=control-group\nTimeoutStopSec=15\nSendSIGKILL=yes\nUMask=0077\n"
     );
     Ok(UnitFiles {
         names,
@@ -157,4 +167,32 @@ pub(super) fn require_staged(config: &ServiceConfig, rendered: &UnitFiles) -> Re
         }
     }
     Ok(())
+}
+
+/// Reloads the user manager only when a unit is not loaded yet or its file changed on disk.
+/// A reload also discards start-rate counters, so an unconditional reload would let an explicit
+/// start or a Rust relaunch silently revive a backend that hit its crash-loop limit.
+pub(super) fn reload_if_changed(manager: &impl Manager, names: &[&String]) -> Result<bool> {
+    let mut stale = false;
+    for name in names {
+        let text = manager.run(
+            "/usr/bin/systemctl",
+            &systemctl_args(&["show", name, "--property=NeedDaemonReload,LoadState"]),
+        )?;
+        let mut reload = None;
+        let mut load = None;
+        for line in text.lines() {
+            if let Some(value) = line.strip_prefix("NeedDaemonReload=") {
+                reload = Some(value == "yes");
+            } else if let Some(value) = line.strip_prefix("LoadState=") {
+                load = Some(value == "loaded");
+            }
+        }
+        // Anything but a loaded, current unit (including unparsable output) needs the reload.
+        stale |= reload != Some(false) || load != Some(true);
+    }
+    if stale {
+        manager.run("/usr/bin/systemctl", &systemctl_args(&["daemon-reload"]))?;
+    }
+    Ok(stale)
 }

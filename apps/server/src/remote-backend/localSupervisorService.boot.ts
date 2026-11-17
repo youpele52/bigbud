@@ -12,7 +12,10 @@ import {
   makeLocalSupervisorTransportFactory,
 } from "./localSupervisorTransport.ts";
 import { makeLocalSupervisorServiceLauncher } from "./localSupervisorService.launch.ts";
-import { makeLocalSupervisorBootProgressStore } from "./localSupervisorService.boot.store.ts";
+import {
+  accountBootRequestId,
+  makeLocalSupervisorBootProgressStore,
+} from "./localSupervisorService.boot.store.ts";
 
 /** Finite boot reconciliation. Lock/identity/SQL ownership belongs to the caller's scoped entry. */
 export function makeLocalSupervisorBootReconciler(input: {
@@ -92,7 +95,7 @@ export function makeLocalSupervisorBootReconciler(input: {
         ).stdout.trim();
         if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(bootId))
           throw new Error("Account service boot requires a verified Linux boot identity.");
-        const requestId = `account-boot:${target}:${bootId}:${binding.runtime.generation}`;
+        const requestId = accountBootRequestId(state, target, bootId, binding);
         signal.throwIfAborted();
         const prior = state.restartReservations.find((entry) => entry.id === requestId);
         if (

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import * as ts from "typescript";
+import { makeRegionDigest } from "./build-remote-backend-graph.regionHash.ts";
 
 /** Static dependency facts for one graph module. Parsing never executes graph code. */
 export type GraphEdgeKind =
@@ -26,7 +27,8 @@ export interface LoaderSite {
   readonly kind: LoaderSiteKind;
   /** Rolldown `//#region` source marker, or the graph path for an unbundled file. */
   readonly member: string;
-  /** SHA-256 of the enclosing region text, or of the whole file without a region. */
+  /** SHA-256 of the enclosing region's canonical text (bundler `$<n>` binding renames are
+   * normalised; see `build-remote-backend-graph.regionHash.ts`), or of the whole file. */
   readonly sha256: string;
   readonly excerpt: string;
 }
@@ -78,6 +80,7 @@ export function parseGraphModule(path: string, text: string): GraphModule {
     throw new Error(`Executable graph contains invalid JavaScript syntax in ${path}.`);
   const tree = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const spans = regions(text);
+  const regionDigest = makeRegionDigest(tree, text);
   const edges: GraphEdge[] = [];
   const sites: LoaderSite[] = [];
   const requireAliases = new Set(["require"]);
@@ -91,7 +94,7 @@ export function parseGraphModule(path: string, text: string): GraphModule {
     sites.push({
       kind,
       member: region ? normalizeRegionMarker(region.marker) : path,
-      sha256: region ? sha256(text.slice(region.start, region.end)) : (fileHash ??= sha256(text)),
+      sha256: region ? regionDigest(region.start, region.end) : (fileHash ??= sha256(text)),
       excerpt: node.getText(tree).slice(0, 120).replace(/\s+/g, " "),
     });
   };

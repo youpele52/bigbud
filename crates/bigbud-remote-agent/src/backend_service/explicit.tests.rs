@@ -50,14 +50,19 @@ fn assert_boot_policy_untouched(manager: &FakeManager) {
 fn start_does_not_enable_or_touch_linger() {
     let fixture = Fixture::new();
     staged(&fixture);
-    let manager = manager(&fixture, "active");
-    let observed = run(
+    let manager = FakeManager {
+        active_after_job: Some("active"),
+        ..manager(&fixture, "inactive")
+    };
+    let outcome = run(
         &fixture.config,
         Explicit::Start,
         &manager,
         Prerequisites::MissingLinger,
     )
     .unwrap();
+    assert!(!outcome.already_running);
+    let observed = outcome.observed;
     assert_boot_policy_untouched(&manager);
     let names = UnitNames::new(&fixture.config);
     let jobs: Vec<_> = systemctl_calls(&manager)
@@ -66,11 +71,8 @@ fn start_does_not_enable_or_touch_linger() {
         .collect();
     // Only the backend is started; it starts the Rust unit under a fresh P4 reservation.
     assert_eq!(jobs, vec![args(&["start", &names.backend])]);
-    assert!(
-        systemctl_calls(&manager)
-            .iter()
-            .any(|args| args.iter().any(|arg| arg == "daemon-reload"))
-    );
+    // Loaded, unchanged units are not reloaded: a reload would reset the crash-loop limit.
+    assert!(!reloaded(&manager));
     assert!(
         manager.calls.borrow()[0].0.ends_with("bigbud-remote-agent"),
         "the verified artifact identity is checked before any manager call"
@@ -92,7 +94,8 @@ fn stop_reports_success_and_preserves_data() {
         &manager,
         Prerequisites::Ready,
     )
-    .unwrap();
+    .unwrap()
+    .observed;
     assert_boot_policy_untouched(&manager);
     let names = UnitNames::new(&fixture.config);
     let jobs: Vec<_> = systemctl_calls(&manager)
@@ -195,7 +198,7 @@ fn refuses_missing_manager_foreign_fragment_consent_and_unsettled_jobs() {
     ));
     let failing = FakeManager {
         fail_jobs: true,
-        ..manager
+        ..self::manager(&fixture, "inactive")
     };
     assert!(
         run(
@@ -218,8 +221,90 @@ fn refuses_missing_manager_foreign_fragment_consent_and_unsettled_jobs() {
             &starting_failed,
             Prerequisites::Ready
         ),
+        Err(ServiceError::Invalid(_))
+    ));
+    let started_then_failed = FakeManager {
+        active_after_job: Some("failed"),
+        ..self::manager(&fixture, "inactive")
+    };
+    assert!(matches!(
+        run(
+            &fixture.config,
+            Explicit::Start,
+            &started_then_failed,
+            Prerequisites::Ready
+        ),
         Err(ServiceError::Manager)
     ));
+}
+
+fn reloaded(manager: &FakeManager) -> bool {
+    systemctl_calls(manager)
+        .iter()
+        .any(|args| args.iter().any(|arg| arg == "daemon-reload"))
+}
+fn jobs(manager: &FakeManager) -> usize {
+    systemctl_calls(manager)
+        .iter()
+        .filter(|args| args.iter().any(|arg| arg == "start" || arg == "stop"))
+        .count()
+}
+
+#[test]
+fn start_refuses_units_that_need_repair_without_reloading_their_start_limit() {
+    let fixture = Fixture::new();
+    staged(&fixture);
+    for (active, result) in [("failed", "exit-code"), ("inactive", "start-limit-hit")] {
+        let manager = FakeManager {
+            unit_result: Some(result),
+            need_reload: true,
+            ..manager(&fixture, active)
+        };
+        let error = run(
+            &fixture.config,
+            Explicit::Start,
+            &manager,
+            Prerequisites::Ready,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("needs repair"), "{error}");
+        assert!(!reloaded(&manager), "a reload would reset the start limit");
+        assert_eq!(jobs(&manager), 0);
+    }
+}
+
+#[test]
+fn start_is_idempotent_while_running_and_reloads_only_changed_units() {
+    let fixture = Fixture::new();
+    staged(&fixture);
+    let running = manager(&fixture, "active");
+    let outcome = run(
+        &fixture.config,
+        Explicit::Start,
+        &running,
+        Prerequisites::Ready,
+    )
+    .unwrap();
+    assert!(outcome.already_running);
+    assert_eq!(jobs(&running), 0);
+    assert!(!reloaded(&running));
+    let changed = FakeManager {
+        need_reload: true,
+        active_after_job: Some("active"),
+        ..manager(&fixture, "inactive")
+    };
+    assert!(
+        !run(
+            &fixture.config,
+            Explicit::Start,
+            &changed,
+            Prerequisites::Ready
+        )
+        .unwrap()
+        .already_running
+    );
+    assert!(reloaded(&changed));
+    assert_eq!(jobs(&changed), 1);
 }
 
 #[test]

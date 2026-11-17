@@ -2,6 +2,10 @@ import { isAbsolute, join, normalize } from "node:path";
 import { hasLocalSupervisorServiceControls } from "./localSupervisorService.paths.ts";
 
 export const LOCAL_SERVICE_UNIT_NAME = /^bigbud-(backend|rust)-([a-f0-9]{32})\.service$/;
+/** The backend unit's only other command: after a clean stop it flushes its own start-rate
+ * counter (Rust `BACKEND_STOP_POST`). It names no artifact path, so it adds no reference. */
+export const LOCAL_SERVICE_BACKEND_STOP_POST =
+  "ExecStopPost=-/bin/sh -c 'case $$SERVICE_RESULT in success) exec /usr/bin/systemctl --user --no-ask-password reset-failed $$1;; esac' sh %n";
 
 function unquote(token: string): string {
   let value = "";
@@ -36,7 +40,13 @@ export function localSupervisorServiceUnitReference(text: string, name: string, 
       ? "# bigbud account-service v1; independent Rust terminal owner"
       : "# bigbud account-service v1; user scope only";
   if (text.split("\n")[0] !== header) throw new Error("The unit is user-managed or unsupported.");
-  const commands = text.split("\n").filter((line) => line.startsWith("Exec"));
+  const lines = text.split("\n");
+  const stopPost = lines.filter((line) => line === LOCAL_SERVICE_BACKEND_STOP_POST).length;
+  if (stopPost > (identity[1] === "backend" ? 1 : 0))
+    throw new Error("Unknown service unit command ownership.");
+  const commands = lines.filter(
+    (line) => line.startsWith("Exec") && line !== LOCAL_SERVICE_BACKEND_STOP_POST,
+  );
   if (commands.length !== 1) throw new Error("Unknown service unit command ownership.");
   const command =
     /^ExecStart=("(?:[^"\\]|\\.)*") --backend-service run ("(?:[^"\\]|\\.)*") (backend|rust)$/.exec(

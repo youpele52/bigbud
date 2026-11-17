@@ -7,14 +7,20 @@ import {
   runBackendNativeCli,
   type BackendNativeAction,
 } from "./cli.backend.operations.ts";
+import { describeBackendFailure, type BackendCliAction } from "./cli.backend.failure.ts";
 
-function report<A, E, R>(operation: Effect.Effect<A, E, R>, print: (value: A) => void) {
+function report<A, E, R>(
+  action: BackendCliAction,
+  operation: Effect.Effect<A, E, R>,
+  print: (value: A) => void,
+) {
   return operation.pipe(
     Effect.tap((value) => Effect.sync(() => print(value))),
-    Effect.catchCause(() =>
+    Effect.catchCause((cause) =>
       Effect.sync(() => {
+        const reason = describeBackendFailure(cause, action);
         process.stderr.write(
-          "bigbud backend: Operation unavailable or incomplete. Preserve its state and inspect status before retrying.\n",
+          `bigbud backend: Operation unavailable or incomplete. Preserve its state and inspect status before retrying.\n${reason ? `${reason}\n` : ""}`,
         );
         process.exitCode = 1;
       }),
@@ -65,7 +71,7 @@ const setup = Command.make("setup", {
   Command.withHandler((input) =>
     !input.confirmFreshSetup
       ? confirmationRequired("--confirm-fresh-setup")
-      : report(runBackendSetupCli(input), (result) => {
+      : report("setup", runBackendSetupCli(input), (result) => {
           process.stdout.write(
             `Configured authority: ${result.authorityId}\nRequest: ${result.requestId}\nBackend startup remains disabled.\n`,
           );
@@ -88,7 +94,7 @@ function native(
         ? confirmationRequired("--confirm-startup")
         : (action === "start" || action === "stop") && input.confirmStartup
           ? startupConsentRefused
-          : report(runBackendNativeCli({ ...input, action }), (result) => {
+          : report(name, runBackendNativeCli({ ...input, action }), (result) => {
               if (action === "status")
                 process.stdout.write(
                   `${result.output.trim()}\nBackend readiness is not assessed by unit status.\n`,

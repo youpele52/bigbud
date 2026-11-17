@@ -2,7 +2,9 @@
 //! for this session only. They never enable, disable or change lingering.
 use super::command::{Manager, systemctl_args as args};
 use super::status::{Prerequisites, ServiceState, UnitStatus, unit_arguments};
-use super::unit::{UnitFiles, render_definition, render_units, require_staged, unit_directory};
+use super::unit::{
+    UnitFiles, reload_if_changed, render_definition, render_units, require_staged, unit_directory,
+};
 use super::{Result, ServiceConfig, ServiceError};
 use std::time::Duration;
 
@@ -36,6 +38,22 @@ fn staged(config: &ServiceConfig, rendered: &UnitFiles) -> Result<()> {
     }
 }
 
+/// Observed units after an explicit operation; `already_running` means start changed nothing.
+#[derive(Debug)]
+pub(super) struct Outcome {
+    pub(super) observed: Vec<(String, UnitStatus)>,
+    pub(super) already_running: bool,
+}
+
+fn observe(manager: &impl Manager, names: [&String; 2]) -> Result<Vec<(String, UnitStatus)>> {
+    let mut observed = Vec::with_capacity(2);
+    for name in names {
+        let status = UnitStatus::parse(&manager.run(SYSTEMCTL, &unit_arguments(name))?)?;
+        observed.push((name.clone(), status));
+    }
+    Ok(observed)
+}
+
 /// Starts only the backend unit: its own finite reconciliation projects a fresh P4 reservation
 /// and starts the Rust unit through `start-rust`. Starting the Rust unit directly would run it
 /// against the stale recorded reservation, fail, and count toward its crash limit.
@@ -45,7 +63,7 @@ pub(super) fn run(
     operation: Explicit,
     manager: &impl Manager,
     readiness: Prerequisites,
-) -> Result<Vec<(String, UnitStatus)>> {
+) -> Result<Outcome> {
     if !matches!(
         readiness,
         Prerequisites::Ready | Prerequisites::MissingLinger
@@ -60,11 +78,31 @@ pub(super) fn run(
         Explicit::Stop => render_definition(config)?,
     };
     staged(config, &rendered)?;
+    let names = [&rendered.names.backend, &rendered.names.rust];
     if operation == Explicit::Start {
         super::cli::require_capability(config, manager, true)?;
-        manager.run(SYSTEMCTL, &args(&["daemon-reload"]))?;
+        let before = observe(manager, names)?;
+        // A crash-looped or failed unit is repaired explicitly (status prints the steps); a
+        // start, and especially a reload, must not reset its start limit and revive it.
+        if before
+            .iter()
+            .any(|(_, status)| status.state == ServiceState::NeedsRepair)
+        {
+            return Err(ServiceError::Invalid(
+                "an account unit needs repair; run backend status and follow its repair steps before starting",
+            ));
+        }
+        if before.first().is_some_and(|(_, status)| {
+            matches!(status.state, ServiceState::Starting | ServiceState::Active)
+        }) {
+            return Ok(Outcome {
+                observed: before,
+                already_running: true,
+            });
+        }
+        reload_if_changed(manager, &names)?;
     }
-    for name in [&rendered.names.backend, &rendered.names.rust] {
+    for name in names {
         let fragment = manager.run(SYSTEMCTL, &args(&["show", name, "--property=FragmentPath"]))?;
         if fragment
             != format!(
@@ -89,11 +127,9 @@ pub(super) fn run(
             STOP_DEADLINE,
         )?,
     };
-    let mut observed = Vec::with_capacity(2);
-    for name in [rendered.names.backend, rendered.names.rust] {
-        let status = UnitStatus::parse(&manager.run(SYSTEMCTL, &unit_arguments(&name))?)?;
-        observed.push((name, status));
-    }
+    let observed = observe(manager, names)?;
+    // A settled Rust stop exits 143, which its unit counts as success (Stopped); an unsettled
+    // exit or a crash leaves it failed (NeedsRepair) and this stop is reported as incomplete.
     let settled = match operation {
         Explicit::Start => observed.first().is_some_and(|(_, status)| {
             matches!(status.state, ServiceState::Starting | ServiceState::Active)
@@ -111,7 +147,10 @@ pub(super) fn run(
         }
         return Err(ServiceError::Manager);
     }
-    Ok(observed)
+    Ok(Outcome {
+        observed,
+        already_running: false,
+    })
 }
 
 /// CLI boundary: consent flags belong to boot policy and are refused here.
@@ -128,11 +167,11 @@ pub(super) fn report(
             "start and stop take no startup consent; use enable for boot startup",
         ));
     }
-    let observed = run(config, operation, manager, readiness)?;
+    let outcome = run(config, operation, manager, readiness)?;
     if readiness != Prerequisites::Ready {
         println!("{}", readiness.remediation(uid));
     }
-    for (name, status) in observed {
+    for (name, status) in outcome.observed {
         println!(
             "{name}: {:?}; crash-restarts={}",
             status.state, status.restarts
@@ -141,6 +180,8 @@ pub(super) fn report(
     println!(
         "{}",
         match operation {
+            Explicit::Start if outcome.already_running =>
+                "The backend unit is already running; nothing was started or reloaded.",
             Explicit::Start =>
                 "Backend unit started for this session; boot startup and lingering are unchanged. The backend starts and admits its Rust unit itself; unit state is not backend readiness.",
             Explicit::Stop =>

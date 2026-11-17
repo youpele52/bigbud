@@ -7,6 +7,7 @@ import * as Option from "effect/Option";
 import { resolveServerConfig } from "./cli.config.ts";
 import { prepareBackendSetupCliInput, type BackendSetupCliInput } from "./cli.backend.inputs.ts";
 import { backendCliOwned, BackendCliError } from "./cli.backend.effect.ts";
+import { backendUnitRunning } from "./cli.backend.failure.ts";
 import { readLocalSupervisorServiceConfig } from "../remote-backend/localSupervisorService.config.read.ts";
 import {
   readLocalSupervisorServiceFile,
@@ -118,6 +119,29 @@ async function selectedNative(authorityId: string, signal: AbortSignal) {
   };
 }
 
+type SelectedNative = Awaited<ReturnType<typeof selectedNative>>;
+async function invokeNative(
+  selected: SelectedNative,
+  action: BackendNativeAction,
+  signal: AbortSignal,
+): Promise<string> {
+  const result = await runLocalSupervisorCommand(
+    "/bin/sh",
+    [
+      "-c",
+      `${quote(selected.binary)} --backend-service ${action} ${quote(selected.configPath)}${action === "enable" ? " --confirm-startup" : ""}`,
+    ],
+    {
+      cwd: selected.home,
+      signal,
+      timeoutMs: NATIVE_TIMEOUT_MS[action],
+      maxBufferBytes: 64 * 1024,
+      env: { HOME: selected.home, PATH: "/usr/local/bin:/usr/bin:/bin", LANG: "C.UTF-8" },
+    },
+  );
+  return result.stdout;
+}
+
 /** Native CLI revalidates configuration/graph and owns finite preflight before boot policy changes. */
 export const runBackendNativeCli = Effect.fn("runBackendNativeCli")(function* (input: {
   readonly authorityId: string;
@@ -133,6 +157,17 @@ export const runBackendNativeCli = Effect.fn("runBackendNativeCli")(function* (i
       new BackendCliError({ message: "Explicit startup confirmation is required." }),
     );
   const selected = yield* backendCliOwned((signal) => selectedNative(fixed.authorityId, signal));
+  if (fixed.action === "start") {
+    // A running backend holds the state directory its preflight needs, so start is answered
+    // from read-only unit status instead of failing on the lock: an idempotent no-op.
+    const status = yield* backendCliOwned((signal) => invokeNative(selected, "status", signal));
+    if (backendUnitRunning(status, fixed.authorityId))
+      return Object.freeze({
+        authorityId: fixed.authorityId,
+        action: fixed.action,
+        output: `${status.trim()}\nThe backend is already running; nothing was started.\n`,
+      });
+  }
   // Starting, like enabling, requires verified setup completion; stop never depends on it.
   if (fixed.action === "enable" || fixed.action === "start") {
     const config = yield* configuration(selected.config.backend_home);
@@ -165,24 +200,10 @@ export const runBackendNativeCli = Effect.fn("runBackendNativeCli")(function* (i
       throw new Error("Configured service changed before execution.");
     await verifyManagedLocalSupervisor(selected.runtime);
     signal.throwIfAborted();
-    const result = await runLocalSupervisorCommand(
-      "/bin/sh",
-      [
-        "-c",
-        `${quote(selected.binary)} --backend-service ${fixed.action} ${quote(selected.configPath)}${fixed.action === "enable" ? " --confirm-startup" : ""}`,
-      ],
-      {
-        cwd: selected.home,
-        signal,
-        timeoutMs: NATIVE_TIMEOUT_MS[fixed.action],
-        maxBufferBytes: 64 * 1024,
-        env: { HOME: selected.home, PATH: "/usr/local/bin:/usr/bin:/bin", LANG: "C.UTF-8" },
-      },
-    );
     return Object.freeze({
       authorityId: fixed.authorityId,
       action: fixed.action,
-      output: result.stdout,
+      output: await invokeNative(selected, fixed.action, signal),
     });
   });
 });
