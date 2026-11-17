@@ -1,14 +1,21 @@
 import * as Schema from "effect/Schema";
 import * as Record from "effect/Record";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { backendScopedKey, createBackendScopedStorage } from "../lib/backendScopedStorage";
 
 interface LocalStorageKeyOptions {
   readonly legacyKeys?: ReadonlyArray<string>;
+  /** `"backend"` namespaces the key (and legacy keys) to the window's bound backend; the local
+   * window still uses the plain key. Omit for device-global preferences. */
+  readonly scope?: "backend";
 }
 
 interface LocalStorageOptions<T> extends LocalStorageKeyOptions {
   readonly migrateLegacyValue?: (value: T) => T;
 }
+
+/** Stable options object for backend-owned values (safe as a hook dependency). */
+export const BACKEND_SCOPED_STORAGE_OPTIONS = { scope: "backend" } as const;
 
 const isomorphicLocalStorage: Storage =
   typeof window !== "undefined"
@@ -26,6 +33,16 @@ const isomorphicLocalStorage: Storage =
           setItem: (_, value) => store.set(_, value),
         };
       })();
+const backendScopedIsomorphicStorage = createBackendScopedStorage(() => isomorphicLocalStorage);
+
+function storageFor(options: LocalStorageKeyOptions | undefined) {
+  return options?.scope === "backend" ? backendScopedIsomorphicStorage : isomorphicLocalStorage;
+}
+
+/** Key as it appears in `StorageEvent.key`; null while a bound window's identity is pending. */
+function physicalKey(key: string, options: LocalStorageKeyOptions | undefined): string | null {
+  return options?.scope === "backend" ? backendScopedKey(key) : key;
+}
 
 const decode = <T, E>(schema: Schema.Codec<T, E>, value: string) =>
   Schema.decodeSync(Schema.fromJsonString(schema))(value);
@@ -33,14 +50,18 @@ const decode = <T, E>(schema: Schema.Codec<T, E>, value: string) =>
 const encode = <T, E>(schema: Schema.Codec<T, E>, value: T) =>
   Schema.encodeSync(Schema.fromJsonString(schema))(value);
 
-function readRawLocalStorageItem(key: string, legacyKeys: ReadonlyArray<string>) {
-  const item = isomorphicLocalStorage.getItem(key);
+function readRawLocalStorageItem(
+  storage: Pick<Storage, "getItem">,
+  key: string,
+  legacyKeys: ReadonlyArray<string>,
+) {
+  const item = storage.getItem(key);
   if (item !== null) {
     return { key, item } as const;
   }
 
   for (const legacyKey of legacyKeys) {
-    const legacyItem = isomorphicLocalStorage.getItem(legacyKey);
+    const legacyItem = storage.getItem(legacyKey);
     if (legacyItem !== null) {
       return { key: legacyKey, item: legacyItem } as const;
     }
@@ -55,17 +76,15 @@ export const getLocalStorageItem = <T, E>(
   options?: LocalStorageOptions<T>,
 ): T | null => {
   const legacyKeys = options?.legacyKeys ?? [];
-  const resolved = readRawLocalStorageItem(key, legacyKeys);
+  const storage = storageFor(options);
+  const resolved = readRawLocalStorageItem(storage, key, legacyKeys);
   if (!resolved) return null;
 
   const decoded = decode(schema, resolved.item);
   if (resolved.key !== key) {
     const migrated = options?.migrateLegacyValue ? options.migrateLegacyValue(decoded) : decoded;
-    isomorphicLocalStorage.setItem(
-      key,
-      options?.migrateLegacyValue ? encode(schema, migrated) : resolved.item,
-    );
-    isomorphicLocalStorage.removeItem(resolved.key);
+    storage.setItem(key, options?.migrateLegacyValue ? encode(schema, migrated) : resolved.item);
+    storage.removeItem(resolved.key);
     return migrated;
   }
   return decoded;
@@ -78,16 +97,18 @@ export const setLocalStorageItem = <T, E>(
   options?: LocalStorageOptions<T>,
 ) => {
   const valueToSet = encode(schema, value);
-  isomorphicLocalStorage.setItem(key, valueToSet);
+  const storage = storageFor(options);
+  storage.setItem(key, valueToSet);
   for (const legacyKey of options?.legacyKeys ?? []) {
-    isomorphicLocalStorage.removeItem(legacyKey);
+    storage.removeItem(legacyKey);
   }
 };
 
 export const removeLocalStorageItem = (key: string, options?: LocalStorageKeyOptions) => {
-  isomorphicLocalStorage.removeItem(key);
+  const storage = storageFor(options);
+  storage.removeItem(key);
   for (const legacyKey of options?.legacyKeys ?? []) {
-    isomorphicLocalStorage.removeItem(legacyKey);
+    storage.removeItem(legacyKey);
   }
 };
 
@@ -174,7 +195,11 @@ export function useLocalStorage<T, E>(
     };
 
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === key || (event.key !== null && Boolean(legacyKeys?.includes(event.key)))) {
+      if (event.key === null) return;
+      const legacyMatch = legacyKeys?.some(
+        (legacyKey) => physicalKey(legacyKey, options) === event.key,
+      );
+      if (event.key === physicalKey(key, options) || legacyMatch) {
         syncFromStorage();
       }
     };

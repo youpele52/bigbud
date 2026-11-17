@@ -34,14 +34,18 @@ function hydrateProfileLaunches(value: unknown) {
 }
 
 import { resolveStorage } from "../../lib/storage";
+import { createBackendScopedStorage } from "../../lib/backendScopedStorage";
 import { skipUnchangedPersistWrites } from "../../lib/storage.persistGate";
 import type { TerminalLayoutMode } from "./terminal.store.layout";
 import type { TerminalStateStoreState } from "./terminal.store.types";
 
 const STORAGE_KEY = "bigbud:terminal-state:v1";
 
+/** Terminal state is per backend thread. In a bound window the legacy aliases resolve inside
+ * the backend namespace too, so the local window's keys are never read or migrated. */
 function createTerminalStateStorage() {
-  return resolveStorage(typeof window !== "undefined" ? window.localStorage : undefined, {
+  const base = typeof window !== "undefined" ? window.localStorage : undefined;
+  return resolveStorage(base ? createBackendScopedStorage(base) : undefined, {
     legacyKeysByName: { [STORAGE_KEY]: ["t3code:terminal-state:v1"] },
   });
 }

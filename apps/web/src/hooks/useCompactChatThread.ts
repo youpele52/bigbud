@@ -31,6 +31,7 @@ import { readOwnershipLedger } from "~/stores/ownership/ownershipLedger";
 import { findOwnershipReplacement } from "~/stores/ownership/ownershipLedger.replacements";
 import { useCompactChatDraftOwnership } from "./useCompactChatDraftOwnership";
 import { useCompactChatOwnershipRestoration } from "~/hooks/useCompactChatThread.restore";
+import { backendScopedLocalStorage } from "~/lib/backendScopedStorage";
 
 function getInitialSelection() {
   return getCompactChatModelPreference() ?? getNewestRecentlyUsedModel();
@@ -38,7 +39,9 @@ function getInitialSelection() {
 
 function readStoredCompactChatState() {
   try {
-    return parseCompactChatPersistedState(localStorage.getItem(COMPACT_THREAD_STORAGE_KEY));
+    return parseCompactChatPersistedState(
+      backendScopedLocalStorage.getItem(COMPACT_THREAD_STORAGE_KEY),
+    );
   } catch {
     return null;
   }
@@ -46,7 +49,7 @@ function readStoredCompactChatState() {
 
 function persistCompactChatState(threadId: ThreadId, materialized: boolean): void {
   try {
-    localStorage.setItem(
+    backendScopedLocalStorage.setItem(
       COMPACT_THREAD_STORAGE_KEY,
       serializeCompactChatPersistedState({ threadId, materialized }),
     );

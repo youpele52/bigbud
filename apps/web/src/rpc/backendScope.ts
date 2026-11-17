@@ -1,5 +1,6 @@
 import type { OrchestrationDeliveryLifecycle } from "@bigbud/contracts";
 import type { RemoteBackendRelayLease } from "@bigbud/contracts/server/remoteBackendRelay.ts";
+import { setBackendStorageIdentity } from "~/lib/backendScopedStorage";
 import { randomUUID } from "~/lib/utils";
 import { leaseHttpEndpoint } from "./backendScope.endpoint";
 import {
@@ -93,6 +94,9 @@ export async function bootstrapBackendScope(
     const reason = listed.availability === "available" ? "not-found" : "setup-required";
     return settle({ kind: "unavailable", profileId, reason });
   }
+  // Persisted stores key off the pinned identity (same as the scoped delivery cursor). This runs
+  // before the first render; the owner refuses any server that does not match this pin.
+  setBackendStorageIdentity(profile.identity);
 
   let http: BoundBackendHttpEndpoint | null = null;
   let handles: Awaited<ReturnType<typeof openRemoteBackendClientOwner>> | null = null;

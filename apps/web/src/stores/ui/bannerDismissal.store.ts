@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
+import { rehydrateOnBackendStorageReady } from "../../lib/backendScopedStorage";
 import { createSessionNoticeStorage } from "../../lib/sessionNoticeStorage";
 
 interface BannerDismissalState {
@@ -61,3 +62,4 @@ export function createBannerDismissalStore(storage: StateStorage) {
 }
 
 export const useBannerDismissalStore = createBannerDismissalStore(createSessionNoticeStorage());
+rehydrateOnBackendStorageReady(useBannerDismissalStore);

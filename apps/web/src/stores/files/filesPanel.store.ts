@@ -4,6 +4,10 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { createDebouncedStorage, resolveStorage } from "../../lib/storage";
 import {
+  createBackendScopedStorage,
+  rehydrateOnBackendStorageReady,
+} from "../../lib/backendScopedStorage";
+import {
   emptyFileHistory,
   FILE_HISTORY_WORKSPACE_LIMIT,
   moveFileHistory,
@@ -252,7 +256,7 @@ export const useFilesPanelStore = create<FilesPanelState>()(
     {
       name: FILE_HISTORY_STORAGE_KEY,
       version: 1,
-      storage: createJSONStorage(() => fileHistoryStorage),
+      storage: createJSONStorage(() => createBackendScopedStorage(fileHistoryStorage)),
       partialize: (state) => ({ histories: state.histories, historyKeys: state.historyKeys }),
       merge: (persistedState, currentState) => ({
         ...currentState,
@@ -261,3 +265,5 @@ export const useFilesPanelStore = create<FilesPanelState>()(
     },
   ),
 );
+
+rehydrateOnBackendStorageReady(useFilesPanelStore);

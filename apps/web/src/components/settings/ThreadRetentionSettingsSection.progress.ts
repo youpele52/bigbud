@@ -5,6 +5,7 @@ import type {
 } from "@bigbud/contracts/core/settings.threadRetention";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { backendScopedLocalStorage } from "../../lib/backendScopedStorage";
 import { ensureNativeApi } from "../../rpc/nativeApi";
 import { toastManager } from "../ui/toast";
 import {
@@ -30,7 +31,7 @@ export function retentionToastData(runId: string) {
 
 function storedRunId(): string | null {
   try {
-    return window.localStorage.getItem(STORAGE_KEY);
+    return backendScopedLocalStorage.getItem(STORAGE_KEY);
   } catch {
     return null;
   }
@@ -38,8 +39,8 @@ function storedRunId(): string | null {
 
 function storeRunId(runId: string | null): void {
   try {
-    if (runId) window.localStorage.setItem(STORAGE_KEY, runId);
-    else window.localStorage.removeItem(STORAGE_KEY);
+    if (runId) backendScopedLocalStorage.setItem(STORAGE_KEY, runId);
+    else backendScopedLocalStorage.removeItem(STORAGE_KEY);
   } catch {
     /* Browser storage may be unavailable. */
   }

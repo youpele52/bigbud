@@ -1,3 +1,5 @@
+import { backendScopedLocalStorage as storage } from "../../lib/backendScopedStorage";
+
 const STORAGE_PREFIX = "bigbud:remote-agent-admission-request:v1:";
 const memory = new Map<string, string>();
 
@@ -7,7 +9,7 @@ function storageKey(executionTargetId: string): string {
 
 function readStored(key: string): string | null {
   try {
-    return globalThis.window?.localStorage.getItem(key) ?? memory.get(key) ?? null;
+    return (globalThis.window ? storage.getItem(key) : null) ?? memory.get(key) ?? null;
   } catch {
     return memory.get(key) ?? null;
   }
@@ -17,8 +19,9 @@ function writeStored(key: string, value: string | null): void {
   if (value === null) memory.delete(key);
   else memory.set(key, value);
   try {
-    if (value === null) globalThis.window?.localStorage.removeItem(key);
-    else globalThis.window?.localStorage.setItem(key, value);
+    if (!globalThis.window) return;
+    if (value === null) storage.removeItem(key);
+    else storage.setItem(key, value);
   } catch {
     // Private browsing and quota failures retain the in-process identity.
   }

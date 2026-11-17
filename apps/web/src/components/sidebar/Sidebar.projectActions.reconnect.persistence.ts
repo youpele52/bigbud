@@ -1,4 +1,5 @@
 import type { ProjectId } from "@bigbud/contracts";
+import { backendScopedLocalStorage as storage } from "../../lib/backendScopedStorage";
 
 export interface PersistedReconnectRequest {
   readonly requestId: string;
@@ -11,7 +12,7 @@ const STORAGE_KEY = "bigbud:remote-reconnect-requests";
 
 function readRequests(): PersistedReconnectRequest[] {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]");
+    const value: unknown = JSON.parse(storage.getItem(STORAGE_KEY) ?? "[]");
     return Array.isArray(value) ? (value as PersistedReconnectRequest[]) : [];
   } catch {
     return [];
@@ -20,7 +21,7 @@ function readRequests(): PersistedReconnectRequest[] {
 
 function writeRequests(requests: PersistedReconnectRequest[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(requests));
+    storage.setItem(STORAGE_KEY, JSON.stringify(requests));
   } catch {
     // Reconciliation remains best-effort when storage is unavailable.
   }

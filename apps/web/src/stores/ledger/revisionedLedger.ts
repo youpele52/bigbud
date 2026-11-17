@@ -1,3 +1,9 @@
+import {
+  backendScopedKey,
+  backendScopedLocalStorage,
+  resolveBackendStoragePrefix,
+} from "../../lib/backendScopedStorage";
+
 export interface LedgerStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -20,8 +26,17 @@ export interface LockManagerLike {
 const localMutationTails = new Map<string, Promise<void>>();
 const sameWindowListeners = new Map<string, Set<(revision: number) => void>>();
 
+/** Ledgers hold backend thread/project state, so they live in the backend-scoped namespace.
+ * A bound window whose identity is still pending reports the ledger as unavailable. */
 export function resolveLedgerStorage(): LedgerStorage | null {
-  return typeof localStorage === "undefined" ? null : localStorage;
+  if (typeof localStorage === "undefined" || resolveBackendStoragePrefix() === null) return null;
+  return backendScopedLocalStorage;
+}
+
+/** Lock, channel and `StorageEvent` names follow the storage namespace so windows bound to
+ * different backends never coordinate (or wake each other) through one ledger name. */
+function scopedName(name: string): string {
+  return backendScopedKey(name) ?? name;
 }
 
 function newMutationId(): string {
@@ -56,7 +71,7 @@ function publishChange(channelName: string, revision: number): void {
   for (const listener of sameWindowListeners.get(channelName) ?? []) listener(revision);
   if (typeof BroadcastChannel === "undefined") return;
   try {
-    const channel = new BroadcastChannel(channelName);
+    const channel = new BroadcastChannel(scopedName(channelName));
     // BroadcastChannel.postMessage has no targetOrigin; oxlint models Window.postMessage.
     // eslint-disable-next-line unicorn/require-post-message-target-origin
     channel.postMessage({ revision });
@@ -108,8 +123,9 @@ export async function mutateRevisionedLedger<TLedger extends RevisionedLedger, T
     }
     throw new Error("Ledger unavailable: concurrent-write");
   };
-  if (lockManager) return lockManager.request(`bigbud:${input.key}:write`, operation);
-  return withLocalSerialization(input.key, operation);
+  const lockKey = scopedName(input.key);
+  if (lockManager) return lockManager.request(`bigbud:${lockKey}:write`, operation);
+  return withLocalSerialization(lockKey, operation);
 }
 
 export function subscribeToLedgerChanges(input: {
@@ -121,7 +137,8 @@ export function subscribeToLedgerChanges(input: {
   listeners.add(input.listener);
   sameWindowListeners.set(input.channelName, listeners);
   const onStorage = (event: StorageEvent) => {
-    if (event.key !== input.key || event.newValue === null) return;
+    if (event.key === null || event.key !== backendScopedKey(input.key) || event.newValue === null)
+      return;
     try {
       const revision = (JSON.parse(event.newValue) as { revision?: unknown }).revision;
       if (Number.isSafeInteger(revision)) input.listener(revision as number);
@@ -133,7 +150,7 @@ export function subscribeToLedgerChanges(input: {
   let channel: BroadcastChannel | null = null;
   if (typeof BroadcastChannel !== "undefined") {
     try {
-      channel = new BroadcastChannel(input.channelName);
+      channel = new BroadcastChannel(scopedName(input.channelName));
       channel.addEventListener("message", (event) => {
         const revision = (event.data as { revision?: unknown } | null)?.revision;
         if (Number.isSafeInteger(revision)) input.listener(revision as number);

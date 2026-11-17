@@ -39,6 +39,7 @@ import { type TerminalStateStoreState } from "./terminal.store.types";
 import { removeTerminalLayouts, resetClosedTerminalLayout } from "./terminal.store.layout";
 import { terminalWslSelectionPatch, removeOrphanedWslSelections } from "./terminal.store.wsl";
 import { terminalPersistenceOptions } from "./terminal.store.persistence";
+import { rehydrateOnBackendStorageReady } from "../../lib/backendScopedStorage";
 import { reconcileTerminalInventory } from "./terminal.store.inventory";
 import {
   createProfileTerminal,
@@ -396,3 +397,4 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
     };
   }, terminalPersistenceOptions),
 );
+rehydrateOnBackendStorageReady(useTerminalStateStore);

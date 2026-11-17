@@ -25,6 +25,7 @@ import {
   sanitizePersistedThreadLastVisitedAt,
 } from "./ui.store.persistence";
 import { type SyncProjectInput, type SyncThreadInput, type UiState } from "./ui.store.types";
+import { backendScopedKey, onBackendStorageReady } from "../../lib/backendScopedStorage";
 
 export {
   PERSISTED_STATE_KEY,
@@ -318,13 +319,16 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
 }));
 
 useUiStateStore.subscribe((state) => debouncedPersistState.maybeExecute(state));
+// A bound window learns its backend identity after store creation; re-read that backend's state.
+// The resulting update also replaces any pending debounced write captured before the identity.
+onBackendStorageReady(() => useUiStateStore.setState(readPersistedState()));
 
 if (typeof window !== "undefined") {
   window.addEventListener("beforeunload", () => {
     debouncedPersistState.flush();
   });
   window.addEventListener("storage", (event) => {
-    if (event.key !== PERSISTED_STATE_KEY || event.newValue === null) {
+    if (event.key !== backendScopedKey(PERSISTED_STATE_KEY) || event.newValue === null) {
       return;
     }
     try {

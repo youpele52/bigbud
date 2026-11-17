@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 import type { ServerProvider } from "@bigbud/contracts";
 
-import { getLocalStorageItem } from "~/hooks/useLocalStorage";
+import { BACKEND_SCOPED_STORAGE_OPTIONS, getLocalStorageItem } from "~/hooks/useLocalStorage";
 import {
   RecentModelUsage as RecentModelUsageSchema,
   type RecentModelUsage as RecentModelUsageValue,
@@ -15,7 +15,11 @@ export const CompactChatModelPreference = Schema.NullOr(RecentModelUsageSchema);
 export type CompactChatModelPreference = RecentModelUsageValue;
 
 export function getCompactChatModelPreference(): CompactChatModelPreference | null {
-  return getLocalStorageItem(COMPACT_CHAT_MODEL_PREFERENCE_STORAGE_KEY, CompactChatModelPreference);
+  return getLocalStorageItem(
+    COMPACT_CHAT_MODEL_PREFERENCE_STORAGE_KEY,
+    CompactChatModelPreference,
+    BACKEND_SCOPED_STORAGE_OPTIONS,
+  );
 }
 
 export function isCompactChatModelPreferenceAvailable(

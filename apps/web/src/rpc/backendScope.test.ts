@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { remoteBackendWindowGuidance } from "../components/remote-backend/remoteBackendWindow.logic";
 import { toAttachmentPreviewUrl } from "../lib/attachmentPreview";
+import {
+  __resetBackendScopedStorageForTests,
+  backendScopedKey,
+  backendStoragePrefix,
+} from "../lib/backendScopedStorage";
 import { bootstrapBackendScope } from "./backendScope";
 import {
   __resetBackendScopeForTests,
@@ -14,6 +19,7 @@ import {
   handshakeFetch,
   LEASE_CREDENTIAL,
   LEASE_ORIGIN,
+  profile,
   scopeDeps,
 } from "./backendScope.test.helpers";
 import { __resetNativeApiForTests, readNativeApi } from "./nativeApi";
@@ -28,6 +34,7 @@ const disposers: Array<() => void> = [];
 afterEach(async () => {
   for (const dispose of disposers.splice(0)) dispose();
   __resetBackendScopeForTests();
+  __resetBackendScopedStorageForTests();
   __resetNativeApiForTests();
   await new Promise((resolve) => setTimeout(resolve, 0));
 });
@@ -82,6 +89,8 @@ describe("backend scope binding", () => {
     const keys = harness.cursor.storage.session.setItem.mock.calls.map(([key]) => key);
     expect(keys.length).toBeGreaterThan(0);
     for (const key of keys) expect(key).toContain("backend-v1");
+    // Persisted stores share the cursor's pinned identity namespace (WP-3C).
+    expect(backendScopedKey("k")).toBe(`${backendStoragePrefix(profile.identity)}k`);
     expect(control.relay.openRemoteBackendRelay).toHaveBeenCalledWith({
       profileId: "vps-1",
       requestId: "12345678-1234-4123-8123-abcdefabcdef",
