@@ -58,6 +58,15 @@ export interface CreateWindowDeps {
   readonly getSafeExternalUrl: (url: unknown) => string | null;
   readonly emitUpdateState: () => void;
   readonly onWindowClosed: (window: BrowserWindow) => void;
+  /** Extra renderer query parameters, e.g. `backend` for a remote backend window. */
+  readonly searchParams?: Readonly<Record<string, string>> | undefined;
+}
+
+function withSearchParams(url: string, params: CreateWindowDeps["searchParams"]): string {
+  if (!params) return url;
+  const parsed = new URL(url);
+  for (const [key, value] of Object.entries(params)) parsed.searchParams.set(key, value);
+  return parsed.toString();
 }
 
 export function createWindow(deps: CreateWindowDeps): BrowserWindow {
@@ -214,10 +223,17 @@ export function createWindow(deps: CreateWindowDeps): BrowserWindow {
   });
 
   if (deps.isDevelopment) {
-    void window.loadURL(getDevelopmentWindowUrl(process.env.VITE_DEV_SERVER_URL as string));
+    void window.loadURL(
+      withSearchParams(
+        getDevelopmentWindowUrl(process.env.VITE_DEV_SERVER_URL as string),
+        deps.searchParams,
+      ),
+    );
     window.webContents.openDevTools({ mode: "detach" });
   } else {
-    void window.loadURL(`${deps.desktopScheme}://app/index.html`);
+    void window.loadURL(
+      withSearchParams(`${deps.desktopScheme}://app/index.html`, deps.searchParams),
+    );
   }
 
   window.on("closed", () => {

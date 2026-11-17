@@ -66,6 +66,10 @@ import {
   startComputerUseGuard,
 } from "./computer-use/computerUse.bootstrap";
 import { configureIpcAuthorization } from "./window/ipcAuthorization";
+import {
+  createRemoteBackendWindows,
+  registerRemoteBackendWindowIpc,
+} from "./window/remoteBackendWindow";
 
 interface BootstrapDesktopOptions {
   /** Legacy Cua runtime base (`cuaDriverBaseDir` in main config); used only for Cua. */
@@ -88,7 +92,7 @@ interface BootstrapDesktopOptions {
   readonly isDevelopment: boolean;
   readonly isPackaged: boolean;
   readonly logHeader: (message: string) => void;
-  readonly makeWindow: () => BrowserWindow;
+  readonly makeWindow: (searchParams?: Readonly<Record<string, string>>) => BrowserWindow;
   readonly prepareForAppQuit: (reason: string) => void;
   readonly registerFloatingAssistantIpc: () => void;
   readonly resolveIconPath: (ext: "ico" | "icns" | "png") => string | null;
@@ -251,13 +255,17 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   });
   registerTerminalRenderingIpc((sender) => {
     const role = windowRegistry.getRole(sender);
-    return role === "main" || role === "compact-chat";
+    return role === "main" || role === "compact-chat" || role === "remote-backend";
   });
   registerOwnershipRecoveryIpc(() => {
     const contents = getMainWindow()?.webContents;
     return contents && windowRegistry.isTrusted(contents) ? contents : undefined;
   }, makeMainOwnershipRecovery(getIsQuitting));
   registerFloatingAssistantIpc();
+  registerRemoteBackendWindowIpc({
+    channels,
+    windows: createRemoteBackendWindows({ makeWindow, registry: windowRegistry }),
+  });
   registerCommandLineToolIpc({
     channel: channels.installCommandLineTool,
     isPackaged,

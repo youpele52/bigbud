@@ -48,6 +48,8 @@ export const desktopIpcChannels = {
   getTerminalRenderingPolicy: "desktop:get-terminal-rendering-policy",
   openMainWindow: "desktop:open-main-window",
   openCompactChat: "desktop:open-compact-chat",
+  openRemoteBackendWindow: "desktop:open-remote-backend-window",
+  bindRemoteBackendAssets: "desktop:bind-remote-backend-assets",
   getPendingCompactScreenshot: "desktop:get-pending-compact-screenshot",
   acknowledgeCompactScreenshot: "desktop:acknowledge-compact-screenshot",
   compactScreenshotAvailable: "desktop:compact-screenshot-available",

@@ -102,10 +102,19 @@ contextBridge.exposeInMainWorld("desktopBridge", {
   onWindowZoomFactorChange: windowZoom.onWindowZoomFactorChange,
   getWindowRole: () => {
     const result = ipcRenderer.sendSync(GET_WINDOW_ROLE_CHANNEL);
-    return result === "main" || result === "mascot" || result === "compact-chat" ? result : null;
+    return result === "main" ||
+      result === "mascot" ||
+      result === "compact-chat" ||
+      result === "remote-backend"
+      ? result
+      : null;
   },
   openMainWindow: (threadId) => ipcRenderer.invoke(OPEN_MAIN_WINDOW_CHANNEL, threadId),
   openCompactChat: () => ipcRenderer.invoke(OPEN_COMPACT_CHAT_CHANNEL),
+  openRemoteBackendWindow: (profileId) =>
+    ipcRenderer.invoke(desktopIpcChannels.openRemoteBackendWindow, profileId),
+  bindRemoteBackendAssets: (binding) =>
+    ipcRenderer.invoke(desktopIpcChannels.bindRemoteBackendAssets, binding),
   compactChatScreenshot: {
     getPending: (threadId) =>
       ipcRenderer.invoke(desktopIpcChannels.getPendingCompactScreenshot, threadId),

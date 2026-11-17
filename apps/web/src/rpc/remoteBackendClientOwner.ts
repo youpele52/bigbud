@@ -99,6 +99,8 @@ export async function openRemoteBackendClientOwner(options: {
   }
   return {
     api: context.api,
+    /** The same owned client the API wraps; bound windows route direct RPC callers here. */
+    rpcClient,
     identity: pin,
     get handshake() {
       return handshake;

@@ -24,10 +24,14 @@ import { createDetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import { createDatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
 import { createMetadataWarningRpcMethods } from "./wsRpcClient.metadataWarnings";
 import { type StreamSubscriptionOptions, type WsRpcClient } from "./wsRpcClient.types";
+import { resolveBoundWsRpcClient } from "./backendScope.state";
 
 let sharedWsRpcClient: WsRpcClient | null = null;
 
 export function getWsRpcClient(): WsRpcClient {
+  // A `?backend=` window gets its owned client (or a typed error), never the local singleton.
+  const bound = resolveBoundWsRpcClient();
+  if (bound) return bound;
   if (sharedWsRpcClient) {
     return sharedWsRpcClient;
   }

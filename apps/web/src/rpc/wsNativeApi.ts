@@ -22,6 +22,7 @@ import type { NativeDeliveryCursor } from "./orchestrationDeliveryCursor.scoped"
 import { createNativeDelivery } from "./wsNativeApi.delivery";
 import { __resetWsRpcClientForTests, getWsRpcClient } from "./wsRpcClient";
 import type { WsRpcClient } from "./wsRpcClient.types";
+import { isBoundBackendWindow } from "./backendScope.state";
 
 let instance: { api: NativeApi } | null = null;
 
@@ -36,6 +37,7 @@ export function __resetWsNativeApiForTests() {
 
 /** Existing local entrypoint retains its singleton and legacy cursor storage. */
 export function createWsNativeApi(): NativeApi {
+  if (isBoundBackendWindow()) throw new Error("A remote backend window has no local native API.");
   if (instance) return instance.api;
   const rpcClient = getWsRpcClient();
   const consumerId = resolveDeliveryConsumerId();

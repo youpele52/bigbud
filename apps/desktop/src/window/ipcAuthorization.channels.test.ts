@@ -41,6 +41,7 @@ import { registerSystemMonitorIpc } from "../system-monitor/ipc";
 import { COMPUTER_USE_SAFETY_ROLE } from "./DesktopWindowRegistry";
 import { registerIpcHandlers } from "./ipcHandlers";
 import { registerOwnershipRecoveryIpc } from "./ipcHandlers.ownershipRecovery";
+import { registerRemoteBackendWindowIpc } from "./remoteBackendWindow";
 import { authorizeFakeSenders, fakeIpcSender } from "./ipcAuthorization.testSupport";
 
 const sideEffect = vi.fn(() => {
@@ -77,6 +78,7 @@ function registerEverything(): void {
     openMainWindow: sideEffect,
     windowRegistry: { getRole: sideEffect, get: sideEffect, isTrusted: sideEffect } as never,
   });
+  registerRemoteBackendWindowIpc({ channels: desktopIpcChannels, windows: detector });
 }
 
 const safety = fakeIpcSender(1);
@@ -106,7 +108,7 @@ describe("every-handler IPC authorization", () => {
 
   it("registers the audited production channel set", () => {
     // Includes the window-material snapshot and floating-assistant helper channels.
-    expect(registered.handle.size).toBe(50);
+    expect(registered.handle.size).toBe(52);
     expect(registered.on.size).toBe(4);
     for (const credentialOrEffect of [
       "channel:GET_WS_URL_CHANNEL",
@@ -117,6 +119,8 @@ describe("every-handler IPC authorization", () => {
       "channel:ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL",
       "channel:UPDATE_INSTALL_CHANNEL",
       "desktop:quit-application",
+      desktopIpcChannels.openRemoteBackendWindow,
+      desktopIpcChannels.bindRemoteBackendAssets,
     ]) {
       expect(
         registered.handle.has(credentialOrEffect) || registered.on.has(credentialOrEffect),
@@ -142,6 +146,13 @@ describe("every-handler IPC authorization", () => {
   it("denies a main-window sender on the mascot-only Stop computer use channel", async () => {
     const listener = registered.handle.get(desktopIpcChannels.setMascotComputerUseActive)!;
     expect(await listener({ sender: legit, senderFrame: legit.mainFrame }, true)).toBeNull();
+    expect(sideEffect).not.toHaveBeenCalled();
+  });
+
+  it("denies a main-window sender on the bound-window-only asset credential channel", async () => {
+    const listener = registered.handle.get(desktopIpcChannels.bindRemoteBackendAssets)!;
+    const binding = { baseUrl: "http://127.0.0.1:4000", localCredential: "a".repeat(64) };
+    expect(await listener({ sender: legit, senderFrame: legit.mainFrame }, binding)).toBeNull();
     expect(sideEffect).not.toHaveBeenCalled();
   });
 
