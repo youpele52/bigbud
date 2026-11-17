@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 use super::*;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -155,11 +155,10 @@ fn verified_tree_is_bound_to_original_receipt_owner_and_actual_launch_option() {
     args = f.args.clone();
     args.extend(f.args.clone());
     assert!(f.reference.validate_argument(&args).is_err());
-    assert!(
-        f.reference
-            .validate_argument(&[format!("--assets-dir={}", f.root.display())])
-            .is_err()
-    );
+    assert!(f
+        .reference
+        .validate_argument(&[format!("--assets-dir={}", f.root.display())])
+        .is_err());
     let mut binding = f.binding.clone();
     binding.nonce = "another-original".into();
     assert!(f.reference.validate(&binding, &f.args).is_err());
@@ -169,7 +168,15 @@ fn detached_tree_watch_detects_modification_extra_members_and_original_root_repl
     let f = Fixture::new();
     let watch = f.reference.watch().unwrap();
     watch.check().unwrap();
-    std::fs::write(f.root.join("index.html"), b"other").unwrap();
+    let file_path = f.root.join("index.html");
+    std::fs::write(&file_path, b"other").unwrap();
+    // Some Linux filesystems expose coarse timestamps. Make the metadata
+    // mutation deterministic while keeping the replacement content the same size.
+    let modified = std::time::UNIX_EPOCH + std::time::Duration::from_secs(1);
+    std::fs::File::open(&file_path)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
     assert!(watch.check().is_err());
     let f = Fixture::new();
     let watch = f.reference.watch().unwrap();
