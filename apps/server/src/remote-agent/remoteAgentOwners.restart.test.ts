@@ -289,7 +289,15 @@ describe("application terminal owner recovery after server services restart", ()
               if (frame.type === "ptyAttachRequest") {
                 if (ptys.get(frame.value.ptyId) !== generation)
                   throw new Error("Unknown original PTY");
-                return { type: "ptyAttachResponse", value: { pid: 9000, replayGap: false } };
+                return {
+                  type: "ptyAttachResponse",
+                  value: {
+                    requestId: frame.value.requestId,
+                    ptyId: frame.value.ptyId,
+                    pid: 9000,
+                    replayGap: false,
+                  },
+                };
               }
               return { type: "ptyInputResponse", value: { accepted: true } };
             },

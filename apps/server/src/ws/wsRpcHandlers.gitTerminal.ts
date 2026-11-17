@@ -142,7 +142,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
     ) =>
       observeRpcEffect(
         WS_METHODS.serverRestartRemoteAgent,
-        restartRemoteAgentEffect(input, context.remoteAgentRestart, context.orchestrationEngine),
+        restartRemoteAgentEffect(input, context.remoteAgentRestart, context),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverGetRemoteAgentRestartStatus]: (
@@ -150,11 +150,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
     ) =>
       observeRpcEffect(
         WS_METHODS.serverGetRemoteAgentRestartStatus,
-        getRemoteAgentRestartStatusEffect(
-          input,
-          context.remoteAgentRestart,
-          context.orchestrationEngine,
-        ),
+        getRemoteAgentRestartStatusEffect(input, context.remoteAgentRestart, context),
         { "rpc.aggregate": "server" },
       ),
     [WS_METHODS.serverUnlockSshPassword]: (input: Parameters<typeof unlockSshPasswordEffect>[0]) =>

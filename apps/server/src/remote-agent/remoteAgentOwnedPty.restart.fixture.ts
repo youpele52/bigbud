@@ -128,7 +128,12 @@ export async function makeRemoteRestartFixture(options: { withholdControlAcks?: 
           if (frame.type === "ptyAttachRequest")
             return {
               type: "ptyAttachResponse",
-              value: { pid: pids.get(frame.value.ptyId), replayGap: false },
+              value: {
+                requestId: frame.value.requestId,
+                ptyId: frame.value.ptyId,
+                pid: pids.get(frame.value.ptyId),
+                replayGap: false,
+              },
             };
           if (
             options.withholdControlAcks &&
