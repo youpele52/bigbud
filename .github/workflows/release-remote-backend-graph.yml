@@ -1,0 +1,195 @@
+name: Build remote backend graph artifacts
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+      version:
+        required: true
+        type: string
+      release_signing:
+        description: "Sign with the release key secrets instead of an ephemeral CI fixture key"
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      BIGBUD_REMOTE_AGENT_SIGNING_KEY:
+        required: false
+      BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID:
+        required: false
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release-remote-backend-graph.yml"
+      - "apps/server/tsdown.config.ts"
+      - "apps/server/tsdown.clientRelay.config.ts"
+      - "scripts/build-remote-backend-graph*.ts"
+      - "scripts/remote-backend-graph/**"
+      - "scripts/lib/artifact-build/**"
+      - "scripts/lib/remote-backend-control/**"
+
+permissions:
+  contents: read
+
+jobs:
+  remote_backend_graph_build:
+    name: Build remote backend graph ${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x86_64
+            target: x86_64-unknown-linux-gnu
+            platform: linux/amd64
+          - label: Linux arm64
+            target: aarch64-unknown-linux-gnu
+            platform: linux/arm64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - id: meta
+        name: Resolve graph version
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          version="$RELEASE_VERSION"
+          if [[ -z "$version" ]]; then
+            base="$(node -p "require('./apps/server/package.json').version")"
+            version="${base}-ci.${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # The normal server build skips remote-client-relay/, which every graph must contain.
+      - name: Build server and client relay bundles
+        working-directory: apps/server
+        run: |
+          bunx tsdown
+          bunx tsdown -c tsdown.clientRelay.config.ts
+
+      - id: signing
+        name: Prepare signing key
+        shell: bash
+        env:
+          RELEASE_SIGNING: ${{ inputs.release_signing == true }}
+          # Fixture runs never receive the release key, even when the repository exposes it.
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY: ${{ inputs.release_signing == true && secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY || '' }}
+          BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID: ${{ inputs.release_signing == true && secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID || '' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key_dir="$RUNNER_TEMP/graph-signing"
+          mkdir -p "$key_dir"
+          key_file="$key_dir/key.pem"
+          if [[ "$RELEASE_SIGNING" == true ]]; then
+            if [[ -z "$BIGBUD_REMOTE_AGENT_SIGNING_KEY" || -z "$BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID" ]]; then
+              echo "::error::Release graph signing requires the remote agent signing key secrets"; exit 1
+            fi
+            printf '%s\n' "$BIGBUD_REMOTE_AGENT_SIGNING_KEY" > "$key_file"
+            key_id="$BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID"
+          else
+            # Non-release runs sign with a throwaway key that exists only in this job.
+            openssl genpkey -algorithm ed25519 -out "$key_file"
+            openssl pkey -in "$key_file" -pubout -out "$key_dir/fixture-public-key.pem"
+            key_id="ci-fixture-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          fi
+          chmod 600 "$key_file"
+          echo "key_file=$key_file" >> "$GITHUB_OUTPUT"
+          echo "key_id=$key_id" >> "$GITHUB_OUTPUT"
+
+      - name: Build remote backend graph
+        shell: bash
+        env:
+          GRAPH_VERSION: ${{ steps.meta.outputs.version }}
+          GRAPH_KEY_FILE: ${{ steps.signing.outputs.key_file }}
+          GRAPH_KEY_ID: ${{ steps.signing.outputs.key_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/remote-backend-graph"
+          bun run remote-backend-graph --target "${{ matrix.target }}" --dist apps/server/dist \
+            --output "$RUNNER_TEMP/remote-backend-graph/out" --key-file "$GRAPH_KEY_FILE" \
+            --key-id "$GRAPH_KEY_ID" --version "$GRAPH_VERSION"
+          dirty="$(git status --porcelain)"
+          if [[ -n "$dirty" ]]; then
+            printf '%s\n' "$dirty"
+            if [[ "${{ inputs.release_signing == true }}" == true ]]; then
+              echo "::error::Release graph provenance would record a dirty source tree"; exit 1
+            fi
+            echo "::warning::Graph provenance records a dirty source tree"
+          fi
+
+      - name: Remove signing key
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/graph-signing/key.pem"
+
+      - name: Set up QEMU for arm64 execution checks
+        if: startsWith(matrix.target, 'aarch64-')
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Smoke test graph runtime offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          graph="$RUNNER_TEMP/remote-backend-graph/out/graph"
+          docker run --rm --network none --read-only --tmpfs /tmp \
+            --platform "${{ matrix.platform }}" -v "$graph:/opt/graph:ro" debian:bookworm-slim \
+            /opt/graph/runtime/node /opt/graph/server/bin.mjs --help > graph-help.txt 2>&1 \
+            || { cat graph-help.txt; exit 1; }
+          grep -q '^USAGE' graph-help.txt || { cat graph-help.txt; exit 1; }
+
+      - name: Stage remote backend graph assets
+        shell: bash
+        env:
+          GRAPH_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/remote-backend-graph/out"
+          prefix="bigbud-backend-graph-${GRAPH_VERSION}-${{ matrix.target }}"
+          mkdir -p release-publish
+          # Per-target names let the release merge both targets into one directory.
+          cp "$out/${prefix}.tar.gz" "release-publish/${prefix}.tar.gz"
+          cp "$out/manifest.json" "release-publish/${prefix}.manifest.json"
+          cp "$out/provenance.json" "release-publish/${prefix}.provenance.json"
+          fixture_key="$RUNNER_TEMP/graph-signing/fixture-public-key.pem"
+          if [[ -f "$fixture_key" ]]; then
+            cp "$fixture_key" "release-publish/${prefix}.fixture-public-key.pem"
+          fi
+          chmod 644 release-publish/*
+          (cd release-publish && sha256sum "${prefix}.tar.gz" > "${prefix}.tar.gz.sha256")
+          node -e '
+            const [provenance, archive] = process.argv.slice(1);
+            const recorded = require(provenance).archive.sha256;
+            const actual = require("fs").readFileSync(archive, "utf8").split(" ")[0];
+            if (recorded !== actual) throw new Error("Archive digest differs from provenance");
+          ' "$PWD/release-publish/${prefix}.provenance.json" "release-publish/${prefix}.tar.gz.sha256"
+
+      - name: Upload remote backend graph artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-backend-graph-${{ matrix.target }}
+          path: release-publish/*
+          if-no-files-found: error

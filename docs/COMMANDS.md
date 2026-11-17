@@ -142,6 +142,19 @@ The output directory must not exist. After a dependency or bundle change, add
 `--list-loader-sites` (no key needed) to print each unreviewed loader site with its member and
 hash, plus any other refusal, and leave an unsigned graph for inspection.
 
+CI runs the same steps for `x86_64-unknown-linux-gnu` and `aarch64-unknown-linux-gnu` in
+`.github/workflows/release-remote-backend-graph.yml`, then smoke-tests `server/bin.mjs --help`
+offline in a Debian container (arm64 through QEMU). Tagged releases call it from `release.yml`,
+sign with the `BIGBUD_REMOTE_AGENT_SIGNING_KEY` secrets and publish
+`bigbud-backend-graph-<version>-<target>.tar.gz` (plus `.tar.gz.sha256`, `.manifest.json` and
+`.provenance.json`). Manual dispatches and pull requests that touch the producer sign with a
+throwaway key generated in the job (key id `ci-fixture-<run>-<attempt>`) and upload its public
+key beside the artifacts; those graphs are for inspection only.
+
+```sh
+gh workflow run release-remote-backend-graph.yml --ref dev
+```
+
 ## Root: checks, tests, and cleanup
 
 | Bun                              | just                          |
@@ -411,6 +424,35 @@ The command uses the account's authenticated backend client socket and displays 
 scope, expiry and one-time pairing link. The backend requires current mobile consent and a ready
 gateway with that exact configured origin. Installation and mobile enablement remain separate.
 The installation-control socket cannot issue pairing links.
+
+## Remote account mobile consent and activation
+
+Run these on the Linux remote account, against its running backend. They use the same
+authenticated backend client socket as `mobile pair`. Every command except `inputs set` accepts
+`--json`; a refusal or an unreachable socket exits with status 1.
+
+```sh
+# One-time, owner-private proof inputs (read by the backend at its next start).
+bigbud mobile inputs set \
+  --authority 00000000000000000000000000000000 \
+  --trusted-keys /home/account/install/trusted-public-keys.json \
+  --gateway /home/account/install/mobile-gateway.json \
+  --gateway-file /home/account/install/bigbud-mobile-gateway \
+  --assets /home/account/install/mobile-assets.json \
+  --assets-file /home/account/install/mobile-assets.tar.gz
+
+bigbud mobile status --authority 00000000000000000000000000000000
+bigbud mobile enable --authority 00000000000000000000000000000000 --confirm-consent
+bigbud mobile activate --authority 00000000000000000000000000000000 \
+  --origin https://host.your-tailnet.ts.net --port 49322
+bigbud mobile stop --authority 00000000000000000000000000000000
+```
+
+`enable` is the only way to grant durable mobile consent and refuses to run without
+`--confirm-consent`; turning mobile access off in settings revokes it. `activate` reports an
+acknowledgement, not readiness; check `status`. `inputs set` never replaces an existing inputs
+file. See [docs/REMOTE_MOBILE_INPUTS.md](REMOTE_MOBILE_INPUTS.md) for the file format and the consent
+revision rules. These are installed CLI subcommands, with no separate Bun script or just recipe.
 
 ## Focused optional-component CAS proof
 

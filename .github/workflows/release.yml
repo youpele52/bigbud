@@ -148,6 +148,17 @@ jobs:
       ref: ${{ needs.preflight.outputs.ref }}
       version: ${{ needs.preflight.outputs.version }}
 
+  remote_backend_graph_build:
+    needs: preflight
+    uses: ./.github/workflows/release-remote-backend-graph.yml
+    with:
+      ref: ${{ needs.preflight.outputs.ref }}
+      version: ${{ needs.preflight.outputs.version }}
+      release_signing: true
+    secrets:
+      BIGBUD_REMOTE_AGENT_SIGNING_KEY: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY }}
+      BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID }}
+
   workspace_agent_windows_arm64:
     name: Build Windows ARM64 server workspace agent
     needs: preflight
@@ -193,7 +204,12 @@ jobs:
 
   release:
     name: Publish GitHub Release
-    needs: [preflight, build, remote_agent_build, workspace_agent_windows_arm64]
+    needs:
+      - preflight
+      - build
+      - remote_agent_build
+      - remote_backend_graph_build
+      - workspace_agent_windows_arm64
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -220,6 +236,12 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: remote-agent-*
+          merge-multiple: true
+          path: release-assets
+      - name: Download all remote backend graph artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: remote-backend-graph-*
           merge-multiple: true
           path: release-assets
 
@@ -278,6 +300,22 @@ jobs:
             "$(asset x86_64-unknown-linux-musl)" "$(asset aarch64-unknown-linux-musl)" \
             "$(asset x86_64-unknown-linux-gnu)" "$(asset aarch64-unknown-linux-gnu)"
 
+      - name: Verify remote backend graph assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='${{ needs.preflight.outputs.version }}'
+          for target in x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu; do
+            prefix="bigbud-backend-graph-${version}-${target}"
+            for suffix in .manifest.json .provenance.json; do
+              test -f "release-assets/${prefix}${suffix}"
+            done
+            (cd release-assets && sha256sum --check "${prefix}.tar.gz.sha256")
+          done
+          if compgen -G 'release-assets/bigbud-backend-graph-*.fixture-public-key.pem' > /dev/null; then
+            echo "::error::Release graph assets were signed with a CI fixture key"; exit 1
+          fi
+
       - name: Verify assembled release payload
         run: >-
           node scripts/verify-desktop-release-assets.ts release-assets
@@ -308,6 +346,7 @@ jobs:
             release-assets/remote-agent-manifest.json
             release-assets/remote-agent-install-source.v2.json
             release-assets/remote-agent-manifest.v2.json
+            release-assets/bigbud-backend-graph-*
             release-assets/server-workspace-agent-*
             release-assets/server-organization-supervisor-*
           fail_on_unmatched_files: true
