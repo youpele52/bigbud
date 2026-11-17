@@ -52,7 +52,7 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
       ? Layer.succeed(RemoteWorkspaceRuntime, options.layers.remoteWorkspaceRuntime)
       : Layer.empty;
 
-    const appLayer = HttpRouter.serve(makeRoutesLayer, {
+    const appLayer = HttpRouter.serve(options?.routes ?? makeRoutesLayer, {
       disableListenLog: true,
       disableLogger: true,
     }).pipe(

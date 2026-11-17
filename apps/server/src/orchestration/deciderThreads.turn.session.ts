@@ -3,6 +3,7 @@ import type {
   OrchestrationEvent,
   OrchestrationReadModel,
   OrchestrationSession,
+  OrchestrationThreadActivity,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
 
@@ -48,6 +49,21 @@ function hasSameCanonicalSessionState(
     (current.reason ?? null) === (next.reason ?? null) &&
     current.lastError === next.lastError
   );
+}
+
+/** True only on positive evidence: the latest lifecycle activity for the request resolved it. */
+function isApprovalRequestResolved(
+  activities: ReadonlyArray<OrchestrationThreadActivity>,
+  requestId: string,
+): boolean {
+  const latest = activities.findLast(
+    (activity) =>
+      (activity.kind === "approval.requested" || activity.kind === "approval.resolved") &&
+      typeof activity.payload === "object" &&
+      activity.payload !== null &&
+      (activity.payload as { readonly requestId?: unknown }).requestId === requestId,
+  );
+  return latest?.kind === "approval.resolved";
 }
 
 export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand")(
@@ -181,6 +197,13 @@ export const decideThreadSessionCommand = Effect.fn("decideThreadSessionCommand"
         };
       case "thread.approval.respond":
         yield* requireThreadReadyForMutation({ thread, command });
+        // Another client may already have answered; a second answer must not reach the provider.
+        if (isApprovalRequestResolved(thread.activities, command.requestId)) {
+          return yield* new OrchestrationCommandInvariantError({
+            commandType: command.type,
+            detail: `Approval request ${command.requestId} was already resolved.`,
+          });
+        }
         return {
           ...withEventBase({
             aggregateKind: "thread",
