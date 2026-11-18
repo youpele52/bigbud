@@ -25,7 +25,9 @@ it.layer(SqlitePersistenceMemory)("legacy metadata evidence query plan", (it) =>
         identities.every((row) => row.detail.includes("<expr>=?")),
         JSON.stringify(plan),
       );
-      assert.strictEqual(
+      // SQLite versions differ in how many times the planner visits `a` (one search on 3.51,
+      // two on Node 24's bundled SQLite); every visit must use the thread index, never a scan.
+      assert.isAtLeast(
         plan.filter((row) =>
           /SEARCH a USING INDEX idx_projection_thread_activities_thread/.test(row.detail),
         ).length,
