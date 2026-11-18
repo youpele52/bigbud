@@ -55,9 +55,10 @@ Nothing has been pushed. `dev` is 52 commits ahead of `origin/dev`.
 7. **Real VPS and x86_64:** all live runs were arm64 VMs; repeat the M1–M6 checklists on a real
    x86_64 and arm64 VPS, and the M5 measurement matrix (1 GB and 4 GB).
 8. **D4 musl-only cutover timing** ([prep](2026-11-17-d4-musl-only-cutover-prep.md)).
-9. **Decision O-1:** terminal reattach after a laptop crash fails on machines without
-   `/etc/machine-id` (common in containers). Recommendation: a persisted random installation id
-   as the fallback identity.
+9. **O-1 resolved:** the user chose a persisted random installation id as the fallback identity
+   on machines without `/etc/machine-id`; implemented in `79a55b6136`
+   ([report](2026-11-18-o1-installation-identity-fallback.md)). Reattach after a container
+   restart is still refused by design.
 
 ## Known open items (not blocking the above)
 
