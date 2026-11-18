@@ -1,5 +1,9 @@
 import * as Cause from "effect/Cause";
 import { hasLocalSupervisorServiceControls } from "../remote-backend/localSupervisorService.paths.ts";
+import {
+  describePrivatePermission,
+  PrivatePermissionError,
+} from "../remote-backend/privatePermission.ts";
 
 /** The CLI action names users type; `disable-boot` dispatches the native `disable`. */
 export type BackendCliAction = "setup" | "status" | "enable" | "disable-boot" | "start" | "stop";
@@ -51,7 +55,8 @@ const IN_USE: Partial<Record<BackendCliAction, string>> = {
 };
 
 /** A specific, non-secret reason for a failed backend command, or undefined for the generic text.
- * Our own error messages stay private: they can carry account paths. */
+ * Our own error messages stay private: they can carry account paths. The one exception is a
+ * permission refusal, which names the user's own path so they can fix its mode. */
 export function describeBackendFailure(
   cause: Cause.Cause<unknown>,
   action: BackendCliAction,
@@ -59,6 +64,9 @@ export function describeBackendFailure(
   const chain = causes(Cause.squash(cause));
   if (chain.some(stateDirectoryInUse))
     return IN_USE[action] ?? "The backend is running and holds its state directory.";
+  // A path that is not private enough: name it, the required mode and the chmod that fixes it.
+  const permission = chain.find((error) => error instanceof PrivatePermissionError);
+  if (permission) return describePrivatePermission(permission.detail);
   for (const error of chain) {
     const message = error instanceof Error ? error.message : undefined;
     if (!message || !NATIVE_FAILURE.test(message)) continue;

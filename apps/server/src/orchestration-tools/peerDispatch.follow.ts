@@ -193,6 +193,28 @@ const settleRefused = Effect.fn("peerDispatch.settleRefused")(function* (
   });
 });
 
+/**
+ * A definite refusal before the worker accepted the dispatch. A delegate tool call still waiting
+ * in-call reports it itself; otherwise the tool already returned `pending`/`sent-uncertain` and
+ * the thread is waiting, so one failure is delivered (same `peer-result:<dispatchId>` identity,
+ * idempotent on replay) before the row settles.
+ */
+const settleRejected = Effect.fn("peerDispatch.settleRejected")(function* (
+  deps: PeerCoordinatorDeps,
+  dispatch: PeerDispatch,
+  pairing: PeerPairing,
+  error: PeerError,
+) {
+  if (!deps.toolWaits.handOff(dispatch.dispatchId, error)) {
+    const result = boundPeerSummary(
+      "failed",
+      `The worker refused this task before accepting it (${error.code}): ${error.message}`,
+    );
+    yield* deliverResult(deps, dispatch, pairing, result);
+  }
+  return yield* move(deps, dispatch, "rejected", { error });
+});
+
 /** Applies a reply that names the child (delegate, status, follow or cancel). */
 const observe = Effect.fn("peerDispatch.observe")(function* (
   deps: PeerCoordinatorDeps,
@@ -236,7 +258,7 @@ const uncertainOutcome = (
     }
     case "refused":
       return isFinalDelegateRefusal(outcome.error.code)
-        ? move(deps, dispatch, "rejected", { error: outcome.error })
+        ? settleRejected(deps, dispatch, pairing, outcome.error)
         : Effect.succeed("wait");
   }
 };
@@ -254,9 +276,12 @@ export const peerFollowStep = Effect.fn("peerDispatch.followStep")(function* (
       // Nothing has reached the worker yet; without the stored request it never will.
       const request = yield* deps.requests.get(dispatch.dispatchId);
       if (!request)
-        return yield* move(deps, dispatch, "rejected", {
-          error: peerError("dispatch-unknown", "The delegate request was not recorded."),
-        });
+        return yield* settleRejected(
+          deps,
+          dispatch,
+          pairing,
+          peerError("dispatch-unknown", "The delegate request was not recorded."),
+        );
       const sent = yield* deps.dispatches.transition(dispatch.dispatchId, "send-started", {
         updatedAt: deps.now(),
       });

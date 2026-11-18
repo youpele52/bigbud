@@ -3,6 +3,7 @@ import { constants, type BigIntStats } from "node:fs";
 import * as fs from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
 import type { BackendGraphManifest, BackendGraphFile } from "./backendGraph.manifest.ts";
+import { assertPrivateOwnership, type PrivatePathKind } from "./privatePermission.ts";
 
 export interface BackendGraphRoot {
   readonly dev: string;
@@ -21,13 +22,14 @@ function same(a: BigIntStats, b: BigIntStats) {
     a.ctimeNs === b.ctimeNs
   );
 }
-function owned(stat: BigIntStats, mode: number) {
-  if (
-    !process.getuid ||
-    stat.uid !== BigInt(process.getuid()) ||
-    (stat.mode & 0o7777n) !== BigInt(mode)
-  )
-    throw new Error("Executable graph must be privately owned with exact safe permissions.");
+function owned(stat: BigIntStats, mode: number, path: string, kind: PrivatePathKind) {
+  assertPrivateOwnership(stat, {
+    kind,
+    path,
+    allowedModes: [mode],
+    message: "Executable graph must be privately owned with exact safe permissions.",
+    role: kind === "file" ? "executable graph file" : "executable graph directory (--graph-root)",
+  });
 }
 async function verifyFile(
   path: string,
@@ -41,7 +43,7 @@ async function verifyFile(
   );
   try {
     const before = await file.stat({ bigint: true });
-    owned(before, member.executable ? 0o700 : 0o600);
+    owned(before, member.executable ? 0o700 : 0o600, path, "file");
     if (!before.isFile() || before.nlink !== 1n || before.size !== BigInt(member.sizeBytes))
       throw new Error("Executable graph member type, link count or size does not match.");
     const hash = createHash("sha256");
@@ -99,8 +101,10 @@ export async function verifyBackendGraphDirectory(
     signal?.throwIfAborted();
     const path = relative ? join(root, relative) : root;
     const before = await fs.lstat(path, { bigint: true });
-    owned(before, 0o700);
-    if (!before.isDirectory() || (await fs.realpath(path)) !== path)
+    if (!before.isDirectory())
+      throw new Error("Executable graph directory must not contain links.");
+    owned(before, 0o700, path, "directory");
+    if ((await fs.realpath(path)) !== path)
       throw new Error("Executable graph directory must not contain links.");
     directories.set(path, before);
     // Stream entries so undeclared directory contents cannot force an unbounded allocation.

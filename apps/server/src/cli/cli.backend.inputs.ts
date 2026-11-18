@@ -6,6 +6,7 @@ import { ownershipStateDir } from "@bigbud/shared/backendOwnership.paths";
 import { hasRemoteAgentPathControls } from "../remote-agent/remoteAgentRuntime.ts";
 import { within } from "../remote-backend/localSupervisorService.setup.validation.ts";
 import { readLocalSupervisorServiceFile } from "../remote-backend/localSupervisorService.files.ts";
+import { labelPrivatePermission } from "../remote-backend/privatePermission.ts";
 import { verifyBackendGraph } from "../remote-backend/backendGraph.ts";
 import { decodeBackendGraphManifest } from "../remote-backend/backendGraph.manifest.ts";
 import { parseRemoteAgentInstallSource } from "../remote-agent/remoteAgentInstallManager.ts";
@@ -35,6 +36,10 @@ async function assertCanonicalUncreatedHome(path: string) {
   }
   throw new Error("Backend home exceeds the bounded path policy.");
 }
+
+/** Reads one owner-private setup input; a mode refusal names the flag it came from. */
+const readSetupInput = (role: string, path: string, maxBytes: number) =>
+  labelPrivatePermission(role, () => readLocalSupervisorServiceFile(path, maxBytes));
 
 /** Explicit local owner trust, never keys embedded in the downloaded manifest. */
 export function decodeBackendSetupTrust(value: unknown): Readonly<Record<string, string>> {
@@ -93,11 +98,13 @@ export async function prepareBackendSetupCliInput(
   if (paths.some((p) => within(graphRoot, p)))
     throw new Error("Signed metadata and pinned trust must be outside the executable graph.");
   const keys = decodeBackendSetupTrust(
-    JSON.parse(await readLocalSupervisorServiceFile(paths[2]!, 64 * 1024)),
+    JSON.parse(await readSetupInput("trusted-keys file (--trusted-keys)", paths[2]!, 64 * 1024)),
   );
   signal.throwIfAborted();
   const manifest = decodeBackendGraphManifest(
-    JSON.parse(await readLocalSupervisorServiceFile(paths[0]!, 16 * 1024 * 1024)),
+    JSON.parse(
+      await readSetupInput("graph manifest (--graph-manifest)", paths[0]!, 16 * 1024 * 1024),
+    ),
   );
   const target =
     process.arch === "arm64"
@@ -115,7 +122,9 @@ export async function prepareBackendSetupCliInput(
     signal,
   });
   const rustSource = parseRemoteAgentInstallSource({
-    manifest: JSON.parse(await readLocalSupervisorServiceFile(paths[1]!, 1024 * 1024)),
+    manifest: JSON.parse(
+      await readSetupInput("Rust manifest (--rust-manifest)", paths[1]!, 1024 * 1024),
+    ),
     trustStore: keys,
   });
   for (const artifact of rustSource.manifest.artifacts)

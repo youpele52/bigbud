@@ -4,20 +4,30 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 
 import { RemoteBackendAuthorityError } from "./authority.record.ts";
+import { assertPrivateOwnership, type PrivatePathKind } from "./privatePermission.ts";
 
 const MAX_IDENTITY_BYTES = 16 * 1024;
 export const AUTHORITY_FILENAME = "remote-authority.json";
 
+const UNSAFE_STATE =
+  "Remote backend state must use owned private directories and an unlinked private identity file.";
+
 function unsafeState(): never {
-  throw new RemoteBackendAuthorityError(
-    "unsafe-state",
-    "Remote backend state must use owned private directories and an unlinked private identity file.",
-  );
+  throw new RemoteBackendAuthorityError("unsafe-state", UNSAFE_STATE);
 }
 
-function assertOwnedMode(stat: BigIntStats, mode: bigint) {
-  if (!process.getuid || stat.uid !== BigInt(process.getuid()) || (stat.mode & 0o7777n) !== mode) {
-    unsafeState();
+/** The refusal keeps its message; its cause names the path and the mode to fix. */
+function assertOwnedMode(stat: BigIntStats, mode: number, path: string, kind: PrivatePathKind) {
+  try {
+    assertPrivateOwnership(stat, {
+      kind,
+      path,
+      allowedModes: [mode],
+      message: UNSAFE_STATE,
+      role: kind === "directory" ? "backend state directory" : "backend identity file",
+    });
+  } catch (cause) {
+    throw new RemoteBackendAuthorityError("unsafe-state", UNSAFE_STATE, { cause });
   }
 }
 
@@ -26,7 +36,7 @@ export async function ensurePrivateRemoteStateRoot(stateDir: string) {
   await fs.mkdir(stateDir, { recursive: true, mode: 0o700 });
   const stat = await fs.lstat(stateDir, { bigint: true });
   if (!stat.isDirectory() || stat.isSymbolicLink()) unsafeState();
-  assertOwnedMode(stat, 0o700n);
+  assertOwnedMode(stat, 0o700, stateDir, "directory");
   return stat;
 }
 
@@ -52,7 +62,7 @@ export async function readPrivateAuthority(stateDir: string): Promise<string | u
       );
     }
     if (!before.isFile() || before.size > BigInt(MAX_IDENTITY_BYTES)) unsafeState();
-    assertOwnedMode(before, 0o600n);
+    assertOwnedMode(before, 0o600, path, "file");
     const bytes = Buffer.alloc(MAX_IDENTITY_BYTES + 1);
     const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
     const after = await handle.stat({ bigint: true });
@@ -65,7 +75,7 @@ export async function readPrivateAuthority(stateDir: string): Promise<string | u
       after.nlink !== 1n
     )
       unsafeState();
-    assertOwnedMode(after, 0o600n);
+    assertOwnedMode(after, 0o600, path, "file");
     return bytes.subarray(0, bytesRead).toString("utf8");
   } finally {
     await handle.close();

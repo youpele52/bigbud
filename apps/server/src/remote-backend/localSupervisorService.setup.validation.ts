@@ -9,6 +9,7 @@ import { parseRemoteAgentInstallSource } from "../remote-agent/remoteAgentInstal
 import type { LocalSupervisorPreflightContext } from "./localSupervisorService.preflight.ts";
 import { projectVerifiedBackendGraph } from "./backendGraph.ts";
 import { assertLocalSupervisorServiceDirectory } from "./localSupervisorService.files.ts";
+import { labelPrivatePermission } from "./privatePermission.ts";
 import {
   SERVICE_SETUP_REQUEST_ID,
   type LocalSupervisorServiceSetupInput,
@@ -71,8 +72,12 @@ export async function validateServiceSetup(
     ownershipStateDir(backendHome, false) !== context.owner.stateDir
   )
     throw new Error("Backend home does not select the actual locked state directory.");
-  await assertLocalSupervisorServiceDirectory(home, [0o700, 0o750, 0o755]);
-  await assertLocalSupervisorServiceDirectory(backendHome);
+  await labelPrivatePermission("account home directory", () =>
+    assertLocalSupervisorServiceDirectory(home, [0o700, 0o750, 0o755]),
+  );
+  await labelPrivatePermission("backend home directory (--backend-home)", () =>
+    assertLocalSupervisorServiceDirectory(backendHome),
+  );
   const graph = await projectVerifiedBackendGraph(input.graph, signal);
   const architecture =
     account.architecture === "arm64" ? "aarch64" : account.architecture === "x64" ? "x86_64" : null;

@@ -12,6 +12,7 @@ import { Effect, Layer, Option } from "effect";
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 import { loadPeerChildThread } from "./peerWorker.read.ts";
 import { makeEnginePeerDeliver } from "../orchestration-tools/peerDispatch.delivery.ts";
+import { makePeerToolWaits } from "../orchestration-tools/peerDispatch.toolWait.ts";
 import {
   defaultPeerRetryDelayMs,
   type PeerCoordinatorDeps,
@@ -65,6 +66,7 @@ export const PeerCoordinatorLive = Layer.effectDiscard(
           Effect.orElseSucceed(() => null),
         ),
       setupErrors: new Map(),
+      toolWaits: makePeerToolWaits(),
       now: () => new Date().toISOString(),
       newDispatchId: randomUUID,
       retryDelayMs: defaultPeerRetryDelayMs,

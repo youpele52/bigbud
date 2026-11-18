@@ -5,7 +5,7 @@
  *
  * @module peerDispatch.service
  */
-import type { PeerDispatch } from "@bigbud/contracts/server/remotePeer.ts";
+import type { PeerDispatch, PeerError } from "@bigbud/contracts/server/remotePeer.ts";
 import { Duration, Effect, Fiber, ServiceMap } from "effect";
 
 import { isTerminalPeerDispatchState } from "../peer-orchestration/peerDispatch.transition.ts";
@@ -64,6 +64,12 @@ export function peerDispatchView(deps: PeerCoordinatorDeps, dispatch: PeerDispat
     ...(setupError && !isTerminalPeerDispatchState(dispatch.state) ? { setupError } : {}),
   } satisfies PeerToolResult;
 }
+
+/** A refusal handed to this tool call whose row has not settled yet still reads as failed. */
+const withHandedRefusal = (dispatch: PeerDispatch, refusal: PeerError | undefined) =>
+  refusal && (dispatch.state === "pending" || dispatch.state === "sent-uncertain")
+    ? { ...dispatch, state: "failed" as const, error: refusal }
+    : dispatch;
 
 export const makePeerDispatchService = Effect.fn("makePeerDispatchService")(function* (
   deps: PeerCoordinatorDeps,
@@ -155,8 +161,15 @@ export const makePeerDispatchService = Effect.fn("makePeerDispatchService")(func
           ...(prepared.unavailable ? { unavailable: true } : {}),
           error: prepared.error,
         };
-      yield* ensureFollower(prepared.dispatch.dispatchId);
-      const dispatch = (yield* settleView(prepared.dispatch.dispatchId)) ?? prepared.dispatch;
+      const dispatchId = prepared.dispatch.dispatchId;
+      // Registered before the follower can run, so a refusal inside the wait is ours to report.
+      deps.toolWaits.enter(dispatchId);
+      let refusal: PeerError | undefined;
+      yield* ensureFollower(dispatchId);
+      const waited = yield* settleView(dispatchId).pipe(
+        Effect.onExit(() => Effect.sync(() => (refusal = deps.toolWaits.leave(dispatchId)))),
+      );
+      const dispatch = withHandedRefusal(waited ?? prepared.dispatch, refusal);
       return {
         ...peerDispatchView(deps, dispatch),
         worker: prepared.pairing.label,

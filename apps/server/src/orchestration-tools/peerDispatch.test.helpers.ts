@@ -1,4 +1,8 @@
-import type { PeerDispatch, PeerResultSummary } from "@bigbud/contracts/server/remotePeer.ts";
+import type {
+  PeerDispatch,
+  PeerErrorCode,
+  PeerResultSummary,
+} from "@bigbud/contracts/server/remotePeer.ts";
 import type { PeerChildStatus } from "@bigbud/contracts/server/remotePeer.wire.ts";
 import type { PeerSetupErrorCode } from "@bigbud/contracts/server/remotePeer.pairing.ts";
 import { Effect, Layer } from "effect";
@@ -17,6 +21,7 @@ import { PeerPairingRepository } from "../persistence/Services/PeerPairings.ts";
 import { runMigrations } from "../persistence/Migrations.ts";
 import type { PeerCoordinatorDeps } from "./peerDispatch.deps.ts";
 import type { PeerResultDelivery } from "./peerDispatch.delivery.ts";
+import { makePeerToolWaits } from "./peerDispatch.toolWait.ts";
 import { classifyPeerReply, type PeerTransport } from "./peerDispatch.transport.ts";
 
 export const GRANT_ID = "00000001-0000-4000-8000-000000000001";
@@ -54,6 +59,8 @@ export class FakeWorker {
   partition = false;
   dropReplies: Partial<Record<string, number>> = {};
   setup: PeerSetupErrorCode | null = null;
+  /** A definite refusal of a delegate the worker never recorded (grant, permission). */
+  refuseDelegate: PeerErrorCode | null = null;
   /** Interrupting a running child cancels it (an idle, unstarted child stays running). */
   cancelInterrupts = true;
 
@@ -83,6 +90,8 @@ export class FakeWorker {
     ];
     let child = this.children.get(dispatchId);
     if (action === "delegate") {
+      if (!child && this.refuseDelegate)
+        return [403, { error: { code: this.refuseDelegate, message: "refused" } }];
       const replayed = child !== undefined;
       if (!child) {
         this.launches++;
@@ -163,6 +172,7 @@ export const makePeerTestDeps = Effect.fn("makePeerTestDeps")(function* (
     deliver: thread.deliver,
     callerRuntimeMode: () => Effect.succeed("full-access" as const),
     setupErrors: new Map(),
+    toolWaits: makePeerToolWaits(),
     now: () => new Date().toISOString(),
     newDispatchId: () => `00000002-0000-4000-8000-${String(++ids).padStart(12, "0")}`,
     retryDelayMs: () => 5,

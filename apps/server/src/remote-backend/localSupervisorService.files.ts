@@ -2,6 +2,7 @@ import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
 import { isAbsolute, normalize } from "node:path";
 import { hasLocalSupervisorServiceControls } from "./localSupervisorService.paths.ts";
+import { assertPrivateOwnership } from "./privatePermission.ts";
 
 function uid(): bigint {
   if (!process.getuid) throw new Error("Account-service files require Unix ownership.");
@@ -23,13 +24,11 @@ export async function assertLocalSupervisorServiceDirectory(
   )
     throw new Error("Service directory modes must remain non-writable to other users.");
   const stat = await fs.lstat(path, { bigint: true });
-  if (
-    !stat.isDirectory() ||
-    stat.uid !== uid() ||
-    !allowedModes.some((mode) => (stat.mode & 0o7777n) === BigInt(mode)) ||
-    (await fs.realpath(path)) !== path
-  )
-    throw new Error("Service directory must be canonical, owned and safely permissioned.");
+  const message = "Service directory must be canonical, owned and safely permissioned.";
+  if (!stat.isDirectory()) throw new Error(message);
+  uid();
+  assertPrivateOwnership(stat, { kind: "directory", path, allowedModes, message });
+  if ((await fs.realpath(path)) !== path) throw new Error(message);
 }
 
 /** Bounded immutable snapshot. Does not create, chmod, follow links or read credentials implicitly. */
@@ -38,7 +37,7 @@ export async function readLocalSupervisorServiceFile(
   maxBytes: number,
 ): Promise<string> {
   canonicalShape(path);
-  const owner = uid();
+  uid();
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 16 * 1024 * 1024)
     throw new Error("Service file read exceeds the bounded policy.");
   if ((await fs.realpath(path)) !== path)
@@ -49,15 +48,11 @@ export async function readLocalSupervisorServiceFile(
   );
   try {
     const before = await file.stat({ bigint: true });
-    if (
-      !before.isFile() ||
-      before.uid !== owner ||
-      (before.mode & 0o7777n) !== 0o600n ||
-      before.nlink !== 1n ||
-      before.size < 1n ||
-      before.size > BigInt(maxBytes)
-    )
-      throw new Error("Service file must be a bounded private owned single-link regular file.");
+    const message = "Service file must be a bounded private owned single-link regular file.";
+    if (!before.isFile()) throw new Error(message);
+    assertPrivateOwnership(before, { kind: "file", path, allowedModes: [0o600], message });
+    if (before.nlink !== 1n || before.size < 1n || before.size > BigInt(maxBytes))
+      throw new Error(message);
     const buffer = Buffer.alloc(maxBytes + 1);
     let length = 0;
     while (length < buffer.length) {
