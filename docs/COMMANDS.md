@@ -407,7 +407,17 @@ Focused presentation regression: `bun run --cwd packages/ui vitest run src/alert
 
 ### Remote agent operation recovery
 
-`bigbud remote-agent install <target> [--replace] [--yes] [--json]` returns an operation ID.
+`bigbud remote-agent install <target> [--replace | --keep-previous] [--yes] [--json]` returns an
+operation ID. When neither `--replace` nor `--keep-previous` is given and the terminal is
+interactive (no `--json`), the CLI first reads `status`; if an approved host already runs an older
+agent build it asks `An older agent build (<version>) is installed on <target>. Replace it after the
+new one is active? [y/N]` (only `y`/`yes` replaces). The `--yes` host-consent prompt is never
+preceded by this question for an unapproved host, and unreadable status skips it. Without a TTY,
+with `--json`, or when status is unreadable, older builds are kept and a one-line `--replace` hint
+is printed to stderr. Passing both flags is a usage error (exit 4). If the operation stops because
+the host is at its two-build capacity because live work still uses the older build, the reply
+explains that no slot could be freed and to retry after that work ends (and, without `--replace`,
+to use `--replace` on future installs).
 If an initial or follow reply is lost, retain the reported ID and use
 `bigbud remote-agent follow <operation-id> [--json]` with the same `--dev` / `--base-dir`
 options. Follow is read-only and never starts another install. IDs are retained by the running

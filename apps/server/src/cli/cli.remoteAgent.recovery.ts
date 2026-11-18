@@ -1,3 +1,4 @@
+import type { RemoteAgentOperationSnapshot } from "../remote-agent/remoteAgentInstall.operation.ts";
 import { waitForRemoteAgentOperation } from "../remote-agent/remoteAgentLocalControl.client.ts";
 import {
   isRemoteAgentOperationSnapshot,
@@ -29,13 +30,19 @@ export async function followRemoteAgentOperation(input: {
   operationId: string;
   target?: string;
   print: (value: unknown, text: string) => void;
+  /** Optional actionable line appended to a completed operation's message. */
+  hint?: (snapshot: RemoteAgentOperationSnapshot) => string | null;
 }): Promise<number> {
   try {
     const response = await waitForRemoteAgentOperation(input.socketPath, input.operationId);
     if (!response.ok) throw new Error(response.error.message);
     if (!isRemoteAgentOperationSnapshot(response.result))
       throw new Error("Invalid operation reply.");
-    input.print(response.result, response.result.message);
+    const hint = input.hint?.(response.result) ?? null;
+    input.print(
+      hint ? { ...response.result, hint } : response.result,
+      hint ? `${response.result.message}\n${hint}` : response.result.message,
+    );
     return remoteAgentOutcomeExitCode(response.result.outcome);
   } catch (cause) {
     const recovery = operationRecovery(input.operationId, input.target);

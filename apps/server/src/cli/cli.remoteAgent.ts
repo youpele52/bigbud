@@ -4,7 +4,12 @@ import {
   operationRecovery,
   RemoteAgentOperationUncertainError,
 } from "./cli.remoteAgent.recovery.ts";
-import { createInterface } from "node:readline/promises";
+import {
+  askYesNo,
+  capacityHint,
+  REPLACE_FLAG_CONFLICT,
+  resolveReplaceChoice,
+} from "./cli.remoteAgent.replace.ts";
 
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
@@ -63,15 +68,8 @@ function failResponse(json: boolean, response: RemoteAgentControlResponse): numb
   return REMOTE_AGENT_CLI_EXIT.failed;
 }
 
-async function askConsent(target: string, message: string): Promise<boolean> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) return false;
-  const prompt = createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    const answer = await prompt.question(`${message}\nInstall it on ${target}? [y/N] `);
-    return /^y(es)?$/i.test(answer.trim());
-  } finally {
-    prompt.close();
-  }
+function askConsent(target: string, message: string): Promise<boolean> {
+  return askYesNo(`${message}\nInstall it on ${target}? [y/N] `);
 }
 
 /** Run one CLI action, mapping backend unavailability to its dedicated exit code. */
@@ -116,7 +114,13 @@ const readOnlyCommand = (method: "status" | "doctor", description: string) =>
 const installCommand = Command.make("install", {
   target: targetArgument,
   replace: Flag.boolean("replace").pipe(
-    Flag.withDescription("Retire older builds after the new build is active."),
+    Flag.withDescription("Retire older builds after the new build is active, without asking."),
+    Flag.optional,
+  ),
+  keepPrevious: Flag.boolean("keep-previous").pipe(
+    Flag.withDescription(
+      "Keep older builds without asking (the default when not interactive or with --json).",
+    ),
     Flag.optional,
   ),
   yes: Flag.boolean("yes").pipe(
@@ -125,16 +129,38 @@ const installCommand = Command.make("install", {
   ),
   ...sharedFlags,
 }).pipe(
-  Command.withDescription("Install, or replace, the bigbud remote agent and activate it."),
+  Command.withDescription(
+    "Install the bigbud remote agent and activate it. When an older build is installed, asks whether to replace it (interactive only); --replace or --keep-previous answers without asking.",
+  ),
   Command.withHandler((options) =>
     runAction(options, async (json) => {
+      const replaceFlag = Option.getOrElse(options.replace, () => false);
+      const keepPrevious = Option.getOrElse(options.keepPrevious, () => false);
+      if (replaceFlag && keepPrevious) {
+        print(
+          json,
+          { ok: false, error: { code: "usage", message: REPLACE_FLAG_CONFLICT } },
+          `bigbud remote-agent: ${REPLACE_FLAG_CONFLICT}`,
+        );
+        return REMOTE_AGENT_CLI_EXIT.failed;
+      }
       const socketPath = socketFor(options);
+      // Read-only status first: the replace question needs an approved host with an older build.
+      const replace = await resolveReplaceChoice({
+        socketPath,
+        target: options.target,
+        replace: replaceFlag,
+        keepPrevious,
+        json,
+        agentVersion: version,
+        hint: (line) => void process.stderr.write(`${line}\n`),
+      });
       const operationId = randomUUID();
       const request = (consent: boolean): RemoteAgentControlRequest => ({
         method: "install",
         operationId,
         target: options.target,
-        replace: Option.getOrElse(options.replace, () => false),
+        replace,
         consent,
       });
       let response = await sendRemoteAgentControlRequest(
@@ -171,6 +197,7 @@ const installCommand = Command.make("install", {
         operationId: response.result.operationId,
         target: options.target,
         print: (value, text) => print(json, value, text),
+        hint: (snapshot) => capacityHint(snapshot, replace),
       });
     }),
   ),

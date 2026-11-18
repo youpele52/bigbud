@@ -25,6 +25,7 @@ afterEach(() => {
 
 async function install() {
   vi.spyOn(process.stdout, "write").mockReturnValue(true);
+  vi.spyOn(process.stderr, "write").mockReturnValue(true);
   await Effect.runPromise(
     Command.runWith(remoteAgentCommand, { version: "0.0.0" })([
       "install",
