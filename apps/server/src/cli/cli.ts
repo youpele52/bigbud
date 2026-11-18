@@ -1,4 +1,5 @@
 import { mobileCommand } from "./cli.mobile.ts";
+import { peerCommand } from "./cli.peer.ts";
 import { backendCommand } from "./cli.backend.ts";
 import { APP_SERVER_NAME } from "@bigbud/contracts";
 import { Effect, Layer, Option, Schema } from "effect";
@@ -351,6 +352,7 @@ const rootCommand = Command.make("bigbud", commandFlags).pipe(
     remoteAgentCommand,
     backendCommand,
     mobileCommand,
+    peerCommand,
     commandLineCommand,
   ]),
 );

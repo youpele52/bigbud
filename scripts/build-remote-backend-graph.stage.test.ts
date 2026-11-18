@@ -93,6 +93,7 @@ async function stageInputs(base: string) {
     "chunk.mjs.map": "{}",
     "NodeSqliteWorker.mjs": "import 'node:sqlite';",
     "remote-client-relay/remoteBackendClientRelay.mjs": "import 'node:http';",
+    "remote-peer-relay/remoteBackendPeerRelay.mjs": "import 'node:http';",
     "client/index.html": "<html></html>",
   });
   const nodeModules = await writeTree(join(base, "node_modules"), {
@@ -149,6 +150,7 @@ it("stage_is_deterministic", async () => {
     "server/bin.mjs",
     "server/chunk.mjs",
     "server/remote-client-relay/remoteBackendClientRelay.mjs",
+    "server/remote-peer-relay/remoteBackendPeerRelay.mjs",
   ]);
   // The aggregate is byte-identical across builds and carries every referenced notice text.
   const notices = await read(first.graph, "THIRD_PARTY_NOTICES");

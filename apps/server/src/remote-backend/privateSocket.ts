@@ -6,6 +6,13 @@ import { join } from "node:path";
 import { ensurePrivateRemoteStateRoot } from "./authority.files.ts";
 import { RemoteBackendAuthorityError } from "./authority.record.ts";
 
+/** Fixed, separate endpoints: authenticated clients, the Rust mobile gateway and P8 peers. */
+export const REMOTE_SOCKET_NAMES = {
+  client: "remote-backend.sock",
+  mobile: "remote-mobile.sock",
+  peer: "remote-peer.sock",
+} as const;
+
 export interface PrivateRemoteSocketOptions {
   readonly existing?: "recover-stale" | "refuse-existing";
 }
@@ -49,7 +56,7 @@ function socketHasNoListener(path: string): Promise<boolean> {
 export async function preparePrivateRemoteSocket(
   stateDir: string,
   assertHeld: () => Promise<void>,
-  endpoint: "client" | "mobile",
+  endpoint: "client" | "mobile" | "peer",
   options: PrivateRemoteSocketOptions = {},
 ) {
   const existing = options.existing ?? "recover-stale";
@@ -61,9 +68,10 @@ export async function preparePrivateRemoteSocket(
   };
   await ensurePrivateRemoteStateRoot(stateDir);
   await assertHeld();
-  if (endpoint !== "client" && endpoint !== "mobile")
+  const name = REMOTE_SOCKET_NAMES[endpoint];
+  if (!Object.hasOwn(REMOTE_SOCKET_NAMES, endpoint) || !name)
     throw unsafe("Unknown remote socket endpoint.");
-  const path = join(stateDir, endpoint === "client" ? "remote-backend.sock" : "remote-mobile.sock");
+  const path = join(stateDir, name);
   if (Buffer.byteLength(path) >= 108)
     throw unsafe("The remote socket path exceeds the Unix socket limit.");
   // libuv removes the bound pathname during close. Never bind on the shared publication path:

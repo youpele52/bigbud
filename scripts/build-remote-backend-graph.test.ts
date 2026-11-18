@@ -38,6 +38,7 @@ async function fixture() {
   const root = join(base, "graph");
   await mkdir(root, { mode: 0o700 });
   await mkdir(join(root, "remote-client-relay"), { mode: 0o700 });
+  await mkdir(join(root, "remote-peer-relay"), { mode: 0o700 });
   const node = Buffer.alloc(64);
   node.set([0x7f, 0x45, 0x4c, 0x46, 2, 1]);
   node.writeUInt16LE(2, 16);
@@ -48,6 +49,7 @@ async function fixture() {
     ["chunk.mjs", "export const ready=true;"],
     ["NodeSqliteWorker.mjs", "import 'node:sqlite';"],
     ["remote-client-relay/remoteBackendClientRelay.mjs", "import 'node:http';"],
+    ["remote-peer-relay/remoteBackendPeerRelay.mjs", "import 'node:http';"],
   ])
     await writeFile(join(root, name!), body!, { mode: 0o600 });
   const keys = generateKeyPairSync("ed25519"),

@@ -104,6 +104,12 @@ const make = Effect.gen(function* () {
         sqlError("findActiveForCoordinator"),
         Effect.flatMap(first),
       ),
+    list: (limit) =>
+      sql<Row>`SELECT ${columns(sql)} FROM peer_grants
+        ORDER BY issued_at DESC, grant_id LIMIT ${Math.max(0, Math.min(limit, 256))}`.pipe(
+        sqlError("list"),
+        Effect.flatMap((rows) => Effect.forEach(rows, decode)),
+      ),
     revoke: Effect.fn("PeerGrantRepository.revoke")(function* (grantId, revokedAt) {
       yield* sql`UPDATE peer_grants SET revoked_at = ${revokedAt}
         WHERE grant_id = ${grantId} AND revoked_at IS NULL`.pipe(sqlError("revoke"));

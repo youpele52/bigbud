@@ -33,6 +33,10 @@ export interface PeerGrantRepositoryShape {
   readonly get: (grantId: string) => Find;
   /** The coordinator's unrevoked grant, if any; expiry is evaluated by the caller. */
   readonly findActiveForCoordinator: (coordinatorAuthorityId: string) => Find;
+  /** Every stored grant, newest first, bounded for owner listing. */
+  readonly list: (
+    limit: number,
+  ) => Effect.Effect<ReadonlyArray<PeerGrant>, PeerGrantRepositoryError>;
   /** Revokes a grant once; undefined when it is unknown. Revoking twice keeps the first time. */
   readonly revoke: (grantId: string, revokedAt: string) => Find;
 }

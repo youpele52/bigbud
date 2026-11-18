@@ -195,6 +195,8 @@ export const PeerErrorCode = Schema.Literals([
   "authority-mismatch",
   "action-not-allowed",
   "permission-exceeds-ceiling",
+  /** The worker has no project for the requested workspace root (WP-8B). */
+  "workspace-unavailable",
   "worker-unreachable",
   "dispatch-conflict",
   "dispatch-unknown",

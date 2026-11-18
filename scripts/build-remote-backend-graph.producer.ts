@@ -60,6 +60,7 @@ async function validateNode(path: string, target: string) {
 export const backendGraphRequiredRoots = (entry: string) => [
   join(dirname(entry), "NodeSqliteWorker.mjs"),
   join(dirname(entry), "remote-client-relay/remoteBackendClientRelay.mjs"),
+  join(dirname(entry), "remote-peer-relay/remoteBackendPeerRelay.mjs"),
 ];
 /** Build/sign only. The caller's signing key is explicit; this does not establish release trust. */
 export async function buildRemoteBackendGraph(
@@ -97,7 +98,7 @@ export async function buildRemoteBackendGraph(
   const required = backendGraphRequiredRoots(input.entry);
   if (required.some((path) => !files.some((file) => file.path === path)))
     throw new Error(
-      "Backend graph must include its SQLite worker and standalone client relay helper.",
+      "Backend graph must include its SQLite worker and standalone client and peer relay helpers.",
     );
   await validateNode(join(root, input.node), input.target);
   const report = await validateBackendGraphClosure(root, files, {

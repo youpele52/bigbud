@@ -1,4 +1,5 @@
 import { mobileOwnerPairingRoute } from "./remote-backend/mobileOwnerPairing.ts";
+import { peerGrantOwnerRouteLayer } from "./remote-backend/peerGrantOwnerRoute.ts";
 import { mobileOwnerActivationRoute } from "./remote-backend/mobileOwnerActivation.ts";
 import { RemoteMobileConsentJournalLive } from "./remote-backend/mobileConsentEnable.ts";
 import { RemoteMobileNativeInputsLive } from "./remote-backend/mobileGatewayActivation.inputs.ts";
@@ -30,6 +31,8 @@ export const makeRemoteClientRoutesLayer = Layer.unwrap(
         Layer.provide(Layer.merge(RemoteMobileNativeInputsLive, RemoteMobileConsentJournalLive)),
       ),
       // The authenticated client socket is the only route granting D10 setup authority.
+      // P8: owner-only peer grant issue/revoke/list (`bigbud peer`); never on the peer socket.
+      peerGrantOwnerRouteLayer,
       makeWebsocketRpcRouteLayer(withBootstrapCommandLock, { remoteClientRouter: true }),
       attachmentsRouteLayer,
       projectFaviconRouteLayer,

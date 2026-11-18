@@ -111,6 +111,7 @@ export async function assembleBackendGraph(input: AssembleBackendGraphInput) {
     for (const [directory, prefix] of [
       ["", "server"],
       ["remote-client-relay", "server/remote-client-relay"],
+      ["remote-peer-relay", "server/remote-peer-relay"],
     ] as const)
       for (const name of (await readdir(join(input.dist, directory))).toSorted())
         if (name.endsWith(".mjs") && isBackendGraphPath(name)) {
