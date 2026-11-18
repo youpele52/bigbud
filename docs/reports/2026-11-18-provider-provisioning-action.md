@@ -227,3 +227,102 @@ HEAD (`1c86b915…`). It drifted because `_a$1` became the unsuffixed `_a`.
   (`stage.ts`, `producer.ts`, `tsdown.clientRelay.config.ts`). Once it lands, check that bundle's
   loader sites again. The uncommitted `scripts/lib/workspace-agent-target.ts` change does not
   touch the backend graph.
+
+## Deterministic loader-region digests (18 November 2026)
+
+This fixes "Loader-region pin still unstable after `6716f8b8fe`" in
+`2026-11-18-linux-arm64-deletion-fix.md`.
+
+### Root cause
+
+- tsdown 0.20.3 uses rolldown `1.0.0-rc.3`, and that rolldown does not name symbols
+  deterministically. Fourteen rebuilds of one unchanged `git archive HEAD` snapshot gave seven
+  different outputs. The chunk set was the same every time; only the names differed.
+- The Claude SDK has `import ob from "node:process"`. Other modules import the same default as
+  `process`. Rolldown merges these into one binding and names it after whichever importer it meets
+  first, which depends on load timing: `process$1` in some builds and `ob` in others. The `$<n>`
+  suffixes move the same way (`posix$1` ↔ `posix$2`).
+- With the old canonical form, three of the seven outputs gave the Claude SDK region `5dd1aace…`
+  and four gave the pinned `c822c89d…`. The overlay in the deletion fix was not the cause.
+- No rc.3 option fixes this. The input and output options have no ordering or concurrency
+  control, and `experimental.strictExecutionOrder` changes runtime semantics. The build config is
+  unchanged.
+- rolldown `1.1.5` (already installed for vite 8) was deterministic: 8 of 8 rebuilds gave
+  identical whole-`dist` hashes. This was a throwaway symlink test in the snapshot only. Moving
+  tsdown to a rolldown 1.x release is a separate dependency decision; it would also make
+  `buildDigest` and the archive hash reproducible, which they are not today.
+
+### Change
+
+- `build-remote-backend-graph.regionHash.ts`: a file binding referenced from a region (declared
+  anywhere outside the region) is now `$f#<k>`, numbered by first appearance in the region. Its
+  spelling is ignored. Region-local bindings are still `$#<k>`. Undeclared globals, property
+  keys, strings, labels and comments keep their bytes.
+- The review guarantee is unchanged apart from file-binding spelling:
+  - a reference that switches between a file binding and a global changes the digest;
+  - two references to one file binding share a label, and two file bindings never do;
+  - a file binding and a region-local binding never share a label.
+  - Not detected: a consistent swap of which file bindings the region uses (`use(a, b)` versus
+    `use(b, a)`). What a file binding holds was never pinned.
+- `build-remote-backend-graph.regionHash.test.ts` has 8 tests. New cases cover the
+  `process$1` ↔ `ob` rename, same versus different file bindings, file binding versus global
+  (same or other spelling), and file binding versus local (including a `var` declared both inside
+  and outside the region).
+- Mutation check (backup in the job's private tmp directory, restored and compared with `cmp`).
+  Each mutant fails at least one test:
+  - labelling by spelling;
+  - one shared file label;
+  - treating file bindings as globals;
+  - labelling file bindings as locals;
+  - labelling locals as file bindings;
+  - dropping the written-out shorthand key.
+
+### Re-pins
+
+Six region pins changed. `msgpackr/unpack.js` refers to no file binding, so its pin
+(`6e04f456…`) did not change. File pins did not change.
+
+- **Reference builds:** the reviewed M1 build (`server-GpjOiZW6.mjs`) and the earlier clean-HEAD
+  build (`server-kQedXKey.mjs`). With the old algorithm, both hash to the old pins.
+- **Check:** the old algorithm was run with each file-binding label marked, and the marks were
+  checked to leave the text unchanged. Each marked label was then relabelled `$f#<k>` by first
+  appearance. For every member, in both builds, the result is byte-identical to the new canonical
+  text. So the new canonical text is the reviewed canonical text with only file-binding labels
+  renamed.
+
+| Member                                   | Old pin     | New pin     | File bindings |
+| ---------------------------------------- | ----------- | ----------- | ------------- |
+| `@anthropic-ai/claude-agent-sdk/sdk.mjs` | `c822c89d…` | `f99dc39c…` | 71            |
+| `msgpackr/struct.js`                     | `7a42dcad…` | `c320bf3a…` | 5             |
+| `node-gyp-build-optional-packages/…`     | `51baa13c…` | `c5cbd62e…` | 3             |
+| `Copilot/Runtime.executable.ts`          | `ec03d459…` | `bbc91896…` | 7             |
+| `Copilot/Adapter.types.cli.ts`           | `7be52708…` | `14857f59…` | 7             |
+| `Pi/Cli.ts`                              | `3de5ba64…` | `9c4de834…` | 6             |
+
+All seven rc.3 output variants from the rebuild sweep, including the three that gave `5dd1aace…`,
+hash to the new pins.
+
+### Three-build proof
+
+- **Snapshot:** `git archive HEAD` (`295df61927`), tar sha256 `f4ae17b6…a879a`, plus only the three
+  changed scripts files (checked with `diff -rq` against a fresh extraction). `node_modules` was
+  APFS-cloned. Both tsdown configs were built, then the producer ran.
+- **Builds:**
+  - `b1` and `b2`: two separate fresh extractions.
+  - `c`: a fresh extraction plus an unrelated overlay. `src/detOverlayProbe.ts` imports
+    `node:process` and `node:path`, and `bin.ts` imports it; it lands in `bin.mjs`.
+
+| Build | Server chunk          | Old SDK digest | Region digests       | aarch64 producer    | x86_64 `--list-loader-sites` |
+| ----- | --------------------- | -------------- | -------------------- | ------------------- | ---------------------------- |
+| `b1`  | `server-BfyPj7WT.mjs` | `c822c89d…`    | all seven equal pins | passed, 27 reviewed | 0 unreviewed, 0 refusals     |
+| `b2`  | `server-CYOXumN5.mjs` | `c822c89d…`    | identical to `b1`    | passed, 27 reviewed | 0 unreviewed, 0 refusals     |
+| `c`   | `server-uHTgn3-X.mjs` | `c822c89d…`    | identical to `b1`    | passed, 27 reviewed | 0 unreviewed, 0 refusals     |
+
+- **Signing:** the aarch64 runs were signed with a throwaway ed25519 fixture key. Their
+  `buildDigest`s differed (`09250b68…`, `380ce0cb…`, `a2faf73d…`) because rc.3 renames symbols
+  in the bundle bytes.
+- **x86_64:** each listing reported 829 reachable modules.
+- **`remote-peer-relay`:** `remoteBackendPeerRelay.mjs` (P8, `e312c2fa1f`) is in every graph and
+  has 0 loader sites. So does `remoteBackendClientRelay.mjs`.
+- **Clean-up:** the build directories were deleted afterwards. Logs and digests are kept in the
+  job's private tmp directory.

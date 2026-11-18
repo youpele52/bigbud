@@ -7,7 +7,11 @@
  * `build-remote-backend-graph.regionHash.ts`). On 18 Nov 2026 the canonicalization was extended
  * to unsuffixed region-declared names and every region pin was re-pinned: each region's canonical
  * text from the reviewed M1 build (whose raw text matched the earlier pins) equals the canonical
- * text of a clean HEAD build, byte for byte. */
+ * text of a clean HEAD build, byte for byte. Later on 18 Nov 2026 file bindings referenced from a
+ * region were relabelled by first appearance instead of by spelling, because rolldown renames
+ * them between builds (`process$1` ↔ `ob`); the six regions that refer to file bindings were
+ * re-pinned after checking that their new canonical text is the reviewed canonical text with only
+ * those labels renamed. */
 const loader = (member: string, sha256: string, reason: string, roots: string[] = []) => ({
   member,
   sha256,
@@ -23,17 +27,17 @@ export const BACKEND_GRAPH_LOADER_POLICY_DATA = {
     // bigbud bundle regions named by the M1 plan.
     loader(
       "src/provider/Layers/Copilot/Runtime.executable.ts",
-      "ec03d4598f986fdbd8334983eb9e94dc4a1c7c1eb9a117238e87201754a84a7a",
+      "bbc9189662576361b9d893ba703622cc59b2fd572b65ab6a621216d744536e3c",
       "Locates the Copilot SDK platform runtime package beside the graph's @github/copilot-sdk; npm-shim fallback is Windows-only.",
     ),
     loader(
       "src/provider/Layers/Copilot/Adapter.types.cli.ts",
-      "7be5270815a8f795f859f50d8186cd4682eab854e5b7c1ef5f42c4e8a44fb75b",
+      "14857f59fda9f1423588f9001e3609cb1d21cd5cb47aca0ce591004dc3d031d9",
       "Resolves the optional standalone @github/copilot CLI; absent from the graph, so the caught failure falls back to the SDK runtime.",
     ),
     loader(
       "src/provider/Layers/Pi/Cli.ts",
-      "3de5ba64a1634b576301f2b81cc9e8db761b294c0827d9bdd9d88d84a3e56f29",
+      "9c4de83408a1f05438f604e1bad40fb9ceb323e939b5cfba0da90e8cb10b86e3",
       "Finds the bundled Pi CLI beside its rpc-entry export and spawns it with the graph's private Node.",
       ["node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"],
     ),
@@ -45,17 +49,17 @@ export const BACKEND_GRAPH_LOADER_POLICY_DATA = {
     ),
     loader(
       "msgpackr/struct.js",
-      "7a42dcade49cb3e2dae338624b5f5467d6f93633abfc3ae10c158ff6204304e3",
+      "c320bf3aca1504af45d51cfe686b370ca756324621d4412c1d3b82f15205f88c",
       "msgpackr struct accessor code generation and a CSP probe; loads no modules.",
     ),
     loader(
       "node-gyp-build-optional-packages/node-gyp-build.js",
-      "51baa13c384a4b2cf5ba0ba3614c4907c086e02e1ea3eb645d37e278c8507805",
+      "c5cbd62e7396425edd527aedce61cc5bb2ce7187f7d642a86d5b7112817b84d0",
       "msgpackr's optional msgpackr-extract native lookup; the package is absent and msgpackr falls back to JavaScript.",
     ),
     loader(
       "@anthropic-ai/claude-agent-sdk/sdk.mjs",
-      "c822c89d016d3b4a8f2b0c2b18d7eaf33f665ee43d4e09fa7c582764f064123d",
+      "f99dc39cb4b0c4faf2b605ba202f5db12fc4d9baa1536283180f89a4e060cda9",
       "Claude agent SDK: ajv schema-validator codegen, a globalThis probe, and a native CLI lookup used only without pathToClaudeCodeExecutable (absent here, typed error).",
     ),
     // Pi closure, reached through the reviewed Pi CLI root and its rpc-entry export.

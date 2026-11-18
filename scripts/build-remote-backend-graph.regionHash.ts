@@ -3,25 +3,32 @@ import * as ts from "typescript";
 
 /** Rolldown deconflicts colliding top-level names bundle-wide, so an edit anywhere in the bundle
  * can rename an untouched reviewed region: `posix$2` → `posix$1`, or `read$2` → `read` when
- * another chunk frees the name. The region digest therefore hashes a canonical text in which
- * every binding is labelled by what it resolves to (TypeScript's binder, never by spelling):
+ * another chunk frees the name. Names declared outside the region move too: rolldown merges the
+ * default imports of one external (`import process from "node:process"` in one module,
+ * `import ob from "node:process"` in the SDK) into one binding and names it after whichever
+ * importer it meets first, so the same region can refer to `process$1` in one build and `ob` in
+ * the next. The region digest therefore hashes a canonical text in which every binding is
+ * labelled by what it resolves to (TypeScript's binder, never by spelling):
  *
  * - A binding whose every declaration lies inside the region becomes `$#<k>`, numbered by first
  *   appearance, whether or not its name carries a `$<n>` suffix. Distinct bindings get distinct
  *   labels even when they share a spelling (shadowing), so no two bindings are merged.
- * - A free name keeps its spelling, so a change in what the region refers to, including a free
- *   name captured by a new local, changes the digest. An undeclared global keeps its exact bytes.
- *   A binding declared elsewhere in the file is marked `<name>#`, so it never reads as a global;
- *   when it carries a `$<n>` suffix it becomes `<base>$#<k>`, numbered per base by first
- *   appearance. What that outside declaration holds lives outside the region and is not pinned.
+ * - A binding declared elsewhere in the file becomes `$f#<k>`, numbered by first appearance in
+ *   the region, whatever its spelling. Two references to one file binding share a label and
+ *   references to two file bindings never do, so a reference that moves to another file binding
+ *   still changes the region's text. What that outside declaration holds lives outside the
+ *   region and is not pinned, so its spelling carries nothing to review.
+ * - An undeclared global keeps its exact bytes, so a name that switches between a file binding
+ *   and a global, or between two globals, changes the digest; so does a free name captured by a
+ *   new local.
  * - Property keys, export and import names, labels, strings and comments keep their bytes.
  *   Where one identifier is both a key and a binding (`{ a }`, `export { a }`, `import { a }`),
  *   the key is spelled out beside the label (`a:$#0`, `$#0 as a`, `a as $#0`).
  *
  * The canonical text is therefore equal only for regions that are byte-equivalent up to a
- * consistent renaming of their local bindings. A region that declares nothing and refers to no
- * file binding hashes to its raw-text digest. `#` cannot occur in an identifier, so labels never meet raw names. */
-const SUFFIXED = /^([A-Za-z_$][\w$]*?)\$(\d+)$/;
+ * consistent renaming of their local bindings and of the file bindings they refer to. A region
+ * that declares nothing and refers to no file binding hashes to its raw-text digest. `#` cannot
+ * occur in an identifier, so labels never meet raw names. */
 const BINDING =
   ts.SymbolFlags.Variable | ts.SymbolFlags.Function | ts.SymbolFlags.Class | ts.SymbolFlags.Alias;
 const MEMBER = ts.SymbolFlags.Property | ts.SymbolFlags.Method | ts.SymbolFlags.Accessor;
@@ -111,8 +118,8 @@ export function makeCanonicalRegion(tree: ts.SourceFile, text: string) {
       return declaration.getSourceFile() === tree && at >= start && declaration.end <= end;
     };
     const labels = new Map<ts.Symbol, string>();
-    const perBase = new Map<string, number>();
     let local = 0;
+    let file = 0;
     const label = (node: ts.Identifier): string | undefined => {
       if (keyOnly(node)) return undefined;
       const symbol = resolver(node);
@@ -120,18 +127,10 @@ export function makeCanonicalRegion(tree: ts.SourceFile, text: string) {
       if (!symbol || !declarations?.length) return undefined;
       const known = labels.get(symbol);
       if (known) return known;
-      let next: string | undefined;
+      let next: string;
       if (declarations.every(inside)) next = `$#${local++}`;
-      else {
-        const suffixed = SUFFIXED.exec(node.text);
-        if (!declarations.every((d) => d.getSourceFile() === tree)) return undefined;
-        if (!suffixed) next = `${node.text}#`;
-        else {
-          const index = perBase.get(suffixed[1]!) ?? 0;
-          perBase.set(suffixed[1]!, index + 1);
-          next = `${suffixed[1]}$#${index}`;
-        }
-      }
+      else if (declarations.every((d) => d.getSourceFile() === tree)) next = `$f#${file++}`;
+      else return undefined;
       labels.set(symbol, next);
       return next;
     };

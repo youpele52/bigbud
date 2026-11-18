@@ -21,8 +21,31 @@ const loader = (name: string) => `export const f = (n) => ${name}.isAbsolute(n);
 const read = (name: string) => `function ${name}(n) { return n; }\nconst x = ${name}(1);`;
 
 describe("canonical loader region digests", () => {
-  it("ignores bundle-wide $n renames of free bindings declared elsewhere in the file", () => {
+  it("ignores bundle-wide renames of free bindings declared elsewhere in the file", () => {
     same([declare, loader("posix$2")], [declare, loader("posix$1")]);
+    // Rolldown names a merged external default import after whichever importer it meets first.
+    same(
+      ['import process$1 from "node:process";', "use(process$1.cwd(), process$1.env);"],
+      ['import ob from "node:process";', "use(ob.cwd(), ob.env);"],
+    );
+    const outer = "const ob = 1, process$1 = 2;";
+    same([outer, "use(ob);"], [outer, "use(process$1);"]);
+  });
+
+  it("tells file bindings apart within the region, and from globals and locals", () => {
+    const outer = "const ob = 1, process$1 = 2;";
+    // Two references to one file binding stay equal; to two file bindings stay different.
+    same([outer, "use(ob, ob);"], [outer, "use(process$1, process$1);"]);
+    differ([outer, "use(ob, process$1);"], [outer, "use(ob, ob);"]);
+    differ([outer, "use(ob, process$1);"], [outer, "use(process$1, process$1);"]);
+    // File binding versus the global of the same or another spelling.
+    differ([outer, "use(process$1);"], ["", "use(process$1);"]);
+    differ([outer, "use(ob);"], [outer, "use(process);"]);
+    differ([outer, "use(ob, process);"], [outer, "use(ob, ob);"]);
+    // File binding versus a region-local binding.
+    differ([outer, "use(ob);"], [outer, "let ob; use(ob);"]);
+    // A `var` also declared outside the region is a file binding, not a local one.
+    differ(["var ob = 1;", "use(ob); var ob;"], ["", "use(ob); var ob;"]);
   });
 
   it("ignores renames of region-declared bindings, suffixed or not", () => {
@@ -60,9 +83,7 @@ describe("canonical loader region digests", () => {
     differ(["", "let a; use(a);"], ["", "let a; use(fetch);"]);
     // A free name that refers to something else: another global, or a file binding.
     differ(["", "use(fetch);"], ["", "use(fetch2);"]);
-    const outer = "const ob = 1, process = 2;";
-    differ([outer, "use(ob);"], [outer, "use(process);"]);
-    differ([outer, "use(process);"], ["", "use(process);"]);
+    differ(["const process = 2;", "use(process);"], ["", "use(process);"]);
     differ([declare, loader("posix$1")], [declare, loader("posix")]);
     // A binding that moved out of the region is no longer local.
     differ(["", "function read() {} read();"], ["function read() {}", "read();"]);
