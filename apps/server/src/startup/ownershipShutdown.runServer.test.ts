@@ -17,6 +17,11 @@ const wiring = vi.hoisted(() => ({
   pipes: undefined as undefined | { input: PassThrough; output: PassThrough },
 }));
 // Replace the heavyweight application only, retaining runServer's actual shutdown wrapper.
+// server.ts imports `effect/Layer` directly; the barrel is mocked too so either style is covered.
+vi.mock("effect/Layer", async (original) => {
+  const actual = await original<typeof import("effect/Layer")>();
+  return { ...actual, launch: wiring.launch };
+});
 vi.mock("effect", async (original) => {
   const actual = await original<typeof import("effect")>();
   return { ...actual, Layer: { ...actual.Layer, launch: wiring.launch } };

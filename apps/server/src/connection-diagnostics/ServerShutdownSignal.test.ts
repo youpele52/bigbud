@@ -123,8 +123,15 @@ describe("server shutdown signal", () => {
     expect(local).toMatch(
       /return withServerShutdownSignal\(serverApplicationLayer\)\.pipe\(\s*(?:\/\/[^\n]*\n\s*)*Layer\.provideMerge\(RuntimeServicesLive\)/,
     );
-    expect(source).toMatch(
-      /const RemoteServerLive = withRemoteCallbackRuntime\(\s*withServerShutdownSignal\(RemoteServerApplicationLive\),\s*RuntimeServicesLive,/,
+    // The remote application (all listeners) is the signal's only input, and the pair sits
+    // inside runtime services. A plain `Layer.provide` of one named layer (e.g. runtime
+    // updates) stays inside the wrapper; a `provideMerge` or runtime services would not.
+    const remoteLive = source.slice(
+      source.indexOf("const RemoteServerLive"),
+      source.indexOf("function localServerLayer"),
+    );
+    expect(remoteLive).toMatch(
+      /^const RemoteServerLive = withRemoteCallbackRuntime\(\s*(?:\/\/[^\n]*\n\s*)*withServerShutdownSignal\(\s*RemoteServerApplicationLive(?:\.pipe\(Layer\.provide\(\w+\)\))?,?\s*\),\s*RuntimeServicesLive,\s*\)/,
     );
     const remote = readFileSync(new URL("../server.remote.ts", import.meta.url), "utf8");
     expect(remote).toContain("serveIsolatedRemoteRoutes(makeRemoteClientRoutesLayer)");
