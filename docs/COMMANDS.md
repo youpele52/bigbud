@@ -66,6 +66,7 @@ Bun scripts remain the source of truth for workflow implementation. The just rec
 | `bun run package:mobile-components`  | `just package-mobile-components`  |
 | `bun run build:remote-backend-graph` | `just build-remote-backend-graph` |
 | `bun run remote-backend-graph`       | `just remote-backend-graph`       |
+| `bun run provider-conformance`       | `just provider-conformance`       |
 | `bun run licenses:rust`              | `just licenses-rust`              |
 | `bun run build:desktop`              | `just build-desktop`              |
 | `bun run build:contracts`            | `just build-contracts`            |
@@ -118,6 +119,19 @@ allowed only when no eager edge reaches them from a statically reachable module.
 file must be listed for the target and match its ELF machine, and any other ELF member must match
 too. Static inventory and a successful signature check do not qualify providers, shared
 libraries, native execution or release-key authorization.
+
+### Provider conformance harness (M4)
+
+`bun run provider-conformance --self-test` runs every row against an in-process mock backend and
+mock provider; it checks the harness only and its report says "No acceptance". Live runs drive a
+remote backend through its authenticated client socket, on the host
+(`~/runtime/backend/runtime/node apps/server/scripts/providerConformance/driver.ts --authority
+<id>`) or from the laptop over the SSH relay (`--transport relay --ssh <target> --relay-node
+<abs> --relay-entry <abs> --tuple <label>`). `--dry-run` lists what would run; `--providers`,
+`--rows`, `--model provider=slug`, `--expect-needs-auth` and `--provision-copilot` (the only
+installing action, Copilot only) narrow or extend a run; `--restore <workDir>` replays cleanup.
+It writes a redacted, dated JSON and markdown matrix to `~/bigbud-conformance-results/`. See
+[the harness report](reports/2026-11-18-provider-conformance-harness.md) for the per-tuple checklist.
 
 ### Remote backend graph (dev)
 

@@ -56,6 +56,9 @@ build-remote-backend-graph *args:
 remote-backend-graph *args:
     bun run remote-backend-graph "$@"
 
+provider-conformance *args:
+    bun run provider-conformance "$@"
+
 licenses-rust *args:
     bun run licenses:rust "$@"
 
