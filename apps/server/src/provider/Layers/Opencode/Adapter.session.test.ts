@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-
 import {
   EventId,
   LOCAL_EXECUTION_TARGET_ID,
@@ -20,6 +18,7 @@ import {
 
 const THREAD_ID = ThreadId.makeUnsafe("thread-opencode-session-test");
 const CREATED_AT = "2026-05-14T00:00:00.000Z";
+const REMOTE_TARGET_ID = "ssh:host=devbox&user=root&port=22&auth=ssh-key";
 
 describe("Opencode session lifecycle", () => {
   for (const [runtimeMode, expectedRules] of [
@@ -90,90 +89,82 @@ describe("Opencode session lifecycle", () => {
     );
   }
 
-  it.effect("runs OpenCode locally against a synthetic workspace for remote projects", () =>
-    Effect.gen(function* () {
-      const acquireCalls: Array<unknown> = [];
-      const createInputs: Array<Record<string, unknown>> = [];
-      const handle: OpencodeServerHandle = {
-        client: makeMockOpencodeClient({
-          onSessionCreate: (sessionInput) => createInputs.push(sessionInput),
-        }),
-        url: "http://127.0.0.1:4097",
-        release() {},
-        invalidate() {},
-      };
-
-      const methods = makeSessionMethods({
-        provider: "opencode",
-        sessions: new Map(),
-        runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
-        serverManager: {
-          acquire: async (input) => {
-            acquireCalls.push(input);
-            return handle;
-          },
-        },
-        serverSettings: {
-          getSettings: Effect.succeed({
-            providers: {
-              opencode: {
-                binaryPath: "/opt/opencode/bin/opencode",
-              },
-            },
-          } as never),
-        },
-        serverConfig: {
-          attachmentsDir: "/tmp/attachments",
-          stateDir: "/tmp/bigbud-state",
-          port: 3773,
-          host: "127.0.0.1",
-        },
-        nextEventId: Effect.succeed(EventId.makeUnsafe("evt-next")),
-        makeEventStamp: () =>
-          Effect.succeed({
-            eventId: EventId.makeUnsafe("evt-remote"),
-            createdAt: CREATED_AT,
+  // Legacy OpenCode is read-only history (providerRemoteWorkspaceConformance): it does not get the
+  // local-runtime + synthetic-workspace bridge, so the runtime stays on the project's target.
+  it.effect(
+    "keeps legacy OpenCode on the remote project target without a synthetic workspace",
+    () =>
+      Effect.gen(function* () {
+        const acquireCalls: Array<unknown> = [];
+        const createInputs: Array<Record<string, unknown>> = [];
+        const handle: OpencodeServerHandle = {
+          client: makeMockOpencodeClient({
+            onSessionCreate: (sessionInput) => createInputs.push(sessionInput),
           }),
-        nativeEventLogger: undefined,
-        services: yield* Effect.services<never>(),
-      });
+          url: "http://127.0.0.1:4097",
+          release() {},
+          invalidate() {},
+        };
 
-      const session = yield* methods.startSession({
-        threadId: THREAD_ID,
-        provider: "opencode",
-        executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
-        runtimeMode: "full-access",
-        cwd: "/root/project",
-      });
+        const methods = makeSessionMethods({
+          provider: "opencode",
+          sessions: new Map(),
+          runtimeEventQueue: yield* Queue.unbounded<ProviderRuntimeEvent>(),
+          serverManager: {
+            acquire: async (input) => {
+              acquireCalls.push(input);
+              return handle;
+            },
+          },
+          serverSettings: {
+            getSettings: Effect.succeed({
+              providers: {
+                opencode: {
+                  binaryPath: "/opt/opencode/bin/opencode",
+                },
+              },
+            } as never),
+          },
+          serverConfig: {
+            attachmentsDir: "/tmp/attachments",
+            stateDir: "/tmp/bigbud-state",
+            port: 3773,
+            host: "127.0.0.1",
+          },
+          nextEventId: Effect.succeed(EventId.makeUnsafe("evt-next")),
+          makeEventStamp: () =>
+            Effect.succeed({
+              eventId: EventId.makeUnsafe("evt-remote"),
+              createdAt: CREATED_AT,
+            }),
+          nativeEventLogger: undefined,
+          services: yield* Effect.services<never>(),
+        });
 
-      expect(acquireCalls).toHaveLength(1);
-      const acquireInput = acquireCalls[0] as {
-        readonly binaryPath: string;
-        readonly directory: string;
-        readonly executionTargetId: string;
-      };
-      expect(acquireInput.binaryPath).toBe("/opt/opencode/bin/opencode");
-      expect(acquireInput.executionTargetId).toBe(LOCAL_EXECUTION_TARGET_ID);
-      expect(acquireInput.directory).not.toBe("/root/project");
-      expect(acquireInput.directory).toContain("bigbud-opencode-remote-workspace-");
-      expect(createInputs[0]?.directory).toBeUndefined();
-      yield* Effect.promise(() =>
-        expect(
-          fs.access(`${acquireInput.directory}/.bigbud/remote-workspace-mcp-server.mjs`),
-        ).resolves.toBeUndefined(),
-      );
-      yield* Effect.promise(() =>
-        expect(fs.access(`${acquireInput.directory}/.opencode/tools`)).rejects.toThrow(),
-      );
+        const session = yield* methods.startSession({
+          threadId: THREAD_ID,
+          provider: "opencode",
+          executionTargetId: REMOTE_TARGET_ID,
+          runtimeMode: "full-access",
+          cwd: "/root/project",
+        });
 
-      expect(session.providerRuntimeExecutionTargetId).toBe(LOCAL_EXECUTION_TARGET_ID);
-      expect(session.workspaceExecutionTargetId).toBe(
-        "ssh:host=devbox&user=root&port=22&auth=ssh-key",
-      );
-      expect(session.executionTargetId).toBe("ssh:host=devbox&user=root&port=22&auth=ssh-key");
+        expect(acquireCalls).toHaveLength(1);
+        const acquireInput = acquireCalls[0] as {
+          readonly binaryPath: string;
+          readonly directory: string;
+          readonly executionTargetId: string;
+        };
+        expect(acquireInput.binaryPath).toBe("/opt/opencode/bin/opencode");
+        expect(acquireInput.executionTargetId).toBe(REMOTE_TARGET_ID);
+        expect(acquireInput.directory).toBe("/root/project");
 
-      yield* methods.stopSession(THREAD_ID);
-      yield* Effect.promise(() => expect(fs.access(acquireInput.directory)).rejects.toThrow());
-    }),
+        expect(session.providerRuntimeExecutionTargetId).toBe(REMOTE_TARGET_ID);
+        expect(session.workspaceExecutionTargetId).toBe(REMOTE_TARGET_ID);
+        expect(session.executionTargetId).toBe(REMOTE_TARGET_ID);
+        expect(session.providerRuntimeExecutionTargetId).not.toBe(LOCAL_EXECUTION_TARGET_ID);
+
+        yield* methods.stopSession(THREAD_ID);
+      }),
   );
 });
