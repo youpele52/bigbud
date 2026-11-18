@@ -183,7 +183,7 @@ it.effect("completes and clears an interrupted baseline flight", () =>
   }),
 );
 
-it.effect("does not reload a baseline during cooldown and resumes after expiry", () =>
+it.effect("does not re-verify during cooldown and resumes after expiry", () =>
   Effect.gen(function* () {
     let latestVerifiedCount = 0;
     let compactCount = 0;
@@ -202,12 +202,14 @@ it.effect("does not reload a baseline during cooldown and resumes after expiry",
 
     assert.equal((yield* Effect.exit(ensure(1)))._tag, "Failure");
     assert.equal(latestVerifiedCount, 1);
+    // During cooldown only the cheap coverage sequence is read; verification does not rerun.
     assert.equal((yield* Effect.exit(ensure(1)))._tag, "Failure");
-    assert.equal(latestVerifiedCount, 1);
+    assert.equal(latestVerifiedCount, 2);
+    assert.equal(compactCount, 1);
 
     yield* TestClock.adjust(`${PROJECTION_BASELINE_FAILURE_COOLDOWN_MS} millis`);
     yield* ensure(1);
-    assert.equal(latestVerifiedCount, 3);
+    assert.equal(latestVerifiedCount, 4);
     assert.equal(compactCount, 2);
   }).pipe(Effect.provide(TestClock.layer())),
 );

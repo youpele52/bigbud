@@ -159,19 +159,12 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             if (!activeExecutor) {
               return yield* Effect.fail(new Error("cleanup executor was not prepared"));
             }
-            const files =
-              event.payload.origin === "project-cascade"
-                ? {
-                    directResources: [],
-                    retainedResources: [],
-                    worktreeResources: [],
-                    retainedExternalWorktrees: [],
-                    retainedUnverifiedAttachments: [],
-                  }
-                : yield* orchestrationEngine.threadDeletion!.discoverFiles({
-                    rootThreadId: thread.id,
-                    threadIds,
-                  });
+            // A project cascade owns its threads' provider logs, attachments and worktrees the
+            // same way a direct delete does: project discovery only covers notes and kanban.
+            const files = yield* orchestrationEngine.threadDeletion!.discoverFiles({
+              rootThreadId: thread.id,
+              threadIds,
+            });
             const operationId = `direct-cleanup:${event.eventId}`;
             preparedOperationId = operationId;
             const finalizeCommandId = CommandId.makeUnsafe(
@@ -297,14 +290,12 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
                 }).pipe(Effect.as(false)),
               ),
             );
-            if (event.payload.origin !== "project-cascade") {
-              yield* cleanupDeletedThreadTerminalHistory(terminal, thread.id, threadIds);
-              yield* recoverDirectCleanupWorktrees({
-                repository: cleanupRepository,
-                config,
-                operationId,
-              });
-            }
+            yield* cleanupDeletedThreadTerminalHistory(terminal, thread.id, threadIds);
+            yield* recoverDirectCleanupWorktrees({
+              repository: cleanupRepository,
+              config,
+              operationId,
+            });
             if (!pruningRecorded) return;
             if (directResources.length > 0 && preparedExecutor) {
               yield* executeReadyDirectCleanupPlan({

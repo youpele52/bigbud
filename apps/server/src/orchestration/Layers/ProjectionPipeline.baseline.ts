@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, Option } from "effect";
+import { Cause, Effect, Exit, Option, Semaphore } from "effect";
 
 import { type ProjectionRepositoryError } from "../../persistence/Errors.ts";
 import { increment, threadRetentionCompactionRows } from "../../observability/Metrics.ts";
@@ -82,19 +82,35 @@ export function makeProjectionBaselineOperations(input: {
     return true;
   });
 
-  const verifyThrough = Effect.fn("verifyProjectionBaselineThrough")(function* () {
+  /**
+   * One verification at a time across every caller. `createCandidate` hands concurrent callers
+   * the same candidate row, which then shares one workspace file; one caller's rejection can
+   * delete the row the other is about to mark verified, and a compacting caller can remove the
+   * replay prefix the other is still reading. Each loser reported a failure that the baseline
+   * coordinators then held for their whole cooldown, stalling canonical cleanup.
+   */
+  const verification = Semaphore.makeUnsafe(1);
+
+  const verifyLatestCandidate = Effect.fn("verifyLatestProjectionBaselineCandidate")(function* () {
     const candidateOption = yield* input.baselines.createCandidate(input.projectorNames);
     if (Option.isNone(candidateOption)) return;
-    const verified = yield* verify(candidateOption.value);
-    if (!verified) return;
+    yield* verify(candidateOption.value);
+  });
+
+  const verifyThrough = Effect.fn("verifyProjectionBaselineThrough")(function* () {
+    yield* verification.withPermits(1)(verifyLatestCandidate());
   });
 
   const compact = Effect.fn("compactCanonicalProjectionEvents")(function* (batchSize = 500) {
-    yield* verifyThrough();
-    if (input.eventStore.compactVerifiedPrefix) {
-      const result = yield* input.eventStore.compactVerifiedPrefix(batchSize);
-      yield* increment(threadRetentionCompactionRows, {}, result.deletedCount);
-    }
+    yield* verification.withPermits(1)(
+      Effect.gen(function* () {
+        yield* verifyLatestCandidate();
+        if (input.eventStore.compactVerifiedPrefix) {
+          const result = yield* input.eventStore.compactVerifiedPrefix(batchSize);
+          yield* increment(threadRetentionCompactionRows, {}, result.deletedCount);
+        }
+      }),
+    );
   });
 
   return { compact, verify, verifyThrough };

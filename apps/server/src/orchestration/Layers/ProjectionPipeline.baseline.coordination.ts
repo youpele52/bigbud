@@ -48,6 +48,16 @@ export const makeProjectionBaselineCoordinator = Effect.fn("makeProjectionBaseli
               const current = yield* Ref.get(flight);
               const requestedSequence =
                 current?.deferred === deferred ? current.requestedSequence : 0;
+              // Coverage needs only the sequence. Loading the verified row would read,
+              // hash and parse the entire baseline payload on every check. It is checked before
+              // the cooldown: a baseline verified since the failure (by the other coordinator,
+              // or a later flight) covers the request, so the old failure must not be replayed.
+              const verified = yield* input.baselines.latestVerifiedSequence();
+              if (Option.isSome(verified) && (yield* markCovered(deferred, verified.value))) {
+                yield* Ref.set(failure, null);
+                return;
+              }
+
               const now = yield* Clock.currentTimeMillis;
               const previousFailure = yield* Ref.get(failure);
               if (
@@ -59,14 +69,6 @@ export const makeProjectionBaselineCoordinator = Effect.fn("makeProjectionBaseli
                   cooldownMs: PROJECTION_BASELINE_FAILURE_COOLDOWN_MS,
                 });
                 return yield* previousFailure.error;
-              }
-
-              // Coverage needs only the sequence. Loading the verified row would read,
-              // hash and parse the entire baseline payload on every check.
-              const verified = yield* input.baselines.latestVerifiedSequence();
-              if (Option.isSome(verified) && (yield* markCovered(deferred, verified.value))) {
-                yield* Ref.set(failure, null);
-                return;
               }
 
               yield* input.compact;
