@@ -34,6 +34,7 @@ import { prepareCodexRemoteWorkspaceBridge } from "./Adapter.session.remoteWorks
 import { REMOTE_WORKSPACE_MCP_SERVER_NAME } from "../../../remote-workspace-bridge/remoteWorkspaceTools.ts";
 import { makeCodexTurnControl } from "./Adapter.session.turnControl.ts";
 import { makeCodexControls } from "./Adapter.controls.ts";
+import { peerToolsOfferedTo } from "../../../orchestration-tools/peerTools.shared.ts";
 
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
 /** Builds the full Codex adapter shape given a manager and supporting services. */
@@ -121,6 +122,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
       const orchestrationConfig = buildCodexSessionOrchestrationConfig(orchestrationBridge);
       const orchestrationDynamicTools = createCodexThreadOrchestrationDynamicTools({
         delegatedModelChoice: true,
+        peerTools: peerToolsOfferedTo(input.threadId),
       });
       const mergedConfigArgs = mergeCodexConfigArgs(
         remoteWorkspaceBridge?.configArgs,

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { isLatestTurnSettled } from "../../logic/session/session.logic";
 import { mapThreadSummary } from "./mappers.lazy.store";
+import { syncBoundedCatalog, syncSidebarCatalog } from "./helpers.lazy.store";
+import { useStore } from "./main.store";
 
 const UPDATED_AT = "2026-03-04T12:00:00.000Z";
 
@@ -36,6 +38,49 @@ function summary(overrides: Partial<ThreadSummary>): ThreadSummary {
     ...overrides,
   } as ThreadSummary;
 }
+
+describe("bounded notification summary ordering", () => {
+  it.each([true, false])(
+    "keeps newest evidence regardless of catalog source (sidebar newest: %s)",
+    (sidebarNewest) => {
+      const old = summary({ title: "Old" });
+      const current = summary({
+        title: "Current",
+        notificationSafety: {
+          turnId: "turn-1" as TurnId,
+          tasks: [],
+          childThreadIds: [],
+          pendingRequestIds: ["pending"],
+          queuedPromptIds: [],
+          overflow: false,
+        },
+      });
+      const sidebar = {
+        projectionSequence: sidebarNewest ? 20 : 19,
+        threads: [sidebarNewest ? current : old],
+        recentThreadIds: [],
+        pinnedThreadIds: [],
+        projectThreadCounts: [],
+      };
+      const page = {
+        projectionSequence: sidebarNewest ? 19 : 20,
+        projectId: current.projectId,
+        threads: [sidebarNewest ? old : current],
+      };
+      const initial = { ...useStore.getState(), threads: [], sidebarThreadsById: {} };
+      const next = syncBoundedCatalog(initial, {}, {}, {}, sidebar, [page]);
+      expect(next.threads[0]?.title).toBe("Current");
+      expect(next.threads[0]?.notificationSafetySequence).toBe(20);
+      expect(next.threads[0]?.notificationSafety?.pendingRequestIds).toEqual(["pending"]);
+      const stale = syncSidebarCatalog(next, {
+        ...sidebar,
+        projectionSequence: 19,
+        threads: [old],
+      });
+      expect(stale.threads[0]).toBe(next.threads[0]);
+    },
+  );
+});
 
 describe("mapThreadSummary latest turn", () => {
   it.each(["completed", "interrupted", "error"] as const)(

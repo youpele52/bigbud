@@ -3,6 +3,8 @@
 mod fixture;
 #[path = "shutdown.tests.rs"]
 mod shutdown_tests;
+#[path = "signals.tests.rs"]
+mod signal_tests;
 use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, PROTOCOL_MAJOR, PROTOCOL_MINOR, read_frame, v1};
 use fixture::*;
 use std::fs;
@@ -98,6 +100,7 @@ impl Rig {
                 cols: 80,
                 rows: 24,
                 environment: vec![],
+                profile_launch: false,
             }),
         );
         let v1::frame::Payload::PtyCreateResponse(value) = read_until(stream, |p| {
@@ -358,3 +361,6 @@ fn real_supervisor_expires_half_frames_and_no_hello_without_expiring_established
         let (_peer, _) = rig.connect();
     }
 }
+
+#[path = "detach.tests.rs"]
+mod detach_tests;

@@ -4,6 +4,7 @@ import { createFileRoute, retainSearchParams, useNavigate } from "@tanstack/reac
 import { useCallback, useEffect, useState } from "react";
 
 import ChatView from "../components/chat/view/ChatView";
+import { ThreadProjectGate } from "../components/chat/view/ThreadProjectGate";
 import { BigbudLogo } from "../components/sidebar/SidebarProjectItem";
 import {
   clearPromotedDraftThread,
@@ -70,9 +71,10 @@ export function ChatThreadRouteView() {
   const threadTitle =
     routeThread && isVisibleThread(routeThread) ? routeThread.title : "New thread";
   const search = Route.useSearch();
-  const draftThreadExists = useComposerDraftStore((store) =>
-    Object.hasOwn(store.draftThreadsByThreadId, threadId),
+  const draftProjectId = useComposerDraftStore(
+    (store) => store.draftThreadsByThreadId[threadId]?.projectId,
   );
+  const draftThreadExists = draftProjectId !== undefined;
   const [draftOwnership, setDraftOwnership] = useState<GetThreadOwnershipResult | null>(null);
   const resolvingDraftOwnership = draftThreadExists && routeThread === undefined;
   const routeThreadExists = routeThread
@@ -198,10 +200,21 @@ export function ChatThreadRouteView() {
 
   useEffect(() => {
     const api = readNativeApi();
-    if (!api || missingThreadRouteAction !== "bootstrap") {
+    const state = useStore.getState();
+    const action = getMissingThreadRouteAction({
+      bootstrapComplete,
+      routeThreadExists: state.threads.some(
+        (thread) => thread.id === threadId && isVisibleThread(thread),
+      ),
+      hydrationStatus: resolvingDraftOwnership
+        ? "loading"
+        : (state.threadHydrationById[threadId]?.status ?? "unloaded"),
+    });
+    if (!api || action !== "bootstrap") {
       return;
     }
 
+    // Loading is owned by this request, not a change to the route's intent.
     let disposed = false;
     void runBoundedBootstrap({ api, selectedThreadId: threadId, disposed: () => disposed }).catch(
       () => undefined,
@@ -209,7 +222,7 @@ export function ChatThreadRouteView() {
     return () => {
       disposed = true;
     };
-  }, [missingThreadRouteAction, threadId]);
+  }, [bootstrapComplete, resolvingDraftOwnership, threadId]);
 
   useEffect(() => {
     if (missingThreadRouteAction === "redirect") {
@@ -235,7 +248,9 @@ export function ChatThreadRouteView() {
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
-      <ChatView threadId={threadId} />
+      <ThreadProjectGate projectId={routeThread?.projectId ?? draftProjectId}>
+        <ChatView threadId={threadId} />
+      </ThreadProjectGate>
     </SidebarInset>
   );
 }

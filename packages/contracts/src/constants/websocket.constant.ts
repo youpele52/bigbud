@@ -8,6 +8,16 @@
  * @see APP_SERVER_NAME
  */
 export const WS_METHODS = {
+  serverListRemoteBackendRelayProfiles: "server.listRemoteBackendRelayProfiles",
+  serverOpenRemoteBackendRelay: "server.openRemoteBackendRelay",
+  serverCloseRemoteBackendRelay: "server.closeRemoteBackendRelay",
+  serverSetupRemoteBackend: "server.setupRemoteBackend",
+  serverRequestRemoteRuntimeUpdate: "server.requestRemoteRuntimeUpdate",
+  serverGetRemoteRuntimeUpdateStatus: "server.getRemoteRuntimeUpdateStatus",
+  serverConsentRemoteRuntimeUpdateInterruption: "server.consentRemoteRuntimeUpdateInterruption",
+  serverCancelRemoteRuntimeUpdate: "server.cancelRemoteRuntimeUpdate",
+  serverGetProviderProvisioningStatus: "server.getProviderProvisioningStatus",
+  serverProvisionProvider: "server.provisionProvider",
   // Project registry methods
   projectsList: "projects.list",
   projectsAdd: "projects.add",
@@ -66,7 +76,12 @@ export const WS_METHODS = {
   // Terminal methods
   terminalOpen: "terminal.open",
   terminalWslDistributions: "terminal.wslDistributions",
+  terminalShellProfiles: "terminal.shellProfiles",
   terminalSnapshot: "terminal.snapshot",
+  terminalRemoteInventory: "terminal.remoteInventory",
+  terminalRemoteAttach: "terminal.remoteAttach",
+  terminalRemoteDetach: "terminal.remoteDetach",
+  terminalRemoteStop: "terminal.remoteStop",
   terminalRecovery: "terminal.recovery",
   terminalWrite: "terminal.write",
   terminalResize: "terminal.resize",
@@ -90,6 +105,7 @@ export const WS_METHODS = {
   serverListConnectedSshMonitors: "server.listConnectedSshMonitors",
   serverListRemoteFolders: "server.listRemoteFolders",
   serverInstallRemoteAgent: "server.installRemoteAgent",
+  serverGetRemoteAgentManualInstall: "server.getRemoteAgentManualInstall",
   serverConnectRemoteAgent: "server.connectRemoteAgent",
   serverRestartRemoteAgent: "server.restartRemoteAgent",
   serverGetRemoteAgentRestartStatus: "server.getRemoteAgentRestartStatus",
@@ -117,6 +133,7 @@ export const WS_METHODS = {
   serverGetHandoffJob: "server.getHandoffJob",
   serverGetOpencodeV2ThreadToolsSetup: "server.getOpencodeV2ThreadToolsSetup",
   serverCopilotRuntime: "server.copilotRuntime",
+  serverPeerPairing: "server.peerPairing",
   serverCreateMobileRemotePairing: "server.createMobileRemotePairing",
   serverListMobileRemoteSessions: "server.listMobileRemoteSessions",
   serverRevokeMobileRemoteSession: "server.revokeMobileRemoteSession",

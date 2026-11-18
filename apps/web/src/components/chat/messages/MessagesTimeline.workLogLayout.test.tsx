@@ -60,10 +60,9 @@ describe("MessagesTimeline work log layout", () => {
       />,
     );
 
-    expect(markup).toContain("group/work-log flex flex-col items-start gap-1");
-    expect(markup).toContain(
-      "px-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/work-log:opacity-100",
-    );
+    expect(markup).toContain('class="group/work-log"');
+    expect(markup).toContain('data-slot="activity-accordion-actions"');
+    expect(markup).not.toContain("group-hover/work-log:opacity-100");
     expect(markup).not.toContain("mt-1.5 flex justify-start pl-6");
   });
 });

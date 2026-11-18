@@ -170,6 +170,7 @@ it("a candidate that becomes busy after sweep selection is vetoed by the real se
         Effect.sync(() => work.get(threadId) ?? { state: "idle", quietSince: null }),
       open: unused,
       snapshot: unused,
+      listShellProfiles: unused,
       restart: unused,
       write: () => Effect.void,
       resize: () => Effect.void,

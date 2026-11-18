@@ -62,8 +62,8 @@ describe("answered user input history", () => {
       activeTurnStartedAt: null,
     });
     expect(rows[0]).toMatchObject({ kind: "user-input-question", answers: history[0]!.answers });
-    // Collapsed by default: row gap, inset, accordion header and the hover copy row.
-    expect(estimateMessagesTimelineRowHeight(rows[0]!, { timelineWidthPx: 800 })).toBe(84);
+    // Collapsed by default: shared row gap (16px) plus section header (36px).
+    expect(estimateMessagesTimelineRowHeight(rows[0]!, { timelineWidthPx: 800 })).toBe(52);
   });
 
   it("keeps the same row identity and position when a pending question is answered", () => {

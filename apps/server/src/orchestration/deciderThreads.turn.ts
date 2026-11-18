@@ -42,6 +42,7 @@ export type ThreadTurnCommand = Exclude<
       | "thread.meta.update"
       | "thread.runtime-mode.set"
       | "thread.interaction-mode.set"
+      | "thread.turn.settle"
       | "thread.task.upsert"
       | "thread.task.remove"
       | "thread.fork"

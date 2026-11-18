@@ -1,3 +1,4 @@
+import { validateLocalDirectoryPath } from "./WorkspaceEntries.paths.ts";
 import fsPromises from "node:fs/promises";
 import type { Dirent } from "node:fs";
 
@@ -124,6 +125,7 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
     { readonly relativeDir: string; readonly dirents: Dirent[] | null },
     WorkspaceEntriesError
   > {
+    yield* validateLocalDirectoryPath(cwd, relativeDir, path.sep);
     return yield* Effect.tryPromise({
       try: async () => {
         const absoluteDir = relativeDir ? path.join(cwd, relativeDir) : cwd;

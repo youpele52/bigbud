@@ -1,3 +1,4 @@
+import { desktopMobileGatewayEnvironment } from "./mobileGatewayOwner";
 import { backendChildEnv } from "../logging/logging";
 
 export function withBackendNodeOptions(
@@ -48,6 +49,7 @@ export function buildBackendChildEnvironment(input: {
         ? { BIGBUD_DESKTOP_SUPERVISOR_BINARY: input.packagedDesktopSupervisorBinary }
         : {}),
       ...input.computerUseRuntimeEnv,
+      ...desktopMobileGatewayEnvironment(),
       BIGBUD_NODE_EXECUTABLE: input.backendNodeExecutable,
       BIGBUD_DESKTOP_PACKAGED: input.isPackaged ? "1" : "0",
       ELECTRON_RUN_AS_NODE: "1",

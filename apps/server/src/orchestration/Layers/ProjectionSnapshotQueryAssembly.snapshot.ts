@@ -123,6 +123,7 @@ export function mapCheckpointRow(row: ProjectionCheckpointRow): OrchestrationChe
 
 function mapLatestTurnRow(row: ProjectionLatestTurnRow): OrchestrationLatestTurn {
   return {
+    ...(row.terminalOutcome ? { terminalOutcome: row.terminalOutcome } : {}),
     turnId: row.turnId,
     state:
       row.state === "error"

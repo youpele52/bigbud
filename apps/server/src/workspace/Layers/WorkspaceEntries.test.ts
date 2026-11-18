@@ -273,14 +273,14 @@ it.layer(TestLayer)("WorkspaceEntriesLive", (it) => {
       Effect.gen(function* () {
         vi.mocked(runSshCommand)
           .mockResolvedValueOnce({
-            stdout: "d\tsrc\0f\tREADME.md\0",
+            stdout: "d\tsrc \0f\tREADME.md\0",
             stderr: "",
             code: 0,
             signal: null,
             timedOut: false,
           })
           .mockResolvedValueOnce({
-            stdout: "f\tindex.ts\0",
+            stdout: "f\tindex\t.ts \0",
             stderr: "",
             code: 0,
             signal: null,
@@ -295,14 +295,16 @@ it.layer(TestLayer)("WorkspaceEntriesLive", (it) => {
         const nested = yield* workspaceEntries.listDirectory({
           cwd: "/srv/project",
           executionTargetId: "ssh:dev",
-          relativePath: "src",
+          relativePath: "src ",
         });
 
         expect(root.entries).toEqual([
-          { path: "src", kind: "directory" },
+          { path: "src ", kind: "directory" },
           { path: "README.md", kind: "file" },
         ]);
-        expect(nested.entries).toEqual([{ path: "src/index.ts", kind: "file", parentPath: "src" }]);
+        expect(nested.entries).toEqual([
+          { path: "src /index\t.ts ", kind: "file", parentPath: "src " },
+        ]);
         expect(runSshCommand).toHaveBeenCalledTimes(2);
       }),
     );

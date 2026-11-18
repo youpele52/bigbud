@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   clearMobileSession,
@@ -35,6 +35,7 @@ function createLocalStorageMock() {
 }
 
 describe("mobileSession", () => {
+  afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
     const localStorage = createLocalStorageMock();
     vi.stubGlobal("localStorage", localStorage);
@@ -45,6 +46,36 @@ describe("mobileSession", () => {
     writeMobileSession(baseSession);
     expect(readMobileSession()).toEqual(baseSession);
     clearMobileSession();
+    expect(readMobileSession()).toBeNull();
+  });
+
+  it("strips untrusted JSON identity fields while preserving the original credential origin", () => {
+    window.localStorage.setItem(
+      "bigbud:mobile-web:session:v1",
+      JSON.stringify({ ...baseSession, authorityId: "a".repeat(32), privateField: "fixture" }),
+    );
+    expect(readMobileSession()).toEqual(baseSession);
+  });
+
+  it.each([
+    { ...baseSession, scope: "admin" },
+    { ...baseSession, sessionToken: "" },
+    { ...baseSession, expiresAt: "invalid" },
+    { ...baseSession, backendBaseUrl: "https://user:password@fixture.invalid" },
+    { ...baseSession, backendBaseUrl: "https://fixture.invalid/path?token=fixture" },
+  ])("ignores malformed stored credentials without deleting their original data", (invalid) => {
+    const raw = JSON.stringify(invalid);
+    window.localStorage.setItem("bigbud:mobile-web:session:v1", raw);
+    expect(readMobileSession()).toBeNull();
+    expect(window.localStorage.getItem("bigbud:mobile-web:session:v1")).toBe(raw);
+  });
+
+  it("treats denied browser storage as unavailable without crashing startup", () => {
+    vi.stubGlobal("window", {
+      get localStorage() {
+        throw new Error("fixture denied");
+      },
+    });
     expect(readMobileSession()).toBeNull();
   });
 

@@ -10,6 +10,8 @@ import {
   verifyLocalWorkspaceWatchAgentBinary,
 } from "./localWorkspaceWatchAgent.binary.ts";
 
+import { REMOTE_AGENT_PROTOCOL_MAJOR, REMOTE_AGENT_PROTOCOL_MINOR } from "./remoteAgentProtocol.ts";
+
 const temporaryDirectories: string[] = [];
 
 function temporaryDirectory(): string {
@@ -218,7 +220,7 @@ describe("local workspace watcher agent binary", () => {
   it("maps Node's Darwin identity to Rust's macOS identity", () => {
     const probe = vi.fn(() => ({
       status: 0,
-      stdout: "bigbud-remote-agent\t0.1.0\t1\t3\tdigest\tmacos\taarch64\n",
+      stdout: `bigbud-remote-agent\t0.1.0\t${REMOTE_AGENT_PROTOCOL_MAJOR}\t${REMOTE_AGENT_PROTOCOL_MINOR}\tdigest\tmacos\taarch64\n`,
       stderr: "",
     }));
 

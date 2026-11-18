@@ -163,6 +163,7 @@ describe("windowManager context menu", () => {
 
     const window = mockWindowInstances.at(-1);
     expect(window?.options).toMatchObject({
+      backgroundColor: "#ffffff",
       webPreferences: expect.objectContaining({
         plugins: true,
         spellcheck: false,
@@ -252,6 +253,7 @@ describe("windowManager context menu", () => {
       nodeIntegrationInWorker: false,
       plugins: true,
       sandbox: true,
+      transparent: false,
       webSecurity: true,
       webviewTag: false,
     });

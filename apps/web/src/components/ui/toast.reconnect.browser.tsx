@@ -1,8 +1,12 @@
 import "~/index.css";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
+import { settleToastForPointer } from "./toast.browser.utils";
 import { render } from "vitest-browser-react";
 vi.mock("@tanstack/react-router", () => ({ useParams: () => null }));
 import { AnchoredToastProvider, anchoredToastManager, ToastProvider, toastManager } from "./toast";
+
+afterEach(() => toastManager.close());
 
 it("renders a blue progress spinner and removes it when the connection is restored", async () => {
   const screen = await render(<ToastProvider />);
@@ -31,6 +35,7 @@ it("renders a blue progress spinner and removes it when the connection is restor
   expect(document.querySelector(".lucide-wifi")).toBeNull();
   expect(document.querySelector('[data-slot="toast-icon"]')).toBeNull();
   toastManager.close(id);
+  await expect.element(screen.getByText("Reconnected", { exact: true })).not.toBeInTheDocument();
 });
 
 it("lets the shared close control dismiss every toast type", async () => {
@@ -41,16 +46,16 @@ it("lets the shared close control dismiss every toast type", async () => {
     toastManager.add({ title, type, timeout: 0 });
 
     await expect.element(screen.getByText(title)).toBeVisible();
-    await expect
-      .poll(() =>
-        screen
-          .getByText(title)
-          .element()
-          .closest('[data-slot="toast-popup"]')
-          ?.hasAttribute("data-starting-style"),
+    const popup = screen
+      .getByText(title)
+      .element()
+      .closest<HTMLElement>('[data-slot="toast-popup"]')!;
+    await settleToastForPointer(popup);
+    await page
+      .elementLocator(
+        popup.querySelector<HTMLButtonElement>('button[aria-label="Close notification"]')!,
       )
-      .toBe(false);
-    await screen.getByRole("button", { name: "Close notification" }).click();
+      .click();
     await expect.element(screen.getByText(title)).not.toBeInTheDocument();
   }
 });
@@ -72,6 +77,12 @@ it("lets the shared close control dismiss anchored notifications", async () => {
   });
 
   await expect.element(screen.getByText("Anchored notification")).toBeVisible();
+  await settleToastForPointer(
+    screen
+      .getByText("Anchored notification")
+      .element()
+      .closest<HTMLElement>('[data-slot="toast-popup"]')!,
+  );
   await screen.getByRole("button", { name: "Close notification" }).click();
   await expect.element(screen.getByText("Anchored notification")).not.toBeInTheDocument();
 });

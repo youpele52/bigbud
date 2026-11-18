@@ -63,13 +63,90 @@ const duplicateLabelQuestion = {
 } as const;
 
 describe("resolvePendingUserInputAnswer", () => {
-  it("prefers a custom answer over selected options", () => {
+  it("combines a plain single-select choice with composer context", () => {
     expect(
       resolvePendingUserInputAnswer(singleSelectQuestion, {
         selectedOptionLabels: ["Orchestration-first"],
-        customAnswer: "Keep the existing envelope for one release",
+        customAnswer: "  Keep the existing envelope for one release ",
       }),
-    ).toBe("Keep the existing envelope for one release");
+    ).toBe("Orchestration-first\nKeep the existing envelope for one release");
+    expect(
+      resolvePendingUserInputAnswer(singleSelectQuestion, { customAnswer: " Only text " }),
+    ).toBe("Only text");
+    expect(
+      resolvePendingUserInputAnswer(multiSelectQuestion, {
+        selectedOptionLabels: ["Server", "Web"],
+        customAnswer: "staging only",
+      }),
+    ).toBe("Server, Web\nstaging only");
+  });
+
+  it("keeps the bare selection where options are ids or custom strings are refused", () => {
+    expect(
+      resolvePendingUserInputAnswer(cursorQuestion, {
+        selectedOptionIds: ["model-fast"],
+        customAnswer: "Custom model",
+      }),
+    ).toBe("model-fast");
+    expect(resolvePendingUserInputAnswer(cursorQuestion, { customAnswer: "Custom model" })).toBe(
+      "Custom model",
+    );
+    const strict = {
+      ...singleSelectQuestion,
+      field: { type: "string", required: true, allowCustom: false },
+    } as const;
+    expect(
+      resolvePendingUserInputAnswer(strict, {
+        selectedOptionLabels: ["Orchestration-first"],
+        customAnswer: "Typed answer",
+      }),
+    ).toBeNull();
+    const typed = {
+      ...singleSelectQuestion,
+      field: { type: "string", required: true, allowCustom: true },
+    } as const;
+    expect(
+      resolvePendingUserInputAnswer(typed, {
+        selectedOptionLabels: ["Orchestration-first"],
+        customAnswer: "Typed answer",
+      }),
+    ).toBe("Orchestration-first\nTyped answer");
+    expect(
+      setPendingUserInputCustomAnswer({ selectedOptionIds: ["model-fast"] }, "x", cursorQuestion),
+    ).toEqual({ customAnswer: "x", selectedOptionIds: ["model-fast"] });
+  });
+
+  it("ignores typed text on an options-only multiselect field instead of blocking the choice", () => {
+    const optionsOnly = {
+      ...multiSelectQuestion,
+      options: [
+        { id: "server", label: "Server", description: "Server" },
+        { id: "web", label: "Web", description: "Web" },
+      ],
+      field: { type: "multiselect", required: true, allowCustom: false },
+    } as const;
+    expect(
+      resolvePendingUserInputAnswer(optionsOnly, {
+        selectedOptionIds: ["server"],
+        customAnswer: "just a note",
+      }),
+    ).toEqual(["server"]);
+  });
+
+  it("keeps plain selections while typing and keeps typed context while toggling", () => {
+    const typed = setPendingUserInputCustomAnswer(
+      { selectedOptionLabels: ["Server"] },
+      "context",
+      multiSelectQuestion,
+    );
+    expect(typed).toEqual({ customAnswer: "context", selectedOptionLabels: ["Server"] });
+    expect(togglePendingUserInputOptionSelection(multiSelectQuestion, typed, "Web")).toEqual({
+      customAnswer: "context",
+      selectedOptionLabels: ["Server", "Web"],
+    });
+    expect(
+      togglePendingUserInputOptionSelection(cursorQuestion, { customAnswer: "typed" }, "Fast"),
+    ).toEqual({ customAnswer: "typed", selectedOptionIds: ["model-fast"] });
   });
 
   it("falls back to the selected option for single-select questions", () => {
@@ -80,15 +157,15 @@ describe("resolvePendingUserInputAnswer", () => {
     ).toBe("Orchestration-first");
   });
 
-  it("returns all selected labels for multi-select questions", () => {
+  it("joins selected labels into one string for plain multi-select questions", () => {
     expect(
       resolvePendingUserInputAnswer(multiSelectQuestion, {
         selectedOptionLabels: ["Server", "Web"],
       }),
-    ).toEqual(["Server", "Web"]);
+    ).toBe("Server, Web");
   });
 
-  it("clears the preset selection when a custom answer is entered", () => {
+  it("keeps the preset selection when a custom answer is entered", () => {
     expect(
       setPendingUserInputCustomAnswer(
         {
@@ -98,6 +175,7 @@ describe("resolvePendingUserInputAnswer", () => {
       ),
     ).toEqual({
       customAnswer: "doesn't matter",
+      selectedOptionLabels: ["Server", "Web"],
     });
   });
 });
@@ -203,7 +281,7 @@ describe("buildPendingUserInputAnswers", () => {
     });
   });
 
-  it("returns arrays for answered multi-select prompts", () => {
+  it("returns one comma-separated string for answered plain multi-select prompts", () => {
     expect(
       buildPendingUserInputAnswers([multiSelectQuestion], {
         areas: {
@@ -211,7 +289,7 @@ describe("buildPendingUserInputAnswers", () => {
         },
       }),
     ).toEqual({
-      areas: ["Server", "Web"],
+      areas: "Server, Web",
     });
   });
 
@@ -307,7 +385,7 @@ describe("pending user input question progress", () => {
       ),
     ).toMatchObject({
       selectedOptionLabels: ["Server", "Web"],
-      resolvedAnswer: ["Server", "Web"],
+      resolvedAnswer: "Server, Web",
       canAdvance: true,
       isComplete: true,
     });

@@ -7,7 +7,7 @@ export interface WorkGroupPresentation {
   readonly hasOverflow: boolean;
   readonly hiddenCount: number;
   readonly title: string;
-  /** A lone visible entry keeps its hover actions outside the accordion. */
+  /** A lone visible entry keeps its actions in the header, outside the panel. */
   readonly showSingleEntryActionsOutside: boolean;
 }
 

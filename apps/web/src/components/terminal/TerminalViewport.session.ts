@@ -15,13 +15,19 @@ import { attachTerminalViewportInput } from "./TerminalViewport.input";
 import { createTerminalView, type TerminalView } from "./TerminalViewport.view";
 import { useTerminalViewFind, useTerminalViewSettings } from "./TerminalViewport.viewState";
 import { makeTerminalLinkRegistrar } from "./TerminalViewport.links";
-import { clearSelectionAction, openTerminalSession } from "./TerminalViewport.session.helpers";
+import {
+  clearSelectionAction,
+  openTerminalSession,
+  releaseTerminalViewRefs,
+} from "./TerminalViewport.session.helpers";
 import { attachTerminalSelection } from "./TerminalViewport.selection";
 import { makeTerminalRestartAction } from "./TerminalViewport.restart";
+import { registerTerminalProfileRestart } from "./TerminalProfilePicker.restart";
 import { TerminalHistoryUnavailableError } from "./TerminalHistoryUnavailableError";
 import { TerminalSetupCleanup } from "./TerminalSetupCleanup";
 import { makeTerminalStartupRecovery } from "./TerminalViewport.startup";
-import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { recordTerminalProfileSnapshot } from "./TerminalViewport.profile";
+import { prepareTerminalRestartDelivery } from "./TerminalViewport.restart.recovery";
 import { subscribeTerminalLifecycleRefresh } from "./terminalLifecycle.recovery";
 import type { UseTerminalViewportSessionInput } from "./TerminalViewport.session.types";
 import {
@@ -31,15 +37,6 @@ import {
 
 export function useTerminalViewportSession(input: UseTerminalViewportSessionInput) {
   const lifecycle = useTerminalLifecycle(input.threadId, input.terminalId);
-  // Callback identity changes must not remount the terminal.
-  const readTerminalLabelRef = useRef(input.readTerminalLabel);
-  readTerminalLabelRef.current = input.readTerminalLabel;
-  const onAddTerminalContextRef = useRef(input.onAddTerminalContext);
-  onAddTerminalContextRef.current = input.onAddTerminalContext;
-  const onRequestTerminalAnnotationRef = useRef(input.onRequestTerminalAnnotation);
-  onRequestTerminalAnnotationRef.current = input.onRequestTerminalAnnotation;
-  const onSessionExitedRef = useRef(input.onSessionExited);
-  onSessionExitedRef.current = input.onSessionExited;
   const [inputEnabled, setInputEnabled] = useState(false);
   const [deliveryError, setDeliveryError] = useState<string | null>(null);
   const [historyUnavailable, setHistoryUnavailable] = useState(false);
@@ -57,18 +54,18 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
   const retryDeliveryRef = useRef<() => void>(() => undefined);
   const restartDeliveryRef = useRef<() => void>(() => undefined);
   const resyncDeliveryRef = useRef<() => void>(() => undefined);
-  const typographyRef = useRef(input);
-  typographyRef.current = input;
+  const latestInputRef = useRef(input);
+  latestInputRef.current = input;
 
   useEffect(() => {
     const mount = input.containerRef.current;
     if (!mount) return;
 
-    const readTerminalLabel = () => readTerminalLabelRef.current();
+    const readTerminalLabel = () => latestInputRef.current.readTerminalLabel();
     const onAddTerminalContext: typeof input.onAddTerminalContext = (selection) =>
-      onAddTerminalContextRef.current(selection);
+      latestInputRef.current.onAddTerminalContext(selection);
     const onRequestTerminalAnnotation: typeof input.onRequestTerminalAnnotation = (request) =>
-      onRequestTerminalAnnotationRef.current(request);
+      latestInputRef.current.onRequestTerminalAnnotation(request);
     const selectionActionTimerRef = input.selectionActionTimerRef;
     const selectionActionOpenRef = input.selectionActionOpenRef;
     const terminalRef = input.terminalRef;
@@ -85,7 +82,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     setRendering({ mode: "dom", reason: null });
     const view = createTerminalView({
       mount,
-      settings: typographyRef.current,
+      settings: latestInputRef.current,
       threadId: input.threadId,
       terminalId: input.terminalId,
       executionTargetId: input.executionTargetId,
@@ -96,13 +93,8 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
     input.terminalRef.current = terminal;
     input.fitAddonRef.current = fitAddon;
     fontControllerRef.current = fontController;
-    const releaseView = () => {
-      if (viewRef.current === view) viewRef.current = null;
-      if (fontControllerRef.current === fontController) fontControllerRef.current = null;
-      if (terminalRef.current === terminal) terminalRef.current = null;
-      if (fitAddonRef.current === fitAddon) fitAddonRef.current = null;
-      view.dispose();
-    };
+    const releaseView = () =>
+      releaseTerminalViewRefs(view, { viewRef, fontControllerRef, terminalRef, fitAddonRef });
 
     const api = readNativeApi();
     if (!api) {
@@ -119,7 +111,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           hasHandledExitRef: input.hasHandledExitRef,
           dropPathModeRef: input.dropPathModeRef,
           clearSelectionAction: clearSelectionActionState,
-          handleSessionExited: () => onSessionExitedRef.current(),
+          handleSessionExited: () => latestInputRef.current.onSessionExited(),
           onSnapshot: (snapshot) => onSnapshot(snapshot),
           onInputState: (enabled) => {
             if (!disposed) {
@@ -219,7 +211,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
       let hasRunningSnapshot = false;
       let lastSnapshot: TerminalSessionSnapshot | null = null;
       const onSnapshot = (snapshot: TerminalSessionSnapshot) => {
-        if (!recordTerminalLaunch(snapshot)) return false;
+        if (!recordTerminalProfileSnapshot(snapshot)) return false;
         lastSnapshot = snapshot;
         input.dropPathModeRef.current = snapshot.dropPathMode;
         terminalLinksDisposable.dispose();
@@ -287,10 +279,10 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
           delivery.intake.pause(err instanceof Error ? err : new Error("Failed to open terminal"));
         },
       });
-      const replaceDelivery = () => {
+      const replaceDelivery = (keepSubscription = false) => {
         startup.invalidate();
         delivery.dispose();
-        output.unsubscribe();
+        if (!keepSubscription) output.unsubscribe();
         setDeliveryError(null);
         setStartupPending(!hasRunningSnapshot);
         setStartupFailed(false);
@@ -309,16 +301,13 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
         replaceDelivery();
         void startup.run(hasRunningSnapshot);
       };
-      restartDeliveryRef.current = makeTerminalRestartAction({
+      const restart = makeTerminalRestartAction({
         api,
         terminal,
         readSnapshot: () => lastSnapshot,
         disposed: () => disposed,
-        prepare: async () => {
-          const owner = replaceDelivery();
-          await subscribe();
-          return owner;
-        },
+        prepare: (isCurrent) =>
+          prepareTerminalRestartDelivery(subscribe, () => replaceDelivery(true), isCurrent),
         isCurrent: (owner) => delivery === owner,
         onSnapshot,
         onFailure: (error) => {
@@ -327,10 +316,18 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
         },
       });
 
+      restartDeliveryRef.current = restart;
+      const unregisterRestart = registerTerminalProfileRestart(
+        input.threadId,
+        input.terminalId,
+        restart,
+      );
+      partialCleanups.add(unregisterRestart);
       void startup.run();
 
       return () => {
         disposed = true;
+        unregisterRestart();
         unsubscribeRefresh();
         clearSelectionActionState();
         retryDeliveryRef.current = () => undefined;

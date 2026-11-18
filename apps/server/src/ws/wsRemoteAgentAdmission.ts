@@ -7,17 +7,22 @@ import {
   type ServerGetRemoteAgentUpdateStatusInput,
   type ServerRemoteAgentUpdateStatus,
 } from "@bigbud/contracts/server/server.ts";
-import { remoteAgentAdmission } from "../remote-agent/remoteAgentAdmission.ts";
+import { activateRemoteAgentFresh } from "../remote-agent/remoteAgentActivation.ts";
 import { isRemoteAgentConfigured } from "../remote-agent/remoteAgentServerLayer.ts";
 import { isRemoteAgentExecutionTarget } from "../remote-agent/remoteAgentDefault.ts";
-import { scheduleRemoteAgentCleanup } from "../remote-agent/remoteAgentInstall.maintenance.ts";
-import { remoteAgentRuntimeSummary } from "../remote-agent/remoteAgentStatus.ts";
 import type { RemoteAgentUpdateCoordinatorShape } from "../remote-agent/remoteAgentUpdate.coordinator.ts";
 import { remoteAgentFailureMessage } from "../remote-agent/remoteAgentFailure.ts";
+import type { RemoteAgentInstallOperations } from "../remote-agent/remoteAgentInstall.operation.ts";
 
+/**
+ * Fresh admission from the app. With `replace` (the app's default) older builds are retired
+ * through the shared install operations once the new build is active; a healthy fallback
+ * activated nothing new, so it retires nothing. Retirement never affects the connection.
+ */
 export const connectRemoteAgentEffect = Effect.fn("connectRemoteAgentEffect")(function* (
   input: ServerConnectRemoteAgentInput,
   remoteAgentUpdateCoordinator?: RemoteAgentUpdateCoordinatorShape,
+  operations?: Pick<RemoteAgentInstallOperations, "retireAfterActivation">,
 ): Effect.fn.Return<ServerConnectRemoteAgentResult, ServerInstallRemoteAgentError> {
   if (!isRemoteAgentConfigured())
     return yield* new ServerInstallRemoteAgentError({
@@ -27,16 +32,12 @@ export const connectRemoteAgentEffect = Effect.fn("connectRemoteAgentEffect")(fu
     return yield* new ServerInstallRemoteAgentError({
       message: "This project uses Direct SSH. Select bigbud remote agent before connecting it.",
     });
-  const result = yield* Effect.tryPromise({
+  const connected = yield* Effect.tryPromise({
     try: () =>
-      remoteAgentAdmission.fresh(
+      activateRemoteAgentFresh(
         input.executionTargetId,
         input.requestId,
-        async () =>
-          (await remoteAgentUpdateCoordinator?.prepareForAdmission(
-            input.executionTargetId,
-            input.requestId,
-          )) ?? {},
+        remoteAgentUpdateCoordinator,
       ),
     catch: (cause) =>
       new ServerInstallRemoteAgentError({
@@ -44,22 +45,15 @@ export const connectRemoteAgentEffect = Effect.fn("connectRemoteAgentEffect")(fu
         cause,
       }),
   });
-  remoteAgentUpdateCoordinator?.enqueue({
-    target: input.executionTargetId,
-    trigger: "authenticated",
-    authenticated: true,
-  });
-  const owner = result.state.admissions.find((entry) => entry.id === result.connectionId)!;
-  scheduleRemoteAgentCleanup(input.executionTargetId);
+  if (!input.replace || !operations || connected.outcome === "fallback") return connected;
+  const cleanup = yield* Effect.promise(() =>
+    operations.retireAfterActivation(input.executionTargetId).catch(() => null),
+  );
+  if (!cleanup) return connected;
   return {
-    ...remoteAgentRuntimeSummary({
-      ...result.state,
-      current: owner.buildId,
-      currentConnectionId: result.connectionId,
-    }),
-    connectionId: result.connectionId,
-    currentVersion: result.state.builds.find((entry) => entry.id === owner.buildId)!.runtime
-      .version,
+    ...connected,
+    cleanupDeferred: cleanup.cleanupDeferred,
+    ...(cleanup.message ? { cleanupMessage: cleanup.message } : {}),
   };
 });
 

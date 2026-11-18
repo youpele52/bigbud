@@ -61,7 +61,11 @@ export interface DirectResourceCleanupExecutorShape {
 
 export class DirectResourceCleanupExecutorError extends Data.TaggedError(
   "DirectResourceCleanupExecutorError",
-)<{ readonly detail: string; readonly cause?: unknown }> {}
+)<{ readonly detail: string; readonly cause?: unknown }> {
+  override get message(): string {
+    return this.detail;
+  }
+}
 
 export class DirectResourceCleanupExecutor extends ServiceMap.Service<
   DirectResourceCleanupExecutor,

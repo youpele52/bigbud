@@ -15,6 +15,7 @@ import { openRemoteAgentControl } from "./remoteAgentControl.ts";
 import { makeOwnedRemoteAgentPty } from "./remoteAgentOwnedPty.ts";
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
 import { remoteAgentBuildId } from "./remoteAgentRuntime.ts";
+import { observeLegacyRemoteAgentBinding } from "./remoteAgentLegacyBinding.ts";
 import {
   cancelOwnedRemoteProcess,
   makeOwnedRemoteAgentProcess,
@@ -59,8 +60,29 @@ export function makeRemoteAgentComposition(input: {
   const workspaceResolver = makeRemoteWorkspaceClientResolver(pool);
   const processResolver = makeRemoteProcessClientResolver(pool);
   const ownedRunner = managed ? { runOwned: makeOwnedRemoteAgentProcess(pool) } : {};
+  // Custom binaries are observed, never promoted into the managed target admission.
+  // The ordinary inventory/legacy connection may prepare its existing supervisor;
+  // this profile lane and every recovery connection are strictly proxy-only.
+  const resolveProfileBinding = managed
+    ? remoteAgentAdmission.resolveBinding
+    : async (target: string) =>
+        observeLegacyRemoteAgentBinding(
+          target,
+          await openRemoteAgentControl(target),
+          undefined,
+          undefined,
+          input.binaryPath,
+        );
+  const ownedPty = makeOwnedRemoteAgentPty(pool, remoteAgentOwners, resolveProfileBinding);
   const ptyResolver = {
-    ...(managed ? { restoreOrCreate: makeOwnedRemoteAgentPty(pool) } : {}),
+    resolveProfileBinding,
+    restoreOrCreate: managed
+      ? ownedPty
+      : async (spawn) => {
+          const owner = await remoteAgentOwners().get(`terminal:${spawn.ownerKey}`);
+          if (spawn.shellLaunch || spawn.recoverOnly || owner) return ownedPty(spawn);
+          return undefined; // Preserve implicit ordinary account-login-shell creation.
+        },
     resolvePty: (executionTargetId: string) => pool.getPtyClient(executionTargetId),
     resolveWorkspace: (_executionTargetId: string, connection: RemoteAgentConnection) =>
       Promise.resolve(new RemoteAgentWorkspaceClient(connection)),

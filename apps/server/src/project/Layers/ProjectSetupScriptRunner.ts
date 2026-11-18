@@ -1,10 +1,15 @@
 import { projectScriptRuntimeEnv, setupProjectScript } from "@bigbud/shared/projectScripts";
 import { assertTerminalCommandContext } from "@bigbud/shared/terminalCommand";
+import { ProjectId } from "@bigbud/contracts";
 import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
-import { OrchestrationEngineService } from "../../orchestration/Services/OrchestrationEngine.ts";
+import {
+  ensureOrchestrationProjectState,
+  ensureOrchestrationWorkspaceProjects,
+  OrchestrationEngineService,
+} from "../../orchestration/Services/OrchestrationEngine.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { resolveWorkspaceExecutionTargetId } from "../../workspace-target/workspaceTarget.ts";
 import {
@@ -18,6 +23,13 @@ const makeProjectSetupScriptRunner = Effect.gen(function* () {
 
   const runForThread: ProjectSetupScriptRunnerShape["runForThread"] = (input) =>
     Effect.gen(function* () {
+      if (input.projectId)
+        yield* ensureOrchestrationProjectState(
+          orchestrationEngine,
+          ProjectId.makeUnsafe(input.projectId),
+        );
+      else if (input.projectCwd)
+        yield* ensureOrchestrationWorkspaceProjects(orchestrationEngine, input.projectCwd);
       const readModel = yield* orchestrationEngine.getReadModel();
       const project =
         (input.projectId

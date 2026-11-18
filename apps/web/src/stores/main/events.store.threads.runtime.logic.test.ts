@@ -43,7 +43,7 @@ describe("isStaleRunningSessionUpdate", () => {
     ).toBe(false);
   });
 
-  it("still treats post-completion compaction updates as stale", () => {
+  it("treats compaction updates as stale only after authoritative settlement", () => {
     expect(
       isStaleRunningSessionUpdate({
         ...baseInput,
@@ -51,6 +51,7 @@ describe("isStaleRunningSessionUpdate", () => {
         latestTurn: {
           turnId: "turn-1",
           completedAt: "2026-02-27T00:00:02.000Z",
+          terminalOutcome: "completed",
         },
       }),
     ).toBe(true);

@@ -363,7 +363,6 @@ describe("terminal layout integration", () => {
         expect(buttons.map((button) => button.ariaLabel)).toEqual([
           "New Terminal (⌘N)",
           "Split Terminal (⌘⇧G)",
-          "Rename Terminal",
           "Close Terminal (⌘W)",
           ...(!panel ? ["Minimize terminal", "Expand terminal"] : []),
         ]);
@@ -371,25 +370,20 @@ describe("terminal layout integration", () => {
         expect(dividers).toHaveLength(panel ? 2 : 3);
         expect(dividers[0]!.previousElementSibling).toBe(buttons[0]);
         expect(dividers[0]!.nextElementSibling).toBe(buttons[1]);
-        expect(dividers[1]!.previousElementSibling).toBe(buttons[2]);
-        expect(dividers[1]!.nextElementSibling).toBe(buttons[3]);
+        expect(dividers[1]!.previousElementSibling).toBe(buttons[1]);
+        expect(dividers[1]!.nextElementSibling).toBe(buttons[2]);
         if (!panel) {
-          expect(dividers[2]!.previousElementSibling).toBe(buttons[3]);
-          expect(dividers[2]!.nextElementSibling).toBe(buttons[4]);
-          expect(buttons[4]!.nextElementSibling).toBe(buttons[5]);
+          expect(dividers[2]!.previousElementSibling).toBe(buttons[2]);
+          expect(dividers[2]!.nextElementSibling).toBe(buttons[3]);
+          expect(buttons[3]!.nextElementSibling).toBe(buttons[4]);
         }
-        const callbacks = [
-          onNew,
-          onSplit,
-          onRename,
-          onClose,
-          ...(!panel ? [onMinimize, onExpand] : []),
-        ];
+        const callbacks = [onNew, onSplit, onClose, ...(!panel ? [onMinimize, onExpand] : [])];
         for (const [index, button] of buttons.entries()) {
           expect(button.querySelector("svg")?.classList.contains("size-3.25")).toBe(true);
           await page.getByRole("button", { name: button.ariaLabel!, exact: true }).click();
           expect(callbacks[index]).toHaveBeenCalledTimes(1);
         }
+        expect(onRename).not.toHaveBeenCalled();
         expect(onClose).toHaveBeenCalledExactlyOnceWith("terminal-2");
         expect(onExpand).toHaveBeenCalledTimes(panel ? 0 : 1);
       } finally {

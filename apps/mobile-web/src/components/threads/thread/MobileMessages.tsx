@@ -1,19 +1,27 @@
 import type { OrchestrationMessage } from "@bigbud/contracts";
 import { useMemo } from "react";
+import { ChatGreetingSurface } from "@bigbud/ui/chatGreetingSurface";
 
 import ChatMarkdown from "~/components/chat/common/ChatMarkdown";
 import { UserMessageBody } from "~/components/chat/messages/MessagesTimeline.userMessage";
 import { deriveDisplayedUserMessageState } from "~/lib/terminalContext";
 import { formatShortTimestamp } from "~/utils/timestamp/timestamp.utils";
 import { BigbudLogo } from "../../shell/BigbudLogo";
+import { cn } from "../../../lib/cn";
 
 interface MobileMessagesProps {
   messages: ReadonlyArray<OrchestrationMessage>;
   cwd: string | undefined;
   showEmptyState?: boolean;
+  greeting?: string | null;
 }
 
-export function MobileMessages({ messages, cwd, showEmptyState = false }: MobileMessagesProps) {
+export function MobileMessages({
+  messages,
+  cwd,
+  showEmptyState = false,
+  greeting = null,
+}: MobileMessagesProps) {
   const visibleMessages = useMemo(
     () => messages.filter((message) => message.role === "user" || message.role === "assistant"),
     [messages],
@@ -23,11 +31,14 @@ export function MobileMessages({ messages, cwd, showEmptyState = false }: Mobile
     return (
       <div
         aria-label="No messages yet"
-        className="flex min-h-full flex-1 items-center justify-center px-4 py-12"
+        className={cn(
+          "flex min-h-full flex-1 items-center justify-center py-12",
+          !greeting && "px-4",
+        )}
         data-mobile-empty-state="true"
         role="status"
       >
-        <BigbudLogo className="h-8 opacity-45" />
+        <ChatGreetingSurface Logo={BigbudLogo} greeting={greeting} className="min-h-full flex-1" />
       </div>
     );
   }

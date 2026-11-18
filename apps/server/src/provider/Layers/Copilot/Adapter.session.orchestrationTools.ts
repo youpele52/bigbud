@@ -10,6 +10,7 @@ import { createCopilotThreadOrchestrationTools } from "../../../orchestration-to
 import type { ThreadOrchestrationToolDispatcherShape } from "../../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { dispatchComputerUseToolRequest } from "../../../orchestration-tools/computerUseToolRequest.ts";
 import { runThreadOrganizationTool } from "../../../orchestration-tools/threadOrganizationTool.run.ts";
+import { peerToolsOfferedTo } from "../../../orchestration-tools/peerTools.shared.ts";
 
 const asRecord = <A>(effect: Effect.Effect<A, Error>) =>
   Effect.runPromise(
@@ -33,6 +34,18 @@ export function createCopilotOrchestrationToolSurface(input: {
       dispatcher.configureSystemResourceRules
         ? asRecord(dispatcher.configureSystemResourceRules(args))
         : Promise.reject(new Error("monitor settings unavailable")),
+    ...(dispatcher.remoteAgent
+      ? { remoteAgent: (request) => asRecord(dispatcher.remoteAgent!(request)) }
+      : {}),
+    peerTools: peerToolsOfferedTo(threadId),
+    ...(dispatcher.peer
+      ? {
+          peer: (tool, args, invocationId) =>
+            asRecord(
+              dispatcher.peer!({ callerThreadId: threadId, invocationId, tool, arguments: args }),
+            ),
+        }
+      : {}),
     getSystemResources: (args) =>
       dispatcher.getSystemResources
         ? asRecord(dispatcher.getSystemResources(args))
@@ -43,6 +56,15 @@ export function createCopilotOrchestrationToolSurface(input: {
             asRecord(workspaceDispatch({ callerThreadId: threadId, tool, arguments: args })),
         }
       : {}),
+    setElevatorSummary: (summary, invocationId) =>
+      Effect.runPromise(
+        dispatcher.setElevatorSummary?.({
+          threadId,
+          summary,
+          invocationId,
+          sourceMessageId: MessageId.makeUnsafe(invocationId),
+        }) ?? Effect.fail(new Error("Thread summary tools are not ready.")),
+      ),
     renameThread: (title, targetThreadId, invocationId) =>
       Effect.runPromise(
         dispatcher.rename({

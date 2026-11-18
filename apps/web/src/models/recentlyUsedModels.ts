@@ -7,7 +7,12 @@ import { getProviderDescriptor } from "../components/chat/provider/providerDescr
 export const RECENTLY_USED_MODELS_STORAGE_KEY = "bigbud:recently-used-models:v2";
 export const LEGACY_RECENTLY_USED_MODELS_STORAGE_KEYS = ["bigbud:recently-used-models:v1"] as const;
 const STORAGE_KEY = RECENTLY_USED_MODELS_STORAGE_KEY;
-const LEGACY_STORAGE_KEYS = LEGACY_RECENTLY_USED_MODELS_STORAGE_KEYS;
+/** Model ids come from the backend's providers, so recents are backend-scoped. */
+export const RECENTLY_USED_MODELS_STORAGE_OPTIONS = {
+  legacyKeys: LEGACY_RECENTLY_USED_MODELS_STORAGE_KEYS,
+  scope: "backend",
+} as const;
+const STORAGE_OPTIONS = RECENTLY_USED_MODELS_STORAGE_OPTIONS;
 const LOCAL_STORAGE_CHANGE_EVENT = "bigbud:local_storage_change";
 export const MAX_RECENT_MODELS_PER_PROVIDER = 5;
 
@@ -69,9 +74,7 @@ export function normalizeRecentlyUsedModels(entries: ReadonlyArray<unknown>): {
 }
 
 function readAll(): RecentModelUsage[] {
-  const result = getLocalStorageItem(STORAGE_KEY, RecentModelsRawList, {
-    legacyKeys: LEGACY_STORAGE_KEYS,
-  });
+  const result = getLocalStorageItem(STORAGE_KEY, RecentModelsRawList, STORAGE_OPTIONS);
   if (!result) return [];
   const normalized = normalizeRecentlyUsedModels(result);
   if (normalized.changed) {
@@ -81,9 +84,7 @@ function readAll(): RecentModelUsage[] {
 }
 
 function writeAll(list: RecentModelUsage[]): void {
-  setLocalStorageItem(STORAGE_KEY, list, RecentModelsList, {
-    legacyKeys: LEGACY_STORAGE_KEYS,
-  });
+  setLocalStorageItem(STORAGE_KEY, list, RecentModelsList, STORAGE_OPTIONS);
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent(LOCAL_STORAGE_CHANGE_EVENT, { detail: { key: STORAGE_KEY } }),

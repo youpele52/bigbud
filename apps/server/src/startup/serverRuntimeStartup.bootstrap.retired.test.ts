@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
+import { ProjectionProjectRepository } from "../persistence/Services/ProjectionProjects.ts";
 import { ProviderRegistry } from "../provider/Services/ProviderRegistry.ts";
 import { ServerSettingsService } from "../ws/serverSettings.ts";
 import { ServerConfig } from "./config.ts";
@@ -25,10 +26,9 @@ it("does not bootstrap a replacement runtime for an existing removed-provider pr
           Effect.succeed(Option.some({ id: projectId, defaultModelSelection: selection })),
         getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
       } as never),
-      Effect.provideService(OrchestrationEngineService, {
-        getReadModel: () =>
-          Effect.succeed({ projects: [{ id: BUILT_IN_CHATS_PROJECT_ID }], threads: [] }),
-        dispatch,
+      Effect.provideService(OrchestrationEngineService, { dispatch } as never),
+      Effect.provideService(ProjectionProjectRepository, {
+        getById: () => Effect.succeed(Option.some({ projectId: BUILT_IN_CHATS_PROJECT_ID })),
       } as never),
       Effect.provideService(ProviderRegistry, { getProviders: Effect.succeed([]) } as never),
       Effect.provideService(ServerSettingsService, {

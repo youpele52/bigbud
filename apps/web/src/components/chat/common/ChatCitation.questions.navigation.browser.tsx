@@ -1,3 +1,4 @@
+import { THREAD_VIEW_MESSAGE_PAGE_SIZE } from "../../../routes/-__root.bounded-bootstrap";
 import "../../../index.css";
 import { ApprovalRequestId, EventId, MessageId } from "@bigbud/contracts/core/baseSchemas";
 import type { GetSelectedThreadDetailResult } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
@@ -163,8 +164,20 @@ it("loads missing question history through real cursor pagination before reveali
     await page.getByRole("button", { name: "Go to citation from Question: Which theme" }).click();
     await expect.poll(() => mocks.getDetail.mock.calls.length, { timeout: 10_000 }).toBe(2);
     expect(mocks.getDetail.mock.calls).toEqual([
-      [{ threadId: CITE_THREAD_ID, messageCursor: firstCursor }],
-      [{ threadId: CITE_THREAD_ID, messageCursor: secondCursor }],
+      [
+        {
+          threadId: CITE_THREAD_ID,
+          messageCursor: firstCursor,
+          messageLimit: THREAD_VIEW_MESSAGE_PAGE_SIZE,
+        },
+      ],
+      [
+        {
+          threadId: CITE_THREAD_ID,
+          messageCursor: secondCursor,
+          messageLimit: THREAD_VIEW_MESSAGE_PAGE_SIZE,
+        },
+      ],
     ]);
     await expect.poll(() => CSS.highlights.get("bigbud-chat-citation")?.size).toBe(1);
     expect(highlightedRange().toString()).toBe("Which theme");
@@ -198,6 +211,7 @@ it("retains an unavailable question snapshot without issuing a message-anchor qu
     expect(mocks.getDetail).toHaveBeenCalledExactlyOnceWith({
       threadId: CITE_THREAD_ID,
       messageCursor: firstCursor,
+      messageLimit: THREAD_VIEW_MESSAGE_PAGE_SIZE,
     });
     expect(CSS.highlights.get("bigbud-chat-citation")).toBeUndefined();
     expect(useSearchStore.getState().focusRequest).toBeNull();
@@ -254,8 +268,11 @@ it("reveals and visibly highlights only the cited generic heading after the ques
     <CitationBrowserHarness messages={[]} pendingUserInputs={[prompt]} />,
   );
   try {
-    const headings = document.querySelectorAll<HTMLElement>('[data-chat-cite-region="header"]');
-    selectChatText(headings[1]!, 3, 11);
+    // The pending panel shows one question at a time; move to the second one before citing.
+    await page.getByRole("button", { name: "Next question" }).click();
+    const heading = document.querySelector<HTMLElement>('[data-chat-cite-region="header"]')!;
+    expect(heading.textContent).toBe("2. Question");
+    selectChatText(heading, 3, 11);
     await page.getByRole("button", { name: "Cite", exact: true }).click();
     const saved = useComposerDraftStore.getState().draftsByThreadId[CITE_THREAD_ID]!.annotations[0];
     expect(saved).toMatchObject({

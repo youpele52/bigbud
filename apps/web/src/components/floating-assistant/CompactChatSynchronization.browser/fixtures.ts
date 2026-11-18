@@ -1,3 +1,9 @@
+import { vi } from "vitest";
+import { createBaseServerConfig } from "~/components/chat/view/ChatView.browser/fixtures";
+import { emitWelcome, setServerConfigSnapshot } from "~/rpc/serverState";
+import { __resetNativeApiForTests } from "~/rpc/nativeApi";
+import { __resetWsRpcClientForTests } from "~/rpc/wsRpcClient";
+import { recordWsConnectionOpened } from "~/rpc/wsConnectionState";
 import {
   BUILT_IN_CHATS_PROJECT_ID,
   MessageId,
@@ -160,4 +166,60 @@ export function deliveryBatch(event: OrchestrationEvent): OrchestrationDeliveryB
     batchId: `batch-${event.sequence}`,
     events: [event],
   };
+}
+
+export function nativeSettlement(threadId: ThreadId, turnId: TurnId, sequence: number) {
+  return makeEvent(
+    "thread.turn-settled",
+    {
+      threadId,
+      turnId,
+      sessionEpoch: 0,
+      outcome: "completed",
+      completedAt: NOW,
+    },
+    { sequence },
+  );
+}
+
+/** Install window.nativeApi first, then retire any fallback transport before mounting real coordinators. */
+export async function primeCompactConnection() {
+  await __resetWsRpcClientForTests();
+  __resetNativeApiForTests();
+  const config = createBaseServerConfig();
+  setServerConfigSnapshot({
+    ...config,
+    providers: [{ ...config.providers[0]!, initialProbeComplete: true, status: "ready" }],
+  });
+  emitWelcome({
+    cwd: "/repo/main",
+    projectName: "Main",
+    bootstrapThreadId: "main-thread" as never,
+  });
+  recordWsConnectionOpened();
+}
+
+export function announceCompactWelcome() {
+  emitWelcome({
+    cwd: "/repo/main",
+    projectName: "Main",
+    bootstrapThreadId: "main-thread" as never,
+  });
+}
+
+export function compactCommandOutcome(
+  acceptedCommands: Map<string, { threadId: ThreadId; sequence: number }>,
+) {
+  return vi.fn(async ({ commandId }: { commandId: string }) => {
+    const accepted = acceptedCommands.get(commandId);
+    return accepted
+      ? {
+          commandId,
+          status: "accepted",
+          aggregateKind: "thread",
+          aggregateId: accepted.threadId,
+          resultSequence: accepted.sequence,
+        }
+      : { commandId, status: "unknown" };
+  });
 }

@@ -1,3 +1,4 @@
+import { FilesystemPath } from "./filesystemPath";
 import { Schema } from "effect";
 import { ExecutionTargetId, PositiveInt, TrimmedNonEmptyString } from "../core/baseSchemas";
 
@@ -7,7 +8,7 @@ const PROJECT_WRITE_FILE_PATH_MAX_LENGTH = 512;
 
 export const ProjectSearchEntriesInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
+  cwd: FilesystemPath,
   query: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
   limit: PositiveInt.check(Schema.isLessThanOrEqualTo(PROJECT_SEARCH_ENTRIES_MAX_LIMIT)),
 });
@@ -16,9 +17,9 @@ export type ProjectSearchEntriesInput = typeof ProjectSearchEntriesInput.Type;
 const ProjectEntryKind = Schema.Literals(["file", "directory"]);
 
 export const ProjectEntry = Schema.Struct({
-  path: TrimmedNonEmptyString,
+  path: FilesystemPath,
   kind: ProjectEntryKind,
-  parentPath: Schema.optional(TrimmedNonEmptyString),
+  parentPath: Schema.optional(FilesystemPath),
 });
 export type ProjectEntry = typeof ProjectEntry.Type;
 
@@ -38,14 +39,14 @@ export class ProjectSearchEntriesError extends Schema.TaggedErrorClass<ProjectSe
 
 export const ProjectSearchFileContentsInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
+  cwd: FilesystemPath,
   query: TrimmedNonEmptyString.check(Schema.isMaxLength(256)),
   limit: PositiveInt.check(Schema.isLessThanOrEqualTo(PROJECT_SEARCH_FILE_CONTENTS_MAX_LIMIT)),
 });
 export type ProjectSearchFileContentsInput = typeof ProjectSearchFileContentsInput.Type;
 
 export const ProjectFileContentMatch = Schema.Struct({
-  path: TrimmedNonEmptyString,
+  path: FilesystemPath,
   line: PositiveInt,
   column: Schema.optional(PositiveInt),
   lineText: Schema.String,
@@ -68,8 +69,8 @@ export class ProjectSearchFileContentsError extends Schema.TaggedErrorClass<Proj
 
 export const ProjectListDirectoryInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
-  relativePath: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(4096))),
+  cwd: FilesystemPath,
+  relativePath: Schema.optional(FilesystemPath.check(Schema.isMaxLength(4096))),
 });
 export type ProjectListDirectoryInput = typeof ProjectListDirectoryInput.Type;
 
@@ -88,8 +89,8 @@ export class ProjectListDirectoryError extends Schema.TaggedErrorClass<ProjectLi
 
 export const ProjectDirectoryWatchInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
-  relativePath: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(4096))),
+  cwd: FilesystemPath,
+  relativePath: Schema.optional(FilesystemPath.check(Schema.isMaxLength(4096))),
 });
 export type ProjectDirectoryWatchInput = typeof ProjectDirectoryWatchInput.Type;
 
@@ -167,13 +168,13 @@ export class ProjectDirectoryWatchError extends Schema.TaggedErrorClass<ProjectD
 
 export const ProjectReadFilePreviewInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
-  cwd: TrimmedNonEmptyString,
-  relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(4096)),
+  cwd: FilesystemPath,
+  relativePath: FilesystemPath.check(Schema.isMaxLength(4096)),
 });
 export type ProjectReadFilePreviewInput = typeof ProjectReadFilePreviewInput.Type;
 
 export const ProjectReadFilePreviewResult = Schema.Struct({
-  relativePath: TrimmedNonEmptyString,
+  relativePath: FilesystemPath,
   contents: Schema.String,
   sizeBytes: Schema.Number,
   truncated: Schema.Boolean,
@@ -194,8 +195,8 @@ export const ProjectWriteFileInput = Schema.Struct({
   executionTargetId: Schema.optional(ExecutionTargetId),
   /** Stable caller identity for this write; ambiguous operations must not be replayed. */
   operationId: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(128))),
-  cwd: TrimmedNonEmptyString,
-  relativePath: TrimmedNonEmptyString.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
+  cwd: FilesystemPath,
+  relativePath: FilesystemPath.check(Schema.isMaxLength(PROJECT_WRITE_FILE_PATH_MAX_LENGTH)),
   contents: Schema.String,
   /** SHA-256 of the version the caller read before editing, when known. */
   expectedSha256: Schema.optional(Schema.String),
@@ -203,7 +204,7 @@ export const ProjectWriteFileInput = Schema.Struct({
 export type ProjectWriteFileInput = typeof ProjectWriteFileInput.Type;
 
 export const ProjectWriteFileResult = Schema.Struct({
-  relativePath: TrimmedNonEmptyString,
+  relativePath: FilesystemPath,
 });
 export type ProjectWriteFileResult = typeof ProjectWriteFileResult.Type;
 

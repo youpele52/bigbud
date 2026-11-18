@@ -1,3 +1,4 @@
+vi.mock("./commandLine/commandLineTool.ipc", () => ({ registerCommandLineToolIpc: vi.fn() }));
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let resolvePendingPort: (port: number) => void = () => undefined;
@@ -103,6 +104,10 @@ vi.mock("./updater/autoUpdater", () => ({
   updaterConfigured: false,
 }));
 vi.mock("./window/ipcHandlers", () => ({ registerIpcHandlers: vi.fn() }));
+vi.mock("./window/remoteBackendWindow", () => ({
+  createRemoteBackendWindows: vi.fn(),
+  registerRemoteBackendWindowIpc: vi.fn(),
+}));
 vi.mock("./system-monitor/ipc", () => ({ registerSystemMonitorIpc: vi.fn() }));
 vi.mock("./main.systemMonitor", () => ({
   startDesktopResourceAwareness: vi.fn(async () => undefined),

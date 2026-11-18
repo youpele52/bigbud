@@ -16,6 +16,8 @@ export interface ProcessRunOptions {
   allowNonZeroExit?: boolean | undefined;
   maxBufferBytes?: number | undefined;
   outputMode?: "error" | "truncate" | undefined;
+  /** Retain the final stderr bytes while stdout keeps its normal policy. */
+  stderrTailBytes?: number | undefined;
   onStdoutChunk?: ((chunk: string) => void) | undefined;
 }
 
@@ -147,6 +149,7 @@ export async function runProcess(
 
     let stdout = "";
     let stderr = "";
+    let stderrTail = Buffer.alloc(0);
     let stdoutBytes = 0;
     let stderrBytes = 0;
     let stdoutTruncated = false;
@@ -215,6 +218,14 @@ export async function runProcess(
           return normalizeBufferError(command, args, "stdout", maxBufferBytes);
         }
       } else {
+        if (options.stderrTailBytes !== undefined) {
+          const limit = Math.max(0, Math.floor(options.stderrTailBytes));
+          const combined = Buffer.concat([stderrTail, chunkBuffer]);
+          stderrTruncated ||= combined.length > limit;
+          stderrTail = Buffer.from(combined.subarray(Math.max(0, combined.length - limit)));
+          stderr = stderrTail.toString("utf8");
+          return null;
+        }
         if (outputMode === "truncate") {
           const appended = appendChunkWithinLimit(stderr, stderrBytes, chunkBuffer, maxBufferBytes);
           stderr = appended.next;
@@ -267,7 +278,7 @@ export async function runProcess(
       }
       if (outputMode !== "truncate") {
         stdout += stdoutDecoder.end();
-        stderr += stderrDecoder.end();
+        if (options.stderrTailBytes === undefined) stderr += stderrDecoder.end();
       }
       const result: ProcessRunResult = {
         stdout,

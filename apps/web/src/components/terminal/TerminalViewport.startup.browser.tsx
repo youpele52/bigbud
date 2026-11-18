@@ -1,3 +1,4 @@
+import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
@@ -34,6 +35,7 @@ vi.mock("../ui/toast.manager", async (importOriginal) => ({
 }));
 
 beforeEach(() => {
+  useRemoteAccessStore.getState().replaceDisconnectedExecutionTargetIds([]);
   vi.clearAllMocks();
   mocks.open.mockImplementation(
     async (input: {
@@ -55,6 +57,10 @@ beforeEach(() => {
   );
 });
 afterEach(() => {
+  useRemoteAccessStore.setState({
+    disconnectedExecutionTargetIds: {},
+    disconnectedTargetsLoaded: false,
+  });
   for (const id of ["bottom", "right-panel"]) forgetTerminalLaunch("draft-startup-browser", id);
 });
 

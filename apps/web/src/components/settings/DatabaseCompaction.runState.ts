@@ -14,6 +14,7 @@ import type {
 } from "@bigbud/contracts/server/databaseCompaction.ts";
 import { useEffect, useSyncExternalStore } from "react";
 
+import { backendScopedLocalStorage } from "../../lib/backendScopedStorage";
 import { ensureNativeApi } from "../../rpc/nativeApi";
 import { useWsConnectionStatus } from "../../rpc/wsConnectionState";
 import { toastManager } from "../ui/toast";
@@ -87,7 +88,7 @@ export function useDatabaseCompactionRunState(): DatabaseCompactionRunState {
 
 function readToastedRun(): string | null {
   try {
-    return window.localStorage.getItem(TOASTED_RUN_KEY);
+    return backendScopedLocalStorage.getItem(TOASTED_RUN_KEY);
   } catch {
     return null;
   }
@@ -95,7 +96,7 @@ function readToastedRun(): string | null {
 
 function storeToastedRun(key: string): void {
   try {
-    window.localStorage.setItem(TOASTED_RUN_KEY, key);
+    backendScopedLocalStorage.setItem(TOASTED_RUN_KEY, key);
   } catch {
     /* Browser storage may be unavailable. */
   }

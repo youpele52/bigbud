@@ -7,6 +7,7 @@ import { render } from "vitest-browser-react";
 import { getCustomModelOptionsByProvider } from "../../../models/provider";
 import { ProviderModelPicker } from "./ProviderModelPicker";
 import { RECENTLY_USED_MODELS_STORAGE_KEY } from "../../../models/recentlyUsedModels";
+import { opencodeV2SnapshotFixture } from "./ProviderModelPicker.opencodeV2.browser.fixtures";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(async () => {}),
@@ -21,38 +22,8 @@ beforeEach(() => {
   mocks.routesByPath = { "/settings/providers": {} };
 });
 
-function snapshotFixture(): ServerProvider {
-  return {
-    provider: "opencodeV2",
-    enabled: true,
-    installed: true,
-    version: "2.0.26",
-    status: "ready",
-    auth: { status: "authenticated" },
-    checkedAt: "2026-09-30T00:00:00.000Z",
-    models: [
-      {
-        slug: "synthetic",
-        name: "Synthetic V2 model",
-        subProviderID: "synthetic",
-        isCustom: false,
-        capabilities: {
-          reasoningEffortLevels: [],
-          supportsFastMode: false,
-          supportsThinkingToggle: false,
-          contextWindowOptions: [],
-          promptInjectedEffortLevels: [],
-        },
-      },
-    ],
-    slashCommands: [],
-    skills: [],
-    supportsLocalRuntimeRemoteWorkspace: false,
-  };
-}
-
 it("opens targeted setup for an unavailable V2 entry without selecting a model", async () => {
-  const snapshot = { ...snapshotFixture(), installed: false, models: [] };
+  const snapshot = { ...opencodeV2SnapshotFixture(), installed: false, models: [] };
   const options = getCustomModelOptionsByProvider(
     DEFAULT_UNIFIED_SETTINGS,
     [snapshot],
@@ -89,7 +60,7 @@ it("opens targeted setup for an unavailable V2 entry without selecting a model",
 it("shows consent guidance and setup for an empty locked V2 picker without selecting a model", async () => {
   const message = "Native service trust consent required";
   const snapshot: ServerProvider = {
-    ...snapshotFixture(),
+    ...opencodeV2SnapshotFixture(),
     status: "warning",
     auth: { status: "unknown" },
     models: [],
@@ -124,52 +95,13 @@ it("shows consent guidance and setup for an empty locked V2 picker without selec
   }
 });
 
-it.each([null, "opencodeV2"] as const)(
-  "keeps unsupported remote V2 unavailable with lock %s rather than advertising local setup",
-  async (lockedProvider) => {
-    const snapshot: ServerProvider = { ...snapshotFixture(), status: "warning", models: [] };
-    const change = vi.fn();
-    const screen = await render(
-      <ProviderModelPicker
-        provider="codex"
-        model="gpt-5.4"
-        lockedProvider={lockedProvider}
-        workspaceExecutionTargetId="ssh:fixture"
-        providers={[snapshot]}
-        modelOptionsByProvider={getCustomModelOptionsByProvider(
-          DEFAULT_UNIFIED_SETTINGS,
-          [snapshot],
-          "codex",
-          "gpt-5.4",
-        )}
-        onProviderModelChange={change}
-      />,
-    );
-    try {
-      await page.getByRole("button").click();
-      if (lockedProvider === "opencodeV2") {
-        await expect
-          .element(page.getByRole("status"))
-          .toHaveTextContent("Provider does not support a remote workspace with a local runtime");
-      } else {
-        await expect
-          .element(page.getByRole("menuitem", { name: /OpenCode Provider does not support/ }))
-          .toBeDisabled();
-      }
-      await expect
-        .element(page.getByRole("menuitem", { name: /Set up OpenCode/ }))
-        .not.toBeInTheDocument();
-      expect(change).not.toHaveBeenCalled();
-      expect(mocks.navigate).not.toHaveBeenCalled();
-    } finally {
-      await screen.unmount();
-    }
-  },
-);
-
 it("directs mobile users to desktop/web setup rather than navigating to a missing route", async () => {
   mocks.routesByPath = {};
-  const snapshot: ServerProvider = { ...snapshotFixture(), status: "warning", models: [] };
+  const snapshot: ServerProvider = {
+    ...opencodeV2SnapshotFixture(),
+    status: "warning",
+    models: [],
+  };
   const change = vi.fn();
   const screen = await render(
     <ProviderModelPicker
@@ -203,7 +135,7 @@ it("directs mobile users to desktop/web setup rather than navigating to a missin
 
 it("selects a configured native V2 model/subprovider without a hidden development flag", async () => {
   const snapshot = {
-    ...snapshotFixture(),
+    ...opencodeV2SnapshotFixture(),
     auth: { status: "unknown" as const },
   };
   const options = getCustomModelOptionsByProvider(
@@ -237,7 +169,7 @@ it("selects a configured native V2 model/subprovider without a hidden developmen
 });
 
 it("selects a different native model without changing the bound V2 provider", async () => {
-  const base = snapshotFixture();
+  const base = opencodeV2SnapshotFixture();
   const snapshot = {
     ...base,
     models: [...base.models, { ...base.models[0]!, slug: "second", name: "Second V2 model" }],
@@ -269,7 +201,7 @@ it("selects a different native model without changing the bound V2 provider", as
 });
 
 it("browses grouped full-catalog models with setup guidance, search and exact-subprovider recent selection", async () => {
-  const base = snapshotFixture();
+  const base = opencodeV2SnapshotFixture();
   const snapshot: ServerProvider = {
     ...base,
     status: "warning",

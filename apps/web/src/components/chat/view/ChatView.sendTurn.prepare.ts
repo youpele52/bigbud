@@ -14,7 +14,7 @@ import {
   deriveComposerSendState,
   formatOutgoingPrompt,
 } from "./ChatView.logic";
-import { IMAGE_ONLY_BOOTSTRAP_PROMPT } from "./ChatView.sendTurn.helpers";
+import { IMAGE_ONLY_BOOTSTRAP_PROMPT } from "~/constants/chatPrompt";
 import { formatReadDocumentPrompt, parseReadDocumentCommand } from "./ChatView.sendTurn.read";
 import type { UseOnSendInput } from "./ChatView.sendTurn.types";
 
@@ -108,7 +108,13 @@ export async function prepareComposerPrompt(input: {
     }
     return null;
   }
-  if (!sendInput.activeProject) return null;
+  if (!sendInput.activeProject) {
+    sendInput.setThreadError(
+      thread.id,
+      "The chat project is not loaded. Wait for project loading or retry opening this chat. Your unsent draft is safe.",
+    );
+    return null;
+  }
 
   const promptTextForSend = readDocumentCommand
     ? await api.server

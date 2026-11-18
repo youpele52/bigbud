@@ -11,7 +11,7 @@ describe("workspaceTarget", () => {
     });
   });
 
-  it("normalizes remote workspace cwd values", () => {
+  it("preserves remote workspace cwd identity", () => {
     expect(
       resolveWorkspaceTarget({
         executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
@@ -20,7 +20,7 @@ describe("workspaceTarget", () => {
     ).toEqual({
       location: "remote",
       executionTargetId: "ssh:host=devbox&user=root&port=22&auth=ssh-key",
-      cwd: "/root/project",
+      cwd: "  /root/project  ",
     });
   });
 

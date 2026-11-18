@@ -13,6 +13,7 @@ import { isThreadNavigationAvailable } from "../components/layout/AppSidebarLayo
 import {
   buildTaskCompletionCopy,
   collectCompletedThreadCandidates,
+  collectAgentUpdateCandidates,
   type CompletedThreadCandidate,
 } from "./taskCompletion.logic";
 
@@ -94,14 +95,26 @@ export async function showSystemTaskCompletionNotification(
  * Fires an in-app toast notification for a completed task. Clicking the
  * action button navigates to the thread.
  */
+const visibleUpdates = new Map<string, string>();
+
 export function showCompletionToast(
   candidate: CompletedThreadCandidate,
   navigate: ReturnType<typeof useNavigate>,
 ): void {
   const { title, body } = buildTaskCompletionCopy(candidate);
 
-  toastManager.add({
-    type: "success",
+  const key = candidate.messageId ? `${candidate.threadId}:${candidate.messageId}` : null;
+  const existing = key ? visibleUpdates.get(key) : undefined;
+  if (candidate.kind !== "update" && existing) {
+    toastManager.update(existing, { type: "success", title, description: body });
+    visibleUpdates.delete(key!);
+    return;
+  }
+  const id = toastManager.add({
+    type: candidate.kind === "update" ? "info" : "success",
+    onClose: () => {
+      if (key) visibleUpdates.delete(key);
+    },
     title,
     description: body,
     data: {
@@ -115,6 +128,10 @@ export function showCompletionToast(
       },
     },
   });
+  if (key && candidate.kind === "update") {
+    visibleUpdates.set(key, id);
+    if (visibleUpdates.size > 256) visibleUpdates.delete(visibleUpdates.keys().next().value!);
+  }
 }
 
 /**
@@ -130,6 +147,7 @@ export function TaskCompletionNotifications() {
 
   // Keep a stable ref to the previous threads snapshot so we can diff on every update.
   const previousThreadsRef = useRef<Thread[]>([]);
+  const notifiedRef = useRef(new Set<string>());
 
   // Keep refs to the latest settings and navigate so the effect doesn't re-run
   // on every settings change while still reading current values.
@@ -166,7 +184,17 @@ export function TaskCompletionNotifications() {
       }
     }
 
-    const candidates = collectCompletedThreadCandidates(previousThreads, threads);
+    const completed = collectCompletedThreadCandidates(previousThreads, threads);
+    const candidates = [
+      ...collectAgentUpdateCandidates(previousThreads, threads).filter(
+        (update) =>
+          !completed.some(
+            (candidate) =>
+              candidate.threadId === update.threadId && candidate.messageId === update.messageId,
+          ),
+      ),
+      ...completed,
+    ];
     if (candidates.length === 0) {
       return;
     }
@@ -179,6 +207,11 @@ export function TaskCompletionNotifications() {
     const appIsHidden = document.hidden;
 
     for (const candidate of candidates) {
+      const key = candidate.notificationKey!;
+      if (notifiedRef.current.has(key)) continue;
+      notifiedRef.current.add(key);
+      if (notifiedRef.current.size > 512)
+        notifiedRef.current.delete(notifiedRef.current.values().next().value!);
       if (currentSettings.enableTaskCompletionToasts) {
         showCompletionToast(candidate, currentNavigate);
       }

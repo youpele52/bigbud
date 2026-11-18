@@ -94,6 +94,9 @@ const makeFixture = Effect.gen(function* () {
     getStartupOperationalState: vi.fn(liveQuery.getStartupOperationalState),
     getThreadOperationalState: vi.fn(liveQuery.getThreadOperationalState),
     getFullThreadHistory: vi.fn(liveQuery.getFullThreadHistory),
+    getProjectOperationalState: vi.fn(liveQuery.getProjectOperationalState),
+    listProjectThreadIds: vi.fn(liveQuery.listProjectThreadIds),
+    listProjectIdsByWorkspaceRoot: vi.fn(liveQuery.listProjectIdsByWorkspaceRoot),
   };
   let readModel = createEmptyReadModel(now);
   const hydrator = makeThreadStateHydrator({

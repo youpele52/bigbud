@@ -45,7 +45,7 @@ export function useMobileThreadScroll(input: {
     lastScrolledThreadIdRef.current = input.threadId;
     lastScrolledNodeRef.current = scrollContainer;
     const timeoutId = window.setTimeout(() => {
-      if (!userInteractedRef.current && scrollContainer.isConnected) {
+      if (!userInteractedRef.current && isFollowingRef.current && scrollContainer.isConnected) {
         scrollContainer.scrollTop = scrollContainer.scrollHeight;
       }
     }, 96);

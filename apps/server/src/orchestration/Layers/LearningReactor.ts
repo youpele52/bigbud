@@ -11,7 +11,10 @@ import { SkillChangeProposalRepository } from "../../persistence/Services/SkillC
 import { DiscoveryRegistry } from "../../provider/Services/DiscoveryRegistry.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { canScheduleProviderLearning } from "../../provider/Layers/ProviderService.learningSupport.ts";
-import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
+import {
+  getOrchestrationThread,
+  OrchestrationEngineService,
+} from "../Services/OrchestrationEngine.ts";
 import { LearningReactor, type LearningReactorShape } from "../Services/LearningReactor.ts";
 import { makeLearningJobProcessor } from "./LearningReactor.process.ts";
 import * as LearningReactorLogic from "./LearningReactor.logic.ts";
@@ -55,8 +58,7 @@ const makeLearningReactor = Effect.gen(function* () {
         }
 
         return Effect.gen(function* () {
-          const readModel = yield* orchestrationEngine.getReadModel();
-          const thread = readModel.threads.find((entry) => entry.id === event.threadId);
+          const thread = yield* getOrchestrationThread(orchestrationEngine, event.threadId);
           const model = turnModels.get(key) ?? thread?.modelSelection.model;
           turnModels.delete(key);
           if (!thread || !model) return;

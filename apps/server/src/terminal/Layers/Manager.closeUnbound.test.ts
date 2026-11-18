@@ -2,7 +2,18 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
+import { remoteFixture, target } from "./Manager.shell.remote.test.helpers";
+
+vi.mock("../../ssh/sshProcess", () => ({
+  runSshCommand: vi.fn(async (input: { args: string[] }) => ({
+    stdout: `\x1e${input.args[3]}\x1f`,
+    stderr: "",
+    code: 0,
+    signal: null,
+    timedOut: false,
+  })),
+}));
 import {
   createManager,
   openInput,
@@ -82,7 +93,7 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("identityless termin
   it.effect("refuses matching-generation Close after owner recovery fails", () =>
     Effect.gen(function* () {
       let released = 0;
-      const { manager, logsDir, ptyAdapter } = yield* createManager(5, {
+      const { manager, logsDir, adapter } = yield* remoteFixture({
         releaseWorktreeLease: () =>
           Effect.sync(() => {
             released++;
@@ -90,8 +101,8 @@ it.layer(NodeServices.layer, { excludeTestServices: true })("identityless termin
       });
       const history = multiTerminalHistoryLogPath(logsDir);
       yield* writeFileString(history, "previous owner recovery marker");
-      ptyAdapter.spawnFailures.push(new Error("recovery unavailable"));
-      const failed = yield* manager.open(openInput());
+      adapter.spawnFailures.push(new Error("recovery unavailable"));
+      const failed = yield* manager.open(openInput({ executionTargetId: target }));
       expect(failed.status).toBe("error");
       const beforeClose = released;
       const error = yield* manager

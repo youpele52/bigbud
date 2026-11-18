@@ -19,9 +19,22 @@ export interface BuildSshCommandInput {
   readonly args?: ReadonlyArray<string>;
   readonly allocateTty?: boolean;
   readonly transportArgs?: ReadonlyArray<string>;
+  /** SSH may still invoke the account shell before this application-owned wrapper. */
+  readonly shellMode?: "login" | "clean-posix" | "non-login-posix";
 }
 
 const SSH_COMMAND = "ssh";
+
+/**
+ * Environment of the LOCAL `ssh` client process, shared by every SSH flow: the server's own
+ * environment, so the client keeps `SSH_AUTH_SOCK` (including a socket `ensureSshAgentEnv`
+ * exported), `PATH` for `ProxyCommand`s, the real `HOME` for `~/.ssh` and `DISPLAY`. A remote
+ * command's environment is encoded into the remote command by `buildSshCommandInvocation`; it
+ * must never replace this one.
+ */
+export function sshClientProcessEnv(): NodeJS.ProcessEnv {
+  return process.env;
+}
 const REMOTE_EXEC_SCRIPT =
   'if [ -n "$1" ]; then cd "$1" || exit 1; fi; shift; while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do export "$1"; shift; done; shift; exec "$@"';
 
@@ -64,9 +77,14 @@ export function buildSshCommandInvocation(input: BuildSshCommandInput): SshComma
   const envAssignments = Object.entries(input.env ?? {})
     .filter(([key]) => key.trim().length > 0)
     .map(([key, value]) => `${key}=${value}`);
+  const shellPrefix =
+    input.shellMode === "clean-posix"
+      ? ["/usr/bin/env", "-i", "PATH=/usr/bin:/bin", "LC_ALL=C", "/bin/sh", "-c"]
+      : input.shellMode === "non-login-posix"
+        ? ["/bin/sh", "-c"]
+        : ["sh", "-lc"];
   const remoteCommand = [
-    "sh",
-    "-lc",
+    ...shellPrefix,
     REMOTE_EXEC_SCRIPT,
     "sh",
     input.cwd ?? "",
@@ -86,6 +104,8 @@ export function buildSshCommandInvocation(input: BuildSshCommandInput): SshComma
         ...(input.allocateTty !== undefined ? { allocateTty: input.allocateTty } : {}),
       }),
       ...(input.transportArgs ?? []),
+      // End option parsing: a destination can never be read as an ssh option.
+      "--",
       formatSshDestination(target),
       remoteCommand,
     ],

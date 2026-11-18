@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import { makeRemoteAgentPtyAdapter, type RemoteAgentPtyResolver } from "./remoteAgentPtyAdapter.ts";
 import type { RemoteAgentPtyClient } from "./remoteAgentPtyClient.ts";
 import type { PtyAdapterShape, PtyProcess } from "../terminal/Services/PTY";
+import { profileLaunch, spawnInput } from "./remoteAgentOwnedPty.profile.testUtils.ts";
 
 const fakeProcess: PtyProcess = {
   pid: 12,
@@ -15,6 +16,46 @@ const fakeProcess: PtyProcess = {
 };
 
 describe("remote-agent PTY adapter", () => {
+  it("refuses to silently downgrade explicit profiles on the nonowned path", async () => {
+    const calls: string[] = [];
+    const resolver: RemoteAgentPtyResolver = {
+      resolvePty: async () => {
+        calls.push("create");
+        throw new Error("must not run");
+      },
+      resolveWorkspace: async () => {
+        throw new Error("must not run");
+      },
+    };
+    const adapter = makeRemoteAgentPtyAdapter(
+      { spawn: () => Effect.succeed(fakeProcess) },
+      resolver,
+    );
+    const error = await Effect.runPromise(Effect.flip(adapter.spawn(spawnInput(profileLaunch()))));
+    expect(error.message).toContain("durable terminal ownership");
+    expect(calls).toEqual([]);
+  });
+
+  it("forwards exact-profile intent to the durable lane without changing it", async () => {
+    const input = spawnInput(profileLaunch());
+    const adapter = makeRemoteAgentPtyAdapter(
+      { spawn: () => Effect.succeed(fakeProcess) },
+      {
+        restoreOrCreate: async (received) => {
+          expect(received).toBe(input);
+          return fakeProcess;
+        },
+        resolvePty: async () => {
+          throw new Error("must not run");
+        },
+        resolveWorkspace: async () => {
+          throw new Error("must not run");
+        },
+      },
+    );
+    expect(await Effect.runPromise(adapter.spawn(input))).toBe(fakeProcess);
+  });
+
   it("keeps local PTYs on the existing adapter", async () => {
     const calls: string[] = [];
     const base: PtyAdapterShape = {
@@ -45,6 +86,8 @@ describe("remote-agent PTY adapter", () => {
     const opened: Array<{ handle: string; root: string }> = [];
     const created: Array<Record<string, unknown>> = [];
     const resolver: RemoteAgentPtyResolver = {
+      // Custom-binary composition declines ownership for fresh implicit terminals.
+      restoreOrCreate: async () => undefined,
       resolveWorkspace: async () =>
         ({
           openWorkspace: async (workspaceHandle: string, root: string) => {
@@ -83,6 +126,10 @@ describe("remote-agent PTY adapter", () => {
           LANG: "en_US.UTF-8",
           LC_MESSAGES: "en_US.UTF-8",
           SECRET_KEY: "must-not-forward",
+          HOME: "/desktop/home",
+          PATH: "/desktop/bin",
+          SHELL: "/desktop/shell",
+          LC_invalid: "must-not-forward",
         },
         executionTargetId: "ssh:host=devbox",
       }),
@@ -99,6 +146,7 @@ describe("remote-agent PTY adapter", () => {
     ]);
     expect(created[0]?.cwd).toBe("");
     expect(created[0]?.shell).toBe("/bin/sh");
+    expect(created[0]?.args).toEqual(["-lc", 'exec "${SHELL:-/bin/sh}" -l']);
   });
 
   it("keeps an explicit Direct SSH target on the base PTY adapter", async () => {

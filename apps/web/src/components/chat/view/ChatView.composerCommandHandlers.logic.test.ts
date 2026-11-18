@@ -28,7 +28,6 @@ function makeInput(
     interactionMode: "default",
     activePendingProgress: null,
     activePendingUserInput: null,
-    isOpencodePendingUserInputMode: false,
     setComposerCursor: vi.fn(),
     setComposerTrigger: vi.fn(),
     setComposerHighlightedItemId: vi.fn(),

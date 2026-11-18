@@ -78,6 +78,8 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(sections[4]?.rows).toEqual([
       "Terminal font",
       "Terminal font size",
+      "Default shell profile",
+      "Terminal history suggestions",
       "Terminal theme (dark appearance)",
       "Terminal theme (light appearance)",
       "Terminal scroll speed",

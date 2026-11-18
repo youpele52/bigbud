@@ -2,12 +2,26 @@ import { Effect, Exit, Layer, Option, PubSub, Queue, Scope, Stream } from "effec
 import { WS_METHODS, WsRpcGroup } from "@bigbud/contracts";
 import { ThreadRetentionMutationAuthorization } from "@bigbud/contracts/server/rpc.retention";
 import type { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention";
+import { RemoteRuntimeUpdateSetupAuthority } from "@bigbud/contracts/server/rpc.remoteBackendUpdate.ts";
+import type { RemoteRuntimeUpdateError } from "@bigbud/contracts/server/remoteBackendUpdate.ts";
+import { ProviderProvisioningSetupAuthority } from "@bigbud/contracts/server/rpc.providerProvisioning.ts";
+import type { ProviderProvisioningError } from "@bigbud/contracts/server/providerProvisioning.ts";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import type * as RpcMiddleware from "effect/unstable/rpc/RpcMiddleware";
 
 const allowRetentionMutations: RpcMiddleware.RpcMiddleware<
   never,
   ServerThreadRetentionError,
+  never
+> = (effect) => effect;
+/** The harness stands in for an authorized remote client; real setup authority is server-side. */
+const allowRuntimeUpdates: RpcMiddleware.RpcMiddleware<never, RemoteRuntimeUpdateError, never> = (
+  effect,
+) => effect;
+/** Same stand-in for provisioning setup authority (D10 is enforced server-side). */
+const allowProviderProvisioning: RpcMiddleware.RpcMiddleware<
+  never,
+  ProviderProvisioningError,
   never
 > = (effect) => effect;
 
@@ -118,6 +132,8 @@ export class BrowserWsRpcHarness {
           Layer.mergeAll(
             this.makeLayer(),
             Layer.succeed(ThreadRetentionMutationAuthorization, allowRetentionMutations),
+            Layer.succeed(RemoteRuntimeUpdateSetupAuthority, allowRuntimeUpdates),
+            Layer.succeed(ProviderProvisioningSetupAuthority, allowProviderProvisioning),
             Layer.succeed(RpcServer.Protocol, protocol),
           ),
         ),

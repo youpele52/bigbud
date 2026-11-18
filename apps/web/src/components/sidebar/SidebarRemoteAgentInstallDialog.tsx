@@ -6,6 +6,7 @@ import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
 import type { SidebarRemoteAgentInstallRequest } from "./Sidebar.remoteWorkspaceAddActions.types";
 import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { REMOTE_AGENT_FAILURE_GUIDANCE } from "./SidebarRemoteAgentStatus.messages";
+import { SidebarRemoteAgentManualInstall } from "./SidebarRemoteAgentManualInstall";
 import {
   notifyRemoteAgentConnection,
   remoteAgentConnectionWarning,
@@ -30,11 +31,13 @@ export function SidebarRemoteAgentInstallDialog({
   const [error, setError] = useState<string | null>(null);
   const [stagedMessage, setStagedMessage] = useState<string | null>(null);
   const [connectionRequestId, setConnectionRequestId] = useState<string | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
 
   useEffect(() => {
     setError(null);
     setStagedMessage(null);
     setConnectionRequestId(null);
+    setManualOpen(false);
   }, [request]);
 
   const install = async () => {
@@ -51,10 +54,12 @@ export function SidebarRemoteAgentInstallDialog({
         const admissionRequestId =
           connectionRequestId ?? getRemoteAgentAdmissionRequestId(request.executionTargetId);
         setConnectionRequestId(admissionRequestId);
+        // Older builds are retired once the staged build is active (deferred for live work).
         const connected = await api.server.connectRemoteAgent({
           executionTargetId: request.executionTargetId,
           requestId: admissionRequestId,
           intent: "fresh",
+          replace: true,
         });
         useRemoteAccessStore
           .getState()
@@ -62,9 +67,13 @@ export function SidebarRemoteAgentInstallDialog({
         notifyRemoteAgentConnection(request.executionTargetId, connected);
         completeRemoteAgentAdmission(request.executionTargetId, admissionRequestId);
         setConnectionRequestId(null);
-        await onInstalled(
+        const connectedMessage =
           remoteAgentConnectionWarning(connected) ??
-            `Connected to remote agent ${connected.currentVersion}. Healthy fallback: ${connected.fallbackVersion ?? "none"}.`,
+          `Connected to remote agent ${connected.currentVersion}. Healthy fallback: ${connected.fallbackVersion ?? "none"}.`;
+        await onInstalled(
+          connected.cleanupMessage
+            ? `${connectedMessage} ${connected.cleanupMessage}`
+            : connectedMessage,
         );
         return;
       }
@@ -114,6 +123,10 @@ export function SidebarRemoteAgentInstallDialog({
                   SSH user permissions, and opens no inbound network port.
                 </p>
                 <p>
+                  After the new build is active, older agent builds are removed. Builds still used
+                  by open sessions stay until that work ends.
+                </p>
+                <p>
                   Cancel setup to leave the project unchanged. Downloaded agent builds stay
                   available for a later connection.
                 </p>
@@ -123,6 +136,13 @@ export function SidebarRemoteAgentInstallDialog({
                     {!error.includes("Direct SSH") ? <p>{REMOTE_AGENT_FAILURE_GUIDANCE}</p> : null}
                   </div>
                 ) : null}
+                {stagedMessage ? null : (
+                  <SidebarRemoteAgentManualInstall
+                    executionTargetId={request.executionTargetId}
+                    autoOpen={error !== null && !error.includes("Direct SSH")}
+                    onOpenChange={setManualOpen}
+                  />
+                )}
               </div>
             }
             cancelLabel={stagedMessage ? "Later" : "Cancel"}
@@ -133,7 +153,9 @@ export function SidebarRemoteAgentInstallDialog({
                   : "Downloading..."
                 : stagedMessage
                   ? "Connect new session"
-                  : "Download update"
+                  : manualOpen
+                    ? "Finish install/update"
+                    : "Download update"
             }
             busy={isInstalling}
             onCancel={onDecline}

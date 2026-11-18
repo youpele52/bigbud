@@ -6,6 +6,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
 import { useCompactChatThread } from "~/hooks/useCompactChatThread";
+import { CompactChatShell } from "./FloatingAssistantShell";
+
+// Keep the production restoration hook, shell, banners and Retry action. Only
+// the expensive conversation/editor leaf is replaced at this UI boundary.
+vi.mock("~/components/chat/view/ThreadComposerSurface", () => ({
+  ThreadComposerSurface: () => <div data-testid="ready-composer">Composer ready</div>,
+}));
 import { DraftOwnershipCoordinator } from "~/components/DraftOwnershipCoordinator";
 import {
   COMPACT_THREAD_STORAGE_KEY,
@@ -23,6 +30,10 @@ import {
 
 const projectId = ProjectId.makeUnsafe(BUILT_IN_CHATS_PROJECT_ID);
 const poisonedThreadId = ThreadId.makeUnsafe("compact-poisoned");
+
+function CompactShellHarness() {
+  return <CompactChatShell compactChat={useCompactChatThread()} />;
+}
 
 function CompactOwnershipHarness() {
   const compact = useCompactChatThread();
@@ -177,6 +188,55 @@ describe("compact chat canonical ownership", () => {
       }
     },
   );
+
+  it("exposes production shell Retry and restarts ownership without losing the draft", async () => {
+    const resolveThreadOwnership = vi
+      .fn<NativeApi["orchestration"]["resolveThreadOwnership"]>()
+      .mockResolvedValueOnce({
+        threadId: poisonedThreadId,
+        status: "unavailable",
+        ownership: "unconfirmed",
+        reason: "server unavailable",
+      })
+      .mockResolvedValue({
+        threadId: poisonedThreadId,
+        status: "absent",
+        reusePolicy: "canonical-identity-unclaimed",
+        serverEpoch: "server-1",
+        canonicalRevision: 10,
+      });
+    installApi(resolveThreadOwnership);
+    const savedChoice = serializeCompactChatPersistedState({
+      threadId: poisonedThreadId,
+      materialized: true,
+    });
+    localStorage.setItem(COMPACT_THREAD_STORAGE_KEY, savedChoice);
+    const mounted = await render(
+      <AppAtomRegistryProvider>
+        <CompactShellHarness />
+      </AppAtomRegistryProvider>,
+    );
+    try {
+      await expect
+        .element(page.getByText("Floating chat could not synchronize: server unavailable"))
+        .toBeVisible();
+      await expect.element(page.getByTestId("ready-composer")).not.toBeInTheDocument();
+      expect(localStorage.getItem(COMPACT_THREAD_STORAGE_KEY)).toBe(savedChoice);
+      await page.getByRole("button", { name: "Retry", exact: true }).click();
+      await expect.element(page.getByTestId("ready-composer")).toBeVisible();
+      expect(resolveThreadOwnership).toHaveBeenCalledTimes(2);
+      expect(resolveThreadOwnership).toHaveBeenLastCalledWith({ threadId: poisonedThreadId });
+      expect(useComposerDraftStore.getState().draftsByThreadId[poisonedThreadId]).toMatchObject({
+        prompt: "preserve compact prompt",
+        images: [{ id: "preserve-screenshot" }],
+      });
+      expect(JSON.parse(localStorage.getItem(COMPACT_THREAD_STORAGE_KEY)!).threadId).toBe(
+        poisonedThreadId,
+      );
+    } finally {
+      await mounted.unmount();
+    }
+  });
 
   it("keeps an uncertain compact draft gated and intact", async () => {
     installApi(

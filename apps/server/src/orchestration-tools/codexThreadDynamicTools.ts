@@ -1,3 +1,5 @@
+import { isRemoteAgentToolName } from "./remoteAgentTools.shared.ts";
+import { isPeerToolName } from "./peerTools.shared.ts";
 import { createHash } from "node:crypto";
 
 import {
@@ -25,7 +27,8 @@ import { getEffectiveCapabilityCatalog } from "../capabilities/CapabilityCatalog
 import { BIGBUD_ORCHESTRATION_NAMESPACE } from "./codexThreadDynamicTools.specs.ts";
 import { normalizeListThreadsStatus } from "./ThreadOrchestrationTools.listThreads.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES, type AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
-import { RenameThreadArguments } from "./threadRenameTool.shared.ts";
+import { formatRenameThreadToolResult, RenameThreadArguments } from "./threadRenameTool.shared.ts";
+import { decodeSetElevatorSummaryArguments } from "./threadSummaryTool.shared.ts";
 import { runThreadOrganizationTool } from "./threadOrganizationTool.run.ts";
 import {
   decodeComputerUseToolRequest,
@@ -82,6 +85,18 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     const dispatcher = requireDispatcher();
     const capabilityCatalog = getEffectiveCapabilityCatalog(threadId);
 
+    if (isRemoteAgentToolName(tool)) {
+      if (!dispatcher.remoteAgent) throw new Error("Remote agent tools are not ready.");
+      const result = await Effect.runPromise(dispatcher.remoteAgent({ tool, arguments: args }));
+      return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
+    }
+    if (isPeerToolName(tool)) {
+      if (!dispatcher.peer) throw new Error("Peer delegation tools are not ready.");
+      const invocationId = JSON.stringify([turnId ?? requestSource ?? sourceMessageId, requestId]);
+      const peerInput = { callerThreadId: threadId, invocationId, tool, arguments: args };
+      const result = await Effect.runPromise(dispatcher.peer(peerInput));
+      return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
+    }
     if (AGENT_WORKSPACE_TOOL_NAMES.includes(tool as AgentWorkspaceToolName)) {
       if (!dispatcher.workspace) throw new Error("Workspace tools are not ready.");
       const result = await Effect.runPromise(
@@ -159,6 +174,19 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
           success: true,
         };
       }
+      case "set_elevator_summary": {
+        if (!dispatcher.setElevatorSummary) throw new Error("Thread summary tools are not ready.");
+        const { summary } = decodeSetElevatorSummaryArguments(args);
+        const result = await Effect.runPromise(
+          dispatcher.setElevatorSummary({
+            threadId,
+            summary,
+            invocationId: String(requestId),
+            sourceMessageId: MessageId.makeUnsafe(requestSource ?? sourceMessageId),
+          }),
+        );
+        return { contentItems: [inputText(JSON.stringify(result))], success: true };
+      }
       case "rename_thread": {
         const renameArgs = Schema.decodeUnknownSync(RenameThreadArguments)(args);
         const title = renameArgs.title.trim();
@@ -177,7 +205,7 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
           }),
         );
         return {
-          contentItems: [inputText(`Renamed thread to "${result.title}".`)],
+          contentItems: [inputText(formatRenameThreadToolResult(result, title))],
           success: true,
         };
       }

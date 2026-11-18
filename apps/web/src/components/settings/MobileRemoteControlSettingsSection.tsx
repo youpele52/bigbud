@@ -14,10 +14,12 @@ import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { normalizeBackendBaseUrl, resolveDefaultBackendBaseUrl } from "./mobileRemoteControl.urls";
 import { useMobileRemotePairing } from "./MobileRemoteControlSettingsSection.pairing";
 import { MobileRemoteUrlSelection } from "./MobileRemoteControlSettingsSection.urlSelection";
+import { MobileRemoteTailscaleDoctor } from "./MobileRemoteControlSettingsSection.doctor";
 import { MobileRemotePairingQrCode } from "./MobileRemotePairingQrCode";
 import {
   MOBILE_REMOTE_BACKEND_URL_STORAGE_KEY,
   readStoredBackendBaseUrl,
+  resolveBackendReachNotice,
   resolveMobileRemoteControlStatus,
   resolveTailscaleRemoteBackendCheck,
   syncTailscaleDerivedUrls,
@@ -119,6 +121,14 @@ export function MobileRemoteControlSettingsSection() {
         activeSessionCount,
       }),
     [activeSessionCount, settings.mobileRemoteControl.enabled],
+  );
+  const backendReachNotice = useMemo(
+    () =>
+      resolveBackendReachNotice({
+        backendBaseUrl,
+        mobileWebBaseUrl: pairing.mobileBaseUrl ?? null,
+      }),
+    [backendBaseUrl, pairing.mobileBaseUrl],
   );
   const tailscaleCheck = useMemo(
     () =>
@@ -227,6 +237,9 @@ export function MobileRemoteControlSettingsSection() {
                 {tailscaleCheck.tip}
               </p>
             ) : null}
+            {tailscaleStatus && !tailscaleQuery.isLoading ? (
+              <MobileRemoteTailscaleDoctor status={tailscaleStatus} />
+            ) : null}
           </div>
         </SettingsRow>
 
@@ -247,6 +260,14 @@ export function MobileRemoteControlSettingsSection() {
               onChange={(event) => setBackendBaseUrl(event.target.value)}
               onBlur={() => setBackendBaseUrl((current) => normalizeBackendBaseUrl(current))}
             />
+            {backendReachNotice ? (
+              <p
+                className={`text-xs ${backendReachNotice.tone === "warning" ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}
+                data-testid="mobile-backend-reach"
+              >
+                {backendReachNotice.message}
+              </p>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"

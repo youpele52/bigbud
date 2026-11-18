@@ -21,6 +21,7 @@ const terminalStub = (
   getThreadIdleWork: get,
   open: () => Effect.die("unused"),
   snapshot: () => Effect.die("unused"),
+  listShellProfiles: () => Effect.die("unused"),
   restart: () => Effect.die("unused"),
   write: () => Effect.void,
   resize: () => Effect.void,

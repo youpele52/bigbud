@@ -3,6 +3,5 @@
 # probe runs without touching processes, PTYs, workers, SQLite, sockets, fetch, or
 # filesystem paths outside their own mkdtemp directories. Unlisted files run serially.
 src/project/Layers/ProjectFaviconResolver.test.ts
-src/project/Layers/ProjectSetupScriptRunner.terminal.test.ts
 src/project/Layers/ProjectSetupScriptRunner.test.ts
 src/project/Layers/ProjectSetupScriptRunner.wsl.test.ts

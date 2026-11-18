@@ -8,6 +8,9 @@ use std::time::{Duration, Instant};
 #[path = "input.ledger.rs"]
 mod ledger;
 use ledger::*;
+#[path = "input.reconcile.rs"]
+mod reconcile;
+pub use reconcile::InputReceipt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InputOutcome {
@@ -16,6 +19,7 @@ pub enum InputOutcome {
     Written(usize),
     FailedBeforeWrite,
     PartialUnknown(usize),
+    NotAdmitted,
 }
 
 impl InputOutcome {
@@ -60,6 +64,7 @@ impl InputWriter {
                 fenced: false,
                 pending: 0,
                 bytes: 0,
+                receipt: reconcile::ReceiptSlot::new()?,
             }),
             changed: Condvar::new(),
             cancelled: AtomicBool::new(false),
@@ -118,6 +123,9 @@ impl InputWriter {
             return Err(super::PtyError::InputExpired);
         }
         if let Some(record) = ledger.records.get(&sequence) {
+            if record.outcome == InputOutcome::NotAdmitted {
+                return Err(super::PtyError::InputFenced);
+            }
             return if record.digest == digest {
                 Ok(false)
             } else {
@@ -160,6 +168,7 @@ impl InputWriter {
             },
         );
         ledger.high_water = sequence;
+        reconcile::remember(&mut ledger, sequence, bytes);
         ledger.pending += 1;
         ledger.bytes += bytes.len();
         let work = Work {
@@ -252,6 +261,7 @@ impl Drop for InputWriter {
 fn settle(shared: &Shared, work: &Work, outcome: InputOutcome) {
     if let Ok(mut ledger) = shared.ledger.lock() {
         ledger.fenced |= matches!(outcome, InputOutcome::PartialUnknown(_));
+        reconcile::observe(&mut ledger, work.sequence, outcome);
         if let Some(record) = ledger.records.get_mut(&work.sequence) {
             record.outcome = outcome;
             record.completed = Some(Instant::now());
@@ -273,6 +283,7 @@ fn process(shared: &Shared, work: &Work, write: &mut impl FnMut(&[u8]) -> io::Re
         }
         let fenced = match shared.ledger.lock() {
             Ok(mut ledger) => {
+                reconcile::observe(&mut ledger, work.sequence, InputOutcome::Writing(written));
                 if let Some(record) = ledger.records.get_mut(&work.sequence) {
                     record.outcome = InputOutcome::Writing(written);
                 }

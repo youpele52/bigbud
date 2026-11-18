@@ -55,7 +55,7 @@ describe("incremental orchestration updates", () => {
 
     expect(next.threads[0]?.session?.status).toBe("running");
     expect(next.threads[0]?.session?.reason).toBe("context.compacting");
-    expect(next.threads[0]?.latestTurn?.state).toBe("completed");
+    expect(next.threads[0]?.latestTurn?.state).toBe("running");
     expect(next.threads[0]?.messages).toHaveLength(1);
   });
 
@@ -308,6 +308,7 @@ describe("incremental orchestration updates", () => {
       latestTurn: {
         turnId: TurnId.makeUnsafe("turn-1"),
         state: "completed",
+        terminalOutcome: "completed",
         requestedAt: "2026-02-27T00:00:00.000Z",
         startedAt: "2026-02-27T00:00:00.000Z",
         completedAt: "2026-02-27T00:00:02.000Z",
@@ -337,7 +338,7 @@ describe("incremental orchestration updates", () => {
           runtimeMode: "full-access",
           activeTurnId: TurnId.makeUnsafe("turn-1"),
           sessionEpoch: 0,
-          reason: "context.compacting",
+          reason: null,
           lastError: null,
           updatedAt: "2026-02-27T00:00:03.000Z",
         },

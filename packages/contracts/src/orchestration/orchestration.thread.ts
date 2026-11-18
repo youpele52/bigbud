@@ -173,6 +173,8 @@ export type OrchestrationThreadActivity = typeof OrchestrationThreadActivity.Typ
 
 export * from "./orchestration.thread.tasks";
 
+import { TurnTerminalOutcome } from "./orchestration.turnSettled";
+
 export const OrchestrationLatestTurnState = Schema.Literals([
   "running",
   "interrupted",
@@ -182,6 +184,8 @@ export const OrchestrationLatestTurnState = Schema.Literals([
 export type OrchestrationLatestTurnState = typeof OrchestrationLatestTurnState.Type;
 
 export const OrchestrationLatestTurn = Schema.Struct({
+  /** Absent on legacy/inferred turns. Only native settlement is completion evidence. */
+  terminalOutcome: Schema.optional(TurnTerminalOutcome),
   turnId: TurnId,
   state: OrchestrationLatestTurnState,
   requestedAt: IsoDateTime,

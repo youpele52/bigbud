@@ -15,7 +15,6 @@ export function WorkEntryDetails(props: {
     <ActivityAccordion
       variant="compact"
       title="Details"
-      className="mt-0.5"
       panelClassName="space-y-1.5"
       data-work-entry-details=""
       {...props.accordion}

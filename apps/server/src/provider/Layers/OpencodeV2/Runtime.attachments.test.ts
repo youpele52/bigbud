@@ -41,13 +41,16 @@ it("restores path-first context from managed bytes and replays after source/snap
     const input = {
       threadId,
       requestMessageId: MessageId.makeUnsafe("document"),
-      input: "summarize",
+      input: `START${"x".repeat(119_980)}TAIL`,
       modelSelection: selection,
       attachments: [attachment],
     };
     await runtime.send(input);
     await expect.poll(() => runtime.get(threadId).terminalDelivered).toBe(true);
     const prompt = http.calls.find((call) => call.pathname.endsWith("/prompt"))!;
+    expect(input.input.length).toBeLessThan(120_000);
+    expect(String(prompt.body.text).length).toBeGreaterThan(120_000);
+    expect(prompt.body.text).toContain(input.input);
     expect(prompt.body.text).toContain(await realpath(snapshot));
     expect(prompt.body.text).toContain("context");
     expect(prompt.body.text).not.toContain(attachment.sourcePath);

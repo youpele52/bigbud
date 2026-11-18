@@ -10,7 +10,10 @@ import type { ClaudeHarnessConfig } from "../../provider/Layers/Claude/Adapter.t
 import { materializeClaudeQuerySettings } from "../../provider/Layers/Claude/Adapter.session.options.ts";
 import { getClaudeModelCapabilities } from "../../provider/Layers/Claude/Provider.ts";
 import { normalizeCliError, toJsonSchemaObject } from "../Utils.ts";
-import type { TextGenerationShape } from "../Services/TextGeneration.ts";
+import type {
+  TextGenerationShape,
+  MetadataTextGenerationAttempt,
+} from "../Services/TextGeneration.ts";
 
 const ClaudeOutputEnvelope = Schema.Struct({ structured_output: Schema.Unknown });
 
@@ -44,6 +47,7 @@ export function makeClaudeJsonRunner(
     outputSchemaJson,
     modelSelection,
     harness,
+    metadataAttempt,
   }: {
     operation: keyof TextGenerationShape;
     cwd: string;
@@ -51,6 +55,7 @@ export function makeClaudeJsonRunner(
     outputSchemaJson: S;
     modelSelection: ClaudeModelSelection;
     harness?: ClaudeHarnessConfig;
+    metadataAttempt?: MetadataTextGenerationAttempt;
   }): Effect.fn.Return<S["Type"], TextGenerationError, S["DecodingServices"]> {
     const jsonSchemaStr = JSON.stringify(toJsonSchemaObject(outputSchemaJson));
     const normalizedOptions = normalizeClaudeModelOptionsWithCapabilities(
@@ -66,10 +71,12 @@ export function makeClaudeJsonRunner(
         : {}),
       ...(normalizedOptions?.fastMode ? { fastMode: true } : {}),
     };
-    const claudeSettings = yield* serverSettingsService.getSettings.pipe(
-      Effect.map((value) => value.providers.claudeAgent),
-      Effect.catch(() => Effect.undefined),
-    );
+    const claudeSettings =
+      metadataAttempt?.providerSettings.claudeAgent ??
+      (yield* serverSettingsService.getSettings.pipe(
+        Effect.map((value) => value.providers.claudeAgent),
+        Effect.catch(() => Effect.undefined),
+      ));
     const runClaudeCommand = Effect.fn("runClaudeJson.runClaudeCommand")(function* () {
       // Reuse the harness's restricted file materialization; credentials never enter argv.
       const lease = harness?.protectedSettingsEnvironment
@@ -113,6 +120,7 @@ export function makeClaudeJsonRunner(
           stdin: { stream: Stream.encodeText(Stream.make(prompt)) },
         },
       );
+      if (metadataAttempt) yield* metadataAttempt.beforeDispatch();
       const child = yield* commandSpawner.spawn(command).pipe(
         Effect.mapError((cause) =>
           harness
@@ -153,6 +161,7 @@ export function makeClaudeJsonRunner(
             !harness && detail
               ? `Claude CLI command failed: ${detail}`
               : `Claude CLI command failed with code ${exitCode}.`,
+          ...(metadataAttempt ? { metadataOutcome: "failed" as const } : {}),
         });
       }
       return stdout;
@@ -164,7 +173,11 @@ export function makeClaudeJsonRunner(
         Option.match({
           onNone: () =>
             Effect.fail(
-              new TextGenerationError({ operation, detail: "Claude CLI request timed out." }),
+              new TextGenerationError({
+                operation,
+                detail: "Claude CLI request timed out.",
+                ...(metadataAttempt ? { metadataOutcome: "uncertain" as const } : {}),
+              }),
             ),
           onSome: (value) => Effect.succeed(value),
         }),
@@ -179,6 +192,7 @@ export function makeClaudeJsonRunner(
             operation,
             detail: "Claude CLI returned unexpected output format.",
             ...(harness ? {} : { cause }),
+            ...(metadataAttempt ? { metadataOutcome: "failed" as const } : {}),
           }),
         ),
       ),
@@ -190,6 +204,7 @@ export function makeClaudeJsonRunner(
             operation,
             detail: "Claude returned invalid structured output.",
             ...(harness ? {} : { cause }),
+            ...(metadataAttempt ? { metadataOutcome: "failed" as const } : {}),
           }),
         ),
       ),

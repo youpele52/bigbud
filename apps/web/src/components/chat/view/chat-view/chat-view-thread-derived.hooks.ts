@@ -292,7 +292,8 @@ export function useChatViewThreadDerivedState(base: ChatViewBaseState) {
   const isComposerApprovalState = activePendingApproval !== null;
   const hasComposerHeader =
     isComposerApprovalState || (showPlanFollowUpPrompt && activeProposedPlan !== null);
-  const composerFooterHasWideActions = showPlanFollowUpPrompt;
+  // Plan follow-up and per-question Next/Submit labels need the compact footer on narrow widths.
+  const composerFooterHasWideActions = showPlanFollowUpPrompt || activePendingProgress !== null;
 
   const completionSummary = useMemo(() => {
     if (!latestTurnSettled) return null;

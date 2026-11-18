@@ -1,5 +1,6 @@
 import {
   parseRemoteAgentArtifactManifest,
+  remoteAgentTargetCandidates,
   selectRemoteAgentArtifact,
   verifyRemoteAgentArtifactBytes,
   verifyRemoteAgentArtifactSignature,
@@ -22,6 +23,16 @@ import { probeRemoteAgentPlatform, type RemoteAgentPlatformInfo } from "./remote
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
 import { parseRemoteAgentCheckOutput, remoteAgentIdentityMatches } from "./remoteAgentIdentity.ts";
 import { downloadRemoteAgentArtifact } from "./remoteAgentArtifactDownload.ts";
+import {
+  RemoteAgentRemoteCommandError,
+  runRemoteAgentDiagnosedCommand,
+} from "./remoteAgentDiagnostics.ts";
+import {
+  adoptRemoteAgentPlacedArtifact,
+  probeRemoteAgentPlacedArtifact,
+  type RemoteAgentPlacedState,
+} from "./remoteAgentInstall.inbox.ts";
+import { assertRemoteAgentPreflight } from "./remoteAgentInstall.preflight.ts";
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
 
 export class RemoteAgentInstallManagerError extends Error {
@@ -42,6 +53,10 @@ export interface RemoteAgentInstallSource {
 export interface RemoteAgentInstallResult {
   readonly runtimeSummary: ReturnType<typeof remoteAgentRuntimeSummary>;
   readonly status: "staged";
+  /** Where verified bytes came from: uploaded, already managed, or the manual inbox. */
+  readonly placement: "upload" | "managed" | "inbox";
+  /** A manual inbox candidate exists for this digest but does not match the signed build. */
+  readonly inboxConflict: boolean;
   readonly platform: RemoteAgentPlatformInfo;
   readonly targetTriple: RemoteAgentTargetTriple;
   readonly artifact: RemoteAgentArtifact;
@@ -54,12 +69,6 @@ export interface RemoteAgentResolvedArtifact {
   readonly platform: RemoteAgentPlatformInfo;
   readonly targetTriple: RemoteAgentTargetTriple;
   readonly artifact: RemoteAgentArtifact;
-}
-
-function remoteCommandStdout(result: unknown): string {
-  return typeof result === "object" && result !== null && "stdout" in result
-    ? String((result as { stdout?: unknown }).stdout ?? "")
-    : "";
 }
 
 interface RemoteAgentInstallManagerDependencies {
@@ -79,6 +88,16 @@ interface RemoteAgentInstallManagerDependencies {
     readonly reservationId?: string;
   }) => Promise<RemoteAgentInstallPaths>;
   readonly runRemoteCommand: (input: RunSshCommandInput) => Promise<unknown>;
+  readonly probePlacedArtifact: (
+    executionTargetId: string,
+    artifact: RemoteAgentArtifact,
+  ) => Promise<RemoteAgentPlacedState>;
+  readonly adoptPlacedArtifact: (input: {
+    readonly executionTargetId: string;
+    readonly artifact: RemoteAgentArtifact;
+    readonly targetTriple: RemoteAgentTargetTriple;
+    readonly reservationId?: string;
+  }) => Promise<RemoteAgentInstallPaths>;
   readonly verifyInstalledAgent: (input: {
     readonly binaryPath: string;
     readonly targetTriple: RemoteAgentTargetTriple;
@@ -102,17 +121,24 @@ function defaultDependencies(
       downloadRemoteAgentArtifact(artifact, signal ? { signal } : {}),
     installArtifact: installRemoteAgentArtifact,
     runRemoteCommand,
+    probePlacedArtifact: (executionTargetId, artifact) =>
+      probeRemoteAgentPlacedArtifact(runRemoteCommand, executionTargetId, artifact).catch(
+        (cause: unknown) => {
+          // Placement is an optimisation: a failed probe falls back to the verified upload.
+          if (cause instanceof RemoteAgentRemoteCommandError) return "absent" as const;
+          throw cause;
+        },
+      ),
+    adoptPlacedArtifact: (input) => adoptRemoteAgentPlacedArtifact(runRemoteCommand, input),
     verifyInstalledAgent: async (input) => {
-      const result = await runRemoteCommand({
+      const { stdout } = await runRemoteAgentDiagnosedCommand(runRemoteCommand, "check", {
         executionTargetId: input.executionTargetId,
         command: "sh",
         args: ["-lc", buildRemoteAgentIdentityProbeCommand(input.binaryPath)],
         timeoutMs: 30_000,
         maxBufferBytes: 64 * 1024,
-        outputMode: "error",
       });
       try {
-        const stdout = remoteCommandStdout(result);
         const identity = parseRemoteAgentCheckOutput(stdout);
         const architecture = input.targetTriple.startsWith("aarch64") ? "aarch64" : "x86_64";
         if (
@@ -173,11 +199,15 @@ export function makeRemoteAgentInstallManager(
         `Remote agent is unsupported on ${platform.operatingSystem}/${platform.architecture}.`,
       );
     }
-    const artifact = selectRemoteAgentArtifact(input.source.manifest, platform.targetTriple);
+    // Prefer the static musl build when published; glibc remains for transition manifests.
+    const artifact = selectRemoteAgentArtifact(
+      input.source.manifest,
+      remoteAgentTargetCandidates(platform.targetTriple, platform.preflight?.libc.family),
+    );
     if (input.verifySignature && !input.source.allowUntrustedDevelopmentArtifact) {
       verifyRemoteAgentArtifactSignature(artifact, input.source.trustStore);
     }
-    return { platform, targetTriple: platform.targetTriple, artifact };
+    return { platform, targetTriple: artifact.targetTriple, artifact };
   };
 
   return {
@@ -185,11 +215,15 @@ export function makeRemoteAgentInstallManager(
     cleanup: async (executionTargetId: string) => {
       const control = await dependencies.openControl(executionTargetId);
       let referencedBuildIds: (() => Promise<ReadonlySet<string>>) | undefined;
-      try {
-        const owners = remoteAgentOwners();
-        referencedBuildIds = () => owners.referencedBuildIds(executionTargetId);
-      } catch {
-        // Standalone install-manager tests and pre-persistence bootstrap have no local owner store.
+      if (dependencies.referencedBuildIds) {
+        referencedBuildIds = () => dependencies.referencedBuildIds!(executionTargetId);
+      } else {
+        try {
+          const owners = remoteAgentOwners();
+          referencedBuildIds = () => owners.referencedBuildIds(executionTargetId);
+        } catch {
+          // Standalone install-manager tests and pre-persistence bootstrap have no local owner store.
+        }
       }
       return cleanupRemoteAgentBuilds(control, referencedBuildIds, executionTargetId);
     },
@@ -206,8 +240,13 @@ export function makeRemoteAgentInstallManager(
           ...input,
           verifySignature: true,
         });
-        const bytes = await dependencies.readArtifactBytes(artifact, input.signal);
-        verifyRemoteAgentArtifactBytes(artifact, bytes);
+        // Refuse before downloading or uploading when the host cannot install or run the build.
+        if (platform.preflight) assertRemoteAgentPreflight(platform.preflight);
+        // Pre-placed managed or inbox bytes skip the download and upload entirely.
+        const placed = await dependencies.probePlacedArtifact(input.executionTargetId, artifact);
+        const adopt = placed === "managed" || placed === "inbox";
+        const bytes = adopt ? null : await dependencies.readArtifactBytes(artifact, input.signal);
+        if (bytes) verifyRemoteAgentArtifactBytes(artifact, bytes);
         if (input.signal?.aborted) {
           throw input.signal.reason ?? new DOMException("caller", "AbortError");
         }
@@ -244,17 +283,24 @@ export function makeRemoteAgentInstallManager(
             });
           },
           installAndCheck: async (binaryPath, reservationId) => {
-            const installed = await dependencies.installArtifact({
-              executionTargetId: input.executionTargetId,
-              artifact,
-              targetTriple,
-              bytes,
-              trustStore: input.source.trustStore,
-              ...(input.source.allowUntrustedDevelopmentArtifact
-                ? { skipSignatureVerification: true }
-                : {}),
-              reservationId,
-            });
+            const installed = bytes
+              ? await dependencies.installArtifact({
+                  executionTargetId: input.executionTargetId,
+                  artifact,
+                  targetTriple,
+                  bytes,
+                  trustStore: input.source.trustStore,
+                  ...(input.source.allowUntrustedDevelopmentArtifact
+                    ? { skipSignatureVerification: true }
+                    : {}),
+                  reservationId,
+                })
+              : await dependencies.adoptPlacedArtifact({
+                  executionTargetId: input.executionTargetId,
+                  artifact,
+                  targetTriple,
+                  reservationId,
+                });
             await dependencies.verifyInstalledAgent({
               executionTargetId: input.executionTargetId,
               binaryPath,
@@ -270,6 +316,8 @@ export function makeRemoteAgentInstallManager(
         return {
           runtimeSummary: remoteAgentRuntimeSummary(await control.registry.read()),
           status: "staged",
+          placement: adopt ? placed : "upload",
+          inboxConflict: placed === "inbox-conflict",
           platform,
           targetTriple,
           artifact,

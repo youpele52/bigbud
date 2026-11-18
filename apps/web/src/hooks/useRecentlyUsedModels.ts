@@ -4,19 +4,18 @@ import {
   RecentModelsRawList,
   type RecentModelUsage,
   RECENTLY_USED_MODELS_STORAGE_KEY,
-  LEGACY_RECENTLY_USED_MODELS_STORAGE_KEYS,
+  RECENTLY_USED_MODELS_STORAGE_OPTIONS,
 } from "../models/recentlyUsedModels";
 import { useLocalStorage } from "./useLocalStorage";
 
 const EMPTY: unknown[] = [];
-const STORAGE_OPTIONS = { legacyKeys: LEGACY_RECENTLY_USED_MODELS_STORAGE_KEYS } as const;
 
 export function useRecentlyUsedModels(): readonly RecentModelUsage[] {
   const [value, setValue] = useLocalStorage(
     RECENTLY_USED_MODELS_STORAGE_KEY,
     EMPTY,
     RecentModelsRawList,
-    STORAGE_OPTIONS,
+    RECENTLY_USED_MODELS_STORAGE_OPTIONS,
   );
   const normalized = useMemo(() => normalizeRecentlyUsedModels(value), [value]);
 

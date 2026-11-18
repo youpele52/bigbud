@@ -300,7 +300,10 @@ export function isTerminalSplitShortcut(
   keybindings: ResolvedKeybindingsConfig,
   options?: ShortcutMatchOptions,
 ): boolean {
-  return matchesCommandShortcut(event, keybindings, "terminal.split", options);
+  return (
+    matchesCommandShortcut(event, keybindings, "terminal.split", options) ||
+    matchesCommandShortcut(event, keybindings, "terminal.splitDown", options)
+  );
 }
 
 export function isTerminalNewShortcut(

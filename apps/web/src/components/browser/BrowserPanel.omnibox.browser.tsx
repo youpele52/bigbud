@@ -1,7 +1,7 @@
 import "../../index.css";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cdp, page } from "vitest/browser";
+import { cdp, page, userEvent } from "vitest/browser";
 import { render } from "vitest-browser-react";
 
 import { useBrowserPanelStore } from "~/stores/browser/browser.store";
@@ -198,10 +198,10 @@ describe("BrowserPanel omnibox", () => {
     const screen = await render(<BrowserPanel activeThreadId={"thread-1" as never} />);
     try {
       const input = page.getByPlaceholder("Enter a URL or search");
+      // Filling focuses the input without moving a pointer left over another suggestion.
+      await input.click();
       await input.fill("example.org");
-      input
-        .element()
-        .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+      await userEvent.keyboard("{ArrowDown}");
       await vi.waitFor(() =>
         expect(
           document
@@ -209,16 +209,16 @@ describe("BrowserPanel omnibox", () => {
             ?.classList.contains("bg-accent"),
         ).toBe(true),
       );
-      input.element().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      expect(document.activeElement).toBe(input.element());
+      await userEvent.keyboard("{Enter}");
       await vi.waitFor(() =>
         expect(useBrowserPanelStore.getState().tabsById.browser?.url).toBe(
           "https://duckduckgo.com/?q=example.org",
         ),
       );
+      await input.click();
       await input.fill("example.net");
-      input
-        .element()
-        .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+      await userEvent.keyboard("{ArrowUp}");
       await vi.waitFor(() =>
         expect(
           document
@@ -226,12 +226,15 @@ describe("BrowserPanel omnibox", () => {
             ?.classList.contains("bg-accent"),
         ).toBe(true),
       );
-      input.element().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      expect(document.activeElement).toBe(input.element());
+      await userEvent.keyboard("{Enter}");
       await vi.waitFor(() =>
         expect(useBrowserPanelStore.getState().tabsById.browser?.url).toBe("https://example.net/"),
       );
+      await input.click();
       await input.fill("example.org");
-      input.element().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      expect(document.activeElement).toBe(input.element());
+      await userEvent.keyboard("{Enter}");
       await vi.waitFor(() =>
         expect(useBrowserPanelStore.getState().tabsById.browser?.url).toBe("https://example.org/"),
       );

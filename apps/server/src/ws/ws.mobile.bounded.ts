@@ -1,8 +1,7 @@
 import { OrchestrationGetMobileThreadError, type ThreadId } from "@bigbud/contracts";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { MobileRecoveryBaselineError } from "@bigbud/contracts/server/mobile.recovery";
 
-import { buildBoundedMobileThread } from "../mobile/mobileThread.bounded.ts";
-import { ProjectionThreadDetailNotFoundError } from "../orchestration/Services/ProjectionCatalogQuery.ts";
 import type { WsRpcContext } from "./wsRpcContext.ts";
 
 type MobileReadContext = Pick<
@@ -28,30 +27,27 @@ export const readBoundedMobileSnapshot = Effect.fn("readBoundedMobileSnapshot")(
   return baseline.snapshot;
 });
 
-/** One mobile thread from the operational shell and the bounded selected-thread detail. */
+/** Legacy reads share the mobile SQL exemptions and serialized budget, never desktop detail. */
 export const readBoundedMobileThread = Effect.fn("readBoundedMobileThread")(function* (
   context: MobileReadContext,
   threadId: ThreadId,
 ) {
-  if (Option.isNone(context.projectionOperationalStateQuery)) {
+  const getBaseline = context.projectionSnapshotQuery.getMobileRecoveryBaseline;
+  if (!getBaseline) {
     return yield* new OrchestrationGetMobileThreadError({
       message: "Mobile thread reads are unavailable on this server.",
     });
   }
-  const detail = yield* context.projectionCatalogQuery
-    .getSelectedThreadDetail({ threadId })
-    .pipe(
-      Effect.catchIf(Schema.is(ProjectionThreadDetailNotFoundError), () =>
-        Effect.fail(threadNotFound()),
-      ),
-    );
-  const shell =
-    yield* context.projectionOperationalStateQuery.value.getThreadOperationalState(threadId);
-  const thread = Option.flatMap(shell, (model) =>
-    Option.fromNullishOr(model.threads.find((entry) => entry.id === threadId)),
+  const baseline = yield* getBaseline(threadId).pipe(
+    Effect.mapError(
+      (error) =>
+        new OrchestrationGetMobileThreadError({
+          message: Schema.is(MobileRecoveryBaselineError)(error.cause)
+            ? error.cause.message
+            : "Mobile thread could not be loaded.",
+        }),
+    ),
   );
-  if (Option.isNone(thread)) {
-    return yield* threadNotFound();
-  }
-  return buildBoundedMobileThread(thread.value, detail);
+  if (baseline.selectedThread?.status !== "present") return yield* threadNotFound();
+  return baseline.selectedThread.thread;
 });

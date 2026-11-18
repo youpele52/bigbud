@@ -96,7 +96,7 @@ export function GeneralSettingsSection() {
         {showWindowMaterialSetting ? (
           <SettingsRow
             title="Window Material"
-            description="Controls the macOS desktop window appearance for shell chrome only. This does not change light or dark theme."
+            description="Automatic follows your Mac’s transparency and contrast preferences on macOS 26 or later, and uses Solid on older versions. Applies to the window frame, sidebar, and header without changing your light or dark theme."
             resetAction={
               settings.windowMaterial !== DEFAULT_UNIFIED_SETTINGS.windowMaterial ? (
                 <SettingResetButton

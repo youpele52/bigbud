@@ -8,23 +8,32 @@ use std::time::Duration;
 static NEXT: AtomicU64 = AtomicU64::new(1);
 static OWNER_ACTIVE: AtomicBool = AtomicBool::new(false);
 struct Slot {
+    spawn_id: String,
     child: Option<Arc<Child>>,
     cleanup: bool,
 }
 static PENDING: Mutex<BTreeMap<u64, Slot>> = Mutex::new(BTreeMap::new());
 
 /// Capacity is held BEFORE fork. Setup failures retain their direct-child
-/// identity here until verified reap; unknown cleanup never frees admission.
+/// identity and native spawn ID here until verified reap; unknown cleanup never
+/// frees same-ID admission. This is not durable/session-level deduplication.
 pub(super) struct Reservation {
     id: u64,
+    spawn_id: String,
     retained: bool,
 }
 impl Reservation {
-    pub fn reserve() -> io::Result<Self> {
+    pub fn reserve(spawn_id: &str) -> io::Result<Self> {
         poll();
         let mut pending = PENDING
             .lock()
             .map_err(|_| io::Error::other("pending reap registry poisoned"))?;
+        if pending.values().any(|slot| slot.spawn_id == spawn_id) {
+            return Err(io::Error::new(
+                io::ErrorKind::AlreadyExists,
+                "PTY spawn ID has pending native setup or cleanup",
+            ));
+        }
         if pending.len() >= 64 {
             return Err(io::Error::other("pending child capacity exhausted"));
         }
@@ -36,28 +45,40 @@ impl Reservation {
         pending.insert(
             id,
             Slot {
+                spawn_id: spawn_id.to_owned(),
                 child: None,
                 cleanup: false,
             },
         );
         Ok(Self {
             id,
+            spawn_id: spawn_id.to_owned(),
             retained: false,
         })
     }
     pub fn retain(&mut self, child: Arc<Child>) -> io::Result<()> {
-        PENDING
-            .lock()
-            .map_err(|_| io::Error::other("pending reap registry poisoned"))?
-            .insert(
-                self.id,
-                Slot {
-                    child: Some(child),
-                    cleanup: false,
-                },
-            );
+        let (mut pending, poisoned) = match PENDING.lock() {
+            Ok(pending) => (pending, false),
+            // Preserve the pre-reserved child's identity even on poison. Do not
+            // reopen admission or claim successful setup from recovered state.
+            Err(error) => (error.into_inner(), true),
+        };
+        pending.insert(
+            self.id,
+            Slot {
+                spawn_id: self.spawn_id.clone(),
+                child: Some(child),
+                cleanup: poisoned,
+            },
+        );
         self.retained = true;
-        Ok(())
+        if poisoned {
+            Err(io::Error::other(
+                "pending reap registry poisoned; child retained",
+            ))
+        } else {
+            Ok(())
+        }
     }
     pub fn transfer(mut self) {
         self.retained = false;
@@ -123,6 +144,9 @@ pub(super) fn retained_children() -> Vec<Arc<Child>> {
         .collect()
 }
 
+#[cfg(test)]
+#[path = "cleanup.admission.tests.rs"]
+mod admission_tests;
 #[cfg(test)]
 #[path = "cleanup.tests.rs"]
 mod tests;

@@ -74,6 +74,7 @@ it.layer(NodeServices.layer)("cli persisted settings", (it) => {
         cwd: process.cwd(),
         baseDir,
         ...derivedPaths,
+        terminalShellInstallEvidence: "existing-or-uncertain",
         host: "127.0.0.1",
         staticDir: resolved.staticDir,
         devUrl: undefined,

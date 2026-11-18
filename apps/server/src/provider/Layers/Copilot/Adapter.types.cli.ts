@@ -1,15 +1,17 @@
 import { createRequire } from "node:module";
 
-import {
-  RuntimeConnection,
-  type CopilotClientOptions,
-  type RuntimeConnection as CopilotRuntimeConnection,
-  type SessionFsConfig,
+import type {
+  CopilotClientOptions,
+  RuntimeConnection as CopilotRuntimeConnection,
+  SessionFsConfig,
 } from "@github/copilot-sdk";
+
+import { copilotSdk } from "./copilotSdk.lazy.ts";
 
 import { readManagedCopilotRuntime } from "@bigbud/shared/copilotRuntime.paths";
 import { copilotNativePackageName } from "./Runtime.release.ts";
 import { resolveExternalCopilot, sdkCopilotExecutable } from "./Runtime.executable.ts";
+import { copilotRuntimeEnvironment } from "./Runtime.vendorCache.ts";
 
 export { copilotNativePackageName } from "./Runtime.release.ts";
 
@@ -116,9 +118,13 @@ export function resolveCopilotRuntimeInvocation(
 export function makeCliRuntimeConnection(
   invocation: CopilotRuntimeInvocation | undefined,
 ): CopilotRuntimeConnection | undefined {
-  return invocation === undefined
-    ? undefined
-    : RuntimeConnection.forStdio({ path: invocation.path, args: invocation.args });
+  if (invocation === undefined) return undefined;
+  const env = copilotRuntimeEnvironment(invocation);
+  return copilotSdk().RuntimeConnection.forStdio({
+    path: invocation.path,
+    args: invocation.args,
+    ...(env ? { env } : {}),
+  });
 }
 
 export function makeCopilotClientOptions(input: {

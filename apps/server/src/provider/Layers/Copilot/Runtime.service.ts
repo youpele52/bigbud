@@ -1,3 +1,4 @@
+import { lstat } from "node:fs/promises";
 import type {
   CopilotRuntimeInput,
   CopilotRuntimeState,
@@ -9,10 +10,29 @@ import { acknowledgeCopilotSetup, copilotSetupAcknowledged } from "./Runtime.lif
 import { cancelCopilotJob, readCopilotJob, startCopilotJob } from "./Runtime.jobs.ts";
 import { activeCopilotLeases, withCopilotRuntimeLock } from "@bigbud/shared/copilotRuntime.storage";
 
-/** Server-authoritative lifecycle status; only explicit install/update actions download bytes. */
+export interface CopilotRuntimeProviderSettings {
+  readonly binaryPath: string;
+  readonly enabled: boolean;
+}
+
+async function rootExists(root: string): Promise<boolean> {
+  try {
+    await lstat(root);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/**
+ * Server-authoritative lifecycle status; only explicit install/update actions download bytes.
+ * While the provider is disabled, a status read never executes a Copilot binary, never writes
+ * state, and never prompts for setup.
+ */
 export async function copilotRuntimeRequest(
   input: CopilotRuntimeInput,
-  binaryPath: string,
+  provider: CopilotRuntimeProviderSettings,
   root = copilotRuntimeRoot(),
 ): Promise<CopilotRuntimeState> {
   let error: string | null = null;
@@ -24,16 +44,26 @@ export async function copilotRuntimeRequest(
   } catch (cause) {
     error = cause instanceof Error ? cause.message : String(cause);
   }
-  const discovery = await discoverCopilotRuntime(binaryPath, root);
-  if (discovery.available || discovery.source !== "missing") await acknowledgeCopilotSetup(root);
-  return withCopilotRuntimeLock(root, async () => ({
+  const passive = !provider.enabled && input.action === "status";
+  const discovery = await discoverCopilotRuntime(provider.binaryPath, root, {
+    probe: provider.enabled,
+  });
+  const base = {
     ...discovery,
     error,
     diagnostic: discovery.error,
+    pinnedVersion: COPILOT_RUNTIME_VERSION,
+  };
+  if (passive && !(await rootExists(root)))
+    return { ...base, managed: [], activeLeases: 0, onboarding: false, job: null };
+  if (!passive && (discovery.available || discovery.source !== "missing"))
+    await acknowledgeCopilotSetup(root);
+  return withCopilotRuntimeLock(root, async () => ({
+    ...base,
     managed: await managedCopilotInstallations(root),
     activeLeases: await activeCopilotLeases(root),
-    onboarding: discovery.source === "missing" && !(await copilotSetupAcknowledged(root)),
-    pinnedVersion: COPILOT_RUNTIME_VERSION,
+    onboarding:
+      provider.enabled && discovery.source === "missing" && !(await copilotSetupAcknowledged(root)),
     job: await readCopilotJob(root),
   }));
 }

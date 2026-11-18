@@ -1,12 +1,9 @@
-import {
-  type ExecutionTargetId,
-  type ResolvedKeybindingsConfig,
-  type ThreadId,
-} from "@bigbud/contracts";
+import { useTerminalSurfaceShortcuts } from "./useTerminalSurfaceShortcuts";
+import { terminalActionLabels } from "./terminalActionLabels";
+import type { ThreadTerminalDrawerProps } from "./ThreadTerminalDrawer.types";
+import type { TerminalProfileLaunch } from "../../lib/terminalProfileLaunch";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { cn } from "~/lib/utils";
-import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
 import {
   DEFAULT_THREAD_TERMINAL_ID,
   MAX_TERMINALS_PER_GROUP,
@@ -28,40 +25,6 @@ export {
   terminalSelectionActionDelayForClickCount,
 } from "./ThreadTerminalDrawer.logic";
 
-interface ThreadTerminalDrawerProps {
-  threadId: ThreadId;
-  executionTargetId?: ExecutionTargetId | undefined;
-  cwd: string;
-  worktreePath?: string | null;
-  runtimeEnv?: Record<string, string>;
-  visible?: boolean;
-  height: number;
-  terminalIds: string[];
-  activeTerminalId: string;
-  terminalGroups: ThreadTerminalGroup[];
-  activeTerminalGroupId: string;
-  focusRequestId: number;
-  onSplitTerminal: () => void;
-  onNewTerminal: () => void;
-  splitShortcutLabel?: string | undefined;
-  newShortcutLabel?: string | undefined;
-  closeShortcutLabel?: string | undefined;
-  onActiveTerminalChange: (terminalId: string) => void;
-  onCloseTerminal: (terminalId: string) => void;
-  onHeightChange: (height: number) => void;
-  onAddTerminalContext: (selection: TerminalContextSelection) => void;
-  keybindings: ResolvedKeybindingsConfig;
-  terminalBaseLabel: string;
-  terminalLabelOverrides: Readonly<Record<string, string>>;
-  terminalProviderById: Readonly<Record<string, TerminalAgentKind>>;
-  mode?: "drawer" | "panel";
-  fillAvailableSpace?: boolean;
-  onToggleExpanded?: (() => void) | undefined;
-  onMinimize?: (() => void) | undefined;
-  onSetTerminalLabelOverride: (terminalId: string, label: string) => void;
-  onClearTerminalLabelOverride: (terminalId: string) => void;
-}
-
 export default function ThreadTerminalDrawer({
   threadId,
   executionTargetId,
@@ -77,8 +40,8 @@ export default function ThreadTerminalDrawer({
   focusRequestId,
   onSplitTerminal,
   onNewTerminal,
-  splitShortcutLabel,
   newShortcutLabel,
+  splitShortcutLabel,
   closeShortcutLabel,
   onActiveTerminalChange,
   onCloseTerminal,
@@ -157,6 +120,7 @@ export default function ThreadTerminalDrawer({
           : `group-${nextTerminalIds[0] ?? DEFAULT_THREAD_TERMINAL_ID}`;
       nextGroups.push({
         id: assignUniqueGroupId(baseGroupId),
+        layout: terminalGroup.layout,
         terminalIds: nextTerminalIds,
       });
     }
@@ -212,24 +176,41 @@ export default function ThreadTerminalDrawer({
   const [terminalRenameDraft, setTerminalRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const renameTerminalActionLabel = "Rename Terminal";
-  const splitTerminalActionLabel = hasReachedSplitLimit
-    ? `Split Terminal (max ${MAX_TERMINALS_PER_GROUP} per group)`
-    : splitShortcutLabel
-      ? `Split Terminal (${splitShortcutLabel})`
-      : "Split Terminal";
-  const newTerminalActionLabel = newShortcutLabel
-    ? `New Terminal (${newShortcutLabel})`
-    : "New Terminal";
-  const closeTerminalActionLabel = closeShortcutLabel
-    ? `Close Terminal (${closeShortcutLabel})`
-    : "Close Terminal";
-  const onSplitTerminalAction = useCallback(() => {
-    if (hasReachedSplitLimit) return;
-    onSplitTerminal();
-  }, [hasReachedSplitLimit, onSplitTerminal]);
-  const onNewTerminalAction = useCallback(() => {
-    onNewTerminal();
-  }, [onNewTerminal]);
+  const {
+    splitTerminalActionLabel,
+    newTerminalActionLabel,
+    closeTerminalActionLabel,
+    closeShortcutLabel: resolvedCloseShortcutLabel,
+    findShortcutLabel,
+  } = terminalActionLabels({
+    keybindings,
+    hasReachedSplitLimit,
+    splitShortcutLabel,
+    closeShortcutLabel,
+    newShortcutLabel,
+  });
+  const onSplitTerminalAction = useCallback(
+    (direction?: import("../../lib/terminalSplitLayout").TerminalSplitDirection) => {
+      if (hasReachedSplitLimit) return;
+      onSplitTerminal(direction);
+    },
+    [hasReachedSplitLimit, onSplitTerminal],
+  );
+  const onNewTerminalAction = useCallback(
+    (profile?: TerminalProfileLaunch) => {
+      onNewTerminal(profile);
+    },
+    [onNewTerminal],
+  );
+  const surface = useRef<HTMLElement | null>(null);
+  useTerminalSurfaceShortcuts({
+    surface,
+    keybindings,
+    activeTerminalId: resolvedActiveTerminalId,
+    split: onSplitTerminalAction,
+    create: onNewTerminalAction,
+    close: onCloseTerminal,
+  });
   const onStartTerminalRename = useCallback(
     (terminalId: string) => {
       setEditingTerminalId(terminalId);
@@ -285,6 +266,8 @@ export default function ThreadTerminalDrawer({
 
   return (
     <aside
+      ref={surface}
+      data-terminal-surface={mode}
       className={cn(
         "thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden bg-background",
         mode === "panel" || fillAvailableSpace ? "h-full" : "border-t border-border/80",
@@ -312,6 +295,7 @@ export default function ThreadTerminalDrawer({
           renameTerminalActionLabel={renameTerminalActionLabel}
           splitTerminalActionLabel={splitTerminalActionLabel}
           newTerminalActionLabel={newTerminalActionLabel}
+          findShortcutLabel={findShortcutLabel}
           closeTerminalActionLabel={closeTerminalActionLabel}
           resolvedActiveTerminalId={resolvedActiveTerminalId}
           onRenameTerminalAction={() => onStartTerminalRename(resolvedActiveTerminalId)}
@@ -322,7 +306,7 @@ export default function ThreadTerminalDrawer({
       )}
 
       {!hasTerminalSidebar && editingTerminalId === resolvedActiveTerminalId && (
-        <div className="pointer-events-none absolute left-2 top-2 z-20 max-w-[min(24rem,calc(100%-8rem))]">
+        <div className="pointer-events-none absolute left-1/2 top-2 z-20 max-w-[min(24rem,calc(100%-8rem))] -translate-x-1/2">
           <ThreadTerminalDrawerRenameEditor
             value={terminalRenameDraft}
             placeholder={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}
@@ -348,6 +332,7 @@ export default function ThreadTerminalDrawer({
               runtimeEnv={runtimeEnv}
               visible={visible}
               visibleTerminalIds={visibleTerminalIds}
+              splitLayout={resolvedTerminalGroups[resolvedActiveGroupIndex]?.layout}
               resolvedActiveTerminalId={resolvedActiveTerminalId}
               terminalLabelById={terminalLabelById}
               focusRequestId={focusRequestId}
@@ -379,8 +364,9 @@ export default function ThreadTerminalDrawer({
               renameTerminalActionLabel={renameTerminalActionLabel}
               splitTerminalActionLabel={splitTerminalActionLabel}
               newTerminalActionLabel={newTerminalActionLabel}
+              findShortcutLabel={findShortcutLabel}
               closeTerminalActionLabel={closeTerminalActionLabel}
-              closeShortcutLabel={closeShortcutLabel}
+              closeShortcutLabel={resolvedCloseShortcutLabel ?? undefined}
               onTerminalRenameDraftChange={setTerminalRenameDraft}
               onStartTerminalRename={onStartTerminalRename}
               onCommitTerminalRename={onCommitTerminalRename}

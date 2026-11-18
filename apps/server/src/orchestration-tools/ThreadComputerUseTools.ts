@@ -1,3 +1,4 @@
+import type { RuntimeMode } from "../startup/config.ts";
 import type { ComputerUseAction, ThreadId } from "@bigbud/contracts";
 import {
   DEFAULT_COMPUTER_USE_ACTION_TIMEOUT_MS,
@@ -9,7 +10,10 @@ import type { ComputerUseShape } from "../computer-use/Services/ComputerUse.ts";
 import type { ComputerUseActivityShape } from "../computer-use/Services/ComputerUseActivity.ts";
 import { isDesktopSurfaceAction } from "../computer-use/Layers/ComputerUse.ts";
 import { guardComputerUseAction } from "../computer-use/computerUseSafety.ts";
-import { type OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  type OrchestrationEngineShape,
+  getOrchestrationThread,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import {
   appendComputerUseActivity,
   persistComputerUseScreenshot,
@@ -160,7 +164,7 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     readonly fileSystem: FileSystem.FileSystem;
     readonly orchestrationEngine: OrchestrationEngineShape;
     readonly path: Path.Path;
-    readonly serverMode: "web" | "desktop";
+    readonly serverMode: RuntimeMode;
     readonly threadId: ThreadId;
     readonly action: ComputerUseAction;
     readonly checkInIntervalMs?: number;
@@ -168,13 +172,7 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     /** Registers the action for the mascot's "Stop computer use"; absent in narrow test hosts. */
     readonly activity?: ComputerUseActivityShape;
   }) {
-    const thread = yield* input.orchestrationEngine
-      .getReadModel()
-      .pipe(
-        Effect.map((readModel) =>
-          readModel.threads.find((candidate) => candidate.id === input.threadId),
-        ),
-      );
+    const thread = yield* getOrchestrationThread(input.orchestrationEngine, input.threadId);
     if (!thread) {
       return yield* Effect.fail(new Error(`Thread not found: ${input.threadId}`));
     }
@@ -195,7 +193,7 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     if (isDesktopSurfaceAction(input.action) && input.serverMode !== "desktop") {
       return yield* Effect.fail(
         new Error(
-          "Desktop computer-use actions are only available when bigbud is running in desktop mode. The current runtime mode is 'web'.",
+          `Desktop computer-use actions are only available when bigbud is running in desktop mode. The current runtime mode is '${input.serverMode}'.`,
         ),
       );
     }

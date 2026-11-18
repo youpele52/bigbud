@@ -2,11 +2,20 @@ use super::*;
 
 #[cfg(unix)]
 pub fn run_proxy<R: Read + Send, W: Write>(
-    mut input: R,
-    mut output: W,
+    input: R,
+    output: W,
     socket_path: &Path,
 ) -> io::Result<()> {
-    let mut socket = UnixStream::connect(socket_path)?;
+    forward_authenticated_proxy(input, output, UnixStream::connect(socket_path)?)
+}
+
+/// The caller has already authenticated this exact connected socket.
+#[cfg(unix)]
+pub(crate) fn forward_authenticated_proxy<R: Read + Send, W: Write>(
+    mut input: R,
+    mut output: W,
+    mut socket: UnixStream,
+) -> io::Result<()> {
     let mut socket_writer = socket.try_clone()?;
     std::thread::scope(|scope| {
         let input_thread = scope.spawn(move || {

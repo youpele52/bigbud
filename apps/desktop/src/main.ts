@@ -230,8 +230,9 @@ configureAppIdentity({
 
 // Window factory (thin wrapper that closes over main.ts state)
 
-function makeWindow(): BrowserWindow {
+function makeWindow(searchParams?: Readonly<Record<string, string>>): BrowserWindow {
   const window = createWindow({
+    searchParams,
     appDisplayName: APP_DISPLAY_NAME,
     desktopScheme: DESKTOP_SCHEME,
     isDevelopment,
@@ -245,7 +246,7 @@ function makeWindow(): BrowserWindow {
       if (mainWindow === w) mainWindow = null;
     },
   });
-  windowRegistry.register("main", window);
+  if (!searchParams) windowRegistry.register("main", window);
   return window;
 }
 

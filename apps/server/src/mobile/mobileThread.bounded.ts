@@ -9,11 +9,13 @@ import type {
   ThreadDetailMessage,
 } from "@bigbud/contracts/orchestration/orchestration.detail.ts";
 
+import { mobileTextFromDetailMessage } from "./mobileRecordBounds.ts";
+
 function toOrchestrationMessage(message: ThreadDetailMessage): OrchestrationMessage {
   return {
     id: message.id,
     role: message.role,
-    text: message.text,
+    text: mobileTextFromDetailMessage(message),
     attachments: message.attachments,
     ...(message.replyTo !== undefined ? { replyTo: message.replyTo } : {}),
     ...(message.originSegments !== undefined ? { originSegments: message.originSegments } : {}),
@@ -35,6 +37,8 @@ function compareActivities(left: OrchestrationThreadActivity, right: Orchestrati
  * The mobile thread view from bounded reads only: the operational shell (identity, session, latest
  * turn, tasks and watches) plus the selected-thread detail window (byte-bounded newest messages,
  * the active turn's activities, answered questions, the active plan and recent checkpoints).
+ * A truncated message preview ends with the too-large notice; detail activities keep their
+ * `payloadTruncated`/`payloadLength` flags as they are.
  */
 export function buildBoundedMobileThread(
   shell: OrchestrationThread,

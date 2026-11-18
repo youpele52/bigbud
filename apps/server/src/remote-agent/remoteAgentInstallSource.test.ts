@@ -52,7 +52,7 @@ describe("remote agent install source", () => {
         },
       ),
     ).toBe(
-      "https://github.com/youpele52/bigbud/releases/download/v0.3.00/remote-agent-install-source.json",
+      "https://github.com/youpele52/bigbud/releases/download/v0.3.00/remote-agent-install-source.v2.json",
     );
   });
 
@@ -104,7 +104,7 @@ describe("remote agent install source", () => {
     );
 
     expect(String(request.mock.calls[0]?.[0])).toBe(
-      "https://github.com/owner/repository/releases/download/v2.3.4-rc.1/remote-agent-install-source.json",
+      "https://github.com/owner/repository/releases/download/v2.3.4-rc.1/remote-agent-install-source.v2.json",
     );
   });
 
@@ -119,7 +119,7 @@ describe("remote agent install source", () => {
     );
 
     expect(String(request.mock.calls[0]?.[0])).toBe(
-      "https://github.com/youpele52/bigbud/releases/latest/download/remote-agent-install-source.json",
+      "https://github.com/youpele52/bigbud/releases/latest/download/remote-agent-install-source.v2.json",
     );
   });
 
@@ -134,7 +134,7 @@ describe("remote agent install source", () => {
     );
 
     expect(String(request.mock.calls[0]?.[0])).toBe(
-      `https://github.com/youpele52/bigbud/releases/download/v${serverVersion}/remote-agent-install-source.json`,
+      `https://github.com/youpele52/bigbud/releases/download/v${serverVersion}/remote-agent-install-source.v2.json`,
     );
   });
 
@@ -177,9 +177,26 @@ describe("remote agent install source", () => {
     ).rejects.toThrow(
       "Remote agent install source is unavailable (HTTP 404). Publish the matching release, configure BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH or BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL with a signed install source, or choose Direct SSH in the project's connection settings.",
     );
-    expect(request).toHaveBeenCalledOnce();
-    expect(String(request.mock.calls[0]?.[0])).toBe(
+    expect(request.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://github.com/youpele52/bigbud/releases/latest/download/remote-agent-install-source.v2.json",
       "https://github.com/youpele52/bigbud/releases/latest/download/remote-agent-install-source.json",
+    ]);
+  });
+
+  it("falls back to the legacy file name for releases before the musl transition", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(installSource())));
+
+    await expect(
+      loadRemoteAgentInstallSource(
+        { BIGBUD_REMOTE_AGENT_RELEASE_VERSION: "0.3.3" },
+        { fetch: request, logger: () => undefined },
+      ),
+    ).resolves.toMatchObject({ manifest: { schemaVersion: 1 } });
+    expect(String(request.mock.calls[1]?.[0])).toBe(
+      "https://github.com/youpele52/bigbud/releases/download/v0.3.3/remote-agent-install-source.json",
     );
   });
 
@@ -192,9 +209,9 @@ describe("remote agent install source", () => {
         { fetch: request, logger: () => undefined },
       ),
     ).rejects.toThrow("Remote agent install source is unavailable (HTTP 404)");
-    expect(request).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledTimes(2);
     expect(String(request.mock.calls[0]?.[0])).toBe(
-      `https://github.com/youpele52/bigbud/releases/download/v${serverVersion}/remote-agent-install-source.json`,
+      `https://github.com/youpele52/bigbud/releases/download/v${serverVersion}/remote-agent-install-source.v2.json`,
     );
   });
 

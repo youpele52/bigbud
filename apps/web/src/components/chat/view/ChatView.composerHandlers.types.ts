@@ -45,7 +45,6 @@ export interface UseApplyPromptReplacementInput {
   setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
   activePendingProgress: ReturnType<typeof derivePendingUserInputProgress> | null;
   activePendingUserInput: { requestId: string } | null;
-  isOpencodePendingUserInputMode: boolean;
   setPendingUserInputAnswersByRequestId: React.Dispatch<
     React.SetStateAction<Record<string, Record<string, PendingUserInputDraftAnswer>>>
   >;
@@ -58,18 +57,10 @@ export interface UsePendingUserInputHandlersInput {
     questions: ReadonlyArray<UserInputQuestion>;
   } | null;
   activePendingProgress: ReturnType<typeof derivePendingUserInputProgress> | null;
-  activePendingResolvedAnswers: Record<string, string | string[]> | null;
-  promptRef: React.MutableRefObject<string>;
-  setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
-  setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
   setPendingUserInputAnswersByRequestId: React.Dispatch<
     React.SetStateAction<Record<string, Record<string, PendingUserInputDraftAnswer>>>
   >;
   setPendingUserInputQuestionIndexByRequestId: React.Dispatch<
     React.SetStateAction<Record<string, number>>
   >;
-  onRespondToUserInput: (
-    requestId: ApprovalRequestId,
-    answers: Record<string, unknown>,
-  ) => Promise<void>;
 }

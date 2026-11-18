@@ -5,6 +5,22 @@ import { maybeGenerateThreadElevatorSummary } from "../../orchestration/Layers/P
 import { maybeGenerateAndRenameWorktreeBranchForFirstTurn } from "../../orchestration/Layers/ProviderCommandReactorSessionOps.firstTurn.ts";
 import { textGenerationSelection } from "../../provider/Layers/OpencodeV2/TextGeneration.fixture.ts";
 
+it("summary cannot fall back to legacy V2 dispatch when durable admission is absent", async () => {
+  const f = await dispatchRaceFixture("preference-change");
+  try {
+    await Effect.runPromise(
+      maybeGenerateThreadElevatorSummary(f.services())({
+        threadId: f.state.thread.id,
+        force: true,
+      }),
+    );
+    expect(paid(f)).toBe(0);
+    expect(f.ordinaryCalls()).toBe(0);
+  } finally {
+    f.finishAll();
+  }
+});
+
 const paid = (f: Awaited<ReturnType<typeof dispatchRaceFixture>>) =>
   f.http.requests.filter(({ pathname }) => pathname.endsWith("/generate")).length;
 function run(f: Awaited<ReturnType<typeof dispatchRaceFixture>>, operation: "summary" | "branch") {
@@ -18,7 +34,7 @@ function run(f: Awaited<ReturnType<typeof dispatchRaceFixture>>, operation: "sum
       });
 }
 
-it.each(["summary", "branch"] as const)(
+it.each(["branch"] as const)(
   "%s persists authoritative V2 ownership before dispatch despite a changed preference, and survives interruption/restart",
   async (operation) => {
     for (const mode of ["preference-change", "fallback"] as const) {
@@ -94,7 +110,7 @@ it.each(["preference-change", "fallback"] as const)(
   },
 );
 
-it.each(["summary", "branch"] as const)(
+it.each(["branch"] as const)(
   "ordinary non-V2 %s failures remain retryable without native ownership claims",
   async (operation) => {
     const f = await dispatchRaceFixture("ordinary");

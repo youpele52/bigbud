@@ -5,7 +5,9 @@ import type { BrowserWindow, WebContents } from "electron";
  * `broadRendererWindows()` (connectivity/update/backend-startup broadcasts,
  * menu actions) cover only these.
  */
-export const desktopWindowRoles = ["main", "mascot", "compact-chat"] as const;
+export const desktopWindowRoles = ["main", "mascot", "compact-chat", "remote-backend"] as const;
+/** One window per remote backend profile, so this role has many live windows; `get` skips it. */
+export const REMOTE_BACKEND_WINDOW_ROLE = "remote-backend" as const;
 /**
  * Restricted computer-use safety surface (Stop/status/notice). It never loads
  * the broad preload and is authorized only for its own channels.
@@ -22,7 +24,7 @@ export class DesktopWindowRegistry {
 
   register(role: DesktopWindowRole, window: BrowserWindow): void {
     const webContentsId = window.webContents.id;
-    this.#windows.set(role, window);
+    if (role !== REMOTE_BACKEND_WINDOW_ROLE) this.#windows.set(role, window);
     this.#rolesByWebContentsId.set(webContentsId, role);
     window.once("closed", () => {
       if (this.#windows.get(role) === window) this.#windows.delete(role);

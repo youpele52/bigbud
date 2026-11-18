@@ -1,3 +1,5 @@
+import { encodePtyInventoryFrame } from "./remoteAgentProtocol.codec.pty.inventory.ts";
+import { encodePtyInputReconcileFrame } from "./remoteAgentProtocol.codec.pty.input.ts";
 import {
   type RemoteAgentFrame,
   type RemoteAgentProcessEnvironment,
@@ -40,6 +42,7 @@ function encodeCreate(value: RemoteAgentPtyCreateRequest): Uint8Array {
   for (const environment of value.environment ?? []) {
     writer.fieldMessage(10, encodeEnvironment(environment));
   }
+  writer.fieldBool(11, value.profileLaunch ?? false);
   return writer.finish();
 }
 
@@ -51,6 +54,7 @@ function encodeCreateResponse(value: RemoteAgentPtyCreateResponse): Uint8Array {
   writer.fieldUint(4, value.pid);
   writer.fieldString(5, value.errorCode);
   writer.fieldString(6, value.errorMessage);
+  writer.fieldString(7, value.launchStatus ?? "");
   return writer.finish();
 }
 
@@ -133,6 +137,7 @@ function encodeAttachResponse(value: RemoteAgentPtyAttachResponse): Uint8Array {
   writer.fieldUint(5, value.nextSequence);
   writer.fieldUint(6, value.firstRetainedSequence);
   writer.fieldBool(7, value.replayGap);
+  writer.fieldString(8, value.launchStatus ?? "");
   return writer.finish();
 }
 
@@ -178,6 +183,14 @@ export function encodePtyFrame(
   frame: RemoteAgentFrame,
 ): { readonly field: number; readonly value: Uint8Array } | undefined {
   switch (frame.type) {
+    case "ptyDetachRequest": {
+      const writer = new WireWriter();
+      writer.fieldString(1, frame.value.requestId);
+      writer.fieldString(2, frame.value.ptyId);
+      return { field: 62, value: writer.finish() };
+    }
+    case "ptyDetachResponse":
+      return { field: 63, value: encodeControlResponse(frame.value) };
     case "ptyCreateRequest":
       return { field: 42, value: encodeCreate(frame.value) };
     case "ptyCreateResponse":
@@ -211,6 +224,6 @@ export function encodePtyFrame(
     case "ptyOutputAckResponse":
       return { field: 57, value: encodeControlResponse(frame.value) };
     default:
-      return undefined;
+      return encodePtyInventoryFrame(frame) ?? encodePtyInputReconcileFrame(frame);
   }
 }

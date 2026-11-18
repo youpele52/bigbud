@@ -13,4 +13,4 @@ export function MobileQueueNotice({ queuedPromptCount }: { queuedPromptCount: nu
     </Alert>
   );
 }
-import { Alert, AlertDescription } from "~/components/ui/alert";
+import { Alert, AlertDescription } from "@bigbud/ui/alert";

@@ -1,5 +1,7 @@
+import { hasUnconfirmedDirectShell } from "./Manager.shell.direct.policy";
 import { makeInactiveSessionEviction } from "./Manager.process.eviction.ts";
 import { makeTerminalIdleWorkTracker } from "./Manager.idleWork.ts";
+import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
 import { type TerminalEvent } from "@bigbud/contracts";
 import { makeKeyedCoalescingWorker } from "@bigbud/shared/KeyedCoalescingWorker";
 import * as Effect from "effect/Effect";
@@ -266,6 +268,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       subprocessPollIntervalMs,
       shellResolver,
       ptyAdapter: options.ptyAdapter,
+      directShellOwners: options.directShellOwners,
     };
 
     const clearKillFiber = (proc: PtyProcess | null) =>
@@ -275,7 +278,7 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       drainProcessEventsWith(lifecycleCtx, clearKillFiber, session, expectedPid).pipe(
         Effect.andThen(
           Effect.suspend(() =>
-            session.process === null
+            session.process === null && !hasUnconfirmedDirectShell(session)
               ? releaseWorktreeLease({
                   threadId: session.threadId,
                   terminalId: session.terminalId,
@@ -337,6 +340,9 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
     );
 
     const api = buildSessionApi({
+      resolveOwnedRuntime: (target) => resolveOwnedPtyRuntime(options.ptyAdapter, target),
+      getLocalShellDefault: options.getLocalShellDefault,
+      listLocalShellProfiles: options.listLocalShellProfiles,
       publishEvent,
       modifyManagerState,
       getSession,
@@ -355,6 +361,10 @@ export const makeTerminalManagerWithOptions = Effect.fn("makeTerminalManagerWith
       evictInactiveSessionsIfNeeded,
       assertValidCwd,
       resolveRuntimePathIdentity: options.resolveRuntimePathIdentity,
+      directShellOwners: options.directShellOwners,
+      resolveShellProfile: options.resolveShellProfile,
+      preflightRemoteShellProfile: options.preflightRemoteShellProfile,
+      listShellProfiles: options.listShellProfiles,
       snapshot,
       acquireWorktreeLease,
       markWorktreeLeaseStarted,

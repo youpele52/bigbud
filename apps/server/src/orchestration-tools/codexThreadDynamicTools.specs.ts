@@ -38,6 +38,12 @@ import {
   UNPIN_THREAD_TOOL_DESCRIPTION,
 } from "./threadOrchestrationBridge.shared.ts";
 import { AGENT_WORKSPACE_TOOL_SPECS } from "./AgentWorkspaceToolSpecs.ts";
+import { REMOTE_AGENT_TOOL_SPECS } from "./remoteAgentTools.shared.ts";
+import { PEER_TOOL_SPECS } from "./peerTools.shared.ts";
+import {
+  SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+  SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
+} from "./threadSummaryTool.shared.ts";
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
 import {
   MOVE_THREAD_TOOL_DESCRIPTION,
@@ -95,7 +101,7 @@ function createThreadToolSpecs(delegatedModelChoice: boolean): ReadonlyArray<Cod
 }
 
 export function createCodexThreadOrchestrationDynamicTools(
-  options: { readonly delegatedModelChoice?: boolean } = {},
+  options: { readonly delegatedModelChoice?: boolean; readonly peerTools?: boolean } = {},
 ): ReadonlyArray<CodexDynamicToolSpec> {
   return [
     ...AGENT_WORKSPACE_TOOL_SPECS.map((spec) => ({
@@ -104,6 +110,14 @@ export function createCodexThreadOrchestrationDynamicTools(
       description: spec.description,
       inputSchema: spec.inputSchema,
     })),
+    ...[...REMOTE_AGENT_TOOL_SPECS, ...(options.peerTools === false ? [] : PEER_TOOL_SPECS)].map(
+      (spec) => ({
+        namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+        name: spec.name,
+        description: spec.description,
+        inputSchema: spec.parameters,
+      }),
+    ),
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "render_html",
@@ -139,6 +153,12 @@ export function createCodexThreadOrchestrationDynamicTools(
       name: "browser",
       description: BROWSER_TOOL_DESCRIPTION,
       inputSchema: BROWSER_TOOL_PARAMETERS,
+    },
+    {
+      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+      name: "set_elevator_summary",
+      description: SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+      inputSchema: SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
     },
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,

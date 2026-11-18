@@ -1,3 +1,4 @@
+import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { expect, it, vi } from "vitest";
 import { makeV2RegistryRaceFixture } from "./Orchestration.registry.races.fixture.ts";
 
@@ -29,7 +30,9 @@ it.each([true, "compact"] as const)(
       await expect(
         f.host.call("enroll", f.envelope(next, "enroll", 1, Date.now() + 50000)),
       ).resolves.toMatchObject({ state: "active" });
-      expect(Object.keys((await f.host.request(next.nativeSessionId)).tools)).toHaveLength(6);
+      expect(Object.keys((await f.host.request(next.nativeSessionId)).tools).toSorted()).toEqual(
+        [...v2ThreadRegistration(f.app.artifact).tools].toSorted(),
+      );
       expect(Object.keys((await f.host.request("unrelated-native-session")).tools)).toHaveLength(0);
       expect(
         Object.keys(

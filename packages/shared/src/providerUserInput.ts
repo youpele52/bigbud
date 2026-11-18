@@ -1,5 +1,27 @@
 import type { UserInputQuestion } from "@bigbud/contracts/orchestration/providerRuntime.payloads.ts";
 
+/**
+ * Whether composer text can travel with a chosen option. Selections and text always coexist in the
+ * draft; this only decides the answer. Id-valued options (Cursor) and fields that refuse custom
+ * strings keep the bare selection, because appended text would no longer match an option.
+ */
+export function pendingUserInputAcceptsContext(question: UserInputQuestion): boolean {
+  if ((question.options ?? []).some((option) => option.id)) return false;
+  return (
+    !question.field || (question.field.type === "string" && question.field.allowCustom === true)
+  );
+}
+
+const MULTIPLE_CHOICE_WORDING =
+  /\ball that apply\b|\b(select|choose|pick|check|tick) all\b|\bone or more\b|\b(select|choose|pick) (multiple|several)\b|\bmultiple (choices|options|selections)\b/i;
+
+/** Warn when a single-choice provider question asks for multiple picks in its prose. */
+export function singleChoiceQuestionAsksForMultiple(question: UserInputQuestion): boolean {
+  if (question.multiSelect || question.field?.type === "multiselect") return false;
+  if (question.options.length < 2) return false;
+  return MULTIPLE_CHOICE_WORDING.test(`${question.header}\n${question.question}`);
+}
+
 /** Validate the supported typed form subset without evaluating arbitrary native regular expressions. */
 export function validUserInputAnswer(question: UserInputQuestion, raw: unknown): boolean {
   const field = question.field;

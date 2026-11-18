@@ -13,12 +13,17 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   Outlet: () => <main data-testid="route-outlet">Route outlet</main>,
 }));
 
-vi.mock("../rpc/nativeApi", () => ({ readNativeApi: readNativeApiMock }));
+vi.mock("../rpc/nativeApi", async (original) => ({
+  ...(await original<typeof import("../rpc/nativeApi")>()),
+  readNativeApi: readNativeApiMock,
+  ensureNativeApi: readNativeApiMock,
+}));
 vi.mock("../hooks/useSettings", () => ({
   useSettings: () => ({ hasSeenFileAccessPrompt: true }),
 }));
 vi.mock("../hooks/useWindowMaterial", () => ({ useWindowMaterial: () => undefined }));
-vi.mock("../rpc/serverState", () => ({
+vi.mock("../rpc/serverState", async (original) => ({
+  ...(await original<typeof import("../rpc/serverState")>()),
   useDefaultChatCwd: () => null,
   useServerConfig: () => null,
   useServerProviders: () => [],

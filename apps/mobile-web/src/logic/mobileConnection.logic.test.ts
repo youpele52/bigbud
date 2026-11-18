@@ -35,6 +35,24 @@ describe("mobile connection lifecycle evidence", () => {
     });
   });
 
+  it("records a host-access-off close without treating it as an authorization rejection", () => {
+    const lifecycle = createMobileConnectionLifecycle();
+    const lease = lifecycle.begin("2030-01-01T00:00:00.000Z");
+    lease.handlers.onClose?.({
+      code: 4503,
+      reason: "mobile remote control was turned off on this host",
+    });
+    expect(lifecycle.getState()).toMatchObject({
+      hostAccessOff: true,
+      authorization: "unknown",
+    });
+    // Later retries are refused at upgrade (opaque to browsers); the flag stays.
+    lease.handlers.onClose?.({ code: 1006, reason: "" });
+    expect(lifecycle.getState().hostAccessOff).toBe(true);
+    lease.handlers.onOpen?.();
+    expect(lifecycle.getState().hostAccessOff).toBe(false);
+  });
+
   it("keeps generic close failures separate from explicit authorization evidence", () => {
     expect(isExplicitMobileAuthorizationClose({ code: 1006, reason: "network disappeared" })).toBe(
       false,
@@ -86,6 +104,38 @@ describe("mobile connection lifecycle evidence", () => {
     cancel();
   });
 
+  it("does not expire immediately when expiry is beyond the 32-bit timer limit", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
+    const onExpired = vi.fn();
+    const cancel = scheduleMobileConnectionExpiry({
+      expiresAt: "2030-03-01T00:00:00.000Z",
+      onExpired,
+    });
+
+    vi.advanceTimersByTime(1);
+    expect(onExpired).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(Date.parse("2030-03-01T00:00:00.000Z") - Date.now() - 1);
+    expect(onExpired).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(onExpired).toHaveBeenCalledOnce();
+    cancel();
+  });
+
+  it("cancels a far-future expiry before its re-armed timer fires", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
+    const onExpired = vi.fn();
+    const cancel = scheduleMobileConnectionExpiry({
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      onExpired,
+    });
+    vi.advanceTimersByTime(2_147_483_647);
+    cancel();
+    vi.advanceTimersByTime(10 * 2_147_483_647);
+    expect(onExpired).not.toHaveBeenCalled();
+  });
+
   it("publishes reconnect thresholds from one incident clock", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
@@ -131,5 +181,18 @@ describe("mobile connection lifecycle evidence", () => {
     expect(lifecycle.getState()).toMatchObject({ browserOffline: true, authorization: "unknown" });
     lifecycle.setBrowserOffline(false);
     expect(lifecycle.getState().browserOffline).toBe(false);
+  });
+});
+
+describe("server session-ended close", () => {
+  it("classifies the backend's 4401 session-ended close as an explicit rejection", () => {
+    for (const reason of [
+      "unauthorized: mobile session revoked",
+      "unauthorized: mobile session expired",
+    ]) {
+      expect(isExplicitMobileAuthorizationClose({ code: 4401, reason })).toBe(true);
+    }
+    // A vanished backend relayed by the gateway stays a retryable network event.
+    expect(isExplicitMobileAuthorizationClose({ code: 1013, reason: "" })).toBe(false);
   });
 });

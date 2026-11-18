@@ -36,6 +36,23 @@ describe("resolveMobileConnectionNotice", () => {
     );
   });
 
+  it("explains that mobile access is off on the host rather than a network failure", () => {
+    const notice = resolveMobileConnectionPresentation({
+      connection: {
+        ...initialMobileConnectionState(),
+        transport: "exhausted",
+        incidentLevel: "escalated",
+        hostAccessOff: true,
+      },
+      recoveryState: initialMobileRecoveryState("current"),
+    });
+    expect(notice).toMatchObject({
+      title: "Mobile access is off on this host",
+      showRetry: true,
+      actionsDisabled: true,
+    });
+  });
+
   it("prioritizes authorization and exhaustion over transport details", () => {
     const recoveryState = initialMobileRecoveryState("current");
     expect(

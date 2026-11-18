@@ -2,9 +2,38 @@ import { createHash, createPrivateKey, createPublicKey, sign } from "node:crypto
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  isRemoteAgentTargetTriple,
+  REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR,
+  type RemoteAgentTargetTriple,
+} from "@bigbud/shared/remoteAgentArtifact";
+
 import { resolveReleaseMetadata } from "./lib/release-metadata.ts";
 
-export type RemoteAgentReleaseTarget = "x86_64-unknown-linux-gnu" | "aarch64-unknown-linux-gnu";
+// Use the same binary identity source as release-remote-agent-build.yml, not a
+// client compatibility minimum or a separately maintained release constant.
+export function parseRemoteAgentReleaseProtocol(source: string): {
+  readonly protocolMajor: typeof REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR;
+  readonly protocolMinor: number;
+} {
+  const readVersion = (name: "MAJOR" | "MINOR"): number => {
+    const declarations = [
+      ...source.matchAll(new RegExp(`^pub const PROTOCOL_${name}: u32 = (\\d+);\\r?$`, "gm")),
+    ];
+    const value = Number(declarations[0]?.[1]);
+    if (declarations.length !== 1 || !Number.isSafeInteger(value) || value > 0xffff_ffff) {
+      throw new Error(`Cannot determine the release protocol ${name.toLowerCase()} identity.`);
+    }
+    return value;
+  };
+  const protocolMajor = readVersion("MAJOR");
+  if (protocolMajor !== REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR) {
+    throw new Error("Release protocol major is not supported by the artifact schema.");
+  }
+  return { protocolMajor, protocolMinor: readVersion("MINOR") };
+}
+
+export type RemoteAgentReleaseTarget = RemoteAgentTargetTriple;
 
 export interface RemoteAgentReleaseManifestInput {
   readonly version: string;
@@ -24,8 +53,8 @@ export interface RemoteAgentReleaseManifest {
   readonly artifacts: ReadonlyArray<{
     readonly version: string;
     readonly buildDigest: string;
-    readonly protocolMajor: 1;
-    readonly protocolMinor: 3;
+    readonly protocolMajor: typeof REMOTE_AGENT_SUPPORTED_PROTOCOL_MAJOR;
+    readonly protocolMinor: number;
     readonly targetTriple: RemoteAgentReleaseTarget;
     readonly sizeBytes: number;
     readonly sha256: string;
@@ -100,22 +129,29 @@ export function buildRemoteAgentReleaseManifest(
   );
   assertSafeReleaseValue(input.signingKeyId, "Signing key ID", /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/);
   if (input.signingKeyPem.length === 0) throw new Error("Remote-agent signing key is required.");
-  if (input.assets.length !== 2) {
-    throw new Error("The remote-agent release must contain exactly two target assets.");
-  }
   if (new Set(input.assets.map((asset) => asset.targetTriple)).size !== input.assets.length) {
     throw new Error("The remote-agent release contains duplicate target assets.");
   }
+  // Each published libc family must cover both architectures: the glibc-only legacy manifest
+  // has two assets, and the musl-aware v2 manifest adds the static pair (D4 transition).
+  const families = new Set(input.assets.map((asset) => asset.targetTriple.split("-").at(-1)));
+  if (input.assets.length === 0 || input.assets.length !== families.size * 2) {
+    throw new Error(
+      "The remote-agent release must contain x86_64 and aarch64 assets for each libc family.",
+    );
+  }
 
+  const protocol = parseRemoteAgentReleaseProtocol(
+    readFileSync(new URL("../crates/bigbud-protocol/src/lib.rs", import.meta.url), "utf8"),
+  );
   const artifacts = input.assets.map(({ targetTriple, path }) => {
     const bytes = readFileSync(path);
     if (bytes.byteLength === 0) throw new Error(`Remote-agent asset '${path}' is empty.`);
     const assetName = `bigbud-remote-agent-${input.version}-${targetTriple}`;
-    const artifact = {
+    const artifact: UnsignedRemoteAgentArtifact = {
       version: input.version,
       buildDigest: input.buildDigest,
-      protocolMajor: 1 as const,
-      protocolMinor: 3 as const,
+      ...protocol,
       targetTriple,
       sizeBytes: bytes.byteLength,
       sha256: createHash("sha256").update(bytes).digest("hex"),
@@ -147,7 +183,7 @@ function parseAssetSpec(value: string): RemoteAgentReleaseManifestInput["assets"
     throw new Error(`Invalid --asset value '${value}'. Expected TARGET=PATH.`);
   }
   const targetTriple = value.slice(0, separator);
-  if (targetTriple !== "x86_64-unknown-linux-gnu" && targetTriple !== "aarch64-unknown-linux-gnu") {
+  if (!isRemoteAgentTargetTriple(targetTriple)) {
     throw new Error(`Unsupported remote-agent target '${targetTriple}'.`);
   }
   return { targetTriple, path: value.slice(separator + 1) };

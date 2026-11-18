@@ -38,6 +38,7 @@ export function syncDelegatedChildSummaries(threads: Thread[], child: Thread): T
               title: child.title,
               projectId: child.projectId,
               workflowState: workflowState(child),
+              terminalOutcome: child.latestTurn?.terminalOutcome,
               updatedAt: child.updatedAt ?? child.session?.updatedAt ?? item.updatedAt,
               ...modelChoice(item, child),
             }

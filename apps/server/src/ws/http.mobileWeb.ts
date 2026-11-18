@@ -2,6 +2,7 @@ import Mime from "@effect/platform-node/Mime";
 import { Effect, FileSystem, Option, Path } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
+import { rejectWithoutMobileGatewayCredential } from "../mobile/mobileGatewayCredential";
 import { ServerConfig } from "../startup/config";
 
 const MOBILE_WEB_ROUTE_PREFIX = "/mobile";
@@ -31,6 +32,10 @@ export const mobileWebStaticRouteLayer = HttpRouter.add(
   "GET",
   `${MOBILE_WEB_ROUTE_PREFIX}*`,
   Effect.gen(function* () {
+    const gatewayRejection = yield* rejectWithoutMobileGatewayCredential;
+    if (Option.isSome(gatewayRejection)) {
+      return gatewayRejection.value;
+    }
     const request = yield* HttpServerRequest.HttpServerRequest;
     const url = HttpServerRequest.toURL(request);
     if (Option.isNone(url)) {

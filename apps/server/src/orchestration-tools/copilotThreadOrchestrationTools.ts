@@ -1,3 +1,10 @@
+import { REMOTE_AGENT_TOOL_SPECS, type RemoteAgentToolInput } from "./remoteAgentTools.shared.ts";
+import { PEER_TOOL_SPECS, type PeerToolName } from "./peerTools.shared.ts";
+import {
+  decodeSetElevatorSummaryArguments,
+  SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+  SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
+} from "./threadSummaryTool.shared.ts";
 import type { Tool } from "@github/copilot-sdk";
 import {
   HTML_RENDER_TOOL_DESCRIPTION,
@@ -45,7 +52,12 @@ import {
 } from "./threadPlanTrackingTool.shared.ts";
 import type { AgentWorkspaceToolName } from "./AgentWorkspaceTools.ts";
 import { createCopilotAgentWorkspaceTools } from "./copilotAgentWorkspaceTools.ts";
-import { RenameThreadArguments, RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
+import {
+  formatRenameThreadToolResult,
+  RenameThreadArguments,
+  RENAME_THREAD_TOOL_PARAMETERS,
+} from "./threadRenameTool.shared.ts";
+import type { ThreadCoordinationRefusal } from "./ThreadCoordinationConfirmation.result.ts";
 import {
   MOVE_THREAD_TOOL_DESCRIPTION,
   MOVE_THREAD_TOOL_PARAMETERS,
@@ -84,16 +96,26 @@ export function createCopilotThreadOrchestrationTools(
   input: CopilotThreadToolsInput & {
     readonly renderHtml?: (args: unknown, invocationId: string) => Promise<unknown>;
     readonly getSystemResources?: (input?: unknown) => Promise<Record<string, unknown>>;
+    readonly remoteAgent?: (input: RemoteAgentToolInput) => Promise<Record<string, unknown>>;
+    /** False for background sessions, which are not offered the peer tools (O-2). */
+    readonly peerTools?: boolean;
+    /** P8 peer tools; the binding adds the caller thread. */
+    readonly peer?: (
+      tool: PeerToolName,
+      args: unknown,
+      invocationId: string,
+    ) => Promise<Record<string, unknown>>;
     readonly configureSystemResourceRules?: (input: unknown) => Promise<Record<string, unknown>>;
     readonly workspace?: (
       tool: AgentWorkspaceToolName,
       args: Record<string, unknown>,
     ) => Promise<Record<string, unknown>>;
+    readonly setElevatorSummary?: (summary: string, invocationId: string) => Promise<unknown>;
     readonly renameThread: (
       title: string,
       targetThreadId?: string,
       invocationId?: string,
-    ) => Promise<{ readonly title: string }>;
+    ) => Promise<{ readonly title: string } | ThreadCoordinationRefusal>;
     readonly archiveThread: () => Promise<void>;
     /** Inyosira `move_thread` / `snooze_thread`; absent until organization is installed. */
     readonly organizeThread?: (
@@ -125,6 +147,36 @@ export function createCopilotThreadOrchestrationTools(
       },
     },
     ...(input.workspace ? createCopilotAgentWorkspaceTools(input.workspace) : []),
+    ...REMOTE_AGENT_TOOL_SPECS.map((spec) => ({
+      name: spec.name,
+      description: spec.description,
+      parameters: spec.parameters,
+      handler: async (args: unknown) => {
+        try {
+          if (!input.remoteAgent) throw new Error("Remote agent tools are not ready.");
+          const result = await input.remoteAgent({ tool: spec.name, arguments: args ?? {} });
+          return successResult(JSON.stringify(result, null, 2));
+        } catch (error) {
+          return failureResult(
+            error instanceof Error ? error.message : "Remote agent tool failed.",
+          );
+        }
+      },
+    })),
+    ...(input.peerTools === false ? [] : PEER_TOOL_SPECS).map((spec) => ({
+      name: spec.name,
+      description: spec.description,
+      parameters: spec.parameters,
+      handler: async (args: unknown, invocation: { readonly toolCallId: string }) => {
+        try {
+          if (!input.peer) throw new Error("Peer delegation tools are not ready.");
+          const result = await input.peer(spec.name, args ?? {}, invocation.toolCallId);
+          return successResult(JSON.stringify(result, null, 2));
+        } catch (error) {
+          return failureResult(error instanceof Error ? error.message : "Peer tool failed.");
+        }
+      },
+    })),
     {
       name: "get_system_resources",
       description: GET_SYSTEM_RESOURCES_TOOL_DESCRIPTION,
@@ -158,6 +210,24 @@ export function createCopilotThreadOrchestrationTools(
       },
     },
     {
+      name: "set_elevator_summary",
+      description: SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
+      parameters: SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
+      handler: async (args, invocation) => {
+        try {
+          const { summary } = decodeSetElevatorSummaryArguments(args);
+          if (!input.setElevatorSummary) throw new Error("Thread summary tools are not ready.");
+          return successResult(
+            JSON.stringify(await input.setElevatorSummary(summary, invocation.toolCallId)),
+          );
+        } catch (error) {
+          return failureResult(
+            error instanceof Error ? error.message : "Failed to set thread summary.",
+          );
+        }
+      },
+    },
+    {
       name: "rename_thread",
       description: RENAME_THREAD_TOOL_DESCRIPTION,
       parameters: RENAME_THREAD_TOOL_PARAMETERS,
@@ -165,7 +235,7 @@ export function createCopilotThreadOrchestrationTools(
         try {
           const { title, targetThreadId } = Schema.decodeUnknownSync(RenameThreadArguments)(args);
           const result = await input.renameThread(title, targetThreadId, invocation.toolCallId);
-          return successResult(`Renamed thread to "${result.title}".`);
+          return successResult(formatRenameThreadToolResult(result, title));
         } catch (error) {
           const message = error instanceof Error ? error.message : "Failed to rename thread.";
           return failureResult(message);

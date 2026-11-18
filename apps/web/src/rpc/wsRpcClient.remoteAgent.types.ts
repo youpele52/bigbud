@@ -8,6 +8,10 @@ import type { RpcUnaryMethod, RpcUnaryNoArgMethod } from "./wsRpcClient.types";
 
 /** Remote service restart and user-initiated SSH connection controls. */
 export interface WsRpcRemoteAgentMethods {
+  /** Version-pinned remote command that stages the agent for a later Finish install/update. */
+  readonly getRemoteAgentManualInstall: RpcUnaryMethod<
+    typeof WS_METHODS.serverGetRemoteAgentManualInstall
+  >;
   readonly restartRemoteAgent: (
     input: ServerRestartRemoteAgentInput,
   ) => Promise<ServerRestartRemoteAgentResult>;

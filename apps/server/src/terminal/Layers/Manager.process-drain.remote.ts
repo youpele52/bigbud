@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { invalidateTerminalWorkAssessment } from "./Manager.idleWork.ts";
-import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { terminalPidIsOnBackendHost } from "./OwnedPtyRuntime.identity.ts";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { detectTerminalAgentForShell } from "./Manager.agentDetection.ts";
 import { applyAgentIdentitiesWith } from "./Manager.process-drain.identity.ts";
@@ -29,14 +29,17 @@ export function pollRemoteProcessesWith(
   >();
   for (const session of runningSessions) {
     if (
-      isLocalExecutionTarget(session.executionTargetId) ||
+      terminalPidIsOnBackendHost(ctx.ptyAdapter, session.executionTargetId, session.process) ||
       isWslTerminalTargetId(session.executionTargetId)
     )
       continue;
     const remotePid =
       session.process?.pidDomain === "remote" ? session.pid : session.remoteShellPid;
     if (!remotePid || !Number.isSafeInteger(remotePid) || remotePid <= 1) continue;
-    const group = groups.get(session.executionTargetId) ?? [];
+    const target =
+      ctx.ptyAdapter?.ownedRuntimeForTarget?.(session.executionTargetId)?.targetId ??
+      session.executionTargetId;
+    const group = groups.get(target) ?? [];
     group.push({
       threadId: session.threadId,
       terminalId: session.terminalId,
@@ -46,7 +49,7 @@ export function pollRemoteProcessesWith(
       pid: session.pid,
       remotePid,
     });
-    groups.set(session.executionTargetId, group);
+    groups.set(target, group);
   }
   return Effect.forEach(
     [...groups],

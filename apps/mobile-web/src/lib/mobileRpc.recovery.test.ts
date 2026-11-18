@@ -2,7 +2,11 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { describe, expect, it, vi } from "vitest";
 import { MobileRpcClient } from "./mobileRpc";
-import { MobileRecoveryUnsupportedError } from "./mobileRpc.errors";
+import { MobileRecoveryBaselineError } from "@bigbud/contracts/server/mobile.recovery";
+import {
+  MobileRecoveryRejectedBaselineError,
+  MobileRecoveryUnsupportedError,
+} from "./mobileRpc.errors";
 
 function makeClient(protocol: Record<string, unknown>) {
   return new MobileRpcClient("ws://fixture", undefined, {
@@ -39,6 +43,22 @@ describe("mobile RPC recovery boundary", () => {
       }),
     );
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(MobileRecoveryUnsupportedError);
+    await client.dispose();
+  });
+
+  it("marks only explicitly permanent baseline errors as non-retryable", async () => {
+    const client = makeClient({
+      "mobile.recovery.getBaseline": () =>
+        Effect.fail(
+          new MobileRecoveryBaselineError({
+            message: "Too much recent activity",
+            retryable: false,
+          }),
+        ),
+    });
+    await expect(
+      client.getMobileRecoveryBaseline({ recoveryAttemptId: "attempt" }),
+    ).rejects.toBeInstanceOf(MobileRecoveryRejectedBaselineError);
     await client.dispose();
   });
 

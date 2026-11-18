@@ -1,3 +1,8 @@
+import { retainedDirectOwnerKey, directLeaseReleaseAllowed } from "./directShellLease";
+import {
+  retainedRustTerminalOwnerKey,
+  rustTerminalLeaseReleaseAllowed,
+} from "./ownedRustTerminalLease.ts";
 import * as nodeFs from "node:fs/promises";
 
 import { Effect } from "effect";
@@ -53,13 +58,25 @@ export async function captureWorktreePathIdentity(target: string): Promise<{
 
 export const reconcileWorktreeRuntimeLeases = Effect.fn("reconcileWorktreeRuntimeLeases")(
   function* (sql: SqlClient.SqlClient, runtimeKind: "terminal" | "shell") {
-    const rows = yield* sql<{ readonly leaseId: string; readonly processId: number | null }>`
-    SELECT lease_id AS "leaseId", process_id AS "processId"
+    const rows = yield* sql<{
+      readonly leaseId: string;
+      readonly processId: number | null;
+      readonly threadId: string;
+      readonly runtimeKind: string;
+      readonly updatedAt: string;
+      readonly expiresAt: string | null;
+    }>`
+    SELECT lease_id AS "leaseId", process_id AS "processId", thread_id AS "threadId", runtime_kind AS "runtimeKind", updated_at AS "updatedAt", expires_at AS "expiresAt"
     FROM worktree_runtime_leases WHERE runtime_kind = ${runtimeKind}
   `;
     for (const row of rows) {
       if (row.processId !== null && isDefinitelyTerminated(row.processId)) {
-        yield* sql`DELETE FROM worktree_runtime_leases WHERE lease_id = ${row.leaseId}`;
+        yield* sql`DELETE FROM worktree_runtime_leases WHERE lease_id = ${row.leaseId}
+          AND updated_at = ${row.updatedAt}
+          AND expires_at IS ${row.expiresAt}
+          AND process_id IS ${row.processId}
+          AND ${directLeaseReleaseAllowed(sql, retainedDirectOwnerKey(row))}
+          AND ${rustTerminalLeaseReleaseAllowed(sql, retainedRustTerminalOwnerKey(row))}`;
       }
     }
   },

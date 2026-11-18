@@ -1,8 +1,10 @@
-import { memo } from "react";
-import { ChevronDownIcon, ChevronLeftIcon } from "lucide-react";
+import { memo, useRef } from "react";
+import { ArrowUpIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Button } from "../../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../../ui/menu";
+import { useComposerEscapeStop } from "./ComposerEscapeStop.hooks";
+import { ComposerEscapeStopHint } from "./ComposerEscapeStopHint";
 import { useConfirmedThreadStop } from "./ComposerStopConfirmation";
 
 interface PendingActionState {
@@ -32,16 +34,12 @@ interface ComposerPrimaryActionsProps {
 }
 
 const formatPendingPrimaryActionLabel = (input: {
-  compact: boolean;
   isLastQuestion: boolean;
   isResponding: boolean;
   questionIndex: number;
 }) => {
   if (input.isResponding) {
     return "Submitting...";
-  }
-  if (input.compact) {
-    return input.isLastQuestion ? "Submit" : "Next";
   }
   return input.isLastQuestion
     ? input.questionIndex > 0
@@ -70,20 +68,30 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     backgroundSubagentCount,
     onInterrupt,
   });
+  // Double-Escape mirrors the visible Stop button, so it is enabled exactly when one renders.
+  const stopAnchorRef = useRef<HTMLSpanElement>(null);
+  const { hintVisible } = useComposerEscapeStop({
+    enabled: pendingAction ? hasBackgroundWork : isRunning || hasBackgroundWork,
+    anchorRef: stopAnchorRef,
+    onStop: requestStop,
+  });
   if (pendingAction) {
     return (
       <div className={cn("flex items-center justify-end", compact ? "gap-1.5" : "gap-2")}>
         {confirmation}
         {hasBackgroundWork ? (
-          <Button
-            type="button"
-            variant="destructive"
-            size="sm"
-            onClick={requestStop}
-            aria-label="Stop generation and subagents"
-          >
-            Stop
-          </Button>
+          <span ref={stopAnchorRef} className="relative inline-flex">
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={requestStop}
+              aria-label="Stop generation and subagents"
+            >
+              Stop
+            </Button>
+            <ComposerEscapeStopHint visible={hintVisible} />
+          </span>
         ) : null}
         {pendingAction.questionIndex > 0 ? (
           compact ? (
@@ -109,21 +117,27 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             </Button>
           )
         ) : null}
+        {/* Narrow footers get an icon with the full label as its accessible name. */}
         <Button
           type="submit"
-          size="sm"
-          className={cn("rounded-full", compact ? "px-3" : "px-4")}
+          size={compact ? "icon-sm" : "sm"}
+          className={cn("rounded-full", !compact && "px-4")}
+          aria-label={compact ? formatPendingPrimaryActionLabel(pendingAction) : undefined}
+          aria-busy={pendingAction.isResponding || undefined}
           disabled={
             pendingAction.isResponding ||
             (pendingAction.isLastQuestion ? !pendingAction.isComplete : !pendingAction.canAdvance)
           }
         >
-          {formatPendingPrimaryActionLabel({
-            compact,
-            isLastQuestion: pendingAction.isLastQuestion,
-            isResponding: pendingAction.isResponding,
-            questionIndex: pendingAction.questionIndex,
-          })}
+          {compact ? (
+            pendingAction.isLastQuestion ? (
+              <ArrowUpIcon className="size-3.5" />
+            ) : (
+              <ChevronRightIcon className="size-3.5" />
+            )
+          ) : (
+            formatPendingPrimaryActionLabel(pendingAction)
+          )}
         </Button>
       </div>
     );
@@ -133,16 +147,19 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     return (
       <>
         {confirmation}
-        <button
-          type="button"
-          className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-rose-500/90 text-white transition-all duration-150 hover:bg-rose-500 hover:scale-105 sm:h-8 sm:w-8"
-          onClick={requestStop}
-          aria-label={hasBackgroundWork ? "Stop generation and subagents" : "Stop generation"}
-        >
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-            <rect x="2" y="2" width="8" height="8" rx="1.5" />
-          </svg>
-        </button>
+        <span ref={stopAnchorRef} className="relative inline-flex">
+          <button
+            type="button"
+            className="flex size-8 cursor-pointer items-center justify-center rounded-full bg-rose-500/90 text-white transition-all duration-150 hover:bg-rose-500 hover:scale-105 sm:h-8 sm:w-8"
+            onClick={requestStop}
+            aria-label={hasBackgroundWork ? "Stop generation and subagents" : "Stop generation"}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+              <rect x="2" y="2" width="8" height="8" rx="1.5" />
+            </svg>
+          </button>
+          <ComposerEscapeStopHint visible={hintVisible} />
+        </span>
       </>
     );
   }

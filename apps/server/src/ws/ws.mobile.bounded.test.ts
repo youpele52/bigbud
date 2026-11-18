@@ -1,12 +1,11 @@
 import { MessageId, ProjectId, ThreadId, type OrchestrationReadModel } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
-import { Effect, Exit, Option } from "effect";
+import { Effect, Exit } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 
 import { ORCHESTRATION_PROJECTOR_NAMES } from "../orchestration/Layers/ProjectionPipeline.ts";
 import { projectionSnapshotLayer } from "../orchestration/Layers/ProjectionSnapshotQuery.test.helpers.ts";
 import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSnapshotQuery.ts";
-import { ProjectionThreadDetailNotFoundError } from "../orchestration/Services/ProjectionCatalogQuery.ts";
 import { readBoundedMobileSnapshot, readBoundedMobileThread } from "./ws.mobile.bounded.ts";
 import type { WsRpcContext } from "./wsRpcContext.ts";
 
@@ -51,61 +50,42 @@ function context(input: { readonly detailMissing?: boolean } = {}) {
         calls.getSnapshot += 1;
         return Effect.die(new Error("the full snapshot must not be built for mobile"));
       },
-      getMobileRecoveryBaseline: () =>
-        Effect.succeed({ snapshot: shell(), snapshotSequence: 5, selectedThread: null }),
-    },
-    projectionOperationalStateQuery: Option.some({
-      getThreadOperationalState: () => Effect.succeed(Option.some(shell())),
-    }),
-    projectionCatalogQuery: {
-      getSelectedThreadDetail: () => {
-        calls.detail += 1;
-        if (input.detailMissing) {
-          return Effect.fail(new ProjectionThreadDetailNotFoundError({ threadId }));
-        }
+      getMobileRecoveryBaseline: (selected: ThreadId | null) => {
+        calls.detail += selected ? 1 : 0;
         return Effect.succeed({
-          projectionSequence: 5,
-          threadId,
-          projectId: ProjectId.makeUnsafe("mobile-project"),
-          activityTurnId: null,
-          messages: ["newest", "older"].map((text, index) => ({
-            id: MessageId.makeUnsafe(`message-${text}`),
-            role: "user" as const,
-            text,
-            attachments: [],
-            attachmentsTruncated: false,
-            turnId: null,
-            streaming: false,
-            createdAt: `2026-01-0${2 - index}T00:00:00.000Z`,
-            updatedAt: `2026-01-0${2 - index}T00:00:00.000Z`,
-          })),
-          messageWindow: {
-            order: "newest-first" as const,
-            requestedCursor: null,
-            newestCursor: null,
-            oldestCursor: null,
-            nextCursor: null,
-            hasOlder: false,
-          },
-          activities: [],
-          activitiesTruncated: false,
-          pendingApprovals: [],
-          pendingApprovalsTruncated: false,
-          pendingUserInputs: [],
-          pendingUserInputsTruncated: false,
-          activePlan: null,
-          activeTasks: [],
-          activeTasksTruncated: false,
-          checkpoints: [],
-          checkpointsTruncated: false,
+          snapshot: shell(),
+          snapshotSequence: 5,
+          selectedThread: !selected
+            ? null
+            : input.detailMissing
+              ? { status: "missing" }
+              : {
+                  status: "present",
+                  thread: {
+                    ...shell().threads[0],
+                    messages: ["older", "newest"].map((text) => ({
+                      id: MessageId.makeUnsafe(`message-${text}`),
+                      role: "user",
+                      text,
+                      attachments: [],
+                      turnId: null,
+                      streaming: false,
+                      createdAt: AT,
+                      updatedAt: AT,
+                    })),
+                  },
+                },
         });
       },
+    },
+    projectionCatalogQuery: {
+      getSelectedThreadDetail: () => Effect.die("Legacy mobile must not read desktop detail"),
     },
   } as unknown as WsRpcContext;
   return { value, calls };
 }
 
-it.effect("builds getMobileThread from the bounded detail, never the full snapshot", () =>
+it.effect("builds getMobileThread from the bounded baseline, never the full snapshot", () =>
   Effect.gen(function* () {
     const { value, calls } = context();
     const thread = yield* readBoundedMobileThread(value, threadId);

@@ -72,6 +72,7 @@ describe("generateOpencodeThreadTitleNative", () => {
         },
         noReply: false,
       }),
+      { signal: expect.any(AbortSignal) },
     );
     expect(result.title).toBe("Count uncommitted files");
     expect(release).toHaveBeenCalledTimes(1);
@@ -146,6 +147,7 @@ describe("generateOpencodeThreadElevatorSummaryNative", () => {
         },
         noReply: false,
       }),
+      { signal: expect.any(AbortSignal) },
     );
     expect(result.summary).toBe("Debugs sidebar hover summaries for reactivated OpenCode threads");
     expect(release).toHaveBeenCalledTimes(1);

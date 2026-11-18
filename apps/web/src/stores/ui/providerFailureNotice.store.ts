@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist, type StateStorage } from "zustand/middleware";
 
+import { rehydrateOnBackendStorageReady } from "../../lib/backendScopedStorage";
 import { createSessionNoticeStorage } from "../../lib/sessionNoticeStorage";
 
 interface FailureNotice {
@@ -52,3 +53,4 @@ export function createProviderFailureNoticeStore(storage: StateStorage) {
 export const useProviderFailureNoticeStore = createProviderFailureNoticeStore(
   createSessionNoticeStorage(),
 );
+rehydrateOnBackendStorageReady(useProviderFailureNoticeStore);

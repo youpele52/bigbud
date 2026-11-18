@@ -107,7 +107,10 @@ it("main Stop is not hidden by a pending child question", async () => {
       onImplementPlanInNewThread={() => {}}
     />,
   );
-  await expect.element(page.getByRole("button", { name: "Submit", exact: true })).toBeEnabled();
+  // Compact footers show an icon; the accessible name carries the full label.
+  await expect
+    .element(page.getByRole("button", { name: "Submit answer", exact: true }))
+    .toBeEnabled();
   await page.getByRole("button", { name: "Stop generation and subagents" }).click();
   expect(onInterrupt).toHaveBeenCalledOnce();
 });

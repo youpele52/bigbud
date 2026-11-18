@@ -11,11 +11,14 @@ import { ownershipStateDir } from "@bigbud/shared/backendOwnership.paths";
 
 import type { DesktopBackendStartReason } from "@bigbud/contracts/server/desktopLifecycleHint.ts";
 
+import type { RemoteMobileConfiguration } from "./config.remoteMobile.ts";
+import type { TerminalShellInstallEvidence } from "./config.terminalShells.ts";
+
 import type { TraceMode } from "../observability/TracePolicy.ts";
 
 export { DEFAULT_SERVER_PORT as DEFAULT_PORT } from "@bigbud/shared/DevPorts";
 
-export const RuntimeMode = Schema.Literals(["web", "desktop"]);
+export const RuntimeMode = Schema.Literals(["web", "desktop", "remote"]);
 export type RuntimeMode = typeof RuntimeMode.Type;
 
 /**
@@ -57,6 +60,15 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly otlpServiceName: string;
   readonly mode: RuntimeMode;
   readonly port: number;
+  /** Owner-only client endpoint for the Linux remote composition. */
+  readonly remoteSocketPath?: string;
+  /** Explicit optional Rust mobile gateway upstream configuration. */
+  readonly remoteMobile?: RemoteMobileConfiguration;
+  /**
+   * Agent binary the host already verified (the remote account service's pinned Rust agent).
+   * Local workspace helpers such as resource cleanup prefer it over packaged or repository builds.
+   */
+  readonly workspaceAgentBinaryPath?: string;
   readonly host: string | undefined;
   readonly cwd: string;
   readonly baseDir: string;
@@ -72,6 +84,8 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   /** Child fd of Electron main's lifecycle hint pipe, when a desktop bootstrap envelope came. */
   readonly desktopLifecycleHintFd?: number;
   readonly desktopOwnershipHandoff?: boolean;
+  /** Evidence captured before startup creates any directories; absence is uncertainty. */
+  readonly terminalShellInstallEvidence?: TerminalShellInstallEvidence;
 }
 
 export const deriveServerPaths = Effect.fn(function* (

@@ -26,11 +26,30 @@ import type { TerminalViewportIntake } from "./TerminalViewport.intake";
 import { ensureThreadMaterialized } from "../../lib/threadMaterialization";
 import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { preserveTerminalScroll } from "./terminalScrollState";
+import { terminalProfileOpenOptions } from "./TerminalViewport.profile";
 import { deferRecoveryFit, terminalResizeGeometry } from "./terminalRecoveryGeometry";
 import {
   hasCurrentTerminalBaseline,
   resolveTerminalViewportSnapshot,
 } from "./TerminalViewport.snapshot";
+
+export function releaseTerminalViewRefs(
+  view: import("./TerminalViewport.view").TerminalView,
+  refs: {
+    viewRef: MutableRefObject<import("./TerminalViewport.view").TerminalView | null>;
+    fontControllerRef: MutableRefObject<
+      import("./TerminalFontController").TerminalFontController | null
+    >;
+    terminalRef: MutableRefObject<Terminal | null>;
+    fitAddonRef: MutableRefObject<FitAddon | null>;
+  },
+) {
+  if (refs.viewRef.current === view) refs.viewRef.current = null;
+  if (refs.fontControllerRef.current === view.fontController) refs.fontControllerRef.current = null;
+  if (refs.terminalRef.current === view.terminal) refs.terminalRef.current = null;
+  if (refs.fitAddonRef.current === view.fitAddon) refs.fitAddonRef.current = null;
+  view.dispose();
+}
 
 interface TerminalSelectionActionStateRefs {
   readonly selectionActionRequestIdRef: MutableRefObject<number>;
@@ -276,6 +295,7 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
   const opened = viewOnly
     ? await api.terminal.snapshot!({ threadId: input.threadId, terminalId: input.terminalId })
     : await api.terminal.open({
+        ...terminalProfileOpenOptions(input.threadId, input.terminalId),
         threadId: input.threadId,
         terminalId: input.terminalId,
         ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),

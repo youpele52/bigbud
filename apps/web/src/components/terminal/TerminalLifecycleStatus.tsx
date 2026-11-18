@@ -1,3 +1,4 @@
+import { dismissUnconfirmedTerminalPane } from "./terminalLifecycle.dismiss";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
@@ -43,7 +44,7 @@ export function TerminalLifecycleStatus({
     <div
       className={cn(
         "absolute z-10 flex items-center gap-2 rounded border bg-background/95 px-2 py-1 text-sm shadow-sm",
-        operation.phase === "closing"
+        !failed
           ? "left-1/2 top-1/2 w-max max-w-[calc(100%-0.5rem)] -translate-x-1/2 -translate-y-1/2"
           : "inset-x-1 top-1",
       )}
@@ -59,7 +60,21 @@ export function TerminalLifecycleStatus({
               ? "Starting terminal…"
               : "Stopping terminal…"}
       </span>
-      {failed && (
+      {failed && operation.canDismiss && (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">
+            The remote process may still be running. Dismiss only hides this pane.
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => dismissUnconfirmedTerminalPane(threadId, terminalId)}
+          >
+            Dismiss pane
+          </Button>
+        </div>
+      )}
+      {failed && !operation.canDismiss && (
         <Button
           size="sm"
           variant="outline"

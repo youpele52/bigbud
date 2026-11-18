@@ -1,5 +1,6 @@
 import { Effect, Layer } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefault.ts";
 import { makeRemoteAgentMaintenance } from "../../remote-agent/remoteAgentInstall.maintenance.ts";
 import {
   configureRemoteAgentOwners,
@@ -7,22 +8,22 @@ import {
   parseRemoteAgentBinding,
   type RemoteAgentOwnerStore,
 } from "../../remote-agent/remoteAgentOwners.ts";
-import { MAX_REMOTE_AGENT_TERMINAL_OWNERS } from "../../remote-agent/remoteAgentInstall.registry.ts";
-import { remoteAgentReplayFence } from "./RemoteAgentRuntimeBindings.replay.ts";
-import { isRemoteAgentControllerAlive } from "../../remote-agent/remoteAgentController.ts";
+import { makeRemoteAgentOwnerInventory } from "./RemoteAgentRuntimeBindings.inventory.ts";
+import { makeRemoteAgentRuntimeReservations } from "./RemoteAgentRuntimeBindings.reservation.ts";
 import { configureRemoteAgentRestartStore } from "../../remote-agent/remoteAgentRestart.store.ts";
 import type {
   RemoteAgentRestartRecord,
   RemoteAgentRestartStore,
 } from "../../remote-agent/remoteAgentRestart.types.ts";
 import { validateRemoteAgentRuntime } from "../../remote-agent/remoteAgentRuntime.ts";
+import { RemoteAgentRuntimeOwners } from "./RemoteAgentRuntimeBindings.service.ts";
 
 const MAX_INACTIVE_BINDINGS = 16;
 const MAX_RESTART_REQUESTS = 64;
 
 export const makeRemoteAgentRuntimeBindings = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
-  const replayFence = remoteAgentReplayFence(sql);
+  const reservations = yield* makeRemoteAgentRuntimeReservations;
   yield* sql`PRAGMA synchronous = FULL`;
   const run = Effect.runPromiseWith(yield* Effect.services<SqlClient.SqlClient>());
   const read = async (key: string) => {
@@ -37,31 +38,7 @@ export const makeRemoteAgentRuntimeBindings = Effect.gen(function* () {
       ? { owner: parseRemoteAgentOwner(row.route_json), revision: row.revision }
       : undefined;
   };
-  const pruneTerminal = async () => {
-    const result = await run(
-      sql.withTransaction(
-        Effect.gen(function* () {
-          const expired = yield* sql<{
-            owner_key: string;
-          }>`SELECT owner_key FROM remote_agent_runtime_owners
-          WHERE json_extract(route_json, '$.state') = 'terminal'
-          AND rowid NOT IN (SELECT rowid FROM remote_agent_runtime_owners
-            WHERE json_extract(route_json, '$.state') = 'terminal'
-            ORDER BY rowid DESC LIMIT ${MAX_REMOTE_AGENT_TERMINAL_OWNERS})`;
-          for (const row of expired) yield* replayFence.remember(row.owner_key);
-          return yield* sql`DELETE FROM remote_agent_runtime_owners
-          WHERE json_extract(route_json, '$.state') = 'terminal'
-            AND rowid NOT IN (
-              SELECT rowid FROM remote_agent_runtime_owners
-              WHERE json_extract(route_json, '$.state') = 'terminal'
-              ORDER BY rowid DESC LIMIT ${MAX_REMOTE_AGENT_TERMINAL_OWNERS}
-            )
-          RETURNING owner_key`;
-        }),
-      ),
-    );
-    return result.length;
-  };
+  const inventory = yield* makeRemoteAgentOwnerInventory();
   return {
     getBinding: async (target) => {
       const rows = await run(
@@ -107,67 +84,18 @@ export const makeRemoteAgentRuntimeBindings = Effect.gen(function* () {
       return rows.map((row) => row.connection_id);
     },
     get: async (key) => (await read(key))?.owner,
-    reserve: async (owner, replaceTerminal = false) => {
-      const text = JSON.stringify(parseRemoteAgentOwner(JSON.stringify(owner)));
-      const saved = await run(
-        sql.withTransaction(
-          Effect.gen(function* () {
-            const existing = yield* sql<{
-              route_json: string;
-            }>`SELECT route_json FROM remote_agent_runtime_owners WHERE owner_key = ${owner.ownerKey}`;
-            if (!existing.length) yield* replayFence.assertNew(owner.ownerKey);
-            const previous = existing[0]
-              ? parseRemoteAgentOwner(existing[0].route_json)
-              : undefined;
-            if (
-              replaceTerminal &&
-              previous?.state === "terminal" &&
-              previous.invocationId !== owner.invocationId
-            ) {
-              yield* replayFence.assertNew(JSON.stringify([owner.ownerKey, owner.invocationId]));
-              yield* replayFence.remember(JSON.stringify([owner.ownerKey, previous.invocationId]));
-            }
-            yield* sql`INSERT INTO remote_agent_runtime_owners (owner_key, route_json) VALUES (${owner.ownerKey}, ${text}) ON CONFLICT(owner_key) DO NOTHING`;
-            if (replaceTerminal)
-              yield* sql`UPDATE remote_agent_runtime_owners SET route_json = ${text}, revision = revision + 1 WHERE owner_key = ${owner.ownerKey} AND json_extract(route_json, '$.state') = 'terminal'`;
-            if (
-              previous?.state === "prepared" &&
-              previous.controllerId !== undefined &&
-              previous.controllerPid !== undefined &&
-              previous.controllerStartedAt !== undefined &&
-              !(yield* Effect.promise(() =>
-                isRemoteAgentControllerAlive({
-                  id: previous.controllerId!,
-                  pid: previous.controllerPid!,
-                  startedAt: previous.controllerStartedAt!,
-                }),
-              ))
-            )
-              yield* sql`UPDATE remote_agent_runtime_owners SET route_json = ${text}, revision = revision + 1 WHERE owner_key = ${owner.ownerKey} AND json_extract(route_json, '$.state') = 'prepared' AND json_extract(route_json, '$.resourceId') = ${previous.resourceId}`;
-            const rows = yield* sql<{
-              route_json: string;
-            }>`SELECT route_json FROM remote_agent_runtime_owners WHERE owner_key = ${owner.ownerKey}`;
-            return rows[0]?.route_json;
-          }),
-        ),
-      );
-      if (!saved) throw new Error("Owner reservation did not persist.");
-      return parseRemoteAgentOwner(saved);
-    },
-    rollbackPrepared: async (key, resourceId) => {
-      const result = await run(
-        sql`DELETE FROM remote_agent_runtime_owners WHERE owner_key = ${key} AND json_extract(route_json, '$.resourceId') = ${resourceId} AND json_extract(route_json, '$.state') = 'prepared' RETURNING owner_key`,
-      );
-      return result.length > 0;
-    },
-    update: async (key, transition) => {
+    ...reservations,
+    update: async (key, transition, expectedTarget?: string) => {
       for (let attempt = 0; attempt < 8; attempt++) {
         const row = await read(key);
         if (!row) throw new Error("Durable owner is missing; dispatch is forbidden.");
+        if (expectedTarget !== undefined && row.owner.target !== expectedTarget)
+          throw new Error("Owner update belongs to another target.");
         const next = parseRemoteAgentOwner(JSON.stringify(transition(row.owner)));
         if (
           next.ownerKey !== key ||
           next.resourceId !== row.owner.resourceId ||
+          next.terminalCwd !== row.owner.terminalCwd ||
           next.target !== row.owner.target ||
           next.epoch !== row.owner.epoch ||
           next.connectionId !== row.owner.connectionId ||
@@ -184,10 +112,10 @@ export const makeRemoteAgentRuntimeBindings = Effect.gen(function* () {
         )
           throw new Error("A durable owner cannot change runtime or wire identity.");
         const result = await run(
-          sql`UPDATE remote_agent_runtime_owners SET route_json = ${JSON.stringify(next)}, revision = revision + 1 WHERE owner_key = ${key} AND revision = ${row.revision} RETURNING revision`,
+          sql`UPDATE remote_agent_runtime_owners SET route_json = ${JSON.stringify(next)}, revision = revision + 1 WHERE owner_key = ${key} AND revision = ${row.revision} AND (${expectedTarget ?? null} IS NULL OR json_extract(route_json, '$.target') = ${expectedTarget ?? null}) RETURNING revision`,
         );
         if (result.length) {
-          if (next.state === "terminal") await pruneTerminal();
+          if (next.state === "terminal") await inventory.pruneTerminal(expectedTarget);
           return next;
         }
       }
@@ -219,18 +147,24 @@ export const makeRemoteAgentRuntimeBindings = Effect.gen(function* () {
       `);
       return targets.map((target) => target.target_id);
     },
-    reconcileRuntime: async (generation, epoch) => {
+    reconcileRuntime: async (target, generation, epoch) => {
       await run(
         sql`UPDATE remote_agent_runtime_owners
             SET route_json = json_set(route_json, '$.state', 'outcome-unknown', '$.interruptionReason', 'restart') , revision = revision + 1
-            WHERE json_extract(route_json, '$.runtime.generation') = ${generation}
+            WHERE json_extract(route_json, '$.target') = ${target}
+              AND json_extract(route_json, '$.runtime.generation') = ${generation}
               AND json_extract(route_json, '$.epoch') = ${epoch}
               AND json_extract(route_json, '$.state') <> 'terminal'`,
       );
     },
-    pruneTerminal,
+    ...inventory,
   } satisfies RemoteAgentOwnerStore;
 });
+
+export const RemoteAgentRuntimeOwnersLive = Layer.effect(
+  RemoteAgentRuntimeOwners,
+  makeRemoteAgentRuntimeBindings,
+);
 
 export const makeRemoteAgentRestartStore = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -355,7 +289,7 @@ export const makeRemoteAgentRestartStore = Effect.gen(function* () {
 
 export const RemoteAgentRuntimeBindingsLive = Layer.effectDiscard(
   Effect.gen(function* () {
-    const store = yield* makeRemoteAgentRuntimeBindings;
+    const store = yield* RemoteAgentRuntimeOwners;
     yield* makeRemoteAgentRestartStore;
     const sql = yield* SqlClient.SqlClient;
     const checks = [
@@ -394,7 +328,8 @@ export const RemoteAgentRuntimeBindingsLive = Layer.effectDiscard(
     }>`SELECT DISTINCT target_id FROM remote_agent_target_admissions LIMIT 128`;
     for (const target of targets) {
       yield* sql`DELETE FROM remote_agent_connection_bindings WHERE target_id = ${target.target_id} AND connection_id <> (SELECT connection_id FROM remote_agent_target_admissions WHERE target_id = ${target.target_id}) AND rowid NOT IN (SELECT rowid FROM remote_agent_connection_bindings WHERE target_id = ${target.target_id} AND connection_id <> (SELECT connection_id FROM remote_agent_target_admissions WHERE target_id = ${target.target_id}) ORDER BY rowid DESC LIMIT ${MAX_INACTIVE_BINDINGS})`;
-      maintenance.schedule(target.target_id);
+      // This maintenance owner uses SSH control; local authority admissions remain durable.
+      if (isRemoteAgentExecutionTarget(target.target_id)) maintenance.schedule(target.target_id);
     }
   }),
-);
+).pipe(Layer.provide(RemoteAgentRuntimeOwnersLive));

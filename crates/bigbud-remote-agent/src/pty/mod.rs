@@ -1,8 +1,8 @@
 mod core;
 
 #[cfg(unix)]
-pub use core::{CleanupOwner, InputOutcome, pending_cleanup_settled, read_events};
+pub use core::{CleanupOwner, InputOutcome, InputReceipt, pending_cleanup_settled, read_events};
 pub use core::{
-    MAX_OUTPUT_BYTES, PtyError, PtyEvent, PtyHandle, PtyJob, PtyOutputChunk, PtySnapshot, PtyState,
-    run_events,
+    LaunchOutcome, LaunchStage, LaunchUnknown, MAX_OUTPUT_BYTES, PtyError, PtyEvent, PtyHandle,
+    PtyJob, PtyOutputChunk, PtySnapshot, PtyState, run_events,
 };

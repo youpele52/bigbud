@@ -34,6 +34,21 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
         DEFAULT_KEYBINDINGS.map((binding) => [binding.command, binding.key] as const),
       );
 
+      for (const [command, key] of [
+        ["terminal.split", "mod+d"],
+        ["terminal.splitDown", "mod+shift+d"],
+        ["terminal.new", "mod+n"],
+        ["terminal.close", "mod+w"],
+      ] as const) {
+        assert.deepEqual(
+          DEFAULT_KEYBINDINGS.find((rule) => rule.command === command),
+          {
+            key,
+            command,
+            when: "terminalFocus",
+          },
+        );
+      }
       assert.equal(defaultsByCommand.get("git.toggle"), "mod+g");
       assert.equal(defaultsByCommand.get("diff.toggle"), "mod+shift+g");
       assert.equal(defaultsByCommand.get("rightPanel.newTab"), "mod+t");
@@ -220,6 +235,26 @@ it.layer(NodeServices.layer)("keybindings", (it) => {
       );
       assert.isFalse(
         persisted.some((entry) => entry.key === "mod+shift+o" && entry.command === "chat.new"),
+      );
+    }).pipe(Effect.provide(makeKeybindingsLayer())),
+  );
+
+  it.effect("migrates the old focused split default while preserving custom split bindings", () =>
+    Effect.gen(function* () {
+      const { keybindingsConfigPath } = yield* ServerConfig;
+      yield* writeKeybindingsConfig(keybindingsConfigPath, [
+        { key: "mod+shift+g", command: "terminal.split", when: "terminalFocus" },
+        { key: "mod+shift+d", command: "terminal.split", when: "terminalFocus" },
+      ]);
+      const keybindings = yield* Keybindings;
+      yield* keybindings.syncDefaultKeybindingsOnStartup;
+      const persisted = yield* readKeybindingsConfig(keybindingsConfigPath);
+      assert.deepEqual(
+        persisted.filter((rule) => rule.command === "terminal.split"),
+        [
+          { key: "mod+d", command: "terminal.split", when: "terminalFocus" },
+          { key: "mod+shift+d", command: "terminal.split", when: "terminalFocus" },
+        ],
       );
     }).pipe(Effect.provide(makeKeybindingsLayer())),
   );

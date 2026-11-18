@@ -5,11 +5,12 @@ import {
 } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import { Schema } from "effect";
 
+import { TARGET_THREAD_ID_DESCRIPTION } from "./threadRenameTool.shared.ts";
+
 const TARGET_THREAD_ID_PROPERTY = {
   type: "string",
   minLength: 1,
-  description:
-    "Optional canonical thread ID; omit for the current thread. Only explicitly requested current-project threads or directly delegated children are eligible.",
+  description: TARGET_THREAD_ID_DESCRIPTION,
 } as const;
 
 export const MOVE_THREAD_TOOL_DESCRIPTION =

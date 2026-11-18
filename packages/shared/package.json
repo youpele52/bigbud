@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./mobileOptionalAssets.policy": "./src/mobileOptionalAssets.policy.ts",
+    "./mobileOptionalArtifact": "./src/mobileOptionalArtifact.ts",
+    "./artifactSignature": "./src/artifactSignature.ts",
     "./resourceAwareness.preferences": "./src/resourceAwareness.preferences.ts",
     "./resourceAwareness.metrics": "./src/resourceAwareness.metrics.ts",
     "./resourceAwareness.rules": "./src/resourceAwareness.rules.ts",
@@ -34,6 +37,10 @@
     "./backendOwnership.control": {
       "types": "./src/backendOwnership.control.ts",
       "import": "./src/backendOwnership.control.ts"
+    },
+    "./commandLineLauncher": {
+      "types": "./src/commandLineLauncher.ts",
+      "import": "./src/commandLineLauncher.ts"
     },
     "./usageTokenMix": {
       "types": "./src/usageTokenMix.ts",
@@ -382,7 +389,16 @@
     "./computer-use/policy.watch": {
       "types": "./src/computer-use/policy.watch.ts",
       "import": "./src/computer-use/policy.watch.ts"
-    }
+    },
+    "./remoteBackendIdentity": "./src/remoteBackendIdentity.ts",
+    "./mobileBackendReach": "./src/mobileBackendReach.ts",
+    "./pendingUserInput": "./src/pendingUserInput.ts",
+    "./greeting": "./src/greeting.ts",
+    "./greeting.messages": "./src/greeting.messages.ts",
+    "./workLogPresentation": "./src/workLogPresentation.ts",
+    "./mobileGatewaySupervisor": "./src/mobileGatewaySupervisor.ts",
+    "./mobileGatewaySupervisor.config": "./src/mobileGatewaySupervisor.config.ts",
+    "./tailscaleServe.config": "./src/tailscaleServe.config.ts"
   },
   "scripts": {
     "prepare": "node -e \"if (process.env.CF_PAGES || process.env.CLOUDFLARE) process.exit(0); process.exit(require('child_process').spawnSync('effect-language-service', ['patch'], { stdio: 'inherit', shell: true }).status ?? 1)\"",

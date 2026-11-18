@@ -64,7 +64,22 @@ const DEFAULT_PROJECT_OPEN_RULE: KeybindingRule = {
   when: "!terminalFocus",
 };
 
+const LEGACY_TERMINAL_SPLIT_RULE: KeybindingRule = {
+  key: "mod+shift+g",
+  command: "terminal.split",
+  when: "terminalFocus",
+};
+
+const DEFAULT_TERMINAL_SPLIT_RULE: KeybindingRule = {
+  key: "mod+d",
+  command: "terminal.split",
+  when: "terminalFocus",
+};
+
 function migrateLegacyDefaultShortcut(rule: KeybindingRule): KeybindingRule {
+  if (isSameKeybindingRule(rule, LEGACY_TERMINAL_SPLIT_RULE)) {
+    return DEFAULT_TERMINAL_SPLIT_RULE;
+  }
   if (isSameKeybindingRule(rule, LEGACY_COMMAND_PALETTE_RULE)) {
     return DEFAULT_COMMAND_PALETTE_RULE;
   }

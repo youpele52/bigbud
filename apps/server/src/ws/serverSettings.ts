@@ -11,8 +11,6 @@
  */
 import {
   DEFAULT_SERVER_SETTINGS,
-  PersistedModelSelection,
-  PROVIDER_KINDS,
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
@@ -33,13 +31,16 @@ import {
   ServiceMap,
   Stream,
   Cause,
-  SchemaIssue,
 } from "effect";
 import * as Semaphore from "effect/Semaphore";
 import { ServerSettingsSnapshot, type SettingsSnapshot } from "./serverSettings.snapshot.ts";
+import {
+  guardMobileSettingsAcceptance,
+  ServerSettingsMobileConsentGuard,
+} from "./serverSettings.mobileConsent.ts";
 import { makeTestSettings } from "./serverSettings.testing.ts";
 import { ServerConfig } from "../startup/config";
-import { type DeepPartial, deepMerge } from "@bigbud/shared/Struct";
+import { type DeepPartial } from "@bigbud/shared/Struct";
 import { fromLenientJson } from "@bigbud/shared/schemaJson";
 import {
   decodeSettingsFieldWise,
@@ -60,14 +61,25 @@ import {
   EXISTING_SERVER_SETTINGS_FALLBACK,
 } from "./serverSettings.opencodePolicy.ts";
 
+import { normalizeServerSettingsPatch } from "./serverSettings.normalize.ts";
+import {
+  initializeTerminalShellSettings,
+  type TerminalShellInitialization,
+} from "./serverSettings.terminalShells.ts";
+
 export interface ServerSettingsShape extends ThreadRetentionSettingsOperations {
   readonly start: Effect.Effect<void, ServerSettingsError>;
+  readonly initializeTerminalShells?: TerminalShellInitialization;
 
   readonly ready: Effect.Effect<void, ServerSettingsError>;
 
   readonly getSettings: Effect.Effect<ServerSettings, ServerSettingsError>;
   readonly currentSnapshot?: () => SettingsSnapshot | undefined;
   readonly onSnapshotChange?: (listener: (snapshot: SettingsSnapshot) => void) => () => void;
+  /** Hold accepted settings stable during short internal preparation; no providers or settings writes. */
+  readonly withSnapshotBarrier?: <A, E>(
+    prepare: (snapshot: SettingsSnapshot) => Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | ServerSettingsError>;
 
   /** Patch settings and persist. Returns the new full settings object. */
   readonly updateSettings: (
@@ -89,7 +101,10 @@ export class ServerSettingsService extends ServiceMap.Service<
 const ServerSettingsJson = fromLenientJson(ServerSettings);
 
 const makeServerSettings = Effect.gen(function* () {
-  const { settingsPath } = yield* ServerConfig;
+  const { settingsPath, mode } = yield* ServerConfig;
+  const mobileConsent = yield* Effect.serviceOption(ServerSettingsMobileConsentGuard);
+  const guardMobile = (settings: ServerSettings) =>
+    guardMobileSettingsAcceptance(mode, settingsPath, mobileConsent, settings);
   const fs = yield* FileSystem.FileSystem;
   const pathService = yield* Path.Path;
   const writeSemaphore = yield* Semaphore.make(1);
@@ -214,6 +229,7 @@ const makeServerSettings = Effect.gen(function* () {
     options?: { readonly preserveThreadRetentionPolicy?: boolean },
   ) =>
     Effect.gen(function* () {
+      yield* guardMobile(settings);
       yield* writeSettingsAtomically(settings, options);
       yield* Effect.sync(() => snapshot.accept(resolveTextGenerationProvider(settings)));
       yield* Cache.set(settingsCache, cacheKey, settings);
@@ -226,6 +242,7 @@ const makeServerSettings = Effect.gen(function* () {
       yield* Cache.invalidate(settingsCache, cacheKey);
       yield* quarantineUnauthorizedRetention;
       const settings = yield* getSettingsFromCache;
+      yield* guardMobile(settings);
       yield* Effect.sync(() => snapshot.accept(resolveTextGenerationProvider(settings)));
       yield* emitChange(settings);
     }),
@@ -280,11 +297,12 @@ const makeServerSettings = Effect.gen(function* () {
       yield* startWatcher;
       yield* Cache.invalidate(settingsCache, cacheKey);
       const initial = yield* getSettingsFromCache;
+      yield* guardMobile(initial);
       yield* Effect.sync(() => snapshot.accept(resolveTextGenerationProvider(initial)));
       yield* quarantineUnauthorizedRetention;
     });
 
-    const startupExit = yield* Effect.exit(startup);
+    const startupExit = yield* Effect.exit(writeSemaphore.withPermits(1)(startup));
     if (startupExit._tag === "Failure") {
       yield* Deferred.failCause(startedDeferred, startupExit.cause).pipe(Effect.orDie);
       return yield* Effect.failCause(startupExit.cause);
@@ -299,42 +317,43 @@ const makeServerSettings = Effect.gen(function* () {
     getSettings: getSettingsFromCache.pipe(Effect.map(resolveTextGenerationProvider)),
     currentSnapshot: snapshot.read,
     onSnapshotChange: snapshot.subscribe,
+    withSnapshotBarrier: (prepare) =>
+      Deferred.await(startedDeferred).pipe(
+        Effect.andThen(
+          writeSemaphore.withPermits(1)(
+            Effect.gen(function* () {
+              const accepted = snapshot.read();
+              if (!accepted)
+                return yield* new ServerSettingsError({
+                  settingsPath,
+                  detail: "Accepted settings are unavailable.",
+                });
+              return yield* prepare(accepted);
+            }),
+          ),
+        ),
+      ),
     updateSettings: (patch) =>
       writeSemaphore.withPermits(1)(
         Effect.gen(function* () {
-          if (Object.prototype.hasOwnProperty.call(patch, "threadRetentionPolicy")) {
-            return yield* new ServerSettingsError({
-              settingsPath: "<memory>",
-              detail: "threadRetentionPolicy must be changed through the dedicated retention RPC",
-            });
-          }
           const current = yield* getSettingsFromCache;
-          const merged = deepMerge(current, patch);
-          const currentSelection = current.textGenerationModelSelection as unknown;
-          const preservePersistedSelection =
-            patch.textGenerationModelSelection === undefined &&
-            Schema.is(PersistedModelSelection)(currentSelection) &&
-            !PROVIDER_KINDS.includes(currentSelection.provider as (typeof PROVIDER_KINDS)[number]);
-          const candidate = preservePersistedSelection
-            ? {
-                ...merged,
-                textGenerationModelSelection: DEFAULT_SERVER_SETTINGS.textGenerationModelSelection,
-              }
-            : merged;
-          const decoded = yield* Schema.decodeEffect(ServerSettings)(candidate).pipe(
-            Effect.mapError(
-              (cause) =>
-                new ServerSettingsError({
-                  settingsPath: "<memory>",
-                  detail: `failed to normalize server settings: ${SchemaIssue.makeFormatterDefault()(cause.issue)}`,
-                  cause,
-                }),
-            ),
-          );
-          const next = preservePersistedSelection
-            ? ({ ...decoded, textGenerationModelSelection: currentSelection } as ServerSettings)
-            : decoded;
+          const next = yield* normalizeServerSettingsPatch(current, patch);
           return yield* persistSettings(next);
+        }),
+      ),
+    initializeTerminalShells: (selection, origin) =>
+      writeSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          const current = yield* getSettingsFromCache;
+          if (current.terminalShells.version !== 0) return current;
+          return yield* persistSettings({
+            ...current,
+            terminalShells: initializeTerminalShellSettings(
+              current.terminalShells,
+              selection,
+              origin,
+            ),
+          });
         }),
       ),
     setThreadRetentionPolicy: (policy) =>

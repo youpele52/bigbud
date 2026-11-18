@@ -7,6 +7,7 @@ import {
   markThreadViewed,
   MAX_HYDRATED_THREADS,
   unloadHydratedThreads,
+  invalidateInFlightThreadHydrations,
 } from "./helpers.lazy.eviction.store";
 import type { AppState } from "./main.store";
 import { makeEvent, makeState, makeThread } from "./main.store.test.helpers";
@@ -123,6 +124,30 @@ describe("hydrated thread eviction", () => {
     expect(state.threadHydrationById["thread-1"]).toEqual({ status: "loadingOlder" });
     expect(threadAt(state, 1).messages).toHaveLength(1);
   });
+
+  it.each(["loading", "loadingOlder"] as const)(
+    "makes revoked %s requests reloadable without disturbing other hydration owners",
+    (status) => {
+      const base = stateWithLoadedThreads(2);
+      const state = invalidateInFlightThreadHydrations({
+        ...base,
+        threadHydrationById: {
+          ...base.threadHydrationById,
+          "thread-0": { status },
+          "thread-absent": { status },
+        },
+      });
+      expect(state.threadHydrationById["thread-0"]).toEqual({ status: "unloaded" });
+      expect(state.threadHydrationById["thread-absent"]).toEqual({ status: "unloaded" });
+      expect(threadAt(state, 0).messages).toEqual([]);
+      expect(threadAt(state, 0).activities.map((activity) => activity.kind)).toEqual([
+        "approval.requested",
+      ]);
+      expect(state.threadHydrationById["thread-1"]).toBe(base.threadHydrationById["thread-1"]);
+      expect(threadAt(state, 1)).toBe(threadAt(base, 1));
+      expect(invalidateInFlightThreadHydrations(state)).toBe(state);
+    },
+  );
 
   it("marks every hydrated non-selected thread unloaded on a baseline reset", () => {
     const state = unloadHydratedThreads(stateWithLoadedThreads(3), ThreadId.makeUnsafe("thread-1"));

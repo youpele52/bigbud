@@ -1,4 +1,5 @@
 import type { ServerProviderModel } from "@bigbud/contracts";
+import { DEFAULT_MODEL_BY_PROVIDER } from "@bigbud/contracts/constants/model.constant.ts";
 
 export type CodexPlanType =
   | "free"
@@ -18,7 +19,7 @@ export interface CodexAccountSnapshot {
   readonly sparkEnabled: boolean;
 }
 
-export const CODEX_DEFAULT_MODEL = "gpt-5.5";
+export const CODEX_DEFAULT_MODEL = DEFAULT_MODEL_BY_PROVIDER.codex;
 export const CODEX_SPARK_MODEL = "gpt-5.3-codex-spark";
 const CODEX_SPARK_ENABLED_PLAN_TYPES = new Set<CodexPlanType>(["pro"]);
 

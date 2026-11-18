@@ -31,26 +31,35 @@ describe("ChatView footer layout integration", () => {
     });
 
     try {
-      // The question is shown in the timeline; the answer is typed into the composer and sent.
-      await waitForElement(
-        () =>
-          document.querySelector<HTMLElement>(
-            '[data-timeline-row-id="user-input-question:req-browser-user-input"]',
-          ),
-        "Unable to find the pending question.",
+      // The question is docked above the composer with chips; the composer adds context.
+      const panel = await waitForElement(
+        () => document.querySelector<HTMLElement>("[data-pending-user-input-panel]"),
+        "Unable to find the pending question panel.",
       );
+      expect(panel.closest('[data-chat-composer-form="true"]')).not.toBeNull();
+      expect(
+        document.querySelector(
+          '[data-timeline-row-id="user-input-question:req-browser-user-input"]',
+        ),
+      ).toBeNull();
+      await expect.element(page.getByRole("radio", { name: /Tight/ })).toBeInTheDocument();
       await waitForElement(
         () =>
           document.querySelector<HTMLElement>(
-            '[data-testid="composer-editor"][aria-placeholder="Type your answer to continue..."]',
+            '[data-testid="composer-editor"][aria-placeholder="Add context, or just send your selection"]',
           ),
-        "Composer should ask for the answer.",
+        "Composer should ask for context.",
       );
       await page.getByTestId("composer-editor").fill("Tight");
+      // Two questions: the primary action advances first ("Next question"), then submits.
       const send = await waitForElement(
-        () => document.querySelector<HTMLButtonElement>('button[aria-label="Send message"]'),
-        "Unable to find the send button.",
+        () =>
+          document.querySelector<HTMLButtonElement>(
+            '[data-chat-composer-footer="true"] button[type="submit"]',
+          ),
+        "Unable to find the pending primary action.",
       );
+      expect(send.textContent).toBe("Next question");
       await vi.waitFor(() => expect(send.disabled).toBe(false));
       await mounted.setContainerSize(COMPACT_FOOTER_VIEWPORT);
       await expectComposerActionsContained();

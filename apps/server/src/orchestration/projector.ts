@@ -6,12 +6,10 @@ import type { OrchestrationProjectorDecodeError } from "./Errors.ts";
 import {
   ThreadActivityAppendedPayload,
   ThreadProposedPlanUpsertedPayload,
-  ThreadRevertedPayload,
   ThreadSessionSetPayload,
   ThreadTurnDiffCompletedPayload,
 } from "./Schemas.ts";
 import {
-  checkpointStatusToLatestTurnState,
   decodeForEvent,
   projectProjectCreated,
   projectProjectDeleted,
@@ -34,14 +32,11 @@ import {
   projectThreadUnarchived,
   projectThreadUnpinned,
 } from "./projectorThreadLifecycle.ts";
-import {
-  compareThreadActivities,
-  retainThreadActivitiesAfterRevert,
-  retainThreadMessagesAfterRevert,
-  retainThreadProposedPlansAfterRevert,
-} from "./projectorThreadState.ts";
+import { compareThreadActivities } from "./projectorThreadState.ts";
+import { projectThreadReverted } from "./projectorThreadReverted.ts";
 import { projectThreadTaskEvent } from "./projectorTasks.ts";
 import { projectThreadMessageSent } from "./projectorThreadMessages.ts";
+import { projectThreadTurnSettled } from "./projectorThreadTurnSettled.ts";
 import { projectThreadQueuedPromptEvent } from "./projectorThreadQueuedPrompts.ts";
 import { projectThreadTurnControlEvent } from "./projectorThreadTurnControl.ts";
 import { projectThreadPendingTurnStart } from "./projectorThreadPendingTurnStart.ts";
@@ -49,7 +44,6 @@ import { projectThreadRecovery } from "./projectorThreadRecovery.ts";
 import { projectThreadOrganization } from "./projectorThreadOrganization.ts";
 import { retainThreadTitleOwnership } from "../orchestration-tools/TerminalThreadTitle.ts";
 
-const MAX_THREAD_MESSAGES = 2_000;
 const MAX_THREAD_CHECKPOINTS = 500;
 
 export function projectEvent(
@@ -163,6 +157,9 @@ function projectEventState(
     case "thread.message-sent":
       return projectThreadMessageSent(nextBase, event);
 
+    case "thread.turn-settled":
+      return Effect.succeed(projectThreadTurnSettled(nextBase, event));
+
     case "thread.session-set":
       return Effect.gen(function* () {
         const payload = yield* decodeForEvent(
@@ -190,8 +187,15 @@ function projectEventState(
             latestTurn:
               session.status === "running" && session.activeTurnId !== null
                 ? {
+                    ...(thread.latestTurn?.turnId === session.activeTurnId
+                      ? thread.latestTurn
+                      : {}),
                     turnId: session.activeTurnId,
-                    state: "running",
+                    state:
+                      thread.latestTurn?.turnId === session.activeTurnId &&
+                      thread.latestTurn.terminalOutcome
+                        ? thread.latestTurn.state
+                        : "running",
                     requestedAt:
                       thread.latestTurn?.turnId === session.activeTurnId
                         ? thread.latestTurn.requestedAt
@@ -200,7 +204,11 @@ function projectEventState(
                       thread.latestTurn?.turnId === session.activeTurnId
                         ? (thread.latestTurn.startedAt ?? session.updatedAt)
                         : session.updatedAt,
-                    completedAt: null,
+                    completedAt:
+                      thread.latestTurn?.turnId === session.activeTurnId &&
+                      thread.latestTurn.terminalOutcome
+                        ? thread.latestTurn.completedAt
+                        : null,
                     assistantMessageId:
                       thread.latestTurn?.turnId === session.activeTurnId
                         ? thread.latestTurn.assistantMessageId
@@ -290,75 +298,13 @@ function projectEventState(
           ...nextBase,
           threads: updateThread(nextBase.threads, payload.threadId, {
             checkpoints,
-            latestTurn: {
-              turnId: payload.turnId,
-              state: checkpointStatusToLatestTurnState(payload.status),
-              requestedAt:
-                thread.latestTurn?.turnId === payload.turnId
-                  ? thread.latestTurn.requestedAt
-                  : payload.completedAt,
-              startedAt:
-                thread.latestTurn?.turnId === payload.turnId
-                  ? (thread.latestTurn.startedAt ?? payload.completedAt)
-                  : payload.completedAt,
-              completedAt: payload.completedAt,
-              assistantMessageId: payload.assistantMessageId,
-            },
             updatedAt: event.occurredAt,
           }),
         };
       });
 
     case "thread.reverted":
-      return decodeForEvent(ThreadRevertedPayload, event.payload, event.type, "payload").pipe(
-        Effect.map((payload) => {
-          const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
-          if (!thread) {
-            return nextBase;
-          }
-
-          const checkpoints = thread.checkpoints
-            .filter((entry) => entry.checkpointTurnCount <= payload.turnCount)
-            .toSorted((left, right) => left.checkpointTurnCount - right.checkpointTurnCount)
-            .slice(-MAX_THREAD_CHECKPOINTS);
-          const retainedTurnIds = new Set(checkpoints.map((checkpoint) => checkpoint.turnId));
-          const messages = retainThreadMessagesAfterRevert(
-            thread.messages,
-            retainedTurnIds,
-            payload.turnCount,
-          ).slice(-MAX_THREAD_MESSAGES);
-          const proposedPlans = retainThreadProposedPlansAfterRevert(
-            thread.proposedPlans,
-            retainedTurnIds,
-          ).slice(-200);
-          const activities = retainThreadActivitiesAfterRevert(thread.activities, retainedTurnIds);
-
-          const latestCheckpoint = checkpoints.at(-1) ?? null;
-          const latestTurn =
-            latestCheckpoint === null
-              ? null
-              : {
-                  turnId: latestCheckpoint.turnId,
-                  state: checkpointStatusToLatestTurnState(latestCheckpoint.status),
-                  requestedAt: latestCheckpoint.completedAt,
-                  startedAt: latestCheckpoint.completedAt,
-                  completedAt: latestCheckpoint.completedAt,
-                  assistantMessageId: latestCheckpoint.assistantMessageId,
-                };
-
-          return {
-            ...nextBase,
-            threads: updateThread(nextBase.threads, payload.threadId, {
-              checkpoints,
-              messages,
-              proposedPlans,
-              activities,
-              latestTurn,
-              updatedAt: event.occurredAt,
-            }),
-          };
-        }),
-      );
+      return projectThreadReverted(nextBase, event);
 
     case "thread.activity-appended":
       return decodeForEvent(

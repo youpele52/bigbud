@@ -1,20 +1,41 @@
-import { Effect, Layer } from "effect";
-import { FetchHttpClient, HttpRouter, HttpServer } from "effect/unstable/http";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpServer from "effect/unstable/http/HttpServer";
 
-import { ServerConfig } from "./startup/config";
+import { ServerConfig, type ServerConfigShape } from "./startup/config";
+import { RemoteProfileConfigurationError } from "./startup/config.remote.ts";
+import { resolveRemoteMobileConfiguration } from "./startup/config.remoteMobile.ts";
+import { assertRemoteServerProfile } from "./startup/config.remote.ts";
+import { ensurePrivateRemoteStateRoot } from "./remote-backend/authority.files.ts";
+import { RemoteBackendAuthorityError } from "./remote-backend/authority.record.ts";
+import { RemoteBackendIdentityForServerLive } from "./remote-backend/identity.service.policy.ts";
+import {
+  RemoteCallbackBindingLive,
+  withRemoteCallbackRuntime,
+} from "./server.remote.callbackBinding.ts";
+import { RemoteServerApplicationLive } from "./server.remote.ts";
+import {
+  RemoteRuntimeUpdateRemoteLive,
+  RuntimeMaintenanceGateRemoteLive,
+} from "./remote-backend/Layers/RemoteRuntimeUpdate.remote.ts";
+import { RemoteMobileConsentGuardLive } from "./remote-backend/mobileConsentRevoke.ts";
+import { RemoteMobileGatewayCompositionLive } from "./server.mobileOwner.ts";
 import { StateDirLockLive } from "./startup/backendInstance";
 import { withOwnershipShutdown } from "./startup/ownershipShutdown";
-import { fixPath } from "./utils/os-jank";
+import { prepareProviderServicePath } from "./provider-provisioning/servicePath.runtime.ts";
 import { makeRoutesLayer } from "./server.routes.ts";
-import { OpenLive } from "./utils/open";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { withRemoteExecutionTargetDisconnects } from "./persistence/Layers/RemoteExecutionTargetDisconnects.ts";
 import { ServerLifecycleEventsLive } from "./startup/serverLifecycleEvents";
-import { AnalyticsServiceLayerLive } from "./telemetry/Layers/AnalyticsService";
 import { withEngineTerminal } from "./server.engineTerminal.ts";
 import { ThreadToolsActivationLive } from "./provider/Layers/OpencodeV2/ThreadToolsActivation.ts";
 import { OpencodeServerManagerLive } from "./provider/Layers/Opencode/ServerManager";
 import { OrchestrationEngineLive } from "./orchestration/Layers/OrchestrationEngine";
+import { WorkspaceModeGateLive } from "./remote-backend/workspaceMode.gate.ts";
+import { ThreadCoordinationGrantsLive } from "./orchestration-tools/Layers/ThreadCoordinationGrants.ts";
 import { CommandGatewayLive } from "./command-gateway/Layers/CommandGateway.ts";
 import { OrchestrationProjectionPipelineLive } from "./orchestration/Layers/ProjectionPipeline";
 import { OrchestrationEventStoreLive } from "./persistence/Layers/OrchestrationEventStore";
@@ -28,6 +49,9 @@ import { ProjectionOperationalStateQueryLive } from "./orchestration/Layers/Proj
 import { CheckpointStoreLive } from "./checkpointing/Layers/CheckpointStore";
 import { makeGitLayerLive } from "./git/Layers/GitComposition.ts";
 import { TerminalManagerLive } from "./terminal/Layers/Manager";
+import { LocalShellProfilesLive } from "./terminal/Layers/LocalShellProfiles.ts";
+import { ShellProfilesLive } from "./terminal/Layers/ShellProfiles.ts";
+import { ShellLaunchPlannerLive } from "./terminal/Layers/ShellLaunchPlanner.ts";
 import { PtyAdapter } from "./terminal/Services/PTY";
 import { KeybindingsLive } from "./keybindings/keybindings";
 import { ServerRuntimeStartup, ServerRuntimeStartupLive } from "./startup/serverRuntimeStartup";
@@ -47,8 +71,9 @@ import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
 import { ServerSettingsLive } from "./ws/serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
 import { makeConfiguredRemoteAgentLayers } from "./remote-agent/remoteAgentServerLayer.ts";
+import { RemoteAgentLocalControlLive } from "./remote-agent/remoteAgentLocalControl.layer.ts";
+import { RemoteBackendDeploymentLive } from "./remote-backend/Layers/RemoteBackendDeployment.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability";
-import { ComputerUseLayerLive } from "./server.computerUse.ts";
 import { ThreadShellRunnerLive } from "./shell/Layers/ThreadShellRunner";
 import { ProjectionNoteRepositoryLive } from "./persistence/Layers/ProjectionNotes";
 import { ProjectionKanbanRepositoryLive } from "./persistence/Layers/ProjectionKanban";
@@ -59,15 +84,12 @@ import { LearningJobRepositoryLive } from "./persistence/Layers/LearningJobs";
 import { SkillChangeProposalRepositoryLive } from "./persistence/Layers/SkillChangeProposals";
 import { LearningReactorLive } from "./orchestration/Layers/LearningReactor";
 import { MemoryStoreLive } from "./learning/Layers/MemoryStore";
-import { MobileRemoteControlLive } from "./mobile/Layers/MobileRemoteControl";
 import { ThreadRetentionRepositoryLive } from "./persistence/Layers/ThreadRetentionRepository.ts";
-import { VisibleBrowserControlLive } from "./browser/Layers/VisibleBrowserControl.ts";
 import { PurgeJobRepositoryLive } from "./persistence/Layers/PurgeJobRepository.ts";
 import { ThreadRetentionLive } from "./retention/Layers/ThreadRetention.ts";
 import { HttpServerLive, PlatformServicesLive } from "./server.platform.ts";
 import { makeRemoteAgentPtyAdapter } from "./remote-agent/remoteAgentPtyAdapter.ts";
 import { isRemoteAgentExecutionTarget } from "./remote-agent/remoteAgentDefault.ts";
-import { DesktopSupervisorDeliveryLive } from "./desktop-supervisor/desktopSupervisorDelivery.layer.ts";
 import { ConnectionDiagnosticsLive } from "./connection-diagnostics/Layers/ConnectionDiagnostics.ts";
 import { EventLoopLagMonitorLive } from "./connection-diagnostics/Layers/EventLoopLagMonitor.ts";
 import { withServerShutdownSignal } from "./connection-diagnostics/Layers/ServerShutdownSignal.ts";
@@ -79,17 +101,16 @@ import { ProcessLedgerLive } from "./process-ledger/Layers/ProcessLedger.ts";
 import { makeProviderInfrastructureLayerLive } from "./server.providerLayers.ts";
 import { BackgroundMaintenanceLayerLive } from "./server.maintenanceLayers.ts";
 import { ThreadBranchCopyLive } from "./orchestration/Layers/ThreadBranchCopy.ts";
-const PtyAdapterLive = Layer.unwrap(
-  Effect.gen(function* () {
-    if (typeof Bun !== "undefined") {
-      const BunPTY = yield* Effect.promise(() => import("./terminal/Layers/BunPTY"));
-      return BunPTY.layer;
-    } else {
-      const NodePTY = yield* Effect.promise(() => import("./terminal/Layers/NodePTY"));
-      return NodePTY.layer;
-    }
-  }),
-);
+import {
+  ProfileComputerUseLive,
+  ProfileVisibleBrowserControlLive,
+  ProfileOpenLive,
+  ProfileAnalyticsLive,
+  ProfileMobileControlLive,
+  ProfileDeliveryLive,
+} from "./server.profile.ts";
+import { RemoteTerminalAvailabilityLive } from "./remote-backend/terminalAvailability.ts";
+import { PtyAdapterLive } from "./server.pty.ts";
 
 const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
@@ -146,15 +167,26 @@ const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
       }),
     ).pipe(Layer.provide(PtyAdapterLive))
   : PtyAdapterLive;
-const TerminalLayerLive = TerminalManagerLive.pipe(Layer.provide(TerminalPtyLayerLive));
+const TerminalLayerLive = TerminalManagerLive.pipe(
+  Layer.provide(TerminalPtyLayerLive),
+  Layer.provide(
+    ShellLaunchPlannerLive.pipe(
+      Layer.provideMerge(ShellProfilesLive),
+      Layer.provide(LocalShellProfilesLive),
+    ),
+  ),
+);
 
 const OrchestrationEngineLayerLive = withEngineTerminal(
   OrchestrationEngineLive,
   TerminalLayerLive,
 ).pipe(
   Layer.provide(OrchestrationInfrastructureLayerLive),
-  Layer.provide(ComputerUseLayerLive),
-  Layer.provide(VisibleBrowserControlLive),
+  Layer.provide(ProfileComputerUseLive),
+  Layer.provide(ProfileVisibleBrowserControlLive),
+  // One shared in-memory grant store; grants and challenges are lost on restart by design.
+  Layer.provide(ThreadCoordinationGrantsLive),
+  Layer.provide(WorkspaceModeGateLive),
 );
 
 const OrchestrationCommandLayerLive = CommandGatewayLive.pipe(
@@ -163,8 +195,8 @@ const OrchestrationCommandLayerLive = CommandGatewayLive.pipe(
 
 const OrchestrationLayerLive = Layer.mergeAll(
   OrchestrationInfrastructureLayerLive,
-  ComputerUseLayerLive,
-  VisibleBrowserControlLive,
+  ProfileComputerUseLive,
+  ProfileVisibleBrowserControlLive,
   OrchestrationCommandLayerLive,
 );
 
@@ -234,15 +266,15 @@ const RuntimeDependenciesLive = ReactorLayerLive.pipe(
   // Retained by the legacy OpenCode text-generation infrastructure.
   Layer.provideMerge(OpencodeServerManagerLive),
   // Misc.
-  Layer.provideMerge(AnalyticsServiceLayerLive),
+  Layer.provideMerge(ProfileAnalyticsLive),
   Layer.provideMerge(
-    Layer.mergeAll(OpenLive, EventLoopLagMonitorLive, Recovery.SleepEvidenceLayerLive),
+    Layer.mergeAll(ProfileOpenLive, EventLoopLagMonitorLive, Recovery.SleepEvidenceLayerLive),
   ),
   Layer.provideMerge(ServerLifecycleEventsLive),
   Layer.provideMerge(
     Layer.mergeAll(
-      MobileRemoteControlLive.pipe(Layer.provide(ServerSettingsLive)),
-      DesktopSupervisorDeliveryLive,
+      ProfileMobileControlLive.pipe(Layer.provide(ServerSettingsLive)),
+      ProfileDeliveryLive,
       ConnectionDiagnosticsLive,
     ),
   ),
@@ -255,41 +287,104 @@ const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
   Layer.provideMerge(RuntimeDependenciesLive),
 );
 
+const RemoteServerLive = withRemoteCallbackRuntime(
+  // Runtime updates (M3 WP-4D) need runtime services and serve on the client routes.
+  withServerShutdownSignal(
+    RemoteServerApplicationLive.pipe(Layer.provide(RemoteRuntimeUpdateRemoteLive)),
+  ),
+  RuntimeServicesLive,
+).pipe(
+  Layer.provideMerge(RemoteCallbackBindingLive),
+  // Under the state lock, before persistence: finishes a rollback restore, holds admission.
+  Layer.provideMerge(RuntimeMaintenanceGateRemoteLive),
+  // Admission consumers capture this real idle owner while runtime services are constructed.
+  Layer.provideMerge(RemoteMobileGatewayCompositionLive),
+  Layer.provideMerge(RemoteMobileConsentGuardLive),
+  // Identity validation precedes runtime/persistence construction and both listeners.
+  Layer.provideMerge(RemoteBackendIdentityForServerLive),
+  Layer.provideMerge(RemoteTerminalAvailabilityLive),
+  Layer.provide(StateDirLockLive),
+  Layer.provide(ObservabilityLive),
+  Layer.provideMerge(FetchHttpClient.layer),
+  Layer.provideMerge(PlatformServicesLive),
+);
+
 export { makeRoutesLayer } from "./server.routes.ts";
+
+function localServerLayer(config: ServerConfigShape) {
+  const httpListeningLayer = Layer.effectDiscard(
+    Effect.gen(function* () {
+      yield* HttpServer.HttpServer;
+      const startup = yield* ServerRuntimeStartup;
+      yield* startup.markHttpListening;
+    }),
+  );
+
+  const serverApplicationLayer = Layer.mergeAll(
+    // Persisted relay profiles replace the unavailable directory on the local backend (WP-3A).
+    HttpRouter.serve(makeRoutesLayer, {
+      disableLogger: !config.logWebSocketEvents,
+    }).pipe(Layer.provide(RemoteBackendDeploymentLive)),
+    httpListeningLayer,
+    ThreadToolModelSourcesLive,
+    RemoteAgentLocalControlLive,
+  );
+
+  // The shutdown signal finalizes first, before routes close their WebSocket streams.
+  return withServerShutdownSignal(serverApplicationLayer).pipe(
+    Layer.provideMerge(RuntimeServicesLive),
+    Layer.provideMerge(HttpServerLive),
+    // One backend per state directory: acquired before the port binds and persistence opens,
+    // released after both close.
+    Layer.provide(StateDirLockLive),
+    Layer.provide(ObservabilityLive),
+    Layer.provideMerge(FetchHttpClient.layer),
+    Layer.provideMerge(PlatformServicesLive),
+  );
+}
+
+type ServerApplicationLayer = Layer.Layer<
+  never,
+  Layer.Error<typeof RemoteServerLive> | Layer.Error<ReturnType<typeof localServerLayer>>,
+  ServerConfig
+>;
 
 export const makeServerLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig;
+    if (config.mode === "remote") {
+      yield* Effect.try({
+        try: () => {
+          assertRemoteServerProfile(config);
+          resolveRemoteMobileConfiguration({
+            mode: config.mode,
+            enabled: config.remoteMobile !== undefined,
+            clientToken: config.authToken,
+            gatewayCredential: config.remoteMobile
+              ? Redacted.value(config.remoteMobile.gatewayCredential)
+              : undefined,
+          });
+        },
+        catch: () =>
+          new RemoteProfileConfigurationError("The remote profile configuration is invalid."),
+      });
+      yield* Effect.tryPromise({
+        try: () => ensurePrivateRemoteStateRoot(config.stateDir),
+        catch: () =>
+          new RemoteBackendAuthorityError(
+            "unsafe-state",
+            "The remote state root must be private before acquiring its backend lock.",
+          ),
+      });
+      // Bounded service PATH discovery for provider resolution and spawns (never `fixPath()`).
+      yield* prepareProviderServicePath(config.mode);
+      const application: ServerApplicationLayer = RemoteServerLive;
+      return application;
+    }
 
-    fixPath();
-
-    const httpListeningLayer = Layer.effectDiscard(
-      Effect.gen(function* () {
-        yield* HttpServer.HttpServer;
-        const startup = yield* ServerRuntimeStartup;
-        yield* startup.markHttpListening;
-      }),
-    );
-
-    const serverApplicationLayer = Layer.mergeAll(
-      HttpRouter.serve(makeRoutesLayer, {
-        disableLogger: !config.logWebSocketEvents,
-      }),
-      httpListeningLayer,
-      ThreadToolModelSourcesLive,
-    );
-
-    // The shutdown signal finalizes first, before routes close their WebSocket streams.
-    return withServerShutdownSignal(serverApplicationLayer).pipe(
-      Layer.provideMerge(RuntimeServicesLive),
-      Layer.provideMerge(HttpServerLive),
-      // One backend per state directory: acquired before the port binds and persistence opens,
-      // released after both close.
-      Layer.provide(StateDirLockLive),
-      Layer.provide(ObservabilityLive),
-      Layer.provideMerge(FetchHttpClient.layer),
-      Layer.provideMerge(PlatformServicesLive),
-    );
+    yield* prepareProviderServicePath(config.mode); // Desktop/web: the unchanged `fixPath()`.
+    const application: ServerApplicationLayer = localServerLayer(config);
+    return application;
   }),
 );
 

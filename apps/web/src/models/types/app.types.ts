@@ -1,3 +1,4 @@
+import type { TerminalSplitLayout } from "../../lib/terminalSplitLayout";
 import type {
   ExecutionTargetId,
   HistoricalModelSelection,
@@ -52,6 +53,7 @@ export const MAX_TERMINALS_PER_GROUP = _MAX_TERMINALS_PER_GROUP;
 export type ProjectScript = ContractProjectScript;
 
 export interface ThreadTerminalGroup {
+  layout?: TerminalSplitLayout | undefined;
   id: string;
   terminalIds: string[];
 }
@@ -226,6 +228,11 @@ export interface Thread {
   messages: ChatMessage[];
   proposedPlans: ProposedPlan[];
   providerAgents?: OrchestrationTask[];
+  notificationSafety?: import("@bigbud/contracts/orchestration/orchestration.notificationSafety.ts").ThreadNotificationSafety;
+  /** Live-only, bounded observations; never reconstructed from hydrated history. */
+  notificationObservation?: import("../../notifications/taskCompletion.observations").ThreadNotificationObservation;
+  /** Latest live/catalog evidence sequence; older hydration cannot release a safety gate. */
+  notificationSafetySequence?: number;
   delegatedChildren?: DelegatedChildSummary[];
   queuedPrompts?: Array<OrchestrationQueuedPrompt>;
   pendingTurnControlOperation?: OrchestrationTurnControlOperation | null;

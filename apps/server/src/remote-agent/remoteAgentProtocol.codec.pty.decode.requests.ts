@@ -40,6 +40,7 @@ function decodeCreate(bytes: Uint8Array): RemoteAgentPtyCreateRequest {
     rows: 0,
   };
   const environment: RemoteAgentProcessEnvironment[] = [];
+  let profileLaunch = false;
   decodeMessage(bytes, (field, wireType, reader) => {
     switch (field) {
       case 1:
@@ -82,11 +83,19 @@ function decodeCreate(bytes: Uint8Array): RemoteAgentPtyCreateRequest {
         requireWireType(wireType, 2);
         environment.push(decodeEnvironment(reader.bytesValue()));
         break;
+      case 11:
+        requireWireType(wireType, 0);
+        profileLaunch = reader.uint() !== 0;
+        break;
       default:
         reader.skip(wireType);
     }
   });
-  return { ...value, ...(environment.length > 0 ? { environment } : {}) };
+  return {
+    ...value,
+    ...(environment.length > 0 ? { environment } : {}),
+    ...(profileLaunch ? { profileLaunch: true } : {}),
+  };
 }
 
 function decodeInput(bytes: Uint8Array): RemoteAgentPtyInput {

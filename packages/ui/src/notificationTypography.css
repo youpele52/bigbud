@@ -1,0 +1,9 @@
+/* Notification text stays at the shared 14px UI size, including nested content
+   and responsive button variants. Keep this outside utility layers so local
+   size classes cannot shrink banners or toasts; weights and colors still apply. */
+[data-slot="alert"],
+[data-slot="alert"] *,
+[data-slot="toast-popup"],
+[data-slot="toast-popup"] * {
+  font-size: var(--text-sm, 0.875rem);
+}

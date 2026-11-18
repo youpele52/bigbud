@@ -1,3 +1,4 @@
+import type { TerminalSplitDirection } from "../../lib/terminalSplitLayout";
 import { LOCAL_EXECUTION_TARGET_ID, type ThreadId } from "@bigbud/contracts";
 import { useCallback, useMemo, useState } from "react";
 import { randomUUID } from "~/lib/utils";
@@ -17,6 +18,7 @@ import { resolveTerminalBaseLabel, resolveTerminalProviderFromEvents } from "./t
 import { closeTerminalConfirmed } from "./terminalLifecycle.operations";
 import { resolveManualTerminalTarget } from "../../stores/terminal/terminal.store.wsl";
 import type { TerminalAgentKind } from "../../stores/terminal/terminal.store.agentKind";
+import { canCreateProfileTerminal } from "./TerminalProfilePicker.launch";
 
 const EMPTY_TERMINAL_LABEL_OVERRIDES: Record<string, string> = Object.freeze({});
 const EMPTY_TERMINAL_EVENT_ENTRIES_BY_KEY = Object.freeze({});
@@ -36,8 +38,10 @@ export interface UseThreadTerminalDrawerResult {
   terminalBaseLabel: string;
   terminalLabelOverrides: Record<string, string>;
   terminalProviderById: Readonly<Record<string, TerminalAgentKind>>;
-  splitTerminal: () => void;
-  createNewTerminal: () => void;
+  splitTerminal: (direction?: TerminalSplitDirection) => void;
+  createNewTerminal: (
+    profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch,
+  ) => void;
   activateTerminal: (terminalId: string) => void;
   closeTerminal: (terminalId: string) => void;
   setTerminalLabelOverride: (terminalId: string, label: string) => void;
@@ -195,15 +199,39 @@ export function useThreadTerminalDrawer(
     [storeSetTerminalHeight, threadId],
   );
 
-  const splitTerminal = useCallback(() => {
-    storeSplitTerminal(threadId, `terminal-${randomUUID()}`);
-    bumpFocusRequestId();
-  }, [bumpFocusRequestId, storeSplitTerminal, threadId]);
+  const splitTerminal = useCallback(
+    (direction: TerminalSplitDirection = "right") => {
+      const profile = { newExecutionTargetId: executionTargetId ?? LOCAL_EXECUTION_TARGET_ID };
+      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId, profile)) return;
+      storeSplitTerminal(threadId, `terminal-${randomUUID()}`, profile, direction);
+      bumpFocusRequestId();
+    },
+    [
+      bumpFocusRequestId,
+      storeSplitTerminal,
+      threadId,
+      terminalState.activeTerminalId,
+      executionTargetId,
+    ],
+  );
 
-  const createNewTerminal = useCallback(() => {
-    storeNewTerminal(threadId, `terminal-${randomUUID()}`);
-    bumpFocusRequestId();
-  }, [bumpFocusRequestId, storeNewTerminal, threadId]);
+  const createNewTerminal = useCallback(
+    (profile?: import("../../lib/terminalProfileLaunch").TerminalProfileLaunch) => {
+      const requested = profile ?? {
+        newExecutionTargetId: executionTargetId ?? LOCAL_EXECUTION_TARGET_ID,
+      };
+      if (!canCreateProfileTerminal(threadId, terminalState.activeTerminalId, requested)) return;
+      storeNewTerminal(threadId, `terminal-${randomUUID()}`, requested);
+      bumpFocusRequestId();
+    },
+    [
+      bumpFocusRequestId,
+      storeNewTerminal,
+      threadId,
+      terminalState.activeTerminalId,
+      executionTargetId,
+    ],
+  );
 
   const activateTerminal = useCallback(
     (terminalId: string) => {

@@ -33,6 +33,7 @@ import type {
 
 import { sendTurnAttempt } from "./ProviderCommandReactorSessionOps.send.ts";
 import { withTurnStartRecovery } from "./ProviderCommandReactorSessionOps.recovery.turnStart.ts";
+import { getOrchestrationThreadWithReadModel } from "../Services/OrchestrationEngine.ts";
 
 export const ensureSessionForThread = (services: SessionOpServices) =>
   Effect.fn("ensureSessionForThread")(function* (
@@ -47,8 +48,10 @@ export const ensureSessionForThread = (services: SessionOpServices) =>
       capabilityContextStates,
       setThreadSession,
     } = services;
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === threadId);
+    const { readModel, thread } = yield* getOrchestrationThreadWithReadModel(
+      orchestrationEngine,
+      threadId,
+    );
     if (!thread) {
       return yield* Effect.die(new Error(`Thread '${threadId}' was not found in read model.`));
     }

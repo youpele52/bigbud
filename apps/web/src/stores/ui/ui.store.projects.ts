@@ -16,6 +16,7 @@ import {
   sanitizePersistedThreadChangedFilesExpanded,
   sanitizePersistedThreadLastVisitedAt,
 } from "./ui.store.persistence";
+import { backendScopedLocalStorage as storage } from "../../lib/backendScopedStorage";
 
 export const PERSISTED_STATE_KEY = "bigbud:ui-state:v1";
 const LEGACY_PERSISTED_STATE_KEYS = [
@@ -66,10 +67,10 @@ export function readPersistedState(): UiState {
     return initialState;
   }
   try {
-    const raw = window.localStorage.getItem(PERSISTED_STATE_KEY);
+    const raw = storage.getItem(PERSISTED_STATE_KEY);
     if (!raw) {
       for (const legacyKey of LEGACY_PERSISTED_STATE_KEYS) {
-        const legacyRaw = window.localStorage.getItem(legacyKey);
+        const legacyRaw = storage.getItem(legacyKey);
         if (!legacyRaw) {
           continue;
         }
@@ -85,7 +86,7 @@ export function readPersistedState(): UiState {
       const sanitized = { ...parsed };
       delete sanitized.lastActiveThreadId;
       try {
-        window.localStorage.setItem(PERSISTED_STATE_KEY, JSON.stringify(sanitized));
+        storage.setItem(PERSISTED_STATE_KEY, JSON.stringify(sanitized));
       } catch {
         // Hydration remains valid even when best-effort repair cannot be written.
       }
@@ -147,7 +148,7 @@ export function persistState(state: UiState): void {
         return Object.keys(nextTurns).length > 0 ? [[threadId, nextTurns]] : [];
       }),
     );
-    window.localStorage.setItem(
+    storage.setItem(
       PERSISTED_STATE_KEY,
       JSON.stringify({
         sidebarActionOrder: state.sidebarActionOrder,
@@ -168,7 +169,7 @@ export function persistState(state: UiState): void {
     if (!legacyKeysCleanedUp) {
       legacyKeysCleanedUp = true;
       for (const legacyKey of LEGACY_PERSISTED_STATE_KEYS) {
-        window.localStorage.removeItem(legacyKey);
+        storage.removeItem(legacyKey);
       }
     }
   } catch {

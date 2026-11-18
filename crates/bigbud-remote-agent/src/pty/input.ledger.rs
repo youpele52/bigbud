@@ -28,6 +28,7 @@ pub(super) struct Ledger {
     pub fenced: bool,
     pub pending: usize,
     pub bytes: usize,
+    pub receipt: super::reconcile::ReceiptSlot,
 }
 pub(super) struct Shared {
     pub ledger: Mutex<Ledger>,
@@ -96,7 +97,9 @@ pub(super) fn compact_completed(ledger: &mut Ledger) {
         && ledger.records.first_key_value().is_some_and(|(_, record)| {
             matches!(
                 record.outcome,
-                InputOutcome::Written(_) | InputOutcome::FailedBeforeWrite
+                InputOutcome::Written(_)
+                    | InputOutcome::FailedBeforeWrite
+                    | InputOutcome::NotAdmitted
             )
         })
     {

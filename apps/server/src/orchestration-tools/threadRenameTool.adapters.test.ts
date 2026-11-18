@@ -9,6 +9,8 @@ import {
   type ThreadOrchestrationToolDispatcherShape,
 } from "./ThreadOrchestrationToolDispatcher.ts";
 import { RENAME_THREAD_TOOL_PARAMETERS } from "./threadRenameTool.shared.ts";
+import { confirmationRequiredResult } from "./ThreadCoordinationConfirmation.result.ts";
+import { ProjectId } from "@bigbud/contracts/core/baseSchemas.ts";
 
 const caller = ThreadId.makeUnsafe("canonical-caller");
 const target = ThreadId.makeUnsafe("canonical-target");
@@ -101,4 +103,40 @@ it("routes Copilot SDK handlers through the same canonical caller/target contrac
     expect(await handler(args as never, invocation)).toMatchObject({ resultType: "failure" });
   }
   expect(rename).toHaveBeenCalledTimes(2);
+});
+
+it("prints a confirmation_required rename payload in Codex and Copilot instead of a rename", async () => {
+  const refusal = confirmationRequiredResult({
+    code: "BB-INPROC00",
+    projectId: ProjectId.makeUnsafe("project-b"),
+    projectTitle: "B",
+    targetIsRemote: true,
+  });
+  const dispatcher = {
+    rename: vi.fn(() => Effect.succeed(refusal)),
+  } as unknown as ThreadOrchestrationToolDispatcherShape;
+  setThreadOrchestrationToolDispatcher(dispatcher);
+  const codex = await createCodexThreadOrchestrationDynamicToolHandler(
+    caller,
+    MessageId.makeUnsafe("source"),
+  )({
+    namespace: "bigbud_orchestration",
+    tool: "rename_thread",
+    requestId: 9,
+    arguments: { title: "x", targetThreadId: target },
+  });
+  expect(codex).toMatchObject({ success: true });
+  const [item] = codex.contentItems;
+  if (item?.type !== "inputText") throw new Error("expected a Codex text result");
+  expect(JSON.parse(item.text)).toEqual(refusal);
+
+  const tool = createCopilotOrchestrationToolSurface({ dispatcher, threadId: caller }).find(
+    (candidate) => candidate.name === "rename_thread",
+  )!;
+  const copilot = await tool.handler!(
+    { title: "x", targetThreadId: target },
+    { toolCallId: "call-9", toolName: "rename_thread", sessionId: "native", arguments: {} },
+  );
+  expect(copilot).toMatchObject({ resultType: "success" });
+  expect(JSON.parse((copilot as { textResultForLlm: string }).textResultForLlm)).toEqual(refusal);
 });

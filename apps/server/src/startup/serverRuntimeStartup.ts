@@ -24,6 +24,7 @@ import { ProjectionSnapshotQuery } from "../orchestration/Services/ProjectionSna
 import { OrchestrationReactor } from "../orchestration/Services/OrchestrationReactor";
 import { ServerLifecycleEvents } from "./serverLifecycleEvents";
 import { ServerSettingsService } from "../ws/serverSettings";
+import { runTerminalShellSettingsMigration } from "./serverRuntimeStartup.terminalShells.ts";
 import { AnalyticsService } from "../telemetry/Services/AnalyticsService";
 import { maybeOpenBrowser, runStartupPhase } from "./serverRuntimeStartup.browser.ts";
 import { autoBootstrapWelcome } from "./serverRuntimeStartup.bootstrap.ts";
@@ -43,6 +44,7 @@ import {
   makeBoundedCommandAdmission,
   withCommandAdmissionDeadline,
 } from "../command-admission/CommandAdmission.ts";
+import { sweepStaleBigbudTempDirsAtStartup } from "./tempDirSweep.ts";
 
 export class ServerRuntimeStartupError extends Data.TaggedError("ServerRuntimeStartupError")<{
   readonly message: string;
@@ -248,6 +250,7 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       ),
     );
     yield* runStartupPhase("settings.ready", serverSettings.ready);
+    yield* runStartupPhase("terminalShells.migrate", runTerminalShellSettingsMigration());
 
     yield* Effect.logDebug("startup phase: migrating thread retention settings");
     yield* runStartupPhase("retention.settings.migrate", runThreadRetentionSettingsMigration());
@@ -354,6 +357,9 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       if (threadRetention._tag === "Some") {
         yield* Effect.forkScoped(threadRetention.value.start);
       }
+      yield* Effect.forkScoped(
+        sweepStaleBigbudTempDirsAtStartup().pipe(Effect.ignoreCause({ log: true })),
+      );
       yield* Effect.logDebug("startup phase: browser open check");
       yield* runStartupPhase("browser.open", maybeOpenBrowser);
       yield* Effect.logDebug("startup phase: complete");

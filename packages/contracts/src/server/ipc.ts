@@ -10,10 +10,13 @@ import type {
   DesktopUpdateStatus,
 } from "./ipc.desktop";
 import type { DesktopCertificateChallengeBridge } from "./ipc.desktopCertificate";
+import type { DesktopCommandLineBridge } from "./ipc.desktopCommandLine";
 import type { DesktopComputerUseBridge } from "./ipc.desktopComputerUse";
 import type { DesktopSystemMonitorBridge } from "../system-monitor/types";
 import type { DesktopScreenshotBridge } from "./ipc.desktopScreenshot";
+import type { DesktopRemoteBackendBridge } from "./ipc.desktopRemoteBackend";
 import type { TerminalRenderingPolicy } from "./ipc.terminal";
+import type { DesktopWindowMaterialState } from "./ipc.windowMaterial";
 
 export type {
   DesktopRuntimeArch,
@@ -25,6 +28,8 @@ export type {
   DesktopUpdateStatus,
 } from "./ipc.desktop";
 export * from "./ipc.desktopComputerUse";
+export type * from "./ipc.desktopCommandLine";
+export type * from "./ipc.desktopRemoteBackend";
 export type { NativeApi } from "./ipc.nativeApi";
 
 export interface ContextMenuItem<T extends string = string> {
@@ -40,7 +45,7 @@ export interface ContextMenuItem<T extends string = string> {
 }
 
 export type DesktopTheme = "light" | "dark" | "system";
-export type DesktopWindowRole = "main" | "mascot" | "compact-chat";
+export type DesktopWindowRole = "main" | "mascot" | "compact-chat" | "remote-backend";
 export type FloatingAssistantCaller = "chrome" | "logo" | "matte";
 
 export interface CompactChatLinkHandoff {
@@ -75,9 +80,11 @@ export interface DesktopTailscaleRemoteAccessStatus {
 
 export interface DesktopBridge
   extends
+    DesktopCommandLineBridge,
     DesktopComputerUseBridge,
     DesktopCertificateChallengeBridge,
     DesktopScreenshotBridge,
+    DesktopRemoteBackendBridge,
     DesktopSystemMonitorBridge {
   getWindowRole?: () => DesktopWindowRole | null;
   /** This window's page zoom factor; 1 is actual size. */
@@ -120,7 +127,9 @@ export interface DesktopBridge
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;
   setTheme: (theme: DesktopTheme) => Promise<void>;
-  setWindowMaterial: (windowMaterial: DesktopWindowMaterial) => Promise<void>;
+  setWindowMaterial: (windowMaterial: DesktopWindowMaterial, requestId?: string) => Promise<void>;
+  getWindowMaterialState?: () => Promise<DesktopWindowMaterialState | null>;
+  onWindowMaterialState?: (listener: (state: DesktopWindowMaterialState) => void) => () => void;
   showContextMenu: <T extends string>(
     items: readonly ContextMenuItem<T>[],
     position?: { x: number; y: number },

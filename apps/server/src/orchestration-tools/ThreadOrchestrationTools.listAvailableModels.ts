@@ -7,7 +7,10 @@
 import { ModelSelection, type ThreadId } from "@bigbud/contracts";
 import { Effect, Schema } from "effect";
 
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  type OrchestrationEngineShape,
+  getOrchestrationThread,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadToolModelSources } from "./ThreadOrchestrationToolDispatcher.ts";
 import { loadModelChoiceContext } from "./ThreadOrchestrationTools.modelChoice.context.ts";
 import { listRankedUsableModels } from "./ThreadOrchestrationTools.modelChoice.usable.ts";
@@ -23,8 +26,7 @@ export const listAvailableModelsViaOrchestration = Effect.fn("listAvailableModel
     readonly limit?: number | undefined;
     readonly modelSources: ThreadToolModelSources | null | undefined;
   }) {
-    const readModel = yield* input.orchestrationEngine.getReadModel();
-    const caller = readModel.threads.find((thread) => thread.id === input.callerThreadId);
+    const caller = yield* getOrchestrationThread(input.orchestrationEngine, input.callerThreadId);
     if (!caller || caller.deletedAt !== null) {
       return yield* Effect.fail(new Error("Caller thread was not found."));
     }

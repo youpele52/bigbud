@@ -1,10 +1,11 @@
-import { ThreadId } from "@bigbud/contracts";
+import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { afterEach, describe, expect, vi } from "vitest";
 
 import { writeThreadOrchestrationToolAuth } from "../orchestration-tools/ThreadOrchestrationToolAuth.ts";
 import { setThreadOrchestrationToolDispatcher } from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
+import { confirmationRequiredResult } from "../orchestration-tools/ThreadCoordinationConfirmation.result.ts";
 import { buildAppUnderTest, getHttpServerUrl, serverTestLayer } from "../server.test.helpers.ts";
 import { serverHttpTestLayer } from "../server.test.http.ts";
 import { deriveServerPaths } from "../startup/config.ts";
@@ -28,7 +29,14 @@ describe("thread orchestration send route", () => {
         );
         const sendMessage = vi.fn((input: { callerThreadId: ThreadId; threadId: ThreadId }) => {
           if (input.threadId === "thread-cross-project") {
-            return Effect.fail(new Error("not accessible from the current project"));
+            return Effect.succeed(
+              confirmationRequiredResult({
+                code: "BB-TESTCODE",
+                projectId: ProjectId.makeUnsafe("project-b"),
+                projectTitle: "B",
+                targetIsRemote: true,
+              }),
+            );
           }
           if (input.threadId === "thread-missing") {
             return Effect.fail(new Error("Thread 'thread-missing' was not found."));
@@ -74,15 +82,23 @@ describe("thread orchestration send route", () => {
           invocationId: "send-call-1",
         });
 
-        assert.equal(
-          (yield* request({
-            action: "send_thread_message",
-            threadId: "thread-cross-project",
-            message: "Denied",
-            invocationId: "send-call-2",
-          })).status,
-          400,
-        );
+        // A cross-project target that still needs confirmation is a 200 with the payload.
+        const crossProject = yield* request({
+          action: "send_thread_message",
+          threadId: "thread-cross-project",
+          message: "Needs confirmation",
+          invocationId: "send-call-2",
+        });
+        assert.equal(crossProject.status, 200);
+        expect(yield* Effect.promise(() => crossProject.json())).toMatchObject({
+          ok: true,
+          result: {
+            status: "confirmation_required",
+            code: "BB-TESTCODE",
+            targetIsRemote: true,
+            allowLabel: "Allow",
+          },
+        });
         assert.equal(
           (yield* request({
             action: "send_thread_message",

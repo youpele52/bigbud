@@ -72,6 +72,7 @@ export async function cleanupRemoteAgentBuilds(
       buildId: candidate.id,
       reservationId: `retire-${candidate.runtime.generation}`,
       referencedBuildIds: durableReferences,
+      ...(referencedBuildIds ? { recheckReferencedBuildIds: referencedBuildIds } : {}),
     });
     if (result === "deleted") deleted++;
   }

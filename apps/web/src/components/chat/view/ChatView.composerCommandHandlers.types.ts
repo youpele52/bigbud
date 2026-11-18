@@ -23,7 +23,6 @@ export interface UseComposerCommandHandlersInput {
   interactionMode: ProviderInteractionMode;
   activePendingProgress: ReturnType<typeof derivePendingUserInputProgress> | null;
   activePendingUserInput: { requestId: string } | null;
-  isOpencodePendingUserInputMode: boolean;
   setComposerCursor: React.Dispatch<React.SetStateAction<number>>;
   setComposerTrigger: React.Dispatch<React.SetStateAction<ComposerTrigger | null>>;
   setComposerHighlightedItemId: React.Dispatch<React.SetStateAction<string | null>>;
@@ -45,11 +44,6 @@ export interface UseComposerCommandHandlersInput {
   toggleInteractionMode: () => void;
   onOpenReadDialog: () => void;
   onSend: (e?: { preventDefault: () => void }) => void;
-  onChangeActivePendingUserInputCustomAnswer: (
-    questionId: string,
-    value: string,
-    nextCursor: number,
-    expandedCursor: number,
-    cursorAdjacentToMention: boolean,
-  ) => void;
+  /** Mirrors editor text into the active pending question's draft answer. */
+  onChangeActivePendingUserInputCustomAnswer: (questionId: string, value: string) => void;
 }

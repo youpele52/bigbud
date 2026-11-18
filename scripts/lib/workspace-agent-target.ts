@@ -26,6 +26,14 @@ export const WORKSPACE_AGENT_TARGETS = [
     rustTarget: "x86_64-unknown-linux-gnu",
   },
   {
+    buildPlatform: "linux",
+    platform: "linux",
+    arch: "arm64",
+    rustOs: "linux",
+    rustArch: "aarch64",
+    rustTarget: "aarch64-unknown-linux-gnu",
+  },
+  {
     buildPlatform: "win",
     platform: "win32",
     arch: "arm64",
@@ -77,7 +85,7 @@ export function assertWorkspaceAgentArtifactTarget(
     matches =
       bytes.subarray(0, 4).equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46])) &&
       bytes[4] === 2 &&
-      bytes.readUInt16LE(18) === 0x3e;
+      bytes.readUInt16LE(18) === (target.arch === "arm64" ? 0xb7 : 0x3e);
   } else if (target.platform === "darwin") {
     const cpuType = bytes.length >= 8 ? bytes.readUInt32LE(4) : 0;
     matches =

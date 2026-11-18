@@ -106,7 +106,7 @@ describe("tailscaleRemoteAccess", () => {
 
     await expect(getDesktopTailscaleRemoteAccessStatus(3774, execFile)).resolves.toMatchObject({
       serving: false,
-      error: "Tailscale Serve is not exposing this desktop backend.",
+      error: expect.stringContaining('forwards "/" to 127.0.0.1:4888, which bigbud did not set up'),
     });
   });
 
@@ -148,6 +148,7 @@ describe("tailscaleRemoteAccess", () => {
   it("enables serve against the loopback backend target", async () => {
     const execFile = vi
       .fn()
+      .mockResolvedValueOnce({ stdout: JSON.stringify({}), stderr: "" })
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
       .mockResolvedValueOnce({
         stdout: JSON.stringify({
@@ -174,7 +175,7 @@ describe("tailscaleRemoteAccess", () => {
     const status = await enableDesktopTailscaleRemoteAccess(3774, execFile);
 
     expect(execFile).toHaveBeenNthCalledWith(
-      1,
+      2,
       "tailscale",
       ["serve", "--yes", "--bg", "http://127.0.0.1:3774"],
       expect.objectContaining({ encoding: "utf8", windowsHide: true }),
@@ -185,6 +186,17 @@ describe("tailscaleRemoteAccess", () => {
   it("disables serve from the default https listener", async () => {
     const execFile = vi
       .fn()
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          TCP: { "443": { HTTPS: true } },
+          Web: {
+            "bigbud-dev.tail123.ts.net:443": {
+              Handlers: { "/": { Proxy: "http://127.0.0.1:3774" } },
+            },
+          },
+        }),
+        stderr: "",
+      })
       .mockResolvedValueOnce({ stdout: "", stderr: "" })
       .mockResolvedValueOnce({
         stdout: JSON.stringify({
@@ -201,7 +213,7 @@ describe("tailscaleRemoteAccess", () => {
     const status = await disableDesktopTailscaleRemoteAccess(3774, execFile);
 
     expect(execFile).toHaveBeenNthCalledWith(
-      1,
+      2,
       "tailscale",
       ["serve", "--yes", "--https=443", "off"],
       expect.objectContaining({ encoding: "utf8", windowsHide: true }),

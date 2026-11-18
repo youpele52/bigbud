@@ -5,6 +5,17 @@ import type { WsRpcClient } from "./wsRpcClient.types";
 
 export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["terminal"] {
   return {
+    remoteInventory: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRemoteInventory](input)),
+    remoteAttach: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRemoteAttach](input)),
+    remoteDetach: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRemoteDetach](input)),
+    remoteStop: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalRemoteStop](input)),
+
+    shellProfiles: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalShellProfiles](input)),
     wslDistributions: () =>
       transport.request((client) => client[WS_METHODS.terminalWslDistributions]({})),
     snapshot: (input) => transport.request((client) => client[WS_METHODS.terminalSnapshot](input)),

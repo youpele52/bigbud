@@ -75,7 +75,13 @@ function predecessorState(
     predecessor: predecessor.id,
     promotionSequence: current.promotion,
     launches: [
-      { id: predecessor.runtime.generation, buildId: predecessor.id, phase, epoch: "epoch-a" },
+      {
+        id: predecessor.runtime.generation,
+        buildId: predecessor.id,
+        attemptId: "old-attempt",
+        phase,
+        epoch: "epoch-a",
+      },
       {
         id: current.runtime.generation,
         buildId: current.id,
@@ -111,7 +117,7 @@ describe("remote agent predecessor retirement", () => {
   ])("defers %s predecessor without issuing shutdown", async (_label, phase) => {
     const predecessor = build("0.2.205", 5);
     const current = build("0.2.207", 7);
-    const run = vi.fn(async () => "live");
+    const run = vi.fn(async (_command: string) => "live");
     const control = controlFor(predecessorState(predecessor, current, phase), run);
     const result = await retireManagedRemoteAgentBuild({
       control,
@@ -123,11 +129,15 @@ describe("remote agent predecessor retirement", () => {
     expect(result).toBe("deferred");
     const after = await control.registry.read();
     expect(after.predecessor).toBe(predecessor.id);
-    expect(after.retirementReservations[0]).toMatchObject({
-      phase: "failed",
-      failure: "uncertain",
-    });
-    expect(run).toHaveBeenCalledTimes(0);
+    if (phase === "ready") expect(after.retirementReservations).toEqual([]);
+    else
+      expect(after.retirementReservations[0]).toMatchObject({
+        phase: "failed",
+        failure: "uncertain",
+      });
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0]?.[0]).toContain("observe_supervisor");
+    expect(run.mock.calls[0]?.[0]).not.toContain("--shutdown-supervisor");
   });
 
   it("releases a deferred durable fence before allowing the next retirement attempt", async () => {

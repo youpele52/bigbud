@@ -1,9 +1,5 @@
-/**
- * Single Zustand store for terminal UI state keyed by threadId.
- *
- * State helpers (pure functions) live in terminalStateStore.helpers.ts.
- * This file contains only the store creation and action wiring.
- */
+import { excludeDismissedPanes } from "./terminal.store.dismiss";
+/** Terminal UI state and action wiring; pure transitions live in helpers.store.ts. */
 
 import { ThreadId } from "@bigbud/contracts";
 import { create } from "zustand";
@@ -19,7 +15,6 @@ import {
   setThreadTerminalActivity,
   setThreadTerminalHeight,
   setThreadTerminalOpen,
-  splitThreadTerminal,
   updateTerminalStateByThreadId,
   type TerminalEventEntry,
   type ThreadTerminalLaunchContext,
@@ -32,7 +27,7 @@ import {
 } from "./terminal.store.panel";
 import { removeTerminalTransientState } from "./terminal.store.cleanup";
 import { closeTerminalPaneInState } from "./terminal.store.close";
-import { hydrateTerminalAgentFromSnapshot } from "./terminal.store.identity";
+import { hydrateTerminalAgentFromSnapshot } from "./terminal.store.snapshot";
 import { markTerminalAgentActive } from "./terminal.store.recentAgent";
 import {
   clearTerminalLabelOverrideByThreadId,
@@ -44,7 +39,12 @@ import { type TerminalStateStoreState } from "./terminal.store.types";
 import { removeTerminalLayouts, resetClosedTerminalLayout } from "./terminal.store.layout";
 import { terminalWslSelectionPatch, removeOrphanedWslSelections } from "./terminal.store.wsl";
 import { terminalPersistenceOptions } from "./terminal.store.persistence";
+import { rehydrateOnBackendStorageReady } from "../../lib/backendScopedStorage";
 import { reconcileTerminalInventory } from "./terminal.store.inventory";
+import {
+  createProfileTerminal,
+  removeTerminalProfileLaunches,
+} from "./terminal.store.profileLaunch";
 
 export type { TerminalEventEntry, ThreadTerminalLaunchContext, ThreadTerminalState };
 export {
@@ -63,7 +63,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         const nextTerminalStateByThreadId = updateTerminalStateByThreadId(
           state.terminalStateByThreadId,
           threadId,
-          updater,
+          (pane) => excludeDismissedPanes(state, threadId, updater(pane)),
         );
         if (nextTerminalStateByThreadId === state.terminalStateByThreadId) {
           return state;
@@ -88,7 +88,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         const nextPanelTerminalStateByThreadId = updateTerminalStateByThreadId(
           state.panelTerminalStateByThreadId,
           threadId,
-          updater,
+          (pane) => excludeDismissedPanes(state, threadId, updater(pane)),
         );
         if (nextPanelTerminalStateByThreadId === state.panelTerminalStateByThreadId) {
           return state;
@@ -100,6 +100,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
     };
 
     return {
+      terminalProfileLaunches: {},
       terminalLayoutByThreadId: {},
       setTerminalLayout: (threadId, mode) => {
         // persist writes even when set returns unchanged state: skip set entirely on warm selection.
@@ -124,10 +125,12 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         updateTerminal(threadId, (state) => setThreadTerminalOpen(state, open)),
       setTerminalHeight: (threadId, height) =>
         updateTerminal(threadId, (state) => setThreadTerminalHeight(state, height)),
-      splitTerminal: (threadId, terminalId) =>
-        updateTerminal(threadId, (state) => splitThreadTerminal(state, terminalId)),
-      newTerminal: (threadId, terminalId) =>
-        updateTerminal(threadId, (state) => newThreadTerminal(state, terminalId)),
+      splitTerminal: (threadId, terminalId, profile, direction) =>
+        set((state) =>
+          createProfileTerminal(state, threadId, terminalId, false, true, profile, direction),
+        ),
+      newTerminal: (threadId, terminalId, profile) =>
+        set((state) => createProfileTerminal(state, threadId, terminalId, false, false, profile)),
       ensureTerminal: (threadId, terminalId, options) =>
         updateTerminal(threadId, (state) => {
           let nextState = state;
@@ -186,10 +189,12 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         updatePanelTerminal(threadId, (state) => setThreadTerminalOpen(state, open)),
       setPanelTerminalHeight: (threadId, height) =>
         updatePanelTerminal(threadId, (state) => setThreadTerminalHeight(state, height)),
-      splitPanelTerminal: (threadId, terminalId) =>
-        updatePanelTerminal(threadId, (state) => splitThreadTerminal(state, terminalId)),
-      newPanelTerminal: (threadId, terminalId) =>
-        updatePanelTerminal(threadId, (state) => newThreadTerminal(state, terminalId)),
+      splitPanelTerminal: (threadId, terminalId, profile, direction) =>
+        set((state) =>
+          createProfileTerminal(state, threadId, terminalId, true, true, profile, direction),
+        ),
+      newPanelTerminal: (threadId, terminalId, profile) =>
+        set((state) => createProfileTerminal(state, threadId, terminalId, true, false, profile)),
       ensurePanelTerminal: (threadId, terminalId, options) =>
         set((state) => ensurePanelTerminalInState(state, threadId, terminalId, options)),
       setPanelActiveTerminal: (threadId, terminalId) =>
@@ -236,6 +241,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         set((state) => hydrateTerminalAgentFromSnapshot(state, snapshot)),
       clearTerminalState: (threadId) =>
         set((state) => {
+          const profiles = removeTerminalProfileLaunches(state, (id) => id === threadId);
           const layouts = removeTerminalLayouts(state, (id) => id === threadId);
           const nextTerminalStateByThreadId = updateTerminalStateByThreadId(
             state.terminalStateByThreadId,
@@ -264,12 +270,14 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             !hadLaunchContext &&
             !hadLabelOverrides &&
             !transient.removed &&
+            profiles.terminalProfileLaunches === state.terminalProfileLaunches &&
             layouts.terminalLayoutByThreadId === state.terminalLayoutByThreadId
           ) {
             return state;
           }
           return {
             ...layouts,
+            ...profiles,
             terminalStateByThreadId: nextTerminalStateByThreadId,
             panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
             terminalLabelOverridesByThreadId: remainingLabelOverrides,
@@ -279,6 +287,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
         }),
       removeTerminalState: (threadId) =>
         set((state) => {
+          const profiles = removeTerminalProfileLaunches(state, (id) => id === threadId);
           const layouts = removeTerminalLayouts(state, (id) => id === threadId);
           const hadTerminalState = state.terminalStateByThreadId[threadId] !== undefined;
           const hadPanelTerminalState = state.panelTerminalStateByThreadId[threadId] !== undefined;
@@ -294,6 +303,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             !hadLaunchContext &&
             state.terminalWslDistributionByThreadId[threadId] === undefined &&
             !transient.removed &&
+            profiles.terminalProfileLaunches === state.terminalProfileLaunches &&
             layouts.terminalLayoutByThreadId === state.terminalLayoutByThreadId
           ) {
             return state;
@@ -310,6 +320,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
           delete nextLaunchContexts[threadId];
           return {
             ...layouts,
+            ...profiles,
             ...terminalWslSelectionPatch(state, threadId, null),
             terminalStateByThreadId: nextTerminalStateByThreadId,
             panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
@@ -321,6 +332,10 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
       removeOrphanedTerminalStates: (activeThreadIds) =>
         set((state) => {
           const layouts = removeTerminalLayouts(
+            state,
+            (id) => !activeThreadIds.has(id as ThreadId),
+          );
+          const profiles = removeTerminalProfileLaunches(
             state,
             (id) => !activeThreadIds.has(id as ThreadId),
           );
@@ -351,6 +366,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
             wslSelections.terminalWslDistributionByThreadId ===
               state.terminalWslDistributionByThreadId &&
             !transient.removed &&
+            profiles.terminalProfileLaunches === state.terminalProfileLaunches &&
             layouts.terminalLayoutByThreadId === state.terminalLayoutByThreadId
           ) {
             return state;
@@ -369,6 +385,7 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
           }
           return {
             ...layouts,
+            ...profiles,
             ...wslSelections,
             terminalStateByThreadId: next,
             panelTerminalStateByThreadId: nextPanel,
@@ -380,3 +397,4 @@ export const useTerminalStateStore = create<TerminalStateStoreState>()(
     };
   }, terminalPersistenceOptions),
 );
+rehydrateOnBackendStorageReady(useTerminalStateStore);

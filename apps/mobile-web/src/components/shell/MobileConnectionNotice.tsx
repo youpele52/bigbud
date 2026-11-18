@@ -1,7 +1,7 @@
 import { Button } from "../ui/button";
 import type { MobileConnectionState } from "../../logic/mobileConnection.logic";
 import type { MobileRecoveryState } from "../../logic/mobileRecovery.types";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "~/components/ui/alert";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@bigbud/ui/alert";
 import { resolveMobileConnectionNotice } from "./MobileConnectionNotice.logic";
 
 export function MobileConnectionNotice({

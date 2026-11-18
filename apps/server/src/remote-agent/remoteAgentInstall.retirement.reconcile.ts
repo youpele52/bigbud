@@ -3,6 +3,7 @@ import type {
   RemoteAgentRegistryBuild,
   RemoteAgentRetirementReservation,
 } from "./remoteAgentInstall.registry.ts";
+import { remoteAgentBuildIsReferenced } from "./remoteAgentInstall.registry.references.ts";
 import { confirmRemoteAgentRetirementDeletion } from "./remoteAgentInstall.registry.retirement.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import { buildRemoteAgentRetirementDeletionCommand } from "./remoteAgentInstall.retirement.deletion.ts";
@@ -10,14 +11,6 @@ import { probeRemoteAgentSupervisorState } from "./remoteAgentInstall.retirement
 import { validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 
 export const MAX_RETIREMENT_RECONCILIATIONS = 8;
-const ACTIVE_UPDATE_PHASES: ReadonlySet<string> = new Set([
-  "waiting-for-capacity",
-  "reserved",
-  "installing",
-  "checking",
-  "ready-for-reconnect",
-  "uncertain",
-] as const);
 // Slot rows are immutable replay evidence; confirmation releases matching rows.
 
 function registryReferencesBuild(
@@ -26,29 +19,13 @@ function registryReferencesBuild(
   reservationId: string,
 ): boolean {
   return (
-    state.current === buildId ||
     state.predecessor === buildId ||
-    state.pending === buildId ||
-    state.pins.some((pin) => pin.buildId === buildId) ||
-    state.stages.some((stage) => stage.buildId === buildId && stage.phase !== "cancelled") ||
-    state.launches.some((launch) => launch.buildId === buildId && launch.phase !== "proven-dead") ||
-    state.admissions.some((admission) => admission.buildId === buildId) ||
-    // The matching update is the retirement's own durable evidence; an active
-    // unrelated update still protects the build from continuation.
-    state.updates.some(
-      (update) =>
-        update.buildId === buildId &&
-        update.requestId !== reservationId &&
-        ACTIVE_UPDATE_PHASES.has(update.phase),
-    ) ||
+    remoteAgentBuildIsReferenced(state, buildId, { retirementId: reservationId }) ||
     state.retirementReservations.some(
       (reservation) =>
         reservation.id !== reservationId &&
         reservation.buildId === buildId &&
         reservation.phase !== "failed",
-    ) ||
-    state.restartReservations.some(
-      (reservation) => reservation.buildId === buildId && reservation.phase !== "failed",
     )
   );
 }

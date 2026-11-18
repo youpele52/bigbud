@@ -19,6 +19,7 @@ describe("user turn success threshold binding", () => {
           threadId: ThreadId.makeUnsafe("thread"),
           requestMessageId: id,
           turnId: TurnId.makeUnsafe("actual-turn"),
+          sessionEpoch: 7,
           createdAt: "2026-10-17T00:00:00.000Z",
           providerIdle: false,
         }),
@@ -30,7 +31,7 @@ describe("user turn success threshold binding", () => {
             activity: expect.objectContaining({
               kind: "text-generation.user-turn-bound",
               turnId: "actual-turn",
-              payload: { messageId: id, providerIdle: false },
+              payload: { messageId: id, providerIdle: false, sessionEpoch: 7 },
             }),
           }),
         );

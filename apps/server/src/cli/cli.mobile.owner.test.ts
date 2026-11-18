@@ -1,0 +1,235 @@
+import * as Effect from "effect/Effect";
+import * as Command from "effect/unstable/cli/Command";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { afterEach, expect, it, vi } from "vitest";
+import {
+  activateMobileOwner,
+  enableMobileOwnerConsent,
+  readMobileOwnerStatus,
+  repairMobileOwner,
+  resolveMobileOwner,
+  stopMobileOwner,
+} from "./cli.mobile.owner.client.ts";
+import { mobileCommand } from "./cli.mobile.ts";
+vi.mock("./cli.mobile.owner.client.ts", () => ({
+  activateMobileOwner: vi.fn(),
+  enableMobileOwnerConsent: vi.fn(),
+  readMobileOwnerStatus: vi.fn(),
+  repairMobileOwner: vi.fn(),
+  resolveMobileOwner: vi.fn(),
+  stopMobileOwner: vi.fn(),
+}));
+const previousExit = process.exitCode;
+afterEach(() => {
+  process.exitCode = previousExit;
+  vi.restoreAllMocks();
+  vi.resetAllMocks();
+});
+const authority = "a".repeat(32);
+const run = (argv: string[]) =>
+  Effect.runPromise(
+    Command.runWith(mobileCommand, { version: "fixture" })(argv).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  );
+const written = (spy: { mock: { calls: unknown[][] } }) =>
+  spy.mock.calls.map((call) => String(call[0])).join("");
+const capture = () => {
+  const out = vi.spyOn(process.stdout, "write").mockReturnValue(true);
+  const err = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  const text = written;
+  return { out: () => text(out), err: () => text(err) };
+};
+const status = {
+  authorityId: authority,
+  controller: {
+    attached: true,
+    retiring: false,
+    stopping: false,
+    phase: "idle" as const,
+    lastOutcome: {
+      kind: "exit-recorded",
+      repairRequired: false,
+      at: "2026-11-17T00:00:00.000Z",
+      reason: null,
+      detail: null,
+    },
+    lastRepair: { at: "2026-11-17T00:00:01.000Z", removed: 2, kept: 1, failed: false },
+  },
+  consent: { state: "enabled" as const, revision: 3 },
+  inputs: { state: "loaded" as const, reason: null },
+  settingsEnabled: true,
+};
+
+it("refuses enable without --confirm-consent and sends nothing", async () => {
+  const io = capture();
+  await run(["enable", "--authority", authority]);
+  expect(enableMobileOwnerConsent).not.toHaveBeenCalled();
+  expect(io.err()).toContain("requires --confirm-consent");
+  expect(process.exitCode).toBe(1);
+});
+
+it("grants with confirmation and reports the revision", async () => {
+  const io = capture();
+  vi.mocked(enableMobileOwnerConsent).mockResolvedValue({
+    ok: true,
+    value: { enabled: true, revision: 3, changed: true, settingsEnabled: true },
+  });
+  await run(["enable", "--authority", authority, "--confirm-consent"]);
+  expect(enableMobileOwnerConsent).toHaveBeenCalledWith(authority);
+  expect(io.out()).toContain("Mobile consent granted (revision 3)");
+});
+
+it("prints status as text or JSON", async () => {
+  vi.mocked(readMobileOwnerStatus).mockResolvedValue({ ok: true, value: status });
+  let io = capture();
+  await run(["status", "--authority", authority]);
+  expect(io.out()).toContain("Controller: attached, phase idle");
+  expect(io.out()).toContain("Consent: enabled (revision 3)");
+  expect(io.out()).toContain("Proof inputs: loaded");
+  expect(io.out()).toContain("Last outcome: exit-recorded at 2026-11-17T00:00:00.000Z");
+  expect(io.out()).toContain("Last asset repair: 2 removed, 1 kept at 2026-11-17T00:00:01.000Z");
+  vi.restoreAllMocks();
+  io = capture();
+  await run(["status", "--authority", authority, "--json"]);
+  expect(JSON.parse(io.out())).toEqual({ ok: true, value: status });
+});
+
+it("activate passes origin/port and fails on a non-accepted acknowledgement", async () => {
+  const io = capture();
+  vi.mocked(activateMobileOwner).mockResolvedValue({
+    ok: true,
+    value: { requestId: null, status: "unavailable" },
+  });
+  await run([
+    "activate",
+    "--authority",
+    authority,
+    "--origin",
+    "https://h.ts.net",
+    "--port",
+    "443",
+  ]);
+  expect(activateMobileOwner).toHaveBeenCalledWith(authority, {
+    externalOrigin: "https://h.ts.net",
+    port: 443,
+  });
+  expect(io.out()).toContain("Activation not started");
+  expect(process.exitCode).toBe(1);
+  await expect(
+    run(["activate", "--authority", authority, "--origin", "https://h.ts.net", "--port", "0"]),
+  ).rejects.toThrow();
+});
+
+it("maps refusals and unreachable sockets to fixed text without echoing failures", async () => {
+  let io = capture();
+  vi.mocked(stopMobileOwner).mockResolvedValue({ ok: false, refused: "uncertain" });
+  await run(["stop", "--authority", authority]);
+  expect(io.err()).toContain("uncertain");
+  expect(process.exitCode).toBe(1);
+  process.exitCode = previousExit;
+  vi.restoreAllMocks();
+  io = capture();
+  vi.mocked(stopMobileOwner).mockRejectedValue(new Error("PRIVATE_OWNER_TOKEN"));
+  await run(["stop", "--authority", authority, "--json"]);
+  expect(JSON.parse(io.out())).toEqual({ ok: false, error: "unreachable" });
+  expect(io.out() + io.err()).not.toContain("PRIVATE_OWNER_TOKEN");
+  expect(process.exitCode).toBe(1);
+});
+
+it("repair prints kept/removed with fixed reasons; a non-owner refusal sets exit 1", async () => {
+  let io = capture();
+  const kept = `assets-${"2".repeat(32)}`;
+  vi.mocked(repairMobileOwner).mockResolvedValue({
+    ok: true,
+    value: {
+      removed: 1,
+      kept: 1,
+      entries: [
+        { generation: `assets-${"1".repeat(32)}`, outcome: "removed", reason: "proven-orphan" },
+        { generation: kept, outcome: "kept", reason: "pinned" },
+      ],
+    },
+  });
+  await run(["repair", "--authority", authority]);
+  expect(repairMobileOwner).toHaveBeenCalledWith(authority);
+  expect(io.out()).toContain("Runtime-asset repair: 1 removed, 1 kept.");
+  expect(io.out()).toContain(`kept ${kept}: pinned`);
+  expect(process.exitCode).toBe(previousExit);
+  vi.restoreAllMocks();
+  io = capture();
+  vi.mocked(repairMobileOwner).mockResolvedValue({ ok: false, refused: "authority-mismatch" });
+  await run(["repair", "--authority", "b".repeat(32)]);
+  expect(io.err()).toContain("The authority does not match");
+  expect(io.out()).toBe("");
+  expect(process.exitCode).toBe(1);
+});
+
+it("reports an activation that failed before Start with its step, as not started", async () => {
+  const io = capture();
+  vi.mocked(activateMobileOwner).mockResolvedValue({
+    ok: true,
+    value: { requestId: "r", status: "failed", reason: "publication-failed" },
+  });
+  await run(["activate", "--authority", authority, "--origin", "https://h.ts.net", "--port", "1"]);
+  expect(io.out()).toContain("failed before native Start");
+  expect(io.out()).toContain("(publication-failed)");
+  expect(process.exitCode).toBe(1);
+});
+
+it("repair --resolve prints cleared/kept rows with evidence reasons, then the GC", async () => {
+  const io = capture();
+  const kept = `assets-${"4".repeat(32)}`;
+  vi.mocked(resolveMobileOwner).mockResolvedValue({
+    ok: true,
+    value: {
+      cleared: 1,
+      kept: 1,
+      unresolved: 1,
+      entries: [
+        { generation: `assets-${"3".repeat(32)}`, outcome: "cleared", reason: "prior-boot" },
+        { generation: kept, outcome: "kept", reason: "death-unproven" },
+      ],
+      repair: { removed: 1, kept: 1, entries: [] },
+    },
+  });
+  await run(["repair", "--authority", authority, "--resolve"]);
+  expect(resolveMobileOwner).toHaveBeenCalledWith(authority);
+  expect(repairMobileOwner).not.toHaveBeenCalled();
+  expect(io.out()).toContain("Native resolution: 1 cleared, 1 kept, 1 unsettled.");
+  expect(io.out()).toContain(`kept ${kept}: death-unproven`);
+  expect(io.out()).toContain("Runtime-asset repair: 1 removed, 1 kept.");
+});
+
+it("guides the owner on a full stage journal and prints stage retirement after the GC", async () => {
+  let io = capture();
+  vi.mocked(activateMobileOwner).mockResolvedValue({
+    ok: true,
+    value: { requestId: "r", status: "failed", reason: "stage-budget-exhausted" },
+  });
+  await run(["activate", "--authority", authority, "--origin", "https://h.ts.net", "--port", "1"]);
+  expect(io.out()).toContain("(stage-budget-exhausted)");
+  expect(io.out()).toContain("Run `bigbud mobile repair`");
+  vi.restoreAllMocks();
+  io = capture();
+  vi.mocked(repairMobileOwner).mockResolvedValue({
+    ok: true,
+    value: {
+      removed: 0,
+      kept: 0,
+      entries: [],
+      stages: {
+        retired: 1,
+        kept: 1,
+        live: 2,
+        entries: [
+          { stageId: "s.r3", outcome: "retired", reason: "retired" },
+          { stageId: "s.r5", outcome: "kept", reason: "desired" },
+        ],
+      },
+    },
+  });
+  await run(["repair", "--authority", authority]);
+  expect(io.out()).toContain("Stage retirement: 1 retired, 1 kept, 2 live.");
+  expect(io.out()).toContain("kept s.r5: desired");
+});

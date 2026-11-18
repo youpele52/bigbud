@@ -60,7 +60,7 @@ export function MessagesTimelineWorkGroup({
   );
 
   return (
-    <div className="group/work-log flex flex-col items-start gap-1">
+    <div className="group/work-log">
       <ActivityAccordion
         title={presentation.title}
         className="w-full"
@@ -73,18 +73,18 @@ export function MessagesTimelineWorkGroup({
             />
           ) : undefined
         }
+        persistentActions={
+          singleVisibleEntry ? (
+            <WorkEntryActionButtons
+              workEntry={singleVisibleEntry}
+              executionTargetId={executionTargetId}
+            />
+          ) : undefined
+        }
         {...accordion}
       >
         {entries}
       </ActivityAccordion>
-      {singleVisibleEntry ? (
-        <div className="flex items-center gap-1.5 px-1 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/work-log:opacity-100">
-          <WorkEntryActionButtons
-            workEntry={singleVisibleEntry}
-            executionTargetId={executionTargetId}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }

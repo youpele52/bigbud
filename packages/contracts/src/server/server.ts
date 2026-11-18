@@ -218,27 +218,28 @@ export class ServerVerifyExecutionTargetError extends Schema.TaggedErrorClass<Se
   },
 ) {}
 
-export const ServerInstallRemoteAgentInput = Schema.Struct({
-  executionTargetId: ExecutionTargetId,
-});
-export type ServerInstallRemoteAgentInput = typeof ServerInstallRemoteAgentInput.Type;
+export {
+  ServerConnectRemoteAgentInput,
+  ServerInstallRemoteAgentInput,
+} from "./server.remoteAgentInstall";
 
-export const ServerConnectRemoteAgentInput = Schema.Struct({
-  executionTargetId: ExecutionTargetId,
-  requestId: TrimmedNonEmptyString,
-  intent: Schema.Literal("fresh"),
-});
-export type ServerConnectRemoteAgentInput = typeof ServerConnectRemoteAgentInput.Type;
 export const ServerConnectRemoteAgentResult = Schema.Struct({
   ...ServerRemoteAgentRuntimeSummary.fields,
   connectionId: TrimmedNonEmptyString,
   currentVersion: TrimmedNonEmptyString,
+  /** Set when `replace` was requested: older builds stay while live work still uses them. */
+  cleanupDeferred: Schema.optional(Schema.Boolean),
+  cleanupMessage: Schema.optional(TrimmedNonEmptyString),
 });
 export type ServerConnectRemoteAgentResult = typeof ServerConnectRemoteAgentResult.Type;
 
 export const ServerInstallRemoteAgentResult = Schema.Struct({
   executionTargetId: ExecutionTargetId,
-  version: TrimmedNonEmptyString,
+  outcome: Schema.optional(
+    Schema.Literals(["active", "staged", "deferred", "failed", "uncertain"]),
+  ),
+  cleanupDeferred: Schema.optional(Schema.Boolean),
+  version: Schema.optional(TrimmedNonEmptyString),
   message: TrimmedNonEmptyString,
   runtimeSummary: Schema.optional(ServerRemoteAgentRuntimeSummary),
 });

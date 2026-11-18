@@ -6,12 +6,15 @@ import {
   TextGeneration,
   type TextGenerationShape,
   type InternalTextGenerationContext,
+  type MetadataTextGenerationAttempt,
+  type MetadataTextGenerationContext,
 } from "../Services/TextGeneration.ts";
 import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
 import { CursorTextGenerationLive } from "./CursorTextGeneration.ts";
 import { OpencodeV2TextGenerationLive } from "./OpencodeV2TextGeneration.ts";
 import {
+  generateCopilotThreadElevatorSummaryNative,
   generateCopilotThreadTitleNative,
   generateOpencodeThreadElevatorSummaryNative,
   generateOpencodeThreadTitleNative,
@@ -20,6 +23,7 @@ import {
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { OpencodeServerManager } from "../../provider/Services/Opencode/ServerManager.ts";
 import { runInternalTextGeneration } from "./InternalTextGenerationPolicy.ts";
+import { runMetadataGenerationAttempt } from "./MetadataTextGeneration.ts";
 import { sanitizeElevatorSummary } from "../Utils.ts";
 import { shouldRetryGeneratedThreadTitle } from "../../orchestration/Layers/ProviderCommandReactorHelpers.ts";
 
@@ -80,15 +84,19 @@ export function makeInternalTextGenerationRouter(deps: {
 
   const run = <A extends object>(
     operation: keyof TextGenerationShape,
-    input: InternalTextGenerationContext & {
-      readonly successfulModelSelection?: ModelSelection | null;
-      readonly message?: string;
-      readonly transcript?: string;
-      readonly attachments?: ReadonlyArray<unknown> | undefined;
-      readonly titleSeed?: string | undefined;
-      readonly verifiedThreadModelOnly?: boolean;
-    },
-    generate: (selection: ModelSelection) => Effect.Effect<A, TextGenerationError>,
+    input: InternalTextGenerationContext &
+      MetadataTextGenerationContext & {
+        readonly successfulModelSelection?: ModelSelection | null;
+        readonly message?: string;
+        readonly transcript?: string;
+        readonly attachments?: ReadonlyArray<unknown> | undefined;
+        readonly titleSeed?: string | undefined;
+        readonly verifiedThreadModelOnly?: boolean;
+      },
+    generate: (
+      selection: ModelSelection,
+      metadataAttempt?: MetadataTextGenerationAttempt,
+    ) => Effect.Effect<A, TextGenerationError>,
   ) =>
     Effect.gen(function* () {
       for (const field of ["message", "transcript"] as const) {
@@ -109,6 +117,17 @@ export function makeInternalTextGenerationRouter(deps: {
             kind: "invalid-input",
           });
         }
+      }
+      if (
+        input.metadataAttempt &&
+        (operation === "generateThreadTitle" || operation === "generateThreadElevatorSummary")
+      ) {
+        return yield* runMetadataGenerationAttempt({
+          operation,
+          attempt: input.metadataAttempt,
+          ...(input.titleSeed !== undefined ? { titleSeed: input.titleSeed } : {}),
+          generate: (attempt) => generate(attempt.selection, attempt),
+        });
       }
       const settings = yield* serverSettingsService.getSettings.pipe(
         Effect.mapError(
@@ -202,23 +221,30 @@ export function makeInternalTextGenerationRouter(deps: {
           : unsupported("generateBranchName", selection);
       }),
     generateThreadTitle: (input) =>
-      run("generateThreadTitle", input, (selection) => {
-        const resolved = { ...input, modelSelection: selection };
+      run("generateThreadTitle", input, (selection, metadataAttempt) => {
+        const resolved = {
+          ...input,
+          ...(metadataAttempt ? { metadataAttempt } : {}),
+          modelSelection: selection,
+        };
         const service = route(selection);
         if (service) return service.generateThreadTitle(resolved);
         switch (selection.provider) {
           case "cliProxy":
             return claude.generateThreadTitle(resolved);
           case "pi":
-            return generatePiThreadTitleNative(nativeDeps, { ...input, modelSelection: selection });
+            return generatePiThreadTitleNative(nativeDeps, {
+              ...resolved,
+              modelSelection: selection,
+            });
           case "copilot":
             return generateCopilotThreadTitleNative(nativeDeps, {
-              ...input,
+              ...resolved,
               modelSelection: selection,
             });
           case "opencode":
             return generateOpencodeThreadTitleNative(nativeDeps, {
-              ...input,
+              ...resolved,
               modelSelection: selection,
             });
           default:
@@ -226,11 +252,22 @@ export function makeInternalTextGenerationRouter(deps: {
         }
       }),
     generateThreadElevatorSummary: (input) =>
-      run("generateThreadElevatorSummary", input, (selection) => {
-        const resolved = { ...input, modelSelection: selection };
+      run("generateThreadElevatorSummary", input, (selection, metadataAttempt) => {
+        const resolved = {
+          ...input,
+          ...(metadataAttempt ? { metadataAttempt } : {}),
+          modelSelection: selection,
+        };
+        if (selection.provider === "cliProxy")
+          return claude.generateThreadElevatorSummary(resolved);
+        if (selection.provider === "copilot")
+          return generateCopilotThreadElevatorSummaryNative(nativeDeps, {
+            ...resolved,
+            modelSelection: selection,
+          });
         if (selection.provider === "opencode")
           return generateOpencodeThreadElevatorSummaryNative(nativeDeps, {
-            ...input,
+            ...resolved,
             modelSelection: selection,
           });
         const service = route(selection);

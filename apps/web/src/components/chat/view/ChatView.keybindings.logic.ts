@@ -20,7 +20,9 @@ export interface UseChatKeybindingsInput {
   toggleTerminalVisibility: () => void;
   toggleTerminalPanel: () => void;
   setTerminalOpen: (open: boolean) => void;
-  splitTerminal: () => void;
+  splitTerminal: (
+    direction?: import("../../../lib/terminalSplitLayout").TerminalSplitDirection,
+  ) => void;
   closeTerminal: (terminalId: string) => void;
   createNewTerminal: () => void;
   onToggleDiff: () => void;
@@ -73,13 +75,21 @@ export function useChatKeybindings({
         return;
       }
 
-      if (command === "terminal.split") {
+      // Mounted surfaces own their focused terminal; the chat fallback must not touch another pane.
+      if (
+        command.startsWith("terminal.") &&
+        (!shortcutContext.terminalFocus ||
+          document.activeElement?.closest("[data-terminal-surface]"))
+      )
+        return;
+
+      if (command === "terminal.split" || command === "terminal.splitDown") {
         event.preventDefault();
         event.stopPropagation();
         if (!terminalState.terminalOpen) {
           setTerminalOpen(true);
         }
-        splitTerminal();
+        splitTerminal(command === "terminal.splitDown" ? "down" : "right");
         return;
       }
 

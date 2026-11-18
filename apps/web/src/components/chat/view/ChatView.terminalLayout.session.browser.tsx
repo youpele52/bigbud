@@ -264,15 +264,15 @@ it.each([
       );
       expect(buttons.map((button) => button.ariaLabel)).toEqual([
         "New Terminal",
+        "Terminal actions",
         "Split Terminal",
-        "Rename Terminal",
         "Close Terminal",
       ]);
       const toolbar = buttons[0]!.parentElement!;
       const dividers = toolbar.querySelectorAll("div.w-px");
       expect(dividers).toHaveLength(2);
-      expect(dividers[0]!.previousElementSibling).toBe(buttons[0]);
-      expect(dividers[0]!.nextElementSibling).toBe(buttons[1]);
+      expect(dividers[0]!.previousElementSibling).toBe(buttons[1]);
+      expect(dividers[0]!.nextElementSibling).toBe(buttons[2]);
       expect(dividers[1]!.previousElementSibling).toBe(buttons[2]);
       expect(dividers[1]!.nextElementSibling).toBe(buttons[3]);
       const colors = buttons.map((button) => getComputedStyle(button).color);

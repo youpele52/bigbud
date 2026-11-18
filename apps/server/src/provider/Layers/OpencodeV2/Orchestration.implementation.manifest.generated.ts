@@ -120,4 +120,50 @@ export const V2_IMPLEMENTATION_MANIFEST = {
       ],
     ],
   },
+  v5: {
+    format: "bigbud.thread.implementation.sources.v1",
+    bootstrapAbi: "bigbud.thread.bootstrap.v5",
+    canonicalRequestAbi: "bigbud.thread.canonical.v3",
+    resultEncoding: "bigbud.thread.final-json.v1",
+    schemaDigest: "c692065972f9b85315306b4105528c1ea8d263e8b6c8701792c0e770bf79ff66",
+    implementationDigest: "f4e2e95306266b015d3b6cb0f8cec6e98a4720d04d871e5ed187600b1049c837",
+    sources: [
+      [
+        "Orchestration.implementation.types.ts",
+        "a7bfc4bcd9ecf4853d149cb3a4f4a77b116a04f7e5adad671d15cf1bae613707",
+      ],
+      [
+        "Orchestration.implementation.types.v3.ts",
+        "36afbb472ee93dc1e55813a5738e15b368859a4fa338e5e94f68c4f3e4df23eb",
+      ],
+      [
+        "Orchestration.implementation.types.v5.ts",
+        "44e43c38b7edcab164064a136ae12a77537ed096707b7a5d1a248cdcb4521f77",
+      ],
+      [
+        "Orchestration.implementation.v1.ts",
+        "07ad4d0c58e00679cb0777524f608b3f571f96d0d0c4157a23cb4c86483611dd",
+      ],
+      [
+        "Orchestration.implementation.v3.ts",
+        "0f4698c87d349434d7c69c5d14ac287f4612b7d00e3dab55a21cf597f409ee8b",
+      ],
+      [
+        "Orchestration.implementation.v5.ts",
+        "9f7d68976601cc0288fba35b92db204b81f4dd69bc51c328f953016ecf4d950f",
+      ],
+      [
+        "Orchestration.plugin.specs.ts",
+        "614c41c704bc33dd72c7b0b0dde50bc0cd8e9d474a40542ae2ba3f411a49d853",
+      ],
+      [
+        "Orchestration.plugin.specs.v4.ts",
+        "4ed68206a2f2792ce1c48b2d68a280bf50963f2af2a3a18a665c8c14a790afec",
+      ],
+      [
+        "Orchestration.plugin.specs.v5.ts",
+        "46bebbead7cf41ab7257c74872d53a6c1845f1bccc6619e74b77170796f4705c",
+      ],
+    ],
+  },
 } as const;

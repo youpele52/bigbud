@@ -1,4 +1,4 @@
-import { V2_HTML_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v4.ts";
+import { V2_SUMMARY_BOOTSTRAP_SPECS } from "./Orchestration.plugin.specs.v5.ts";
 import {
   V2_COMPATIBILITY_DIGEST,
   V2_BOOTSTRAP_COMPATIBILITY,
@@ -7,7 +7,7 @@ import { renderV2CanonicalCandidateGuard } from "./NativeCompatibility.version.t
 
 /** Bootstrap public semantics are frozen; app implementation releases cannot change native registrations. */
 export function renderV2ThreadPlugin(): string {
-  const specs = V2_HTML_BOOTSTRAP_SPECS;
+  const specs = V2_SUMMARY_BOOTSTRAP_SPECS;
   return `import {randomBytes} from "node:crypto";
 import {protocol,issuer,hash,callback,fail} from "./identity.mjs";
 import {registry} from "./registry.mjs";

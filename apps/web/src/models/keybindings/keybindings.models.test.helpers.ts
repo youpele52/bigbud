@@ -74,8 +74,13 @@ export const DEFAULT_BINDINGS = compile([
     whenAst: whenIdentifier("terminalFocus"),
   },
   {
-    shortcut: modShortcut("g", { shiftKey: true }),
+    shortcut: modShortcut("d"),
     command: "terminal.split",
+    whenAst: whenIdentifier("terminalFocus"),
+  },
+  {
+    shortcut: modShortcut("d", { shiftKey: true }),
+    command: "terminal.splitDown",
     whenAst: whenIdentifier("terminalFocus"),
   },
   {

@@ -26,7 +26,7 @@ it.each(["word", "phrase", "whole-line"] as const)(
       await waitForElement(
         () =>
           document.querySelector<HTMLElement>(
-            '[data-testid="composer-editor"][aria-placeholder="Type your answer to continue..."]',
+            '[data-testid="composer-editor"][aria-placeholder="Add context, or just send your selection"]',
           ),
         "Expected the pending-answer composer",
       );

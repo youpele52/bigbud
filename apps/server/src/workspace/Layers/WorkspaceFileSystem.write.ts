@@ -89,6 +89,7 @@ export function makeWorkspaceWriteFile(input: {
     const executionTargetId = resolveExecutionTargetId(value.executionTargetId);
     const target = yield* input.workspacePaths.resolveRelativePathWithinRoot({
       workspaceRoot: value.cwd,
+      executionTargetId,
       relativePath: value.relativePath,
     });
 

@@ -99,7 +99,7 @@ export async function countPhysicalRemoteAgentExecutables(
 }
 
 /** Owned, network-disabled Linux fixture; Docker skips are never counted as Linux passes. */
-export function createLinuxControlFixture() {
+export function createLinuxControlFixture(options: { readonly image?: string } = {}) {
   const docker = process.env.BIGBUD_TEST_LINUX_DOCKER === "1";
   const container = docker
     ? execFileSync(
@@ -116,7 +116,7 @@ export function createLinuxControlFixture() {
                 `type=bind,src=${process.env.BIGBUD_TEST_AGENT_FIXTURES},dst=/fixtures,readonly`,
               ]
             : []),
-          "rust:1.95-bookworm",
+          options.image ?? "rust:1.95-bookworm",
           "sleep",
           "300",
         ],

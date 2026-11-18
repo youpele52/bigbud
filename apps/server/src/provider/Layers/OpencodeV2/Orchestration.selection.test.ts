@@ -3,7 +3,7 @@ import { makeV2ThreadPluginFixture } from "./Orchestration.plugin.fixture.ts";
 import { exportV2ThreadArtifact } from "./Orchestration.artifact.ts";
 import { V2ThreadRecords } from "./Orchestration.records.ts";
 import { v2ThreadOwnerDigest } from "./Orchestration.protocol.ts";
-import { selectV2SessionArtifact } from "./Orchestration.selection.ts";
+import { assertV2SessionBootstrap, selectV2SessionArtifact } from "./Orchestration.selection.ts";
 
 it("fresh scoped sessions never select a legacy artifact; signed retained legacy history keeps its exact artifact permanently", async () => {
   const old = await makeV2ThreadPluginFixture({ legacyRegistration: true });
@@ -53,5 +53,29 @@ it("fresh scoped sessions never select a legacy artifact; signed retained legacy
     await old.artifact.verify();
   } finally {
     await old.close();
+  }
+});
+
+it("compact histories retain namespace-aware v3/v4/v5 and reject older bootstraps", async () => {
+  const app = await makeV2ThreadPluginFixture();
+  try {
+    for (const version of [3, 4, 5]) {
+      expect(() =>
+        assertV2SessionBootstrap(
+          { ...app.artifact, bootstrapAbi: `bigbud.thread.bootstrap.v${version}` },
+          "ses_bb3_retained",
+        ),
+      ).not.toThrow();
+    }
+    for (const version of [1, 2]) {
+      expect(() =>
+        assertV2SessionBootstrap(
+          { ...app.artifact, bootstrapAbi: `bigbud.thread.bootstrap.v${version}` },
+          "ses_bb3_retained",
+        ),
+      ).toThrow("namespace-aware");
+    }
+  } finally {
+    await app.close();
   }
 });

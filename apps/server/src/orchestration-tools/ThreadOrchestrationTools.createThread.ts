@@ -15,11 +15,17 @@ import {
 } from "@bigbud/contracts";
 import { Effect, Option, Schema } from "effect";
 
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  ensureOrchestrationProjectState,
+  type OrchestrationEngineShape,
+  getOrchestrationThread,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../persistence/Services/ProjectionThreadWatches.ts";
 import type { ThreadToolModelSources } from "./ThreadOrchestrationToolDispatcher.ts";
+import type { ThreadCoordinationDeps } from "./ThreadCoordinationConfirmation.ts";
+import { requireThreadCoordinationAccess } from "./ThreadOrchestrationTools.access.ts";
 import {
   decisionRecord,
   decisionThreadModel,
@@ -42,6 +48,8 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     readonly orchestrationEngine: OrchestrationEngineShape;
     readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
     readonly projectionThreadWatchRepository: ProjectionThreadWatchRepositoryShape;
+    /** Cross-project confirmation handles; absent means foreign-project creates are refused. */
+    readonly coordination?: ThreadCoordinationDeps | undefined;
     readonly callerThreadId: ThreadId;
     readonly sourceMessageId: MessageId;
     readonly invocationId: string;
@@ -66,8 +74,10 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
       return yield* Effect.fail(new Error("Invocation ID is required."));
     }
 
-    const readModel = yield* input.orchestrationEngine.getReadModel();
-    const callerThread = readModel.threads.find((thread) => thread.id === input.callerThreadId);
+    const callerThread = yield* getOrchestrationThread(
+      input.orchestrationEngine,
+      input.callerThreadId,
+    );
     if (!callerThread || callerThread.deletedAt !== null) {
       return yield* Effect.fail(new Error("Caller thread was not found."));
     }
@@ -81,7 +91,11 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
       );
     }
     const targetProjectId = input.projectId ?? callerThread.projectId;
-    const targetProject = readModel.projects.find((project) => project.id === targetProjectId);
+    // An idle target project is not in the startup read model; hydrate it (F-P8-2).
+    const targetProject = yield* ensureOrchestrationProjectState(
+      input.orchestrationEngine,
+      targetProjectId,
+    );
     if (!targetProject || targetProject.deletedAt !== null) {
       return yield* Effect.fail(new Error(`Project '${targetProjectId}' was not found.`));
     }
@@ -101,6 +115,23 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
         invocationId,
       })
       .pipe(Effect.mapError(delegationError));
+    // An existing delegation replays with no confirmation, but only for its own project: a
+    // retry naming another project would otherwise create there without the gate.
+    if (Option.isSome(existing) && existing.value.targetProjectId !== targetProjectId) {
+      return yield* Effect.fail(
+        new Error("This create_thread invocation already targets a different project."),
+      );
+    }
+    // A refused create reserves nothing.
+    if (Option.isNone(existing)) {
+      const access = yield* requireThreadCoordinationAccess({
+        ...input,
+        mode: "write",
+        callerThread,
+        targetProjectId,
+      });
+      if (access.kind !== "allowed") return access.result;
+    }
     const delegation = Option.isSome(existing)
       ? existing.value
       : yield* input.threadDelegationRepository
@@ -125,7 +156,10 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     // Retries must dispatch byte-identical commands; a fresh clock would conflict on replay.
     const createdAt = delegation.createdAt;
 
-    const child = readModel.threads.find((thread) => thread.id === delegation.childThreadId);
+    const child = yield* getOrchestrationThread(
+      input.orchestrationEngine,
+      delegation.childThreadId,
+    );
     if (delegation.state === "completed" || delegation.state === "watch_armed") {
       const stored = readStoredModelDecision(delegation.resultJson);
       return {
@@ -302,9 +336,9 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
       })
       .pipe(Effect.mapError(delegationError));
     yield* updateState("completed");
-    const updatedReadModel = yield* input.orchestrationEngine.getReadModel();
-    const updatedChild = updatedReadModel.threads.find(
-      (thread) => thread.id === delegation.childThreadId,
+    const updatedChild = yield* getOrchestrationThread(
+      input.orchestrationEngine,
+      delegation.childThreadId,
     );
     return {
       ...result,

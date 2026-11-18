@@ -165,6 +165,8 @@ jobs:
             runner: macos-15-intel
           - label: Linux x64
             runner: ubuntu-24.04
+          - label: Linux arm64
+            runner: ubuntu-24.04-arm
           - label: Windows x64
             runner: windows-2022
     steps:
@@ -322,10 +324,53 @@ jobs:
           path: release-publish/*
           if-no-files-found: error
 
+  workspace_agent_linux_arm64:
+    name: Build Linux ARM64 server workspace agent
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: quality
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+      - name: Build native server helpers
+        env:
+          BIGBUD_AGENT_BUILD_VERSION: 0.0.0-preview.${{ github.run_number }}
+          BIGBUD_AGENT_BUILD_DIGEST: ${{ github.sha }}
+        run: |
+          cargo build --locked --release --package bigbud-remote-agent
+          cargo build --locked --release --package bigbud-desktop-supervisor
+      - name: Stage native server artifact
+        run: |
+          mkdir -p release-publish
+          cp target/release/bigbud-desktop-supervisor release-publish/server-organization-supervisor-linux-arm64
+          node --input-type=module -e "import { smokeTestThreadOrganizationBinary } from './scripts/lib/thread-organization-smoke.ts'; await smokeTestThreadOrganizationBinary('./release-publish/server-organization-supervisor-linux-arm64');"
+          cp target/release/bigbud-remote-agent release-publish/server-workspace-agent-linux-arm64
+          identity="$(release-publish/server-workspace-agent-linux-arm64 --check)"
+          if ! printf '%s\n' "$identity" | grep -Eq 'linux[[:space:]]+aarch64$'; then
+            echo "Native ARM64 identity mismatch: $identity" >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-assets-workspace-agent-linux-arm64
+          path: release-publish/*
+          if-no-files-found: error
+
   release_asset_assembly:
     name: Release Asset Assembly
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [desktop_release_build, workspace_agent_windows_arm64, release_smoke]
+    needs:
+      [
+        desktop_release_build,
+        workspace_agent_windows_arm64,
+        workspace_agent_linux_arm64,
+        release_smoke,
+      ]
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout

@@ -7,6 +7,10 @@ impl AgentSession {
 
     pub fn stop_accepting_work(&mut self) {
         self.accepting_work = false;
+        #[cfg(unix)]
+        if let Some(lease) = &self.managed_service_lease {
+            lease.fence();
+        }
     }
 
     /// Fences admission, then requests shutdown through each owned resource path.
@@ -39,7 +43,8 @@ impl AgentSession {
     }
 
     fn restart_work_idle_inner(&mut self) -> bool {
-        let process_idle = !self.process_operations.has_live_operations();
+        let process_idle =
+            !self.process_operations.has_live_operations() && !self.has_active_service_lease();
         let pty_idle = self
             .pty_sessions
             .values()
@@ -54,7 +59,8 @@ impl AgentSession {
     }
 
     pub fn is_idle_for_retirement(&mut self) -> bool {
-        let process_idle = !self.process_operations.has_live_operations();
+        let process_idle =
+            !self.process_operations.has_live_operations() && !self.has_active_service_lease();
         let pty_idle = self
             .pty_sessions
             .values()

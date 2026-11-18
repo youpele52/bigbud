@@ -1,3 +1,4 @@
+import { hasUnconfirmedDirectShell } from "./Manager.shell.direct.policy";
 import { Effect } from "effect";
 
 import { retainTerminalHistory } from "./Manager.history.retention";
@@ -81,6 +82,8 @@ export function drainProcessEventsWith(
         session.activeAgent = null;
         session.agentIdentityMisses = 0;
         session.status = "exited";
+        // Local transport settlement is not owner release. Remove obsolete callback poison.
+        if (hasUnconfirmedDirectShell(session)) session.restartPreparation = undefined;
         session.pendingHistoryControlSequence = "";
         session.pendingProcessEvents = [];
         session.pendingProcessEventIndex = 0;

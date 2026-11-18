@@ -6,33 +6,30 @@ import {
   MessageId,
   ThreadId,
   type GetSidebarThreadCatalogResult,
+  type ClientOrchestrationCommand,
   type NativeApi,
   type OrchestrationEvent,
 } from "@bigbud/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  RouterProvider,
-  createMemoryHistory,
-  createRootRouteWithContext,
-  createRouter,
-} from "@tanstack/react-router";
+import { RouterProvider } from "@tanstack/react-router";
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "vitest-browser-react";
 
-import { createBaseServerConfig } from "~/components/chat/view/ChatView.browser/fixtures";
-import { useCompactChatThread } from "~/hooks/useCompactChatThread";
 import { AppAtomRegistryProvider } from "~/rpc/atomRegistry";
 import { __resetNativeApiForTests } from "~/rpc/nativeApi";
-import { emitWelcome, resetServerStateForTests, setServerConfigSnapshot } from "~/rpc/serverState";
+import { resetServerStateForTests } from "~/rpc/serverState";
 import { useComposerDraftStore } from "~/stores/composer";
 import { useStore } from "~/stores/main";
 import { makeEvent } from "~/stores/main/main.store.test.helpers";
-import { EventRouter } from "~/routes/-__root.logic";
 
-import { CompactChatShell } from "./FloatingAssistantShell";
+import { createCompactRouter } from "./CompactChatSynchronization.browser/harness";
 import {
   NOW,
+  compactCommandOutcome,
+  nativeSettlement,
+  primeCompactConnection,
+  announceCompactWelcome,
   TURN_1,
   TURN_2,
   chatsProjectPage,
@@ -41,27 +38,6 @@ import {
   threadDetail,
   threadSummary,
 } from "./CompactChatSynchronization.browser/fixtures";
-
-function CompactSynchronizationHarness() {
-  const compactChat = useCompactChatThread();
-  return (
-    <>
-      <EventRouter ownedThreadId={compactChat.threadId} />
-      <CompactChatShell compactChat={compactChat} />
-    </>
-  );
-}
-
-function createCompactRouter(queryClient: QueryClient) {
-  const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-    component: CompactSynchronizationHarness,
-  });
-  return createRouter({
-    routeTree: rootRoute,
-    history: createMemoryHistory({ initialEntries: ["/"] }),
-    context: { queryClient },
-  });
-}
 
 describe("compact chat synchronization", () => {
   beforeEach(() => {
@@ -76,16 +52,6 @@ describe("compact chat synchronization", () => {
       projectDraftThreadIdByProjectId: {},
       stickyModelSelectionByProvider: {},
       stickyActiveProvider: null,
-    });
-    const config = createBaseServerConfig();
-    setServerConfigSnapshot({
-      ...config,
-      providers: [{ ...config.providers[0]!, initialProbeComplete: true, status: "ready" }],
-    });
-    emitWelcome({
-      cwd: "/repo/main",
-      projectName: "Main",
-      bootstrapThreadId: "main-thread" as never,
     });
   });
 
@@ -133,14 +99,22 @@ describe("compact chat synchronization", () => {
         events,
       };
     });
-    const dispatchCommand = vi.fn(async () => {
+    const acceptedCommands = new Map<string, { threadId: ThreadId; sequence: number }>();
+    const dispatchCommand = vi.fn(async (command: ClientOrchestrationCommand) => {
+      if (!("threadId" in command)) throw new Error("Unexpected non-thread command");
+      ownedThreadId ??= command.threadId;
       materialized = true;
       projectionSequence = 11;
+      acceptedCommands.set(command.commandId, {
+        threadId: command.threadId,
+        sequence: projectionSequence,
+      });
       return { sequence: projectionSequence };
     });
     window.nativeApi = {
       orchestration: {
         dispatchCommand,
+        getCommandOutcome: compactCommandOutcome(acceptedCommands),
         acknowledgeDelivery: vi.fn(async ({ appliedThroughSequence }) => ({
           accepted: true,
           fenced: false,
@@ -160,7 +134,8 @@ describe("compact chat synchronization", () => {
         getProjectThreadSummaries: vi.fn(async ({ projectId }) => ({
           projectionSequence,
           projectId,
-          threads: ownedThreadId ? [threadSummary(ownedThreadId, projectionSequence)] : [],
+          threads:
+            materialized && ownedThreadId ? [threadSummary(ownedThreadId, projectionSequence)] : [],
         })),
         replayEvents,
         onDomainEvent: vi.fn((listener, options) => {
@@ -175,6 +150,7 @@ describe("compact chat synchronization", () => {
       },
       terminal: { onEvent: vi.fn(() => () => undefined) },
     } as unknown as NativeApi;
+    await primeCompactConnection();
 
     const mount = async () => {
       const queryClient = new QueryClient();
@@ -185,10 +161,15 @@ describe("compact chat synchronization", () => {
           </AppAtomRegistryProvider>
         </QueryClientProvider>,
       );
+      announceCompactWelcome();
       return { mounted, queryClient };
     };
     const first = await mount();
     try {
+      await vi.waitFor(
+        () => expect(window.nativeApi!.orchestration.getStartupProjectCatalog).toHaveBeenCalled(),
+        { timeout: 5000 },
+      );
       await page.getByTestId("composer-editor").fill("hi");
       await page.getByRole("button", { name: "Send message" }).click();
       await vi.waitFor(() => expect(materialized).toBe(true));
@@ -257,6 +238,7 @@ describe("compact chat synchronization", () => {
           { sequence: 15 },
         ),
       );
+      emit(nativeSettlement(ownedThreadId!, TURN_1, 16));
       await vi.waitFor(() =>
         expect(
           useStore.getState().threads.find((thread) => thread.id === ownedThreadId),
@@ -278,7 +260,7 @@ describe("compact chat synchronization", () => {
             createdAt: NOW,
             updatedAt: NOW,
           },
-          { sequence: 16 },
+          { sequence: 17 },
         ),
       );
       await vi.waitFor(() =>
@@ -303,7 +285,7 @@ describe("compact chat synchronization", () => {
               updatedAt: NOW,
             },
           },
-          { sequence: 17 },
+          { sequence: 18 },
         ),
       );
       await vi.waitFor(() =>
@@ -327,7 +309,7 @@ describe("compact chat synchronization", () => {
               createdAt: NOW,
             },
           },
-          { sequence: 18 },
+          { sequence: 19 },
         ),
       );
       await vi.waitFor(() =>
@@ -348,10 +330,11 @@ describe("compact chat synchronization", () => {
             createdAt: NOW,
             updatedAt: NOW,
           },
-          { sequence: 19 },
+          { sequence: 20 },
         ),
       );
 
+      emit(nativeSettlement(ownedThreadId!, TURN_2, 21));
       await vi.waitFor(() => {
         const thread = useStore
           .getState()

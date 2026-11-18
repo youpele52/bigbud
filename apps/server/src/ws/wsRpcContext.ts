@@ -30,6 +30,10 @@ import { DiscoveryRegistry } from "../provider/Services/DiscoveryRegistry";
 import { ThreadShellRunner } from "../shell/Services/ThreadShellRunner";
 import { ServerLifecycleEvents } from "../startup/serverLifecycleEvents";
 import { ServerRuntimeStartup } from "../startup/serverRuntimeStartup";
+import {
+  gateServerRuntimeStartup,
+  RuntimeMaintenanceGate,
+} from "../command-admission/RuntimeMaintenanceGate.ts";
 import { ServerSettingsService } from "./serverSettings";
 import { TerminalManager } from "../terminal/Services/Manager";
 import { toDispatchCommandError } from "./wsDispatchCommandError.ts";
@@ -43,6 +47,7 @@ import {
   RemoteAgentInstallerService,
 } from "../remote-agent/remoteAgentServerLayer.ts";
 import { RemoteAgentRestartService } from "../remote-agent/remoteAgentRestart.ts";
+import { RemoteAgentInstallOperationsService } from "../remote-agent/remoteAgentInstall.operation.live.ts";
 import { ProjectSetupScriptRunner } from "../project/Services/ProjectSetupScriptRunner";
 import { makeBootstrapWorktreeIdentityResolver } from "./wsBootstrap.identity.ts";
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
@@ -105,13 +110,20 @@ export const makeWsRpcContext = (
     const remoteAgentShellRunner = yield* Effect.serviceOption(RemoteAgentShellRunner);
     const remoteAgentHealth = yield* Effect.serviceOption(RemoteAgentHealthService);
     const remoteAgentInstaller = yield* Effect.serviceOption(RemoteAgentInstallerService);
+    const remoteAgentInstallOperations = yield* Effect.serviceOption(
+      RemoteAgentInstallOperationsService,
+    );
     const remoteAgentRestart = yield* Effect.serviceOption(RemoteAgentRestartService);
     const remoteAgentUpdateCoordinator = yield* Effect.serviceOption(RemoteAgentUpdateCoordinator);
     const config = yield* ServerConfig;
     const lifecycleEvents = yield* ServerLifecycleEvents;
     const serverSettings = yield* ServerSettingsService;
     const cliProxyLifecycleOption = yield* Effect.serviceOption(CliProxyLifecycle);
-    const startup = yield* ServerRuntimeStartup;
+    // Remote runtime updates close public admission here (M3 WP-4D); absent elsewhere.
+    const startup = gateServerRuntimeStartup(
+      yield* ServerRuntimeStartup,
+      yield* Effect.serviceOption(RuntimeMaintenanceGate),
+    );
     const workspaceEntries = yield* WorkspaceEntries;
     const workspaceFileSystem = yield* WorkspaceFileSystem;
     const workspaceRuntime = yield* WorkspaceRuntime;
@@ -351,6 +363,7 @@ export const makeWsRpcContext = (
       workspaceRuntime,
       remoteAgentHealth: Option.getOrUndefined(remoteAgentHealth),
       remoteAgentInstaller: Option.getOrUndefined(remoteAgentInstaller),
+      remoteAgentInstallOperations: Option.getOrUndefined(remoteAgentInstallOperations),
       remoteAgentRestart: Option.getOrUndefined(remoteAgentRestart),
       remoteAgentUpdateCoordinator: Option.getOrUndefined(remoteAgentUpdateCoordinator) as
         | RemoteAgentUpdateCoordinatorShape

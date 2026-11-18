@@ -1,5 +1,6 @@
 import { IsoDateTime, ProjectId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { Schema } from "effect";
+import { TurnTerminalOutcome } from "@bigbud/contracts/orchestration/orchestration.turnSettled.ts";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
@@ -10,6 +11,7 @@ const Row = Schema.Struct({
   projectId: Schema.NullOr(ProjectId),
   sessionStatus: Schema.NullOr(Schema.String),
   latestTurnState: Schema.NullOr(Schema.String),
+  terminalOutcome: Schema.NullOr(TurnTerminalOutcome),
   deletedAt: Schema.NullOr(Schema.String),
   updatedAt: IsoDateTime,
 });
@@ -37,6 +39,7 @@ export function makeReadDelegatedChildren(sql: SqlClient.SqlClient) {
         t.project_id AS "projectId",
         s.status AS "sessionStatus",
         turns.state AS "latestTurnState",
+        turns.terminal_outcome AS "terminalOutcome",
         t.deleted_at AS "deletedAt",
         COALESCE(t.updated_at, d.updated_at) AS "updatedAt"
       FROM thread_delegations d
@@ -58,6 +61,7 @@ export function normalizeDelegatedChildren(rows: ReadonlyArray<typeof Row.Type>)
     title: row.title ?? "Unavailable thread",
     projectId: row.projectId,
     workflowState: workflowState(row),
+    ...(row.terminalOutcome ? { terminalOutcome: row.terminalOutcome } : {}),
     updatedAt: row.updatedAt,
   }));
 }

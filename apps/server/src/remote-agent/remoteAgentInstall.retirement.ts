@@ -1,3 +1,4 @@
+import { buildRemoteAgentSupervisorObservation } from "./remoteAgentSupervisorLiveness.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
 import type { RemoteAgentRegistryBuild } from "./remoteAgentInstall.registry.ts";
 import type { RemoteAgentInventory } from "./remoteAgentUpdate.inventory.ts";
@@ -9,15 +10,13 @@ import {
   tombstoneRemoteAgentRetirement,
 } from "./remoteAgentInstall.registry.retirement.ts";
 import { withdrawRemoteAgentPredecessor } from "./remoteAgentUpdate.state.ts";
+import { reconcileRemoteAgentLaunchExits } from "./remoteAgentInstall.reconcile.ts";
+import { remoteAgentBuildIsReferenced } from "./remoteAgentInstall.registry.references.ts";
 import { currentRemoteAgentController } from "./remoteAgentController.ts";
 import { validateRemoteAgentRuntime } from "./remoteAgentRuntime.ts";
 import { buildRemoteAgentSupervisorShutdownCommand } from "./remoteAgentSupervisor.ts";
 import { buildRemoteAgentRetirementDeletionCommand } from "./remoteAgentInstall.retirement.deletion.ts";
 import type { RemoteAgentRetirementFence } from "./remoteAgentRetirement.ts";
-
-function quote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
 
 type RetirementResult = "deleted" | "deferred";
 
@@ -66,64 +65,80 @@ async function retirementStillSafe(input: {
     reservation.buildId !== input.buildId ||
     reservation.phase === "failed" ||
     reservation.phase === "tombstoned" ||
-    state.current === input.buildId ||
     state.predecessor !== input.buildId ||
-    state.pins.some((pin) => pin.buildId === input.buildId) ||
-    state.stages.some((stage) => stage.buildId === input.buildId && stage.phase !== "cancelled") ||
-    state.launches.some(
-      (launch) => launch.buildId === input.buildId && launch.phase !== "proven-dead",
-    ) ||
-    state.admissions.some((admission) => admission.buildId === input.buildId)
+    remoteAgentBuildIsReferenced(state, input.buildId, { retirementId: input.reservationId })
   )
     return false;
-  if (input.recheckReferencedBuildIds) {
-    try {
-      if ((await input.recheckReferencedBuildIds()).has(input.buildId)) return false;
-    } catch {
-      return false;
-    }
+  return externalReferencesStillSafe(input.buildId, input.recheckReferencedBuildIds);
+}
+
+async function externalReferencesStillSafe(
+  buildId: string,
+  recheck: (() => Promise<ReadonlySet<string>>) | undefined,
+): Promise<boolean> {
+  if (!recheck) return true;
+  try {
+    return !(await recheck()).has(buildId);
+  } catch {
+    return false;
   }
-  return true;
 }
 
 export async function probeRemoteAgentSupervisorState(
   control: RemoteAgentControl,
   runtime: ReturnType<typeof validateRemoteAgentRuntime>,
 ): Promise<"live" | "dead" | "uncertain" | "absent"> {
-  const command = [
-    "set -eu",
-    `state=${quote(runtime.statePath)}`,
-    `socket=${quote(runtime.socketPath)}`,
-    'if test -S "$socket"; then printf live; exit 0; fi',
-    'if test ! -e "$state"; then printf absent; exit 0; fi',
-    'if test -f "$state/launch.exit" && test -f "$state/launch.lock"; then',
-    '  exec 8< "$state/launch.lock"',
-    "  if flock -n -x 8; then printf dead; else printf uncertain; fi",
-    "else",
-    "  printf uncertain",
-    "fi",
-  ].join("\n");
-  return (await control.run(command)).trim() as "live" | "dead" | "uncertain" | "absent";
+  const attemptId = (await control.registry.read()).launches.find(
+    (entry) => entry.id === runtime.generation,
+  )?.attemptId;
+  if (!attemptId) {
+    const state = `'${runtime.statePath.replaceAll("'", "'\\''")}'`;
+    const result = await control.run(`set -eu
+state=${state}
+if test ! -e "$state" && test ! -L "$state" && test "$(readlink -m -- "$state")" = "$state"; then printf absent; else printf uncertain; fi
+`);
+    return result.trim() === "absent" ? "absent" : "uncertain";
+  }
+  const result = await control.run(`set -eu
+${buildRemoteAgentSupervisorObservation(runtime, attemptId)}
+case "$(observe_supervisor)" in
+  ready|live) printf live ;;
+  exited:*) printf dead ;;
+  prior-boot-dead) printf dead ;;
+  *) printf uncertain ;;
+esac
+`);
+  return result.trim() === "live" ? "live" : result.trim() === "dead" ? "dead" : "uncertain";
 }
 
 async function awaitSupervisorExit(
   control: RemoteAgentControl,
   runtime: ReturnType<typeof validateRemoteAgentRuntime>,
 ): Promise<boolean> {
-  const command = [
-    "set -eu",
-    `state=${quote(runtime.statePath)}`,
-    `socket=${quote(runtime.socketPath)}`,
-    "for n in $(seq 1 100); do",
-    '  if test ! -S "$socket" && test -f "$state/launch.exit" && test -f "$state/launch.lock"; then',
-    '    exec 8< "$state/launch.lock"',
-    "    if flock -n -x 8; then printf exited; exit 0; fi",
-    "  fi",
-    "  sleep .1",
-    "done",
-    "printf uncertain",
-  ].join("\n");
-  return (await control.run(command)).trim() === "exited";
+  const attemptId = (await control.registry.read()).launches.find(
+    (entry) => entry.id === runtime.generation,
+  )?.attemptId;
+  if (!attemptId) return false;
+  const result = await control.run(`set -eu
+${buildRemoteAgentSupervisorObservation(runtime, attemptId)}
+for n in $(seq 1 100); do
+  case "$(observe_supervisor)" in exited:*|prior-boot-dead) printf exited; exit 0 ;; esac
+  sleep .1
+done
+printf uncertain
+`);
+  return result.trim() === "exited";
+}
+
+async function proveRemoteAgentLaunchExit(
+  control: RemoteAgentControl,
+  buildId: string,
+): Promise<void> {
+  try {
+    await reconcileRemoteAgentLaunchExits(control, { buildId });
+  } catch {
+    // Unproven exits keep the launch unresolved, which defers retirement conservatively.
+  }
 }
 
 /** Retire one managed build through fencing, native control, and exact deletion. */
@@ -143,15 +158,29 @@ export async function retireManagedRemoteAgentBuild(input: {
   if (!build || build.binary !== "present" || build.runtime.origin !== "managed") return "deferred";
   if (input.referencedBuildIds?.has(input.buildId)) return "deferred";
   const runtime = validateRemoteAgentRuntime(build.runtime);
+  // Only the explicit `--replace` predecessor path may reserve a build whose launch is still ready.
+  const liveLaunch = input.allowLiveShutdown === true && input.withdrawPredecessor === true;
   let releaseFence: (() => void) | undefined;
   let deletionStarted = false;
   try {
+    // A supervisor that already exited still has a `ready` launch until its exit receipt is proven.
+    await proveRemoteAgentLaunchExit(input.control, input.buildId);
+    if (input.allowLiveShutdown === false) {
+      const observedState = await input.control.registry.read();
+      if (
+        observedState.launches.some(
+          (launch) => launch.buildId === input.buildId && launch.phase === "ready",
+        )
+      )
+        return "deferred"; // Policy forbids live retirement; this is not an uncertain attempt.
+    }
     await input.control.registry.update((state) =>
       reserveRemoteAgentRetirement(state, {
         id: input.reservationId,
         buildId: input.buildId,
         controllerId: currentRemoteAgentController().id,
         ...(input.withdrawPredecessor ? { allowPredecessorReservation: true } : {}),
+        ...(liveLaunch ? { allowLiveLaunch: true } : {}),
       }),
     );
     if (input.beginRetirement) releaseFence = await input.beginRetirement(runtime.generation);
@@ -180,6 +209,8 @@ export async function retireManagedRemoteAgentBuild(input: {
       return "deferred";
     }
     if (input.withdrawPredecessor) {
+      // Withdrawal requires the launch to be proven dead from its receipt, not just unreachable.
+      await proveRemoteAgentLaunchExit(input.control, input.buildId);
       if (
         !(await retirementStillSafe({
           control: input.control,
@@ -196,6 +227,12 @@ export async function retireManagedRemoteAgentBuild(input: {
       await input.control.registry.update((state) =>
         withdrawRemoteAgentPredecessor(state, input.reservationId, input.buildId),
       );
+    }
+    // Ordinary cleanup also needs the latest external service/owner references, not only
+    // predecessor withdrawal. Unknown metadata retains the bytes and settles conservatively.
+    if (!(await externalReferencesStillSafe(input.buildId, input.recheckReferencedBuildIds))) {
+      await markRetirementDeferred(input.control, input.reservationId, input.buildId);
+      return "deferred";
     }
     await input.control.registry.update((state) =>
       advanceRemoteAgentRetirement(state, input.reservationId, "exited"),

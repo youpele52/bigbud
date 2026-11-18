@@ -1,4 +1,8 @@
 import type { DesktopTailscaleRemoteAccessStatus } from "@bigbud/contracts";
+import {
+  classifyMobileBackendReach,
+  toRedactedMobileOrigin,
+} from "@bigbud/shared/mobileBackendReach";
 import type { Dispatch, SetStateAction } from "react";
 
 import type { AppCheckStatus } from "../../lib/checkStatus";
@@ -117,4 +121,55 @@ export function resolveTailscaleRemoteBackendCheck(input: {
     message: "Checking Tailscale remote access.",
     tip: "bigbud is still checking whether this desktop backend is reachable through Tailscale Serve.",
   };
+}
+
+export interface BackendReachNotice {
+  readonly tone: "info" | "warning";
+  readonly message: string;
+}
+
+/**
+ * Labels how far a pairing link's backend address reaches. Static address
+ * evidence only; it does not prove the phone can connect.
+ */
+export function resolveBackendReachNotice(input: {
+  readonly backendBaseUrl: string;
+  readonly mobileWebBaseUrl: string | null;
+}): BackendReachNotice | null {
+  const origin = toRedactedMobileOrigin(input.backendBaseUrl);
+  if (origin === null) return null;
+  const reach = classifyMobileBackendReach(origin);
+  const mixedContent =
+    input.mobileWebBaseUrl?.startsWith("https:") === true && origin.startsWith("http:")
+      ? " The mobile page uses HTTPS, so phone browsers block this HTTP address."
+      : "";
+  switch (reach) {
+    case "tailnet-https":
+      return {
+        tone: "info",
+        message:
+          "Designed for use from other networks: the phone needs Tailscale signed in and connected, and your tailnet must allow it to reach this computer.",
+      };
+    case "lan-http":
+    case "lan-https":
+      return {
+        tone: "warning",
+        message: `Same-network only: works when the phone is on this computer's Wi-Fi. For cellular or other networks, enable Tailscale Serve and create a new link.${mixedContent}`,
+      };
+    case "loopback":
+      return {
+        tone: "warning",
+        message:
+          "This address only works on this computer, so a phone cannot reach it. Enable Tailscale Serve and create a new link.",
+      };
+    case "tailnet-http":
+    case "other-http":
+      return {
+        tone: "warning",
+        message: `This address does not use HTTPS. Prefer the Tailscale HTTPS address.${mixedContent}`,
+      };
+    case "other-https":
+    case "invalid":
+      return null;
+  }
 }

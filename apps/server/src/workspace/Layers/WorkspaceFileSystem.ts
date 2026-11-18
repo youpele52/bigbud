@@ -79,6 +79,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
     const target = yield* workspacePaths.resolveRelativePathWithinRoot({
       workspaceRoot: input.cwd,
+      executionTargetId,
       relativePath: input.relativePath,
     });
 
@@ -95,7 +96,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
         const result = await runToolCommand({
           target: resolveToolTransportTarget(workspaceTarget),
           command: "cat",
-          args: [target.relativePath],
+          args: ["--", target.relativePath],
           timeoutMs: 30_000,
           maxBufferBytes: DEFAULT_FILE_PREVIEW_MAX_BYTES + 1,
           outputMode: "truncate",
@@ -262,6 +263,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     const target = input.relativePath
       ? yield* workspacePaths.resolveRelativePathWithinRoot({
           workspaceRoot: input.cwd,
+          executionTargetId,
           relativePath: input.relativePath,
         })
       : { relativePath: "" };

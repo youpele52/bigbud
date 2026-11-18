@@ -18,7 +18,7 @@ const uncertain = () =>
     }),
   );
 
-it.each(["summary", "branch"] as const)(
+it.each(["branch"] as const)(
   "%s metadata generation preserves uncertainty and does not replay a paid job",
   async (operation) => {
     const f = titleFixture();
@@ -34,14 +34,12 @@ it.each(["summary", "branch"] as const)(
       },
     };
     const run = () =>
-      operation === "summary"
-        ? maybeGenerateThreadElevatorSummary(services)({ threadId: f.thread.id, force: true })
-        : maybeGenerateAndRenameWorktreeBranchForFirstTurn(services)({
-            threadId: f.thread.id,
-            branch: "bigbud/12345678",
-            worktreePath: "/fixture",
-            messageText: "Repair routing",
-          });
+      maybeGenerateAndRenameWorktreeBranchForFirstTurn(services)({
+        threadId: f.thread.id,
+        branch: "bigbud/12345678",
+        worktreePath: "/fixture",
+        messageText: "Repair routing",
+      });
     await Effect.runPromise(run());
     await Effect.runPromise(run());
     expect(generate).toHaveBeenCalledTimes(1);

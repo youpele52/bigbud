@@ -1,4 +1,7 @@
-import { Effect, Layer, Option, Scope } from "effect";
+import { makeRemoteBackendRelayRoute } from "../remote-backend/clientRelay.route.ts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Scope from "effect/Scope";
 import { randomUUID } from "node:crypto";
 import { WsRpcGroup } from "@bigbud/contracts";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
@@ -21,7 +24,14 @@ import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
 import { makeWsRpcConnectionDiagnosticsHandlers } from "./wsRpcHandlers.connectionDiagnostics.ts";
 import { makeWsRpcComputerUseHandlers } from "./wsRpcHandlers.computerUse.ts";
 import { makeWsRpcCopilotRuntimeHandlers } from "./wsRpcHandlers.copilotRuntime.ts";
+import { makeWsRpcPeerPairingHandlers } from "./wsRpcHandlers.peerPairing.ts";
 import { makeWsRpcDatabaseCompactionHandlers } from "./wsRpcHandlers.databaseCompaction.ts";
+import { makeWsRpcMetadataWarningHandlers } from "./wsRpcHandlers.metadataWarnings.ts";
+import { makeWsRpcRemoteBackendDeploymentHandlers } from "./wsRpcHandlers.remoteBackendDeployment.ts";
+import { makeWsRpcRemoteBackendUpdateHandlers } from "./wsRpcHandlers.remoteBackendUpdate.ts";
+import { makeRuntimeUpdateSetupAuthority } from "../remote-backend/runtimeUpdate.authority.ts";
+import { makeWsRpcProviderProvisioningHandlers } from "./wsRpcHandlers.providerProvisioning.ts";
+import { makeProviderProvisioningAuthority } from "../provider-provisioning/provisionAuthority.ts";
 import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
@@ -29,6 +39,7 @@ import {
 import type { BootstrapCommandLock } from "./wsBootstrap.lock.ts";
 import { makeWsRpcHttpEffectWithSshMonitorCleanup } from "./wsSshMonitor.protocol.ts";
 import { forgetSshMonitorInstance } from "../ssh/sshMonitor.connections.ts";
+import { authorizeWebsocketRpcConnection } from "./wsConnectionAuthorization.ts";
 
 const retentionMutationAuthorization = makeRetentionMutationAuthorization();
 
@@ -36,15 +47,26 @@ const makeWsRpcLayer = (
   withBootstrapCommandLock: BootstrapCommandLock,
   worktreeScope: Scope.Scope,
   monitorInstanceId: string,
+  relayHandlers: Awaited<
+    Effect.Success<ReturnType<typeof makeRemoteBackendRelayRoute>>
+  >["handlers"],
 ) =>
   WsRpcGroup.toLayer(
     Effect.gen(function* () {
       const context = yield* makeWsRpcContext(withBootstrapCommandLock, monitorInstanceId);
       const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
       const databaseCompactionHandlers = yield* makeWsRpcDatabaseCompactionHandlers;
+      const metadataWarningHandlers = yield* makeWsRpcMetadataWarningHandlers;
+      const deploymentHandlers = yield* makeWsRpcRemoteBackendDeploymentHandlers();
+      const runtimeUpdateHandlers = yield* makeWsRpcRemoteBackendUpdateHandlers();
 
       return WsRpcGroup.of({
+        ...relayHandlers,
+        ...deploymentHandlers,
+        ...runtimeUpdateHandlers,
         ...makeWsRpcCopilotRuntimeHandlers(context),
+        ...makeWsRpcPeerPairingHandlers(),
+        ...makeWsRpcProviderProvisioningHandlers(context),
         ...makeWsRpcAutomationHandlers(context),
         ...makeWsRpcOrchestrationServerHandlers(context),
         ...makeWsRpcBrowserHandlers(),
@@ -60,13 +82,20 @@ const makeWsRpcLayer = (
         ...makeWsRpcConnectionDiagnosticsHandlers(context),
         ...computerUseHandlers,
         ...databaseCompactionHandlers,
+        ...metadataWarningHandlers,
       });
     }),
   );
 
-export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCommandLock) =>
+export const makeWebsocketRpcRouteLayer = (
+  withBootstrapCommandLock: BootstrapCommandLock,
+  /** Only the remote client Unix socket router sets this; it gates D10 setup authority. */
+  options: { readonly remoteClientRouter?: boolean } = {},
+) =>
   Layer.unwrap(
     Effect.gen(function* () {
+      const setupAuthority = makeRuntimeUpdateSetupAuthority();
+      const provisioningAuthority = makeProviderProvisioningAuthority();
       // Own accepted mutations for the HTTP server's lifetime, not the temporary RPC layer build.
       const worktreeScope = yield* Effect.scope;
       const monitorInstanceId = randomUUID();
@@ -74,13 +103,17 @@ export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCo
         worktreeScope,
         Effect.sync(() => forgetSshMonitorInstance(monitorInstanceId)),
       );
+      const relay = yield* makeRemoteBackendRelayRoute(monitorInstanceId, worktreeScope);
       const wsRpcRuntimeLayer = Layer.mergeAll(
-        makeWsRpcLayer(withBootstrapCommandLock, worktreeScope, monitorInstanceId),
+        makeWsRpcLayer(withBootstrapCommandLock, worktreeScope, monitorInstanceId, relay.handlers),
         RpcSerialization.layerJson,
         retentionMutationAuthorization.layer,
+        setupAuthority.layer,
+        provisioningAuthority.layer,
       );
       const rpcWebSocketHttpEffect = yield* makeWsRpcHttpEffectWithSshMonitorCleanup(
         monitorInstanceId,
+        relay.lifecycle,
       ).pipe(Effect.provide(wsRpcRuntimeLayer));
 
       return HttpRouter.add(
@@ -89,20 +122,35 @@ export const makeWebsocketRpcRouteLayer = (withBootstrapCommandLock: BootstrapCo
         Effect.gen(function* () {
           const request = yield* HttpServerRequest.HttpServerRequest;
           const config = yield* ServerConfig;
-          if (config.authToken) {
-            const url = HttpServerRequest.toURL(request);
-            if (Option.isNone(url)) {
-              return HttpServerResponse.text("Invalid WebSocket URL", { status: 400 });
-            }
-            const token = url.value.searchParams.get("token");
-            if (token !== config.authToken) {
-              return HttpServerResponse.text("Unauthorized WebSocket connection", { status: 401 });
-            }
-          }
+          const authorization = authorizeWebsocketRpcConnection({
+            mode: config.mode,
+            authToken: config.authToken,
+            url: request.url,
+            headers: request.headers,
+          });
+          if (authorization !== "authorized")
+            return HttpServerResponse.text("WebSocket connection unavailable", {
+              status:
+                authorization === "incompatible"
+                  ? 426
+                  : authorization === "invalid-url"
+                    ? 400
+                    : 401,
+            });
+          const trustedLocal =
+            config.authToken !== undefined || isTrustedRetentionMutationOrigin(request.headers);
+          const connection = {
+            mode: config.mode,
+            remoteClientRouter: options.remoteClientRouter === true,
+            authorized: authorization === "authorized",
+          };
           const requestWithAuthorization = request.modify({
-            headers: retentionMutationAuthorization.authorizeHeaders(
-              request.headers,
-              config.authToken !== undefined || isTrustedRetentionMutationOrigin(request.headers),
+            headers: provisioningAuthority.authorizeHeaders(
+              setupAuthority.authorizeHeaders(
+                retentionMutationAuthorization.authorizeHeaders(request.headers, trustedLocal),
+                connection,
+              ),
+              { ...connection, trustedLocal },
             ),
           });
           return yield* rpcWebSocketHttpEffect.pipe(

@@ -2,6 +2,7 @@ import { EventId, type ProviderRuntimeEvent, type ThreadId } from "@bigbud/contr
 import { DateTime, Effect, Queue, Random, Stream } from "effect";
 
 import type { ClaudeSessionContext, UnstampedProviderRuntimeEvent } from "./Adapter.types.ts";
+import { makeProviderAdapterEventQueue } from "../../providerEventQueueBounds.ts";
 
 export function deleteClaudeSessionIfCurrent(
   sessions: Map<ThreadId, ClaudeSessionContext>,
@@ -19,7 +20,7 @@ export type OfferClaudeRuntimeEvent = (
 export const makeClaudeEventRuntime = Effect.fn("ClaudeAdapter.makeEventRuntime")(function* (
   sessions: Map<ThreadId, ClaudeSessionContext>,
 ) {
-  const queue = yield* Queue.unbounded<ProviderRuntimeEvent>();
+  const queue = yield* makeProviderAdapterEventQueue<ProviderRuntimeEvent>();
   const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
   const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.makeUnsafe(id));
   const makeEventStamp = (): Effect.Effect<{ eventId: EventId; createdAt: string }> =>

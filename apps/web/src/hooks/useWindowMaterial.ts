@@ -1,33 +1,25 @@
-import { useEffect, useMemo } from "react";
-import type { DesktopWindowMaterial } from "@bigbud/contracts/settings";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import type { DesktopWindowMaterialState } from "@bigbud/contracts/server/ipc.windowMaterial.ts";
 import { isElectron } from "../config/env";
 import { isMacPlatform } from "../lib/utils";
 import { useSettings } from "./useSettings";
-
-export type ResolvedWindowMaterial = "solid" | "translucent";
+import { syncWindowMaterial } from "./useWindowMaterial.sync";
 
 export function isMacDesktopWindowMaterialSupported(): boolean {
   return isElectron && typeof navigator !== "undefined" && isMacPlatform(navigator.platform);
 }
 
-export function resolveDesktopWindowMaterial(
-  windowMaterial: DesktopWindowMaterial,
-  isMacDesktop: boolean,
-): ResolvedWindowMaterial {
-  if (!isMacDesktop) {
-    return "solid";
-  }
-
-  return windowMaterial === "solid" ? "solid" : "translucent";
-}
-
 export function useWindowMaterial() {
   const { windowMaterial } = useSettings();
   const isMacDesktop = isMacDesktopWindowMaterialSupported();
-  const resolvedWindowMaterial = useMemo(
-    () => resolveDesktopWindowMaterial(windowMaterial, isMacDesktop),
-    [isMacDesktop, windowMaterial],
-  );
+  // Selecting the same mode again still requires a fresh native confirmation.
+  const request = useMemo(() => ({ mode: windowMaterial }), [windowMaterial]);
+  const [applied, setApplied] = useState<{
+    request: typeof request;
+    state: DesktopWindowMaterialState;
+  } | null>(null);
+  const resolvedWindowMaterial =
+    isMacDesktop && applied?.request === request ? applied.state.material : "solid";
 
   useEffect(() => {
     const bridge = window.desktopBridge;
@@ -35,10 +27,10 @@ export function useWindowMaterial() {
       return;
     }
 
-    void bridge.setWindowMaterial(windowMaterial).catch(() => undefined);
-  }, [windowMaterial]);
+    return syncWindowMaterial(bridge, request.mode, (state) => setApplied({ request, state }));
+  }, [request]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const root = document.documentElement;
     root.dataset.desktopShell = isMacDesktop ? "macos" : "default";
     root.dataset.windowMaterial = resolvedWindowMaterial;

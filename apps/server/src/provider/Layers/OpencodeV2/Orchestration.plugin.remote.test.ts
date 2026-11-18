@@ -1,3 +1,5 @@
+import { V2_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.ts";
+import { V2_N8_COMPATIBILITY_DIGEST } from "./Orchestration.compatibility.n8.ts";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
 import { expect, it } from "vitest";
@@ -7,13 +9,19 @@ import { V2ThreadOwner } from "./Orchestration.protocol.ts";
 import { v2ThreadRegistration } from "./Orchestration.registration.ts";
 import { renderV2ThreadIdentity } from "./Orchestration.plugin.identity.ts";
 
-it("pins current native identity bytes after the v4 bootstrap migration", () => {
-  // Fixed placeholder avoids private keys/user state. Future changes require a separately
-  // designed native bootstrap migration, not merely updating this expected digest.
-  // The websearch policy expansion retained the prior descriptor as V2_N7 (legacy.ts).
-  expect(createHash("sha256").update(renderV2ThreadIdentity("public-key")).digest("hex")).toBe(
-    "155eb230bac8f0e67b24b5f430c78d005a7413fba30005bb4fcc4537d4e6a4f2",
-  );
+it("pins current v5 identity bytes and retained v4 migration provenance", () => {
+  // The own-thread summary migration introduced v5/canonical-v3 in f73faab0d3;
+  // N8 retains the previous six-tool descriptor. Fixed placeholders contain no private state.
+  const current = renderV2ThreadIdentity("public-key");
+  const hash = (source: string) => createHash("sha256").update(source).digest("hex");
+  expect(hash(current)).toBe("f7b6fc93dbf267b63e7a3cf33d67c53e4e560824f2e75a88eef29b34a1dee186");
+  expect(
+    hash(
+      current
+        .replaceAll("bigbud.thread.bootstrap.v5", "bigbud.thread.bootstrap.v4")
+        .replaceAll(V2_COMPATIBILITY_DIGEST, V2_N8_COMPATIBILITY_DIGEST),
+    ),
+  ).toBe("155eb230bac8f0e67b24b5f430c78d005a7413fba30005bb4fcc4537d4e6a4f2");
 });
 
 it("enrolls a synthetic local Location and dispatches canonical thread tools without remote file authority", async () => {
@@ -32,7 +40,9 @@ it("enrolls a synthetic local Location and dispatches canonical thread tools wit
       await expect(
         host.call("enroll", app.envelope("enroll", 1, Date.now() + 40000)),
       ).resolves.toMatchObject({ state: "active", revision: 1 });
-      expect(Object.keys((await host.request(owner.nativeSessionId)).tools)).toHaveLength(6);
+      expect(Object.keys((await host.request(owner.nativeSessionId)).tools).toSorted()).toEqual(
+        [...v2ThreadRegistration(app.artifact).tools].toSorted(),
+      );
       expect(Object.keys((await host.request("ses_other_workspace")).tools)).toHaveLength(0);
       const tool = host.tools.get(v2ThreadRegistration(app.artifact).tool("list_threads"))!;
       await tool.execute(

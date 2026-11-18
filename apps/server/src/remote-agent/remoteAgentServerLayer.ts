@@ -26,9 +26,11 @@ import {
   makeWorkspaceRuntimeLayer,
 } from "../workspace-runtime/Layers/WorkspaceRuntime.ts";
 import { runSshCommand } from "../ssh/sshProcess.ts";
+import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import { remoteAgentAdmission } from "./remoteAgentAdmission.ts";
 import { RemoteAgentRuntimeBindingsLive } from "../persistence/Layers/RemoteAgentRuntimeBindings.ts";
 import type { ServerRemoteAgentRuntimeSummary } from "@bigbud/contracts/server/server.ts";
+import type { ServerGetRemoteAgentManualInstallResult } from "@bigbud/contracts/server/server.remoteAgentInstall";
 import {
   makeRemoteAgentUpdateCoordinator,
   RemoteAgentUpdateCoordinator,
@@ -40,6 +42,7 @@ import { RemoteAgentRestartService } from "./remoteAgentRestart.types.ts";
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
 import { makeSshShellRunner } from "../ssh/sshShellRunner.ts";
 import { makeRemoteAgentInstaller } from "./remoteAgentServerLayer.installer.ts";
+import { remoteAgentInstallOperationsLayer } from "./remoteAgentInstall.operation.live.ts";
 
 export { makeRemoteAgentInstaller };
 
@@ -76,8 +79,16 @@ export interface RemoteAgentInstaller {
     signal?: AbortSignal,
   ) => Promise<{
     readonly version: string;
+    /** Exact staged build (version, digest and target triple). */
+    readonly buildId?: string;
     readonly runtimeSummary?: ServerRemoteAgentRuntimeSummary;
+    readonly placement?: "upload" | "managed" | "inbox";
+    readonly inboxConflict?: boolean;
   }>;
+  readonly manualInstall?: (
+    executionTargetId: string,
+    signal?: AbortSignal,
+  ) => Promise<ServerGetRemoteAgentManualInstallResult>;
 }
 
 export class RemoteAgentInstallerService extends ServiceMap.Service<
@@ -262,6 +273,7 @@ export function makeRemoteAgentServerServices(
     installManager,
     loadInstallSource,
     pool: dependencies.pool,
+    releaseRepository: process.env.BIGBUD_REMOTE_AGENT_RELEASE_REPOSITORY,
   });
   return {
     health,
@@ -285,6 +297,8 @@ export function makeRemoteAgentServerServices(
           await dependencies.pool.get(target);
         }
       },
+      bindReplacement: (target, connectionId, binding) =>
+        remoteAgentOwners().bindConnection(target, connectionId, binding),
       verifyReadiness: (target, runtime) => remoteAgentAdmission.verify(target, runtime),
       ...(dependencies.beginRetirement ? { beginRetirement: dependencies.beginRetirement } : {}),
       reconcileRuntime: async (target, binding) => {
@@ -295,6 +309,7 @@ export function makeRemoteAgentServerServices(
         }
         try {
           await remoteAgentOwners().reconcileRuntime?.(
+            target,
             binding.runtime.generation,
             binding.expectedEpoch,
           );
@@ -332,13 +347,12 @@ export function makeConfiguredRemoteAgentLayers() {
     beginRetirement: (executionTargetId, generation) =>
       composition.pool.beginRetirement(executionTargetId, generation),
     runIdentityProbe: async (executionTargetId, command) => {
-      const presence = await runSshCommand({
+      const presence = await runRemoteAgentDiagnosedCommand(runSshCommand, "check", {
         executionTargetId,
         command: "sh",
         args: ["-lc", command],
         timeoutMs: 30_000,
         maxBufferBytes: 1024,
-        outputMode: "error",
       });
       return presence.stdout;
     },
@@ -361,6 +375,7 @@ export function makeConfiguredRemoteAgentLayers() {
     }),
     Layer.succeed(RemoteAgentHealthService, health),
     Layer.succeed(RemoteAgentInstallerService, installer),
+    remoteAgentInstallOperationsLayer({ installer, updateCoordinator, pool: composition.pool }),
     Layer.succeed(RemoteAgentUpdateCoordinator, updateCoordinator),
     Layer.succeed(RemoteAgentRestartService, restart),
   );

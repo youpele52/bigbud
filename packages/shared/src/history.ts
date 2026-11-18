@@ -98,13 +98,10 @@ function buildMessageBlock(message: BootstrapMessage): string {
   return `${messageRoleLabel(message)}:\n(empty message)`;
 }
 
-function finalizeWithPrompt(
-  transcriptBody: string,
-  latestPrompt: string,
-  maxChars: number,
-): string | null {
-  const text = `${BOOTSTRAP_PREAMBLE}\n\n${TRANSCRIPT_HEADER}\n${transcriptBody}\n\n${LATEST_PROMPT_HEADER}\n${latestPrompt}`;
-  return text.length <= maxChars ? text : null;
+export const DEFAULT_BOOTSTRAP_HISTORY_MAX_CHARS = 120_000;
+
+function buildHistoryPrefix(transcriptBody: string): string {
+  return `${BOOTSTRAP_PREAMBLE}\n\n${TRANSCRIPT_HEADER}\n${transcriptBody}\n\n${LATEST_PROMPT_HEADER}\n`;
 }
 
 /** Returns true when there are any non-image file attachments. */
@@ -122,17 +119,18 @@ export function hasAnyAttachments(attachments: ReadonlyArray<ChatAttachment> | u
 export function buildBootstrapInput(
   previousMessages: ReadonlyArray<BootstrapMessage>,
   latestPrompt: string,
-  maxChars: number,
+  // Includes all replay framing, but never any part of the current request.
+  maxHistoryChars: number,
 ): BootstrapInputResult {
-  const budget = Number.isFinite(maxChars) ? Math.max(1, Math.floor(maxChars)) : 1;
-  const promptOnly = latestPrompt.length <= budget ? latestPrompt : latestPrompt.slice(0, budget);
+  const budget = Number.isFinite(maxHistoryChars) ? Math.max(0, Math.floor(maxHistoryChars)) : 0;
+  const promptOnly = latestPrompt;
 
   if (previousMessages.length === 0) {
     return {
       text: promptOnly,
       includedCount: 0,
       omittedCount: 0,
-      truncated: promptOnly.length !== latestPrompt.length,
+      truncated: false,
     };
   }
 
@@ -161,7 +159,7 @@ export function buildBootstrapInput(
       omittedCount > 0
         ? `${OMITTED_SUMMARY(omittedCount)}\n\n${nextChronological.join("\n\n")}`
         : nextChronological.join("\n\n");
-    if (!finalizeWithPrompt(transcriptBody, latestPrompt, budget)) {
+    if (buildHistoryPrefix(transcriptBody).length > budget) {
       break;
     }
     includedNewestFirst = nextNewestFirst;
@@ -176,13 +174,13 @@ export function buildBootstrapInput(
           ? `${OMITTED_SUMMARY(omittedCount)}\n\n${includedChronological.join("\n\n")}`
           : OMITTED_SUMMARY(omittedCount)
         : includedChronological.join("\n\n");
-    const finalized = finalizeWithPrompt(transcriptBody, latestPrompt, budget);
-    if (finalized) {
+    const prefix = buildHistoryPrefix(transcriptBody);
+    if (prefix.length <= budget) {
       return {
-        text: finalized,
+        text: prefix + latestPrompt,
         includedCount: includedChronological.length,
         omittedCount,
-        truncated: omittedCount > 0 || latestPrompt.length !== promptOnly.length,
+        truncated: omittedCount > 0,
       };
     }
 

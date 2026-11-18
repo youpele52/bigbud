@@ -1,4 +1,5 @@
 import posix from "node:path/posix";
+import { isRemoteAgentTargetTriple } from "./remoteAgentArtifact.ts";
 import { Schema } from "effect";
 
 export const RemoteAgentRuntimeSchema = Schema.Struct({
@@ -14,6 +15,15 @@ export const RemoteAgentRuntimeSchema = Schema.Struct({
   origin: Schema.Literals(["managed", "legacy-external"]),
 });
 export type RemoteAgentRuntime = typeof RemoteAgentRuntimeSchema.Type;
+
+/** Registry build ID of a managed build staged from a signed artifact. */
+export function remoteAgentArtifactBuildId(artifact: {
+  readonly version: string;
+  readonly sha256: string;
+  readonly targetTriple: string;
+}): string {
+  return `${artifact.version}:${artifact.sha256}:${artifact.targetTriple}`;
+}
 
 export function remoteAgentBuildId(runtime: RemoteAgentRuntime): string {
   return `${runtime.version}:${runtime.sha256}:${runtime.targetTriple}${runtime.origin === "legacy-external" ? ":legacy" : ""}`;
@@ -58,7 +68,7 @@ export function validateRemoteAgentRuntime(value: unknown): RemoteAgentRuntime {
   ) {
     throw new Error("Invalid runtime build identity.");
   }
-  if (!/^(aarch64|x86_64)-unknown-linux-gnu$/.test(runtime.targetTriple)) {
+  if (!isRemoteAgentTargetTriple(runtime.targetTriple)) {
     throw new Error("Unsupported runtime target.");
   }
   for (const path of [runtime.binaryPath, runtime.statePath, runtime.socketPath, runtime.logPath]) {

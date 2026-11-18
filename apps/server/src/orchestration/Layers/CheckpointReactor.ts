@@ -8,6 +8,7 @@ import { CheckpointReactor, type CheckpointReactorShape } from "../Services/Chec
 import {
   ensureOrchestrationThreadState,
   OrchestrationEngineService,
+  getOrchestrationThread,
 } from "../Services/OrchestrationEngine.ts";
 import { RuntimeReceiptBus } from "../Services/RuntimeReceiptBus.ts";
 import { CheckpointStoreError } from "../../checkpointing/Errors.ts";
@@ -88,9 +89,11 @@ const make = Effect.gen(function* () {
       const turnId = toTurnId(event.turnId);
       if (!turnId) return;
 
-      const readModel = yield* orchestrationEngine.getReadModel();
-      const thread = readModel.threads.find((entry: any) => entry.id === event.threadId);
+      // Checkpoint counts need the full history; hydrated if the thread is not resident.
+      const thread = yield* getOrchestrationThread(orchestrationEngine, event.threadId, "history");
       if (!thread) return;
+      // A resident thread's project is resident too (installed with it, never evicted).
+      const readModel = yield* orchestrationEngine.getReadModel();
 
       const checkpointCwd = yield* resolveCheckpointCwd({
         threadId: thread.id,
@@ -145,9 +148,9 @@ const make = Effect.gen(function* () {
     }
 
     const threadId = event.payload.threadId;
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry: any) => entry.id === threadId);
+    const thread = yield* getOrchestrationThread(orchestrationEngine, threadId, "history");
     if (!thread) return;
+    const readModel = yield* orchestrationEngine.getReadModel();
 
     const checkpointCwd = yield* resolveCheckpointCwd({
       threadId,

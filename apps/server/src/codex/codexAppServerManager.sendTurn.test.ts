@@ -4,6 +4,7 @@ import {
   CODEX_DEFAULT_MODE_DEVELOPER_INSTRUCTIONS,
   CODEX_PLAN_MODE_DEVELOPER_INSTRUCTIONS,
 } from "./codexAppServerManager";
+import { CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS } from "./codexModeInstructions";
 import { asThreadId, createSendTurnHarness } from "./codexAppServerManager.test.helpers";
 
 vi.mock("./codexVersionCheck", () => ({
@@ -182,6 +183,51 @@ describe("sendTurn", () => {
         },
       },
       undefined,
+    );
+  });
+
+  it("lets Default mode ask through request_user_input on Codex versions that enable it", async () => {
+    const { manager, context, sendRequest } = createSendTurnHarness();
+    Object.assign(context, { runtimeVersion: "0.167.0" });
+
+    await manager.sendTurn({
+      threadId: asThreadId("thread_1"),
+      input: "Ship it",
+      interactionMode: "default",
+    });
+
+    const params = sendRequest.mock.calls.at(-1)?.[2] as {
+      collaborationMode?: { settings?: { developer_instructions?: string } };
+    };
+    expect(params.collaborationMode?.settings?.developer_instructions).toBe(
+      CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS,
+    );
+    // Codex 0.167 wording for the enabled tool, plus bigbud steering choices into the panel.
+    expect(CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS).toContain(
+      "Use the `request_user_input` tool only when it is listed in the available tools for this turn.",
+    );
+    expect(CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS).toContain(
+      "use `request_user_input` instead of listing the choices in a message",
+    );
+    // Codex questions carry no multiSelect, so "select all that apply" can never be honoured.
+    expect(CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS).toContain(
+      'Each `request_user_input` question is single-choice: never word it as "select all that apply"',
+    );
+    expect(CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS).not.toContain("unavailable");
+    // Cross-project confirmations must reach the question panel, never an assumed answer.
+    expect(CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS).toMatch(
+      /`status: "confirmation_required"`\), always ask it with `request_user_input`[\s\S]*<\/collaboration_mode>$/,
+    );
+    // Upstream's bare "never for permission requests" would forbid asking those confirmations;
+    // only Codex's own sandbox, command and file-change escalations are excluded.
+    expect(CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS).toContain(
+      "Never use the `request_user_input` tool for sandbox, command-execution, or file-change permission escalations; Codex has its own approval flow for those.",
+    );
+    expect(CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS).not.toContain(
+      "for permission requests or permission-related escalations",
+    );
+    expect(CODEX_DEFAULT_MODE_WITH_USER_INPUT_DEVELOPER_INSTRUCTIONS).toContain(
+      "or when a tool result asks for the user's confirmation (see below).",
     );
   });
 

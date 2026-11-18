@@ -19,6 +19,14 @@ import {
   interfaceMetric,
 } from "./ResourceNetworkInterfaces.fixtures";
 
+function hostViewContent() {
+  return (
+    <div style={{ width: 896 }}>
+      <SystemMonitorHostView />
+    </div>
+  );
+}
+
 function MonitorLink({
   children,
   to,
@@ -30,7 +38,11 @@ function MonitorLink({
 }) {
   return <a href={`${to}?monitorScope=${search?.monitorScope ?? "system"}`}>{children}</a>;
 }
-vi.mock("@tanstack/react-router", () => ({ Link: MonitorLink }));
+vi.mock("@tanstack/react-router", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-router")>()),
+  Link: MonitorLink,
+  useParams: () => null,
+}));
 vi.mock("./useResourceMonitor", () => ({ useResourceMonitor: vi.fn() }));
 
 beforeEach(() => {
@@ -119,12 +131,7 @@ it("wires core usage bars into the host view and suppresses old usage when disco
     ...useResourceMonitor(true, false, false),
     snapshot: { ...appMonitorSnapshot(), perCorePercent: cpuCoreReadings() },
   });
-  const content = () => (
-    <div style={{ width: 896 }}>
-      <SystemMonitorHostView />
-    </div>
-  );
-  const screen = await render(content());
+  const screen = await render(hostViewContent());
   try {
     const cores = screen.getByRole("region", { name: "CPU cores", exact: true });
     expect(cores.getByRole("meter").elements()).toHaveLength(10);
@@ -132,7 +139,7 @@ it("wires core usage bars into the host view and suppresses old usage when disco
       ...useResourceMonitor(true, false, false),
       connection: "unavailable",
     });
-    await screen.rerender(content());
+    await screen.rerender(hostViewContent());
     expect(cores.getByRole("meter").elements()).toHaveLength(0);
     expect(cores.getByRole("img").elements()).toHaveLength(10);
   } finally {

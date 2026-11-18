@@ -24,6 +24,7 @@ import { DirectResourceCleanupRepository } from "../../persistence/Services/Dire
 import { calculateCommandPayloadDigest, commandPayloadDigestMatches } from "../commandDigest.ts";
 import { executeReadyDirectCleanupPlan } from "../../deletion/Layers/DirectResourceCleanupCoordinator.ts";
 import { makeDirectResourceCleanupExecutor } from "../../deletion/Layers/DirectResourceCleanupExecutor.ts";
+import { describeDeletionFailure } from "../../deletion/Layers/DeletionFailure.detail.ts";
 import { makeDirectResourceCleanupRepository } from "../../persistence/Layers/DirectResourceCleanupRepository.ts";
 import { directCleanupProofDigest } from "../../deletion/Layers/DirectResourceCleanup.proof.ts";
 import {
@@ -159,7 +160,6 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
     }
 
     const result = yield* waitForProjectThreadsToSettle(deps, event.payload.projectId);
-
     if (!result.ok) {
       yield* Effect.logWarning("project deletion aborted", {
         projectId: event.payload.projectId,
@@ -171,6 +171,10 @@ export const makeProcessProjectDeletionRequested = Effect.gen(function* () {
 
     const preparedExecutorExit = yield* Effect.exit(cleanupExecutor.prepare());
     if (preparedExecutorExit._tag === "Failure") {
+      yield* Effect.logWarning("project deletion aborted: resource cleanup is unavailable", {
+        projectId: event.payload.projectId,
+        detail: describeDeletionFailure(preparedExecutorExit.cause),
+      });
       yield* abortDeletion;
       return;
     }

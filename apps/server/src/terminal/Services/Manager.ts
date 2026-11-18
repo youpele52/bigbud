@@ -1,3 +1,9 @@
+import type {
+  TerminalRemoteInventoryInput,
+  TerminalRemoteInventory,
+  TerminalRemoteAttachInput,
+  TerminalRemoteDetachInput,
+} from "@bigbud/contracts/workspace/terminal.remote.ts";
 /**
  * TerminalManager - Terminal session orchestration service interface.
  *
@@ -30,6 +36,10 @@ import {
 } from "@bigbud/contracts";
 import { PtyProcess } from "./PTY";
 import { Effect, ServiceMap } from "effect";
+import type {
+  TerminalShellProfileInventory,
+  TerminalShellProfilesInput,
+} from "@bigbud/contracts/workspace/terminal.shellProfiles.ts";
 import type { TerminalSnapshotInput } from "@bigbud/contracts/workspace/terminal.ts";
 import type {
   TerminalRecoveryInput,
@@ -96,6 +106,17 @@ export interface TerminalIdleWork {
 }
 
 export interface TerminalManagerShape {
+  readonly remoteInventory?: (
+    input: TerminalRemoteInventoryInput,
+  ) => Effect.Effect<TerminalRemoteInventory, TerminalError>;
+  readonly remoteAttach?: (
+    input: TerminalRemoteAttachInput,
+  ) => Effect.Effect<TerminalSessionSnapshot, TerminalError>;
+  readonly remoteDetach?: (input: TerminalRemoteDetachInput) => Effect.Effect<void, TerminalError>;
+  readonly remoteStop?: (input: TerminalRemoteAttachInput) => Effect.Effect<void, TerminalError>;
+  readonly listShellProfiles: (
+    input: TerminalShellProfilesInput,
+  ) => Effect.Effect<TerminalShellProfileInventory, TerminalError>;
   /** Server-owned sampled work facts; a shell alone is not work. */
   readonly getThreadIdleWork?: (threadId: string) => Effect.Effect<TerminalIdleWork>;
   /** Cached owner facts only; no OS/global process rescan. */

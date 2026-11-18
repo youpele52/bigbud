@@ -15,3 +15,8 @@ pub use session::{
 pub mod identity;
 pub mod inspect_local;
 mod spawn_gate;
+
+pub mod backend_service;
+pub mod local_control;
+
+pub mod service_lease;

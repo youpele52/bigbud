@@ -1,6 +1,6 @@
 import * as Schema from "effect/Schema";
 import { ThreadToolRequest } from "../../../ws/http.threadTools.schema.ts";
-import type { V2CanonicalBody, V2PureAction } from "./Orchestration.implementation.types.v3.ts";
+import type { V2CanonicalBody, V2PureAction } from "./Orchestration.implementation.types.v5.ts";
 import type { V2PureJson } from "./Orchestration.implementation.types.ts";
 
 /** Own/freeze plain JSON before pure code runs; reject accessors, prototypes and unbounded structures. */
@@ -78,10 +78,12 @@ export function validateV2PreparedBody(
     list_threads: ["action", "projectId", "status", "limit", "includeExcerpt"],
     rename_thread: ["action", "threadId", "targetThreadId", "title"],
     render_html: ["action", "htmlArguments"],
+    set_elevator_summary: ["action", "threadId", "summary"],
   };
   if (
     Object.keys(body).some((key) => !allowed[action].includes(key)) ||
-    (action === "rename_thread" && body.threadId !== callerThreadId)
+    ((action === "rename_thread" || action === "set_elevator_summary") &&
+      body.threadId !== callerThreadId)
   )
     throw new Error(
       "V2 pinned body attempted authority/ID fields outside the narrow canonical action boundary.",

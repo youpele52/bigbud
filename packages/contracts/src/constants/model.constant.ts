@@ -20,7 +20,8 @@ export const CODEX_REASONING_EFFORT_OPTIONS = ["xhigh", "high", "medium", "low"]
  * - Resetting to defaults
  */
 export const DEFAULT_MODEL_BY_PROVIDER = {
-  codex: "gpt-5.5",
+  // Codex's own model/list default; gpt-5.5 is rejected for ChatGPT-account sign-ins.
+  codex: "gpt-6.1-sol",
   claudeAgent: "default",
   cliProxy: "default",
   copilot: "gpt-5",

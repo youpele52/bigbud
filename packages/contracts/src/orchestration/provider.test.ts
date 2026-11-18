@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { Schema } from "effect";
 
 import { LOCAL_EXECUTION_TARGET_ID } from "../core/baseSchemas";
-import { ProviderSendTurnInput, ProviderSessionStartInput } from "./provider";
+import {
+  ProviderSendTurnInput,
+  ProviderSessionStartInput,
+  ProviderSteerTurnInput,
+} from "./provider";
 import { ModelSelection, PersistedModelSelection } from "./orchestration.provider";
 
 const decodeProviderSessionStartInput = Schema.decodeUnknownSync(ProviderSessionStartInput);
@@ -144,6 +148,43 @@ describe("ProviderSessionStartInput", () => {
 });
 
 describe("ProviderSendTurnInput", () => {
+  it.each([120_000, 120_001, 240_000])(
+    "accepts complete send and steer text of %s characters",
+    (length) => {
+      const text = `START${"x".repeat(length - 8)}END`;
+      for (const schema of [ProviderSendTurnInput, ProviderSteerTurnInput]) {
+        expect(
+          Schema.decodeUnknownSync(schema)({ threadId: "long", input: `  ${text}\n` }).input,
+        ).toBe(text);
+      }
+    },
+  );
+
+  it("preserves optional send, required steer, nonblank text and attachment bounds", () => {
+    expect(decodeProviderSendTurnInput({ threadId: "optional" }).input).toBeUndefined();
+    expect(() =>
+      Schema.decodeUnknownSync(ProviderSteerTurnInput)({ threadId: "required" }),
+    ).toThrow();
+    for (const schema of [ProviderSendTurnInput, ProviderSteerTurnInput]) {
+      expect(() =>
+        Schema.decodeUnknownSync(schema)({ threadId: "blank", input: " \n " }),
+      ).toThrow();
+    }
+    const attachment = {
+      type: "image",
+      id: "image",
+      name: "image.png",
+      mimeType: "image/png",
+      sizeBytes: 1,
+    };
+    expect(
+      decodeProviderSendTurnInput({ threadId: "images", attachments: Array(8).fill(attachment) })
+        .attachments,
+    ).toHaveLength(8);
+    expect(() =>
+      decodeProviderSendTurnInput({ threadId: "images", attachments: Array(9).fill(attachment) }),
+    ).toThrow();
+  });
   it("keeps request message identity optional for existing payloads", () => {
     const legacy = { threadId: "thread-legacy", input: "hello" } as const;
 

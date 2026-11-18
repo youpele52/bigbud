@@ -10,7 +10,7 @@ import { openV2ThreadEncryptedRequest } from "./Orchestration.crypto.ts";
 import { runWithAbortableDeadline } from "../../RequestDeadline.ts";
 import {
   V2ThreadImplementationRegistry,
-  v2ThreadImplementation,
+  v2ImplementationForBootstrap,
 } from "./Orchestration.implementation.ts";
 import { V2ImplementationSelection } from "./Orchestration.implementation.selection.ts";
 import { readV2RetainedArtifact } from "./Orchestration.artifact.retained.ts";
@@ -34,8 +34,9 @@ export async function makeV2ApplicationOrchestration(
   eligibility: V2NativeEligibilityVerifier = verifyV2NativeEligibility,
   configRoot?: string,
   backend?: V2BackendInstance,
+  exportArtifact: typeof exportV2ThreadArtifact = exportV2ThreadArtifact,
 ) {
-  const artifact = await exportV2ThreadArtifact(stateDir);
+  const artifact = await exportArtifact(stateDir);
   const implementations = new V2ThreadImplementationRegistry();
   const implementationSelection = await V2ImplementationSelection.open(artifact, implementations);
   const records = await V2ThreadRecords.open(
@@ -94,9 +95,10 @@ export async function makeV2ApplicationOrchestration(
         session.lease.process.client,
         session.native.location.directory,
         undefined,
-        installed.bootstrapAbi !== "bigbud.thread.bootstrap.v4"
-          ? v2ThreadImplementation("v1")
-          : await implementationSelection.refresh(),
+        v2ImplementationForBootstrap(
+          await implementationSelection.refresh(),
+          installed.bootstrapAbi,
+        ),
         eligibility,
         session.activation?.stamp.nativeProof?.root ?? configRoot,
       );

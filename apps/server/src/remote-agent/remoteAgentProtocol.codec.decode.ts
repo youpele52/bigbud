@@ -1,3 +1,4 @@
+import { decodeServiceLeaseFrame } from "./remoteAgentProtocol.codec.serviceLease.ts";
 import {
   type RemoteAgentCapability,
   type RemoteAgentCancelRequest,
@@ -321,7 +322,14 @@ export function decodeFramePayload(bytes: Uint8Array): RemoteAgentFrame {
           (field >= 8 && field <= 32) ||
           (field >= 33 && field <= 34) ||
           (field >= 42 && field <= 57) ||
-          (field >= 100 && field <= 107)
+          field === 60 ||
+          field === 61 ||
+          field === 62 ||
+          field === 63 ||
+          field === 64 ||
+          field === 65 ||
+          (field >= 100 && field <= 107) ||
+          (field >= 120 && field <= 127)
         )
       ) {
         reader.skip(wireType);
@@ -335,7 +343,12 @@ export function decodeFramePayload(bytes: Uint8Array): RemoteAgentFrame {
       const cleanupFrame = decodeResourceCleanupFrame(field, payload);
       const controlFrame = decodeRemoteAgentControlFrame(field, payload);
       const decodedFrame =
-        workspaceFrame ?? processFrame ?? ptyFrame ?? cleanupFrame ?? controlFrame;
+        workspaceFrame ??
+        processFrame ??
+        ptyFrame ??
+        cleanupFrame ??
+        controlFrame ??
+        decodeServiceLeaseFrame(field, payload);
       if (!decodedFrame) return;
       if (frame) {
         throw new RemoteAgentProtocolDecodeError("protobuf frame contains multiple payloads");

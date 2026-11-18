@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 
 export const CAPABILITY_URI_PREFIX = "bigbud://capabilities/";
-export const LP_TARGET_TOKEN_LIMIT = 1_200;
+/** Raised from 1200 for remote-agent Tracks (user decision 2026-11-13); hard limit unchanged. */
+export const LP_TARGET_TOKEN_LIMIT = 1_260;
 export const LP_HARD_TOKEN_LIMIT = 2_000;
 export const SKIT_TARGET_TOKEN_LIMIT = 100;
 export const SKIT_HARD_TOKEN_LIMIT = 200;

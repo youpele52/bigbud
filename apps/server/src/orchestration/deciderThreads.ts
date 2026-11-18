@@ -16,6 +16,7 @@ import {
   decideThreadLifecycleCommand,
 } from "./deciderThreads.lifecycle.ts";
 import { type ThreadTurnCommand, decideThreadTurnCommand } from "./deciderThreads.turn.ts";
+import { decideThreadTurnSettle } from "./deciderThreads.turnSettled.ts";
 import { decideThreadTaskCommand } from "./deciderThreads.tasks.ts";
 import { decideThreadForkCommand } from "./deciderThreads.fork.ts";
 import { decideDelegationModelChoiceCommand } from "./deciderThreads.delegationModelChoice.ts";
@@ -106,6 +107,9 @@ export const decideThreadCommand = Effect.fn("decideThreadCommand")(function* ({
       command: command as ThreadOrganizationCommand,
       readModel,
     });
+  }
+  if (command.type === "thread.turn.settle") {
+    return yield* decideThreadTurnSettle({ command, readModel });
   }
   if (command.type === "thread.fork") {
     return yield* decideThreadForkCommand({ command, readModel });

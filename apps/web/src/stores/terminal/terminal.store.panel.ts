@@ -1,6 +1,9 @@
+import { dismissedPaneKey } from "./terminal.store.dismiss";
 import { ThreadId, type TerminalEvent } from "@bigbud/contracts";
 import { terminalRunningSubprocessFromEvent } from "../../utils/terminal";
 import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { reconcileTerminalProfileLaunches } from "./terminal.store.snapshot";
+import type { TerminalStateStoreState } from "./terminal.store.types";
 import {
   appendTerminalEventEntry,
   createSingleThreadTerminalState,
@@ -21,6 +24,7 @@ import {
 } from "./terminal.store.identity";
 
 interface PanelTerminalStateSlice {
+  dismissedTerminalPanes?: TerminalStateStoreState["dismissedTerminalPanes"];
   panelTerminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
 }
 
@@ -30,7 +34,11 @@ export function ensurePanelTerminalInState(
   terminalId: string,
   options: { open?: boolean; active?: boolean } | undefined,
 ): PanelTerminalStateSlice {
-  if (threadId.length === 0) return state;
+  if (
+    threadId.length === 0 ||
+    state.dismissedTerminalPanes?.[dismissedPaneKey(threadId, terminalId)]
+  )
+    return state;
   const currentPanelState = state.panelTerminalStateByThreadId[threadId];
   if (!currentPanelState) {
     const nextState = createSingleThreadTerminalState(terminalId);
@@ -79,6 +87,7 @@ export function ensurePanelTerminalInState(
 }
 
 interface TerminalEventStateSlice extends PanelTerminalStateSlice, TerminalAgentIdentityState {
+  terminalProfileLaunches: TerminalStateStoreState["terminalProfileLaunches"];
   terminalStateByThreadId: Record<ThreadId, ThreadTerminalState>;
   terminalLaunchContextByThreadId: Record<ThreadId, ThreadTerminalLaunchContext>;
   terminalEventEntriesByKey: Record<string, ReadonlyArray<TerminalEventEntry>>;
@@ -90,6 +99,8 @@ export function applyTerminalEventToState(
   state: TerminalEventStateSlice,
   event: TerminalEvent,
 ): TerminalEventStateSlice {
+  if (state.dismissedTerminalPanes?.[dismissedPaneKey(event.threadId, event.terminalId)])
+    return state;
   if (
     (event.type === "started" || event.type === "restarted") &&
     !recordTerminalLaunch(event.snapshot)
@@ -152,6 +163,11 @@ export function applyTerminalEventToState(
   );
 
   return {
+    dismissedTerminalPanes: state.dismissedTerminalPanes,
+    terminalProfileLaunches:
+      event.type === "started" || event.type === "restarted"
+        ? reconcileTerminalProfileLaunches(state, event.snapshot).terminalProfileLaunches
+        : state.terminalProfileLaunches,
     terminalStateByThreadId: nextTerminalStateByThreadId,
     panelTerminalStateByThreadId: nextPanelTerminalStateByThreadId,
     terminalLaunchContextByThreadId: state.terminalLaunchContextByThreadId,

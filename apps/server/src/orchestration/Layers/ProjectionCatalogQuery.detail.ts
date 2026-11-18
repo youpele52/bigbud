@@ -185,7 +185,7 @@ export function makeGetSelectedThreadDetail(
         checkpoint_ref AS "checkpointRef",
         checkpoint_status AS status,
         assistant_message_id AS "assistantMessageId",
-        completed_at AS "completedAt"
+        COALESCE(checkpoint_completed_at, completed_at) AS "completedAt"
       FROM projection_turns
       WHERE thread_id = ${threadId} AND checkpoint_turn_count IS NOT NULL
       ORDER BY checkpoint_turn_count DESC, turn_id ASC

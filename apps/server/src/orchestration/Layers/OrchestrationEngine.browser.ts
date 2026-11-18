@@ -1,13 +1,17 @@
-import type { BrowserAction, OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
+import type { BrowserAction, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import type { BrowserManagerShape } from "../../browser/Services/BrowserManager.ts";
 import type { VisibleBrowserControlShape } from "../../browser/Services/VisibleBrowserControl.ts";
 import { browserViaOrchestration } from "../../orchestration-tools/ThreadBrowserTools.ts";
+import {
+  getOrchestrationThread,
+  type OrchestrationEngineShape,
+} from "../Services/OrchestrationEngine.ts";
 
 export const executeBrowserAction = Effect.fn("executeBrowserAction")(function* (input: {
   readonly browser: BrowserManagerShape;
-  readonly readModel: () => OrchestrationReadModel;
+  readonly engine: Pick<OrchestrationEngineShape, "getReadModel" | "getThread">;
   readonly threadId: ThreadId;
   readonly action: BrowserAction;
   readonly visibleBrowser: VisibleBrowserControlShape;
@@ -18,7 +22,7 @@ export const executeBrowserAction = Effect.fn("executeBrowserAction")(function* 
       ? yield* input.visibleBrowser.resolveThreadLease(input.threadId)
       : input.action.tabId;
   if (requestedTarget === "visible" || (requestedTarget === "auto" && tabId)) {
-    const thread = input.readModel().threads.find((candidate) => candidate.id === input.threadId);
+    const thread = yield* getOrchestrationThread(input.engine, input.threadId);
     const turnId =
       thread?.session?.status === "running"
         ? (thread.session.activeTurnId ??

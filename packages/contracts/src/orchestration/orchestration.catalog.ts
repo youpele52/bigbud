@@ -17,10 +17,14 @@ import {
 } from "./orchestration.provider";
 import {
   ElevatorSummary,
+  OrchestrationLatestTurn,
+  OrchestrationTurnControlOperation,
   OrchestrationLatestTurnState,
   OrchestrationSessionStatus,
   OrchestrationThreadPurpose,
 } from "./orchestration.thread";
+import { ThreadRecovery } from "./orchestration.recovery";
+import { ThreadNotificationSafety } from "./orchestration.notificationSafety";
 import { ThreadOrganizationField } from "./orchestration.organization";
 import { SIDEBAR_THREAD_SORT_ORDERS } from "../constants/settings.constant";
 
@@ -75,6 +79,12 @@ export const ThreadSummary = Schema.Struct({
   /** Owned native descendants may outlive the parent turn (OrchestrationSession.retainedFamily). */
   retainedFamily: Schema.optional(Schema.Boolean),
   latestTurnState: Schema.NullOr(OrchestrationLatestTurnState),
+  latestTurn: Schema.optional(Schema.NullOr(OrchestrationLatestTurn)),
+  notificationSafety: Schema.optional(ThreadNotificationSafety),
+  recovery: Schema.optional(Schema.NullOr(ThreadRecovery)),
+  pendingTurnControlOperation: Schema.optional(Schema.NullOr(OrchestrationTurnControlOperation)),
+  sessionReason: Schema.optional(Schema.NullOr(Schema.String)),
+  sessionEpoch: Schema.optional(NonNegativeInt),
   isWatching: Schema.Boolean,
   isWatched: Schema.Boolean,
   isDelegated: Schema.Boolean,

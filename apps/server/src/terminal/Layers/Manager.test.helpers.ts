@@ -30,6 +30,7 @@ import { makeTerminalManagerWithOptions } from "./Manager";
 import type { RemoteTerminalProcessInspector } from "./Manager.remote-inspection.ts";
 import type { TerminalSubprocessChecker } from "./Manager.shell.ts";
 import type { TerminalAgentDetector } from "./Manager.agentDetection";
+import type { TerminalManagerOptions } from "./Manager.types";
 
 export class FakePtyProcess implements PtyProcess {
   readonly writes: string[] = [];
@@ -240,6 +241,8 @@ export function writeFileString(filePath: string, contents: string) {
 }
 
 export interface CreateManagerOptions {
+  getLocalShellDefault?: TerminalManagerOptions["getLocalShellDefault"];
+  resolveShellProfile?: TerminalManagerOptions["resolveShellProfile"];
   shellResolver?: () => string;
   subprocessChecker?: TerminalSubprocessChecker;
   agentDetector?: TerminalAgentDetector;
@@ -275,8 +278,12 @@ export const createManager = (
 
       const manager = yield* makeTerminalManagerWithOptions({
         logsDir,
+        getLocalShellDefault: options.getLocalShellDefault,
         historyLineLimit,
         ptyAdapter,
+        ...(options.resolveShellProfile
+          ? { resolveShellProfile: options.resolveShellProfile }
+          : {}),
         ...(options.releaseWorktreeLease
           ? { releaseWorktreeLease: options.releaseWorktreeLease }
           : {}),

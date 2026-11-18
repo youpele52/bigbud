@@ -23,9 +23,19 @@ import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
 import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
 
+import {
+  RuntimeMaintenanceGate,
+  type RuntimeMaintenanceGateShape,
+} from "../../command-admission/RuntimeMaintenanceGate.ts";
 import { TerminalManager, type TerminalManagerShape } from "../../terminal/Services/Manager.ts";
+import { ReadModelResidencyConfig } from "./OrchestrationEngine.residency.ts";
 
-export function createRuntime(dbPath: string, terminalManager?: TerminalManagerShape) {
+export function createRuntime(
+  dbPath: string,
+  terminalManager?: TerminalManagerShape,
+  maintenance?: RuntimeMaintenanceGateShape,
+  residency?: typeof ReadModelResidencyConfig.Service,
+) {
   const layer = OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
     Layer.provide(ProjectionOperationalStateQueryLive),
@@ -40,6 +50,12 @@ export function createRuntime(dbPath: string, terminalManager?: TerminalManagerS
       terminalManager ? Layer.succeed(TerminalManager, terminalManager) : Layer.empty,
     ),
     Layer.provideMerge(NodeServices.layer),
+    Layer.provideMerge(
+      maintenance ? Layer.succeed(RuntimeMaintenanceGate, maintenance) : Layer.empty,
+    ),
+    Layer.provideMerge(
+      residency ? Layer.succeed(ReadModelResidencyConfig, residency) : Layer.empty,
+    ),
   );
   return ManagedRuntime.make(layer);
 }

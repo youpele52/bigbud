@@ -1,7 +1,12 @@
 import { RemoteAgentConnection } from "./remoteAgentConnection.ts";
 import { parseRemoteAgentCheckOutput } from "./remoteAgentIdentity.ts";
 import type { RemoteAgentControl } from "./remoteAgentControl.ts";
-import { validateRemoteAgentRuntime, remoteAgentBuildId } from "./remoteAgentRuntime.ts";
+import {
+  validateRemoteAgentRuntime,
+  remoteAgentBuildId,
+  remoteAgentRuntimeEqual,
+} from "./remoteAgentRuntime.ts";
+import { buildRemoteAgentRuntimeProbeCommand } from "./remoteAgentConnection.identity.ts";
 import type { RemoteAgentRuntimeBinding } from "./remoteAgentConnectionPool.ts";
 import { assertRemoteAgentRuntimeHello } from "./remoteAgentCompatibility.ts";
 import {
@@ -29,15 +34,12 @@ export async function observeLegacyRemoteAgentBinding(
         readonly trustStore: RemoteAgentArtifactTrustStore;
       }
     | undefined = undefined,
+  externalBinaryPath?: string,
 ): Promise<RemoteAgentRuntimeBinding | undefined> {
   if (historical) verifyRemoteAgentArtifactSignature(historical.artifact, historical.trustStore);
-  const output = await control.run(`set -eu
-binary="$HOME/.bigbud/agent/bin/current"
-if test ! -x "$binary"; then printf missing; exit 0; fi
-readlink -f -- "$binary"
-sha256sum -- "$binary" | cut -d ' ' -f1
-"$binary" --check
-`);
+  const output = await control.run(
+    buildRemoteAgentRuntimeProbeCommand(externalBinaryPath ?? "$HOME/.bigbud/agent/bin/current"),
+  );
   if (output.trim() === "missing") return undefined;
   const [binaryPath, sha256, ...checkLines] = output.trim().split("\n");
   const check = parseRemoteAgentCheckOutput(checkLines.join("\n"));
@@ -55,7 +57,7 @@ sha256sum -- "$binary" | cut -d ' ' -f1
   const runtimeVersion = historicalIdentityMatches ? historical!.artifact.version : check.version;
   const statePath = `${control.root}/state`;
   const runtime = validateRemoteAgentRuntime({
-    generation: "legacy",
+    generation: externalBinaryPath ? `external-${sha256?.slice(0, 23)}` : "legacy",
     version: runtimeVersion,
     sha256,
     buildDigest: check.buildDigest,
@@ -71,6 +73,13 @@ sha256sum -- "$binary" | cut -d ' ' -f1
   try {
     const hello = await connection.handshake();
     assertRemoteAgentRuntimeHello(runtime, hello);
+    if (
+      externalBinaryPath &&
+      !(["terminal.pty", "workspace.files", "terminal.shell-profiles"] as const).every((name) =>
+        hello.capabilities.some((capability) => capability.name === name && capability.major === 1),
+      )
+    )
+      throw new Error("External runtime does not support explicit shell profiles.");
     const readinessId = `legacy-readiness-${crypto.randomUUID()}`;
     const readiness = await connection.request(
       {
@@ -95,6 +104,50 @@ sha256sum -- "$binary" | cut -d ' ' -f1
       throw new Error("Legacy remote runtime did not confirm readiness.");
     const id = remoteAgentBuildId(runtime);
     const state = await control.registry.update((current) => {
+      if (externalBinaryPath) {
+        const existing = current.builds.find((entry) => entry.id === id);
+        if (
+          existing &&
+          (!remoteAgentRuntimeEqual(existing.runtime, runtime) || existing.binary !== "present")
+        )
+          throw new Error(
+            "External runtime descriptor changed; existing ownership requires recovery.",
+          );
+        const launch = current.launches.find((entry) => entry.id === runtime.generation);
+        if (
+          launch &&
+          (launch.buildId !== id || launch.epoch !== hello.agentEpoch || launch.phase !== "ready")
+        )
+          throw new Error("External runtime epoch changed; existing ownership requires recovery.");
+        return {
+          ...current,
+          revision: current.revision + 1,
+          builds: existing
+            ? current.builds
+            : [
+                ...current.builds,
+                {
+                  id,
+                  runtime,
+                  health: "staged" as const,
+                  promotion: 0,
+                  binary: "present" as const,
+                  authenticated: false,
+                },
+              ],
+          launches: launch
+            ? current.launches
+            : [
+                ...current.launches,
+                {
+                  id: runtime.generation,
+                  buildId: id,
+                  phase: "ready" as const,
+                  epoch: hello.agentEpoch,
+                },
+              ],
+        };
+      }
       if (current.current) return current;
       if (current.builds.some((entry) => entry.runtime.generation === "legacy"))
         throw new Error("Legacy continuity is already reserved; recovery is required.");
@@ -120,6 +173,7 @@ sha256sum -- "$binary" | cut -d ' ' -f1
         ],
       };
     });
+    if (externalBinaryPath) return { runtime, expectedEpoch: hello.agentEpoch };
     const selected = state.builds.find((entry) => entry.id === state.current)!;
     const launch = state.launches.find((entry) => entry.buildId === selected.id)!;
     return { runtime: selected.runtime, expectedEpoch: launch.epoch };

@@ -49,6 +49,9 @@ export function MobileComposerModelPicker({
   onProviderUnlock,
 }: MobileComposerModelPickerProps) {
   const modelOptionsByProvider = useMemo(() => buildModelOptionsByProvider(providers), [providers]);
+  const menuItemClassName = "min-h-11 text-sm sm:min-h-11 sm:text-sm";
+  const searchbarClassName =
+    "px-3 py-0 [&_input]:min-h-11 [&_input]:w-full [&_input]:text-sm [&_input]:placeholder:text-sm [&_button]:min-h-11 [&_button]:min-w-11";
   const popupClassName = "[--available-height:33vh] !max-h-[50vh]";
   const subPopupClassName =
     "[--available-height:33vh] !max-h-[50vh] w-[min(66vw,calc(var(--anchor-width)*2.5))] max-w-[66vw]";
@@ -58,10 +61,11 @@ export function MobileComposerModelPicker({
       compact
       lockedProvider={lockedProvider}
       model={selectionValue(selection)}
+      menuItemClassName={menuItemClassName}
       modelListGroupLabelClassName="px-3 text-sm font-normal"
-      modelListItemClassName="items-start pe-3 ps-3"
+      modelListItemClassName={`${menuItemClassName} items-center pe-3 ps-3`}
       modelListItemLabelClassName="whitespace-normal break-words leading-snug"
-      modelListSearchbarClassName="px-3"
+      modelListSearchbarClassName={searchbarClassName}
       modelOptionsByProvider={modelOptionsByProvider}
       popupClassName={popupClassName}
       provider={selection.provider}

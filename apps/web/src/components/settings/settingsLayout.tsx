@@ -47,6 +47,7 @@ export function SettingsRow({
   control,
   children,
   searchTerms = [],
+  forceVisible = false,
   layout = "default",
   statusPlacement = "inline",
 }: {
@@ -57,17 +58,16 @@ export function SettingsRow({
   control?: ReactNode;
   children?: ReactNode;
   searchTerms?: ReadonlyArray<string>;
+  /** Explicit navigation targets remain reachable while an unrelated search is active. */
+  forceVisible?: boolean;
   layout?: "default" | "three-quarter-control";
   statusPlacement?: "inline" | "below";
 }) {
   const { query, terms } = useSettingsSearch();
   const titleTerms = typeof title === "string" ? [title] : [];
-  const matches = matchesSettingsSearchTerms(query, [
-    ...terms,
-    ...titleTerms,
-    description,
-    ...searchTerms,
-  ]);
+  const matches =
+    forceVisible ||
+    matchesSettingsSearchTerms(query, [...terms, ...titleTerms, description, ...searchTerms]);
   const isSearching = Boolean(normalizeSettingsSearchQuery(query));
 
   return (

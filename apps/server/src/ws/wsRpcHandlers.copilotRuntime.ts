@@ -13,7 +13,8 @@ export function makeWsRpcCopilotRuntimeHandlers(context: WsRpcContext) {
       Effect.gen(function* () {
         const settings = yield* context.serverSettings.getSettings;
         return yield* Effect.tryPromise({
-          try: () => copilotRuntimeRequest(input, settings.providers.copilot.binaryPath),
+          // Disabled providers get passive status: no binary launch, extraction, or state write.
+          try: () => copilotRuntimeRequest(input, settings.providers.copilot),
           catch: (error) => (error instanceof Error ? error.message : String(error)),
         });
       }).pipe(

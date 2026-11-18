@@ -9,6 +9,7 @@ import {
   createBaseTimelineProps,
   createMessage,
 } from "../messages/MessagesTimeline.virtualization.test.fixtures";
+import { PendingQuestionHarness } from "../view/chat-view/PendingUserInputPanel.browser-helpers";
 import { ChatCitationProvider } from "./ChatCitationProvider";
 import type { ChatMessage } from "../../../models/types";
 
@@ -53,7 +54,6 @@ export function CitationBrowserHarness({
         <MessagesTimeline
           {...createBaseTimelineProps({
             messages,
-            ...(pendingUserInputs ? { pendingUserInputs } : {}),
             ...(answeredUserInputs ? { answeredUserInputs } : {}),
           })}
           activityAccordionOpenById={openById}
@@ -64,6 +64,10 @@ export function CitationBrowserHarness({
           focusMessageId={focusedId}
         />
       </div>
+      {/* Pending questions render in the composer panel, as in ChatView. */}
+      {pendingUserInputs?.[0] ? (
+        <PendingQuestionHarness key={pendingUserInputs[0].requestId} input={pendingUserInputs[0]} />
+      ) : null}
       <div data-testid="citation-composer">
         <ComposerAnnotationPreviews
           annotations={annotations}

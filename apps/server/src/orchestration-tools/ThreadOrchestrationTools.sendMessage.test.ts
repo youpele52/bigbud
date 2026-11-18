@@ -3,12 +3,23 @@ import { Effect, Option, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 
 import { sendThreadMessageViaOrchestration } from "./ThreadOrchestrationTools.sendMessage.ts";
+import {
+  makeTestCoordination,
+  pushClientAnswer,
+  resolvedActivityEvent,
+} from "./ThreadCoordinationConfirmation.test.helpers.ts";
+import type { ThreadCoordinationDeps } from "./ThreadCoordinationConfirmation.ts";
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 
 const callerId = ThreadId.makeUnsafe("caller");
 const targetId = ThreadId.makeUnsafe("target");
 const projectId = ProjectId.makeUnsafe("project");
+const otherProject = ProjectId.makeUnsafe("other");
+const projects = [
+  { id: projectId, title: "Project", deletedAt: null },
+  { id: otherProject, title: "Other", workspaceExecutionTargetId: "ssh:box", deletedAt: null },
+];
 
 const thread = (id: ThreadId, overrides = {}) => ({
   id,
@@ -68,7 +79,7 @@ function system(input?: {
     readEventsByCommandId,
     repository,
     engine: {
-      getReadModel: () => Effect.succeed({ threads, projects: [] }),
+      getReadModel: () => Effect.succeed({ threads, projects }),
       readEvents,
       readEventsByCommandId,
       dispatch,
@@ -128,9 +139,9 @@ describe("sendThreadMessageViaOrchestration", () => {
     await expect(send(system({ callerOverrides: { deletedAt: "now" } }))).rejects.toThrow(
       "Caller thread",
     );
-    await expect(
-      send(system({ targetOverrides: { projectId: ProjectId.makeUnsafe("other") } })),
-    ).rejects.toThrow("not accessible");
+    const foreign = system({ targetOverrides: { projectId: otherProject } });
+    await expect(send(foreign)).resolves.toMatchObject({ status: "confirmation_required" });
+    expect(foreign.dispatch).not.toHaveBeenCalled();
     await expect(send(system({ targetOverrides: { archivedAt: "now" } }))).rejects.toThrow(
       "not available",
     );
@@ -145,13 +156,94 @@ describe("sendThreadMessageViaOrchestration", () => {
     );
   });
 
-  it("allows a direct delegated child in another project", async () => {
-    const value = system({
-      targetOverrides: { projectId: ProjectId.makeUnsafe("other") },
-      delegatedChild: true,
+  it("allows a direct delegated child in another project with no prompt", async () => {
+    const value = system({ targetOverrides: { projectId: otherProject }, delegatedChild: true });
+    const { coordination } = makeTestCoordination();
+
+    await expect(send(value, { coordination })).resolves.toEqual({
+      delivery: "queued",
+      queuePosition: 3,
+    });
+    expect(value.repository.findDirectByChild).toHaveBeenCalledWith({ childThreadId: targetId });
+  });
+});
+
+describe("cross-project sendThreadMessageViaOrchestration", () => {
+  const foreignSystem = (callerOverrides = {}) =>
+    system({ targetOverrides: { projectId: otherProject }, callerOverrides });
+  const required = async (
+    value: ReturnType<typeof system>,
+    coordination: ThreadCoordinationDeps,
+  ) => {
+    const result = await send(value, { coordination });
+    if (!("status" in result) || result.status !== "confirmation_required") {
+      throw new Error(`expected confirmation_required, got ${JSON.stringify(result)}`);
+    }
+    return result;
+  };
+
+  it("asks first, then delivers after a recorded client Allow, even in full access", async () => {
+    const value = foreignSystem({ runtimeMode: "full-access" });
+    const { coordination, log } = makeTestCoordination();
+    const challenge = await required(value, coordination);
+    expect(challenge).toMatchObject({
+      targetProjectId: otherProject,
+      targetProjectTitle: "Other",
+      targetIsRemote: true,
+    });
+    expect(value.dispatch).not.toHaveBeenCalled();
+
+    pushClientAnswer(log, {
+      callerThreadId: callerId,
+      question: challenge.question,
+      answer: "Allow",
+    });
+    await expect(send(value, { coordination })).resolves.toEqual({
+      delivery: "queued",
+      queuePosition: 3,
+    });
+    const [command] = value.dispatch.mock.calls.map(([entry]) => entry);
+    // The target keeps its own runtime mode and approvals: the send carries neither.
+    expect(command).not.toHaveProperty("runtimeMode");
+    expect(command).not.toHaveProperty("interactionMode");
+    await expect(send(value, { coordination, invocationId: "call-2" })).resolves.toMatchObject({
+      delivery: "queued",
+    });
+  });
+
+  it("returns confirmation_denied for Deny and never grants from a provider-reported answer", async () => {
+    const denied = foreignSystem();
+    const deny = makeTestCoordination();
+    const challenge = await required(denied, deny.coordination);
+    pushClientAnswer(deny.log, {
+      callerThreadId: callerId,
+      question: challenge.question,
+      answer: "Deny",
+    });
+    await expect(send(denied, { coordination: deny.coordination })).resolves.toMatchObject({
+      status: "confirmation_denied",
     });
 
-    await expect(send(value)).resolves.toEqual({ delivery: "queued", queuePosition: 3 });
-    expect(value.repository.findDirectByChild).toHaveBeenCalledWith({ childThreadId: targetId });
+    const pi = foreignSystem({ runtimeMode: "full-access" });
+    const auto = makeTestCoordination();
+    const piChallenge = await required(pi, auto.coordination);
+    auto.log.push(
+      resolvedActivityEvent({
+        threadId: callerId,
+        sequence: auto.log.nextSequence(),
+        requestId: "pi-confirm",
+        answers: { [piChallenge.question]: "Allow" },
+      }),
+    );
+    await required(pi, auto.coordination);
+    expect(pi.dispatch).not.toHaveBeenCalled();
+  });
+
+  it("refuses cross-project sends when the grants service is absent", async () => {
+    const value = foreignSystem();
+    await expect(send(value, { coordination: {} })).resolves.toMatchObject({
+      status: "confirmation_required",
+    });
+    expect(value.dispatch).not.toHaveBeenCalled();
   });
 });

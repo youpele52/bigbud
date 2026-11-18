@@ -12,6 +12,8 @@ function runtimeState(event: OrchestrationEvent): WorkflowState | undefined {
         event.payload.session.status === "starting"
         ? "working"
         : "idle";
+    case "thread.turn-settled":
+      return event.payload.outcome === "completed" ? "idle" : "failed";
     case "thread.turn-start-requested":
       return "working";
     case "thread.turn-start-failed":
@@ -36,7 +38,17 @@ export function applyDelegatedChildRuntimeEvent(
       ...thread,
       delegatedChildren: thread.delegatedChildren.map((child) =>
         child.threadId === childThreadId
-          ? { ...child, workflowState, updatedAt: event.occurredAt }
+          ? {
+              ...child,
+              workflowState,
+              updatedAt: event.occurredAt,
+              ...(event.type === "thread.turn-settled"
+                ? { terminalOutcome: event.payload.outcome }
+                : {}),
+              ...(event.type === "thread.turn-start-requested"
+                ? { terminalOutcome: undefined }
+                : {}),
+            }
           : child,
       ),
     };

@@ -5,7 +5,6 @@ import { Input } from "../ui/input";
 import { Alert, AlertDescription } from "../ui/alert";
 import {
   Dialog,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogPanel,
@@ -50,9 +49,6 @@ export function SidebarNewProjectFlow(props: SidebarNewProjectFlowProps) {
         >
           <DialogHeader>
             <DialogTitle>Add project</DialogTitle>
-            <DialogDescription>
-              Give your project a name and optionally choose a folder.
-            </DialogDescription>
           </DialogHeader>
           <DialogPanel className="space-y-4">
             <label htmlFor="new-project-name" className="block">

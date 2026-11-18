@@ -99,6 +99,9 @@ const makeProviderLayerLive = (
         Layer.provide(providerSessionDirectoryLayer),
         Layer.provide(ProviderTurnLivenessRepositoryLive),
         Layer.provide(Recovery.RecoveryPersistenceLayerLive),
+        // Exported, not only provided: runtime ingestion's startup hygiene reads it as an optional
+        // service, and without it stale `running` rows and their provider leases survive a crash.
+        Layer.provideMerge(ProviderSessionRuntimeRepositoryLive),
       );
     }),
   );

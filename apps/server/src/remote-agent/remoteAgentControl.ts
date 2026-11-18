@@ -1,3 +1,4 @@
+import { runRemoteAgentDiagnosedCommand } from "./remoteAgentDiagnostics.ts";
 import { makeRemoteAgentRegistryStore } from "./remoteAgentInstall.registry.store.ts";
 import { hasRemoteAgentPathControls } from "./remoteAgentRuntime.ts";
 import { runSshCommand, type RunSshCommandInput } from "../ssh/sshProcess.ts";
@@ -20,7 +21,7 @@ export async function openRemoteAgentControl(
   execute: (input: RunSshCommandInput) => Promise<unknown> = runSshCommand,
 ): Promise<RemoteAgentControl> {
   const run = async (command: string) => {
-    const result = await execute({
+    const result = await runRemoteAgentDiagnosedCommand(execute, "control", {
       executionTargetId,
       command: "sh",
       args: ["-lc", command],

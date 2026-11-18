@@ -144,6 +144,7 @@ export function SidebarRemoteAgentStatus({
         executionTargetId,
         requestId: admissionRequestId,
         intent: "fresh",
+        replace: true,
       });
       if (actionRevision !== revision.current) return;
       const usingFallback = result.outcome === "fallback" || Boolean(result.warning);
@@ -152,7 +153,7 @@ export function SidebarRemoteAgentStatus({
       useRemoteAccessStore.getState().recordRemoteConnection(executionTargetId, result);
       notifyRemoteAgentConnection(executionTargetId, result);
       setMessage(
-        `Connected to ${usingFallback ? "healthy fallback " : ""}${result.currentVersion}. Existing terminals and operations keep their original runtime.`,
+        `Connected to ${usingFallback ? "healthy fallback " : ""}${result.currentVersion}. Existing terminals and operations keep their original runtime.${result.cleanupMessage ? ` ${result.cleanupMessage}` : ""}`,
       );
       completeRemoteAgentAdmission(executionTargetId, admissionRequestId);
       requestId.current = undefined;
