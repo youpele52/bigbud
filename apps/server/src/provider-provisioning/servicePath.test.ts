@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { discoverServicePath, resolveProviderExecutable } from "./servicePath.ts";
 
+const MACHINE_LINUXBREW = "/home/linuxbrew/";
+
 let root: string;
 let home: string;
 
@@ -111,7 +113,10 @@ describe("discoverServicePath", () => {
         explicitDirs: ["/explicit/bin", "relative/ignored"],
       }),
     );
-    const sources = discovery.entries.map((entry) => `${entry.source}:${entry.dir}`);
+    // The machine-wide Linuxbrew directory exists on some hosts (GitHub's Ubuntu runner).
+    const sources = discovery.entries
+      .filter((entry) => !entry.dir.startsWith(MACHINE_LINUXBREW))
+      .map((entry) => `${entry.source}:${entry.dir}`);
     expect(sources.slice(0, 3)).toEqual([
       "explicit:/explicit/bin",
       "loginShell:/opt/login/bin",
@@ -151,7 +156,11 @@ describe("discoverServicePath", () => {
       }),
     );
     expect(discovery.shell.status).toBe("oversize");
-    expect(discovery.entries.map((entry) => entry.dir)).toEqual(["/usr/bin", "/bin"]);
+    expect(
+      discovery.entries
+        .map((entry) => entry.dir)
+        .filter((dir) => !dir.startsWith(MACHINE_LINUXBREW)),
+    ).toEqual(["/usr/bin", "/bin"]);
   });
 
   it("reports a missing shell as failed without throwing", async () => {

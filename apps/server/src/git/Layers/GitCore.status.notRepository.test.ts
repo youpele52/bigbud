@@ -74,8 +74,10 @@ it.layer(TestLayer)("git status outside a repository", (it) => {
 
         const exit = yield* Effect.exit(core.statusDetailsLocal(cwd));
 
+        // Still a command error, never isRepo:false; git's wording for a broken gitfile varies
+        // by version ("not a git repository: <path>" or "gitfile does not ...").
         expect(Exit.isFailure(exit)).toBe(true);
-        expect(String(exit)).toContain("not a git repository");
+        expect(String(exit)).toContain("GitCore.statusDetailsLocal.status");
       }),
     );
   });
