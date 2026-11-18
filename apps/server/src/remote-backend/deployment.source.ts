@@ -6,6 +6,7 @@ import { createReadStream } from "node:fs";
 import { authenticateBackendGraphManifest } from "./backendGraph.manifest.ts";
 import { developmentGraphOverridesAllowed } from "./developmentOverrides.ts";
 import { decodeBackendSetupTrust } from "../cli/cli.backend.inputs.ts";
+import { pinReleaseTrustStore, untrustedReleaseKeyMessage } from "@bigbud/shared/releaseTrust";
 import { downloadRemoteAgentHttp } from "../remote-agent/remoteAgentHttpDownload.ts";
 import {
   REMOTE_AGENT_ARTIFACT_DOWNLOAD_POLICY,
@@ -39,11 +40,27 @@ function authenticate(input: {
   readonly target: Parameters<DeploymentGraphSourceResolver>[0];
   readonly rust: RemoteAgentInstallSource;
   readonly extraKeys: Readonly<Record<string, string>>;
+  /** Release graphs reduce the install-source keys to the app's pinned release keys. */
+  readonly pinRelease: boolean;
 }) {
   let trustedKeys: Readonly<Record<string, string>>;
   let manifest: DeploymentGraphSource["manifest"];
+  const rustKeys = input.pinRelease
+    ? pinReleaseTrustStore(input.rust.trustStore)
+    : input.rust.trustStore;
+  if (input.pinRelease) {
+    let keyId: unknown;
+    try {
+      keyId = (JSON.parse(input.manifestJson) as { signature?: { keyId?: unknown } }).signature
+        ?.keyId;
+    } catch {
+      // Malformed manifests fail the authentication below with the generic message.
+    }
+    if (typeof keyId === "string" && !Object.hasOwn(rustKeys, keyId))
+      throw deploymentError("graph-unavailable", untrustedReleaseKeyMessage(keyId));
+  }
   try {
-    trustedKeys = decodeBackendSetupTrust({ ...input.rust.trustStore, ...input.extraKeys });
+    trustedKeys = decodeBackendSetupTrust({ ...rustKeys, ...input.extraKeys });
     manifest = authenticateBackendGraphManifest(
       JSON.parse(input.manifestJson),
       trustedKeys,
@@ -88,7 +105,8 @@ async function localSource(
   const keyId = (JSON.parse(manifestJson) as { signature?: { keyId?: unknown } }).signature?.keyId;
   if (fixture && typeof keyId === "string" && !Object.hasOwn(extraKeys, keyId))
     extraKeys[keyId] = await readFile(join(directory, fixture), "utf8");
-  const verified = authenticate({ manifestJson, target, rust, extraKeys });
+  // Development-only local graphs keep env/CLI-chosen trust (fixture keys, trusted-keys JSON).
+  const verified = authenticate({ manifestJson, target, rust, extraKeys, pinRelease: false });
   // Producer provenance pins the archive; without it the laptop pins the bytes it will upload.
   const provenance = names.includes("provenance.json")
     ? (JSON.parse(await readFile(join(directory, "provenance.json"), "utf8")) as {
@@ -142,7 +160,14 @@ async function releaseSource(
   const archiveSha256 = pin;
   return {
     origin: "release",
-    ...authenticate({ manifestJson, target, rust, extraKeys: {} }),
+    // A locally overridden install source carries operator trust; downloaded trust is pinned.
+    ...authenticate({
+      manifestJson,
+      target,
+      rust,
+      extraKeys: {},
+      pinRelease: rust.localTrustOverride !== true,
+    }),
     archiveSha256,
     archiveUrl: `${prefix}.tar.gz`,
     materializeArchive: async (inner) => {

@@ -41,7 +41,14 @@ async function assertCanonicalUncreatedHome(path: string) {
 const readSetupInput = (role: string, path: string, maxBytes: number) =>
   labelPrivatePermission(role, () => readLocalSupervisorServiceFile(path, maxBytes));
 
-/** Explicit local owner trust, never keys embedded in the downloaded manifest. */
+/**
+ * Explicit local owner trust, never keys embedded in the downloaded manifest.
+ *
+ * Release-key pinning (`@bigbud/shared/releaseTrust`) is deliberately not applied here: the
+ * `backend setup --trusted-keys` file is an owner-private local CLI input, like the
+ * BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH override, and dev/test fixture graphs depend on it.
+ * Downloaded release trust is pinned by the callers before it reaches this normalizer.
+ */
 export function decodeBackendSetupTrust(value: unknown): Readonly<Record<string, string>> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("A pinned public-key map is required.");

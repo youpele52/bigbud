@@ -11,6 +11,10 @@ import {
   verifyRemoteAgentArtifactSignature,
   type RemoteAgentTargetTriple,
 } from "@bigbud/shared/remoteAgentArtifact";
+import {
+  assertPinnedReleaseSigningKey,
+  PINNED_RELEASE_TRUST_STORE,
+} from "@bigbud/shared/releaseTrust";
 
 interface AssetSpec {
   readonly targetTriple: RemoteAgentTargetTriple;
@@ -33,6 +37,8 @@ export function verifyRemoteAgentReleaseAssets(input: {
   readonly signingKeyId: string;
   readonly assets: ReadonlyArray<AssetSpec>;
   readonly installSourceBytes?: Uint8Array;
+  /** Clients' pinned release keys; tests substitute their own fixture pin. */
+  readonly pinnedTrustStore?: Readonly<Record<string, string>>;
 }): void {
   const manifest = parseReleaseManifest(
     JSON.parse(new TextDecoder().decode(input.manifestBytes)) as unknown,
@@ -43,6 +49,11 @@ export function verifyRemoteAgentReleaseAssets(input: {
   const publicKey = createPublicKey(input.signingKeyPem)
     .export({ type: "spki", format: "pem" })
     .toString();
+  // A release signed with a key shipped clients do not pin would be refused by every client.
+  assertPinnedReleaseSigningKey(
+    { keyId: input.signingKeyId, publicKeyPem: publicKey },
+    input.pinnedTrustStore ?? PINNED_RELEASE_TRUST_STORE,
+  );
   const trustStore = { [input.signingKeyId]: publicKey };
   for (const asset of input.assets) {
     const artifact = selectRemoteAgentArtifact(manifest, asset.targetTriple);

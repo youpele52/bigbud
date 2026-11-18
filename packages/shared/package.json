@@ -7,6 +7,7 @@
     "./mobileOptionalAssets.policy": "./src/mobileOptionalAssets.policy.ts",
     "./mobileOptionalArtifact": "./src/mobileOptionalArtifact.ts",
     "./artifactSignature": "./src/artifactSignature.ts",
+    "./releaseTrust": "./src/releaseTrust.ts",
     "./resourceAwareness.preferences": "./src/resourceAwareness.preferences.ts",
     "./resourceAwareness.metrics": "./src/resourceAwareness.metrics.ts",
     "./resourceAwareness.rules": "./src/resourceAwareness.rules.ts",

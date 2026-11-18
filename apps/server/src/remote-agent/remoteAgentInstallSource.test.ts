@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { PINNED_RELEASE_TRUST_STORE } from "@bigbud/shared/releaseTrust";
+
 import { version as serverVersion } from "../../package.json" with { type: "json" };
 import {
   loadRemoteAgentInstallSource,
@@ -19,7 +21,7 @@ afterEach(async () => {
   );
 });
 
-function installSource() {
+function installSource(trustStore: Record<string, string> = PINNED_RELEASE_TRUST_STORE) {
   return {
     manifest: {
       schemaVersion: 1,
@@ -37,7 +39,7 @@ function installSource() {
         },
       ],
     },
-    trustStore: { "release-2026": "public-key" },
+    trustStore,
   };
 }
 
@@ -74,7 +76,7 @@ describe("remote agent install source", () => {
     const directory = await mkdtemp(join(tmpdir(), "bigbud-agent-source-"));
     temporaryDirectories.push(directory);
     const path = join(directory, "remote-agent-install-source.json");
-    await writeFile(path, JSON.stringify(installSource()));
+    await writeFile(path, JSON.stringify(installSource({ "release-2026": "public-key" })));
 
     const source = await loadRemoteAgentInstallSource({
       BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH: path,

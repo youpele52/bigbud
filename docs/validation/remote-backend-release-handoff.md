@@ -282,12 +282,22 @@ GitHub is in the user's password manager. Note that `gh` in this checkout defaul
 upstream `pingdotgg/t3code`; pass `--repo youpele52/bigbud` or run
 `gh repo set-default youpele52/bigbud`.
 
-- Clients hold no pinned key. Each release publishes its trust store (`{ keyId: SPKI PEM }`) in
-  `remote-agent-install-source*.json`, derived from the signing key, and clients trust that
-  file as downloaded from the GitHub release. Pinning `release-2026` in the app is a possible
-  follow-up.
-- Rotation: generate a new key, set both secrets with a new key id, release. Only legacy
-  binding (`remoteAgentLegacyBinding.ts`) needs the old public key.
+- Clients pin the release key. `packages/shared/src/releaseTrust.ts` holds
+  `{ "release-2026": SPKI PEM }`. Each release still publishes its trust store in
+  `remote-agent-install-source*.json`, but when that file comes from the default GitHub release
+  location the server keeps only entries whose key id is pinned and whose Ed25519 key bytes match,
+  and refuses a manifest signed by any other key ("update bigbud"). Backend graph trust derived
+  from the install source is pinned the same way. Explicit local overrides
+  (`BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH`/`_URL`, the development graph directory and
+  trusted-keys inputs, `backend setup --trusted-keys`) keep operator-chosen trust; downloaded
+  content cannot select them.
+- The release verifier (`scripts/verify-remote-agent-release-assets.ts`) and the release-signed
+  graph job (`scripts/verify-release-signing-key-pin.ts`) fail when the signing key is not pinned.
+- Rotation: add the new key id and public key to the pinned set and ship an app release first;
+  then set both secrets to the new key and release; drop the old key from the pinned set once no
+  supported client needs it. Clients older than the pinning release must update. Legacy binding
+  (`remoteAgentLegacyBinding.ts`) takes its historical trust store from in-process composition
+  only and is not pinned.
 - Graphs built without the release key are refused by the release job
   (`*.fixture-public-key.pem` check). The mobile packager takes any key at packaging time.
 

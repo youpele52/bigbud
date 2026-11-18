@@ -12,6 +12,10 @@ import {
   type RemoteAgentFetch,
 } from "./remoteAgentHttpDownload.ts";
 import { REMOTE_AGENT_METADATA_DOWNLOAD_POLICY } from "./remoteAgentHttpDownload.policy.ts";
+import {
+  markLocalTrustOverride,
+  pinReleaseInstallSource,
+} from "./remoteAgentInstallSource.trust.ts";
 import type { RemoteAgentDownloadLogger } from "./remoteAgentHttpDownload.diagnostics.ts";
 
 export const DEFAULT_RELEASE_REPOSITORY = "youpele52/bigbud";
@@ -154,7 +158,7 @@ export async function loadRemoteAgentInstallSource(
   options: InstallSourceLoadOptions = {},
 ): Promise<RemoteAgentInstallSource> {
   const path = environment.BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH?.trim();
-  if (path) return readInstallSourceFile(path, options.signal);
+  if (path) return markLocalTrustOverride(await readInstallSourceFile(path, options.signal));
 
   const url = resolveInstallSourceUrl(environment);
   const explicitUrl = Boolean(environment.BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL?.trim());
@@ -164,7 +168,9 @@ export async function loadRemoteAgentInstallSource(
       if (explicitUrl || !isNotFound(error)) throw error;
       return downloadMetadata(legacyInstallSourceUrl(url), false, options);
     });
-    return parseInstallSourceJson(bytes, "the configured release host");
+    const source = parseInstallSourceJson(bytes, "the configured release host");
+    // Only local env selects override trust; the default release location is pinned.
+    return explicitUrl ? markLocalTrustOverride(source) : pinReleaseInstallSource(source);
   } catch (error) {
     if (isNotFound(error)) {
       throw new RemoteAgentInstallManagerError(

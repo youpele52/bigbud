@@ -16,7 +16,13 @@ import {
 } from "./remoteAgentArtifact.ts";
 import { remoteAgentRequestDigest } from "./remoteAgentRequestDigest.ts";
 
-/** Observe legacy continuity without preparing, relaunching, importing state, or granting artifact trust. */
+/**
+ * Observe legacy continuity without preparing, relaunching, importing state, or granting artifact trust.
+ *
+ * `historical.trustStore` is not release-pinned on purpose: it is supplied only by in-process
+ * composition (`makeRemoteAgentAdmission({ historicalLegacy })`), never by downloaded content, and
+ * production composition passes none. A match only labels an already-running binary's version.
+ */
 export async function observeLegacyRemoteAgentBinding(
   target: string,
   control: RemoteAgentControl,
