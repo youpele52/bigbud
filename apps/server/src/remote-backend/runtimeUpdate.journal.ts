@@ -10,7 +10,12 @@
  *                   the database (idempotent, so an interrupted restore simply repeats)
  *   restored        the backup is the database again; the old runtime settles the operation
  *
- * Its existence keeps public admission closed in whichever runtime starts next.
+ * Its existence keeps public admission closed in whichever runtime starts next, and a runtime
+ * removes it before it opens admission. So a `restarting` journal also proves that nothing was
+ * admitted since the switch: the Rust launcher (`backend_service/rollback.rs`) relies on that
+ * when it rolls back a switched runtime that never starts. It counts those launches in
+ * `launch-attempts-v1` beside the journal, and may itself move the journal to `rollback` and
+ * `restore-pending`; this runtime then finishes the restore and settles the operation.
  */
 import { constants, existsSync } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -44,6 +49,9 @@ export interface RuntimeUpdateJournal {
 export const runtimeUpdateDirectory = (stateDir: string) => join(stateDir, "runtime-update");
 export const runtimeUpdateJournalPath = (stateDir: string) =>
   join(runtimeUpdateDirectory(stateDir), "activation-v1.json");
+/** The Rust launcher's launch counter for a switched runtime on trial. */
+export const runtimeUpdateLaunchAttemptsPath = (stateDir: string) =>
+  join(runtimeUpdateDirectory(stateDir), "launch-attempts-v1");
 export const runtimeUpdateBackupPath = (stateDir: string, operationId: string) =>
   join(runtimeUpdateDirectory(stateDir), `backup-${operationId}.sqlite`);
 
@@ -124,9 +132,15 @@ export async function writeRuntimeUpdateJournal(stateDir: string, journal: Runti
   );
 }
 
+/** Removes the journal and the launcher's counter, keeping the backup; idempotent. */
+export async function retireRuntimeUpdateJournal(stateDir: string) {
+  await fs.rm(runtimeUpdateJournalPath(stateDir), { force: true });
+  await fs.rm(runtimeUpdateLaunchAttemptsPath(stateDir), { force: true });
+  await syncDirectory(runtimeUpdateDirectory(stateDir)).catch(() => undefined);
+}
+
 /** Settles the journal and the backup it names; idempotent. */
 export async function clearRuntimeUpdateJournal(stateDir: string, journal: RuntimeUpdateJournal) {
   await fs.rm(journal.backupPath, { force: true });
-  await fs.rm(runtimeUpdateJournalPath(stateDir), { force: true });
-  await syncDirectory(runtimeUpdateDirectory(stateDir)).catch(() => undefined);
+  await retireRuntimeUpdateJournal(stateDir);
 }

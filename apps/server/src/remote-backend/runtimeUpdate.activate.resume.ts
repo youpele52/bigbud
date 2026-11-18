@@ -11,7 +11,10 @@
  * - Journal `restored`: the old runtime is back; it settles the operation as failed with the
  *   journal's reason and releases the staged archive.
  * - `activating` without a journal: the old runtime stopped before the switch; nothing changed.
- * Commands admitted after the trial opened admission are never rolled back automatically.
+ * Commands admitted after the trial opened admission are never rolled back automatically: the
+ * journal is removed before admission opens, and the Rust launcher only rolls back a runtime
+ * whose journal is still `restarting` (a switched runtime that never starts, or a pair left
+ * half-switched). It then leaves the journal `restore-pending` for the previous runtime here.
  */
 import { Effect, Option, type Scope } from "effect";
 import type { RemoteRuntimeUpdateOperation } from "@bigbud/contracts/server/remoteBackendUpdate.ts";
@@ -34,6 +37,7 @@ import {
 import {
   clearRuntimeUpdateJournal,
   readRuntimeUpdateJournal,
+  retireRuntimeUpdateJournal,
   writeRuntimeUpdateJournal,
   type RuntimeUpdateJournal,
 } from "./runtimeUpdate.journal.ts";
@@ -106,11 +110,15 @@ const settleActivating = Effect.fn("RuntimeUpdate.settleActivating")(function* (
     return yield* rollBack(ctx, journal, journal.failure ?? "The new runtime failed its trial.");
   const outcome = yield* trial(ctx, store, journal).pipe(Effect.result);
   if (outcome._tag === "Failure") {
-    if (ctx.gate.admitted() > 0)
+    if (ctx.gate.admitted() > 0) {
+      // Keep the backup for the explicit restore, but retire the journal before admission
+      // reopens so the launcher never rolls back past admitted commands.
+      yield* promise(() => retireRuntimeUpdateJournal(ctx.stateDir));
       return yield* settleRuntimeUpdateFailed(ctx, service, {
         ...base,
         failure: `${outcome.failure.message} Commands were already admitted, so it was not rolled back automatically; restore the previous runtime explicitly.`,
       });
+    }
     return yield* rollBack(ctx, journal, outcome.failure.message);
   }
   const key = journal.archiveKey as RuntimeArchiveKey;
@@ -119,9 +127,16 @@ const settleActivating = Effect.fn("RuntimeUpdate.settleActivating")(function* (
   yield* promise(() => pruneRuntimeArchives(store, { inUse: [key] })).pipe(
     Effect.catch((error) => Effect.logWarning("Runtime archive pruning failed", error)),
   );
-  yield* promise(() => clearRuntimeUpdateJournal(ctx.stateDir, journal)).pipe(
-    Effect.catch((error) => Effect.logWarning("Runtime update journal not cleared", error)),
+  // Admission opens only once the journal is gone (see the launcher rule above). Otherwise the
+  // next start's sweep clears it, because the operation is already `activated`.
+  const cleared = yield* promise(() => clearRuntimeUpdateJournal(ctx.stateDir, journal)).pipe(
+    Effect.result,
   );
+  if (cleared._tag === "Failure")
+    return yield* Effect.logError(
+      "Runtime update journal not cleared; admission stays closed until the next start",
+      cleared.failure,
+    );
   if (journal.uncertain.length)
     yield* Effect.logWarning("Runtime update finished with uncertain interrupted turns", {
       threads: journal.uncertain,

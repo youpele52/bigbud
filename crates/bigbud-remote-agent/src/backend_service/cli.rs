@@ -252,6 +252,10 @@ pub fn run_cli_with_supervisor(
         #[cfg(unix)]
         {
             use std::os::unix::process::CommandExt;
+            // A runtime update whose new runtime never starts is rolled back here, before Node.
+            let config = super::rollback::reconcile(config, |current| {
+                super::launch::verify_service_owner(current, role)
+            })?;
             let mut command = config.command(role)?;
             super::launch::verify_service_owner(&config, role)?;
             // Pinned command and exact live user-unit ownership are both required before exec.

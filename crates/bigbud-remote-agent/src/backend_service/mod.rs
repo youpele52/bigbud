@@ -42,6 +42,8 @@ mod files;
 mod graph;
 #[cfg(unix)]
 mod launch;
+#[cfg(unix)]
+mod rollback;
 mod status;
 mod unit;
 

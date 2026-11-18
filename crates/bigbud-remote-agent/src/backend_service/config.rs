@@ -138,6 +138,53 @@ impl ServiceConfig {
         Ok(config)
     }
 
+    /// The canonical text, in the backend's key order (`LOCAL_SUPERVISOR_SERVICE_CONFIG_KEYS`).
+    pub(super) fn encode(&self) -> Result<String> {
+        let path = |value: &Path| {
+            value
+                .to_str()
+                .map(str::to_owned)
+                .ok_or(ServiceError::Invalid("non-UTF-8 service config path"))
+        };
+        let fields = [
+            ("version", "1".to_owned()),
+            ("authority", self.authority.clone()),
+            ("home", path(&self.home)?),
+            ("backend_home", path(&self.backend_home)?),
+            ("rust_binary", path(&self.rust_binary)?),
+            ("rust_sha256", self.rust_sha256.clone()),
+            ("rust_state", path(&self.rust_state)?),
+            ("node_binary", path(&self.node_binary)?),
+            ("node_sha256", self.node_sha256.clone()),
+            ("backend_entry", path(&self.backend_entry)?),
+            ("backend_sha256", self.backend_sha256.clone()),
+            ("receipt_sha256", self.receipt_sha256.clone()),
+            (
+                "restart",
+                if self.restart { "yes" } else { "no" }.to_owned(),
+            ),
+            ("launch_attempt", self.launch_attempt.clone()),
+            ("prior_epoch", self.prior_epoch.clone()),
+            ("launch_boot", self.launch_boot.clone()),
+            (
+                "expected_installation_fingerprint",
+                self.expected_installation_fingerprint.clone(),
+            ),
+            (
+                "authority_reservation_sha256",
+                self.authority_reservation_sha256.clone(),
+            ),
+        ];
+        let text: String = fields
+            .iter()
+            .map(|(key, value)| format!("{key}={value}\n"))
+            .collect();
+        if Self::parse(&text)? != *self {
+            return Err(ServiceError::Invalid("service config does not round-trip"));
+        }
+        Ok(text)
+    }
+
     pub(super) fn definition(path: &Path) -> Result<Self> {
         let bytes = files::read_private(path, 32 * 1024)?;
         let text = std::str::from_utf8(&bytes)
@@ -162,6 +209,11 @@ impl ServiceConfig {
     }
 
     pub(super) fn validate_role(&self, role: ServiceRole) -> Result<()> {
+        self.validate_role_at(role, &self.receipt_path())
+    }
+
+    /// `validate_role` against a receipt at `receipt` instead of the stable receipt path.
+    pub(super) fn validate_role_at(&self, role: ServiceRole, receipt: &Path) -> Result<()> {
         if !valid_hex(&self.authority, 32)
             || [
                 &self.rust_sha256,
@@ -231,15 +283,11 @@ impl ServiceConfig {
             &self.rust_sha256,
             files::FileKind::ManagedExecutable,
         )?;
-        files::hash_file(
-            &self.receipt_path(),
-            &self.receipt_sha256,
-            files::FileKind::Private,
-        )?;
+        files::hash_file(receipt, &self.receipt_sha256, files::FileKind::Private)?;
         super::authority::verify(self)?;
         if role == ServiceRole::Backend {
             #[cfg(unix)]
-            super::graph::verify(self)?;
+            super::graph::verify_at(self, receipt)?;
             self.runtime_path()?;
             files::directory(&self.backend_home, &[0o700])?;
             files::hash_file(

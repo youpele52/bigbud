@@ -46,8 +46,14 @@ fn field<'a>(lines: &mut impl Iterator<Item = &'a str>, name: &str) -> Result<&'
         .filter(|v| !v.is_empty())
         .ok_or_else(invalid)
 }
+#[cfg(test)]
 pub(super) fn verify(config: &ServiceConfig) -> Result<()> {
-    let bytes = files::read_private(&config.receipt_path(), 16 * 1024 * 1024)?;
+    verify_at(config, &config.receipt_path())
+}
+/// Verifies the graph against the receipt at `receipt`: the stable receipt path, or a staged
+/// copy the launcher checks before restoring a previous runtime (see `rollback.rs`).
+pub(super) fn verify_at(config: &ServiceConfig, receipt: &Path) -> Result<()> {
+    let bytes = files::read_private(receipt, 16 * 1024 * 1024)?;
     if format!("{:x}", Sha256::digest(&bytes)) != config.receipt_sha256 {
         return Err(invalid());
     }
@@ -139,7 +145,7 @@ pub(super) fn verify(config: &ServiceConfig) -> Result<()> {
         return Err(invalid());
     }
     graph_files::verify(Path::new(&root), &members, (root_dev, root_ino, root_ctime))?;
-    if files::read_private(&config.receipt_path(), 16 * 1024 * 1024)? != bytes {
+    if files::read_private(receipt, 16 * 1024 * 1024)? != bytes {
         return Err(invalid());
     }
     Ok(())

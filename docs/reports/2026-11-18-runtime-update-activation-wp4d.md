@@ -138,15 +138,14 @@ Checks:
 
 ## Gaps
 
-- **A runtime that cannot start Node is not rolled back automatically.** This covers a crash
-  before the trial, and a crash between the receipt and config renames. The unit retries up to
-  its start limit and the journal stays `restarting`. To recover:
-  1. Write `previousConfig` and `previousReceipt` from the journal back to
-     `~/.bigbud/backend-services/<authority>/{config-v1,artifact-receipt}`.
-  2. Run `systemctl --user reset-failed` and then `start` on the backend unit.
-
-  The old runtime then fails the trial check (it is not the staged entry), rolls back and
-  restores the backup automatically.
+- **Closed:** a runtime that cannot start Node is rolled back automatically. This covers a crash
+  before the trial and a crash between the receipt and config renames. The Rust launcher counts
+  the launches of a switched runtime and restores the previous pins on the fourth start, inside
+  the start limit. It also reconciles a half-switched pair. See
+  [launcher rollback](2026-11-18-launcher-rollback-unbootable-runtime.md). Manual recovery is
+  needed only when the previous runtime itself fails verification. The journal is then left
+  `restarting`, and the steps are the old ones: write `previousConfig` and `previousReceipt` back,
+  then `reset-failed` and `start`.
 
 - **`laptop-upload` updates report "not available yet".**
 - **The first update records no rollback version in the archive store.** The graph that setup
@@ -185,5 +184,6 @@ Checks:
    are all present, and the operation is `failed` with a message that says it rolled back.
 10. **Interrupted restore.** Stop the unit while the journal is `restore-pending`, then start it.
     The restore completes and the operation settles.
-11. **Unbootable runtime.** Use a graph whose Node exits at once. Check that the manual recovery
-    in Gaps works.
+11. **Unbootable runtime.** Use a graph whose Node exits at once. The launcher rolls back
+    after three failed launches without a human
+    ([launcher rollback](2026-11-18-launcher-rollback-unbootable-runtime.md)).
