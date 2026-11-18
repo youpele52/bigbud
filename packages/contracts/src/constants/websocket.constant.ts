@@ -16,6 +16,8 @@ export const WS_METHODS = {
   serverGetRemoteRuntimeUpdateStatus: "server.getRemoteRuntimeUpdateStatus",
   serverConsentRemoteRuntimeUpdateInterruption: "server.consentRemoteRuntimeUpdateInterruption",
   serverCancelRemoteRuntimeUpdate: "server.cancelRemoteRuntimeUpdate",
+  serverGetProviderProvisioningStatus: "server.getProviderProvisioningStatus",
+  serverProvisionProvider: "server.provisionProvider",
   // Project registry methods
   projectsList: "projects.list",
   projectsAdd: "projects.add",

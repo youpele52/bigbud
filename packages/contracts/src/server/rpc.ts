@@ -209,6 +209,10 @@ import { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
 import { WsComputerUseStopRpc, WsSubscribeComputerUseActivityRpc } from "./rpc.computerUse";
 import { WsCopilotRuntimeRpc } from "./rpc.copilotRuntime";
 import {
+  WsServerGetProviderProvisioningStatusRpc,
+  WsServerProvisionProviderRpc,
+} from "./rpc.providerProvisioning";
+import {
   WsServerClaimMetadataWarningsRpc,
   WsServerAcknowledgeMetadataWarningRpc,
 } from "./rpc.metadataWarnings";
@@ -223,6 +227,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerConsentRemoteRuntimeUpdateInterruptionRpc,
   WsServerCancelRemoteRuntimeUpdateRpc,
   WsCopilotRuntimeRpc,
+  WsServerGetProviderProvisioningStatusRpc,
+  WsServerProvisionProviderRpc,
   WsServerRetryTextGenerationRpc,
   WsServerClaimMetadataWarningsRpc,
   WsServerAcknowledgeMetadataWarningRpc,

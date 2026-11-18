@@ -1,5 +1,5 @@
 import type { CopilotClient } from "@github/copilot-sdk";
-import { copilotSdk } from "../../provider/Layers/Copilot/copilotSdk.lazy.ts";
+import { copilotSdk, loadCopilotSdk } from "../../provider/Layers/Copilot/copilotSdk.lazy.ts";
 import type { ServerSettings } from "@bigbud/contracts/core/settings.ts";
 import type { ModelSelection } from "@bigbud/contracts/orchestration/orchestration.provider";
 import { metadataProviderConfiguration } from "./ThreadMetadataGeneration.configuration.ts";
@@ -115,6 +115,7 @@ export const createMetadataCopilotClient: MetadataCopilotClientFactory = async (
   binary,
   environment,
 ) => {
+  await loadCopilotSdk();
   // Lease BEFORE resolution, as for ordinary Copilot sessions: uninstall must not race startup.
   const release = await acquireCopilotLease(copilotRuntimeRoot());
   let ownedCwd: string | undefined;

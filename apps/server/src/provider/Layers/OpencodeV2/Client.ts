@@ -1,5 +1,5 @@
-import { OpenCode, type OpenCodeClient } from "@opencode/client";
-import { Service } from "@opencode/client/service";
+import type { OpenCodeClient } from "@opencode/client";
+import { opencodeV2Sdk } from "./Client.sdk.ts";
 import {
   assertV2RequestContext,
   currentV2RequestContext,
@@ -25,7 +25,7 @@ export function makeOwnedClient(input: {
 }): OpencodeV2Client {
   return makeV2Client({
     ...input,
-    headers: Service.headers({
+    headers: opencodeV2Sdk().Service.headers({
       url: input.endpoint,
       auth: { type: "basic", username: "opencode", password: input.password },
     }),
@@ -110,7 +110,7 @@ export function makeV2Client(input: {
         fetchImplementation.preconnect?.(...args),
     },
   );
-  return OpenCode.make({
+  return opencodeV2Sdk().OpenCode.make({
     baseUrl: origin,
     headers: input.headers,
     fetch: guardedFetch,

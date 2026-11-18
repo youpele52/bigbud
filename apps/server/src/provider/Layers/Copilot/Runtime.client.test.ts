@@ -20,7 +20,7 @@ vi.mock("./copilotSdk.lazy.ts", async () => {
       async forceStop() {}
     },
   };
-  return { copilotSdk: () => fake };
+  return { copilotSdk: () => fake, loadCopilotSdk: async () => fake };
 });
 const roots: string[] = [];
 afterEach(async () => {

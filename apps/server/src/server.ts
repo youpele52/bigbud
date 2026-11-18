@@ -25,7 +25,7 @@ import { RemoteMobileConsentGuardLive } from "./remote-backend/mobileConsentRevo
 import { RemoteMobileGatewayCompositionLive } from "./server.mobileOwner.ts";
 import { StateDirLockLive } from "./startup/backendInstance";
 import { withOwnershipShutdown } from "./startup/ownershipShutdown";
-import { fixPath } from "./utils/os-jank";
+import { prepareProviderServicePath } from "./provider-provisioning/servicePath.runtime.ts";
 import { makeRoutesLayer } from "./server.routes.ts";
 import { layerConfig as SqlitePersistenceLayerLive } from "./persistence/Layers/Sqlite";
 import { withRemoteExecutionTargetDisconnects } from "./persistence/Layers/RemoteExecutionTargetDisconnects.ts";
@@ -312,8 +312,6 @@ const RemoteServerLive = withRemoteCallbackRuntime(
 export { makeRoutesLayer } from "./server.routes.ts";
 
 function localServerLayer(config: ServerConfigShape) {
-  fixPath();
-
   const httpListeningLayer = Layer.effectDiscard(
     Effect.gen(function* () {
       yield* HttpServer.HttpServer;
@@ -378,10 +376,13 @@ export const makeServerLayer = Layer.unwrap(
             "The remote state root must be private before acquiring its backend lock.",
           ),
       });
+      // Bounded service PATH discovery for provider resolution and spawns (never `fixPath()`).
+      yield* prepareProviderServicePath(config.mode);
       const application: ServerApplicationLayer = RemoteServerLive;
       return application;
     }
 
+    yield* prepareProviderServicePath(config.mode); // Desktop/web: the unchanged `fixPath()`.
     const application: ServerApplicationLayer = localServerLayer(config);
     return application;
   }),

@@ -1,5 +1,5 @@
 import type { CopilotClient } from "@github/copilot-sdk";
-import { copilotSdk } from "./copilotSdk.lazy.ts";
+import { copilotSdk, loadCopilotSdk } from "./copilotSdk.lazy.ts";
 import { makeCopilotClientOptions } from "./Adapter.types.cli.ts";
 import { copilotRuntimeRoot } from "@bigbud/shared/copilotRuntime.paths";
 import { acquireCopilotLease } from "@bigbud/shared/copilotRuntime.storage";
@@ -11,6 +11,8 @@ export async function createLeasedCopilotClient(
   factory?: (options: ReturnType<typeof makeCopilotClientOptions>) => CopilotClient,
   root = copilotRuntimeRoot(),
 ): Promise<CopilotClient> {
+  // First use loads the optional SDK; option builders below use it synchronously.
+  await loadCopilotSdk();
   // Injected adapters are test doubles and never launch a managed runtime.
   if (factory) return factory(makeCopilotClientOptions(input));
   const release = await acquireCopilotLease(root);

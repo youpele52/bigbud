@@ -4,7 +4,10 @@
  * unreviewed site, review the code, then update the entry. A hash pins the whole bundle region
  * or file, so unrelated edits inside the same region also need a fresh review. Region hashes
  * ignore rolldown's bundle-wide `$<n>` binding renames (see `build-remote-backend-graph.regionHash.ts`);
- * the four region pins re-pinned on 18 Nov 2026 cover byte-identical reviewed code. */
+ * the four region pins re-pinned on 18 Nov 2026 cover byte-identical reviewed code. WP-5C (18 Nov
+ * 2026) re-pinned msgpackr/unpack.js after the Muse and OpenCode v2 SDKs moved to lazy chunks: the
+ * region equals the reviewed text except `read$2` -> `read`, a binding rename the canonical digest
+ * cannot relate because the freed name is unsuffixed. */
 const loader = (member: string, sha256: string, reason: string, roots: string[] = []) => ({
   member,
   sha256,
@@ -37,7 +40,7 @@ export const BACKEND_GRAPH_LOADER_POLICY_DATA = {
     // Inlined third-party regions of the server bundle.
     loader(
       "msgpackr/unpack.js",
-      "4168ccbbd478db942369c79212e5fe573b411af8562c216dfcf004ec90241420",
+      "90b22fe66d31dd6c9b606f203f45e7de6543c2c8e5882433bcf06e8f7730a44f",
       "msgpackr record readers generated from decoded field names; generates object literals, loads no modules.",
     ),
     loader(

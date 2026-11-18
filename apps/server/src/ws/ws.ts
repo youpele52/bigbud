@@ -29,6 +29,8 @@ import { makeWsRpcMetadataWarningHandlers } from "./wsRpcHandlers.metadataWarnin
 import { makeWsRpcRemoteBackendDeploymentHandlers } from "./wsRpcHandlers.remoteBackendDeployment.ts";
 import { makeWsRpcRemoteBackendUpdateHandlers } from "./wsRpcHandlers.remoteBackendUpdate.ts";
 import { makeRuntimeUpdateSetupAuthority } from "../remote-backend/runtimeUpdate.authority.ts";
+import { makeWsRpcProviderProvisioningHandlers } from "./wsRpcHandlers.providerProvisioning.ts";
+import { makeProviderProvisioningAuthority } from "../provider-provisioning/provisionAuthority.ts";
 import {
   isTrustedRetentionMutationOrigin,
   makeRetentionMutationAuthorization,
@@ -62,6 +64,7 @@ const makeWsRpcLayer = (
         ...deploymentHandlers,
         ...runtimeUpdateHandlers,
         ...makeWsRpcCopilotRuntimeHandlers(context),
+        ...makeWsRpcProviderProvisioningHandlers(context),
         ...makeWsRpcAutomationHandlers(context),
         ...makeWsRpcOrchestrationServerHandlers(context),
         ...makeWsRpcBrowserHandlers(),
@@ -90,6 +93,7 @@ export const makeWebsocketRpcRouteLayer = (
   Layer.unwrap(
     Effect.gen(function* () {
       const setupAuthority = makeRuntimeUpdateSetupAuthority();
+      const provisioningAuthority = makeProviderProvisioningAuthority();
       // Own accepted mutations for the HTTP server's lifetime, not the temporary RPC layer build.
       const worktreeScope = yield* Effect.scope;
       const monitorInstanceId = randomUUID();
@@ -103,6 +107,7 @@ export const makeWebsocketRpcRouteLayer = (
         RpcSerialization.layerJson,
         retentionMutationAuthorization.layer,
         setupAuthority.layer,
+        provisioningAuthority.layer,
       );
       const rpcWebSocketHttpEffect = yield* makeWsRpcHttpEffectWithSshMonitorCleanup(
         monitorInstanceId,
@@ -130,17 +135,20 @@ export const makeWebsocketRpcRouteLayer = (
                     ? 400
                     : 401,
             });
+          const trustedLocal =
+            config.authToken !== undefined || isTrustedRetentionMutationOrigin(request.headers);
+          const connection = {
+            mode: config.mode,
+            remoteClientRouter: options.remoteClientRouter === true,
+            authorized: authorization === "authorized",
+          };
           const requestWithAuthorization = request.modify({
-            headers: setupAuthority.authorizeHeaders(
-              retentionMutationAuthorization.authorizeHeaders(
-                request.headers,
-                config.authToken !== undefined || isTrustedRetentionMutationOrigin(request.headers),
+            headers: provisioningAuthority.authorizeHeaders(
+              setupAuthority.authorizeHeaders(
+                retentionMutationAuthorization.authorizeHeaders(request.headers, trustedLocal),
+                connection,
               ),
-              {
-                mode: config.mode,
-                remoteClientRouter: options.remoteClientRouter === true,
-                authorized: authorization === "authorized",
-              },
+              { ...connection, trustedLocal },
             ),
           });
           return yield* rpcWebSocketHttpEffect.pipe(

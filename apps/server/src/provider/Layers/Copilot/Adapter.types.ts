@@ -14,11 +14,7 @@ import {
   type ProviderSession,
   type ThreadTokenUsageSnapshot,
 } from "@bigbud/contracts";
-import {
-  type CopilotClientOptions,
-  type CopilotSession,
-  type SessionEvent,
-} from "@github/copilot-sdk";
+import type { CopilotClientOptions, CopilotSession, SessionEvent } from "@github/copilot-sdk";
 
 import { ProviderAdapterRequestError } from "../../Errors.ts";
 import { type EventNdjsonLogger } from "../EventNdjsonLogger.ts";

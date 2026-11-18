@@ -32,7 +32,8 @@ function probeVersion(path: string, stamp: string, sdk: boolean): Promise<string
 }
 
 let musl: boolean | undefined;
-export function localCopilotRelease() {
+/** Linux without a glibc runtime version in the process report is treated as musl. */
+export function isMuslHost(): boolean {
   if (musl === undefined) {
     const report =
       process.platform === "linux"
@@ -40,10 +41,14 @@ export function localCopilotRelease() {
         : undefined;
     musl = process.platform === "linux" && !report?.header?.glibcVersionRuntime;
   }
+  return musl;
+}
+
+export function localCopilotRelease() {
   return resolveCopilotRuntimeRelease({
     platform: process.platform,
     arch: process.arch,
-    isMusl: musl,
+    isMusl: isMuslHost(),
   });
 }
 
