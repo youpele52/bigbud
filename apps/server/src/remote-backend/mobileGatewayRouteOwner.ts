@@ -12,7 +12,12 @@ import {
 
 const CHECK_INTERVAL_MS = 1_000;
 const MAX_VERIFIED_AGE_MS = 5_000;
-const unavailable = () => new Error("The mobile HTTPS route could not be verified.");
+/** Named so owner status can tell a route failure from a revoke-triggered stop. */
+class MobileGatewayRouteUnverified extends Error {
+  override readonly name = "MobileGatewayRouteUnverified";
+}
+const unavailable = () =>
+  new MobileGatewayRouteUnverified("The mobile HTTPS route could not be verified.");
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -84,10 +89,16 @@ async function tailscaleJson(command: "status" | "serve", signal: AbortSignal): 
 }
 
 async function checkRoute(input: MobileGatewayRouteInput, signal: AbortSignal): Promise<void> {
-  const status = await tailscaleJson("status", signal);
-  const config = await tailscaleJson("serve", signal);
-  assertMobileGatewayServeRoute(input, status, config);
-  await probeMobileGatewayHttps({ ...input, signal });
+  try {
+    const status = await tailscaleJson("status", signal);
+    const config = await tailscaleJson("serve", signal);
+    assertMobileGatewayServeRoute(input, status, config);
+    await probeMobileGatewayHttps({ ...input, signal });
+  } catch (cause) {
+    // A missing CLI, bad JSON or a failed probe is a route failure, not an aborted (stopped) check.
+    if (signal.aborted || cause instanceof MobileGatewayRouteUnverified) throw cause;
+    throw Object.assign(unavailable(), { cause });
+  }
 }
 
 /** Internal dependency seam for deterministic lifecycle tests; the production Layer uses real IO. */

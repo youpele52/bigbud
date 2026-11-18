@@ -8,6 +8,7 @@ import {
   type MobileActivationStatus,
 } from "./mobileGatewayActivation.state.ts";
 import type { MobileRuntimeRepairReport } from "./mobileGatewayAssets.orphan.ts";
+import type { MobileNativeResolveReport } from "./mobileGatewayNative.resolve.ts";
 
 export class MobileGatewayActivationError extends Data.TaggedError("MobileGatewayActivationError")<{
   readonly message: string;
@@ -24,6 +25,8 @@ export interface RemoteMobileGatewayActivationShape {
   readonly status: Effect.Effect<MobileActivationStatus>;
   /** Orphan runtime-asset GC on the attached controller; `null` when none is attached. */
   readonly repair: Effect.Effect<MobileRuntimeRepairReport | null, MobileGatewayActivationError>;
+  /** Owner-only evidence-based settlement of ended native rows, then GC; `null` if unattached. */
+  readonly resolve: Effect.Effect<MobileNativeResolveReport | null, MobileGatewayActivationError>;
 }
 export class RemoteMobileGatewayActivation extends ServiceMap.Service<
   RemoteMobileGatewayActivation,
@@ -48,6 +51,7 @@ export const RemoteMobileGatewayActivationLive = Layer.sync(RemoteMobileGatewayA
     stop: Effect.tryPromise({ try: () => state.stop(), catch: failure }),
     status: Effect.sync(() => state.status()),
     repair: Effect.tryPromise({ try: () => state.repair(), catch: failure }),
+    resolve: Effect.tryPromise({ try: () => state.resolve(), catch: failure }),
   });
   states.set(service, state);
   return service;

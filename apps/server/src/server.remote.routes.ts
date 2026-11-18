@@ -1,9 +1,7 @@
 import { mobileOwnerPairingRoute } from "./remote-backend/mobileOwnerPairing.ts";
-import { peerGrantOwnerRouteLayer } from "./remote-backend/peerGrantOwnerRoute.ts";
-import { mobileOwnerActivationRoute } from "./remote-backend/mobileOwnerActivation.ts";
-import { RemoteMobileConsentJournalLive } from "./remote-backend/mobileConsentEnable.ts";
-import { RemoteMobileNativeInputsLive } from "./remote-backend/mobileGatewayActivation.inputs.ts";
+import { mobileOwnerActivationRoutesLive } from "./remote-backend/mobileOwnerActivation.routes.ts";
 import { Effect, Layer } from "effect";
+import { peerGrantOwnerRouteLayer } from "./remote-backend/peerGrantOwnerRoute.ts";
 
 import { version } from "../package.json" with { type: "json" };
 import { BootstrapCommandLockService } from "./ws/wsBootstrap.lock.ts";
@@ -26,13 +24,11 @@ export const makeRemoteClientRoutesLayer = Layer.unwrap(
     return Layer.mergeAll(
       makeRemoteClientHandshakeRoute(version),
       mobileOwnerPairingRoute,
-      // The same inputs layer value the activation attach reads, so one build reads it once.
-      mobileOwnerActivationRoute.pipe(
-        Layer.provide(Layer.merge(RemoteMobileNativeInputsLive, RemoteMobileConsentJournalLive)),
-      ),
-      // The authenticated client socket is the only route granting D10 setup authority.
+      // Request-scoped consent journal; inputs come from the attach's single read.
+      mobileOwnerActivationRoutesLive,
       // P8: owner-only peer grant issue/revoke/list (`bigbud peer`); never on the peer socket.
       peerGrantOwnerRouteLayer,
+      // The authenticated client socket is the only route granting D10 setup authority.
       makeWebsocketRpcRouteLayer(withBootstrapCommandLock, { remoteClientRouter: true }),
       attachmentsRouteLayer,
       projectFaviconRouteLayer,

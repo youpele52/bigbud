@@ -57,8 +57,11 @@ export const MobileGatewayAttempt = Schema.Struct({
   stageId: Token,
   releaseId: Schema.String.check(Schema.isPattern(/^mobile-release:[a-f0-9]{64}$/)),
   consentRevision: Counter.check(Schema.isGreaterThanOrEqualTo(1)),
+  /** The original controller: immutable, and the native guard and receipts name it. */
   controller: MobileGatewayController,
   controllerHost: Schema.optional(MobileGatewayControllerHost),
+  /** A successor that durably adopted the live native original (mirrors the native receipt). */
+  currentController: Schema.optional(MobileGatewayController),
   binding: MobileGatewayBinding,
   nativeOwnership: Schema.optional(MobileNativeGatewayOwnership),
   configuration: MobileGatewayConfiguration,

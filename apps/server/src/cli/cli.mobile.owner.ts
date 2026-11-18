@@ -8,11 +8,13 @@ import {
   enableMobileOwnerConsent,
   readMobileOwnerStatus,
   repairMobileOwner,
+  resolveMobileOwner,
   stopMobileOwner,
   type MobileOwnerReply,
 } from "./cli.mobile.owner.client.ts";
 import {
   formatMobileOwnerRepair,
+  formatMobileOwnerResolve,
   formatMobileOwnerStatus,
   writeMobileOwnerReply,
 } from "./cli.mobile.owner.format.ts";
@@ -42,7 +44,7 @@ const enable = Command.make("enable", {
   json: json(),
 }).pipe(
   Command.withDescription(
-    "Grant durable mobile journal consent through the backend owner socket. Revoke from settings.",
+    "Grant durable mobile consent and turn settings mobile access on. Turning that setting off revokes.",
   ),
   Command.withHandler((input) =>
     !input.confirmConsent
@@ -57,8 +59,8 @@ const enable = Command.make("enable", {
           () => enableMobileOwnerConsent(input.authorityId),
           (result) =>
             result.changed
-              ? `Mobile consent granted (revision ${result.revision}). Gateways from earlier grants can only be revoked.`
-              : `Mobile consent was already granted (revision ${result.revision}); nothing changed.`,
+              ? `Mobile consent granted (revision ${result.revision}); settings mobile access is on. Gateways from earlier grants can only be revoked.`
+              : `Mobile consent was already granted (revision ${result.revision}); settings mobile access is on.`,
         ),
   ),
 );
@@ -68,6 +70,7 @@ const notStarted: Record<string, string> = {
   retired: "the controller retired",
   unavailable:
     "no mobile controller is attached or it is busy or uncertain (see bigbud mobile status)",
+  failed: "it failed before native Start; the controller is unchanged",
 };
 const activate = Command.make("activate", {
   authorityId: authority(),
@@ -92,7 +95,7 @@ const activate = Command.make("activate", {
       (ack) =>
         started(ack.status)
           ? `Activation ${ack.status} (request ${ack.requestId}). This is not readiness; check status.`
-          : `Activation not started: ${notStarted[ack.status] ?? ack.status}.`,
+          : `Activation not started: ${notStarted[ack.status] ?? ack.status}${ack.reason ? ` (${ack.reason})` : ""}.`,
       // Only an accepted acknowledgement is success; every other status started nothing.
       (ack) => started(ack.status),
     ),
@@ -117,12 +120,22 @@ const status = Command.make("status", { authorityId: authority(), json: json() }
   ),
 );
 
-const repair = Command.make("repair", { authorityId: authority(), json: json() }).pipe(
+const repair = Command.make("repair", {
+  authorityId: authority(),
+  resolve: Flag.boolean("resolve").pipe(
+    Flag.withDescription(
+      "First settle gateway rows whose native supervisor provably ended (prior boot or settled exit).",
+    ),
+  ),
+  json: json(),
+}).pipe(
   Command.withDescription(
     "Remove runtime-asset trees the journal proves unowned; report what was kept and why.",
   ),
   Command.withHandler((input) =>
-    run(input.json, () => repairMobileOwner(input.authorityId), formatMobileOwnerRepair),
+    input.resolve
+      ? run(input.json, () => resolveMobileOwner(input.authorityId), formatMobileOwnerResolve)
+      : run(input.json, () => repairMobileOwner(input.authorityId), formatMobileOwnerRepair),
   ),
 );
 

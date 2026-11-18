@@ -10,10 +10,27 @@ use std::os::{
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
+/// The service manager stops a unit by signalling its whole control group, this monitor
+/// included. Only the owner channel (EOF or `!`) may end the monitor: it must outlive that
+/// signal to reap the original group and report the exit the supervisor drain settles on.
+const OWNER_ONLY_SIGNALS: [libc::c_int; 3] = [libc::SIGTERM, libc::SIGINT, libc::SIGHUP];
+
+fn set_termination_disposition(handler: libc::sighandler_t) -> std::io::Result<()> {
+    for signal in OWNER_ONLY_SIGNALS {
+        // SAFETY: signal(2) only replaces this process's disposition; it is async-signal-safe,
+        // so the pre-exec child may call it too.
+        if unsafe { libc::signal(signal, handler) } == libc::SIG_ERR {
+            return Err(std::io::Error::last_os_error());
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn run() -> Result<()> {
     if !cfg!(target_os = "linux") {
         return Err(Error::Unsupported);
     }
+    set_termination_disposition(libc::SIG_IGN)?;
     group::prepare().map_err(|_| Error::Uncertain)?;
     // SAFETY: the owning Rust process supplies the unique private socket at fd3.
     let mut owner = unsafe { UnixStream::from_raw_fd(3) };
@@ -75,14 +92,16 @@ pub(super) fn run() -> Result<()> {
         })
         .stderr(Stdio::null())
         .process_group(0);
-    // SAFETY: async-signal-safe fd operations before exec; fd3 must never reach a descendant.
+    // SAFETY: async-signal-safe fd and signal-disposition operations before exec; fd3 must
+    // never reach a descendant.
     unsafe {
         command.pre_exec(move || {
             if libc::fcntl(fd, libc::F_SETFD, 0) < 0 {
                 return Err(std::io::Error::last_os_error());
             }
             libc::close(3);
-            Ok(())
+            // An ignored disposition survives exec: the original child keeps the defaults.
+            set_termination_disposition(libc::SIG_DFL)
         });
     }
     let mut child = command.spawn()?;

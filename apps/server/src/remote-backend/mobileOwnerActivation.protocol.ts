@@ -6,6 +6,8 @@ import {
   validateMobileGatewayConfiguration,
 } from "../remote-agent/mobileGatewayLifecycle.schema.ts";
 import { MOBILE_RUNTIME_REPAIR_REASONS } from "./mobileGatewayAssets.orphan.reasons.ts";
+import { MOBILE_ACTIVATION_REASONS } from "./mobileGatewayActivation.reason.ts";
+import { MOBILE_NATIVE_RESOLVE_REASONS } from "./mobileGatewayNative.resolve.ts";
 
 /** Owner-client UDS only, sibling of the pairing route; same bearer/revision authentication. */
 export const MOBILE_OWNER_ACTIVATION_PATH = "/api/remote-backend/mobile/owner";
@@ -33,8 +35,15 @@ const Request = Schema.Union([
     configuration: MobileGatewayConfiguration,
   }),
   Schema.Struct({ action: Schema.Literal("stop"), authorityId: RemoteBackendAuthorityId }),
-  /** Orphan runtime-asset GC: removes only journal-proven unowned trees, reports the rest. */
-  Schema.Struct({ action: Schema.Literal("repair"), authorityId: RemoteBackendAuthorityId }),
+  /**
+   * Orphan runtime-asset GC: removes only journal-proven unowned trees, reports the rest. With
+   * `resolve`, first settles attempted native rows whose supervisor epoch provably ended.
+   */
+  Schema.Struct({
+    action: Schema.Literal("repair"),
+    authorityId: RemoteBackendAuthorityId,
+    resolve: Schema.optionalKey(Schema.Literal(true)),
+  }),
 ]);
 export type MobileOwnerActivationRequest = typeof Request.Type;
 export function decodeMobileOwnerActivationRequest(value: unknown): MobileOwnerActivationRequest {
@@ -43,10 +52,14 @@ export function decodeMobileOwnerActivationRequest(value: unknown): MobileOwnerA
   return request;
 }
 
+const Reason = Schema.Literals(MOBILE_ACTIVATION_REASONS);
+const ErrorName = Schema.String.check(Schema.isPattern(/^[A-Za-z][A-Za-z0-9_.-]{0,63}$/));
 const Outcome = Schema.Struct({
   kind: Schema.String.check(Schema.isMaxLength(64)),
   repairRequired: Schema.Boolean,
   at: Schema.String.check(Schema.isMaxLength(64)),
+  reason: Schema.NullOr(Reason),
+  detail: Schema.NullOr(ErrorName),
 });
 const Count = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1024 }));
 const RepairSummary = Schema.Struct({
@@ -82,10 +95,14 @@ export const MobileOwnerConsentResult = Schema.Struct({
   enabled: Schema.Literal(true),
   revision: Revision,
   changed: Schema.Boolean,
+  /** The grant also turned settings mobile access on, so the startup guard keeps the grant. */
+  settingsEnabled: Schema.Literal(true),
 });
 export const MobileOwnerActivateResult = Schema.Struct({
   requestId: Schema.NullOr(Schema.String.check(Schema.isMaxLength(64))),
-  status: Schema.Literals(["disabled", "accepted", "selected", "retired", "unavailable"]),
+  status: Schema.Literals(["disabled", "accepted", "selected", "retired", "unavailable", "failed"]),
+  /** Only with `failed`: the step that failed before native Start. */
+  reason: Schema.optionalKey(Reason),
 });
 export const MobileOwnerStopResult = Schema.Struct({ stopped: Schema.Literal(true) });
 export const MobileOwnerRepairResult = Schema.Struct({
@@ -100,6 +117,20 @@ export const MobileOwnerRepairResult = Schema.Struct({
   ).check(Schema.isMaxLength(512)),
 });
 export type MobileOwnerRepairResult = typeof MobileOwnerRepairResult.Type;
+export const MobileOwnerResolveResult = Schema.Struct({
+  cleared: Count,
+  kept: Count,
+  unresolved: Count,
+  entries: Schema.Array(
+    Schema.Struct({
+      generation: Schema.String.check(Schema.isPattern(/^assets-[a-f0-9]{32}$/)),
+      outcome: Schema.Literals(["cleared", "kept"]),
+      reason: Schema.Literals(MOBILE_NATIVE_RESOLVE_REASONS),
+    }),
+  ).check(Schema.isMaxLength(64)),
+  repair: Schema.NullOr(MobileOwnerRepairResult),
+});
+export type MobileOwnerResolveResult = typeof MobileOwnerResolveResult.Type;
 
 /** Fixed refusal codes; clients map them to their own text and never echo server prose. */
 export const MobileOwnerRefusalCode = Schema.Literals([

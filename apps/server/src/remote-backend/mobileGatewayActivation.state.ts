@@ -1,8 +1,12 @@
 import type { MobileRuntimeRepairReport } from "./mobileGatewayAssets.orphan.ts";
+import type { MobileActivationReason } from "./mobileGatewayActivation.reason.ts";
+import type { MobileNativeResolveReport } from "./mobileGatewayNative.resolve.ts";
 /** Orchestration state only: neither acknowledgement nor stop() is native exit/readiness proof. */
 export interface MobileActivationAcknowledgement {
   readonly requestId: string | null;
-  readonly status: "disabled" | "accepted" | "selected" | "retired" | "unavailable";
+  /** `failed`: nothing reached native Start and the controller kept its prior phase. */
+  readonly status: "disabled" | "accepted" | "selected" | "retired" | "unavailable" | "failed";
+  readonly reason?: MobileActivationReason;
 }
 /** Owner status only; never readiness, exit or publication evidence. */
 export type MobileActivationPhase = "idle" | "running" | "uncertain-detached" | "uncertain-repair";
@@ -10,6 +14,14 @@ export interface MobileActivationOutcomeSummary {
   readonly kind: string;
   readonly repairRequired: boolean;
   readonly at: string;
+  /** Fixed step that failed and the innermost error name; never a message or value. */
+  readonly reason: MobileActivationReason | null;
+  readonly detail: string | null;
+}
+/** Why proof inputs are (not) loaded, recorded once by the attach that read them. */
+export interface MobileInputsSummary {
+  readonly state: "loaded" | "absent" | "invalid" | "unsupported";
+  readonly reason: string | null;
 }
 /** Counts of the last orphan runtime-asset repair run; `failed` means nothing was proven. */
 export interface MobileRuntimeRepairSummary {
@@ -29,6 +41,8 @@ export interface MobileActivationStatus {
   readonly stopping: boolean;
   /** `null` while unattached, or for a controller that reports no status. */
   readonly controller: MobileActivationControllerStatus | null;
+  /** `null` until the app's single inputs read is recorded. */
+  readonly inputs: MobileInputsSummary | null;
 }
 export interface MobileActivationController {
   readonly activate: (input: unknown) => Promise<MobileActivationAcknowledgement>;
@@ -40,6 +54,8 @@ export interface MobileActivationController {
   readonly status?: () => MobileActivationControllerStatus;
   /** Orphan runtime-asset GC; kept/removed with fixed reasons. Absent means unavailable. */
   readonly repair?: () => Promise<MobileRuntimeRepairReport>;
+  /** Owner-only: settle native rows whose supervisor epoch provably ended, then GC. */
+  readonly resolve?: () => Promise<MobileNativeResolveReport>;
 }
 const unavailable = (): MobileActivationAcknowledgement => ({
   requestId: null,
@@ -51,6 +67,12 @@ export class MobileActivationState {
   private retiring: Promise<void> | undefined;
   private stopping: Promise<void> | undefined;
   private previouslyAttached = false;
+  private inputs: MobileInputsSummary | null = null;
+
+  /** Recorded once per app by the attach layer from its single inputs read. */
+  recordInputs(summary: MobileInputsSummary): void {
+    this.inputs = Object.freeze({ ...summary });
+  }
 
   activate(input: unknown): Promise<MobileActivationAcknowledgement> {
     if (!this.controller || this.retiring || this.stopping) return Promise.resolve(unavailable());
@@ -79,12 +101,22 @@ export class MobileActivationState {
       this.controller === controller && !this.retiring && !this.stopping ? repair() : null,
     );
   }
+  /** `null` when no controller (or no resolve seam) is attached: nothing ran. */
+  resolve(): Promise<MobileNativeResolveReport | null> {
+    const controller = this.controller;
+    if (!controller?.resolve || this.retiring || this.stopping) return Promise.resolve(null);
+    const resolve = controller.resolve;
+    return Promise.resolve().then(() =>
+      this.controller === controller && !this.retiring && !this.stopping ? resolve() : null,
+    );
+  }
   status(): MobileActivationStatus {
     return {
       attached: this.controller !== undefined,
       retiring: this.retiring !== undefined,
       stopping: this.stopping !== undefined,
       controller: this.controller?.status?.() ?? null,
+      inputs: this.inputs,
     };
   }
   stop(): Promise<void> {
@@ -122,6 +154,7 @@ export class MobileActivationState {
       close: input.close.bind(input),
       ...(input.status ? { status: input.status.bind(input) } : {}),
       ...(input.repair ? { repair: input.repair.bind(input) } : {}),
+      ...(input.resolve ? { resolve: input.resolve.bind(input) } : {}),
     });
     this.controller = controller;
     this.previouslyAttached = true;

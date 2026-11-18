@@ -17,6 +17,11 @@ const immutable = (a: MobileGatewayAttempt) =>
     a.reservedAtUnixMs,
     a.kind,
   ]);
+/** Everything except the adopting successor, which only an attempted native row may change. */
+const withoutAdoption = ({ currentController: _adopted, ...rest }: MobileGatewayAttempt) =>
+  JSON.stringify(rest);
+const adoptionChanged = (before: MobileGatewayAttempt, after: MobileGatewayAttempt) =>
+  JSON.stringify(before.currentController) !== JSON.stringify(after.currentController);
 export function assertMobileGatewayLifecycleTransition(
   before: RemoteAgentRegistry,
   next: RemoteAgentRegistry,
@@ -56,7 +61,13 @@ export function assertMobileGatewayLifecycleTransition(
       (attempt.child && JSON.stringify(attempt.child) !== JSON.stringify(observed.child)) ||
       (attempt.phase === "exit-confirmed" &&
         JSON.stringify(attempt) !== JSON.stringify(observed)) ||
-      (attempt.phase === observed.phase && JSON.stringify(attempt) !== JSON.stringify(observed))
+      (attempt.phase === observed.phase &&
+        withoutAdoption(attempt) !== withoutAdoption(observed)) ||
+      (adoptionChanged(attempt, observed) &&
+        (attempt.phase !== "attempted" ||
+          observed.phase !== "attempted" ||
+          !observed.nativeOwnership ||
+          !observed.currentController))
     )
       throw new Error("Gateway attempt identity/child/phase fence changed.");
   }

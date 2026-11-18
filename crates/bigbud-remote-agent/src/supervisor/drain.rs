@@ -126,7 +126,9 @@ fn stop_service_lease(sessions: &Arc<Mutex<AgentSession>>) -> io::Result<()> {
         .service_lease_for_retirement();
     if let Some(lease) = lease {
         // Failure remains active/uncertain; the existing idle fence refuses shutdown.
-        let _owned_settlement = lease.stop_for_retirement();
+        if let Err(error) = lease.stop_for_retirement() {
+            eprintln!("remote agent service lease retirement is unsettled: {error}");
+        }
     }
     Ok(())
 }

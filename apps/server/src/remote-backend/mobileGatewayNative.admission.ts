@@ -22,6 +22,10 @@ import {
 } from "./mobileGatewayAdmission.batch.ts";
 
 const equal = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** The journal row does not admit this controller; its name classifies owner status. */
+export class MobileGatewayNativeAdmissionRefused extends Error {
+  override readonly name = "MobileGatewayNativeAdmissionRefused";
+}
 
 /**
  * Native admission stamp for one original lease the native owner holds for this controller.
@@ -75,11 +79,14 @@ export async function mobileGatewayNativeAdmission(input: {
         attempt.stageId !== paths.stageId ||
         attempt.releaseId !== paths.releaseId ||
         attempt.consentRevision !== paths.consentRevision ||
-        !equal(attempt.controller, authority.controller) ||
+        // The current controller: this instance started it, or durably adopted it as successor.
+        !equal(attempt.currentController ?? attempt.controller, authority.controller) ||
         attempt.configuration.port !== input.port ||
         attempt.configuration.externalOrigin !== input.externalOrigin
       )
-        throw Error("Original attempted native gateway admission unavailable.");
+        throw new MobileGatewayNativeAdmissionRefused(
+          "Original attempted native gateway admission unavailable.",
+        );
       return { authority, paths, attempt, stage };
     },
     input.signal,

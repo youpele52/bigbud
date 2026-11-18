@@ -1,6 +1,7 @@
 import type {
   MobileOwnerRefusalCode,
   MobileOwnerRepairResult,
+  MobileOwnerResolveResult,
   MobileOwnerStatus,
 } from "../remote-backend/mobileOwnerActivation.protocol.ts";
 import type { MobileOwnerReply } from "./cli.mobile.owner.client.ts";
@@ -22,8 +23,10 @@ const unreachableText =
 
 export function formatMobileOwnerStatus(status: MobileOwnerStatus): string {
   const { controller, consent, inputs } = status;
-  const outcome = controller.lastOutcome
-    ? `${controller.lastOutcome.kind}${controller.lastOutcome.repairRequired ? " (repair required)" : ""} at ${controller.lastOutcome.at}`
+  const last = controller.lastOutcome;
+  const cause = last?.reason ? `: ${last.reason}${last.detail ? ` [${last.detail}]` : ""}` : "";
+  const outcome = last
+    ? `${last.kind}${cause}${last.repairRequired ? " (repair required)" : ""} at ${last.at}`
     : "none";
   const flags = [controller.retiring && "retiring", controller.stopping && "stopping"].filter(
     Boolean,
@@ -57,6 +60,18 @@ export function formatMobileOwnerRepair(result: MobileOwnerRepairResult): string
     `Runtime-asset repair: ${result.removed} removed, ${result.kept} kept.`,
     ...result.entries.map((e) => `  ${e.outcome} ${e.generation}: ${e.reason}`),
     ...(result.kept ? ["Kept entries were not proven unowned and were left untouched."] : []),
+  ].join("\n");
+}
+
+/** Per ended native row: cleared or kept with its fixed evidence reason, then the GC lines. */
+export function formatMobileOwnerResolve(result: MobileOwnerResolveResult): string {
+  return [
+    `Native resolution: ${result.cleared} cleared, ${result.kept} kept, ${result.unresolved} unsettled.`,
+    ...result.entries.map((e) => `  ${e.outcome} ${e.generation}: ${e.reason}`),
+    ...(result.kept
+      ? ["Kept rows have no proof their gateway is dead (reboot proves it) and were untouched."]
+      : []),
+    result.repair ? formatMobileOwnerRepair(result.repair) : "Runtime-asset repair did not run.",
   ].join("\n");
 }
 

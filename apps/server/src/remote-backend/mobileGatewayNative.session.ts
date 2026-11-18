@@ -29,6 +29,7 @@ import { validateMobileGatewayListener } from "./mobileGatewayListener.prefix.ts
 import { serveSealedMobileUpstream } from "./mobileGatewayListener.upstream.ts";
 import { makeNativeMobileGatewayLaunchPreparation } from "./mobileGatewayNative.prepare.ts";
 import { nativeMobileGatewayProcessPort } from "./mobileGatewayOwner.port.ts";
+import type { MobileActivationReason } from "./mobileGatewayActivation.reason.ts";
 
 export class NativeMobileGatewaySessionError extends Data.TaggedError(
   "NativeMobileGatewaySessionError",
@@ -37,6 +38,8 @@ export class NativeMobileGatewaySessionError extends Data.TaggedError(
   /** Original native ownership is uncertain; preserve intent, pin and assets for repair. */
   readonly repairRequired: boolean;
   readonly cause?: unknown;
+  /** Set when an explicit stop or a consent revoke ended the session, not a route failure. */
+  readonly reason?: MobileActivationReason;
 }> {}
 const failure = (cause?: unknown) =>
   cause instanceof NativeMobileGatewaySessionError
@@ -142,6 +145,14 @@ export const runNativeMobileGatewaySession = Effect.fn("runNativeMobileGatewaySe
           RemoteAgentRuntimeOwners | RemoteBackendIdentityService | ServerSettingsService
         >(),
       );
+      // A revoke- or stop-triggered end is recorded as such, never as a route failure.
+      const ended = (error: NativeMobileGatewaySessionError) =>
+        consentOff.signal.aborted || signals.stop.aborted
+          ? new NativeMobileGatewaySessionError({
+              ...error,
+              reason: consentOff.signal.aborted ? "consent-revoked" : "stop-requested",
+            })
+          : error;
       return yield* settledNativeMobileWork((interrupted) =>
         runMobileActivationWorker({
           ...nativeMobileActivationPorts(client, preparation, nativeMobileActivationAssets(proof)),
@@ -169,7 +180,7 @@ export const runNativeMobileGatewaySession = Effect.fn("runNativeMobileGatewaySe
             );
           },
         }),
-      );
+      ).pipe(Effect.mapError(ended));
     }),
   ).pipe(Effect.mapError(failure));
 });

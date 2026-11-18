@@ -9,6 +9,7 @@ import {
   MobileOwnerConsentResult,
   MobileOwnerRefusal,
   MobileOwnerRepairResult,
+  MobileOwnerResolveResult,
   MobileOwnerStatus,
   MobileOwnerStopResult,
   type MobileOwnerActivationRequest,
@@ -117,4 +118,10 @@ export const stopMobileOwner = (authorityId: string) =>
 export const repairMobileOwner = (authorityId: string) =>
   session(authorityId, deadlines.control, (send) =>
     send({ action: "repair", authorityId }, MobileOwnerRepairResult),
+  );
+
+/** Evidence-only settlement of ended native rows, then the same GC; owner authority only. */
+export const resolveMobileOwner = (authorityId: string) =>
+  session(authorityId, deadlines.control, (send) =>
+    send({ action: "repair", authorityId, resolve: true }, MobileOwnerResolveResult),
   );

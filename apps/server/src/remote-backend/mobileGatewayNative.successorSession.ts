@@ -42,14 +42,25 @@ import {
 } from "./mobileGatewayNative.successor.ts";
 import { recordNativeMobileSuccessorExit } from "./mobileGatewayNative.successorExit.ts";
 import { nativeMobileGatewayProcessPort } from "./mobileGatewayOwner.port.ts";
+import type { MobileActivationReason } from "./mobileGatewayActivation.reason.ts";
+import {
+  readNativeMobileHostEvidence,
+  settleEndedNativeMobileAttempt,
+} from "./mobileGatewayNative.resolve.ts";
+import { adoptNativeMobileSuccessorController } from "./mobileGatewayNative.successorAdopt.ts";
 
 class NativeMobileSuccessorRestoreError extends Data.TaggedError(
   "NativeMobileSuccessorRestoreError",
 )<{ readonly message: string; readonly cause: unknown }> {}
-const failed = (cause: unknown, repairRequired: boolean): NativeMobileSuccessorOutcome => ({
+const failed = (
+  cause: unknown,
+  repairRequired: boolean,
+  reason?: MobileActivationReason,
+): NativeMobileSuccessorOutcome => ({
   kind: "failed",
   repairRequired,
   cause,
+  ...(reason ? { reason } : {}),
 });
 /** Canonical journal consent for exactly this attempt's owner and consent revision. */
 export function nativeMobileSuccessorConsented(
@@ -136,12 +147,15 @@ const adoptWithPublication = Effect.fn("adoptNativeMobileSuccessorWithPublicatio
           },
           serveUpstream,
           recordExit,
-          use: (lease, upstream, signal) =>
-            runOwner(
+          use: async (lease, upstream, signal) => {
+            // Durable adoption first: owner admission requires this instance as the current one.
+            await adoptNativeMobileSuccessorController(proof, candidate, signal);
+            return runOwner(
               listener.gateway
                 .runWith(proof, selected, nativeMobileGatewayProcessPort(lease, signal))
                 .pipe(Effect.provideService(ServerConfig, upstream.config)),
-            ),
+            );
+          },
         }),
       );
     }),
@@ -168,20 +182,53 @@ export const runNativeMobileSuccessor = Effect.fn("runNativeMobileSuccessor")(fu
   const read = (signal: AbortSignal) =>
     authority.registry(AbortSignal.any([signal, signals.detach])).read();
   const initial = yield* Effect.exit(Effect.tryPromise(read));
-  if (Exit.isFailure(initial)) return failed(initial.cause, false);
+  if (Exit.isFailure(initial)) return failed(initial.cause, false, "journal-unreadable");
   const selection = selectNativeMobileSuccessor(initial.value, authority.owner);
   if (selection.kind === "none") return { kind: "none" } as NativeMobileSuccessorOutcome;
   if (selection.kind === "conflict")
-    return failed(Error("Several foreign native mobile originals require owner repair."), true);
+    return failed(
+      Error("Several foreign native mobile originals require owner repair."),
+      true,
+      "successor-conflict",
+    );
   const candidate = selection;
   const identity = yield* RemoteBackendIdentityService;
+  const owners = yield* RemoteAgentRuntimeOwners;
+  const host = yield* Effect.exit(
+    Effect.tryPromise(() => readNativeMobileHostEvidence(owners, authority.pin)),
+  );
+  // A lease of an earlier supervisor epoch cannot be resumed: only proven death settles it.
+  if (
+    Exit.isSuccess(host) &&
+    host.value.epoch !== candidate.attempt.nativeOwnership.binding.nativeEpoch
+  ) {
+    const settled = yield* Effect.exit(
+      Effect.tryPromise((signal) =>
+        authority
+          .registry(AbortSignal.any([signal, signals.detach]))
+          .update((state) =>
+            settleEndedNativeMobileAttempt(
+              state,
+              authority.pin,
+              candidate.attempt.nonce,
+              host.value,
+              Date.now(),
+            ),
+          ),
+      ),
+    );
+    return Exit.isSuccess(settled)
+      ? ({ kind: "exit-recorded" } as NativeMobileSuccessorOutcome)
+      : failed(settled.cause, true, "native-epoch-ended-unproven");
+  }
   const run = Effect.runPromiseWith(
     yield* Effect.services<Effect.Services<ReturnType<typeof adoptWithPublication>>>(),
   );
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const channel = yield* Effect.exit(acquireManagedNativeLeaseChannel());
-      if (Exit.isFailure(channel)) return failed(channel.cause, true);
+      if (Exit.isFailure(channel))
+        return failed(channel.cause, true, "successor-channel-unavailable");
       const client = managedNativeLeaseChannel(channel.value).client;
       // An older Rust epoch, a foreign owner or a non-canonical row is refused here: repair.
       const restored = yield* Effect.exit(
@@ -200,7 +247,8 @@ export const runNativeMobileSuccessor = Effect.fn("runNativeMobileSuccessor")(fu
             }),
         }),
       );
-      if (Exit.isFailure(restored)) return failed(restored.cause, true);
+      if (Exit.isFailure(restored))
+        return failed(restored.cause, true, "successor-restore-refused");
       const pending = restored.value;
       onAdopted();
       const consented = async (signal: AbortSignal) =>
@@ -224,7 +272,9 @@ export const runNativeMobileSuccessor = Effect.fn("runNativeMobileSuccessor")(fu
             (proof, lifetime) => run(adoptWithPublication(proof, adopted, lifetime)),
           ),
         );
-        return Exit.isSuccess(published) ? published.value : failed(published.cause, true);
+        return Exit.isSuccess(published)
+          ? published.value
+          : failed(published.cause, true, "publication-failed");
       }
       const original = candidate.attempt.nativeOwnership;
       return yield* settle((interrupted) =>

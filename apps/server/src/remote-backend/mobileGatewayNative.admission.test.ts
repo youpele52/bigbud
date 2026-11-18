@@ -11,6 +11,8 @@ import {
   setConsent,
   withNativeAdmission,
 } from "./mobileGatewayNative.admission.fixture.ts";
+// After the fixture: its module mock must load before the admission module's runner.
+import { MobileGatewayNativeAdmissionRefused } from "./mobileGatewayNative.admission.ts";
 
 /** The same original scope reported live at a different (successor) generation. */
 const successorGeneration = {
@@ -78,7 +80,10 @@ it("refuses a journal row that is not attempted, both at capture and after a cha
     () => undefined,
     (cause: unknown) => cause as { readonly cause?: unknown },
   );
-  expect(capture?.cause).toEqual(Error("Original attempted native gateway admission unavailable."));
+  expect(capture?.cause).toBeInstanceOf(MobileGatewayNativeAdmissionRefused);
+  expect((capture?.cause as Error | undefined)?.message).toBe(
+    "Original attempted native gateway admission unavailable.",
+  );
   await withNativeAdmission({ status: [spawnedReply] }, async (f) => {
     await f.mirror((state) =>
       editAttempt(state, (attempt) => ({

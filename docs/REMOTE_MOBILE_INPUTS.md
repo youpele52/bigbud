@@ -57,7 +57,18 @@ helper again. The descriptor and key files it reads must themselves be `0600`. I
 
 Durable journal consent can be granted only with `bigbud mobile enable --confirm-consent`. The
 command reads the current consent revision through `status`, then sends a grant that applies only
-if the revision is still the same. The settings toggle can only revoke consent.
+if the revision is still the same.
+
+The grant also turns settings mobile access (`mobileRemoteControl.enabled`) on, before it writes
+the journal. That setting stays revoke-only:
+
+- Turning it on grants nothing by itself. Durable consent still needs the CLI grant.
+- Turning it off revokes durable consent. The backend also applies this at every start: if the
+  setting is off when the backend starts, it revokes durable consent. Without the setting on, a
+  grant would therefore not survive the next restart.
+- The gateway descriptor and owner admission require the setting too, so mobile access works only
+  while both are on.
+- A stale grant (`stale-revision`) is refused before the setting changes.
 
 - Every real change bumps the revision and cancels every stage: grant after revoke, revoke after
   grant, and the first mobile write on an older journal, which starts at revision 1.
@@ -68,3 +79,53 @@ if the revision is still the same. The settings toggle can only revoke consent.
   original from the earlier grant can therefore only be revoked, never served again.
 - The grant is refused while the remote agent is not installed (`not-installed`), when the revision
   has changed concurrently (`stale-revision`), and when the backend authority does not match.
+
+## Stages after a consent change
+
+Every consent change cancels every stage, and a cancelled stage is a permanent replay fence. The
+stage id in the inputs file is therefore used only by the first grant that publishes it. After a
+revoke and a new grant, activation publishes a stage named `<stageId>.r<revision>` for the new
+consent revision. You do not need to change the inputs file.
+
+- An original from an earlier grant still names its own stage and revision, so it can only be
+  revoked, never served again.
+- The journal keeps at most 16 stages per installation, so the number of consent cycles is
+  bounded. When the budget is spent, activation fails at publication (`publication-failed` in
+  status) and never reuses a fenced stage.
+- An activation that fails before native Start reports `failed` with the step that failed, and the
+  controller keeps its phase (for example `idle`). Only work that reached native Start can leave
+  the controller `uncertain`.
+
+## Status reasons
+
+`bigbud mobile status` shows the last outcome with a fixed reason and, in brackets, the innermost
+error name, for example `failed: route-unverified [MobileGatewayRouteUnverified]`. Reasons never
+carry paths, tokens or server text. A stop caused by revoking consent reads `consent-revoked`, an
+owner stop reads `stop-requested`, and a failed HTTPS route check reads `route-unverified`. The
+full cause is written to the backend log.
+
+## Repairing an uncertain gateway
+
+A gateway attempt stays `uncertain-repair` while nothing proves its original native gateway ended.
+Two kinds of evidence prove it:
+
+- **Prior boot:** the controller that started the gateway ran in an earlier kernel boot.
+- **Settled supervisor exit:** the canonical agent journal shows that the native supervisor epoch
+  owning the gateway was replaced after its exit receipt. The supervisor writes that receipt (exit
+  143 or 0) only after every owned lease, the gateway included, has stopped.
+
+When the backend attaches, it settles such an attempt automatically if the evidence is there. You
+can also run the same check yourself:
+
+```sh
+bigbud mobile repair --authority <authority> --resolve
+```
+
+It clears only attempts with that evidence, then runs the orphan runtime-asset repair. Any other
+attempt is kept with a reason:
+
+- `live-epoch`: the current supervisor still owns it.
+- `death-unproven`: there is no evidence yet. A reboot provides it.
+- `journal-inconsistent`: the attempt record does not match its build pin or epoch.
+
+The command never signals, adopts or guesses about a native process.

@@ -67,13 +67,16 @@ it("grants by revision CAS: bump on change, keep when already granted, refuse st
       status: 409,
       body: { refused: "stale-revision" },
     });
+    expect(app.settingsEnabled()).toBe(false);
     expect(await send(app, grant())).toEqual({
       status: 200,
-      body: { enabled: true, revision: 3, changed: true },
+      body: { enabled: true, revision: 3, changed: true, settingsEnabled: true },
     });
+    // The grant turned settings mobile access on, so the startup guard keeps it.
+    expect(app.settingsEnabled()).toBe(true);
     expect(await send(app, grant({ expectedRevision: 3 }))).toEqual({
       status: 200,
-      body: { enabled: true, revision: 3, changed: false },
+      body: { enabled: true, revision: 3, changed: false, settingsEnabled: true },
     });
   } finally {
     await app.dispose();
@@ -113,7 +116,13 @@ it("routes activate/stop to the attached controller and reports its phase in sta
     close: async () => {},
     status: () => ({
       phase: "uncertain-repair",
-      lastOutcome: { kind: "failed", repairRequired: true, at: "2026-11-17T00:00:00.000Z" },
+      lastOutcome: {
+        kind: "failed",
+        repairRequired: true,
+        at: "2026-11-17T00:00:00.000Z",
+        reason: "route-unverified",
+        detail: "MobileGatewayRouteUnverified",
+      },
     }),
   };
   const app = await makeOwnerActivationFixture({
@@ -143,7 +152,13 @@ it("routes activate/stop to the attached controller and reports its phase in sta
           // A failed stop stays pending in the activation state: no relaunch until retirement.
           stopping: true,
           phase: "uncertain-repair",
-          lastOutcome: { kind: "failed", repairRequired: true, at: "2026-11-17T00:00:00.000Z" },
+          lastOutcome: {
+            kind: "failed",
+            repairRequired: true,
+            at: "2026-11-17T00:00:00.000Z",
+            reason: "route-unverified",
+            detail: "MobileGatewayRouteUnverified",
+          },
           lastRepair: null,
         },
         consent: { state: "enabled", revision: 4 },

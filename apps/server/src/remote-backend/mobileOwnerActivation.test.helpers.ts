@@ -3,7 +3,7 @@ import * as Layer from "effect/Layer";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as HttpRouter from "effect/unstable/http/HttpRouter";
 import { generateKeyPairSync } from "node:crypto";
-import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/settings";
+import { DEFAULT_SERVER_SETTINGS, type ServerSettings } from "@bigbud/contracts/settings";
 import { ServerConfig } from "../startup/config.ts";
 import { ServerSettingsService } from "../ws/serverSettings.ts";
 import { buildTestServerConfig } from "../server.test.app.config.ts";
@@ -14,7 +14,7 @@ import {
   RemoteMobileConsentJournal,
   type MobileConsentState,
 } from "./mobileConsentEnable.ts";
-import { RemoteMobileNativeInputsReport } from "./mobileGatewayActivation.inputs.ts";
+import { mobileNativeInputsSummary } from "./mobileGatewayActivation.inputs.ts";
 import type { MobileNativeInputsReport } from "./mobileGatewayActivation.inputs.read.ts";
 import {
   RemoteMobileGatewayActivation,
@@ -23,6 +23,7 @@ import {
 } from "./mobileGatewayActivation.service.ts";
 import type { MobileActivationController } from "./mobileGatewayActivation.state.ts";
 import { mobileOwnerActivationRoute } from "./mobileOwnerActivation.ts";
+import { makeMobileOwnerActivationRoutes } from "./mobileOwnerActivation.routes.ts";
 import { MOBILE_OWNER_ACTIVATION_PATH } from "./mobileOwnerActivation.protocol.ts";
 
 export const ownerAuthority = "a".repeat(32);
@@ -42,17 +43,31 @@ export function activationRequest(
   });
 }
 
-/** Real route, router authentication and activation service; journal and controller recorded. */
+/**
+ * Real route composition (request-scoped journal), router authentication, activation service and
+ * attach-time inputs recording; journal, settings and controller are recorded. App-wide services
+ * never include the journal or the inputs report: `legacy` wires the journal the pre-fix way
+ * (`Layer.provide` on the route layer) as a negative control.
+ */
 export async function makeOwnerActivationFixture(
   options: {
     remote?: boolean;
     consent?: MobileConsentState;
     inputs?: MobileNativeInputsReport;
     controller?: MobileActivationController;
+    settingsEnabled?: boolean;
+    legacy?: boolean;
   } = {},
 ) {
   const enables: number[] = [];
   let consent = options.consent ?? { enabled: false, revision: 2 };
+  let currentSettings: ServerSettings = {
+    ...DEFAULT_SERVER_SETTINGS,
+    mobileRemoteControl: {
+      ...DEFAULT_SERVER_SETTINGS.mobileRemoteControl,
+      enabled: options.settingsEnabled ?? false,
+    },
+  };
   const config = Layer.effect(
     ServerConfig,
     buildTestServerConfig({
@@ -63,7 +78,18 @@ export async function makeOwnerActivationFixture(
     }),
   ).pipe(Layer.provideMerge(NodeServices.layer));
   const settings = Layer.mock(ServerSettingsService)({
-    getSettings: Effect.succeed(DEFAULT_SERVER_SETTINGS),
+    getSettings: Effect.sync(() => currentSettings),
+    updateSettings: (patch) =>
+      Effect.sync(() => {
+        currentSettings = {
+          ...currentSettings,
+          mobileRemoteControl: {
+            ...currentSettings.mobileRemoteControl,
+            ...patch.mobileRemoteControl,
+          },
+        };
+        return currentSettings;
+      }),
   });
   const identity = Layer.succeed(RemoteBackendIdentityService, {
     authority: {
@@ -94,23 +120,33 @@ export async function makeOwnerActivationFixture(
       Effect.provide(RemoteMobileGatewayActivationLive),
     ),
   );
+  // What the attach layer records from its single inputs read (never app-wide provision).
+  registeredMobileGatewayActivationState(activation).recordInputs(
+    mobileNativeInputsSummary(options.inputs ?? { kind: "absent" }),
+  );
   if (options.controller)
     registeredMobileGatewayActivationState(activation).attach(options.controller);
   const services = Layer.mergeAll(
     config,
     settings,
     identity,
-    journal,
     Layer.succeed(RemoteMobileGatewayActivation, activation),
-    Layer.succeed(RemoteMobileNativeInputsReport, options.inputs ?? { kind: "absent" }),
   );
+  const route = options.legacy
+    ? mobileOwnerActivationRoute.pipe(Layer.provide(journal))
+    : makeMobileOwnerActivationRoutes(journal);
   const app = HttpRouter.toWebHandler(
-    mobileOwnerActivationRoute.pipe(
+    route.pipe(
       Layer.provide(remoteClientAuthorizationLive),
       HttpRouter.provideRequest(services),
       Layer.provide(config),
     ),
     { disableLogger: true },
   );
-  return { ...app, enables, consent: () => consent };
+  return {
+    ...app,
+    enables,
+    consent: () => consent,
+    settingsEnabled: () => currentSettings.mobileRemoteControl.enabled,
+  };
 }

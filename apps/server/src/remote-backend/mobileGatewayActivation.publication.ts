@@ -6,23 +6,27 @@ import {
 } from "../remote-agent/mobileOptionalPublication.ts";
 import type { RemoteMobileNativeInputsValue } from "./mobileGatewayActivation.inputs.ts";
 
-/** Publish once, or remint the already-published stage of the current durable consent. */
+/**
+ * Publish once, or remint the already-published stage of the current durable consent. `stageId`
+ * is the inputs' stage for the current consent revision (`mobileStageIdForConsent`).
+ */
 export async function verifiedNativeMobilePublication(
   publisher: MobileOptionalPublisher,
   inputs: RemoteMobileNativeInputsValue,
+  stageId: string,
   consentRevision: number,
   published: boolean,
   signal: AbortSignal,
 ): Promise<VerifiedMobilePublication> {
   const { artifacts } = inputs;
-  if (published) return publisher.remint(artifacts.stageId, consentRevision);
+  if (published) return publisher.remint(stageId, consentRevision);
   const [gatewayBytes, assetsBytes] = await Promise.all([
     fs.readFile(artifacts.gatewayPath, { signal }),
     fs.readFile(artifacts.assetsPath, { signal }),
   ]);
   signal.throwIfAborted();
   return publisher.publish({
-    stageId: artifacts.stageId,
+    stageId,
     consentRevision,
     gateway: artifacts.gateway,
     assets: artifacts.assets,

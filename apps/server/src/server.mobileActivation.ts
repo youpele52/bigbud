@@ -6,6 +6,8 @@ import { makeNativeMobileActivationController } from "./remote-backend/mobileGat
 import {
   RemoteMobileNativeInputs,
   RemoteMobileNativeInputsLive,
+  RemoteMobileNativeInputsReport,
+  mobileNativeInputsSummary,
   type RemoteMobileNativeInputsValue,
 } from "./remote-backend/mobileGatewayActivation.inputs.ts";
 import {
@@ -55,10 +57,18 @@ const attachNativeMobileActivation = (inputs: RemoteMobileNativeInputsValue) =>
     }),
   ).pipe(Layer.provide(RemoteAgentRuntimeOwnersLive));
 
-/** Default-off: absent proof inputs attach nothing and perform no FS, IO or channel work. */
+/**
+ * Default-off: absent proof inputs attach nothing and perform no FS, IO or channel work. The one
+ * inputs read is recorded on the app's activation state either way, so the owner route reports
+ * the same report the attach acted on (route handlers cannot see layer-provided services).
+ */
 export const RemoteMobileActivationAttachLive = Layer.unwrap(
   Effect.gen(function* () {
     const inputs = yield* RemoteMobileNativeInputs;
+    const report = yield* RemoteMobileNativeInputsReport;
+    registeredMobileGatewayActivationState(yield* RemoteMobileGatewayActivation).recordInputs(
+      mobileNativeInputsSummary(report),
+    );
     return Option.isSome(inputs) ? attachNativeMobileActivation(inputs.value) : Layer.empty;
   }),
 );

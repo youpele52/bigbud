@@ -23,6 +23,8 @@ export interface NativeAdmissionScenario {
   readonly status?: SuccessorReply[];
   /** Leave the journal row `reserved`: Start happens without the durable `attempted` fence. */
   readonly skipInvoked?: boolean;
+  /** Rewrite the canonical journal after Start, before admission captures it. */
+  readonly journal?: (state: Registry) => RemoteAgentRegistry;
 }
 
 export async function withNativeAdmission<A>(
@@ -48,6 +50,11 @@ export async function withNativeAdmission<A>(
         if (!intent) throw Error("Fixture reservation was not admitted.");
         if (!scenario.skipInvoked) await n.api.markInvoked(intent);
         const lease = await n.client.start(n.pending);
+        if (scenario.journal) {
+          const state = f.read();
+          if (state.schemaVersion !== 3) throw Error("Fixture journal missing.");
+          f.replaceState(scenario.journal(state));
+        }
         const directory = join(f.control.root, "control-v1");
         const mirror = async (
           edit: (state: Registry) => RemoteAgentRegistry = (state) => state,

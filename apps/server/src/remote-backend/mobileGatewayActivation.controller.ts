@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import { MobileActivationRequestId } from "../remote-agent/mobileGatewayActivation.selection.schema.ts";
@@ -29,6 +30,15 @@ import {
   runNativeMobileSuccessor,
   type NativeMobileSuccessorServices,
 } from "./mobileGatewayNative.successorSession.ts";
+import type { MobileNativeResolveReport } from "./mobileGatewayNative.resolve.ts";
+import {
+  runMobileNativeResolve,
+  type MobileNativeResolveServices,
+} from "./mobileGatewayNative.resolve.run.ts";
+import {
+  classifyMobileActivationCause,
+  mobileFailureDetail,
+} from "./mobileGatewayActivation.reason.ts";
 
 const ActivationInput = Schema.Struct({
   requestId: MobileActivationRequestId,
@@ -79,6 +89,25 @@ const unrecoverable: MobileActivationRecover = async () => ({ kind: "unavailable
 export type MobileActivationRepair = (signal: AbortSignal) => Promise<MobileRuntimeRepairReport>;
 const unrepairable: MobileActivationRepair = () =>
   Promise.reject(Error("Mobile runtime-asset repair is unavailable."));
+/** Evidence-only settlement of attempted native rows whose supervisor epoch ended. */
+export type MobileActivationResolve = (
+  signal: AbortSignal,
+) => Promise<Omit<MobileNativeResolveReport, "repair">>;
+const unresolvable: MobileActivationResolve = () =>
+  Promise.reject(Error("Mobile native resolution is unavailable."));
+/** Bounded, non-secret summary: kind, fixed reason and the innermost error name only. */
+export function summarizeMobileActivationOutcome(
+  outcome: NativeMobileSuccessorOutcome,
+): MobileActivationOutcomeSummary {
+  const failed = outcome.kind === "failed";
+  return Object.freeze({
+    kind: outcome.kind,
+    repairRequired: failed && outcome.repairRequired,
+    at: new Date().toISOString(),
+    reason: failed ? (outcome.reason ?? classifyMobileActivationCause(outcome.cause)) : null,
+    detail: failed ? mobileFailureDetail(outcome.cause) : null,
+  });
+}
 
 function decodeActivation(input: unknown): NativeMobileActivationRequest {
   const decoded = Schema.decodeUnknownSync(ActivationInput)(input, { onExcessProperty: "error" });
@@ -103,11 +132,14 @@ export function createMobileActivationController(
   platform: NodeJS.Platform = process.platform,
   recover: MobileActivationRecover = unrecoverable,
   repairAssets: MobileActivationRepair = unrepairable,
+  resolveNative: MobileActivationResolve = unresolvable,
+  onOutcome: (outcome: NativeMobileSuccessorOutcome) => void = () => {},
 ): MobileActivationController {
   let phase: Phase = { kind: "idle" };
   let lastOutcome: MobileActivationOutcomeSummary | null = null;
   let lastRepair: MobileRuntimeRepairSummary | null = null;
   let repairing: Promise<MobileRuntimeRepairReport> | undefined;
+  let resolving: Promise<unknown> | undefined;
   const retired = new AbortController();
 
   const begin = (
@@ -142,20 +174,25 @@ export function createMobileActivationController(
       selection.then(() => ack(requestId, "accepted")),
       done.then((outcome) => {
         if (selected) return ack(requestId, "accepted");
-        // Nothing foreign remains to adopt: the predecessor's work is retired.
-        if (outcome.kind === "none") return ack(null, "retired");
+        // Nothing foreign remains to adopt, or its proven exit was recorded: it is retired.
+        if (outcome.kind === "none" || outcome.kind === "exit-recorded")
+          return ack(null, "retired");
         if (outcome.kind === "unavailable" || outcome.kind === "disabled")
           return ack(null, outcome.kind);
+        // Nothing reached native Start: report the failed step; the prior phase is kept.
+        if (outcome.kind === "failed" && !outcome.repairRequired)
+          return {
+            requestId,
+            status: "failed" as const,
+            reason: summarizeMobileActivationOutcome(outcome).reason ?? "unknown",
+          };
         throw uncertainty(outcome);
       }),
     ]);
     const running: Running = { kind: "running", request, detach, stop, acknowledged, done };
     void done.then((outcome) => {
-      lastOutcome = Object.freeze({
-        kind: outcome.kind,
-        repairRequired: outcome.kind === "failed" && outcome.repairRequired,
-        at: new Date().toISOString(),
-      });
+      lastOutcome = summarizeMobileActivationOutcome(outcome);
+      onOutcome(outcome);
       if (phase !== running) return;
       phase = !settledOwnership(outcome)
         ? { kind: "uncertain", reason: outcome.kind === "detached" ? "detached" : "repair" }
@@ -166,11 +203,44 @@ export function createMobileActivationController(
     return running;
   };
 
+  const repair = (): Promise<MobileRuntimeRepairReport> => {
+    if (platform !== "linux")
+      return Promise.reject(Error("Mobile runtime-asset repair is unavailable."));
+    if (repairing) return repairing;
+    const run = Promise.resolve()
+      .then(() => repairAssets(retired.signal))
+      .then(
+        (report) => {
+          lastRepair = Object.freeze({
+            at: new Date().toISOString(),
+            removed: report.removed,
+            kept: report.kept,
+            failed: false,
+          });
+          return report;
+        },
+        (cause: unknown) => {
+          lastRepair = Object.freeze({
+            at: new Date().toISOString(),
+            removed: 0,
+            kept: 0,
+            failed: true,
+          });
+          throw cause;
+        },
+      )
+      .finally(() => {
+        if (repairing === run) repairing = undefined;
+      });
+    repairing = run;
+    return run;
+  };
+
   return Object.freeze({
     activate: async (input: unknown) => {
       if (platform !== "linux") return ack(null, "unavailable");
       const request = decodeActivation(input);
-      if (phase.kind === "uncertain") return ack(null, "unavailable");
+      if (phase.kind === "uncertain" || resolving) return ack(null, "unavailable");
       if (phase.kind === "running") {
         const current = phase.request;
         if (
@@ -203,37 +273,26 @@ export function createMobileActivationController(
       const outcome = await phase.done;
       if (!settledOwnership(outcome)) throw uncertainty(outcome);
     },
-    repair: () => {
-      if (platform !== "linux")
-        return Promise.reject(Error("Mobile runtime-asset repair is unavailable."));
-      if (repairing) return repairing;
-      const run = Promise.resolve()
-        .then(() => repairAssets(retired.signal))
-        .then(
-          (report) => {
-            lastRepair = Object.freeze({
-              at: new Date().toISOString(),
-              removed: report.removed,
-              kept: report.kept,
-              failed: false,
-            });
-            return report;
-          },
-          (cause: unknown) => {
-            lastRepair = Object.freeze({
-              at: new Date().toISOString(),
-              removed: 0,
-              kept: 0,
-              failed: true,
-            });
-            throw cause;
-          },
-        )
-        .finally(() => {
-          if (repairing === run) repairing = undefined;
-        });
-      repairing = run;
-      return run;
+    repair,
+    /**
+     * Owner-only: settle attempted native rows whose supervisor epoch provably ended (prior boot
+     * or a settled exit receipt in the canonical journal), then run the orphan GC. Uncertainty is
+     * cleared only when no attempted native row remains; never while work is running.
+     */
+    resolve: async () => {
+      if (platform !== "linux") throw Error("Mobile native resolution is unavailable.");
+      if (phase.kind === "running" || repairing || resolving)
+        throw Error("Mobile activation work is running; resolve after it settles.");
+      const run = resolveNative(retired.signal);
+      resolving = run;
+      try {
+        const resolved = await run;
+        if (phase.kind === "uncertain" && resolved.unresolved === 0) phase = { kind: "idle" };
+        const assets = await repair().catch(() => null);
+        return Object.freeze({ ...resolved, repair: assets });
+      } finally {
+        resolving = undefined;
+      }
     },
     close: async () => {
       retired.abort(Error("Mobile activation controller is retiring."));
@@ -261,6 +320,7 @@ export const makeNativeMobileActivationController = Effect.fn(
       | NativeMobileActivationServices
       | NativeMobileSuccessorServices
       | MobileRuntimeAssetsRepairServices
+      | MobileNativeResolveServices
     >(),
   );
   return createMobileActivationController(
@@ -269,5 +329,16 @@ export const makeNativeMobileActivationController = Effect.fn(
     process.platform,
     (signals, onAdopted) => run(runNativeMobileSuccessor(inputs, signals, onAdopted)),
     (signal) => run(runMobileRuntimeAssetsRepair(signal)),
+    (signal) => run(runMobileNativeResolve(signal)),
+    (outcome) => {
+      // The full cause stays in the server log; status carries only the bounded summary.
+      if (outcome.kind === "failed")
+        void run(
+          Effect.logWarning("Mobile gateway activation ended with a failure.", {
+            ...summarizeMobileActivationOutcome(outcome),
+            cause: Cause.isCause(outcome.cause) ? Cause.pretty(outcome.cause) : outcome.cause,
+          }),
+        );
+    },
   );
 });

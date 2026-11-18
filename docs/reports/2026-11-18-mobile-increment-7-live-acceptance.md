@@ -202,3 +202,123 @@ vm/, vm-collect/, archive-extra/), archived as
 `~/DevWorld/bigbud-evidence/tmp-bigbud-evidence-20261118-mobile-inc7.tar.zst` with a `.sha256`
 file. The archive contains no private key and no client or mobile session token. The VM was
 deleted, the build container ran with `--rm`, and nothing else was touched.
+
+## Fixes and re-run (18 November 2026, 05:03–05:41 UTC)
+
+**Verdict:** F1–F8 are fixed and re-run live. F9 is unchanged by design: authenticated admission
+still needs real Tailscale Serve and the public HTTPS probe, which stays on the physical
+phone/Tailscale checklist. Nothing is committed.
+
+### Root causes and fixes
+
+- **F1 (confirmed):** `HttpRouter` handlers run with the request fiber's services.
+  - Two things never reached the handler: `Layer.provide` on the route layer, and the
+    `Layer.fresh` the remote listener wraps routes in (which also rebuilt the inputs layer, a
+    second read).
+  - A negative-control test with the pre-fix wiring reproduces `unavailable`.
+  - **Fix:** the consent journal is provided per request through `HttpRouter.provideRequest`
+    (`mobileOwnerActivation.routes.ts`). The attach layer records its single inputs read on the
+    app-wide activation state, and status reads it from there.
+  - Test: `mobileOwnerActivation.routes.test.ts`, using the real route composition with no
+    app-wide journal.
+- **F2 (confirmed):** the startup guard revokes durable consent whenever the toggle is off.
+  - **Fix (D-B kept):** `mobile enable --confirm-consent` turns settings mobile access on first,
+    then runs the journal CAS. A stale revision is refused before the setting changes.
+  - Turning the toggle on grants nothing, and turning it off still revokes. Documented in
+    `REMOTE_MOBILE_INPUTS.md`.
+- **F3 (confirmed):** a consent change cancels every stage, and a cancelled stage is a permanent
+  fence.
+  - **Fix:** the first grant keeps the inputs' stage id. A later revision publishes
+    `<stageId>.r<revision>` (`mobileGatewayActivation.stage.ts`). This is deterministic, so a
+    remint after restart finds the same stage.
+  - Old attempts keep their own stage and revision, so an old original can still only be revoked.
+  - A failure before native Start now acknowledges `failed` with the step that failed, and the
+    controller keeps its phase. It no longer reports `uncertain`.
+  - Bound: the journal keeps at most 16 stages, so consent cycles per installation are finite.
+- **F4 (confirmed):** admission compared the immutable original `controller` with the current
+  instance.
+  - That field cannot be rewritten: the native guard predicates and the assets receipt name it.
+  - **Fix:** a new optional `currentController` on the attempt, set by a CAS after a verified
+    successor Resume, from exactly the foreign controller that was selected. This mirrors the
+    Rust receipt's current/previous controller.
+  - Admission and successor selection use `currentController ?? controller`. Journal invariants
+    allow only an attempted native row to change it.
+  - Tests: `mobileGatewayNative.admission.successor.test.ts` and
+    `mobileGatewayLifecycle.native.adopt.test.ts`.
+- **F5 (confirmed by a failing Linux test before the fix):** the Rust unit uses
+  `KillMode=control-group`, so systemd's SIGTERM also reached the private lease monitor.
+  - The monitor had the default disposition (the supervisor's handler resets on exec), so it died
+    by signal. `Monitor::stop` then saw a non-success exit, marked the lease uncertain, and the
+    drain exited 1 with no receipt.
+  - **Fix:** the monitor ignores SIGTERM, SIGINT and SIGHUP (only its owner channel ends it), and
+    it restores the defaults for the original child before exec. The drain now logs a failed lease
+    retirement instead of discarding it.
+  - Test: `tests/service_lease_signal_drain.rs`.
+- **F6 (confirmed):** nothing could settle an attempt whose native epoch ended. New evidence kind
+  `native-epoch-ended`:
+  - **Prior boot:** the original controller's boot id differs from the current boot.
+  - **Settled supervisor exit:** a P4 restart of exactly that epoch reached `starting` or `ready`,
+    which the core writes only after an exit receipt or a prior-boot proof.
+  - It never clears a live epoch or an unproven row.
+  - It is applied automatically at attach. The owner can run it on demand with
+    `bigbud mobile repair --resolve`, which clears uncertainty only when no unsettled attempt
+    remains and then runs the orphan GC.
+- **F7:** `apps/mobile-web/public/_redirects` is removed. It was a static-host rewrite with no
+  in-repo consumer: the native gateway and the desktop server both do their own SPA fallback. The
+  static-only asset policy stays strict, and a plain build now packages unmodified.
+- **F8:** `lastOutcome` now carries a fixed `reason` and the innermost error name as `detail`.
+  - These never include messages or values. The full cause goes to the backend log.
+  - Route-check failures are named `MobileGatewayRouteUnverified`. A revoke-triggered stop reads
+    `consent-revoked` and an owner stop reads `stop-requested`.
+
+### Re-run
+
+**Build:**
+
+- Source: `git archive` of HEAD `6716f8b8fe` plus only this fix's files.
+- Graph: `0.1.613-dev.fix3`. The producer passed unmodified.
+- Agent: `0.3.3-fix.9ffa9610b565`, sha256 `312f9a19…`. The gateway is unchanged (sha256
+  `809aa448…`).
+- Mobile assets: a plain `VITE_MOBILE_BASE=/mobile/` build, packaged with no edits.
+- All signed with the dev fixture key only.
+
+**VM:** Lima `bb-mobile-fix` (vz, Ubuntu 22.04.5 arm64, `mounts: []`). It was deleted afterwards.
+
+**Harness:** the tailscale stand-in and the stalling `:443` listener, as in increment 7. The
+consent driver was not needed.
+
+**Validator mistakes (not product defects):**
+
+- The first two graphs were rebuilt to add cause logging and the route-error naming.
+- The first mobile descriptors named backend `0.1.614` instead of `0.1.613`, so publication was
+  refused as incompatible. They were repackaged.
+- The first three accounts were removed to free subordinate-UID ranges.
+
+| Step                                            | Result   | Evidence (`live/`)                                                                                                                                                                         |
+| ----------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| F1 status before enable                         | **PASS** | `04-provision2`: `Proof inputs: loaded`, `Consent: disabled (revision 0)`                                                                                                                  |
+| F1 `mobile enable --confirm-consent`            | **PASS** | `02`, `05`, `08`: `granted (revision 1); settings mobile access is on`                                                                                                                     |
+| F2 consent survives restart (and a reboot)      | **PASS** | `02`/`05`: still `enabled (revision 1)` after restart; `16`: `revision 3` after reboot                                                                                                     |
+| F3 revoke → re-grant → activate                 | **PASS** | `07`: rev 1 → 2 (toggle) → 3 (CLI); stage `….r3` published; native Start (child 28810), then `native-exit`                                                                                 |
+| F3 honest pre-Start failure                     | **PASS** | `03`/`05`: `failed before native Start … (publication-failed)`, phase `idle`                                                                                                               |
+| F4 successor adoption → admission → route check | **PASS** | `11`: same gateway PID 45656; journal `cur 45831`; the successor's own stand-in call at 05:36:26; outcome `route-unverified` (F9 boundary); `native-exit` with current/previous controller |
+| F5 `backend stop` with a live gateway           | **PASS** | `12`: stop returned in 0.6 s; Rust `Result=success`, `launch.exit=143`; gateway gone                                                                                                       |
+| F5 backend later reconciles the attempt         | **PASS** | `13`: restart reservation for the old epoch `ready`; attempt `native-epoch-ended / settled-supervisor-exit`; tree removed (`1 removed`)                                                    |
+| F6 resolve refuses without evidence             | **PASS** | `14`: Rust SIGKILLed with the gateway live → `uncertain-repair`; `repair --resolve` kept the row (`live-epoch`); controller stays uncertain                                                |
+| F6 after reboot                                 | **PASS** | `15`: attach settled the row (`native-epoch-ended / prior-boot`), phase `idle`, GC `2 removed`; `--resolve` then reports nothing unsettled; `16`: a new activation runs normally           |
+| F7 assets with `_redirects` handling            | **PASS** | `logs/mobile-components-613.log`: unmodified dist packaged                                                                                                                                 |
+| F8 causes                                       | **PASS** | `09`: `failed: route-unverified [MobileGatewayRouteUnverified]`; `10`: `failed: consent-revoked`                                                                                           |
+
+`--resolve` clearing a row on demand is covered by unit tests. Live, the automatic attach path
+settled the row first.
+
+### What remains (user)
+
+- Real Tailscale Serve plus a physical phone: authenticated `/mobile-ws` admission and the
+  "ready again" half of 5a (F9).
+- x86_64.
+
+Evidence for this re-run: `/tmp/bigbud-mobile-fix-20261118T050343Z/` (logs/, live/, vm/, tools/;
+no private key or tokens), archived as
+`~/DevWorld/bigbud-evidence/tmp-bigbud-evidence-20261118-mobile-inc7-fix.tar.zst` with a `.sha256`
+file.

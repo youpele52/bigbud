@@ -36,6 +36,13 @@ export class RemoteMobileNativeInputsReport extends ServiceMap.Service<
   MobileNativeInputsReport
 >()("bigbud/remote-backend/MobileNativeInputsReport") {}
 
+/** Owner-status projection of the single inputs read: kind and fixed reason, never contents. */
+export const mobileNativeInputsSummary = (report: MobileNativeInputsReport) =>
+  Object.freeze({
+    state: report.kind,
+    reason: report.kind === "invalid" ? report.reason : null,
+  });
+
 const reportLayer = (report: MobileNativeInputsReport) =>
   Layer.mergeAll(
     Layer.succeed(

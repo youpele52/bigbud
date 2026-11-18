@@ -39,16 +39,19 @@ export function selectNativeMobileSuccessor(
   current: Pick<BackendInstanceShape, "nonce" | "pid" | "startedAt">,
 ): NativeMobileSuccessorSelection {
   if (state.schemaVersion !== 3) return { kind: "none" };
-  const foreign = (state.mobile.gatewayLifecycle?.attempts ?? []).filter(
-    (a) =>
+  // The current controller: a successor that adopted the original, else the original one.
+  const foreign = (state.mobile.gatewayLifecycle?.attempts ?? []).filter((a) => {
+    const controller = a.currentController ?? a.controller;
+    return (
       a.phase === "attempted" &&
       a.nativeOwnership !== undefined &&
       !(
-        a.controller.id === current.nonce &&
-        a.controller.pid === current.pid &&
-        a.controller.startedAt === current.startedAt
-      ),
-  );
+        controller.id === current.nonce &&
+        controller.pid === current.pid &&
+        controller.startedAt === current.startedAt
+      )
+    );
+  });
   if (foreign.length === 0) return { kind: "none" };
   const attempt = foreign[0];
   if (foreign.length > 1 || !attempt?.nativeOwnership) return { kind: "conflict" };

@@ -83,7 +83,10 @@ it("reaches the real route: status decodes, stale grant decodes as a fixed refus
       MobileOwnerConsentResult,
       credentials,
     ),
-  ).toEqual({ ok: true, value: { enabled: true, revision: 3, changed: true } });
+  ).toEqual({
+    ok: true,
+    value: { enabled: true, revision: 3, changed: true, settingsEnabled: true },
+  });
 });
 
 it("refuses an invalid request before sending, server prose, redirects and oversize bodies", async () => {

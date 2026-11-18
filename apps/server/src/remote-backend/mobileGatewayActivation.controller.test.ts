@@ -85,9 +85,19 @@ describe("native mobile activation controller", () => {
     expect(await disabled).toEqual({ requestId: null, status: "disabled" });
     const failing = controller.activate(input());
     await tick();
-    script.runs[1]!.settle({ kind: "failed", repairRequired: false, cause: Error("CAS lost") });
-    await expect(failing).rejects.toThrow("CAS lost");
+    script.runs[1]!.settle({
+      kind: "failed",
+      repairRequired: false,
+      cause: Error("CAS lost"),
+      reason: "selection-failed",
+    });
+    // Nothing reached native Start: an honest `failed` with its step, never `uncertain`.
+    expect(await failing).toEqual({ requestId, status: "failed", reason: "selection-failed" });
     await tick();
+    expect(controller.status?.()).toMatchObject({
+      phase: "idle",
+      lastOutcome: { kind: "failed", repairRequired: false, reason: "selection-failed" },
+    });
     await expect(controller.stop()).resolves.toBeUndefined();
     void controller.activate(input());
     await tick();
@@ -204,6 +214,7 @@ describe("native mobile activation controller", () => {
       retiring: false,
       stopping: false,
       controller: null,
+      inputs: null,
     });
     state.attach(controller);
     expect(state.status().controller?.phase).toBe("uncertain-detached");

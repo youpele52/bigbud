@@ -12,6 +12,10 @@ import {
 } from "./mobileGatewayActivation.successor.ts";
 import { nativeMobileSuccessorPort } from "./mobileGatewayActivation.successor.native.ts";
 import type { NativeMobileGatewaySessionSignals } from "./mobileGatewayNative.session.ts";
+import {
+  classifyMobileActivationCause,
+  type MobileActivationReason,
+} from "./mobileGatewayActivation.reason.ts";
 
 /** Resume settlement: `none` means no foreign original exists, so nothing was adopted. */
 export type NativeMobileSuccessorOutcome =
@@ -32,10 +36,14 @@ export interface NativeMobileSuccessorAdoption<U extends MobileSuccessorUpstream
   readonly use: (lease: VerifiedNativeLease, upstream: U, signal: AbortSignal) => Promise<unknown>;
 }
 
-const repair = (cause: unknown): NativeMobileActivationOutcome => ({
+const repair = (
+  cause: unknown,
+  reason?: MobileActivationReason,
+): NativeMobileActivationOutcome => ({
   kind: "failed",
   repairRequired: true,
   cause,
+  reason: reason ?? classifyMobileActivationCause(cause),
 });
 
 /**
@@ -66,6 +74,7 @@ export async function adoptNativeMobileSuccessor<U extends MobileSuccessorUpstre
           Error(
             `Native mobile successor ${recovered.kind === "unready" ? "unready" : recovered.reason}.`,
           ),
+          recovered.kind === "unready" ? "successor-unready" : `successor-${recovered.reason}`,
         );
   const { lease, upstream } = recovered;
   const failures: unknown[] = [];
@@ -109,5 +118,10 @@ export async function adoptNativeMobileSuccessor<U extends MobileSuccessorUpstre
   if (!exitRecorded) return { kind: "detached" };
   return work.ok
     ? { kind: "exit-recorded" }
-    : { kind: "failed", repairRequired: false, cause: work.cause };
+    : {
+        kind: "failed",
+        repairRequired: false,
+        cause: work.cause,
+        reason: stop.aborted ? "stop-requested" : classifyMobileActivationCause(work.cause),
+      };
 }

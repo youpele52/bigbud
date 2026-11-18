@@ -13,6 +13,11 @@ import {
   runNativeMobileGatewaySession,
   type NativeMobileGatewaySessionSignals,
 } from "./mobileGatewayNative.session.ts";
+import {
+  classifyMobileActivationCause,
+  type MobileActivationReason,
+} from "./mobileGatewayActivation.reason.ts";
+import { mobileStageIdForConsent } from "./mobileGatewayActivation.stage.ts";
 
 export interface NativeMobileActivationRequest {
   readonly requestId: string;
@@ -27,13 +32,19 @@ export type NativeMobileActivationOutcome =
   | { readonly kind: "disabled" }
   | { readonly kind: "exit-recorded" }
   | { readonly kind: "detached" }
-  | { readonly kind: "failed"; readonly repairRequired: boolean; readonly cause: unknown };
+  | {
+      readonly kind: "failed";
+      readonly repairRequired: boolean;
+      readonly cause: unknown;
+      /** Fixed step that failed; absent means classify the cause by its error names. */
+      readonly reason?: MobileActivationReason;
+    };
 
-const failed = (cause: unknown, repairRequired = false): NativeMobileActivationOutcome => ({
-  kind: "failed",
-  repairRequired,
-  cause,
-});
+const failed = (
+  cause: unknown,
+  repairRequired: boolean,
+  reason: MobileActivationReason,
+): NativeMobileActivationOutcome => ({ kind: "failed", repairRequired, cause, reason });
 
 /**
  * One activation, owned by the attached controller: activation authority → durable consent read
@@ -54,14 +65,20 @@ export const runNativeMobileActivation = Effect.fn("runNativeMobileActivation")(
       authority.value.registry(AbortSignal.any([signal, retired])).read(),
     ),
   );
-  if (Exit.isFailure(journal)) return failed(journal.cause);
+  if (Exit.isFailure(journal)) return failed(journal.cause, false, "journal-unreadable");
   const state = journal.value;
   if (state.schemaVersion !== 3 || !state.mobile.consent.enabled)
     return { kind: "disabled" } as NativeMobileActivationOutcome;
   const consentRevision = state.mobile.consent.revision;
+  // A consent change fences the inputs' stage forever; a new grant publishes its own stage.
+  const stageId = mobileStageIdForConsent(
+    state.mobile.stages,
+    inputs.artifacts.stageId,
+    consentRevision,
+  );
   const published = state.mobile.stages.some(
     (stage) =>
-      stage.id === inputs.artifacts.stageId &&
+      stage.id === stageId &&
       stage.consentRevision === consentRevision &&
       stage.phase === "files-published",
   );
@@ -71,13 +88,22 @@ export const runNativeMobileActivation = Effect.fn("runNativeMobileActivation")(
     >(),
   );
   let selected = false;
+  let step: "publication-failed" | "selection-failed" = "publication-failed";
   const settled = yield* Effect.exit(
     withNativeMobilePublication(
       inputs.trustedKeys,
       retired,
       (publisher, signal) =>
-        verifiedNativeMobilePublication(publisher, inputs, consentRevision, published, signal),
+        verifiedNativeMobilePublication(
+          publisher,
+          inputs,
+          stageId,
+          consentRevision,
+          published,
+          signal,
+        ),
       async (proof, lifetime, signal) => {
+        step = "selection-failed";
         await run(
           commitMobileGatewayDesiredSelection(proof, request.requestId, request.configuration),
           { signal },
@@ -96,12 +122,23 @@ export const runNativeMobileActivation = Effect.fn("runNativeMobileActivation")(
       },
     ),
   );
-  if (Exit.isFailure(settled)) return failed(settled.cause, selected);
+  if (Exit.isFailure(settled))
+    return failed(
+      settled.cause,
+      selected,
+      selected ? classifyMobileActivationCause(settled.cause) : step,
+    );
   const session = settled.value;
   if (Exit.isFailure(session)) {
     const error = Cause.findErrorOption(session.cause);
     // Defects/interrupts after Start are never exit evidence: preserve for repair.
-    return failed(session.cause, error._tag === "Some" ? error.value.repairRequired : true);
+    return failed(
+      session.cause,
+      error._tag === "Some" ? error.value.repairRequired : true,
+      error._tag === "Some" && error.value.reason
+        ? error.value.reason
+        : classifyMobileActivationCause(session.cause),
+    );
   }
   const result = session.value;
   return (

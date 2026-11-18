@@ -42,5 +42,15 @@ export const MobileNativeGatewayCompletion = Schema.Union([
   }),
   Schema.Struct({ kind: Schema.Literal("native-cancel") }),
   Schema.Struct({ kind: Schema.Literal("native-never-invoked") }),
+  /**
+   * The supervisor epoch that owned the original lease provably ended with its owned work: the
+   * kernel booted since the original controller started, or the canonical P4 journal recorded a
+   * settled exit receipt for that epoch before its replacement started.
+   */
+  Schema.Struct({
+    kind: Schema.Literal("native-epoch-ended"),
+    epoch: Token,
+    proof: Schema.Literals(["prior-boot", "settled-supervisor-exit"]),
+  }),
 ]);
 export type MobileNativeGatewayCompletion = typeof MobileNativeGatewayCompletion.Type;
