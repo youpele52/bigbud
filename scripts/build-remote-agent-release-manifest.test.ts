@@ -1,4 +1,4 @@
-import { generateKeyPairSync, verify } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, verify } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -13,6 +13,15 @@ import { verifyRemoteAgentReleaseAssets } from "./verify-remote-agent-release-as
 import { resolveReleaseMetadata } from "./lib/release-metadata.ts";
 
 const temporaryDirectories: string[] = [];
+
+/** The fixture key stands in for the clients' pinned release key. */
+function fixturePin(signingKeyId: string, signingKeyPem: string) {
+  return {
+    [signingKeyId]: createPublicKey(signingKeyPem)
+      .export({ type: "spki", format: "pem" })
+      .toString(),
+  };
+}
 
 function protocolSource(minor: string): string {
   return `pub const PROTOCOL_MAJOR: u32 = 1;\npub const PROTOCOL_MINOR: u32 = ${minor};\n`;
@@ -46,6 +55,7 @@ function releaseFixture() {
     installSource,
     manifestBytes: Buffer.from(JSON.stringify(manifest)),
     installSourceBytes: Buffer.from(JSON.stringify(installSource)),
+    pinnedTrustStore: fixturePin(input.signingKeyId, signingKeyPem),
   };
 }
 
@@ -158,6 +168,10 @@ describe("buildRemoteAgentReleaseManifest", () => {
       installSourceBytes: Buffer.from(JSON.stringify(installSource)),
       signingKeyPem: keyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
       signingKeyId: "release-2026",
+      pinnedTrustStore: fixturePin(
+        "release-2026",
+        keyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+      ),
       assets: [
         { targetTriple: "x86_64-unknown-linux-gnu", path: x64Path },
         { targetTriple: "aarch64-unknown-linux-gnu", path: arm64Path },
@@ -190,6 +204,10 @@ describe("buildRemoteAgentReleaseManifest", () => {
         manifestBytes: Buffer.from(JSON.stringify(manifest)),
         signingKeyPem: keyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
         signingKeyId: "release-2026",
+        pinnedTrustStore: fixturePin(
+          "release-2026",
+          keyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+        ),
         assets: [
           { targetTriple: "x86_64-unknown-linux-gnu", path: x64Path },
           { targetTriple: "aarch64-unknown-linux-gnu", path: arm64Path },
@@ -227,6 +245,7 @@ describe("buildRemoteAgentReleaseManifest", () => {
       manifestBytes: Buffer.from(JSON.stringify(manifest)),
       signingKeyPem,
       signingKeyId: "release-2026",
+      pinnedTrustStore: fixturePin("release-2026", signingKeyPem),
       assets,
     });
   });

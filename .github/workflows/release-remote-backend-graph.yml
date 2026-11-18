@@ -116,6 +116,8 @@ jobs:
             fi
             printf '%s\n' "$BIGBUD_REMOTE_AGENT_SIGNING_KEY" > "$key_file"
             key_id="$BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID"
+            # Clients only trust pinned release keys; refuse to sign a graph they would reject.
+            bun run scripts/verify-release-signing-key-pin.ts --key-file "$key_file" --key-id "$key_id"
           else
             # Non-release runs sign with a throwaway key that exists only in this job.
             openssl genpkey -algorithm ed25519 -out "$key_file"

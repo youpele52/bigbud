@@ -41,6 +41,32 @@ secrets. The workflow publishes the corresponding public key in the remote-agent
 install source under that key ID, which lets the installer verify manifest
 signatures and supports key rotation.
 
+Clients pin the release public keys they accept in
+[`packages/shared/src/releaseTrust.ts`](../../packages/shared/src/releaseTrust.ts)
+(currently `release-2026`). When the install source comes from the default GitHub
+release location, the server keeps only downloaded trust entries whose key ID is
+pinned and whose Ed25519 key bytes equal the pinned key, and refuses a manifest
+signed by any other key with an "update bigbud" error. The backend graph trust
+derived from that install source is pinned the same way. Explicit local overrides
+(`BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH` or `BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_URL`,
+the development graph directory and trusted-keys inputs, and
+`bigbud backend setup --trusted-keys`) keep the operator-chosen trust; downloaded
+content cannot select them.
+
+The release side enforces the same set: `scripts/verify-remote-agent-release-assets.ts`
+fails when the signing key ID or public key is not pinned, and the release-signed
+backend graph job runs `scripts/verify-release-signing-key-pin.ts` before signing.
+
+Rotate the key in this order:
+
+1. Generate the new key and add its key ID and public key to the pinned set in
+   `releaseTrust.ts`, keeping the current key.
+2. Ship an app release with that pinned set, still signed with the current key.
+3. Switch `BIGBUD_REMOTE_AGENT_SIGNING_KEY` and `BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID`
+   to the new key and release. Clients older than step 2 cannot verify these
+   releases and must update.
+4. Remove the old key from the pinned set once no supported client needs it.
+
 ## Release environment and secret reference
 
 Use [.env.release.example](../../.env.release.example) as the required-secret name and

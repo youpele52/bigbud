@@ -48,6 +48,12 @@ export interface RemoteAgentInstallSource {
   readonly manifest: RemoteAgentArtifactManifest;
   readonly trustStore: RemoteAgentArtifactTrustStore;
   readonly allowUntrustedDevelopmentArtifact?: true;
+  /**
+   * Set only by the install-source loader when local env (BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH
+   * or _URL) chose the source: its trust store is the operator's and is not checked against the
+   * pinned release keys. `parseRemoteAgentInstallSource` never copies it from downloaded JSON.
+   */
+  readonly localTrustOverride?: true;
 }
 
 export interface RemoteAgentInstallResult {
