@@ -25,6 +25,7 @@ import {
 import { eventBase } from "./Adapter.utils.ts";
 
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
+import { makeProviderAdapterEventQueue } from "../../providerEventQueueBounds.ts";
 export type { PiAdapterLiveOptions } from "./Adapter.types.ts";
 
 export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiAdapterLiveOptions) {
@@ -42,7 +43,7 @@ export const makePiAdapter = Effect.fn("makePiAdapter")(function* (options?: PiA
       : undefined);
 
   const sessions = new Map<ThreadId, ActivePiSession>();
-  const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
+  const runtimeEventQueue = yield* makeProviderAdapterEventQueue<ProviderRuntimeEvent>();
   const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.makeUnsafe(id));
 
   const makeEventStamp = () =>

@@ -18,6 +18,7 @@ import {
   type MuseAdapterDeps,
   type MuseSessionState,
 } from "./Adapter.types.ts";
+import { makeProviderAdapterEventPubSub } from "../../providerEventQueueBounds.ts";
 
 export type { MuseAdapterDeps, MuseBridgeHandle } from "./Adapter.types.ts";
 
@@ -33,7 +34,7 @@ export const makeMuseAdapterShape = Effect.fn("makeMuseAdapterShape")(function* 
   deps: MuseAdapterDeps,
 ) {
   const sessionsRef = yield* Ref.make<Sessions>(new Map());
-  const eventsPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
+  const eventsPubSub = yield* makeProviderAdapterEventPubSub<ProviderRuntimeEvent>();
   const publish = (event: ProviderRuntimeEvent) => PubSub.publish(eventsPubSub, event);
 
   const getSession = (threadId: ThreadId) =>

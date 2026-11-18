@@ -1,4 +1,4 @@
-import { Deferred, Effect, Layer, Option, Queue, Ref, Scope, ServiceMap, Stream } from "effect";
+import { Deferred, Effect, Layer, Option, Ref, Scope, ServiceMap, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
 import * as EffectAcpClient from "effect-acp/client";
 import * as EffectAcpErrors from "effect-acp/errors";
@@ -24,6 +24,7 @@ import {
   handleSessionUpdate,
   type AcpAssistantSegmentState,
 } from "./AcpSessionRuntime.sessionUpdate.ts";
+import { makeProviderAdapterEventQueue } from "../providerEventQueueBounds.ts";
 
 export interface AcpSpawnInput {
   readonly command: string;
@@ -138,7 +139,7 @@ const makeAcpSessionRuntime = (
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const runtimeScope = yield* Scope.Scope;
-    const eventQueue = yield* Queue.unbounded<AcpParsedSessionEvent>();
+    const eventQueue = yield* makeProviderAdapterEventQueue<AcpParsedSessionEvent>();
     const modeStateRef = yield* Ref.make<AcpSessionModeState | undefined>(undefined);
     const toolCallsRef = yield* Ref.make(new Map<string, AcpToolCallState>());
     const assistantSegmentRef = yield* Ref.make<AcpAssistantSegmentState>({ nextSegmentIndex: 0 });

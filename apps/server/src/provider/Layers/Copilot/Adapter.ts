@@ -46,6 +46,7 @@ import {
 import { makeSteerTurn } from "./Adapter.session.steer.ts";
 
 import { PROVIDER_SUBAGENT_CAPABILITIES } from "../../providerSubagents.capabilities.ts";
+import { makeProviderAdapterEventQueue } from "../../providerEventQueueBounds.ts";
 export { resolveCopilotRuntimeInvocation } from "./Adapter.types.ts";
 export type { CopilotAdapterLiveOptions } from "./Adapter.types.ts";
 
@@ -62,7 +63,7 @@ const makeCopilotAdapter = Effect.fn("makeCopilotAdapter")(function* (
         })
       : undefined);
   const sessions = new Map<ThreadId, ActiveCopilotSession>();
-  const runtimeEventQueue = yield* Queue.unbounded<ProviderRuntimeEvent>();
+  const runtimeEventQueue = yield* makeProviderAdapterEventQueue<ProviderRuntimeEvent>();
 
   const nextEventId = Effect.map(Random.nextUUIDv4, (id) => EventId.makeUnsafe(id));
   const makeEventStamp = () =>
