@@ -485,6 +485,10 @@ bigbud backend stop --authority 00000000000000000000000000000000
 Replace the example paths, request UUID and authority. Keep executable files separate from backend
 data and account service state. Setup stages the units and admits the signed Rust runtime; backend
 startup remains disabled. `--restart never` opts out of the default failure restart policy.
+With `--restart never`, a runtime update whose new runtime crashes on start is not relaunched by
+systemd, so the launcher's automatic rollback to the previous runtime waits for the next manual
+`backend start`, which counts as another launch attempt toward the rollback. Keep the default when hosts
+receive unattended runtime updates.
 Enable verifies completed setup and finite preflight before requesting startup. Status reports unit
 state without claiming backend readiness. Disable-boot prevents automatic startup while current work
 continues. Start launches the staged backend for this session without enabling boot startup or
