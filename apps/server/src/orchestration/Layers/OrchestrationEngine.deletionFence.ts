@@ -5,6 +5,7 @@ import {
   resolveProjectDeletionRequests,
   type ThreadDeletionShape,
 } from "../../deletion/Services/ThreadDeletion.ts";
+import { retentionDeletionMode } from "../../deletion/Services/ThreadDeletion.mode.ts";
 import { OrchestrationCommandInvariantError } from "../Errors.ts";
 
 const commandThreadId = (command: OrchestrationCommand): ThreadId | undefined =>
@@ -21,6 +22,8 @@ export function makeDeletionFence(input: {
   readonly readModel: () => OrchestrationReadModel;
 }) {
   const projectFenceRootsByCommandId = new Map<string, ReadonlyArray<ThreadId>>();
+  // Retention commands that took their fence themselves; only those may release it.
+  const retentionFenceOwners = new Set<string>();
   const allowsWhileFenced = (command: OrchestrationCommand, threadId: ThreadId) =>
     command.type === "thread.delete.finalize" ||
     command.type === "thread.delete.abort" ||
@@ -61,13 +64,23 @@ export function makeDeletionFence(input: {
       return input.threadDeletion.acquireFence(command.threadId, "single");
     }
     if (command.type === "thread.retention-delete") {
+      // The fence mode must match the mode the decider requests (D-3). A per-thread run reuses
+      // any fence it finds instead of upgrading it: the thread is then already being deleted (the
+      // run's re-check skips it), and a `subtree` fence would strand that delete's own request.
+      const mode = retentionDeletionMode(command.selectionMode);
       return input.threadDeletion
-        .isFenceRoot(command.threadId, "subtree")
+        .isFenceRoot(command.threadId, mode === "single" ? undefined : "subtree")
         .pipe(
           Effect.flatMap((held) =>
             held
               ? Effect.succeed(true)
-              : input.threadDeletion.acquireFence(command.threadId, "subtree"),
+              : input.threadDeletion.acquireFence(command.threadId, mode).pipe(
+                  Effect.tap((acquired) =>
+                    Effect.sync(() => {
+                      if (acquired) retentionFenceOwners.add(command.commandId);
+                    }),
+                  ),
+                ),
           ),
         );
     }
@@ -97,7 +110,10 @@ export function makeDeletionFence(input: {
       case "thread.delete":
         return input.threadDeletion.releaseFence(command.threadId, "single");
       case "thread.retention-delete":
-        return input.threadDeletion.releaseFence(command.threadId, "subtree");
+        return input.threadDeletion.releaseFence(
+          command.threadId,
+          retentionDeletionMode(command.selectionMode),
+        );
       case "thread.delete.finalize":
       case "thread.delete.abort":
         return input.threadDeletion.releaseFence(command.threadId, command.mode);
@@ -125,6 +141,8 @@ export function makeDeletionFence(input: {
       return accepted ? Effect.void : release(command);
     }
     if (command.type === "thread.retention-delete") {
+      // A fence this command found already held belongs to the deletion that holds it.
+      if (!retentionFenceOwners.delete(command.commandId)) return Effect.void;
       if (!accepted) return release(command);
       const thread = input
         .readModel()
