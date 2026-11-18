@@ -16,11 +16,12 @@ function tcpHttpServerLive(port: number, host: string | undefined) {
       }
       const [NodeHttpServer, NodeHttp] = yield* Effect.all([
         Effect.promise(() => import("@effect/platform-node/NodeHttpServer")),
-        Effect.promise(() => import("node:http")),
+        Effect.promise(() => import("./server.platform.nodeHttp.ts")),
       ]);
-      return NodeHttpServer.layer(NodeHttp.createServer, {
+      return NodeHttpServer.layer(NodeHttp.createShutdownAwareHttpServer, {
         host,
         port,
+        ...NodeHttp.nodeHttpServerShutdownOptions,
       });
     }),
   );
@@ -52,9 +53,12 @@ export function remoteUnixHttpServerLive(path: string) {
       }
       const [NodeHttpServer, NodeHttp] = yield* Effect.all([
         Effect.promise(() => import("@effect/platform-node/NodeHttpServer")),
-        Effect.promise(() => import("node:http")),
+        Effect.promise(() => import("./server.platform.nodeHttp.ts")),
       ]);
-      return NodeHttpServer.layer(NodeHttp.createServer, { path });
+      return NodeHttpServer.layer(NodeHttp.createShutdownAwareHttpServer, {
+        path,
+        ...NodeHttp.nodeHttpServerShutdownOptions,
+      });
     }),
   );
 }
