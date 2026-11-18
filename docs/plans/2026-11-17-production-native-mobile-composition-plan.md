@@ -1,12 +1,25 @@
 # Production native mobile composition
 
 **Date:** 17 November 2026
-**Status:** In progress; increment 1 implemented (uncommitted), increment 2 in progress
-**Baseline:** `dev` at `26aa117e12`
-**Related:** [Remote agent plan](2026-11-13-remote-agent-manual-install-plan.md) (P7),
-[Mobile remote access plan](2026-11-13-mobile-remote-access-plan.md) (P2–P4),
-[Completion handover](2026-11-17-remote-mobile-completion-handover.md),
-[Workspace status report](../reports/2026-11-17-remote-mobile-workspace-status.md)
+**Status:** Increments 1–6 implemented and committed on `dev`; increment 7 partial (as of
+`e84335fe60`, 18 November 2026):
+
+- Increments 1–2: `5048b457df`.
+- Increment 3: `506c19b099`.
+- Increment 4: `a6fa01fee0`.
+- Increment 5: `f7c2920c68`, with live fixes in `55bb012f73`.
+- Increment 6: `e73d2e5c7c`, with live fixes in `55bb012f73`.
+- Increment 7: partial. arm64 live PASS after the F1–F8 fixes
+  ([report](../reports/2026-11-18-mobile-increment-7-live-acceptance.md)). Remaining: the
+  x86_64 run on the user's VPS, and the physical phone with real Tailscale Serve
+  (authenticated `/mobile-ws` admission, F9). A real arm64 host run is deferred by the user
+  (18 November 2026); arm64 is covered by the Lima VM runs. Stage retirement for unlimited consent cycles (`cc85ccbbfc`) is verified by focused
+  tests only so far.
+  **Baseline:** `dev` at `26aa117e12`
+  **Related:** [Remote agent plan](2026-11-13-remote-agent-manual-install-plan.md) (P7),
+  [Mobile remote access plan](2026-11-13-mobile-remote-access-plan.md) (P2–P4),
+  [Completion handover](2026-11-17-remote-mobile-completion-handover.md),
+  [Workspace status report](../reports/2026-11-17-remote-mobile-workspace-status.md)
 
 ## Goal
 

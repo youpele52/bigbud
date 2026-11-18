@@ -243,8 +243,7 @@ GitHub Copilot CLI licence (`@github/copilot@1.0.105` `LICENSE.md`, sha256 `b968
 for `@github/copilot-sdk` and `@github/copilot-sdk-linux-*`, with the real licences of the bundled
 `rg` (ripgrep 15.0.0, plus PCRE2 10.46) and `tgrep` (microsoft/tgrep, MIT). **Claude agent SDK:
 resolved, option (a)** (user decision, 18 November 2026): keep shipping it inlined, as the desktop
-app already does, with its `LICENSE.md` in `notices/bundled/`. The user reads Anthropic's Legal
-Agreements once to confirm the terms cover this; that check is on the user's release checklist.
+app already does, with its `LICENSE.md` in `notices/bundled/`. The user read Anthropic's terms on 18 November 2026 and confirmed they cover this.
 
 - **Claude agent SDK 0.3.310** is inlined into every graph. Its package declares
   `SEE LICENSE IN README.md`; its `LICENSE.md` refers to Anthropic's Legal Agreements URL. The
@@ -275,18 +274,22 @@ field as the only record. `NOTICES.json` and `THIRD_PARTY_NOTICES` already recor
 
 ### 3. Release signing key
 
-- Format the tooling expects: Ed25519 private key in PKCS8 PEM (`openssl genpkey -algorithm
-ed25519`), with a key id; the matching public key must be in the client trust stores.
-- Today both the remote agent manifests and the backend graph manifests are signed with the same
-  secrets, `BIGBUD_REMOTE_AGENT_SIGNING_KEY` and `BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID`
-  (`release.yml` passes them to `release-remote-backend-graph.yml` with `release_signing: true`).
-  The mobile packager takes any key at packaging time.
-- Options: (a) one key for all (current wiring; one secret to rotate, one compromise affects
-  all); (b) a separate graph key (needs a new secret, a second trust-store entry and a workflow
-  change).
-- Also decide where the private key lives, who can run the release workflow, and the rotation
-  plan. Graphs built without the release key are refused by the release job
-  (`*.fixture-public-key.pem` check).
+**Resolved, option (a), 18 November 2026.** One Ed25519 key signs the remote agent manifests
+and the backend graph manifests. The user generated it (`openssl genpkey -algorithm ED25519`,
+PKCS8 PEM) and stored it as the repository secrets `BIGBUD_REMOTE_AGENT_SIGNING_KEY` and
+`BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID` (`release-2026`) on `youpele52/bigbud`. The only copy outside
+GitHub is in the user's password manager. Note that `gh` in this checkout defaulted to the
+upstream `pingdotgg/t3code`; pass `--repo youpele52/bigbud` or run
+`gh repo set-default youpele52/bigbud`.
+
+- Clients hold no pinned key. Each release publishes its trust store (`{ keyId: SPKI PEM }`) in
+  `remote-agent-install-source*.json`, derived from the signing key, and clients trust that
+  file as downloaded from the GitHub release. Pinning `release-2026` in the app is a possible
+  follow-up.
+- Rotation: generate a new key, set both secrets with a new key id, release. Only legacy
+  binding (`remoteAgentLegacyBinding.ts`) needs the old public key.
+- Graphs built without the release key are refused by the release job
+  (`*.fixture-public-key.pem` check). The mobile packager takes any key at packaging time.
 
 ### 4. Publication
 
@@ -296,19 +299,24 @@ and Rust inventories are now release assets, decision 7.)
 
 ### 5. D4 musl-only cutover timing
 
-Default (decision 12): the first release that ships the backend graph still publishes both gnu
-and musl remote agents; the following release drops the gnu triples. The workflow diffs are
-prepared in the [D4 report](../reports/2026-11-17-d4-musl-only-cutover-prep.md) and not applied.
-Options: keep the default, or move the cutover earlier or later. A musl-only remote agent links
-musl libc statically, which then becomes part of the shipped bytes.
+**Resolved, default kept (user decision D3 (a)).** The first release that ships the backend graph
+still publishes both gnu and musl remote agents; the following release drops the gnu triples
+(older desktop apps asking for a gnu agent then get a 404). The workflow diffs are prepared in
+the [D4 report](../reports/2026-11-17-d4-musl-only-cutover-prep.md) and applied for that second
+release. A musl-only remote agent links musl libc statically, which then becomes part of the
+shipped bytes.
 
 ### 6. Redeploy bigbud.app with `remote-agent.sh`
 
-The site does not serve the script yet. Deploy the marketing site from a commit that contains
-`apps/marketing/public/remote-agent.sh`, then run
-`bun run verify:published-remote-agent-script` until it reports a match, and again with
-`--release v<x>` after the release is published. Clients must not show the `curl … | sh`
-command before this passes.
+The site does not serve the script yet. Cloudflare Pages deploys bigbud.app from the
+`marketing` branch (root `apps/marketing`, `astro build`, output `dist`), not from `main`, and
+that branch does not contain `apps/marketing/public/remote-agent.sh` yet. Release order:
+
+1. Merge `dev` into `main` (draft PR first so CI runs).
+2. Squash-merge `main` into `marketing` and push it; Cloudflare redeploys the site.
+3. Run `bun run verify:published-remote-agent-script` until it reports a match, and again with
+   `--release v<x>` after the release is published. Clients must not show the `curl … | sh`
+   command before this passes.
 
 ### 7. Notices beside the non-graph artifacts
 

@@ -6,7 +6,10 @@
 [Orphan asset repair](2026-11-17-mobile-orphan-runtime-asset-repair.md),
 [M1 live systemd acceptance](2026-11-17-m1-live-systemd-acceptance.md),
 [Proof inputs](../REMOTE_MOBILE_INPUTS.md)
-**Verdict:** **Not accepted.** The native core works live: managed prepare, Start, original-child
+**Verdict (after the re-run below):** accepted on arm64 for F1–F8 (fixes committed in
+`55bb012f73`); F9 and x86_64 remain on the user's checklist.
+
+**First-run verdict:** **Not accepted.** The native core works live: managed prepare, Start, original-child
 readiness, confirmed native exit, same-CAS cleanup, consent revoke, successor adoption of a live
 original, the Gone variant, revoke during the successor, old-epoch → uncertain, and orphan repair.
 Five product defects block acceptance:
@@ -207,7 +210,7 @@ deleted, the build container ran with `--rm`, and nothing else was touched.
 
 **Verdict:** F1–F8 are fixed and re-run live. F9 is unchanged by design: authenticated admission
 still needs real Tailscale Serve and the public HTTPS probe, which stays on the physical
-phone/Tailscale checklist. Nothing is committed.
+phone/Tailscale checklist. The fixes are committed in `55bb012f73`.
 
 ### Root causes and fixes
 

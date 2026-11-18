@@ -4,7 +4,7 @@
 **Finding:** F-B11 in [Remote backend measurements](2026-11-18-remote-backend-measurements.md)
 **Related:** [M1 live systemd acceptance](2026-11-17-m1-live-systemd-acceptance.md) (Lima recipe),
 [Thread retention](../THREAD_RETENTION.md)
-**Status:** Code fix landed in the working tree (uncommitted).
+**Status:** Code fix committed in `295df61927`.
 
 - **Live result:** on aarch64, thread and project deletes now succeed and stay deleted.
 - **Still needed:** a schema migration (provided below, not added: migrations are owned

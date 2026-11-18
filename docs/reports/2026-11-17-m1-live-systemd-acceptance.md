@@ -4,9 +4,13 @@
 **Plan:** [Remote completion plan](../plans/2026-11-17-remote-completion-plan.md), M1 live checklist
 **Related:** [Backend graph producer](2026-11-17-remote-backend-graph-m1.md),
 [WP-1D explicit start/stop](2026-11-17-wp-1d-explicit-start-stop-musl-launcher.md)
-**Verdict:** **Not accepted.** The exit-130 fix, crash restart, crash-loop limit, Rust terminal
-survival across a backend crash, supervisor SIGTERM handling and the refusals all pass. Three
-blocking bugs remain:
+**Verdict:** **Accepted after the 18 November re-run** ([Fixes and re-run](#fixes-and-re-run-18-november-2026),
+`376819c1fd`). Every failing row passes on a fresh VM, including boot autostart in 3 of 3
+reboots; row 10b (`terminate-user` stops a lingering user manager) is expected systemd behaviour.
+
+**First run (17 November): not accepted.** The exit-130 fix, crash restart, crash-loop limit,
+Rust terminal survival across a backend crash, supervisor SIGTERM handling and the refusals all
+passed. Three blocking bugs were found:
 
 - After any graceful stop of the Rust unit (`backend stop`, `loginctl terminate-user`, a SIGTERM),
   the backend cannot start again on the same boot.

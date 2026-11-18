@@ -1,7 +1,7 @@
 # Remote agent installation, persistence and orchestration
 
 **Date:** 13 November, 2026 (decisions recorded the same day)
-**Status:** In progress — installation implemented; terminal acceptance finishing; production remote backend and orchestration remain
+**Status:** In progress — phases 1–8 implemented and committed on `dev` (18 November 2026); remaining gates need the user ([completion status](../reports/2026-11-18-remote-mobile-completion-status.md))
 **Owner:** Unassigned
 
 ## Current completion checkpoint — 15 November 2026
@@ -126,14 +126,15 @@ snapshot-history driver failure and original outer metadata volume-label error a
 with explicit corrections; neither contributes a false pass. Both plans continue in parallel.
 
 This checkpoint supersedes historical pending recovery entries below only for the stated
-artifacts and scenarios. The full plan is not complete.
+artifacts and scenarios. The full plan is not complete. The Phase 7 and Phase 8 rows were updated
+on 18 November 2026; see the [completion status](../reports/2026-11-18-remote-mobile-completion-status.md).
 
 | Scope      | Current disposition                                                                                                                                               | Remaining work                                                                                                                   |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Phases 1–5 | Installation, diagnostics, trusted inbox adoption, CLI/capability and launcher engineering largely implemented                                                    | Shipping-artifact/release delivery, native Windows and actual-provider qualification remain separate                             |
 | Phase 6    | Warm attachment and input recovery accepted in the recorded live scenarios; same-boot and real prior-boot managed restart now pass with the epoch-mode correction | Bounded Linux ARM64 development-client lifecycle proof now passes; native Windows/x64 and packaged qualification remain separate |
-| Phase 7    | Authenticated core and local Rust PTY integration pass bounded real Linux restart/isolation checks                                                                | Production account-service lifecycle, backend-scoped clients, safe updates and all nine provider conformance rows                |
-| Phase 8    | Not implemented                                                                                                                                                   | Durable authenticated peer dispatch, following, cancellation and cross-host fault acceptance after phase 7                       |
+| Phase 7    | Implemented and committed on `dev` (18 November 2026); M1–M3 live on arm64 Lima ([completion plan](2026-11-17-remote-completion-plan.md))                         | Provider conformance with real credentials, real VPS and x86_64, packaged-app runs, live re-run of the test-only fixes           |
+| Phase 8    | Implemented and committed (`25f359aebc`, `e312c2fa1f`, `a216835c89`, `d220098854`, `f49e521f6e`); M6 live re-run passes on arm64 Lima                             | Peer hosts UI live, approval waits on the worker, grant expiry, two physical laptops, x86_64                                     |
 
 Fresh bounded recovery evidence uses the isolated corr2 plus epoch-mode correction snapshot at
 `/tmp/bigbud-remote-resume-20261115/src`. Its server bundle SHA-256 is
@@ -566,6 +567,11 @@ Test Linux remote hosts with macOS, Linux and Windows clients. Record unsupporte
 
 ### Phase 7: Remote-owned TypeScript backend
 
+**Status (18 November 2026):** implemented and committed on `dev` as increments 1–6 of the
+[remote completion plan](2026-11-17-remote-completion-plan.md); M1–M3 pass live on arm64 Lima.
+Open: provider conformance with real credentials, real VPS and x86_64, packaged-app runs, and a
+live re-run of the fixes so far verified by focused tests only.
+
 Goal: persistent chat uses the existing provider and orchestration implementations on the VPS.
 Production delivery depends on phase 6. Run the isolated packaging control experiment in parallel
 with phases 1–3; it does not depend on terminal persistence. Before phase 7, complete legacy
@@ -639,6 +645,11 @@ compressed/installed/staging bytes, idle and active process-tree memory, CPU, re
 reconnect latency and DB growth on small and realistic histories. No footprint guarantee yet.
 
 ### Phase 8: TypeScript-owned remote orchestration and peer connections
+
+**Status (18 November 2026):** implemented and committed (`25f359aebc`, `e312c2fa1f`,
+`a216835c89`, live fixes `d220098854`, late refusals `f49e521f6e`); the M6 live re-run passes on
+arm64 Lima ([report](../reports/2026-11-18-p8-live-acceptance.md)). Not covered: the Settings >
+Peer hosts UI live, approval waits on the worker, grant expiry, two physical laptops, x86_64.
 
 Goal: remote workflows continue across multiple VPSs without a laptop relay. Depends on phase 7
 proving remote ownership/recovery; reuse the same TS scheduler and coordination services.
