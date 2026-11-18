@@ -132,6 +132,10 @@ fn read_until(
     stream: &mut UnixStream,
     matches: impl Fn(&v1::frame::Payload) -> bool,
 ) -> v1::frame::Payload {
+    // A missing frame must fail the test, not hang CI while the supervisor idles.
+    stream
+        .set_read_timeout(Some(Duration::from_secs(60)))
+        .unwrap();
     loop {
         let payload = read_frame(stream, DEFAULT_MAX_FRAME_BYTES)
             .unwrap()
