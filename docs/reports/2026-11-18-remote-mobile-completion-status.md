@@ -60,15 +60,23 @@ Nothing has been pushed. `dev` is 52 commits ahead of `origin/dev`.
    ([report](2026-11-18-o1-installation-identity-fallback.md)). Reattach after a container
    restart is still refused by design.
 
-## Known open items (not blocking the above)
+## Known open items
 
-- A delegate refused before acceptance, after the tool already returned `sent-uncertain`, settles
-  without a delivery to the coordinator thread.
-- Remaining unbounded structures F-B1..F-B10 from the measurement report.
-- Mobile consent cycles are limited to 16 stages per installation.
-- A remote backend that never starts Node after an update needs the documented manual recovery.
-- `backend setup` refuses with a generic reason when the trusted-keys file or directories are not
-  private (0600/0700).
+The five gaps listed here on 18 November are fixed:
+
+- Late peer refusals now deliver one failure to the coordinator thread, and `backend setup` names
+  the non-private path with the `chmod` fix ([report](2026-11-18-peer-rejection-and-setup-permissions.md)).
+- Unbounded structures F-B1–F-B3 and F-B5–F-B9 are bounded
+  ([report](2026-11-18-unbounded-structures-fixes.md)); F-B4 (read-model eviction) stays a
+  documented finding and F-B10 did not reproduce.
+- Mobile consent cycles are unlimited; old stages retire safely
+  ([report](2026-11-18-mobile-stage-retirement.md)).
+- A runtime update that never starts Node rolls back automatically through the launcher
+  ([report](2026-11-18-launcher-rollback-unbootable-runtime.md)); manual recovery remains only if
+  the previous runtime itself fails verification.
+
+Remaining: F-B4 read-model eviction, and removing the unreachable legacy OpenCode
+synthetic-workspace path (cleanup).
 
 ## Evidence
 
