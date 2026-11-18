@@ -153,7 +153,9 @@ removed.
 ## Gaps and notes
 
 - **`restart=no` units are not covered.** With `Restart=no`, a crashed new runtime is not
-  relaunched, so the rollback waits for the next manual start, which counts as a launch.
+  relaunched, so the rollback waits for the next manual start, which counts as a launch. This is
+  documented for users beside `--restart never` in `docs/COMMANDS.md`; it is accepted
+  behaviour, not a defect.
 - **The launcher's own error text is not shown.** stderr shows only "account-service operation
   failed", because of the existing `anyhow` context in `main.rs`. The reason is still persisted
   through the journal.
