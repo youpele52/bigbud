@@ -167,19 +167,32 @@ fn real_supervisor_paced_replay_precedes_concurrent_live_output_and_exit() {
     let rig = Rig::new("replay-race", Some("BIGBUD_TEST_REPLAY_BARRIER"));
     let (mut primary, _) = rig.connect();
     rig.open(&mut primary);
-    rig.pty(&mut primary, "replay-race", "head -c 1048576 /dev/zero; printf CUT; while [ ! -e go ]; do sleep .01; done; printf SUFFIX");
+    // The primary is a live subscriber; by policy the supervisor disconnects one
+    // whose 256 KiB streaming window overflows. Emit the 1 MiB burst in
+    // acknowledged 32 KiB credits so a starved test thread cannot be cut off.
+    const CREDITS: usize = 32;
+    let script = format!(
+        "i=0; while [ $i -lt {CREDITS} ]; do head -c 32768 /dev/zero; i=$((i+1)); \
+         printf \"<$i>\"; while [ ! -e ack$i ]; do sleep .01; done; done; printf CUT; \
+         while [ ! -e go ]; do sleep .01; done; printf SUFFIX"
+    );
+    rig.pty(&mut primary, "replay-race", &script);
     let mut produced = Vec::new();
-    loop {
+    let mut credit = 1;
+    while !produced.ends_with(b"CUT") {
         let v1::frame::Payload::PtyOutput(value) = read_until(&mut primary, |p| {
             matches!(p, v1::frame::Payload::PtyOutput(_))
         }) else {
             panic!("output")
         };
         produced.extend_from_slice(&value.bytes);
-        if produced.ends_with(b"CUT") {
-            break;
+        if credit <= CREDITS && produced.ends_with(format!("<{credit}>").as_bytes()) {
+            fs::write(rig.root.join(format!("workspace/ack{credit}")), b"ack").unwrap();
+            credit += 1;
         }
     }
+    // Replay must still exceed the response window so it is paced, not buffered.
+    assert!(produced.len() > DEFAULT_MAX_FRAME_BYTES);
     let (mut attached, _) = rig.connect();
     write_request(
         &mut attached,
