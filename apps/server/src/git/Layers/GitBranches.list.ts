@@ -8,6 +8,7 @@ import {
   createGitCommandError,
   filterBranchesForListQuery,
   isMissingGitCwdError,
+  isNotGitRepositoryResult,
   paginateBranches,
   parseBranchLine,
   parseRemoteFetchUrls,
@@ -96,7 +97,7 @@ export function makeListBranchesOp(helpers: GitHelpers): GitCoreShape["listBranc
         Effect.succeed({
           code: 128,
           stdout: "",
-          stderr: "fatal: not a git repository",
+          stderr: "fatal: not a git repository (or any of the parent directories): .git",
           stdoutTruncated: false,
           stderrTruncated: false,
         }),
@@ -105,7 +106,7 @@ export function makeListBranchesOp(helpers: GitHelpers): GitCoreShape["listBranc
 
     if (localBranchResult.code !== 0) {
       const stderr = localBranchResult.stderr.trim();
-      if (stderr.toLowerCase().includes("not a git repository")) {
+      if (isNotGitRepositoryResult(localBranchResult)) {
         return {
           branches: [],
           isRepo: false,

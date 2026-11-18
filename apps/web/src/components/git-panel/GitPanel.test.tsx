@@ -161,16 +161,19 @@ describe("GitPanelContent", () => {
     expect(markup).toContain('draggable="true"');
   });
 
-  it("explains that Git resolves from the configured workspace root", () => {
+  it("shows the quiet empty state for a folder that is not a git repository", () => {
     gitStatusResult = { ...defaultGitStatusResult, isRepo: false };
 
     const markup = renderToStaticMarkup(<GitPanelContent activeThreadId={null} />);
 
-    expect(markup).toContain("No Git repository at");
-    expect(markup).toContain("&quot;/repo/project&quot;");
-    expect(markup).toContain("font-light");
-    expect(markup).not.toContain("<code");
-    expect(markup).toContain("not the terminal&#x27;s current directory");
+    expect(markup).toContain('data-testid="git-panel-not-repo"');
+    expect(markup).toContain("This folder isn&#x27;t a git repository.");
+    expect(markup).toContain("<svg");
+    expect(markup).toContain("text-xs text-muted-foreground/70");
+    expect(markup).not.toContain("text-destructive");
+    expect(markup).not.toContain("Failed to load Git state");
+    expect(markup).not.toContain("Up to date");
+    expect(markup).not.toContain('aria-label="Changes"');
   });
 
   it("shows the Git status request error", () => {
