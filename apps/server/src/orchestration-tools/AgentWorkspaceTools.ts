@@ -1,6 +1,10 @@
-import { type OrchestrationReadModel, type ThreadId } from "@bigbud/contracts";
+import { type ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
+import {
+  getOrchestrationThread,
+  type OrchestrationEngineShape,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ProjectionKanbanRepositoryShape } from "../persistence/Services/ProjectionKanban.ts";
 import type { ProjectionNoteRepositoryShape } from "../persistence/Services/ProjectionNotes.ts";
 
@@ -25,7 +29,7 @@ export type AgentWorkspaceToolInput = {
 };
 
 type Dependencies = {
-  readonly readModel: () => OrchestrationReadModel;
+  readonly engine: Pick<OrchestrationEngineShape, "getReadModel" | "getThread">;
   readonly notes: ProjectionNoteRepositoryShape;
   readonly kanban: ProjectionKanbanRepositoryShape;
 };
@@ -82,7 +86,7 @@ const cardResult = ({
 
 export function makeAgentWorkspaceTool(dependencies: Dependencies) {
   return Effect.fn("AgentWorkspaceTools.execute")(function* (input: AgentWorkspaceToolInput) {
-    const thread = dependencies.readModel().threads.find(({ id }) => id === input.callerThreadId);
+    const thread = yield* getOrchestrationThread(dependencies.engine, input.callerThreadId);
     if (!thread?.projectId) return yield* Effect.fail(new Error("Current project not found."));
     const projectId = thread.projectId;
     const args = input.arguments;

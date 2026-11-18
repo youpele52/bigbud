@@ -4,6 +4,7 @@ import type { ProviderRuntimeIngestionShape } from "../Services/ProviderRuntimeI
 import {
   ensureOrchestrationThreadState,
   type OrchestrationEngineShape,
+  getOrchestrationThread,
 } from "../Services/OrchestrationEngine.ts";
 
 /** Durable replay is independent of liveness claims and native process ownership after restart. */
@@ -24,9 +25,7 @@ export const replayInspectionTerminals = Effect.fn("replayInspectionTerminals")(
       const event = record.terminal;
       yield* ensureOrchestrationThreadState(input.orchestrationEngine, event.threadId, "history");
       const owns = Effect.gen(function* () {
-        const thread = (yield* input.orchestrationEngine.getReadModel()).threads.find(
-          (entry) => entry.id === event.threadId,
-        );
+        const thread = yield* getOrchestrationThread(input.orchestrationEngine, event.threadId);
         return (
           thread !== undefined &&
           thread.deletedAt === null &&

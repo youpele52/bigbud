@@ -43,10 +43,10 @@ Nothing has been pushed. `dev` is 52 commits ahead of `origin/dev`.
    the homepage on 17 Nov), then run `bun run verify:published-remote-agent-script`.
 3. **Signing:** confirm `BIGBUD_REMOTE_AGENT_SIGNING_KEY` is an Ed25519 PKCS8 PEM and decide
    whether backend graphs share it or get their own key.
-4. **Licences and redistribution:** the decisions listed in
-   [the release handoff](../validation/remote-backend-release-handoff.md) (Claude agent SDK and
-   Copilot CLI terms, 19 packages without licence files, notices for the agent, gateway and
-   assets).
+4. **Licences:** decided and implemented (`dc66b324a7`): real upstream licence texts are
+   vendored and hash-checked, Copilot stays with its licence, and notices ship beside the agent,
+   gateway and asset artifacts. The user still reads Anthropic's terms once for the Claude agent
+   SDK ([handoff](../validation/remote-backend-release-handoff.md)).
 5. **Provider conformance:** run the harness with real credentials per tuple
    ([commands](2026-11-18-provider-conformance-harness.md)).
 6. **Phone and Tailscale:** authenticated mobile route admission needs real Tailscale Serve and a
@@ -67,16 +67,17 @@ The five gaps listed here on 18 November are fixed:
 - Late peer refusals now deliver one failure to the coordinator thread, and `backend setup` names
   the non-private path with the `chmod` fix ([report](2026-11-18-peer-rejection-and-setup-permissions.md)).
 - Unbounded structures F-B1–F-B3 and F-B5–F-B9 are bounded
-  ([report](2026-11-18-unbounded-structures-fixes.md)); F-B4 (read-model eviction) stays a
-  documented finding and F-B10 did not reproduce.
+  ([report](2026-11-18-unbounded-structures-fixes.md)), and F-B4 now evicts idle threads from
+  the orchestration read model, which reload from SQL on access
+  ([report](2026-11-18-read-model-eviction.md)); F-B10 did not reproduce.
 - Mobile consent cycles are unlimited; old stages retire safely
   ([report](2026-11-18-mobile-stage-retirement.md)).
 - A runtime update that never starts Node rolls back automatically through the launcher
   ([report](2026-11-18-launcher-rollback-unbootable-runtime.md)); manual recovery remains only if
   the previous runtime itself fails verification.
 
-Remaining: F-B4 read-model eviction, and removing the unreachable legacy OpenCode
-synthetic-workspace path (cleanup).
+The unreachable legacy OpenCode synthetic-workspace path is removed (`9c142552ee`). No code
+items remain open; everything left needs the user (above).
 
 ## Evidence
 

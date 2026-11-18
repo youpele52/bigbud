@@ -2,7 +2,10 @@ import { type OrchestrationEvent, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
 import type { ProjectionThreadWatchRepositoryShape } from "../../persistence/Services/ProjectionThreadWatches.ts";
-import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
+import {
+  type OrchestrationEngineShape,
+  getOrchestrationThread,
+} from "../Services/OrchestrationEngine.ts";
 import {
   dispatchThreadWatchTriggerTurn,
   groupActiveWatchesByTriggerKey,
@@ -31,8 +34,9 @@ export const maybeTriggerThreadWatchesForThread = Effect.fn("maybeTriggerThreadW
     readonly watchedThreadId: ThreadId;
     readonly occurredAt: string;
   }) {
-    const readModel = yield* input.orchestrationEngine.getReadModel();
-    const watchedThread = readModel.threads.find((thread) => thread.id === input.watchedThreadId);
+    const readThread = (threadId: ThreadId) =>
+      getOrchestrationThread(input.orchestrationEngine, threadId);
+    const watchedThread = yield* readThread(input.watchedThreadId);
     if (!watchedThread || !isThreadWorkflowComplete(watchedThread)) {
       return;
     }
@@ -62,7 +66,7 @@ export const maybeTriggerThreadWatchesForThread = Effect.fn("maybeTriggerThreadW
       const completedThreads = [];
       let allComplete = true;
       for (const watch of groupWatches) {
-        const thread = readModel.threads.find((entry) => entry.id === watch.watchedThreadId);
+        const thread = yield* readThread(watch.watchedThreadId);
         if (!thread || !isThreadWorkflowComplete(thread)) {
           allComplete = false;
           break;
@@ -77,7 +81,7 @@ export const maybeTriggerThreadWatchesForThread = Effect.fn("maybeTriggerThreadW
         continue;
       }
 
-      const watcherThread = readModel.threads.find((thread) => thread.id === first.watcherThreadId);
+      const watcherThread = yield* readThread(first.watcherThreadId);
       if (isWatcherThreadBusy(watcherThread)) {
         continue;
       }

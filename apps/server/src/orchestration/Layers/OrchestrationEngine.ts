@@ -1,7 +1,6 @@
 import type { OrchestrationReadModel, ThreadId } from "@bigbud/contracts";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { makeWorktreeReservations } from "../../git/Layers/WorktreeReservations.ts";
-import { withMetadataTransaction } from "../../persistence/Layers/ThreadMetadataGeneration.transaction.ts";
 import { assertWorkspaceCommandAdmission } from "../ProjectWorkspace.engineTransition.ts";
 import { reconcileProjectWorkspaceStartup } from "../ProjectWorkspace.nativeStartup.ts";
 import {
@@ -44,6 +43,8 @@ import { ThreadRetentionRepositoryLive } from "../../persistence/Layers/ThreadRe
 import { ThreadDeletion, ThreadDeletionLive } from "../../deletion/Services/ThreadDeletion.ts";
 import { VisibleBrowserControlLive } from "../../browser/Layers/VisibleBrowserControl.ts";
 import { makeThreadStateHydrator } from "./OrchestrationEngine.hydration.ts";
+import { makeThreadResidency, ReadModelResidencyConfig } from "./OrchestrationEngine.residency.ts";
+import { makeReadModelResidencyApi } from "./OrchestrationEngine.residencyApi.ts";
 import { enqueueQueuedPromptRecovery } from "./OrchestrationEngine.lifecycleFlush.ts";
 import { RuntimeMaintenanceGate } from "../../command-admission/RuntimeMaintenanceGate.ts";
 import { makeOrphanedPendingTurnStartCommand } from "../PendingTurnStart.logic.ts";
@@ -96,11 +97,14 @@ const makeOrchestrationEngine = Effect.gen(function* () {
   let readModel = createEmptyReadModel(new Date().toISOString());
   const commandSemaphore = yield* Semaphore.make(1);
   const serverEpoch = crypto.randomUUID();
+  const residencyConfig = yield* ReadModelResidencyConfig;
+  const residency = makeThreadResidency(residencyConfig.bounds, residencyConfig.nowMs);
   const threadStateHydrator = Option.isSome(operationalQueryOption)
     ? makeThreadStateHydrator({
         query: operationalQueryOption.value,
         eventStore,
         readModel: () => readModel,
+        residency,
         install: ({ threadId, thread, project }) => {
           const threads = thread
             ? [...readModel.threads.filter((candidate) => candidate.id !== threadId), thread]
@@ -109,6 +113,12 @@ const makeOrchestrationEngine = Effect.gen(function* () {
             ? [...readModel.projects.filter((candidate) => candidate.id !== project.id), project]
             : readModel.projects;
           readModel = { ...readModel, projects, threads };
+        },
+        evict: (threadIds) => {
+          readModel = {
+            ...readModel,
+            threads: readModel.threads.filter((thread) => !threadIds.has(thread.id)),
+          };
         },
       })
     : null;
@@ -325,31 +335,18 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     readReplay,
     openDeliveryLiveCapture: domainEvents.openDeliveryCapture,
     oldestReactorCursor: domainEvents.oldestOpenCursor,
-    ...(threadStateHydrator === null
+    ...(threadStateHydrator === null || Option.isNone(operationalQueryOption)
       ? {}
-      : {
-          withThreadHistoryBarrier: (threadId, effect) =>
-            commandSemaphore.withPermits(1)(
-              // Hydration itself uses SQL transactions. Reserve interruptibly before
-              // those masked acquisitions; release SQL before identity/dispatch preparation.
-              withMetadataTransaction(
-                workspaceSql,
-                threadStateHydrator.load(threadId, "history"),
-              ).pipe(Effect.orDie, Effect.andThen(effect)),
-            ),
-          ensureThreadState: (threadId: ThreadId, level: "operational" | "history") =>
-            commandSemaphore
-              .withPermits(1)(threadStateHydrator.load(threadId, level))
-              .pipe(Effect.orDie),
-          ensureProjectState: (projectId) =>
-            commandSemaphore
-              .withPermits(1)(threadStateHydrator.loadProject(projectId))
-              .pipe(Effect.orDie),
-          ensureWorkspaceProjects: (workspaceRoot) =>
-            commandSemaphore
-              .withPermits(1)(threadStateHydrator.loadWorkspaceProjects(workspaceRoot))
-              .pipe(Effect.orDie),
-        }),
+      : makeReadModelResidencyApi({
+          hydrator: threadStateHydrator,
+          residency,
+          query: operationalQueryOption.value,
+          commandSemaphore,
+          workspaceSql,
+          threadDeletion,
+          readModel: () => readModel,
+          nowMs: residencyConfig.nowMs,
+        })),
     dispatch,
     get streamDomainEvents(): OrchestrationEngineShape["streamDomainEvents"] {
       return domainEvents.streamGeneral();
@@ -366,7 +363,6 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     notes,
     path,
     projectionCatalogQuery,
-    readModel: () => readModel,
     serverConfig,
     serverSettingsService,
     threadDelegationRepository,
