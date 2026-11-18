@@ -5,8 +5,6 @@ const BROWSER_SYSTEM_PROMPT =
   "Summarize what was verified, including URL and important observations. " +
   "Avoid unnecessary browser use when terminal or file tools are sufficient.";
 
-export function buildOpencodeSystemPrompt(remoteWorkspacePrompt?: string): string {
-  return remoteWorkspacePrompt
-    ? `${BROWSER_SYSTEM_PROMPT} ${remoteWorkspacePrompt}`
-    : BROWSER_SYSTEM_PROMPT;
+export function buildOpencodeSystemPrompt(): string {
+  return BROWSER_SYSTEM_PROMPT;
 }

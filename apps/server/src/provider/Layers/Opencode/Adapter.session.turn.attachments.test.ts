@@ -95,7 +95,6 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
         },
       },
       releaseServer: () => undefined,
-      remoteWorkspaceSystemPrompt: "The actual workspace root is /srv/project.",
       opencodeSessionId: "opencode-session-1",
       threadId: THREAD_ID,
       sessionEpoch: 0,
@@ -168,7 +167,7 @@ it.effect("sends image attachments to OpenCode as file parts", () => {
         },
       ],
       system:
-        "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient. The actual workspace root is /srv/project.",
+        "You have access to a Chromium browser in this environment. Use it when the task requires live web interaction, navigation, UI verification, login flows, repros, scraping, or screenshots. Prefer codebase inspection first when the task is local-only. Summarize what was verified, including URL and important observations. Avoid unnecessary browser use when terminal or file tools are sufficient.",
     });
     assert.isAtLeast(events.length, 1);
     expect(JSON.stringify(promptInput)).toContain("<attachment_delivery>");
