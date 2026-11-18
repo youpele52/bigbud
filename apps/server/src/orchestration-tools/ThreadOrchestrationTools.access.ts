@@ -5,7 +5,6 @@ import { Effect, Option } from "effect";
 import {
   ensureOrchestrationProjectState,
   type OrchestrationEngineShape,
-  listOrchestrationProjectThreadIds,
 } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import {
@@ -58,19 +57,20 @@ export const requireThreadCoordinationConfirmation = Effect.fn(
     input.orchestrationEngine,
     input.targetProjectId,
   );
+  const readModel = yield* input.orchestrationEngine.getReadModel();
   if (!project || project.deletedAt !== null) {
     return yield* Effect.fail(new Error(`Project '${input.targetProjectId}' was not found.`));
   }
   const targetThread = input.targetThread;
-  // Ids from the projections: an attached thread counts whether or not it is resident.
-  const targetProjectThreadIds = targetThread
-    ? undefined
-    : new Set<string>(
-        yield* listOrchestrationProjectThreadIds(input.orchestrationEngine, input.targetProjectId),
-      );
   const referencesTarget = targetThread
     ? (threadId: string) => threadId === targetThread.id
-    : (threadId: string) => targetProjectThreadIds?.has(threadId) === true;
+    : (threadId: string) =>
+        readModel.threads.some(
+          (thread) =>
+            thread.id === threadId &&
+            thread.projectId === input.targetProjectId &&
+            thread.deletedAt == null,
+        );
   return yield* requireCrossProjectConfirmation({
     coordination: input.coordination,
     callerThreadId: input.callerThread.id,

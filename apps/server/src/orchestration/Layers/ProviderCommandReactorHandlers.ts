@@ -138,6 +138,7 @@ export const makeProviderCommandHandlers = Effect.gen(function* () {
   const processTurnSteerRequested = makeProcessTurnSteerRequested({
     providerService,
     orchestrationEngine,
+    resolveThread: orchestrationEngine.getReadModel,
     appendProviderFailureActivity,
   });
   const expandTurnMessageText = expandProviderInputMentions({

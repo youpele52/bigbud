@@ -21,8 +21,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import os from "node:os";
 
-import { resolveOwnershipBaseDir } from "./backendOwnership.paths";
-import { readOrCreateInstallationId } from "./machineIdentity.installation";
+import { resolveOwnershipBaseDir } from "./backendOwnership.paths.ts";
+import { readOrCreateInstallationId } from "./machineIdentity.installation.ts";
 
 const PREFIX = "machine-v1:";
 const INSTALLATION_PREFIX = "install-v1:";

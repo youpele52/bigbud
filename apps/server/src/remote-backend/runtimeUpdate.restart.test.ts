@@ -79,6 +79,8 @@ it("restart_request_killed_mid_flight_never_restores_and_the_trial_decides", asy
   await stop(old);
   const next = await start(h, { runningEntry: () => stagedEntryPath(h, "2.0.0") });
   await waitFor(async () => (await operationState(next))?.state === "activated");
+  // `activated` is recorded before the journal is cleared; admission reopens only after that.
+  await waitFor(() => !next.gate.isClosed());
   assert.isNull(await readRuntimeUpdateJournal(h.stateDir));
 });
 

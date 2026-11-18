@@ -1,5 +1,11 @@
 # F-B4: bounded orchestration read model (eviction with transparent rehydration)
 
+> **Reverted on 18 November 2026.** The live re-run
+> ([report](2026-11-18-unit-only-fixes-live-rerun.md)) found this change wedges the backend under
+> 3–8 concurrent provider sessions (D-1: a SQLite write lock is never released; the parent commit
+> does not wedge). `e84335fe60` was reverted; this report is kept as the design reference for a
+> fixed re-land.
+
 **Date:** 18 November 2026
 **Source:** [Unbounded structures: fixes](2026-11-18-unbounded-structures-fixes.md), F-B4; the shared
 hydrator from [P8 live acceptance, "Fixes and re-run"](2026-11-18-p8-live-acceptance.md).

@@ -1,5 +1,9 @@
 #![allow(clippy::panic_in_result_fn)]
 use super::*;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+// Parallel tests can read the same clock tick, so the root also carries a per-process counter.
+static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
 struct Fixture {
     root: std::path::PathBuf,
     source: std::path::PathBuf,
@@ -13,8 +17,9 @@ impl Fixture {
             .map_err(io::Error::other)?
             .as_nanos();
         let root = std::env::temp_dir().join(format!(
-            "bigbud-launch-install-{}-{nonce}",
-            std::process::id()
+            "bigbud-launch-install-{}-{nonce}-{}",
+            std::process::id(),
+            NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&root)?;
         let source = root.join("source.exe");

@@ -2,10 +2,7 @@ import type { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { Duration, Effect, Ref } from "effect";
 
 import { waitForReadModelCondition } from "../../orchestration/Layers/readModelSettle.ts";
-import {
-  getOrchestrationThread,
-  type OrchestrationEngineShape,
-} from "../../orchestration/Services/OrchestrationEngine.ts";
+import type { OrchestrationEngineShape } from "../../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadRetentionRepositoryShape } from "../../persistence/Services/ThreadRetentionRepository.ts";
 
 export function settleRetentionDelete(input: {
@@ -16,9 +13,10 @@ export function settleRetentionDelete(input: {
   return Effect.gen(function* () {
     const seenPending = yield* Ref.make(false);
     return yield* waitForReadModelCondition({
-      check: getOrchestrationThread(input.orchestration, input.threadId).pipe(
-        Effect.flatMap((thread) =>
+      check: input.orchestration.getReadModel().pipe(
+        Effect.flatMap((model) =>
           Effect.gen(function* () {
+            const thread = model.threads.find((candidate) => candidate.id === input.threadId);
             if (!thread || thread.deletedAt !== null) {
               return { done: true as const, value: "deleted" as const };
             }

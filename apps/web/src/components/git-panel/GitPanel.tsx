@@ -16,6 +16,7 @@ import {
 import { useGitPanelViewStore } from "~/stores/git/gitPanelView.store";
 import { GitPanelChanges } from "./GitPanelChanges";
 import { GitPanelHistory } from "./GitPanelHistory";
+import { GitPanelNotRepository } from "./GitPanelNotRepository";
 import { GitPanelSyncControl } from "./GitPanelSyncControl";
 import { StatusBanner } from "../common/StatusBanner";
 import { ToggleGroup, Toggle } from "../ui/toggle-group";
@@ -133,17 +134,7 @@ export function GitPanelContent({ activeThreadId, visible = true }: GitPanelProp
   }
 
   if (!isGitRepo || !gitStatus) {
-    return (
-      <div className="space-y-2 p-4 text-sm text-muted-foreground">
-        <p>
-          No Git repository at <span className="break-all font-light">&quot;{cwd}&quot;</span>.
-        </p>
-        <p>
-          Git uses the project workspace root, not the terminal&apos;s current directory. Edit the
-          remote workspace and set its workspace root to the repository directory.
-        </p>
-      </div>
-    );
+    return <GitPanelNotRepository />;
   }
 
   const branchLabel = gitStatus.branch ?? "Detached HEAD";

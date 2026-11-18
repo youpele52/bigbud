@@ -38,7 +38,6 @@ import {
   type RecoveryContext,
   type RecoveryNoticeKey,
 } from "./ProviderTurnSupervisor.state.ts";
-import { getOrchestrationThread } from "../Services/OrchestrationEngine.ts";
 
 export const SLEEP_CONTINUATION_TEXT =
   "Your previous response was interrupted when the computer went to sleep. Continue the task from where it stopped. Do not repeat actions that already completed, and check the current state before relying on anything that may not have finished.";
@@ -58,15 +57,20 @@ export const findThread = Effect.fn("findRecoveryThread")(function* (
   ctx: RecoveryContext,
   threadId: ThreadId,
 ) {
-  return yield* getOrchestrationThread(ctx.engine, threadId).pipe(
-    Effect.catchCause((cause) =>
-      Cause.hasInterruptsOnly(cause)
-        ? Effect.interrupt
-        : Effect.logWarning("failed to load thread for sleep recovery", { threadId, cause }).pipe(
-            Effect.as(undefined),
-          ),
-    ),
-  );
+  const model = yield* ctx.engine.getReadModel();
+  const loaded = model.threads.find((thread) => thread.id === threadId);
+  if (loaded !== undefined || ctx.engine.ensureThreadState === undefined) return loaded;
+  return yield* ctx.engine
+    .ensureThreadState(threadId, "operational")
+    .pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.interrupt
+          : Effect.logWarning("failed to load thread for sleep recovery", { threadId, cause }).pipe(
+              Effect.as(undefined),
+            ),
+      ),
+    );
 });
 
 /** Compare-and-set; returns the updated intent, or none when another writer won. */

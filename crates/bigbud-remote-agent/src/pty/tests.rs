@@ -15,7 +15,7 @@ fn spawns_a_shell_and_replays_bounded_output() {
     ));
     std::fs::create_dir_all(&root).unwrap();
     let job = PtyHandle::spawn(
-        "pty-1".to_owned(),
+        "pty-replay".to_owned(),
         &root,
         "sh",
         &["-c".to_owned(), "printf hello".to_owned()],

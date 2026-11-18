@@ -1,5 +1,6 @@
 import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts/core/settings.ts";
 import { publishHtmlRender } from "../../orchestration-tools/HtmlRenderTool.ts";
+import type { OrchestrationReadModel } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
 import { Effect, Option } from "effect";
 import type { FileSystem, Path } from "effect";
 
@@ -69,6 +70,7 @@ export const installOrchestrationEngineToolDispatchers = Effect.fn(
   readonly notes: Option.Option<ProjectionNoteRepositoryShape>;
   readonly path: Path.Path;
   readonly projectionCatalogQuery: Option.Option<ProjectionCatalogQueryShape>;
+  readonly readModel: () => OrchestrationReadModel;
   readonly serverConfig: ServerConfigShape;
   readonly serverSettingsService: ServerSettingsShape;
   readonly threadDelegationRepository: ThreadDelegationRepositoryShape;
@@ -90,7 +92,7 @@ export const installOrchestrationEngineToolDispatchers = Effect.fn(
     ...(Option.isSome(input.notes) && Option.isSome(input.kanban)
       ? {
           workspace: makeAgentWorkspaceTool({
-            engine: input.engine,
+            readModel: input.readModel,
             notes: input.notes.value,
             kanban: input.kanban.value,
           }),
@@ -209,7 +211,7 @@ export const installOrchestrationEngineToolDispatchers = Effect.fn(
     browser: (request) =>
       executeBrowserAction({
         browser: input.browser,
-        engine: input.engine,
+        readModel: input.readModel,
         threadId: request.threadId,
         action: request.action,
         visibleBrowser: input.visibleBrowser,

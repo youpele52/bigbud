@@ -4,10 +4,7 @@ import { createHash } from "node:crypto";
 
 import { resolveThreadWorkspaceCwd } from "../checkpointing/Utils.ts";
 import { isLocalExecutionTarget } from "../executionTargets.ts";
-import {
-  OrchestrationEngineService,
-  getOrchestrationThreadWithReadModel,
-} from "../orchestration/Services/OrchestrationEngine.ts";
+import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
 import { resolveToolTransportTarget, runToolCommand } from "../tool-transport/toolTransport.ts";
 import { resolveWorkspaceExecutionTargetId } from "../workspace-target/workspaceTarget.ts";
 import type { RemoteWorkspaceExecutions } from "../remote-workspace-bridge/remoteWorkspaceExecutions.ts";
@@ -114,10 +111,8 @@ export const runRemoteWorkspaceProcess = Effect.fn("runRemoteWorkspaceProcess")(
   });
 
   const orchestrationEngine = yield* OrchestrationEngineService;
-  const { readModel, thread } = yield* getOrchestrationThreadWithReadModel(
-    orchestrationEngine,
-    input.callerThreadId,
-  );
+  const readModel = yield* orchestrationEngine.getReadModel();
+  const thread = readModel.threads.find(({ id }) => id === input.callerThreadId);
   if (!thread) {
     return yield* new ThreadToolRequestError({ status: 404, message: "Current thread not found." });
   }

@@ -11,10 +11,7 @@ import { Cause, Effect } from "effect";
 
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
 import { OrchestrationCommandInvariantError, type OrchestrationDispatchError } from "../Errors.ts";
-import {
-  type OrchestrationEngineShape,
-  getOrchestrationThread,
-} from "../Services/OrchestrationEngine.ts";
+import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { formatProviderServiceCauseDetail } from "./ProviderCommandReactorHelpers.ts";
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import { classifyTurnStartFailure } from "./ProviderTurnFailureClassification.ts";
@@ -111,7 +108,9 @@ const markProviderTurnRunning = Effect.fn("markProviderTurnRunning")(function* (
     (session) => session.threadId === input.threadId,
   );
   if (!liveSession?.activeTurnId) return;
-  const thread = yield* getOrchestrationThread(input.orchestrationEngine, input.threadId);
+  const thread = (yield* input.orchestrationEngine.getReadModel()).threads.find(
+    (candidate) => candidate.id === input.threadId,
+  );
   if (!thread) return;
   const reconciliation = buildThreadReconciliationCommand({
     thread,

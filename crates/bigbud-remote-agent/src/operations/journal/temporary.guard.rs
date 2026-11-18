@@ -19,6 +19,16 @@ pub(in crate::operations::journal) struct Guard {
     lock: File,
 }
 
+impl Drop for Guard {
+    fn drop(&mut self) {
+        // A concurrent fork in this process (Linux Command::spawn, forkpty) copies
+        // this description into a child until it execs, so closing alone could
+        // leave the transaction locked. Unlocking releases it for every copy.
+        // SAFETY: lock is this guard's owned open descriptor.
+        let _unlocked = unsafe { libc::flock(self.lock.as_raw_fd(), libc::LOCK_UN) };
+    }
+}
+
 impl Guard {
     pub(in crate::operations::journal) fn acquire(path: &Path) -> Result<Self> {
         // Relative filenames deliberately resolve in the current directory.

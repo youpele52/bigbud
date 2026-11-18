@@ -14,6 +14,7 @@ struct Fixture {
     session: AgentSession,
     job: Option<pty::PtyJob>,
     root: PathBuf,
+    pty_id: &'static str,
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
@@ -25,7 +26,8 @@ impl Drop for Fixture {
     }
 }
 impl Fixture {
-    fn new() -> Result<Self, Box<dyn std::error::Error>> {
+    // Native PTY spawn IDs are process-wide, so each parallel test needs its own.
+    fn new(pty_id: &'static str) -> Result<Self, Box<dyn std::error::Error>> {
         let root = std::env::temp_dir().join(format!(
             "bigbud-input-receipt-{}",
             SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
@@ -44,7 +46,7 @@ impl Fixture {
         })?;
         let (_, job) = session.prepare_pty_create(v1::PtyCreateRequest {
             request_id: "create".to_owned(),
-            pty_id: "p".to_owned(),
+            pty_id: pty_id.to_owned(),
             request_digest: vec![1; 32],
             workspace_handle: "w".to_owned(),
             shell: "/bin/sh".to_owned(),
@@ -53,13 +55,18 @@ impl Fixture {
             rows: 24,
             ..Default::default()
         })?;
-        Ok(Self { session, job, root })
+        Ok(Self {
+            session,
+            job,
+            root,
+            pty_id,
+        })
     }
     fn request(&self, sequence: u64, bytes: &[u8]) -> v1::PtyInputReconcileRequest {
         v1::PtyInputReconcileRequest {
             request_id: "receipt".to_owned(),
             expected_epoch: self.session.agent_epoch.clone(),
-            pty_id: "p".to_owned(),
+            pty_id: self.pty_id.to_owned(),
             create_digest: vec![1; 32],
             sequence,
             payload_digest: digest(bytes),
@@ -82,7 +89,7 @@ impl Fixture {
 
 #[test]
 fn wire_retirement_blocks_late_input_and_written_receipt_keeps_exact_identity() {
-    let mut f = Fixture::new().unwrap();
+    let mut f = Fixture::new("input-retirement").unwrap();
     let handle = f.job.as_ref().unwrap().handle.clone();
     let pid = handle.pid;
     let request = f.request(1, b"never\n");
@@ -108,7 +115,7 @@ fn wire_retirement_blocks_late_input_and_written_receipt_keeps_exact_identity() 
 
 #[test]
 fn wire_rejects_wrong_epoch_resource_payload_and_drain_admission() {
-    let mut f = Fixture::new().unwrap();
+    let mut f = Fixture::new("input-admission").unwrap();
     let valid = f.request(1, b"bytes");
     let mut requests = Vec::new();
     let mut wrong = valid.clone();

@@ -8,6 +8,7 @@ import {
   parsePorcelainPath,
   createGitCommandError,
   isMissingGitCwdError,
+  isNotGitRepositoryResult,
 } from "./GitCoreUtils.ts";
 import type { GitHelpers } from "./GitCoreExecutor.ts";
 
@@ -50,7 +51,8 @@ export function makeReadStatusDetails({
       allowNonZeroExit: true,
     }).pipe(Effect.catchIf(isMissingGitCwdError, () => Effect.succeed(null)));
 
-    if (statusResult === null) {
+    // A missing cwd or a directory outside any repository is a normal non-repository state.
+    if (statusResult === null || isNotGitRepositoryResult(statusResult)) {
       return NON_REPOSITORY_STATUS_DETAILS;
     }
 

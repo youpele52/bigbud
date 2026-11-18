@@ -3,10 +3,7 @@ import { Effect, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { BrowserManager } from "../../browser/Services/BrowserManager.ts";
 import { finalizeThreadCanonicalHistory } from "../../deletion/Layers/CanonicalThreadCleanup.ts";
-import {
-  ensureOrchestrationThreadSubtree,
-  OrchestrationEngineService,
-} from "../Services/OrchestrationEngine.ts";
+import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
@@ -92,8 +89,8 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
         rootThreadId: thread.id,
         mode,
         fenceAlreadyHeld,
-        // The subtree is hydrated first: an evicted (or never loaded) descendant is deleted too.
-        resolveThreads: () => ensureOrchestrationThreadSubtree(orchestrationEngine, thread.id),
+        resolveThreads: () =>
+          orchestrationEngine.getReadModel().pipe(Effect.map((model) => model.threads)),
         preflight: (threads) =>
           Effect.gen(function* () {
             if (threads.some((candidate) => candidate.pinnedAt !== null)) return "pinned" as const;

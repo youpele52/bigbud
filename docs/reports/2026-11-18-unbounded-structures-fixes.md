@@ -3,8 +3,8 @@
 **Date:** 18 November 2026
 **Source:** [Remote backend measurements and bounds audit](2026-11-18-remote-backend-measurements.md),
 "Left as findings"
-**Status:** 9 of 10 fixed (F-B1, F-B2, F-B3, F-B5, F-B6, F-B7, F-B8, F-B9 here; F-B4 later in
-[read-model eviction](2026-11-18-read-model-eviction.md)). F-B10 did not reproduce.
+**Status:** 8 of 10 fixed (F-B1, F-B2, F-B3, F-B5, F-B6, F-B7, F-B8, F-B9). F-B4 and F-B10 remain open
+findings (reasons below). Not committed.
 
 Each fix adds a named limit with its overflow behaviour documented at the constant. The rule
 applied throughout: preview and telemetry data may be dropped with a visible gap; ordered
@@ -161,11 +161,7 @@ failure instead).
 
 ## Left as findings
 
-### F-B4: the read model keeps every thread it has loaded (fixed later)
-
-**Update:** fixed by migrating single-thread reads to a reload-on-miss accessor and evicting idle
-threads; see [read-model eviction](2026-11-18-read-model-eviction.md). The analysis below is the
-original finding.
+### F-B4: the read model keeps every thread it has loaded (risky, not changed)
 
 Evicting a hydrated thread from `OrchestrationEngine`'s read model would be correct only for
 consumers that rehydrate on demand. There are about 95 direct `readModel.threads.find` lookups

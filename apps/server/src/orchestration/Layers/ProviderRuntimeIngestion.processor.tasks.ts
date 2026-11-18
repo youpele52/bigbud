@@ -22,7 +22,6 @@ import {
   type TaskUpsertRuntimeEvent,
 } from "./ProviderRuntimeIngestion.tasks.map.ts";
 import { resolveRuntimeTaskIdentity } from "./ProviderRuntimeIngestion.tasks.identity.ts";
-import { getOrchestrationThread } from "../Services/OrchestrationEngine.ts";
 
 /** Runtime events after which every pending subagent snapshot of the thread is persisted. */
 const SUBAGENT_FLUSH_BOUNDARY_EVENTS: ReadonlySet<ProviderRuntimeEvent["type"]> = new Set([
@@ -48,9 +47,13 @@ export function makeRuntimeTaskProcessor(input: {
   let nextTaskOrdinal = 0;
 
   const readTasks = (threadId: string) =>
-    getOrchestrationThread(orchestrationEngine, threadId as ThreadId).pipe(
-      Effect.map((thread) => thread?.tasks ?? []),
-    );
+    orchestrationEngine
+      .getReadModel()
+      .pipe(
+        Effect.map(
+          (readModel) => readModel.threads.find((thread) => thread.id === threadId)?.tasks ?? [],
+        ),
+      );
 
   /** Persists deferred snapshots unless a newer or terminal state superseded them. */
   const persistPending = Effect.fn("persistPendingSubagentUpserts")(function* (

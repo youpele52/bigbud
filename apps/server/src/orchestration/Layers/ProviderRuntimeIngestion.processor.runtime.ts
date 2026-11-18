@@ -24,10 +24,7 @@ import type {
   RuntimeProcessorCacheHelpers,
   RuntimeProcessorServices,
 } from "./ProviderRuntimeIngestion.processor.ts";
-import {
-  ensureOrchestrationThreadState,
-  getOrchestrationThread,
-} from "../Services/OrchestrationEngine.ts";
+import { ensureOrchestrationThreadState } from "../Services/OrchestrationEngine.ts";
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import { lookupLiveSessionBestEffort } from "./ProviderRuntimeIngestion.processor.runtime.lookup.ts";
 import { providerCommandId } from "./ProviderRuntimeIngestion.processor.runtime.command.ts";
@@ -86,7 +83,9 @@ export function makeRuntimeEventProcessor(
   ) {
     yield* ensureOrchestrationThreadState(orchestrationEngine, event.threadId, "history");
     yield* taskProcessor.flushDue(event, event.threadId);
-    const thread = yield* getOrchestrationThread(orchestrationEngine, event.threadId);
+    const thread = (yield* orchestrationEngine.getReadModel()).threads.find(
+      (entry) => entry.id === event.threadId,
+    );
     if (!thread) return;
     const resumedTerminal =
       isInspectedTerminal(event) &&

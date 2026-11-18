@@ -1,10 +1,7 @@
 import { CommandId, FAVORITE_THREAD_LIMIT, ThreadId } from "@bigbud/contracts";
 import { Effect } from "effect";
 
-import {
-  type OrchestrationEngineShape,
-  getOrchestrationThread,
-} from "../orchestration/Services/OrchestrationEngine.ts";
+import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import { resolveThreadToolParticipants } from "./ThreadOrchestrationTools.participants.ts";
@@ -50,16 +47,12 @@ const requireCallerThread = Effect.fn("requirePinnedThreadToolCaller")(function*
   readonly orchestrationEngine: OrchestrationEngineShape;
   readonly callerThreadId: ThreadId;
 }) {
-  const callerThread = yield* getOrchestrationThread(
-    input.orchestrationEngine,
-    input.callerThreadId,
-  );
+  const readModel = yield* input.orchestrationEngine.getReadModel();
+  const callerThread = readModel.threads.find((thread) => thread.id === input.callerThreadId);
   if (!callerThread) {
     return yield* Effect.fail(new Error("Caller thread could not be resolved."));
   }
-  // Whole-model pinned scans are complete: a pinned thread is operational, so it is loaded at
-  // startup and never evicted.
-  return yield* input.orchestrationEngine.getReadModel();
+  return readModel;
 });
 
 export const setThreadPinnedViaOrchestration = Effect.fn("setThreadPinnedViaOrchestration")(
@@ -69,8 +62,8 @@ export const setThreadPinnedViaOrchestration = Effect.fn("setThreadPinnedViaOrch
     readonly threadId: ThreadId;
     readonly pinned: boolean;
   }) {
-    yield* requireCallerThread(input);
-    const targetThread = yield* getOrchestrationThread(input.orchestrationEngine, input.threadId);
+    const readModel = yield* requireCallerThread(input);
+    const targetThread = readModel.threads.find((thread) => thread.id === input.threadId);
 
     if (input.pinned) {
       if (!targetThread || targetThread.deletedAt !== null) {
@@ -94,7 +87,7 @@ export const setThreadPinnedViaOrchestration = Effect.fn("setThreadPinnedViaOrch
       (thread) => thread.deletedAt === null && (thread.pinnedAt ?? null) !== null,
     );
     const pinnedAt =
-      (yield* getOrchestrationThread(input.orchestrationEngine, input.threadId))?.pinnedAt ?? null;
+      nextReadModel.threads.find((thread) => thread.id === input.threadId)?.pinnedAt ?? null;
     return {
       threadId: input.threadId,
       pinned: input.pinned,

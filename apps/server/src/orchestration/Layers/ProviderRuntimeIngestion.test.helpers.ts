@@ -39,8 +39,6 @@ import { ProviderRuntimeIngestionService } from "../Services/ProviderRuntimeInge
 import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts";
 import { ComputerUseDisabledTestLayer } from "./OrchestrationEngine.test.helpers.ts";
 import { OrchestrationEngineLive } from "./OrchestrationEngine.ts";
-import { ReadModelResidencyConfig } from "./OrchestrationEngine.residency.ts";
-import { ProjectionOperationalStateQueryLive } from "./ProjectionOperationalStateQuery.ts";
 import { OrchestrationProjectionPipelineLive } from "./ProjectionPipeline.ts";
 import { OrchestrationProjectionSnapshotQueryLive } from "./ProjectionSnapshotQuery.ts";
 import { ProviderRuntimeIngestionLive } from "./ProviderRuntimeIngestion.ts";
@@ -191,8 +189,6 @@ export function registerProviderRuntimeIngestionTestCleanup(): void {
 export async function createHarness(options?: {
   serverSettings?: Partial<ServerSettings>;
   provider?: ProviderRuntimeEvent["provider"];
-  /** Hydrating engine (operational query) with these residency bounds, for eviction tests. */
-  residency?: typeof ReadModelResidencyConfig.Service;
 }) {
   const workspaceRoot = makeTrackedTempDir("t3-provider-project-");
   fs.mkdirSync(path.join(workspaceRoot, ".git"));
@@ -218,10 +214,6 @@ export async function createHarness(options?: {
   const provider = createProviderServiceHarness(providerName);
   const orchestrationLayer = OrchestrationEngineLive.pipe(
     Layer.provideMerge(OrchestrationProjectionSnapshotQueryLive),
-    Layer.provide(options?.residency ? ProjectionOperationalStateQueryLive : Layer.empty),
-    Layer.provide(
-      options?.residency ? Layer.succeed(ReadModelResidencyConfig, options.residency) : Layer.empty,
-    ),
     Layer.provide(OrchestrationProjectionPipelineLive),
     Layer.provide(OrchestrationEventStoreLive),
     Layer.provide(OrchestrationCommandReceiptRepositoryLive),

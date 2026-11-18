@@ -3,6 +3,15 @@ use super::*;
 use crate::backend_service::tests::fixture::{Fixture, write};
 use std::fs;
 
+// `run` installs the process-wide supervisor exit seam, so tests using it must not overlap.
+static EXIT_SEAM_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn lock_exit_seam() -> std::sync::MutexGuard<'static, ()> {
+    EXIT_SEAM_TEST_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn prepared() -> Fixture {
     let fixture = Fixture::new();
     let root = &fixture.config.rust_state;
@@ -21,6 +30,7 @@ fn prepared() -> Fixture {
 }
 #[test]
 fn only_exact_fresh_p4_reservation_can_hold_lifetime_lock_and_settle_receipt() {
+    let _seam = lock_exit_seam();
     let fixture = prepared();
     let guard = LaunchGuard::with_boot(&fixture.config, &fixture.config.launch_boot).unwrap();
     assert!(LaunchGuard::with_boot(&fixture.config, &fixture.config.launch_boot).is_err());
@@ -53,6 +63,7 @@ fn rejects_changed_boot_attempt_and_unprepared_existing_epoch() {
 }
 #[test]
 fn changed_reservation_or_lock_never_receives_an_exit_receipt() {
+    let _seam = lock_exit_seam();
     for replace_lock in [false, true] {
         let fixture = prepared();
         let guard = LaunchGuard::with_boot(&fixture.config, &fixture.config.launch_boot).unwrap();
@@ -110,6 +121,7 @@ fn requires_exact_independent_service_pid_and_cgroup_not_environment_claims() {
 
 #[test]
 fn failed_supervisor_settles_failure_without_claiming_admission_or_success() {
+    let _seam = lock_exit_seam();
     let fixture = prepared();
     let guard = LaunchGuard::with_boot(&fixture.config, &fixture.config.launch_boot).unwrap();
     assert!(guard.run(|_| Err(ServiceError::Supervisor)).is_err());
@@ -200,6 +212,7 @@ fn explicit_service_start_requires_consent_capability_and_only_starts_rust_unit(
 
 #[test]
 fn prepared_replacement_matches_old_epoch_and_never_retries_a_changed_epoch() {
+    let _seam = lock_exit_seam();
     for mode in [0o600, 0o700] {
         let mut fixture = prepared();
         fixture.config.prior_epoch = "1234".into();
@@ -348,6 +361,7 @@ fn settled_exit_seam_writes_verified_death_evidence_once_and_unsettled_writes_no
 
 #[test]
 fn run_installs_its_exit_seam_only_for_its_own_lifetime() {
+    let _seam = lock_exit_seam();
     let first = prepared();
     let guard = LaunchGuard::with_boot(&first.config, &first.config.launch_boot).unwrap();
     assert!(guard.run(|_| Ok(())).is_ok());

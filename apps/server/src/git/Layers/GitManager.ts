@@ -36,10 +36,6 @@ const LOCAL_STATUS_CACHE_TTL = Duration.seconds(1);
 const REMOTE_STATUS_CACHE_TTL = Duration.seconds(5);
 const STATUS_RESULT_CACHE_CAPACITY = 2_048;
 
-function isNotGitRepositoryError(error: import("@bigbud/contracts").GitCommandError): boolean {
-  return error.message.toLowerCase().includes("not a git repository");
-}
-
 function isMissingDirectoryError(error: unknown): error is PlatformError.PlatformError {
   if (
     typeof error === "object" &&
@@ -117,10 +113,9 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   const normalizeStatusCacheKey = (cwd: string) => canonicalizeExistingPath(cwd);
 
   const readLocalStatus = Effect.fn("readLocalStatus")(function* (cwd: string) {
-    const details = yield* gitCore.statusDetailsLocal(cwd).pipe(
-      Effect.catchIf(isNotGitRepositoryError, () => Effect.succeed(emptyLocalStatus())),
-      Effect.catchIf(isMissingDirectoryError, () => Effect.succeed(emptyLocalStatus())),
-    );
+    const details = yield* gitCore
+      .statusDetailsLocal(cwd)
+      .pipe(Effect.catchIf(isMissingDirectoryError, () => Effect.succeed(emptyLocalStatus())));
     return {
       isRepo: details.isRepo,
       hasOriginRemote: details.hasOriginRemote,
@@ -132,10 +127,9 @@ export const makeGitManager = Effect.fn("makeGitManager")(function* () {
   });
 
   const readRemoteStatus = Effect.fn("readRemoteStatus")(function* (cwd: string) {
-    const details = yield* gitCore.statusDetails(cwd).pipe(
-      Effect.catchIf(isNotGitRepositoryError, () => Effect.succeed(emptyLocalStatus())),
-      Effect.catchIf(isMissingDirectoryError, () => Effect.succeed(emptyLocalStatus())),
-    );
+    const details = yield* gitCore
+      .statusDetails(cwd)
+      .pipe(Effect.catchIf(isMissingDirectoryError, () => Effect.succeed(emptyLocalStatus())));
 
     const pr =
       details.isRepo && details.branch !== null

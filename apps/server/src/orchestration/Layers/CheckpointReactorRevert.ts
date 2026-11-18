@@ -20,15 +20,10 @@ import type { OrchestrationDispatchError } from "../Errors.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import { ProviderValidationError } from "../../provider/Errors.ts";
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
-import {
-  getOrchestrationThread,
-  type OrchestrationEngineShape,
-} from "../Services/OrchestrationEngine.ts";
 
 export function makeHandleRevertRequested(
   orchestrationEngine: {
     getReadModel: () => Effect.Effect<OrchestrationReadModel, never>;
-    getThread?: NonNullable<OrchestrationEngineShape["getThread"]>;
     dispatch: (
       cmd: OrchestrationCommand,
     ) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError>;
@@ -80,13 +75,8 @@ export function makeHandleRevertRequested(
   > {
     const now = new Date().toISOString();
 
-    // The revert reads checkpoints and messages: full history (`thread.checkpoint.revert`
-    // already prepared it, so a resident thread is returned as is).
-    const thread = yield* getOrchestrationThread(
-      orchestrationEngine,
-      event.payload.threadId,
-      "history",
-    );
+    const readModel = yield* orchestrationEngine.getReadModel();
+    const thread = readModel.threads.find((entry) => entry.id === event.payload.threadId);
     if (!thread) {
       yield* appendRevertFailureActivity({
         threadId: event.payload.threadId,
@@ -272,7 +262,9 @@ export function makeHandleRevertRequested(
                 issue:
                   "The exact filesystem checkpoint ref is unavailable; no native rewind was dispatched.",
               });
-            const current = yield* getOrchestrationThread(orchestrationEngine, thread.id);
+            const current = (yield* orchestrationEngine.getReadModel()).threads.find(
+              (entry) => entry.id === thread.id,
+            );
             if (
               !current ||
               current.deletedAt !== null ||

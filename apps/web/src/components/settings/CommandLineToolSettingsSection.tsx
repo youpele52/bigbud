@@ -8,7 +8,9 @@ import { SettingsRow, SettingsSection } from "./settingsLayout";
 
 /** D2: the Settings entry point for the `bigbud` launcher; hidden where it is not offered. */
 export function CommandLineToolSettingsSection() {
-  const install = window.desktopBridge?.installCommandLineTool;
+  // Settings also render without a DOM (static markup), where no desktop bridge exists.
+  const install =
+    typeof window === "undefined" ? undefined : window.desktopBridge?.installCommandLineTool;
   const [busy, setBusy] = useState(false);
   const run = useCallback(async () => {
     if (!install) return;
