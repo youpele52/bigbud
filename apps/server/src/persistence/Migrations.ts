@@ -89,6 +89,7 @@ import Migration0171 from "./Migrations/171_ThreadMetadataLegacyClaimBoundary.ts
 import Migration0170 from "./Migrations/170_DirectShellLaunchOwners.ts";
 import Migration0173 from "./Migrations/173_RemoteBackendProfiles.ts";
 import Migration0174 from "./Migrations/174_RemoteRuntimeUpdateOperations.ts";
+import Migration0175 from "./Migrations/175_PeerOrchestration.ts";
 
 export const migrationEntries = [
   ...baseMigrationEntries,
@@ -166,6 +167,7 @@ export const migrationEntries = [
   [172, "ThreadMetadataPurgedIdentityBoundary", Migration0172],
   [173, "RemoteBackendProfiles", Migration0173],
   [174, "RemoteRuntimeUpdateOperations", Migration0174],
+  [175, "PeerOrchestration", Migration0175],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;
