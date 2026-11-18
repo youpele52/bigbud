@@ -21,6 +21,7 @@ it("dispatches exact stored SSH account, port, cwd, executable and argv with hon
     "BatchMode=yes",
     "-p",
     "2222",
+    "--",
     "tester@example.test",
   ]);
   const command = plan.invocation.args.at(-1)!;

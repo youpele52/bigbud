@@ -77,10 +77,18 @@ fn inspection_capability_probe_preserves_check_identity_without_creating_state()
         .output()?;
     let plain_text = String::from_utf8(plain.stdout).map_err(io::Error::other)?;
     let capability_text = String::from_utf8(capabilities.stdout).map_err(io::Error::other)?;
+    // Mirrors the per-platform capability list printed by `run_check`.
+    let platform_capabilities = if cfg!(windows) {
+        "\tinspect-local=1\tlocal-control-pipe=1"
+    } else if cfg!(target_os = "linux") {
+        "\tinspect-local=1\tbackend-service=2\tbackend-service-graph=1"
+    } else {
+        "\tinspect-local=1"
+    };
     if !plain.status.success()
         || !capabilities.status.success()
         || plain_text.trim().split('\t').count() != 7
-        || capability_text.trim() != format!("{}\tinspect-local=1", plain_text.trim())
+        || capability_text.trim() != format!("{}{platform_capabilities}", plain_text.trim())
         || root.exists()
     {
         return Err(io::Error::other(

@@ -23,9 +23,16 @@ export class V2CodingReceipts {
     return new V2CodingReceipts(await realpath(directory));
   }
   /** The application owns this profile; all in-process handles share one bounded admission queue. */
-  private async reserve(key: string, fingerprint: string) {
+  private reserve(key: string, fingerprint: string) {
+    return this.exclusive(() => this.reserveExclusive(key, fingerprint));
+  }
+  /**
+   * Admission counts and completion renames share one queue: readdir is not stable while an
+   * entry is renamed (btrfs re-indexes the target), so an overlapping count could overshoot.
+   */
+  private async exclusive<T>(work: () => Promise<T>): Promise<T> {
     const prior = V2CodingReceipts.reservations.get(this.directory) ?? Promise.resolve();
-    const pending = prior.then(() => this.reserveExclusive(key, fingerprint));
+    const pending = prior.then(work);
     const settled = pending.then(
       () => {},
       () => {},
@@ -85,6 +92,10 @@ export class V2CodingReceipts {
     if (replay) return replay;
     const filename = path.join(this.directory, createHash("sha256").update(key).digest("hex"));
     const result = await operation();
+    await this.exclusive(() => this.complete(filename, fingerprint, result));
+    return result;
+  }
+  private async complete(filename: string, fingerprint: string, result: V2CodingFileResult) {
     const temporary = `${filename}.${randomUUID()}`;
     const completed = await open(
       temporary,
@@ -107,7 +118,6 @@ export class V2CodingReceipts {
     } finally {
       await parent.close();
     }
-    return result;
   }
   async find(key: string, fingerprint: string): Promise<V2CodingFileResult | undefined> {
     const filename = path.join(this.directory, createHash("sha256").update(key).digest("hex"));

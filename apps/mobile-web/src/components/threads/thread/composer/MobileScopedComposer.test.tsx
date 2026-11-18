@@ -34,7 +34,9 @@ it.each(["read-only", "approve-only", undefined] as const)(
       />,
     );
     expect(html).not.toContain("Private question");
-    expect(html).not.toContain("<textarea");
+    // The saved draft stays visible read-only; only the editable message box is hidden.
+    expect(html).not.toContain('aria-label="Message"');
+    expect(html).toMatch(/<textarea aria-label="Saved draft"[^>]* readOnly=""/);
     expect(html).not.toContain("Stop generation");
     expect(html).not.toContain("Send message");
   },
@@ -50,7 +52,8 @@ it("approve-only keeps approval buttons but no question/model controls", () => {
   );
   expect(html).toContain(">Approve<");
   expect(html).toContain(">Deny<");
-  expect(html).not.toContain("<textarea");
+  expect(html).not.toContain('aria-label="Message"');
+  expect(html).toMatch(/<textarea aria-label="Saved draft"[^>]* readOnly=""/);
   expect(html).not.toContain("Stop generation");
 });
 it("read-only hides approvals; thread-control retains the composer", () => {

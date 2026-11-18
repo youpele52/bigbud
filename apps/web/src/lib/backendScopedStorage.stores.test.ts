@@ -153,6 +153,10 @@ describe("backend-scoped stores (batch 1)", () => {
       }),
     });
     expect(lockNames[0]).toBe(`bigbud:${PREFIX_A}bigbud:test-ledger:write`);
-    expect([...storage.entries.keys()]).toEqual([`${PREFIX_A}bigbud:test-ledger`]);
+    // Stores from earlier windows in this file may still flush debounced state into the shared
+    // spy storage; what matters is that the ledger lands under, and nothing escapes, prefix A.
+    const keys = [...storage.entries.keys()];
+    expect(keys).toContain(`${PREFIX_A}bigbud:test-ledger`);
+    expect(keys.every((key) => key.startsWith(PREFIX_A))).toBe(true);
   });
 });

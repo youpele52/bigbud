@@ -6,7 +6,10 @@ import { SqlitePersistenceMemory } from "./persistence/Layers/Sqlite.ts";
 import { RemoteAgentRuntimeOwnersLive } from "./persistence/Layers/RemoteAgentRuntimeBindings.ts";
 import { RemoteAgentRuntimeOwners } from "./persistence/Layers/RemoteAgentRuntimeBindings.service.ts";
 import type { RemoteAgentOwnerStore } from "./remote-agent/remoteAgentOwners.ts";
-import { RemoteMobileNativeInputs } from "./remote-backend/mobileGatewayActivation.inputs.ts";
+import {
+  RemoteMobileNativeInputs,
+  RemoteMobileNativeInputsReport,
+} from "./remote-backend/mobileGatewayActivation.inputs.ts";
 import {
   RemoteMobileGatewayActivation,
   RemoteMobileGatewayActivationLive,
@@ -97,7 +100,12 @@ it("inputs present attach one controller over the app's single owners store", as
   ).pipe(Layer.provide(RemoteAgentRuntimeOwnersLive));
   const composition = Layer.mergeAll(RemoteMobileActivationAttachLive, consumer).pipe(
     Layer.provideMerge(RemoteMobileGatewayActivationLive),
-    Layer.provide(Layer.succeed(RemoteMobileNativeInputs, Option.some(inputs))),
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.succeed(RemoteMobileNativeInputs, Option.some(inputs)),
+        Layer.succeed(RemoteMobileNativeInputsReport, { kind: "loaded", value: inputs }),
+      ),
+    ),
     Layer.provide(SqlitePersistenceMemory),
   ) as unknown as Layer.Layer<RemoteMobileGatewayActivation>;
   const result = await Effect.runPromise(

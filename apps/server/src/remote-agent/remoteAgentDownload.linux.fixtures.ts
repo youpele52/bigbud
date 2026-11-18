@@ -27,7 +27,8 @@ export async function prepareDownloadFixture(
       .replace("MAX_AGENT_BYTES=67108864", "MAX_AGENT_BYTES=2048")
       .replace("MAX_METADATA_BYTES=1048576", "MAX_METADATA_BYTES=1024"),
   );
-  await fixture.run(`mkdir -p /tmp/test-bin /tmp/test-home/.bigbud/agent/bin; chmod 700 /tmp/test-home/.bigbud/agent; printf working > /tmp/test-home/.bigbud/agent/bin/current
+  // Fixed paths: on a Linux host (no per-test container) each test must start from a clean slate.
+  await fixture.run(`rm -rf /tmp/test-bin /tmp/test-home /tmp/downloader.pid /tmp/script.pid /tmp/download.out; mkdir -p /tmp/test-bin /tmp/test-home/.bigbud/agent/bin; chmod 700 /tmp/test-home/.bigbud/agent; printf working > /tmp/test-home/.bigbud/agent/bin/current
 for tool in uname sha256sum awk mktemp stat head mkfifo wc flock id mkdir rmdir rm grep tr chmod mv cat sleep; do ln -s "$(command -v "$tool")" "/tmp/test-bin/$tool"; done`);
   await fixture.runInput(`cat > /tmp/test-bin/${downloader}`, `#!/bin/sh\n${body}\n`);
   await fixture.run(`chmod 700 /tmp/test-bin/${downloader}`);

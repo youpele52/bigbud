@@ -1,6 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as http from "node:http";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { vi } from "vitest";
 import type { ChildProcess } from "node:child_process";
 import { makeRemoteBackendRelayLeases } from "./clientRelay.leases.ts";
@@ -57,8 +58,14 @@ export async function makeLeaseFixture(
     }),
     { mode: 0o600 },
   );
+  // The pinned remote helper path is never executed here: the mocked SSH transport runs the real
+  // relay entry against this fixture's HOME, private token and backend socket.
   const helper = "/fixture-helper/remoteBackendClientRelay.mjs";
-  calls.args = [helper, authorityId];
+  calls.args = [
+    "--experimental-transform-types",
+    fileURLToPath(new URL("./clientRelay.entry.ts", import.meta.url)),
+    authorityId,
+  ];
   const profile: ResolvedRemoteBackendRelayProfile = {
     profile: {
       profileId: "isolated-fixture",

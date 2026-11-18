@@ -6,7 +6,7 @@ import { join } from "node:path";
 
 // Current client protocol golden; independent of the minimum compatible agent minor.
 const CLIENT_HELLO_FRAME = Buffer.from(
-  "000000290a27080110051a08636c69656e742d31220c636f6e6e656374696f6e2d312a056e6f6e636530808040",
+  "000000290a27080110081a08636c69656e742d31220c636f6e6e656374696f6e2d312a056e6f6e636530808040",
   "hex",
 );
 

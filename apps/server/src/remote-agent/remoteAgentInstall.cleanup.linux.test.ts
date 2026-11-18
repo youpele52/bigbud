@@ -39,7 +39,7 @@ describe.runIf(linuxControlAvailable)("install-manager Linux binary retention", 
         logPath: `${statePath}/supervisor.log`,
       };
       await fixture.run(
-        `umask 077; mkdir -p '${fixture.root}/bin/0.2.${number}/${sha256}' '${statePath}'; printf '%s' '${bytes}' > '${runtime.binaryPath}'; chmod 700 '${runtime.binaryPath}'; printf retained-log > '${runtime.logPath}'; : > '${statePath}/launch.lock'; printf '0' > '${statePath}/launch.exit'; chmod 600 '${statePath}/launch.lock' '${statePath}/launch.exit'`,
+        `umask 077; mkdir -p '${fixture.root}/bin/0.2.${number}/${sha256}' '${statePath}'; printf '%s' '${bytes}' > '${runtime.binaryPath}'; chmod 700 '${runtime.binaryPath}'; printf retained-log > '${runtime.logPath}'; : > '${statePath}/launch.lock'; printf '0' > '${statePath}/launch.exit'; printf 'launch-${generation}' > '${statePath}/launch.intent'; chmod 600 '${statePath}/launch.lock' '${statePath}/launch.exit' '${statePath}/launch.intent'`,
       );
       builds.push({
         id: remoteAgentBuildId(runtime),
@@ -55,7 +55,9 @@ describe.runIf(linuxControlAvailable)("install-manager Linux binary retention", 
       revision: state.revision + 1,
       builds,
       promotionSequence: 3,
+      // Retirement proves death from this attempt's exit receipt, never from an unnamed launch.
       launches: builds.map((build) => ({
+        attemptId: `launch-${build.runtime.generation}`,
         id: build.runtime.generation,
         buildId: build.id,
         phase: "proven-dead",

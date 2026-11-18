@@ -59,6 +59,15 @@ impl RotatingLog {
     }
 }
 
+impl Drop for RotatingLog {
+    fn drop(&mut self) {
+        // A concurrent fork copies this description into a child until it execs;
+        // explicit unlock releases the log pair for every copy, not just this fd.
+        // SAFETY: current is this logger's owned open descriptor.
+        let _unlocked = unsafe { libc::flock(self.current.as_raw_fd(), libc::LOCK_UN) };
+    }
+}
+
 impl Write for RotatingLog {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         if bytes.is_empty() {

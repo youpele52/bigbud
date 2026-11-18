@@ -64,7 +64,16 @@ describe("remote PTY reconnect", () => {
       request: async (frame: RemoteAgentFrame) =>
         ({
           type: frame.type === "ptyCreateRequest" ? "ptyCreateResponse" : "ptyAttachResponse",
-          value: { ptyId: "pty-1", accepted: true, pid: 5, firstRetainedSequence: 1 },
+          // Reattach requires the original process to be confirmed running.
+          value: {
+            ptyId: "pty-1",
+            accepted: true,
+            state: "running",
+            pid: 5,
+            nextSequence: 1,
+            firstRetainedSequence: 1,
+            replayGap: false,
+          },
         }) as unknown as RemoteAgentFrame,
     } as unknown as RemoteAgentConnection;
     let outcomes = ["socket closed", "socket closed", null];
