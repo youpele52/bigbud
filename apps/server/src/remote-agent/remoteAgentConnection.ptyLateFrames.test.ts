@@ -61,7 +61,9 @@ it("discards unclaimed late PTY frames while preserving live listeners and unrel
       signal: 0,
     },
   });
-  expect((connection as unknown as { queuedFrames: unknown[] }).queuedFrames).toHaveLength(0);
+  expect(
+    (connection as unknown as { inbox: { unclaimedCount: number } }).inbox.unclaimedCount,
+  ).toBe(0);
   const received = vi.fn((frame: RemoteAgentFrame) => frame.type === "ptyOutput");
   const remove = connection.onFrame(received);
   emit({ type: "ptyOutput", value: { ptyId: "active", sequence: 1, bytes: new Uint8Array([65]) } });

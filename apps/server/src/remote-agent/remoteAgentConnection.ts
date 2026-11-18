@@ -4,6 +4,7 @@ import {
   finishRemoteAgentGracefulClose,
 } from "./remoteAgentConnection.process.ts";
 import { requestRemoteFrame, type FrameWaiter } from "./remoteAgentConnection.request";
+import { RemoteAgentFrameInbox, type FrameListener } from "./remoteAgentConnection.inbox.ts";
 import { randomUUID } from "node:crypto";
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { type KillProcessTreeOptions, killProcessTree } from "../utils/killProcessTree.ts";
@@ -72,8 +73,6 @@ export interface RemoteAgentSshProcessInput {
   readonly maxFrameBytes?: number;
 }
 
-type FrameListener = (frame: RemoteAgentFrame) => boolean | void;
-
 export { buildRemoteAgentIdentityProbeCommand } from "./remoteAgentConnection.identity.ts";
 
 export class RemoteAgentConnection {
@@ -82,9 +81,7 @@ export class RemoteAgentConnection {
   private readonly processLifecycle: ReturnType<typeof trackRemoteAgentProcess>;
   private stderrTail = "";
   private readBuffer = Buffer.alloc(0);
-  private readonly queuedFrames: RemoteAgentFrame[] = [];
-  private readonly waiters: FrameWaiter[] = [];
-  private readonly frameListeners = new Set<FrameListener>();
+  private readonly inbox: RemoteAgentFrameInbox;
   private readonly failureListeners = new Set<(error: Error) => void>();
   private failure: Error | null = null;
   private closed = false;
@@ -96,7 +93,12 @@ export class RemoteAgentConnection {
     );
   }
 
-  private constructor(child: ChildProcessWithoutNullStreams, maxFrameBytes: number) {
+  private constructor(
+    child: ChildProcessWithoutNullStreams,
+    maxFrameBytes: number,
+    maxUnclaimedFrames?: number,
+  ) {
+    this.inbox = new RemoteAgentFrameInbox(maxUnclaimedFrames);
     this.child = child;
     this.processLifecycle = trackRemoteAgentProcess(child);
     this.maxFrameBytes = maxFrameBytes;
@@ -220,20 +222,12 @@ export class RemoteAgentConnection {
   }
 
   async nextFrame(matches?: (frame: RemoteAgentFrame) => boolean): Promise<RemoteAgentFrame> {
-    const queuedIndex = matches
-      ? this.queuedFrames.findIndex((frame) => frame.type === "protocolError" || matches(frame))
-      : this.queuedFrames.findIndex(
-          (frame) =>
-            !this.waiters.some(
-              (waiter) =>
-                waiter.matches && (frame.type === "protocolError" || waiter.matches(frame)),
-            ),
-        );
-    if (queuedIndex >= 0) return this.queuedFrames.splice(queuedIndex, 1)[0]!;
+    const queued = matches ? this.inbox.takeUnclaimed(matches) : this.inbox.takeUnwaited();
+    if (queued) return queued;
     if (this.failure) throw this.failure;
     if (this.closed) throw new RemoteAgentConnectionError("Remote agent connection is closed.");
     return new Promise<RemoteAgentFrame>((resolve, reject) => {
-      this.waiters.push(matches ? { resolve, reject, matches } : { resolve, reject });
+      this.inbox.waiters.push(matches ? { resolve, reject, matches } : { resolve, reject });
     });
   }
 
@@ -243,10 +237,10 @@ export class RemoteAgentConnection {
     signal?: AbortSignal,
   ): Promise<RemoteAgentFrame> {
     signal?.throwIfAborted();
-    const queued = this.takeQueuedFrame(matches);
+    const queued = this.inbox.takeUnclaimed(matches);
     if (queued) return this.assertRequestResponse(queued);
     const response = await requestRemoteFrame(
-      this.waiters,
+      this.inbox.waiters,
       () => this.send(frame),
       matches,
       signal,
@@ -258,14 +252,14 @@ export class RemoteAgentConnection {
     encoded: Uint8Array,
     matches: (response: RemoteAgentFrame) => boolean,
   ): Promise<RemoteAgentFrame> {
-    const queued = this.takeQueuedFrame(matches);
+    const queued = this.inbox.takeUnclaimed(matches);
     if (queued) return this.assertRequestResponse(queued);
     const response = await new Promise<RemoteAgentFrame>((resolve, reject) => {
       const waiter: FrameWaiter = { resolve, reject, matches };
-      this.waiters.push(waiter);
+      this.inbox.waiters.push(waiter);
       void this.sendEncoded(encoded).catch((error: unknown) => {
-        const index = this.waiters.indexOf(waiter);
-        if (index >= 0) this.waiters.splice(index, 1);
+        const index = this.inbox.waiters.indexOf(waiter);
+        if (index >= 0) this.inbox.waiters.splice(index, 1);
         reject(error instanceof Error ? error : new RemoteAgentConnectionError(String(error)));
       });
     });
@@ -277,7 +271,7 @@ export class RemoteAgentConnection {
     this.closed = true;
     closeRemoteAgentProcess(this.child);
     const error = new RemoteAgentConnectionError("Remote agent connection is closed.");
-    for (const waiter of this.waiters.splice(0)) waiter.reject(error);
+    this.inbox.rejectWaiters(error);
   }
 
   /**
@@ -296,7 +290,7 @@ export class RemoteAgentConnection {
       closeRemoteAgentProcess(this.child),
     );
     const error = new RemoteAgentConnectionError("Remote agent connection is closed.");
-    for (const waiter of this.waiters.splice(0)) waiter.reject(error);
+    this.inbox.rejectWaiters(error);
   }
 
   closeConfirmed(timeoutMs = 2_000): Promise<void> {
@@ -310,8 +304,8 @@ export class RemoteAgentConnection {
   }
 
   onFrame(listener: FrameListener): () => void {
-    this.frameListeners.add(listener);
-    return () => this.frameListeners.delete(listener);
+    this.inbox.listeners.add(listener);
+    return () => this.inbox.listeners.delete(listener);
   }
 
   private consume(chunk: Buffer): void {
@@ -326,51 +320,16 @@ export class RemoteAgentConnection {
       const encoded = this.readBuffer.subarray(0, length + 4);
       this.readBuffer = this.readBuffer.subarray(length + 4);
       try {
-        this.deliver(decodeDelimitedFrame(encoded, this.maxFrameBytes));
+        const overflow = this.inbox.deliver(decodeDelimitedFrame(encoded, this.maxFrameBytes));
+        if (overflow) {
+          this.disconnect(overflow);
+          return;
+        }
       } catch (error) {
         this.fail(error);
         return;
       }
     }
-  }
-
-  private deliver(frame: RemoteAgentFrame): void {
-    let consumed = false;
-    for (const listener of this.frameListeners) {
-      if (listener(frame) === true) consumed = true;
-    }
-    const waiterIndex = this.waiters.findIndex(
-      (waiter) => waiter.matches && (frame.type === "protocolError" || waiter.matches(frame)),
-    );
-    const waiter =
-      waiterIndex >= 0
-        ? this.waiters.splice(waiterIndex, 1)[0]
-        : this.waiters.find((candidate) => candidate.matches === undefined);
-    if (waiter && waiter.matches === undefined) {
-      const index = this.waiters.indexOf(waiter);
-      if (index >= 0) this.waiters.splice(index, 1);
-    }
-    if (waiter) waiter.resolve(frame);
-    else if (!consumed) {
-      // PTY consumers install listeners/waiters before dispatch. Unclaimed late frames
-      // belong to retired observations; output/exit are recovered from agent replay.
-      if (
-        frame.type === "ptyOutput" ||
-        frame.type === "ptyExited" ||
-        frame.type === "ptyAttachResponse"
-      )
-        return;
-      this.queuedFrames.push(frame);
-    }
-  }
-
-  private takeQueuedFrame(
-    matches: (frame: RemoteAgentFrame) => boolean,
-  ): RemoteAgentFrame | undefined {
-    const index = this.queuedFrames.findIndex(
-      (frame) => frame.type === "protocolError" || matches(frame),
-    );
-    return index >= 0 ? this.queuedFrames.splice(index, 1)[0] : undefined;
   }
 
   private assertRequestResponse(frame: RemoteAgentFrame): RemoteAgentFrame {
@@ -394,7 +353,7 @@ export class RemoteAgentConnection {
               ? (error as NodeJS.ErrnoException).code
               : undefined,
           );
-    for (const waiter of this.waiters.splice(0)) waiter.reject(this.failure);
+    this.inbox.rejectWaiters(this.failure);
     for (const listener of this.failureListeners) listener(this.failure);
   }
 }
