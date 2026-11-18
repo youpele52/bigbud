@@ -56,6 +56,9 @@ build-remote-backend-graph *args:
 remote-backend-graph *args:
     bun run remote-backend-graph "$@"
 
+licenses-rust *args:
+    bun run licenses:rust "$@"
+
 build-desktop *args:
     bun run build:desktop "$@"
 

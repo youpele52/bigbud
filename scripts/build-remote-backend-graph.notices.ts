@@ -137,3 +137,38 @@ export function noticeSummary(entries: ReadonlyArray<GraphNoticeEntry>) {
     licenses: Object.fromEntries([...licenses].toSorted((a, b) => (a[0] < b[0] ? -1 : 1))),
   };
 }
+
+/** Plain-text aggregate of every notice file the entries reference, in entry order. It is derived
+ * from the same entries as `NOTICES.json` and states declared-only or missing evidence as such;
+ * it does not interpret any license. `read` returns a referenced file's bytes, which must still
+ * match the recorded hash. */
+export async function renderThirdPartyNotices(
+  title: string,
+  entries: ReadonlyArray<GraphNoticeEntry>,
+  read: (path: string) => Promise<Buffer>,
+) {
+  const rule = "=".repeat(78);
+  const parts = [
+    `${title}\n\nThis file collects the license and notice files shipped with each component, ` +
+      `as listed in the\naccompanying inventory. It is generated, not a legal review.\n`,
+  ];
+  for (const entry of entries) {
+    const label = entry.version ? `${entry.name}@${entry.version}` : entry.name;
+    parts.push(
+      `\n${rule}\n${label} (${entry.kind})\nDeclared license: ${entry.license ?? "none declared"}\n` +
+        `Location: ${entry.directory || (entry.kind === "bundled" ? "inlined into the server bundle" : "archive root")}\n`,
+    );
+    if (!entry.files.length)
+      parts.push("\nNo license or notice file is shipped for this component.\n");
+    for (const file of entry.files) {
+      const bytes = await read(file.path);
+      if (sha256(bytes) !== file.sha256)
+        throw new Error(`Notice file ${file.path} changed after it was inventoried.`);
+      const text = bytes.includes(0)
+        ? `[binary file, ${bytes.length} bytes]`
+        : bytes.toString("utf8").replace(/\r\n?/g, "\n").trimEnd();
+      parts.push(`\n--- ${file.path} (sha256 ${file.sha256}) ---\n\n${text}\n`);
+    }
+  }
+  return parts.join("");
+}

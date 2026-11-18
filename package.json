@@ -43,6 +43,7 @@
     "package:mobile-components": "bun run scripts/package-mobile-components.ts",
     "build:remote-backend-graph": "bun run scripts/build-remote-backend-graph.ts",
     "remote-backend-graph": "bun run scripts/build-remote-backend-graph.stage.cli.ts",
+    "licenses:rust": "bun run scripts/rust-dependency-licenses.ts",
     "build:desktop": "turbo run build --filter=@bigbud/desktop --filter=@bigbud/server",
     "typecheck": "turbo run typecheck",
     "lint": "oxlint --report-unused-disable-directives && bun run scripts/check-test-file-length.ts",

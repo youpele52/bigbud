@@ -66,6 +66,7 @@ Bun scripts remain the source of truth for workflow implementation. The just rec
 | `bun run package:mobile-components`  | `just package-mobile-components`  |
 | `bun run build:remote-backend-graph` | `just build-remote-backend-graph` |
 | `bun run remote-backend-graph`       | `just remote-backend-graph`       |
+| `bun run licenses:rust`              | `just licenses-rust`              |
 | `bun run build:desktop`              | `just build-desktop`              |
 | `bun run build:contracts`            | `just build-contracts`            |
 | `bun run build:workspace-agent`      | `just build-workspace-agent`      |
@@ -153,6 +154,25 @@ key beside the artifacts; those graphs are for inspection only.
 
 ```sh
 gh workflow run release-remote-backend-graph.yml --ref dev
+```
+
+Each graph also carries `THIRD_PARTY_NOTICES`, the text of every licence and notice file that
+`NOTICES.json` lists, generated in the same step.
+
+### Rust dependency licences
+
+`bun run licenses:rust` writes a licence inventory for one workspace crate's dependency closure
+(default `bigbud-remote-agent`) from `cargo metadata --locked --filter-platform <target>`. Each
+crate is marked `linked` or `build-time` with its declared licence and the hashes of the licence
+files in its source. `--notices-output` also writes a `THIRD_PARTY_NOTICES` text for the linked
+crates. Outputs must not exist. Add `--offline` when the crate sources are already fetched. See
+[the release handoff](validation/remote-backend-release-handoff.md).
+
+```sh
+bun run licenses:rust --target x86_64-unknown-linux-musl --output /tmp/agent-licenses.json \
+  --notices-output /tmp/agent-THIRD_PARTY_NOTICES
+bun run licenses:rust --package bigbud-mobile-gateway --target aarch64-unknown-linux-gnu \
+  --output /tmp/gateway-licenses.json
 ```
 
 ## Root: checks, tests, and cleanup

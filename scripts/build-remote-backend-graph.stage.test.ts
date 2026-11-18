@@ -139,6 +139,7 @@ it("stage_is_deterministic", async () => {
   expect(first.manifest.files.map((file) => file.path)).toEqual([
     "LICENSE",
     "NOTICES.json",
+    "THIRD_PARTY_NOTICES",
     "node_modules/dep/LICENSE",
     "node_modules/dep/index.js",
     "node_modules/dep/package.json",
@@ -149,6 +150,11 @@ it("stage_is_deterministic", async () => {
     "server/chunk.mjs",
     "server/remote-client-relay/remoteBackendClientRelay.mjs",
   ]);
+  // The aggregate is byte-identical across builds and carries every referenced notice text.
+  const notices = await read(first.graph, "THIRD_PARTY_NOTICES");
+  expect(notices).toBe(await read(second.graph, "THIRD_PARTY_NOTICES"));
+  for (const text of ["MIT bigbud", "Node license", "MIT dep", "dep@1.0.0 (package)"])
+    expect(notices).toContain(text);
   await expect(
     verifyBackendGraph({
       root: first.graph,

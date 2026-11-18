@@ -30,6 +30,7 @@ import {
   collectPackageNotices,
   noticeFiles,
   noticeSummary,
+  renderThirdPartyNotices,
   type GraphNoticeEntry,
 } from "./build-remote-backend-graph.notices.ts";
 import {
@@ -42,6 +43,7 @@ import { buildRemoteBackendGraph } from "./build-remote-backend-graph.producer.t
 
 export const GRAPH_NODE = "runtime/node";
 export const GRAPH_ENTRY = "server/bin.mjs";
+export const THIRD_PARTY_NOTICES = "THIRD_PARTY_NOTICES";
 const forbidden = /^(?:\.env.*|\.git|\.npmrc|\.netrc|\.bigbud|\.config)$/;
 const sha256 = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 
@@ -145,6 +147,13 @@ export async function assembleBackendGraph(input: AssembleBackendGraphInput) {
       ...bundled.entries,
       ...(await collectPackageNotices(graph)),
     ];
+    // Derived from the same entries after they are collected, so it never lists itself.
+    const thirdParty = await renderThirdPartyNotices(
+      "bigbud remote backend graph: third-party notices",
+      notices,
+      (path) => readFile(join(graph, path)),
+    );
+    await writeFile(join(graph, THIRD_PARTY_NOTICES), thirdParty, { flag: "wx", mode: 0o600 });
     const noticeJson = `${JSON.stringify({ schemaVersion: 1, entries: notices }, null, 2)}\n`;
     await writeFile(join(graph, "NOTICES.json"), noticeJson, { flag: "wx", mode: 0o600 });
     await privateDirectories(graph);
