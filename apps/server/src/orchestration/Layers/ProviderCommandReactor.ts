@@ -1,6 +1,6 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
-import { Cause, Effect, Layer, Option, Schedule, Scope, Stream } from "effect";
-import { type DrainableWorker, makeDrainableWorker } from "@bigbud/shared/DrainableWorker";
+import { Cause, Effect, Layer, Option, Schedule, Stream } from "effect";
+import { makeKeyedDrainableWorkers } from "../keyedDrainableWorkers.ts";
 
 import {
   ProviderCommandReactor,
@@ -75,24 +75,10 @@ const make = Effect.gen(function* () {
       }),
     );
 
-  // Per-thread worker map: each thread gets its own DrainableWorker so that
-  // a slow operation on one thread (e.g. spawning the Codex process) does not
-  // block intent events for any other thread.
-  const aggregateWorkers = new Map<string, DrainableWorker<ProviderIntentEvent>>();
-  const outerScope = yield* Effect.scope;
-
-  const getOrCreateAggregateWorker = (
-    aggregateKey: string,
-  ): Effect.Effect<DrainableWorker<ProviderIntentEvent>> => {
-    const existing = aggregateWorkers.get(aggregateKey);
-    if (existing !== undefined) {
-      return Effect.succeed(existing);
-    }
-    return makeDrainableWorker(processDomainEventSafely).pipe(
-      Effect.provideService(Scope.Scope, outerScope),
-      Effect.tap((worker) => Effect.sync(() => aggregateWorkers.set(aggregateKey, worker))),
-    );
-  };
+  // Per-aggregate workers: each thread or project gets its own DrainableWorker so that a slow
+  // operation on one (e.g. spawning the Codex process) does not block intent events for any
+  // other. Idle workers are closed and recreated on demand (F-B2, `keyedDrainableWorkers`).
+  const aggregateWorkers = yield* makeKeyedDrainableWorkers(processDomainEventSafely);
 
   const start: ProviderCommandReactorShape["start"] = Effect.fn("start")(function* () {
     yield* startTerminalTitles();
@@ -114,12 +100,12 @@ const make = Effect.gen(function* () {
         event.type === "thread.session-stop-requested" ||
         event.type === "thread.deletion-requested"
       ) {
-        const worker = yield* getOrCreateAggregateWorker(
+        return yield* aggregateWorkers.enqueue(
           "projectId" in event.payload
             ? `project:${event.payload.projectId}`
             : `thread:${event.payload.threadId}`,
+          event,
         );
-        return yield* worker.enqueue(event);
       }
     });
 
@@ -203,13 +189,8 @@ const make = Effect.gen(function* () {
 
   return {
     start,
-    // Lazily capture workers at drain time so newly-created thread workers are
-    // included. Runs all active per-thread drain effects concurrently.
-    drain: Effect.suspend(() =>
-      Effect.forEach(Array.from(aggregateWorkers.values()), (worker) => worker.drain, {
-        concurrency: "unbounded",
-      }),
-    ).pipe(Effect.asVoid),
+    // Waits for every live per-aggregate worker, including ones created meanwhile.
+    drain: aggregateWorkers.drain,
   } satisfies ProviderCommandReactorShape;
 });
 
