@@ -42,15 +42,14 @@ export const EnvServerConfig = Config.all({
     Config.string("BIGBUD_TRACE_FILE"),
     Config.string("T3CODE_TRACE_FILE"),
   ),
-  traceMaxBytes: aliasedWithDefault(
+  // Defaults depend on the runtime mode; see startup/config.traceRotation.ts.
+  traceMaxBytes: aliasedOptional(
     Config.int("BIGBUD_TRACE_MAX_BYTES"),
     Config.int("T3CODE_TRACE_MAX_BYTES"),
-    10 * 1024 * 1024,
   ),
-  traceMaxFiles: aliasedWithDefault(
+  traceMaxFiles: aliasedOptional(
     Config.int("BIGBUD_TRACE_MAX_FILES"),
     Config.int("T3CODE_TRACE_MAX_FILES"),
-    10,
   ),
   traceBatchWindowMs: aliasedWithDefault(
     Config.int("BIGBUD_TRACE_BATCH_WINDOW_MS"),

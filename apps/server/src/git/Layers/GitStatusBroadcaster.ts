@@ -21,6 +21,13 @@ import {
 } from "../Services/GitStatusBroadcaster.ts";
 import { type GitStatusDetails } from "../Services/GitCore.ts";
 
+/**
+ * Per-subscriber backlog for one cwd. Every event carries the full local or remote state, so
+ * a slow subscriber (for example a remote client on a slow link) only needs the newest ones:
+ * the PubSub slides, dropping that subscriber's oldest events instead of growing without limit.
+ */
+export const GIT_STATUS_SUBSCRIBER_BACKLOG_CAPACITY = 64;
+
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function toLocalResult(details: GitStatusDetails): GitStatusLocalResult {
@@ -68,7 +75,9 @@ export const makeGitStatusBroadcaster = Effect.fn("makeGitStatusBroadcaster")(fu
     const existing = map.get(cwd);
     if (existing) return existing;
 
-    const pubSub = yield* PubSub.unbounded<GitStatusStreamEvent>();
+    const pubSub = yield* PubSub.sliding<GitStatusStreamEvent>(
+      GIT_STATUS_SUBSCRIBER_BACKLOG_CAPACITY,
+    );
     const localRef = yield* Ref.make<GitStatusLocalResult | null>(null);
     const remoteRef = yield* Ref.make<GitStatusRemoteResult | null>(null);
     const entry: BroadcasterEntry = { pubSub, localRef, remoteRef };

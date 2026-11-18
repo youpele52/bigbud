@@ -8,6 +8,7 @@ import {
   RemoteProfileConfigurationError,
 } from "../startup/config.remote.ts";
 import { resolveRemoteMobileConfiguration } from "../startup/config.remoteMobile.ts";
+import { resolveTraceRotation } from "../startup/config.traceRotation.ts";
 import { ensurePrivateRemoteStateRoot } from "../remote-backend/authority.files.ts";
 
 import { NetService } from "@bigbud/shared/Net";
@@ -287,8 +288,10 @@ export const resolveServerConfig = (
       traceMinLevel: env.traceMinLevel,
       traceTimingEnabled: env.traceTimingEnabled,
       traceBatchWindowMs: env.traceBatchWindowMs,
-      traceMaxBytes: env.traceMaxBytes,
-      traceMaxFiles: env.traceMaxFiles,
+      ...resolveTraceRotation(mode, {
+        maxBytes: env.traceMaxBytes,
+        maxFiles: env.traceMaxFiles,
+      }),
       ...(env.traceMode === undefined ? {} : { traceMode: env.traceMode }),
       traceDiagnosticTtlMs: env.traceDiagnosticTtlMs,
       otlpTracesUrl:

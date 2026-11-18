@@ -133,12 +133,30 @@ export function createEffectiveCapabilityCatalog(input: {
   return createCapabilityCatalog([...BIGBUD_CAPABILITY_TRACKS, ...dynamicTracks]);
 }
 
+/**
+ * Effective catalogs are set on every turn start, so an evicted idle thread gets its catalog
+ * back on its next turn; until then callers fall back to the static catalog. Least recently
+ * used threads are evicted so a long-running backend does not keep one per thread ever seen.
+ */
+export const MAX_EFFECTIVE_CAPABILITY_CATALOG_THREADS = 512;
+
 const catalogsByThreadId = new Map<string, CapabilityCatalog>();
 
 export function setEffectiveCapabilityCatalog(threadId: string, catalog: CapabilityCatalog): void {
+  catalogsByThreadId.delete(threadId);
   catalogsByThreadId.set(threadId, catalog);
+  while (catalogsByThreadId.size > MAX_EFFECTIVE_CAPABILITY_CATALOG_THREADS) {
+    const oldest = catalogsByThreadId.keys().next().value;
+    if (oldest === undefined) break;
+    catalogsByThreadId.delete(oldest);
+  }
 }
 
 export function getEffectiveCapabilityCatalog(threadId: string): CapabilityCatalog | undefined {
-  return catalogsByThreadId.get(threadId);
+  const catalog = catalogsByThreadId.get(threadId);
+  if (catalog !== undefined) {
+    catalogsByThreadId.delete(threadId);
+    catalogsByThreadId.set(threadId, catalog);
+  }
+  return catalog;
 }

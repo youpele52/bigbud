@@ -489,8 +489,15 @@ Local trace file:
 - `BIGBUD_TRACE_MODE`: `production` (default), `diagnostic`, or `all`. Diagnostic mode retains fast successful spans temporarily; all mode retains them without the diagnostic expiry. Increased capture can contain more sensitive context and consume more disk space.
 - `BIGBUD_TRACE_DIAGNOSTIC_TTL_MS`: diagnostic capture duration, default `900000` (15 minutes), then production retention resumes.
 - `BIGBUD_TRACE_FILE`: override trace file path
-- `BIGBUD_TRACE_MAX_BYTES`: per-file rotation size, default `10485760`
-- `BIGBUD_TRACE_MAX_FILES`: rotated file count, default `10`
+- `BIGBUD_TRACE_MAX_BYTES`: per-file rotation size, default `10485760` (10 MiB); `8388608` (8 MiB) in remote mode
+- `BIGBUD_TRACE_MAX_FILES`: rotated file count, default `10`; `4` in remote mode
+
+The remote profile (`--mode remote`) keeps the trace file to at most 40 MiB (the active file plus
+four rotated files) because remote backends run on small VPS disks. Explicit values still win
+([`config.traceRotation.ts`](../../apps/server/src/startup/config.traceRotation.ts)). Server logs
+go to stdout/stderr; under the remote profile that is the systemd journal, which journald rotates
+by its own limits (`SystemMaxUse`, by default 10% of the file system, capped at 4 GiB).
+
 - `BIGBUD_TRACE_BATCH_WINDOW_MS`: flush window, default `200`
 - `BIGBUD_TRACE_MIN_LEVEL`: minimum trace level, default `Info`
 - `BIGBUD_TRACE_TIMING_ENABLED`: enable timing metadata, default `true`
