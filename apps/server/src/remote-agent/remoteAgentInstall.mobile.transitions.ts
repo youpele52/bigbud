@@ -7,7 +7,9 @@ import {
   verifyMobileOptionalArtifactSignature,
   type MobileOptionalArtifactHost,
 } from "@bigbud/shared/mobileOptionalArtifact";
+import { MobileStageBudgetExhausted } from "./mobileStageRetirement.rules.ts";
 import {
+  MAX_MOBILE_REGISTRY_STAGES,
   MobileRegistryOwnerSchema,
   MobileRegistryControllerSchema,
   mobileRegistryOwnerEqual,
@@ -157,6 +159,8 @@ export function reserveRemoteAgentMobileStage(
     }
     return state;
   }
+  // Settled stages retire first (publication and repair); only genuinely live ones fill the cap.
+  if (mobile.stages.length >= MAX_MOBILE_REGISTRY_STAGES) throw new MobileStageBudgetExhausted();
   return changed(state, {
     ...mobile,
     releases: mobile.releases.some((entry) => entry.id === release.id)

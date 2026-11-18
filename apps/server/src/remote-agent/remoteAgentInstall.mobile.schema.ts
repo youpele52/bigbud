@@ -47,6 +47,25 @@ export const MobileRegistryReleaseSchema = Schema.Struct({
   assets: MobileOptionalArtifact,
 });
 export type MobileRegistryRelease = typeof MobileRegistryReleaseSchema.Type;
+/**
+ * Monotonic tally of settled history retired from the bounded journal (`mobileStageRetirement`).
+ * `revisionFloor` is the highest consent revision of any retired stage: a new stage must be newer,
+ * so a retired (id, revision) replay fence can never be re-admitted. The counters keep the
+ * selection-revision and attempt-kind sequences continuous after their prefixes leave.
+ */
+export const MobileRegistryRetiredSchema = Schema.Struct({
+  stages: Counter,
+  revisionFloor: Counter,
+  selections: Counter,
+  attempts: Counter,
+});
+export type MobileRegistryRetired = typeof MobileRegistryRetiredSchema.Type;
+export const NO_MOBILE_REGISTRY_RETIREMENT: MobileRegistryRetired = Object.freeze({
+  stages: 0,
+  revisionFloor: 0,
+  selections: 0,
+  attempts: 0,
+});
 export const MobileRegistrySchema = Schema.Struct({
   owner: MobileRegistryOwnerSchema,
   consent: Schema.Struct({
@@ -57,6 +76,7 @@ export const MobileRegistrySchema = Schema.Struct({
   gatewayLifecycle: Schema.optional(MobileGatewayLifecycle),
   desired: Schema.optional(MobileGatewayDesiredSelection),
   desiredHistory: Schema.optional(Schema.Array(MobileGatewayDesiredSelection)),
+  retired: Schema.optional(MobileRegistryRetiredSchema),
   stages: Schema.Array(
     Schema.Struct({
       id: Token,
@@ -117,7 +137,15 @@ export function validateMobileRegistry(mobile: MobileRegistry): void {
   ) {
     throw new Error("Mobile registry record budget exceeded.");
   }
-  if (mobile.gatewayLifecycle) validateMobileGatewayLifecycle(mobile.gatewayLifecycle);
+  const retired = mobile.retired ?? NO_MOBILE_REGISTRY_RETIREMENT;
+  // Only superseded consent revisions retire, so the floor stays below the current revision.
+  if (
+    retired.revisionFloor >= mobile.consent.revision ||
+    (retired.stages === 0) !== (retired.revisionFloor === 0)
+  )
+    throw new Error("Invalid mobile retirement tally.");
+  if (mobile.gatewayLifecycle)
+    validateMobileGatewayLifecycle(mobile.gatewayLifecycle, retired.attempts);
   validateMobileGatewaySelections(mobile);
   const releases = new Set<string>();
   for (const release of mobile.releases) {

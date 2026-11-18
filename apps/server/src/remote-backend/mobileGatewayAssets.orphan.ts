@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import type { MobileRegistryOwner } from "../remote-agent/remoteAgentInstall.mobile.schema.ts";
 import type { RemoteAgentRegistry } from "../remote-agent/remoteAgentInstall.registry.ts";
+import type { MobileStageRetirementReport } from "../remote-agent/mobileStageRetirement.ts";
 import { privateDirectory } from "../remote-agent/mobileOptionalPublication.files.ts";
 import {
   mobileRuntimeAnchorMatches,
@@ -41,6 +42,8 @@ export interface MobileRuntimeRepairReport {
   readonly removed: number;
   readonly kept: number;
   readonly entries: readonly MobileRuntimeRepairEntry[];
+  /** Stage retirement after the GC; `null` when it could not run (publication lease held). */
+  readonly stages?: MobileStageRetirementReport | null;
 }
 /** Above the preparation cap (64), so every admitted generation is classified. */
 export const MOBILE_RUNTIME_REPAIR_MAX_ENTRIES = 128;

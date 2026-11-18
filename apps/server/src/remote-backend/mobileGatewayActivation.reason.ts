@@ -8,6 +8,7 @@ export const MOBILE_ACTIVATION_REASONS = [
   "authority-unavailable",
   "journal-unreadable",
   "publication-failed",
+  "stage-budget-exhausted",
   "selection-failed",
   "consent-revoked",
   "stop-requested",
@@ -33,6 +34,7 @@ export type MobileActivationReason = (typeof MOBILE_ACTIVATION_REASONS)[number];
 /** Error names that identify a step by themselves, most specific first. */
 const NAMED_REASONS: ReadonlyArray<readonly [string, MobileActivationReason]> = [
   ["MobileGatewayAdmissionRevoked", "consent-revoked"],
+  ["MobileStageBudgetExhausted", "stage-budget-exhausted"],
   ["MobileGatewayNativeAdmissionRefused", "admission-refused"],
   ["MobileGatewayRouteUnverified", "route-unverified"],
   ["MobileActivationWorkerRepair", "native-cleanup-uncertain"],

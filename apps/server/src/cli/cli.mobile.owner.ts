@@ -16,6 +16,7 @@ import {
   formatMobileOwnerRepair,
   formatMobileOwnerResolve,
   formatMobileOwnerStatus,
+  mobileActivationReasonGuidance,
   writeMobileOwnerReply,
 } from "./cli.mobile.owner.format.ts";
 
@@ -95,7 +96,11 @@ const activate = Command.make("activate", {
       (ack) =>
         started(ack.status)
           ? `Activation ${ack.status} (request ${ack.requestId}). This is not readiness; check status.`
-          : `Activation not started: ${notStarted[ack.status] ?? ack.status}${ack.reason ? ` (${ack.reason})` : ""}.`,
+          : `Activation not started: ${notStarted[ack.status] ?? ack.status}${ack.reason ? ` (${ack.reason})` : ""}.${
+              ack.reason && mobileActivationReasonGuidance[ack.reason]
+                ? ` ${mobileActivationReasonGuidance[ack.reason]}`
+                : ""
+            }`,
       // Only an accepted acknowledgement is success; every other status started nothing.
       (ack) => started(ack.status),
     ),

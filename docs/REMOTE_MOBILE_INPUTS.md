@@ -82,19 +82,60 @@ the journal. That setting stays revoke-only:
 
 ## Stages after a consent change
 
-Every consent change cancels every stage, and a cancelled stage is a permanent replay fence. The
-stage id in the inputs file is therefore used only by the first grant that publishes it. After a
-revoke and a new grant, activation publishes a stage named `<stageId>.r<revision>` for the new
-consent revision. You do not need to change the inputs file.
+Every consent change cancels every stage, and a cancelled stage is a replay fence. The stage id in
+the inputs file is therefore used only by the first grant that publishes it. After a revoke and a
+new grant, activation publishes a stage named `<stageId>.r<revision>` for the new consent revision.
+You do not need to change the inputs file.
 
 - An original from an earlier grant still names its own stage and revision, so it can only be
   revoked, never served again.
-- The journal keeps at most 16 stages per installation, so the number of consent cycles is
-  bounded. When the budget is spent, activation fails at publication (`publication-failed` in
-  status) and never reuses a fenced stage.
 - An activation that fails before native Start reports `failed` with the step that failed, and the
   controller keeps its phase (for example `idle`). Only work that reached native Start can leave
   the controller `uncertain`.
+
+### Retiring old stages
+
+Consent cycles are unlimited. Every publication, and every `bigbud mobile repair`, first retires
+stages that are provably unused, so the journal stays small. A stage is retired only when all of
+these hold:
+
+- It belongs to an earlier consent revision (so it is already cancelled and cannot be served).
+- The desired selection does not name it.
+- Every gateway attempt of its revision is settled: its exit was recorded, or its native epoch
+  ended (`repair --resolve` or the automatic check at attach). These are the same evidence rules as
+  the orphan GC and `--resolve`.
+- No gateway base pin of those attempts remains.
+- Each original's runtime-asset tree and receipt is already gone. The orphan GC removes them first
+  (`mobile repair` runs it before retirement), because its proof needs the attempt record.
+- Its published files are the journal's exact owner-keyed directory, anchored by device and inode,
+  and hold only the two component files, each matching the publication receipt. A foreign or
+  changed member is preserved, and the stage is kept.
+- Its attempts and history rows are the oldest in the journal. Older live history has to retire
+  first.
+
+Retirement removes the files with the same stamp-checked, non-recursive removal as the orphan GC,
+then retires the stage, its settled attempts, its history rows, and releases nothing else uses, in
+one journal write. Files go before rows, and missing files count as removed, so a crash at any
+point is finished by the next run. A retired stage id is never issued again, and a new stage must
+belong to a newer revision than every retired one. A small `retired` tally in the journal keeps
+the selection and attempt sequences continuous. Older backends without this support refuse to
+read such a journal (they fail closed).
+
+`bigbud mobile repair` prints one line per stage, for example
+`retired inputs-stage.r3: retired` or `kept inputs-stage.r5: desired`. Other reasons are
+`current-consent`, `unsettled-attempt`, `pinned`, `history-order`, `runtime-assets-present`,
+`publication-unverified`, `publication-foreign`, `removal-failed` and `journal-changed`. While an
+activation holds the publication, retirement is skipped ("did not run") and happens at the next
+publication.
+
+The journal still holds at most 16 stages as a safety bound. Activation refuses only when all 16
+are still live. It then fails before native Start with `stage-budget-exhausted`, not
+`publication-failed`, and the CLI tells you to run `bigbud mobile repair` (with `--resolve` after
+a reboot) to settle and retire old stages.
+
+Activations within one consent revision share that revision's stage and still count against the
+journal's 16-entry selection history and 32-entry attempt ledger. Those rows retire with their
+stage after a later grant and a newer selection, not before.
 
 ## Status reasons
 

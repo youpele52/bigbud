@@ -136,7 +136,8 @@ export function reserveMobileGatewayAttempt(
     binding: context.binding,
     configuration: context.configuration,
     reservedAtUnixMs: context.now,
-    kind: lifecycle.attempts.length ? "crash-restart" : "initial",
+    kind:
+      lifecycle.attempts.length || current.mobile.retired?.attempts ? "crash-restart" : "initial",
     phase: "reserved",
   };
   const pinned = pinRemoteAgentBuild(state, mobileGatewayBuildPin(nonce), context.binding.buildId);

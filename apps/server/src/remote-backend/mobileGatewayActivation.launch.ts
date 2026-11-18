@@ -70,12 +70,8 @@ export const runNativeMobileActivation = Effect.fn("runNativeMobileActivation")(
   if (state.schemaVersion !== 3 || !state.mobile.consent.enabled)
     return { kind: "disabled" } as NativeMobileActivationOutcome;
   const consentRevision = state.mobile.consent.revision;
-  // A consent change fences the inputs' stage forever; a new grant publishes its own stage.
-  const stageId = mobileStageIdForConsent(
-    state.mobile.stages,
-    inputs.artifacts.stageId,
-    consentRevision,
-  );
+  // A consent change fences the inputs' stage; a new grant publishes its own stage.
+  const stageId = mobileStageIdForConsent(state.mobile, inputs.artifacts.stageId, consentRevision);
   const published = state.mobile.stages.some(
     (stage) =>
       stage.id === stageId &&
@@ -122,12 +118,15 @@ export const runNativeMobileActivation = Effect.fn("runNativeMobileActivation")(
       },
     ),
   );
-  if (Exit.isFailure(settled))
+  if (Exit.isFailure(settled)) {
+    const named = classifyMobileActivationCause(settled.cause);
+    // A full journal of live stages is its own typed refusal with repair guidance.
     return failed(
       settled.cause,
       selected,
-      selected ? classifyMobileActivationCause(settled.cause) : step,
+      selected || named === "stage-budget-exhausted" ? named : step,
     );
+  }
   const session = settled.value;
   if (Exit.isFailure(session)) {
     const error = Cause.findErrorOption(session.cause);

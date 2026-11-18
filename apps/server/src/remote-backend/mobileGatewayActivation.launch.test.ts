@@ -8,6 +8,7 @@ import {
   runNativeMobileActivation,
   type NativeMobileActivationOutcome,
 } from "./mobileGatewayActivation.launch.ts";
+import { MobileStageBudgetExhausted } from "../remote-agent/mobileStageRetirement.rules.ts";
 import {
   NativeMobileGatewaySessionError,
   type NativeMobileGatewaySessionSignals,
@@ -19,6 +20,7 @@ const script = vi.hoisted(() => ({
   authority: true,
   journal: {} as unknown,
   selection: undefined as Error | undefined,
+  publication: undefined as Error | undefined,
   session: undefined as unknown,
   sessionSignals: undefined as NativeMobileGatewaySessionSignals | undefined,
   lifetime: new AbortController(),
@@ -43,6 +45,7 @@ vi.mock("../remote-agent/mobileOptionalPublication.ts", async () => {
   const publisher = {
     publish: async (request: { gatewayBytes: Uint8Array; consentRevision: number }) => {
       script.events.push(`publish:${request.consentRevision}:${request.gatewayBytes.length}`);
+      if (script.publication) throw script.publication;
       return proof;
     },
     remint: async (stageId: string, revision: number) => {
@@ -122,6 +125,7 @@ afterEach(() => {
   script.events.length = 0;
   script.authority = true;
   script.selection = undefined;
+  script.publication = undefined;
   script.lifetime = new AbortController();
 });
 
@@ -198,4 +202,28 @@ it("losing the publication lifetime detaches the session, never stops it", async
   script.lifetime.abort();
   expect(script.sessionSignals!.detach.aborted).toBe(true);
   expect(script.sessionSignals!.stop.aborted).toBe(false);
+});
+
+it("reports a journal full of live stages as its own guided reason, not publication-failed", async () => {
+  const dir = await fs.mkdtemp(join(tmpdir(), "bigbud-activation-"));
+  try {
+    await fs.writeFile(join(dir, "gateway"), "abc");
+    await fs.writeFile(join(dir, "assets"), "defg");
+    script.journal = journal();
+    script.publication = new MobileStageBudgetExhausted();
+    expect((await launch(inputs(dir))).outcome).toMatchObject({
+      kind: "failed",
+      repairRequired: false,
+      reason: "stage-budget-exhausted",
+    });
+    script.publication = Error("disk full");
+    expect((await launch(inputs(dir))).outcome).toMatchObject({
+      kind: "failed",
+      repairRequired: false,
+      reason: "publication-failed",
+    });
+    expect(script.events).not.toContain("session");
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });

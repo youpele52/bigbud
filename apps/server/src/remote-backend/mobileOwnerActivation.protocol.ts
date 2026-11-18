@@ -8,6 +8,7 @@ import {
 import { MOBILE_RUNTIME_REPAIR_REASONS } from "./mobileGatewayAssets.orphan.reasons.ts";
 import { MOBILE_ACTIVATION_REASONS } from "./mobileGatewayActivation.reason.ts";
 import { MOBILE_NATIVE_RESOLVE_REASONS } from "./mobileGatewayNative.resolve.ts";
+import { MOBILE_STAGE_RETIREMENT_REASONS } from "../remote-agent/mobileStageRetirement.rules.ts";
 
 /** Owner-client UDS only, sibling of the pairing route; same bearer/revision authentication. */
 export const MOBILE_OWNER_ACTIVATION_PATH = "/api/remote-backend/mobile/owner";
@@ -115,6 +116,23 @@ export const MobileOwnerRepairResult = Schema.Struct({
       reason: Schema.Literals(MOBILE_RUNTIME_REPAIR_REASONS),
     }),
   ).check(Schema.isMaxLength(512)),
+  /** Stage retirement after the GC; `null` when it could not run (activation holds the lease). */
+  stages: Schema.optionalKey(
+    Schema.NullOr(
+      Schema.Struct({
+        retired: Count,
+        kept: Count,
+        live: Count,
+        entries: Schema.Array(
+          Schema.Struct({
+            stageId: Schema.String.check(Schema.isPattern(/^[\x21-\x7e]{1,128}$/)),
+            outcome: Schema.Literals(["retired", "kept"]),
+            reason: Schema.Literals(MOBILE_STAGE_RETIREMENT_REASONS),
+          }),
+        ).check(Schema.isMaxLength(64)),
+      }),
+    ),
+  ),
 });
 export type MobileOwnerRepairResult = typeof MobileOwnerRepairResult.Type;
 export const MobileOwnerResolveResult = Schema.Struct({

@@ -200,3 +200,36 @@ it("repair --resolve prints cleared/kept rows with evidence reasons, then the GC
   expect(io.out()).toContain(`kept ${kept}: death-unproven`);
   expect(io.out()).toContain("Runtime-asset repair: 1 removed, 1 kept.");
 });
+
+it("guides the owner on a full stage journal and prints stage retirement after the GC", async () => {
+  let io = capture();
+  vi.mocked(activateMobileOwner).mockResolvedValue({
+    ok: true,
+    value: { requestId: "r", status: "failed", reason: "stage-budget-exhausted" },
+  });
+  await run(["activate", "--authority", authority, "--origin", "https://h.ts.net", "--port", "1"]);
+  expect(io.out()).toContain("(stage-budget-exhausted)");
+  expect(io.out()).toContain("Run `bigbud mobile repair`");
+  vi.restoreAllMocks();
+  io = capture();
+  vi.mocked(repairMobileOwner).mockResolvedValue({
+    ok: true,
+    value: {
+      removed: 0,
+      kept: 0,
+      entries: [],
+      stages: {
+        retired: 1,
+        kept: 1,
+        live: 2,
+        entries: [
+          { stageId: "s.r3", outcome: "retired", reason: "retired" },
+          { stageId: "s.r5", outcome: "kept", reason: "desired" },
+        ],
+      },
+    },
+  });
+  await run(["repair", "--authority", authority]);
+  expect(io.out()).toContain("Stage retirement: 1 retired, 1 kept, 2 live.");
+  expect(io.out()).toContain("kept s.r5: desired");
+});

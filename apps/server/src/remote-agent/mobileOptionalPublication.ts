@@ -4,6 +4,7 @@ import {
 } from "./mobileGatewayLifecycle.publication.ts";
 import {
   createMobilePublicationWork,
+  runOwnedMobilePublicationRead,
   MOBILE_PUBLICATION_IO_RESERVATION,
 } from "./mobileOptionalPublication.work.ts";
 import { settleOwnedMobilePublisher } from "./mobileOptionalPublication.lifetime.ts";
@@ -46,6 +47,11 @@ import {
   mobilePublicationDirectoryKey,
 } from "./mobileOptionalPublication.files.ts";
 import {
+  mobileStageRetirementJournal,
+  retireSettledMobileStages,
+  type MobileStageRetirementReport,
+} from "./mobileStageRetirement.ts";
+import {
   inspectMobilePublication,
   probeMobilePublicationArchive,
 } from "./mobileOptionalPublication.verify.ts";
@@ -72,6 +78,8 @@ export interface MobilePublicationRequest {
 export interface MobileOptionalPublisher {
   readonly publish: (request: MobilePublicationRequest) => Promise<VerifiedMobilePublication>;
   readonly remint: (stageId: string, consentRevision: number) => Promise<VerifiedMobilePublication>;
+  /** Retire provably unused stages and their files (also run by every `publish`). */
+  readonly retire: (signal?: AbortSignal) => Promise<MobileStageRetirementReport>;
 }
 function createPublisher(
   authority: MobilePublicationAuthority,
@@ -107,6 +115,12 @@ function createPublisher(
     verifyMobileOptionalArtifactBytes(assets, assetsBytes);
     return start(stageId, operationId, size, async (signal, controller) => {
       const completion = { id: stageId, releaseId, gatewayBytes, assetsBytes };
+      // Settled stages retire first, so repeated consent cycles never fill the bounded journal.
+      // Best effort: a stage that stays live keeps its slot, and a full journal refuses below.
+      await retireSettledMobileStages(
+        mobileStageRetirementJournal(authority, signal),
+        signal,
+      ).catch(() => undefined);
       let current = await authority.inspect(consentRevision, gateway, keys, signal);
       await current.store.update((state) =>
         reserveRemoteAgentMobileStage(
@@ -293,7 +307,14 @@ function createPublisher(
         );
       },
     );
-  return { api: Object.freeze({ publish, remint }), close: work.close };
+  const retire: MobileOptionalPublisher["retire"] = (external) =>
+    runOwnedMobilePublicationRead(
+      authority,
+      (signal) =>
+        retireSettledMobileStages(mobileStageRetirementJournal(authority, signal), signal),
+      external,
+    );
+  return { api: Object.freeze({ publish, remint, retire }), close: work.close };
 }
 
 /** Service-derived authority and settled cancellation, never caller JSON owner/path authority. */

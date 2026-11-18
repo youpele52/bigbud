@@ -99,7 +99,11 @@ export function validateMobileGatewayConfiguration(
       "Gateway configuration requires canonical HTTPS origin and fixed loopback port.",
     );
 }
-export function validateMobileGatewayLifecycle(lifecycle: MobileGatewayLifecycle): void {
+/** `retiredAttempts`: settled rows already retired from the front (their stages retired too). */
+export function validateMobileGatewayLifecycle(
+  lifecycle: MobileGatewayLifecycle,
+  retiredAttempts = 0,
+): void {
   if (lifecycle.attempts.length > MAX_MOBILE_GATEWAY_ATTEMPTS)
     throw new Error("Gateway lifetime attempt ledger is full; owner repair required.");
   const nonces = new Set<string>();
@@ -109,7 +113,7 @@ export function validateMobileGatewayLifecycle(lifecycle: MobileGatewayLifecycle
     validateMobileGatewayConfiguration(attempt.configuration);
     validateMobileNativeGatewayAttempt(attempt);
     if (
-      attempt.kind !== (index === 0 ? "initial" : "crash-restart") ||
+      attempt.kind !== (index === 0 && retiredAttempts === 0 ? "initial" : "crash-restart") ||
       lifecycle.attempts
         .slice(0, index)
         .filter(

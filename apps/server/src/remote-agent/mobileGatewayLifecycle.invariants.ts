@@ -22,21 +22,49 @@ const withoutAdoption = ({ currentController: _adopted, ...rest }: MobileGateway
   JSON.stringify(rest);
 const adoptionChanged = (before: MobileGatewayAttempt, after: MobileGatewayAttempt) =>
   JSON.stringify(before.currentController) !== JSON.stringify(after.currentController);
+const tally = (state: RemoteAgentRegistry) =>
+  state.schemaVersion === 3 ? (state.mobile.retired?.attempts ?? 0) : 0;
+/**
+ * Stage retirement may drop a settled, unpinned prefix whose stages leave in the same CAS (the
+ * tally advances by exactly the dropped count); every other row keeps its full fence.
+ */
+function retainedAttempts(
+  before: RemoteAgentRegistry,
+  next: RemoteAgentRegistry,
+  attempts: readonly MobileGatewayAttempt[],
+): readonly MobileGatewayAttempt[] {
+  const dropped = tally(next) - tally(before);
+  if (
+    dropped < 0 ||
+    dropped > attempts.length ||
+    attempts
+      .slice(0, dropped)
+      .some(
+        (a) =>
+          a.phase !== "exit-confirmed" ||
+          next.pins.some((p) => p.owner === mobileGatewayBuildPin(a.nonce)) ||
+          (next.schemaVersion === 3 && next.mobile.stages.some((s) => s.id === a.stageId)),
+      )
+  )
+    throw new Error("Only settled attempts of retired stages may leave the journal, oldest first.");
+  return attempts.slice(dropped);
+}
 export function assertMobileGatewayLifecycleTransition(
   before: RemoteAgentRegistry,
   next: RemoteAgentRegistry,
 ): void {
   const prior = before.schemaVersion === 3 ? before.mobile.gatewayLifecycle : undefined;
   const current = next.schemaVersion === 3 ? next.mobile.gatewayLifecycle : undefined;
+  const kept = retainedAttempts(before, next, prior?.attempts ?? []);
   if (
     prior &&
     (!current ||
       current.lastObservedUnixMs < prior.lastObservedUnixMs ||
       (prior.repairRequired && !current.repairRequired) ||
-      current.attempts.length < prior.attempts.length)
+      current.attempts.length < kept.length)
   )
     throw new Error("Gateway durable budget/replay history cannot be reset or rolled back.");
-  for (const [index, attempt] of (prior?.attempts ?? []).entries()) {
+  for (const [index, attempt] of kept.entries()) {
     const observed = current?.attempts[index];
     if (
       !observed ||
@@ -72,9 +100,9 @@ export function assertMobileGatewayLifecycleTransition(
       throw new Error("Gateway attempt identity/child/phase fence changed.");
   }
   if (current) {
-    if (current.attempts.length > (prior?.attempts.length ?? 0) + 1)
+    if (current.attempts.length > kept.length + 1)
       throw new Error("One CAS admits at most one gateway attempt.");
-    const added = current.attempts.slice(prior?.attempts.length ?? 0);
+    const added = current.attempts.slice(kept.length);
     if (added.some((a) => a.phase !== "reserved"))
       throw new Error("Gateway attempt must begin reserved.");
     for (const attempt of current.attempts) {

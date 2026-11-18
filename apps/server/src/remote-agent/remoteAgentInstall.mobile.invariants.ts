@@ -1,6 +1,7 @@
 import { assertMobileGatewaySelectionTransition } from "./mobileGatewayActivation.selection.invariants.ts";
 import { assertMobileGatewayLifecycleTransition } from "./mobileGatewayLifecycle.invariants.ts";
 import { mobileRegistryOwnerEqual } from "./remoteAgentInstall.mobile.schema.ts";
+import { assertMobileStageRetirementTransition } from "./mobileStageRetirement.rules.ts";
 import {
   parseRemoteAgentRegistry,
   type RemoteAgentRegistry,
@@ -36,9 +37,11 @@ export function assertMobileRegistryTransition(
   ) {
     throw new Error("Mobile consent revision must advance monotonically when consent changes.");
   }
+  // Only provably unused stages of superseded consent may leave (see mobileStageRetirement).
+  assertMobileStageRetirementTransition(before.mobile, before.pins, next.mobile);
   for (const prior of before.mobile.stages) {
     const stage = next.mobile.stages.find((entry) => entry.id === prior.id);
-    if (!stage) throw new Error("Mobile journal replay fences cannot be discarded.");
+    if (!stage) continue;
     if (
       stage.releaseId !== prior.releaseId ||
       stage.consentRevision !== prior.consentRevision ||

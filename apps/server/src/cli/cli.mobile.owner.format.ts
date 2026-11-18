@@ -54,12 +54,32 @@ export function formatMobileOwnerStatus(status: MobileOwnerStatus): string {
   ].join("\n");
 }
 
+/** Extra owner guidance for an activation reason that the owner can act on. */
+export const mobileActivationReasonGuidance: Partial<Record<string, string>> = {
+  "stage-budget-exhausted":
+    "Every mobile stage slot holds a live stage. Run `bigbud mobile repair` (add --resolve after a reboot) to settle and retire old stages, then activate again.",
+};
+
+/** Stage retirement lines: retired or kept with the fixed reason, and the live stage count. */
+function formatStageRetirement(stages: MobileOwnerRepairResult["stages"]): string[] {
+  if (stages === undefined) return [];
+  if (stages === null)
+    return [
+      "Stage retirement did not run (an activation holds the publication); retry after it settles.",
+    ];
+  return [
+    `Stage retirement: ${stages.retired} retired, ${stages.kept} kept, ${stages.live} live.`,
+    ...stages.entries.map((e) => `  ${e.outcome} ${e.stageId}: ${e.reason}`),
+  ];
+}
+
 /** One line per generation: what was removed or kept and the fixed reason. */
 export function formatMobileOwnerRepair(result: MobileOwnerRepairResult): string {
   return [
     `Runtime-asset repair: ${result.removed} removed, ${result.kept} kept.`,
     ...result.entries.map((e) => `  ${e.outcome} ${e.generation}: ${e.reason}`),
     ...(result.kept ? ["Kept entries were not proven unowned and were left untouched."] : []),
+    ...formatStageRetirement(result.stages),
   ].join("\n");
 }
 

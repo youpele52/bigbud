@@ -8,14 +8,27 @@ interface SelectionState {
   readonly stages: readonly { readonly id: string; readonly phase: string }[];
   readonly desired?: MobileGatewayDesiredSelection | undefined;
   readonly desiredHistory?: readonly MobileGatewayDesiredSelection[] | undefined;
+  readonly retired?: { readonly selections: number } | undefined;
 }
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
-/** Exact immutable prefix; generic CAS writers cannot erase retired request replay fences. */
+/**
+ * Exact immutable prefix; generic CAS writers cannot erase retired request replay fences. Only
+ * stage retirement may drop the oldest rows, and only together with the stages they name.
+ */
 export function assertMobileGatewaySelectionTransition(
   before: SelectionState,
   next: SelectionState,
 ): void {
-  const history = before.desiredHistory ?? [],
+  // Stage retirement drops a settled prefix whose stages left in the same CAS; nothing else may.
+  const dropped = (next.retired?.selections ?? 0) - (before.retired?.selections ?? 0);
+  const prior = before.desiredHistory ?? [];
+  if (
+    dropped < 0 ||
+    dropped > prior.length ||
+    prior.slice(0, dropped).some((row) => next.stages.some((stage) => stage.id === row.stageId))
+  )
+    throw Error("Only selections of retired stages may leave the history, oldest first.");
+  const history = prior.slice(dropped),
     nextHistory = next.desiredHistory ?? [];
   const changed = !same(before.desired, next.desired);
   if (changed && next.desired) {

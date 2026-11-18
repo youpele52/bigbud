@@ -25,6 +25,8 @@ export type MobileGatewayDesiredSelection = typeof MobileGatewayDesiredSelection
 interface SelectionReferences {
   readonly desired?: MobileGatewayDesiredSelection | undefined;
   readonly desiredHistory?: readonly MobileGatewayDesiredSelection[] | undefined;
+  /** Retired history rows (a prefix, with their stages); revisions stay continuous. */
+  readonly retired?: { readonly selections: number } | undefined;
   readonly consent: { readonly revision: number };
   readonly stages: readonly {
     readonly id: string;
@@ -43,6 +45,7 @@ export function validateMobileGatewaySelections(mobile: SelectionReferences): vo
   )
     throw Error("Mobile desired-selection history exceeds its admitted lifetime budget.");
   const seen = new Set<string>();
+  const offset = mobile.retired?.selections ?? 0;
   for (const [index, selected] of [
     ...history,
     ...(mobile.desired ? [mobile.desired] : []),
@@ -50,7 +53,7 @@ export function validateMobileGatewaySelections(mobile: SelectionReferences): vo
     validateMobileGatewayConfiguration(selected.configuration);
     const stage = mobile.stages.find((entry) => entry.id === selected.stageId);
     if (
-      selected.revision !== index + 1 ||
+      selected.revision !== offset + index + 1 ||
       seen.has(selected.requestId) ||
       selected.consentRevision > mobile.consent.revision ||
       !stage ||
