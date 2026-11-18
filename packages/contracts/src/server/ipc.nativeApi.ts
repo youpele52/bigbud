@@ -256,6 +256,10 @@ export interface NativeApi {
       copilotRuntime?: (
         input: import("./copilotRuntime").CopilotRuntimeInput,
       ) => Promise<import("./copilotRuntime").CopilotRuntimeState>;
+      /** P8 coordinator pairing (WP-8E); absent on older servers. */
+      peerPairing?: (
+        input: import("./remotePeer.pairing").PeerPairingRequest,
+      ) => Promise<import("./remotePeer.pairing").PeerPairingResult>;
       createMobileRemotePairing: (
         input: Mobile.ServerCreateMobileRemotePairingInput,
       ) => Promise<Mobile.ServerMobileRemotePairing>;

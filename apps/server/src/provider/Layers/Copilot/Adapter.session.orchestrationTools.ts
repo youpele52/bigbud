@@ -36,6 +36,14 @@ export function createCopilotOrchestrationToolSurface(input: {
     ...(dispatcher.remoteAgent
       ? { remoteAgent: (request) => asRecord(dispatcher.remoteAgent!(request)) }
       : {}),
+    ...(dispatcher.peer
+      ? {
+          peer: (tool, args, invocationId) =>
+            asRecord(
+              dispatcher.peer!({ callerThreadId: threadId, invocationId, tool, arguments: args }),
+            ),
+        }
+      : {}),
     getSystemResources: (args) =>
       dispatcher.getSystemResources
         ? asRecord(dispatcher.getSystemResources(args))

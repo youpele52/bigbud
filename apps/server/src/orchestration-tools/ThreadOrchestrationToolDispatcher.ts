@@ -27,6 +27,7 @@ import type {
 } from "./ThreadOrchestrationTools.listThreads.ts";
 import type { AgentWorkspaceToolInput } from "./AgentWorkspaceTools.ts";
 import type { RemoteAgentToolInput } from "./remoteAgentTools.shared.ts";
+import type { PeerToolInput } from "./peerTools.shared.ts";
 import type { ComputerUseV2Dispatch } from "./computerUseToolRequest.ts";
 import type { ThreadOrganization } from "@bigbud/contracts/orchestration/orchestration.organization.ts";
 import type { ThreadOrganizationToolOutcome } from "./ThreadOrchestrationTools.organization.ts";
@@ -45,6 +46,8 @@ export interface ThreadOrchestrationToolDispatcherShape {
   readonly remoteAgent?: (
     input: RemoteAgentToolInput,
   ) => Effect.Effect<Record<string, unknown>, Error>;
+  /** P8 peer delegation (`delegate_to_host`, status, cancel); typed unavailable without a grant. */
+  readonly peer?: (input: PeerToolInput) => Effect.Effect<Record<string, unknown>, Error>;
   readonly getSystemResources?: (input?: unknown) => Effect.Effect<Record<string, unknown>, Error>;
   readonly configureSystemResourceRules?: (
     input: unknown,

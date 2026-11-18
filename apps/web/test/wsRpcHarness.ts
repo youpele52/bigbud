@@ -4,6 +4,8 @@ import { ThreadRetentionMutationAuthorization } from "@bigbud/contracts/server/r
 import type { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention";
 import { RemoteRuntimeUpdateSetupAuthority } from "@bigbud/contracts/server/rpc.remoteBackendUpdate.ts";
 import type { RemoteRuntimeUpdateError } from "@bigbud/contracts/server/remoteBackendUpdate.ts";
+import { ProviderProvisioningSetupAuthority } from "@bigbud/contracts/server/rpc.providerProvisioning.ts";
+import type { ProviderProvisioningError } from "@bigbud/contracts/server/providerProvisioning.ts";
 import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
 import type * as RpcMiddleware from "effect/unstable/rpc/RpcMiddleware";
 
@@ -16,6 +18,12 @@ const allowRetentionMutations: RpcMiddleware.RpcMiddleware<
 const allowRuntimeUpdates: RpcMiddleware.RpcMiddleware<never, RemoteRuntimeUpdateError, never> = (
   effect,
 ) => effect;
+/** Same stand-in for provisioning setup authority (D10 is enforced server-side). */
+const allowProviderProvisioning: RpcMiddleware.RpcMiddleware<
+  never,
+  ProviderProvisioningError,
+  never
+> = (effect) => effect;
 
 type RpcWriter = Parameters<RpcServer.Protocol["Service"]["run"]>[0];
 
@@ -125,6 +133,7 @@ export class BrowserWsRpcHarness {
             this.makeLayer(),
             Layer.succeed(ThreadRetentionMutationAuthorization, allowRetentionMutations),
             Layer.succeed(RemoteRuntimeUpdateSetupAuthority, allowRuntimeUpdates),
+            Layer.succeed(ProviderProvisioningSetupAuthority, allowProviderProvisioning),
             Layer.succeed(RpcServer.Protocol, protocol),
           ),
         ),

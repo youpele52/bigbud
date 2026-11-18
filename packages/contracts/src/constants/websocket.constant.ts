@@ -133,6 +133,7 @@ export const WS_METHODS = {
   serverGetHandoffJob: "server.getHandoffJob",
   serverGetOpencodeV2ThreadToolsSetup: "server.getOpencodeV2ThreadToolsSetup",
   serverCopilotRuntime: "server.copilotRuntime",
+  serverPeerPairing: "server.peerPairing",
   serverCreateMobileRemotePairing: "server.createMobileRemotePairing",
   serverListMobileRemoteSessions: "server.listMobileRemoteSessions",
   serverRevokeMobileRemoteSession: "server.revokeMobileRemoteSession",

@@ -24,6 +24,7 @@ import { makeWsRpcBrowserHandlers } from "./wsRpcHandlers.browser";
 import { makeWsRpcConnectionDiagnosticsHandlers } from "./wsRpcHandlers.connectionDiagnostics.ts";
 import { makeWsRpcComputerUseHandlers } from "./wsRpcHandlers.computerUse.ts";
 import { makeWsRpcCopilotRuntimeHandlers } from "./wsRpcHandlers.copilotRuntime.ts";
+import { makeWsRpcPeerPairingHandlers } from "./wsRpcHandlers.peerPairing.ts";
 import { makeWsRpcDatabaseCompactionHandlers } from "./wsRpcHandlers.databaseCompaction.ts";
 import { makeWsRpcMetadataWarningHandlers } from "./wsRpcHandlers.metadataWarnings.ts";
 import { makeWsRpcRemoteBackendDeploymentHandlers } from "./wsRpcHandlers.remoteBackendDeployment.ts";
@@ -64,6 +65,7 @@ const makeWsRpcLayer = (
         ...deploymentHandlers,
         ...runtimeUpdateHandlers,
         ...makeWsRpcCopilotRuntimeHandlers(context),
+        ...makeWsRpcPeerPairingHandlers(),
         ...makeWsRpcProviderProvisioningHandlers(context),
         ...makeWsRpcAutomationHandlers(context),
         ...makeWsRpcOrchestrationServerHandlers(context),

@@ -92,6 +92,7 @@ import Migration0174 from "./Migrations/174_RemoteRuntimeUpdateOperations.ts";
 import Migration0175 from "./Migrations/175_PeerOrchestration.ts";
 import Migration0176 from "./Migrations/176_PeerChildren.ts";
 import Migration0177Arm from "./Migrations/177_DirectResourceCleanupLinuxArm64.ts";
+import Migration0178 from "./Migrations/178_PeerPairings.ts";
 
 export const migrationEntries = [
   ...baseMigrationEntries,
@@ -172,6 +173,7 @@ export const migrationEntries = [
   [175, "PeerOrchestration", Migration0175],
   [176, "PeerChildren", Migration0176],
   [177, "DirectResourceCleanupLinuxArm64", Migration0177Arm],
+  [178, "PeerPairings", Migration0178],
 ] as const;
 
 export const latestMigrationId = migrationEntries.at(-1)?.[0] ?? 0;

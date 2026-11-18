@@ -281,6 +281,7 @@ export interface WsRpcClient {
         input: ServerOpencodeV2ThreadToolsSetupInput,
       ) => Promise<ServerOpencodeV2ThreadToolsSetupResult>;
       readonly copilotRuntime: RpcUnaryMethod<typeof WS_METHODS.serverCopilotRuntime>;
+      readonly peerPairing: RpcUnaryMethod<typeof WS_METHODS.serverPeerPairing>;
       readonly createMobileRemotePairing: (
         input: ServerCreateMobileRemotePairingInput,
       ) => Promise<ServerMobileRemotePairing>;

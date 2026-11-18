@@ -27,6 +27,7 @@ import { listThreadsViaOrchestration } from "../../orchestration-tools/ThreadOrc
 import { sendThreadMessageViaOrchestration } from "../../orchestration-tools/ThreadOrchestrationTools.sendMessage.ts";
 import { makeAgentWorkspaceTool } from "../../orchestration-tools/AgentWorkspaceTools.ts";
 import { remoteAgentToolViaOrchestration } from "../../orchestration-tools/ThreadRemoteAgentTools.ts";
+import { peerToolViaOrchestration } from "../../orchestration-tools/ThreadPeerTools.ts";
 import {
   getSystemResources,
   configureSystemResourceRules,
@@ -87,6 +88,7 @@ export const installOrchestrationEngineToolDispatchers = Effect.fn(
     getSystemResources,
     configureSystemResourceRules,
     remoteAgent: remoteAgentToolViaOrchestration,
+    peer: peerToolViaOrchestration,
     ...(Option.isSome(input.notes) && Option.isSome(input.kanban)
       ? {
           workspace: makeAgentWorkspaceTool({

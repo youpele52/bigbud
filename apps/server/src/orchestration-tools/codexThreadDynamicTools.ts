@@ -1,4 +1,5 @@
 import { isRemoteAgentToolName } from "./remoteAgentTools.shared.ts";
+import { isPeerToolName } from "./peerTools.shared.ts";
 import { createHash } from "node:crypto";
 
 import {
@@ -87,6 +88,13 @@ export function createCodexThreadOrchestrationDynamicToolHandler(
     if (isRemoteAgentToolName(tool)) {
       if (!dispatcher.remoteAgent) throw new Error("Remote agent tools are not ready.");
       const result = await Effect.runPromise(dispatcher.remoteAgent({ tool, arguments: args }));
+      return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
+    }
+    if (isPeerToolName(tool)) {
+      if (!dispatcher.peer) throw new Error("Peer delegation tools are not ready.");
+      const invocationId = JSON.stringify([turnId ?? requestSource ?? sourceMessageId, requestId]);
+      const peerInput = { callerThreadId: threadId, invocationId, tool, arguments: args };
+      const result = await Effect.runPromise(dispatcher.peer(peerInput));
       return { contentItems: [inputText(JSON.stringify(result, null, 2))], success: true };
     }
     if (AGENT_WORKSPACE_TOOL_NAMES.includes(tool as AgentWorkspaceToolName)) {

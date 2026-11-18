@@ -6,6 +6,7 @@ import { BrowserAction, ThreadId } from "@bigbud/contracts";
 import { ServerConfig } from "../startup/config.ts";
 import { handleHtmlRenderAction } from "./http.threadTools.htmlRender.ts";
 import {
+  handlePeerAction,
   handleRemoteAgentAction,
   handleSystemResourceAction,
 } from "./http.threadTools.systemAndRemote.ts";
@@ -118,6 +119,7 @@ export const threadOrchestrationToolsRouteLayer = HttpRouter.add(
         return yield* handleSystemResourceAction({ dispatcher, body });
       if (body.action === "remote_agent")
         return yield* handleRemoteAgentAction({ dispatcher, body });
+      if (body.action === "peer") return yield* handlePeerAction({ dispatcher, threadId, body });
 
       if (body.action === "remote_workspace_process") {
         const result = yield* runRemoteWorkspaceProcess({

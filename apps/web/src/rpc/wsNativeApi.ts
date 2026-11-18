@@ -197,6 +197,7 @@ export function createWsNativeApiContext({
       getHandoffJob: rpcClient.server.getHandoffJob,
       getOpencodeV2ThreadToolsSetup: rpcClient.server.getOpencodeV2ThreadToolsSetup,
       copilotRuntime: rpcClient.server.copilotRuntime,
+      peerPairing: rpcClient.server.peerPairing,
       createMobileRemotePairing: rpcClient.server.createMobileRemotePairing,
       listMobileRemoteSessions: rpcClient.server.listMobileRemoteSessions,
       revokeMobileRemoteSession: rpcClient.server.revokeMobileRemoteSession,

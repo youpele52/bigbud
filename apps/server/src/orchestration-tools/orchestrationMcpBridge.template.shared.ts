@@ -1,4 +1,5 @@
 import { REMOTE_AGENT_TOOL_SPECS } from "./remoteAgentTools.shared.ts";
+import { PEER_TOOL_SPECS } from "./peerTools.shared.ts";
 import {
   SET_ELEVATOR_SUMMARY_TOOL_DESCRIPTION,
   SET_ELEVATOR_SUMMARY_TOOL_PARAMETERS,
@@ -62,7 +63,7 @@ export const ORCHESTRATION_MCP_TOOL_DEFINITIONS = [
         inputSchema: spec.inputSchema,
       })},`,
   ),
-  ...REMOTE_AGENT_TOOL_SPECS.map(
+  ...[...REMOTE_AGENT_TOOL_SPECS, ...PEER_TOOL_SPECS].map(
     (spec) =>
       `  ${JSON.stringify({
         name: spec.name,

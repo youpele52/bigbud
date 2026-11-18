@@ -262,6 +262,8 @@ export function createWsRpcClient(
         ),
       copilotRuntime: (input) =>
         transport.request((client) => client[WS_METHODS.serverCopilotRuntime](input)),
+      peerPairing: (input) =>
+        transport.request((client) => client[WS_METHODS.serverPeerPairing](input)),
       createMobileRemotePairing: (input) =>
         transport.request((client) => client[WS_METHODS.serverCreateMobileRemotePairing](input)),
       listMobileRemoteSessions: () =>

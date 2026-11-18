@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
 
+import type { ThreadId } from "@bigbud/contracts";
 import type { ThreadOrchestrationToolDispatcherShape } from "../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { ThreadToolRequestError, type ThreadToolRequest } from "./http.threadTools.schema.ts";
 
@@ -52,6 +53,33 @@ export const handleRemoteAgentAction = Effect.fn("handleRemoteAgentAction")(func
     });
   const result = yield* input.dispatcher
     .remoteAgent({ tool, arguments: input.body.remoteAgentArguments ?? {} })
+    .pipe(
+      Effect.mapError(
+        (error) => new ThreadToolRequestError({ status: 400, message: error.message }),
+      ),
+    );
+  return yield* HttpServerResponse.json({ ok: true, result });
+});
+
+/** P8 peer delegation tools; the invocation id keys delegate retries onto one dispatch. */
+export const handlePeerAction = Effect.fn("handlePeerAction")(function* (input: {
+  dispatcher: ThreadOrchestrationToolDispatcherShape;
+  threadId: ThreadId;
+  body: typeof ThreadToolRequest.Type;
+}) {
+  const tool = input.body.peerTool;
+  if (!tool || !input.dispatcher.peer)
+    return yield* new ThreadToolRequestError({
+      status: 503,
+      message: "Peer delegation tools are not ready.",
+    });
+  const result = yield* input.dispatcher
+    .peer({
+      callerThreadId: input.threadId,
+      invocationId: input.body.invocationId?.trim() ?? "",
+      tool,
+      arguments: input.body.peerArguments ?? {},
+    })
     .pipe(
       Effect.mapError(
         (error) => new ThreadToolRequestError({ status: 400, message: error.message }),

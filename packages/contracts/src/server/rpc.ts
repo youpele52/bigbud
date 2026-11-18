@@ -208,6 +208,7 @@ export { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
 import { WsServerRetryTextGenerationRpc } from "./rpc.textGeneration";
 import { WsComputerUseStopRpc, WsSubscribeComputerUseActivityRpc } from "./rpc.computerUse";
 import { WsCopilotRuntimeRpc } from "./rpc.copilotRuntime";
+import { WsServerPeerPairingRpc } from "./rpc.remotePeer";
 import {
   WsServerGetProviderProvisioningStatusRpc,
   WsServerProvisionProviderRpc,
@@ -227,6 +228,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerConsentRemoteRuntimeUpdateInterruptionRpc,
   WsServerCancelRemoteRuntimeUpdateRpc,
   WsCopilotRuntimeRpc,
+  WsServerPeerPairingRpc,
   WsServerGetProviderProvisioningStatusRpc,
   WsServerProvisionProviderRpc,
   WsServerRetryTextGenerationRpc,

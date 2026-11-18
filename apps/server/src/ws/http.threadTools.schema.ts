@@ -2,6 +2,7 @@ import { Data, Effect, Schema } from "effect";
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES } from "../orchestration-tools/AgentWorkspaceTools.ts";
 import { REMOTE_AGENT_TOOL_NAMES } from "../orchestration-tools/remoteAgentTools.shared.ts";
+import { PEER_TOOL_NAMES } from "../orchestration-tools/peerTools.shared.ts";
 
 export const ThreadToolRequest = Schema.Struct({
   action: Schema.Literals([
@@ -26,6 +27,7 @@ export const ThreadToolRequest = Schema.Struct({
     "get_system_resources",
     "configure_system_resource_rules",
     "remote_agent",
+    "peer",
     "move",
     "snooze",
   ]),
@@ -64,6 +66,8 @@ export const ThreadToolRequest = Schema.Struct({
   workspaceArguments: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   remoteAgentTool: Schema.optional(Schema.Literals(REMOTE_AGENT_TOOL_NAMES)),
   remoteAgentArguments: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  peerTool: Schema.optional(Schema.Literals(PEER_TOOL_NAMES)),
+  peerArguments: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   remoteCommand: Schema.optional(Schema.String),
   remoteInvocationId: Schema.optional(Schema.String),
   remoteArgs: Schema.optional(Schema.Array(Schema.String)),

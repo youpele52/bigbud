@@ -1,4 +1,5 @@
 import { REMOTE_AGENT_TOOL_NAMES } from "./remoteAgentTools.shared.ts";
+import { PEER_TOOL_NAMES } from "./peerTools.shared.ts";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -165,7 +166,9 @@ export function buildClaudeOrchestrationBridgeConfig(
       `mcp__${bridge.serverName}__archive_thread`,
       `mcp__${bridge.serverName}__send_thread_message`,
       `mcp__${bridge.serverName}__get_thread_status`,
-      ...REMOTE_AGENT_TOOL_NAMES.map((name) => `mcp__${bridge.serverName}__${name}`),
+      ...[...REMOTE_AGENT_TOOL_NAMES, ...PEER_TOOL_NAMES].map(
+        (name) => `mcp__${bridge.serverName}__${name}`,
+      ),
       `mcp__${bridge.serverName}__get_system_resources`,
       `mcp__${bridge.serverName}__configure_system_resource_rules`,
       `mcp__${bridge.serverName}__list_threads`,
