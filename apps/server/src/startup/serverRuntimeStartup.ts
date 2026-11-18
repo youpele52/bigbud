@@ -44,6 +44,7 @@ import {
   makeBoundedCommandAdmission,
   withCommandAdmissionDeadline,
 } from "../command-admission/CommandAdmission.ts";
+import { sweepStaleBigbudTempDirsAtStartup } from "./tempDirSweep.ts";
 
 export class ServerRuntimeStartupError extends Data.TaggedError("ServerRuntimeStartupError")<{
   readonly message: string;
@@ -356,6 +357,9 @@ const makeServerRuntimeStartup = Effect.gen(function* () {
       if (threadRetention._tag === "Some") {
         yield* Effect.forkScoped(threadRetention.value.start);
       }
+      yield* Effect.forkScoped(
+        sweepStaleBigbudTempDirsAtStartup().pipe(Effect.ignoreCause({ log: true })),
+      );
       yield* Effect.logDebug("startup phase: browser open check");
       yield* runStartupPhase("browser.open", maybeOpenBrowser);
       yield* Effect.logDebug("startup phase: complete");

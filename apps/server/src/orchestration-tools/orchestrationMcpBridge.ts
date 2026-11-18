@@ -15,6 +15,7 @@ import {
 import { resolveMcpInvocationStatePath } from "./mcpInvocationStatePath.ts";
 import { ELECTRON_NODE_RUNTIME_ENV, resolveNodeExecutable } from "../utils/nodeExecutable.ts";
 import { AGENT_WORKSPACE_TOOL_NAMES } from "./AgentWorkspaceTools.ts";
+import { writeBigbudTempDirOwner } from "../startup/tempDirSweep.ts";
 
 export interface ThreadOrchestrationBridgeInput {
   readonly stateDir: string;
@@ -99,6 +100,8 @@ export async function createThreadOrchestrationBridge(
     namespace: "orchestration",
   });
   await mkdir(path.join(bridgeDir, ".bigbud"), { recursive: true });
+  // Lets the startup temp sweep tell a crashed owner from a live one (F-B7).
+  await writeBigbudTempDirOwner(bridgeDir);
   const durableHttpConfig = {
     ...httpConfig,
     providerInvocationStatePath: invocationStatePath,
