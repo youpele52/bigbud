@@ -66,15 +66,23 @@ export function selectPeerPairing(
       `Several hosts are paired; pass host as one of: ${active.map((p) => p.label).join(", ")}.`,
     );
   }
-  const match = active.find(
-    (p) => p.label === wanted || p.workerAuthorityId === wanted || p.host === wanted,
-  );
-  return (
-    match ??
-    refused(
-      "grant-missing",
-      `No active pairing named ${wanted}; paired hosts: ${active.map((p) => p.label).join(", ")}.`,
-    )
+  const named = (p: PeerPairing) =>
+    p.label === wanted || p.workerAuthorityId === wanted || p.host === wanted;
+  const match = active.find(named);
+  if (match) return match;
+  // A known host without an active grant (revoked, or never granted) is unavailable (O-4).
+  const inactive = pairings.find(named);
+  if (inactive)
+    return refused(
+      inactive.grantRevokedAt !== null ? "grant-revoked" : "grant-missing",
+      `Host ${inactive.label} has no active grant (${
+        inactive.grantRevokedAt !== null ? "revoked" : "not granted yet"
+      }); active hosts: ${active.map((p) => p.label).join(", ")}.`,
+      true,
+    );
+  return refused(
+    "grant-missing",
+    `No active pairing named ${wanted}; paired hosts: ${active.map((p) => p.label).join(", ")}.`,
   );
 }
 

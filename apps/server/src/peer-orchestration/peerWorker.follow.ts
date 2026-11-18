@@ -1,6 +1,9 @@
 /**
- * Worker-side `status`, `follow` and `cancel` (WP-8B). Each reaches only children recorded under
- * the caller's grant; an unknown or foreign dispatch reads as `dispatch-unknown`.
+ * Worker-side `status`, `follow` and `cancel` (WP-8B). Each reaches only children recorded for the
+ * caller's coordinator authority; an unknown or foreign dispatch reads as `dispatch-unknown`.
+ * The command id embeds the coordinator authority, so a child created under an earlier grant of
+ * the same coordinator stays readable (and cancellable) after a re-grant, and its real outcome is
+ * reported instead of being lost (O-5).
  *
  * @module peerWorker.follow
  */
@@ -10,13 +13,8 @@ import type { PeerChildStatus } from "@bigbud/contracts/server/remotePeer.wire.t
 import { Effect } from "effect";
 
 import type { PeerChild } from "../persistence/Services/PeerChildren.ts";
-import { loadPeerChildThread, type PeerWorkerDeps } from "./peerWorker.delegate.ts";
-import {
-  isTerminalPeerChildState,
-  peerChildStatus,
-  peerCommandId,
-  PeerWorkerRefusal,
-} from "./peerWorker.status.ts";
+import { readPeerChildStatus, type PeerWorkerDeps } from "./peerWorker.read.ts";
+import { isTerminalPeerChildState, peerCommandId, PeerWorkerRefusal } from "./peerWorker.status.ts";
 
 const FOLLOW_POLL_MS = 250;
 const unknown = () =>
@@ -27,20 +25,22 @@ const statusOf = Effect.fn("peerWorkerStatusOf")(function* (
   deps: PeerWorkerDeps,
   child: PeerChild,
 ) {
-  // A record without its thread means the delegate never finished; the coordinator re-sends the
-  // same identity, which completes it without a second child.
-  const thread = yield* loadPeerChildThread(deps.engine, child.childThreadId);
-  if (!thread) return yield* unknown();
-  return peerChildStatus(child, thread);
+  // A pre-179 record without its thread means the delegate never finished; the coordinator
+  // re-sends the same identity, which completes it without a second child.
+  const status = yield* readPeerChildStatus(deps, child).pipe(Effect.mapError(internal));
+  if (!status) return yield* unknown();
+  return status;
 });
 
 const findChild = (deps: PeerWorkerDeps, grant: PeerGrant, dispatchId: string) =>
-  deps.children
-    .findForGrant(grant.grantId, peerCommandId(grant.coordinatorAuthorityId, dispatchId))
-    .pipe(
-      Effect.mapError(internal),
-      Effect.flatMap((child) => (child ? Effect.succeed(child) : Effect.fail(unknown()))),
-    );
+  deps.children.findByCommand(peerCommandId(grant.coordinatorAuthorityId, dispatchId)).pipe(
+    Effect.mapError(internal),
+    Effect.flatMap((child) =>
+      child && child.coordinatorAuthorityId === grant.coordinatorAuthorityId
+        ? Effect.succeed(child)
+        : Effect.fail(unknown()),
+    ),
+  );
 
 export const peerWorkerStatus = Effect.fn("peerWorkerStatus")(function* (
   deps: PeerWorkerDeps,
@@ -79,8 +79,9 @@ export const peerWorkerCancel = Effect.fn("peerWorkerCancel")(function* (
   dispatchId: string,
 ) {
   const commandId = peerCommandId(grant.coordinatorAuthorityId, dispatchId);
+  const recorded = yield* findChild(deps, grant, dispatchId);
   const child = yield* deps.children
-    .markCancelRequested(grant.grantId, commandId, new Date().toISOString())
+    .markCancelRequested(recorded.grantId, commandId, new Date().toISOString())
     .pipe(Effect.mapError(internal));
   if (!child || child.cancelRequestedAt === null) return yield* unknown();
   const before = yield* statusOf(deps, child);

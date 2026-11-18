@@ -1,4 +1,5 @@
 import { MCP_SERVER_TEMPLATE_PRELUDE } from "../remote-workspace-bridge/remoteWorkspaceMcpBridge.template.shared.ts";
+import { PEER_TOOL_NAMES, peerToolsOfferedTo } from "./peerTools.shared.ts";
 import { renderRenameThreadResultTextSource } from "./threadRenameTool.shared.ts";
 import {
   ORCHESTRATION_MCP_TOOL_DEFINITIONS,
@@ -21,6 +22,8 @@ export function renderOrchestrationMcpServerSource(input: ThreadOrchestrationHtt
     `const CONFIG = ${config};`,
     "const invocation = new AsyncLocalStorage();",
     ...ORCHESTRATION_MCP_TOOL_DEFINITIONS,
+    // O-2: background sessions do not list the peer tools (the dispatcher refuses them too).
+    `const HIDDEN_TOOLS = new Set(${JSON.stringify(peerToolsOfferedTo(input.threadId) ? [] : PEER_TOOL_NAMES)});`,
     "let negotiatedProtocolVersion = DEFAULT_NEGOTIATED_PROTOCOL_VERSION;",
     "let outputFraming = 'content-length';",
     "let stdinBuffer = Buffer.alloc(0);",
@@ -245,7 +248,7 @@ export function renderOrchestrationMcpServerSource(input: ThreadOrchestrationHtt
     "    return;",
     "  }",
     "  if (message.method === 'tools/list') {",
-    "    writeResponse(message.id, { tools: TOOLS });",
+    "    writeResponse(message.id, { tools: TOOLS.filter((tool) => !HIDDEN_TOOLS.has(tool.name)) });",
     "    return;",
     "  }",
     "  if (message.method === 'tools/call') {",

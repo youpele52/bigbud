@@ -112,8 +112,11 @@ export const PeerPairingRequest = Schema.Union([
     port: PeerSshPort,
     user: PeerSshUser,
     pinnedHostKey: PeerPinnedHostKey,
-    /** The user explicitly confirmed this exact pin; nothing is saved without it. */
-    confirmPin: Schema.Literal(true),
+    /**
+     * The user explicitly confirmed this exact pin; nothing is saved unless it is `true`. Any
+     * other value decodes, so the server refuses it as a typed `invalid-request` (O-3).
+     */
+    confirmPin: Schema.optional(Schema.Boolean),
     workspaceRoot: PeerWorkspaceRoot,
     provider: ProviderKind,
     runtimeMode: RuntimeMode,

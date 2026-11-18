@@ -17,6 +17,7 @@ import {
 } from "./ProjectionSnapshotQuerySql.schemas.ts";
 import { unresolvedModelChoiceRequestsCtes } from "../../persistence/DelegatedModelChoiceSql.ts";
 import { threadOrganizationJsonSql } from "../../persistence/Layers/ProjectionThreads.organization.ts";
+import { projectionProjectColumnsSql } from "./ProjectionOperationalStateQuery.projectSql.ts";
 
 export const STARTUP_OPERATIONAL_MESSAGE_LIMIT = 50;
 export const STARTUP_OPERATIONAL_ACTIVITY_LIMIT = 100;
@@ -102,14 +103,7 @@ export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
     Result: ProjectionProjectDbRowSchema,
     execute: () => sql`
       SELECT
-        p.project_id AS "projectId", p.title,
-        p.provider_runtime_execution_target_id AS "providerRuntimeExecutionTargetId",
-        p.workspace_execution_target_id AS "workspaceExecutionTargetId",
-        p.execution_target_id AS "executionTargetId", p.workspace_root AS "workspaceRoot",
-        p.workspace_kind AS "workspaceKind", p.previous_workspace_root AS "previousWorkspaceRoot",
-        p.default_model_selection_json AS "defaultModelSelection", p.scripts_json AS scripts,
-        p.created_at AS "createdAt", p.updated_at AS "updatedAt",
-        p.deleting_at AS "deletingAt", p.deleted_at AS "deletedAt"
+        ${projectionProjectColumnsSql(sql)}
       FROM projection_projects p
       WHERE EXISTS (
         SELECT 1 FROM projection_threads t WHERE t.project_id = p.project_id

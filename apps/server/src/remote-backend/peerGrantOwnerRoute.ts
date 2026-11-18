@@ -21,7 +21,10 @@ import {
 import { Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/unstable/http";
 
-import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  ensureOrchestrationWorkspaceProjects,
+  OrchestrationEngineService,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import { PeerGrantRepositoryLive } from "../persistence/Layers/PeerGrants.ts";
 import { PeerGrantRepository } from "../persistence/Services/PeerGrants.ts";
 import { ServerConfig } from "../startup/config.ts";
@@ -75,12 +78,12 @@ export const peerGrantOwnerRoute = HttpRouter.add(
         )
           return refuse("invalid-request");
         // The worker's local policy: any provider and mode, but only workspaces it already has.
-        const readModel = yield* (yield* OrchestrationEngineService).getReadModel();
-        const roots = new Set(
-          readModel.projects
-            .filter((project) => project.deletedAt === null && !project.deletingAt)
-            .flatMap((project) => (project.workspaceRoot ? [project.workspaceRoot] : [])),
-        );
+        // Idle projects are not in the startup read model; hydrate each requested root.
+        const engine = yield* OrchestrationEngineService;
+        const roots = new Set<string>();
+        for (const root of new Set(input.ceiling.workspaceRoots))
+          if ((yield* ensureOrchestrationWorkspaceProjects(engine, root)).length > 0)
+            roots.add(root);
         const localCeiling = {
           runtimeMode: "full-access",
           providers: [...PROVIDER_KINDS],

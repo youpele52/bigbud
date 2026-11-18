@@ -21,7 +21,7 @@ import type { PeerDispatch, PeerResultSummary } from "@bigbud/contracts/server/r
 import { Effect } from "effect";
 
 import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
-import { loadPeerChildThread } from "../peer-orchestration/peerWorker.delegate.ts";
+import { loadPeerChildThread } from "../peer-orchestration/peerWorker.read.ts";
 import { stableThreadToolId } from "./ThreadOrchestrationTools.origins.ts";
 
 export interface PeerResultDelivery {

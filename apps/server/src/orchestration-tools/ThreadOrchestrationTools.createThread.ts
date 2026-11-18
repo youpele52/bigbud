@@ -15,7 +15,10 @@ import {
 } from "@bigbud/contracts";
 import { Effect, Option, Schema } from "effect";
 
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  ensureOrchestrationProjectState,
+  type OrchestrationEngineShape,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import type { ProjectionThreadWatchRepositoryShape } from "../persistence/Services/ProjectionThreadWatches.ts";
@@ -85,7 +88,11 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
       );
     }
     const targetProjectId = input.projectId ?? callerThread.projectId;
-    const targetProject = readModel.projects.find((project) => project.id === targetProjectId);
+    // An idle target project is not in the startup read model; hydrate it (F-P8-2).
+    const targetProject = yield* ensureOrchestrationProjectState(
+      input.orchestrationEngine,
+      targetProjectId,
+    );
     if (!targetProject || targetProject.deletedAt !== null) {
       return yield* Effect.fail(new Error(`Project '${targetProjectId}' was not found.`));
     }

@@ -99,6 +99,9 @@ describe("OrchestrationEngine", () => {
           getStartupOperationalState: () => Effect.succeed(projectionSnapshot),
           getThreadOperationalState: () => Effect.succeed(Option.none()),
           getFullThreadHistory: () => Effect.succeed(Option.none()),
+          getProjectOperationalState: () => Effect.succeed(Option.none()),
+          listProjectThreadIds: () => Effect.succeed([]),
+          listProjectIdsByWorkspaceRoot: () => Effect.succeed([]),
         }),
       ),
       Layer.provide(

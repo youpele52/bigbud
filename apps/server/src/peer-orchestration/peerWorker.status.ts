@@ -53,9 +53,32 @@ export function boundPeerSummary(
   };
 }
 
+const PROVIDER_TURN_START_FAILED = "provider.turn.start.failed";
+const NEVER_STARTED = "The child's first turn never started on the worker.";
+
+/**
+ * F-P8-1: the first turn was accepted (its user message exists) but never bound to a provider
+ * turn, and nothing can still start it (no pending start gate, queued prompt or active session).
+ * Returns the failure reason, or null when the child may still start.
+ */
+export function peerChildStartFailure(thread: OrchestrationThread): string | null {
+  if (thread.latestTurn !== null) return null;
+  if (thread.pendingTurnStart != null || (thread.queuedPrompts?.length ?? 0) > 0) return null;
+  if (thread.session?.status === "starting" || thread.session?.status === "running") return null;
+  if (!thread.messages.some((message) => message.role === "user")) return null;
+  const failure = thread.activities.findLast(
+    (activity) => activity.kind === PROVIDER_TURN_START_FAILED,
+  );
+  const payload = failure?.payload as { readonly detail?: unknown } | undefined;
+  const detail = typeof payload?.detail === "string" ? payload.detail.trim() : "";
+  const reason = detail || thread.session?.lastError?.trim() || failure?.summary || "";
+  return reason ? `${NEVER_STARTED} ${reason}` : NEVER_STARTED;
+}
+
 function childState(thread: OrchestrationThread): {
   readonly state: PeerChildState;
   readonly workflowStatus: string;
+  readonly reason?: string;
 } {
   if (thread.deletedAt !== null) return { state: "failed", workflowStatus: "deleted" };
   const status = resolveThreadWorkflowStatus(thread);
@@ -63,6 +86,9 @@ function childState(thread: OrchestrationThread): {
   if (status.isAgentActive) return { state: "running", workflowStatus: status.workflowStatus };
   if (status.workflowStatus === "workflow_complete" || status.workflowStatus === "plan_ready")
     return { state: "completed", workflowStatus: status.workflowStatus };
+  const startFailure = peerChildStartFailure(thread);
+  if (startFailure !== null)
+    return { state: "failed", workflowStatus: status.workflowStatus, reason: startFailure };
   if (status.workflowStatus === "error" || turn === "error")
     return { state: "failed", workflowStatus: status.workflowStatus };
   if (status.hasPendingApprovals || status.hasPendingUserInput)
@@ -73,13 +99,16 @@ function childState(thread: OrchestrationThread): {
   return { state: "running", workflowStatus: status.workflowStatus };
 }
 
+const resultOutcome = (state: PeerChildState) =>
+  state === "completed" ? "completed" : state === "failed" ? "failed" : "cancelled";
+
 export function peerChildStatus(child: PeerChild, thread: OrchestrationThread): PeerChildStatus {
-  const { state, workflowStatus } = childState(thread);
-  const text = lastAssistantText(thread);
+  const { state, workflowStatus, reason } = childState(thread);
+  const text = reason ?? lastAssistantText(thread);
   const result = !isTerminalPeerChildState(state)
     ? null
     : boundPeerSummary(
-        state === "completed" ? "completed" : state === "failed" ? "failed" : "cancelled",
+        resultOutcome(state),
         text ??
           (state === "completed"
             ? "The child finished without a final message."
@@ -95,5 +124,27 @@ export function peerChildStatus(child: PeerChild, thread: OrchestrationThread): 
     workflowStatus: workflowStatus.slice(0, 64),
     cancelRequested: child.cancelRequestedAt !== null,
     result,
+  } as PeerChildStatus;
+}
+
+/**
+ * Status of a child whose start intent is not complete (F-P8-3): `running` while the worker
+ * still completes it, terminal once the start was refused or cancelled before the first turn.
+ */
+export function peerChildPendingStartStatus(
+  child: PeerChild,
+  cancelledReason: string,
+): PeerChildStatus {
+  const failure = child.startFailure;
+  const state: PeerChildState =
+    failure === null ? "running" : failure === cancelledReason ? "cancelled" : "failed";
+  return {
+    dispatchId: child.dispatchId,
+    commandId: child.commandId,
+    childThreadId: child.childThreadId,
+    state,
+    workflowStatus: failure === null ? "starting" : "not_started",
+    cancelRequested: child.cancelRequestedAt !== null,
+    result: failure === null ? null : boundPeerSummary(resultOutcome(state), failure),
   } as PeerChildStatus;
 }

@@ -2,7 +2,10 @@ import type { OrchestrationThread, ProjectId } from "@bigbud/contracts";
 import { isRemoteExecutionTargetId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { Effect, Option } from "effect";
 
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  ensureOrchestrationProjectState,
+  type OrchestrationEngineShape,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
 import {
   requireCrossProjectConfirmation,
@@ -50,8 +53,11 @@ export const requireThreadCoordinationConfirmation = Effect.fn(
 )(function* (
   input: Omit<ThreadCoordinationAccessInput, "threadDelegationRepository">,
 ): Effect.fn.Return<ThreadCoordinationAccess, Error> {
+  const project = yield* ensureOrchestrationProjectState(
+    input.orchestrationEngine,
+    input.targetProjectId,
+  );
   const readModel = yield* input.orchestrationEngine.getReadModel();
-  const project = readModel.projects.find((candidate) => candidate.id === input.targetProjectId);
   if (!project || project.deletedAt !== null) {
     return yield* Effect.fail(new Error(`Project '${input.targetProjectId}' was not found.`));
   }

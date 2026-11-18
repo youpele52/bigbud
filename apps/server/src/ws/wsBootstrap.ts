@@ -31,7 +31,11 @@ import {
   claimBootstrapSubmissionRecipe,
   type BootstrapSubmissionRecipe,
 } from "./wsBootstrap.submissionRecipe.ts";
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import {
+  ensureOrchestrationProjectState,
+  ensureOrchestrationWorkspaceProjects,
+  type OrchestrationEngineShape,
+} from "../orchestration/Services/OrchestrationEngine.ts";
 import type { BootstrapSubmissionDispatch } from "../orchestration/Layers/OrchestrationEngine.bootstrapIdentity.ts";
 
 export type BootstrapServices = {
@@ -117,8 +121,16 @@ export function makeDispatchBootstrapThreadCommand(
               )
           : Effect.fail(new Error("Durable command outcome lookup is unavailable"));
 
+      // Idle projects are not in the startup read model; hydrate the referenced one first.
+      const hydrateTargetProject = Effect.gen(function* () {
+        if (targetProjectId !== undefined)
+          yield* ensureOrchestrationProjectState(orchestrationEngine, targetProjectId);
+        else if (targetProjectCwd !== undefined)
+          yield* ensureOrchestrationWorkspaceProjects(orchestrationEngine, targetProjectCwd);
+      });
       const resolveTargetProject = () =>
-        orchestrationEngine.getReadModel().pipe(
+        hydrateTargetProject.pipe(
+          Effect.andThen(orchestrationEngine.getReadModel()),
           Effect.map((readModel) => {
             const readModelThread =
               targetProjectId === undefined && targetProjectCwd === undefined

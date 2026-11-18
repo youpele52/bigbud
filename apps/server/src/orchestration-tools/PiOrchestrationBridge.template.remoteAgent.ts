@@ -8,7 +8,7 @@ import { REMOTE_AGENT_TOOL_SPECS } from "./remoteAgentTools.shared.ts";
  * (`delegate_to_host`, status, cancel) ride along on the `peer` action, keyed by the tool call id.
  * Relies on the bridge's `callOrchestrationTool` and `textResult`.
  */
-export function renderPiRemoteAgentToolsSource(): string {
+export function renderPiRemoteAgentToolsSource(options: { readonly peerTools: boolean }): string {
   return [
     `const remoteAgentToolSpecs = ${JSON.stringify(REMOTE_AGENT_TOOL_SPECS)};`,
     "const remoteAgentTools = remoteAgentToolSpecs.map((spec) => defineTool({",
@@ -21,7 +21,7 @@ export function renderPiRemoteAgentToolsSource(): string {
     "    return textResult(JSON.stringify(result.result ?? {}, null, 2));",
     "  },",
     "}));",
-    `const peerToolSpecs = ${JSON.stringify(PEER_TOOL_SPECS)};`,
+    `const peerToolSpecs = ${JSON.stringify(options.peerTools ? PEER_TOOL_SPECS : [])};`,
     "for (const spec of peerToolSpecs) remoteAgentTools.push(defineTool({",
     "  name: spec.name,",
     "  label: spec.name,",

@@ -3,7 +3,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { CommandId, ProjectId } from "@bigbud/contracts";
 import { PEER_CREDENTIAL_HEADERS } from "@bigbud/contracts/constants/remotePeer.constant.ts";
 import type { PeerGrant } from "@bigbud/contracts/server/remotePeer.ts";
-import { Effect, Layer } from "effect";
+import { Effect, Exit, Layer, Scope } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 
 import { createOrchestrationSystem } from "../orchestration/Layers/OrchestrationEngine.test.helpers.ts";
@@ -14,6 +14,8 @@ import {
   peerGrantFixture,
   peerUuid,
 } from "../peer-orchestration/peerFixtures.test.helpers.ts";
+import { makePeerChildStarter } from "../peer-orchestration/peerWorker.start.ts";
+import { PeerChildStarterService } from "../peer-orchestration/peerWorker.starter.layer.ts";
 import { PeerChildRepositoryLive } from "../persistence/Layers/PeerChildren.ts";
 import { PeerGrantRepositoryLive } from "../persistence/Layers/PeerGrants.ts";
 import { PeerChildRepository } from "../persistence/Services/PeerChildren.ts";
@@ -94,11 +96,18 @@ export async function makePeerRouteFixture() {
       return { grants: yield* PeerGrantRepository, children: yield* PeerChildRepository };
     }).pipe(Effect.provide(Layer.mergeAll(PeerGrantRepositoryLive, PeerChildRepositoryLive))),
   );
+  const starterScope = await system.run(Scope.make());
+  const starter = await system.run(
+    makePeerChildStarter({ engine: system.engine, children: repositories.children }).pipe(
+      Scope.provide(starterScope),
+    ),
+  );
   const { publicKey } = generateKeyPairSync("ed25519");
   const services = Layer.mergeAll(
     Layer.succeed(OrchestrationEngineService, system.engine),
     Layer.succeed(PeerGrantRepository, repositories.grants),
     Layer.succeed(PeerChildRepository, repositories.children),
+    Layer.succeed(PeerChildStarterService, starter),
     Layer.succeed(RemoteBackendIdentityService, {
       authority: {
         authorityId: WORKER_AUTHORITY,
@@ -138,8 +147,10 @@ export async function makePeerRouteFixture() {
     post,
     coordinator: COORDINATOR_AUTHORITY,
     services,
+    starter,
     dispose: async () => {
       await app.dispose();
+      await system.run(Scope.close(starterScope, Exit.void));
       await system.dispose();
     },
   };

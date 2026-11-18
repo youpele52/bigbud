@@ -154,6 +154,11 @@ export const handlePeerPairingRequest = Effect.fn("peerPairing.handle")(function
       return yield* result(deps, { scannedHostKeys });
     }
     case "save": {
+      if (request.confirmPin !== true)
+        return yield* fail(
+          "invalid-request",
+          "Confirm the host key pin before saving; nothing was saved.",
+        );
       const key = (yield* result(deps)).coordinator;
       if (!key.fingerprint)
         return yield* fail("key-unavailable", "Generate the coordinator key before pairing.");

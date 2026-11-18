@@ -17,7 +17,7 @@ import { PeerChildRepositoryLive } from "./PeerChildren.ts";
 
 const layer = PeerChildRepositoryLive.pipe(Layer.provideMerge(NodeSqliteClient.layerMemory()));
 
-const child = (n: number, overrides: Partial<PeerChild> = {}) => {
+const child = (n: number, overrides: Partial<PeerChild> = {}): PeerChild => {
   const dispatchId = peerUuid(2, n);
   return {
     commandId: `peer:${COORDINATOR_AUTHORITY}:${dispatchId}`,
@@ -29,6 +29,10 @@ const child = (n: number, overrides: Partial<PeerChild> = {}) => {
     workspaceRoot: "/srv/work",
     provider: "codex",
     createdAt: `2026-11-18T00:00:0${n}.000Z`,
+    cancelRequestedAt: null,
+    start: null,
+    startCompletedAt: null,
+    startFailure: null,
     ...overrides,
   };
 };
@@ -42,6 +46,8 @@ it.effect("176 records one child per dispatch identity, scoped to its grant", ()
       [],
     );
     yield* runMigrations({ toMigrationInclusive: 176 });
+    // 179 adds the start intent columns the repository reads.
+    yield* runMigrations({ toMigrationInclusive: 179 });
     const children = yield* PeerChildRepository;
     const first = yield* children.claim(child(1));
     assert.isFalse(first.joined);

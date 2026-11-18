@@ -20,10 +20,9 @@ import { Effect, Layer, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
-import {
-  peerWorkerDelegate,
-  type PeerWorkerDeps,
-} from "../peer-orchestration/peerWorker.delegate.ts";
+import { peerWorkerDelegate } from "../peer-orchestration/peerWorker.delegate.ts";
+import type { PeerWorkerDeps } from "../peer-orchestration/peerWorker.read.ts";
+import { PeerChildStarterService } from "../peer-orchestration/peerWorker.starter.layer.ts";
 import {
   peerWorkerCancel,
   peerWorkerFollow,
@@ -67,6 +66,7 @@ function peerRoute<I, O>(
       const deps: PeerWorkerDeps = {
         engine: yield* OrchestrationEngineService,
         children: yield* PeerChildRepository,
+        starter: yield* PeerChildStarterService,
       };
       const result = yield* handle(deps, grant, input);
       return HttpServerResponse.jsonUnsafe(encode(result), { headers });

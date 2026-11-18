@@ -130,7 +130,7 @@ const makeOrchestrationEngine = Effect.gen(function* () {
     },
   });
 
-  const prepareCommandState = makePrepareCommandState({ threadStateHydrator, sql: workspaceSql });
+  const prepareCommandState = makePrepareCommandState({ threadStateHydrator });
   const deletionFence = makeDeletionFence({
     threadDeletion,
     readModel: () => readModel,
@@ -340,6 +340,14 @@ const makeOrchestrationEngine = Effect.gen(function* () {
           ensureThreadState: (threadId: ThreadId, level: "operational" | "history") =>
             commandSemaphore
               .withPermits(1)(threadStateHydrator.load(threadId, level))
+              .pipe(Effect.orDie),
+          ensureProjectState: (projectId) =>
+            commandSemaphore
+              .withPermits(1)(threadStateHydrator.loadProject(projectId))
+              .pipe(Effect.orDie),
+          ensureWorkspaceProjects: (workspaceRoot) =>
+            commandSemaphore
+              .withPermits(1)(threadStateHydrator.loadWorkspaceProjects(workspaceRoot))
               .pipe(Effect.orDie),
         }),
     dispatch,

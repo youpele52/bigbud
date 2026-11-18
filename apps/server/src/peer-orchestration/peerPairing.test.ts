@@ -71,6 +71,14 @@ it.live("revoke_independent_of_saved_connection", () =>
     assert.strictEqual(scanned.scannedHostKeys?.[0]?.pinnedHostKey, PIN);
     assert.match(scanned.scannedHostKeys?.[0]?.fingerprint ?? "", /^SHA256:[A-Za-z0-9+/]+$/);
 
+    // O-3: a missing or false confirmation is a typed refusal, and nothing is saved.
+    const { confirmPin: _confirmed, ...unconfirmed } = save;
+    for (const request of [unconfirmed, { ...save, confirmPin: false }]) {
+      const refused = yield* Effect.flip(handlePeerPairingRequest(deps, request));
+      assert.strictEqual(errorCode(refused), "invalid-request");
+    }
+    assert.lengthOf((yield* handlePeerPairingRequest(deps, { action: "status" })).pairings, 0);
+
     const saved = yield* handlePeerPairingRequest(deps, save);
     const pairing = saved.pairings[0]!;
     assert.strictEqual(pairing.state, "awaiting-grant");
@@ -128,6 +136,14 @@ it.live("a saved connection with unsettled dispatches cannot be deleted", () =>
   Effect.gen(function* () {
     const { deps } = yield* makeDeps();
     yield* handlePeerPairingRequest(deps, { action: "ensure-key" });
+    // O-3: a missing or false confirmation is a typed refusal, and nothing is saved.
+    const { confirmPin: _confirmed, ...unconfirmed } = save;
+    for (const request of [unconfirmed, { ...save, confirmPin: false }]) {
+      const refused = yield* Effect.flip(handlePeerPairingRequest(deps, request));
+      assert.strictEqual(errorCode(refused), "invalid-request");
+    }
+    assert.lengthOf((yield* handlePeerPairingRequest(deps, { action: "status" })).pairings, 0);
+
     const saved = yield* handlePeerPairingRequest(deps, save);
     const pairing = saved.pairings[0]!;
     yield* handlePeerPairingRequest(deps, {

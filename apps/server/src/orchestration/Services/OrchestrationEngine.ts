@@ -19,7 +19,9 @@ import type {
   OrchestrationReadModel,
   OrchestrationReplayEventsResult,
   GetThreadOwnershipResult,
+  OrchestrationProject,
   OrchestrationThread,
+  ProjectId,
   ThreadId,
 } from "@bigbud/contracts";
 import { Effect, ServiceMap } from "effect";
@@ -62,6 +64,16 @@ export interface OrchestrationEngineShape {
     threadId: ThreadId,
     level: "operational" | "history",
   ) => Effect.Effect<OrchestrationThread | undefined>;
+
+  /** Installs a project the startup window left out (an idle project) from durable projections. */
+  readonly ensureProjectState?: (
+    projectId: ProjectId,
+  ) => Effect.Effect<OrchestrationProject | undefined>;
+
+  /** Installs and returns every live project that uses this workspace root. */
+  readonly ensureWorkspaceProjects?: (
+    workspaceRoot: string,
+  ) => Effect.Effect<ReadonlyArray<OrchestrationProject>>;
 
   readonly resolveThreadOwnership?: (threadId: ThreadId) => Effect.Effect<GetThreadOwnershipResult>;
 
@@ -148,6 +160,43 @@ export function ensureOrchestrationThreadState(
     : engine
         .getReadModel()
         .pipe(Effect.map((model) => model.threads.find((thread) => thread.id === threadId)));
+}
+
+/**
+ * A project by id, hydrated when the startup window left it out. Read-model lookups of a
+ * project before a dispatch go through this, never `getReadModel().projects` alone.
+ */
+export function ensureOrchestrationProjectState(
+  engine: Pick<OrchestrationEngineShape, "ensureProjectState" | "getReadModel">,
+  projectId: ProjectId,
+) {
+  return engine.ensureProjectState
+    ? engine.ensureProjectState(projectId)
+    : engine
+        .getReadModel()
+        .pipe(Effect.map((model) => model.projects.find((project) => project.id === projectId)));
+}
+
+/** Live (not deleted, not being deleted) projects using a workspace root, hydrated if needed. */
+export function ensureOrchestrationWorkspaceProjects(
+  engine: Pick<OrchestrationEngineShape, "ensureWorkspaceProjects" | "getReadModel">,
+  workspaceRoot: string,
+) {
+  return (
+    engine.ensureWorkspaceProjects
+      ? engine.ensureWorkspaceProjects(workspaceRoot)
+      : engine
+          .getReadModel()
+          .pipe(
+            Effect.map((model) =>
+              model.projects.filter((project) => project.workspaceRoot === workspaceRoot),
+            ),
+          )
+  ).pipe(
+    Effect.map((projects) =>
+      projects.filter((project) => project.deletedAt === null && !project.deletingAt),
+    ),
+  );
 }
 
 export function resolveOrchestrationThreadOwnership(

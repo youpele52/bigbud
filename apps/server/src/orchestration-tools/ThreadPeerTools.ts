@@ -1,7 +1,11 @@
 import { Effect } from "effect";
 
 import type { PeerDispatchServiceShape, PeerToolResult } from "./peerDispatch.service.ts";
-import type { PeerToolInput } from "./peerTools.shared.ts";
+import {
+  PEER_TOOLS_NOT_OFFERED,
+  peerToolsOfferedTo,
+  type PeerToolInput,
+} from "./peerTools.shared.ts";
 
 /**
  * Thread tool entry for P8 peer delegation (WP-8E). Per-thread authentication happens before
@@ -30,6 +34,7 @@ export function runPeerTool(
   service: PeerDispatchServiceShape | null,
   input: PeerToolInput,
 ): Effect.Effect<PeerToolResult, Error> {
+  if (!peerToolsOfferedTo(input.callerThreadId)) return Effect.succeed(PEER_TOOLS_NOT_OFFERED);
   if (!service) return Effect.succeed(PEER_TOOL_UNAVAILABLE);
   const args =
     input.arguments && typeof input.arguments === "object"

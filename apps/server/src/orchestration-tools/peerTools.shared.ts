@@ -3,6 +3,8 @@
  * status and cancel it. Every provider surface renders these from the same specs. Without an
  * active pairing `delegate_to_host` returns a typed unavailable result (`grant-missing`).
  */
+import { isBackgroundSessionThreadId } from "../provider/backgroundSessionThreads.ts";
+
 export const PEER_TOOL_NAMES = [
   "delegate_to_host",
   "peer_dispatch_status",
@@ -68,3 +70,21 @@ export interface PeerToolInput {
   readonly tool: PeerToolName;
   readonly arguments: unknown;
 }
+
+/**
+ * The one rule for who sees the peer tools (O-2): user-driven threads only. Background sessions
+ * (learning reviews) replay a transcript the user is not steering, so every provider surface
+ * leaves the tools out of their list and the dispatcher refuses them.
+ */
+export function peerToolsOfferedTo(threadId: string): boolean {
+  return !isBackgroundSessionThreadId(threadId);
+}
+
+export const PEER_TOOLS_NOT_OFFERED = {
+  ok: false,
+  unavailable: true,
+  error: {
+    code: "action-not-allowed",
+    message: "Peer delegation is only available to user-driven threads.",
+  },
+} as const;

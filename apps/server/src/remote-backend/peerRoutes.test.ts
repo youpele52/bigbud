@@ -88,12 +88,21 @@ describe("worker peer router boundary", () => {
       expect(refused.status, path).toBe(403);
       expect(refused.json.error.code, path).toBe("grant-revoked");
     }
-    // Re-pairing supersedes: the old grant stays refused, the new one cannot see old children.
+    // Re-pairing supersedes: the old grant stays refused. The same coordinator's new grant still
+    // reads the earlier child's real status (O-5); another coordinator never sees it.
     const next = await fixture.issue(2);
-    const unknown = await fixture.post(
+    const earlier = await fixture.post(
       PEER_ROUTE_PATHS.status,
       { dispatchId: peerUuid(2, 1) },
       peerHeaders(next),
+    );
+    expect(earlier.status).toBe(200);
+    expect(earlier.json.childThreadId).toBe(accepted.json.childThreadId);
+    const other = await fixture.issue(3, { coordinatorAuthorityId: "f".repeat(32) });
+    const unknown = await fixture.post(
+      PEER_ROUTE_PATHS.status,
+      { dispatchId: peerUuid(2, 1) },
+      peerHeaders(other),
     );
     expect(unknown.status).toBe(404);
     expect(unknown.json.error.code).toBe("dispatch-unknown");

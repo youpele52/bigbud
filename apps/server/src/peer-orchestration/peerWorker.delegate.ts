@@ -1,23 +1,17 @@
 /**
  * Worker-side `delegate` (WP-8B). Maps one peer dispatch identity onto the same orchestration
  * commands `create_thread` uses (`thread.create` then `thread.turn.start`), with the
- * coordinator-namespaced command id. The `peer_children` record fixes the child id and creation
- * time, so a repeated delegate dispatches byte-identical commands and command receipts return the
- * first result: one dispatch identity never creates a second child.
+ * coordinator-namespaced command id. The `peer_children` record fixes the child id, creation
+ * time and start intent, so a repeated delegate dispatches byte-identical commands and command
+ * receipts return the first result: one dispatch identity never creates a second child. The
+ * start itself completes in `peerWorker.start`, independently of this request (F-P8-3).
  *
  * @module peerWorker.delegate
  */
 import { createHash } from "node:crypto";
 
-import {
-  CommandId,
-  MessageId,
-  ModelSelection,
-  ThreadId,
-  type OrchestrationThread,
-} from "@bigbud/contracts";
+import { ModelSelection } from "@bigbud/contracts";
 import { DEFAULT_MODEL_BY_PROVIDER } from "@bigbud/contracts/constants/model.constant.ts";
-import { DEFAULT_PROVIDER_INTERACTION_MODE } from "@bigbud/contracts/constants/runtime.constant.ts";
 import type { PeerGrant } from "@bigbud/contracts/server/remotePeer.ts";
 import type {
   PeerDelegateRequest,
@@ -25,16 +19,12 @@ import type {
 } from "@bigbud/contracts/server/remotePeer.wire.ts";
 import { Effect, Schema } from "effect";
 
-import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
+import { ensureOrchestrationWorkspaceProjects } from "../orchestration/Services/OrchestrationEngine.ts";
 import { stableThreadToolId } from "../orchestration-tools/ThreadOrchestrationTools.origins.ts";
-import type { PeerChildRepositoryShape } from "../persistence/Services/PeerChildren.ts";
+import type { PeerChildStart } from "../persistence/Services/PeerChildren.ts";
 import { isWithinPeerPermissionCeiling } from "./peerPermission.narrowing.ts";
-import { peerChildStatus, peerCommandId, PeerWorkerRefusal } from "./peerWorker.status.ts";
-
-export interface PeerWorkerDeps {
-  readonly engine: OrchestrationEngineShape;
-  readonly children: PeerChildRepositoryShape;
-}
+import { peerWorkerChildStatus, type PeerWorkerDeps } from "./peerWorker.read.ts";
+import { peerCommandId, PeerWorkerRefusal } from "./peerWorker.status.ts";
 
 /** Canonical digest of the request; field order is fixed so identical retries match. */
 export function peerDelegateDigest(request: PeerDelegateRequest): string {
@@ -54,24 +44,19 @@ export function peerDelegateDigest(request: PeerDelegateRequest): string {
 }
 
 const internal = (message: string) => PeerWorkerRefusal.of("child-failed", message);
-const dispatchFailure = (error: { readonly _tag?: string }) =>
-  error._tag === "OrchestrationCommandIdConflictError"
-    ? PeerWorkerRefusal.of("dispatch-conflict", "The dispatch identity conflicts with a command.")
-    : internal("The worker could not start the child.");
-
-/** History-level thread state, falling back to the operational read model. */
-export const loadPeerChildThread = Effect.fn("loadPeerChildThread")(function* (
-  engine: OrchestrationEngineShape,
-  childThreadId: string,
-) {
-  const id = ThreadId.makeUnsafe(childThreadId);
-  if (engine.ensureThreadState) {
-    const thread = yield* engine.ensureThreadState(id, "history");
-    if (thread) return thread;
-  }
-  const readModel = yield* engine.getReadModel();
-  return readModel.threads.find((thread) => thread.id === id) as OrchestrationThread | undefined;
-});
+/**
+ * The child's model: the requested one, else the worker project's default when it names the
+ * same provider, else the provider default.
+ */
+export function resolvePeerChildModel(
+  request: Pick<PeerDelegateRequest, "provider" | "model">,
+  projectDefault: { readonly provider: string; readonly model: string } | null | undefined,
+): string {
+  if (request.model) return request.model;
+  if (projectDefault && projectDefault.provider === request.provider && projectDefault.model)
+    return projectDefault.model;
+  return DEFAULT_MODEL_BY_PROVIDER[request.provider];
+}
 
 export const peerWorkerDelegate = Effect.fn("peerWorkerDelegate")(function* (
   deps: PeerWorkerDeps,
@@ -92,24 +77,12 @@ export const peerWorkerDelegate = Effect.fn("peerWorkerDelegate")(function* (
       "permission-exceeds-ceiling",
       "The delegate target is outside the requested permissions.",
     );
-  const readModel = yield* deps.engine.getReadModel();
-  const project = readModel.projects.find(
-    (entry) =>
-      entry.workspaceRoot === request.workspaceRoot &&
-      entry.deletedAt === null &&
-      !entry.deletingAt,
-  );
-  if (!project)
-    return yield* PeerWorkerRefusal.of(
-      "workspace-unavailable",
-      "The worker has no project for the requested workspace root.",
-    );
-  const modelSelection = yield* Schema.decodeUnknownEffect(ModelSelection)({
-    provider: request.provider,
-    model: request.model ?? DEFAULT_MODEL_BY_PROVIDER[request.provider],
-  }).pipe(Effect.mapError(() => internal("The requested model selection is invalid.")));
-
   const commandId = peerCommandId(grant.coordinatorAuthorityId, request.dispatchId);
+  // A repeated identity keeps the start intent recorded first (project and model included).
+  const existing = yield* deps.children
+    .findByCommand(commandId)
+    .pipe(Effect.mapError(() => internal("The worker could not read the child record.")));
+  const start = existing?.start ?? (yield* resolvePeerChildStart(deps, request));
   const { child, joined } = yield* deps.children
     .claim({
       commandId,
@@ -121,6 +94,7 @@ export const peerWorkerDelegate = Effect.fn("peerWorkerDelegate")(function* (
       workspaceRoot: request.workspaceRoot,
       provider: request.provider,
       createdAt: new Date().toISOString(),
+      start,
     })
     .pipe(
       Effect.mapError((error) =>
@@ -129,43 +103,35 @@ export const peerWorkerDelegate = Effect.fn("peerWorkerDelegate")(function* (
           : internal("The worker could not record the child."),
       ),
     );
-  const threadId = ThreadId.makeUnsafe(child.childThreadId);
-  const common = {
+  // The start runs in the starter's scope: a cut channel interrupts only this wait.
+  yield* deps.starter.ensureStarted(child.commandId);
+  const status = yield* peerWorkerChildStatus(deps, child.commandId).pipe(
+    Effect.mapError(() => internal("The worker could not read the child.")),
+  );
+  if (!status) return yield* internal("The child is not visible after creation.");
+  return { ...status, replayed: joined } as PeerDelegateResponse;
+});
+
+/** Project (hydrated when idle) and model for a new child; refuses an unknown workspace. */
+const resolvePeerChildStart = Effect.fn("resolvePeerChildStart")(function* (
+  deps: PeerWorkerDeps,
+  request: PeerDelegateRequest,
+) {
+  const [project] = yield* ensureOrchestrationWorkspaceProjects(deps.engine, request.workspaceRoot);
+  if (!project)
+    return yield* PeerWorkerRefusal.of(
+      "workspace-unavailable",
+      "The worker has no project for the requested workspace root.",
+    );
+  const modelSelection = yield* Schema.decodeUnknownEffect(ModelSelection)({
+    provider: request.provider,
+    model: resolvePeerChildModel(request, project.defaultModelSelection),
+  }).pipe(Effect.mapError(() => internal("The requested model selection is invalid.")));
+  return {
+    projectId: project.id,
+    title: request.title,
+    task: request.task,
+    modelSelection: { provider: modelSelection.provider, model: modelSelection.model },
     runtimeMode: request.permissions.runtimeMode,
-    interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
-    createdAt: child.createdAt,
-  } as const;
-  // Both commands are pure functions of the stored record and the (digest-checked) request.
-  yield* deps.engine
-    .dispatch({
-      type: "thread.create",
-      commandId: CommandId.makeUnsafe(child.commandId),
-      threadId,
-      projectId: project.id,
-      title: request.title,
-      purpose: "standard",
-      modelSelection,
-      branch: null,
-      worktreePath: null,
-      ...common,
-    })
-    .pipe(Effect.mapError(dispatchFailure));
-  yield* deps.engine
-    .dispatch({
-      type: "thread.turn.start",
-      commandId: CommandId.makeUnsafe(`${child.commandId}:turn`),
-      threadId,
-      message: {
-        messageId: MessageId.makeUnsafe(stableThreadToolId("peer-message", child.commandId)),
-        role: "user",
-        text: request.task,
-        attachments: [],
-      },
-      modelSelection,
-      ...common,
-    })
-    .pipe(Effect.mapError(dispatchFailure));
-  const thread = yield* loadPeerChildThread(deps.engine, child.childThreadId);
-  if (!thread) return yield* internal("The child thread is not visible after creation.");
-  return { ...peerChildStatus(child, thread), replayed: joined } as PeerDelegateResponse;
+  } satisfies PeerChildStart;
 });

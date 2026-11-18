@@ -10,6 +10,7 @@ import { createCopilotThreadOrchestrationTools } from "../../../orchestration-to
 import type { ThreadOrchestrationToolDispatcherShape } from "../../../orchestration-tools/ThreadOrchestrationToolDispatcher.ts";
 import { dispatchComputerUseToolRequest } from "../../../orchestration-tools/computerUseToolRequest.ts";
 import { runThreadOrganizationTool } from "../../../orchestration-tools/threadOrganizationTool.run.ts";
+import { peerToolsOfferedTo } from "../../../orchestration-tools/peerTools.shared.ts";
 
 const asRecord = <A>(effect: Effect.Effect<A, Error>) =>
   Effect.runPromise(
@@ -36,6 +37,7 @@ export function createCopilotOrchestrationToolSurface(input: {
     ...(dispatcher.remoteAgent
       ? { remoteAgent: (request) => asRecord(dispatcher.remoteAgent!(request)) }
       : {}),
+    peerTools: peerToolsOfferedTo(threadId),
     ...(dispatcher.peer
       ? {
           peer: (tool, args, invocationId) =>

@@ -101,7 +101,7 @@ function createThreadToolSpecs(delegatedModelChoice: boolean): ReadonlyArray<Cod
 }
 
 export function createCodexThreadOrchestrationDynamicTools(
-  options: { readonly delegatedModelChoice?: boolean } = {},
+  options: { readonly delegatedModelChoice?: boolean; readonly peerTools?: boolean } = {},
 ): ReadonlyArray<CodexDynamicToolSpec> {
   return [
     ...AGENT_WORKSPACE_TOOL_SPECS.map((spec) => ({
@@ -110,12 +110,14 @@ export function createCodexThreadOrchestrationDynamicTools(
       description: spec.description,
       inputSchema: spec.inputSchema,
     })),
-    ...[...REMOTE_AGENT_TOOL_SPECS, ...PEER_TOOL_SPECS].map((spec) => ({
-      namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
-      name: spec.name,
-      description: spec.description,
-      inputSchema: spec.parameters,
-    })),
+    ...[...REMOTE_AGENT_TOOL_SPECS, ...(options.peerTools === false ? [] : PEER_TOOL_SPECS)].map(
+      (spec) => ({
+        namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
+        name: spec.name,
+        description: spec.description,
+        inputSchema: spec.parameters,
+      }),
+    ),
     {
       namespace: BIGBUD_ORCHESTRATION_NAMESPACE,
       name: "render_html",

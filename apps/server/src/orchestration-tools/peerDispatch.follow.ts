@@ -14,7 +14,11 @@
  *
  * @module peerDispatch.follow
  */
-import type { PeerDispatch, PeerError } from "@bigbud/contracts/server/remotePeer.ts";
+import type {
+  PeerDispatch,
+  PeerError,
+  PeerResultSummary,
+} from "@bigbud/contracts/server/remotePeer.ts";
 import {
   PeerChildStatus,
   type PeerDelegateRequest,
@@ -30,6 +34,7 @@ import type {
   PeerDispatchRepositoryError,
   PeerDispatchTransitionPatch,
 } from "../persistence/Services/PeerDispatches.ts";
+import type { PeerPairingRepositoryError } from "../persistence/Services/PeerPairings.ts";
 import { buildPeerResultDelivery } from "./peerDispatch.delivery.ts";
 import type { PeerCoordinatorDeps } from "./peerDispatch.deps.ts";
 import {
@@ -44,6 +49,7 @@ class PeerTransportFailure extends Data.TaggedError("PeerTransportFailure")<{
 
 export type PeerFollowError =
   | PeerDispatchRepositoryError
+  | PeerPairingRepositoryError
   | PersistenceSqlError
   | PersistenceDecodeError;
 
@@ -106,6 +112,24 @@ const move = (
     .transition(dispatch.dispatchId, event, { ...patch, updatedAt: deps.now() })
     .pipe(Effect.as<PeerFollowStep>("continue"));
 
+/** Delivers one result into the coordinator thread; idempotent per dispatch identity. */
+const deliverResult = (
+  deps: PeerCoordinatorDeps,
+  dispatch: PeerDispatch,
+  pairing: PeerPairing,
+  result: PeerResultSummary,
+) =>
+  deps.deliver(buildPeerResultDelivery(dispatch, pairing.label, result)).pipe(
+    Effect.retry({ times: 2 }),
+    // The result stays on the row (status tool, settings); settling must not wait forever.
+    Effect.catch((error) =>
+      Effect.logWarning("peer result delivery failed", {
+        dispatchId: dispatch.dispatchId,
+        error: error.message,
+      }),
+    ),
+  );
+
 /** Delivers the child's result, then settles the row (delivery is idempotent per identity). */
 const settle = Effect.fn("peerDispatch.settle")(function* (
   deps: PeerCoordinatorDeps,
@@ -124,16 +148,7 @@ const settle = Effect.fn("peerDispatch.settle")(function* (
       "The worker reported no summary.",
     );
   const accepted = { ...dispatch, childThreadId: dispatch.childThreadId ?? status.childThreadId };
-  yield* deps.deliver(buildPeerResultDelivery(accepted, pairing.label, result)).pipe(
-    Effect.retry({ times: 2 }),
-    // The result stays on the row (status tool, settings); settling must not wait forever.
-    Effect.catch((error) =>
-      Effect.logWarning("peer result delivery failed", {
-        dispatchId: dispatch.dispatchId,
-        error: error.message,
-      }),
-    ),
-  );
+  yield* deliverResult(deps, accepted, pairing, result);
   // The child id is recorded too: a cancel requested before acceptance never saw it.
   const base = { result, childThreadId: status.childThreadId };
   if (result.outcome === "completed") return yield* move(deps, dispatch, "child-completed", base);
@@ -144,6 +159,37 @@ const settle = Effect.fn("peerDispatch.settle")(function* (
   return yield* move(deps, dispatch, "child-failed", {
     ...base,
     error: peerError("child-failed", message || "The child failed on the worker."),
+  });
+});
+
+/** Why an accepted child can no longer be observed, for the delivered failure (F-P8-4, O-5). */
+export function peerRefusalReason(
+  dispatch: PeerDispatch,
+  pairing: PeerPairing,
+  error: PeerError,
+): string {
+  if (error.code === "dispatch-unknown" && pairing.grantId !== dispatch.worker.grantId)
+    return (
+      "The worker grant was re-issued after this task was accepted (grant superseded), and the " +
+      "worker no longer reports this child, so its outcome is unknown."
+    );
+  return `The worker can no longer report this child (${error.code}): ${error.message}`;
+}
+
+/** A final refusal after acceptance: deliver a failure once, then settle the row failed. */
+const settleRefused = Effect.fn("peerDispatch.settleRefused")(function* (
+  deps: PeerCoordinatorDeps,
+  dispatch: PeerDispatch,
+  pairing: PeerPairing,
+  error: PeerError,
+) {
+  // Re-read the pairing: a re-grant may have landed while this request was in flight.
+  const current = (yield* deps.pairings.findByWorker(pairing.workerAuthorityId)) ?? pairing;
+  const result = boundPeerSummary("failed", peerRefusalReason(dispatch, current, error));
+  yield* deliverResult(deps, dispatch, pairing, result);
+  return yield* move(deps, dispatch, "child-failed", {
+    result,
+    error: peerError(error.code, result.summary),
   });
 });
 
@@ -281,7 +327,7 @@ const followOutcome = (
         outcome.error.code === "dispatch-unknown"
       )
         return move(deps, dispatch, "cancel-confirmed");
-      return move(deps, dispatch, "child-failed", { error: outcome.error });
+      return settleRefused(deps, dispatch, pairing, outcome.error);
     }
   }
 };

@@ -7,6 +7,7 @@
 import { Effect, Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 
+import { PeerChildStarterLive } from "../peer-orchestration/peerWorker.starter.layer.ts";
 import { PeerChildRepositoryLive } from "../persistence/Layers/PeerChildren.ts";
 import { PeerGrantRepositoryLive } from "../persistence/Layers/PeerGrants.ts";
 import { remoteUnixHttpServerLive } from "../server.platform.ts";
@@ -48,8 +49,12 @@ export const RemotePeerSocketLive = Layer.unwrap(
       (prepared) => socketOperation(prepared.release).pipe(Effect.ignoreCause({ log: true })),
     );
     // Peer-only repositories, built once and provided to every peer request.
+    // The child starter lives in this scope, so a start outlives the request that began it.
     const repositories = yield* Layer.build(
-      Layer.mergeAll(PeerGrantRepositoryLive, PeerChildRepositoryLive),
+      Layer.mergeAll(
+        PeerGrantRepositoryLive,
+        PeerChildStarterLive.pipe(Layer.provideMerge(PeerChildRepositoryLive)),
+      ),
     );
     const serving = serveIsolatedRemoteRoutes(
       remotePeerRoutesLayer.pipe(HttpRouter.provideRequest(Layer.succeedServices(repositories))),

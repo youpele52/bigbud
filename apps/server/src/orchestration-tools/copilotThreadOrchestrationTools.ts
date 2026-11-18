@@ -97,6 +97,8 @@ export function createCopilotThreadOrchestrationTools(
     readonly renderHtml?: (args: unknown, invocationId: string) => Promise<unknown>;
     readonly getSystemResources?: (input?: unknown) => Promise<Record<string, unknown>>;
     readonly remoteAgent?: (input: RemoteAgentToolInput) => Promise<Record<string, unknown>>;
+    /** False for background sessions, which are not offered the peer tools (O-2). */
+    readonly peerTools?: boolean;
     /** P8 peer tools; the binding adds the caller thread. */
     readonly peer?: (
       tool: PeerToolName,
@@ -161,7 +163,7 @@ export function createCopilotThreadOrchestrationTools(
         }
       },
     })),
-    ...PEER_TOOL_SPECS.map((spec) => ({
+    ...(input.peerTools === false ? [] : PEER_TOOL_SPECS).map((spec) => ({
       name: spec.name,
       description: spec.description,
       parameters: spec.parameters,

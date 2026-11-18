@@ -186,6 +186,9 @@ describe("OrchestrationEngine rejected receipt durability", () => {
                   detail: "history hydration failed",
                 }),
               ),
+            getProjectOperationalState: () => Effect.succeed(Option.none()),
+            listProjectThreadIds: () => Effect.succeed([]),
+            listProjectIdsByWorkspaceRoot: () => Effect.succeed([]),
           }),
         ),
         Layer.provide(

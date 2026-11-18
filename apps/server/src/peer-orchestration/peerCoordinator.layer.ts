@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { Effect, Layer, Option } from "effect";
 
 import { OrchestrationEngineService } from "../orchestration/Services/OrchestrationEngine.ts";
-import { loadPeerChildThread } from "./peerWorker.delegate.ts";
+import { loadPeerChildThread } from "./peerWorker.read.ts";
 import { makeEnginePeerDeliver } from "../orchestration-tools/peerDispatch.delivery.ts";
 import {
   defaultPeerRetryDelayMs,

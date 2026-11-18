@@ -51,6 +51,9 @@ function makeThreadHistoryLayer(threadId?: ThreadId) {
     getStartupOperationalState: () => Effect.die(new Error("not used by handoff jobs")),
     getThreadOperationalState: () => Effect.die(new Error("not used by handoff jobs")),
     getFullThreadHistory: () => Effect.succeed(Option.some(makeSnapshot(threadId))),
+    getProjectOperationalState: () => Effect.die(new Error("not used by handoff jobs")),
+    listProjectThreadIds: () => Effect.die(new Error("not used by handoff jobs")),
+    listProjectIdsByWorkspaceRoot: () => Effect.die(new Error("not used by handoff jobs")),
   });
 }
 
