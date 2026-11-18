@@ -20,77 +20,44 @@
     ],
     "all": [
       {
-        "path": [
-          "schemaVersion"
-        ],
-        "values": [
-          3
-        ]
+        "path": ["schemaVersion"],
+        "values": [3]
       },
       {
-        "path": [
-          "mobile",
-          "consent",
-          "enabled"
-        ],
-        "values": [
-          true
-        ]
+        "path": ["mobile", "consent", "enabled"],
+        "values": [true]
       }
     ],
     "select": [
       {
-        "path": [
-          "mobile",
-          "gatewayLifecycle",
-          "attempts"
-        ],
+        "path": ["mobile", "gatewayLifecycle", "attempts"],
         "key": "nonce",
         "value": "original-nonce",
         "maxRows": 32,
         "all": [
           {
-            "path": [
-              "phase"
-            ],
-            "values": [
-              "attempted",
-              "child-owned"
-            ]
+            "path": ["phase"],
+            "values": ["attempted", "child-owned"]
           },
           {
-            "path": [
-              "nativeOwnership",
-              "binding",
-              "configurationSha256"
-            ],
+            "path": ["nativeOwnership", "binding", "configurationSha256"],
             "valueFrom": "configurationSha256"
           },
           {
-            "path": [
-              "nativeOwnership",
-              "binding",
-              "guardSha256"
-            ],
+            "path": ["nativeOwnership", "binding", "guardSha256"],
             "valueFrom": "guardSha256"
           }
         ]
       },
       {
-        "path": [
-          "pins"
-        ],
+        "path": ["pins"],
         "key": "owner",
         "value": "original-pin",
         "maxRows": 128,
         "all": [
           {
-            "path": [
-              "buildId"
-            ],
-            "values": [
-              "original-build"
-            ]
+            "path": ["buildId"],
+            "values": ["original-build"]
           }
         ]
       }
