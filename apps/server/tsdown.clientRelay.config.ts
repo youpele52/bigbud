@@ -8,6 +8,9 @@ const helper = (name: string, entry: string, outDir: string): UserConfig => ({
   clean: true,
   noExternal: () => true,
   inlineOnly: false,
+  // Same code generation as tsdown.config.ts: no rolldown 1.x DCE minify or constant inlining.
+  inputOptions: { optimization: { inlineConst: false } },
+  minify: false,
   sourcemap: true,
   banner: { js: "#!/usr/bin/env node\n" },
 });

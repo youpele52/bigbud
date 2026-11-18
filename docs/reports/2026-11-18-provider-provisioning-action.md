@@ -326,3 +326,10 @@ hash to the new pins.
   has 0 loader sites. So does `remoteBackendClientRelay.mjs`.
 - **Clean-up:** the build directories were deleted afterwards. Logs and digests are kept in the
   job's private tmp directory.
+
+### Follow-up: rolldown 1.1.5
+
+tsdown now runs on rolldown `1.1.5`. Server builds and aarch64 graphs are byte-reproducible
+(archive sha256 and `buildDigest` included). Three region pins (msgpackr `unpack.js` and
+`struct.js`, and the Claude SDK) change, and they are **not** re-pinned yet. See
+[tsdown on rolldown 1.1.5](2026-11-18-tsdown-rolldown-1.1.5.md).

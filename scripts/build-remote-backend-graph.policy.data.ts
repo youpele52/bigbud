@@ -11,7 +11,12 @@
  * region were relabelled by first appearance instead of by spelling, because rolldown renames
  * them between builds (`process$1` ↔ `ob`); the six regions that refer to file bindings were
  * re-pinned after checking that their new canonical text is the reviewed canonical text with only
- * those labels renamed. */
+ * those labels renamed. On 18 Nov 2026 the server build moved to rolldown 1.1.5 and the msgpackr
+ * `unpack.js`/`struct.js` and Claude agent SDK regions were re-pinned after a security re-review
+ * of the rc.3 and 1.1.5 builds: msgpackr only splits declarator lists (and gains a `@__PURE__`
+ * comment); the SDK region only drops dead code, inlines single-use values and folds calls to
+ * empty functions, and every loader site keeps the same arguments resolving to the same bindings
+ * (docs/reports/2026-11-18-tsdown-rolldown-1.1.5.md, "Security re-review"). */
 const loader = (member: string, sha256: string, reason: string, roots: string[] = []) => ({
   member,
   sha256,
@@ -44,12 +49,12 @@ export const BACKEND_GRAPH_LOADER_POLICY_DATA = {
     // Inlined third-party regions of the server bundle.
     loader(
       "msgpackr/unpack.js",
-      "6e04f456e946c7b0f2bb03e24a05c43270c454337ce4adfec072ceab9c0841d9",
+      "15bff2e606ca40b410bb609715fd83f0819ef28f342a8e43356d8dd278645226",
       "msgpackr record readers generated from decoded field names; generates object literals, loads no modules.",
     ),
     loader(
       "msgpackr/struct.js",
-      "c320bf3aca1504af45d51cfe686b370ca756324621d4412c1d3b82f15205f88c",
+      "786e8edea024ebddc826226c8b8f923c4c2e21bcfe0d8777dcf738e9b07de0be",
       "msgpackr struct accessor code generation and a CSP probe; loads no modules.",
     ),
     loader(
@@ -59,7 +64,7 @@ export const BACKEND_GRAPH_LOADER_POLICY_DATA = {
     ),
     loader(
       "@anthropic-ai/claude-agent-sdk/sdk.mjs",
-      "f99dc39cb4b0c4faf2b605ba202f5db12fc4d9baa1536283180f89a4e060cda9",
+      "e17af7aa0bff3353f0ded5d73ea8a03adb2079736d862208855dafde5bbaf3f5",
       "Claude agent SDK: ajv schema-validator codegen, a globalThis probe, and a native CLI lookup used only without pathToClaudeCodeExecutable (absent here, typed error).",
     ),
     // Pi closure, reached through the reviewed Pi CLI root and its rpc-entry export.

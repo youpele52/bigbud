@@ -44,7 +44,12 @@ export default defineConfig({
   format: ["esm"],
   // A worker entry has startup side effects. Never promote shared helpers into its
   // public exports: main-thread chunks would import and execute the worker entry.
-  inputOptions: { preserveEntrySignatures: "strict" },
+  // rolldown 1.x defaults to `minify: "dce-only"` and smart `inlineConst`; both rewrite or drop a
+  // module's first statement and its `//#region` marker, which the backend graph's loader policy
+  // uses to attribute reviewed code. Keep rolldown 1.0.0-rc.3's code generation (also in
+  // tsdown.clientRelay.config.ts).
+  inputOptions: { preserveEntrySignatures: "strict", optimization: { inlineConst: false } },
+  minify: false,
   outDir: "dist",
   // import.meta.url resolves beside the bundled server, not the original source tree.
   copy: [

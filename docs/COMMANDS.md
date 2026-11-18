@@ -153,6 +153,12 @@ bun run remote-backend-graph --target aarch64-unknown-linux-gnu --dist apps/serv
   --key-id dev-graph --version 0.1.613-dev
 ```
 
+tsdown runs on rolldown `1.1.5`, pinned by the root `overrides` in `package.json`. With an
+unchanged source tree and lockfile, the server build is byte-identical between runs and
+checkouts, so the archive sha256 and `buildDigest` are reproducible too. Both server tsdown
+configs set `minify: false` and `optimization.inlineConst: false`. These keep the
+`//#region` markers that the loader policy uses to attribute reviewed code.
+
 The output directory must not exist. After a dependency or bundle change, add
 `--list-loader-sites` (no key needed) to print each unreviewed loader site with its member and
 hash, plus any other refusal, and leave an unsigned graph for inspection.
