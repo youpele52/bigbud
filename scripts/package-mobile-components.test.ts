@@ -225,6 +225,7 @@ it("fails corrupted archive contents before exposing a manifest", async () => {
   await expect(readFile(join(input.outputDirectory, "manifest.json"))).rejects.toThrow();
 });
 
+// Compresses and then streams a 160 MiB expansion; 0.7 s locally, over 5 s on a busy CI runner.
 it("rejects total archive header/PAX/padding expansion before signing any metadata", async () => {
   const { input } = await mobileFixture();
   const bomb = gzipSync(Buffer.alloc(MOBILE_ASSET_MAX_EXPANDED_BYTES + 512));
@@ -241,4 +242,4 @@ it("rejects total archive header/PAX/padding expansion before signing any metada
   expect(await readFile(join(input.outputDirectory, "UNPUBLISHED.txt"), "utf8")).toContain(
     "Do not publish",
   );
-});
+}, 30_000);
