@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Option } from "effect";
 
 import {
   DirectResourceCleanupExecutor,
@@ -11,14 +11,23 @@ import { RemoteAgentConnection } from "../../remote-agent/remoteAgentConnection.
 import { resolveLocalWorkspaceWatchAgentBinary } from "../../remote-agent/localWorkspaceWatchAgent.binary.ts";
 import { REMOTE_AGENT_PROTOCOL_MINOR } from "../../remote-agent/remoteAgentProtocol.ts";
 import { assertAllowedDirectCleanupRoot } from "./DirectResourceCleanup.roots.ts";
+import { ServerConfig } from "../../startup/config.ts";
 
-const SUPPORTED = new Set(["darwin/arm64", "darwin/x64", "linux/x64", "win32/x64"]);
+/** Hosts whose `bigbud-remote-agent` build is qualified for `--resource-cleanup`. */
+const SUPPORTED = new Set(["darwin/arm64", "darwin/x64", "linux/arm64", "linux/x64", "win32/x64"]);
+
+export interface DirectResourceCleanupHost {
+  readonly platform: NodeJS.Platform;
+  readonly arch: string;
+}
+
+const PROCESS_HOST: DirectResourceCleanupHost = { platform: process.platform, arch: process.arch };
 
 function rustPlatform(platform: NodeJS.Platform): string {
   return platform === "darwin" ? "macos" : platform === "win32" ? "windows" : platform;
 }
 
-function rustArchitecture(architecture: NodeJS.Architecture): string {
+function rustArchitecture(architecture: string): string {
   return architecture === "x64" ? "x86_64" : architecture === "arm64" ? "aarch64" : architecture;
 }
 
@@ -39,24 +48,27 @@ async function withTimeout<A>(promise: Promise<A>, timeoutMs: number): Promise<A
   }
 }
 
-function resolveCleanupBinary(): string {
-  if (process.env.VITEST) {
-    return resolveLocalWorkspaceWatchAgentBinary({ environment: {} });
-  }
-  return resolveLocalWorkspaceWatchAgentBinary();
+/**
+ * `pinnedBinaryPath` is an agent the host already verified, such as the remote account service's
+ * pinned Rust agent; the resolver still checks its identity and protocol before use.
+ */
+function resolveCleanupBinary(pinnedBinaryPath?: string): string {
+  return resolveLocalWorkspaceWatchAgentBinary({
+    ...(process.env.VITEST ? { environment: {} } : {}),
+    ...(pinnedBinaryPath ? { packagedBinaryPath: pinnedBinaryPath } : {}),
+  });
 }
 
 export function makeDirectResourceCleanupExecutor(
   resolveBinary: () => string = resolveCleanupBinary,
+  host: DirectResourceCleanupHost = PROCESS_HOST,
 ): DirectResourceCleanupExecutorShape {
   return {
     prepare: () =>
       Effect.tryPromise({
         try: async () => {
-          if (!SUPPORTED.has(`${process.platform}/${process.arch}`)) {
-            throw new Error(
-              `Resource cleanup is unsupported on ${process.platform}/${process.arch}.`,
-            );
+          if (!SUPPORTED.has(`${host.platform}/${host.arch}`)) {
+            throw new Error(`Resource cleanup is unsupported on ${host.platform}/${host.arch}.`);
           }
           const connection = RemoteAgentConnection.local({
             binaryPath: resolveBinary(),
@@ -65,8 +77,8 @@ export function makeDirectResourceCleanupExecutor(
           try {
             const hello = await withTimeout(connection.handshake(), 5_000);
             if (
-              hello.os !== rustPlatform(process.platform) ||
-              hello.architecture !== rustArchitecture(process.arch) ||
+              hello.os !== rustPlatform(host.platform) ||
+              hello.architecture !== rustArchitecture(host.arch) ||
               hello.protocolMinor < REMOTE_AGENT_PROTOCOL_MINOR ||
               !hello.capabilities.some(
                 (capability) => capability.name === "resource.cleanup" && capability.major === 1,
@@ -248,7 +260,11 @@ export function makeDirectResourceCleanupExecutor(
   };
 }
 
-export const DirectResourceCleanupExecutorLive = Layer.succeed(
+export const DirectResourceCleanupExecutorLive = Layer.effect(
   DirectResourceCleanupExecutor,
-  makeDirectResourceCleanupExecutor(),
+  Effect.gen(function* () {
+    const config = yield* Effect.serviceOption(ServerConfig);
+    const pinned = Option.isSome(config) ? config.value.workspaceAgentBinaryPath : undefined;
+    return makeDirectResourceCleanupExecutor(() => resolveCleanupBinary(pinned));
+  }),
 );

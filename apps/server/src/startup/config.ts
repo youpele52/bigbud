@@ -64,6 +64,11 @@ export interface ServerConfigShape extends ServerDerivedPaths {
   readonly remoteSocketPath?: string;
   /** Explicit optional Rust mobile gateway upstream configuration. */
   readonly remoteMobile?: RemoteMobileConfiguration;
+  /**
+   * Agent binary the host already verified (the remote account service's pinned Rust agent).
+   * Local workspace helpers such as resource cleanup prefer it over packaged or repository builds.
+   */
+  readonly workspaceAgentBinaryPath?: string;
   readonly host: string | undefined;
   readonly cwd: string;
   readonly baseDir: string;

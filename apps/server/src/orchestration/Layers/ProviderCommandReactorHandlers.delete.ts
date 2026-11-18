@@ -8,7 +8,7 @@ import { OrchestrationProjectionPipeline } from "../Services/ProjectionPipeline.
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
-import { ThreadDeletionOperationError } from "../../deletion/Services/ThreadDeletion.ts";
+import { toThreadDeletionOperationError } from "../../deletion/Services/ThreadDeletion.ts";
 import { threadSubtreeHasLiveActiveRuntime } from "../../deletion/Services/ThreadDeletion.preflight.ts";
 import { ThreadShellRunner } from "../../shell/Services/ThreadShellRunner.ts";
 import { DirectResourceCleanupExecutor } from "../../deletion/Services/DirectResourceCleanupExecutor.ts";
@@ -100,9 +100,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             }
             preparedExecutor ??= yield* cleanupExecutor.prepare();
             return undefined;
-          }).pipe(
-            Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
-          ),
+          }).pipe(Effect.mapError(toThreadDeletionOperationError)),
         teardown: (candidate) =>
           Effect.gen(function* () {
             const liveSessions = yield* providerService.listSessions();
@@ -154,9 +152,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
                 new Error(`Runtime cleanup failed: ${describeRuntimeCleanupFailures(failures)}.`),
               );
             }
-          }).pipe(
-            Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
-          ),
+          }).pipe(Effect.mapError(toThreadDeletionOperationError)),
         finalize: (threadIds) =>
           Effect.gen(function* () {
             const activeExecutor = preparedExecutor;
@@ -337,9 +333,7 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
             } else {
               yield* cleanupRepository.complete(operationId, new Date().toISOString());
             }
-          }).pipe(
-            Effect.mapError((error) => new ThreadDeletionOperationError({ detail: String(error) })),
-          ),
+          }).pipe(Effect.mapError(toThreadDeletionOperationError)),
       })
       .pipe(
         Effect.ensuring(

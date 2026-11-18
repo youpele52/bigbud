@@ -83,11 +83,13 @@ describe("desktop release assets", () => {
       "server-workspace-agent-darwin-arm64",
       "server-workspace-agent-darwin-x64",
       "server-workspace-agent-linux-x64",
+      "server-workspace-agent-linux-arm64",
       "server-workspace-agent-win32-x64.exe",
       "server-workspace-agent-win32-arm64.exe",
       "server-organization-supervisor-darwin-arm64",
       "server-organization-supervisor-darwin-x64",
       "server-organization-supervisor-linux-x64",
+      "server-organization-supervisor-linux-arm64",
       "server-organization-supervisor-win32-x64.exe",
       "server-organization-supervisor-win32-arm64.exe",
     ];
@@ -109,6 +111,16 @@ describe("desktop release assets", () => {
     );
     writeFileSync(arm64Helper, "native Windows ARM64 helper");
     expect(() => verifyAssembledDesktopReleaseAssets(directory, "preview")).not.toThrow();
+    const linuxArm64Helper = join(directory, "server-workspace-agent-linux-arm64");
+    rmSync(linuxArm64Helper);
+    expect(() => verifyAssembledDesktopReleaseAssets(directory, "preview")).toThrow(
+      "Missing packaged workspace agent: server-workspace-agent-linux-arm64",
+    );
+    writeFileSync(linuxArm64Helper, "native Linux ARM64 helper");
+    rmSync(join(directory, "server-organization-supervisor-linux-arm64"));
+    expect(() => verifyAssembledDesktopReleaseAssets(directory, "preview")).toThrow(
+      "Missing packaged organisation supervisor: linux-arm64",
+    );
   });
 
   it("does not treat the Windows watcher as the desktop installer", () => {
@@ -130,11 +142,13 @@ describe("desktop release assets", () => {
       "server-workspace-agent-darwin-arm64",
       "server-workspace-agent-darwin-x64",
       "server-workspace-agent-linux-x64",
+      "server-workspace-agent-linux-arm64",
       "server-workspace-agent-win32-x64.exe",
       "server-workspace-agent-win32-arm64.exe",
       "server-organization-supervisor-darwin-arm64",
       "server-organization-supervisor-darwin-x64",
       "server-organization-supervisor-linux-x64",
+      "server-organization-supervisor-linux-arm64",
       "server-organization-supervisor-win32-x64.exe",
       "server-organization-supervisor-win32-arm64.exe",
     ]) {
@@ -164,11 +178,13 @@ describe("desktop release assets", () => {
       "server-workspace-agent-darwin-arm64",
       "server-workspace-agent-darwin-x64",
       "server-workspace-agent-linux-x64",
+      "server-workspace-agent-linux-arm64",
       "server-workspace-agent-win32-x64.exe",
       "server-workspace-agent-win32-arm64.exe",
       "server-organization-supervisor-darwin-arm64",
       "server-organization-supervisor-darwin-x64",
       "server-organization-supervisor-linux-x64",
+      "server-organization-supervisor-linux-arm64",
       "server-organization-supervisor-win32-x64.exe",
       "server-organization-supervisor-win32-arm64.exe",
     ]) {

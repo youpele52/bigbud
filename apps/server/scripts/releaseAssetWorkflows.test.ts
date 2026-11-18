@@ -62,6 +62,54 @@ describe("assembled release native helper coverage", () => {
       ),
     ).toBe(true);
   });
+
+  it.each([
+    ["ci.yml", "release_asset_assembly"],
+    ["release.yml", "release"],
+  ])("%s builds and downloads the required Linux ARM64 helpers", (workflowFile, consumerName) => {
+    const workflow = parse(
+      readFileSync(new URL(`../../../.github/workflows/${workflowFile}`, import.meta.url), "utf8"),
+    ) as {
+      jobs: Record<
+        string,
+        WorkflowJob & {
+          readonly strategy?: { readonly matrix: { readonly include: { runner: string }[] } };
+        }
+      >;
+    };
+    const producerName = "workspace_agent_linux_arm64";
+    const producer = workflow.jobs[producerName]!;
+    const consumer = workflow.jobs[consumerName]!;
+    expect(consumer.needs).toContain(producerName);
+    // Same glibc baseline as the x64 Linux helpers built on ubuntu-22.04.
+    expect(producer["runs-on"]).toBe("ubuntu-22.04-arm");
+    if (workflowFile === "ci.yml") expect(producer.if).toBe(consumer.if);
+    const commands = producer.steps.map((step) => step.run ?? "").join("\n");
+    expect(commands).toContain("cargo build --locked --release --package bigbud-remote-agent");
+    expect(commands).toContain(
+      "cargo build --locked --release --package bigbud-desktop-supervisor",
+    );
+    expect(commands).toContain(
+      "cp target/release/bigbud-remote-agent release-publish/server-workspace-agent-linux-arm64",
+    );
+    expect(commands).toContain("release-publish/server-organization-supervisor-linux-arm64");
+    expect(commands).toContain("linux[[:space:]]+aarch64$");
+    const upload = producer.steps.find((step) =>
+      step.uses?.startsWith("actions/upload-artifact@"),
+    )!;
+    expect(upload.with?.path).toBe("release-publish/*");
+    expect(upload.with?.["if-no-files-found"]).toBe("error");
+    const download = consumer.steps.find(
+      (step) =>
+        step.uses?.startsWith("actions/download-artifact@") &&
+        upload.with!.name!.startsWith(step.with?.pattern?.replace(/\*$/, "") ?? "!"),
+    );
+    expect(download?.with?.path).toBe("release-assets");
+    const cleanupRunners = workflow.jobs.native_resource_cleanup!.strategy!.matrix.include.map(
+      (entry) => entry.runner,
+    );
+    expect(cleanupRunners).toContain("ubuntu-24.04-arm");
+  });
 });
 
 interface GraphWorkflow {

@@ -52,7 +52,12 @@ export const preflightLocalSupervisorService = (configPath: string) =>
       bootstrapFd: Option.none(),
       logWebSocketEvents: Option.none(),
     };
-    const serverConfig = yield* resolveServerConfig(flags, Option.none());
+    // The Rust launcher verified `rust_binary` against `rust_sha256` before starting this
+    // process; it is the same `bigbud-remote-agent` build that serves local resource cleanup.
+    const serverConfig = {
+      ...(yield* resolveServerConfig(flags, Option.none())),
+      workspaceAgentBinaryPath: config.rust_binary,
+    };
     return yield* runLocalSupervisorServicePreflight({
       config: serverConfig,
       requireExistingIdentity: true,
