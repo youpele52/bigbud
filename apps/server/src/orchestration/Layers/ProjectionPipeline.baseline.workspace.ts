@@ -122,10 +122,16 @@ export const verifyCandidateInWorkspace = (input: {
           (workspaceScope) =>
             Effect.gen(function* () {
               const persistence = makeSqlitePersistenceLive(workspacePath);
-              const context = yield* Layer.build(
+              // A private memo map. `Layer.build` reuses the caller's, so every repository layer
+              // the live server had already built came back bound to the live database: the
+              // final digest then hashed the live projections instead of the replay, and a live
+              // change during verification (a project cascade) rejected a matching candidate.
+              const memoMap = yield* Layer.makeMemoMap;
+              const context = yield* Layer.buildWithMemoMap(
                 workspaceLayer.pipe(Layer.provideMerge(persistence)),
+                memoMap,
+                workspaceScope,
               ).pipe(
-                Scope.provide(workspaceScope),
                 Effect.mapError(
                   () =>
                     new ProjectionBaselineWorkspaceSchemaError({
