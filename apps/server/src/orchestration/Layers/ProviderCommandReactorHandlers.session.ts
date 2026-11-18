@@ -9,10 +9,7 @@ import { Effect } from "effect";
 
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
-import {
-  type OrchestrationEngineShape,
-  getOrchestrationThreadWithReadModel,
-} from "../Services/OrchestrationEngine.ts";
+import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import { buildThreadReconciliationCommand } from "./ProviderRuntimeIngestion.reconcile.ts";
 import { makeProcessSessionResponseHandlers } from "./ProviderCommandReactorHandlers.session.responses.ts";
@@ -92,10 +89,8 @@ export const makeProcessSessionHandlers = ({
     const operation = event.payload.operation;
     if (!operation) return;
     if (operation.reservedPromptIds.length > 0) {
-      const { readModel: snapshot, thread: current } = yield* getOrchestrationThreadWithReadModel(
-        orchestrationEngine,
-        event.payload.threadId,
-      );
+      const snapshot = yield* orchestrationEngine.getReadModel();
+      const current = snapshot.threads.find((entry) => entry.id === event.payload.threadId);
       if (!current) return;
       const command = makeReservedQueuedPromptFlushCommand({
         thread: current,

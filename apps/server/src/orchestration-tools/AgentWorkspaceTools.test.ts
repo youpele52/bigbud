@@ -78,7 +78,7 @@ function dependencies(
     reorderWithinStatus: (value) => Effect.succeed({ ...cardValue, ...value }),
     deleteById: vi.fn(() => Effect.void),
   } satisfies ProjectionKanbanRepositoryShape;
-  return { engine: { getReadModel: () => Effect.succeed(readModel()) }, notes, kanban };
+  return { readModel, notes, kanban };
 }
 
 const execute = (

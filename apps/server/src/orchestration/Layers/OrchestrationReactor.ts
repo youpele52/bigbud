@@ -12,7 +12,6 @@ import { ThreadWatchReactor } from "../Services/ThreadWatchReactor.ts";
 import { LearningReactor } from "../Services/LearningReactor.ts";
 import { ProviderTurnSupervisor } from "../Services/ProviderTurnSupervisor.ts";
 import { ThreadOrganizationReactor } from "../Services/ThreadOrganizationReactor.ts";
-import { makeReadModelResidencySweeper } from "./ReadModelResidencySweeper.ts";
 
 export const makeOrchestrationReactor = Effect.gen(function* () {
   const providerRuntimeIngestion = yield* ProviderRuntimeIngestionService;
@@ -23,7 +22,6 @@ export const makeOrchestrationReactor = Effect.gen(function* () {
   const learningReactor = yield* LearningReactor;
   const providerTurnSupervisor = yield* ProviderTurnSupervisor;
   const threadOrganizationReactor = yield* ThreadOrganizationReactor;
-  const readModelResidency = yield* makeReadModelResidencySweeper();
 
   const start: OrchestrationReactorShape["start"] = Effect.fn("start")(function* () {
     yield* providerRuntimeIngestion.start();
@@ -35,8 +33,6 @@ export const makeOrchestrationReactor = Effect.gen(function* () {
     yield* threadWatchReactor.start();
     yield* learningReactor.start();
     yield* threadOrganizationReactor.start();
-    // Bounds the engine read model (F-B4): idle threads are evicted and rehydrate on access.
-    yield* readModelResidency.start();
   });
 
   return {

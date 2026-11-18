@@ -4,11 +4,7 @@ import { Effect, Exit, Schema } from "effect";
 
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
-import {
-  type OrchestrationEngineShape,
-  getOrchestrationThread,
-  getOrchestrationThreadWithReadModel,
-} from "../Services/OrchestrationEngine.ts";
+import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import {
   canNativelySteerQueuedPrefix,
   compatibleQueuedPrefix,
@@ -64,7 +60,9 @@ export const completeTurnControlIfConsumed = Effect.fn("completeTurnControlIfCon
     readonly operation: OrchestrationTurnControlOperation;
     readonly createdAt: string;
   }) {
-    const thread = yield* getOrchestrationThread(input.orchestrationEngine, input.threadId);
+    const thread = (yield* input.orchestrationEngine.getReadModel()).threads.find(
+      (t) => t.id === input.threadId,
+    );
     const current = thread?.pendingTurnControlOperation;
     if (
       !thread ||
@@ -81,6 +79,7 @@ export const completeTurnControlIfConsumed = Effect.fn("completeTurnControlIfCon
 export function makeProcessTurnSteerRequested(input: {
   readonly providerService: ProviderServiceShape;
   readonly orchestrationEngine: OrchestrationEngineShape;
+  readonly resolveThread: OrchestrationEngineShape["getReadModel"];
   readonly appendProviderFailureActivity: (input: {
     readonly threadId: import("@bigbud/contracts").ThreadId;
     readonly kind: "provider.turn.steer.failed";
@@ -98,7 +97,9 @@ export function makeProcessTurnSteerRequested(input: {
   ) {
     const operation = event.payload.operation;
     if (!operation) return;
-    const thread = yield* getOrchestrationThread(input.orchestrationEngine, event.payload.threadId);
+    const thread = (yield* input.resolveThread()).threads.find(
+      (candidate) => candidate.id === event.payload.threadId,
+    );
     if (
       !thread ||
       thread.archivedAt != null ||
@@ -194,8 +195,8 @@ export function makeProcessTurnSteerRequested(input: {
       state: "provider-acknowledged",
       createdAt: event.payload.createdAt,
     });
-    const { readModel: acknowledgedSnapshot, thread: acknowledgedThread } =
-      yield* getOrchestrationThreadWithReadModel(input.orchestrationEngine, thread.id);
+    const acknowledgedSnapshot = yield* input.resolveThread();
+    const acknowledgedThread = acknowledgedSnapshot.threads.find((entry) => entry.id === thread.id);
     const flush =
       acknowledgedThread &&
       makeReservedQueuedPromptFlushCommand({

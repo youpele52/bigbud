@@ -63,8 +63,8 @@ Fixed, verified by unit and focused tests only (not yet re-run live):
 - O-2 (20 s backend stops with open WebSockets) and O-6 (repeated Chats bootstrap)
   (`51ce573251`, [report](2026-11-18-o2-o6-shutdown-and-chats-bootstrap.md)).
 - Unbounded structures F-B1–F-B3 and F-B5–F-B9 ([report](2026-11-18-unbounded-structures-fixes.md)),
-  and F-B4 eviction of idle threads from the orchestration read model, which reload from SQL on
-  access (`e84335fe60`, [report](2026-11-18-read-model-eviction.md)); F-B10 did not reproduce.
+  F-B10 did not reproduce. F-B4 eviction (`e84335fe60`) was reverted after the live re-run
+  (see follow-ups, [report](2026-11-18-read-model-eviction.md)).
 - Mobile stage retirement: consent cycles are unlimited and old stages retire safely
   (`cc85ccbbfc`, [report](2026-11-18-mobile-stage-retirement.md)).
 - O-1 persisted installation identity fallback for hosts without `/etc/machine-id`
@@ -86,8 +86,8 @@ A live arm64 re-run of these is in progress; its report will follow.
    ([handoff](../validation/remote-backend-release-handoff.md)).
 3. **Signing: resolved.** One Ed25519 key, id `release-2026`, signs the remote agent and backend
    graph manifests. It was set as repository secrets on `youpele52/bigbud` on 18 November 2026,
-   and the only copy outside GitHub is in the user's password manager. Clients do not pin it yet
-   (follow-up below).
+   and the only copy outside GitHub is in the user's password manager. The app pins it
+   (`2b78407ac3`): release manifests and graphs signed by any other key are refused.
 4. **Licences: resolved** (`dc66b324a7`): real upstream licence texts are vendored and
    hash-checked, Copilot stays with its licence, and notices ship beside the agent, gateway and
    asset artifacts. The user still reads Anthropic's terms once for the Claude agent SDK
@@ -116,13 +116,20 @@ A live arm64 re-run of these is in progress; its report will follow.
 
 ## Follow-ups (code and docs)
 
-- Client trust-key pinning: clients trust the key store published with each release; pinning
-  `release-2026` in the app is not done.
-- Launcher rollback does not cover `Restart=no` units: a crashed new runtime is not relaunched,
-  so rollback waits for the next manual start
-  ([report](2026-11-18-launcher-rollback-unbootable-runtime.md), Gaps and notes). Document this
-  for users.
+- Client trust-key pinning: done (`2b78407ac3`).
+- `--restart never` delays launcher rollback until the next manual start: documented in
+  `docs/COMMANDS.md` (`be47c063e7`).
 - D4: apply the prepared gnu-drop workflow diff for the second release with backend graphs.
+- **F-B4 read-model eviction is reverted.** The live re-run
+  ([report](2026-11-18-unit-only-fixes-live-rerun.md)) found it wedges the backend under 3–8
+  concurrent provider sessions (D-1: a SQLite write lock never released; the parent commit does
+  not wedge). The read model is unbounded again, as before 18 November, until the lock cycle is
+  found.
+- **D-2:** after a project cascade, cleanup still waits out the 15-minute compaction failure
+  cooldown (an intermediate baseline candidate is rejected mid-cascade). Needs a design choice.
+- **D-3:** a thread delete issued about 2 s after `thread.session.stop` can stay "deleting"
+  (2 of 7 attempts); retention then reports `deferred`.
+- `peer_dispatch_status` does not show the worker child's `waiting` state.
 
 The unreachable legacy OpenCode synthetic-workspace path is removed (`9c142552ee`).
 

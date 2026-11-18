@@ -35,7 +35,6 @@ import {
   ensureOrchestrationProjectState,
   ensureOrchestrationWorkspaceProjects,
   type OrchestrationEngineShape,
-  getOrchestrationThread,
 } from "../orchestration/Services/OrchestrationEngine.ts";
 import type { BootstrapSubmissionDispatch } from "../orchestration/Layers/OrchestrationEngine.bootstrapIdentity.ts";
 
@@ -47,7 +46,6 @@ export type BootstrapServices = {
     ) => Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchError>;
     getReadModel: () => Effect.Effect<OrchestrationReadModel, never>;
     ensureThreadState?: NonNullable<OrchestrationEngineShape["ensureThreadState"]>;
-    getThread?: NonNullable<OrchestrationEngineShape["getThread"]>;
     getCommandOutcome?: (
       commandId: CommandId,
     ) => Effect.Effect<GetCommandOutcomeResult, OrchestrationCommandReceiptRepositoryError>;
@@ -132,21 +130,12 @@ export function makeDispatchBootstrapThreadCommand(
       });
       const resolveTargetProject = () =>
         hydrateTargetProject.pipe(
-          Effect.andThen(
-            Effect.suspend(() =>
+          Effect.andThen(orchestrationEngine.getReadModel()),
+          Effect.map((readModel) => {
+            const readModelThread =
               targetProjectId === undefined && targetProjectCwd === undefined
-                ? getOrchestrationThread(orchestrationEngine, command.threadId)
-                : Effect.succeed(undefined),
-            ),
-          ),
-          // A resident thread's project is resident too (installed with it, never evicted).
-          Effect.flatMap((thread) =>
-            orchestrationEngine
-              .getReadModel()
-              .pipe(Effect.map((readModel) => ({ readModel, thread }))),
-          ),
-          Effect.map(({ readModel, thread }) => {
-            const readModelThread = thread ?? null;
+                ? (readModel.threads.find((entry) => entry.id === command.threadId) ?? null)
+                : null;
             const nextProjectId = targetProjectId ?? readModelThread?.projectId ?? null;
             const project =
               (nextProjectId
@@ -284,9 +273,9 @@ export function makeDispatchBootstrapThreadCommand(
           const metaCommandId = serverCommandId(command.commandId, "bootstrap-thread-meta-update");
           const metaOutcome = yield* getCommandOutcome(metaCommandId);
           if (isAcceptedThreadOutcome(metaOutcome, command.threadId, "metadata child")) {
-            const canonicalThread = yield* getOrchestrationThread(
-              orchestrationEngine,
-              command.threadId,
+            const readModel = yield* orchestrationEngine.getReadModel();
+            const canonicalThread = readModel.threads.find(
+              (thread) => thread.id === command.threadId,
             );
             if (!canonicalThread?.worktreePath) {
               throw new Error(

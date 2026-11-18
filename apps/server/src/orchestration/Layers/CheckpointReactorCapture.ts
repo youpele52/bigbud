@@ -29,10 +29,7 @@ import type {
   RestoreCheckpointInput,
 } from "../../checkpointing/Services/CheckpointStore.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
-import {
-  getOrchestrationThread,
-  type OrchestrationEngineShape,
-} from "../Services/OrchestrationEngine.ts";
+import type { OrchestrationReadModel } from "@bigbud/contracts";
 
 // Re-exported utility so callers don't need to import from Utils
 export { isGitRepository as isGitWorkspace };
@@ -131,13 +128,14 @@ export function makeAppendCaptureFailureActivity(orchestrationEngine: {
 // ---------------------------------------------------------------------------
 
 export function makeResolveSessionRuntimeForThread(
-  orchestrationEngine: Pick<OrchestrationEngineShape, "getReadModel" | "getThread">,
+  orchestrationEngine: { getReadModel: () => Effect.Effect<OrchestrationReadModel, never> },
   providerService: { listSessions: () => Effect.Effect<ReadonlyArray<ProviderSession>> },
 ) {
   return Effect.fn("resolveSessionRuntimeForThread")(function* (
     threadId: ThreadId,
   ): Effect.fn.Return<Option.Option<{ readonly threadId: ThreadId; readonly cwd: string }>, never> {
-    const thread = yield* getOrchestrationThread(orchestrationEngine, threadId);
+    const readModel = yield* orchestrationEngine.getReadModel();
+    const thread = readModel.threads.find((entry) => entry.id === threadId);
     const sessions = yield* providerService.listSessions();
 
     const findSessionWithCwd = (

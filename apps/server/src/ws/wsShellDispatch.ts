@@ -28,10 +28,6 @@ import {
   SHELL_OUTPUT_BATCH_FLUSH_MS,
   SHELL_OUTPUT_BATCH_MAX_BYTES,
 } from "./wsShellDispatch.shellOutput";
-import {
-  getOrchestrationThreadWithReadModel,
-  type OrchestrationEngineShape,
-} from "../orchestration/Services/OrchestrationEngine.ts";
 
 class ShellCommandExecutionError extends Data.TaggedError("ShellCommandExecutionError")<{
   readonly message: string;
@@ -50,7 +46,6 @@ interface DispatchShellCommandServices {
       command: OrchestrationCommand,
     ) => Effect.Effect<{ readonly sequence: number }, OrchestrationDispatchError>;
     readonly getReadModel: () => Effect.Effect<OrchestrationReadModel, never>;
-    readonly getThread?: NonNullable<OrchestrationEngineShape["getThread"]>;
   };
   readonly serverSettings: {
     readonly getSettings: Effect.Effect<ServerSettings, ServerSettingsError>;
@@ -100,12 +95,10 @@ export const makeDispatchShellCommand =
           readonly thread: OrchestrationReadModel["threads"][number] | null;
         }> =>
           Effect.gen(function* () {
-            const { readModel: currentReadModel, thread: hydratedThread } =
-              yield* getOrchestrationThreadWithReadModel(
-                orchestrationEngine,
-                normalizedCommand.threadId,
-              );
-            const currentThread = hydratedThread ?? null;
+            const currentReadModel = yield* orchestrationEngine.getReadModel();
+            const currentThread =
+              currentReadModel.threads.find((entry) => entry.id === normalizedCommand.threadId) ??
+              null;
             if (currentThread || attemptsRemaining <= 0) {
               return {
                 readModel: currentReadModel,

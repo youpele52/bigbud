@@ -14,10 +14,7 @@ import {
 import { Data, Effect } from "effect";
 
 import type { AutomationScheduleRepositoryShape } from "../../persistence/Services/AutomationScheduleRepository.ts";
-import {
-  type OrchestrationEngineShape,
-  getOrchestrationThread,
-} from "../Services/OrchestrationEngine.ts";
+import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { getNextCronTime } from "../Scheduler/cron.ts";
 import {
   automationAlreadyAdmitted,
@@ -94,7 +91,8 @@ export const dispatchAutomationRun = Effect.fn("dispatchAutomationRun")(function
 
   const now = new Date().toISOString();
   const executionPrompt = buildAutomationExecutionPrompt(input.prompt, input.run.startedAt);
-  const thread = yield* getOrchestrationThread(input.orchestrationEngine, input.run.threadId);
+  const readModel = yield* input.orchestrationEngine.getReadModel();
+  const thread = readModel.threads.find((entry) => entry.id === input.run.threadId);
   if (automationAlreadyAdmitted(thread, input.run)) {
     yield* input.repository.recordRunDispatched({ runId: input.run.runId, dispatchedAt: now });
     return { ok: true as const, skipped: true as const };

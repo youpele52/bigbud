@@ -10,10 +10,7 @@ import type { ComputerUseShape } from "../computer-use/Services/ComputerUse.ts";
 import type { ComputerUseActivityShape } from "../computer-use/Services/ComputerUseActivity.ts";
 import { isDesktopSurfaceAction } from "../computer-use/Layers/ComputerUse.ts";
 import { guardComputerUseAction } from "../computer-use/computerUseSafety.ts";
-import {
-  type OrchestrationEngineShape,
-  getOrchestrationThread,
-} from "../orchestration/Services/OrchestrationEngine.ts";
+import { type OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import {
   appendComputerUseActivity,
   persistComputerUseScreenshot,
@@ -172,7 +169,13 @@ export const computerUseViaOrchestration = Effect.fn("computerUseViaOrchestratio
     /** Registers the action for the mascot's "Stop computer use"; absent in narrow test hosts. */
     readonly activity?: ComputerUseActivityShape;
   }) {
-    const thread = yield* getOrchestrationThread(input.orchestrationEngine, input.threadId);
+    const thread = yield* input.orchestrationEngine
+      .getReadModel()
+      .pipe(
+        Effect.map((readModel) =>
+          readModel.threads.find((candidate) => candidate.id === input.threadId),
+        ),
+      );
     if (!thread) {
       return yield* Effect.fail(new Error(`Thread not found: ${input.threadId}`));
     }

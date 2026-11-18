@@ -1,4 +1,4 @@
-import { DEFAULT_SERVER_SETTINGS, type OrchestrationReadModel } from "@bigbud/contracts";
+import { DEFAULT_SERVER_SETTINGS } from "@bigbud/contracts";
 import { Effect, Layer, Option, Stream } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 
@@ -263,16 +263,6 @@ export const buildAppUnderTest = (options?: BuildAppUnderTestOptions) =>
       Layer.provide(
         Layer.mock(OrchestrationEngineService)({
           getReadModel: () => Effect.succeed(makeDefaultOrchestrationReadModel()),
-          // By-id reads resolve against whichever read model the test supplies.
-          getThread: (threadId) =>
-            Effect.map(
-              Effect.suspend(
-                (): Effect.Effect<OrchestrationReadModel> =>
-                  options?.layers?.orchestrationEngine?.getReadModel?.() ??
-                  Effect.succeed(makeDefaultOrchestrationReadModel()),
-              ),
-              (model) => model.threads.find((thread) => thread.id === threadId),
-            ),
           readEvents: () => Stream.empty,
           dispatch: () => Effect.succeed({ sequence: 0 }),
           streamDomainEvents: Stream.empty,

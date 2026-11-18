@@ -22,13 +22,9 @@ import { projectionProjectColumnsSql } from "./ProjectionOperationalStateQuery.p
 export const STARTUP_OPERATIONAL_MESSAGE_LIMIT = 50;
 export const STARTUP_OPERATIONAL_ACTIVITY_LIMIT = 100;
 
-/**
- * The startup operational predicate over a `projection_threads t` row. The startup window loads
- * exactly the threads it matches; read-model eviction re-checks it per thread so an evicted thread
- * is always one a restart would also have left out.
- */
-export const operationalThreadPredicateSql = (sql: SqlClient.SqlClient) => sql`
-  EXISTS (
+export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
+  const operationalThreadPredicate = sql`
+    EXISTS (
       SELECT 1 FROM projection_thread_sessions s
       WHERE s.thread_id = t.thread_id AND (s.status IN ('starting', 'running') OR s.retained_family = 1)
     )
@@ -66,9 +62,6 @@ export const operationalThreadPredicateSql = (sql: SqlClient.SqlClient) => sql`
       WHERE r.thread_id = t.thread_id AND r.disposition = 'active' AND r.recovery_status != 'none'
     )
   `;
-
-export function makeStartupOperationalWindowSql(sql: SqlClient.SqlClient) {
-  const operationalThreadPredicate = operationalThreadPredicateSql(sql);
 
   const listOperationalThreadRows = SqlSchema.findAll({
     Request: Schema.Void,

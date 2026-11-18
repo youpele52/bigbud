@@ -52,8 +52,6 @@ export interface ComputerUseControlDeps {
 }
 
 const readActivity = Effect.fn("readComputerUseActivity")(function* (deps: ComputerUseControlDeps) {
-  // A whole-model scan is complete here: relevance needs an active turn or a computer-use
-  // activity lease, and a thread with either is never evicted from the read model.
   const readModel = yield* deps.engine.getReadModel();
   const nowMs = (deps.nowMs ?? Date.now)();
   yield* deps.activity.prune((entry) =>

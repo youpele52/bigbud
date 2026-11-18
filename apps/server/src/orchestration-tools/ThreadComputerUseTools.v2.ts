@@ -20,10 +20,7 @@ import {
 import { Cause, Effect, Exit, Option } from "effect";
 
 import { guardComputerUseAction } from "../computer-use/computerUseSafety.ts";
-import {
-  type OrchestrationEngineShape,
-  getOrchestrationThread,
-} from "../orchestration/Services/OrchestrationEngine.ts";
+import type { OrchestrationEngineShape } from "../orchestration/Services/OrchestrationEngine.ts";
 import {
   computerUseV2RequestActionName,
   refusedComputerUseV2Result,
@@ -103,7 +100,9 @@ export const computerUseV2ViaOrchestration = Effect.fn("computerUseV2ViaOrchestr
       });
     }
     const action = input.request.action;
-    const thread = yield* getOrchestrationThread(input.orchestrationEngine, input.threadId);
+    const thread = yield* input.orchestrationEngine
+      .getReadModel()
+      .pipe(Effect.map((model) => model.threads.find((item) => item.id === input.threadId)));
     if (!thread) return yield* Effect.fail(new Error(`Thread not found: ${input.threadId}`));
     if (!input.computerUseEnabled) {
       return yield* Effect.fail(

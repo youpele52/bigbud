@@ -4,15 +4,11 @@ import {
   PROVIDER_RECOVERING_SESSION_REASON,
   PROVIDER_STALLED_SESSION_REASON,
 } from "@bigbud/contracts/constants/providerRuntime.constant";
-import type { OrchestrationThread, ThreadId } from "@bigbud/contracts";
 import type { ProviderTurnLiveness } from "@bigbud/contracts/orchestration/providerTurnLiveness";
 import { Effect, Option } from "effect";
 
 import type { ProviderServiceShape } from "../../provider/Services/ProviderService.ts";
-import {
-  type OrchestrationEngineShape,
-  getOrchestrationThread,
-} from "../Services/OrchestrationEngine.ts";
+import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { serverCommandId } from "./ProviderCommandReactorHelpers.ts";
 import type { ProviderRuntimeIngestionShape } from "../Services/ProviderRuntimeIngestion.ts";
 import { replayInspectionTerminals } from "./ProviderTurnSupervisor.inspection.ts";
@@ -54,9 +50,8 @@ function projectHealthState(input: {
   readonly clearHealthProjection?: boolean;
 }) {
   return Effect.gen(function* () {
-    const thread = yield* getOrchestrationThread(
-      input.orchestrationEngine,
-      input.liveness.threadId,
+    const thread = (yield* input.orchestrationEngine.getReadModel()).threads.find(
+      (candidate) => candidate.id === input.liveness.threadId,
     );
     const current = thread?.session;
     if (!thread || !current || current.activeTurnId !== input.liveness.turnId) return;
@@ -106,12 +101,13 @@ export function superviseProviderTurns(input: {
     );
     if (due.length === 0) return;
     // Only the threads with a due inspection are looked up, never the whole model.
+    const readModel = yield* input.orchestrationEngine.getReadModel();
     const dueThreadIds = new Set(due.map((entry) => entry.threadId));
-    const threadsById = new Map<ThreadId, OrchestrationThread>();
-    for (const threadId of dueThreadIds) {
-      const thread = yield* getOrchestrationThread(input.orchestrationEngine, threadId);
-      if (thread) threadsById.set(threadId, thread);
-    }
+    const threadsById = new Map(
+      readModel.threads
+        .filter((thread) => dueThreadIds.has(thread.id))
+        .map((thread) => [thread.id, thread]),
+    );
 
     yield* Effect.forEach(
       due,

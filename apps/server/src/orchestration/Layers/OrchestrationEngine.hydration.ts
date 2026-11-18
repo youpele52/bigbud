@@ -12,7 +12,6 @@ import type { ProjectionRepositoryError } from "../../persistence/Errors.ts";
 import type { OrchestrationEventStoreShape } from "../../persistence/Services/OrchestrationEventStore.ts";
 import type { ProjectionOperationalStateQueryShape } from "../Services/ProjectionOperationalStateQuery.ts";
 import { projectEvent } from "../projector.ts";
-import type { ThreadResidency } from "./OrchestrationEngine.residency.ts";
 
 export type ThreadStateLevel = "operational" | "history";
 
@@ -38,24 +37,8 @@ export function makeThreadStateHydrator(input: {
   readonly eventStore: OrchestrationEventStoreShape;
   readonly readModel: () => OrchestrationReadModel;
   readonly install: ThreadStateInstall;
-  /** Records each access so eviction picks only idle threads. */
-  readonly residency?: ThreadResidency;
-  /** Removes evicted threads from the engine read model. */
-  readonly evict?: (threadIds: ReadonlySet<ThreadId>) => void;
 }) {
   const historyLoaded = new Set<ThreadId>();
-  const touch = (threadId: ThreadId) => input.residency?.touch(threadId);
-
-  /**
-   * The resident thread when it already satisfies `level`, without a barrier or SQL. Callers
-   * that miss must call `load` under the command barrier.
-   */
-  const peek = (threadId: ThreadId, level: ThreadStateLevel) => {
-    const current = input.readModel().threads.find((thread) => thread.id === threadId);
-    if (!current || (level === "history" && !historyLoaded.has(threadId))) return undefined;
-    touch(threadId);
-    return current;
-  };
 
   /** Replays retained events onto a projection snapshot; `undefined` means the range moved. */
   const replayOnto = Effect.fn("OrchestrationEngine.replayHydration")(function* (
@@ -83,11 +66,13 @@ export function makeThreadStateHydrator(input: {
     threadId: ThreadId,
     level: ThreadStateLevel,
   ) {
-    const current = peek(threadId, level);
-    if (current) return current;
-    // An access by id counts even before the thread exists: a command creating it is prepared
-    // here, so its residency starts now (the sweep drops entries for ids never installed).
-    touch(threadId);
+    const current = input.readModel().threads.find((thread) => thread.id === threadId);
+    if (level === "operational" && current) {
+      return current;
+    }
+    if (level === "history" && current && historyLoaded.has(threadId)) {
+      return current;
+    }
 
     for (let attempt = 0; attempt < HYDRATION_ATTEMPTS; attempt += 1) {
       const queried = yield* level === "history"
@@ -158,37 +143,7 @@ export function makeThreadStateHydrator(input: {
     return project;
   });
 
-  /** The root and its live descendants (subtree deletion must see every one of them). */
-  const loadThreadSubtree = Effect.fn("OrchestrationEngine.ensureThreadSubtree")(function* (
-    rootThreadId: ThreadId,
-    level: ThreadStateLevel,
-  ) {
-    yield* load(rootThreadId, level);
-    if (input.query.listThreadSubtreeIds === undefined) return;
-    for (const threadId of yield* input.query.listThreadSubtreeIds(rootThreadId)) {
-      yield* load(threadId, level);
-    }
-  });
-
-  /** Drops threads from the read model; the next access rehydrates them. Barrier required. */
-  const evict = (threadIds: ReadonlySet<ThreadId>) => {
-    if (threadIds.size === 0) return;
-    for (const threadId of threadIds) {
-      historyLoaded.delete(threadId);
-      input.residency?.forget(threadId);
-    }
-    input.evict?.(threadIds);
-  };
-
-  return {
-    peek,
-    load,
-    loadProject,
-    loadWorkspaceProjects,
-    loadProjectWithThreads,
-    loadThreadSubtree,
-    evict,
-  };
+  return { load, loadProject, loadWorkspaceProjects, loadProjectWithThreads };
 }
 
 export type ThreadStateHydrator = ReturnType<typeof makeThreadStateHydrator>;

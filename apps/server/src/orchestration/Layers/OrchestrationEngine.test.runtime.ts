@@ -28,13 +28,11 @@ import {
   type RuntimeMaintenanceGateShape,
 } from "../../command-admission/RuntimeMaintenanceGate.ts";
 import { TerminalManager, type TerminalManagerShape } from "../../terminal/Services/Manager.ts";
-import { ReadModelResidencyConfig } from "./OrchestrationEngine.residency.ts";
 
 export function createRuntime(
   dbPath: string,
   terminalManager?: TerminalManagerShape,
   maintenance?: RuntimeMaintenanceGateShape,
-  residency?: typeof ReadModelResidencyConfig.Service,
 ) {
   const layer = OrchestrationEngineLive.pipe(
     Layer.provide(OrchestrationProjectionSnapshotQueryLive),
@@ -52,9 +50,6 @@ export function createRuntime(
     Layer.provideMerge(NodeServices.layer),
     Layer.provideMerge(
       maintenance ? Layer.succeed(RuntimeMaintenanceGate, maintenance) : Layer.empty,
-    ),
-    Layer.provideMerge(
-      residency ? Layer.succeed(ReadModelResidencyConfig, residency) : Layer.empty,
     ),
   );
   return ManagedRuntime.make(layer);

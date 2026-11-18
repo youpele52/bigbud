@@ -1,10 +1,7 @@
 import type { ProviderRuntimeEvent } from "@bigbud/contracts";
 import { Deferred, Effect } from "effect";
 import type { RuntimeIngestionInput } from "./ProviderRuntimeIngestion.helpers.ts";
-import {
-  type OrchestrationEngineShape,
-  getOrchestrationThread,
-} from "../Services/OrchestrationEngine.ts";
+import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
 import { InspectionReconciliationError } from "../Services/ProviderRuntimeIngestion.ts";
 import type { ProviderRuntimeIngestionShape } from "../Services/ProviderRuntimeIngestion.ts";
 import type { DrainableWorker } from "@bigbud/shared/DrainableWorker";
@@ -25,7 +22,9 @@ export function processInspectionItems<E>(
 ) {
   return Effect.gen(function* () {
     for (const event of input.events) {
-      const thread = yield* getOrchestrationThread(engine, event.threadId);
+      const thread = (yield* engine.getReadModel()).threads.find(
+        (entry) => entry.id === event.threadId,
+      );
       if (
         !thread ||
         thread.deletedAt !== null ||

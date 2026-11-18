@@ -18,7 +18,6 @@ import {
 } from "./ProjectionOperationalStateQuery.sql.ts";
 import { makeProjectOperationalStateSql } from "./ProjectionOperationalStateQuery.projectSql.ts";
 import { makeThreadOperationalStateSql } from "./ProjectionOperationalStateQuery.threadSql.ts";
-import { makeThreadResidencySql } from "./ProjectionOperationalStateQuery.residencySql.ts";
 import { assembleSnapshotRows } from "./ProjectionSnapshotQueryAssembly.snapshot.ts";
 import { makeProjectionSnapshotQuerySql } from "./ProjectionSnapshotQuerySql.ts";
 
@@ -41,7 +40,6 @@ const makeProjectionOperationalStateQuery = Effect.gen(function* () {
   const startupWindowSql = makeStartupOperationalWindowSql(sql);
   const threadSql = makeThreadOperationalStateSql(sql);
   const projectSql = makeProjectOperationalStateSql(sql);
-  const residencySql = makeThreadResidencySql(sql);
 
   const getStartupOperationalState: ProjectionOperationalStateQueryShape["getStartupOperationalState"] =
     () =>
@@ -179,16 +177,6 @@ const makeProjectionOperationalStateQuery = Effect.gen(function* () {
         Effect.mapError(
           mapQueryError("ProjectionOperationalStateQuery.listProjectIdsByWorkspaceRoot"),
         ),
-      ),
-    isThreadOperational: (threadId) =>
-      residencySql.findOperationalThread({ threadId }).pipe(
-        Effect.map((rows) => rows.length > 0),
-        Effect.mapError(mapQueryError("ProjectionOperationalStateQuery.isThreadOperational")),
-      ),
-    listThreadSubtreeIds: (threadId) =>
-      residencySql.listThreadSubtreeIds({ threadId }).pipe(
-        Effect.map((rows) => rows.map((row) => row.threadId as ThreadId)),
-        Effect.mapError(mapQueryError("ProjectionOperationalStateQuery.listThreadSubtreeIds")),
       ),
   } satisfies ProjectionOperationalStateQueryShape;
 });
