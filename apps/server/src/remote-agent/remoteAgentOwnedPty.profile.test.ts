@@ -102,6 +102,7 @@ vi.mock("./remoteAgentInstall.registry.transitions.ts", () => ({
 vi.mock("./remoteAgentController.ts", () => ({
   currentRemoteAgentController: () => ({ id: "controller", pid: 123, startedAt: "now" }),
   isRemoteAgentControllerAlive: async () => f.controllerAlive,
+  remoteAgentControllerScopeIssue: () => undefined,
 }));
 import { makeOwnedRemoteAgentPty } from "./remoteAgentOwnedPty.ts";
 import { openRemoteAgentControl } from "./remoteAgentControl.ts";

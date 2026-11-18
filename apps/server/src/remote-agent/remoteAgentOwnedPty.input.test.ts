@@ -284,3 +284,18 @@ it.each(
     expect(request).toHaveBeenCalledTimes(stage === "attach" ? 1 : 0);
   },
 );
+
+it("names why this controller cannot prove an earlier one dead", async () => {
+  const f = fixture();
+  await f.claim();
+  await expect(
+    RemoteAgentOwnedInput.claim(f.store, f.state(), {
+      ...f.environment,
+      alive: vi.fn(async () => true),
+      controller: { id: "controller-B", pid: 102, startedAt: "start-B" },
+      scopeIssue: () => "No platform machine id, and the bigbud installation id is unusable: x.",
+    }),
+  ).rejects.toThrow(
+    "Previous remote input controller is live or unconfirmed. No platform machine id, and the bigbud installation id is unusable: x.",
+  );
+});

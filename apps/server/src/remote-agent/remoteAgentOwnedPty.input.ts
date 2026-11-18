@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   currentRemoteAgentController,
   isRemoteAgentControllerAlive,
+  remoteAgentControllerScopeIssue,
   type RemoteAgentControllerIdentity,
 } from "./remoteAgentController.ts";
 import type {
@@ -20,6 +21,11 @@ interface ClaimEnvironment {
   controller: RemoteAgentControllerIdentity;
   alive: typeof isRemoteAgentControllerAlive;
   nonce: () => string;
+  scopeIssue?: () => string | undefined;
+}
+
+function scopeIssueOf(environment: ClaimEnvironment): string | undefined {
+  return environment.scopeIssue?.();
 }
 
 export function remoteAgentInputIdentity(
@@ -91,6 +97,7 @@ export class RemoteAgentOwnedInput {
       controller: currentRemoteAgentController(),
       alive: isRemoteAgentControllerAlive,
       nonce: randomUUID,
+      scopeIssue: remoteAgentControllerScopeIssue,
     },
   ): Promise<RemoteAgentOwnedInput> {
     for (let attempt = 0; attempt < 8; attempt++) {
@@ -112,7 +119,11 @@ export class RemoteAgentOwnedInput {
         !previous ||
         (previous.id !== environment.controller.id && (await environment.alive(previous)))
       )
-        throw new Error("Previous remote input controller is live or unconfirmed.");
+        throw new Error(
+          ["Previous remote input controller is live or unconfirmed.", scopeIssueOf(environment)]
+            .filter(Boolean)
+            .join(" "),
+        );
       const authority = { ...environment.controller, nonce: environment.nonce() };
       try {
         const owner = await store.update(expected.ownerKey, (current) => {

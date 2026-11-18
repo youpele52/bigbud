@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 
 import { readlinkSync } from "node:fs";
-import { machineIdentity } from "../utils/machineIdentity.ts";
+import { localHostIdentity } from "../utils/machineIdentity.ts";
 
 import { compareProcessStartToken, processStartToken } from "../utils/processStartToken.ts";
 
@@ -11,19 +11,21 @@ export interface RemoteAgentControllerIdentity {
   readonly startedAt: string;
 }
 
-// PID evidence is meaningful only on the same machine and in the same PID namespace.
-function localControllerScope(): string | undefined {
-  const machine = machineIdentity();
-  if (!machine) return undefined;
+// PID evidence is meaningful only on the same machine and in the same PID namespace. Without a
+// platform machine id the persisted installation identity stands in (`install-v1:`, bound to the
+// hostname), so a restarted backend in the same container still recognises its dead predecessor.
+function localControllerScope(): { readonly scope?: string; readonly issue?: string } {
+  const host = localHostIdentity();
+  if (host.identity === null) return { issue: host.reason };
   try {
     const namespace =
       process.platform === "linux" ? readlinkSync("/proc/self/ns/pid") : process.platform;
-    return createHash("sha256").update(`${machine}:${namespace}`).digest("hex");
-  } catch {
-    return undefined;
+    return { scope: createHash("sha256").update(`${host.identity}:${namespace}`).digest("hex") };
+  } catch (cause) {
+    return { issue: `The PID namespace is unreadable: ${String(cause)}` };
   }
 }
-const scope = localControllerScope();
+const { scope, issue: scopeIssue } = localControllerScope();
 const controller: RemoteAgentControllerIdentity = {
   id: `controller-v2:${scope ?? "unknown"}:${process.pid}:${randomUUID()}`,
   pid: process.pid,
@@ -32,6 +34,11 @@ const controller: RemoteAgentControllerIdentity = {
 
 export function currentRemoteAgentController(): RemoteAgentControllerIdentity {
   return controller;
+}
+
+/** Why this controller cannot prove any earlier controller dead, if it cannot. */
+export function remoteAgentControllerScopeIssue(): string | undefined {
+  return scopeIssue;
 }
 
 /** A prepared reservation is reclaimable only after its owning process is proven absent. */
