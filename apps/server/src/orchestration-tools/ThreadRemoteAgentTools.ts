@@ -33,7 +33,8 @@ function toolRequest(input: RemoteAgentToolInput): RemoteAgentControlRequest | s
   if (!target) return "target is required.";
   if (input.tool === "remote_agent_status") return { method: "status", target };
   // Agents never grant consent; unapproved hosts return consent-required for the user.
-  return { method: "install", target, replace: args.replace === true, consent: false };
+  // Older builds are retired after activation by default; `replace: false` keeps them.
+  return { method: "install", target, replace: args.replace !== false, consent: false };
 }
 
 function toolResult(response: RemoteAgentControlResponse): Record<string, unknown> {

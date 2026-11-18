@@ -8,18 +8,23 @@ import {
 } from "./remoteAgentInstall.registry.ts";
 import { retireRemoteAgentBuildsForReplace } from "./remoteAgentInstall.replace.ts";
 
-function build(version: string, digest: string, promotion: number): RemoteAgentRegistryBuild {
+function build(
+  version: string,
+  digest: string,
+  promotion: number,
+  targetTriple = "aarch64-unknown-linux-gnu",
+): RemoteAgentRegistryBuild {
   const sha256 = digest.repeat(64);
   const generation = `g-${digest}`;
   const statePath = `/tmp/agent/runtimes/${generation}`;
   return {
-    id: `${version}:${sha256}:aarch64-unknown-linux-gnu`,
+    id: `${version}:${sha256}:${targetTriple}`,
     runtime: {
       generation,
       version,
       sha256,
       buildDigest: `build-${version}`,
-      targetTriple: "aarch64-unknown-linux-gnu",
+      targetTriple,
       origin: "managed",
       binaryPath: `/tmp/agent/bin/${version}/${sha256}/bigbud-remote-agent`,
       statePath,
@@ -35,6 +40,10 @@ function build(version: string, digest: string, promotion: number): RemoteAgentR
 
 const predecessor = build("0.3.3", "a", 1);
 const current = build("0.3.4", "b", 2);
+interface BuildPair {
+  readonly predecessor: RemoteAgentRegistryBuild;
+  readonly current: RemoteAgentRegistryBuild;
+}
 
 /*
  * Durable history a real install leaves behind (matches a live registry after a replace): every
@@ -48,7 +57,7 @@ const stage = (entry: RemoteAgentRegistryBuild) => ({
 });
 const epoch = (entry: RemoteAgentRegistryBuild) => `epoch-${entry.runtime.version}`;
 
-function installHistory(restaged: boolean) {
+function installHistory(restaged: boolean, { predecessor, current }: BuildPair) {
   return {
     stages: [
       stage(predecessor),
@@ -99,14 +108,18 @@ function installHistory(restaged: boolean) {
 }
 
 /** `supervisor`: how the predecessor's live supervisor answers an idle-only shutdown. */
-function fixture(supervisor: "idle" | "busy" | "dead", options: { restaged?: boolean } = {}) {
+function fixture(
+  supervisor: "idle" | "busy" | "dead",
+  options: { restaged?: boolean; pair?: BuildPair } = {},
+) {
+  const pair = options.pair ?? { predecessor, current };
   let state = parseRemoteAgentRegistry(
     JSON.stringify({
       ...emptyRemoteAgentRegistry(),
-      ...installHistory(options.restaged === true),
-      builds: [predecessor, current],
-      current: current.id,
-      predecessor: predecessor.id,
+      ...installHistory(options.restaged === true, pair),
+      builds: [pair.predecessor, pair.current],
+      current: pair.current.id,
+      predecessor: pair.predecessor.id,
       promotionSequence: 2,
     }),
   );
@@ -121,7 +134,7 @@ function fixture(supervisor: "idle" | "busy" | "dead", options: { restaged?: boo
       return "shutdown-accepted";
     }
     if (command.includes('rm -- "$binary"')) return "deleted";
-    if (command.includes(predecessor.runtime.statePath)) return alive ? "live" : "dead";
+    if (command.includes(pair.predecessor.runtime.statePath)) return alive ? "live" : "dead";
     return "dead";
   });
   const control: RemoteAgentControl = {
@@ -162,6 +175,33 @@ describe("remote agent --replace retirement", () => {
     // Only the acknowledged history record is consumed; the current build keeps its own.
     expect(after.stages.map((entry) => entry.buildId)).toEqual([current.id]);
     expect(after.launches.find((entry) => entry.buildId === current.id)?.phase).toBe("ready");
+  });
+
+  it("retires a same-version glibc build after the musl build is active (D4, by build ID)", async () => {
+    const gnu = build("0.3.4", "a", 1, "aarch64-unknown-linux-gnu");
+    const musl = build("0.3.4", "b", 2, "aarch64-unknown-linux-musl");
+    expect(gnu.id).not.toBe(musl.id);
+    const f = fixture("idle", { pair: { predecessor: gnu, current: musl } });
+    expect(
+      await retireRemoteAgentBuildsForReplace({
+        target: "ssh:fixture",
+        control: f.control,
+        referencedBuildIds: async () => new Set([musl.id]),
+      }),
+    ).toEqual({ deleted: 1, deferred: 0 });
+    const after = f.state();
+    expect(after.builds.find((entry) => entry.id === gnu.id)?.binary).toBe("absent");
+    expect(after.builds.find((entry) => entry.id === musl.id)?.binary).toBe("present");
+    expect(after.current).toBe(musl.id);
+    // Live work on the glibc build still defers it; a matching version is never enough.
+    const busy = fixture("idle", { pair: { predecessor: gnu, current: musl } });
+    expect(
+      await retireRemoteAgentBuildsForReplace({
+        target: "ssh:fixture",
+        control: busy.control,
+        referencedBuildIds: async () => new Set([musl.id, gnu.id]),
+      }),
+    ).toEqual({ deleted: 0, deferred: 1 });
   });
 
   it("retires an already-exited predecessor without asking it to shut down", async () => {

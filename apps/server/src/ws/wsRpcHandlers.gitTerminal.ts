@@ -87,7 +87,11 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
     ) =>
       observeRpcEffect(
         WS_METHODS.serverConnectRemoteAgent,
-        connectRemoteAgentEffect(input, context.remoteAgentUpdateCoordinator),
+        connectRemoteAgentEffect(
+          input,
+          context.remoteAgentUpdateCoordinator,
+          context.remoteAgentInstallOperations,
+        ),
         {
           "rpc.aggregate": "server",
         },

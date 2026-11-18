@@ -54,10 +54,12 @@ export function SidebarRemoteAgentInstallDialog({
         const admissionRequestId =
           connectionRequestId ?? getRemoteAgentAdmissionRequestId(request.executionTargetId);
         setConnectionRequestId(admissionRequestId);
+        // Older builds are retired once the staged build is active (deferred for live work).
         const connected = await api.server.connectRemoteAgent({
           executionTargetId: request.executionTargetId,
           requestId: admissionRequestId,
           intent: "fresh",
+          replace: true,
         });
         useRemoteAccessStore
           .getState()
@@ -65,9 +67,13 @@ export function SidebarRemoteAgentInstallDialog({
         notifyRemoteAgentConnection(request.executionTargetId, connected);
         completeRemoteAgentAdmission(request.executionTargetId, admissionRequestId);
         setConnectionRequestId(null);
-        await onInstalled(
+        const connectedMessage =
           remoteAgentConnectionWarning(connected) ??
-            `Connected to remote agent ${connected.currentVersion}. Healthy fallback: ${connected.fallbackVersion ?? "none"}.`,
+          `Connected to remote agent ${connected.currentVersion}. Healthy fallback: ${connected.fallbackVersion ?? "none"}.`;
+        await onInstalled(
+          connected.cleanupMessage
+            ? `${connectedMessage} ${connected.cleanupMessage}`
+            : connectedMessage,
         );
         return;
       }
@@ -115,6 +121,10 @@ export function SidebarRemoteAgentInstallDialog({
                   The agent is installed under{" "}
                   <span className="font-light">&quot;~/.bigbud/agent&quot;</span>, runs with your
                   SSH user permissions, and opens no inbound network port.
+                </p>
+                <p>
+                  After the new build is active, older agent builds are removed. Builds still used
+                  by open sessions stay until that work ends.
                 </p>
                 <p>
                   Cancel setup to leave the project unchanged. Downloaded agent builds stay

@@ -58,6 +58,15 @@ export interface RemoteAgentOperationDependencies {
   readonly now?: () => number;
 }
 
+/** Outcome of retiring older builds after a build became active. */
+export interface RemoteAgentCleanupResult {
+  readonly cleanupDeferred: boolean;
+  /** Notice for the person; null when every older build was retired. */
+  readonly message: string | null;
+}
+
+const CLEANUP_DEFERRED_MESSAGE =
+  "Cleanup of older builds is deferred while live work still uses them.";
 const MAX_RETAINED_OPERATIONS = 64;
 const RETAINED_OPERATION_MS = 60 * 60 * 1000;
 
@@ -94,6 +103,23 @@ export function makeRemoteAgentInstallOperations(dependencies: RemoteAgentOperat
           stagedBuilds.delete(entry.operationId);
         }
       });
+  };
+
+  /**
+   * The one retirement step for every caller (CLI, agent tools, app Replace and the app's
+   * Connect after a staged Install). Retirement is maintenance: live work defers it, and a
+   * failure keeps old builds and never affects the activation that already happened.
+   */
+  const retireOlderBuilds = async (target: string): Promise<RemoteAgentCleanupResult> => {
+    try {
+      const cleanupDeferred = (await dependencies.retire(target)).deferred > 0;
+      return { cleanupDeferred, message: cleanupDeferred ? CLEANUP_DEFERRED_MESSAGE : null };
+    } catch (cause) {
+      return {
+        cleanupDeferred: true,
+        message: `Cleanup of older builds could not run and is deferred: ${remoteAgentFailureDetail(cause)}`,
+      };
+    }
   };
 
   const run = async (
@@ -169,28 +195,15 @@ export function makeRemoteAgentInstallOperations(dependencies: RemoteAgentOperat
         }${warning ? ` ${warning}` : ""}`,
       });
     }
-    let cleanupDeferred = false;
-    let cleanupFailure: string | null = null;
-    if (replace) {
-      try {
-        cleanupDeferred = (await dependencies.retire(target)).deferred > 0;
-      } catch (cause) {
-        // Retirement is maintenance; a failure keeps old builds and never affects activation.
-        cleanupDeferred = true;
-        cleanupFailure = remoteAgentFailureDetail(cause);
-      }
-    }
+    const cleanup = replace ? await retireOlderBuilds(target) : null;
     return finish({
       version,
       activeVersion,
       outcome: "active",
-      cleanupDeferred,
+      cleanupDeferred: cleanup?.cleanupDeferred ?? false,
       message:
-        (cleanupFailure
-          ? `Agent ${version} is active. Cleanup of older builds could not run and is deferred: ${cleanupFailure}`
-          : cleanupDeferred
-            ? `Agent ${version} is active. Cleanup of older builds is deferred while live work still uses them.`
-            : `Agent ${version} is active.`) + (warning ? ` ${warning}` : ""),
+        `Agent ${version} is active.${cleanup?.message ? ` ${cleanup.message}` : ""}` +
+        (warning ? ` ${warning}` : ""),
     });
   };
 
@@ -246,6 +259,12 @@ export function makeRemoteAgentInstallOperations(dependencies: RemoteAgentOperat
       running.set(input.executionTargetId, { id: snapshot.operationId, done });
       return snapshot;
     },
+    /**
+     * Retire older builds after the app's Connect activated a staged build. Skipped (null) while
+     * an operation runs for the target: that operation owns the host and retires when replacing.
+     */
+    retireAfterActivation: (target: string): Promise<RemoteAgentCleanupResult | null> =>
+      running.has(target) ? Promise.resolve(null) : retireOlderBuilds(target),
     get: (operationId: string): RemoteAgentOperationSnapshot | null =>
       operations.get(operationId) ?? null,
     /** Staging details (placement, inbox conflict, runtime summary) of an operation. */

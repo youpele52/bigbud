@@ -15,7 +15,7 @@ export function isRemoteAgentToolName(value: unknown): value is RemoteAgentToolN
 export const REMOTE_AGENT_STATUS_TOOL_DESCRIPTION =
   "Read the bigbud remote agent status of a saved remote target (target ID or SSH alias such as user@host). Read-only.";
 export const REMOTE_AGENT_INSTALL_TOOL_DESCRIPTION =
-  "Install or replace the bigbud remote agent on a saved bigbud remote target and activate it. Returns an operation: when state is running, call again with the same operationId to follow it; never start a second install. Hosts that are not saved in bigbud are refused; ask the user to add the host in bigbud or run `bigbud remote-agent install <host>` themselves. Installs only the base agent, never provider tools.";
+  "Install or replace the bigbud remote agent on a saved bigbud remote target and activate it. Older builds are retired after activation unless replace is false. Returns an operation: when state is running, call again with the same operationId to follow it; never start a second install. Hosts that are not saved in bigbud are refused; ask the user to add the host in bigbud or run `bigbud remote-agent install <host>` themselves. Installs only the base agent, never provider tools.";
 
 const TARGET = { type: "string", minLength: 1, maxLength: 512 };
 
@@ -32,7 +32,11 @@ export const REMOTE_AGENT_INSTALL_PARAMETERS = {
   required: [],
   properties: {
     target: TARGET,
-    replace: { type: "boolean" },
+    replace: {
+      type: "boolean",
+      description:
+        "Default true: retire older builds once the new build is active (deferred while live work uses them). Pass false to keep them.",
+    },
     operationId: { type: "string", pattern: "^[0-9a-f-]{36}$" },
   },
 };

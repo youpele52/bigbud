@@ -34,6 +34,31 @@ describe("thread remote agent tools", () => {
     expect(result).toMatchObject({ status: "consent-required", guidance: expect.any(String) });
   });
 
+  it.each([
+    [{}, true],
+    [{ replace: true }, true],
+    [{ replace: false }, false],
+    [{ replace: "no" }, true],
+  ])("replaces older builds by default (%j -> replace=%s)", async (extra, replace) => {
+    const handle = vi.fn(async (_request: RemoteAgentControlRequest) => ({
+      v: 1 as const,
+      ok: false as const,
+      error: { code: "busy" as const, message: "busy" },
+    }));
+    await Effect.runPromise(
+      makeThreadRemoteAgentTool(handle)({
+        tool: "remote_agent_install",
+        arguments: { target: "x", ...extra },
+      }),
+    );
+    expect(handle).toHaveBeenCalledExactlyOnceWith({
+      method: "install",
+      target: "x",
+      replace,
+      consent: false,
+    });
+  });
+
   it("follows an accepted install once and resumes by operation ID", async () => {
     const handle = vi.fn(async (request: RemoteAgentControlRequest) => ({
       v: 1 as const,

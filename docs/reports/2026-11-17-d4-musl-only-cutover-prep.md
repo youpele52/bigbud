@@ -132,6 +132,16 @@ accepts only the musl launcher, which `remoteAgentTargetCandidates` already allo
 Not a remote-agent reference: `scripts/lib/workspace-agent-target.ts` uses `x86_64-unknown-linux-gnu`
 for the desktop-bundled workspace agent. That is a different binary and is out of D4 scope.
 
+## Old builds on upgrade
+
+Installing or updating the agent retires older builds by default once the new build is active
+(`bigbud remote-agent install`, the app's Replace and Connect new session, and the
+`remote_agent_install` tool; opt out with `--keep-previous` or `replace: false`). Retirement
+picks builds by exact build ID, not version, so the first musl install over a glibc build of the
+same or an older version retires the glibc build. It is deferred while live work still uses the
+glibc build and never interrupts live terminals; a build kept that way stays until a later
+install or cleanup can retire it.
+
 ## Verification at cutover
 
 1. Run the release workflow on a prerelease tag. Check that it uploads exactly two
@@ -140,3 +150,6 @@ for the desktop-bundled workspace agent. That is a different binary and is out o
    for both the site and the release asset.
 3. Do a fresh install on a glibc host (Ubuntu 22.04) and a musl host (Alpine 3.20) from the D4
    release. Then pin a pre-D4 version on the glibc host to confirm the legacy fallback still works.
+4. On a glibc host that runs a pre-D4 glibc build and has no open sessions, install the D4 release
+   with no flags. Check that `bigbud remote-agent status <target>` reports the musl build as
+   current and `olderBuilds: 0`.

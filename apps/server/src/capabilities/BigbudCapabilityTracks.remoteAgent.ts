@@ -35,7 +35,7 @@ export const REMOTE_AGENT_CAPABILITY_TRACKS: ReadonlyArray<CapabilityTrack> = [
     triggers: ["The user asks to install, repair or update the remote agent on a saved host."],
     risk: "reversible-write",
     workflow:
-      "Call remote_agent_install with target (replace: true retires idle older builds). While state is running, call again with the same operationId. Report active, staged, deferred, failed or uncertain truthfully, and cleanupDeferred separately.",
+      "Call remote_agent_install with target; older builds are retired once idle by default (replace: false keeps them). While state is running, call again with the same operationId. Report active, staged, deferred, failed or uncertain truthfully, and cleanupDeferred separately.",
     permissions:
       "Only remote targets saved in bigbud; other hosts are refused and agents cannot consent, so ask the user. Installs only the base agent; never provider tools or a backend runtime. Live work is never interrupted.",
     examples: ["Install the remote agent on dev@vps and report whether it is active."],

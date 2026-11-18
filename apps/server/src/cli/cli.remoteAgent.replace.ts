@@ -7,20 +7,24 @@ import {
 } from "../remote-agent/remoteAgentLocalControl.client.ts";
 
 export const REPLACE_FLAG_CONFLICT = "--replace and --keep-previous cannot be used together.";
-export const KEEP_PREVIOUS_HINT =
-  "Older agent builds are kept. Pass --replace to retire them after the new build is active (or --keep-previous to skip this hint).";
+export const REPLACE_DEFAULT_HINT =
+  "Older agent builds are retired after the new build is active. Pass --keep-previous to keep them (or --replace to skip this hint).";
 const STATUS_TIMEOUT_MS = 60_000;
 
 export function isInteractiveTerminal(): boolean {
   return process.stdin.isTTY === true && process.stdout.isTTY === true;
 }
 
-/** Ask one [y/N] question; anything but y/yes, or a non-interactive terminal, is no. */
-export async function askYesNo(question: string): Promise<boolean> {
+/**
+ * Ask one yes/no question. y/yes (any case) is yes; with `defaultYes` ([Y/n]) an empty answer is
+ * yes too. Anything else, or a non-interactive terminal, is no.
+ */
+export async function askYesNo(question: string, defaultYes = false): Promise<boolean> {
   if (!isInteractiveTerminal()) return false;
   const prompt = createInterface({ input: process.stdin, output: process.stdout });
   try {
-    return /^y(es)?$/i.test((await prompt.question(question)).trim());
+    const answer = (await prompt.question(question)).trim();
+    return /^y(es)?$/i.test(answer) || (defaultYes && answer === "");
   } finally {
     prompt.close();
   }
@@ -43,8 +47,9 @@ export function olderInstalledVersion(result: unknown, newVersion: string): stri
 
 /**
  * Decide whether older builds are retired after activation. Explicit flags win; otherwise an
- * interactive person is asked only when status shows an older build on an approved host. Every
- * other case keeps older builds (the safe default) with a one-line hint.
+ * interactive person is asked ([Y/n]) only when status shows an older build on an approved host.
+ * Every other case replaces (the default), with a one-line hint whenever nobody was asked.
+ * Replacing is always safe: retirement waits for live work and never touches the active build.
  */
 export async function resolveReplaceChoice(input: {
   readonly socketPath: string;
@@ -58,8 +63,8 @@ export async function resolveReplaceChoice(input: {
   if (input.replace) return true;
   if (input.keepPrevious) return false;
   if (input.json || !isInteractiveTerminal()) {
-    input.hint(KEEP_PREVIOUS_HINT);
-    return false;
+    input.hint(REPLACE_DEFAULT_HINT);
+    return true;
   }
   let readable = false;
   let older: string | null = null;
@@ -79,11 +84,12 @@ export async function resolveReplaceChoice(input: {
   }
   if (older) {
     return askYesNo(
-      `An older agent build (${older}) is installed on ${input.target}. Replace it after the new one is active? [y/N] `,
+      `An older agent build (${older}) is installed on ${input.target}. Replace it after the new one is active? [Y/n] `,
+      true,
     );
   }
-  if (!readable) input.hint(KEEP_PREVIOUS_HINT);
-  return false;
+  if (!readable) input.hint(REPLACE_DEFAULT_HINT);
+  return true;
 }
 
 /** Actionable follow-up for an operation stopped by the host's two-build capacity. */
@@ -94,5 +100,5 @@ export function capacityHint(
   if (snapshot.failureKind !== "capacity-deferred") return null;
   return replace
     ? "The host already holds two agent builds and live work still uses the older one, so no slot could be freed. Retry after that work ends."
-    : "The host already holds two agent builds and live work still uses the older one, so no slot could be freed. Retry after that work ends, and use --replace on future installs so older builds do not accumulate.";
+    : "The host already holds two agent builds and live work still uses the older one, so no slot could be freed. Retry after that work ends, and let future installs replace older builds (the default; omit --keep-previous) so they do not accumulate.";
 }

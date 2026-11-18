@@ -29,3 +29,15 @@ export const ServerInstallRemoteAgentInput = Schema.Struct({
   replace: Schema.optional(Schema.Boolean),
 });
 export type ServerInstallRemoteAgentInput = typeof ServerInstallRemoteAgentInput.Type;
+
+/**
+ * Fresh admission from the app's Connect. `replace` retires older builds once the new build is
+ * active (the app's default after a staged Install or update); live work defers retirement.
+ */
+export const ServerConnectRemoteAgentInput = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  requestId: TrimmedNonEmptyString,
+  intent: Schema.Literal("fresh"),
+  replace: Schema.optional(Schema.Boolean),
+});
+export type ServerConnectRemoteAgentInput = typeof ServerConnectRemoteAgentInput.Type;

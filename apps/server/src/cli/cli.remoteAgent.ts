@@ -114,13 +114,13 @@ const readOnlyCommand = (method: "status" | "doctor", description: string) =>
 const installCommand = Command.make("install", {
   target: targetArgument,
   replace: Flag.boolean("replace").pipe(
-    Flag.withDescription("Retire older builds after the new build is active, without asking."),
+    Flag.withDescription(
+      "Retire older builds after the new build is active, without asking (the default).",
+    ),
     Flag.optional,
   ),
   keepPrevious: Flag.boolean("keep-previous").pipe(
-    Flag.withDescription(
-      "Keep older builds without asking (the default when not interactive or with --json).",
-    ),
+    Flag.withDescription("Keep older builds instead of retiring them, without asking."),
     Flag.optional,
   ),
   yes: Flag.boolean("yes").pipe(
@@ -130,7 +130,7 @@ const installCommand = Command.make("install", {
   ...sharedFlags,
 }).pipe(
   Command.withDescription(
-    "Install the bigbud remote agent and activate it. When an older build is installed, asks whether to replace it (interactive only); --replace or --keep-previous answers without asking.",
+    "Install the bigbud remote agent and activate it. Older builds are retired once the new build is active (deferred while live work uses them). Interactive installs over an older build ask first, defaulting to yes; --replace or --keep-previous answers without asking.",
   ),
   Command.withHandler((options) =>
     runAction(options, async (json) => {

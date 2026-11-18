@@ -61,7 +61,8 @@ export function RemoteAgentManagementSection() {
           <p className="text-sm font-medium">{parseRemoteExecutionTarget(target)?.host}</p>
           <p className="text-xs text-muted-foreground">
             Install or stage an update, then connect explicitly. Replace activates a verified build
-            and cleans up only unused predecessors; live work is preserved.
+            now. Both remove older builds once the new one is active; builds still used by live work
+            stay until it ends.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button

@@ -193,4 +193,49 @@ describe("shared remote agent install operation", () => {
     expect(fixture.dependencies.stage).toHaveBeenCalledOnce();
     expect(fixture.operations.get("missing")).toBeNull();
   });
+
+  describe("retirement after the app's Connect activated a staged build", () => {
+    it("reuses the replace retirement and reports deferral while live work uses old builds", async () => {
+      const fixture = operations({ retire: vi.fn(async () => ({ deferred: 1 })) });
+      expect(await fixture.operations.retireAfterActivation(target)).toEqual({
+        cleanupDeferred: true,
+        message: "Cleanup of older builds is deferred while live work still uses them.",
+      });
+      expect(fixture.dependencies.retire).toHaveBeenCalledExactlyOnceWith(target);
+      const clean = operations();
+      expect(await clean.operations.retireAfterActivation(target)).toEqual({
+        cleanupDeferred: false,
+        message: null,
+      });
+    });
+
+    it("turns a retirement failure into deferred cleanup instead of an error", async () => {
+      const fixture = operations({
+        retire: vi.fn(async () => {
+          throw new Error("ssh dropped");
+        }),
+      });
+      const result = await fixture.operations.retireAfterActivation(target);
+      expect(result?.cleanupDeferred).toBe(true);
+      expect(result?.message).toContain("could not run and is deferred");
+    });
+
+    it("leaves retirement to an operation already running for the target", async () => {
+      let release!: () => void;
+      const fixture = operations({
+        stage: vi.fn(
+          () =>
+            new Promise<{ version: string }>(
+              (resolve) => (release = () => resolve({ version: "0.3.4" })),
+            ),
+        ),
+      });
+      const started = fixture.operations.start({ executionTargetId: target, replace: true });
+      expect(await fixture.operations.retireAfterActivation(target)).toBeNull();
+      expect(fixture.dependencies.retire).not.toHaveBeenCalled();
+      release();
+      await fixture.operations.wait(started.operationId, 5_000);
+      expect(fixture.dependencies.retire).toHaveBeenCalledOnce();
+    });
+  });
 });

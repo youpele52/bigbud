@@ -11,8 +11,8 @@ import {
 import type { RemoteAgentControlRequest } from "../remote-agent/remoteAgentLocalControl.protocol.ts";
 import { remoteAgentCommand } from "./cli.remoteAgent.ts";
 import {
-  KEEP_PREVIOUS_HINT,
   olderInstalledVersion,
+  REPLACE_DEFAULT_HINT,
   REPLACE_FLAG_CONFLICT,
 } from "./cli.remoteAgent.replace.ts";
 
@@ -26,7 +26,7 @@ vi.mock("../remote-agent/remoteAgentLocalControl.client.ts", async (original) =>
 vi.mock("node:readline/promises", () => ({ createInterface: vi.fn() }));
 
 const PROMPT =
-  "An older agent build (0.0.1-old) is installed on vps. Replace it after the new one is active? [y/N] ";
+  "An older agent build (0.0.1-old) is installed on vps. Replace it after the new one is active? [Y/n] ";
 const previousExitCode = process.exitCode;
 const tty = { stdin: process.stdin.isTTY, stdout: process.stdout.isTTY };
 const question = vi.fn<(text: string) => Promise<string>>();
@@ -110,10 +110,11 @@ const installRequest = () =>
 
 describe("remote-agent install replace choice", () => {
   it.each([
+    ["", true],
     ["y", true],
     ["YES", true],
     ["n", false],
-    ["", false],
+    ["No", false],
     ["maybe", false],
   ])("asks when an older build exists and maps %j to replace=%s", async (answer, replace) => {
     setTty(true);
@@ -123,7 +124,7 @@ describe("remote-agent install replace choice", () => {
     expect(question).toHaveBeenCalledExactlyOnceWith(PROMPT);
     expect(methods()).toEqual(["status", "install"]);
     expect(installRequest().replace).toBe(replace);
-    expect(stderr).not.toContain(KEEP_PREVIOUS_HINT);
+    expect(stderr).not.toContain(REPLACE_DEFAULT_HINT);
   });
 
   it.each([
@@ -148,26 +149,30 @@ describe("remote-agent install replace choice", () => {
   it.each([
     ["non-TTY", false, []],
     ["--json", true, ["--json"]],
-  ])("%s keeps older builds with a hint and no prompt", async (_name, interactive, flags) => {
-    setTty(interactive);
-    backend("0.0.1-old");
-    expect(await install(...flags)).toBe(0);
-    expect(question).not.toHaveBeenCalled();
-    expect(methods()).toEqual(["install"]);
-    expect(installRequest().replace).toBe(false);
-    expect(stderr).toContain(KEEP_PREVIOUS_HINT);
-  });
+  ])(
+    "%s replaces older builds by default with a hint and no prompt",
+    async (_name, interactive, flags) => {
+      setTty(interactive);
+      backend("0.0.1-old");
+      expect(await install(...flags)).toBe(0);
+      expect(question).not.toHaveBeenCalled();
+      expect(methods()).toEqual(["install"]);
+      expect(installRequest().replace).toBe(true);
+      expect(stderr).toContain(REPLACE_DEFAULT_HINT);
+      expect(REPLACE_DEFAULT_HINT).toContain("--keep-previous");
+    },
+  );
 
   it.each([
     ["fresh host", null],
     ["same build already active", version],
-  ])("does not ask on a %s", async (_name, current) => {
+  ])("does not ask on a %s and keeps the replace default", async (_name, current) => {
     setTty(true);
     backend(current);
     expect(await install()).toBe(0);
     expect(question).not.toHaveBeenCalled();
-    expect(installRequest().replace).toBe(false);
-    expect(stderr).not.toContain(KEEP_PREVIOUS_HINT);
+    expect(installRequest().replace).toBe(true);
+    expect(stderr).not.toContain(REPLACE_DEFAULT_HINT);
   });
 
   it("asks consent for an unapproved host but never the replace question", async () => {
@@ -184,8 +189,8 @@ describe("remote-agent install replace choice", () => {
     expect(await install()).toBe(0);
     expect(question).toHaveBeenCalledExactlyOnceWith("Not approved.\nInstall it on vps? [y/N] ");
     expect(methods()).toEqual(["status", "install", "install"]);
-    expect(installRequest().replace).toBe(false);
-    expect(stderr).toContain(KEEP_PREVIOUS_HINT);
+    expect(installRequest().replace).toBe(true);
+    expect(stderr).toContain(REPLACE_DEFAULT_HINT);
   });
 
   it("skips the question when status cannot be read", async () => {
@@ -194,11 +199,13 @@ describe("remote-agent install replace choice", () => {
     vi.mocked(sendRemoteAgentControlRequest).mockRejectedValueOnce(new Error("ssh down"));
     expect(await install()).toBe(0);
     expect(question).not.toHaveBeenCalled();
-    expect(installRequest().replace).toBe(false);
+    expect(installRequest().replace).toBe(true);
+    expect(stderr).toContain(REPLACE_DEFAULT_HINT);
   });
 
   it.each([
-    [[], "use --replace on future installs"],
+    [["--keep-previous"], "omit --keep-previous"],
+    [[], "Retry after that work ends."],
     [["--replace"], "Retry after that work ends."],
   ])("makes a capacity stop actionable (%j)", async (flags, expected) => {
     setTty(false);

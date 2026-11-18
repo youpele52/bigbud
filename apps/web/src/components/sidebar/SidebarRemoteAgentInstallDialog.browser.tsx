@@ -149,11 +149,42 @@ describe("SidebarRemoteAgentInstallDialog", () => {
       executionTargetId: request.executionTargetId,
       requestId: expect.any(String),
       intent: "fresh",
+      replace: true,
     });
     expect(request.candidate.remoteTransport).toBe("agent");
     resolveConnection?.();
     await vi.waitFor(() => expect(onInstalled).toHaveBeenCalledOnce());
     expect(toast.add).not.toHaveBeenCalled();
+  });
+
+  it("retires older builds after connecting and reports the deferral while live work keeps one", async () => {
+    const cleanupMessage = "Cleanup of older builds is deferred while live work still uses them.";
+    const installRemoteAgent = vi.fn().mockResolvedValue({ message: "Update staged." });
+    const connectRemoteAgent = vi.fn().mockResolvedValue({
+      connectionId: "ready",
+      currentVersion: "0.2.209",
+      fallbackVersion: null,
+      cleanupDeferred: true,
+      cleanupMessage,
+    });
+    api.current = { server: { installRemoteAgent, connectRemoteAgent } } as never;
+    const onInstalled = vi.fn().mockResolvedValue(undefined);
+    await render(
+      <SidebarRemoteAgentInstallDialog
+        request={installRequest()}
+        onDecline={vi.fn()}
+        onInstalled={onInstalled}
+      />,
+    );
+    await expect.element(page.getByText(/older agent builds are removed/)).toBeVisible();
+    await page.getByRole("button", { name: "Download update" }).click();
+    await page.getByRole("button", { name: "Connect new session" }).click();
+    await vi.waitFor(() => expect(onInstalled).toHaveBeenCalledOnce());
+    expect(installRemoteAgent.mock.calls[0]?.[0].replace).toBeUndefined();
+    expect(connectRemoteAgent.mock.calls[0]?.[0].replace).toBe(true);
+    expect(onInstalled).toHaveBeenCalledWith(
+      `Connected to remote agent 0.2.209. Healthy fallback: none. ${cleanupMessage}`,
+    );
   });
 
   it("describes a same-version rebuild as staging without replacing the serving runtime", async () => {

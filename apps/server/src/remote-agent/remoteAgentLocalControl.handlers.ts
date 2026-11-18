@@ -155,7 +155,7 @@ export function makeRemoteAgentControlHandler(dependencies: RemoteAgentControlHa
           message:
             started.kind === "stage"
               ? `bigbud is staging the agent for this host (operation ${started.operationId}). Retry after it completes.`
-              : `An install is already running (operation ${started.operationId}). Retry --replace after it completes.`,
+              : `An install that keeps older builds is already running (operation ${started.operationId}). Retry after it completes to replace them.`,
         },
       };
     }
