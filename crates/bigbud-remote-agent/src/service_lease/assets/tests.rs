@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 use super::*;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -155,10 +155,11 @@ fn verified_tree_is_bound_to_original_receipt_owner_and_actual_launch_option() {
     args = f.args.clone();
     args.extend(f.args.clone());
     assert!(f.reference.validate_argument(&args).is_err());
-    assert!(f
-        .reference
-        .validate_argument(&[format!("--assets-dir={}", f.root.display())])
-        .is_err());
+    assert!(
+        f.reference
+            .validate_argument(&[format!("--assets-dir={}", f.root.display())])
+            .is_err()
+    );
     let mut binding = f.binding.clone();
     binding.nonce = "another-original".into();
     assert!(f.reference.validate(&binding, &f.args).is_err());
