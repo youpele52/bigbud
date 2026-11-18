@@ -66,7 +66,7 @@ export const makeRemoteRuntimeUpdate = Effect.fn("makeRemoteRuntimeUpdate")(func
 
   const db = <A, E>(effect: Effect.Effect<A, E>) => effect.pipe(Effect.mapError(unavailable));
   const get = (operationId: string) => db(repository.get(operationId));
-  const require = Effect.fn("RemoteRuntimeUpdate.require")(function* (operationId: string) {
+  const getRequired = Effect.fn("RemoteRuntimeUpdate.getRequired")(function* (operationId: string) {
     const record = yield* get(operationId);
     if (!record) return yield* runtimeUpdateError("not-found", "No such update operation.");
     return record;
@@ -151,7 +151,7 @@ export const makeRemoteRuntimeUpdate = Effect.fn("makeRemoteRuntimeUpdate")(func
   const status: RemoteRuntimeUpdateShape["status"] = Effect.fn("RemoteRuntimeUpdate.status")(
     function* (input) {
       const record = input.operationId
-        ? yield* require(input.operationId)
+        ? yield* getRequired(input.operationId)
         : ((yield* db(repository.findLive())) ?? (yield* db(repository.findLatest())));
       if (!record || !CONSENTABLE_RUNTIME_UPDATE_STATES.includes(record.state))
         return {
@@ -220,9 +220,9 @@ export const makeRemoteRuntimeUpdate = Effect.fn("makeRemoteRuntimeUpdate")(func
   const cancel: RemoteRuntimeUpdateShape["cancel"] = (input) =>
     admission.withPermit(
       Effect.gen(function* () {
-        const first = yield* cancelOnce(yield* require(input.operationId));
+        const first = yield* cancelOnce(yield* getRequired(input.operationId));
         // One retry covers a staging → staged race; anything else reports the new state.
-        const settled = first ?? (yield* cancelOnce(yield* require(input.operationId)));
+        const settled = first ?? (yield* cancelOnce(yield* getRequired(input.operationId)));
         if (!settled) return yield* changed();
         return toRuntimeUpdateView(settled);
       }),
@@ -231,7 +231,7 @@ export const makeRemoteRuntimeUpdate = Effect.fn("makeRemoteRuntimeUpdate")(func
   const withSingleFlight: RemoteRuntimeUpdateShape["withSingleFlight"] = (use, operationId) =>
     lock.withLock((checkpoint) =>
       Effect.gen(function* () {
-        const record = yield* require(operationId);
+        const record = yield* getRequired(operationId);
         const store = yield* Effect.tryPromise({
           try: () => deps.openStore(checkpoint),
           catch: () =>

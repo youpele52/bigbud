@@ -147,7 +147,7 @@ describe("reachability-aware closure", () => {
 
   it("matches rolldown region markers and adds reviewed roots inside node_modules", async () => {
     const region =
-      "//#region ../../node_modules/.bun/x@1.0.0/node_modules/x/load.js\nexport const f = (n) => import(n);\n//#endregion";
+      "//#region ../../node_modules/.bun/x@1.0.0/node_modules/x/load.js\nimport(globalThis.target);\n//#endregion";
     const policy = {
       ...basePolicy,
       reviewedDynamicLoaders: [

@@ -27,7 +27,7 @@ export interface LoaderSite {
   readonly kind: LoaderSiteKind;
   /** Rolldown `//#region` source marker, or the graph path for an unbundled file. */
   readonly member: string;
-  /** SHA-256 of the enclosing region's canonical text (bundler `$<n>` binding renames are
+  /** SHA-256 of the enclosing region's canonical text (consistent binding renames are
    * normalised; see `build-remote-backend-graph.regionHash.ts`), or of the whole file. */
   readonly sha256: string;
   readonly excerpt: string;

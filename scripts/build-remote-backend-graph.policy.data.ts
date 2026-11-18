@@ -3,11 +3,11 @@
  * `bun run remote-backend-graph --list-loader-sites ...` to print the member and hash of each
  * unreviewed site, review the code, then update the entry. A hash pins the whole bundle region
  * or file, so unrelated edits inside the same region also need a fresh review. Region hashes
- * ignore rolldown's bundle-wide `$<n>` binding renames (see `build-remote-backend-graph.regionHash.ts`);
- * the four region pins re-pinned on 18 Nov 2026 cover byte-identical reviewed code. WP-5C (18 Nov
- * 2026) re-pinned msgpackr/unpack.js after the Muse and OpenCode v2 SDKs moved to lazy chunks: the
- * region equals the reviewed text except `read$2` -> `read`, a binding rename the canonical digest
- * cannot relate because the freed name is unsuffixed. */
+ * cover a canonical text that ignores consistent renaming of bindings (see
+ * `build-remote-backend-graph.regionHash.ts`). On 18 Nov 2026 the canonicalization was extended
+ * to unsuffixed region-declared names and every region pin was re-pinned: each region's canonical
+ * text from the reviewed M1 build (whose raw text matched the earlier pins) equals the canonical
+ * text of a clean HEAD build, byte for byte. */
 const loader = (member: string, sha256: string, reason: string, roots: string[] = []) => ({
   member,
   sha256,
@@ -23,39 +23,39 @@ export const BACKEND_GRAPH_LOADER_POLICY_DATA = {
     // bigbud bundle regions named by the M1 plan.
     loader(
       "src/provider/Layers/Copilot/Runtime.executable.ts",
-      "f89959cee2c2a4ec8ff4f02793a1c42be80f07b0a749e825e1433c9e63ac8251",
+      "ec03d4598f986fdbd8334983eb9e94dc4a1c7c1eb9a117238e87201754a84a7a",
       "Locates the Copilot SDK platform runtime package beside the graph's @github/copilot-sdk; npm-shim fallback is Windows-only.",
     ),
     loader(
       "src/provider/Layers/Copilot/Adapter.types.cli.ts",
-      "b7ffc526d0828e14b688b44ecff5893440c32b3f2b86e0174411be7aa048a0c1",
+      "7be5270815a8f795f859f50d8186cd4682eab854e5b7c1ef5f42c4e8a44fb75b",
       "Resolves the optional standalone @github/copilot CLI; absent from the graph, so the caught failure falls back to the SDK runtime.",
     ),
     loader(
       "src/provider/Layers/Pi/Cli.ts",
-      "b1c8780b888322c3ed07c810e68217541a2e2136c0e8a938fd938189a2f91777",
+      "3de5ba64a1634b576301f2b81cc9e8db761b294c0827d9bdd9d88d84a3e56f29",
       "Finds the bundled Pi CLI beside its rpc-entry export and spawns it with the graph's private Node.",
       ["node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"],
     ),
     // Inlined third-party regions of the server bundle.
     loader(
       "msgpackr/unpack.js",
-      "90b22fe66d31dd6c9b606f203f45e7de6543c2c8e5882433bcf06e8f7730a44f",
+      "6e04f456e946c7b0f2bb03e24a05c43270c454337ce4adfec072ceab9c0841d9",
       "msgpackr record readers generated from decoded field names; generates object literals, loads no modules.",
     ),
     loader(
       "msgpackr/struct.js",
-      "b45551c38aaa5bd83a2a4244b6688acc8f0271a822a76be5e8ae386639ecd021",
+      "7a42dcade49cb3e2dae338624b5f5467d6f93633abfc3ae10c158ff6204304e3",
       "msgpackr struct accessor code generation and a CSP probe; loads no modules.",
     ),
     loader(
       "node-gyp-build-optional-packages/node-gyp-build.js",
-      "b090934115d5a4e98d178615a2e80e81d21a99336ac3617c59b8af8b14cf4297",
+      "51baa13c384a4b2cf5ba0ba3614c4907c086e02e1ea3eb645d37e278c8507805",
       "msgpackr's optional msgpackr-extract native lookup; the package is absent and msgpackr falls back to JavaScript.",
     ),
     loader(
       "@anthropic-ai/claude-agent-sdk/sdk.mjs",
-      "1e2e54a38bad420ad78724f0b6d3540cdd6a4b1f204a951c4c99fbb8ac09a079",
+      "c822c89d016d3b4a8f2b0c2b18d7eaf33f665ee43d4e09fa7c582764f064123d",
       "Claude agent SDK: ajv schema-validator codegen, a globalThis probe, and a native CLI lookup used only without pathToClaudeCodeExecutable (absent here, typed error).",
     ),
     // Pi closure, reached through the reviewed Pi CLI root and its rpc-entry export.

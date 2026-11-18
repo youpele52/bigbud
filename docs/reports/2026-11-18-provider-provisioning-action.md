@@ -138,3 +138,92 @@ import; an untyped load failure.
   now lazy. Expect `OptionalSdkUnavailableError` on first use.
 - Consider teaching the region digest to canonicalize freed unsuffixed names. Today any
   chunking change in the bundle can invalidate the msgpackr and Claude SDK pins.
+
+## Loader policy hardening (18 November 2026)
+
+This fixes F-M5-1 (measurements report) and the last note above. A clean HEAD build now passes
+the producer with no edits.
+
+### Changes
+
+- `runtimeUpdate.operation.ts`: the local `Effect.fn` helper `require` is now `getRequired`
+  (span `RemoteRuntimeUpdate.getRequired`). Behaviour is unchanged. The four false-positive
+  `non-literal-require` sites are gone.
+- `build-remote-backend-graph.regionHash.ts`: the canonical region text now labels each
+  identifier by the binding it resolves to. TypeScript's binder does the resolution on the
+  parsed tree, with `noLib` and `noResolve`. Spelling is not used.
+  - A binding declared only inside the region becomes `$#<k>`, numbered by first appearance,
+    with or without a `$<n>` suffix. Two bindings with the same spelling (shadowing) get two
+    labels, so bindings are never merged.
+  - Free names keep their spelling. An undeclared global keeps its exact bytes. A binding
+    declared elsewhere in the file is marked `<name>#`, so it never reads as a global. A suffixed
+    one becomes `<base>$#<k>`, as before.
+  - Property keys, labels, strings, comments and import or export names keep their bytes.
+    Where one identifier is both a key and a binding, the key is written out: `{ a }` becomes
+    `a: $#0`, `export { a }` becomes `$#0 as a`, and an object binding pattern is handled like
+    `{ a }`.
+  - The review guarantee holds: equal canonical text means the code is byte-equivalent up to a
+    consistent renaming of local bindings.
+- `build-remote-backend-graph.regionHash.test.ts` has 7 tests:
+  - suffixed and unsuffixed renames (including WP-5C's `read$2` → `read`) give the same digest;
+  - the raw digest is kept when nothing is renamed;
+  - distinct and shadowed bindings are not merged;
+  - a free name captured by a new local, a different global, a file binding versus a global,
+    `posix$1` versus `posix`, and a binding that moved out of the region all change the digest;
+  - keys, labels, strings and globals stay byte-exact;
+  - `{ a }` equals `{ a: z }`, but swapping which binding `{ a }` holds is detected.
+- Mutation check (backups in the job's private tmp directory, restored afterwards). Each mutant
+  fails at least one test:
+  - labelling by spelling instead of by binding;
+  - also renaming free names;
+  - dropping the written-out key;
+  - leaving file-bound free names unmarked;
+  - renaming property keys.
+- `build-remote-backend-graph.policy.test.ts`: the fixture region now refers only to a global
+  (`import(globalThis.target)`), so its pin is still the raw-text digest.
+
+### Re-pins
+
+The new canonical form changes every region digest, so all seven region pins were re-pinned. The
+reference text is the reviewed M1 build: `/tmp/bigbud-m1-live-20261117T220256Z/…/server-GpjOiZW6.mjs`.
+
+- With the old algorithm, that build's regions hash to the old pins. For `msgpackr/unpack.js` it
+  hashes to the pin from before WP-5C (`4168ccbb…`).
+- For each member, the new canonical text of the reference region is byte-identical to the new
+  canonical text of the clean HEAD build (`server-kQedXKey.mjs`).
+- File pins (Pi chunks, jiti, koffi, photon) are raw file hashes and did not change.
+
+| Member                                   | Old pin     | New pin     | Raw difference from reviewed text                           |
+| ---------------------------------------- | ----------- | ----------- | ----------------------------------------------------------- |
+| `@anthropic-ai/claude-agent-sdk/sdk.mjs` | `1e2e54a3…` | `c822c89d…` | `_a$1`→`_a` (8), `fs$6`→`fs$5` (5), `posix$1`→`posix$2` (4) |
+| `msgpackr/unpack.js`                     | `90b22fe6…` | `6e04f456…` | `read$2`→`read` (22), `decode$5`→`decode$6` (1)             |
+| `node-gyp-build-optional-packages/…`     | `b0909341…` | `51baa13c…` | `path$6`→`path$5` (12), `fs$7`→`fs$6` (2)                   |
+| `msgpackr/struct.js`                     | `b45551c3…` | `7a42dcad…` | none                                                        |
+| `Copilot/Runtime.executable.ts`          | `f89959ce…` | `ec03d459…` | none                                                        |
+| `Copilot/Adapter.types.cli.ts`           | `b7ffc526…` | `7be52708…` | none                                                        |
+| `Pi/Cli.ts`                              | `b1c8780b…` | `3de5ba64…` | none                                                        |
+
+Counts are identifier tokens. With the old algorithm, only the Claude SDK pin had drifted on clean
+HEAD (`1c86b915…`). It drifted because `_a$1` became the unsuffixed `_a`.
+
+### Clean-HEAD build
+
+- **Snapshot:** `git archive HEAD` (`4a1971a1e0`), tar sha256
+  `ae953233c57893e2a46c5d3f779acf90a9ff2c0b4eaeb76568ccdd164ebb2b25`. Extracted to
+  `/tmp/bigbud-loaderpol-20261118T003506Z/src`. The root and workspace `node_modules` were
+  APFS-cloned.
+- **Contents:** the snapshot is HEAD plus only the six files above. The sixth is a comment
+  edit in `build-remote-backend-graph.reachability.ts`. `diff -rq` against a fresh extraction
+  shows only these files. The x86_64 listing was re-run after the comment edit, with the same
+  result.
+- **Build:** both tsdown configs. No other edits to the snapshot.
+- **aarch64:** `bun run remote-backend-graph --target aarch64-unknown-linux-gnu` passed. It was
+  signed with a throwaway fixture key, and reported 27 reviewed sites.
+  - Archive sha256: `c763d4069f04990b3da7e1748868e1ca142ebd50b37ca2c680cb110865bf09b6`.
+  - `buildDigest`: `616fa340…0045`.
+- **x86_64:** `--list-loader-sites` reported "0 unreviewed sites, 0 refusals; 828 reachable
+  modules".
+- **Not in this build:** staged work from another lane adds `remote-peer-relay` to the graph
+  (`stage.ts`, `producer.ts`, `tsdown.clientRelay.config.ts`). Once it lands, check that bundle's
+  loader sites again. The uncommitted `scripts/lib/workspace-agent-target.ts` change does not
+  touch the backend graph.
