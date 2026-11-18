@@ -1,0 +1,5 @@
+# Vendored licence files keep their upstream bytes (one has CRLF line endings);
+# their SHA-256 is checked when a backend graph is built.
+* -text -eol
+manifest.json text eol=lf
+.gitattributes text eol=lf

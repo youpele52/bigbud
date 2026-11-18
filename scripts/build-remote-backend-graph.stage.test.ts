@@ -16,6 +16,7 @@ import {
   nodeTarball,
   privateBase,
   signingKey,
+  vendoredLicenseFixture,
   writeTree,
 } from "./build-remote-backend-graph.fixture.ts";
 import {
@@ -104,6 +105,10 @@ async function stageInputs(base: string) {
   const license = join(base, "LICENSE");
   await writeTree(base, { LICENSE: "MIT bigbud" });
   const key = await signingKey(base);
+  const vendoredLicenses = await vendoredLicenseFixture(join(base, "vendored"), {
+    "dep@1.0.0": { "UPSTREAM-LICENSE": "MIT dep upstream" },
+    "dep@9.9.9": { LICENSE: "other version" },
+  });
   return {
     key,
     input: {
@@ -114,6 +119,7 @@ async function stageInputs(base: string) {
       nodePin: { name: NODE_RUNTIME_PINS[target].name, sha256: await sha256File(archive) },
       nodeModules,
       projectLicense: license,
+      vendoredLicenses,
       externals: { lockSha256: "f".repeat(64), skippedInstallScripts: [], pruned: 0 },
       keyFile: key.keyFile,
       keyId: "fixture",
@@ -144,6 +150,7 @@ it("stage_is_deterministic", async () => {
     "node_modules/dep/LICENSE",
     "node_modules/dep/index.js",
     "node_modules/dep/package.json",
+    "notices/vendored/dep@1.0.0/UPSTREAM-LICENSE",
     "runtime/LICENSE",
     "runtime/node",
     "server/NodeSqliteWorker.mjs",
@@ -157,6 +164,18 @@ it("stage_is_deterministic", async () => {
   expect(notices).toBe(await read(second.graph, "THIRD_PARTY_NOTICES"));
   for (const text of ["MIT bigbud", "Node license", "MIT dep", "dep@1.0.0 (package)"])
     expect(notices).toContain(text);
+  // Vendored upstream text is shipped, hash-listed and attributed; other versions are ignored.
+  expect(notices).toContain("Vendored from https://example.test/dep/raw/v1.0.0/UPSTREAM-LICENSE");
+  expect(notices).toContain("\nMIT dep upstream\n");
+  expect(notices).not.toContain("other version");
+  const noticeJson = JSON.parse(await read(first.graph, "NOTICES.json"));
+  const dep = noticeJson.entries.find((entry: { name: string }) => entry.name === "dep");
+  expect(dep.files.map((file: { path: string }) => file.path)).toEqual([
+    "node_modules/dep/LICENSE",
+    "notices/vendored/dep@1.0.0/UPSTREAM-LICENSE",
+  ]);
+  expect(dep.upstream.status).toBe("vendored");
+  expect(first.provenance.notices.vendoredNoticeFiles).toEqual(["dep@1.0.0"]);
   await expect(
     verifyBackendGraph({
       root: first.graph,

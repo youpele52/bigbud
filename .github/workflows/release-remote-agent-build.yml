@@ -41,6 +41,11 @@ jobs:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -94,6 +99,17 @@ jobs:
           '${{ matrix.strip }}' "release-publish/${asset_name}"
           chmod 755 "release-publish/${asset_name}"
           (cd release-publish && sha256sum "${asset_name}" > "${asset_name}.sha256")
+
+      # Unsigned sidecars next to the binary: the linked crates' licence files (including the
+      # project LICENSE) and their inventory. The signed manifests list only the binary.
+      - name: Generate remote agent third-party notices
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset_name="bigbud-remote-agent-${{ inputs.version }}-${{ matrix.target }}"
+          bun run licenses:rust --target "${{ matrix.target }}" \
+            --output "release-publish/${asset_name}.licenses.json" \
+            --notices-output "release-publish/${asset_name}.THIRD_PARTY_NOTICES"
 
       - name: Verify packaged identity and Linux compatibility
         shell: bash

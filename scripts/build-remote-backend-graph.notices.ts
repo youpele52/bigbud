@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { join, posix } from "node:path";
+import type { UpstreamLicenseRecord } from "./build-remote-backend-graph.vendored.ts";
 
 /** Notice inventory for the staged graph. It records what the graph carries; it is not a legal
  * review, and packages without a license file are listed with empty `files` for follow-up. */
@@ -12,6 +13,9 @@ export interface GraphNoticeEntry {
   /** Graph-relative directory for installed packages; empty for bundled code. */
   readonly directory: string;
   readonly files: ReadonlyArray<{ readonly path: string; readonly sha256: string }>;
+  /** Upstream licence evidence for packages that publish no licence file themselves: vendored
+   * files (also listed in `files`) with their exact source, or the upstream check that found none. */
+  readonly upstream?: UpstreamLicenseRecord;
 }
 const noticeName =
   /^(?:licen[cs]e|notice|copying|copyright|authors|third[-_]party[-_]notices?|patents)(?:[-_.][A-Za-z0-9.-]*)?$/i;
@@ -134,6 +138,10 @@ export function noticeSummary(entries: ReadonlyArray<GraphNoticeEntry>) {
   return {
     packages: entries.length,
     withoutNoticeFiles: withoutFiles.map((entry) => `${entry.name}@${entry.version}`).toSorted(),
+    vendoredNoticeFiles: entries
+      .filter((entry) => entry.upstream?.status === "vendored")
+      .map((entry) => `${entry.name}@${entry.version}`)
+      .toSorted(),
     licenses: Object.fromEntries([...licenses].toSorted((a, b) => (a[0] < b[0] ? -1 : 1))),
   };
 }
@@ -160,6 +168,23 @@ export async function renderThirdPartyNotices(
     );
     if (!entry.files.length)
       parts.push("\nNo license or notice file is shipped for this component.\n");
+    if (entry.upstream?.status === "no-license-file-upstream") {
+      const { repository, ref, commit, retrieved } = entry.upstream.checked;
+      parts.push(
+        `No license file upstream: checked ${repository} at ${commit} (${ref}) on ${retrieved}.\n` +
+          (entry.upstream.note ? `${entry.upstream.note}\n` : ""),
+      );
+    }
+    if (entry.upstream?.status === "vendored")
+      parts.push(
+        "License text below is published upstream, not in this package; bigbud vendors it.\n" +
+          (entry.upstream.note ? `${entry.upstream.note}\n` : ""),
+      );
+    const vendored = new Map(
+      entry.upstream?.status === "vendored"
+        ? entry.upstream.files.map((file) => [file.graphPath, file])
+        : [],
+    );
     for (const file of entry.files) {
       const bytes = await read(file.path);
       if (sha256(bytes) !== file.sha256)
@@ -167,7 +192,14 @@ export async function renderThirdPartyNotices(
       const text = bytes.includes(0)
         ? `[binary file, ${bytes.length} bytes]`
         : bytes.toString("utf8").replace(/\r\n?/g, "\n").trimEnd();
-      parts.push(`\n--- ${file.path} (sha256 ${file.sha256}) ---\n\n${text}\n`);
+      const source = vendored.get(file.path);
+      const origin = source
+        ? `Vendored from ${source.sourceUrl} (ref ${source.ref}` +
+          `${source.commit ? `, commit ${source.commit}` : ""}), retrieved ${source.retrieved}.\n` +
+          (source.covers ? `Covers: ${source.covers}\n` : "") +
+          (source.note ? `Note: ${source.note}\n` : "")
+        : "";
+      parts.push(`\n--- ${file.path} (sha256 ${file.sha256}) ---\n${origin}\n${text}\n`);
     }
   }
   return parts.join("");

@@ -62,6 +62,9 @@ provider-conformance *args:
 licenses-rust *args:
     bun run licenses:rust "$@"
 
+licenses-mobile-web *args:
+    bun run licenses:mobile-web "$@"
+
 build-desktop *args:
     bun run build:desktop "$@"
 

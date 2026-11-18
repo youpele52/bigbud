@@ -16,6 +16,8 @@ const options = {
   "key-id": { type: "string" },
   "key-file": { type: "string" },
   "output-directory": { type: "string" },
+  "gateway-notices": { type: "string" },
+  "assets-notices": { type: "string" },
   help: { type: "boolean" },
 } as const;
 
@@ -61,6 +63,7 @@ try {
       keyId: required("key-id"),
       keyFile: required("key-file"),
       outputDirectory: required("output-directory"),
+      notices: { gateway: required("gateway-notices"), assets: required("assets-notices") },
     });
     console.log(
       "Created unpublished signed mobile component artifacts. Host activation requires separate consent and lifecycle validation.",

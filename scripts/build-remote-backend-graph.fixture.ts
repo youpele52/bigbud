@@ -68,3 +68,56 @@ export async function nodeTarball(base: string, name = "node-v24.13.1-linux-arm6
   if (result.status !== 0) throw new Error(result.stderr);
   return archive;
 }
+
+const splitKey = (key: string) => {
+  const at = key.lastIndexOf("@");
+  return { name: key.slice(0, at), version: key.slice(at + 1) };
+};
+
+/** A vendored-licence directory: `files` maps `<name>@<version>` to `{ file: text }`, and
+ * `none` lists packages recorded as having no licence file upstream. */
+export async function vendoredLicenseFixture(
+  root: string,
+  files: Record<string, Record<string, string>>,
+  none: ReadonlyArray<string> = [],
+) {
+  const { createHash } = await import("node:crypto");
+  const tree: Record<string, string> = {};
+  const packages: unknown[] = [];
+  for (const [key, texts] of Object.entries(files)) {
+    const { name, version } = splitKey(key);
+    packages.push({
+      name,
+      version,
+      declaredRepository: `git+https://example.test/${name}.git`,
+      status: "vendored",
+      files: Object.entries(texts).map(([file, text]) => {
+        tree[`${name.replace("/", "+")}@${version}/${file}`] = text;
+        return {
+          file,
+          sha256: createHash("sha256").update(text).digest("hex"),
+          sourceUrl: `https://example.test/${name}/raw/v${version}/${file}`,
+          repository: `https://example.test/${name}`,
+          ref: `v${version}`,
+          commit: "a".repeat(40),
+          path: file,
+          retrieved: "2026-11-18",
+        };
+      }),
+    });
+  }
+  for (const key of none)
+    packages.push({
+      ...splitKey(key),
+      declaredRepository: null,
+      status: "no-license-file-upstream",
+      checked: {
+        repository: "https://example.test/none",
+        ref: "v1",
+        commit: "b".repeat(40),
+        retrieved: "2026-11-18",
+      },
+    });
+  tree["manifest.json"] = JSON.stringify({ schemaVersion: 1, packages });
+  return writeTree(root, tree);
+}

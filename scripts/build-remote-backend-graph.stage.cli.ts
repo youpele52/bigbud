@@ -17,6 +17,7 @@ import {
   GRAPH_ENTRY,
   stageRemoteBackendGraph,
 } from "./build-remote-backend-graph.stage.ts";
+import { VENDORED_LICENSES_DIRECTORY } from "./build-remote-backend-graph.vendored.ts";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const usage =
@@ -76,6 +77,7 @@ export async function main(args: string[]) {
       nodeModules: externals.nodeModules,
       projectLicense: join(repo, "LICENSE"),
       bundleSourceRoot: repo,
+      vendoredLicenses: join(repo, VENDORED_LICENSES_DIRECTORY),
     };
     if (listing) return await listLoaderSites({ ...common, graph: output });
     const revision = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" });

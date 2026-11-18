@@ -40,6 +40,10 @@ import {
   type BackendGraphTarget,
 } from "./build-remote-backend-graph.policy.ts";
 import { buildRemoteBackendGraph } from "./build-remote-backend-graph.producer.ts";
+import {
+  applyVendoredLicenses,
+  loadVendoredLicenses,
+} from "./build-remote-backend-graph.vendored.ts";
 
 export const GRAPH_NODE = "runtime/node";
 export const GRAPH_ENTRY = "server/bin.mjs";
@@ -88,6 +92,8 @@ export interface AssembleBackendGraphInput {
   readonly projectLicense: string;
   /** Workspace root holding the `node_modules/.bun` store named by the bundle regions. */
   readonly bundleSourceRoot?: string;
+  /** Directory with `manifest.json` and vendored upstream licence files, hash-checked here. */
+  readonly vendoredLicenses?: string;
   /** Fresh directory; created private. */
   readonly graph: string;
 }
@@ -126,7 +132,7 @@ export async function assembleBackendGraph(input: AssembleBackendGraphInput) {
       ? await collectBundledNotices({ workspaceRoot: input.bundleSourceRoot, bundleTexts })
       : { entries: [], copies: [] };
     for (const copy of bundled.copies) await copyPrivate(copy.from, join(graph, copy.to));
-    const notices: GraphNoticeEntry[] = [
+    const collected: GraphNoticeEntry[] = [
       {
         kind: "project",
         name: "bigbud",
@@ -148,6 +154,11 @@ export async function assembleBackendGraph(input: AssembleBackendGraphInput) {
       ...bundled.entries,
       ...(await collectPackageNotices(graph)),
     ];
+    const vendored = input.vendoredLicenses
+      ? applyVendoredLicenses(collected, await loadVendoredLicenses(input.vendoredLicenses))
+      : { entries: collected, copies: [] };
+    for (const copy of vendored.copies) await copyPrivate(copy.from, join(graph, copy.to));
+    const notices = vendored.entries;
     // Derived from the same entries after they are collected, so it never lists itself.
     const thirdParty = await renderThirdPartyNotices(
       "bigbud remote backend graph: third-party notices",

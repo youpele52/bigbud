@@ -1,19 +1,8 @@
 import { gzipSync } from "node:zlib";
 import { MOBILE_ASSET_MAX_EXPANDED_BYTES } from "@bigbud/shared/mobileOptionalAssets.policy";
 import { createPublicKey, generateKeyPairSync } from "node:crypto";
-import {
-  chmod,
-  link,
-  mkdtemp,
-  mkdir,
-  readFile,
-  rm,
-  symlink,
-  truncate,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, link, mkdir, readFile, rm, symlink, truncate, writeFile } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterEach, expect, it } from "vitest";
@@ -23,61 +12,13 @@ import {
 } from "@bigbud/shared/mobileOptionalArtifact";
 import { runArchive } from "./lib/remote-backend-control/archive.ts";
 import { assertGatewayHeader } from "./package-mobile-components.binary.ts";
-import {
-  packageMobileComponents,
-  type MobileComponentBuildInput,
-} from "./package-mobile-components.producer.ts";
+import { cleanupMobileFixtures, elf, mobileFixture } from "./package-mobile-components.fixture.ts";
+import { packageMobileComponents } from "./package-mobile-components.producer.ts";
 
-const roots: string[] = [];
-afterEach(async () => {
-  for (const root of roots.splice(0)) {
-    for (const output of ["out", "out2"]) await chmod(join(root, output), 0o700).catch(() => {});
-    await rm(root, { recursive: true, force: true });
-  }
-});
-function elf(): Buffer {
-  const bytes = Buffer.alloc(64);
-  bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1]);
-  bytes.writeUInt16LE(2, 16);
-  bytes.writeUInt16LE(183, 18);
-  return bytes;
-}
-async function fixture() {
-  const root = await mkdtemp(join(tmpdir(), "bigbud-mobile-producer-"));
-  roots.push(root);
-  const assets = join(root, "assets");
-  await mkdir(assets);
-  await mkdir(join(assets, "static"));
-  await writeFile(join(assets, "index.html"), "<html>fixture static mobile entry</html>");
-  await writeFile(join(assets, "static", "app.js"), "console.log('static fixture');");
-  const key = generateKeyPairSync("ed25519");
-  const privatePem = key.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-  const keyFile = join(root, "signing.pem");
-  await writeFile(keyFile, privatePem, { mode: 0o600 });
-  const gateway = join(root, "gateway");
-  await writeFile(gateway, elf());
-  const input: MobileComponentBuildInput = {
-    gatewayBinary: gateway,
-    targetTriple: "aarch64-unknown-linux-musl",
-    assetsDirectory: assets,
-    compatibility: {
-      agentVersion: "1",
-      backendVersion: "2",
-      gatewayVersion: "3",
-      mobileAssetVersion: "4",
-      minimumMobileRpcRevision: 1,
-      maximumMobileRpcRevision: 2,
-    },
-    artifactBaseUrl: "https://github.com/example/releases/download/test/",
-    keyId: "fixture-key",
-    keyFile,
-    outputDirectory: join(root, "out"),
-  };
-  return { root, input, key, privatePem };
-}
+afterEach(cleanupMobileFixtures);
 
 it("produces deterministic separate artifacts with verified signatures and no private source inventory", async () => {
-  const { root, input, key, privatePem } = await fixture();
+  const { root, input, key, privatePem } = await mobileFixture();
   const first = await packageMobileComponents(input);
   const second = await packageMobileComponents({ ...input, outputDirectory: join(root, "out2") });
   expect(second).toEqual(first);
@@ -108,7 +49,7 @@ it.each([
   "debug.map",
   "../escape",
 ])("rejects unsafe/private assets %s without a signed manifest", async (name) => {
-  const { input } = await fixture();
+  const { input } = await mobileFixture();
   if (name === "../escape") {
     await expect(
       packageMobileComponents({
@@ -127,7 +68,7 @@ it.each([
 });
 
 it.each(["symlink", "hardlink", "key-content"])("rejects %s assets", async (kind) => {
-  const { input, privatePem } = await fixture();
+  const { input, privatePem } = await mobileFixture();
   const destination = join(input.assetsDirectory, "untrusted.txt");
   if (kind === "symlink") await symlink(input.keyFile, destination);
   else if (kind === "hardlink") await link(join(input.assetsDirectory, "index.html"), destination);
@@ -137,7 +78,7 @@ it.each(["symlink", "hardlink", "key-content"])("rejects %s assets", async (kind
 });
 
 it("refuses a signing key anywhere under the asset input", async () => {
-  const { input, privatePem } = await fixture();
+  const { input, privatePem } = await mobileFixture();
   const keyFile = join(input.assetsDirectory, "signer.txt");
   await writeFile(keyFile, privatePem, { mode: 0o600 });
   await expect(packageMobileComponents({ ...input, keyFile })).rejects.toThrow(/separate/);
@@ -145,7 +86,7 @@ it("refuses a signing key anywhere under the asset input", async () => {
 it.each(["permissions", "symlink", "wrong-algorithm"])(
   "refuses unsafe signing key %s",
   async (kind) => {
-    const { input, root } = await fixture();
+    const { input, root } = await mobileFixture();
     let keyFile = input.keyFile;
     if (kind === "permissions") await chmod(keyFile, 0o644);
     else if (kind === "symlink") {
@@ -162,7 +103,7 @@ it.each(["permissions", "symlink", "wrong-algorithm"])(
 );
 
 it("refuses nested output and never overwrites an existing directory", async () => {
-  const { input } = await fixture();
+  const { input } = await mobileFixture();
   await expect(
     packageMobileComponents({ ...input, outputDirectory: join(input.assetsDirectory, "out") }),
   ).rejects.toThrow(/separate/);
@@ -175,7 +116,7 @@ it("refuses nested output and never overwrites an existing directory", async () 
 it.each(["assets", "gateway", "key"])(
   "fails source %s mutation before manifest publication",
   async (source) => {
-    const { input } = await fixture();
+    const { input } = await mobileFixture();
     await expect(
       packageMobileComponents(input, {
         archive: (request) => {
@@ -201,7 +142,7 @@ it.each(["assets", "gateway", "key"])(
 );
 
 it("rejects missing index, wrong architecture, credentialed URLs and inverted RPC ranges", async () => {
-  const { input } = await fixture();
+  const { input } = await mobileFixture();
   await expect(
     packageMobileComponents({ ...input, targetTriple: "x86_64-unknown-linux-musl" }),
   ).rejects.toThrow(/ELF/);
@@ -249,7 +190,7 @@ it("CLI fails closed without explicit required inputs and never prints a signing
 });
 
 it("bounds assets, key size and directory nesting before producing any manifest", async () => {
-  const { input, root } = await fixture();
+  const { input, root } = await mobileFixture();
   await writeFile(join(input.assetsDirectory, "oversize.js"), "");
   await truncate(join(input.assetsDirectory, "oversize.js"), 128 * 1024 * 1024 + 1);
   await expect(packageMobileComponents(input)).rejects.toThrow(/byte budget/);
@@ -261,7 +202,7 @@ it("bounds assets, key size and directory nesting before producing any manifest"
 });
 
 it("bounds asset directory nesting without following links", async () => {
-  const { input } = await fixture();
+  const { input } = await mobileFixture();
   let directory = input.assetsDirectory;
   for (let depth = 0; depth < 34; depth += 1) {
     directory = join(directory, "nested");
@@ -271,7 +212,7 @@ it("bounds asset directory nesting without following links", async () => {
 });
 
 it("fails corrupted archive contents before exposing a manifest", async () => {
-  const { input } = await fixture();
+  const { input } = await mobileFixture();
   await expect(
     packageMobileComponents(input, {
       archive: (request) => {
@@ -285,7 +226,7 @@ it("fails corrupted archive contents before exposing a manifest", async () => {
 });
 
 it("rejects total archive header/PAX/padding expansion before signing any metadata", async () => {
-  const { input } = await fixture();
+  const { input } = await mobileFixture();
   const bomb = gzipSync(Buffer.alloc(MOBILE_ASSET_MAX_EXPANDED_BYTES + 512));
   await expect(
     packageMobileComponents(input, {

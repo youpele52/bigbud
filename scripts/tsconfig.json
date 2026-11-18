@@ -26,6 +26,8 @@
     "../apps/server/src/attachments/fileMime.ts",
     "../apps/server/src/remote-backend/backendGraph.ts",
     "../apps/server/src/remote-backend/backendGraph.files.ts",
-    "../apps/server/src/remote-backend/backendGraph.manifest.ts"
+    "../apps/server/src/remote-backend/backendGraph.manifest.ts",
+    "../apps/server/src/remote-backend/privatePermission.ts",
+    "../apps/server/src/remote-backend/localSupervisorService.paths.ts"
   ]
 }

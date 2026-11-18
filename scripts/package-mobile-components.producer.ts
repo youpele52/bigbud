@@ -16,6 +16,11 @@ import { isWithin } from "./lib/remote-backend-control/closure.ts";
 import { assertGatewayHeader } from "./package-mobile-components.binary.ts";
 import { assertMobileArchiveExpansionBudget } from "./package-mobile-components.budget.ts";
 import {
+  readMobileComponentNotices,
+  writeMobileComponentNotices,
+  type MobileComponentNotices,
+} from "./package-mobile-components.notices.ts";
+import {
   assertMobileAssetsStable,
   captureMobileAssets,
 } from "./package-mobile-components.inventory.ts";
@@ -35,6 +40,8 @@ export interface MobileComponentBuildInput {
   readonly keyId: string;
   readonly keyFile: string;
   readonly outputDirectory: string;
+  /** Notice texts written beside the artifacts as unsigned `.THIRD_PARTY_NOTICES` sidecars. */
+  readonly notices?: MobileComponentNotices;
 }
 
 /** Explicit build-time invocation signs unpublished artifacts; it never enables a host. */
@@ -104,6 +111,7 @@ export async function packageMobileComponents(
   const gatewayRead = await readStableFile(gateway);
   assertGatewayHeader(gatewayRead.bytes, input.targetTriple);
   if (!(await lstat(assets)).isDirectory()) throw new Error("Asset input must be a directory.");
+  const noticeTexts = await readMobileComponentNotices(input.notices, output);
   await mkdir(output, { mode: 0o700 }); // Exclusive fresh directory, never replace prior output.
   const staging = join(output, ".unpublished");
   await mkdir(staging, { mode: 0o700 });
@@ -180,6 +188,11 @@ export async function packageMobileComponents(
     await rename(archivePath, join(output, assetsName));
     await chmod(join(output, gatewayName), 0o555);
     await chmod(join(output, assetsName), 0o444);
+    await writeMobileComponentNotices(
+      output,
+      { gateway: gatewayName, assets: assetsName },
+      noticeTexts,
+    );
     const manifestPath = join(staging, "manifest.json");
     await writeFile(manifestPath, JSON.stringify({ schemaVersion: 1, artifacts }, null, 2) + "\n", {
       flag: "wx",
