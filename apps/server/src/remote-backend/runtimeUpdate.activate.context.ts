@@ -30,6 +30,8 @@ export interface RuntimeUpdateActivationContext {
   readonly runningVersion: string;
   readonly diskProbe?: RuntimeUpdateDiskProbe;
   readonly deferRetryMs?: number;
+  /** How long a runtime waits to be restarted before repeating the request (default 60 s). */
+  readonly restartGraceMs?: number;
   readonly drain?: {
     readonly inFlightTimeoutMs?: number;
     readonly settleTimeoutMs?: number;

@@ -9,8 +9,10 @@
  *   3. disk budget again under the lock
  *   4. advance → activating, offline `VACUUM INTO` backup, journal `restarting`
  *   5. point the unit config at the staged graph, ask systemd to restart the backend unit
- * A failure in 4–5 restores the previous config and settles the operation as failed in this
- * (still old) runtime; nothing was admitted because admission stayed closed.
+ * A failure in 4–5 before a restart could have been queued restores the previous config and
+ * settles the operation as failed in this (still old) runtime; nothing was admitted because
+ * admission stayed closed. Once a restart is requested, or may have been, nothing is restored
+ * here: the next runtime's trial decides (`runtimeUpdate.restart.ts`).
  */
 import { Duration, Effect } from "effect";
 
@@ -34,6 +36,7 @@ import {
   type RuntimeUpdateJournal,
 } from "./runtimeUpdate.journal.ts";
 import { isTerminalRuntimeUpdateState } from "./runtimeUpdate.states.ts";
+import { requestBackendRestart, superviseBackendRestart } from "./runtimeUpdate.restart.ts";
 import { readStagedGraphPins } from "./runtimeUpdate.unit.ts";
 import type { RemoteRuntimeUpdateShape } from "./Services/RemoteRuntimeUpdate.ts";
 
@@ -127,16 +130,18 @@ export const attemptRuntimeActivation = Effect.fn("RuntimeUpdate.attemptActivati
     yield* promise(() => writeRuntimeUpdateJournal(ctx.stateDir, journal!));
     pointed = true;
     yield* promise(() => ctx.unit.pointAt(prepared.success.raw, prepared.success.pins));
-    yield* promise(() => ctx.unit.restart());
+    yield* requestBackendRestart(ctx);
   }).pipe(Effect.result);
   if (restarted._tag === "Success") {
     if (uncertain.length)
       yield* Effect.logWarning("Runtime update interrupted turns whose outcome is uncertain", {
         threads: uncertain,
       });
+    yield* superviseBackendRestart(ctx);
     return "restarting" as RuntimeUpdateAttempt;
   }
-  // Still the old runtime and nothing admitted: undo the switch, then report the failure.
+  // No restart was queued, so this is still the old runtime and nothing was admitted: undo the
+  // switch, then report the failure.
   const undone = yield* promise(async () => {
     if (journal && pointed) await ctx.unit.restore(journal.previousConfig, journal.previousReceipt);
     if (journal) await clearRuntimeUpdateJournal(ctx.stateDir, journal);

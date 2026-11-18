@@ -54,6 +54,8 @@ export interface RemoteRuntimeUpdateDependencies {
   /** Backend instance ownership assertion, checked by every store checkpoint. */
   readonly assertOwner?: () => Promise<void>;
   readonly activation?: RuntimeUpdateActivationSeam;
+  /** This runtime's version: a request for an older one is refused before anything is staged. */
+  readonly runningVersion?: string;
 }
 
 type Result<A> = Effect.Effect<A, RemoteRuntimeUpdateError>;

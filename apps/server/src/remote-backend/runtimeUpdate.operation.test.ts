@@ -166,3 +166,19 @@ it.effect("advance follows the state machine and keeps activation for WP-4D", ()
     }).pipe(Effect.provide(runtimeUpdateLayer(harness.deps, dbPath)));
   }),
 );
+
+it.effect("a known downgrade is refused at request time, before anything is staged", () =>
+  Effect.gen(function* () {
+    const { harness, dbPath } = yield* setup();
+    yield* Effect.gen(function* () {
+      const update = yield* RemoteRuntimeUpdate;
+      const refused = yield* update.request(request(1, "2.0.0")).pipe(Effect.flip);
+      assert.equal(refused.code, "invalid-state");
+      assert.match(refused.message, /Downgrading from 2\.1\.0 to 2\.0\.0 is refused/);
+      assert.isNull((yield* update.status({})).operation);
+      assert.deepStrictEqual(harness.resolves, []);
+    }).pipe(
+      Effect.provide(runtimeUpdateLayer({ ...harness.deps, runningVersion: "2.1.0" }, dbPath)),
+    );
+  }),
+);

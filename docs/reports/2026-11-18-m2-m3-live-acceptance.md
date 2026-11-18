@@ -258,3 +258,80 @@ ProviderCommandReactorHandlers.session.responses.ts:146-171`). Reproduced on the
   - The macOS laptop backend was stopped.
   - The snapshot, build directories, graph archives and fixture key under `/tmp` were deleted.
   - No other VM or container was touched.
+
+## Fixes and re-run
+
+**Date:** 18 November 2026, 07:25–08:10 UTC. **Source under test:** `git archive` of `3235c1c7a9`
+plus the uncommitted fixes below (snapshot, not the working tree). **No product patches:** the
+only edits to built graphs are the two test graphs (never-ready `d`/`d2`, unbootable `e`/`e2`).
+
+### Root causes and fixes
+
+| Finding | Root cause                                                                                                                                                                                                                                                                                                                                                                                                                     | Fix                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| F-M2-1  | Confirmed (unit test fails on the old code: the local `ssh` saw no `SSH_AUTH_SOCK`). `runDeploymentSsh` passed the remote command's `env` as the local spawn env.                                                                                                                                                                                                                                                              | `sshCommand.ts` names the shared local-client policy (`sshClientProcessEnv()`: the server's own env, the same env every other SSH flow already spawns `ssh` with). `deployment.ssh.ts` keeps `command.env` for the remote command only and spawns `ssh` with `localEnv: sshClientProcessEnv()`.                                                                                                                                                                                                                                                             |
+| F-M3-1  | Confirmed (live: "need … update inputs"). The launcher clears the environment, so dev variables can never arrive.                                                                                                                                                                                                                                                                                                              | Owner-private `~/.bigbud/backend-services/<authority>/runtime-update-dev-inputs-v1` (mobile inputs-file pattern), written once by `bigbud backend update-inputs set --authority --graph-versions-dir [--trusted-keys] [--install-source]`, read per `local-graph` request (`<dir>/<version>/`). Release updates ignore it. One release rule for laptop and backend (`developmentOverrides.ts`): refused when `BIGBUD_DESKTOP_PACKAGED=1` or the bundle carries `bigbudReleaseTag`; the release graph workflow now stamps that tag before bundling.          |
+| F-M3-3  | Confirmed (D-2 evidence; live: activation now reaches systemd).                                                                                                                                                                                                                                                                                                                                                                | `userSystemdBus.ts` holds the validated `/run/user/<uid>` bus preamble, now shared by `localSupervisorService.references.manager.ts` and the update restart.                                                                                                                                                                                                                                                                                                                                                                                                |
+| F-M3-4  | Confirmed (D-3 evidence; the `systemctl` child sits in the cgroup being stopped).                                                                                                                                                                                                                                                                                                                                              | The restart is requested from a transient user unit (`systemd-run --user --no-block --collect`, outside the backend cgroup; returns once queued). Exit status ≠ 0 means nothing was queued (`RuntimeUnitRestartRefused`), so only then is config restored. A killed or timed-out requester is `unconfirmed` and treated as requested. After any request the runtime never restores: it waits 60 s, repeats the idempotent request up to 5 times, then logs; the next start's trial decides. Shared by activation and rollback (`runtimeUpdate.restart.ts`). |
+| F-M3-2  | Confirmed, three parts: (1) the probe listed provider leases, which follow a live session, not work; (2) `processSessionStopRequested` only interrupted; (3) **new:** `ProviderSessionRuntimeRepositoryLive` was only `Layer.provide`d to the session directory, so ingestion's `Effect.serviceOption` got `None` and the startup reconcile of stale `running` rows never ran in production (reproduced live after a SIGKILL). | (1) The drain probe excludes `provider` leases (running turns stay blocking via the read model and admissions). (2) `thread.session.stop` on an idle session stops the live provider session and projects it `stopped`; an active turn is still only interrupted. (3) `server.providerLayers.ts` exports the repository (`provideMerge`), guarded by a type-level test that fails without it.                                                                                                                                                               |
+| O-4     | The refusal ran at activation.                                                                                                                                                                                                                                                                                                                                                                                                 | `request` refuses a known downgrade (`runningVersion` dep) before staging; activation still re-checks the manifest.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+
+### Observations not fixed
+
+- **O-1, root cause confirmed, not changed.** `node:24.13.1-bookworm` has no `/etc/machine-id`, so the
+  laptop's controller scope is `unknown`, and `isRemoteAgentControllerAlive` fails closed for every
+  foreign controller. A real fix needs a machine-identity fallback design, because a boot-id scope
+  would stay stuck after a reboot.
+- **O-2, reproduced and narrowed, root cause not confirmed.** 9 of the 13 stops driven by an update
+  hit `TimeoutStopSec=15`. Fresh or idle runtimes stopped in under 0.1 s, including with an idle
+  provider session, a gate that was closed at start and then reopened, a staging failure under the
+  lock, and a SIGTERM to the whole cgroup.
+  - A Node report taken from a stuck runtime 3 s into its stop showed an idle JS thread and an idle
+    loop, with the HTTP listener still open. A scope finalizer is waiting asynchronously.
+  - It is not a provider stop (that is bounded at 3 s), and not the `--proxy` child.
+  - Data stayed safe, and stale leases are now reconciled at startup.
+- **O-6 (new).** Every runtime that starts after a database restore appends a server
+  `project.created __chats__` event (sequences 199, 200 and 201). These are not client commands, and
+  the acknowledged rows are intact.
+
+### Live re-run (unpatched)
+
+Laptop: macOS host, snapshot `dist/bin.mjs --mode web`, `SSH_AUTH_SOCK` = a dedicated `ssh-agent`
+holding a passphrase key (unusable without the agent: `Permission denied (publickey)`). Harness-only
+isolation: an `ssh` wrapper adding `-F` (pinned `known_hosts`, so `~/.ssh` was untouched) and a
+stand-in `SHELL`. VM `bbfix`: Lima vz, Ubuntu 22.04 arm64, systemd 249. Musl agent
+`0.3.3-fix.3235c1c7a940` built in `node:24.13.1-bookworm --rm`; all graphs signed with fixture key
+`dev-fixture-fix`.
+
+| #      | Check                                  | Result   | Key evidence                                                                                                                                                                                                                                                                                       |
+| ------ | -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M2-1   | macOS setup, `enableBoot: false`       | **PASS** | D5 refusal before approval, then `started` in 57 s. Unit `disabled`/`active`, profile `available`, lease handshake 200 with the pinned authority (401 without credential). Every setup/start `ssh` ran with `SSH_AUTH_SOCK` = the agent socket and the real `PATH`                                 |
+| —      | F-M3-1 inputs                          | **PASS** | Without inputs: clear failure naming `bigbud backend update-inputs set`. CLI wrote the 0600 file; a second `set` refused ("already exists")                                                                                                                                                        |
+| 2      | Deferred during a turn, then activates | **PASS** | `deferred` listing only `t1#turn` (no `#provider`). Activated about 6 s after the turn ended, no operator restart; systemd logged the transient `systemctl … restart` unit; `backendVersion` 0.1.614; `runtime-update/` empty                                                                      |
+| 4      | Interrupting update with consent       | **PASS** | Redone on t2 (the first try raced: the fake read `SLOW:45` from t1's history). Consent at 07:59:24, one `turn/interrupt` at 07:59:25.950, turn `interrupted` 3 ms later (not uncertain), restart 07:59:26, queued prompt's turn started in the new runtime at 07:59:44.951; each user message once |
+| 6      | Rust terminal survives                 | **PASS** | Shell 8643 and Rust MainPID 7103 unchanged across 4 activations, 3 rollbacks, two 6-crash loops and manual recovery; reattached with the same PID and accepted input                                                                                                                               |
+| 9      | Failed trial rolls back                | **PASS** | Never-ready d2: rollback after the 120 s trial, `failed` "…Rolled back to the previous runtime and database backup…"; events 1–198 and message counts (47/41/3) unchanged (199 = O-6)                                                                                                              |
+| 10     | Interrupted restore completes          | **PASS** | Previous node mode 000 during the trial: 6 × `Permission denied`, start-limit `failed`, journal `restore-pending`. After mode 700, `reset-failed`, `start`: restore ran, operation settled with the rollback message, journal cleared, counts unchanged                                            |
+| 11     | Unbootable runtime, manual recovery    | **PASS** | e2: `status=3` six times, journal `restarting`. WP-4D manual recovery, then the old runtime refused the trial ("not running the staged runtime"), rolled back and settled; handshake 200, counts unchanged                                                                                         |
+| F-M3-2 | Stale lease and idle stop              | **PASS** | Before the composition fix: after SIGKILL, t2 stayed `running` with its lease and no process. With the fix: `stale provider runtime rows marked stopped at startup {stoppedCount: 1}`, lease gone. `thread.session.stop` on idle t3: provider process exited, lease removed, session `stopped`     |
+| O-4    | Downgrade before staging               | **PASS** | `request 0.1.600` refused immediately ("Downgrading from 0.1.615 … Nothing was stopped"), nothing staged                                                                                                                                                                                           |
+
+### Checks
+
+- `bunx oxfmt`/`oxfmt --check`/`oxlint` on the 32 changed TS files (explicit list): clean. All
+  changed files ≤ 400 lines. `bun run --cwd apps/server typecheck`: clean.
+- Focused Vitest: 24 files, 96 tests passed (new: `deployment.ssh`, `runtimeUpdate.restart`,
+  `runtimeUpdate.devInputs`, `runtimeUpdate.drain.probe`, `ProviderCommandReactor.sessionStop`,
+  `server.providerLayers`, plus a request-time downgrade case and a workflow-stamp case).
+- Mutations: the old local ssh env, a restart classifier without the signal case, and dropping the
+  repository export each made a test or the typecheck fail.
+- No Rust code changed, so no Rust checks were needed.
+
+### Evidence and teardown
+
+`~/DevWorld/bigbud-evidence/tmp-bigbud-evidence-20261118-m2-m3-fixes-rerun.tar.zst` (`.sha256`
+beside it): live logs per check, VM journals, the fake-provider log, the ssh-wrapper trace, the O-2
+bisection and stop diagnostics, the fixes diff, graph manifests and provenance, the fixture public
+key and the harness tools. It was scanned for the laptop token, the SSH passphrase, private keys and
+credentials before archiving. The VM `bbfix` was deleted, the laptop backend and `ssh-agent` were
+stopped, and the run directories under `/tmp` were removed. No other VM or container was touched.

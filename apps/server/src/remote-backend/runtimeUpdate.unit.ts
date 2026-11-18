@@ -7,9 +7,15 @@
  * (`--backend-service run <config> backend`), which revalidates config, receipt and the whole
  * graph before Node starts. The independent Rust unit is never named, so its terminals keep
  * their processes.
+ *
+ * The restart is requested from a transient user service (`systemd-run --user --no-block`), not
+ * from this process: the backend unit uses `KillMode=control-group`, so a `systemctl` child of
+ * the backend is in the cgroup being stopped and can be killed before it reports the job. The
+ * transient unit lives outside that cgroup, and `systemd-run --no-block` returns as soon as the
+ * manager has queued it, before the restart it requests can begin.
  */
 import { execFile } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import * as fs from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -22,6 +28,7 @@ import { readLocalSupervisorServiceConfig } from "./localSupervisorService.confi
 import { readLocalSupervisorServiceFile } from "./localSupervisorService.files.ts";
 import type { RuntimeArchiveEntry } from "./runtimeArchive.store.ts";
 import { replacePrivateFile } from "./runtimeUpdate.journal.ts";
+import { USER_SYSTEMCTL, USER_SYSTEMD_BUS_PREAMBLE } from "./userSystemdBus.ts";
 
 const STAGED_RECEIPT = "artifact-receipt";
 const STAGED_PINS = "activation-v1.json";
@@ -64,6 +71,28 @@ export async function readStagedGraphPins(entry: RuntimeArchiveEntry) {
   return { raw, pins };
 }
 
+/**
+ * `requested`: the manager accepted the restart request. `unconfirmed`: the request was sent but
+ * its reply was lost (the requester was killed or timed out), so a restart may be in flight.
+ */
+export type RuntimeUnitRestartRequest = "requested" | "unconfirmed";
+
+/** The request definitely did not reach the manager (non-zero exit, or it could not start). */
+export class RuntimeUnitRestartRefused extends Error {}
+
+/** A requester killed by a signal or by its timeout may already have queued the restart. */
+export function classifyRestartRequestFailure(cause: unknown): RuntimeUnitRestartRequest {
+  const failure = cause as { readonly signal?: unknown; readonly killed?: unknown } | null;
+  if (failure && (typeof failure.signal === "string" || failure.killed === true))
+    return "unconfirmed";
+  throw new RuntimeUnitRestartRefused(
+    `The restart request was refused: ${cause instanceof Error ? cause.message : String(cause)}`,
+  );
+}
+
+/** Requests the restart from a transient user service outside the backend unit's cgroup. */
+const RESTART_REQUEST_SCRIPT = `${USER_SYSTEMD_BUS_PREAMBLE}exec /usr/bin/systemd-run --user --no-block --collect --quiet --unit="$1" --setenv=XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" --setenv=DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" ${USER_SYSTEMCTL} --no-block restart "$2"`;
+
 export interface RuntimeUpdateServiceUnit {
   /** Refuses unless this process runs inside the managed backend unit of this authority. */
   readonly assertManaged: () => Promise<void>;
@@ -72,8 +101,11 @@ export interface RuntimeUpdateServiceUnit {
   readonly pointAt: (receipt: string, pins: StagedGraphPins) => Promise<void>;
   /** Restores the exact previous config and receipt. */
   readonly restore: (config: string, receipt: string) => Promise<void>;
-  /** Asks systemd to restart only the backend unit; returns once the job is queued. */
-  readonly restart: () => Promise<void>;
+  /**
+   * Asks systemd to restart only the backend unit; returns once the request is queued (or may
+   * be). Rejects with `RuntimeUnitRestartRefused` only when nothing was queued.
+   */
+  readonly restart: () => Promise<RuntimeUnitRestartRequest>;
 }
 
 export function makeRuntimeUpdateServiceUnit(input: {
@@ -128,14 +160,14 @@ export function makeRuntimeUpdateServiceUnit(input: {
     },
     restore: (config, receipt) => write(config, receipt),
     restart: async () => {
-      await exec("/usr/bin/systemctl", [
-        "--user",
-        "--no-pager",
-        "--no-ask-password",
-        "--no-block",
-        "restart",
-        unitName,
-      ]);
+      // Not `bigbud-backend-*`: the account-service inventory accepts only real service units.
+      const requester = `bigbud-update-restart-${input.authorityId}-${randomBytes(6).toString("hex")}`;
+      try {
+        await exec("/bin/sh", ["-c", RESTART_REQUEST_SCRIPT, "sh", requester, unitName]);
+        return "requested";
+      } catch (cause) {
+        return classifyRestartRequestFailure(cause);
+      }
     },
   };
 }

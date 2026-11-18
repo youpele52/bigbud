@@ -12,6 +12,7 @@ import {
   formatProviderServiceCauseDetail,
   isUnknownPendingApprovalRequestError,
   isUnknownPendingUserInputRequestError,
+  serverCommandId,
   stalePendingRequestDetail,
 } from "./ProviderCommandReactorHelpers.ts";
 
@@ -152,12 +153,30 @@ export const makeProcessSessionResponseHandlers = ({
     }
 
     const now = event.payload.createdAt;
+    const sessionEpoch = event.payload.operation?.sessionEpoch ?? thread.session?.sessionEpoch ?? 0;
     if (thread.session?.activeTurnId) {
       yield* providerService.interruptTurn({
         threadId: thread.id,
         turnId: thread.session.activeTurnId,
-        sessionEpoch: event.payload.operation?.sessionEpoch ?? thread.session.sessionEpoch ?? 0,
+        sessionEpoch,
       });
+    } else if (thread.session && thread.session.status !== "stopped") {
+      // Idle: nothing to interrupt, so end the live provider session (its process and its
+      // provider lease) and project the thread's session as stopped. The resume cursor is kept.
+      const live = (yield* providerService.listSessions()).some(
+        (session) => session.threadId === thread.id,
+      );
+      if (live) yield* providerService.stopSession({ threadId: thread.id, sessionEpoch });
+      yield* orchestrationEngine
+        .dispatch({
+          type: "thread.session.set",
+          commandId: serverCommandId("provider-session-stop"),
+          threadId: thread.id,
+          session: { ...thread.session, status: "stopped", activeTurnId: null, updatedAt: now },
+          expectedSessionEpoch: sessionEpoch,
+          createdAt: now,
+        })
+        .pipe(Effect.asVoid);
     }
     if (event.payload.operation) {
       yield* setTurnControlOperation({

@@ -84,7 +84,8 @@ export async function makeDeploymentFixture(): Promise<DeploymentFixture> {
     return runBoundedProcess(
       command.command,
       args,
-      { ...command, env: { PATH: `${bin}:/usr/bin:/bin`, LC_ALL: "C", ...command.env } },
+      // The fake "remote" runs locally, so the remote env becomes this process's env here only.
+      { ...command, localEnv: { PATH: `${bin}:/usr/bin:/bin`, LC_ALL: "C", ...command.env } },
       signal,
     );
   };

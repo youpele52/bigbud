@@ -24,6 +24,17 @@ export interface BuildSshCommandInput {
 }
 
 const SSH_COMMAND = "ssh";
+
+/**
+ * Environment of the LOCAL `ssh` client process, shared by every SSH flow: the server's own
+ * environment, so the client keeps `SSH_AUTH_SOCK` (including a socket `ensureSshAgentEnv`
+ * exported), `PATH` for `ProxyCommand`s, the real `HOME` for `~/.ssh` and `DISPLAY`. A remote
+ * command's environment is encoded into the remote command by `buildSshCommandInvocation`; it
+ * must never replace this one.
+ */
+export function sshClientProcessEnv(): NodeJS.ProcessEnv {
+  return process.env;
+}
 const REMOTE_EXEC_SCRIPT =
   'if [ -n "$1" ]; then cd "$1" || exit 1; fi; shift; while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do export "$1"; shift; done; shift; exec "$@"';
 

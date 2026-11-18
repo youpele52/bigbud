@@ -2,9 +2,12 @@
  * Live drain probe over the orchestration read model and durable leases (M3 WP-4D).
  *
  * Affected work: active or starting turns and pending turn starts, pending approvals and
- * user-input requests (read model), plus durable activity leases, shell/provider worktree leases
- * and non-terminal provider turn admissions (SQL; a read error counts as busy). Terminal leases
- * are excluded: remote terminals are owned by the independent Rust unit and survive the update.
+ * user-input requests (read model), plus durable activity leases, shell worktree leases and
+ * non-terminal provider turn admissions (SQL; a read error counts as busy). Excluded:
+ * - terminal leases: remote terminals are owned by the independent Rust unit and survive;
+ * - provider leases: they follow a live (or, after a crash, stale) provider SESSION, not work.
+ *   A running turn is already a `turn` item (read model) and a non-terminal admission; an idle
+ *   session ends with the restart and resumes from its kept cursor.
  */
 import { randomUUID } from "node:crypto";
 import { CommandId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
@@ -44,7 +47,7 @@ export function makeRuntimeUpdateDrainProbe(input: {
     const rows = yield* sql<{ readonly threadId: string; readonly kind: string }>`
       SELECT thread_id AS "threadId", 'activity' AS kind FROM thread_activity_leases
       UNION ALL SELECT thread_id, runtime_kind FROM worktree_runtime_leases
-        WHERE runtime_kind <> 'terminal'
+        WHERE runtime_kind NOT IN ('terminal', 'provider')
       UNION ALL SELECT owner_thread_id, 'admission' FROM provider_turn_admissions
         WHERE state <> 'terminal'`.pipe(
       Effect.orElseSucceed(() => [{ threadId: "unknown", kind: "unreadable" }]),

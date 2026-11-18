@@ -1,14 +1,15 @@
 /**
  * Graph source for remote runtime updates (M3 WP-4D). Resolution is WP-3A's
- * `makeDeploymentGraphSourceResolver` (signed release asset pinned by sha256, or the dev
- * `BIGBUD_REMOTE_BACKEND_GRAPH_DIR` override), run on the backend host with the requested version
- * as the release version. Extraction untars into the reserved archive slot, verifies the graph in
+ * `makeDeploymentGraphSourceResolver` (signed release asset pinned by sha256, or a development
+ * local graph), run on the backend host with the requested version as the release version. A
+ * managed backend's environment is cleared, so `local-graph` updates take their directory, extra
+ * keys and Rust install source from the owner-private dev inputs (`runtimeUpdate.devInputs.ts`). Extraction untars into the reserved archive slot, verifies the graph in
  * place with the pinned trust, and records the native receipt and graph pins next to the entry
  * while the original verification token still exists (activation needs them after a restart).
  */
 import { execFile } from "node:child_process";
 import * as fs from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import { serializeVerifiedBackendGraphReceipt } from "./backendGraph.receipt.ts";
@@ -20,6 +21,8 @@ import {
 } from "./deployment.source.ts";
 import type { DeploymentGraphSourceResolver } from "./deployment.types.ts";
 import type { RemoteAgentInstallSource } from "../remote-agent/remoteAgentInstallManager.ts";
+import { loadRemoteAgentInstallSource } from "../remote-agent/remoteAgentInstallSource.ts";
+import type { RuntimeUpdateDevInputsReport } from "./runtimeUpdate.devInputs.ts";
 import { writeStagedGraphPins } from "./runtimeUpdate.unit.ts";
 import type { RuntimeUpdateGraphSource } from "./Services/RemoteRuntimeUpdate.ts";
 
@@ -60,6 +63,8 @@ export async function recordStagedGraphPins(
 export function makeRuntimeUpdateGraphSource(input: {
   readonly environment: NodeJS.ProcessEnv;
   readonly loadRustSource: (signal: AbortSignal) => Promise<RemoteAgentInstallSource>;
+  /** The owner-private dev inputs, read per request; absent outside a managed backend. */
+  readonly devInputs?: () => Promise<RuntimeUpdateDevInputsReport>;
   readonly target?: GraphTarget;
 }): RuntimeUpdateGraphSource {
   return {
@@ -67,15 +72,36 @@ export function makeRuntimeUpdateGraphSource(input: {
       if (source === "laptop-upload")
         throw new Error("Laptop-uploaded runtime updates are not available yet.");
       const environment: NodeJS.ProcessEnv = { ...input.environment };
+      let loadRustSource = input.loadRustSource;
+      let localTrustedKeys: Readonly<Record<string, string>> = {};
       if (source === "release") {
         delete environment[LOCAL_GRAPH_DIR_ENV];
         environment[RELEASE_GRAPH_VERSION_ENV] = version;
-      } else if (!environment[LOCAL_GRAPH_DIR_ENV]?.trim())
-        throw new Error(`Local-graph updates need ${LOCAL_GRAPH_DIR_ENV} on the backend host.`);
+      } else {
+        const report = (await input.devInputs?.()) ?? { kind: "absent" as const };
+        if (report.kind === "refused")
+          throw new Error(`The development update inputs were refused: ${report.reason}.`);
+        if (report.kind === "loaded") {
+          const { graphVersionsDirectory, trustedKeys, installSourcePath } = report.value;
+          // The contract's version pattern has no path separators, so this stays one level down.
+          environment[LOCAL_GRAPH_DIR_ENV] = join(graphVersionsDirectory, version);
+          localTrustedKeys = trustedKeys;
+          if (installSourcePath)
+            loadRustSource = (inner) =>
+              loadRemoteAgentInstallSource(
+                { BIGBUD_REMOTE_AGENT_INSTALL_SOURCE_PATH: installSourcePath },
+                { signal: inner },
+              );
+        } else if (!environment[LOCAL_GRAPH_DIR_ENV]?.trim())
+          throw new Error(
+            "Local-graph updates need the backend's development update inputs: run `bigbud backend update-inputs set` on the backend host.",
+          );
+      }
       const target = input.target ?? runtimeUpdateGraphTarget();
       const resolved = await makeDeploymentGraphSourceResolver({
         environment,
-        loadRustSource: input.loadRustSource,
+        loadRustSource,
+        localTrustedKeys,
       })(target, signal);
       if (resolved.manifest.version !== version)
         throw new Error("The resolved backend graph is not the requested version.");

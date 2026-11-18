@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createReadStream } from "node:fs";
 import { authenticateBackendGraphManifest } from "./backendGraph.manifest.ts";
+import { developmentGraphOverridesAllowed } from "./developmentOverrides.ts";
 import { decodeBackendSetupTrust } from "../cli/cli.backend.inputs.ts";
 import { downloadRemoteAgentHttp } from "../remote-agent/remoteAgentHttpDownload.ts";
 import {
@@ -66,6 +67,7 @@ function authenticate(input: {
 async function localSource(
   directory: string,
   keysPath: string | undefined,
+  pinnedKeys: Readonly<Record<string, string>>,
   target: Parameters<DeploymentGraphSourceResolver>[0],
   rust: RemoteAgentInstallSource,
 ): Promise<DeploymentGraphSource> {
@@ -78,9 +80,10 @@ async function localSource(
     throw deploymentError("graph-unavailable", `No single local ${target} backend graph found.`);
   const archive = join(directory, archives[0]!);
   const manifestJson = await readFile(join(directory, manifests[0]!), "utf8");
-  const extraKeys: Record<string, string> = keysPath
-    ? (JSON.parse(await readFile(keysPath, "utf8")) as Record<string, string>)
-    : {};
+  const extraKeys: Record<string, string> = {
+    ...pinnedKeys,
+    ...(keysPath ? (JSON.parse(await readFile(keysPath, "utf8")) as Record<string, string>) : {}),
+  };
   const fixture = names.find((name) => name.endsWith(`-${target}.fixture-public-key.pem`));
   const keyId = (JSON.parse(manifestJson) as { signature?: { keyId?: unknown } }).signature?.keyId;
   if (fixture && typeof keyId === "string" && !Object.hasOwn(extraKeys, keyId))
@@ -161,16 +164,18 @@ async function releaseSource(
   };
 }
 
-/** Release asset by default; an explicit local graph directory only outside packaged desktop. */
+/** Release asset by default; an explicit local graph directory only outside release mode. */
 export function makeDeploymentGraphSourceResolver(input: {
   readonly environment: NodeJS.ProcessEnv;
   readonly loadRustSource: (signal: AbortSignal) => Promise<RemoteAgentInstallSource>;
+  /** Extra pinned public keys for a local graph (the backend's owner-private dev inputs). */
+  readonly localTrustedKeys?: Readonly<Record<string, string>>;
 }): DeploymentGraphSourceResolver {
   return async (target, signal) => {
     const env = input.environment;
     const local = env[LOCAL_GRAPH_DIR_ENV]?.trim();
     const version = env[RELEASE_GRAPH_VERSION_ENV]?.trim();
-    if (local && env.BIGBUD_DESKTOP_PACKAGED === "1")
+    if (local && !developmentGraphOverridesAllowed(env))
       throw deploymentError("graph-unavailable", "Local backend graphs are a development option.");
     if (!local && !version)
       throw deploymentError(
@@ -186,7 +191,13 @@ export function makeDeploymentGraphSourceResolver(input: {
     if (local) {
       if (!(await stat(local).catch(() => undefined))?.isDirectory())
         throw deploymentError("graph-unavailable", "The local backend graph directory is missing.");
-      return localSource(local, env[LOCAL_GRAPH_KEYS_ENV]?.trim() || undefined, target, rust);
+      return localSource(
+        local,
+        env[LOCAL_GRAPH_KEYS_ENV]?.trim() || undefined,
+        input.localTrustedKeys ?? {},
+        target,
+        rust,
+      );
     }
     return releaseSource(version!, env, target, rust, signal);
   };

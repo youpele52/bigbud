@@ -183,6 +183,14 @@ describe("remote backend graph release workflow", () => {
     expect(runs).toContain("/opt/graph/runtime/node /opt/graph/server/bin.mjs --help");
   });
 
+  it("stamps release graphs as release builds before bundling the server", () => {
+    const stamp = job.steps.find((step) =>
+      step.run?.includes("scripts/update-release-package-versions.ts"),
+    ) as { run: string; if?: string } | undefined;
+    expect(stamp?.if).toBe("${{ inputs.release_signing == true }}");
+    expect(runs.indexOf(stamp!.run)).toBeLessThan(runs.indexOf("bunx tsdown\n"));
+  });
+
   it("signs releases with the secret and other runs with an ephemeral fixture key", () => {
     const signing = job.steps.find((step) => step.run?.includes("openssl genpkey"))!;
     expect(signing.run).toContain('if [[ "$RELEASE_SIGNING" == true ]]; then');

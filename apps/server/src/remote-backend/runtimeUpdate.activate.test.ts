@@ -150,16 +150,23 @@ it("rust_terminal_pid_unchanged", async () => {
     assert.equal((await h.base.pointer()).active, key);
     assert.isNull(await readRuntimeUpdateJournal(h.stateDir));
     // Only the backend unit was restarted; the Rust unit's process kept its PID.
-    assert.deepStrictEqual(argv, [
-      [
-        "--user",
-        "--no-pager",
-        "--no-ask-password",
-        "--no-block",
-        "restart",
-        `bigbud-backend-${"a".repeat(32)}.service`,
-      ],
-    ]);
+    // The request runs in a transient unit outside the backend unit's cgroup (F-M3-4).
+    assert.lengthOf(argv, 1);
+    const [shell, script, name, requester, unit] = argv[0]!;
+    assert.deepStrictEqual(
+      [shell, name, unit],
+      ["-c", "sh", `bigbud-backend-${"a".repeat(32)}.service`],
+    );
+    assert.match(requester!, new RegExp(`^bigbud-update-restart-${"a".repeat(32)}-[a-f0-9]{12}$`));
+    assert.include(script, 'export XDG_RUNTIME_DIR="$runtime"');
+    assert.include(
+      script,
+      'exec /usr/bin/systemd-run --user --no-block --collect --quiet --unit="$1"',
+    );
+    assert.include(
+      script,
+      '/usr/bin/systemctl --user --no-pager --no-ask-password --no-block restart "$2"',
+    );
     assert.isTrue(process.kill(pid, 0));
     assert.equal(terminal.exitCode, null);
   } finally {

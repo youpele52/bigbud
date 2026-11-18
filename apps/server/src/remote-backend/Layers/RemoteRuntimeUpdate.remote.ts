@@ -7,6 +7,7 @@
  * supplies WP-4C's dependencies (archive store root, WP-3A graph source, drain probe, owner
  * assertion and the activation seam) to `makeRemoteRuntimeUpdateLive`.
  */
+import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { version } from "../../../package.json" with { type: "json" };
 import { join } from "node:path";
@@ -34,6 +35,7 @@ import {
   sweepRuntimeUpdateJournal,
 } from "../runtimeUpdate.activate.resume.ts";
 import { recoverRuntimeUpdateRestore } from "../runtimeUpdate.backup.ts";
+import { readRuntimeUpdateDevInputs } from "../runtimeUpdate.devInputs.ts";
 import { makeRuntimeUpdateDrainProbe } from "../runtimeUpdate.drain.probe.ts";
 import { makeRuntimeUpdateGraphSource } from "../runtimeUpdate.graphSource.ts";
 import { hasRuntimeUpdateJournal } from "../runtimeUpdate.journal.ts";
@@ -97,8 +99,15 @@ export const RemoteRuntimeUpdateRemoteLive = Layer.unwrap(
       graphSource: makeRuntimeUpdateGraphSource({
         environment: process.env,
         loadRustSource: (signal) => sourceLoader(signal),
+        devInputs: async () =>
+          readRuntimeUpdateDevInputs({
+            homeDir: await realpath(home),
+            authorityId,
+            environment: process.env,
+          }),
       }),
       affectedWork: () => ctx.probe.affectedWork,
+      runningVersion: version,
       assertOwner: owner.assertHeld,
       activation: makeRuntimeUpdateActivation(ctx, scope),
     });

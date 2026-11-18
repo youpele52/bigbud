@@ -24,6 +24,7 @@ import {
   type RuntimeArchiveStore,
 } from "./runtimeArchive.store.ts";
 import { runRuntimeActivation } from "./runtimeUpdate.activate.ts";
+import { requestBackendRestart, superviseBackendRestart } from "./runtimeUpdate.restart.ts";
 import {
   promise,
   settleRuntimeUpdateFailed,
@@ -70,7 +71,8 @@ const rollBack = Effect.fn("RuntimeUpdate.rollBack")(function* (
   yield* promise(() =>
     writeRuntimeUpdateJournal(ctx.stateDir, { ...rolling, phase: "restore-pending" }),
   );
-  yield* promise(() => ctx.unit.restart());
+  yield* requestBackendRestart(ctx);
+  yield* superviseBackendRestart(ctx);
 });
 
 const settleActivating = Effect.fn("RuntimeUpdate.settleActivating")(function* (

@@ -1,22 +1,13 @@
 import type { LocalSupervisorControl } from "./localSupervisorControl.ts";
 import { LOCAL_SERVICE_UNIT_NAME } from "./localSupervisorService.references.unit.ts";
+import { USER_SYSTEMCTL, USER_SYSTEMD_BUS_PREAMBLE } from "./userSystemdBus.ts";
 
 export interface LocalServiceUnitObservation {
   readonly name: string;
   readonly fragmentPath: string;
 }
 const MAX_UNITS = 128;
-const BUS = `set -eu
-uid=$(id -u)
-runtime="/run/user/$uid"
-test ! -L "$runtime"; test -d "$runtime"
-test "$(readlink -f -- "$runtime")" = "$runtime"
-test "$(stat -c '%u' -- "$runtime")" = "$uid"
-test "$(stat -c '%a' -- "$runtime")" = 700
-test ! -L "$runtime/bus"; test -S "$runtime/bus"
-test "$(stat -c '%u' -- "$runtime/bus")" = "$uid"
-export XDG_RUNTIME_DIR="$runtime" DBUS_SESSION_BUS_ADDRESS="unix:path=$runtime/bus" SYSTEMD_COLORS=0
-exec /usr/bin/systemctl --user --no-pager --no-ask-password `;
+const BUS = `${USER_SYSTEMD_BUS_PREAMBLE}exec ${USER_SYSTEMCTL} `;
 
 /** Loaded definitions and on-disk names are both required; no unavailable-manager empty fallback. */
 export async function inspectLocalSupervisorServiceUnits(

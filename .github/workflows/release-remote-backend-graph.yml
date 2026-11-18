@@ -81,6 +81,14 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      # A release graph's server is a release build (bigbudReleaseTag), so on the backend it
+      # refuses development overrides exactly like a packaged desktop app.
+      - name: Stamp release package versions
+        if: ${{ inputs.release_signing == true }}
+        env:
+          GRAPH_VERSION: ${{ steps.meta.outputs.version }}
+        run: node scripts/update-release-package-versions.ts "$GRAPH_VERSION"
+
       # The normal server build skips remote-client-relay/, which every graph must contain.
       - name: Build server and client relay bundles
         working-directory: apps/server

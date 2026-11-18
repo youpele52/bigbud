@@ -8,6 +8,7 @@ import {
   type BackendNativeAction,
 } from "./cli.backend.operations.ts";
 import { describeBackendFailure, type BackendCliAction } from "./cli.backend.failure.ts";
+import { backendUpdateInputsCommand } from "./cli.backend.updateInputs.ts";
 
 function report<A, E, R>(
   action: BackendCliAction,
@@ -137,5 +138,6 @@ export const backendCommand = Command.make("backend").pipe(
       "stop",
       "Stop the backend and Rust units, ending their work; boot startup and data are unchanged.",
     ),
+    backendUpdateInputsCommand,
   ]),
 );

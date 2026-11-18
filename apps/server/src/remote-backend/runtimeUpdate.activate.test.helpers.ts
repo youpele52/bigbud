@@ -61,7 +61,7 @@ export interface FakeUnit extends RuntimeUpdateServiceUnit {
   readonly calls: Array<string>;
   config: string;
   receipt: string;
-  onRestart: () => Promise<void>;
+  onRestart: () => Promise<unknown>;
 }
 
 export function makeFakeUnit(): FakeUnit {
@@ -85,6 +85,7 @@ export function makeFakeUnit(): FakeUnit {
     restart: async () => {
       unit.calls.push("restart");
       await unit.onRestart();
+      return "requested";
     },
   };
   return unit;
@@ -136,6 +137,7 @@ export interface ProcessOptions {
   readonly runningEntry: () => string;
   readonly runningVersion?: string;
   readonly trial?: Effect.Effect<void, RuntimeUpdateStepError>;
+  readonly restartGraceMs?: number;
 }
 
 export interface BackendProcess {
@@ -179,6 +181,7 @@ export async function startBackendProcess(
         runningVersion: options.runningVersion ?? "1.0.0",
         diskProbe: { fileSize: async () => 1024, availableBytes: async () => h.availableBytes },
         deferRetryMs: 20,
+        ...(options.restartGraceMs !== undefined ? { restartGraceMs: options.restartGraceMs } : {}),
         drain: { pollMs: 5, settleTimeoutMs: 200, inFlightTimeoutMs: 200 },
       };
       const publish = Layer.effectDiscard(

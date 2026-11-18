@@ -15,6 +15,7 @@ import {
   type RemoteRuntimeUpdateRecord,
 } from "../persistence/Services/RemoteRuntimeUpdateOperations.ts";
 import { releaseRuntimeArchive } from "./runtimeArchive.store.ts";
+import { runtimeUpdateDowngradeRefusal } from "./runtimeUpdate.activate.context.ts";
 import {
   consumeInterruptionConsent,
   recordInterruptionConsent,
@@ -116,6 +117,12 @@ export const makeRemoteRuntimeUpdate = Effect.fn("makeRemoteRuntimeUpdate")(func
         const replay = yield* db(repository.findByRequestId(input.requestId));
         if (replay)
           return { disposition: "created" as const, operation: toRuntimeUpdateView(replay) };
+        // The requested version is the manifest version staging must find, so a known downgrade
+        // is refused here, before any download or disk use (activation re-checks the manifest).
+        const downgrade = deps.runningVersion
+          ? runtimeUpdateDowngradeRefusal(deps.runningVersion, input.version)
+          : null;
+        if (downgrade) return yield* runtimeUpdateError("invalid-state", downgrade);
         const live = yield* db(repository.findLive());
         if (live) return yield* join(live, input);
         const at = now();

@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";
-import { buildSshCommandInvocation } from "../ssh/sshCommand.ts";
+import { buildSshCommandInvocation, sshClientProcessEnv } from "../ssh/sshCommand.ts";
 import { assertSshExecutionTargetReadyAsync } from "../ssh/sshVerification.ts";
 import type {
   DeploymentRemoteCommand,
@@ -26,12 +26,15 @@ const TRANSPORT_ARGS = [
   "ServerAliveCountMax=4",
 ];
 
-/** Spawn one bounded process; stdin is fixed text or a streamed local file. Exported for tests. */
+/**
+ * Spawn one bounded LOCAL process; stdin is fixed text or a streamed local file. `localEnv` is the
+ * spawned process's own environment (never a remote command's). Exported for tests.
+ */
 export function runBoundedProcess(
   command: string,
   args: ReadonlyArray<string>,
   options: Pick<DeploymentRemoteCommand, "stdin" | "timeoutMs"> & {
-    readonly env?: NodeJS.ProcessEnv;
+    readonly localEnv: NodeJS.ProcessEnv;
   },
   signal: AbortSignal,
 ): Promise<DeploymentRemoteResult> {
@@ -39,7 +42,7 @@ export function runBoundedProcess(
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: ["pipe", "pipe", "pipe"],
-      ...(options.env ? { env: options.env } : {}),
+      env: options.localEnv,
     });
     let stdout = "",
       stderr = "",
@@ -83,7 +86,11 @@ export function runBoundedProcess(
   });
 }
 
-/** Production runner: application-owned `clean-posix` wrapper, strict known-host keys only. */
+/**
+ * Production runner: application-owned `clean-posix` wrapper, strict known-host keys only.
+ * `command.env` is the REMOTE command's environment and travels inside the remote command; the
+ * local `ssh` client keeps the shared SSH client environment (agent socket, PATH, HOME).
+ */
 export const runDeploymentSsh: DeploymentRemoteRunner = async (target, command, signal) => {
   await assertSshExecutionTargetReadyAsync(target);
   signal.throwIfAborted();
@@ -95,5 +102,14 @@ export const runDeploymentSsh: DeploymentRemoteRunner = async (target, command, 
     ...(command.env ? { env: command.env } : {}),
     transportArgs: TRANSPORT_ARGS,
   });
-  return runBoundedProcess(invocation.command, invocation.args, command, signal);
+  return runBoundedProcess(
+    invocation.command,
+    invocation.args,
+    {
+      ...(command.stdin ? { stdin: command.stdin } : {}),
+      timeoutMs: command.timeoutMs,
+      localEnv: sshClientProcessEnv(),
+    },
+    signal,
+  );
 };
