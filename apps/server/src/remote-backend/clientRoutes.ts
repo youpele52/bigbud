@@ -9,6 +9,7 @@ import {
 import { ServerConfig } from "../startup/config.ts";
 import { RemoteBackendIdentityService } from "./identity.service.ts";
 import { RemoteTerminalAvailability } from "./terminalAvailability.ts";
+import { RemoteRuntimeUpdate } from "./Services/RemoteRuntimeUpdate.ts";
 import { Option } from "effect";
 import {
   authorizeRemoteClientRequest,
@@ -50,6 +51,7 @@ export function makeRemoteClientHandshakeRoute(backendVersion: string) {
     Effect.gen(function* () {
       const identity = yield* RemoteBackendIdentityService;
       const terminals = yield* Effect.serviceOption(RemoteTerminalAvailability);
+      const updates = yield* Effect.serviceOption(RemoteRuntimeUpdate);
       return yield* HttpServerResponse.json(
         Schema.encodeSync(RemoteBackendClientHandshake)({
           handshakeRevision: REMOTE_BACKEND_CLIENT_HANDSHAKE_REVISION,
@@ -65,7 +67,8 @@ export function makeRemoteClientHandshakeRoute(backendVersion: string) {
             computerUse: false,
             hostOsIntegration: false,
             mobileAccess: false,
-            runtimeUpdates: false,
+            // Composed only by the remote backend (M3 WP-4D).
+            runtimeUpdates: Option.isSome(updates),
           },
         }),
       );

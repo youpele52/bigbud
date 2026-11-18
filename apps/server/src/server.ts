@@ -17,6 +17,10 @@ import {
   withRemoteCallbackRuntime,
 } from "./server.remote.callbackBinding.ts";
 import { RemoteServerApplicationLive } from "./server.remote.ts";
+import {
+  RemoteRuntimeUpdateRemoteLive,
+  RuntimeMaintenanceGateRemoteLive,
+} from "./remote-backend/Layers/RemoteRuntimeUpdate.remote.ts";
 import { RemoteMobileConsentGuardLive } from "./remote-backend/mobileConsentRevoke.ts";
 import { RemoteMobileGatewayCompositionLive } from "./server.mobileOwner.ts";
 import { StateDirLockLive } from "./startup/backendInstance";
@@ -284,10 +288,15 @@ const RuntimeServicesLive = ServerRuntimeStartupLive.pipe(
 );
 
 const RemoteServerLive = withRemoteCallbackRuntime(
-  withServerShutdownSignal(RemoteServerApplicationLive),
+  // Runtime updates (M3 WP-4D) need runtime services and serve on the client routes.
+  withServerShutdownSignal(
+    RemoteServerApplicationLive.pipe(Layer.provide(RemoteRuntimeUpdateRemoteLive)),
+  ),
   RuntimeServicesLive,
 ).pipe(
   Layer.provideMerge(RemoteCallbackBindingLive),
+  // Under the state lock, before persistence: finishes a rollback restore, holds admission.
+  Layer.provideMerge(RuntimeMaintenanceGateRemoteLive),
   // Admission consumers capture this real idle owner while runtime services are constructed.
   Layer.provideMerge(RemoteMobileGatewayCompositionLive),
   Layer.provideMerge(RemoteMobileConsentGuardLive),

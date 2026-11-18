@@ -6,6 +6,7 @@ import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/Projectio
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { SchedulerConfig } from "../Services/SchedulerConfig.ts";
+import { RuntimeMaintenanceGate } from "../../command-admission/RuntimeMaintenanceGate.ts";
 import {
   SchedulerReactor,
   type AutomationTriggerResult,
@@ -30,6 +31,9 @@ const makeSchedulerReactor = Effect.gen(function* () {
   const repository = yield* AutomationScheduleRepository;
   const projectionTurnRepository = yield* ProjectionTurnRepository;
   const config = yield* SchedulerConfig;
+  // A remote runtime update pauses scheduled admission; claims wait durably (M3 WP-4D).
+  const maintenance = yield* Effect.serviceOption(RuntimeMaintenanceGate);
+  const paused = () => Option.isSome(maintenance) && maintenance.value.isClosed();
 
   const leaseDurationMs = Duration.toMillis(config.leaseDuration);
   const loadScheduleKind = makeLoadScheduleKind(repository);
@@ -154,6 +158,7 @@ const makeSchedulerReactor = Effect.gen(function* () {
   });
 
   const tick = Effect.fn("tick")(function* () {
+    if (paused()) return;
     const now = new Date().toISOString();
     const leaseUntil = new Date(Date.now() + leaseDurationMs).toISOString();
 
@@ -255,6 +260,7 @@ const makeSchedulerReactor = Effect.gen(function* () {
       if (schedule.completedAt !== null) {
         return { status: "paused_or_completed" } satisfies AutomationTriggerResult;
       }
+      if (paused()) return { status: "dispatch_failed" } satisfies AutomationTriggerResult;
 
       return yield* dispatchManualRun(schedule).pipe(
         Effect.catch(() =>

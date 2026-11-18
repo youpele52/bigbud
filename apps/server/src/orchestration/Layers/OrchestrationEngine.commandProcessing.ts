@@ -34,6 +34,7 @@ import { ServerConfig } from "../../startup/config.ts";
 import { TerminalManager } from "../../terminal/Services/Manager.ts";
 import { WorkspaceModeGate } from "../../remote-backend/workspaceMode.gate.ts";
 import { enqueueLifecycleFlush } from "./OrchestrationEngine.lifecycleFlush.ts";
+import { RuntimeMaintenanceGate } from "../../command-admission/RuntimeMaintenanceGate.ts";
 import type { BoundedCommandAdmission } from "../../command-admission/CommandAdmission.ts";
 import { persistRejectedCommandReceipt } from "./OrchestrationEngine.rejectionReceipt.ts";
 
@@ -55,6 +56,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
   const workspaceTerminal = yield* Effect.serviceOption(TerminalManager);
   // Optional so engine tests need no SSH; the server composition always provides it.
   const workspaceModeGate = yield* Effect.serviceOption(WorkspaceModeGate);
+  const maintenance = yield* Effect.serviceOption(RuntimeMaintenanceGate);
 
   return (envelope: CommandEnvelope): Effect.Effect<boolean> => {
     const dispatchStartSequence = input.readModel().snapshotSequence;
@@ -228,6 +230,7 @@ export const makeCommandProcessor = Effect.fn("makeCommandProcessor")(function* 
               input.commandAdmission,
               envelope.command,
               input.readModel(),
+              () => Option.isSome(maintenance) && maintenance.value.isClosed(),
             );
             return true;
           }

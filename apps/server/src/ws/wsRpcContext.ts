@@ -30,6 +30,10 @@ import { DiscoveryRegistry } from "../provider/Services/DiscoveryRegistry";
 import { ThreadShellRunner } from "../shell/Services/ThreadShellRunner";
 import { ServerLifecycleEvents } from "../startup/serverLifecycleEvents";
 import { ServerRuntimeStartup } from "../startup/serverRuntimeStartup";
+import {
+  gateServerRuntimeStartup,
+  RuntimeMaintenanceGate,
+} from "../command-admission/RuntimeMaintenanceGate.ts";
 import { ServerSettingsService } from "./serverSettings";
 import { TerminalManager } from "../terminal/Services/Manager";
 import { toDispatchCommandError } from "./wsDispatchCommandError.ts";
@@ -115,7 +119,11 @@ export const makeWsRpcContext = (
     const lifecycleEvents = yield* ServerLifecycleEvents;
     const serverSettings = yield* ServerSettingsService;
     const cliProxyLifecycleOption = yield* Effect.serviceOption(CliProxyLifecycle);
-    const startup = yield* ServerRuntimeStartup;
+    // Remote runtime updates close public admission here (M3 WP-4D); absent elsewhere.
+    const startup = gateServerRuntimeStartup(
+      yield* ServerRuntimeStartup,
+      yield* Effect.serviceOption(RuntimeMaintenanceGate),
+    );
     const workspaceEntries = yield* WorkspaceEntries;
     const workspaceFileSystem = yield* WorkspaceFileSystem;
     const workspaceRuntime = yield* WorkspaceRuntime;
