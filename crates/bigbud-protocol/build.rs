@@ -6,6 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/pty.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/paste_staging.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/resource_cleanup.proto");
+    println!("cargo:rerun-if-changed=../../protocol/remote-agent/search.proto");
     println!("cargo:rerun-if-changed=../../protocol/remote-agent/workspace.proto");
 
     let protoc = protoc_bin_vendored::protoc_bin_path()

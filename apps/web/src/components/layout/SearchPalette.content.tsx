@@ -1,23 +1,11 @@
-import { type MessageId, type ThreadId, isBuiltInChatsProject } from "@bigbud/contracts";
-import { useDebouncedValue } from "@tanstack/react-pacer";
-import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
+import type { MessageId, ThreadId } from "@bigbud/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
+import { useEffect, useState } from "react";
 
 import { cn } from "~/lib/utils";
-import { projectCatalogSearchQueryOptions } from "~/lib/projectCatalogSearchQuery";
-import {
-  conversationSearchQueryOptions,
-  isConversationSearchQueryValid,
-} from "~/lib/conversationSearchQuery";
-import { projectSearchFileContentsQueryOptions } from "~/lib/projectReactQuery";
-import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { useRemoteExecutionAccessGate } from "~/hooks/useRemoteExecutionAccessGate";
 import { isRemoteExecutionTargetId } from "~/components/sidebar/Sidebar.remoteWorkspaces.logic";
-import { isVisibleThread } from "~/logic/thread/threadVisibility.logic";
-import { useDefaultChatCwd } from "~/rpc/serverState";
-import { useProjectById, useStore, useThreadById } from "../../stores/main";
+import { useStore } from "../../stores/main";
 import { openPathFromChat } from "../../stores/files/filesPanel.open";
 import { useSearchStore, useUiStateStore } from "../../stores/ui";
 import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
@@ -30,59 +18,31 @@ import {
   CommandPanel,
 } from "../ui/command";
 import { joinWorkspaceEntryPath } from "../files/filesPanel.dnd";
-import {
-  findFileSearchMatches,
-  findThreadSearchMatch,
-  normalizeQuery,
-} from "./SearchPalette.logic";
-import {
-  SearchPaletteResults,
-  toFileSearchResults,
-  type MessageSearchResult,
-  type ThreadSearchResult,
-  type FileSearchResult,
-} from "./SearchPalette.results";
-import { toProjectSearchResults, type ProjectSearchResult } from "./SearchPalette.projectResults";
-import { useTerminalSearchResults } from "./SearchPalette.terminalResults";
+import type { FileSearchResult } from "./SearchPalette.results";
+import type { ProjectSearchResult } from "./SearchPalette.projectResults";
+import { useSectionVisibility } from "./SearchPalette.visibility";
+import { useSearchPaletteSources } from "./SearchPalette.sources";
 import {
   revealTerminalSearchResult,
   type TerminalSearchResult,
 } from "./SearchPalette.terminalResults.logic";
+import { SearchPaletteTierSections } from "./SearchPalette.tierSections";
 
 interface SearchPaletteDialogContentProps {
   activeThreadId: ThreadId | null;
 }
 
-const SEARCH_PALETTE_QUERY_DEBOUNCE_MS = 200;
 const INITIAL_VISIBLE_RESULT_COUNT = 5;
-const SEARCH_FILE_CONTENT_LIMIT = 40;
 
 export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDialogContentProps) {
   const navigate = useNavigate();
   const open = useSearchStore((store) => store.searchOpen);
   const setOpen = useSearchStore((store) => store.setSearchOpen);
-  const activeFileSearchContext = useSearchStore((store) => store.activeFileSearchContext);
   const requestMessageFocus = useSearchStore((store) => store.requestMessageFocus);
-  const projects = useStore(useShallow((store) => store.projects));
-  const threads = useStore(useShallow((store) => store.threads.filter(isVisibleThread)));
-  const activeThread = useThreadById(activeThreadId);
-  const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const setSelectedProject = useUiStateStore((state) => state.setSelectedProject);
   const setProjectExpanded = useUiStateStore((state) => state.setProjectExpanded);
   const { beginRemoteExecutionTargetAccessCheck } = useRemoteExecutionAccessGate();
-  const selectedProject = useProjectById(activeThread?.projectId ?? selectedProjectId ?? null);
-  const defaultChatCwd = useDefaultChatCwd();
   const [query, setQuery] = useState("");
-  const [visibleOtherMessageCount, setVisibleOtherMessageCount] = useState(
-    INITIAL_VISIBLE_RESULT_COUNT,
-  );
-  const [visibleThreadCount, setVisibleThreadCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
-  const [visibleProjectCount, setVisibleProjectCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
-  const [visibleFileCount, setVisibleFileCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
-  const [visibleTerminalCount, setVisibleTerminalCount] = useState(INITIAL_VISIBLE_RESULT_COUNT);
-  const [visibleCurrentFileMatchCount, setVisibleCurrentFileMatchCount] = useState(
-    INITIAL_VISIBLE_RESULT_COUNT,
-  );
 
   useEffect(() => {
     if (!open) {
@@ -90,98 +50,12 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
     }
   }, [open]);
 
-  const [debouncedQuery, searchQueryDebouncer] = useDebouncedValue(
-    query,
-    { wait: SEARCH_PALETTE_QUERY_DEBOUNCE_MS },
-    (debouncerState) => ({ isPending: debouncerState.isPending }),
+  const sources = useSearchPaletteSources({ open, query, activeThreadId });
+  const { workspaceRoot, debouncedMessageQuery, conversationSearch } = sources;
+  const visibility = useSectionVisibility(
+    `${open}:${sources.debouncedQuery}`,
+    INITIAL_VISIBLE_RESULT_COUNT,
   );
-  const normalizedQuery = normalizeQuery(query);
-  const debouncedNormalizedQuery = query.length > 0 ? normalizeQuery(debouncedQuery) : "";
-  const debouncedMessageQuery = debouncedQuery.trim();
-  const workspaceRoot =
-    activeThread?.worktreePath ?? selectedProject?.cwd ?? defaultChatCwd ?? null;
-  const workspaceExecutionTargetId = activeThread?.worktreePath
-    ? undefined
-    : selectedProject
-      ? resolveWorkspaceExecutionTargetId(selectedProject)
-      : undefined;
-
-  useEffect(() => {
-    setVisibleOtherMessageCount(INITIAL_VISIBLE_RESULT_COUNT);
-    setVisibleThreadCount(INITIAL_VISIBLE_RESULT_COUNT);
-    setVisibleProjectCount(INITIAL_VISIBLE_RESULT_COUNT);
-    setVisibleFileCount(INITIAL_VISIBLE_RESULT_COUNT);
-    setVisibleTerminalCount(INITIAL_VISIBLE_RESULT_COUNT);
-    setVisibleCurrentFileMatchCount(INITIAL_VISIBLE_RESULT_COUNT);
-  }, [debouncedQuery, open]);
-
-  const fileContentsQuery = useQuery(
-    projectSearchFileContentsQueryOptions({
-      cwd: workspaceRoot,
-      executionTargetId: workspaceExecutionTargetId,
-      query: debouncedNormalizedQuery,
-      enabled: open && debouncedNormalizedQuery.length > 0,
-      limit: SEARCH_FILE_CONTENT_LIMIT,
-    }),
-  );
-  const projectCatalogQueries = useQueries({
-    queries: (["local", "remote"] as const).map((scope) =>
-      projectCatalogSearchQueryOptions({
-        scope,
-        query: debouncedNormalizedQuery,
-        enabled: open && debouncedNormalizedQuery.length > 0,
-      }),
-    ),
-  });
-  const conversationSearch = useInfiniteQuery(
-    conversationSearchQueryOptions({ query: debouncedMessageQuery, enabled: open }),
-  );
-
-  const messageResults = useMemo<MessageSearchResult[]>(() => {
-    if (!isConversationSearchQueryValid(debouncedMessageQuery) || conversationSearch.isError)
-      return [];
-    return (conversationSearch.data?.pages ?? []).flatMap((page) =>
-      page.hits.map((hit) => ({
-        id: `message:${hit.threadId}:${hit.messageId}`,
-        threadId: hit.threadId,
-        messageId: hit.messageId,
-        threadTitle: hit.threadTitle,
-        projectName: hit.projectName,
-        text: hit.snippet,
-        snippet: hit.snippet,
-        matchIndex: hit.snippet.toLowerCase().indexOf(debouncedMessageQuery.toLowerCase()),
-        type: "message" as const,
-      })),
-    );
-  }, [conversationSearch.data, conversationSearch.isError, debouncedMessageQuery]);
-
-  const threadResults = useMemo<ThreadSearchResult[]>(() => {
-    if (!debouncedNormalizedQuery) return [];
-
-    return threads
-      .filter((thread) => thread.archivedAt === null && thread.deletingAt === null)
-      .filter((thread) => findThreadSearchMatch(thread, debouncedNormalizedQuery).matches)
-      .map((thread) => {
-        const project = projects.find((p) => p.id === thread.projectId);
-        const projectName =
-          project?.name ?? (isBuiltInChatsProject(thread.projectId) ? "Chats" : "Project");
-        const { matchedMessageText } = findThreadSearchMatch(thread, debouncedNormalizedQuery);
-        return {
-          id: `thread:${thread.id}`,
-          threadId: thread.id,
-          title: thread.title,
-          projectName,
-          matchedMessageText,
-          type: "thread",
-        };
-      });
-  }, [debouncedNormalizedQuery, threads, projects]);
-
-  const terminalSearch = useTerminalSearchResults({
-    query: debouncedMessageQuery,
-    enabled: open,
-    threads,
-  });
 
   const handleSelectTerminal = (result: TerminalSearchResult) => {
     setOpen(false);
@@ -244,58 +118,19 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
     });
   };
 
-  const inThreadMessageResults = messageResults.filter(
-    (result) => result.threadId === activeThreadId,
-  );
-  const otherThreadMessageResults = messageResults.filter(
-    (result) => result.threadId !== activeThreadId,
-  );
-  const fileResults = toFileSearchResults(fileContentsQuery.data?.matches ?? []);
-  const currentFileMatches = useMemo(
-    () =>
-      activeFileSearchContext
-        ? findFileSearchMatches(activeFileSearchContext.contents, debouncedNormalizedQuery)
-        : [],
-    [activeFileSearchContext, debouncedNormalizedQuery],
-  );
-  const projectResults = toProjectSearchResults({
-    localProjects: projectCatalogQueries[0]?.data?.projects ?? [],
-    remoteWorkspaces: projectCatalogQueries[1]?.data?.projects ?? [],
-  });
-  const isSearchPending = searchQueryDebouncer.state.isPending;
-  const isFileSearchPending = fileContentsQuery.isFetching;
-  const isProjectSearchPending =
-    projectCatalogQueries[0]?.isFetching === true || projectCatalogQueries[1]?.isFetching === true;
-  const hasMessageResults = messageResults.length > 0;
-  const hasFileResults = fileResults.length > 0;
-  const hasThreadResults = threadResults.length > 0;
-  const hasProjectResults = projectResults.length > 0;
-  const showResultsPanel = normalizedQuery.length > 0;
-  const visibleOtherThreadMessageResults = otherThreadMessageResults.slice(
-    0,
-    visibleOtherMessageCount,
-  );
-  const visibleThreadResults = threadResults.slice(0, visibleThreadCount);
-  const visibleProjectResults = projectResults.slice(0, visibleProjectCount);
-  const visibleFileResults = fileResults.slice(0, visibleFileCount);
-  const visibleCurrentFileMatches = currentFileMatches.slice(0, visibleCurrentFileMatchCount);
-
-  const showMoreMessages = () => {
-    if (
-      visibleOtherMessageCount >= otherThreadMessageResults.length &&
-      conversationSearch.hasNextPage &&
-      !conversationSearch.isError
-    ) {
+  const hasMoreMessagePages = conversationSearch.hasNextPage && !conversationSearch.isError;
+  const showMoreMessages = (visibleCount: number) => {
+    if (visibleCount >= sources.tiers.bigbudData.messages.length && hasMoreMessagePages) {
       void conversationSearch.fetchNextPage();
     }
-    setVisibleOtherMessageCount((current) => current + INITIAL_VISIBLE_RESULT_COUNT);
   };
 
   const handleSelectCurrentFileMatch = (line: number) => {
-    if (!activeFileSearchContext) return;
-    activeFileSearchContext.onSelectMatch(line);
+    if (!sources.activeFileSearchContext) return;
+    sources.activeFileSearchContext.onSelectMatch(line);
     setOpen(false);
   };
+  const showResultsPanel = sources.normalizedQuery.length > 0;
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
@@ -326,57 +161,25 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
                     className="px-2 pb-2 sm:px-3 sm:pb-3"
                     scrollAreaClassName="max-h-[min(22rem,50vh)]"
                   >
-                    <SearchPaletteResults
+                    <SearchPaletteTierSections
                       query={query}
-                      normalizedQuery={normalizedQuery}
-                      isSearchPending={isSearchPending}
-                      isFileSearchPending={isFileSearchPending}
-                      isProjectSearchPending={isProjectSearchPending}
-                      isMessageSearchPending={conversationSearch.isFetching}
-                      messageSearchStatus={
-                        conversationSearch.isError
-                          ? "unavailable"
-                          : conversationSearch.data?.pages[0]?.status
-                      }
-                      currentFilePath={activeFileSearchContext?.path ?? null}
-                      currentFileMatches={currentFileMatches}
-                      visibleCurrentFileMatches={visibleCurrentFileMatches}
-                      setVisibleCurrentFileMatchCount={setVisibleCurrentFileMatchCount}
-                      inThreadMessageResults={inThreadMessageResults}
-                      otherThreadMessageResults={otherThreadMessageResults}
-                      visibleOtherThreadMessageResults={visibleOtherThreadMessageResults}
-                      visibleOtherMessageCount={visibleOtherMessageCount}
-                      setVisibleOtherMessageCount={setVisibleOtherMessageCount}
-                      hasMoreMessagePages={
-                        conversationSearch.hasNextPage && !conversationSearch.isError
-                      }
+                      normalizedQuery={sources.normalizedQuery}
+                      tiers={sources.tiers}
+                      pending={sources.pending}
+                      messageSearchStatus={sources.messageSearchStatus}
+                      currentFile={{
+                        path: sources.activeFileSearchContext?.path ?? null,
+                        matches: sources.currentFileMatches,
+                        onSelect: handleSelectCurrentFileMatch,
+                      }}
+                      visibility={visibility}
+                      hasMoreMessagePages={hasMoreMessagePages}
                       onShowMoreMessages={showMoreMessages}
-                      threadResults={threadResults}
-                      visibleThreadResults={visibleThreadResults}
-                      setVisibleThreadCount={setVisibleThreadCount}
-                      projectResults={projectResults}
-                      visibleProjectResults={visibleProjectResults}
-                      setVisibleProjectCount={setVisibleProjectCount}
-                      fileResults={fileResults}
-                      visibleFileResults={visibleFileResults}
-                      setVisibleFileCount={setVisibleFileCount}
-                      hasMessageResults={hasMessageResults}
-                      hasThreadResults={hasThreadResults}
-                      hasProjectResults={hasProjectResults}
-                      hasFileResults={hasFileResults}
                       onSelectMessage={handleSelectMessage}
                       onSelectThread={handleSelectThread}
                       onSelectProject={handleSelectProject}
                       onSelectFile={handleSelectFile}
-                      terminalResults={terminalSearch.results}
-                      visibleTerminalResults={terminalSearch.results.slice(0, visibleTerminalCount)}
-                      isTerminalSearchPending={terminalSearch.isPending}
-                      onShowMoreTerminals={() =>
-                        setVisibleTerminalCount((current) => current + INITIAL_VISIBLE_RESULT_COUNT)
-                      }
                       onSelectTerminal={handleSelectTerminal}
-                      onSelectCurrentFileMatch={handleSelectCurrentFileMatch}
-                      initialVisibleResultCount={INITIAL_VISIBLE_RESULT_COUNT}
                     />
                   </CommandList>
                 </CommandPanel>

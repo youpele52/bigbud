@@ -3,6 +3,7 @@ pub mod paste_staging;
 pub mod process;
 pub mod pty;
 pub mod resource_cleanup;
+pub mod search;
 pub mod state;
 pub mod supervisor;
 pub mod workspace;
@@ -10,8 +11,8 @@ pub mod workspace;
 mod session;
 
 pub use session::{
-    AgentSession, PreparedProcess, PreparedPtyControl, PreparedWorkspaceWatch, ProcessJob,
-    SessionError, is_pty_control, protocol_error_frame, workspace_watch_event_frame,
+    AgentSession, PreparedProcess, PreparedPtyControl, PreparedSearch, PreparedWorkspaceWatch,
+    ProcessJob, SessionError, is_pty_control, protocol_error_frame, workspace_watch_event_frame,
 };
 pub mod identity;
 pub mod inspect_local;

@@ -1,109 +1,135 @@
-import { ThreadId, MessageId } from "@bigbud/contracts";
+import { MessageId, ThreadId } from "@bigbud/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import { SearchPaletteResults } from "./SearchPalette.results";
 import { Command } from "../ui/command";
+import type { MessageSearchResult, ThreadSearchResult } from "./SearchPalette.results";
+import type { SectionVisibility } from "./SearchPalette.visibility";
+import {
+  SearchPaletteTierSections,
+  type SearchPaletteTierSectionsProps,
+} from "./SearchPalette.tierSections";
+import type { SearchPaletteTiers } from "./SearchPalette.tiers.logic";
 
-describe("SearchPaletteResults", () => {
+const visibility: SectionVisibility = {
+  slice: (_id, rows) => rows.slice(0, 5),
+  showMore: vi.fn(),
+};
+
+function message(id: string, snippet: string): MessageSearchResult {
+  return {
+    id,
+    threadId: ThreadId.makeUnsafe(`thread-${id}`),
+    messageId: MessageId.makeUnsafe(id),
+    threadTitle: `Thread ${id}`,
+    projectName: "Project",
+    text: snippet,
+    snippet,
+    matchIndex: 0,
+    type: "message",
+  };
+}
+
+function thread(id: string, title: string): ThreadSearchResult {
+  return {
+    id,
+    threadId: ThreadId.makeUnsafe(id),
+    title,
+    projectName: "Project",
+    matchedMessageText: "",
+    type: "thread",
+  };
+}
+
+function emptyTiers(): SearchPaletteTiers {
+  return {
+    currentThread: { messages: [], terminals: [] },
+    currentProject: { messages: [], threads: [], files: [] },
+    bigbudData: { messages: [], threads: [], projects: [], terminals: [] },
+  };
+}
+
+function renderSections(overrides: Partial<SearchPaletteTierSectionsProps>) {
+  return renderToStaticMarkup(
+    <Command>
+      <SearchPaletteTierSections
+        query="needle"
+        normalizedQuery="needle"
+        tiers={emptyTiers()}
+        pending={{
+          debounce: false,
+          messages: false,
+          files: false,
+          projects: false,
+          terminals: false,
+        }}
+        currentFile={{ path: null, matches: [], onSelect: vi.fn() }}
+        visibility={visibility}
+        hasMoreMessagePages={false}
+        onShowMoreMessages={vi.fn()}
+        onSelectMessage={vi.fn()}
+        onSelectThread={vi.fn()}
+        onSelectProject={vi.fn()}
+        onSelectFile={vi.fn()}
+        onSelectTerminal={vi.fn()}
+        {...overrides}
+      />
+    </Command>,
+  );
+}
+
+describe("SearchPaletteTierSections", () => {
   it("shows current-file matches before global results", () => {
-    const markup = renderToStaticMarkup(
-      <Command>
-        <SearchPaletteResults
-          query="needle"
-          normalizedQuery="needle"
-          isSearchPending={false}
-          isFileSearchPending={false}
-          isProjectSearchPending={false}
-          currentFilePath="src/app.ts"
-          currentFileMatches={[{ line: 3, lineText: "needle in this file" }]}
-          visibleCurrentFileMatches={[{ line: 3, lineText: "needle in this file" }]}
-          setVisibleCurrentFileMatchCount={vi.fn()}
-          inThreadMessageResults={[
-            {
-              id: "message:1",
-              threadId: "thread-1" as ThreadId,
-              messageId: "message-1" as MessageId,
-              threadTitle: "Thread",
-              projectName: "Project",
-              text: "needle elsewhere",
-              snippet: "needle elsewhere",
-              matchIndex: 0,
-              type: "message",
-            },
-          ]}
-          otherThreadMessageResults={[]}
-          visibleOtherThreadMessageResults={[]}
-          visibleOtherMessageCount={5}
-          setVisibleOtherMessageCount={vi.fn()}
-          threadResults={[]}
-          visibleThreadResults={[]}
-          setVisibleThreadCount={vi.fn()}
-          projectResults={[]}
-          visibleProjectResults={[]}
-          setVisibleProjectCount={vi.fn()}
-          fileResults={[]}
-          visibleFileResults={[]}
-          setVisibleFileCount={vi.fn()}
-          hasMessageResults
-          hasThreadResults={false}
-          hasProjectResults={false}
-          hasFileResults={false}
-          onSelectMessage={vi.fn()}
-          onSelectThread={vi.fn()}
-          onSelectProject={vi.fn()}
-          onSelectFile={vi.fn()}
-          onSelectCurrentFileMatch={vi.fn()}
-          initialVisibleResultCount={5}
-        />
-      </Command>,
-    );
-
+    const tiers = emptyTiers();
+    tiers.currentThread.messages.push(message("m1", "needle elsewhere"));
+    const markup = renderSections({
+      tiers,
+      currentFile: {
+        path: "src/app.ts",
+        matches: [{ line: 3, lineText: "needle in this file" }],
+        onSelect: vi.fn(),
+      },
+    });
     expect(markup.indexOf("In app.ts")).toBeLessThan(markup.indexOf("In this thread"));
     expect(markup).toContain("Line 3");
   });
 
   it("shows a current-file no-match message", () => {
-    const markup = renderToStaticMarkup(
-      <Command>
-        <SearchPaletteResults
-          query="needle"
-          normalizedQuery="needle"
-          isSearchPending={false}
-          isFileSearchPending={false}
-          isProjectSearchPending={false}
-          currentFilePath="src/app.ts"
-          currentFileMatches={[]}
-          visibleCurrentFileMatches={[]}
-          setVisibleCurrentFileMatchCount={vi.fn()}
-          inThreadMessageResults={[]}
-          otherThreadMessageResults={[]}
-          visibleOtherThreadMessageResults={[]}
-          visibleOtherMessageCount={5}
-          setVisibleOtherMessageCount={vi.fn()}
-          threadResults={[]}
-          visibleThreadResults={[]}
-          setVisibleThreadCount={vi.fn()}
-          projectResults={[]}
-          visibleProjectResults={[]}
-          setVisibleProjectCount={vi.fn()}
-          fileResults={[]}
-          visibleFileResults={[]}
-          setVisibleFileCount={vi.fn()}
-          hasMessageResults={false}
-          hasThreadResults={false}
-          hasProjectResults={false}
-          hasFileResults={false}
-          onSelectMessage={vi.fn()}
-          onSelectThread={vi.fn()}
-          onSelectProject={vi.fn()}
-          onSelectFile={vi.fn()}
-          onSelectCurrentFileMatch={vi.fn()}
-          initialVisibleResultCount={5}
-        />
-      </Command>,
-    );
-
+    const markup = renderSections({
+      currentFile: { path: "src/app.ts", matches: [], onSelect: vi.fn() },
+    });
     expect(markup).toContain("&quot;needle&quot; wasn&#x27;t found in app.ts.");
+  });
+
+  it("renders sections in fixed tier order: thread, project, then other bigbud data", () => {
+    const tiers = emptyTiers();
+    tiers.bigbudData.messages.push(message("m3", "needle in another project"));
+    tiers.bigbudData.threads.push(thread("t3", "needle other thread"));
+    tiers.currentProject.messages.push(message("m2", "needle in this project"));
+    tiers.currentProject.threads.push(thread("t2", "needle project thread"));
+    tiers.currentThread.messages.push(message("m1", "needle in this thread"));
+    const markup = renderSections({ tiers });
+    const order = [
+      "In this thread",
+      "In this project",
+      "Threads in this project",
+      "Messages in other threads",
+      "All threads",
+    ].map((label) => markup.indexOf(label));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect(order).toEqual(order.toSorted((left, right) => left - right));
+  });
+
+  it("shows client-side thread titles while server sources are still debouncing", () => {
+    const tiers = emptyTiers();
+    tiers.bigbudData.threads.push(thread("t3", "needle other thread"));
+    tiers.bigbudData.messages.push(message("m3", "stale server row"));
+    const markup = renderSections({
+      tiers,
+      pending: { debounce: true, messages: false, files: false, projects: false, terminals: false },
+    });
+    expect(markup).toContain("needle other thread");
+    expect(markup).not.toContain("stale server row");
+    expect(markup).toContain("Searching...");
   });
 });

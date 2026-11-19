@@ -1,15 +1,15 @@
-use super::DirectoryEntry;
+use crate::workspace::DirectoryEntry;
 
 // Keep these scores aligned with WorkspaceEntriesSearch.ts. UTF-16 indices match
 // JavaScript's fuzzy penalties, including for paths containing non-BMP characters.
-pub(super) fn normalize_query(query: &str) -> String {
+pub(crate) fn normalize_query(query: &str) -> String {
     query
         .trim()
         .trim_start_matches(['@', '.', '/'])
         .to_lowercase()
 }
 
-pub(super) fn score_entry(entry: &DirectoryEntry, query: &str) -> Option<usize> {
+pub(crate) fn score_entry(entry: &DirectoryEntry, query: &str) -> Option<usize> {
     if query.is_empty() {
         return Some(usize::from(!entry.is_directory));
     }
@@ -70,20 +70,20 @@ fn score_subsequence(value: &str, query: &str) -> Option<usize> {
     None
 }
 
-pub(super) struct RankedEntries {
+pub(crate) struct RankedEntries {
     entries: Vec<(usize, DirectoryEntry)>,
     limit: usize,
 }
 
 impl RankedEntries {
-    pub(super) fn new(limit: usize) -> Self {
+    pub(crate) fn new(limit: usize) -> Self {
         Self {
             entries: Vec::new(),
             limit,
         }
     }
 
-    pub(super) fn insert(&mut self, entry: DirectoryEntry, score: usize) {
+    pub(crate) fn insert(&mut self, entry: DirectoryEntry, score: usize) {
         let index = self.entries.partition_point(|(current_score, current)| {
             (*current_score, &current.path) <= (score, &entry.path)
         });
@@ -98,7 +98,12 @@ impl RankedEntries {
         self.entries.insert(index, (score, entry));
     }
 
-    pub(super) fn into_entries(self) -> Vec<DirectoryEntry> {
+    pub(crate) fn into_entries(self) -> Vec<DirectoryEntry> {
         self.entries.into_iter().map(|(_, entry)| entry).collect()
+    }
+
+    /// Best first, with the score kept for the wire (`WorkspaceSearchNameHit.score`).
+    pub(crate) fn into_scored_entries(self) -> Vec<(usize, DirectoryEntry)> {
+        self.entries
     }
 }

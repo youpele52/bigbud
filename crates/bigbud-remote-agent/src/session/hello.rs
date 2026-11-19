@@ -30,6 +30,7 @@ impl AgentSession {
                     ("diagnostic", 1),
                     ("workspace.files", 1),
                     ("workspace.search", 1),
+                    ("workspace.search-stream", 1),
                     ("workspace.write", 1),
                     ("workspace.write-create-only", 1),
                     ("workspace.watch", 1),

@@ -13,3 +13,6 @@ mod pty_tests;
 #[cfg(test)]
 #[path = "resource_cleanup.tests.rs"]
 mod resource_cleanup_tests;
+#[cfg(test)]
+#[path = "search.tests.rs"]
+mod search_tests;

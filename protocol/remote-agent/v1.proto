@@ -8,6 +8,7 @@ import "remote-agent/service_lease.proto";
 import "remote-agent/paste_staging.proto";
 import "remote-agent/pty.proto";
 import "remote-agent/resource_cleanup.proto";
+import "remote-agent/search.proto";
 import "remote-agent/workspace.proto";
 
 message Frame {
@@ -78,6 +79,9 @@ message Frame {
     PasteStageCommitResponse paste_stage_commit_response = 71;
     PasteStageDiscardRequest paste_stage_discard_request = 72;
     PasteStageDiscardResponse paste_stage_discard_response = 73;
+    WorkspaceSearchRequest workspace_search_request = 74;
+    WorkspaceSearchBatch workspace_search_batch = 75;
+    WorkspaceSearchCompleted workspace_search_completed = 76;
     ResourceCleanupRootBootstrapRequest resource_cleanup_root_bootstrap_request = 100;
     ResourceCleanupRootBootstrapResponse resource_cleanup_root_bootstrap_response = 101;
     ResourceCleanupRequest resource_cleanup_request = 102;

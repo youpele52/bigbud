@@ -2,18 +2,20 @@ import type { MessageId, ThreadId } from "@bigbud/contracts";
 import { Comment03Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 
-import { cn } from "~/lib/utils";
 import { highlightMatch } from "./SearchPalette.logic";
 import type { MessageSearchResult } from "./SearchPalette.results";
-import { CommandGroup, CommandGroupLabel, CommandItem } from "../ui/command";
-import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar.menu";
+import { SearchPaletteSectionLabel, SearchPaletteSeeMore } from "./SearchPalette.section";
+import { CommandGroup, CommandItem } from "../ui/command";
 
 interface Props {
+  label: string;
   query: string;
-  inThreadResults: MessageSearchResult[];
-  otherThreadResults: MessageSearchResult[];
-  visibleOtherThreadResults: MessageSearchResult[];
-  hasMorePages: boolean;
+  results: MessageSearchResult[];
+  visibleResults: MessageSearchResult[];
+  /** Messages outside the current thread show "project > thread". */
+  showLocation: boolean;
+  /** More server pages exist beyond `results`. */
+  hasMorePages?: boolean;
   onSelect: (threadId: ThreadId, messageId: MessageId) => void;
   onShowMore: () => void;
 }
@@ -70,67 +72,36 @@ function MessageItem({
 }
 
 export function SearchPaletteMessageResults({
+  label,
   query,
-  inThreadResults,
-  otherThreadResults,
-  visibleOtherThreadResults,
-  hasMorePages,
+  results,
+  visibleResults,
+  showLocation,
+  hasMorePages = false,
   onSelect,
   onShowMore,
 }: Props) {
-  const hasMore = otherThreadResults.length > visibleOtherThreadResults.length || hasMorePages;
+  if (results.length === 0 && !hasMorePages) return null;
+  const remaining = results.length - visibleResults.length;
   return (
-    <>
-      {inThreadResults.length > 0 && (
-        <CommandGroup>
-          <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
-            In this thread
-          </CommandGroupLabel>
-          {inThreadResults.map((result) => (
-            <MessageItem
-              key={result.id}
-              result={result}
-              query={query}
-              onSelect={onSelect}
-              showLocation={false}
-            />
-          ))}
-        </CommandGroup>
-      )}
-      {(otherThreadResults.length > 0 || hasMorePages) && (
-        <CommandGroup className={cn(inThreadResults.length > 0 ? "mt-2" : undefined)}>
-          <CommandGroupLabel className="px-2 pb-1 text-muted-foreground/80 uppercase tracking-[0.08em]">
-            Messages in other threads
-          </CommandGroupLabel>
-          {visibleOtherThreadResults.map((result) => (
-            <MessageItem
-              key={result.id}
-              result={result}
-              query={query}
-              onSelect={onSelect}
-              showLocation
-            />
-          ))}
-          {hasMore && (
-            <SidebarMenuSubItem className="w-full px-2 pt-1 pl-9">
-              <SidebarMenuSubButton
-                render={<button type="button" />}
-                size="sm"
-                className="h-6 w-full translate-x-0 justify-start px-2 text-left text-[10px] text-muted-foreground/60 hover:bg-accent hover:text-muted-foreground/80"
-                onClick={onShowMore}
-              >
-                <span className="flex min-w-0 flex-1 items-center gap-2">
-                  <span>
-                    {hasMorePages
-                      ? "See more"
-                      : `See more (${otherThreadResults.length - visibleOtherThreadResults.length})`}
-                  </span>
-                </span>
-              </SidebarMenuSubButton>
-            </SidebarMenuSubItem>
-          )}
-        </CommandGroup>
-      )}
-    </>
+    <CommandGroup className="mt-2 first:mt-0">
+      <SearchPaletteSectionLabel>{label}</SearchPaletteSectionLabel>
+      {visibleResults.map((result) => (
+        <MessageItem
+          key={result.id}
+          result={result}
+          query={query}
+          onSelect={onSelect}
+          showLocation={showLocation}
+        />
+      ))}
+      {remaining > 0 || hasMorePages ? (
+        <SearchPaletteSeeMore
+          indent
+          remaining={hasMorePages ? undefined : remaining}
+          onClick={onShowMore}
+        />
+      ) : null}
+    </CommandGroup>
   );
 }

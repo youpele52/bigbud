@@ -269,11 +269,10 @@ fn filename_search_skips_links_without_following_them_but_rejects_explicit_link_
         workspace.search_entries_bounded("", "no-match", 1, 3),
         Err(WorkspaceError::SearchLimitExceeded)
     ));
-    // Filename policy must not silently change content search's strict policy.
-    assert!(matches!(
-        workspace.search_content("", "needle", 10),
-        Err(WorkspaceError::SymlinkComponent)
-    ));
+    // Regression: content search used to abort on any link; it now skips links like names do.
+    let found = workspace.search_content("", "needle", 10).unwrap();
+    assert!(!found.is_empty());
+    assert!(found.iter().all(|hit| hit.path == "safe/FILE.txt"));
 }
 
 #[cfg(windows)]
@@ -335,17 +334,21 @@ fn filename_search_skips_unrepresentable_discovered_names() {
 }
 
 #[test]
-fn content_search_remains_case_sensitive_and_excludes_ignored_directories() {
+fn content_search_uses_smart_case_and_excludes_ignored_directories() {
     let root = Fixture::new();
     root.file("src/main.rs");
     root.file("node_modules/hidden.rs");
     let workspace = root.workspace();
+    // Regression: a lowercase query used to miss `Needle`; smart case now matches both lines,
+    // while a query with an uppercase letter stays case-sensitive (`rg --smart-case`).
     let results = workspace.search_content("", "needle", 10).unwrap();
-    assert_eq!(results.len(), 1);
-    assert_eq!(
-        (&*results[0].path, results[0].line, results[0].column),
-        ("src/main.rs", 1, 1)
-    );
+    let found: Vec<_> = results
+        .iter()
+        .map(|hit| (&*hit.path, hit.line, hit.column))
+        .collect();
+    assert_eq!(found, [("src/main.rs", 1, 1), ("src/main.rs", 2, 1)]);
+    let upper = workspace.search_content("", "Needle", 10).unwrap();
+    assert_eq!(upper.iter().map(|hit| hit.line).collect::<Vec<_>>(), [2]);
     assert!(
         workspace
             .search_content("", "NEEDLE", 10)

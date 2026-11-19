@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
 use bigbud_remote_agent::{
     AgentSession, identity, protocol_error_frame,
+    search::SearchWorkers,
     state::{AgentState, supervisor_socket_path},
     supervisor::{
         SupervisorPreparation, prepare_supervisor, request_restart, request_shutdown, run_proxy,
@@ -66,6 +67,7 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
         let _ = write_stdio_responses(&watch_writer, vec![workspace_watch_event_frame(event)]);
     });
     let mut watch_subscriptions = HashSet::new();
+    let mut searches = SearchWorkers::new(session.search_registry().clone());
     loop {
         let frame = match read_frame(&mut reader, DEFAULT_MAX_FRAME_BYTES) {
             Ok(Some(frame)) => frame,
@@ -104,6 +106,21 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
             }
             Some(bigbud_protocol::v1::frame::Payload::ProcessRequest(request)) => {
                 session.handle_process_request(request)
+            }
+            Some(bigbud_protocol::v1::frame::Payload::WorkspaceSearchRequest(request)) => {
+                match session.prepare_workspace_search(request) {
+                    Ok(prepared) => {
+                        let search_writer = Arc::clone(&writer);
+                        let operation_id = prepared.operation_id().to_owned();
+                        searches.spawn(operation_id, move || {
+                            prepared.execute(&mut |frame| {
+                                write_stdio_responses(&search_writer, vec![frame]).is_ok()
+                            });
+                        })?;
+                        Ok(Vec::new())
+                    }
+                    Err(refusal) => Ok(vec![*refusal]),
+                }
             }
             Some(bigbud_protocol::v1::frame::Payload::ProcessAttachRequest(request)) => {
                 session.handle_process_attach(request)

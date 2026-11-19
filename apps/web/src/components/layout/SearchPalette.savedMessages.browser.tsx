@@ -236,6 +236,22 @@ describe("saved-message palette search", () => {
     ).toBeNull();
   });
 
+  it("searches the current thread from two characters and shows it first", async () => {
+    searchMessages.mockResolvedValueOnce({
+      ...pageResult([]),
+      currentThreadHits: [hit(1)],
+    });
+    await renderPalette({ focusOldMessage: true, query: "ne" });
+
+    await expect.element(page.getByText("In this thread", { exact: true })).toBeVisible();
+    await expect.element(page.getByText("needle result 1")).toBeVisible();
+    expect(searchMessages).toHaveBeenCalledWith({
+      query: "ne",
+      limit: 30,
+      currentThreadId: THREAD_ID,
+    });
+  });
+
   it("loads an old selected hit by anchor before focusing it", async () => {
     searchMessages.mockResolvedValueOnce(pageResult([1]));
     getSelectedThreadDetail.mockResolvedValueOnce(oldMessageDetail());

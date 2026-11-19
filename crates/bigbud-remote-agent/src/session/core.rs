@@ -42,6 +42,8 @@ mod pty_input_reconcile;
 mod pty_inventory;
 #[path = "pty_profile.rs"]
 mod pty_profile;
+#[path = "search.rs"]
+mod search;
 #[cfg(unix)]
 #[path = "service_lease.rs"]
 mod service_lease;
@@ -87,6 +89,7 @@ use protocol_helpers::{
     pty_control_response_frame, pty_create_response_frame, pty_exited_frame, pty_output_frame,
     workspace_error_code,
 };
+pub use search::PreparedSearch;
 
 /// How long a terminal process result (state, exit code, output watermark)
 /// and an accepted-operation identity are kept. Long enough to survive a
@@ -152,6 +155,7 @@ pub struct AgentSession {
     agent_instance_id: String,
     agent_epoch: String,
     paste_staging: Option<crate::paste_staging::PasteStore>,
+    search_registry: crate::search::SearchRegistry,
     #[cfg(unix)]
     managed_service_lease: Option<Arc<crate::service_lease::Bridge>>,
 }
@@ -232,6 +236,7 @@ impl AgentSession {
             agent_instance_id: format!("agent-{}", std::process::id()),
             agent_epoch: epoch,
             paste_staging: None,
+            search_registry: crate::search::SearchRegistry::default(),
             #[cfg(unix)]
             managed_service_lease: None,
         }

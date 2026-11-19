@@ -1,7 +1,7 @@
 # System-wide search for Mod+F ("Spotlight, but better")
 
 **Date:** 19 November, 2026
-**Status:** Draft. Waiting for answers to the open questions at the end. Not ready for implementation.
+**Status:** Ready for implementation. Revisited on 19 November 2026 against every commit from `724ec1abd5` to `d56720b52e` (terminal paste staging, create-only writes, shared path/byte helpers, Settings › Terminal split). User decisions are recorded in §Decisions; remaining open questions are adopted as "Assumed (recommended) — user may revise".
 **Owner:** bigbud core (server, web, desktop, Rust agent)
 
 ## Summary
@@ -19,6 +19,54 @@ Supported file types open inside bigbud. Anything else opens in the system defau
 - [Remote workspace search and recovery plan](2026-10-28-remote-workspace-search-and-recovery-plan.md): agent filename-search semantics, the symlink-skip fix, and the 30-second remote recovery policy.
 - [Rust remote agent boundary decision](../decisions/2026-08-22-rust-remote-workspace-agent-boundary.md).
 - bigbud note or Kanban card: none identified. The request came in conversation. See open question Q12.
+
+## Revisit after the terminal work (724ec1abd5..d56720b52e)
+
+What changed since the draft, and what it means for this plan:
+
+| Change since the draft                                                                                                                                                                                                                                                                                                                                 | Effect on this plan                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Paste staging took `Frame` oneof numbers **66–73** (`paste_staging.proto`, `v1.proto`).                                                                                                                                                                                                                                                                | Search frames start at **74**. Free range is now 74–99 (35–41 are also unused but sit inside the historical block; do not use them).                                                                                                                                                             |
+| Paste staging and `create_only = 8` (`WriteFileRequest`, `workspace.proto`) shipped **without a `PROTOCOL_MINOR` bump**; both are gated only by new capabilities (`terminal.paste-staging`, `workspace.write-create-only`). Remote install and identity checks compare the minor exactly (`remoteAgentIdentity.ts`), and the local `--check` does too. | **Easier.** Search follows the same precedent: no minor bump, capability-only gating. `PROTOCOL_MINOR` stays 8. Old remote agents are detected by the missing capability, not by version.                                                                                                        |
+| Capabilities are filtered per session in `session/hello.rs` (`terminal.paste-staging` only when `has_paste_staging()`); the supervisor appends connection-scoped `terminal.pty-detach`.                                                                                                                                                                | `os-index.search` uses the same filter with a session flag (`enable_os_index()` → `has_os_index()`), set only by `--ephemeral --os-index`. `workspace.search-stream` is unconditional. Neither name collides with `workspace.search`, `workspace.write-create-only` or `terminal.paste-staging`. |
+| Paste staging added a separate proto file (`paste_staging.proto`), a `build.rs` rerun line, Rust frame tests (`frame/paste_staging.tests.rs`), a single TS codec file (`remoteAgentProtocol.codec.pasteStaging.ts`) plus a constants/types file (`remoteAgentProtocol.pasteStaging.ts` exporting the capability name), and golden frames.              | Search mirrors this exactly: `search.proto`, `remoteAgentProtocol.search.ts` (types + `REMOTE_AGENT_SEARCH_STREAM_CAPABILITY`), `remoteAgentProtocol.codec.search.ts`, `frame/search.tests.rs`.                                                                                                  |
+| `supervisor/core.rs` is now 387 lines; `main.rs` is 290.                                                                                                                                                                                                                                                                                               | **Harder.** The supervisor search branch must live in a new `supervisor/search.rs`; `core.rs` only gains a one-line dispatch. The stdio branch in `main.rs` calls a library helper (`search::stdio`), keeping `main.rs` composition-only.                                                        |
+| `LocalWorkspaceWatchAgent` is created **inside** the `WorkspaceWatch` layer (`localWorkspaceWatchLayer.ts`) and is not a service.                                                                                                                                                                                                                      | **Harder.** Phase 2 promotes it to a `LocalWorkspaceAgent` service so search and watch share one process. Local watching already requires the binary, so requiring it for search adds no new failure mode.                                                                                       |
+| New `@bigbud/shared/path` (`isAbsolutePath`, `isWindowsAbsolutePath`) and `@bigbud/shared/bytes` (`formatBytes`).                                                                                                                                                                                                                                      | Reused: `isAbsolutePath` in loose-file and open-path validation on web and server; `formatBytes` for result sizes and the remote download confirm. No new path or byte helpers.                                                                                                                  |
+| Server config reports `homeDir` (`server.ts`, `wsRpcContext.ts`); web uses it with `cwd: homeDir` to open files outside projects (Terminal agent hooks).                                                                                                                                                                                               | T5 rows display `~/…` with `homeDir`. The loose-file preview keeps its own validated kind; it does not copy the `cwd: homeDir` shortcut.                                                                                                                                                         |
+| `projects.writeFile` gained `createOnly`.                                                                                                                                                                                                                                                                                                              | Not needed by search.                                                                                                                                                                                                                                                                            |
+| Migration `180_TerminalActivity`.                                                                                                                                                                                                                                                                                                                      | No migration is needed by this plan. If one becomes necessary, it is `181`.                                                                                                                                                                                                                      |
+| Settings › Terminal was split into grouped sections; settings search items live in `SETTINGS_SEARCH_ITEMS`. File Access is on Settings › **AI**.                                                                                                                                                                                                       | The new Search section sits on Settings › AI next to File Access, and adds "Search this computer" and "Search connected remote backends" to `SETTINGS_SEARCH_ITEMS`.                                                                                                                             |
+| SearchPalette icon changes (Hugeicons `Comment03Icon`) predate the plan. Desktop and server open-path code are unchanged.                                                                                                                                                                                                                              | No effect.                                                                                                                                                                                                                                                                                       |
+
+No change makes the plan unsound.
+
+## Decisions
+
+User decisions (authoritative):
+
+- One Rust engine in `bigbud-remote-agent` on ripgrep's library crates (`ignore`, `grep-searcher`, `grep-regex`; approved).
+- Hybrid: bigbud data and all project files first; "this computer" only through the OS index (macOS `MDQuery` first; Windows Search and Linux `plocate` later as adapters). Raycast and Alfred are not queried. No bigbud-owned whole-disk index.
+- Full Disk Access stays in Settings › File Access.
+- Remote: bounded live scans as the agent user, no `sudo`, nothing outside that account.
+- Ranking tiers T1–T6 as in Design §1. Streaming with cancellation on every keystroke.
+- Supported formats open in bigbud; others in the system default app. **Executables are revealed, never launched** (no confirm-to-launch override).
+- Settings toggles "Search this computer" and "Search connected remote backends".
+
+Assumed (recommended) — user may revise:
+
+- Q1: "Search this computer" is off by default, with a one-time hint.
+- Q2: File Access level gates T5 (`none` → off; `common-folders` → Desktop, Documents, Downloads, Music, Pictures; `unrestricted` → non-`Library` home children plus iCloud Drive and CloudStorage), enforced on the server.
+- Q3: T6 = registered remote workspace folders that are not projects.
+- Q4: names only first; contents later behind a second toggle.
+- Q5: keep `rg` on SSH-only hosts, with a "use the bigbud agent" hint.
+- Q6: tier → relevance → recency, within the newest 200 candidates.
+- Q7: read-only previews outside projects; no agent access.
+- Q8: remote open: free ≤ 100 MiB, confirm ≤ 2 GiB, refuse above; cache 1 GiB / 7 days.
+- Q9: crates approved (ripgrep crates; `objc2-core-services` with `MDQuery`, macOS only).
+- Q10: phase order ranking → Rust engine → all-project search → opening files → Spotlight; Windows and Linux later.
+- Q11: preview-route tightening is a separate follow-up; not changed here.
+- Q12: no note or card link.
 
 ## Problem
 
@@ -57,7 +105,7 @@ Supported file types open inside bigbud. Anything else opens in the system defau
 | Message search          | FTS5 trigram (`tokenize='trigram'`), 3–160 code points, rowid keyset cursor, `ORDER BY m.rowid DESC`.                                                                                                                                                                                                                                                                                                                      | `Migrations/120_ProjectionMessageSearch.ts:8`, `ProjectionCatalogQuery.search.ts:84-88,140`                                                                                 |
 | Local content search    | `runToolCommand("rg", --json --hidden --smart-case …)`, 10 s timeout, 512 KiB buffer, Node fallback.                                                                                                                                                                                                                                                                                                                       | `WorkspaceFileSystem.ts:172-246`, `WorkspaceFileSystem.search.ts`                                                                                                           |
 | Remote content search   | Managed agent: `ContentSearchRequest` (single response). Direct SSH: `rg` on the host.                                                                                                                                                                                                                                                                                                                                     | `workspace-runtime/Layers/WorkspaceRuntime.remote.ts:297-330`                                                                                                               |
-| Agent protocol          | One `Frame` oneof in `v1.proto`. Workspace messages in `workspace.proto`. `AgentHello.capabilities` lists `workspace.search` 1.0 and others. `PROTOCOL_MINOR` is 8 in Rust and TypeScript. Free oneof numbers: 66–99. `CancelRequest` covers process operations only.                                                                                                                                                      | `protocol/remote-agent/*.proto`, `session/hello.rs:29-56`, `bigbud-protocol/src/lib.rs:11`, `operation_handlers.rs:27-58`                                                   |
+| Agent protocol          | One `Frame` oneof in `v1.proto`. Workspace messages in `workspace.proto`. `AgentHello.capabilities` lists `workspace.search` 1.0 and others. `PROTOCOL_MINOR` is 8 in Rust and TypeScript (unchanged by paste staging and create-only). Oneof 66–73 are paste staging; free: 74–99. `CancelRequest` covers process operations only.                                                                                        | `protocol/remote-agent/*.proto`, `session/hello.rs:29-56`, `bigbud-protocol/src/lib.rs:11`, `operation_handlers.rs:27-58`                                                   |
 | Agent limits            | 1 MiB maximum frame, 64 workspace roots per session, **no workspace close message**, 256 accepted-operation identities kept for 24 h. Current search handlers insert into and then remove from that table. A full table evicts the oldest identity.                                                                                                                                                                        | `bigbud-protocol/src/lib.rs:12`, `session/core.rs:89-93`, `workspace_handlers.rs:140-150`                                                                                   |
 | Local agent             | `LocalWorkspaceWatchAgent` starts `bigbud-remote-agent --ephemeral` lazily, over stdio, on macOS, Windows and Linux (all six desktop targets). It requires `workspace.files` and `workspace.watch`. Its binary must report exactly the server's protocol major **and minor** in `--check`, so the local agent and server always ship together.                                                                             | `localWorkspaceWatchAgent.ts:62-140`, `localWorkspaceWatchAgent.binary.ts:73-97`, `scripts/lib/workspace-agent-target.ts`                                                   |
 | Opening files in bigbud | Browser panel: `.pdf`, `.htm`/`.html`, images. Files panel: images (avif, bmp, gif, ico, jpeg, jpg, png, svg, webp), video (avi, mov, mp4, webm), `.ipynb`, and everything else as text or code (Markdown rendered). Any path inside a workspace counts as "openable", so binaries currently go to the text preview. Code-related paths that cannot open in bigbud go to the preferred editor, otherwise `shell.openPath`. | `lib/workspaceFilePreview.ts:11-60`, `stores/files/filesPanel.open.ts:150-280`, `FilesPanel.preview.tsx:33-49`, `models/editor/fileOpen.models.ts:117-123`                  |
@@ -249,9 +297,9 @@ The new capability folder has a lean `mod.rs`. Each file stays at or under 400 l
   - Remote: 2 threads, with lower CPU and I/O priority.
   - Deadlines: 2 s local and 3 s remote, set by the server per request and clamped by the agent to at most 10 s.
 
-### 3. Protocol (`protocol/remote-agent/workspace.proto`, new `search.proto`; `PROTOCOL_MINOR` 8 → 9)
+### 3. Protocol (new `protocol/remote-agent/search.proto`; `PROTOCOL_MINOR` stays 8)
 
-Field names below are illustrative; final names are chosen in Phase 2. New `Frame` oneof numbers start at 66.
+Field names below are illustrative; final names are chosen in Phase 2. New `Frame` oneof numbers: `WorkspaceSearchRequest` 74, `WorkspaceSearchBatch` 75, `WorkspaceSearchCompleted` 76, `OsIndexSearchRequest` 77, `OsIndexSearchBatch` 78, `OsIndexSearchCompleted` 79. Gating is capability-only, following paste staging and create-only.
 
 - `WorkspaceSearchRequest`: `request_id`, `operation_id`, `repeated SearchRoot roots` (`root_id` as an opaque server label, absolute `root`, optional `relative_path`), `query`, `mode` (`NAMES` / `CONTENT` / `BOTH`), `max_results`, `max_results_per_root`, `deadline_ms`, `max_threads`, `priority`.
   - Each root is validated like `WorkspaceOpenRequest`: absolute, canonical, a directory, no NUL bytes. At most 128 roots per request.
@@ -262,9 +310,9 @@ Field names below are illustrative; final names are chosen in Phase 2. New `Fram
 - Cancellation reuses `CancelRequest` and `CancelResponse`. `handle_cancel_request` checks the search registry before the process table.
 - Capabilities:
   - `workspace.search-stream` 1.0: advertised by all new agents.
-  - `os-index.search` 1.0: advertised **only** when the agent was started with `--ephemeral` from the local desktop server. The request handler refuses OS-index requests in any other mode as well, so remote agents can never search outside project roots (defence in depth for decision 4).
-- **Frame-loop change.** In stdio (`main.rs`) and supervisor (`supervisor/core.rs`) modes, search requests are _prepared_ under the session lock: validate the request and register a cancel flag. They are then _executed_ on a worker thread that writes through the shared writer, following the `prepare_pty_control` and `prepare_pty_create` patterns. The reader loop stays free for `CancelRequest`.
-- `bigbud-protocol/build.rs` rerun inputs, the TypeScript codec split files (`remoteAgentProtocol.codec.search.encode.ts` and `.decode.ts`), and `v1.golden.frames` are all updated together.
+  - `os-index.search` 1.0: advertised **only** when the session has OS-index enabled, which only `--ephemeral --os-index` does. The server passes `--os-index` only as the desktop-embedded backend (never in the remote-backend profile, whose local agent runs on the VPS). The request handler refuses OS-index requests in any other mode as well, so remote agents can never search outside project roots (defence in depth for decision 4).
+- **Frame-loop change.** In stdio (`main.rs`) and supervisor (`supervisor/core.rs`) modes, search requests are _prepared_ under the session lock: validate the request and register a cancel flag. They are then _executed_ on a worker thread that writes through the shared writer, following the `prepare_pty_control` and `prepare_pty_create` patterns. The reader loop stays free for `CancelRequest`. The supervisor branch lives in `supervisor/search.rs` (core.rs is at 387 lines).
+- `bigbud-protocol/build.rs` rerun inputs, `frame/search.tests.rs`, the TypeScript files `remoteAgentProtocol.search.ts` and `remoteAgentProtocol.codec.search.ts` (split encode/decode only if it passes 400 lines), and `v1.golden.frames` are all updated together.
 
 ### 4. Server fan-out, ranking and merge (`apps/server/src/search/`)
 
@@ -287,7 +335,7 @@ Field names below are illustrative; final names are chosen in Phase 2. New `Fram
   - Rows sent to the client: 200 in total.
   - T4: 20 rows per project.
   - T5: 50 rows. The agent requests 200 from Spotlight and filters them down to 50 after applying the exclusions.
-- **Old remote agents.** Without `workspace.search-stream`, the server uses the legacy `FilenameSearchRequest` (names only), marks the source `partial` with reason `agent-update-available`, and skips content search on that target.
+- **Old remote agents.** Without `workspace.search-stream` (checked with `connection.supportsCapability(REMOTE_AGENT_SEARCH_STREAM_CAPABILITY)`, as paste staging does), the server uses the legacy `FilenameSearchRequest` (names only), marks the source `partial` with reason `agent-update-available`, and skips content search on that target.
 - **Direct-SSH remotes (no managed agent).** Behaviour depends on Q5. The recommendation keeps `rg` on the host for those remotes as a legacy path until they move to a managed agent.
 - **Logging.** Only counts, durations, stop reasons and target kinds are logged. Never queries, paths or excerpts. This follows `crates/AGENTS.md` and avoids putting personal data in logs.
 
@@ -315,7 +363,7 @@ New `ServerSettings.search` fields, enforced on the server:
 - `thisComputer: boolean`. Default per Q1; the recommendation is `false`.
 - `connectedRemoteBackends: boolean`. Default `true`; it only ever covers project folders.
 
-The UI is a new "Search" section placed near "File Access", with these rows:
+The UI is a new "Search" section on Settings › AI directly after "File Access" (both rows are added to `SETTINGS_SEARCH_ITEMS`), with these rows:
 
 - "Search this computer". The description names the OS index used ("Uses Spotlight on this Mac"). When the File Access level is `none`, the row is disabled with a link to File Access.
 - "Search connected remote backends".
@@ -326,7 +374,7 @@ The File Access level limits the Spotlight scope:
 - `common-folders` → Desktop, Documents, Downloads, Music and Pictures.
 - `unrestricted` → the non-`Library` children of home, plus iCloud Drive (`~/Library/Mobile Documents`) and `~/Library/CloudStorage`.
 
-The client sends its level with each request and the server takes the stricter of the two (see Q2 for whether this should become a server setting).
+Assumed (Q2): `fileAccessPermissionLevel` is mirrored into `ServerSettings` once on upgrade and the server enforces it; the client value only drives the UI.
 
 Full Disk Access stays where it is, behind the existing "Open System Settings" link in File Access.
 
@@ -342,8 +390,8 @@ Full Disk Access stays where it is, behind the existing "Open System Settings" l
 - **Unsupported types.** `workspaceFilePreview.ts` gains `isKnownBinaryFilePath()`, an explicit list of binary extensions plus a server-side NUL sniff that already happens in preview loads. Those files go to system open instead of the text preview, which removes today's "binary as text" behaviour.
 - **Desktop IPC** (new file `apps/desktop/src/window/shellPathHandlers.ts`, registered beside `OPEN_EXTERNAL_CHANNEL`, main-window role only):
   - `OPEN_PATH_CHANNEL` and `SHOW_ITEM_IN_FOLDER_CHANNEL`.
-  - Validation: a string; absolute; no NUL bytes; normalised; `lstat` shows an existing regular file or directory (symlinks resolved with `realpath`, then checked again); not on the exclusion list.
-  - Executables and launchable bundles (`.app`, `.command`, `.tool`, `.pkg`, `.dmg`, `.exe`, `.bat`, `.cmd`, `.ps1`, `.msi`, `.lnk`, `.desktop`, `.sh` and other files with an executable bit) are **revealed, never launched**, unless the user confirms in the existing confirm dialog.
+  - Validation: a string; absolute (`isAbsolutePath` from `@bigbud/shared/path`); no NUL bytes; normalised; `lstat` shows an existing regular file or directory (symlinks resolved with `realpath`, then checked again); not on the exclusion list.
+  - Executables and launchable bundles (`.app`, `.command`, `.tool`, `.pkg`, `.dmg`, `.exe`, `.bat`, `.cmd`, `.ps1`, `.msi`, `.lnk`, `.desktop`, `.sh` and other files with an executable bit) are **revealed, never launched**. There is no confirm-to-launch override (user decision).
   - Uses `shell.openPath` (which returns an error string) and `shell.showItemInFolder`.
   - The preload exposes `desktopBridge.openPath` and `desktopBridge.showItemInFolder`. `NativeApi.shell.openPath` prefers the bridge, then falls back to the server RPC.
   - The server's `Open.openPath` gets the same validation, extracted to `apps/server/src/utils/openPath.validate.ts`. The shared exclusion data lives in one JSON file (below).
@@ -355,7 +403,7 @@ Full Disk Access stays where it is, behind the existing "Open System Settings" l
 - **Remote download cache.**
   - Location: `<userData>/remote-open-cache/<targetId>/<sha256(path)>/<basename>`, directories mode 0700 (the pattern from commit 198ee98632).
   - Files are streamed through the agent's `ReadFileRequest` in chunks, and the size is checked before download (Q8 sets the caps).
-  - The UI shows "This is a copy; edits won't sync".
+  - The UI shows "This is a copy; edits won't sync". Sizes in the confirm dialog use `formatBytes` from `@bigbud/shared/bytes`.
   - Eviction after 7 days or when the cache passes 1 GiB, oldest first.
   - Cache files are never attached to chats automatically.
 
@@ -406,7 +454,7 @@ How these are measured:
 ### 10. Compatibility and migration
 
 - Local: lockstep through `--check`, so there are no compatibility branches.
-- Remote agents older than protocol minor 9: names only, through the legacy frame, with the "update available" state. The existing managed upgrade flow delivers new agents. The plan never bypasses signature checks or forces an upgrade (see the 2026-10-28 plan).
+- Remote agents without `workspace.search-stream`: names only, through the legacy frame, with the "update available" state. The existing managed upgrade flow delivers new agents. The plan never bypasses signature checks or forces an upgrade (see the 2026-10-28 plan).
 - New agents with old servers: the legacy frames keep working, now backed by the engine.
 - Removing `rg`: after Phase 2 the local path never spawns `rg`. `WorkspaceFileSystem.search.ts` parsing and the Node fallback are deleted once local search goes through the agent. Q5 decides direct SSH.
 - Settings: the new `ServerSettings.search` fields decode with defaults, so no migration is needed.
@@ -450,10 +498,11 @@ Each phase can ship on its own and leaves the palette working.
 
 ### Phase 2: Rust engine and streaming protocol (agent + server, current project only)
 
-- **Dependencies:** approval of Q9.
-- **Agent:** add the `search/` capability, the legacy-frame adapters, and the worker execution with the search registry and `CancelRequest` support in stdio and supervisor modes. Add the protocol messages, capability, `PROTOCOL_MINOR` 9, the TypeScript codec and golden frames.
+- **Dependencies:** approved (Q9).
+- **Agent:** add the `search/` capability, the legacy-frame adapters, and the worker execution with the search registry and `CancelRequest` support in stdio and supervisor modes. Add the protocol messages (frames 74–76), the `workspace.search-stream` capability (no minor bump), the TypeScript codec and golden frames.
 - **Server:**
-  - Local content search goes to the local agent (`LocalWorkspaceWatchAgent`).
+  - Promote the agent owned by `localWorkspaceWatchLayer.ts` to a shared `LocalWorkspaceAgent` service used by watch and search.
+  - Local content search goes to the local agent.
   - Remote managed agents use streaming when `workspace.search-stream` is present, otherwise the legacy frames.
   - Remove the local `rg` spawn and the Node fallback.
 - **Exit:**
@@ -485,7 +534,7 @@ Each phase can ship on its own and leaves the palette working.
 ### Phase 5: "This computer" on macOS
 
 - Add the `os_index/spotlight.rs` asynchronous `MDQuery` worker (run-loop thread, cancel timer, multi-scope, maximum 200, attribute fetch) and the exclusions.
-- Add the `os-index.search` capability (local only), the server `SystemSearch.osIndex.ts` (desktop-only layer and remote-backend unavailable layer), and the settings section with File Access scope mapping.
+- Add the `os-index.search` capability (local only, `--ephemeral --os-index`), the server `SystemSearch.osIndex.ts` (desktop-only layer and remote-backend unavailable layer), and the settings section with File Access scope mapping.
 - Add the unavailable states: indexing off (`mdutil` status queried through `MDQuery` failure or `kMDQueryDidFinish` with an error), turned off in settings, File Access set to `none`.
 - **Exit:**
   - Name queries meet the T5 budget.
@@ -512,7 +561,7 @@ Run `plocate` (then `locate`) as a subprocess, bounded by `-l`, with a timeout a
 - **Session concurrency regressions.** Moving search off the frame thread touches stdio and supervisor loops that carry PTY and process reliability guarantees. Mitigation: use the existing prepare and execute pattern, add regression tests for the PTY and process suites, and keep shutdown joining search workers (cancel, then join with a bounded wait).
 - **Load on remotes during turns.** 2 threads, lower priority, a 3 s deadline, and at most 2 concurrent operations per session. Phase 3 measures this on the VPS during an active turn before release.
 - **Result jumping.** Append-only updates and stable IDs. A browser test asserts the selected row stays put.
-- **Path-validation bugs in open.** Shared validation module, a fuzz-style unit test (traversal, NUL, symlink swap, Windows prefixes and `\\?\`, UNC paths, junctions), and the confirm-before-launch rule.
+- **Path-validation bugs in open.** Shared validation module, a fuzz-style unit test (traversal, NUL, symlink swap, Windows prefixes and `\\?\`, UNC paths, junctions), and the reveal-never-launch rule for executables.
 - **Existing preview route accepts any `cwd`.** This plan does not widen it, and loose-file previews go through a separate validated kind. Hardening the generic route is noted as follow-up (Q11), not done silently.
 - **Spotlight disabled or still indexing.** Explicit "unavailable" or "indexing" rows, never silent empties.
 - **Message reranking changes the order users see.** Only within a page, after tiering. Covered by tests and Q6.
@@ -548,7 +597,7 @@ Run `plocate` (then `locate`) as a subprocess, bounded by `-l`, with a timeout a
   - Unit tests for tier merge, stable IDs, short-query rules and open routing.
   - Browser tests (`bun run --cwd apps/web test:browser <file>`): streaming append without reordering, keyboard selection stability, unavailable and partial states, the settings rows (including disabled when File Access is `none`), and accessibility labels.
 - **Desktop:** IPC handler tests for validation, the executable reveal rule and role authorisation.
-- **Manual:** packaged macOS app with Full Disk Access on and off; a remote VPS search during an active turn; old-agent fallback against an agent at version 0.2.209 or earlier.
+- **Manual:** packaged macOS app with Full Disk Access on and off; a remote VPS search during an active turn; old-agent fallback against a deployed agent that lacks `workspace.search-stream`.
 - **Checks:** only focused formatting, lint, type and length checks on the changed files and packages. Repository-wide checks need approval first (AGENTS.md).
 
 ## Acceptance Criteria
@@ -560,9 +609,26 @@ Run `plocate` (then `locate`) as a subprocess, bounded by `-l`, with a timeout a
 - Supported formats open in bigbud. Unsupported ones open in the default app, or are revealed if they are executables. Remote unsupported files open from a private cache with size limits.
 - All new and edited files are at or under 400 lines, and focused checks pass.
 
-## Open Questions
+## Implementation progress
 
-Only decisions that need the user. Each has a recommendation.
+- **Phase 1: complete.** Server: `search.rowid DESC` keyset, in-page rerank (tier → `bm25` → recency), current-thread substring query (1–160 code points, ASCII case folding; longer non-ASCII queries are folded into T1 from the global FTS page), current-project FTS page (first page only). Web: palette split into sources, tier logic and tier sections in fixed T1–T3 order with stable IDs, append-only merges, immediate thread titles, content search from 3 characters.
+- **Phase 2: agent, protocol and codec complete; server routing not yet switched.** Done: `search/` engine, frames 74–76, `workspace.search-stream`, worker execution with the search registry in stdio and supervisor modes, legacy content search backed by the engine, TypeScript codec (shared table codec extracted from paste staging), golden frames, and `streamRemoteAgentWorkspaceSearch`. Remaining: the `LocalWorkspaceAgent` service, local content search through the agent (removing the local `rg` spawn and Node fallback), and remote streaming with the legacy fallback.
+- Deviation: the legacy `FilenameSearchRequest` keeps its own walker, because it backs Mod+P on remote targets and Mod+P is a non-goal. The new engine's names mode reuses the same `rank` module (moved to `search/rank.rs`).
+- Phase 4 desktop and server open-path validation is being built separately; the palette will call that bridge rather than adding its own.
+
+## Pending live verification
+
+Items that cannot be verified from a sandboxed shell and must be checked by hand before release:
+
+- Spotlight from the packaged bigbud app with Full Disk Access off and on (Desktop, Documents, Downloads, iCloud Drive), and TCC attribution of the server-started agent.
+- Remote VPS scans during an active turn (CPU share, bytes over SSH, 3 s deadline).
+- Real performance numbers for every §9 budget on large trees and a real message database.
+- Old-agent fallback against a deployed agent without `workspace.search-stream`.
+- Packaged agent binary size growth per target.
+
+## Open Questions (resolved as assumptions)
+
+Each item below is adopted as "Assumed (recommended) — user may revise" (see §Decisions). The original wording is kept for reference.
 
 1. **Default for "Search this computer".** Recommendation: **off by default**, with a one-time hint in the palette ("Turn on search across this Mac").
 2. **How the File Access level gates "this computer".** Recommendation: `none` disables the tier; `common-folders` restricts Spotlight to Desktop, Documents, Downloads, Music and Pictures; `unrestricted` covers the non-`Library` home folders plus iCloud Drive and CloudStorage. Follow-up choice: should `fileAccessPermissionLevel` move from client to server settings, so the server enforces it? Recommendation: yes, mirrored once on upgrade.

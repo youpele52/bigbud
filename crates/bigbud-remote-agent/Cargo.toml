@@ -9,6 +9,11 @@ rust-version.workspace = true
 anyhow.workspace = true
 bigbud-protocol = { path = "../bigbud-protocol" }
 bigbud-workspace-watch = { path = "../bigbud-workspace-watch" }
+# ripgrep's library crates back workspace search (approved; see the system-wide search plan).
+grep-matcher = "0.1.9"
+grep-regex = "0.1.14"
+grep-searcher = { version = "0.1.17", default-features = false }
+ignore = "0.4.34"
 sha2.workspace = true
 serde_json.workspace = true
 serde_core.workspace = true
