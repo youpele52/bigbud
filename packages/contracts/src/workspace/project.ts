@@ -53,9 +53,20 @@ export const ProjectFileContentMatch = Schema.Struct({
 });
 export type ProjectFileContentMatch = typeof ProjectFileContentMatch.Type;
 
+/**
+ * Why a content search ran on a slower legacy path: `agent-update-available` for a managed agent
+ * without streaming search, `use-managed-agent` for a direct-SSH host searched with `rg`.
+ */
+export const ProjectSearchFileContentsNotice = Schema.Literals([
+  "agent-update-available",
+  "use-managed-agent",
+]);
+export type ProjectSearchFileContentsNotice = typeof ProjectSearchFileContentsNotice.Type;
+
 export const ProjectSearchFileContentsResult = Schema.Struct({
   matches: Schema.Array(ProjectFileContentMatch),
   truncated: Schema.Boolean,
+  notice: Schema.optional(ProjectSearchFileContentsNotice),
 });
 export type ProjectSearchFileContentsResult = typeof ProjectSearchFileContentsResult.Type;
 

@@ -1,9 +1,9 @@
 import { realpath } from "node:fs/promises";
 
 import { isLocalExecutionTarget } from "../executionTargets.ts";
+import type { LocalWorkspaceAgentShape } from "../workspace-runtime/Services/LocalWorkspaceAgent.ts";
 import type { WorkspaceWatchShape } from "../workspace-runtime/Services/WorkspaceWatch.ts";
 import { makeAgentWorkspaceWatch, type AgentWorkspaceWatchOptions } from "./agentWorkspaceWatch.ts";
-import type { LocalWorkspaceWatchAgent } from "./localWorkspaceWatchAgent.ts";
 
 function localTargetId(executionTargetId: string | undefined): string {
   if (!isLocalExecutionTarget(executionTargetId)) {
@@ -13,7 +13,7 @@ function localTargetId(executionTargetId: string | undefined): string {
 }
 
 export function makeLocalWorkspaceWatch(
-  agent: LocalWorkspaceWatchAgent,
+  agent: Pick<LocalWorkspaceAgentShape, "getWorkspaceClient">,
   options: AgentWorkspaceWatchOptions = {},
 ): WorkspaceWatchShape {
   return makeAgentWorkspaceWatch(

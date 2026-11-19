@@ -12,13 +12,13 @@ import {
   RemoteWorkspaceRuntime,
   type WorkspaceRuntimeBackendShape,
 } from "../Services/WorkspaceRuntime.ts";
-import {
-  WorkspaceSearch,
-  workspaceSearchFromExistingServices,
-} from "../Services/WorkspaceSearch.ts";
+import { LocalWorkspaceAgent } from "../Services/LocalWorkspaceAgent.ts";
+import { WorkspaceSearch } from "../Services/WorkspaceSearch.ts";
 import { WorkspaceWatch } from "../Services/WorkspaceWatch.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
+import { makeLocalWorkspaceSearchLayer } from "../../remote-agent/localWorkspaceSearchLayer.ts";
 import { makeLocalWorkspaceWatchLayer } from "../../remote-agent/localWorkspaceWatchLayer.ts";
+import { LocalWorkspaceAgentLive } from "./LocalWorkspaceAgent.ts";
 
 export function makeTargetAwareRuntime(input: {
   readonly local: WorkspaceRuntimeBackendShape;
@@ -65,19 +65,9 @@ const workspaceFilesLive = Layer.effect(
   Layer.provide(workspaceFileSystemForRuntimeLive),
   Layer.provide(workspaceEntriesForRuntimeLive),
 );
-const workspaceSearchLive = Layer.effect(
-  WorkspaceSearch,
-  Effect.gen(function* () {
-    const fileSystem = yield* WorkspaceFileSystem;
-    const entries = yield* WorkspaceEntries;
-    return workspaceSearchFromExistingServices({ fileSystem, entries });
-  }),
-).pipe(
-  Layer.provide(workspaceFileSystemForRuntimeLive),
-  Layer.provide(workspaceEntriesForRuntimeLive),
-);
 const makeWorkspaceRuntimeLive = (
   localWatchLayer: Layer.Layer<WorkspaceWatch, never, FileSystem.FileSystem | Path.Path>,
+  workspaceSearchLive: Layer.Layer<WorkspaceSearch, never, FileSystem.FileSystem | Path.Path>,
   useRemote?: (executionTargetId: string | undefined) => boolean,
 ) =>
   Layer.effect(
@@ -103,22 +93,35 @@ const makeWorkspaceRuntimeLive = (
  * Complete workspace runtime composition. Existing workspace services are
  * kept in the output so current callers and the new façade can coexist during
  * the migration. A remote backend is opt-in and only selected for remote
- * execution targets.
+ * execution targets. Local watch and local content search share the one
+ * `LocalWorkspaceAgent` (layers are memoized by reference within a build).
  */
 export function makeWorkspaceRuntimeLayer(
   remoteLayer?: Layer.Layer<RemoteWorkspaceRuntime>,
   localWatchLayer: Layer.Layer<
     WorkspaceWatch,
     never,
-    WorkspaceFileSystem | WorkspacePaths
+    WorkspaceFileSystem | WorkspacePaths | LocalWorkspaceAgent
   > = makeLocalWorkspaceWatchLayer(),
   useRemote?: (executionTargetId: string | undefined) => boolean,
+  localAgentLayer: Layer.Layer<LocalWorkspaceAgent> = LocalWorkspaceAgentLive,
 ) {
   const resolvedLocalWatchLayer = localWatchLayer.pipe(
     Layer.provide(workspaceFileSystemForRuntimeLive),
     Layer.provide(WorkspacePathsLive),
+    Layer.provide(localAgentLayer),
   );
-  const workspaceRuntimeLive = makeWorkspaceRuntimeLive(resolvedLocalWatchLayer, useRemote);
+  const workspaceSearchLive = makeLocalWorkspaceSearchLayer().pipe(
+    Layer.provide(workspaceFileSystemForRuntimeLive),
+    Layer.provide(workspaceEntriesForRuntimeLive),
+    Layer.provide(WorkspacePathsLive),
+    Layer.provide(localAgentLayer),
+  );
+  const workspaceRuntimeLive = makeWorkspaceRuntimeLive(
+    resolvedLocalWatchLayer,
+    workspaceSearchLive,
+    useRemote,
+  );
   const runtime = remoteLayer
     ? workspaceRuntimeLive.pipe(Layer.provide(remoteLayer))
     : workspaceRuntimeLive;
@@ -129,6 +132,7 @@ export function makeWorkspaceRuntimeLayer(
     workspaceFilesLive,
     workspaceSearchLive,
     resolvedLocalWatchLayer,
+    localAgentLayer,
     runtime,
   );
 }

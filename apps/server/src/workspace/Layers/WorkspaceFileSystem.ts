@@ -1,4 +1,4 @@
-import { Cause, Effect, Exit, FileSystem, Layer, Path, Option } from "effect";
+import { Effect, FileSystem, Layer, Path, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { resolveExecutionTargetId } from "@bigbud/contracts";
 import { open, stat } from "node:fs/promises";
@@ -14,15 +14,7 @@ import { WorkspacePaths } from "../Services/WorkspacePaths.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { runToolCommand, resolveToolTransportTarget } from "../../tool-transport/toolTransport.ts";
 import { resolveWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
-import {
-  isRipgrepCommandNotFound,
-  normalizeSearchCommandError,
-  parseRipgrepJsonMatches,
-  searchFileContentsWithoutRipgrep,
-  WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS,
-  WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES,
-  WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS,
-} from "./WorkspaceFileSystem.search.ts";
+import { searchRemoteFileContentsViaSsh } from "./WorkspaceFileSystem.search.ts";
 import { makeWorkspaceFileRange } from "./WorkspaceFileSystem.range.ts";
 import { watchRemoteDirectoryViaSsh } from "./WorkspaceFileSystem.remoteWatch.ts";
 import { makeWorkspaceWriteFile } from "./WorkspaceFileSystem.write.ts";
@@ -141,6 +133,14 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
     "WorkspaceFileSystem.searchFileContents",
   )(function* (input) {
     const executionTargetId = resolveExecutionTargetId(input.executionTargetId);
+    if (isLocalExecutionTarget(executionTargetId)) {
+      return yield* new WorkspaceFileSystemError({
+        cwd: input.cwd,
+        operation: "workspaceFileSystem.searchFileContents",
+        detail: "Local content search is owned by the local workspace agent.",
+        retryable: false,
+      });
+    }
     if (input.cwd.includes("\0")) {
       return yield* new WorkspaceFileSystemError({
         cwd: input.cwd,
@@ -148,103 +148,7 @@ export const makeWorkspaceFileSystem = Effect.gen(function* () {
         detail: "Workspace root cannot contain NUL bytes.",
       });
     }
-
-    let normalizedWorkspaceRoot = input.cwd;
-    if (isLocalExecutionTarget(executionTargetId)) {
-      normalizedWorkspaceRoot = yield* workspacePaths.normalizeWorkspaceRoot(input.cwd).pipe(
-        Effect.mapError(
-          (cause) =>
-            new WorkspaceFileSystemError({
-              cwd: input.cwd,
-              operation: "workspaceFileSystem.searchFileContents",
-              detail: cause.message,
-              cause,
-            }),
-        ),
-      );
-    }
-
-    const workspaceTarget = resolveWorkspaceTarget({
-      executionTargetId,
-      cwd: normalizedWorkspaceRoot,
-    });
-    const toolTransportTarget = resolveToolTransportTarget(workspaceTarget);
-    const searchResultOrError = yield* Effect.exit(
-      Effect.tryPromise({
-        try: () =>
-          runToolCommand({
-            target: toolTransportTarget,
-            command: "rg",
-            args: [
-              "--json",
-              "--hidden",
-              "--smart-case",
-              ...WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS.flatMap((glob) => ["--glob", glob]),
-              "--",
-              input.query,
-              ".",
-            ],
-            allowNonZeroExit: true,
-            timeoutMs: WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS,
-            maxBufferBytes: WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES,
-            outputMode: "truncate",
-          }),
-        catch: normalizeSearchCommandError,
-      }),
-    );
-
-    if (Exit.isFailure(searchResultOrError)) {
-      const failure = normalizeSearchCommandError(Cause.squash(searchResultOrError.cause));
-      if (isRipgrepCommandNotFound(failure)) {
-        if (!isLocalExecutionTarget(executionTargetId)) {
-          return yield* new WorkspaceFileSystemError({
-            cwd: input.cwd,
-            operation: "workspaceFileSystem.searchFileContentsRemote",
-            detail: "Remote content search requires ripgrep on the SSH host.",
-            cause: failure,
-          });
-        }
-        return yield* Effect.tryPromise({
-          try: () =>
-            searchFileContentsWithoutRipgrep({
-              cwd: normalizedWorkspaceRoot,
-              query: input.query,
-              limit: input.limit,
-            }),
-          catch: (cause) =>
-            new WorkspaceFileSystemError({
-              cwd: input.cwd,
-              operation: "workspaceFileSystem.searchFileContentsFallback",
-              detail: cause instanceof Error ? cause.message : String(cause),
-              cause,
-            }),
-        });
-      }
-
-      return yield* new WorkspaceFileSystemError({
-        cwd: input.cwd,
-        operation: "workspaceFileSystem.searchFileContentsCommand",
-        detail: failure.message,
-        cause: failure,
-      });
-    }
-
-    const searchResult = searchResultOrError.value;
-
-    if (searchResult.code !== 0 && searchResult.code !== 1) {
-      return yield* new WorkspaceFileSystemError({
-        cwd: input.cwd,
-        operation: "workspaceFileSystem.searchFileContentsCommand",
-        detail: searchResult.stderr.trim() || "Workspace file content search failed.",
-      });
-    }
-
-    const matches = parseRipgrepJsonMatches(searchResult.stdout);
-    const limit = Math.max(0, Math.floor(input.limit));
-    return {
-      matches: matches.slice(0, limit),
-      truncated: (searchResult.stdoutTruncated ?? false) || matches.length > limit,
-    };
+    return yield* searchRemoteFileContentsViaSsh({ ...input, executionTargetId });
   });
 
   const watchDirectory: WorkspaceFileSystemShape["watchDirectory"] = Effect.fn(

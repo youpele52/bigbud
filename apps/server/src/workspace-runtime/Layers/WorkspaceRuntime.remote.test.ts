@@ -16,6 +16,7 @@ import { makeRemoteWorkspaceRuntime } from "./WorkspaceRuntime.remote.ts";
 
 function fakeClient(): RemoteAgentWorkspaceClient {
   return {
+    connection: { supportsCapability: () => false },
     openWorkspace: async () => ({
       requestId: "open",
       workspaceHandle: "workspace",
@@ -101,6 +102,7 @@ describe("remote workspace runtime adapter", () => {
       }),
     );
     expect(matches.matches[0]?.lineText).toBe("remote contents");
+    expect(matches.notice).toBe("agent-update-available");
   });
 
   it("does not accept local targets through the remote adapter", async () => {

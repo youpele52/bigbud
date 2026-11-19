@@ -141,6 +141,7 @@ it.layer(TestLayer)("WorkspaceFileSystem remote fallback", (it) => {
             },
           ],
           truncated: false,
+          notice: "use-managed-agent",
         });
         expect(runToolCommand).toHaveBeenCalledWith(
           expect.objectContaining({
