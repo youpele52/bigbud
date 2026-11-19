@@ -1,5 +1,6 @@
 import type { MessageId, ThreadId } from "@bigbud/contracts";
-import { MessageSquareIcon } from "lucide-react";
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 
 import { cn } from "~/lib/utils";
 import { highlightMatch } from "./SearchPalette.logic";
@@ -37,7 +38,12 @@ function MessageItem({
       onClick={() => onSelect(result.threadId, result.messageId)}
     >
       <div className="mr-3 text-muted-foreground/70">
-        <MessageSquareIcon className="size-4" />
+        <HugeiconsIcon
+          aria-hidden="true"
+          className="size-4"
+          icon={Comment03Icon}
+          strokeWidth={1.5}
+        />
       </div>
       <div className="min-w-0 flex-1">
         <div className="truncate text-muted-foreground text-sm leading-6">

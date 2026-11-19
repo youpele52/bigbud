@@ -4,7 +4,9 @@ import {
   CONVERSATION_SEARCH_MIN_QUERY_LENGTH,
 } from "@bigbud/contracts/orchestration/orchestration.search";
 import { countUnicodeCodePoints } from "@bigbud/shared/String";
-import { FileIcon, MessageSquareIcon } from "lucide-react";
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { FileIcon } from "lucide-react";
 
 import { CommandGroup, CommandGroupLabel, CommandItem } from "../ui/command";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar.menu";
@@ -264,7 +266,12 @@ export function SearchPaletteResults({
               onClick={() => onSelectThread(result.threadId)}
             >
               <div className="mr-3 text-muted-foreground/70">
-                <MessageSquareIcon className="size-4" />
+                <HugeiconsIcon
+                  aria-hidden="true"
+                  className="size-4"
+                  icon={Comment03Icon}
+                  strokeWidth={1.5}
+                />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm">{result.title}</div>
