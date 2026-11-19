@@ -12,6 +12,7 @@ import type { PeerDispatchRepositoryShape } from "../persistence/Services/PeerDi
 import type { PeerDispatchRequestRepositoryShape } from "../persistence/Services/PeerDispatchRequests.ts";
 import type { PeerPairingRepositoryShape } from "../persistence/Services/PeerPairings.ts";
 import type { PeerDeliver } from "./peerDispatch.delivery.ts";
+import type { PeerChildProgressStore } from "./peerDispatch.progress.ts";
 import type { PeerToolWaits } from "./peerDispatch.toolWait.ts";
 import type { PeerTransport } from "./peerDispatch.transport.ts";
 
@@ -27,6 +28,8 @@ export interface PeerCoordinatorDeps {
   readonly callerRuntimeMode: (threadId: string) => Effect.Effect<RuntimeMode | null>;
   /** Per-worker setup errors (host key, key authentication); cleared by a definite reply. */
   readonly setupErrors: Map<string, PeerSetupError>;
+  /** Live child progress (running or waiting) last reported by the worker, per dispatch. */
+  readonly childProgress: PeerChildProgressStore;
   /** Delegate tool calls waiting in-call; decides who reports a refusal before acceptance. */
   readonly toolWaits: PeerToolWaits;
   readonly now: () => string;

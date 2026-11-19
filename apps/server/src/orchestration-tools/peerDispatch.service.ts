@@ -13,6 +13,7 @@ import { requestPeerCancel } from "./peerDispatch.cancel.ts";
 import { preparePeerDelegate, type PeerDelegateInput } from "./peerDispatch.delegate.ts";
 import type { PeerCoordinatorDeps } from "./peerDispatch.deps.ts";
 import type { PeerPairingRepositoryError } from "../persistence/Services/PeerPairings.ts";
+import { peerChildProgressView } from "./peerDispatch.progress.ts";
 import {
   peerFollowStep,
   type PeerFollowError,
@@ -51,6 +52,7 @@ const asError = (error: unknown) =>
 
 export function peerDispatchView(deps: PeerCoordinatorDeps, dispatch: PeerDispatch) {
   const setupError = deps.setupErrors.get(dispatch.worker.workerAuthorityId) ?? null;
+  const child = peerChildProgressView(deps.childProgress, dispatch);
   return {
     ok: dispatch.state !== "failed" && setupError === null,
     dispatchId: dispatch.dispatchId,
@@ -61,6 +63,7 @@ export function peerDispatchView(deps: PeerCoordinatorDeps, dispatch: PeerDispat
     cancelRequestedAt: dispatch.cancelRequestedAt,
     result: dispatch.result,
     error: dispatch.error,
+    ...(child ? { child } : {}),
     ...(setupError && !isTerminalPeerDispatchState(dispatch.state) ? { setupError } : {}),
   } satisfies PeerToolResult;
 }
@@ -84,7 +87,10 @@ export const makePeerDispatchService = Effect.fn("makePeerDispatchService")(func
     let streak = 0;
     for (;;) {
       const dispatch = yield* deps.dispatches.get(dispatchId);
-      if (!dispatch || isTerminalPeerDispatchState(dispatch.state)) return;
+      if (!dispatch || isTerminalPeerDispatchState(dispatch.state)) {
+        deps.childProgress.delete(dispatchId);
+        return;
+      }
       const step: PeerFollowStep = yield* peerFollowStep(deps, dispatch).pipe(
         Effect.catch((error: PeerFollowError | PeerPairingRepositoryError) => {
           // A concurrent writer (cancel) moved the row: re-read it.

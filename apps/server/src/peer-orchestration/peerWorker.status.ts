@@ -10,11 +10,16 @@ import {
   type PeerErrorCode,
   type PeerResultSummary,
 } from "@bigbud/contracts/server/remotePeer.ts";
-import type { PeerChildState, PeerChildStatus } from "@bigbud/contracts/server/remotePeer.wire.ts";
+import type {
+  PeerChildState,
+  PeerChildStatus,
+  PeerChildWaiting,
+} from "@bigbud/contracts/server/remotePeer.wire.ts";
 import { Schema } from "effect";
 
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import type { PeerChild } from "../persistence/Services/PeerChildren.ts";
+import { peerChildWaiting } from "./peerWorker.waiting.ts";
 
 /** A typed peer refusal; the route answers `{ error: { code, message } }`. */
 export class PeerWorkerRefusal extends Schema.TaggedErrorClass<PeerWorkerRefusal>()(
@@ -79,6 +84,7 @@ function childState(thread: OrchestrationThread): {
   readonly state: PeerChildState;
   readonly workflowStatus: string;
   readonly reason?: string;
+  readonly waiting?: PeerChildWaiting;
 } {
   if (thread.deletedAt !== null) return { state: "failed", workflowStatus: "deleted" };
   const status = resolveThreadWorkflowStatus(thread);
@@ -91,8 +97,8 @@ function childState(thread: OrchestrationThread): {
     return { state: "failed", workflowStatus: status.workflowStatus, reason: startFailure };
   if (status.workflowStatus === "error" || turn === "error")
     return { state: "failed", workflowStatus: status.workflowStatus };
-  if (status.hasPendingApprovals || status.hasPendingUserInput)
-    return { state: "waiting", workflowStatus: status.workflowStatus };
+  const waiting = peerChildWaiting(thread, status);
+  if (waiting) return { state: "waiting", workflowStatus: status.workflowStatus, waiting };
   if (turn === "interrupted") return { state: "cancelled", workflowStatus: status.workflowStatus };
   if (status.workflowStatus === "archived" && turn === "completed")
     return { state: "completed", workflowStatus: status.workflowStatus };
@@ -103,7 +109,7 @@ const resultOutcome = (state: PeerChildState) =>
   state === "completed" ? "completed" : state === "failed" ? "failed" : "cancelled";
 
 export function peerChildStatus(child: PeerChild, thread: OrchestrationThread): PeerChildStatus {
-  const { state, workflowStatus, reason } = childState(thread);
+  const { state, workflowStatus, reason, waiting } = childState(thread);
   const text = reason ?? lastAssistantText(thread);
   const result = !isTerminalPeerChildState(state)
     ? null
@@ -123,6 +129,7 @@ export function peerChildStatus(child: PeerChild, thread: OrchestrationThread): 
     state,
     workflowStatus: workflowStatus.slice(0, 64),
     cancelRequested: child.cancelRequestedAt !== null,
+    ...(waiting ? { waiting } : {}),
     result,
   } as PeerChildStatus;
 }

@@ -50,7 +50,14 @@ export const peerWorkerStatus = Effect.fn("peerWorkerStatus")(function* (
   return yield* statusOf(deps, yield* findChild(deps, grant, dispatchId));
 });
 
-/** Bounded long poll: replies once the child is terminal or `waitMs` has elapsed. */
+/** What the coordinator shows of a live child: its state and why it waits. */
+const progressKey = (status: PeerChildStatus) =>
+  `${status.state}:${status.waiting?.reason ?? ""}:${status.waiting?.approvalKind ?? ""}`;
+
+/**
+ * Bounded long poll: replies once the child is terminal, its live progress changed since the poll
+ * began (for example it started waiting for an approval), or `waitMs` has elapsed.
+ */
 export const peerWorkerFollow = Effect.fn("peerWorkerFollow")(function* (
   deps: PeerWorkerDeps,
   grant: PeerGrant,
@@ -58,13 +65,17 @@ export const peerWorkerFollow = Effect.fn("peerWorkerFollow")(function* (
   waitMs: number,
 ) {
   const deadline = Date.now() + waitMs;
+  let initial: string | undefined;
   for (;;) {
     // Re-read the record each round so a cancel recorded meanwhile is reported.
     const status: PeerChildStatus = yield* statusOf(
       deps,
       yield* findChild(deps, grant, dispatchId),
     );
-    if (isTerminalPeerChildState(status.state) || Date.now() >= deadline) return status;
+    const key = progressKey(status);
+    initial ??= key;
+    if (isTerminalPeerChildState(status.state) || key !== initial || Date.now() >= deadline)
+      return status;
     yield* Effect.sleep(Math.min(FOLLOW_POLL_MS, Math.max(0, deadline - Date.now())));
   }
 });
