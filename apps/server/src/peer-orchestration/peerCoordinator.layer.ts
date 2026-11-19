@@ -66,6 +66,7 @@ export const PeerCoordinatorLive = Layer.effectDiscard(
           Effect.orElseSucceed(() => null),
         ),
       setupErrors: new Map(),
+      childProgress: new Map(),
       toolWaits: makePeerToolWaits(),
       now: () => new Date().toISOString(),
       newDispatchId: randomUUID,

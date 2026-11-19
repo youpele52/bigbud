@@ -9,6 +9,7 @@ import {
   OrchestrationProjectionPipeline,
   type OrchestrationProjectionPipelineShape,
 } from "../../orchestration/Services/ProjectionPipeline.ts";
+import { awaitReplayCursorsThrough } from "../../orchestration/Layers/OrchestrationEngine.replayCursors.ts";
 
 export const CANONICAL_THREAD_CLEANUP_LIMIT = 50;
 
@@ -118,6 +119,9 @@ export const finalizeThreadCanonicalHistory = Effect.fn("finalizeThreadCanonical
       );
     }
     yield* verifyReplacement(input.deletionSequence);
+    // Open domain-event streams usually read the deletion within milliseconds; a slower one
+    // makes the proof fail below and recovery prunes once it has caught up.
+    yield* awaitReplayCursorsThrough(input.deletionSequence);
     yield* finalizeThreadCanonicalHistoryWithCoverage(input);
   },
 );
@@ -146,6 +150,7 @@ export const finalizeProjectCanonicalHistory = Effect.fn("finalizeProjectCanonic
       return yield* Effect.fail(new Error("project deletion proof is unavailable"));
     }
     yield* verifyReplacement(deletionSequence);
+    yield* awaitReplayCursorsThrough(deletionSequence);
     yield* finalizeProjectCanonicalHistoryWithCoverage(input);
   },
 );

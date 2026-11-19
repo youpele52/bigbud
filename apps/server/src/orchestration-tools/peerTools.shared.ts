@@ -19,7 +19,7 @@ export function isPeerToolName(value: unknown): value is PeerToolName {
 export const DELEGATE_TO_HOST_TOOL_DESCRIPTION =
   "Delegate a self-contained task to another bigbud host the user paired with this backend (Settings > Peer hosts). The worker runs it in its own thread with its own repository copy; files are not shared. Returns a dispatchId; the bounded result is delivered into this thread when the worker finishes. Retrying the same call never starts a second task. Returns unavailable when no host is paired.";
 export const PEER_DISPATCH_STATUS_TOOL_DESCRIPTION =
-  "Read the state of a task delegated with delegate_to_host (pending, sent-uncertain, accepted, following, cancel-pending, completed, failed or cancelled) and its result once finished. Read-only.";
+  "Read the state of a task delegated with delegate_to_host (pending, sent-uncertain, accepted, following, cancel-pending, completed, failed or cancelled) and its result once finished. While unfinished, child shows whether the worker child is running or waiting (for example for an approval the user must answer on the worker host). Read-only.";
 export const PEER_DISPATCH_CANCEL_TOOL_DESCRIPTION =
   "Request cancellation of a task delegated with delegate_to_host. The state shows cancel-pending until the worker confirms; if the task finished first its real outcome is kept.";
 

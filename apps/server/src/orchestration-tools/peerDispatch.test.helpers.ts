@@ -43,6 +43,10 @@ interface FakeChild {
   readonly dispatchId: string;
   readonly childThreadId: string;
   state: PeerChildStatus["state"];
+  /** Overrides the reported workflow label (defaults to the state). */
+  workflowStatus?: string | undefined;
+  /** Raw `waiting` detail sent as-is, so tests can mimic old or newer workers. */
+  waiting?: unknown;
   cancelRequested: boolean;
   result: PeerResultSummary | null;
 }
@@ -67,6 +71,8 @@ export class FakeWorker {
   finish(dispatchId: string, outcome: PeerResultSummary["outcome"], summary: string) {
     const child = this.children.get(dispatchId)!;
     child.state = outcome;
+    child.waiting = undefined;
+    child.workflowStatus = undefined;
     child.result = { outcome, summary, truncated: false, attachments: [] };
   }
 
@@ -76,8 +82,9 @@ export class FakeWorker {
       commandId: `peer:${COORDINATOR_AUTHORITY}:${child.dispatchId}`,
       childThreadId: child.childThreadId,
       state: child.state,
-      workflowStatus: child.state,
+      workflowStatus: child.workflowStatus ?? child.state,
       cancelRequested: child.cancelRequested,
+      ...(child.waiting === undefined ? {} : { waiting: child.waiting }),
       result: child.result,
     } as PeerChildStatus;
   }
@@ -172,6 +179,7 @@ export const makePeerTestDeps = Effect.fn("makePeerTestDeps")(function* (
     deliver: thread.deliver,
     callerRuntimeMode: () => Effect.succeed("full-access" as const),
     setupErrors: new Map(),
+    childProgress: new Map(),
     toolWaits: makePeerToolWaits(),
     now: () => new Date().toISOString(),
     newDispatchId: () => `00000002-0000-4000-8000-${String(++ids).padStart(12, "0")}`,

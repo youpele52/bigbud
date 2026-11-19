@@ -1,7 +1,7 @@
 import * as Schema from "effect/Schema";
 
 import { ThreadId, TrimmedNonEmptyString } from "../core/baseSchemas";
-import { ProviderKind } from "../orchestration/orchestration.provider";
+import { ProviderKind, ProviderRequestKind } from "../orchestration/orchestration.provider";
 import { RemoteBackendAuthorityId, RemoteBackendSha256Fingerprint } from "./remoteBackendHandshake";
 import {
   PeerActions,
@@ -57,6 +57,21 @@ export const PeerChildState = Schema.Literals([
 ]);
 export type PeerChildState = typeof PeerChildState.Type;
 
+/**
+ * Why a `waiting` child is blocked. Kinds only: never the command, path or question text.
+ * Additive within `/api/peer/v1`: workers before this field omit it (their `waiting` state still
+ * names the block through `workflowStatus`), and coordinators before it ignore it.
+ */
+export const PeerChildWaitReason = Schema.Literals(["approval-pending", "user-input-pending"]);
+export type PeerChildWaitReason = typeof PeerChildWaitReason.Type;
+
+export const PeerChildWaiting = Schema.Struct({
+  reason: PeerChildWaitReason,
+  /** The kind of approval the worker's user must answer, when the provider reported one. */
+  approvalKind: Schema.optional(ProviderRequestKind),
+});
+export type PeerChildWaiting = typeof PeerChildWaiting.Type;
+
 export const PeerChildStatus = Schema.Struct({
   dispatchId: PeerDispatchId,
   commandId: PeerDispatchCommandId,
@@ -65,6 +80,8 @@ export const PeerChildStatus = Schema.Struct({
   /** The worker's workflow label (for example `awaiting_approval`), for display only. */
   workflowStatus: Schema.String.check(Schema.isMaxLength(64)),
   cancelRequested: Schema.Boolean,
+  /** Present only while `state` is `waiting` (absent from workers before this field). */
+  waiting: Schema.optional(PeerChildWaiting),
   /** Present once the child is terminal. */
   result: Schema.NullOr(PeerResultSummary),
 });

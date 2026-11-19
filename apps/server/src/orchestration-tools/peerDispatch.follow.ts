@@ -19,13 +19,13 @@ import type {
   PeerError,
   PeerResultSummary,
 } from "@bigbud/contracts/server/remotePeer.ts";
-import {
+import type {
   PeerChildStatus,
-  type PeerDelegateRequest,
+  PeerDelegateRequest,
 } from "@bigbud/contracts/server/remotePeer.wire.ts";
 import type { PeerPairing } from "@bigbud/contracts/server/remotePeer.pairing.ts";
 import { PEER_FOLLOW_MAX_WAIT_MS } from "@bigbud/contracts/constants/remotePeer.constant.ts";
-import { Data, Effect, Schema } from "effect";
+import { Data, Effect } from "effect";
 
 import type { PeerDispatchEvent } from "../peer-orchestration/peerDispatch.transition.ts";
 import { boundPeerSummary } from "../peer-orchestration/peerWorker.status.ts";
@@ -37,6 +37,7 @@ import type {
 import type { PeerPairingRepositoryError } from "../persistence/Services/PeerPairings.ts";
 import { buildPeerResultDelivery } from "./peerDispatch.delivery.ts";
 import type { PeerCoordinatorDeps } from "./peerDispatch.deps.ts";
+import { decodePeerChildStatus, peerChildProgress } from "./peerDispatch.progress.ts";
 import {
   isFinalDelegateRefusal,
   isFinalFollowRefusal,
@@ -56,7 +57,6 @@ export type PeerFollowError =
 /** `continue` re-reads the row now; `wait` backs off first; `stop` ends this follower. */
 export type PeerFollowStep = "continue" | "wait" | "stop";
 
-const decodeStatus = Schema.decodeUnknownOption(PeerChildStatus);
 const FOLLOW_DEADLINE_MS = PEER_FOLLOW_MAX_WAIT_MS + 10_000;
 const REQUEST_DEADLINE_MS = 35_000;
 
@@ -96,10 +96,8 @@ const call = (
   );
 
 const childStatus = (dispatch: PeerDispatch, body: unknown) => {
-  const status = decodeStatus(body);
-  return status._tag === "Some" && status.value.dispatchId === dispatch.dispatchId
-    ? status.value
-    : undefined;
+  const status = decodePeerChildStatus(body);
+  return status?.dispatchId === dispatch.dispatchId ? status : undefined;
 };
 
 const move = (
@@ -222,10 +220,13 @@ const observe = Effect.fn("peerDispatch.observe")(function* (
   pairing: PeerPairing,
   status: PeerChildStatus,
 ) {
-  if (dispatch.state === "sent-uncertain")
-    return yield* move(deps, dispatch, "worker-accepted", { childThreadId: status.childThreadId });
   const terminal =
     status.state === "completed" || status.state === "failed" || status.state === "cancelled";
+  // Live progress for the status tool (O-A); a settling child drops it with its row.
+  if (terminal) deps.childProgress.delete(dispatch.dispatchId);
+  else deps.childProgress.set(dispatch.dispatchId, peerChildProgress(status, deps.now()));
+  if (dispatch.state === "sent-uncertain")
+    return yield* move(deps, dispatch, "worker-accepted", { childThreadId: status.childThreadId });
   if (terminal) return yield* settle(deps, dispatch, pairing, status);
   return "continue" as PeerFollowStep;
 });
