@@ -18,4 +18,15 @@ describe("terminal agent hook snippets", () => {
       TERMINAL_AGENT_HOOK_SNIPPETS.filter((entry) => !entry.injected).map((e) => e.tool),
     ).toEqual(["OpenCode", "herdr and other tools"]);
   });
+
+  it("each tool has its highlight language and only file-backed tools have a config path", () => {
+    expect(
+      TERMINAL_AGENT_HOOK_SNIPPETS.map((entry) => [entry.tool, entry.language, entry.configPath]),
+    ).toEqual([
+      ["Claude Code", "json", "~/.claude/settings.json"],
+      ["Codex CLI", "toml", "~/.codex/config.toml"],
+      ["OpenCode", "javascript", "~/.config/opencode/plugin/bigbud-done.js"],
+      ["herdr and other tools", "shell", undefined],
+    ]);
+  });
 });
