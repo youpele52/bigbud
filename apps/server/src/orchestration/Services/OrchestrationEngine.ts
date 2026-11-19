@@ -60,10 +60,42 @@ export interface OrchestrationEngineShape {
    */
   readonly getReadModel: () => Effect.Effect<OrchestrationReadModel, never, never>;
 
+  /** Hydrates under the command barrier (waits for the in-flight command first). */
   readonly ensureThreadState?: (
     threadId: ThreadId,
     level: "operational" | "history",
   ) => Effect.Effect<OrchestrationThread | undefined>;
+
+  /**
+   * The thread by id: the resident one without waiting, else hydrated from durable projections
+   * (the startup window leaves settled threads out and idle threads are evicted). Use through
+   * `getOrchestrationThread`, never `getReadModel().threads.find`.
+   */
+  readonly getThread?: (
+    threadId: ThreadId,
+    level: "operational" | "history",
+  ) => Effect.Effect<OrchestrationThread | undefined>;
+
+  /** Hydrates every thread of the project that is not deleted; returns its resident threads. */
+  readonly ensureProjectThreads?: (
+    projectId: ProjectId,
+  ) => Effect.Effect<ReadonlyArray<OrchestrationThread>>;
+
+  /** Hydrates the thread and its live descendants; returns every resident thread. */
+  readonly ensureThreadSubtree?: (
+    rootThreadId: ThreadId,
+  ) => Effect.Effect<ReadonlyArray<OrchestrationThread>>;
+
+  /** Ids of the project's threads that are not deleted, straight from the projections. */
+  readonly listProjectThreadIds?: (projectId: ProjectId) => Effect.Effect<ReadonlyArray<ThreadId>>;
+
+  /**
+   * Evicts idle resident threads (`OrchestrationEngine.residency.ts`). `isHeld` reports outside
+   * interest (a live provider session, an open terminal); a held thread is kept.
+   */
+  readonly evictIdleThreads?: (input: {
+    readonly isHeld: (threadId: ThreadId) => Effect.Effect<boolean>;
+  }) => Effect.Effect<{ readonly evicted: number; readonly resident: number }>;
 
   /** Installs a project the startup window left out (an idle project) from durable projections. */
   readonly ensureProjectState?: (
@@ -160,6 +192,99 @@ export function ensureOrchestrationThreadState(
     : engine
         .getReadModel()
         .pipe(Effect.map((model) => model.threads.find((thread) => thread.id === threadId)));
+}
+
+/**
+ * The one way to read a thread by id outside the command barrier. A resident thread is returned
+ * as is (identical to a direct read-model lookup); a missing one is hydrated, so a thread the
+ * startup window left out or eviction removed is never mistaken for an absent one.
+ */
+export function getOrchestrationThread(
+  engine: Pick<OrchestrationEngineShape, "getThread" | "getReadModel" | "ensureThreadState">,
+  threadId: ThreadId,
+  level: "operational" | "history" = "operational",
+): Effect.Effect<OrchestrationThread | undefined> {
+  if (engine.getThread) return engine.getThread(threadId, level);
+  const ensureThreadState = engine.ensureThreadState;
+  // Hosts with only the barrier hydrator: resident first, else hydrate.
+  return engine.getReadModel().pipe(
+    Effect.map((model) => model.threads.find((thread) => thread.id === threadId)),
+    Effect.flatMap((resident) =>
+      resident !== undefined || ensureThreadState === undefined
+        ? Effect.succeed(resident)
+        : ensureThreadState(threadId, level),
+    ),
+  );
+}
+
+/**
+ * The thread (hydrated if needed) together with the read model it was read from, for callers
+ * that also need the snapshot sequence or the thread's project. The accessor's touch keeps the
+ * thread resident for at least `READ_MODEL_MIN_RESIDENCY_MS`, so the second read still holds it.
+ */
+export function getOrchestrationThreadWithReadModel(
+  engine: Pick<OrchestrationEngineShape, "getThread" | "getReadModel" | "ensureThreadState">,
+  threadId: ThreadId,
+  level: "operational" | "history" = "operational",
+): Effect.Effect<{
+  readonly readModel: OrchestrationReadModel;
+  readonly thread: OrchestrationThread | undefined;
+}> {
+  return getOrchestrationThread(engine, threadId, level).pipe(
+    Effect.flatMap((hydrated) =>
+      engine.getReadModel().pipe(
+        Effect.map((readModel) => ({
+          readModel,
+          thread:
+            hydrated === undefined
+              ? undefined
+              : (readModel.threads.find((thread) => thread.id === threadId) ?? hydrated),
+        })),
+      ),
+    ),
+  );
+}
+
+/** Every thread of a project that is not deleted (hydrated), plus deleted ones still resident. */
+export function ensureOrchestrationProjectThreads(
+  engine: Pick<OrchestrationEngineShape, "ensureProjectThreads" | "getReadModel">,
+  projectId: ProjectId,
+): Effect.Effect<ReadonlyArray<OrchestrationThread>> {
+  return engine.ensureProjectThreads
+    ? engine.ensureProjectThreads(projectId)
+    : engine
+        .getReadModel()
+        .pipe(
+          Effect.map((model) => model.threads.filter((thread) => thread.projectId === projectId)),
+        );
+}
+
+/** Resident threads after hydrating `rootThreadId` and its live descendants. */
+export function ensureOrchestrationThreadSubtree(
+  engine: Pick<OrchestrationEngineShape, "ensureThreadSubtree" | "getReadModel">,
+  rootThreadId: ThreadId,
+): Effect.Effect<ReadonlyArray<OrchestrationThread>> {
+  return engine.ensureThreadSubtree
+    ? engine.ensureThreadSubtree(rootThreadId)
+    : engine.getReadModel().pipe(Effect.map((model) => model.threads));
+}
+
+/** Ids of a project's threads that are not deleted, without loading the threads. */
+export function listOrchestrationProjectThreadIds(
+  engine: Pick<OrchestrationEngineShape, "listProjectThreadIds" | "getReadModel">,
+  projectId: ProjectId,
+): Effect.Effect<ReadonlyArray<ThreadId>> {
+  return engine.listProjectThreadIds
+    ? engine.listProjectThreadIds(projectId)
+    : engine
+        .getReadModel()
+        .pipe(
+          Effect.map((model) =>
+            model.threads
+              .filter((thread) => thread.projectId === projectId && thread.deletedAt === null)
+              .map((thread) => thread.id),
+          ),
+        );
 }
 
 /**

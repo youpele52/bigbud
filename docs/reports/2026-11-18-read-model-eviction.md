@@ -1,10 +1,14 @@
 # F-B4: bounded orchestration read model (eviction with transparent rehydration)
 
-> **Reverted on 18 November 2026.** The live re-run
-> ([report](2026-11-18-unit-only-fixes-live-rerun.md)) found this change wedges the backend under
-> 3–8 concurrent provider sessions (D-1: a SQLite write lock is never released; the parent commit
-> does not wedge). `e84335fe60` was reverted; this report is kept as the design reference for a
-> fixed re-land.
+> **Reverted on 18 November 2026; re-land prepared on 19 November 2026 (not committed).** The
+> live re-run ([report](2026-11-18-unit-only-fixes-live-rerun.md)) saw the backend wedge under
+> 3–8 concurrent provider sessions with this change (D-1), and `e84335fe60` was reverted. The
+> wedge was then traced to a pre-existing lock-order inversion between the provider session
+> directory's write lock and the SQLite connection (in the code since `07356fbac1`; current dev
+> wedges without eviction too). Eviction only made it more likely. With that fixed, the eviction
+> build completes 1/4/8 sessions and still bounds the read model
+> ([report](2026-11-19-d1-eviction-wedge-and-d2-d3-live.md)). The re-land also carries F-1 (one
+> sweep per interval).
 
 **Date:** 18 November 2026
 **Source:** [Unbounded structures: fixes](2026-11-18-unbounded-structures-fixes.md), F-B4; the shared
