@@ -1,5 +1,6 @@
 import type { AppState } from "./main.store";
 import { mapSidebarThreadSummary, mapThreadSummary } from "./mappers.lazy.store";
+import { withTerminalWork } from "./helpers.terminalWork.store";
 import { newerOrganization } from "./helpers.organization.logic.store";
 import { mergeNotificationTasks } from "../../notifications/taskCompletion.tasks";
 import { capProviderAgents } from "./events.store.providerAgents";
@@ -66,7 +67,8 @@ export function mergeSidebarThreadSummary(
   const mapped = mapSidebarThreadSummary(summary);
   if (!previous) return mapped;
   return {
-    ...mapped,
+    // Summaries are server truth for finished items; recency only moves forward.
+    ...withTerminalWork(mapped, previous),
     organization: newerOrganization(previous.organization, mapped.organization),
     session: previous.session ?? mapped.session,
     latestTurn: previous.latestTurn ?? mapped.latestTurn,

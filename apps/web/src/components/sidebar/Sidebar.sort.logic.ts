@@ -11,6 +11,7 @@ type SidebarProject = {
 
 export type SidebarThreadSortInput = Pick<Thread, "createdAt" | "updatedAt"> & {
   latestUserMessageAt?: string | null;
+  latestTerminalActivityAt?: string | null | undefined;
   messages?: Pick<Thread["messages"][number], "createdAt" | "role">[];
 };
 
@@ -51,7 +52,10 @@ function getThreadSortTimestamp(
   if (sortOrder === "created_at") {
     return toSortableTimestamp(thread.createdAt) ?? Number.NEGATIVE_INFINITY;
   }
-  return getLatestUserMessageTimestamp(thread);
+  // Recency: a submitted terminal line or finished terminal work counts like a sent message.
+  const terminal = toSortableTimestamp(thread.latestTerminalActivityAt ?? undefined);
+  const message = getLatestUserMessageTimestamp(thread);
+  return terminal === null ? message : Math.max(message, terminal);
 }
 
 export function sortThreadsForSidebar<

@@ -6,6 +6,7 @@ import { deriveProjectActiveThreadCounts } from "./helpers.projectThreadCount.st
 import type { AppState } from "./main.store";
 import { mapProject, mapThread } from "./mappers.store";
 import { resetProjectCatalogState } from "./helpers.projectEpoch.store";
+import { preserveTerminalWork } from "./helpers.terminalWork.store";
 
 export function syncServerReadModel(state: AppState, readModel: OrchestrationReadModel): AppState {
   const mappedProjects = readModel.projects
@@ -27,7 +28,10 @@ export function syncServerReadModel(state: AppState, readModel: OrchestrationRea
     ...resetProjectCatalogState(state),
     projects,
     threads,
-    sidebarThreadsById: buildSidebarThreadsById(visibleThreads),
+    sidebarThreadsById: preserveTerminalWork(
+      buildSidebarThreadsById(visibleThreads),
+      state.sidebarThreadsById,
+    ),
     threadIdsByProjectId: buildThreadIdsByProjectId(visibleThreads),
     sidebarRecentThreadIds: visibleThreads
       .filter((thread) => isBuiltInChatsProject(thread.projectId))

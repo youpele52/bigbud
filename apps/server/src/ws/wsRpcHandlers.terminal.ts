@@ -17,9 +17,13 @@ export function makeTerminalHandlers(context: WsRpcContext) {
         "rpc.aggregate": "terminal",
       }),
     [WS_METHODS.terminalWrite]: (input: Parameters<WsRpcContext["terminalManager"]["write"]>[0]) =>
-      observeRpcEffect(WS_METHODS.terminalWrite, context.terminalManager.write(input), {
-        "rpc.aggregate": "terminal",
-      }),
+      observeRpcEffect(
+        WS_METHODS.terminalWrite,
+        context.terminalManager.write(input, { origin: "client" }),
+        {
+          "rpc.aggregate": "terminal",
+        },
+      ),
     [WS_METHODS.terminalResize]: (
       input: Parameters<WsRpcContext["terminalManager"]["resize"]>[0],
     ) =>

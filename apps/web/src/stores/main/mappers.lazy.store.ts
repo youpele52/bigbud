@@ -160,6 +160,8 @@ export function mapSidebarThreadSummary(summary: ThreadSummary): SidebarThreadSu
     branch: summary.branch,
     worktreePath: summary.worktreePath,
     latestUserMessageAt: summary.latestUserMessageAt,
+    latestTerminalActivityAt: summary.latestTerminalActivityAt ?? null,
+    terminalFinished: summary.terminalFinished ?? [],
     hasPendingApprovals: summary.isAwaitingApproval,
     hasPendingUserInput: summary.isAwaitingUserInput ?? false,
     hasActionableProposedPlan: false,

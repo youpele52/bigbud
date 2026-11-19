@@ -10,6 +10,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { SqlitePersistenceMemory } from "../../persistence/Layers/Sqlite.ts";
 import { ProjectionCatalogQuery } from "../Services/ProjectionCatalogQuery.ts";
 import { ProjectionCatalogQueryLive } from "./ProjectionCatalogQuery.ts";
+import { THREAD_RECENCY_SORT_KEY_SQL } from "./ProjectionCatalogQuery.threadPages.ts";
 
 const layer = it.layer(
   ProjectionCatalogQueryLive.pipe(Layer.provideMerge(SqlitePersistenceMemory)),
@@ -173,16 +174,16 @@ layer("ProjectionCatalogQuery display-ordered thread pages", (it) => {
     }),
   );
 
-  it.effect("walks the migration 154 page indexes instead of sorting", () =>
+  it.effect("walks the migration 154/180 page indexes instead of sorting", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const plans = {
-        idx_projection_threads_project_activity_page: yield* sql<{ readonly detail: string }>`
+        idx_projection_threads_project_recency_page: yield* sql<{ readonly detail: string }>`
           EXPLAIN QUERY PLAN
           SELECT thread_id FROM projection_threads t
           WHERE t.project_id = ${projectId} AND t.purpose = 'standard'
             AND t.deleted_at IS NULL AND t.archived_at IS NULL AND t.deleting_at IS NULL
-          ORDER BY COALESCE(t.latest_user_message_at, t.created_at) DESC, t.thread_id DESC
+          ORDER BY ${sql.unsafe(THREAD_RECENCY_SORT_KEY_SQL)} DESC, t.thread_id DESC
           LIMIT 5
         `,
         idx_projection_threads_project_created_page: yield* sql<{ readonly detail: string }>`

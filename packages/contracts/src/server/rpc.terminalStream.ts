@@ -7,6 +7,7 @@ import {
   TerminalSessionStreamItem,
 } from "../workspace/terminal.stream";
 import { TerminalSearchInput, TerminalSearchResult } from "../workspace/terminal.search";
+import { TerminalViewInput } from "../workspace/terminal.activity";
 
 /** One terminal's events, flow-controlled by `terminal.outputAck`. */
 export const WsSubscribeTerminalSessionRpc = Rpc.make(WS_METHODS.subscribeTerminalSession, {
@@ -25,4 +26,10 @@ export const WsTerminalOutputAckRpc = Rpc.make(WS_METHODS.terminalOutputAck, {
 export const WsTerminalSearchRpc = Rpc.make(WS_METHODS.terminalSearch, {
   payload: TerminalSearchInput,
   success: TerminalSearchResult,
+});
+
+/** What this connection views (open thread and visible panes); suppresses and clears attention. */
+export const WsTerminalViewRpc = Rpc.make(WS_METHODS.terminalView, {
+  payload: TerminalViewInput,
+  success: Schema.Void,
 });

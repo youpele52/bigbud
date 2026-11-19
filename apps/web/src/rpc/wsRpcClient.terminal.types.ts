@@ -36,4 +36,5 @@ export interface TerminalRpcClient {
   ) => () => void;
   readonly ackOutput: RpcUnaryMethod<typeof WS_METHODS.terminalOutputAck>;
   readonly search: RpcUnaryMethod<typeof WS_METHODS.terminalSearch>;
+  readonly view: RpcUnaryMethod<typeof WS_METHODS.terminalView>;
 }

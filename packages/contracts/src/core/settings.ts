@@ -21,6 +21,7 @@ import {
 } from "../constants/settings.constant";
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
 import { InyosiraIdleSettingsFields } from "./settings.inyosira";
+import { TerminalActivitySettingsFields } from "./settings.terminalActivity";
 import { MuseSettings } from "./settings.muse";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
@@ -309,6 +310,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(() => "agent" as const satisfies DelegatedThreadModelChoice),
   ),
   ...InyosiraIdleSettingsFields,
+  ...TerminalActivitySettingsFields,
 });
 export type ServerSettings = typeof ServerSettings.Type;
 

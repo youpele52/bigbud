@@ -7,7 +7,8 @@ import { threadOrganizationJsonSqlText } from "../../persistence/Layers/Projecti
  * The `ThreadSummary` columns shared by every catalog query. Requires the aliases
  * `t` (`projection_threads`), `s` (`projection_thread_sessions`, LEFT JOIN), and `turn`
  * (`projection_turns` for the latest turn, LEFT JOIN). Decode rows with `ThreadSummaryDbRow`.
- * `latest_user_message_at` is kept exact by the migration 154 triggers.
+ * `latest_user_message_at` is kept exact by the migration 154 triggers;
+ * `latest_terminal_activity_at` and `terminal_finished_attention` come from migration 180.
  */
 const THREAD_SUMMARY_COLUMNS_SQL = `
   t.thread_id AS id,
@@ -26,6 +27,11 @@ const THREAD_SUMMARY_COLUMNS_SQL = `
   t.created_at AS "createdAt",
   t.updated_at AS "updatedAt",
   t.latest_user_message_at AS "latestUserMessageAt",
+  t.latest_terminal_activity_at AS "latestTerminalActivityAt",
+  COALESCE((SELECT json_group_array(json_object(
+    'terminalId', f.terminal_id, 'finishedAt', f.finished_at, 'command', f.command,
+    'exitCode', f.exit_code, 'durationMs', f.duration_ms, 'source', f.source
+  )) FROM terminal_finished_attention f WHERE f.thread_id = t.thread_id), '[]') AS "terminalFinished",
   t.pinned_at AS "pinnedAt",
   ${threadOrganizationJsonSqlText("t")} AS "organization",
   s.status AS "sessionStatus",

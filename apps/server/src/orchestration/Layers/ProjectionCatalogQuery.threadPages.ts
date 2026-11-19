@@ -17,11 +17,15 @@ import {
 } from "./ProjectionCatalogQuery.summaryColumns.ts";
 
 /**
- * Sort key of each displayed order. The expressions match the migration 154 partial indexes
- * character for character, so SQLite can walk them instead of sorting.
+ * Recency: the later of the latest user message and the latest terminal activity, falling back to
+ * creation. Matches the migration 180 partial indexes, so SQLite walks them instead of sorting.
  */
+export const THREAD_RECENCY_SORT_KEY_SQL =
+  "MAX(COALESCE(t.latest_user_message_at, t.created_at), COALESCE(t.latest_terminal_activity_at, t.created_at))";
+
+/** Sort key of each displayed order (migration 154 created / migration 180 recency indexes). */
 const SORT_KEY_SQL: Record<ThreadSummarySortOrder, string> = {
-  updated_at: "COALESCE(t.latest_user_message_at, t.created_at)",
+  updated_at: THREAD_RECENCY_SORT_KEY_SQL,
   created_at: "t.created_at",
 };
 
@@ -37,14 +41,15 @@ export function threadSortKeySql(sql: SqlClient.SqlClient, sortOrder: ThreadSumm
   return sql.unsafe(SORT_KEY_SQL[sortOrder]);
 }
 
-/** Display sort key of a summary row, as the client computes it. */
+/** Display sort key of a summary row, as the client computes it (ISO strings sort by time). */
 export function threadSummarySortKey(
-  summary: Pick<ThreadSummary, "latestUserMessageAt" | "createdAt">,
+  summary: Pick<ThreadSummary, "latestUserMessageAt" | "latestTerminalActivityAt" | "createdAt">,
   sortOrder: ThreadSummarySortOrder,
 ): string {
-  return sortOrder === "created_at"
-    ? summary.createdAt
-    : (summary.latestUserMessageAt ?? summary.createdAt);
+  if (sortOrder === "created_at") return summary.createdAt;
+  const message = summary.latestUserMessageAt ?? summary.createdAt;
+  const terminal = summary.latestTerminalActivityAt ?? summary.createdAt;
+  return terminal > message ? terminal : message;
 }
 
 export function nextSortedThreadCursor(

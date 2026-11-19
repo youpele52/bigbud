@@ -36,6 +36,7 @@ import {
 } from "../command-admission/RuntimeMaintenanceGate.ts";
 import { ServerSettingsService } from "./serverSettings";
 import { TerminalManager } from "../terminal/Services/Manager";
+import { TerminalActivity } from "../terminal/Services/TerminalActivity.ts";
 import { toDispatchCommandError } from "./wsDispatchCommandError.ts";
 import { WorkspaceEntries } from "../workspace/Services/WorkspaceEntries";
 import { WorkspaceFileSystem } from "../workspace/Services/WorkspaceFileSystem";
@@ -103,6 +104,7 @@ export const makeWsRpcContext = (
     const gitStatusBroadcaster = yield* GitStatusBroadcaster;
     const remoteGitStatusInvalidation = yield* makeRemoteGitStatusInvalidation;
     const terminalManager = yield* TerminalManager;
+    const terminalActivity = yield* Effect.serviceOption(TerminalActivity);
     const providerService = yield* ProviderService;
     const providerRegistry = yield* ProviderRegistry;
     const discoveryRegistry = yield* DiscoveryRegistry;
@@ -355,6 +357,7 @@ export const makeWsRpcContext = (
       serverSettings,
       startup,
       terminalManager,
+      terminalActivity: Option.getOrUndefined(terminalActivity),
       threadShellRunner,
       threadRetention,
       toDispatchCommandError,

@@ -90,6 +90,7 @@ export const WS_METHODS = {
   terminalClose: "terminal.close",
   terminalOutputAck: "terminal.outputAck",
   terminalSearch: "terminal.search",
+  terminalView: "terminal.view",
 
   // Server meta
   serverPing: "server.ping",

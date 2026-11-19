@@ -252,6 +252,8 @@ export interface CreateManagerOptions {
   maxRetainedInactiveSessions?: number;
   ptyAdapter?: FakePtyAdapter;
   releaseWorktreeLease?: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
+  workSink?: TerminalManagerOptions["workSink"];
+  shellIntegrationEnv?: TerminalManagerOptions["shellIntegrationEnv"];
 }
 
 export interface ManagerFixture {
@@ -300,6 +302,10 @@ export const createManager = (
           : {}),
         ...(options.processKillGraceMs !== undefined
           ? { processKillGraceMs: options.processKillGraceMs }
+          : {}),
+        ...(options.workSink ? { workSink: options.workSink } : {}),
+        ...(options.shellIntegrationEnv
+          ? { shellIntegrationEnv: options.shellIntegrationEnv }
           : {}),
         ...(options.maxRetainedInactiveSessions !== undefined
           ? { maxRetainedInactiveSessions: options.maxRetainedInactiveSessions }

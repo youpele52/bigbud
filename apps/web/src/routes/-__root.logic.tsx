@@ -41,6 +41,7 @@ import { createEventRouterRecovery } from "./-__root.recovery";
 import { resolveSelectedThreadIdFromPath } from "./-__root.bounded-bootstrap";
 import { createAsyncOperationQueue } from "./-__root.recovery.serial";
 import { subscribeGlobalTerminalState } from "./-__root.terminal-events";
+import { emitTerminalWorkActivity } from "../notifications/terminalWorkEvents";
 import {
   restoreStartupContext,
   runCoalescedStartupFreshChat,
@@ -335,6 +336,10 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
       },
       applyEvents: applyTerminalEvents,
       reconcileInventory: reconcileTerminalInventory,
+      applyWork: (item) => {
+        useStore.getState().applyTerminalWorkActivity(item);
+        emitTerminalWorkActivity(item);
+      },
     });
     return () => {
       disposed = true;

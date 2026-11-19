@@ -12,6 +12,12 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { ServerConfig } from "../../startup/config";
 import { TerminalManager } from "../Services/Manager";
+import { TerminalActivity } from "../Services/TerminalActivity.ts";
+import path from "node:path";
+import {
+  installShellIntegration,
+  shellIntegrationEnv,
+} from "../shellIntegration/shellIntegration.ts";
 import { PtyAdapter } from "../Services/PTY";
 import { ShellLaunchPlanner } from "../Services/ShellLaunchPlanner";
 import { ShellProfiles } from "../Services/ShellProfiles";
@@ -33,12 +39,13 @@ import {
 export { makeTerminalManagerWithOptions } from "./Manager.process";
 
 const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
-  const { terminalLogsDir } = yield* ServerConfig;
+  const { terminalLogsDir, stateDir } = yield* ServerConfig;
   const ptyAdapter = yield* PtyAdapter;
   const shellLaunchPlanner = yield* ShellLaunchPlanner;
   const shellProfiles = yield* ShellProfiles;
   const settings = Option.getOrUndefined(yield* Effect.serviceOption(ServerSettingsService));
   const sql = yield* SqlClient.SqlClient;
+  const activity = Option.getOrUndefined(yield* Effect.serviceOption(TerminalActivity));
   yield* reconcileWorktreeRuntimeLeases(sql, "terminal");
   const acquireWorktreeLease = Effect.fn("terminal.acquireWorktreeLease")(function* (input: {
     runtimePathIdentity?: RuntimePathIdentity | undefined;
@@ -119,8 +126,29 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
         }),
       ),
     );
+  // Best effort: without the files, panes start exactly as before (process-poll fallback).
+  const integration =
+    process.platform === "win32"
+      ? undefined
+      : yield* Effect.tryPromise(() =>
+          installShellIntegration(path.join(stateDir, "shell-integration")),
+        ).pipe(
+          Effect.tapError((cause) =>
+            Effect.logWarning("terminal shell integration unavailable", { cause }),
+          ),
+          Effect.orElseSucceed(() => undefined),
+        );
   return yield* makeTerminalManagerWithOptions({
     logsDir: terminalLogsDir,
+    workSink: activity,
+    shellIntegrationEnv: integration
+      ? (base) =>
+          shellIntegrationEnv(
+            integration,
+            base,
+            settings?.currentSnapshot?.()?.settings.terminalAgentHooksEnabled ?? true,
+          )
+      : undefined,
     getLocalShellDefault: () =>
       localShellDefaultsEnabled()
         ? settings?.currentSnapshot?.()?.settings.terminalShells.hostDefaults.local

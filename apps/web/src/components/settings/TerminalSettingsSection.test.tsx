@@ -27,6 +27,8 @@ describe("terminal settings order", () => {
       "Full-screen app scroll speed",
       "Terminal ligatures",
       "Terminal inline images",
+      "Detect when terminal agents finish",
+      "Terminal agent hooks",
       "Terminal GPU rendering",
     ]);
     expect(markup).not.toContain("<details");

@@ -38,6 +38,8 @@ import {
 } from "./selectors.store";
 import type { GetOrganizationThreadSummariesResult } from "@bigbud/contracts/orchestration/orchestration.catalog.organization.ts";
 import { appendOrganizationPage } from "./helpers.organization.store";
+import { applyTerminalWorkActivity } from "./helpers.terminalWork.store";
+import type { TerminalWorkActivity } from "@bigbud/contracts/workspace/terminal.activity.ts";
 import { markThreadViewed, unloadHydratedThreads } from "./helpers.lazy.eviction.store";
 import { mergeTurnActivities } from "./helpers.turnActivities.store";
 import type { OrchestrationThreadActivity } from "@bigbud/contracts/orchestration/orchestration.thread.ts";
@@ -172,6 +174,7 @@ interface AppStore extends AppState {
   unloadHydratedThreads: (keepThreadId: ThreadId | null) => void;
   applyOrchestrationEvent: (event: OrchestrationEvent) => void;
   applyOrchestrationEvents: (events: ReadonlyArray<OrchestrationEvent>) => void;
+  applyTerminalWorkActivity: (item: TerminalWorkActivity) => void;
   setError: (threadId: ThreadId, error: string | null) => void;
   setThreadBranch: (threadId: ThreadId, branch: string | null, worktreePath: string | null) => void;
 }
@@ -227,6 +230,7 @@ export const useStore = create<AppStore>((set) => ({
     set((state) => unloadHydratedThreads(state, keepThreadId)),
   applyOrchestrationEvent: (event) => set((state) => applyOrchestrationEvent(state, event)),
   applyOrchestrationEvents: (events) => set((state) => applyOrchestrationEvents(state, events)),
+  applyTerminalWorkActivity: (item) => set((state) => applyTerminalWorkActivity(state, item)),
   setError: (threadId, error) => set((state) => setError(state, threadId, error)),
   setThreadBranch: (threadId, branch, worktreePath) =>
     set((state) => setThreadBranch(state, threadId, branch, worktreePath)),

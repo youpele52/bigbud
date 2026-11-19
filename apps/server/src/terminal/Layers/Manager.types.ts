@@ -1,3 +1,4 @@
+import type { TerminalWorkSink } from "./Manager.workSignals.ts";
 import type * as Effect from "effect/Effect";
 import type { DirectShellLaunchOwnerStore } from "./DirectShellLaunch.owner";
 import type * as Fiber from "effect/Fiber";
@@ -154,6 +155,12 @@ export interface TerminalStartInput {
 }
 
 export interface TerminalManagerOptions {
+  /** Terminal recency and finished-work reporting (Enter, OSC 133, poll, agent markers). */
+  workSink?: TerminalWorkSink | undefined;
+  /** Extra environment for local POSIX pane shells (bigbud shell integration); never remote. */
+  shellIntegrationEnv?:
+    | ((base: NodeJS.ProcessEnv) => Record<string, string> | undefined)
+    | undefined;
   getLocalShellDefault?: (() => ShellSelection | undefined) | undefined;
   listLocalShellProfiles?:
     | (() => Effect.Effect<ShellProfileInventory, ShellProfileDiscoveryError>)

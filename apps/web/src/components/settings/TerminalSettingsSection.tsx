@@ -11,6 +11,7 @@ import { TerminalRenderingSettings } from "./TerminalRenderingSettings";
 import { TerminalThemeSettings } from "./TerminalThemeSettings";
 import { TerminalInteractionSettings } from "./TerminalInteractionSettings";
 import { TerminalShellSettings } from "./TerminalShellSettings";
+import { TerminalAgentHooksSettings } from "./TerminalAgentHooksSettings";
 
 const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }> = [
   {
@@ -128,6 +129,7 @@ export function TerminalSettingsSection() {
       <TerminalShellSettings />
       <TerminalThemeSettings />
       <TerminalInteractionSettings />
+      <TerminalAgentHooksSettings />
       <TerminalRenderingSettings />
     </SettingsSection>
   );

@@ -81,6 +81,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     subscribeSession: vi.fn(() => () => undefined),
     ackOutput: vi.fn(),
     search: vi.fn(),
+    view: vi.fn(),
   },
   browser: {
     completeCommand: vi.fn(),

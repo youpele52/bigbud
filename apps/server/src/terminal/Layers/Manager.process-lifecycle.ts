@@ -1,3 +1,5 @@
+import type { TerminalManagerOptions } from "./Manager.types.ts";
+import type { TerminalWorkSignals } from "./Manager.workSignals.ts";
 import { type TerminalSessionSnapshot } from "@bigbud/contracts";
 import type { DirectShellLaunchOwnerStore } from "./DirectShellLaunch.owner";
 import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
@@ -53,6 +55,8 @@ export interface ProcessLifecycleContext {
   shellResolver: () => string;
   ptyAdapter: PtyAdapterShape;
   directShellOwners?: DirectShellLaunchOwnerStore | undefined;
+  workSignals?: TerminalWorkSignals | undefined;
+  shellIntegrationEnv?: TerminalManagerOptions["shellIntegrationEnv"];
 }
 
 // ---------------------------------------------------------------------------

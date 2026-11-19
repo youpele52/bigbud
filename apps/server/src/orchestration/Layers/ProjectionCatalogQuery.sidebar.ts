@@ -16,6 +16,7 @@ import {
   threadSummaryColumnsSql,
   threadSummaryJoinsSql,
 } from "./ProjectionCatalogQuery.summaryColumns.ts";
+import { THREAD_RECENCY_SORT_KEY_SQL } from "./ProjectionCatalogQuery.threadPages.ts";
 
 export function makeGetSidebarThreadCatalog(
   sql: SqlClient.SqlClient,
@@ -32,7 +33,7 @@ export function makeGetSidebarThreadCatalog(
           AND t.deleted_at IS NULL
           AND t.archived_at IS NULL
           AND t.deleting_at IS NULL
-        ORDER BY COALESCE(t.latest_user_message_at, t.created_at) DESC, t.thread_id DESC
+        ORDER BY ${sql.unsafe(THREAD_RECENCY_SORT_KEY_SQL)} DESC, t.thread_id DESC
         LIMIT ${SIDEBAR_THREAD_CATALOG_RECENT_LIMIT}
       ), recent_by_created AS (
         SELECT t.thread_id

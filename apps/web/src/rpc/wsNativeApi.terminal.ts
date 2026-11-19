@@ -36,5 +36,6 @@ export function createNativeTerminalApi(terminal: TerminalRpcClient): NativeApi[
       terminal.subscribeSession(input as never, callback, options),
     ackOutput: (input) => terminal.ackOutput(input),
     search: (input) => terminal.search(input),
+    view: (input) => terminal.view(input as never),
   };
 }

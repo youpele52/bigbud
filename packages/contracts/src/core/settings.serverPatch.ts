@@ -5,6 +5,7 @@ import { GreetingName } from "./settings.greeting";
 import { TerminalShellSettingsPatch } from "./settings.terminalShell";
 import { ComputerUseDeliveryMode } from "./settings.computerUsePolicy";
 import { InyosiraIdleSettingsPatchFields } from "./settings.inyosira";
+import { TerminalActivitySettingsPatchFields } from "./settings.terminalActivity";
 import { OpencodeV2NativeServiceTrust, OpencodeV2PluginConfigRoot } from "./settings.opencodeV2";
 import {
   ClaudeModelOptions,
@@ -155,6 +156,7 @@ export const ServerSettingsPatch = Schema.Struct({
   hiddenComposerProviders: Schema.optionalKey(Schema.Array(ProviderKind)),
   delegatedThreadModelChoice: Schema.optionalKey(DelegatedThreadModelChoice),
   ...InyosiraIdleSettingsPatchFields,
+  ...TerminalActivitySettingsPatchFields,
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(

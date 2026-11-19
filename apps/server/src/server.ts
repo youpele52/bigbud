@@ -111,6 +111,7 @@ import {
 } from "./server.profile.ts";
 import { RemoteTerminalAvailabilityLive } from "./remote-backend/terminalAvailability.ts";
 import { PtyAdapterLive } from "./server.pty.ts";
+import { TerminalActivityLive } from "./terminal/Layers/TerminalActivity.ts";
 
 const ReactorLayerLive = Layer.empty.pipe(
   Layer.provideMerge(
@@ -168,6 +169,7 @@ const TerminalPtyLayerLive = configuredRemoteAgentLayers.enabled
     ).pipe(Layer.provide(PtyAdapterLive))
   : PtyAdapterLive;
 const TerminalLayerLive = TerminalManagerLive.pipe(
+  Layer.provideMerge(TerminalActivityLive),
   Layer.provide(TerminalPtyLayerLive),
   Layer.provide(
     ShellLaunchPlannerLive.pipe(
