@@ -1,9 +1,10 @@
 import { Undo2Icon } from "lucide-react";
-import { type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SettingsSearchProvider, useSettingsSearch } from "./SettingsSearch.context";
 import { matchesSettingsSearchTerms, normalizeSettingsSearchQuery } from "./SettingsSearch.logic";
+import { useSettingsScrollMemory } from "./settingsLastLocation.scroll";
 
 export function SettingsSection({
   title,
@@ -146,9 +147,12 @@ export function SettingResetButton({ label, onClick }: { label: string; onClick:
 export function SettingsPageContainer({ children }: { children: ReactNode }) {
   const { query } = useSettingsSearch();
   const isSearching = Boolean(normalizeSettingsSearchQuery(query));
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useSettingsScrollMemory(scrollRef);
 
   return (
     <div
+      ref={scrollRef}
       className="flex-1 overflow-y-auto p-6"
       data-settings-searching={isSearching ? "" : undefined}
     >

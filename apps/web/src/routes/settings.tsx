@@ -6,6 +6,11 @@ import { SETTINGS_NAV_ITEMS } from "../components/settings/SettingsSidebarNav.it
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
 import { SettingsSearch } from "../components/settings/SettingsSearch";
 import { SettingsSearchProvider } from "../components/settings/SettingsSearch.context";
+import {
+  readLastSettingsPath,
+  rememberSettingsPath,
+} from "../components/settings/settingsLastLocation";
+import { SettingsPagePathProvider } from "../components/settings/settingsLastLocation.scroll";
 import { Button } from "../components/ui/button";
 import { SidebarInset, SidebarTrigger, useSidebar } from "../components/ui/sidebar";
 import { WINDOW_COLLAPSED_HEADER_INSET_CLASS } from "../components/layout/windowChrome";
@@ -26,6 +31,7 @@ function SettingsContentLayout() {
     "/settings/providers",
     "/settings/ai",
   ].includes(location.pathname);
+  useEffect(() => rememberSettingsPath(location.pathname), [location.pathname]);
   const activeSectionLabel =
     SETTINGS_NAV_ITEMS.find((item) => item.to === location.pathname)?.label ?? "Settings";
 
@@ -107,7 +113,9 @@ function SettingsContentLayout() {
 
         <SettingsSearchProvider query={searchQuery} terms={[activeSectionLabel]}>
           <div key={restoreSignal} className="min-h-0 flex flex-1 flex-col">
-            <Outlet />
+            <SettingsPagePathProvider path={location.pathname}>
+              <Outlet />
+            </SettingsPagePathProvider>
           </div>
         </SettingsSearchProvider>
       </div>
@@ -122,7 +130,8 @@ function SettingsRouteLayout() {
 export const Route = createFileRoute("/settings")({
   beforeLoad: ({ location }) => {
     if (location.pathname === "/settings") {
-      throw redirect({ to: "/settings/general", replace: true });
+      // Reopening Settings returns to the last page the user was on.
+      throw redirect({ to: readLastSettingsPath(), replace: true });
     }
   },
   component: SettingsRouteLayout,

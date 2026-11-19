@@ -125,7 +125,7 @@ export function CommandPaletteDialogContent() {
       keywords: "settings preferences configuration keybindings",
       icon: <SettingsIcon className="size-4" />,
       onSelect: async () => {
-        await navigate({ to: "/settings/general" });
+        await navigate({ to: "/settings" });
       },
     });
 
