@@ -24,6 +24,10 @@ import type {
   RuntimeProcessorCacheHelpers,
   RuntimeProcessorServices,
 } from "./ProviderRuntimeIngestion.processor.ts";
+import {
+  getOrchestrationThread,
+  getOrchestrationThreadWithReadModel,
+} from "../Services/OrchestrationEngine.ts";
 
 export function makeProcessorHelpers(
   services: RuntimeProcessorServices,
@@ -39,8 +43,10 @@ export function makeProcessorHelpers(
   } = cacheHelpers;
 
   const isGitRepoForThread = Effect.fn("isGitRepoForThread")(function* (threadId: ThreadId) {
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === threadId);
+    const { readModel, thread } = yield* getOrchestrationThreadWithReadModel(
+      orchestrationEngine,
+      threadId,
+    );
     if (!thread) {
       return false;
     }
@@ -73,8 +79,12 @@ export function makeProcessorHelpers(
           ? input.fallbackText!
           : "";
 
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const existingThread = readModel.threads.find((entry) => entry.id === input.threadId);
+    // Ingestion loaded this thread's history before processing the event.
+    const existingThread = yield* getOrchestrationThread(
+      orchestrationEngine,
+      input.threadId,
+      "history",
+    );
     const existingMessage = existingThread?.messages.find((entry) => entry.id === input.messageId);
 
     if (text.length === 0 && !existingMessage && !input.authoritativeText) {
@@ -238,8 +248,12 @@ export function makeProcessorHelpers(
       implementationThreadId: ThreadId,
       implementedAt: string,
     ) {
-      const readModel = yield* orchestrationEngine.getReadModel();
-      const sourceThread = readModel.threads.find((entry) => entry.id === sourceThreadId);
+      // Proposed plans are history-level state.
+      const sourceThread = yield* getOrchestrationThread(
+        orchestrationEngine,
+        sourceThreadId,
+        "history",
+      );
       const sourcePlan = sourceThread?.proposedPlans.find((entry) => entry.id === sourcePlanId);
       if (!sourceThread || !sourcePlan || sourcePlan.implementedAt !== null) {
         return;

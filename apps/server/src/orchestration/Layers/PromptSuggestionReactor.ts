@@ -37,7 +37,10 @@ import {
 import type { TextGenerationShape } from "../../git/Services/TextGeneration.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import type { ProviderAdapterCapabilities } from "../../provider/Services/ProviderAdapter.ts";
-import type { OrchestrationEngineShape } from "../Services/OrchestrationEngine.ts";
+import {
+  getOrchestrationThread,
+  type OrchestrationEngineShape,
+} from "../Services/OrchestrationEngine.ts";
 import { buildPromptSuggestionActivity } from "../promptSuggestion.logic.ts";
 import {
   buildPromptSuggestionTranscript,
@@ -56,7 +59,7 @@ export const PROMPT_SUGGESTION_MAX_CONCURRENT = 2;
 export interface PromptSuggestionReactorDeps {
   readonly orchestrationEngine: Pick<
     OrchestrationEngineShape,
-    "getReadModel" | "dispatch" | "streamDomainEvents"
+    "getReadModel" | "getThread" | "dispatch" | "streamDomainEvents"
   >;
   readonly providerEvents: Stream.Stream<ProviderRuntimeEvent>;
   readonly getCapabilities: (
@@ -76,9 +79,7 @@ export const startPromptSuggestionReactor = Effect.fn("startPromptSuggestionReac
   const permits = yield* Semaphore.make(deps.maxConcurrent ?? PROMPT_SUGGESTION_MAX_CONCURRENT);
 
   const readThread = (threadId: ThreadId) =>
-    deps.orchestrationEngine
-      .getReadModel()
-      .pipe(Effect.map((model) => model.threads.find((thread) => thread.id === threadId)));
+    getOrchestrationThread(deps.orchestrationEngine, threadId);
 
   // Ingestion applies `turn.completed` beside this reactor; wait briefly until it has.
   const settledThread = (threadId: ThreadId, turnId: TurnId) =>

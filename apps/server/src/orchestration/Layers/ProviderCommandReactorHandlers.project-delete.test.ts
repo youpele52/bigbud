@@ -1,7 +1,7 @@
 import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { describe, expect, it } from "vitest";
 
-import { evaluateProjectThreadSettle } from "./ProviderCommandReactorHandlers.project-delete.ts";
+import { evaluateProjectThreadSettle } from "./ProviderCommandReactorHandlers.project-delete.settle.ts";
 
 const projectId = ProjectId.makeUnsafe("project-settle");
 const rootId = ThreadId.makeUnsafe("root");

@@ -5,6 +5,10 @@ import {
   type OrchestrationReadModel,
 } from "@bigbud/contracts";
 import { Effect } from "effect";
+import {
+  getOrchestrationThread,
+  type OrchestrationEngineShape,
+} from "../Services/OrchestrationEngine.ts";
 
 import {
   isValidWorkspaceRelativePath,
@@ -25,6 +29,7 @@ type PathCheckpointEvent = Extract<
 export function makeHandlePathCheckpointRequested(
   orchestrationEngine: {
     getReadModel: () => Effect.Effect<OrchestrationReadModel, never>;
+    getThread?: NonNullable<OrchestrationEngineShape["getThread"]>;
     dispatch: (
       command: OrchestrationCommand,
     ) => Effect.Effect<{ sequence: number }, OrchestrationDispatchError>;
@@ -63,9 +68,9 @@ export function makeHandlePathCheckpointRequested(
         })
         .pipe(Effect.catch(() => Effect.void));
     const execute = Effect.gen(function* () {
-      const readModel = yield* orchestrationEngine.getReadModel();
-      const thread = readModel.threads.find((entry) => entry.id === event.payload.threadId);
+      const thread = yield* getOrchestrationThread(orchestrationEngine, event.payload.threadId);
       if (!thread) return;
+      const readModel = yield* orchestrationEngine.getReadModel();
       if (thread.latestTurn?.state === "running" || thread.session?.status === "running") {
         yield* appendActivity(
           "error",

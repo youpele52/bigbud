@@ -1,7 +1,6 @@
 import {
   type MessageId,
   type OrchestrationEvent,
-  type OrchestrationReadModel,
   type ProjectId,
   ThreadId,
   type ProviderRuntimeEvent,
@@ -11,6 +10,12 @@ import { Effect } from "effect";
 
 import type { CheckpointStoreError } from "../../checkpointing/Errors.ts";
 import type { OrchestrationDispatchError } from "../Errors.ts";
+import {
+  getOrchestrationThread,
+  type OrchestrationEngineShape,
+} from "../Services/OrchestrationEngine.ts";
+
+type ThreadLookupEngine = Pick<OrchestrationEngineShape, "getReadModel" | "getThread">;
 import { checkpointStatusFromRuntime, sameId, toTurnId } from "./CheckpointReactorCapture.ts";
 
 type ThreadReadModel = {
@@ -31,7 +36,7 @@ type ThreadReadModel = {
 };
 
 export function makeCaptureCheckpointFromTurnCompletion(
-  orchestrationEngine: { getReadModel: () => Effect.Effect<OrchestrationReadModel, never> },
+  orchestrationEngine: ThreadLookupEngine,
   resolveCheckpointCwd: (input: {
     readonly threadId: ThreadId;
     readonly thread: { readonly projectId: ProjectId; readonly worktreePath: string | null };
@@ -64,10 +69,13 @@ export function makeCaptureCheckpointFromTurnCompletion(
     const turnId = toTurnId(event.turnId);
     if (!turnId) return;
 
+    // Checkpoints need the full history; hydrated if the thread is not resident.
+    const thread = (yield* getOrchestrationThread(
+      orchestrationEngine,
+      event.threadId,
+      "history",
+    )) as ThreadReadModel | undefined;
     const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === event.threadId) as
-      | ThreadReadModel
-      | undefined;
     if (!thread) return;
 
     if (thread.session?.activeTurnId && !sameId(thread.session.activeTurnId, turnId)) return;
@@ -113,7 +121,7 @@ export function makeCaptureCheckpointFromTurnCompletion(
 }
 
 export function makeCaptureCheckpointFromPlaceholder(
-  orchestrationEngine: { getReadModel: () => Effect.Effect<OrchestrationReadModel, never> },
+  orchestrationEngine: ThreadLookupEngine,
   resolveCheckpointCwd: (input: {
     readonly threadId: ThreadId;
     readonly thread: { readonly projectId: ProjectId; readonly worktreePath: string | null };
@@ -147,10 +155,11 @@ export function makeCaptureCheckpointFromPlaceholder(
 
     if (status !== "missing") return;
 
-    const readModel = yield* orchestrationEngine.getReadModel();
-    const thread = readModel.threads.find((entry) => entry.id === threadId) as
+    // Checkpoints need the full history; hydrated if the thread is not resident.
+    const thread = (yield* getOrchestrationThread(orchestrationEngine, threadId, "history")) as
       | ThreadReadModel
       | undefined;
+    const readModel = yield* orchestrationEngine.getReadModel();
     if (!thread) {
       yield* Effect.logWarning("checkpoint capture from placeholder skipped: thread not found", {
         threadId,

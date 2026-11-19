@@ -54,7 +54,6 @@ function harness(overrides: Partial<OrchestrationThread> = {}, options = { nativ
       dispatch,
       getReadModel: () => Effect.succeed(model(value)),
     } as unknown as OrchestrationEngineShape,
-    resolveThread: () => Effect.succeed(model(value)),
     appendProviderFailureActivity,
   });
   const event = makeEvent({

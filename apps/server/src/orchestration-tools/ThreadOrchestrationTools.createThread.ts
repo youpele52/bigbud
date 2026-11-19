@@ -18,6 +18,7 @@ import { Effect, Option, Schema } from "effect";
 import {
   ensureOrchestrationProjectState,
   type OrchestrationEngineShape,
+  getOrchestrationThread,
 } from "../orchestration/Services/OrchestrationEngine.ts";
 import { resolveThreadWorkflowStatus } from "../orchestration/ThreadWorkflowStatus.logic.ts";
 import type { ThreadDelegationRepositoryShape } from "../persistence/Services/ThreadDelegations.ts";
@@ -73,8 +74,10 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
       return yield* Effect.fail(new Error("Invocation ID is required."));
     }
 
-    const readModel = yield* input.orchestrationEngine.getReadModel();
-    const callerThread = readModel.threads.find((thread) => thread.id === input.callerThreadId);
+    const callerThread = yield* getOrchestrationThread(
+      input.orchestrationEngine,
+      input.callerThreadId,
+    );
     if (!callerThread || callerThread.deletedAt !== null) {
       return yield* Effect.fail(new Error("Caller thread was not found."));
     }
@@ -153,7 +156,10 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
     // Retries must dispatch byte-identical commands; a fresh clock would conflict on replay.
     const createdAt = delegation.createdAt;
 
-    const child = readModel.threads.find((thread) => thread.id === delegation.childThreadId);
+    const child = yield* getOrchestrationThread(
+      input.orchestrationEngine,
+      delegation.childThreadId,
+    );
     if (delegation.state === "completed" || delegation.state === "watch_armed") {
       const stored = readStoredModelDecision(delegation.resultJson);
       return {
@@ -330,9 +336,9 @@ export const createThreadViaOrchestration = Effect.fn("createThreadViaOrchestrat
       })
       .pipe(Effect.mapError(delegationError));
     yield* updateState("completed");
-    const updatedReadModel = yield* input.orchestrationEngine.getReadModel();
-    const updatedChild = updatedReadModel.threads.find(
-      (thread) => thread.id === delegation.childThreadId,
+    const updatedChild = yield* getOrchestrationThread(
+      input.orchestrationEngine,
+      delegation.childThreadId,
     );
     return {
       ...result,

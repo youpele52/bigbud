@@ -77,7 +77,7 @@ function execute(input: {
   return Effect.runPromise(
     executeBrowserAction({
       browser: input.browser,
-      readModel,
+      engine: { getReadModel: () => Effect.succeed(readModel()) },
       threadId: THREAD_ID,
       action: {
         action: "capture",
