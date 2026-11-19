@@ -1,7 +1,8 @@
 import { isRemoteExecutionTargetId, type ExecutionTargetId } from "@bigbud/contracts";
+import { TERMINAL_PASTE_WSL_UNAVAILABLE_MESSAGE } from "@bigbud/contracts/workspace/terminal.paste.ts";
+import { isAbsolutePath } from "@bigbud/shared/path";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import type { DroppedTerminalPath } from "./TerminalViewport.drop";
-import { isAbsoluteTerminalPath } from "./TerminalViewport.paths";
 
 export type TerminalPasteHostKind = "local" | "remote" | "wsl";
 
@@ -15,9 +16,6 @@ export type TerminalPastePlan =
   | { readonly kind: "passthrough" }
   | { readonly kind: "reject"; readonly message: string }
   | { readonly kind: "deliver"; readonly items: ReadonlyArray<TerminalPasteItem> };
-
-export const WSL_PASTE_NOTICE =
-  "Pasting files is unavailable for WSL terminals. Enter a path inside the selected distro instead.";
 
 export function terminalPasteHostKind(target: string | undefined): TerminalPasteHostKind {
   if (isWslTerminalTargetId(target)) return "wsl";
@@ -46,7 +44,7 @@ function isMeaningfulText(text: string, files: ReadonlyArray<PastedTerminalFile>
 
 /** Local files with a real absolute path paste that path; everything else is staged. */
 function itemFor(entry: PastedTerminalFile, host: TerminalPasteHostKind): TerminalPasteItem {
-  return host === "local" && isAbsoluteTerminalPath(entry.nativePath)
+  return host === "local" && isAbsolutePath(entry.nativePath)
     ? { kind: "path", path: entry.nativePath }
     : { kind: "stage", file: entry.file };
 }
@@ -59,7 +57,8 @@ export function planTerminalPaste(input: {
 }): TerminalPastePlan {
   if (input.files.length === 0 || isMeaningfulText(input.text, input.files))
     return { kind: "passthrough" };
-  if (input.host === "wsl") return { kind: "reject", message: WSL_PASTE_NOTICE };
+  if (input.host === "wsl")
+    return { kind: "reject", message: TERMINAL_PASTE_WSL_UNAVAILABLE_MESSAGE };
   return { kind: "deliver", items: input.files.map((entry) => itemFor(entry, input.host)) };
 }
 
@@ -73,22 +72,17 @@ export function planTerminalDrop(input: {
   readonly host: TerminalPasteHostKind;
 }): TerminalPastePlan {
   if (input.dropped.length === 0) return { kind: "passthrough" };
-  if (input.host === "wsl") return { kind: "reject", message: WSL_PASTE_NOTICE };
+  if (input.host === "wsl")
+    return { kind: "reject", message: TERMINAL_PASTE_WSL_UNAVAILABLE_MESSAGE };
   const items: TerminalPasteItem[] = [];
   for (const entry of input.dropped) {
     if (entry.origin === "internal") {
-      if (isAbsoluteTerminalPath(entry.path)) items.push({ kind: "path", path: entry.path });
+      if (isAbsolutePath(entry.path)) items.push({ kind: "path", path: entry.path });
     } else items.push(itemFor({ file: entry.file, nativePath: entry.path }, input.host));
   }
   return items.length > 0
     ? { kind: "deliver", items }
     : { kind: "reject", message: "Only files with a full path can be dropped here." };
-}
-
-export function formatPasteBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
 }
 
 /** Standard base64 for one upload chunk, built in slices to stay under argument limits. */

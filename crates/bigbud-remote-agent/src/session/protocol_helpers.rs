@@ -343,6 +343,8 @@ pub(super) fn workspace_error_code(error: &WorkspaceError) -> &'static str {
         WorkspaceError::DirectoryLimitExceeded => "DIRECTORY_LIMIT_EXCEEDED",
         WorkspaceError::WriteLimitExceeded => "WRITE_LIMIT_EXCEEDED",
         WorkspaceError::WriteConflict { .. } => "WRITE_CONFLICT",
+        WorkspaceError::AlreadyExists => "ALREADY_EXISTS",
+        WorkspaceError::ConditionalCreate => "INVALID_ARGUMENT",
         WorkspaceError::EmptySearchQuery => "EMPTY_SEARCH_QUERY",
         WorkspaceError::SearchLimitExceeded => "SEARCH_LIMIT_EXCEEDED",
         WorkspaceError::Io(_) => "IO_ERROR",

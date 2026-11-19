@@ -122,16 +122,24 @@ describe("terminal paste staging (local)", () => {
   });
 
   it("rejects oversized files before any upload", async () => {
-    const test = harness({ maxFileBytes: 10 });
-    const code = await test.failCode({
-      op: "begin",
-      threadId: "thread-1",
-      terminalId: "default",
-      fileName: "big.png",
-      mimeType: "image/png",
-      byteLength: 11,
+    const test = harness({ maxFileBytes: 10 * 1024 * 1024 });
+    const error = await Effect.runPromise(
+      Effect.flip(
+        test.staging.stage({
+          op: "begin",
+          threadId: "thread-1",
+          terminalId: "default",
+          fileName: "big.png",
+          mimeType: "image/png",
+          byteLength: 10.5 * 1024 * 1024,
+        }),
+      ),
+    );
+    expect(error).toMatchObject({
+      code: "tooLarge",
+      detail:
+        "big.png is 10.50 MiB; the paste limit is 10.00 MiB. Change it in Settings › Terminal.",
     });
-    expect(code).toBe("tooLarge");
   });
 
   it("rejects a stale generation at begin and a restart before commit", async () => {

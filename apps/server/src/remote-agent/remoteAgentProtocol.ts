@@ -192,6 +192,8 @@ export interface RemoteAgentWriteFileRequest {
   readonly path: string;
   readonly bytes: Uint8Array;
   readonly expectedSha256: string;
+  /** Exclusive create; only for agents advertising `workspace.write-create-only`. */
+  readonly createOnly: boolean;
 }
 
 export interface RemoteAgentWriteFileResponse {

@@ -31,6 +31,7 @@ impl AgentSession {
                     ("workspace.files", 1),
                     ("workspace.search", 1),
                     ("workspace.write", 1),
+                    ("workspace.write-create-only", 1),
                     ("workspace.watch", 1),
                     ("process.run", 1),
                     ("process.attach", 1),

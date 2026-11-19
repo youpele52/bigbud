@@ -1,10 +1,5 @@
 import { type TerminalDropPathMode } from "@bigbud/contracts";
 
-/** Absolute on POSIX or Windows (drive or UNC). Relative, `~` and bare names never qualify. */
-export function isAbsoluteTerminalPath(path: string): boolean {
-  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
-}
-
 function quotePosixPath(path: string): string {
   if (path.length === 0) {
     return "''";

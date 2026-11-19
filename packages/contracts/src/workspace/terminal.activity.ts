@@ -9,6 +9,10 @@ export const TERMINAL_FINISHED_MIN_DURATION_MS = 60_000;
 export const TERMINAL_ACTIVITY_COALESCE_MS = 60_000;
 /** SIGINT exit status: a Ctrl-C stop never raises attention (decision 7). */
 export const TERMINAL_STOPPED_EXIT_CODE = 130;
+/** A client's terminal view stops counting this long after its last report. */
+export const TERMINAL_VIEW_LEASE_MS = 120_000;
+/** Clients re-report what they view this often, well inside the view lease. */
+export const TERMINAL_VIEW_REFRESH_MS = 45_000;
 /** Exact TUI completion marker written by terminal agent hooks. */
 export const TERMINAL_AGENT_DONE_MARKER = "\u001b]777;bigbud;done\u0007";
 

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import {
+  TERMINAL_PASTE_WSL_UNAVAILABLE_MESSAGE,
   TerminalPasteStageError,
   type TerminalPasteHost,
   type TerminalPasteStageResult,
@@ -69,8 +70,7 @@ export const resolvePasteTarget = Effect.fn("terminal.pasteStaging.target")(func
   if (isWslTerminalTargetId(target))
     return yield* new TerminalPasteStageError({
       code: "unsupportedTarget",
-      detail:
-        "Pasting files is unavailable for WSL terminals. Enter a path inside the distro instead.",
+      detail: TERMINAL_PASTE_WSL_UNAVAILABLE_MESSAGE,
     });
   if (isLocalExecutionTarget(target)) {
     return {

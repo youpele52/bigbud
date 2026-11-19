@@ -1,7 +1,8 @@
-import type { TerminalViewInput } from "@bigbud/contracts/workspace/terminal.activity.ts";
+import {
+  TERMINAL_VIEW_LEASE_MS,
+  type TerminalViewInput,
+} from "@bigbud/contracts/workspace/terminal.activity.ts";
 
-/** Clients refresh every 45 s while viewing; a silent client stops counting after this lease. */
-export const TERMINAL_VIEW_LEASE_MS = 120_000;
 const MAX_CALLERS = 10_000;
 
 interface TerminalView {

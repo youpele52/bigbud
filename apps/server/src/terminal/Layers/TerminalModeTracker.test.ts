@@ -88,6 +88,17 @@ describe("terminal mode tracker", () => {
     ]);
   });
 
+  it("re-asserts kitty paste-event mode (5522) for a reattaching view", async () => {
+    const modes = await compare(["\x1b[?2004;5522h", "frame"]);
+    expect(modes.sequence).toContain("\x1b[?5522h");
+    const tracker = new TerminalModeTracker();
+    tracker.receive("\x1b[?5522h\x1b[!p\x1bc");
+    // The renderer keeps this mode across resets; only the program turns it off.
+    expect(tracker.snapshot().sequence).toContain("\x1b[?5522h");
+    tracker.receive("\x1b[?5522l");
+    expect(tracker.snapshot().sequence).toContain("\x1b[?5522l");
+  });
+
   it("re-opens a control sequence split at the snapshot cut", async () => {
     const tracker = new TerminalModeTracker();
     tracker.receive("\x1b[?20");

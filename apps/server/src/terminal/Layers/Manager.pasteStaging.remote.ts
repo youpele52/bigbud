@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import { TerminalPasteStageError } from "@bigbud/contracts/workspace/terminal.paste.ts";
+import { isAbsolutePath } from "@bigbud/shared/path";
 import { REMOTE_AGENT_PASTE_STAGING_CAPABILITY } from "../../remote-agent/remoteAgentProtocol.pasteStaging.ts";
 import {
   beginRemoteAgentPasteUpload,
@@ -10,7 +11,6 @@ import type { RemoteAgentConnection } from "../../remote-agent/remoteAgentConnec
 import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import type { PtyAdapterShape } from "../Services/PTY.ts";
 import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
-import { isAbsolutePastePath } from "./Manager.pasteStaging.names.ts";
 import type {
   PasteClipboardOutcome,
   RemotePasteAgent,
@@ -63,7 +63,7 @@ export function makeRemotePasteAgent(
           commit: (sha256) =>
             rethrow(host, async () => {
               const committed = await upload.commit(sha256);
-              if (!isAbsolutePastePath(committed.path))
+              if (!isAbsolutePath(committed.path))
                 throw new RemoteAgentPasteStagingError("IO", "the agent returned a relative path");
               return { path: committed.path, clipboard: clipboardOutcome(committed.clipboard) };
             }),

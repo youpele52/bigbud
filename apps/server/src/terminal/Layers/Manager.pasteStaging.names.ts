@@ -63,8 +63,3 @@ export function randomPasteBaseName(): string {
 export function randomPasteUploadId(): string {
   return randomBytes(16).toString("hex");
 }
-
-/** Absolute on POSIX or Windows (drive or UNC); never relative and never `~`-prefixed. */
-export function isAbsolutePastePath(path: string): boolean {
-  return path.startsWith("/") || /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
-}

@@ -137,6 +137,48 @@ fn rejects_stale_expected_hash_without_replacing_file() {
 }
 
 #[test]
+fn creates_exclusively_with_parents_and_never_replaces() {
+    let root = TestRoot::new();
+    let workspace = WorkspaceRoot::open(&root.0).unwrap();
+    assert_eq!(workspace.create_file("nested/new.json", b"{}").unwrap(), 2);
+    assert_eq!(fs::read(root.0.join("nested/new.json")).unwrap(), b"{}");
+    assert!(matches!(
+        workspace.create_file("nested/new.json", b"replaced"),
+        Err(WorkspaceError::AlreadyExists)
+    ));
+    assert_eq!(fs::read(root.0.join("nested/new.json")).unwrap(), b"{}");
+    assert!(matches!(
+        workspace.create_file("large.bin", &vec![0; MAX_WRITE_BYTES + 1]),
+        Err(WorkspaceError::WriteLimitExceeded)
+    ));
+    assert!(matches!(
+        workspace.create_file("../escape.txt", b"x"),
+        Err(WorkspaceError::InvalidPath(_))
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn create_refuses_symlinked_targets_and_parents() {
+    let root = TestRoot::new();
+    let outside = TestRoot::new();
+    let workspace = WorkspaceRoot::open(&root.0).unwrap();
+    // A dangling link must not create its target outside the workspace.
+    std::os::unix::fs::symlink(outside.0.join("target.txt"), root.0.join("link.txt")).unwrap();
+    assert!(matches!(
+        workspace.create_file("link.txt", b"x"),
+        Err(WorkspaceError::AlreadyExists)
+    ));
+    assert!(!outside.0.join("target.txt").exists());
+    std::os::unix::fs::symlink(&outside.0, root.0.join("dir")).unwrap();
+    assert!(matches!(
+        workspace.create_file("dir/secret.txt", b"x"),
+        Err(WorkspaceError::SymlinkComponent)
+    ));
+    assert!(!outside.0.join("secret.txt").exists());
+}
+
+#[test]
 fn rejects_lexical_traversal_and_symlink_escape() {
     let root = TestRoot::new();
     fs::write(root.0.join("file.txt"), "safe").unwrap();

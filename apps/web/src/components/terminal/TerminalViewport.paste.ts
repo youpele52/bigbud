@@ -4,13 +4,13 @@ import {
   TERMINAL_PASTE_MAX_FILE_MB,
   terminalPasteMaxFileBytes,
 } from "@bigbud/contracts/core/settings.terminalPaste.ts";
+import { formatBytes } from "@bigbud/shared/bytes";
 import { readTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { getServerConfig } from "../../rpc/serverState";
 import { desktopAttachmentPath } from "../chat/view/ChatView.attachments.logic";
 import { toastManager } from "../ui/toast.manager";
 import { formatTerminalPathPastes } from "./TerminalViewport.paths";
 import {
-  formatPasteBytes,
   planTerminalPaste,
   terminalPasteHostKind,
   type TerminalPastePlan,
@@ -67,7 +67,7 @@ export function attachTerminalPaste(options: AttachTerminalPasteOptions): () => 
   const launch = () => readTerminalLaunch(threadId, terminalId);
 
   const stage = async (file: File): Promise<string | null> => {
-    const size = formatPasteBytes(file.size);
+    const size = formatBytes(file.size);
     const limit = maxPasteBytes();
     if (file.size === 0 || file.size > limit) {
       toastManager.add({
@@ -76,7 +76,7 @@ export function attachTerminalPaste(options: AttachTerminalPasteOptions): () => 
         description:
           file.size === 0
             ? "The file is empty."
-            : `It is ${size}; the paste limit is ${formatPasteBytes(limit)}. Change it in Settings › Terminal.`,
+            : `It is ${size}; the paste limit is ${formatBytes(limit)}. Change it in Settings › Terminal.`,
       });
       return null;
     }

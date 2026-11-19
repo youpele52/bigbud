@@ -75,6 +75,9 @@ mod test_helpers;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "workspace_write.tests.rs"]
+mod workspace_write_tests;
 
 use journal_restore::restore_process_journal;
 pub use protocol_helpers::protocol_error_frame;

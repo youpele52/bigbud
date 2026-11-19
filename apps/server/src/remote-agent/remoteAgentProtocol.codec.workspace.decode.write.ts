@@ -13,6 +13,7 @@ export function decodeWriteFileRequest(bytes: Uint8Array): RemoteAgentWriteFileR
     path: "",
     bytes: new Uint8Array() as Uint8Array<ArrayBufferLike>,
     expectedSha256: "",
+    createOnly: false,
   };
   decodeMessage(bytes, (field, wireType, reader) => {
     switch (field) {
@@ -43,6 +44,10 @@ export function decodeWriteFileRequest(bytes: Uint8Array): RemoteAgentWriteFileR
       case 7:
         requireWireType(wireType, 2);
         value.expectedSha256 = reader.string();
+        break;
+      case 8:
+        requireWireType(wireType, 0);
+        value.createOnly = reader.uint() !== 0;
         break;
       default:
         reader.skip(wireType);

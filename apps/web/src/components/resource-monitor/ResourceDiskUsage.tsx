@@ -1,8 +1,9 @@
+import { formatBytes } from "@bigbud/shared/bytes";
 import { useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import { ChartTooltipContent } from "../ui/chart";
-import { formatBytes, formatPercent } from "./resourceMonitor.format";
+import { formatPercent } from "./resourceMonitor.format";
 
 export interface DiskUsage {
   totalBytes: number;

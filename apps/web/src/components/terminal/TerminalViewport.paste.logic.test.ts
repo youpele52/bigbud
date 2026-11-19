@@ -1,10 +1,10 @@
+import { TERMINAL_PASTE_WSL_UNAVAILABLE_MESSAGE } from "@bigbud/contracts/workspace/terminal.paste.ts";
 import { describe, expect, it } from "vitest";
 import {
   bytesToBase64,
   planTerminalDrop,
   planTerminalPaste,
   terminalPasteHostKind,
-  WSL_PASTE_NOTICE,
 } from "./TerminalViewport.paste.logic";
 
 const image = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], "image.png", {
@@ -80,7 +80,7 @@ describe("terminal paste classification", () => {
     });
     expect(planTerminalPaste({ text: "", files, host: "wsl" })).toEqual({
       kind: "reject",
-      message: WSL_PASTE_NOTICE,
+      message: TERMINAL_PASTE_WSL_UNAVAILABLE_MESSAGE,
     });
   });
 

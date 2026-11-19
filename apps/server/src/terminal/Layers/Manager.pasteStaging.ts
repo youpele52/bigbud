@@ -9,12 +9,10 @@ import {
   type TerminalPasteStageResult,
 } from "@bigbud/contracts/workspace/terminal.paste.ts";
 import { DEFAULT_TERMINAL_ID } from "@bigbud/contracts/workspace/terminal.ts";
+import { formatBytes } from "@bigbud/shared/bytes";
+import { isAbsolutePath } from "@bigbud/shared/path";
 import type { TerminalManagerShape } from "../Services/Manager";
-import {
-  classifyPasteFile,
-  isAbsolutePastePath,
-  randomPasteUploadId,
-} from "./Manager.pasteStaging.names.ts";
+import { classifyPasteFile, randomPasteUploadId } from "./Manager.pasteStaging.names.ts";
 import type { LocalPasteStore } from "./Manager.pasteStaging.local.ts";
 import {
   resolvePasteTarget,
@@ -55,7 +53,6 @@ const fail = (code: TerminalPasteStageError["code"], detail: string) =>
   new TerminalPasteStageError({ code, detail });
 const terminalKey = (threadId: string, terminalId: string) =>
   JSON.stringify([threadId, terminalId]);
-const megabytes = (bytes: number) => `${Math.round((bytes / (1024 * 1024)) * 10) / 10} MB`;
 
 /**
  * Server-authoritative paste staging. The machine, generation and liveness come from the terminal
@@ -122,7 +119,7 @@ export function makeTerminalPasteStaging(options: TerminalPasteStagingOptions) {
     if (input.byteLength > maxBytes)
       return yield* fail(
         "tooLarge",
-        `${input.fileName || "This file"} is ${megabytes(input.byteLength)}; the paste limit is ${megabytes(maxBytes)}. Change it in Settings › Terminal.`,
+        `${input.fileName || "This file"} is ${formatBytes(input.byteLength)}; the paste limit is ${formatBytes(maxBytes)}. Change it in Settings › Terminal.`,
       );
     const snapshot = yield* currentSession(input.threadId, terminalId, input.expectedGeneration);
     const target = yield* resolvePasteTarget({
@@ -224,7 +221,7 @@ export function makeTerminalPasteStaging(options: TerminalPasteStagingOptions) {
           upload.sink!.commit(digest),
         );
         uploads.delete(input.uploadId);
-        if (!isAbsolutePastePath(committed.path))
+        if (!isAbsolutePath(committed.path))
           return yield* fail("storageFailed", "The staged file path is not absolute.");
         const key = terminalKey(upload.threadId, upload.terminalId);
         staged.set(key, [

@@ -4,6 +4,9 @@ import { DEFAULT_TERMINAL_ID } from "../constants/terminal.constant";
 
 /** Bytes per `chunk` call before base64; well under the WebSocket and agent frame limits. */
 export const TERMINAL_PASTE_CHUNK_BYTES = 256 * 1024;
+/** Shown when a file is pasted or dropped on a WSL terminal, which has no staging path. */
+export const TERMINAL_PASTE_WSL_UNAVAILABLE_MESSAGE =
+  "Pasting files is unavailable for WSL terminals. Enter a path inside the selected distro instead.";
 const TERMINAL_PASTE_CHUNK_BASE64_MAX = Math.ceil(TERMINAL_PASTE_CHUNK_BYTES / 3) * 4;
 
 const UploadId = Schema.String.check(Schema.isPattern(/^[a-z0-9]{16,64}$/));

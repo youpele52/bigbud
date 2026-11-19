@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { TERMINAL_VIEW_LEASE_MS, TerminalViewRegistry } from "./terminalViewRegistry.ts";
+import { TERMINAL_VIEW_LEASE_MS } from "@bigbud/contracts/workspace/terminal.activity.ts";
+import { TerminalViewRegistry } from "./terminalViewRegistry.ts";
 
 describe("TerminalViewRegistry", () => {
   it("reports a newly opened thread once and every viewed pane", () => {

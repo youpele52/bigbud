@@ -1,13 +1,11 @@
 import type { ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
+import { TERMINAL_VIEW_REFRESH_MS } from "@bigbud/contracts/workspace/terminal.activity.ts";
 import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { visibleTerminalIds } from "../logic/terminal/terminalView.logic";
 import { readNativeApi } from "../rpc/nativeApi";
 import { useTerminalStateStore } from "../stores/terminal";
 import { useTerminalPanelStore } from "../stores/terminal/terminalPanel.store";
-
-/** Clients refresh before the server's 2-minute view lease ends. */
-const REFRESH_MS = 45_000;
 
 /**
  * Tells the server which thread and panes this window shows, so finished work in a viewed pane
@@ -41,7 +39,7 @@ export function useTerminalViewReport(threadId: ThreadId) {
     report();
     const timer = setInterval(() => {
       if (visible()) send(true);
-    }, REFRESH_MS);
+    }, TERMINAL_VIEW_REFRESH_MS);
     document.addEventListener("visibilitychange", report);
     window.addEventListener("focus", report);
     window.addEventListener("blur", report);

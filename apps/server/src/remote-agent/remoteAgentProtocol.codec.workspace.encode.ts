@@ -154,6 +154,7 @@ function encodeWriteFileRequest(value: RemoteAgentWriteFileRequest): Uint8Array 
   writer.fieldString(5, value.path);
   writer.fieldBytes(6, value.bytes);
   writer.fieldString(7, value.expectedSha256);
+  writer.fieldBool(8, value.createOnly);
   return writer.finish();
 }
 

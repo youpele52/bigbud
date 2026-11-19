@@ -5,6 +5,7 @@ import type { TerminalPasteStageInput } from "@bigbud/contracts/workspace/termin
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bindTerminalLaunch, forgetTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { DEFAULT_BINDINGS } from "../../models/keybindings/keybindings.models.test.helpers";
+import { toastManager } from "../ui/toast.manager";
 import { attachTerminalViewportInput } from "./TerminalViewport.input";
 import { terminalFileDelivery } from "./TerminalViewport.paste";
 
@@ -135,6 +136,28 @@ describe("terminal paste of images and files", () => {
       await expect.poll(f.written).toBe("\x1b[200~hello\x1b[201~");
       expect(f.staged).toEqual([]);
     } finally {
+      f.dispose();
+    }
+  });
+
+  it("refuses a file over the paste limit with binary-unit sizes, before uploading", async () => {
+    const add = vi.spyOn(toastManager, "add");
+    const f = fixture();
+    try {
+      const data = new DataTransfer();
+      data.items.add(
+        new File([new Uint8Array(21 * 1024 * 1024)], "big.png", { type: "image/png" }),
+      );
+      f.paste(data);
+      await expect.poll(() => add.mock.calls.length).toBe(1);
+      expect(add.mock.calls[0]?.[0]).toMatchObject({
+        type: "error",
+        description:
+          "It is 21.00 MiB; the paste limit is 20.00 MiB. Change it in Settings › Terminal.",
+      });
+      expect(f.staged).toEqual([]);
+    } finally {
+      add.mockRestore();
       f.dispose();
     }
   });

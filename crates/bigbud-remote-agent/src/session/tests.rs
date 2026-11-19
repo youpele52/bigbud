@@ -212,6 +212,7 @@ fn opens_a_root_and_reads_through_the_bounded_workspace_protocol() {
                 path: "nested/updated.txt".to_owned(),
                 bytes: b"updated".to_vec(),
                 expected_sha256: String::new(),
+                create_only: false,
             })),
         })
         .unwrap();
