@@ -63,10 +63,63 @@ export interface RemoteAgentWorkspaceSearchCompleted {
   readonly batches: number;
 }
 
+/** "This computer" search (frames 77-79), only on the desktop-embedded local agent. */
+export const REMOTE_AGENT_OS_INDEX_CAPABILITY = "os-index.search";
+/** `OsIndexScopeLevel` wire values; File Access `none` never reaches the agent. */
+export const REMOTE_AGENT_OS_INDEX_SCOPE = { commonFolders: 1, unrestricted: 2 } as const;
+
+export interface RemoteAgentOsIndexSearchRequest {
+  readonly requestId: string;
+  readonly operationId: string;
+  readonly query: string;
+  readonly scopeLevel: (typeof REMOTE_AGENT_OS_INDEX_SCOPE)[keyof typeof REMOTE_AGENT_OS_INDEX_SCOPE];
+  readonly maxResults: number;
+  readonly deadlineMs: number;
+}
+
+export interface RemoteAgentOsIndexSearchHit {
+  /** Absolute path. */
+  readonly path: string;
+  readonly isDirectory: boolean;
+  readonly contentType: string;
+  readonly sizeBytes: number;
+  readonly modifiedUnixMs: number;
+  readonly lastUsedUnixMs: number;
+  readonly score: number;
+}
+
+export interface RemoteAgentOsIndexSearchBatch {
+  readonly requestId: string;
+  readonly operationId: string;
+  readonly sequence: number;
+  readonly hits: ReadonlyArray<RemoteAgentOsIndexSearchHit>;
+}
+
+export interface RemoteAgentOsIndexSearchCompleted {
+  readonly requestId: string;
+  readonly operationId: string;
+  readonly stopReason: string;
+  readonly truncated: boolean;
+  /** `spotlight`, or empty where no OS index is supported. */
+  readonly source: string;
+  /** `ready` or `unavailable`. */
+  readonly availability: string;
+  readonly excluded: number;
+  readonly errorCode: string;
+  readonly errorMessage: string;
+  readonly batches: number;
+}
+
 export type RemoteAgentSearchFrame =
   | { readonly type: "workspaceSearchRequest"; readonly value: RemoteAgentWorkspaceSearchRequest }
   | { readonly type: "workspaceSearchBatch"; readonly value: RemoteAgentWorkspaceSearchBatch }
   | {
       readonly type: "workspaceSearchCompleted";
       readonly value: RemoteAgentWorkspaceSearchCompleted;
+    }
+  | { readonly type: "osIndexSearchRequest"; readonly value: RemoteAgentOsIndexSearchRequest }
+  | { readonly type: "osIndexSearchBatch"; readonly value: RemoteAgentOsIndexSearchBatch }
+  | {
+      readonly type: "osIndexSearchCompleted";
+      readonly value: RemoteAgentOsIndexSearchCompleted;
     };

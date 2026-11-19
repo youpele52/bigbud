@@ -6,7 +6,6 @@ import { cn } from "~/lib/utils";
 import { useRemoteExecutionAccessGate } from "~/hooks/useRemoteExecutionAccessGate";
 import { isRemoteExecutionTargetId } from "~/components/sidebar/Sidebar.remoteWorkspaces.logic";
 import { useStore } from "../../stores/main";
-import { openPathFromChat } from "../../stores/files/filesPanel.open";
 import { useSearchStore, useUiStateStore } from "../../stores/ui";
 import { acknowledgeThreadOpen } from "../../lib/threadOrganizationAcknowledge";
 import {
@@ -17,7 +16,6 @@ import {
   CommandList,
   CommandPanel,
 } from "../ui/command";
-import { joinWorkspaceEntryPath } from "../files/filesPanel.dnd";
 import type { FileSearchResult } from "./SearchPalette.results";
 import type { ProjectSearchResult } from "./SearchPalette.projectResults";
 import { useSectionVisibility } from "./SearchPalette.visibility";
@@ -26,6 +24,8 @@ import {
   revealTerminalSearchResult,
   type TerminalSearchResult,
 } from "./SearchPalette.terminalResults.logic";
+import { openSearchResult, renderSearchResultActions } from "./SearchPalette.open";
+import { SearchPaletteThisComputerHint } from "./SearchPalette.thisComputerHint";
 import { SearchPaletteTierSections } from "./SearchPalette.tierSections";
 
 interface SearchPaletteDialogContentProps {
@@ -51,7 +51,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   }, [open]);
 
   const sources = useSearchPaletteSources({ open, query, activeThreadId });
-  const { workspaceRoot, debouncedMessageQuery, conversationSearch } = sources;
+  const { debouncedMessageQuery, conversationSearch } = sources;
   const visibility = useSectionVisibility(
     `${open}:${sources.debouncedQuery}`,
     INITIAL_VISIBLE_RESULT_COUNT,
@@ -81,16 +81,8 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   };
 
   const handleSelectFile = (result: FileSearchResult) => {
-    if (!workspaceRoot) {
-      return;
-    }
     setOpen(false);
-    void openPathFromChat(
-      `${joinWorkspaceEntryPath(workspaceRoot, result.path)}:${result.line}${
-        result.column ? `:${result.column}` : ""
-      }`,
-      workspaceRoot,
-    ).catch((error) => {
+    void openSearchResult(result).catch((error) => {
       console.error("Failed to open file:", error);
     });
   };
@@ -167,6 +159,14 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
                       tiers={sources.tiers}
                       pending={sources.pending}
                       messageSearchStatus={sources.messageSearchStatus}
+                      systemNotices={sources.systemNotices}
+                      renderFileActions={renderSearchResultActions}
+                      thisComputerHint={
+                        <SearchPaletteThisComputerHint
+                          query={sources.debouncedQuery}
+                          onNavigate={() => setOpen(false)}
+                        />
+                      }
                       currentFile={{
                         path: sources.activeFileSearchContext?.path ?? null,
                         matches: sources.currentFileMatches,

@@ -23,6 +23,7 @@ import { ThreadRetentionPolicy } from "./settings.threadRetention";
 import { InyosiraIdleSettingsFields } from "./settings.inyosira";
 import { TerminalActivitySettingsFields } from "./settings.terminalActivity";
 import { TerminalPasteSettingsFields } from "./settings.terminalPaste";
+import { FileAccessPermissionLevel, SearchSettingsFields } from "./settings.search";
 import { MuseSettings } from "./settings.muse";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
@@ -148,11 +149,9 @@ export const ClientSettingsSchema = Schema.Struct({
   enableSystemTaskCompletionNotifications: Schema.Boolean.pipe(
     Schema.withDecodingDefault(() => true),
   ),
-  fileAccessPermissionLevel: Schema.Literals([
-    "none",
-    "common-folders",
-    "unrestricted",
-  ] as const).pipe(Schema.withDecodingDefault(() => "none")),
+  fileAccessPermissionLevel: FileAccessPermissionLevel.pipe(
+    Schema.withDecodingDefault(() => "none" as const),
+  ),
   hasSeenFileAccessPrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
@@ -313,6 +312,7 @@ export const ServerSettings = Schema.Struct({
   ...InyosiraIdleSettingsFields,
   ...TerminalActivitySettingsFields,
   ...TerminalPasteSettingsFields,
+  ...SearchSettingsFields,
 });
 export type ServerSettings = typeof ServerSettings.Type;
 

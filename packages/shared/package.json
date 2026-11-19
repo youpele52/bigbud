@@ -215,6 +215,10 @@
       "types": "./src/path.ts",
       "import": "./src/path.ts"
     },
+    "./search/osIndexExclusions": {
+      "types": "./src/search/osIndexExclusions.ts",
+      "import": "./src/search/osIndexExclusions.ts"
+    },
     "./systemOpenPath": {
       "types": "./src/systemOpenPath.ts",
       "import": "./src/systemOpenPath.ts"

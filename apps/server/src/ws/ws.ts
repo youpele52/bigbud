@@ -27,6 +27,7 @@ import { makeWsRpcCopilotRuntimeHandlers } from "./wsRpcHandlers.copilotRuntime.
 import { makeWsRpcPeerPairingHandlers } from "./wsRpcHandlers.peerPairing.ts";
 import { makeWsRpcDatabaseCompactionHandlers } from "./wsRpcHandlers.databaseCompaction.ts";
 import { makeWsRpcMetadataWarningHandlers } from "./wsRpcHandlers.metadataWarnings.ts";
+import { makeWsRpcSearchHandlers } from "./wsRpcHandlers.search.ts";
 import { makeWsRpcRemoteBackendDeploymentHandlers } from "./wsRpcHandlers.remoteBackendDeployment.ts";
 import { makeWsRpcRemoteBackendUpdateHandlers } from "./wsRpcHandlers.remoteBackendUpdate.ts";
 import { makeRuntimeUpdateSetupAuthority } from "../remote-backend/runtimeUpdate.authority.ts";
@@ -57,6 +58,7 @@ const makeWsRpcLayer = (
       const computerUseHandlers = yield* makeWsRpcComputerUseHandlers(context);
       const databaseCompactionHandlers = yield* makeWsRpcDatabaseCompactionHandlers;
       const metadataWarningHandlers = yield* makeWsRpcMetadataWarningHandlers;
+      const searchHandlers = yield* makeWsRpcSearchHandlers;
       const deploymentHandlers = yield* makeWsRpcRemoteBackendDeploymentHandlers();
       const runtimeUpdateHandlers = yield* makeWsRpcRemoteBackendUpdateHandlers();
 
@@ -83,6 +85,7 @@ const makeWsRpcLayer = (
         ...computerUseHandlers,
         ...databaseCompactionHandlers,
         ...metadataWarningHandlers,
+        ...searchHandlers,
       });
     }),
   );

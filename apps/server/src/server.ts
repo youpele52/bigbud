@@ -71,6 +71,7 @@ import { DiscoveryRegistryLive } from "./provider/Layers/DiscoveryRegistry";
 import { ServerSettingsLive } from "./ws/serverSettings";
 import { ProjectFaviconResolverLive } from "./project/Layers/ProjectFaviconResolver";
 import { makeConfiguredRemoteAgentLayers } from "./remote-agent/remoteAgentServerLayer.ts";
+import { SystemSearchLive } from "./search/Layers/SystemSearchLive.ts";
 import { RemoteAgentLocalControlLive } from "./remote-agent/remoteAgentLocalControl.layer.ts";
 import { RemoteBackendDeploymentLive } from "./remote-backend/Layers/RemoteBackendDeployment.ts";
 import { ObservabilityLive } from "./observability/Layers/Observability";
@@ -247,7 +248,7 @@ const DirectResourceCleanupLayerLive = DirectResourceCleanupRecoveryLive.pipe(
 );
 
 const RuntimeDependenciesLive = ReactorLayerLive.pipe(
-  Layer.provideMerge(BackgroundMaintenanceLayerLive),
+  Layer.provideMerge(Layer.mergeAll(BackgroundMaintenanceLayerLive, SystemSearchLive)),
   // Core Services
   Layer.provideMerge(Layer.mergeAll(RemoteAgentLayerLive, CheckpointingLayerLive)),
   Layer.provideMerge(GitLayerLive),

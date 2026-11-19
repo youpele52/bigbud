@@ -1,11 +1,12 @@
-use super::request::{MAX_OS_INDEX_QUERY_CHARS, MAX_OS_INDEX_SCOPES};
+use super::request::MAX_OS_INDEX_SCOPES;
+use crate::search::MAX_SEARCH_QUERY_CHARS;
 
 /// Why an OS-index search could not run. Messages never include the query or any path.
 #[derive(Debug, Clone, Copy, thiserror::Error, PartialEq, Eq)]
 pub enum OsIndexError {
     #[error("os index search query cannot be empty")]
     EmptyQuery,
-    #[error("os index search query is longer than {MAX_OS_INDEX_QUERY_CHARS} characters")]
+    #[error("os index search query is longer than {MAX_SEARCH_QUERY_CHARS} characters")]
     QueryTooLong,
     #[error("os index search query contains a control character")]
     ControlCharacter,

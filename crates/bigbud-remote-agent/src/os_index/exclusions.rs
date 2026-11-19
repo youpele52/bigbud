@@ -1,6 +1,7 @@
 //! Default "this computer" exclusions (system-wide search plan, §8). Matching results are dropped
-//! inside the agent, before they can cross the protocol. The data lives in `exclusions.json`, so it
-//! can move to `packages/shared` and be shared with TypeScript without changing this matcher.
+//! inside the agent, before they can cross the protocol. The data lives in
+//! `packages/shared/src/search/osIndexExclusions.json`, shared with the TypeScript matcher that
+//! guards system-open of paths outside projects.
 //!
 //! Matching is ASCII case-insensitive (macOS volumes are case-insensitive by default) and fails
 //! closed: a name pattern excludes the whole subtree of a matching folder, not only files.
@@ -13,7 +14,8 @@ use serde_json::Value;
 
 use super::error::OsIndexError;
 
-const EMBEDDED_EXCLUSIONS: &str = include_str!("exclusions.json");
+const EMBEDDED_EXCLUSIONS: &str =
+    include_str!("../../../../packages/shared/src/search/osIndexExclusions.json");
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Exclusions {

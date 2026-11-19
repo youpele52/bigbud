@@ -22,6 +22,8 @@ mod hello;
 mod journal_restore;
 #[path = "operation_handlers.rs"]
 mod operation_handlers;
+#[path = "os_index_search.rs"]
+mod os_index_search;
 #[path = "paste_staging.rs"]
 mod paste_staging;
 #[path = "process_attach.rs"]
@@ -63,6 +65,9 @@ mod accepted_operations_tests;
 #[path = "journal_restore.tests.rs"]
 mod journal_restore_tests;
 #[cfg(test)]
+#[path = "os_index_search.tests.rs"]
+mod os_index_search_tests;
+#[cfg(test)]
 #[path = "paste_staging.tests.rs"]
 mod paste_staging_tests;
 #[cfg(test)]
@@ -82,6 +87,7 @@ mod tests;
 mod workspace_write_tests;
 
 use journal_restore::restore_process_journal;
+pub use os_index_search::PreparedOsIndexSearch;
 pub use protocol_helpers::protocol_error_frame;
 use protocol_helpers::{
     operation_error, process_attach_response_frame, process_completed_frame, process_environment,
@@ -156,6 +162,9 @@ pub struct AgentSession {
     agent_epoch: String,
     paste_staging: Option<crate::paste_staging::PasteStore>,
     search_registry: crate::search::SearchRegistry,
+    /// Separate slots so "this computer" never waits behind project searches.
+    os_index_registry: crate::search::SearchRegistry,
+    os_index: bool,
     #[cfg(unix)]
     managed_service_lease: Option<Arc<crate::service_lease::Bridge>>,
 }
@@ -237,6 +246,8 @@ impl AgentSession {
             agent_epoch: epoch,
             paste_staging: None,
             search_registry: crate::search::SearchRegistry::default(),
+            os_index_registry: crate::search::SearchRegistry::default(),
+            os_index: false,
             #[cfg(unix)]
             managed_service_lease: None,
         }
@@ -298,6 +309,9 @@ impl AgentSession {
             }
             Some(v1::frame::Payload::ContentSearchRequest(request)) if self.ready => {
                 self.handle_content_search(request)
+            }
+            Some(v1::frame::Payload::OsIndexSearchRequest(request)) if self.ready => {
+                Ok(self.refuse_os_index_search(&request))
             }
             Some(v1::frame::Payload::WriteFileRequest(request)) if self.ready => {
                 self.handle_write_file(request)

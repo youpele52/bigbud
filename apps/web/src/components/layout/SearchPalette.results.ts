@@ -1,6 +1,5 @@
-import { type MessageId, type ProjectFileContentMatch, type ThreadId } from "@bigbud/contracts";
-
-import { searchResultId } from "./SearchPalette.tiers.logic";
+import type { MessageId, ThreadId } from "@bigbud/contracts";
+import type { SystemSearchHit } from "@bigbud/contracts/search/systemSearch.ts";
 
 export interface ThreadSearchResult {
   id: string;
@@ -23,39 +22,13 @@ export interface MessageSearchResult {
   type: "message";
 }
 
-export interface FileSearchResult {
-  id: string;
-  path: string;
-  line: number;
-  column: number | null;
-  lineText: string;
-  type: "file";
-}
+/** A file or folder row from `search.query` (T2, T4, T5, T6); `id` is the stable row ID. */
+export type FileSearchResult = SystemSearchHit;
 
 export function getThreadItemValue(result: ThreadSearchResult): string {
   return `${result.title} ${result.projectName} ${result.matchedMessageText}`.toLowerCase();
 }
 
 export function getFileItemValue(result: FileSearchResult): string {
-  return `${result.path} ${result.lineText}`.toLowerCase();
-}
-
-export function toFileSearchResults(
-  matches: readonly ProjectFileContentMatch[],
-): FileSearchResult[] {
-  return matches.map((match) => ({
-    // Column keeps two matches on one line distinct.
-    id: `${searchResultId({
-      tier: "currentProject",
-      source: "content",
-      target: "workspace",
-      path: match.path,
-      line: match.line,
-    })}:${match.column ?? 0}`,
-    path: match.path,
-    line: match.line,
-    column: match.column ?? null,
-    lineText: match.lineText,
-    type: "file",
-  }));
+  return result.id;
 }

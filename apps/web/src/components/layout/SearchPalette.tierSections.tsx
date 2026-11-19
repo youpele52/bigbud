@@ -14,6 +14,8 @@ import type { FileSearchResult } from "./SearchPalette.results";
 import type { SectionVisibility } from "./SearchPalette.visibility";
 import { TerminalSearchResultGroup } from "./SearchPalette.terminalResults";
 import type { TerminalSearchResult } from "./SearchPalette.terminalResults.logic";
+import { SearchPaletteSystemSections } from "./SearchPalette.systemSections";
+import type { SystemSearchNotice } from "./SearchPalette.systemSearch.logic";
 import { ThreadSearchResultGroup } from "./SearchPalette.threadResults";
 import { describeSearchTiers, type SearchPaletteTiers } from "./SearchPalette.tiers.logic";
 
@@ -32,6 +34,10 @@ export interface SearchPaletteTierSectionsProps {
   tiers: SearchPaletteTiers;
   pending: SearchPalettePendingState;
   messageSearchStatus?: "ready" | "stale" | "unavailable" | undefined;
+  /** Partial or unavailable `search.query` sources (not connected, agent update, ...). */
+  systemNotices?: readonly SystemSearchNotice[];
+  renderFileActions?: (result: FileSearchResult) => React.ReactNode;
+  thisComputerHint?: React.ReactNode;
   currentFile: {
     path: string | null;
     matches: readonly FileSearchMatch[];
@@ -48,8 +54,10 @@ export interface SearchPaletteTierSectionsProps {
 }
 
 /**
- * Sections in fixed tier order: T1 current thread, T2 current project, T3 other bigbud data.
- * Client-side sources (thread titles) render immediately; server sources wait for the debounce.
+ * Sections in fixed tier order: T1 current thread, T2 current project, T3 other bigbud data, T4
+ * other projects' files, T5 this computer, T6 remote folders outside projects. Client-side
+ * sources (thread titles) render immediately; server sources wait for the debounce, and streamed
+ * file rows append as they arrive.
  */
 export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps) {
   const { query, tiers, pending, visibility, currentFile } = props;
@@ -146,13 +154,14 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
         onSelect={props.onSelectThread}
         onShowMore={() => showMore("t2.threads")}
       />
-      {serverReady && !pending.files ? (
+      {serverReady ? (
         <FileSearchResultGroup
           label="Files in this project"
           results={tiers.currentProject.files}
           visibleResults={slice("t2.files", tiers.currentProject.files)}
           onSelect={props.onSelectFile}
           onShowMore={() => showMore("t2.files")}
+          {...(props.renderFileActions ? { renderActions: props.renderFileActions } : {})}
         />
       ) : null}
       {serverReady ? (
@@ -193,6 +202,16 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
           visibleResults={slice("t3.terminals", tiers.bigbudData.terminals)}
           onSelect={props.onSelectTerminal}
           onShowMore={() => showMore("t3.terminals")}
+        />
+      ) : null}
+      {serverReady ? (
+        <SearchPaletteSystemSections
+          tiers={tiers}
+          notices={props.systemNotices ?? []}
+          visibility={visibility}
+          onSelectFile={props.onSelectFile}
+          {...(props.renderFileActions ? { renderFileActions: props.renderFileActions } : {})}
+          thisComputerHint={props.thisComputerHint}
         />
       ) : null}
     </>

@@ -55,7 +55,8 @@ function remoteTarget(executionTargetId: string | undefined): string {
   return target;
 }
 
-function workspaceHandle(executionTargetId: string, cwd: string): string {
+/** Stable agent workspace handle per folder, so reopening a folder reuses its slot. */
+export function workspaceHandle(executionTargetId: string, cwd: string): string {
   return stableId("workspace", { executionTargetId, cwd });
 }
 

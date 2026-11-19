@@ -82,6 +82,47 @@ fn search_frames_match_shared_typescript_goldens() {
                 ..Default::default()
             }),
         ),
+        (
+            "os_index_search_request",
+            v1::frame::Payload::OsIndexSearchRequest(v1::OsIndexSearchRequest {
+                request_id: "os-1".to_owned(),
+                operation_id: "op-os-1".to_owned(),
+                query: "invoice".to_owned(),
+                scope_level: v1::OsIndexScopeLevel::CommonFolders as i32,
+                max_results: 50,
+                deadline_ms: 700,
+            }),
+        ),
+        (
+            "os_index_search_batch",
+            v1::frame::Payload::OsIndexSearchBatch(v1::OsIndexSearchBatch {
+                request_id: "os-1".to_owned(),
+                operation_id: "op-os-1".to_owned(),
+                sequence: 1,
+                hits: vec![v1::OsIndexSearchHit {
+                    path: "/Users/dev/Documents/invoice.pdf".to_owned(),
+                    is_directory: false,
+                    content_type: "com.adobe.pdf".to_owned(),
+                    size_bytes: 52_000,
+                    modified_unix_ms: 1_763_500_000_000,
+                    last_used_unix_ms: 1_763_600_000_000,
+                    score: 3,
+                }],
+            }),
+        ),
+        (
+            "os_index_search_completed",
+            v1::frame::Payload::OsIndexSearchCompleted(v1::OsIndexSearchCompleted {
+                request_id: "os-1".to_owned(),
+                operation_id: "op-os-1".to_owned(),
+                stop_reason: "complete".to_owned(),
+                source: "spotlight".to_owned(),
+                availability: "ready".to_owned(),
+                excluded: 2,
+                batches: 1,
+                ..Default::default()
+            }),
+        ),
     ];
     for (name, payload) in frames {
         let frame = v1::Frame {

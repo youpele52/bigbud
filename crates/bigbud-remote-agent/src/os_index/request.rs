@@ -3,10 +3,8 @@ use std::time::Duration;
 
 use super::error::OsIndexError;
 use super::exclusions::Exclusions;
-use crate::search::MAX_SEARCH_DEADLINE;
+use crate::search::{MAX_SEARCH_DEADLINE, MAX_SEARCH_QUERY_CHARS};
 
-/// Longest accepted query, in characters (same limit as workspace search).
-pub const MAX_OS_INDEX_QUERY_CHARS: usize = 512;
 /// Scopes one request may carry (home has a few dozen children at most).
 pub const MAX_OS_INDEX_SCOPES: usize = 64;
 /// Hard ceiling for returned rows.
@@ -41,7 +39,7 @@ impl OsIndexRequest {
         if query.is_empty() {
             return Err(OsIndexError::EmptyQuery);
         }
-        if query.chars().count() > MAX_OS_INDEX_QUERY_CHARS {
+        if query.chars().count() > MAX_SEARCH_QUERY_CHARS {
             return Err(OsIndexError::QueryTooLong);
         }
         if query.chars().any(char::is_control) {

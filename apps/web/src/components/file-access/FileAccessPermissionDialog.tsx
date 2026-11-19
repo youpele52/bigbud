@@ -10,7 +10,8 @@ import {
   DialogTitle,
 } from "../ui/dialog";
 import { Button } from "../ui/button";
-import { useUpdateSettings } from "../../hooks/useSettings";
+import { updateServerSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { fileAccessServerPatch } from "../../hooks/useSettings.fileAccessMirror";
 
 interface FileAccessPermissionDialogProps {
   open: boolean;
@@ -34,6 +35,7 @@ export function FileAccessPermissionDialog({
       fileAccessPermissionLevel: selectedLevel,
       hasSeenFileAccessPrompt: true,
     });
+    updateServerSettings(fileAccessServerPatch(selectedLevel));
 
     setIsRequesting(false);
     onOpenChange(false);

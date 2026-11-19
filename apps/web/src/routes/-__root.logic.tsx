@@ -35,6 +35,7 @@ import { useThinkingStreamStore } from "../stores/thinkingStream/thinkingStream.
 import { useUiStateStore } from "../stores/ui";
 import { useTerminalStateStore } from "../stores/terminal";
 import { migrateLocalSettingsToServer, persistServerSettings } from "../hooks/useSettings";
+import { mirrorFileAccessLevelToServer } from "../hooks/useSettings.fileAccessMirror";
 import { migrateHiddenComposerProvidersToServer } from "../hooks/useSettings.storage";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
@@ -102,6 +103,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
         restorationRunIdRef.current === runId &&
         readPathname() === launchPathname;
       migrateLocalSettingsToServer();
+      mirrorFileAccessLevelToServer();
       const api = readNativeApi();
       if (!api) {
         return;

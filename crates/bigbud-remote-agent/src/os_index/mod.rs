@@ -34,8 +34,8 @@ mod tests;
 
 pub use error::OsIndexError;
 pub use request::{
-    DEFAULT_OS_INDEX_RESULTS, MAX_OS_INDEX_QUERY_CHARS, MAX_OS_INDEX_RESULTS, MAX_OS_INDEX_SCOPES,
-    OS_INDEX_FETCH_LIMIT, OsIndexRequest,
+    DEFAULT_OS_INDEX_RESULTS, MAX_OS_INDEX_RESULTS, MAX_OS_INDEX_SCOPES, OS_INDEX_FETCH_LIMIT,
+    OsIndexRequest,
 };
 pub use results::{OsIndexHit, OsIndexOutcome};
 pub use run::{OS_INDEX_SOURCE, search_names};

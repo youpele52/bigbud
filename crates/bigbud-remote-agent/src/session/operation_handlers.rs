@@ -28,7 +28,9 @@ impl AgentSession {
         &mut self,
         request: v1::CancelRequest,
     ) -> Result<v1::Frame, SessionError> {
-        let (cancelled, terminal, detail) = if self.search_registry.cancel(&request.operation_id) {
+        let search_cancelled = self.search_registry.cancel(&request.operation_id)
+            || self.os_index_registry.cancel(&request.operation_id);
+        let (cancelled, terminal, detail) = if search_cancelled {
             (true, false, "cancellation-requested")
         } else if let Some(signal) = self.process_cancellations.get(&request.operation_id) {
             signal.store(true, std::sync::atomic::Ordering::Relaxed);

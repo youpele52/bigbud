@@ -1,15 +1,13 @@
 import { type ThreadId, isBuiltInChatsProject } from "@bigbud/contracts";
 import { useDebouncedValue } from "@tanstack/react-pacer";
-import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
 
 import { conversationSearchQueryOptions } from "~/lib/conversationSearchQuery";
 import { projectCatalogSearchQueryOptions } from "~/lib/projectCatalogSearchQuery";
-import { projectSearchFileContentsQueryOptions } from "~/lib/projectReactQuery";
-import { resolveWorkspaceExecutionTargetId } from "~/lib/providerExecutionTargets";
 import { isVisibleThread } from "~/logic/thread/threadVisibility.logic";
-import { useDefaultChatCwd } from "~/rpc/serverState";
+import { useSettings } from "~/hooks/useSettings";
 import { useProjectById, useStore, useThreadById } from "../../stores/main";
 import { useSearchStore, useUiStateStore } from "../../stores/ui";
 import {
@@ -18,19 +16,22 @@ import {
   normalizeQuery,
 } from "./SearchPalette.logic";
 import { toProjectSearchResults } from "./SearchPalette.projectResults";
-import { toFileSearchResults } from "./SearchPalette.results";
+import { useSystemSearchStream } from "./SearchPalette.stream";
+import {
+  isSystemSearchTierPending,
+  systemSearchNotices,
+  systemSearchTierRows,
+} from "./SearchPalette.systemSearch.logic";
 import { useTerminalSearchResults } from "./SearchPalette.terminalResults";
 import {
   partitionMessageTiers,
   partitionTerminalTiers,
   partitionThreadTiers,
-  searchQueryRules,
   type SearchContext,
   type SearchPaletteTiers,
 } from "./SearchPalette.tiers.logic";
 
 const SEARCH_PALETTE_QUERY_DEBOUNCE_MS = 200;
-const SEARCH_FILE_CONTENT_LIMIT = 40;
 
 /** Every palette source for one query, already split into tiers. */
 export function useSearchPaletteSources(input: {
@@ -45,7 +46,7 @@ export function useSearchPaletteSources(input: {
   const activeThread = useThreadById(activeThreadId);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const selectedProject = useProjectById(activeThread?.projectId ?? selectedProjectId ?? null);
-  const defaultChatCwd = useDefaultChatCwd();
+  const searchThisComputer = useSettings((settings) => settings.search.thisComputer);
   const context: SearchContext = useMemo(
     () => ({
       currentThreadId: activeThreadId,
@@ -62,24 +63,13 @@ export function useSearchPaletteSources(input: {
   const normalizedQuery = normalizeQuery(query);
   const debouncedNormalizedQuery = query.length > 0 ? normalizeQuery(debouncedQuery) : "";
   const debouncedMessageQuery = debouncedQuery.trim();
-  const rules = searchQueryRules(debouncedQuery, context);
-  const workspaceRoot =
-    activeThread?.worktreePath ?? selectedProject?.cwd ?? defaultChatCwd ?? null;
-  const workspaceExecutionTargetId = activeThread?.worktreePath
-    ? undefined
-    : selectedProject
-      ? resolveWorkspaceExecutionTargetId(selectedProject)
-      : undefined;
-
-  const fileContentsQuery = useQuery(
-    projectSearchFileContentsQueryOptions({
-      cwd: workspaceRoot,
-      executionTargetId: workspaceExecutionTargetId,
-      query: debouncedNormalizedQuery,
-      enabled: open && rules.fileContents,
-      limit: SEARCH_FILE_CONTENT_LIMIT,
-    }),
-  );
+  const systemSearch = useSystemSearchStream({
+    open,
+    query: debouncedNormalizedQuery,
+    currentProjectId: context.currentProjectId,
+    currentThreadId: context.currentThreadId,
+    thisComputer: searchThisComputer,
+  });
   const projectCatalogQueries = useQueries({
     queries: (["local", "remote"] as const).map((scope) =>
       projectCatalogSearchQueryOptions({
@@ -138,10 +128,6 @@ export function useSearchPaletteSources(input: {
     () => partitionTerminalTiers(terminalSearch.results, context),
     [terminalSearch.results, context],
   );
-  const fileResults = useMemo(
-    () => (rules.fileContents ? toFileSearchResults(fileContentsQuery.data?.matches ?? []) : []),
-    [fileContentsQuery.data, rules.fileContents],
-  );
   const projectResults = toProjectSearchResults({
     localProjects: projectCatalogQueries[0]?.data?.projects ?? [],
     remoteWorkspaces: projectCatalogQueries[1]?.data?.projects ?? [],
@@ -159,7 +145,7 @@ export function useSearchPaletteSources(input: {
     currentProject: {
       messages: messageTiers.currentProject,
       threads: threadTiers.currentProject,
-      files: fileResults,
+      files: systemSearchTierRows(systemSearch, "currentProject"),
     },
     bigbudData: {
       messages: messageTiers.other,
@@ -167,6 +153,9 @@ export function useSearchPaletteSources(input: {
       projects: projectResults,
       terminals: terminalTiers.other,
     },
+    otherProjectFiles: { files: systemSearchTierRows(systemSearch, "otherProjectFiles") },
+    thisComputer: { files: systemSearchTierRows(systemSearch, "thisComputer") },
+    remoteOutsideProjects: { files: systemSearchTierRows(systemSearch, "remoteOutsideProjects") },
   };
 
   return {
@@ -174,19 +163,20 @@ export function useSearchPaletteSources(input: {
     normalizedQuery,
     debouncedQuery,
     debouncedMessageQuery,
-    workspaceRoot,
     activeFileSearchContext,
     currentFileMatches,
     conversationSearch,
     pending: {
       debounce: debouncer.state.isPending,
       messages: conversationSearch.isFetching,
-      files: fileContentsQuery.isFetching,
+      files: isSystemSearchTierPending(systemSearch, "currentProject"),
       projects:
         projectCatalogQueries[0]?.isFetching === true ||
         projectCatalogQueries[1]?.isFetching === true,
       terminals: terminalSearch.isPending,
     },
+    systemNotices: systemSearchNotices(systemSearch),
+    systemSearch,
     messageSearchStatus: conversationSearch.isError
       ? ("unavailable" as const)
       : conversationSearch.data?.pages[0]?.status,

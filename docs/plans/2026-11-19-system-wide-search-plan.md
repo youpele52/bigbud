@@ -93,7 +93,8 @@ Assumed (recommended) — user may revise:
 - Remote search outside the agent account, use of `sudo`, or remote "this computer" search (for example remote `plocate`).
 - Launcher features such as apps, a calculator, or system settings.
 - Exposing workspace-wide or "this computer" search as an agent tool. Agent-facing search is a separate, later decision.
-- Changing Mod+P (`WorkspaceEntries`). Mod+P keeps its current implementation. Matching semantics are shared through fixtures (see Design §2).
+- ~~Changing Mod+P (`WorkspaceEntries`).~~ Superseded by the user on 20 November 2026: Mod+P
+  becomes a file-name search across all sources (Phase 8).
 - Exposing search on the mobile gateway surface (`apps/server/src/ws/ws.mobile.ts`).
 - Notes and Kanban cards as search sources. They can be added later as tier-3 sources.
 
@@ -554,6 +555,30 @@ Run `plocate` (then `locate`) as a subprocess, bounded by `-l`, with a timeout a
 
 **Exit:** an Ubuntu manual run passes, and a missing `plocate` shows "unavailable".
 
+### Phase 8: Mod+P file-name search across all sources
+
+User decision (20 November 2026): Mod+F stays the general search; Mod+P is "find a file by name",
+like VS Code's quick open, extended beyond the current project to the whole computer and connected
+VMs/VPSes, regardless of platform.
+
+- Tiers, in order: (1) current project, (2) other projects (local and remote), (3) this computer
+  through the OS index (Spotlight, Windows Search, `plocate`; Phases 5–7), (4) connected remote
+  backends (project folders and registered remote workspace folders, as the agent user).
+- Matching: fuzzy for project and remote files (VS Code style, reusing the engine's names mode and
+  `search/rank.rs`; the existing `WorkspaceEntries` scoring is replaced or aligned through shared
+  fixtures so local and remote rank identically); name-contains for the OS index tier.
+- The same settings, defaults and enforcement as Mod+F: "Search this computer" and "Search
+  connected remote backends" (both off by default), File Access level → scope, sensitive-path
+  exclusions enforced in the agent, OS-index tier shows "unavailable" (disabled indexer, missing
+  `plocate`) instead of failing.
+- The legacy remote `FilenameSearchRequest` walker moves to the engine's names mode behind
+  `workspace.search-stream`; older agents keep the legacy request with an update notice.
+- Opening uses the Phase 4 routing (in-app viewer, otherwise system default, Reveal; executables
+  revealed only).
+- Exit: Mod+P returns current-project hits first with no added latency (local in-memory list stays
+  the first source), streams the other tiers, cancels superseded queries, and passes the shared
+  fuzzy-ranking fixtures locally and remotely.
+
 ## Risks And Decision Gates
 
 - **Dependency approval (gate for Phase 2).** About 2.2 MB of binary growth, `encoding_rs` with its BSD-3-Clause part, and `unsafe` code in transitive crates (`memmap2`, `bstr`, `crossbeam`). Mitigation: keep `grep-searcher` mmap off (use read-based search), list the licences, measure the size per target.
@@ -622,7 +647,15 @@ Run `plocate` (then `locate`) as a subprocess, bounded by `-l`, with a timeout a
 - Behaviour changes from the engine, as designed in §2: at most 5 matches per file, excerpts capped at 512 characters, and a 2 s local deadline that returns partial results marked truncated (the old `rg` path waited up to 10 s).
 - Phase 2 exit criteria still open: the shared local/remote fixture comparison and the ≤ 50 ms cancel-latency measurement need a live remote and are listed under Pending live verification.
 - Deviation: the legacy `FilenameSearchRequest` keeps its own walker, because it backs Mod+P on remote targets and Mod+P is a non-goal. The new engine's names mode reuses the same `rank` module (moved to `search/rank.rs`).
-- Phase 4 desktop and server open-path validation is being built separately; the palette will call that bridge rather than adding its own.
+- **Phase 3: complete (uncommitted).** `search.query` (`packages/contracts/src/server/rpc.search.ts`, schemas in `packages/contracts/src/search/systemSearch.ts`) is a finite stream of `SystemSearchTierUpdate` rows per tier and source; it is registered on the main WebSocket surface only (`ws/wsRpcHandlers.search.ts`), never on the mobile gateway, thread tools or MCP.
+  - Server (`apps/server/src/search/`): `SystemSearch` service and `SystemSearchLive`; `SystemSearch.rootsQuery.ts` reads live project folders (most recently updated first) and thread worktrees from SQLite; `SystemSearch.roots.ts` plans T2 (the current thread's worktree, else the current project), T4 (every other project, local first, duplicates once) and T6 (remote worktree folders that are neither a project folder nor inside one; never host-wide). `SystemSearch.workspaceFiles.ts` sends T2 alone first (80 rows) and one request per target for T4/T6 (20 rows per project; local 2 s interactive, remote 3 s background), with `SEARCH_BUSY` backoff shared with content search (`retryWhileAgentSearchBusy`). `SystemSearch.emitter.ts` deduplicates rows by stable ID, caps a query at 200 rows and drops everything after abort.
+  - Remotes are used only when already connected (`RemoteAgentConnectionPool.liveConnection`, `SearchAgentConnections`); otherwise `not-connected` at once. Old agents get names only through the legacy `FilenameSearchRequest` (first 8 folders, stable handles) with `agent-update-available`; SSH-only hosts get `use-managed-agent` (T2 keeps `rg` on the host for contents, Q5). Unsubscribing interrupts the fiber; the finaliser aborts every agent request, which sends `CancelRequest`.
+  - Settings: `ServerSettings.search` (`core/settings.search.ts`): `thisComputer` (off), `connectedRemoteBackends` (on, per §6), `fileAccessLevel` mirror (`none`), `hasSeenThisComputerHint`. Settings › AI has a new "Search" section after File Access, and both rows are in `SETTINGS_SEARCH_ITEMS`.
+  - Web: `SearchPalette.stream.ts` + `SearchPalette.systemSearch.logic.ts` (one query at a time; a new query, closing or unmounting aborts the previous one; the transport's `requestStream` accepts an `AbortSignal`), fixed tier order T1–T6 with append-only rows and sources in fixed order (local first), `SearchPalette.systemSections.tsx` for T4–T6 and notices (`SearchPalette.notices.logic.ts`: amber for partial/unavailable, red only for failures). The palette's old `projects.searchFileContents` request is replaced by the stream (T2 now shows names and contents). File names and excerpts render as text with bidi controls made visible (`revealBidiControls` in `@bigbud/shared/String`).
+- **Phase 4 palette wiring: complete except the remote download cache.** `SearchPalette.open.logic.ts` / `SearchPalette.open.tsx`: types bigbud can show keep the existing `openPathFromChat` routing (with line and column); unsupported local types go to `openWithSystemDefault` (desktop bridge; executables and bundles are revealed, never launched); local rows get a "Reveal" action (`revealInFileManager`) only in the desktop app; browsers get `unavailable-in-browser` notices. Q7: "this computer" rows never load into bigbud panels (no editing, no agent-visible browser panel); they always go through the desktop shell. Q8 remote download-to-cache is not built: remote unsupported types show "cannot open yet".
+- **Phase 5 wiring: complete (uncommitted).** Frames 77–79 (`OsIndexSearchRequest` with a scope level the agent resolves under its own home, `OsIndexSearchBatch`, `OsIndexSearchCompleted`) in `search.proto`, Rust and TypeScript golden frames, TS codec tables. `os-index.search` is advertised only after `enable_os_index()`, which only `--ephemeral --os-index` calls; the generic frame handler (supervisor and every other mode) refuses with `UNSUPPORTED`. OS-index searches have their own two-slot registry and worker set, and `CancelRequest` reaches them. The server starts the local agent with `--os-index` only when `mode === "desktop"` and `BIGBUD_SEARCH_THIS_COMPUTER` is not `0`; `SystemSearch.osIndex.ts` enforces mode, policy, `search.thisComputer` and the File Access mirror (`none` → off, `common-folders`/`unrestricted` → agent scope level), re-checks exclusions, and shows rows as `~/…` folders. `exclusions.json` moved to `packages/shared/src/search/osIndexExclusions.json` (`include_str!` updated); `@bigbud/shared/search/osIndexExclusions` mirrors the matcher and `inspectSystemOpenPath` now refuses excluded paths (requested or real path) as `inaccessible`. `search::MAX_SEARCH_QUERY_CHARS` is exported and reused. File Access writes the server mirror (settings section and permission dialog) and a one-time startup step copies an earlier client choice. The palette shows a one-time "Search files across this Mac" hint.
+- Deviations: (1) exclusions in `inspectSystemOpenPath` reuse the `inaccessible` refusal instead of a new `excluded` reason, because the committed server open-path code maps every refusal exhaustively; a distinct reason is a small follow-up. (2) The read-only loose-file preview (`{ kind: "loose" }`) is not built; Q7 is met by never opening "this computer" files in bigbud. (3) No "Index status" line in Settings: Spotlight off and still-indexing cannot be told apart yet; `UNAVAILABLE` shows "index unavailable" in the palette. (4) T6 uses registered thread worktrees on remotes, the only remote folders bigbud records that are not projects.
+- Phase 8 reuse: `search.query` takes explicit tiers and its rows carry `kind` (`name`/`content`), so Mod+P can request names-only tiers (a `mode` field can be added without breaking clients); the engine's names mode, the roots planner, the emitter and the `search` settings toggles are shared.
 - **Phase 5: Spotlight core complete in `bigbud-remote-agent/src/os_index/`; not wired.** Capability, frames 77–79, `--os-index`, session handlers, server and web wait for Phase 2 routing. API for the wiring step:
   - `resolve_scopes(home: &Path, level: OsIndexScopeLevel) -> Result<Vec<PathBuf>, OsIndexError>`. `CommonFolders`: Desktop, Documents, Downloads, Music, Pictures. `Unrestricted`: visible (non-dot) real home folders except `Library`, plus `Library/Mobile Documents` and `Library/CloudStorage`. Symlinks, missing folders and excluded folders are skipped.
   - `OsIndexRequest::new(query: &str, scopes: Vec<PathBuf>, max_results: usize, deadline: Duration) -> Result<OsIndexRequest, OsIndexError>`. Query 1–512 characters after trimming, no control characters. Scopes: 1–64 existing canonical absolute UTF-8 folders, none excluded. `max_results` 0 means 50, capped at 200. Deadline capped at `MAX_SEARCH_DEADLINE` (10 s).
@@ -642,6 +675,9 @@ Items that cannot be verified from a sandboxed shell and must be checked by hand
 - Old-agent fallback against a deployed agent without `workspace.search-stream`.
 - Phase 2 exit: the same results locally and on a remote for one shared fixture tree, and cancel latency ≤ 50 ms end to end.
 - Packaged agent binary size growth per target.
+- Phase 3 exit: 30 local projects and 2 remotes (T2 first, T4/T6 streaming without reordering), a disconnected remote shown as "not connected" without delaying other tiers, and the agent search registry empty within 100 ms of the last keystroke.
+- Phase 5 exit: Spotlight name queries within the T5 budget from the packaged app, File Access `common-folders` and `unrestricted` scopes, and the one-time hint and Settings rows in the running app.
+- Palette opening in the desktop app: a `.docx` opening in its default app, an `.app`/`.exe` revealed instead of launched, "Reveal in Finder", and "this computer" rows opening in the system app.
 
 ## Open Questions (resolved as assumptions)
 

@@ -7,6 +7,7 @@ import { ComputerUseDeliveryMode } from "./settings.computerUsePolicy";
 import { InyosiraIdleSettingsPatchFields } from "./settings.inyosira";
 import { TerminalActivitySettingsPatchFields } from "./settings.terminalActivity";
 import { TerminalPasteSettingsPatchFields } from "./settings.terminalPaste";
+import { SearchSettingsPatchFields } from "./settings.search";
 import { OpencodeV2NativeServiceTrust, OpencodeV2PluginConfigRoot } from "./settings.opencodeV2";
 import {
   ClaudeModelOptions,
@@ -159,6 +160,7 @@ export const ServerSettingsPatch = Schema.Struct({
   ...InyosiraIdleSettingsPatchFields,
   ...TerminalActivitySettingsPatchFields,
   ...TerminalPasteSettingsPatchFields,
+  ...SearchSettingsPatchFields,
   providers: Schema.optionalKey(
     Schema.Struct({
       codex: Schema.optionalKey(

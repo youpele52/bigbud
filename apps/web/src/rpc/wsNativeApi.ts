@@ -96,6 +96,9 @@ export function createWsNativeApiContext({
       searchEntries: rpcClient.projects.searchEntries,
       writeFile: rpcClient.projects.writeFile,
     },
+    search: {
+      query: rpcClient.search.query,
+    },
     notes: {
       list: rpcClient.notes.list,
       get: rpcClient.notes.get,

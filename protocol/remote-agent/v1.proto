@@ -82,6 +82,9 @@ message Frame {
     WorkspaceSearchRequest workspace_search_request = 74;
     WorkspaceSearchBatch workspace_search_batch = 75;
     WorkspaceSearchCompleted workspace_search_completed = 76;
+    OsIndexSearchRequest os_index_search_request = 77;
+    OsIndexSearchBatch os_index_search_batch = 78;
+    OsIndexSearchCompleted os_index_search_completed = 79;
     ResourceCleanupRootBootstrapRequest resource_cleanup_root_bootstrap_request = 100;
     ResourceCleanupRootBootstrapResponse resource_cleanup_root_bootstrap_response = 101;
     ResourceCleanupRequest resource_cleanup_request = 102;

@@ -31,24 +31,14 @@ export async function streamRemoteAgentWorkspaceSearch(
   },
 ): Promise<RemoteAgentWorkspaceSearchCompleted> {
   const requestId = options.requestId ?? randomUUID();
-  const cancelRequestId = `cancel-${requestId}`;
   const isOurs = (frame: RemoteAgentFrame) =>
     (frame.type === "workspaceSearchBatch" || frame.type === "workspaceSearchCompleted") &&
     frame.value.requestId === requestId;
-  let cancelling: Promise<unknown> | undefined;
-  const cancel = () => {
-    cancelling ??= connection
-      .request(
-        {
-          type: "cancelRequest",
-          value: { requestId: cancelRequestId, operationId: request.operationId },
-        },
-        (frame) => frame.type === "cancelResponse" && frame.value.requestId === cancelRequestId,
-      )
-      // The completion frame is authoritative; a lost cancel response changes nothing.
-      .catch(() => undefined);
-  };
-  options.signal?.addEventListener("abort", cancel, { once: true });
+  const cancellation = cancelSearchOnAbort(connection, {
+    requestId,
+    operationId: request.operationId,
+    signal: options.signal,
+  });
   try {
     let frame = await connection.request(
       { type: "workspaceSearchRequest", value: { ...request, requestId } },
@@ -63,9 +53,44 @@ export async function streamRemoteAgentWorkspaceSearch(
       if (!options.signal?.aborted) options.onBatch(frame.value);
       frame = await connection.nextFrame(isOurs);
     }
-    await cancelling;
+    await cancellation.settled();
     return frame.value as RemoteAgentWorkspaceSearchCompleted;
   } finally {
-    options.signal?.removeEventListener("abort", cancel);
+    cancellation.dispose();
   }
+}
+
+/**
+ * Sends one `CancelRequest` for `operationId` when `signal` aborts. The search's own completion
+ * frame stays authoritative, so a lost cancel response changes nothing. Shared by the workspace
+ * and OS-index search streams.
+ */
+export function cancelSearchOnAbort(
+  connection: Pick<RemoteAgentConnection, "request">,
+  input: {
+    readonly requestId: string;
+    readonly operationId: string;
+    readonly signal?: AbortSignal | undefined;
+  },
+) {
+  const cancelRequestId = `cancel-${input.requestId}`;
+  let cancelling: Promise<unknown> | undefined;
+  const cancel = () => {
+    cancelling ??= connection
+      .request(
+        {
+          type: "cancelRequest",
+          value: { requestId: cancelRequestId, operationId: input.operationId },
+        },
+        (frame) => frame.type === "cancelResponse" && frame.value.requestId === cancelRequestId,
+      )
+      .catch(() => undefined);
+  };
+  input.signal?.addEventListener("abort", cancel, { once: true });
+  return {
+    settled: async () => {
+      await cancelling;
+    },
+    dispose: () => input.signal?.removeEventListener("abort", cancel),
+  };
 }

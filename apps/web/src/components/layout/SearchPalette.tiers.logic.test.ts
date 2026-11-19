@@ -136,12 +136,11 @@ describe("search tiers", () => {
       titles: true,
       currentThreadMessages: true,
       messages: false,
-      fileContents: false,
     });
     expect(searchQueryRules("ab", { currentThreadId: null, currentProjectId: null })).toMatchObject(
       { currentThreadMessages: false },
     );
-    expect(searchQueryRules("abc", context)).toMatchObject({ messages: true, fileContents: true });
+    expect(searchQueryRules("abc", context)).toMatchObject({ messages: true });
     expect(searchQueryRules("a".repeat(161), context)).toMatchObject({
       messages: false,
       currentThreadMessages: false,
@@ -159,6 +158,9 @@ describe("search tiers", () => {
         currentThread: { messages: tiers.currentThread, terminals: [] },
         currentProject: { messages: [], threads: [], files: [] },
         bigbudData: { messages: tiers.other, threads: [], projects: [], terminals: [] },
+        otherProjectFiles: { files: [] },
+        thisComputer: { files: [] },
+        remoteOutsideProjects: { files: [] },
       }),
     ).toBe("1 result in this thread, 2 results elsewhere in bigbud");
   });

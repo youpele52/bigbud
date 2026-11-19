@@ -41,11 +41,25 @@ function thread(id: string, title: string): ThreadSearchResult {
   };
 }
 
+function file(id: string, tier: string) {
+  return {
+    id: `${tier}:name:local:/r/${id}`,
+    kind: "name" as const,
+    executionTargetId: "local",
+    root: "/r",
+    path: id,
+    label: "Label",
+  };
+}
+
 function emptyTiers(): SearchPaletteTiers {
   return {
     currentThread: { messages: [], terminals: [] },
     currentProject: { messages: [], threads: [], files: [] },
     bigbudData: { messages: [], threads: [], projects: [], terminals: [] },
+    otherProjectFiles: { files: [] },
+    thisComputer: { files: [] },
+    remoteOutsideProjects: { files: [] },
   };
 }
 
@@ -131,5 +145,35 @@ describe("SearchPaletteTierSections", () => {
     expect(markup).toContain("needle other thread");
     expect(markup).not.toContain("stale server row");
     expect(markup).toContain("Searching...");
+  });
+
+  it("renders streamed file tiers after bigbud data in fixed order T2, T4, T5, T6", () => {
+    const tiers = emptyTiers();
+    tiers.remoteOutsideProjects.files.push(file("remote-folder.ts", "remoteOutsideProjects"));
+    tiers.thisComputer.files.push(file("desktop.pdf", "thisComputer"));
+    tiers.otherProjectFiles.files.push(file("other.ts", "otherProjectFiles"));
+    tiers.bigbudData.threads.push(thread("t3", "needle other thread"));
+    tiers.currentProject.files.push(file("current.ts", "currentProject"));
+    const markup = renderSections({
+      tiers,
+      systemNotices: [
+        {
+          tier: "otherProjectFiles",
+          sourceId: "ssh:host=box",
+          reason: "not-connected",
+          state: "unavailable",
+        },
+      ],
+    });
+    const order = [
+      "Files in this project",
+      "All threads",
+      "Files in other projects",
+      "This computer",
+      "Remote folders outside projects",
+      "box is not connected",
+    ].map((label) => markup.indexOf(label));
+    expect(order.every((index) => index >= 0)).toBe(true);
+    expect(order).toEqual(order.toSorted((left, right) => left - right));
   });
 });

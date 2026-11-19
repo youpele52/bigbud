@@ -3,9 +3,11 @@
  * Shared by every entry point that calls into the OS so the rules cannot drift.
  */
 import * as fs from "node:fs/promises";
+import { homedir } from "node:os";
 import * as nodePath from "node:path";
 
 import { isAbsolutePath, isWindowsAbsolutePath } from "./path";
+import { isOsIndexExcludedPath } from "./search/osIndexExclusions";
 import {
   EXECUTABLE_MAGIC_BYTES,
   hasExecutableMagic,
@@ -20,7 +22,10 @@ export type SystemOpenPathRefusal =
   /** Not a string, empty, relative, contains NUL, or a UNC/device path on Windows. */
   | "invalid-path"
   | "not-found"
-  /** Exists but cannot be resolved or inspected (permissions, loops). */
+  /**
+   * Exists but cannot be resolved or inspected (permissions, loops), or is protected by the
+   * shared privacy exclusions (`.ssh`, keychains, browser profiles, `.env`, private keys).
+   */
   | "inaccessible"
   /** Neither a regular file nor a directory (socket, FIFO, device). */
   | "unsupported-entry";
@@ -75,13 +80,14 @@ async function hasExecutableHeader(realPath: string): Promise<boolean> {
 
 /**
  * Validates `raw` for system open: absolute, existing, symlinks resolved, then re-checked as a
- * regular file or directory. Launchable when either the requested or the real name has a
- * launchable extension, or (files only) the POSIX execute bit is set or the header is an
- * executable or `#!` script.
+ * regular file or directory. Paths on the shared exclusion list (by requested or real path) are
+ * refused. Launchable when either the requested or the real name has a launchable extension, or
+ * (files only) the POSIX execute bit is set or the header is an executable or `#!` script.
  */
 export async function inspectSystemOpenPath(
   raw: unknown,
   platform: NodeJS.Platform = process.platform,
+  options: { readonly home?: string } = {},
 ): Promise<SystemOpenPathInspection> {
   const requestedPath = normalizeSystemOpenPath(raw, platform);
   if (requestedPath === null) return { ok: false, reason: "invalid-path" };
@@ -93,6 +99,10 @@ export async function inspectSystemOpenPath(
     stats = await fs.lstat(realPath);
   } catch (error) {
     return { ok: false, reason: refusalForError(error) };
+  }
+  const home = options.home ?? homedir();
+  if (isOsIndexExcludedPath(requestedPath, home) || isOsIndexExcludedPath(realPath, home)) {
+    return { ok: false, reason: "inaccessible" };
   }
 
   if (stats.isDirectory()) {

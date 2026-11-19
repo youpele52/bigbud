@@ -6,7 +6,7 @@ import {
   type TableFrames,
 } from "./remoteAgentProtocol.codec.table.ts";
 
-/** Field tables mirror `protocol/remote-agent/search.proto`; frame numbers are 74-76. */
+/** Field tables mirror `protocol/remote-agent/search.proto`; frame numbers are 74-79. */
 const FRAMES: TableFrames<RemoteAgentSearchFrame["type"]> = [
   [
     74,
@@ -92,6 +92,58 @@ const FRAMES: TableFrames<RemoteAgentSearchFrame["type"]> = [
       [7, "errorCode", "string"],
       [8, "errorMessage", "string"],
       [9, "batches", "uint"],
+    ],
+  ],
+  [
+    77,
+    "osIndexSearchRequest",
+    [
+      [1, "requestId", "string"],
+      [2, "operationId", "string"],
+      [3, "query", "string"],
+      [4, "scopeLevel", "uint"],
+      [5, "maxResults", "uint"],
+      [6, "deadlineMs", "uint"],
+    ],
+  ],
+  [
+    78,
+    "osIndexSearchBatch",
+    [
+      [1, "requestId", "string"],
+      [2, "operationId", "string"],
+      [3, "sequence", "uint"],
+      [
+        4,
+        "hits",
+        {
+          repeated: [
+            [1, "path", "string"],
+            [2, "isDirectory", "bool"],
+            [3, "contentType", "string"],
+            [4, "sizeBytes", "uint"],
+            [5, "modifiedUnixMs", "uint"],
+            [6, "lastUsedUnixMs", "uint"],
+            [7, "score", "uint"],
+          ],
+        },
+      ],
+    ],
+  ],
+  [
+    79,
+    "osIndexSearchCompleted",
+    [
+      [1, "requestId", "string"],
+      [2, "operationId", "string"],
+      [3, "stopReason", "string"],
+      [4, "truncated", "bool"],
+      [5, "source", "string"],
+      [6, "availability", "string"],
+      [7, "excluded", "uint"],
+      [8, "errorCode", "string"],
+      [9, "errorMessage", "string"],
+      [10, "batches", "uint"],
     ],
   ],
 ];

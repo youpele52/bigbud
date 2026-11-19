@@ -8,7 +8,8 @@ import {
   ArrowUpRightIcon,
 } from "lucide-react";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
-import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { updateServerSettings, useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { fileAccessServerPatch } from "../../hooks/useSettings.fileAccessMirror";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
@@ -64,6 +65,7 @@ export function FileAccessSettingsSection() {
       hasSeenFileAccessPrompt: false,
       fileAccessPermissionLevel: "none",
     });
+    updateServerSettings(fileAccessServerPatch("none"));
     setIsResetting(false);
   }, [updateSettings]);
 
@@ -117,6 +119,8 @@ export function FileAccessSettingsSection() {
             onValueChange={(value) => {
               if (value === "none" || value === "common-folders" || value === "unrestricted") {
                 updateSettings({ fileAccessPermissionLevel: value });
+                // The server enforces the "this computer" search scope from its mirror.
+                updateServerSettings(fileAccessServerPatch(value));
               }
             }}
           >

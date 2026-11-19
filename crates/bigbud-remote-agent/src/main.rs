@@ -68,6 +68,7 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
     });
     let mut watch_subscriptions = HashSet::new();
     let mut searches = SearchWorkers::new(session.search_registry().clone());
+    let mut os_index_searches = SearchWorkers::new(session.os_index_registry().clone());
     loop {
         let frame = match read_frame(&mut reader, DEFAULT_MAX_FRAME_BYTES) {
             Ok(Some(frame)) => frame,
@@ -113,6 +114,22 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
                         let search_writer = Arc::clone(&writer);
                         let operation_id = prepared.operation_id().to_owned();
                         searches.spawn(operation_id, move || {
+                            prepared.execute(&mut |frame| {
+                                write_stdio_responses(&search_writer, vec![frame]).is_ok()
+                            });
+                        })?;
+                        Ok(Vec::new())
+                    }
+                    Err(refusal) => Ok(vec![*refusal]),
+                }
+            }
+            Some(bigbud_protocol::v1::frame::Payload::OsIndexSearchRequest(request)) => {
+                // Refused unless this session was started with `--ephemeral --os-index`.
+                match session.prepare_os_index_search(request) {
+                    Ok(prepared) => {
+                        let search_writer = Arc::clone(&writer);
+                        let operation_id = prepared.operation_id().to_owned();
+                        os_index_searches.spawn(operation_id, move || {
                             prepared.execute(&mut |frame| {
                                 write_stdio_responses(&search_writer, vec![frame]).is_ok()
                             });
@@ -288,8 +305,13 @@ fn main() -> Result<()> {
                 .context("remote agent proxy failed")
         }
         Some("--ephemeral") => {
-            run_stdio(AgentSession::new().context("failed to create the ephemeral agent session")?)
-                .context("remote agent stdio mode failed")
+            let mut session =
+                AgentSession::new().context("failed to create the ephemeral agent session")?;
+            // Only the desktop-embedded local agent passes `--os-index` ("this computer" search).
+            if std::env::args().nth(2).as_deref() == Some("--os-index") {
+                session.enable_os_index();
+            }
+            run_stdio(session).context("remote agent stdio mode failed")
         }
         Some("--resource-cleanup") => bigbud_remote_agent::resource_cleanup::run_stdio()
             .context("resource cleanup stdio mode failed"),

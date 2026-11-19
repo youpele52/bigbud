@@ -32,7 +32,10 @@ vi.mock("~/rpc/nativeApi", () => ({
       getSelectedThreadDetail,
     },
   }),
-  readNativeApi: () => ({ orchestration: { getSelectedThreadDetail } }),
+  readNativeApi: () => ({
+    orchestration: { getSelectedThreadDetail },
+    search: { query: async () => undefined },
+  }),
 }));
 
 import { useChatViewContentHandlers } from "../chat/view/chat-view/ChatViewContent.handlers";

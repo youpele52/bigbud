@@ -54,7 +54,6 @@ export function searchQueryRules(query: string, context: SearchContext) {
     titles: length >= 1,
     currentThreadMessages: context.currentThreadId !== null && length >= 1 && withinMax,
     messages: length >= CONVERSATION_SEARCH_MIN_QUERY_LENGTH && withinMax,
-    fileContents: length >= CONVERSATION_SEARCH_MIN_QUERY_LENGTH,
   };
 }
 
@@ -139,7 +138,7 @@ export function partitionTerminalTiers(
   return { currentThread, other };
 }
 
-/** Rows per tier section for the palette (T1–T3 in Phase 1; T4–T6 join with `search.query`). */
+/** Rows per tier section for the palette, in fixed tier order T1–T6. */
 export interface SearchPaletteTiers {
   readonly currentThread: {
     readonly messages: MessageSearchResult[];
@@ -156,6 +155,9 @@ export interface SearchPaletteTiers {
     readonly projects: ProjectSearchResult[];
     readonly terminals: TerminalSearchResult[];
   };
+  readonly otherProjectFiles: { readonly files: FileSearchResult[] };
+  readonly thisComputer: { readonly files: FileSearchResult[] };
+  readonly remoteOutsideProjects: { readonly files: FileSearchResult[] };
 }
 
 function countTierRows(group: Readonly<Record<string, readonly unknown[]>>): number {
@@ -169,6 +171,9 @@ export function describeSearchTiers(tiers: SearchPaletteTiers): string {
     ["in this thread", count(tiers.currentThread)],
     ["in this project", count(tiers.currentProject)],
     ["elsewhere in bigbud", count(tiers.bigbudData)],
+    ["in other projects", count(tiers.otherProjectFiles)],
+    ["on this computer", count(tiers.thisComputer)],
+    ["in remote folders outside projects", count(tiers.remoteOutsideProjects)],
   ]
     .filter(([, total]) => Number(total) > 0)
     .map(([label, total]) => `${total} ${total === 1 ? "result" : "results"} ${label}`)

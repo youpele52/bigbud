@@ -87,6 +87,60 @@ export const searchGoldenFrames: ReadonlyArray<readonly [string, RemoteAgentFram
       },
     },
   ],
+  [
+    "os_index_search_request",
+    {
+      type: "osIndexSearchRequest",
+      value: {
+        requestId: "os-1",
+        operationId: "op-os-1",
+        query: "invoice",
+        scopeLevel: 1,
+        maxResults: 50,
+        deadlineMs: 700,
+      },
+    },
+  ],
+  [
+    "os_index_search_batch",
+    {
+      type: "osIndexSearchBatch",
+      value: {
+        requestId: "os-1",
+        operationId: "op-os-1",
+        sequence: 1,
+        hits: [
+          {
+            path: "/Users/dev/Documents/invoice.pdf",
+            isDirectory: false,
+            contentType: "com.adobe.pdf",
+            sizeBytes: 52_000,
+            modifiedUnixMs: 1_763_500_000_000,
+            lastUsedUnixMs: 1_763_600_000_000,
+            score: 3,
+          },
+        ],
+      },
+    },
+  ],
+  [
+    "os_index_search_completed",
+    {
+      type: "osIndexSearchCompleted",
+      value: {
+        requestId: "os-1",
+        operationId: "op-os-1",
+        stopReason: "complete",
+        truncated: false,
+        source: "spotlight",
+        availability: "ready",
+        excluded: 2,
+        errorCode: "",
+        errorMessage: "",
+        batches: 1,
+      },
+    },
+  ],
 ];
 
 describe("remote agent search frames", () => {

@@ -21,8 +21,8 @@ pub use content::{LineMatch, MAX_CONTENT_FILE_BYTES, MAX_EXCERPT_CHARS, MAX_MATC
 pub use priority::lower_current_thread_priority;
 pub use registry::{MAX_CONCURRENT_SEARCHES, SearchRegisterError, SearchRegistry, SearchTicket};
 pub use request::{
-    MAX_SEARCH_DEADLINE, MAX_SEARCH_ROOTS, RootFailure, SearchMode, SearchRequest,
-    SearchRequestError, SearchRoot, default_thread_count,
+    MAX_SEARCH_DEADLINE, MAX_SEARCH_QUERY_CHARS, MAX_SEARCH_ROOTS, RootFailure, SearchMode,
+    SearchRequest, SearchRequestError, SearchRoot, default_thread_count,
 };
 pub use run::{
     ContentHit, MAX_BATCH_BYTES, MAX_BATCH_HITS, NameHit, SearchBatch, SearchOutcome, StopReason,
