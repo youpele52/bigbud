@@ -1,6 +1,8 @@
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { isBuiltInChatsProject } from "@bigbud/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { FolderIcon, MessageSquareIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { FolderIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { NewChatIcon } from "../common/NewChatIcon";
 import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -180,7 +182,14 @@ export function CommandPaletteDialogContent() {
         description: chatsProject?.name ?? "Chats",
         group: "threads",
         keywords: `${thread.title} chats`.toLowerCase(),
-        icon: <MessageSquareIcon className="size-4" />,
+        icon: (
+          <HugeiconsIcon
+            aria-hidden="true"
+            className="size-4"
+            icon={Comment03Icon}
+            strokeWidth={1.5}
+          />
+        ),
         onSelect: async () => {
           acknowledgeThreadOpen(thread.id);
           await navigate({ to: "/$threadId", params: { threadId: thread.id } });
@@ -209,7 +218,14 @@ export function CommandPaletteDialogContent() {
           description: `${projectName}${thread.branch ? ` · ${thread.branch}` : ""}`,
           group: "threads",
           keywords: `${thread.title} ${projectName} ${thread.branch ?? ""}`.toLowerCase(),
-          icon: <MessageSquareIcon className="size-4" />,
+          icon: (
+            <HugeiconsIcon
+              aria-hidden="true"
+              className="size-4"
+              icon={Comment03Icon}
+              strokeWidth={1.5}
+            />
+          ),
           onSelect: async () => {
             acknowledgeThreadOpen(thread.id);
             await navigate({ to: "/$threadId", params: { threadId: thread.id } });
