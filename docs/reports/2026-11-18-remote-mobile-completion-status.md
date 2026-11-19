@@ -13,7 +13,10 @@ live arm64 re-run of the test-only fixes is in progress, and its report will fol
 after that needs real infrastructure, credentials, hardware or a decision that only the user can
 provide.
 
-Nothing has been pushed. As of `e84335fe60`, `dev` is 74 commits ahead of `origin/dev`.
+`dev` and `main` are pushed with identical trees (as of `c1fb549ede`, 19 November 2026). `main` was
+updated from `dev` (dev wins) without a tag; no release has been cut. CI on `main` is green, including
+the four desktop release builds and release asset assembly (runs 44411611021, 44424907501,
+44436280799).
 
 ## Proven live (arm64 Lima, fixture keys)
 
@@ -77,12 +80,17 @@ A live arm64 re-run of these is in progress; its report will follow.
 
 ## Needs the user
 
-1. **Push** `dev` (or open a PR) so CI runs the new workflows, including the backend graph and
-   linux-arm64 workspace-agent jobs, and check the first run of each new workflow on GitHub.
+1. **Push and CI: done.** `dev` and `main` are pushed and CI is green. Getting there fixed 24 CI job
+   failures hidden behind the first Rust failure (6 product bugs: Rust journal/log flock release
+   on fork, OpenCode v2 receipt admission race, `.ts` import extensions, a DOM-less settings
+   guard, a stale handshake constant), four runner-dependent tests, and three load-flaky tests
+   root-caused as test races (supervisor replay window, lease recovery fork window, scripts
+   timeouts now 30 s). The release workflows (backend graph, musl agents) only run on a tag and
+   are still untested on GitHub.
 2. **Redeploy bigbud.app** so `https://bigbud.app/remote-agent.sh` serves the script (it returned
    the homepage on 17 Nov). Cloudflare Pages deploys bigbud.app from the `marketing` branch, not
-   `main`. Order: open a `dev` → `main` PR and merge it, squash-merge `main` into `marketing`,
-   push, then run `bun run verify:published-remote-agent-script`
+   `main`. `main` is updated; remaining order: squash-merge `main` into `marketing`, push, then
+   run `bun run verify:published-remote-agent-script`
    ([handoff](../validation/remote-backend-release-handoff.md)).
 3. **Signing: resolved.** One Ed25519 key, id `release-2026`, signs the remote agent and backend
    graph manifests. It was set as repository secrets on `youpele52/bigbud` on 18 November 2026,
@@ -90,8 +98,8 @@ A live arm64 re-run of these is in progress; its report will follow.
    (`2b78407ac3`): release manifests and graphs signed by any other key are refused.
 4. **Licences: resolved** (`dc66b324a7`): real upstream licence texts are vendored and
    hash-checked, Copilot stays with its licence, and notices ship beside the agent, gateway and
-   asset artifacts. The user still reads Anthropic's terms once for the Claude agent SDK
-   ([handoff](../validation/remote-backend-release-handoff.md)).
+   asset artifacts. The user read Anthropic's terms and confirmed they cover shipping the Claude
+   agent SDK ([handoff](../validation/remote-backend-release-handoff.md)).
 5. **Provider conformance:** run the harness with real credentials per tuple
    ([commands](2026-11-18-provider-conformance-harness.md)).
 6. **Phone and Tailscale:** authenticated mobile route admission needs real Tailscale Serve and a
@@ -125,10 +133,19 @@ A live arm64 re-run of these is in progress; its report will follow.
   concurrent provider sessions (D-1: a SQLite write lock never released; the parent commit does
   not wedge). The read model is unbounded again, as before 18 November, until the lock cycle is
   found.
-- **D-2:** after a project cascade, cleanup still waits out the 15-minute compaction failure
-  cooldown (an intermediate baseline candidate is rejected mid-cascade). Needs a design choice.
-- **D-3:** a thread delete issued about 2 s after `thread.session.stop` can stay "deleting"
-  (2 of 7 attempts); retention then reports `deferred`.
+- **D-2: fixed** (`cfea37bc6c`). Baseline verification built its workspace repositories with the
+  live runtime's memo map, so it hashed the live database instead of the replay: a live change
+  during verification (a cascade) rejected a matching candidate and held cleanup for the
+  15-minute cooldown, and with no live change verification compared nothing (a safety hole since
+  at least `58113ce35e`). The workspace now uses a private memo map. Not yet re-run live.
+- **D-3: fixed** (`d5232c7879`). Per-thread retention deletes recorded a single delete but took a
+  subtree fence, so the handler mistook its own fence for a cascade and returned; only a restart
+  cleared it. The other stuck delete in the re-run (a direct delete on the eviction build) has
+  no determinable cause. Not yet re-run live.
+- D-1 investigation should start from the D-2 finding (live-database work inside the
+  verification workspace) before eviction is re-landed.
+- A legacy-subtree retention run can still upgrade a direct delete's fence (an existing test
+  asserts it); `skipped_active` deletion aborts log nothing.
 - `peer_dispatch_status` does not show the worker child's `waiting` state.
 
 The unreachable legacy OpenCode synthetic-workspace path is removed (`9c142552ee`).
