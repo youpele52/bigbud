@@ -1,0 +1,578 @@
+# System-wide search for Mod+F ("Spotlight, but better")
+
+**Date:** 19 November, 2026
+**Status:** Draft. Waiting for answers to the open questions at the end. Not ready for implementation.
+**Owner:** bigbud core (server, web, desktop, Rust agent)
+
+## Summary
+
+Mod+F becomes one search over everything the user works with. Results are ranked in fixed tiers: the current thread, the current project, other bigbud data, other projects' files, this computer, and remote areas outside projects. Results stream in as each source answers, and every keystroke cancels the work started for the previous query.
+
+A single Rust search engine, built on ripgrep's library crates, runs inside `bigbud-remote-agent`. It serves both local search (through the local agent the server already starts) and remote search (through each managed agent). It replaces the agent's naive `workspace/search.rs` walker and the server's use of `rg` from `PATH`. "This computer" results come from the operating system's own index. On macOS that is Spotlight, queried through the `MDQuery` API inside the local agent. Windows Search and Linux `plocate` adapters follow later. bigbud never builds its own whole-disk index.
+
+Supported file types open inside bigbud. Anything else opens in the system default app, with path checks in the desktop shell.
+
+## Related Work
+
+- Research report: [System-wide search research](../reports/2026-11-19-system-wide-search-research.md). This plan is built on its phases and risks.
+- [Saved conversation search plan](2026-09-23-saved-conversation-search-plan.md): the FTS5 trigram index, its 3–160 code point limits, and the unavailable/stale states.
+- [Remote workspace search and recovery plan](2026-10-28-remote-workspace-search-and-recovery-plan.md): agent filename-search semantics, the symlink-skip fix, and the 30-second remote recovery policy.
+- [Rust remote agent boundary decision](../decisions/2026-08-22-rust-remote-workspace-agent-boundary.md).
+- bigbud note or Kanban card: none identified. The request came in conversation. See open question Q12.
+
+## Problem
+
+- Mod+F searches file contents only in the **current** workspace root (`apps/web/src/components/layout/SearchPalette.content.tsx:118-126`). It does not search other projects, the computer, or other connected backends.
+- Local content search spawns `rg` from `PATH`, with a slow Node fallback when `rg` is missing (`apps/server/src/workspace/Layers/WorkspaceFileSystem.ts:172-230`). Direct-SSH remotes fail outright without `rg` on the host (`WorkspaceFileSystem.ts:198-205`).
+- The agent's content search is a breadth-first walk with no `.gitignore` support, a hard-coded ignore list (`crates/bigbud-remote-agent/src/workspace/search.rs:14`), and case-sensitive matching (`search.rs:162`). It differs from `rg --smart-case`. It still **aborts on any symlink** (`search.rs:187`), although filename search was fixed to skip symlinks. A plain walk of this repository without ignore rules took 38 s (see the findings below).
+- In supervisor mode, agent searches run while holding the shared session mutex (`crates/bigbud-remote-agent/src/supervisor/core.rs:349-352`), so a long search blocks every connection to that agent. In stdio mode the frame loop is single-threaded (`crates/bigbud-remote-agent/src/main.rs:45-104`), so a `CancelRequest` cannot even be read until the search finishes.
+- Saved-message search sorts by `ORDER BY m.rowid DESC` (`apps/server/src/orchestration/Layers/ProjectionCatalogQuery.search.ts:88`). That forces SQLite to sort every match in a temporary B-tree (measured below). It has no relevance score and no current-thread or current-project boost.
+
+## Goals
+
+1. One Rust engine (`ignore` + `grep-searcher` + `grep-regex`) in `bigbud-remote-agent`, used for local and remote project search. Local search goes through the local agent the server already runs. The server stops calling `rg`.
+2. Mod+F searches bigbud data and all project files first. It searches "this computer" only through the OS index (Spotlight first). Remote backends get quick, bounded live scans of their project folders only.
+3. Fixed ranking tiers: current thread → current project → other bigbud data → other projects' files → this computer → remote areas outside projects. Rows already shown never reorder.
+4. Results stream, and each keystroke cancels the previous query's work end to end: web, server, agent, and Spotlight.
+5. Supported formats open inside bigbud. Unsupported formats open in the system default app, and "Reveal in Finder/Explorer" is available.
+6. New Settings toggles: "Search this computer" and "Search connected remote backends". Full Disk Access stays in the existing Settings › File Access section.
+7. Hard privacy rules: default exclusions are enforced in the engine. OS-search results are never sent to AI providers. Agents cannot use "this computer" search.
+
+## Non-Goals
+
+- A bigbud-owned whole-disk name or content index, a privileged Windows service, or a new Full Disk Access prompt flow. The existing File Access section covers this.
+- Querying Raycast or Alfred. They have no third-party index API and use Spotlight themselves.
+- Remote search outside the agent account, use of `sudo`, or remote "this computer" search (for example remote `plocate`).
+- Launcher features such as apps, a calculator, or system settings.
+- Exposing workspace-wide or "this computer" search as an agent tool. Agent-facing search is a separate, later decision.
+- Changing Mod+P (`WorkspaceEntries`). Mod+P keeps its current implementation. Matching semantics are shared through fixtures (see Design §2).
+- Exposing search on the mobile gateway surface (`apps/server/src/ws/ws.mobile.ts`).
+- Notes and Kanban cards as search sources. They can be added later as tier-3 sources.
+
+## Current State
+
+| Area                    | Behaviour today                                                                                                                                                                                                                                                                                                                                                                                                            | Evidence                                                                                                                                                                    |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Palette                 | Separate React Query requests for the current file, saved messages, thread titles, projects (local and remote catalog), terminal scrollback, and current-root file contents. 200 ms debounce, 5 rows per section, 40 content matches.                                                                                                                                                                                      | `SearchPalette.content.tsx:56-58,118-140`, `SearchPalette.results.tsx`                                                                                                      |
+| Message search          | FTS5 trigram (`tokenize='trigram'`), 3–160 code points, rowid keyset cursor, `ORDER BY m.rowid DESC`.                                                                                                                                                                                                                                                                                                                      | `Migrations/120_ProjectionMessageSearch.ts:8`, `ProjectionCatalogQuery.search.ts:84-88,140`                                                                                 |
+| Local content search    | `runToolCommand("rg", --json --hidden --smart-case …)`, 10 s timeout, 512 KiB buffer, Node fallback.                                                                                                                                                                                                                                                                                                                       | `WorkspaceFileSystem.ts:172-246`, `WorkspaceFileSystem.search.ts`                                                                                                           |
+| Remote content search   | Managed agent: `ContentSearchRequest` (single response). Direct SSH: `rg` on the host.                                                                                                                                                                                                                                                                                                                                     | `workspace-runtime/Layers/WorkspaceRuntime.remote.ts:297-330`                                                                                                               |
+| Agent protocol          | One `Frame` oneof in `v1.proto`. Workspace messages in `workspace.proto`. `AgentHello.capabilities` lists `workspace.search` 1.0 and others. `PROTOCOL_MINOR` is 8 in Rust and TypeScript. Free oneof numbers: 66–99. `CancelRequest` covers process operations only.                                                                                                                                                      | `protocol/remote-agent/*.proto`, `session/hello.rs:29-56`, `bigbud-protocol/src/lib.rs:11`, `operation_handlers.rs:27-58`                                                   |
+| Agent limits            | 1 MiB maximum frame, 64 workspace roots per session, **no workspace close message**, 256 accepted-operation identities kept for 24 h. Current search handlers insert into and then remove from that table. A full table evicts the oldest identity.                                                                                                                                                                        | `bigbud-protocol/src/lib.rs:12`, `session/core.rs:89-93`, `workspace_handlers.rs:140-150`                                                                                   |
+| Local agent             | `LocalWorkspaceWatchAgent` starts `bigbud-remote-agent --ephemeral` lazily, over stdio, on macOS, Windows and Linux (all six desktop targets). It requires `workspace.files` and `workspace.watch`. Its binary must report exactly the server's protocol major **and minor** in `--check`, so the local agent and server always ship together.                                                                             | `localWorkspaceWatchAgent.ts:62-140`, `localWorkspaceWatchAgent.binary.ts:73-97`, `scripts/lib/workspace-agent-target.ts`                                                   |
+| Opening files in bigbud | Browser panel: `.pdf`, `.htm`/`.html`, images. Files panel: images (avif, bmp, gif, ico, jpeg, jpg, png, svg, webp), video (avi, mov, mp4, webm), `.ipynb`, and everything else as text or code (Markdown rendered). Any path inside a workspace counts as "openable", so binaries currently go to the text preview. Code-related paths that cannot open in bigbud go to the preferred editor, otherwise `shell.openPath`. | `lib/workspaceFilePreview.ts:11-60`, `stores/files/filesPanel.open.ts:150-280`, `FilesPanel.preview.tsx:33-49`, `models/editor/fileOpen.models.ts:117-123`                  |
+| System open             | `shell.openPath` already exists as a WS RPC that calls the server's `Open.openPath`. That spawns `open`, `xdg-open` or `explorer` (with `shell: true` on Windows) and does **no path validation**. In the remote-backend profile it fails by design. The desktop shell only uses `shell.openExternal`.                                                                                                                     | `apps/server/src/utils/open.ts:228-290`, `ws/wsRpcHandlers.workspace.ts:156-159`, `remote-backend/unavailable.host.ts:23`, `apps/desktop/src/window/ipcHandlers.ts:228-240` |
+| Preview HTTP route      | `/api/workspace-file-preview` accepts any `cwd`, normalises it, and resolves the relative path inside it. There is no check against registered projects.                                                                                                                                                                                                                                                                   | `apps/server/src/ws/http.workspace.ts:131-170`                                                                                                                              |
+| File Access settings    | `fileAccessPermissionLevel` (`none`, `common-folders`, `unrestricted`; default `none`) is a **client** setting used only by the UI. Includes a link to the Full Disk Access pane in System Settings.                                                                                                                                                                                                                       | `packages/contracts/src/core/settings.ts:149-153`, `FileAccessSettingsSection.tsx:16-80`                                                                                    |
+| Server settings         | A `ServerSettings` struct exists for server-enforced options.                                                                                                                                                                                                                                                                                                                                                              | `packages/contracts/src/core/settings.ts:255`                                                                                                                               |
+| Streaming RPC           | Effect RPC `stream: true` is used elsewhere. Interrupting the subscription interrupts the server fiber.                                                                                                                                                                                                                                                                                                                    | `packages/contracts/src/server/rpc.workspace.ts:78-86`, `rpc.terminalStream.ts:12-16`                                                                                       |
+
+## Research Findings
+
+All experiments ran on 19 November 2026 on this Mac (macOS 27.2.1, Apple Silicon), from a sandboxed shell, in a scratch folder that was deleted afterwards. Only counts and timings were recorded, never file names. The figures come from one machine and one run and are indicative only. Phase 0 repeats them in the packaged app.
+
+### a. Spotlight from a non-sandboxed process
+
+**`mdfind` CLI**
+
+- Options are limited to `-0`, `-live`, `-count`, `-onlyin`, `-name`, `-literal` and `-interpret`. There is **no result limit, no sort, and no attribute output**.
+- When stdout is a pipe, `mdfind` block-buffers. The first result arrived after 0.55–0.82 s through a pipe, against 0.04–0.20 s through a pty. A subprocess design would need a pty or would see the whole result set late.
+- Total time for broad queries: `-name readme` matched 4,286 items in 2.2 s, and `-name a` matched 122,328 in 14.7 s.
+- `-onlyin ~` with a very common query took 4.4–7.5 s to produce 50 results.
+- Cancelling meant killing the process. The kill was immediate (under 1 ms) and the process was reaped.
+
+**`MDQuery` C API (CoreServices), measured with a small C probe and a Rust probe**
+
+| Query (`kMDItemFSName == "*q*"cd`) | No max count                     | `MDQuerySetMaxCount(50)` |
+| ---------------------------------- | -------------------------------- | ------------------------ |
+| `readme`                           | 4,415 results in 0.60 s          | 50 in 0.055 s            |
+| `package`                          | 6,773 results in 0.59 s          | 50 in 0.053 s            |
+| `a`                                | 479,831 results, cut off at 30 s | 50 in 0.09–0.15 s        |
+| `invoice` (rare)                   | 10 results in 0.37 s             | 10 in 0.35 s             |
+| `zzqqxx` (no match)                | 0 results in 0.35 s              | 0 in 0.36 s              |
+
+- Content queries (`kMDItemTextContent == "q*"cdw`) took 0.03–0.24 s with a maximum of 50. Name **or** content took 0.43–0.71 s.
+- A Rust `objc2-core-services` 0.3.2 probe (feature `MDQuery`; licence Zlib/Apache-2.0/MIT) ran a synchronous query in 55–375 ms. The whole probe binary was 0.39 MB stripped and linked only CoreServices and CoreFoundation. `objc2-core-foundation` 0.3.2 is already in `Cargo.lock` through `sysinfo`.
+- **Scope matters more than speed.**
+  - With the scope set to `$HOME`, 196–199 of the top 200 results for common queries were under `~/Library` (app caches, the pnpm store, Application Support).
+  - Scoping instead to the 24 non-`Library` children of `$HOME`, plus `~/Library/Mobile Documents` (iCloud Drive) and `~/Library/CloudStorage`, gave 0 `Library` noise. It returned 200 results in 0.12–0.52 s.
+- A home-wide name query returned 148 file names that look sensitive: browser `Cookies` and `Login Data`, `.env` files, `.pem` keys and similar. Exclusions must be enforced in the engine, not only in the UI.
+- **Protected folders.**
+  - From this process, which cannot list `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Library/Mail`, `~/Library/Messages`, `~/Library/Safari` or iCloud Drive, Spotlight returned **zero** results inside any of them.
+  - In this run, Spotlight's results were limited to what the calling process can read.
+  - This shell's restriction may come from Claude Code's own sandbox rather than TCC. Phase 0 must repeat this from the packaged bigbud app twice, once without and once with Full Disk Access granted.
+  - When Electron's server starts the local agent, the agent is a descendant of the bigbud app. macOS normally attributes privacy (TCC) checks to the responsible app bundle, which needs the same verification.
+
+**Decision: `MDQuery` in the Rust local agent, not `mdfind`.**
+
+- It has a native maximum count, and results arrive in progress batches without the pipe-buffering problem.
+- `MDQueryStop` provides cancellation.
+- It returns attributes such as `kMDItemPath`, `kMDItemLastUsedDate`, `kMDItemFSSize` and `kMDItemContentType` for ranking.
+- It accepts multiple search scopes.
+- The cost is one small, macOS-only binding crate.
+
+The probe ran synchronous mode. The engine will run asynchronous mode on a dedicated thread with its own `CFRunLoop`, plus a short run-loop timer that polls a cancel flag and calls `MDQueryStop` and `CFRunLoopStop`. Query strings must still be escaped: backslash-escape `\`, `"`, `*` and `?`, and reject control characters. A `mdfind`-through-a-pty fallback was rejected as fragile.
+
+### b. Local agent availability and protocol versioning
+
+- `LocalWorkspaceWatchAgent` runs on all six desktop targets (macOS, Windows and Linux on arm64 and x64). It is started lazily and restarts with backoff.
+- It talks the same framed v1 protocol as remote agents through `RemoteAgentWorkspaceClient`. A search RPC is therefore a protocol addition, not a new process.
+- **Local compatibility is automatic.** `--check` requires the exact server protocol minor (`localWorkspaceWatchAgent.binary.ts:89`), and the agent is packaged with the server, so local server and agent change in lockstep.
+- **Remote compatibility uses the existing capability pattern.** The agent advertises `(name, major, minor)` in `AgentHello`. The server checks `supportsCapability(name)` against major 1 (`remoteAgentConnection.ts:90-94`).
+  - A new capability name (`workspace.search-stream` 1.0) gates the new frames. An old agent never receives them.
+  - If a new frame were sent anyway, prost decodes the unknown oneof as `None`. The old agent answers with a `ProtocolError` and does not crash.
+  - New agents keep serving the legacy `FilenameSearchRequest` and `ContentSearchRequest` (now backed by the new engine), so older servers keep working.
+- Two structural problems must be fixed as part of the protocol work:
+  1. Searches run on the frame thread, and in supervisor mode they hold the session mutex. Search must run on a worker, with a reader that stays responsive to `CancelRequest`.
+  2. Search must not use the 256-entry, 24-hour accepted-operation table. A search per keystroke would evict real process identities. Search gets its own small in-flight registry.
+  - There is also no workspace-close message and a 64-root limit, so workspace-wide search should carry its roots in the request (validated like `WorkspaceOpenRequest`) instead of opening a handle per project.
+
+### c. ripgrep library crates
+
+| Crate (resolved)       | Licence                                                                 | Notes                                                                                                                                                                                                  |
+| ---------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ignore` 0.4.34        | Unlicense OR MIT                                                        | Parallel walker, gitignore rules, overrides; no `unsafe`                                                                                                                                               |
+| `grep-searcher` 0.1.17 | Unlicense OR MIT                                                        | Line-oriented searcher, binary detection, optional mmap; 2 `unsafe` sites                                                                                                                              |
+| `grep-regex` 0.1.14    | Unlicense OR MIT                                                        | Literal and regex matcher with smart case                                                                                                                                                              |
+| `grep-matcher` 0.1.9   | Unlicense OR MIT                                                        | Matcher trait                                                                                                                                                                                          |
+| New transitive crates  | MIT/Apache-2.0, plus `encoding_rs` (Apache-2.0 OR MIT) AND BSD-3-Clause | `globset`, `bstr`, `encoding_rs`, `encoding_rs_io`, `memmap2`, `crossbeam-*`. Already in the agent: `memchr`, `walkdir`, `same-file`, `log`; `regex-automata` and `aho-corasick` are in the workspace. |
+
+- **Binary size (scratch crate, release build, `strip -x`).** A baseline of `walkdir` + `memchr` was 0.43 MB. The same program with `ignore`, `grep-searcher`, `grep-regex` and `grep-matcher` was 2.64 MB, so the libraries add about **2.2 MB**. Today's stripped release agent is 2.66 MB, so expect roughly 4.6–4.9 MB. `encoding_rs` cannot be turned off and accounts for part of that. The BSD-3-Clause part of its licence needs a notice in the third-party licences file.
+- **Speed (this repository, 14,421 files after gitignore, warm cache).**
+  - Parallel literal smart-case search over all files finished in 134–169 ms. The first hit arrived after 43–65 ms.
+  - With 2 threads: 227 ms.
+  - `rg` 15.2 CLI: 164 ms.
+  - The naive walk without ignore rules (comparable to today's Node fallback) took **38 s**.
+- **Cancellation.** Setting the cancel flag 30 ms and 80 ms into a search stopped it after 33.6 ms and 84 ms total, about 4 ms of latency. The flag was checked per file (returning `WalkState::Quit`) and per match (the sink returns `false`). A single large file is the worst case, which the per-file size cap (5 MiB) bounds.
+- **Thread model.** `WalkParallel::run` calls its factory closure once on each worker thread. That is the hook for per-thread priority: QoS `UTILITY` on macOS, `setpriority` and `ioprio_set` on Linux, `THREAD_MODE_BACKGROUND_BEGIN` on Windows. Thread count is set with `.threads(n)`.
+- **Streaming over the framed protocol.** Workers send hits into a bounded channel. One emitter thread batches them (at most 64 hits or about 128 KiB, far below the 1 MiB frame cap) and writes frames through the session's existing shared writer, as the watch events already do (`main.rs:52-54`). Batches carry monotonic sequence numbers, and exactly one terminal frame follows.
+
+### d. Windows Search and Linux `plocate` (desk research, not measured)
+
+- **Windows Search.**
+  - Query `SystemIndex` through OLE DB (`Provider=Search.CollatorDSO`), with `ISearchQueryHelper` generating the SQL. The `windows` crate (feature `Win32_System_Search`) is already in the lockfile at 0.62.2.
+  - Results are security-trimmed to the user, and `SELECT TOP n` gives a native limit.
+  - Default scope is the user profile and libraries. The `WSearch` service is often disabled on managed or debloated machines, and the adapter must then report "unavailable".
+  - OLE DB from Rust involves a fair amount of COM code. A spike is needed before committing.
+- **Linux `plocate`.**
+  - It is the default `locate` on Debian 12 and Ubuntu 22.04 and later. Run `plocate -i -l <n> -0 -- <pattern>` as a subprocess, never by linking (the licence is GPL-2.0).
+  - It checks per result that the user can access the path.
+  - The database is refreshed by a daily `updatedb`, so results can be up to a day old, and the UI should say so.
+  - Fallbacks: `locate`, GNOME `localsearch`/`tracker3` and KDE `baloo` can follow later as adapters. Otherwise the tier shows "unavailable".
+- **Recommendation:** ship macOS first. Windows and Linux follow as separate adapters behind the same `OsIndexSearch` interface.
+
+### e. Message FTS ranking and short queries
+
+Synthetic benchmark: SQLite 3.51 with the production FTS5 trigram schema shape, 200,000 messages of 20–200 words each.
+
+| Query (matches)          | Current `ORDER BY m.rowid DESC` | `ORDER BY bm25()` | `ORDER BY search.rowid DESC` | Recent 200 by FTS rowid, then tier boost + bm25 |
+| ------------------------ | ------------------------------- | ----------------- | ---------------------------- | ----------------------------------------------- |
+| common term (173,503)    | 100 ms                          | 212 ms            | **0.5 ms**                   | 52 ms                                           |
+| common trigram (174,242) | 52 ms                           | 128 ms            | **0.1 ms**                   | 3.5 ms                                          |
+| rare (3,271)             | 2.7 ms                          | 4.4 ms            | 0.1 ms                       | 0.5 ms                                          |
+
+- `EXPLAIN QUERY PLAN` shows the current query uses `USE TEMP B-TREE FOR ORDER BY`. Ordering by the FTS table's own rowid scans in reverse and stops at the limit, so the B-tree goes away.
+- **Recommended cheap ranking:**
+  1. Fix the order to `search.rowid DESC`. This changes no behaviour, because both rowids are the same value.
+  2. Add a current-thread query: indexed `thread_id` lookup plus `instr()` over that thread's messages only. It also works for 1–2 character queries.
+  3. Add a current-project query: FTS `MATCH` plus a `project_id` filter.
+  4. Rerank the global page within a bounded recent window (for example 200 FTS-ordered candidates) by tier, then `bm25()`, then recency.
+  - Full-corpus `bm25()` ordering is rejected because it costs 2x the current query on common terms.
+  - Phase 0 confirms the plans on a real database through the server's SQLite build (`NodeSqliteClient` and `BunSqliteReadWorker`).
+- **Short queries:**
+  - 1–2 characters: client-side thread titles and projects, current-thread messages (`instr`), and current-project file names.
+  - 3 or more characters: message FTS and content search.
+  - "This computer" and all-project file names start at 2 characters.
+
+### f. File-open matrix and the system-open bridge
+
+The exact lists of what opens where are in the Current State table. Three conclusions:
+
+1. Routing must stop treating "inside a workspace" as "previewable". It should send known binary or unsupported types (Office, audio, archives, fonts, executables, disk images and so on) to the system-open path.
+2. The desktop shell should gain `shell.openPath` and `shell.showItemInFolder` IPC with its own path validation. Electron's API calls into the OS without a shell. The server's `Open.openPath` (Windows `shell: true`, no validation) stays as the fallback for web mode on the same machine only.
+3. Remote unsupported files are downloaded over the agent to an owner-only cache, then opened. Supported remote files keep using the existing preview over the agent (5 MiB text cap, ranged video).
+
+## Design
+
+### 1. Tier model and result identity
+
+Fixed tier order. Scores only compare rows within the same tier.
+
+| Tier | Contents                                                                                                                            | Sources                                       | Minimum query length                            |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------- |
+| T1   | Current thread: messages, the current file preview, the current thread's terminals                                                  | Server message query; existing client sources | 1                                               |
+| T2   | Current project: file names and contents, thread titles and messages in the project                                                 | Agent engine (local or remote); server FTS    | Names 1, contents 3, messages 3                 |
+| T3   | Other bigbud data: thread titles, messages, projects, terminals                                                                     | Existing sources with FTS ranking             | Titles and projects 1, messages and terminals 3 |
+| T4   | Other projects' files: local first, then connected remotes                                                                          | Agent engine fan-out                          | Names 2, contents 3                             |
+| T5   | This computer                                                                                                                       | OS index through the local agent              | 2                                               |
+| T6   | Remote areas outside projects: registered remote workspace roots that are not themselves project folders. Never host-wide (see Q3). | Remote agent engine                           | Names 2, contents 3                             |
+
+- Every row has a stable ID: `tier:source:target:path[:line]`. React keys and cmdk values use it, so streamed rows append without reordering existing ones.
+- Within a tier the order is:
+  1. exact basename match;
+  2. prefix match;
+  3. path-segment or word-boundary match;
+  4. subsequence (fuzzy) match;
+  5. ties broken by bigbud's open and attach recency where available, then modification time.
+- Name matching reuses the existing semantics in the agent's `search.rank.rs`, which match `WorkspaceEntriesSearch.ts`. A shared JSON fixture file checks that both implementations stay equivalent.
+- No new fuzzy-matcher crate. `nucleo` (MPL-2.0) is not needed.
+
+### 2. Rust engine (`bigbud-remote-agent/src/search/`)
+
+The new capability folder has a lean `mod.rs`. Each file stays at or under 400 lines.
+
+- `search/request.rs`: validated request (roots, query, mode, limits, deadline, priority, thread budget).
+- `search/walk.rs`: `ignore::WalkBuilder` setup.
+  - Respects `.gitignore`, `.ignore` and the global excludes file.
+  - Includes hidden files, matching today's `rg --hidden`.
+  - Always skips `.git`, `node_modules`, `target`, `.bigbud`, `.next`, `.turbo`, `.convex`, `dist`, `build`, `out` and `.cache`, through overrides. That is the union of today's agent and server lists.
+  - Never follows symlinks or junctions, and skips names that are not valid UTF-8.
+- `search/names.rs`: filename scoring through the existing `rank` module, moved under `search/`. Keeps a bounded top-K heap per root.
+- `search/content.rs`:
+  - `grep-searcher` with literal smart-case matching (`grep-regex` with `fixed_strings`).
+  - Binary detection with `quit(0)` (stop at the first NUL byte).
+  - Skips files over 5 MiB.
+  - At most 5 matches per file; excerpts at most 512 characters.
+- `search/run.rs`: owns the worker pool for one operation.
+  - Cancel flag (`Arc<AtomicBool>`), deadline, and per-root and global result caps.
+  - Bounded `sync_channel` to the emitter. A slow writer blocks the walkers, so memory stays bounded and the deadline still applies.
+  - The terminal stop reason is one of `complete`, `limit`, `deadline`, `cancelled` or `error`.
+- `search/priority.rs` (split per platform with `cfg`): lowers the priority of each walker thread from inside the `WalkParallel::run` factory.
+- `search/registry.rs`: in-flight operations per session.
+  - At most 2 concurrent interactive searches. A third request is rejected with `SEARCH_BUSY`.
+  - The registry is keyed by `operation_id`, which lets `CancelRequest` work.
+  - It is separate from `accepted_operations`. Search is idempotent and is never journalled or replayed. After a reconnect the server simply re-issues the query.
+- `os_index/` (local only): `mod.rs`, `spotlight.rs` (macOS, `MDQuery`), and later `windows_search.rs` and `plocate.rs`, plus `exclusions.rs`.
+- Existing `workspace/search.rs` and `workspace/search.rank.rs` become thin adapters over `search/` for the legacy frames. This fixes the legacy content search's symlink abort and case sensitivity. Their tests move with them.
+- **Thread budgets:**
+  - Local interactive: `min(max(2, cores / 2), 6)`.
+  - Remote: 2 threads, with lower CPU and I/O priority.
+  - Deadlines: 2 s local and 3 s remote, set by the server per request and clamped by the agent to at most 10 s.
+
+### 3. Protocol (`protocol/remote-agent/workspace.proto`, new `search.proto`; `PROTOCOL_MINOR` 8 → 9)
+
+Field names below are illustrative; final names are chosen in Phase 2. New `Frame` oneof numbers start at 66.
+
+- `WorkspaceSearchRequest`: `request_id`, `operation_id`, `repeated SearchRoot roots` (`root_id` as an opaque server label, absolute `root`, optional `relative_path`), `query`, `mode` (`NAMES` / `CONTENT` / `BOTH`), `max_results`, `max_results_per_root`, `deadline_ms`, `max_threads`, `priority`.
+  - Each root is validated like `WorkspaceOpenRequest`: absolute, canonical, a directory, no NUL bytes. At most 128 roots per request.
+  - The agent opens transient roots for the operation, so the 64-handle limit does not apply and no close message is needed.
+- `WorkspaceSearchBatch`: `request_id`, `operation_id`, `sequence`, `repeated SearchNameHit` (`root_id`, `path`, `is_directory`, `size_bytes`, `modified_unix_ms`, `score`), `repeated SearchContentHit` (`root_id`, `path`, `line`, `column`, `excerpt`).
+- `WorkspaceSearchCompleted`: `request_id`, `operation_id`, `stop_reason`, `truncated`, `files_scanned`, `per_root_errors` (root ID and code, for example `ROOT_MISSING`, `PERMISSION_DENIED`), `error_code`, `error_message`.
+- `OsIndexSearchRequest`, `OsIndexSearchBatch` and `OsIndexSearchCompleted`: the same shape, with `source` (`spotlight` / `windows-search` / `plocate`), `availability` (`ready` / `disabled` / `indexing` / `unavailable`), and hits carrying the absolute `path`, `kind`, `size_bytes`, `modified_unix_ms` and `last_used_unix_ms`.
+- Cancellation reuses `CancelRequest` and `CancelResponse`. `handle_cancel_request` checks the search registry before the process table.
+- Capabilities:
+  - `workspace.search-stream` 1.0: advertised by all new agents.
+  - `os-index.search` 1.0: advertised **only** when the agent was started with `--ephemeral` from the local desktop server. The request handler refuses OS-index requests in any other mode as well, so remote agents can never search outside project roots (defence in depth for decision 4).
+- **Frame-loop change.** In stdio (`main.rs`) and supervisor (`supervisor/core.rs`) modes, search requests are _prepared_ under the session lock: validate the request and register a cancel flag. They are then _executed_ on a worker thread that writes through the shared writer, following the `prepare_pty_control` and `prepare_pty_create` patterns. The reader loop stays free for `CancelRequest`.
+- `bigbud-protocol/build.rs` rerun inputs, the TypeScript codec split files (`remoteAgentProtocol.codec.search.encode.ts` and `.decode.ts`), and `v1.golden.frames` are all updated together.
+
+### 4. Server fan-out, ranking and merge (`apps/server/src/search/`)
+
+- `Services/SystemSearch.ts` and `Layers/SystemSearchLive.ts` expose one streaming RPC, `search.query`, defined in `packages/contracts/src/server/rpc.search.ts` with schemas in `packages/contracts/src/search/*.ts`.
+  - Input: `queryId`, `query`, current thread, project and file context, and the enabled tiers.
+  - The stream emits `SearchTierUpdate` events (`queryId`, `tier`, `sourceId`, `items`, `state`: `searching` / `partial` / `done` / `unavailable`, `reason`, `truncated`).
+- Source modules:
+  - `SystemSearch.workspaceFiles.ts`: T2, T4 and T6. Builds root lists from the project catalog (local and remote), groups them by execution target, and sends one agent request per target.
+    - Local requests go to `LocalWorkspaceWatchAgent.getConnection()`. Remote requests go to the existing connection pool, gated by `useRemoteExecutionAccessGate` semantics on the client and connection state on the server.
+    - The current project is requested first and separately, with a higher per-root cap.
+    - Remotes that are not connected yield `unavailable: not-connected`. The server never dials just to search.
+    - Remote search is skipped when the setting is off.
+  - `SystemSearch.osIndex.ts`: T5. Runs only when all of the following hold:
+    1. the server runs as the desktop-embedded backend (the remote-backend profile supplies an unavailable layer, like `RemoteOpenLive`);
+    2. the server setting `search.thisComputer` is on;
+    3. the caller is the main WebSocket surface (not mobile, not thread tools, not MCP).
+  - Message, thread and terminal sources stay on their existing RPCs in Phase 1. The client assembles tiers from those results and the `search.query` stream. Moving them into the stream later is optional.
+- **Cancellation.** The client unsubscribes, which interrupts the Effect fiber. A finaliser sends `CancelRequest` for each in-flight agent operation, and late batches for an interrupted `queryId` are dropped.
+- **Per-query caps.**
+  - Rows sent to the client: 200 in total.
+  - T4: 20 rows per project.
+  - T5: 50 rows. The agent requests 200 from Spotlight and filters them down to 50 after applying the exclusions.
+- **Old remote agents.** Without `workspace.search-stream`, the server uses the legacy `FilenameSearchRequest` (names only), marks the source `partial` with reason `agent-update-available`, and skips content search on that target.
+- **Direct-SSH remotes (no managed agent).** Behaviour depends on Q5. The recommendation keeps `rg` on the host for those remotes as a legacy path until they move to a managed agent.
+- **Logging.** Only counts, durations, stop reasons and target kinds are logged. Never queries, paths or excerpts. This follows `crates/AGENTS.md` and avoids putting personal data in logs.
+
+### 5. Web palette (`apps/web/src/components/layout/`)
+
+`SearchPalette.content.tsx` is already 390 lines, so tier logic moves out before any feature is added:
+
+- `SearchPalette.tiers.logic.ts`: tier ordering, stable IDs, in-tier ranking, and merging streamed updates without reordering.
+- `SearchPalette.stream.ts`: a hook around the `search.query` subscription with a `queryId` generation guard.
+- `SearchPalette.tierSections.tsx`: renders section headings, "Searching…", "Unavailable: Spotlight is turned off", "Remote not connected" and "Agent update available" states.
+- `SearchPalette.open.logic.ts`: the open routing in §7.
+
+Behaviour:
+
+- Local client-side sources (titles, projects) update with no debounce. Server and agent sources keep the 200 ms debounce.
+- Each tier shows 5 rows, with "Show more".
+- Keyboard focus stays on the selected row while new rows arrive below it.
+- Screen readers get a polite live-region summary per tier.
+- Status colours follow the UI conventions: blue for working, amber for partial or unavailable, red only for real failures.
+
+### 6. Settings
+
+New `ServerSettings.search` fields, enforced on the server:
+
+- `thisComputer: boolean`. Default per Q1; the recommendation is `false`.
+- `connectedRemoteBackends: boolean`. Default `true`; it only ever covers project folders.
+
+The UI is a new "Search" section placed near "File Access", with these rows:
+
+- "Search this computer". The description names the OS index used ("Uses Spotlight on this Mac"). When the File Access level is `none`, the row is disabled with a link to File Access.
+- "Search connected remote backends".
+- An "Index status" line, for example "Spotlight indexing is on" or "Windows Search service is disabled".
+
+The File Access level limits the Spotlight scope:
+
+- `common-folders` → Desktop, Documents, Downloads, Music and Pictures.
+- `unrestricted` → the non-`Library` children of home, plus iCloud Drive (`~/Library/Mobile Documents`) and `~/Library/CloudStorage`.
+
+The client sends its level with each request and the server takes the stricter of the two (see Q2 for whether this should become a server setting).
+
+Full Disk Access stays where it is, behind the existing "Open System Settings" link in File Access.
+
+### 7. Opening results
+
+| Result                                       | Supported type (current lists)                         | Unsupported type                                                         |
+| -------------------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Project file (local or remote)               | Existing Files or Browser panel routing                | Local: desktop `openPath`. Remote: download to cache, then `openPath`.   |
+| This computer (local)                        | Read-only "loose file" preview (below)                 | Desktop `openPath`                                                       |
+| Any local result, secondary action           | "Reveal in Finder/Explorer" through `showItemInFolder` | Same                                                                     |
+| Web client not on the host (browser, mobile) | Preview only                                           | Hidden. Opening an app on the host machine would surprise a remote user. |
+
+- **Unsupported types.** `workspaceFilePreview.ts` gains `isKnownBinaryFilePath()`, an explicit list of binary extensions plus a server-side NUL sniff that already happens in preview loads. Those files go to system open instead of the text preview, which removes today's "binary as text" behaviour.
+- **Desktop IPC** (new file `apps/desktop/src/window/shellPathHandlers.ts`, registered beside `OPEN_EXTERNAL_CHANNEL`, main-window role only):
+  - `OPEN_PATH_CHANNEL` and `SHOW_ITEM_IN_FOLDER_CHANNEL`.
+  - Validation: a string; absolute; no NUL bytes; normalised; `lstat` shows an existing regular file or directory (symlinks resolved with `realpath`, then checked again); not on the exclusion list.
+  - Executables and launchable bundles (`.app`, `.command`, `.tool`, `.pkg`, `.dmg`, `.exe`, `.bat`, `.cmd`, `.ps1`, `.msi`, `.lnk`, `.desktop`, `.sh` and other files with an executable bit) are **revealed, never launched**, unless the user confirms in the existing confirm dialog.
+  - Uses `shell.openPath` (which returns an error string) and `shell.showItemInFolder`.
+  - The preload exposes `desktopBridge.openPath` and `desktopBridge.showItemInFolder`. `NativeApi.shell.openPath` prefers the bridge, then falls back to the server RPC.
+  - The server's `Open.openPath` gets the same validation, extracted to `apps/server/src/utils/openPath.validate.ts`. The shared exclusion data lives in one JSON file (below).
+- **Loose-file preview.** A preview target `{ kind: "loose", absolutePath }`:
+  - The server resolves it to the parent folder as `cwd` plus the basename.
+  - It applies the exclusion list and the 5 MiB text cap.
+  - It is read-only: no edit, no annotations, no "add to chat" unless the user drags it in explicitly.
+  - It does not register a project or workspace, and it grants no agent access.
+- **Remote download cache.**
+  - Location: `<userData>/remote-open-cache/<targetId>/<sha256(path)>/<basename>`, directories mode 0700 (the pattern from commit 198ee98632).
+  - Files are streamed through the agent's `ReadFileRequest` in chunks, and the size is checked before download (Q8 sets the caps).
+  - The UI shows "This is a copy; edits won't sync".
+  - Eviction after 7 days or when the cache passes 1 GiB, oldest first.
+  - Cache files are never attached to chats automatically.
+
+### 8. Safety and privacy
+
+- **Default exclusions** (one data file, `packages/shared/src/search/osIndexExclusions.json`, read by TypeScript and embedded in Rust with `include_str!`).
+  - They apply to T5 results, loose-file previews, and system-open of non-project paths.
+  - Path components: `.ssh`, `.gnupg`, `.aws`, `.azure`, `.kube`, `.docker`, `.config/gcloud`, `.password-store`, `Library/Keychains`, `Library/Mail`, `Library/Messages`, `Library/Cookies`, `Library/Safari`, browser profile folders (Chrome, Chromium, Brave, Edge, Arc, Vivaldi, Firefox, Thunderbird), the 1Password, Bitwarden and KeePassXC data folders, `AppData/Roaming/Microsoft/Credentials`, `AppData/Local/Microsoft/Vault`, and bigbud's own state and data folders.
+  - File names and globs: `.env*`, `*.pem`, `*.key`, `id_*` (private keys), `*.p12`, `*.pfx`, `*.kdbx`, `*.keychain*`, `credentials*`, `secrets*`, `.netrc`, `.npmrc`, `.pypirc`, `.git-credentials`, `Cookies`, `Login Data`, `Web Data`, `logins.json`, `key3.db`, `key4.db`.
+  - Excluded results are dropped in the agent before they cross the protocol.
+  - Project tiers keep today's behaviour: `.env` files in projects are shown.
+- **Never sent to AI providers.**
+  - The `search.query` RPC and its results are UI-only.
+  - They are not reachable from thread tools (`ws/http.threadTools*`), MCP bridges, provider adapters or automations.
+  - A result reaches a model only when the user explicitly attaches it or opens it into a chat. A server test asserts that no provider-facing tool registry contains a search tool.
+- **Agents never use "this computer".**
+  - The capability is only advertised to the local desktop server, and the request handler refuses it in any other agent mode.
+  - On the server, the OS-index source only runs for the main desktop WS surface.
+- **Untrusted data.** File names and excerpts are rendered as text (never HTML), truncated, and bidirectional-override characters are made visible.
+- **No persistence.** Queries and results are not stored (no index, no history) beyond in-memory React Query caches, which are cleared when the palette closes. bigbud's own open history (for recency) only covers files the user opened.
+- **Spotlight specifics.** Results are treated as sensitive (Sploitlight). bigbud never asks for Full Disk Access because of search; File Access remains the only place that explains it.
+- **Remote.** Searches run as the agent's user, inside registered roots only, with no `sudo` and with lowered priority. Remote "this computer" does not exist.
+- **Managed devices.** A policy key (`BIGBUD_SEARCH_THIS_COMPUTER=0`, read by the server) forces T5 off. This is documented for administrators.
+
+### 9. Performance budgets and measurement
+
+| Budget (warm cache)                                    | Target                                                                                                                              |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Client-side tiers (titles, projects) after a keystroke | ≤ 16 ms render, no debounce                                                                                                         |
+| Message search (T1 + T3) at 200k messages              | p95 ≤ 20 ms server time                                                                                                             |
+| Current project names (≤ 50k files)                    | first row p50 ≤ 100 ms, p95 ≤ 300 ms                                                                                                |
+| Current project contents                               | first hit p50 ≤ 150 ms; complete or partial by the 2 s deadline                                                                     |
+| All local projects (T4)                                | partial results by 2 s; never runs past the deadline                                                                                |
+| Spotlight (T5)                                         | first batch p50 ≤ 150 ms; done ≤ 700 ms                                                                                             |
+| Remote (per target)                                    | 3 s deadline; ≤ 256 KiB over SSH per query; no measurable effect on active turns (CPU share capped by 2 threads and lower priority) |
+| Cancel → agent work stopped                            | ≤ 50 ms (measured about 4 ms in the probe)                                                                                          |
+| Agent binary growth                                    | ≤ 2.5 MB stripped per target                                                                                                        |
+| Agent RSS during a search                              | ≤ +64 MiB                                                                                                                           |
+
+How these are measured:
+
+- Rust: an `#[ignore]` benchmark integration test (`crates/bigbud-remote-agent/tests/search_bench.rs`) over generated trees (10k, 50k and 200k files) and this repository. It prints first-hit, completion and cancel latency, and it is run manually. No new benchmarking dependency.
+- Server: Effect spans on each source carry `search.tier`, `search.durationMs`, `search.stopReason` and `search.resultCount`.
+- Web: `performance.mark` for keystroke → first row per tier, checked in a browser test with fake sources.
+- Remote: the existing remote measurement procedure (`docs/reports/2026-11-18-remote-backend-measurements.md`), run on the 2 vCPU VPS while a turn is active.
+- Binary size: the stripped release size of each target is compared before and after in the release-asset verification.
+
+### 10. Compatibility and migration
+
+- Local: lockstep through `--check`, so there are no compatibility branches.
+- Remote agents older than protocol minor 9: names only, through the legacy frame, with the "update available" state. The existing managed upgrade flow delivers new agents. The plan never bypasses signature checks or forces an upgrade (see the 2026-10-28 plan).
+- New agents with old servers: the legacy frames keep working, now backed by the engine.
+- Removing `rg`: after Phase 2 the local path never spawns `rg`. `WorkspaceFileSystem.search.ts` parsing and the Node fallback are deleted once local search goes through the agent. Q5 decides direct SSH.
+- Settings: the new `ServerSettings.search` fields decode with defaults, so no migration is needed.
+
+### 11. Conventions
+
+- Every new or materially edited source or test file stays at or under 400 lines. Files are split with dot-notation (`SystemSearch.workspaceFiles.ts`, `SearchPalette.tiers.logic.ts`) and Rust capability folders. `SearchPalette.content.tsx` (390 lines) and `WorkspaceFileSystem.test.ts` (389 lines) must be split before they are edited.
+- Contracts use subpath imports only (`@bigbud/contracts/search/...`). No barrel additions, and no Effect barrel imports.
+- `Effect.fn("name")` is used for named server functions. Layers are named `SystemSearchLive`.
+- Rust: typed errors, no `unwrap`, a `// SAFETY:` comment for each `unsafe` block in the MDQuery binding, `cfg`-gated platform modules, and a regression test for each bug fixed (symlink abort, case sensitivity, session-lock blocking).
+- New crates need engineering-team approval before they are added (`crates/AGENTS.md`). See Q9.
+
+## Phases
+
+Each phase can ship on its own and leaves the palette working.
+
+### Phase 0: Baselines and verification (no user-visible change)
+
+- **Measure:** palette per-tier latency today; the message query plan and timing on a real (copied, local) database through the server's SQLite build; agent search on this repository and on 50k and 200k-file generated trees, locally and on the 2 vCPU VPS.
+- **Verify Spotlight from the packaged bigbud app.** Run it with Full Disk Access off and on, and record whether results inside Desktop, Documents, Downloads and iCloud Drive appear. Confirm that a local agent started by the server inherits the app's TCC attribution.
+- **Spikes:** Windows `SystemIndex` through the `windows` crate (one query, timing, behaviour when the service is disabled), and `plocate` on Ubuntu 24.04.
+- **Exit:** a findings addendum in this plan, with the budgets in §9 confirmed or adjusted.
+
+### Phase 1: Ranking and tiers in the palette (server message query + web)
+
+- **Server:**
+  - Change the message search to `ORDER BY search.rowid DESC`.
+  - Add the current-thread query (`thread_id` index + `instr`, any length up to 160) and a current-project-scoped page.
+  - Rerank the global page within the recent 200-candidate window: tier, then `bm25`, then recency.
+  - Keep the cursor contract. The global keyset stays rowid-based, and reranking only reorders inside a page.
+- **Web:**
+  - Split `SearchPalette.content.tsx`.
+  - Add `SearchPalette.tiers.logic.ts` and tier sections in the fixed order.
+  - Stable IDs and append-only updates.
+  - Short-query rules.
+  - Debounced remote sources; immediate client-side sources.
+- **Exit:**
+  - Tier order is correct for the current thread and the current project.
+  - Existing saved-message browser tests still pass.
+  - Message p95 meets the budget on the benchmark corpus.
+
+### Phase 2: Rust engine and streaming protocol (agent + server, current project only)
+
+- **Dependencies:** approval of Q9.
+- **Agent:** add the `search/` capability, the legacy-frame adapters, and the worker execution with the search registry and `CancelRequest` support in stdio and supervisor modes. Add the protocol messages, capability, `PROTOCOL_MINOR` 9, the TypeScript codec and golden frames.
+- **Server:**
+  - Local content search goes to the local agent (`LocalWorkspaceWatchAgent`).
+  - Remote managed agents use streaming when `workspace.search-stream` is present, otherwise the legacy frames.
+  - Remove the local `rg` spawn and the Node fallback.
+- **Exit:**
+  - Local and remote current-project search return the same results for the same tree (shared fixtures).
+  - No `rg` process is ever spawned locally (asserted in a test).
+  - Cancel latency is ≤ 50 ms.
+  - A search in progress no longer blocks other supervisor connections (regression test).
+
+### Phase 3: Workspace-wide search (T2, T4, T6)
+
+- Add the `search.query` streaming RPC and `SystemSearch` with the workspace-files source.
+- Group roots per target and send one agent request each, with deadlines, caps and per-root errors.
+- Add the remote setting toggle and the not-connected and update-available states.
+- Web: the stream hook and tier sections.
+- **Exit:**
+  - With 30 local projects and 2 remotes, T2 arrives first and T4 and T6 stream without reordering.
+  - Disconnecting a remote shows "not connected" without delaying the other tiers.
+  - Typing quickly leaves no orphaned agent operations (registry empty within 100 ms of the last cancel).
+
+### Phase 4: Opening results
+
+- Add the binary-type routing, desktop `openPath` and `showItemInFolder` IPC with validation, the server `openPath` validation, and the loose-file read-only preview.
+- Add the remote download cache with size caps and eviction.
+- **Exit:** every row in the §7 matrix has a test.
+  - Executables are revealed, not launched.
+  - Excluded paths are refused in both the desktop and the server.
+  - A remote `.docx` opens in the default app from a mode-0700 cache.
+
+### Phase 5: "This computer" on macOS
+
+- Add the `os_index/spotlight.rs` asynchronous `MDQuery` worker (run-loop thread, cancel timer, multi-scope, maximum 200, attribute fetch) and the exclusions.
+- Add the `os-index.search` capability (local only), the server `SystemSearch.osIndex.ts` (desktop-only layer and remote-backend unavailable layer), and the settings section with File Access scope mapping.
+- Add the unavailable states: indexing off (`mdutil` status queried through `MDQuery` failure or `kMDQueryDidFinish` with an error), turned off in settings, File Access set to `none`.
+- **Exit:**
+  - Name queries meet the T5 budget.
+  - Excluded paths never reach the server (Rust test with a fake index).
+  - The tier is absent in remote-backend and mobile surfaces.
+  - The packaged-app check passes with Full Disk Access on and off.
+
+### Phase 6: Windows Search adapter
+
+Depends on the Phase 0 spike: OLE DB `SystemIndex` with `SELECT TOP 200`, scoped to the user profile; "unavailable" when WSearch is not running.
+
+**Exit:** a Windows CI or manual run meets the T5 budget, and the disabled service shows "unavailable".
+
+### Phase 7: Linux `plocate` adapter
+
+Run `plocate` (then `locate`) as a subprocess, bounded by `-l`, with a timeout and kill on cancel. The UI shows "results may be up to a day old".
+
+**Exit:** an Ubuntu manual run passes, and a missing `plocate` shows "unavailable".
+
+## Risks And Decision Gates
+
+- **Dependency approval (gate for Phase 2).** About 2.2 MB of binary growth, `encoding_rs` with its BSD-3-Clause part, and `unsafe` code in transitive crates (`memmap2`, `bstr`, `crossbeam`). Mitigation: keep `grep-searcher` mmap off (use read-based search), list the licences, measure the size per target.
+- **TCC attribution (gate for Phase 5).** If the agent started by the server is not attributed to bigbud.app, Spotlight results or file opens could differ from what the user expects. Phase 0 must verify this. The fallback is to run Spotlight queries from the Electron main process, through a small native module. That is rejected for now because of its cost.
+- **Session concurrency regressions.** Moving search off the frame thread touches stdio and supervisor loops that carry PTY and process reliability guarantees. Mitigation: use the existing prepare and execute pattern, add regression tests for the PTY and process suites, and keep shutdown joining search workers (cancel, then join with a bounded wait).
+- **Load on remotes during turns.** 2 threads, lower priority, a 3 s deadline, and at most 2 concurrent operations per session. Phase 3 measures this on the VPS during an active turn before release.
+- **Result jumping.** Append-only updates and stable IDs. A browser test asserts the selected row stays put.
+- **Path-validation bugs in open.** Shared validation module, a fuzz-style unit test (traversal, NUL, symlink swap, Windows prefixes and `\\?\`, UNC paths, junctions), and the confirm-before-launch rule.
+- **Existing preview route accepts any `cwd`.** This plan does not widen it, and loose-file previews go through a separate validated kind. Hardening the generic route is noted as follow-up (Q11), not done silently.
+- **Spotlight disabled or still indexing.** Explicit "unavailable" or "indexing" rows, never silent empties.
+- **Message reranking changes the order users see.** Only within a page, after tiering. Covered by tests and Q6.
+
+## Testing And Validation
+
+- **Rust** (`cargo test --locked -p bigbud-remote-agent`, crate-scoped Clippy, `cargo fmt` on changed files):
+  - walker rules: gitignore, overrides, hidden files, symlink and junction skipping, non-UTF-8 names;
+  - smart case;
+  - binary skip;
+  - size cap;
+  - per-file and global limits;
+  - deadline;
+  - cancel latency;
+  - registry busy and cancel;
+  - legacy-frame adapters (including the symlink and case regressions);
+  - root validation;
+  - batch size versus the 1 MiB frame cap;
+  - sequence monotonicity and exactly one terminal frame;
+  - capability gating (`os-index.search` refused in non-local modes);
+  - MDQuery query escaping and exclusion filtering through a fake index trait;
+  - a macOS-gated live Spotlight smoke test (marked `#[ignore]`).
+  - Integration tests in `tests/`: a real agent process over stdio, a search with a cancel in flight, and a PTY or process request served while a search runs.
+- **Protocol:** golden frames updated. TypeScript codec round-trip tests (`remoteAgentProtocol.search.test.ts`). A test where an old agent hello lacks the capability, so the server uses the legacy path.
+- **Server** (focused Vitest through `bun run --cwd apps/server vitest run <file>`):
+  - message query ordering, tiers, the current-thread `instr` path and short queries (against a real SQLite database);
+  - `SystemSearch` fan-out with fake agents: ordering, deadlines, per-root errors, not-connected, cancellation finalisers sending `CancelRequest`, late batches dropped;
+  - OS-index gating: settings, policy environment variable, remote-backend layer, mobile surface;
+  - `openPath` validation;
+  - loose-file preview exclusions;
+  - an assertion that no provider tool registry exposes search.
+- **Web:**
+  - Unit tests for tier merge, stable IDs, short-query rules and open routing.
+  - Browser tests (`bun run --cwd apps/web test:browser <file>`): streaming append without reordering, keyboard selection stability, unavailable and partial states, the settings rows (including disabled when File Access is `none`), and accessibility labels.
+- **Desktop:** IPC handler tests for validation, the executable reveal rule and role authorisation.
+- **Manual:** packaged macOS app with Full Disk Access on and off; a remote VPS search during an active turn; old-agent fallback against an agent at version 0.2.209 or earlier.
+- **Checks:** only focused formatting, lint, type and length checks on the changed files and packages. Repository-wide checks need approval first (AGENTS.md).
+
+## Acceptance Criteria
+
+- Mod+F shows results in the fixed tier order T1–T6, streams them without reordering visible rows, and cancels superseded work end to end within the budgets in §9.
+- Local and remote project search use only the Rust engine. The server never spawns `rg` for local search.
+- Old remote agents keep working (names only, with an update hint). New agents serve old servers.
+- "This computer" works on macOS through Spotlight when turned on. It respects the File Access scope and the exclusions, is absent for remote backends, mobile and agents, and never sends results to providers.
+- Supported formats open in bigbud. Unsupported ones open in the default app, or are revealed if they are executables. Remote unsupported files open from a private cache with size limits.
+- All new and edited files are at or under 400 lines, and focused checks pass.
+
+## Open Questions
+
+Only decisions that need the user. Each has a recommendation.
+
+1. **Default for "Search this computer".** Recommendation: **off by default**, with a one-time hint in the palette ("Turn on search across this Mac").
+2. **How the File Access level gates "this computer".** Recommendation: `none` disables the tier; `common-folders` restricts Spotlight to Desktop, Documents, Downloads, Music and Pictures; `unrestricted` covers the non-`Library` home folders plus iCloud Drive and CloudStorage. Follow-up choice: should `fileAccessPermissionLevel` move from client to server settings, so the server enforces it? Recommendation: yes, mirrored once on upgrade.
+3. **Meaning of tier 6, "remote areas outside projects".** Decision 4 limits remote search to project folders. Recommendation: T6 = registered remote workspace roots that are not themselves project folders, as the agent's user, bounded. Never the remote home or host. If you meant something else, T6 is dropped.
+4. **"This computer": file names only, or contents too?** Recommendation: **names only at first.** Content matching (Spotlight `kMDItemTextContent`, measured at 30–240 ms) would come later behind a second toggle, because it surfaces private document text in the palette.
+5. **Direct-SSH remotes (no managed agent).** Removing `PATH` `rg` locally is decided. For direct SSH, should bigbud (a) keep `rg`-on-host as a legacy path until those remotes move to a managed agent, or (b) require the managed agent for content search? Recommendation: **(a)**, with a "Use the bigbud agent for faster search" hint.
+6. **Relevance versus recency for other saved messages (T3).** Recommendation: tier, then bm25, then recency, within a bounded recent window. A message from a year ago that matches better can rank above yesterday's only within that window.
+7. **Loose-file previews outside projects.** Recommendation: read-only, no annotations, no agent access, no automatic attach. Acceptable?
+8. **Remote download cache limits for opening unsupported remote files.** Recommendation: open without asking up to 100 MiB, confirm from 100 MiB to 2 GiB, refuse above 2 GiB. Cache capped at 1 GiB and 7 days.
+9. **Dependency approval** (required by `crates/AGENTS.md`): `ignore`, `grep-searcher`, `grep-regex` and `grep-matcher` (Unlicense/MIT; about +2.2 MB stripped; brings in `encoding_rs` with a BSD-3-Clause part), plus macOS-only `objc2-core-services` 0.3.2 with feature `MDQuery` (Zlib/Apache-2.0/MIT; about 0.4 MB). Approve?
+10. **Phase order.** Recommendation: 1 → 2 → 3 → 4 → 5, then 6 and 7. Phase 1 is a quick win that needs no new dependencies. Phase 5 depends on Phase 0's packaged-app TCC check. Alternatively, Phase 5 could move ahead of Phase 4 if "this computer" is the headline feature.
+11. **Hardening the generic preview route.** `/api/workspace-file-preview` accepts any `cwd` today. Recommendation: keep it out of this plan's scope and track it as a separate security follow-up (restrict to registered projects plus validated loose files). Should it be added here instead?
+12. **Related work.** Should this plan be linked to a bigbud note or Kanban card? None exists yet.
