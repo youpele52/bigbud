@@ -128,22 +128,28 @@ A live arm64 re-run of these is in progress; its report will follow.
 - `--restart never` delays launcher rollback until the next manual start: documented in
   `docs/COMMANDS.md` (`be47c063e7`).
 - D4: apply the prepared gnu-drop workflow diff for the second release with backend graphs.
-- **F-B4 read-model eviction is reverted.** The live re-run
-  ([report](2026-11-18-unit-only-fixes-live-rerun.md)) found it wedges the backend under 3–8
-  concurrent provider sessions (D-1: a SQLite write lock never released; the parent commit does
-  not wedge). The read model is unbounded again, as before 18 November, until the lock cycle is
-  found.
+- **D-1: fixed** (`130c301ba0`). The wedge under concurrent sessions was a lock-order deadlock
+  between the provider session directory's write lock and the single SQLite connection, present
+  since `07356fbac1` (25 October) and not caused by eviction: dev without eviction wedged in 2 of
+  4 live runs. The directory lock is now always taken before the SQL transaction
+  ([report](2026-11-19-d1-eviction-wedge-and-d2-d3-live.md)).
+- **F-B4 read-model eviction re-landed** (`e1255fd5d1`), with the sweeper running once per
+  interval. Live: 4 of 4 runs at 1/4/8 sessions complete and the read model stays at 500
+  resident threads.
+- **D-4: fixed** (`41b5a05063`). After the D-2 fix, a project delete could time out at 30 s with
+  its threads already deleted: the read-model settle waiter subscribed after its first check
+  and missed the commit in between. It now subscribes first and re-checks every 500 ms.
+- Risk, not changed: thread and project pruning never consult the oldest reactor cursor, so an
+  inline reactor slower than about 1 s on one event could hit a replay gap and stop consuming
+  (code reading only).
 - **D-2: fixed** (`cfea37bc6c`). Baseline verification built its workspace repositories with the
   live runtime's memo map, so it hashed the live database instead of the replay: a live change
   during verification (a cascade) rejected a matching candidate and held cleanup for the
   15-minute cooldown, and with no live change verification compared nothing (a safety hole since
-  at least `58113ce35e`). The workspace now uses a private memo map. Not yet re-run live.
+  at least `58113ce35e`). The workspace now uses a private memo map. Live re-run PASS on 19 November.
 - **D-3: fixed** (`d5232c7879`). Per-thread retention deletes recorded a single delete but took a
   subtree fence, so the handler mistook its own fence for a cascade and returned; only a restart
-  cleared it. The other stuck delete in the re-run (a direct delete on the eviction build) has
-  no determinable cause. Not yet re-run live.
-- D-1 investigation should start from the D-2 finding (live-database work inside the
-  verification workspace) before eviction is re-landed.
+  cleared it. Live re-run PASS on 19 November.
 - A legacy-subtree retention run can still upgrade a direct delete's fence (an existing test
   asserts it); `skipped_active` deletion aborts log nothing.
 - `peer_dispatch_status` does not show the worker child's `waiting` state.
