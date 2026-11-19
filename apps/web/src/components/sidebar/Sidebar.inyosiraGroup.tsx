@@ -17,7 +17,6 @@ import {
 } from "./Sidebar.inyosira.logic";
 import { SidebarInyosiraGroupLabel } from "./Sidebar.inyosiraGroupLabel";
 import { SidebarInyosiraLocationLine } from "./Sidebar.inyosiraLocation";
-import { SidebarTerminalFinishedLine } from "./Sidebar.terminalFinished";
 import type { SharedProjectItemProps } from "./Sidebar.types";
 import { SidebarThreadListControls } from "./SidebarThreadListControls";
 import { SidebarThreadRow } from "./SidebarThreadRow";
@@ -146,19 +145,7 @@ function InyosiraThreadRow(props: {
   const location = summary
     ? resolveInyosiraLocation(summary, props.projectById.get(summary.projectId))
     : null;
-  const finished =
-    summary?.organization?.state === "needs-you" && (summary.terminalFinished?.length ?? 0) > 0
-      ? summary.terminalFinished
-      : undefined;
-  const locationLine = location ? <SidebarInyosiraLocationLine location={location} /> : null;
-  const secondaryLine = finished ? (
-    <span className="flex min-w-0 flex-col gap-0.5">
-      <SidebarTerminalFinishedLine items={finished} />
-      {locationLine}
-    </span>
-  ) : (
-    locationLine
-  );
+  const secondaryLine = location ? <SidebarInyosiraLocationLine location={location} /> : null;
   return (
     <SidebarThreadRow
       threadId={threadId}

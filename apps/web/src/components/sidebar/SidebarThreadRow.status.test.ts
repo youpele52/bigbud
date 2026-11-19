@@ -8,6 +8,7 @@ import {
   shouldAnimateProviderIcon,
   shouldShowThreadConnectingPresentation,
   shouldShowThreadStatusLabel,
+  terminalStatusFromFinished,
   terminalStatusFromRunningIds,
 } from "./SidebarThreadRow.status";
 
@@ -42,6 +43,32 @@ describe("SidebarThreadRow.status", () => {
       colorClass: "text-info-foreground",
       pulse: true,
     });
+  });
+
+  it("shows finished terminal work as a red icon on failure and green otherwise, without the exit code", () => {
+    const item = (exitCode: number | null, finishedAt: string) =>
+      ({
+        paneId: "p",
+        command: "sleep 70; false",
+        exitCode,
+        finishedAt,
+        source: "shell-integration",
+      }) as never;
+    const failed = terminalStatusFromFinished([item(1, "2026-01-01T10:00:00.000Z")]);
+    expect(failed).toEqual({
+      label: "Terminal command failed: sleep 70; false",
+      colorClass: "text-destructive",
+      pulse: false,
+    });
+    expect(failed?.label).not.toContain("exit");
+    expect(
+      terminalStatusFromFinished([
+        item(1, "2026-01-01T10:00:00.000Z"),
+        item(0, "2026-01-01T11:00:00.000Z"),
+      ]),
+    ).toMatchObject({ colorClass: "text-success" });
+    expect(terminalStatusFromFinished([])).toBeNull();
+    expect(terminalStatusFromFinished(undefined)).toBeNull();
   });
 
   it("keeps higher-priority resolved statuses visible during a raw connecting session", () => {

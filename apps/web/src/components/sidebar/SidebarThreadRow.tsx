@@ -36,6 +36,7 @@ import {
   shouldAnimateProviderIcon,
   shouldShowThreadConnectingPresentation,
   shouldShowThreadStatusLabel,
+  terminalStatusFromFinished,
   terminalStatusFromRunningIds,
   type ThreadPr,
 } from "./SidebarThreadRow.status";
@@ -78,7 +79,11 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     : null;
   const visibleThreadStatus = shouldShowThreadStatusLabel(threadStatus) ? threadStatus : null;
   const prStatus = prStatusIndicator(props.pr);
-  const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
+  // Finished terminal work in Needs you takes the terminal icon's place (red on failure).
+  const terminalStatus =
+    (thread?.organization?.state === "needs-you"
+      ? terminalStatusFromFinished(thread.terminalFinished)
+      : null) ?? terminalStatusFromRunningIds(runningTerminalIds);
   const isFavorite = props.favoriteThreadIds.has(effectiveThreadId);
   const isAutomationThread = props.automationThreadIds?.has(effectiveThreadId) ?? false;
   // `h-4` matches the title's text-xs line: the taller jump-hint pill overflows it centered
