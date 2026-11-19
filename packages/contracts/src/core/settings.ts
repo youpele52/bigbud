@@ -22,6 +22,7 @@ import {
 import { ThreadRetentionPolicy } from "./settings.threadRetention";
 import { InyosiraIdleSettingsFields } from "./settings.inyosira";
 import { TerminalActivitySettingsFields } from "./settings.terminalActivity";
+import { TerminalPasteSettingsFields } from "./settings.terminalPaste";
 import { MuseSettings } from "./settings.muse";
 import { OpencodeV2DevelopmentSettings } from "./settings.opencodeV2";
 import { GreetingName } from "./settings.greeting";
@@ -311,6 +312,7 @@ export const ServerSettings = Schema.Struct({
   ),
   ...InyosiraIdleSettingsFields,
   ...TerminalActivitySettingsFields,
+  ...TerminalPasteSettingsFields,
 });
 export type ServerSettings = typeof ServerSettings.Type;
 

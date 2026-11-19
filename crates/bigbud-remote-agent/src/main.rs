@@ -26,17 +26,30 @@ fn state_root() -> Option<std::path::PathBuf> {
         })
 }
 
+/// Paste staging lives beside the state folder (`~/.bigbud/agent/paste`). Without it the agent
+/// still runs; it just does not advertise `terminal.paste-staging`.
+fn enable_paste_staging(session: &mut AgentSession, state_root: &std::path::Path) {
+    let Some(root) = state_root.parent().map(|parent| parent.join("paste")) else {
+        return;
+    };
+    if let Err(error) = session.enable_paste_staging(&root) {
+        eprintln!("bigbud remote agent paste staging unavailable: {error}");
+    }
+}
+
 fn create_session() -> Result<AgentSession> {
     let state_root = state_root();
     match state_root {
         Some(root) => {
             let state = AgentState::open(&root)
                 .with_context(|| format!("failed to open agent state at {}", root.display()))?;
-            AgentSession::with_epoch_and_journal(
+            let mut session = AgentSession::with_epoch_and_journal(
                 state.epoch().to_owned(),
                 state.operation_journal_path(),
             )
-            .context("failed to restore the agent session journal")
+            .context("failed to restore the agent session journal")?;
+            enable_paste_staging(&mut session, &root);
+            Ok(session)
         }
         None => AgentSession::new().context("failed to create an ephemeral agent session"),
     }
@@ -161,6 +174,7 @@ fn run_supervisor_mode(
             state.operation_journal_path(),
         )
         .context("failed to restore the supervisor session journal")?;
+        enable_paste_staging(&mut session, &root);
         if let Some(context) = managed {
             session
                 .set_managed_service_account(context)

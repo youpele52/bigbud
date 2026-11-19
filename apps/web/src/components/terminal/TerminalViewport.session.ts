@@ -185,6 +185,7 @@ export function useTerminalViewportSession(input: UseTerminalViewportSessionInpu
         writeNotice,
         tuiWheelMultiplier: view.addons.tuiWheelMultiplier,
         onFind: () => openFind(),
+        dropPathModeRef: input.dropPathModeRef,
       });
       partialCleanups.add(() => viewInput.dispose());
       const disposeSelection = attachTerminalSelection({

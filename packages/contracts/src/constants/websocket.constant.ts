@@ -91,6 +91,7 @@ export const WS_METHODS = {
   terminalOutputAck: "terminal.outputAck",
   terminalSearch: "terminal.search",
   terminalView: "terminal.view",
+  terminalStagePasteFile: "terminal.stagePasteFile",
 
   // Server meta
   serverPing: "server.ping",

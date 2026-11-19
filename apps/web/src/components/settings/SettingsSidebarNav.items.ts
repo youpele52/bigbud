@@ -66,6 +66,12 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Terminal scroll speed", section: "Terminal", to: "/settings/terminal" },
   { label: "Terminal fast scroll speed", section: "Terminal", to: "/settings/terminal" },
   { label: "Full-screen app scroll speed", section: "Terminal", to: "/settings/terminal" },
+  { label: "Largest pasted file", section: "Terminal", to: "/settings/terminal" },
+  {
+    label: "Clipboard requests from terminal programs",
+    section: "Terminal",
+    to: "/settings/terminal",
+  },
   { label: "Terminal ligatures", section: "Terminal", to: "/settings/terminal" },
   { label: "Terminal inline images", section: "Terminal", to: "/settings/terminal" },
   { label: "Terminal GPU rendering", section: "Terminal", to: "/settings/terminal" },

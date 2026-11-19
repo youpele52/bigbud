@@ -12,6 +12,7 @@ import { TerminalThemeSettings } from "./TerminalThemeSettings";
 import { TerminalInteractionSettings, TerminalScrollSettings } from "./TerminalInteractionSettings";
 import { TerminalShellSettings } from "./TerminalShellSettings";
 import { TerminalAgentHooksSettings } from "./TerminalAgentHooksSettings";
+import { TerminalPasteSettings } from "./TerminalPasteSettings";
 
 const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }> = [
   {
@@ -28,7 +29,7 @@ const TERMINAL_FONT_OPTIONS: Array<{ value: TerminalFontFamily; label: string }>
   },
 ];
 
-/** The Terminal settings page: appearance, shell, scrolling and agent activity sections. */
+/** The Terminal settings page: appearance, shell, scrolling, paste and agent activity sections. */
 export function TerminalSettingsSection() {
   const settings = useSettings();
   const { updateSettings } = useUpdateSettings();
@@ -137,6 +138,9 @@ export function TerminalSettingsSection() {
       </SettingsSection>
       <SettingsSection title="Scrolling">
         <TerminalScrollSettings />
+      </SettingsSection>
+      <SettingsSection title="Paste">
+        <TerminalPasteSettings />
       </SettingsSection>
       <SettingsSection title="Agent activity">
         <TerminalAgentHooksSettings />

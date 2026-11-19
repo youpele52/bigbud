@@ -24,6 +24,8 @@ import { ShellProfiles } from "../Services/ShellProfiles";
 import { preflightRemoteTerminalShellProfile } from "./Manager.shell.remote";
 import { makeDirectShellLaunchOwners } from "../../persistence/Layers/DirectShellLaunchOwners";
 import { makeTerminalManagerWithOptions } from "./Manager.process";
+import { withTerminalPasteStaging } from "./Manager.pasteStaging.attach.ts";
+import { makeRemotePasteAgentResolver } from "./Manager.pasteStaging.remote.ts";
 import { classifyTerminalRuntimeLeaseError } from "./Manager.leaseError.ts";
 import type { RuntimePathIdentity } from "./Manager.types";
 import {
@@ -138,7 +140,7 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
           ),
           Effect.orElseSucceed(() => undefined),
         );
-  return yield* makeTerminalManagerWithOptions({
+  const manager = yield* makeTerminalManagerWithOptions({
     logsDir: terminalLogsDir,
     workSink: activity,
     shellIntegrationEnv: integration
@@ -168,6 +170,11 @@ const makeTerminalManager = Effect.fn("makeTerminalManager")(function* () {
     acquireWorktreeLease,
     markWorktreeLeaseStarted,
     releaseWorktreeLease,
+  });
+  return yield* withTerminalPasteStaging(manager, {
+    stateDir,
+    maxFileMb: () => settings?.currentSnapshot?.()?.settings.terminalPasteMaxFileMb,
+    remote: makeRemotePasteAgentResolver(ptyAdapter),
   });
 });
 

@@ -45,6 +45,7 @@ import {
   WsSubscribeTerminalSessionRpc,
   WsTerminalOutputAckRpc,
   WsTerminalSearchRpc,
+  WsTerminalStagePasteFileRpc,
   WsTerminalViewRpc,
 } from "./rpc.terminalStream";
 import { WsTerminalWslDistributionsRpc } from "./rpc.terminalTargets";
@@ -350,6 +351,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalRecoveryRpc,
   WsTerminalOutputAckRpc,
   WsTerminalSearchRpc,
+  WsTerminalStagePasteFileRpc,
   WsTerminalViewRpc,
   WsSubscribeTerminalSessionRpc,
   WsTerminalWslDistributionsRpc,

@@ -45,6 +45,8 @@ describe("Settings search", () => {
         "Terminal scroll speed",
         "Terminal fast scroll speed",
         "Full-screen app scroll speed",
+        "Largest pasted file",
+        "Clipboard requests from terminal programs",
         "Terminal ligatures",
         "Terminal inline images",
         "Terminal GPU rendering",

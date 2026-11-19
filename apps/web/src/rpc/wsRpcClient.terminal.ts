@@ -53,5 +53,7 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
       transport.request((client) => client[WS_METHODS.terminalOutputAck](input)),
     search: (input) => transport.request((client) => client[WS_METHODS.terminalSearch](input)),
     view: (input) => transport.request((client) => client[WS_METHODS.terminalView](input)),
+    stagePasteFile: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalStagePasteFile](input)),
   };
 }

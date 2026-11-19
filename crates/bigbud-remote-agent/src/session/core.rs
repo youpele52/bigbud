@@ -22,6 +22,8 @@ mod hello;
 mod journal_restore;
 #[path = "operation_handlers.rs"]
 mod operation_handlers;
+#[path = "paste_staging.rs"]
+mod paste_staging;
 #[path = "process_attach.rs"]
 mod process_attach;
 #[path = "process_handlers.rs"]
@@ -58,6 +60,9 @@ mod accepted_operations_tests;
 #[cfg(test)]
 #[path = "journal_restore.tests.rs"]
 mod journal_restore_tests;
+#[cfg(test)]
+#[path = "paste_staging.tests.rs"]
+mod paste_staging_tests;
 #[cfg(test)]
 #[path = "process_attach.tests.rs"]
 mod process_attach_tests;
@@ -143,6 +148,7 @@ pub struct AgentSession {
     workspace_roots: HashMap<String, WorkspaceRoot>,
     agent_instance_id: String,
     agent_epoch: String,
+    paste_staging: Option<crate::paste_staging::PasteStore>,
     #[cfg(unix)]
     managed_service_lease: Option<Arc<crate::service_lease::Bridge>>,
 }
@@ -222,6 +228,7 @@ impl AgentSession {
             workspace_roots: HashMap::new(),
             agent_instance_id: format!("agent-{}", std::process::id()),
             agent_epoch: epoch,
+            paste_staging: None,
             #[cfg(unix)]
             managed_service_lease: None,
         }
@@ -310,6 +317,18 @@ impl AgentSession {
             }
             Some(v1::frame::Payload::PtyCloseRequest(request)) if self.ready => {
                 Ok(self.handle_pty_close(request))
+            }
+            Some(v1::frame::Payload::PasteStageBeginRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_begin(request))
+            }
+            Some(v1::frame::Payload::PasteStageChunkRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_chunk(request))
+            }
+            Some(v1::frame::Payload::PasteStageCommitRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_commit(request))
+            }
+            Some(v1::frame::Payload::PasteStageDiscardRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_discard(request))
             }
             _ if !self.ready => Err(SessionError::HelloRequired),
             _ => Err(SessionError::UnexpectedMessage),

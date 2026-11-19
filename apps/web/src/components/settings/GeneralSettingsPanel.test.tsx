@@ -71,6 +71,7 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Appearance",
       "Shell",
       "Scrolling",
+      "Paste",
       "Agent activity",
     ]);
     expect(sections[0]?.rows).toEqual([
@@ -103,6 +104,7 @@ describe("GeneralSettingsPanel terminal group", () => {
       ],
       ["Default shell profile", "Terminal history suggestions"],
       ["Terminal scroll speed", "Terminal fast scroll speed", "Full-screen app scroll speed"],
+      ["Largest pasted file", "Clipboard requests from terminal programs"],
       ["Detect when terminal agents finish", "Terminal agent hooks"],
     ]);
     const sectionClasses = sections.map(

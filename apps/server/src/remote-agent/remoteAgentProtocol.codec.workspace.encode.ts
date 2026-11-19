@@ -1,3 +1,4 @@
+import { encodePasteStagingFrame } from "./remoteAgentProtocol.codec.pasteStaging.ts";
 import {
   type RemoteAgentContentMatch,
   type RemoteAgentContentSearchRequest,
@@ -171,7 +172,7 @@ function encodeWriteFileResponse(value: RemoteAgentWriteFileResponse): Uint8Arra
 export function encodeWorkspaceFrame(
   frame: RemoteAgentFrame,
 ): { readonly field: number; readonly value: Uint8Array } | undefined {
-  const watchFrame = encodeWorkspaceWatchFrame(frame);
+  const watchFrame = encodeWorkspaceWatchFrame(frame) ?? encodePasteStagingFrame(frame);
   if (watchFrame) return watchFrame;
   switch (frame.type) {
     case "workspaceOpenRequest":

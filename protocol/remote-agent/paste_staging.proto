@@ -1,0 +1,72 @@
+syntax = "proto3";
+
+package bigbud.remote_agent.v1;
+
+// Terminal paste staging (capability `terminal.paste-staging` 1.0). Pasted or dropped files are
+// written to the agent's private paste folder and returned as absolute paths on this host.
+// `scope` groups the files of one terminal generation so a close or restart can discard them.
+
+message PasteStageBeginRequest {
+  string request_id = 1;
+  string scope = 2;
+  string upload_id = 3;
+  uint64 total_bytes = 4;
+  string extension = 5;
+  // Recognised image type, or empty. Only images may be copied to the remote clipboard.
+  string image_mime_type = 6;
+}
+
+message PasteStageBeginResponse {
+  string request_id = 1;
+  string upload_id = 2;
+  bool accepted = 3;
+  uint64 max_chunk_bytes = 4;
+  string error_code = 5;
+  string error_message = 6;
+}
+
+message PasteStageChunkRequest {
+  string request_id = 1;
+  string upload_id = 2;
+  uint64 offset = 3;
+  bytes data = 4;
+}
+
+message PasteStageChunkResponse {
+  string request_id = 1;
+  string upload_id = 2;
+  uint64 received_bytes = 3;
+  string error_code = 4;
+  string error_message = 5;
+}
+
+message PasteStageCommitRequest {
+  string request_id = 1;
+  string upload_id = 2;
+  bytes sha256 = 3;
+}
+
+message PasteStageCommitResponse {
+  string request_id = 1;
+  string upload_id = 2;
+  // Fully resolved absolute path on the agent host.
+  string path = 3;
+  // "set", "unavailable" or "skipped".
+  string clipboard = 4;
+  string error_code = 5;
+  string error_message = 6;
+}
+
+// Discards one upload (when upload_id is set) or every file in the scope.
+message PasteStageDiscardRequest {
+  string request_id = 1;
+  string scope = 2;
+  string upload_id = 3;
+}
+
+message PasteStageDiscardResponse {
+  string request_id = 1;
+  uint32 removed = 2;
+  string error_code = 3;
+  string error_message = 4;
+}

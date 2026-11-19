@@ -1,4 +1,9 @@
 import { WS_METHODS } from "@bigbud/contracts/constants/websocket.constant.ts";
+import {
+  TerminalPasteStageError,
+  type TerminalPasteStageInput,
+} from "@bigbud/contracts/workspace/terminal.paste.ts";
+import { Effect } from "effect";
 import { observeRpcEffect } from "../observability/RpcInstrumentation";
 import type { WsRpcContext } from "./wsRpcContext";
 import { makeRemoteTerminalHandlers } from "./wsRpcHandlers.terminalRemote";
@@ -40,6 +45,18 @@ export function makeTerminalHandlers(context: WsRpcContext) {
       observeRpcEffect(WS_METHODS.terminalRestart, context.terminalManager.restart(input), {
         "rpc.aggregate": "terminal",
       }),
+    [WS_METHODS.terminalStagePasteFile]: (input: TerminalPasteStageInput) =>
+      observeRpcEffect(
+        WS_METHODS.terminalStagePasteFile,
+        context.terminalManager.stagePasteFile?.(input) ??
+          Effect.fail(
+            new TerminalPasteStageError({
+              code: "unavailable",
+              detail: "This bigbud server cannot stage pasted files.",
+            }),
+          ),
+        { "rpc.aggregate": "terminal" },
+      ),
     [WS_METHODS.terminalClose]: (input: Parameters<WsRpcContext["terminalManager"]["close"]>[0]) =>
       observeRpcEffect(WS_METHODS.terminalClose, context.terminalManager.close(input), {
         "rpc.aggregate": "terminal",

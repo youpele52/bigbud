@@ -2,6 +2,7 @@ import type * as RemoteTerminal from "../workspace/terminal.remote";
 import type * as Terminal from "../workspace/terminal";
 import type * as TerminalStream from "../workspace/terminal.stream";
 import type * as TerminalSearch from "../workspace/terminal.search";
+import type * as TerminalPaste from "../workspace/terminal.paste";
 import type * as TerminalRecovery from "../workspace/terminal.recovery";
 import type * as TerminalActivity from "../workspace/terminal.activity";
 import type { TerminalWslDistributions } from "../workspace/terminal.wsl";
@@ -59,4 +60,8 @@ export interface TerminalNativeApi {
   search?: (
     input: TerminalSearch.TerminalSearchInput,
   ) => Promise<TerminalSearch.TerminalSearchResult>;
+  /** Stage a pasted/dropped file on the terminal's machine; resolves to its absolute path. */
+  stagePasteFile?: (
+    input: TerminalPaste.TerminalPasteStageInput,
+  ) => Promise<TerminalPaste.TerminalPasteStageResult>;
 }

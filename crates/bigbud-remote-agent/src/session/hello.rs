@@ -38,6 +38,7 @@ impl AgentSession {
                     ("terminal.pty-inventory", 1),
                     ("terminal.pty-input-reconcile", 1),
                     ("terminal.shell-profiles", 1),
+                    ("terminal.paste-staging", 1),
                     ("supervisor.shutdown", 1),
                     ("supervisor.restart", 1),
                     ("service.lease", 1),
@@ -45,6 +46,7 @@ impl AgentSession {
                 .into_iter()
                 .filter(|(name, _)| {
                     (*name != "terminal.pty-input-reconcile" || cfg!(unix))
+                        && (*name != "terminal.paste-staging" || self.has_paste_staging())
                         && (*name != "service.lease" || self.has_managed_service_account())
                 })
                 .map(|(name, major)| v1::Capability {

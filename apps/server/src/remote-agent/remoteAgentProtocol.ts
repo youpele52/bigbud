@@ -1,5 +1,6 @@
 import type { RemoteAgentPtyFrame } from "./remoteAgentProtocol.pty.ts";
 import type { RemoteAgentWorkspaceWatchFrame } from "./remoteAgentProtocol.workspaceWatch.ts";
+import type { RemoteAgentPasteStagingFrame } from "./remoteAgentProtocol.pasteStaging.ts";
 import type { RemoteAgentResourceCleanupFrame } from "./remoteAgentProtocol.resourceCleanup.ts";
 import type { RemoteAgentServiceLeaseFrame } from "./remoteAgentProtocol.serviceLease.ts";
 import type { RemoteAgentControlFrame } from "./remoteAgentProtocol.control.ts";
@@ -308,6 +309,7 @@ export type RemoteAgentFrame =
   | RemoteAgentResourceCleanupFrame
   | RemoteAgentControlFrame
   | RemoteAgentWorkspaceWatchFrame
+  | RemoteAgentPasteStagingFrame
   | { readonly type: "clientHello"; readonly value: RemoteAgentClientHello }
   | { readonly type: "agentHello"; readonly value: RemoteAgentHello }
   | { readonly type: "diagnosticRequest"; readonly value: RemoteAgentDiagnosticRequest }
