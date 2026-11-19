@@ -7,7 +7,7 @@ import {
   KeyboardIcon,
   Settings2Icon,
   SmartphoneIcon,
-  SquareTerminalIcon,
+  TerminalIcon,
 } from "lucide-react";
 import { SettingsAiIcon } from "./SettingsAiIcon";
 
@@ -30,7 +30,7 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   { label: "General", to: "/settings/general", icon: Settings2Icon },
   { label: "Providers", to: "/settings/providers", icon: CpuIcon },
   { label: "AI", to: "/settings/ai", icon: SettingsAiIcon },
-  { label: "Terminal", to: "/settings/terminal", icon: SquareTerminalIcon },
+  { label: "Terminal", to: "/settings/terminal", icon: TerminalIcon },
   { label: "Remote", to: "/settings/remote", icon: SmartphoneIcon },
   { label: "Notifications", to: "/settings/notifications", icon: BellIcon },
   { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },

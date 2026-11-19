@@ -34,6 +34,14 @@ type SettingRow = ReactElement<{
   }>;
 }>;
 
+/** The rows of the Terminal page's first (Appearance) section. */
+function appearanceRows(): SettingRow[] {
+  const sections = TerminalSettingsSection().props.children as ReactElement<{
+    children: SettingRow[];
+  }>[];
+  return sections[0]!.props.children;
+}
+
 describe("GeneralSettingsPanel terminal group", () => {
   beforeEach(() => {
     mock.settings = { ...DEFAULT_UNIFIED_SETTINGS };
@@ -59,7 +67,12 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Browser",
       expect.stringContaining("Learning projects"),
     ]);
-    expect(terminalSections.map(({ title }) => title)).toEqual(["Terminal"]);
+    expect(terminalSections.map(({ title }) => title)).toEqual([
+      "Appearance",
+      "Shell",
+      "Scrolling",
+      "Agent activity",
+    ]);
     expect(sections[0]?.rows).toEqual([
       "What should bigbud call you?",
       "Theme",
@@ -78,21 +91,19 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Older than",
     ]);
     expect(sections[3]?.rows).toEqual(["Default agent browser", "Default search engine"]);
-    expect(terminalSections[0]?.rows).toEqual([
-      "Terminal font",
-      "Terminal font size",
-      "Default shell profile",
-      "Terminal history suggestions",
-      "Terminal theme (dark appearance)",
-      "Terminal theme (light appearance)",
-      "Terminal scroll speed",
-      "Terminal fast scroll speed",
-      "Full-screen app scroll speed",
-      "Terminal ligatures",
-      "Terminal inline images",
-      "Detect when terminal agents finish",
-      "Terminal agent hooks",
-      "Terminal GPU rendering",
+    expect(terminalSections.map(({ rows }) => rows)).toEqual([
+      [
+        "Terminal font",
+        "Terminal font size",
+        "Terminal theme (dark appearance)",
+        "Terminal theme (light appearance)",
+        "Terminal ligatures",
+        "Terminal inline images",
+        "Terminal GPU rendering",
+      ],
+      ["Default shell profile", "Terminal history suggestions"],
+      ["Terminal scroll speed", "Terminal fast scroll speed", "Full-screen app scroll speed"],
+      ["Detect when terminal agents finish", "Terminal agent hooks"],
     ]);
     const sectionClasses = sections.map(
       ({ markup: section }) => section.match(/^<section class="([^"]+)"/)?.[1],
@@ -130,7 +141,7 @@ describe("GeneralSettingsPanel terminal group", () => {
   });
 
   it("keeps the font defaults, accepted options, validation, and reset behavior", () => {
-    const [font, size] = TerminalSettingsSection().props.children as SettingRow[];
+    const [font, size] = appearanceRows();
     expect(font!.props.resetAction).toBeNull();
     expect(size!.props.resetAction).toBeNull();
     expect(font!.props.control.props.value).toBe(DEFAULT_UNIFIED_SETTINGS.terminalFontFamily);
@@ -158,7 +169,7 @@ describe("GeneralSettingsPanel terminal group", () => {
         (value) => value !== DEFAULT_UNIFIED_SETTINGS.terminalFontSize,
       )!,
     };
-    const [changedFont, changedSize] = TerminalSettingsSection().props.children as SettingRow[];
+    const [changedFont, changedSize] = appearanceRows();
     expect(changedFont!.props.control.props.value).toBe(mock.settings.terminalFontFamily);
     expect(changedSize!.props.control.props.value).toBe(String(mock.settings.terminalFontSize));
     expect(mock.updateSettings).not.toHaveBeenCalled();
