@@ -22,6 +22,7 @@ vi.mock("../../hooks/useSettings", () => ({
 
 import { BrowserSettingsSection } from "./BrowserSettingsSection";
 import { GeneralSettingsPanel } from "./GeneralSettingsPanel";
+import { TerminalSettingsPanel } from "./TerminalSettingsPanel";
 import { TerminalSettingsSection } from "./TerminalSettingsSection";
 
 type SettingRow = ReactElement<{
@@ -39,24 +40,26 @@ describe("GeneralSettingsPanel terminal group", () => {
     mock.updateSettings.mockClear();
   });
 
-  it("places the terminal settings in their own shared section after Browser", () => {
+  it("keeps General free of terminal settings, which live on their own page", () => {
     const markup = renderToStaticMarkup(<GeneralSettingsPanel />);
-    const sections = [...markup.matchAll(/<section\b[^>]*>[\s\S]*?<\/section>/g)].map(
-      ([section]) => ({
+    const terminalMarkup = renderToStaticMarkup(<TerminalSettingsPanel />);
+    const sectionsOf = (html: string) =>
+      [...html.matchAll(/<section\b[^>]*>[\s\S]*?<\/section>/g)].map(([section]) => ({
         markup: section,
         title: section.match(/<h2\b[^>]*>(.*?)<\/h2>/)?.[1],
         rows: [...section.matchAll(/<h3\b[^>]*>(.*?)<\/h3>/g)].map((match) => match[1]),
-      }),
-    );
+      }));
+    const sections = sectionsOf(markup);
+    const terminalSections = sectionsOf(terminalMarkup);
 
     expect(sections.map(({ title }) => title)).toEqual([
       "General",
       "Threads",
       "Inyosira",
       "Browser",
-      "Terminal",
       expect.stringContaining("Learning projects"),
     ]);
+    expect(terminalSections.map(({ title }) => title)).toEqual(["Terminal"]);
     expect(sections[0]?.rows).toEqual([
       "What should bigbud call you?",
       "Theme",
@@ -75,7 +78,7 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Older than",
     ]);
     expect(sections[3]?.rows).toEqual(["Default agent browser", "Default search engine"]);
-    expect(sections[4]?.rows).toEqual([
+    expect(terminalSections[0]?.rows).toEqual([
       "Terminal font",
       "Terminal font size",
       "Default shell profile",
@@ -87,6 +90,8 @@ describe("GeneralSettingsPanel terminal group", () => {
       "Full-screen app scroll speed",
       "Terminal ligatures",
       "Terminal inline images",
+      "Detect when terminal agents finish",
+      "Terminal agent hooks",
       "Terminal GPU rendering",
     ]);
     const sectionClasses = sections.map(
@@ -99,10 +104,11 @@ describe("GeneralSettingsPanel terminal group", () => {
     expect(cardClasses[2]).toBeTruthy();
     expect(cardClasses[2]).toBe(cardClasses[1]);
     expect(markup).toContain('aria-label="What should bigbud call you?"');
-    expect(markup).toContain('aria-label="Terminal font family"');
-    expect(markup).toContain('aria-label="Terminal font size"');
-    expect(markup).toContain('aria-label="Terminal GPU rendering"');
-    expect(markup).toContain("JetBrains Mono Nerd Font Mono");
+    expect(markup).not.toContain('aria-label="Terminal font family"');
+    expect(terminalMarkup).toContain('aria-label="Terminal font family"');
+    expect(terminalMarkup).toContain('aria-label="Terminal font size"');
+    expect(terminalMarkup).toContain('aria-label="Terminal GPU rendering"');
+    expect(terminalMarkup).toContain("JetBrains Mono Nerd Font Mono");
     expect(mock.updateSettings).not.toHaveBeenCalled();
   });
 

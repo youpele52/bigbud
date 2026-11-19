@@ -33,16 +33,27 @@ describe("Settings search", () => {
     expect(getSettingsSearchResults("ai").length).toBeGreaterThan(6);
   });
 
-  it("finds all terminal controls in the Terminal group on the General page", () => {
+  it("finds every terminal control on the Terminal page", () => {
     expect(getSettingsSearchResults("terminal")).toEqual(
-      ["Terminal font", "Terminal font size", "Terminal GPU rendering"].map((label) => ({
-        label,
-        section: "Terminal",
-        to: "/settings/general",
-      })),
+      [
+        "Terminal",
+        "Terminal font",
+        "Terminal font size",
+        "Default shell profile",
+        "Terminal history suggestions",
+        "Terminal theme",
+        "Terminal scroll speed",
+        "Terminal fast scroll speed",
+        "Full-screen app scroll speed",
+        "Terminal ligatures",
+        "Terminal inline images",
+        "Terminal GPU rendering",
+        "Detect when terminal agents finish",
+        "Terminal agent hooks",
+      ].map((label) => ({ label, section: "Terminal", to: "/settings/terminal" })),
     );
     expect(getSettingsSearchResults("terminal gpu")).toEqual([
-      { label: "Terminal GPU rendering", section: "Terminal", to: "/settings/general" },
+      { label: "Terminal GPU rendering", section: "Terminal", to: "/settings/terminal" },
     ]);
   });
 });
