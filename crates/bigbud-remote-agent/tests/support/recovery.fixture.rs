@@ -181,6 +181,24 @@ pub fn kill(child: &mut Child) {
     child.kill().unwrap();
     child.wait().unwrap();
 }
+/// Controller crash: its listener dies, the pathname remains. A real crash ends every
+/// descriptor at once, but in this multi-threaded test process a sibling test's child can
+/// still hold a duplicate between fork and exec, so the inode would keep accepting and
+/// recovery would correctly stay uncertain. Wait until the kernel refuses connects.
+pub fn crash_listener(listener: UnixListener, path: &Path) {
+    drop(listener);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        match std::os::unix::net::UnixStream::connect(path) {
+            Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => return,
+            other => assert!(
+                Instant::now() < deadline,
+                "dropped listener still reachable: {other:?}"
+            ),
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
 pub fn kill_pid(pid: u32) {
     assert!(
         Command::new("kill")
