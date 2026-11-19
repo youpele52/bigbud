@@ -43,6 +43,7 @@ export type ServerWorkspaceCapabilities = typeof ServerWorkspaceCapabilities.Typ
 
 export const ServerConfig = Schema.Struct({
   cwd: TrimmedNonEmptyString,
+  homeDir: Schema.optional(TrimmedNonEmptyString),
   storage: ServerStoragePaths,
   keybindingsConfigPath: TrimmedNonEmptyString,
   keybindings: ResolvedKeybindingsConfig,

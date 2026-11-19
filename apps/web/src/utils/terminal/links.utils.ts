@@ -105,8 +105,7 @@ function joinPath(base: string, next: string, separator: "/" | "\\"): string {
   return `${cleanBase}/${next.replace(/^\/+/, "")}`;
 }
 
-/** Best-effort home folder of a POSIX `/Users`, `/home` or Windows `C:\Users` path. */
-export function inferHomeFromCwd(cwd: string): string | undefined {
+function inferHomeFromCwd(cwd: string): string | undefined {
   const posixUser = cwd.match(/^\/Users\/([^/]+)/);
   if (posixUser?.[1]) {
     return `/Users/${posixUser[1]}`;

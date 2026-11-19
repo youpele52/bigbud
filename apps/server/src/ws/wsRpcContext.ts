@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Option, Layer } from "effect";
 import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { GitCommandError } from "@bigbud/contracts";
 import { ServerThreadRetentionError } from "@bigbud/contracts/server/threadRetention.ts";
@@ -275,9 +276,12 @@ export const makeWsRpcContext = (
       const rawSettings = yield* observeConfigStage("settings", serverSettings.getSettings);
       const settings = resolveTextGenByProbeStatus(rawSettings, providers);
       const remoteAgentEnabled = isRemoteAgentConfigured();
+      // Same source as workspace `~` expansion, so clients can address home-relative files.
+      const homeDir = homedir();
 
       return {
         cwd: config.cwd,
+        ...(homeDir ? { homeDir } : {}),
         storage: {
           notesDir: config.notesDir,
           kanbanDir: config.kanbanDir,

@@ -1,5 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
-import { CheckIcon, ChevronRightIcon, CopyIcon, FileIcon } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CheckIcon, ChevronRightIcon, CopyIcon, FileIcon, FilePlusIcon } from "lucide-react";
 import { useState } from "react";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useTheme } from "../../hooks/useTheme";
@@ -7,13 +7,13 @@ import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { cn } from "../../lib/utils";
 import { isBoundBackendWindow } from "../../rpc/backendScope.state";
 import { ensureNativeApi } from "../../rpc/nativeApi";
-import { useDefaultChatCwd, useServerConfig } from "../../rpc/serverState";
+import { useServerConfig } from "../../rpc/serverState";
 import { openFileInFilesPanel } from "../../stores/files/filesPanel.coordinator";
 import { SyntaxHighlightedCode } from "../chat/common/SyntaxHighlightedCode";
 import { Button } from "../ui/button";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
-  inferHomeCandidates,
+  createHookConfigFile,
   resolveHookConfigFile,
 } from "./TerminalAgentHooksSettings.configFile";
 import type { TerminalAgentHookSnippet } from "./TerminalAgentHooksSettings.snippets";
@@ -29,19 +29,22 @@ function openHookConfigFile(directory: string, fileName: string): void {
   window.history.back();
 }
 
-function HookConfigFileAction({ configPath }: { configPath: string }) {
-  const serverConfig = useServerConfig();
-  const defaultChatCwd = useDefaultChatCwd();
-  const homeCandidates = inferHomeCandidates([
-    serverConfig?.cwd,
-    defaultChatCwd,
-    serverConfig?.keybindingsConfigPath,
-    serverConfig?.observability.logsDirectoryPath,
-  ]);
+function HookConfigFileAction({ configPath, snippet }: { configPath: string; snippet: string }) {
+  const homeDir = useServerConfig()?.homeDir;
+  const queryClient = useQueryClient();
+  const queryKey = ["settings", "terminal-agent-hook-config", configPath, homeDir];
   const fileQuery = useQuery({
-    queryKey: ["settings", "terminal-agent-hook-config", configPath, ...homeCandidates],
-    queryFn: () => resolveHookConfigFile(ensureNativeApi(), configPath, homeCandidates),
+    queryKey,
+    queryFn: () => resolveHookConfigFile(ensureNativeApi(), configPath, homeDir),
     retry: false,
+  });
+  const createMutation = useMutation({
+    mutationFn: (home: string) =>
+      createHookConfigFile(ensureNativeApi(), configPath, home, `${snippet}\n`),
+    onSuccess: (location) => {
+      void queryClient.invalidateQueries({ queryKey });
+      openHookConfigFile(location.directory, location.fileName);
+    },
   });
   const state = fileQuery.data;
   if (state?.status === "exists") {
@@ -57,11 +60,24 @@ function HookConfigFileAction({ configPath }: { configPath: string }) {
       </Button>
     );
   }
-  if (state?.status === "missing") {
+  if (state?.status === "missing" && homeDir) {
     return (
-      <p className="text-xs text-muted-foreground">
-        {configPath} does not exist yet. Copy the snippet and create it yourself.
-      </p>
+      <div className="space-y-1">
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={createMutation.isPending}
+          onClick={() => createMutation.mutate(homeDir)}
+        >
+          <FilePlusIcon className="size-3.5" />
+          Create {configPath} with this snippet
+        </Button>
+        {createMutation.error ? (
+          <p role="alert" className="text-xs text-destructive">
+            Could not create {configPath}: {createMutation.error.message}
+          </p>
+        ) : null}
+      </div>
     );
   }
   return null;
@@ -74,7 +90,7 @@ function HookSnippetBody({ entry }: { entry: TerminalAgentHookSnippet }) {
   return (
     <div className="space-y-2 pt-2 pl-5">
       {entry.note ? <p className="text-xs text-muted-foreground">{entry.note}</p> : null}
-      {configPath ? <HookConfigFileAction configPath={configPath} /> : null}
+      {configPath ? <HookConfigFileAction configPath={configPath} snippet={entry.snippet} /> : null}
       <div className="chat-markdown">
         <SyntaxHighlightedCode
           code={entry.snippet}

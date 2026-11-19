@@ -151,4 +151,28 @@ it.layer(TestLayer)("WorkspaceFileSystem remote fallback", (it) => {
       }),
     );
   });
+
+  describe("writeFile", () => {
+    it.effect("refuses create-only writes over SSH without running a command", () =>
+      Effect.gen(function* () {
+        vi.mocked(runToolCommand).mockClear();
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const failure = yield* workspaceFileSystem
+          .writeFile({
+            cwd: "/srv/project",
+            relativePath: "settings.json",
+            contents: "{}",
+            executionTargetId: "ssh:dev",
+            createOnly: true,
+          })
+          .pipe(Effect.flip);
+
+        expect(failure).toMatchObject({
+          operation: "workspaceFileSystem.writeFileCreateOnlyRemote",
+          writeDisposition: "not-dispatched",
+        });
+        expect(runToolCommand).not.toHaveBeenCalled();
+      }),
+    );
+  });
 });

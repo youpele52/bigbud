@@ -10,7 +10,11 @@ import {
 import { WS_METHODS } from "@bigbud/contracts/constants/websocket.constant.ts";
 
 import { observeRpcEffect, observeRpcStreamEffect } from "../observability/RpcInstrumentation";
-import { WorkspaceFileSystemError } from "../workspace/Services/WorkspaceFileSystem";
+import {
+  WORKSPACE_FILE_ALREADY_EXISTS,
+  WORKSPACE_WRITE_CREATE_ONLY_OPERATION,
+  WorkspaceFileSystemError,
+} from "../workspace/Services/WorkspaceFileSystem";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths";
 import type { WsRpcContext } from "./wsRpcContext";
 
@@ -23,14 +27,21 @@ export function projectWriteFileError(
       cause.detail.startsWith("Workspace file changed since it was read")) ||
       (cause.operation === "remoteWorkspace.writeFile" &&
         /workspace file changed since it was read/i.test(cause.detail)));
+  const alreadyExists =
+    Schema.is(WorkspaceFileSystemError)(cause) &&
+    cause.operation === WORKSPACE_WRITE_CREATE_ONLY_OPERATION &&
+    cause.detail === WORKSPACE_FILE_ALREADY_EXISTS;
   const message = Schema.is(WorkspacePathOutsideRootError)(cause)
     ? "Workspace file path must stay within the project root."
     : conflict
       ? "Workspace file changed since it was read."
-      : "Failed to write workspace file";
+      : alreadyExists
+        ? WORKSPACE_FILE_ALREADY_EXISTS
+        : "Failed to write workspace file";
   return new ProjectWriteFileError({
     message,
     ...(conflict ? { conflict: true } : {}),
+    ...(alreadyExists ? { alreadyExists: true } : {}),
     writeDisposition: Schema.is(WorkspacePathOutsideRootError)(cause)
       ? "not-dispatched"
       : cause.writeDisposition,

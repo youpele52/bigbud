@@ -44,6 +44,14 @@ export function makeRemoteWorkspaceWriteFile(options: {
     if (input.expectedSha256 !== undefined && !/^[a-f0-9]{64}$/.test(input.expectedSha256)) {
       return yield* error("expectedSha256 must be a lowercase SHA-256 digest.", "not-dispatched");
     }
+    // The agent has no exclusive-create mode and drops unknown request fields, so forwarding
+    // createOnly to any agent build would overwrite; refuse before dispatch instead.
+    if (input.createOnly === true) {
+      return yield* error(
+        "Create-only writes are not supported by the remote agent.",
+        "not-dispatched",
+      );
+    }
     if (bytes.byteLength > MAX_REMOTE_WRITE_BYTES) {
       return yield* error("Remote file writes are limited to 512 KiB.", "not-dispatched");
     }

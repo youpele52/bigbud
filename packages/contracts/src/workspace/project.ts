@@ -200,6 +200,8 @@ export const ProjectWriteFileInput = Schema.Struct({
   contents: Schema.String,
   /** SHA-256 of the version the caller read before editing, when known. */
   expectedSha256: Schema.optional(Schema.String),
+  /** Create the file exclusively; fails with `alreadyExists` instead of overwriting. */
+  createOnly: Schema.optional(Schema.Boolean),
 });
 export type ProjectWriteFileInput = typeof ProjectWriteFileInput.Type;
 
@@ -221,6 +223,8 @@ export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteF
   {
     message: TrimmedNonEmptyString,
     conflict: Schema.optional(Schema.Boolean),
+    /** A create-only write found the file already present and left it untouched. */
+    alreadyExists: Schema.optional(Schema.Boolean),
     writeDisposition: Schema.optional(ProjectWriteFileDisposition),
     cause: Schema.optional(Schema.Defect),
   },

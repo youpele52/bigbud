@@ -28,12 +28,7 @@ vi.mock("../../rpc/nativeApi", () => ({
   }),
 }));
 vi.mock("../../rpc/serverState", () => ({
-  useServerConfig: () => ({
-    cwd: "/Users/ada/DevWorld/bigbud",
-    keybindingsConfigPath: "/Users/ada/.bigbud/keybindings.json",
-    observability: { logsDirectoryPath: "/Users/ada/.bigbud/logs" },
-  }),
-  useDefaultChatCwd: () => "/Users/ada/Documents",
+  useServerConfig: () => ({ cwd: "/Users/ada/DevWorld/bigbud", homeDir: "/Users/ada" }),
 }));
 vi.mock("../../rpc/backendScope.state", () => ({ isBoundBackendWindow: () => mocks.bound }));
 vi.mock("../../stores/files/filesPanel.coordinator", () => ({
@@ -43,15 +38,10 @@ vi.mock("../../hooks/useCopyToClipboard", () => ({
   useCopyToClipboard: () => ({ copyToClipboard: mocks.copy, isCopied: false }),
 }));
 
-const HOME: ProjectEntry[] = [{ path: ".claude", kind: "directory" }];
-const [claude, codex, , herdr] = TERMINAL_AGENT_HOOK_SNIPPETS;
+const [claude, codex, opencode, herdr] = TERMINAL_AGENT_HOOK_SNIPPETS;
 
 beforeEach(() => {
-  mocks.listings = {
-    "~": HOME,
-    "/Users/ada": HOME,
-    "/Users/ada/.claude": [{ path: "settings.json", kind: "file" }],
-  };
+  mocks.listings = { "/Users/ada/.claude": [{ path: "settings.json", kind: "file" }] };
   mocks.bound = false;
   mocks.openFile.mockReset();
   mocks.writeFile.mockReset();
@@ -93,21 +83,75 @@ it("copies without expanding, then expands to highlighted code and opens the exi
   }
 });
 
-it("keeps Copy and the path when the config file does not exist, never creating it", async () => {
+it("creates a missing config file create-only with the snippet, then opens it", async () => {
+  const back = vi.spyOn(window.history, "back").mockImplementation(() => undefined);
+  mocks.writeFile.mockResolvedValue({ relativePath: ".codex/config.toml" });
   const screen = await renderItem(codex!);
   try {
     await userEvent.click(page.getByRole("button", { name: /^Codex CLI/ }));
-    await expect
-      .element(page.getByText("~/.codex/config.toml does not exist yet", { exact: false }))
-      .toBeVisible();
+    const create = page.getByRole("button", {
+      name: "Create ~/.codex/config.toml with this snippet",
+    });
+    await expect.element(create).toBeVisible();
     expect(page.getByRole("button", { name: /^Open / }).elements()).toHaveLength(0);
     expect(mocks.writeFile).not.toHaveBeenCalled();
+
+    await userEvent.click(create);
+    expect(mocks.writeFile).toHaveBeenCalledWith({
+      cwd: "/Users/ada",
+      relativePath: ".codex/config.toml",
+      contents: `${codex!.snippet}\n`,
+      createOnly: true,
+    });
+    await expect
+      .poll(() => mocks.openFile.mock.calls)
+      .toEqual([["config.toml", null, "/Users/ada/.codex"]]);
+    expect(back).toHaveBeenCalledOnce();
+  } finally {
+    back.mockRestore();
+    await screen.unmount();
+  }
+});
+
+it("opens the file without overwriting when it appeared before Create ran", async () => {
+  const back = vi.spyOn(window.history, "back").mockImplementation(() => undefined);
+  mocks.writeFile.mockRejectedValue(
+    Object.assign(new Error("Workspace file already exists."), { alreadyExists: true }),
+  );
+  const screen = await renderItem(opencode!);
+  try {
+    await userEvent.click(page.getByRole("button", { name: /^OpenCode/ }));
+    await userEvent.click(
+      page.getByRole("button", {
+        name: "Create ~/.config/opencode/plugin/bigbud-done.js with this snippet",
+      }),
+    );
+    expect(mocks.writeFile).toHaveBeenCalledOnce();
+    expect(mocks.writeFile.mock.calls[0]?.[0]).toMatchObject({ createOnly: true });
+    await expect
+      .poll(() => mocks.openFile.mock.calls)
+      .toEqual([["bigbud-done.js", null, "/Users/ada/.config/opencode/plugin"]]);
+    expect(page.getByRole("alert").elements()).toHaveLength(0);
+  } finally {
+    back.mockRestore();
+    await screen.unmount();
+  }
+});
+
+it("reports a failed create without opening anything", async () => {
+  mocks.writeFile.mockRejectedValue(new Error("Failed to write workspace file"));
+  const screen = await renderItem(codex!);
+  try {
+    await userEvent.click(page.getByRole("button", { name: /^Codex CLI/ }));
+    await userEvent.click(page.getByRole("button", { name: /^Create / }));
+    await expect.element(page.getByRole("alert")).toHaveTextContent("Failed to write");
+    expect(mocks.openFile).not.toHaveBeenCalled();
   } finally {
     await screen.unmount();
   }
 });
 
-it("offers no open action for a remote backend or a tool without a config file", async () => {
+it("offers no open or create action for a remote backend or a tool without a config file", async () => {
   mocks.bound = true;
   const remote = await renderItem(claude!);
   try {
@@ -115,7 +159,8 @@ it("offers no open action for a remote backend or a tool without a config file",
     await expect
       .element(page.getByText("Hooks run without a terminal", { exact: false }))
       .toBeVisible();
-    expect(page.getByRole("button", { name: /^Open / }).elements()).toHaveLength(0);
+    expect(page.getByRole("button", { name: /^(Open|Create) / }).elements()).toHaveLength(0);
+    expect(mocks.writeFile).not.toHaveBeenCalled();
   } finally {
     await remote.unmount();
   }

@@ -176,4 +176,31 @@ describe("remote workspace runtime adapter", () => {
     expect(operationIds).toHaveLength(2);
     expect(operationIds[0]).not.toBe(operationIds[1]);
   });
+
+  it("refuses create-only writes before dispatching to any agent build", async () => {
+    const client = fakeClient();
+    let writes = 0;
+    client.writeFile = async (input) => {
+      writes += 1;
+      return fakeClient().writeFile(input);
+    };
+    const runtime = makeRemoteWorkspaceRuntime({ resolve: async () => client });
+    const error = await Effect.runPromise(
+      Effect.flip(
+        runtime.files.writeFile({
+          executionTargetId: "ssh:example",
+          cwd: "/remote/project",
+          relativePath: "settings.json",
+          contents: "{}",
+          createOnly: true,
+        }),
+      ),
+    );
+
+    expect(error).toMatchObject({
+      writeDisposition: "not-dispatched",
+      detail: "Create-only writes are not supported by the remote agent.",
+    });
+    expect(writes).toBe(0);
+  });
 });

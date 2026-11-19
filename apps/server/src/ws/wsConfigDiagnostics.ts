@@ -5,6 +5,7 @@ import { ServerConfig, ServerConfigStreamEvent } from "@bigbud/contracts/server/
 type ConfigStage = "keybindings" | "providers" | "discovery" | "settings" | "snapshot" | "update";
 const AREAS = new Set([
   "cwd",
+  "homeDir",
   "storage",
   "keybindingsConfigPath",
   "keybindings",

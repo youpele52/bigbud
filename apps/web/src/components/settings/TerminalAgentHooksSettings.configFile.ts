@@ -1,5 +1,4 @@
-import type { NativeApi, ProjectEntry } from "@bigbud/contracts";
-import { inferHomeFromCwd } from "../../utils/terminal/links.utils";
+import type { NativeApi } from "@bigbud/contracts";
 
 /** A home-relative hook config path split into the parts the Files panel opens. */
 export interface HookConfigPathParts {
@@ -8,10 +7,16 @@ export interface HookConfigPathParts {
   readonly fileName: string;
 }
 
+/** Absolute location of a hook config file on the server host. */
+export interface HookConfigFileLocation {
+  readonly directory: string;
+  readonly fileName: string;
+}
+
 export type HookConfigFileState =
-  | { readonly status: "exists"; readonly directory: string; readonly fileName: string }
-  | { readonly status: "missing" }
-  /** The server home folder could not be confirmed, so no file is offered. */
+  | ({ readonly status: "exists" } & HookConfigFileLocation)
+  | ({ readonly status: "missing" } & HookConfigFileLocation)
+  /** The server did not report its home folder, so no file is offered. */
   | { readonly status: "unavailable" };
 
 /** Splits `~/dir/file` into its home-relative folder and file name; null for anything else. */
@@ -25,71 +30,64 @@ export function splitHomeConfigPath(configPath: string): HookConfigPathParts | n
   return { relativeDirectory: segments.join("/"), fileName };
 }
 
-/** Distinct home folders inferred from absolute paths the server reported. */
-export function inferHomeCandidates(paths: ReadonlyArray<string | null | undefined>): string[] {
-  const candidates: string[] = [];
-  for (const path of paths) {
-    const home = path ? inferHomeFromCwd(path) : undefined;
-    if (home && !candidates.includes(home)) candidates.push(home);
-  }
-  return candidates;
+function hookConfigLocation(homeDir: string, parts: HookConfigPathParts): HookConfigFileLocation {
+  const separator = homeDir.includes("\\") ? "\\" : "/";
+  const home = homeDir.endsWith(separator) ? homeDir.slice(0, -1) : homeDir;
+  return {
+    directory: `${home}${separator}${parts.relativeDirectory.replaceAll("/", separator)}`,
+    fileName: parts.fileName,
+  };
 }
 
-function listingKey(entries: ReadonlyArray<ProjectEntry>): string {
-  return entries
-    .map((entry) => `${entry.kind}:${entry.path}`)
-    .toSorted()
-    .join("\n");
-}
-
-async function listOrNull(
-  api: NativeApi,
-  cwd: string,
-  relativePath?: string,
-): Promise<ReadonlyArray<ProjectEntry> | null> {
-  try {
-    const result = await api.projects.listDirectory({
-      cwd,
-      ...(relativePath ? { relativePath } : {}),
-    });
-    return result.entries;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The server expands `~` only when listing, while previews need an absolute root. A candidate is
- * accepted only when its listing matches the server's own `~` listing.
- */
-export async function resolveServerHome(
-  api: NativeApi,
-  candidates: ReadonlyArray<string>,
-): Promise<string | null> {
-  if (candidates.length === 0) return null;
-  const home = await listOrNull(api, "~");
-  if (home === null) return null;
-  const expected = listingKey(home);
-  for (const candidate of candidates) {
-    const listing = await listOrNull(api, candidate);
-    if (listing !== null && listingKey(listing) === expected) return candidate;
-  }
-  return null;
-}
-
-/** Whether a home-relative config file exists on the local server host; never writes. */
+/** Whether a home-relative config file exists on the server host; never writes. */
 export async function resolveHookConfigFile(
   api: NativeApi,
   configPath: string,
-  homeCandidates: ReadonlyArray<string>,
+  homeDir: string | undefined,
 ): Promise<HookConfigFileState> {
   const parts = splitHomeConfigPath(configPath);
-  if (!parts) return { status: "unavailable" };
-  const home = await resolveServerHome(api, homeCandidates);
-  if (!home) return { status: "unavailable" };
-  const separator = home.includes("\\") ? "\\" : "/";
-  const directory = `${home}${separator}${parts.relativeDirectory.replaceAll("/", separator)}`;
-  const entries = await listOrNull(api, directory);
-  const exists = entries?.some((entry) => entry.kind === "file" && entry.path === parts.fileName);
-  return exists ? { status: "exists", directory, fileName: parts.fileName } : { status: "missing" };
+  if (!parts || !homeDir) return { status: "unavailable" };
+  const location = hookConfigLocation(homeDir, parts);
+  const entries = await api.projects
+    .listDirectory({ cwd: location.directory })
+    .then((result) => result.entries)
+    .catch(() => null);
+  const exists = entries?.some(
+    (entry) => entry.kind === "file" && entry.path === location.fileName,
+  );
+  return { status: exists ? "exists" : "missing", ...location };
+}
+
+function isAlreadyExistsError(cause: unknown): boolean {
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    "alreadyExists" in cause &&
+    cause.alreadyExists === true
+  );
+}
+
+/**
+ * Creates a missing config file with `contents` (exclusive create, parents included) and returns
+ * where it is. A file that appeared meanwhile is kept as is and returned; nothing is overwritten.
+ */
+export async function createHookConfigFile(
+  api: NativeApi,
+  configPath: string,
+  homeDir: string,
+  contents: string,
+): Promise<HookConfigFileLocation> {
+  const parts = splitHomeConfigPath(configPath);
+  if (!parts) throw new Error(`${configPath} is not inside the home folder.`);
+  try {
+    await api.projects.writeFile({
+      cwd: homeDir,
+      relativePath: `${parts.relativeDirectory}/${parts.fileName}`,
+      contents,
+      createOnly: true,
+    });
+  } catch (cause) {
+    if (!isAlreadyExistsError(cause)) throw cause;
+  }
+  return hookConfigLocation(homeDir, parts);
 }
