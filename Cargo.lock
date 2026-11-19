@@ -88,6 +88,8 @@ dependencies = [
  "grep-searcher",
  "ignore",
  "libc",
+ "objc2-core-foundation",
+ "objc2-core-services",
  "serde_core",
  "serde_json",
  "sha2",
@@ -672,6 +674,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536"
 dependencies = [
  "bitflags",
+]
+
+[[package]]
+name = "objc2-core-services"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "583300ad934cba24ff5292aee751ecc070f7ca6b39a574cc21b7b5e588e06a0b"
+dependencies = [
+ "objc2-core-foundation",
 ]
 
 [[package]]

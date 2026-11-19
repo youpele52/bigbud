@@ -1,4 +1,5 @@
 pub mod operations;
+pub mod os_index;
 pub mod paste_staging;
 pub mod process;
 pub mod pty;

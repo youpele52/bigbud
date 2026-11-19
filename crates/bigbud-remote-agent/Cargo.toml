@@ -22,6 +22,25 @@ thiserror.workspace = true
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[target.'cfg(target_os = "macos")'.dependencies]
+# Spotlight (`MDQuery`) backs the local "this computer" search (approved; see the system-wide search plan).
+# `objc2-core-foundation` is already locked through `sysinfo`; it supplies the CFString, CFArray,
+# CFNumber, CFDate and CFRunLoop types the MDQuery bindings take and return.
+objc2-core-foundation = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "CFArray",
+  "CFDate",
+  "CFNumber",
+  "CFRunLoop",
+  "CFString",
+] }
+objc2-core-services = { version = "0.3.2", default-features = false, features = [
+  "std",
+  "MDItem",
+  "MDQuery",
+  "Metadata",
+] }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = [
   "Wdk_Foundation",
