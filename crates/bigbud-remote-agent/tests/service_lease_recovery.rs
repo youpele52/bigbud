@@ -4,7 +4,7 @@
 #[path = "support/recovery.fixture.rs"]
 mod fixture;
 use bigbud_remote_agent::service_lease::{Controller, Error, State};
-use fixture::{Fixture, inode, kill, kill_pid, old_controller, wait_missing};
+use fixture::{Fixture, crash_listener, inode, kill, kill_pid, old_controller, wait_missing};
 use std::io::{Read, Write};
 use std::time::{Duration, Instant};
 
@@ -53,7 +53,7 @@ fn successor_clears_exact_stale_socket_attaches_and_revokes() {
         ),
         "a live original controller cannot be taken over"
     );
-    drop(original); // Controller crash: its listener dies, the pathname remains.
+    crash_listener(original, &f.socket());
     kill(&mut old);
     assert!(f.socket().exists());
 
@@ -162,7 +162,7 @@ fn gone_gateway_clears_exact_stale_socket_and_permits_fresh_start() {
     let grant = owner
         .start(binding.clone(), old_identity, &[7; 32], f.launch())
         .unwrap();
-    drop(original);
+    crash_listener(original, &f.socket());
     kill(&mut old);
     kill_pid(grant.snapshot.original_child_pid);
     let deadline = Instant::now() + Duration::from_secs(5);

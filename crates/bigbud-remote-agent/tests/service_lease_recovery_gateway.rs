@@ -4,7 +4,7 @@
 #[path = "support/recovery.fixture.rs"]
 mod fixture;
 use bigbud_remote_agent::service_lease::{Controller, State};
-use fixture::{Fixture, inode, kill, old_controller, wait_missing};
+use fixture::{Fixture, crash_listener, inode, kill, old_controller, wait_missing};
 use std::path::PathBuf;
 
 #[test]
@@ -24,7 +24,7 @@ fn actual_gateway_survives_controller_crash_and_attaches_successor_socket() {
         f.receipt().unwrap()["upstream"]["socket"]["ino"],
         inode(&f.socket())
     );
-    drop(original);
+    crash_listener(original, &f.socket());
     kill(&mut old);
 
     let current = Controller::current().unwrap();
