@@ -20,13 +20,20 @@ import {
 
 export type ThreadDeletionOutcome =
   | { readonly type: "deleted"; readonly threadIds: ReadonlyArray<ThreadId> }
-  | { readonly type: "skipped_active"; readonly threadIds: ReadonlyArray<ThreadId> }
+  | {
+      readonly type: "skipped_active";
+      readonly threadIds: ReadonlyArray<ThreadId>;
+      /** A thread in the subtree had a live active runtime, or the subtree changed meanwhile. */
+      readonly reason: ThreadDeletionSkippedActiveReason;
+    }
   | { readonly type: "skipped_pinned"; readonly threadIds: ReadonlyArray<ThreadId> }
   | {
       readonly type: "failed";
       readonly threadIds: ReadonlyArray<ThreadId>;
       readonly detail: string;
     };
+
+export type ThreadDeletionSkippedActiveReason = "active-runtime" | "subtree-changed";
 
 export class ThreadDeletionOperationError extends Data.TaggedError("ThreadDeletionOperationError")<{
   readonly detail: string;
@@ -263,7 +270,11 @@ const makeThreadDeletion = Effect.gen(function* () {
         knownThreadIds = initialIds;
         const firstPreflight = yield* input.preflight(initial);
         if (firstPreflight === "active")
-          return { type: "skipped_active" as const, threadIds: initialIds };
+          return {
+            type: "skipped_active" as const,
+            threadIds: initialIds,
+            reason: "active-runtime" as const,
+          };
         if (firstPreflight === "pinned")
           return { type: "skipped_pinned" as const, threadIds: initialIds };
 
@@ -280,11 +291,19 @@ const makeThreadDeletion = Effect.gen(function* () {
           initialIds.length !== currentIds.length ||
           initialIds.some((id) => !currentIds.includes(id))
         ) {
-          return { type: "skipped_active" as const, threadIds: currentIds };
+          return {
+            type: "skipped_active" as const,
+            threadIds: currentIds,
+            reason: "subtree-changed" as const,
+          };
         }
         const secondPreflight = yield* input.preflight(current);
         if (secondPreflight === "active")
-          return { type: "skipped_active" as const, threadIds: currentIds };
+          return {
+            type: "skipped_active" as const,
+            threadIds: currentIds,
+            reason: "active-runtime" as const,
+          };
         if (secondPreflight === "pinned")
           return { type: "skipped_pinned" as const, threadIds: currentIds };
 

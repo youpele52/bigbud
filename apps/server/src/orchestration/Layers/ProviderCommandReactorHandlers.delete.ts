@@ -38,6 +38,7 @@ import { ServerConfig } from "../../startup/config.ts";
 import { recoverDirectCleanupWorktrees } from "../../deletion/Layers/DirectResourceCleanupRecovery.worktrees.ts";
 import { serializeManagedWorktreeResource } from "../../persistence/Layers/DirectResourceCleanupRepository.worktrees.ts";
 import type * as DeleteTypes from "./ProviderCommandReactorHandlers.delete.types.ts";
+import { reportSkippedActiveThreadDeletion } from "./ProviderCommandReactorHandlers.delete.skipped.ts";
 export const makeProcessDeletionRequested = Effect.gen(function* () {
   const orchestrationEngine = yield* OrchestrationEngineService;
   const providerService = yield* ProviderService;
@@ -382,6 +383,16 @@ export const makeProcessDeletionRequested = Effect.gen(function* () {
           createdAt,
           detail: outcome.detail,
         }).pipe(Effect.asVoid);
+      } else if (outcome.type === "skipped_active") {
+        yield* reportSkippedActiveThreadDeletion(orchestrationEngine, {
+          rootThreadId: thread.id,
+          threadIds: outcome.threadIds,
+          reason: outcome.reason,
+          mode,
+          origin: event.payload.origin,
+          deletionEventId: event.eventId,
+          createdAt,
+        });
       }
     }
   });

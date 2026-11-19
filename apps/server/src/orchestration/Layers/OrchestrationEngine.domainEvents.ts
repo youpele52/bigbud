@@ -4,6 +4,10 @@ import { Effect, Metric, Option, PubSub, Stream } from "effect";
 import { orchestrationDomainEventReplayPagesTotal } from "../../observability/Metrics.orchestrationRecovery.ts";
 import type { OrchestrationEventStoreError } from "../../persistence/Errors.ts";
 import { makeOrchestrationDeliveryHub } from "./OrchestrationEngine.deliveryHub.ts";
+import {
+  registerReplayCursor,
+  unregisterReplayCursor,
+} from "./OrchestrationEngine.replayCursors.ts";
 
 export const ORCHESTRATION_DOMAIN_EVENT_REPLAY_PAGE_SIZE = 500;
 
@@ -19,7 +23,8 @@ export const makeOrchestrationDomainEventDistribution = Effect.fn(
   const generalWakeUp = yield* PubSub.sliding<boolean>({ capacity: 1, replay: 1 });
   const deliveryHub = yield* makeOrchestrationDeliveryHub;
   // Read cursors of open reactor streams. Event-log maintenance must keep every event after
-  // the lowest one: a reactor stream dies when its next replay page is a gap.
+  // the lowest one: a reactor stream dies when its next replay page is a gap. Each cursor is
+  // also registered process-wide so deletion pruning respects it (`.replayCursors`).
   const openCursors = new Set<{ sequence: number }>();
 
   return {
@@ -32,9 +37,14 @@ export const makeOrchestrationDomainEventDistribution = Effect.fn(
             Effect.sync(() => {
               const opened = { sequence: input.initialSequence() };
               openCursors.add(opened);
+              registerReplayCursor(opened);
               return opened;
             }),
-            (opened) => Effect.sync(() => openCursors.delete(opened)),
+            (opened) =>
+              Effect.sync(() => {
+                openCursors.delete(opened);
+                unregisterReplayCursor(opened);
+              }),
           );
           const replayPage = (): Stream.Stream<OrchestrationEvent> =>
             Stream.paginate(cursor.sequence, (pageCursor) =>
