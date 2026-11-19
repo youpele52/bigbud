@@ -105,7 +105,7 @@ export const recordAcceptedSendTurn = Effect.fn("recordAcceptedSendTurn")(functi
     sessionEpoch: input.sessionEpoch,
     startedAt: observedAt,
   };
-  const upsertBinding = input.directory.upsert({
+  const binding = {
     threadId: input.threadId,
     provider: input.adapter.provider,
     status: "running",
@@ -116,14 +116,26 @@ export const recordAcceptedSendTurn = Effect.fn("recordAcceptedSendTurn")(functi
       lastRuntimeEvent: "provider.sendTurn",
       lastRuntimeEventAt: observedAt,
     },
-  });
-  if (input.acknowledge !== undefined) {
+  } as const;
+  const upsertBinding = input.directory.upsert(binding);
+  const acknowledge = input.acknowledge;
+  if (acknowledge !== undefined) {
     // Without a liveness repository the binding alone rides with the acknowledgement, so the
     // attempt never stays `may-have-been-sent` for a turn the provider accepted.
-    const writes = Option.isSome(input.liveness)
-      ? input.liveness.value.startTurn(livenessInput).pipe(Effect.andThen(upsertBinding))
-      : upsertBinding;
-    const acknowledged = yield* input.acknowledge(writes).pipe(
+    const acknowledgeWith = (upsert: ProviderSessionDirectoryShape["upsert"]) =>
+      acknowledge(
+        Option.isSome(input.liveness)
+          ? input.liveness.value.startTurn(livenessInput).pipe(Effect.andThen(upsert(binding)))
+          : upsert(binding),
+      );
+    // The binding write runs inside the acknowledgement's SQL transaction, so the directory's
+    // write lock is taken first (lock order: write lock, then SQL). Taking it inside the
+    // transaction deadlocked with a concurrent session start on another thread (D-1).
+    const acknowledged = yield* (
+      input.directory.withWriteLock
+        ? input.directory.withWriteLock(acknowledgeWith)
+        : acknowledgeWith(input.directory.upsert)
+    ).pipe(
       Effect.as(true),
       Effect.catch((error) =>
         Effect.logWarning("failed to record provider acknowledgement with turn liveness", {
