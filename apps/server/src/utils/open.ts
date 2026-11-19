@@ -150,6 +150,10 @@ export interface OpenShape {
    *
    * Uses the platform's file manager command (`open` on macOS, `xdg-open` on Linux,
    * `explorer` on Windows) so the OS resolves the default app for the given path.
+   *
+   * Does no path validation and may launch executables. Search results do not use it: they
+   * open through the desktop bridge (`desktopBridge.openPath`), which validates with
+   * `@bigbud/shared/systemOpenPath` and reveals launchable paths instead of opening them.
    */
   readonly openPath: (input: OpenPathInput) => Effect.Effect<void, OpenError>;
 }

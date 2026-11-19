@@ -215,6 +215,14 @@
       "types": "./src/path.ts",
       "import": "./src/path.ts"
     },
+    "./systemOpenPath": {
+      "types": "./src/systemOpenPath.ts",
+      "import": "./src/systemOpenPath.ts"
+    },
+    "./systemOpenPath.launchable": {
+      "types": "./src/systemOpenPath.launchable.ts",
+      "import": "./src/systemOpenPath.launchable.ts"
+    },
     "./Net": {
       "types": "./src/Net.ts",
       "import": "./src/Net.ts"

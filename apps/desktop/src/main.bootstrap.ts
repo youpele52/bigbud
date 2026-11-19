@@ -41,6 +41,7 @@ import {
 import { RestartRequiredUpdatePreparationError } from "./updater/autoUpdater.install";
 import { registerIpcHandlers } from "./window/ipcHandlers";
 import { registerCommandLineToolIpc } from "./commandLine/commandLineTool.ipc";
+import { registerShellPathIpc } from "./window/shellPathHandlers";
 import { initializeBrowserSession } from "./window/browserSession";
 import type { DesktopWindowRegistry } from "./window/DesktopWindowRegistry";
 import type { DesktopPreferencesStore } from "./window/desktopPreferences";
@@ -271,6 +272,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     isPackaged,
     resourcesPath,
   });
+  registerShellPathIpc();
   registerComputerUseSafetySurface({
     registry: windowRegistry,
     desktopDir: computerUseGuard.desktopDir,

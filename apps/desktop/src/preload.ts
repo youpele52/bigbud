@@ -219,6 +219,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(SET_WINDOW_MATERIAL_CHANNEL, windowMaterial, requestId),
   showContextMenu: (items, position) => ipcRenderer.invoke(CONTEXT_MENU_CHANNEL, items, position),
   openExternal: (url: string) => ipcRenderer.invoke(OPEN_EXTERNAL_CHANNEL, url),
+  openPath: (path: string) => ipcRenderer.invoke(desktopIpcChannels.openPath, path),
+  showItemInFolder: (path: string) => ipcRenderer.invoke(desktopIpcChannels.showItemInFolder, path),
   onMenuAction: (listener) => {
     const wrappedListener = (_event: Electron.IpcRendererEvent, action: unknown) => {
       if (!isDesktopMenuAction(action)) return;
