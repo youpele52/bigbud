@@ -1,11 +1,10 @@
 import type { IDisposable, Terminal } from "@xterm/xterm";
-import { TERMINAL_PASTE_MAX_FILE_MB } from "@bigbud/contracts/core/settings.terminalPaste.ts";
 import { getServerConfig } from "../../rpc/serverState";
 import {
   ClipboardProtocolState,
   type ClipboardSnapshotItem,
 } from "./TerminalViewport.clipboardProtocol.logic";
-import type { TerminalPasteGesture } from "./TerminalViewport.paste";
+import { maxPasteBytes, type TerminalPasteGesture } from "./TerminalViewport.paste";
 
 const PASTE_EVENT_MODE = 5522;
 const textEncoder = new TextEncoder();
@@ -51,8 +50,7 @@ export function attachTerminalClipboardProtocol(options: {
     now: Date.now,
     randomPassword,
     enabled: () => settings()?.terminalClipboardRequests ?? true,
-    maxBytes: () =>
-      (settings()?.terminalPasteMaxFileMb ?? TERMINAL_PASTE_MAX_FILE_MB.default) * 1024 * 1024,
+    maxBytes: maxPasteBytes,
   });
   const { parser } = options.terminal;
   const disposables: IDisposable[] = [

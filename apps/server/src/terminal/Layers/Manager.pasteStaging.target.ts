@@ -1,13 +1,20 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
-import { TerminalPasteStageError } from "@bigbud/contracts/workspace/terminal.paste.ts";
+import {
+  TerminalPasteStageError,
+  type TerminalPasteHost,
+  type TerminalPasteStageResult,
+} from "@bigbud/contracts/workspace/terminal.paste.ts";
 import { isWslTerminalTargetId } from "@bigbud/shared/terminalExecutionTarget";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { parseSshExecutionTarget } from "../../ssh/sshExecutionTarget.ts";
 import type { LocalPasteStore } from "./Manager.pasteStaging.local.ts";
 import type { PasteFileKind } from "./Manager.pasteStaging.names.ts";
 
-export type PasteClipboardOutcome = "set" | "unavailable" | "skipped";
+export type PasteClipboardOutcome = Extract<
+  TerminalPasteStageResult,
+  { op: "commit" }
+>["clipboard"];
 
 export interface PasteStagingSink {
   readonly write: (chunk: Uint8Array) => Promise<void>;
@@ -20,7 +27,7 @@ export interface PasteStagingSink {
 
 /** The machine one terminal generation stages on, chosen from its server session. */
 export interface PasteStagingTarget {
-  readonly host: "local" | "remote";
+  readonly host: TerminalPasteHost;
   readonly hostLabel: string;
   readonly generation: string | undefined;
   readonly begin: (kind: PasteFileKind, byteLength: number) => Promise<PasteStagingSink>;

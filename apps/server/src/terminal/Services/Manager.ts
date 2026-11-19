@@ -194,11 +194,6 @@ export interface TerminalManagerShape {
     options?: TerminalSubscribeOptions,
   ) => Effect.Effect<() => void>;
 
-  /**
-   * Hold or release a terminal's PTY output for one delivery subscriber (producer flow control).
-   * Succeeds with whether the running process supports pausing; unsupported adapters are bounded
-   * by delivery overflow instead.
-   */
   /** Stage a pasted/dropped file on the session's own machine (never a client-chosen one). */
   readonly stagePasteFile?: (
     input: TerminalPasteStageInput,
@@ -207,6 +202,11 @@ export interface TerminalManagerShape {
   /** Search the output terminals retain (newest lines first); scan on demand, no index. */
   readonly search?: (input: TerminalSearchInput) => Effect.Effect<TerminalSearchResult>;
 
+  /**
+   * Hold or release a terminal's PTY output for one delivery subscriber (producer flow control).
+   * Succeeds with whether the running process supports pausing; unsupported adapters are bounded
+   * by delivery overflow instead.
+   */
   readonly setOutputHold?: (input: {
     readonly threadId: string;
     readonly terminalId: string;

@@ -1,6 +1,9 @@
 import type { Terminal } from "@xterm/xterm";
 import type { NativeApi, TerminalDropPathMode } from "@bigbud/contracts";
-import { TERMINAL_PASTE_MAX_FILE_MB } from "@bigbud/contracts/core/settings.terminalPaste.ts";
+import {
+  TERMINAL_PASTE_MAX_FILE_MB,
+  terminalPasteMaxFileBytes,
+} from "@bigbud/contracts/core/settings.terminalPaste.ts";
 import { readTerminalLaunch } from "../../lib/terminalLaunchBinding";
 import { getServerConfig } from "../../rpc/serverState";
 import { desktopAttachmentPath } from "../chat/view/ChatView.attachments.logic";
@@ -48,10 +51,11 @@ export function terminalFileDelivery(terminal: Terminal | null): TerminalFileDel
   return terminal ? deliveries.get(terminal) : undefined;
 }
 
-function maxPasteBytes(): number {
-  const megabytes =
-    getServerConfig()?.settings.terminalPasteMaxFileMb ?? TERMINAL_PASTE_MAX_FILE_MB.default;
-  return megabytes * 1024 * 1024;
+/** The server's per-file paste cap (Settings › Terminal), in bytes. */
+export function maxPasteBytes(): number {
+  return terminalPasteMaxFileBytes(
+    getServerConfig()?.settings.terminalPasteMaxFileMb ?? TERMINAL_PASTE_MAX_FILE_MB.default,
+  );
 }
 
 /**

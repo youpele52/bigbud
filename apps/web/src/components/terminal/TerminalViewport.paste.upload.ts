@@ -10,7 +10,7 @@ export interface StagedTerminalFile {
   readonly path: string;
   readonly host: TerminalPasteHost;
   readonly hostLabel: string;
-  readonly clipboard: "set" | "unavailable" | "skipped";
+  readonly clipboard: Result<"commit">["clipboard"];
 }
 
 type Result<T extends TerminalPasteStageResult["op"]> = Extract<
