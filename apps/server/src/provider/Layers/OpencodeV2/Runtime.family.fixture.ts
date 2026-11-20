@@ -1,5 +1,6 @@
 import { ThreadId } from "@bigbud/contracts/core/baseSchemas";
 import { realpath } from "node:fs/promises";
+import { expect, vi } from "vitest";
 import { withV2RuntimeFixture } from "./Runtime.fixture.ts";
 import { guardedV2SubagentExecutor } from "./Subagents.guard.ts";
 import type { V2ChildLaunch } from "./Runtime.family.ts";
@@ -10,6 +11,15 @@ const modelSelection = {
   model: "synthetic-model",
 } as const;
 type Fixture = Parameters<Parameters<typeof withV2RuntimeFixture>[0]>[0];
+
+/**
+ * The fixture runtime's real 100ms poller may hold an in-flight repair (`repairQueued`) at any
+ * instant, which correctly suppresses a duplicate poll. Await its natural completion (never force
+ * the flag) so a following synchronous `shouldPollV2Runtime` check reflects ownership state only.
+ */
+export async function settleV2BackgroundRepair(owner: { readonly repairQueued: boolean }) {
+  await vi.waitFor(() => expect(owner.repairQueued).toBe(false), { timeout: 30_000 });
+}
 
 /** Offline pinned-client + SQLite harness. No native process, settings, paid model or qualification registry is touched. */
 export async function withV2OwnedFamily(
