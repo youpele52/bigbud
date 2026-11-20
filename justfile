@@ -197,6 +197,9 @@ marketing-preview *args:
 marketing-typecheck *args:
     bun run --cwd apps/marketing typecheck "$@"
 
+marketing-test *args:
+    bun run --cwd apps/marketing test "$@"
+
 mobile-web-dev *args:
     bun run --cwd apps/mobile-web dev "$@"
 
