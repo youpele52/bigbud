@@ -6,6 +6,7 @@ import { RemoteAgentRegistryV2Schema } from "./remoteAgentInstall.registry.schem
 import {
   buildRemoteAgentRegistryCas,
   buildRemoteAgentRegistryRead,
+  parseRemoteAgentRegistryReadOutput,
 } from "./remoteAgentInstall.registry.shell.ts";
 import {
   pinRemoteAgentBuild,
@@ -40,10 +41,10 @@ describe.runIf(linuxControlAvailable)("Linux shared P4/mobile durable CAS", () =
     const seed = makeRemoteAgentRegistryStore(fixture.root, fixture);
     await seed.update((state) => reserveRemoteAgentStage(state, "P4-stage", base));
     // An old controller may already have read v2 before the first mobile commit.
-    const oldText = Buffer.from(
-      (await fixture.run(buildRemoteAgentRegistryRead(fixture.root))).trim(),
-      "base64",
-    ).toString("utf8");
+    const oldText = parseRemoteAgentRegistryReadOutput(
+      await fixture.run(buildRemoteAgentRegistryRead(fixture.root)),
+    ).text;
+    if (oldText === null) throw new Error("Seeded registry is missing.");
     const oldState = Schema.decodeUnknownSync(RemoteAgentRegistryV2Schema)(JSON.parse(oldText));
     const staleNext = JSON.stringify({ ...oldState, revision: oldState.revision + 1 });
     let lost = false;

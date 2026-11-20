@@ -36,7 +36,8 @@ export type RemoteAgentRemovalCommandMode =
 const TREE_GUARD = `guard_tree() {
   tree="$1"
   test "$(stat -c '%u' -- "$tree")" = "$uid" || { printf refused:foreign-owner; exit 0; }
-  foreign=$(find "$tree" ! -user "$uid" -print)
+  # -prune: report a foreign directory without descending into it (unreadable to a non-root uid).
+  foreign=$(find "$tree" ! -user "$uid" -print -prune)
   if test -n "$foreign"; then printf refused:foreign-owner; exit 0; fi
   mounts=$(awk -v r="$tree" '$5 == r || index($5, r "/") == 1 { print $5 }' /proc/self/mountinfo)
   if test -n "$mounts"; then printf refused:mount; exit 0; fi
