@@ -80,6 +80,7 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **See your desktop through the whole window:** When **Window Material** is translucent, the chat, headers, composer, terminal, right panel, and **Settings** all let your wallpaper show through, not just the sidebar. **Solid** keeps every surface opaque.
 - **Read the layout at a glance:** The sidebar and right panel share one tone, and the chat and terminal sit a shade deeper, in both translucent and solid modes.
 - **Resize with a quiet edge:** Both panel edges show the same thin line when you hover or drag them, and light mode no longer shows a dark line beside the sidebar.
+- **Browse files beside your code:** In **Files**, the file tree sits next to the open file instead of covering it. Hover the **Files** icon or the file's right edge to open it, or click the icon to keep it open until you click again.
 
 ### A Terminal That's Easier to Set Up and Arrange
 
@@ -94,6 +95,7 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **Delete reliably:** Project deletes no longer time out after their chats are removed, retention deletes no longer stay stuck as deleting, and deletion works on Linux ARM and remote servers.
 - **Send long messages:** The general size limit on messages has been removed, while recovery keeps its own limits.
 - **Use computer use in beta builds:** Computer use starts in beta and other channel builds. Channel names appear in lowercase, such as **bigbud beta**.
+- **Update on slower Windows PCs:** Windows updates no longer fail when the pre-install safety check runs slowly. It allows more time and retries once before giving up.
 
 ### More Dependable Providers
 
