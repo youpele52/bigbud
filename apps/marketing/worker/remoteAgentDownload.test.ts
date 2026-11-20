@@ -87,8 +87,37 @@ describe("handleRemoteAgentDownload", () => {
     });
     const response = await handleRemoteAgentDownload("beta", deps);
     expect(response.status).toBe(503);
+    expect(response.headers.get("Content-Type")).toBe("text/plain; charset=utf-8");
     expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.text()).toBe(
+      [
+        "Could not look up the newest bigbud beta release. Retry shortly or use a pinned link such as /download/v<version>/remote-agent.",
+        "Beta and prereleases: https://github.com/youpele52/bigbud/releases",
+        "",
+      ].join("\n"),
+    );
   });
+
+  it.each(["latest", "stable"])(
+    "points a failed %s lookup at the stable and beta release pages",
+    async (ref) => {
+      const { deps } = makeDeps({
+        fetch: async () => {
+          throw new Error("timeout");
+        },
+      });
+      const response = await handleRemoteAgentDownload(ref, deps);
+      expect(response.status).toBe(503);
+      expect(await response.text()).toBe(
+        [
+          "Could not look up the newest bigbud stable release. Retry shortly or use a pinned link such as /download/v<version>/remote-agent.",
+          "Stable releases: https://github.com/youpele52/bigbud/releases/latest",
+          "Beta and prereleases: https://github.com/youpele52/bigbud/releases",
+          "",
+        ].join("\n"),
+      );
+    },
+  );
 
   it("sends the token only when it is configured", async () => {
     const withToken = makeDeps({ token: "github_pat_example" });
