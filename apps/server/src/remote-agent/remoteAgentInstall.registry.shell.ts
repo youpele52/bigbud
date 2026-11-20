@@ -59,6 +59,23 @@ if test -f "$registry"; then base64 -w0 "$registry"; else printf 'missing'; fi
 `;
 }
 
+/** Parses {@link buildRemoteAgentRegistryRead} output: the optional host clock line, then the registry. */
+export function parseRemoteAgentRegistryReadOutput(raw: string): {
+  readonly text: string | null;
+  readonly hostNow: number | undefined;
+} {
+  let output = raw.trim();
+  let hostNow: number | undefined;
+  const clock = /^clock=(\d{1,12})\n/.exec(output);
+  if (clock) {
+    hostNow = Number(clock[1]) * 1000;
+    output = output.slice(clock[0].length).trim();
+  }
+  if (output === "missing") return { text: null, hostNow };
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(output)) throw new Error("Invalid registry response.");
+  return { text: Buffer.from(output, "base64").toString("utf8"), hostNow };
+}
+
 /** Flush bytes, rename, flush filesystem metadata, THEN acknowledge the committed snapshot. */
 export function buildRemoteAgentRegistryCas(input: {
   readonly root: string;

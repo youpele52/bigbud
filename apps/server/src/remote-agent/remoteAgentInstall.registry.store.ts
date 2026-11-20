@@ -6,6 +6,7 @@ import {
 import {
   buildRemoteAgentRegistryCas,
   buildRemoteAgentRegistryRead,
+  parseRemoteAgentRegistryReadOutput,
 } from "./remoteAgentInstall.registry.shell.ts";
 import { assertMobileRegistryTransition } from "./remoteAgentInstall.mobile.invariants.ts";
 import {
@@ -20,16 +21,10 @@ export interface RemoteAgentRegistryCommand {
 /** Cross-controller CAS; lost acknowledgements reconcile content before reporting a failed write. */
 export function makeRemoteAgentRegistryStore(root: string, command: RemoteAgentRegistryCommand) {
   const read = async () => {
-    let output = (await command.run(buildRemoteAgentRegistryRead(root))).trim();
-    let hostNow: number | undefined;
-    const clock = /^clock=(\d{1,12})\n/.exec(output);
-    if (clock) {
-      hostNow = Number(clock[1]) * 1000;
-      output = output.slice(clock[0].length).trim();
-    }
-    if (output === "missing") return { text: null, state: emptyRemoteAgentRegistry(), hostNow };
-    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(output)) throw new Error("Invalid registry response.");
-    const text = Buffer.from(output, "base64").toString("utf8");
+    const { text, hostNow } = parseRemoteAgentRegistryReadOutput(
+      await command.run(buildRemoteAgentRegistryRead(root)),
+    );
+    if (text === null) return { text, state: emptyRemoteAgentRegistry(), hostNow };
     return { text, state: parseRemoteAgentRegistry(text), hostNow };
   };
   return {

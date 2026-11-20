@@ -289,31 +289,24 @@ Files:
    - Exposed as `remove(executionTargetId)` on `makeRemoteAgentInstallManager`
      (`remoteAgentInstallManager.ts` is at 349 lines, so add only the delegating method there).
    - It runs inside `withInstallLock`, so install, replace and remove on one host never overlap.
-   - Order of steps:
-     1. **Blockers:** read the registry (`control.registry.read()`) and owner evidence
-        (`remoteAgentOwners().referencedBuildIds(target)`). Also consult the PTY and process
-        inventories (`remoteAgentPtyInventory.ts`, `remoteAgentReadOnlyInventory.ts`). Block on:
-        any referenced build, launches in progress, stage or admission reservations, and a
-        remote backend runtime that uses the agent (`backend_service` status through the
-        existing remote-backend status path). If anything blocks, return `blocked` with labels.
-     2. **Idle shutdown:** run `--shutdown-supervisor` through the current build. If it refuses
-        (work started meanwhile), return `blocked`. Never kill anything.
-     3. **Delete:** under the inbox `.claim.lock` (shared with the script), write a removal
-        tombstone to `state`. Then delete the managed directories under `~/.bigbud/agent` with
-        the guards from `remoteAgentInstall.retirement.deletion.ts` (canonical path under
-        `$HOME/.bigbud/agent`, owner check, no symlinks followed), and finally the `agent`
-        directory itself.
-        - User-managed external binaries (`runtime.origin !== "managed"`) outside that tree are
-          never touched.
-        - `~/.bigbud/backend-*`, `graph` and `workspace-modes` are never touched.
-     4. **Disconnect:** run the existing disconnect for every connection to that target (the
-        same server effect behind `WsServerDisconnectExecutionTargetRpc`). Drop pool entries
-        (`remoteAgentConnectionPool*`). Clear owner bindings, admission request ids and the
-        update-coordinator state (`remoteAgentUpdate.state.ts`) for the target.
-     5. **Workspaces:** when `switchWorkspacesToDirectSsh` is true (the default), dispatch the
-        existing project update so each workspace on that host uses `remoteTransport:
+   - Order of steps: 1. **Blockers:** read the registry (`control.registry.read()`) and owner evidence
+     (`remoteAgentOwners().referencedBuildIds(target)`). Also consult the PTY and process
+     inventories (`remoteAgentPtyInventory.ts`, `remoteAgentReadOnlyInventory.ts`). Block on:
+     any referenced build, launches in progress, stage or admission reservations, and a
+     remote backend runtime that uses the agent (`backend_service` status through the
+     existing remote-backend status path). If anything blocks, return `blocked` with labels. 2. **Idle shutdown:** run `--shutdown-supervisor` through the current build. If it refuses
+     (work started meanwhile), return `blocked`. Never kill anything. 3. **Delete:** under the inbox `.claim.lock` (shared with the script), write a removal
+     tombstone to `state`. Then delete the managed directories under `~/.bigbud/agent` with
+     the guards from `remoteAgentInstall.retirement.deletion.ts` (canonical path under
+     `$HOME/.bigbud/agent`, owner check, no symlinks followed), and finally the `agent`
+     directory itself. - User-managed external binaries (`runtime.origin !== "managed"`) outside that tree are
+     never touched. - `~/.bigbud/backend-*`, `graph` and `workspace-modes` are never touched. 4. **Disconnect:** run the existing disconnect for every connection to that target (the
+     same server effect behind `WsServerDisconnectExecutionTargetRpc`). Drop pool entries
+     (`remoteAgentConnectionPool*`). Clear owner bindings, admission request ids and the
+     update-coordinator state (`remoteAgentUpdate.state.ts`) for the target. 5. **Workspaces:** when `switchWorkspacesToDirectSsh` is true (the default), dispatch the
+     existing project update so each workspace on that host uses `remoteTransport:
 "direct-ssh"`. Find the command used by the edit dialog's save path, and reuse it rather
-        than writing projects directly.
+     than writing projects directly.
    - Crash safety: if the tombstone is still there at the next install or cleanup, finish the
      deletion first. A fresh install after removal uploads new bytes, because the inbox and
      managed bytes are gone and `probePlacedArtifact` returns `absent`.

@@ -46,6 +46,9 @@ jobs:
         uses: ./.github/actions/setup-bigbud
 
       - name: Typecheck
+        # A cold server typecheck already peaks near V8's default ~4 GB heap; give it headroom.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: bun run typecheck
 
   rust:
