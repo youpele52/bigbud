@@ -87,6 +87,8 @@ jobs:
 
       - name: Validate Windows CUA sweep native helper
         if: matrix.platform == 'win'
+        # Seven helper calls, each bounded by the 180s production budget (cold compile + one retry).
+        timeout-minutes: 30
         run: bun run --cwd apps/desktop vitest run src/backend/cuaDriver.windowsSweep.native.test.ts
 
       - name: Align package versions to release version
