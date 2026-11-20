@@ -1,8 +1,15 @@
 /**
- * Checks that the published remote-agent staging script matches the repository copy (D3: the
- * site serves `apps/marketing/public/remote-agent.sh`, never the moving main branch).
+ * Checks the published remote-agent staging script (D3: users get the reviewed release asset,
+ * never the moving main branch).
  *
- * Exit codes: 0 every source matches, 1 any source differs or is served from a disallowed
+ * - The retired site path `https://bigbud.app/remote-agent.sh` must return 404, so older apps'
+ *   copied commands fail cleanly instead of piping HTML into `sh`.
+ * - `--download <ref>` follows `https://bigbud.app/download/<ref>/remote-agent` and requires the
+ *   body to equal `scripts/release-assets/remote-agent.sh` once the stamped `DEFAULT_VERSION` line
+ *   is normalised, with the stamp equal to the release the link resolved to.
+ * - `--release v<x>` checks that release's `remote-agent.sh` asset the same way.
+ *
+ * Exit codes: 0 every source is as expected, 1 any source differs or is served from a disallowed
  * location (including oversize content), 2 a source could not be fetched and none differed.
  */
 import { createHash } from "node:crypto";
@@ -11,15 +18,21 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { boundedHttpsGet, type BoundedFetchResult } from "./lib/bounded-https-fetch.ts";
+import {
+  normalizeStampedScript,
+  resolvedReleaseTag,
+  stampForTag,
+  validateDownloadRef,
+} from "./verify-published-remote-agent-script.stamp.ts";
 
-export const PUBLISHED_SCRIPT_URL = "https://bigbud.app/remote-agent.sh";
+export const SITE_ORIGIN = "https://bigbud.app";
+export const RETIRED_SCRIPT_URL = `${SITE_ORIGIN}/remote-agent.sh`;
 export const DEFAULT_REPOSITORY = "youpele52/bigbud";
 export const DEFAULT_TIMEOUT_MS = 15_000;
 /** The repo script is a few KiB; anything past this cannot be it. */
 export const MAX_SCRIPT_BYTES = 256 * 1024;
-const REPO_SCRIPT_PATH = fileURLToPath(
-  new URL("../apps/marketing/public/remote-agent.sh", import.meta.url),
-);
+const REPO_SCRIPT_LABEL = "scripts/release-assets/remote-agent.sh";
+const REPO_SCRIPT_PATH = fileURLToPath(new URL(`../${REPO_SCRIPT_LABEL}`, import.meta.url));
 
 export const SITE_HOSTS: ReadonlySet<string> = new Set(["bigbud.app", "www.bigbud.app"]);
 export const RELEASE_HOSTS: ReadonlySet<string> = new Set([
@@ -27,9 +40,10 @@ export const RELEASE_HOSTS: ReadonlySet<string> = new Set([
   "objects.githubusercontent.com",
   "release-assets.githubusercontent.com",
 ]);
+const DOWNLOAD_HOSTS: ReadonlySet<string> = new Set([...SITE_HOSTS, ...RELEASE_HOSTS]);
 const RAW_GITHUB_HOST = "raw.githubusercontent.com";
 
-export type SourceStatus = "match" | "mismatch" | "unreachable";
+export type SourceStatus = "match" | "removed" | "mismatch" | "unreachable";
 
 export interface SourceReport {
   readonly label: string;
@@ -42,11 +56,16 @@ export interface VerifyOptions {
   readonly fetch?: typeof globalThis.fetch;
   readonly expected: Buffer;
   readonly release?: string;
+  readonly download?: string;
   readonly repository?: string;
   readonly timeoutMs?: number;
   readonly maxBytes?: number;
-  readonly siteUrl?: string;
 }
+
+/** What a fetched script must contain: the stamp is fixed, or read from the redirect chain. */
+type StampExpectation =
+  | { readonly kind: "fixed"; readonly stamp: string }
+  | { readonly kind: "resolved"; readonly repository: string };
 
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
@@ -61,22 +80,12 @@ export function releaseScriptUrl(repository: string, release: string): string {
   return `https://github.com/${repository}/releases/download/${tag}/remote-agent.sh`;
 }
 
-function classify(
-  label: string,
-  url: string,
-  result: BoundedFetchResult,
-  expectedSha: string,
-): SourceReport {
+export function downloadUrl(ref: string): string {
+  return `${SITE_ORIGIN}/download/${validateDownloadRef(ref)}/remote-agent`;
+}
+
+function failureReport(label: string, url: string, result: BoundedFetchResult): SourceReport {
   switch (result.kind) {
-    case "ok": {
-      const actual = sha256(result.bytes);
-      const via = result.hops.length > 1 ? [`  via: ${result.hops.join(" -> ")}`] : [];
-      const lines = [`  sha256: ${actual} (${result.bytes.length} bytes)`, ...via];
-      const mismatch = [...lines, `  expected: ${expectedSha}`];
-      return actual === expectedSha
-        ? { label, url, status: "match", lines }
-        : { label, url, status: "mismatch", lines: [...mismatch, ...mismatchHints(result)] };
-    }
     case "redirect-disallowed": {
       const host = new URL(result.location).hostname;
       const lines = [`  redirect to a disallowed location: ${result.from} -> ${result.location}`];
@@ -96,7 +105,53 @@ function classify(
       };
     case "unreachable":
       return { label, url, status: "unreachable", lines: [`  ${result.url}: ${result.reason}`] };
+    case "ok":
+      throw new Error("failureReport needs a failed fetch result.");
   }
+}
+
+function classifyScript(
+  label: string,
+  url: string,
+  result: BoundedFetchResult,
+  expectedSha: string,
+  expectation: StampExpectation,
+): SourceReport {
+  if (result.kind !== "ok") return failureReport(label, url, result);
+  const { normalized, stamp } = normalizeStampedScript(result.bytes);
+  const actual = sha256(normalized);
+  const via = result.hops.length > 1 ? [`  via: ${result.hops.join(" -> ")}`] : [];
+  const lines = [
+    `  sha256 (stamp normalised): ${actual} (${result.bytes.length} bytes)`,
+    `  stamp: ${stamp === null ? "missing" : JSON.stringify(stamp)}`,
+    ...via,
+  ];
+  const problems: string[] = [];
+  if (actual !== expectedSha) problems.push(`  expected: ${expectedSha}`, ...mismatchHints(result));
+  const tag =
+    expectation.kind === "fixed" ? null : resolvedReleaseTag(result.hops, expectation.repository);
+  const wanted = expectation.kind === "fixed" ? expectation.stamp : tag && stampForTag(tag);
+  if (!wanted) problems.push("  could not tell which release the link resolved to");
+  else if (stamp !== wanted) problems.push(`  expected stamp: ${JSON.stringify(wanted)}`);
+  return problems.length === 0
+    ? { label, url, status: "match", lines }
+    : { label, url, status: "mismatch", lines: [...lines, ...problems] };
+}
+
+function classifyRetired(label: string, url: string, result: BoundedFetchResult): SourceReport {
+  if (result.kind === "unreachable" && result.status === 404) {
+    return { label, url, status: "removed", lines: ["  HTTP 404 as required"] };
+  }
+  if (result.kind !== "ok") return failureReport(label, url, result);
+  return {
+    label,
+    url,
+    status: "mismatch",
+    lines: [
+      `  served ${result.bytes.length} bytes (${result.contentType || "no content type"});`,
+      "  the retired path must return 404 so old copied commands fail cleanly.",
+    ],
+  };
 }
 
 function mismatchHints(result: { bytes: Buffer; contentType: string }): string[] {
@@ -104,7 +159,7 @@ function mismatchHints(result: { bytes: Buffer; contentType: string }): string[]
   if (!result.contentType.includes("text/html") && !/^<(!doctype html|html)/.test(head)) return [];
   return [
     `  served ${result.contentType || "HTML"}: likely the site's fallback page,`,
-    "  so remote-agent.sh is not deployed at this URL.",
+    "  so the download link is not deployed at this URL.",
   ];
 }
 
@@ -117,23 +172,32 @@ export async function verifyPublishedRemoteAgentScript(
     timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     maxBytes: options.maxBytes ?? MAX_SCRIPT_BYTES,
   };
-  const sources: Array<{ label: string; url: string; hosts: ReadonlySet<string> }> = [
-    { label: "site", url: options.siteUrl ?? PUBLISHED_SCRIPT_URL, hosts: SITE_HOSTS },
+  const get = (url: string, hosts: ReadonlySet<string>) =>
+    boundedHttpsGet(url, { ...fetchOptions, allowedHosts: hosts });
+  const checks: Array<Promise<SourceReport>> = [
+    get(RETIRED_SCRIPT_URL, SITE_HOSTS).then((result) =>
+      classifyRetired("retired site path", RETIRED_SCRIPT_URL, result),
+    ),
   ];
+  if (options.download) {
+    const url = downloadUrl(options.download);
+    const expectation = { kind: "resolved", repository: DEFAULT_REPOSITORY } as const;
+    checks.push(
+      get(url, DOWNLOAD_HOSTS).then((result) =>
+        classifyScript(`download ${options.download}`, url, result, expectedSha, expectation),
+      ),
+    );
+  }
   if (options.release) {
     const url = releaseScriptUrl(options.repository ?? DEFAULT_REPOSITORY, options.release);
-    sources.push({ label: `release ${options.release}`, url, hosts: RELEASE_HOSTS });
-  }
-  return Promise.all(
-    sources.map(async ({ label, url, hosts }) =>
-      classify(
-        label,
-        url,
-        await boundedHttpsGet(url, { ...fetchOptions, allowedHosts: hosts }),
-        expectedSha,
+    const expectation = { kind: "fixed", stamp: stampForTag(options.release) } as const;
+    checks.push(
+      get(url, RELEASE_HOSTS).then((result) =>
+        classifyScript(`release ${options.release}`, url, result, expectedSha, expectation),
       ),
-    ),
-  );
+    );
+  }
+  return Promise.all(checks);
 }
 
 export function exitCodeFor(reports: ReadonlyArray<SourceReport>): 0 | 1 | 2 {
@@ -143,29 +207,32 @@ export function exitCodeFor(reports: ReadonlyArray<SourceReport>): 0 | 1 | 2 {
 }
 
 export function formatReports(expected: Buffer, reports: ReadonlyArray<SourceReport>): string {
-  const lines = [`repository apps/marketing/public/remote-agent.sh sha256: ${sha256(expected)}`];
+  const lines = [`repository ${REPO_SCRIPT_LABEL} sha256: ${sha256(expected)}`];
   for (const report of reports) {
     lines.push(`${report.label}: ${report.status.toUpperCase()} ${report.url}`, ...report.lines);
   }
   return lines.join("\n");
 }
 
-const USAGE = `Usage: bun run verify:published-remote-agent-script [--release v<x.y.z>]
-  [--repository owner/repo] [--timeout-ms <ms>]
+const USAGE = `Usage: bun run verify:published-remote-agent-script [--download <ref>]
+  [--release v<x.y.z>] [--repository owner/repo] [--timeout-ms <ms>]
 
-Compares ${PUBLISHED_SCRIPT_URL} (and, with --release, that release's remote-agent.sh asset)
-to apps/marketing/public/remote-agent.sh by SHA-256.
-Exit codes: 0 match, 1 mismatch or disallowed redirect, 2 unreachable.`;
+Checks that ${RETIRED_SCRIPT_URL} returns 404. With --download (latest, stable, beta, preview,
+nightly or a tag), follows ${SITE_ORIGIN}/download/<ref>/remote-agent; with --release, fetches
+that release's remote-agent.sh asset. Each must equal ${REPO_SCRIPT_LABEL} by SHA-256 once the
+stamped DEFAULT_VERSION line is normalised, and the stamp must name the resolved release.
+Exit codes: 0 as expected, 1 mismatch or disallowed redirect, 2 unreachable.`;
 
-export function parseArgs(argv: ReadonlyArray<string>): {
+interface ParsedArgs {
   help: boolean;
   release?: string;
+  download?: string;
   repository?: string;
   timeoutMs?: number;
-} {
-  const parsed: { help: boolean; release?: string; repository?: string; timeoutMs?: number } = {
-    help: false,
-  };
+}
+
+export function parseArgs(argv: ReadonlyArray<string>): ParsedArgs {
+  const parsed: ParsedArgs = { help: false };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index]!;
     if (argument === "--help" || argument === "-h") {
@@ -178,6 +245,7 @@ export function parseArgs(argv: ReadonlyArray<string>): {
     const value = inline ?? argv[++index];
     if (value === undefined || value === "") throw new Error(`${flag} requires a value.`);
     if (flag === "--release") parsed.release = value;
+    else if (flag === "--download") parsed.download = validateDownloadRef(value);
     else if (flag === "--repository") parsed.repository = value;
     else if (flag === "--timeout-ms") {
       const timeoutMs = Number(value);
@@ -200,7 +268,7 @@ async function runCli(): Promise<number> {
   const reports = await verifyPublishedRemoteAgentScript({ expected, ...args });
   console.log(formatReports(expected, reports));
   const code = exitCodeFor(reports);
-  console.log(["Result: match.", "Result: MISMATCH.", "Result: UNREACHABLE."][code]);
+  console.log(["Result: as expected.", "Result: MISMATCH.", "Result: UNREACHABLE."][code]);
   return code;
 }
 

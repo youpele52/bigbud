@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  compareReleaseVersions,
   releaseChannelLabel,
   resolveReleaseChannel,
   resolveReleaseVersion,
@@ -53,5 +54,26 @@ describe("release channel", () => {
     "not-a-version",
   ])("rejects unsupported public version %s", (version) => {
     expect(resolveReleaseVersion(version)).toBeNull();
+  });
+});
+
+describe("compareReleaseVersions", () => {
+  it("orders by semver precedence, stable above its prereleases", () => {
+    const sorted = [
+      "v0.4.0",
+      "0.4.0-beta.10",
+      "v0.4.0-beta.2",
+      "0.3.9",
+      "0.4.1-nightly.1",
+    ].toSorted(compareReleaseVersions);
+    expect(sorted).toEqual([
+      "0.3.9",
+      "v0.4.0-beta.2",
+      "0.4.0-beta.10",
+      "v0.4.0",
+      "0.4.1-nightly.1",
+    ]);
+    expect(compareReleaseVersions("0.4.0-beta.1.2", "0.4.0-beta.1")).toBeGreaterThan(0);
+    expect(() => compareReleaseVersions("0.4.0+build", "0.4.0")).toThrow();
   });
 });

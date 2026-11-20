@@ -6,8 +6,8 @@ import type {
 } from "./remoteAgentInstall.operation.ts";
 
 /**
- * D1 owner-only local control socket. It serves only remote-agent status, read-only doctor and
- * install/replace (plus polling an accepted operation). It is deliberately separate from the
+ * D1 owner-only local control socket. It serves only remote-agent status, read-only doctor,
+ * install/replace (plus polling an accepted operation) and explicitly confirmed removal. It is deliberately separate from the
  * backend lock's control port and secret, which can shut the backend down.
  */
 export const REMOTE_AGENT_CONTROL_VERSION = 1;
@@ -31,7 +31,15 @@ export type RemoteAgentControlRequest =
       /** Explicit person consent (interactive yes or `--yes`); never inferred. */
       readonly consent: boolean;
     }
-  | { readonly method: "operation"; readonly operationId: string; readonly waitMs: number };
+  | { readonly method: "operation"; readonly operationId: string; readonly waitMs: number }
+  | {
+      readonly method: "remove";
+      readonly target: string;
+      /** Move the host's workspaces to Direct SSH after removal (the CLI default). */
+      readonly switchToDirectSsh: boolean;
+      /** Explicit person confirmation (interactive yes or `--yes`); never inferred. */
+      readonly consent: boolean;
+    };
 
 export type RemoteAgentControlResponse =
   | { readonly v: 1; readonly ok: true; readonly result: unknown }
@@ -48,6 +56,13 @@ export type RemoteAgentControlErrorCode =
   | "busy"
   | "unavailable"
   | "internal";
+
+/** Removal deletes `~/.bigbud/agent`; the CLI asks or needs `--yes` before sending consent. */
+export interface RemoteAgentRemovalConfirmationRequired {
+  readonly status: "confirmation-required";
+  readonly executionTargetId: string;
+  readonly message: string;
+}
 
 export interface RemoteAgentConsentRequired {
   readonly status: "consent-required";
@@ -72,6 +87,7 @@ export function parseRemoteAgentControlRequest(
     doctor: ["v", "auth", "method", "target"],
     install: ["v", "auth", "method", "target", "replace", "consent", "operationId"],
     operation: ["v", "auth", "method", "operationId", "waitMs"],
+    remove: ["v", "auth", "method", "target", "switchToDirectSsh", "consent"],
   };
   const method = typeof request.method === "string" ? request.method : "";
   const fields = allowed[method];
@@ -114,6 +130,18 @@ export function parseRemoteAgentControlRequest(
       replace: request.replace === true,
       consent: request.consent === true,
       ...(typeof request.operationId === "string" ? { operationId: request.operationId } : {}),
+    };
+  }
+  if (method === "remove") {
+    for (const field of ["switchToDirectSsh", "consent"] as const) {
+      if (request[field] !== undefined && typeof request[field] !== "boolean")
+        return { error: `${field} must be a boolean.` };
+    }
+    return {
+      method,
+      target: request.target,
+      switchToDirectSsh: request.switchToDirectSsh !== false,
+      consent: request.consent === true,
     };
   }
   return { method: method as "status" | "doctor", target: request.target };

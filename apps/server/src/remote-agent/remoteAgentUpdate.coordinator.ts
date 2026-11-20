@@ -48,6 +48,8 @@ export interface RemoteAgentUpdateCoordinatorShape {
     reconnectRequestId?: string,
   ) => Promise<RemoteAgentUpdateStatus>;
   readonly drain: () => Promise<void>;
+  /** Forget cached registry state after the target's agent was removed. */
+  readonly forget?: (target: string) => void;
   readonly prepareForAdmission: (
     target: string,
     requestId: string,
@@ -229,6 +231,11 @@ export function makeRemoteAgentUpdateCoordinator(
       return statusFromState(target, control.root, state, false, reconnectRequestId, capacityIssue);
     },
     drain: () => scheduler.drain(),
+    forget: (target) => {
+      const root = rootByTarget.get(target);
+      if (root !== undefined) stateByRoot.delete(stateKey(target, root));
+      rootByTarget.delete(target);
+    },
     prepareForAdmission: makeRemoteAgentAdmissionPreparation({
       openControl,
       runPreparation,

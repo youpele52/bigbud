@@ -62,6 +62,8 @@ export async function createRemoteAgentSetupFixture(
     trustStore: { fixture: publicKey.export({ type: "spki", format: "pem" }).toString() },
   };
   const manager = makeRemoteAgentInstallManager({
+    // Fixture controls are not a real ~/.bigbud/agent; no removal tombstone to finish.
+    resumeRemoval: async () => false,
     runRemoteCommand: execute,
     openControl: async () => control,
     probePlatform: async () => ({

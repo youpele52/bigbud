@@ -67,6 +67,8 @@ function fixture() {
   const run = vi.fn(async (_target: string, script: string, options?: { stdin?: string }) => {
     let stdout = "";
     if (script.includes("uname -s")) stdout = "Linux\naarch64\n";
+    // No interrupted removal to finish on the fixture host.
+    else if (script.includes(".agent-removing.")) stdout = "none";
     else if (script.includes("verified_file()")) stdout = installed ? "managed" : "absent";
     else if (script.includes("base64 --decode")) {
       expect(options?.stdin).toBe(Buffer.from(bytes).toString("base64"));

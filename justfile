@@ -143,6 +143,9 @@ dist-desktop-linux-deb *args:
 verify-desktop-linux-artifact *args:
     bun run verify:desktop:linux-artifact "$@"
 
+verify-desktop-mac-architecture *args:
+    bun run verify:desktop:mac-architecture "$@"
+
 verify-published-remote-agent-script *args:
     bun run verify:published-remote-agent-script "$@"
 
@@ -196,6 +199,9 @@ marketing-preview *args:
 
 marketing-typecheck *args:
     bun run --cwd apps/marketing typecheck "$@"
+
+marketing-test *args:
+    bun run --cwd apps/marketing test "$@"
 
 mobile-web-dev *args:
     bun run --cwd apps/mobile-web dev "$@"

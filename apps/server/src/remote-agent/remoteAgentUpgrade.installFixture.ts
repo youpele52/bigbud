@@ -43,6 +43,8 @@ export async function installSourceFixture(
     },
   };
   return makeRemoteAgentInstallManager({
+    // Fixture controls are not a real ~/.bigbud/agent; no removal tombstone to finish.
+    resumeRemoval: async () => false,
     runRemoteCommand: async (input) => ({
       stdout: await fixture.run(`export HOME='${home}'; ${input.args?.[1] ?? "exit 1"}`),
     }),

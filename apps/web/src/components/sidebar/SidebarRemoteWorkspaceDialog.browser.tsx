@@ -42,6 +42,25 @@ describe("SidebarRemoteWorkspaceDialog", () => {
       .not.toBeInTheDocument();
   });
 
+  it("explains where the agent goes only while the remote agent method is selected", async () => {
+    setApi({
+      show: vi.fn().mockResolvedValue("edit-ssh"),
+      verifyExecutionTarget: vi.fn(),
+      getProjectWorktreePaths: vi.fn(),
+      dispatchCommand: vi.fn(),
+    });
+    await using _ = await mountHarness();
+    await page.getByRole("button", { name: "Open project menu" }).click();
+
+    const consent = page.getByText(
+      "The agent is installed in ~/.bigbud/agent on the host and runs with your SSH user's permissions. It opens no network port. Saving installs or updates it; older versions are removed once nothing uses them.",
+    );
+    await expect.element(consent).toBeVisible();
+    await expect.element(consent).toHaveClass(/text-xs/);
+    await page.getByRole("button", { name: /^Direct SSH/ }).click();
+    await expect.element(consent).not.toBeInTheDocument();
+  });
+
   it("shows Direct SSH as the current connection for an existing Direct SSH project", async () => {
     setApi({
       show: vi.fn().mockResolvedValue("edit-ssh"),
@@ -183,38 +202,21 @@ describe("SidebarRemoteWorkspaceDialog", () => {
     expect(dispatchCommand).not.toHaveBeenCalled();
   });
 
-  it("requires consent before installing the agent and leaves no project on No", async () => {
-    const installRemoteAgent = vi.fn();
-    const dispatchCommand = vi.fn();
-    setApi({
-      show: vi.fn().mockResolvedValue("edit-ssh"),
-      verifyExecutionTarget: vi.fn().mockResolvedValue({
-        message: "SSH verified; agent missing",
-        remoteAgent: { status: "install-required" },
-      }),
-      installRemoteAgent,
-      getProjectWorktreePaths: vi.fn(),
-      dispatchCommand,
-    });
-    await using _ = await mountHarness();
-
-    await page.getByRole("button", { name: "Open project menu" }).click();
-    await page.getByRole("button", { name: "Save changes" }).click();
-
-    await expect.element(page.getByText("Download remote agent update")).toBeInTheDocument();
-    await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
-    await expect.element(page.getByText("Download remote agent update")).not.toBeInTheDocument();
-    expect(installRemoteAgent).not.toHaveBeenCalled();
-    expect(dispatchCommand).not.toHaveBeenCalled();
-  });
-
-  it("does not create a new remote workspace when installation is declined", async () => {
-    const createProject = vi.fn<CreateProject>();
+  it("adds a workspace after installing the agent inline, with no confirmation dialog", async () => {
+    const createProject = vi.fn<CreateProject>().mockResolvedValue({ ok: true });
+    const installRemoteAgent = vi.fn().mockResolvedValue({ message: "Agent 1.2.3 is active." });
     setApi({
       show: vi.fn(),
       verifyExecutionTarget: vi.fn().mockResolvedValue({
         message: "SSH verified; agent missing",
         remoteAgent: { status: "install-required" },
+      }),
+      installRemoteAgent,
+      connectRemoteAgent: vi.fn().mockResolvedValue({
+        connectionId: "fresh",
+        currentVersion: "1.2.3",
+        pendingVersion: null,
+        fallbackVersion: null,
       }),
       getProjectWorktreePaths: vi.fn(),
       dispatchCommand: vi.fn(),
@@ -229,48 +231,38 @@ describe("SidebarRemoteWorkspaceDialog", () => {
     await page.getByLabelText("Host or IP").fill("remote.example.com");
     await page.getByLabelText("Remote workspace path").fill("/srv/project");
     await page.getByRole("button", { name: "Add remote workspace" }).click();
-    await page.getByRole("alertdialog").getByRole("button", { name: "Cancel" }).click();
 
-    expect(createProject).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(createProject).toHaveBeenCalledOnce());
+    expect(page.getByRole("alertdialog").elements()).toHaveLength(0);
+    expect(installRemoteAgent.mock.invocationCallOrder[0]).toBeLessThan(
+      createProject.mock.invocationCallOrder[0]!,
+    );
   });
 
-  it("stages without updating the project until an explicit fresh connection", async () => {
-    const installRemoteAgent = vi.fn().mockResolvedValue({
-      message: "bigbud remote agent 1.2.3 was installed successfully.",
-      version: "1.2.3",
-    });
-    const dispatchCommand = vi.fn().mockResolvedValue(undefined);
+  it("does not create a new remote workspace when the agent install fails", async () => {
+    const createProject = vi.fn<CreateProject>();
     setApi({
-      show: vi.fn().mockResolvedValue("edit-ssh"),
+      show: vi.fn(),
       verifyExecutionTarget: vi.fn().mockResolvedValue({
         message: "SSH verified; agent missing",
         remoteAgent: { status: "install-required" },
       }),
-      installRemoteAgent,
-      connectRemoteAgent: vi.fn().mockResolvedValue({
-        connectionId: "fresh",
-        currentVersion: "1.2.3",
-        pendingVersion: null,
-        fallbackVersion: null,
-      }),
-      getProjectWorktreePaths: vi.fn().mockResolvedValue({ worktreePaths: [], truncated: false }),
-      dispatchCommand,
+      installRemoteAgent: vi.fn().mockRejectedValue(new Error("Unsupported CPU architecture.")),
+      getProjectWorktreePaths: vi.fn(),
+      dispatchCommand: vi.fn(),
     });
-    await using _ = await mountHarness();
+    await using _ = await mountHarness(createProject);
 
-    await page.getByRole("button", { name: "Open project menu" }).click();
-    await page.getByRole("button", { name: "Save changes" }).click();
-    await page.getByRole("alertdialog").getByRole("button", { name: "Download update" }).click();
-    expect(dispatchCommand).not.toHaveBeenCalled();
+    await page.getByRole("button", { name: "Open add dialog" }).click();
     await page
-      .getByRole("alertdialog")
-      .getByRole("button", { name: "Connect new session" })
+      .getByRole("group", { name: "Connection source" })
+      .getByRole("button", { name: "Enter manually" })
       .click();
+    await page.getByLabelText("Host or IP").fill("remote.example.com");
+    await page.getByLabelText("Remote workspace path").fill("/srv/project");
+    await page.getByRole("button", { name: "Add remote workspace" }).click();
 
-    await vi.waitFor(() => expect(dispatchCommand).toHaveBeenCalledOnce());
-    expect(installRemoteAgent).toHaveBeenCalledOnce();
-    expect(installRemoteAgent.mock.invocationCallOrder[0]).toBeLessThan(
-      dispatchCommand.mock.invocationCallOrder[0]!,
-    );
+    await expect.element(page.getByText("Unsupported CPU architecture.")).toBeVisible();
+    expect(createProject).not.toHaveBeenCalled();
   });
 });

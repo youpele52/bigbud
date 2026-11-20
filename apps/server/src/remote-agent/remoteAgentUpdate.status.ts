@@ -28,7 +28,17 @@ export interface RemoteAgentUpdateStatus {
   readonly candidateVersion: string | null;
   readonly predecessorVersion: string | null;
   readonly outcome: string | null;
+  /** A warning or failure explaining the status; never a successful outcome such as `ready`. */
   readonly reason: string | null;
+  readonly currentTargetTriple: string | null;
+  readonly currentBuildDigestShort: string | null;
+  readonly candidateTargetTriple: string | null;
+  readonly candidateBuildDigestShort: string | null;
+}
+
+/** Short artifact SHA-256: two builds of one version (musl and gnu) never share it. */
+function shortDigest(sha256: string | undefined): string | null {
+  return sha256 ? sha256.slice(0, 12) : null;
 }
 
 export function statusFromState(
@@ -92,7 +102,11 @@ export function statusFromState(
       admission?.failureCode ??
       retired?.failureCode ??
       update?.reason ??
-      update?.outcome ??
       null,
+    currentTargetTriple: current?.runtime.targetTriple ?? null,
+    currentBuildDigestShort: shortDigest(current?.runtime.sha256),
+    candidateTargetTriple:
+      candidate?.runtime.targetTriple ?? update?.identity?.targetTriple ?? null,
+    candidateBuildDigestShort: shortDigest(candidate?.runtime.sha256 ?? update?.identity?.sha256),
   };
 }

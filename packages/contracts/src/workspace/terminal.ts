@@ -100,6 +100,8 @@ export const TerminalCloseInput = Schema.Struct({
   deleteHistory: Schema.optional(Schema.Boolean),
   expectedGeneration: Schema.optional(TrimmedNonEmptyStringSchema),
   onlyIfNotRunning: Schema.optional(Schema.Boolean),
+  /** Pane target for an unbound close; a live session's own target stays authoritative. */
+  executionTargetId: Schema.optional(ExecutionTargetId),
 });
 export type TerminalCloseInput = typeof TerminalCloseInput.Type;
 

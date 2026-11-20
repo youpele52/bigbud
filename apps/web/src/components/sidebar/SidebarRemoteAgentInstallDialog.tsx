@@ -4,17 +4,10 @@ import { readNativeApi } from "../../rpc/nativeApi";
 import { ConfirmationPanel } from "../common/ConfirmationPanel";
 import { AlertDialog, AlertDialogPopup } from "../ui/alert-dialog";
 import type { SidebarRemoteAgentInstallRequest } from "./Sidebar.remoteWorkspaceAddActions.types";
-import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import { REMOTE_AGENT_FAILURE_GUIDANCE } from "./SidebarRemoteAgentStatus.messages";
 import { SidebarRemoteAgentManualInstall } from "./SidebarRemoteAgentManualInstall";
-import {
-  notifyRemoteAgentConnection,
-  remoteAgentConnectionWarning,
-} from "./SidebarRemoteAgentConnection.notifications";
-import {
-  completeRemoteAgentAdmission,
-  getRemoteAgentAdmissionRequestId,
-} from "../../stores/remoteAccess/remoteAgentAdmissionRequest";
+import { remoteAgentConnectionWarning } from "./SidebarRemoteAgentConnection.notifications";
+import { connectFreshRemoteAgent } from "./Sidebar.remoteWorkspaceAgentInstall";
 
 interface SidebarRemoteAgentInstallDialogProps {
   readonly request: SidebarRemoteAgentInstallRequest | null;
@@ -30,13 +23,11 @@ export function SidebarRemoteAgentInstallDialog({
   const [isInstalling, setIsInstalling] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stagedMessage, setStagedMessage] = useState<string | null>(null);
-  const [connectionRequestId, setConnectionRequestId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
 
   useEffect(() => {
     setError(null);
     setStagedMessage(null);
-    setConnectionRequestId(null);
     setManualOpen(false);
   }, [request]);
 
@@ -51,25 +42,11 @@ export function SidebarRemoteAgentInstallDialog({
     setError(null);
     try {
       if (stagedMessage) {
-        const admissionRequestId =
-          connectionRequestId ?? getRemoteAgentAdmissionRequestId(request.executionTargetId);
-        setConnectionRequestId(admissionRequestId);
         // Older builds are retired once the staged build is active (deferred for live work).
-        const connected = await api.server.connectRemoteAgent({
-          executionTargetId: request.executionTargetId,
-          requestId: admissionRequestId,
-          intent: "fresh",
-          replace: true,
-        });
-        useRemoteAccessStore
-          .getState()
-          .recordRemoteConnection(request.executionTargetId, connected);
-        notifyRemoteAgentConnection(request.executionTargetId, connected);
-        completeRemoteAgentAdmission(request.executionTargetId, admissionRequestId);
-        setConnectionRequestId(null);
+        const connected = await connectFreshRemoteAgent(api, request.executionTargetId);
         const connectedMessage =
           remoteAgentConnectionWarning(connected) ??
-          `Connected to remote agent ${connected.currentVersion}. Healthy fallback: ${connected.fallbackVersion ?? "none"}.`;
+          `Connected to remote agent ${connected.currentVersion}. Backup version: ${connected.fallbackVersion ?? "none"}.`;
         await onInstalled(
           connected.cleanupMessage
             ? `${connectedMessage} ${connected.cleanupMessage}`
@@ -154,7 +131,7 @@ export function SidebarRemoteAgentInstallDialog({
                 : stagedMessage
                   ? "Connect new session"
                   : manualOpen
-                    ? "Finish install/update"
+                    ? "Finish install"
                     : "Download update"
             }
             busy={isInstalling}

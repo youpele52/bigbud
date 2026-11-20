@@ -38,8 +38,10 @@ jobs:
             platform: mac
             target: dmg
             arch: arm64
+          # Cross-built on Apple Silicon (guarded by the Rust target, Rosetta and architecture audit
+          # steps). The native Intel cleanup tests in release.yml stay on macos-15-intel.
           - label: macOS x64
-            runner: macos-15-intel
+            runner: macos-15
             platform: mac
             target: dmg
             arch: x64
@@ -84,6 +86,34 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
+
+      # rust-toolchain.toml uses the minimal profile, which has no x86_64 standard library.
+      - name: Add Rust macOS x64 target
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+          if [[ -z "$toolchain" ]]; then
+            echo "::error::Could not read the Rust channel from rust-toolchain.toml"; exit 1
+          fi
+          rustup toolchain install "$toolchain" --profile minimal --target x86_64-apple-darwin
+          if ! rustup target list --installed --toolchain "$toolchain" | grep -qx x86_64-apple-darwin; then
+            echo "::error::x86_64-apple-darwin is not installed for Rust $toolchain"; exit 1
+          fi
+
+      # Packaging runs the x64 helpers (--check, handshakes, smoke tests), so they need Rosetta 2.
+      - name: Ensure Rosetta 2 for x64 smoke tests
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+          if ! arch -x86_64 /usr/bin/true; then
+            echo "::error::Rosetta 2 is unavailable, so the x64 helpers cannot be smoke-tested"; exit 1
+          fi
 
       - name: Validate Windows CUA sweep native helper
         if: matrix.platform == 'win'
@@ -175,6 +205,10 @@ jobs:
           path: notarization-recovery/
           retention-days: 3
           if-no-files-found: ignore
+
+      - name: Audit packaged macOS app architectures
+        if: matrix.platform == 'mac'
+        run: bun run verify:desktop:mac-architecture -- release "${{ matrix.arch }}"
 
       - name: Smoke test packaged workspace watcher
         shell: bash

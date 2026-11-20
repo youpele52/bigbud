@@ -1,112 +1,97 @@
 import { useState } from "react";
+
 import { useStore } from "../../stores/main/main.store";
-import { readNativeApi } from "../../rpc/nativeApi";
-import {
-  createRemoteWorkspaceDraft,
-  parseRemoteExecutionTarget,
-} from "../sidebar/Sidebar.remoteWorkspaces.logic";
-import { resolveWorkspaceExecutionTargetId } from "../../lib/providerExecutionTargets";
-import { SidebarRemoteAgentInstallDialog } from "../sidebar/SidebarRemoteAgentInstallDialog";
+import { useRemoteAccessStore } from "../../stores/remoteAccess/remoteAccess.store";
 import type { SidebarRemoteAgentInstallRequest } from "../sidebar/Sidebar.remoteWorkspaceAddActions.types";
-import { SidebarRemoteAgentManualInstall } from "../sidebar/SidebarRemoteAgentManualInstall";
-import { Button } from "../ui/button";
+import { createRemoteWorkspaceDraft } from "../sidebar/Sidebar.remoteWorkspaces.logic";
+import { SidebarRemoteAgentInstallDialog } from "../sidebar/SidebarRemoteAgentInstallDialog";
 import { SettingsSection } from "./settingsLayout";
+import { useRemoteAgentHostActions } from "./RemoteAgentManagementSection.actions";
+import { RemoteAgentHostRow, RemoteAgentNotice } from "./RemoteAgentManagementSection.host";
+import { buildRemoteAgentHosts, type RemoteAgentHost } from "./RemoteAgentManagementSection.logic";
+import { RemoteAgentRemoveDialog } from "./RemoteAgentManagementSection.remove";
 
 export function RemoteAgentManagementSection() {
   const projects = useStore((state) => state.projects);
-  const [request, setRequest] = useState<SidebarRemoteAgentInstallRequest | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<{ target: string; message: string; error: boolean } | null>(
-    null,
+  const disconnectedExecutionTargetIds = useRemoteAccessStore(
+    (state) => state.disconnectedExecutionTargetIds,
   );
-  const hosts = new Map<string, (typeof projects)[number]>();
-  for (const project of projects) {
-    const target = resolveWorkspaceExecutionTargetId(project);
-    if (target && parseRemoteExecutionTarget(target)?.remoteTransport === "agent")
-      hosts.set(target, project);
-  }
-  const replace = async (target: string) => {
-    if (busy) return;
-    setBusy(target);
-    setNotice(null);
-    try {
-      const api = readNativeApi();
-      if (!api) throw new Error("Native API not found.");
-      const result = await api.server.installRemoteAgent({
-        executionTargetId: target,
-        replace: true,
+  const verifiedExecutionTargetIds = useRemoteAccessStore(
+    (state) => state.verifiedExecutionTargetIds,
+  );
+  const executionTargetChecks = useRemoteAccessStore((state) => state.executionTargetChecks);
+  const remoteConnections = useRemoteAccessStore((state) => state.remoteConnections);
+  const actions = useRemoteAgentHostActions();
+  const [finishRequest, setFinishRequest] = useState<SidebarRemoteAgentInstallRequest | null>(null);
+  const [removeHost, setRemoveHost] = useState<RemoteAgentHost | null>(null);
+  const hosts = buildRemoteAgentHosts(projects, {
+    disconnectedExecutionTargetIds,
+    verifiedExecutionTargetIds,
+    executionTargetChecks,
+    remoteConnections,
+  });
+  // A removal can move every workspace off a host; keep its outcome visible at the top.
+  const orphanNotices = Object.entries(actions.notices).filter(
+    ([target]) => !hosts.some((host) => host.target === target),
+  );
+  const openFinishInstall = (host: RemoteAgentHost) => {
+    const candidate = host.projects[0] ? createRemoteWorkspaceDraft(host.projects[0]) : null;
+    if (candidate)
+      setFinishRequest({
+        kind: "install",
+        candidate,
+        executionTargetId: host.target,
+        targetLabel: host.hostLabel,
       });
-      setNotice({
-        target,
-        message: result.message,
-        error: result.outcome === "failed",
-      });
-    } catch (cause) {
-      setNotice({
-        target,
-        message: cause instanceof Error ? cause.message : "Replacement did not complete.",
-        error: true,
-      });
-    } finally {
-      setBusy(null);
-    }
   };
   return (
     <SettingsSection title="Remote agents">
-      {hosts.size === 0 ? (
-        <p className="p-4 text-sm text-muted-foreground">Saved remote agent hosts appear here.</p>
-      ) : null}
-      {[...hosts].map(([target, project]) => (
-        <div key={target} className="space-y-3 border-t p-4 first:border-t-0">
-          <p className="text-sm font-medium">{parseRemoteExecutionTarget(target)?.host}</p>
-          <p className="text-xs text-muted-foreground">
-            Install or stage an update, then connect explicitly. Replace activates a verified build
-            now. Both remove older builds once the new one is active; builds still used by live work
-            stay until it ends.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={busy !== null}
-              variant="outline"
-              onClick={() => {
-                const candidate = createRemoteWorkspaceDraft(project);
-                if (candidate)
-                  setRequest({
-                    kind: "install",
-                    candidate,
-                    executionTargetId: target,
-                    targetLabel: parseRemoteExecutionTarget(target)!.host,
-                  });
-              }}
-            >
-              Install / stage update
-            </Button>
-            <Button disabled={busy !== null} variant="outline" onClick={() => void replace(target)}>
-              {busy === target ? "Replacing…" : "Replace"}
-            </Button>
-          </div>
-          <SidebarRemoteAgentManualInstall
-            executionTargetId={target}
-            autoOpen={false}
-            onOpenChange={() => {}}
-          />
-          <p className="text-xs text-muted-foreground">
-            After running the remote command, choose Install / stage update to finish adoption, then
-            Connect new session.
-          </p>
-          {notice?.target === target ? (
-            <p role={notice.error ? "alert" : "status"} className="text-sm">
-              {notice.message}
-            </p>
-          ) : null}
+      {orphanNotices.map(([target, notice]) => (
+        <div key={target} className="space-y-1 border-t p-4 first:border-t-0">
+          <p className="text-sm font-medium">{notice.hostLabel}</p>
+          <RemoteAgentNotice notice={notice} />
         </div>
       ))}
+      {hosts.length === 0 ? (
+        <p className="p-4 text-sm text-muted-foreground">Saved remote hosts appear here.</p>
+      ) : null}
+      {hosts.map((host) => (
+        <RemoteAgentHostRow
+          key={host.target}
+          host={host}
+          removed={actions.removed[host.target] === true}
+          installed={actions.installed[host.target] === true}
+          busyAction={actions.busy?.target === host.target ? actions.busy.action : null}
+          anyBusy={actions.busy !== null}
+          notice={actions.notices[host.target]}
+          onUpdate={() => void actions.update(host)}
+          onReplaceNow={() => void actions.replaceNow(host)}
+          onInstall={() => void actions.install(host)}
+          onRemove={() => setRemoveHost(host)}
+          onFinishInstall={() => openFinishInstall(host)}
+          onSwitchToAgent={() => void actions.switchToAgent(host)}
+        />
+      ))}
+      <RemoteAgentRemoveDialog
+        key={removeHost?.target ?? "closed"}
+        host={removeHost}
+        onCancel={() => setRemoveHost(null)}
+        onConfirm={(host, switchWorkspacesToDirectSsh) => {
+          setRemoveHost(null);
+          void actions.remove(host, switchWorkspacesToDirectSsh);
+        }}
+      />
       <SidebarRemoteAgentInstallDialog
-        request={request}
-        onDecline={() => setRequest(null)}
+        request={finishRequest}
+        onDecline={() => setFinishRequest(null)}
         onInstalled={async (message) => {
-          if (request) setNotice({ target: request.executionTargetId, message, error: false });
-          setRequest(null);
+          if (finishRequest)
+            actions.notify(finishRequest.executionTargetId, {
+              hostLabel: finishRequest.targetLabel,
+              tone: "success",
+              message,
+            });
+          setFinishRequest(null);
         }}
       />
     </SettingsSection>

@@ -296,6 +296,10 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(
           macConfig.identity = null;
         }
         buildConfig.mac = macConfig;
+        // ULFO (lzfse) instead of electron-builder's UDZO zlib-9 default, which took 6-9 minutes
+        // on Intel runners. No DMG blockmap: electron-updater on macOS downloads the zip, and the
+        // updater manifest keeps listing the zip (and its blockmap) from the zip target.
+        buildConfig.dmg = { format: "ULFO", writeUpdateInfo: false };
       }
 
       if (platform === "linux") {

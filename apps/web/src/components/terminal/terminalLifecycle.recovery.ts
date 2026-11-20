@@ -96,3 +96,32 @@ export async function recoverStaleTerminalLifecycle(input: {
   });
   return true;
 }
+
+function isSessionLookupMiss(error: unknown, threadId: string, terminalId: string) {
+  if (typeof error !== "object" || error === null) return false;
+  const failure = error as { _tag?: unknown; threadId?: unknown; terminalId?: unknown };
+  return (
+    failure._tag === "TerminalSessionLookupError" &&
+    failure.threadId === threadId &&
+    failure.terminalId === terminalId
+  );
+}
+
+/**
+ * A refused close keeps views attach-only, but a structured lookup miss proves the server
+ * holds no session for the pane, so nothing remains for that close to confirm. Release it
+ * so the next startup issues a real open; the server's owner store still decides whether
+ * that open reattaches or starts fresh.
+ */
+export function releaseUnboundCloseFailure(input: {
+  error: unknown;
+  threadId: string;
+  terminalId: string;
+}): boolean {
+  const { threadId, terminalId } = input;
+  const operation = readTerminalLifecycle(threadId, terminalId);
+  if (operation?.kind !== "close" || operation.phase !== "error") return false;
+  if (!isSessionLookupMiss(input.error, threadId, terminalId)) return false;
+  finishTerminalLifecycle(threadId, terminalId, operation);
+  return true;
+}

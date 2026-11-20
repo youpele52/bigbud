@@ -34,6 +34,12 @@ import {
 } from "./remoteAgentInstall.inbox.ts";
 import { assertRemoteAgentPreflight } from "./remoteAgentInstall.preflight.ts";
 import { remoteAgentOwners } from "./remoteAgentOwners.ts";
+import {
+  listRemoteAgentTerminalOwners,
+  removeRemoteAgentInstallation,
+  resumeRemoteAgentRemoval,
+  type RemoteAgentTerminalOwnerList,
+} from "./remoteAgentInstall.remove.ts";
 
 export class RemoteAgentInstallManagerError extends Error {
   readonly _tag = "RemoteAgentInstallManagerError";
@@ -115,6 +121,9 @@ interface RemoteAgentInstallManagerDependencies {
   }) => Promise<void>;
   readonly beginRetirement?: (executionTargetId: string, generation: string) => Promise<() => void>;
   readonly referencedBuildIds?: (executionTargetId: string) => Promise<ReadonlySet<string>>;
+  readonly terminalOwners?: (executionTargetId: string) => Promise<RemoteAgentTerminalOwnerList>;
+  /** Finishes an interrupted removal; true when it deleted the tree (default: remote command). */
+  readonly resumeRemoval?: (control: RemoteAgentControl) => Promise<boolean>;
 }
 
 function defaultDependencies(
@@ -218,8 +227,27 @@ export function makeRemoteAgentInstallManager(
 
   return {
     resolveArtifact,
+    /** Remove `~/.bigbud/agent` under the same per-target lock as install and replace. */
+    remove: (input: {
+      readonly executionTargetId: string;
+      readonly closeLocalConnections?: () => void;
+      readonly markRemoving?: () => () => void;
+    }) =>
+      withInstallLock(input.executionTargetId, async () =>
+        removeRemoteAgentInstallation({
+          control: await dependencies.openControl(input.executionTargetId),
+          terminalOwners: () =>
+            (dependencies.terminalOwners ?? listRemoteAgentTerminalOwners)(input.executionTargetId),
+          ...(input.closeLocalConnections
+            ? { closeLocalConnections: input.closeLocalConnections }
+            : {}),
+          ...(input.markRemoving ? { markRemoving: input.markRemoving } : {}),
+        }),
+      ),
     cleanup: async (executionTargetId: string) => {
-      const control = await dependencies.openControl(executionTargetId);
+      let control = await dependencies.openControl(executionTargetId);
+      if (await (dependencies.resumeRemoval ?? resumeRemoteAgentRemoval)(control))
+        control = await dependencies.openControl(executionTargetId);
       let referencedBuildIds: (() => Promise<ReadonlySet<string>>) | undefined;
       if (dependencies.referencedBuildIds) {
         referencedBuildIds = () => dependencies.referencedBuildIds!(executionTargetId);
@@ -250,13 +278,23 @@ export function makeRemoteAgentInstallManager(
         if (platform.preflight) assertRemoteAgentPreflight(platform.preflight);
         // Pre-placed managed or inbox bytes skip the download and upload entirely.
         const placed = await dependencies.probePlacedArtifact(input.executionTargetId, artifact);
-        const adopt = placed === "managed" || placed === "inbox";
-        const bytes = adopt ? null : await dependencies.readArtifactBytes(artifact, input.signal);
+        const placedAdoptable = placed === "managed" || placed === "inbox";
+        let adopt = placedAdoptable;
+        let bytes = adopt ? null : await dependencies.readArtifactBytes(artifact, input.signal);
         if (bytes) verifyRemoteAgentArtifactBytes(artifact, bytes);
         if (input.signal?.aborted) {
           throw input.signal.reason ?? new DOMException("caller", "AbortError");
         }
-        const control = await dependencies.openControl(input.executionTargetId);
+        let control = await dependencies.openControl(input.executionTargetId);
+        // An interrupted removal finishes first; bytes it deleted are uploaded fresh instead.
+        if (await (dependencies.resumeRemoval ?? resumeRemoteAgentRemoval)(control)) {
+          control = await dependencies.openControl(input.executionTargetId);
+          if (adopt) {
+            adopt = false;
+            bytes = await dependencies.readArtifactBytes(artifact, input.signal);
+            verifyRemoteAgentArtifactBytes(artifact, bytes);
+          }
+        }
         const paths = await stageRemoteAgentBuild({
           control,
           artifact,
@@ -322,7 +360,7 @@ export function makeRemoteAgentInstallManager(
         return {
           runtimeSummary: remoteAgentRuntimeSummary(await control.registry.read()),
           status: "staged",
-          placement: adopt ? placed : "upload",
+          placement: adopt && placedAdoptable ? placed : "upload",
           inboxConflict: placed === "inbox-conflict",
           platform,
           targetTriple,

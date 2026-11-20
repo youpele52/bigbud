@@ -81,6 +81,7 @@
     },
     "./server/server.remoteRestart": "./src/server/server.remoteRestart.ts",
     "./server/server.remoteAgentInstall": "./src/server/server.remoteAgentInstall.ts",
+    "./server/server.remoteAgentUpdate": "./src/server/server.remoteAgentUpdate.ts",
     "./server/server.remoteConnection": "./src/server/server.remoteConnection.ts",
     "./server/server.sshConfig": "./src/server/server.sshConfig.ts",
     "./server/server.remoteFolders": "./src/server/server.remoteFolders.ts",

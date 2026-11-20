@@ -4,11 +4,15 @@ import { dirname, join } from "node:path";
 
 import {
   assertWorkspaceAgentArtifactTarget,
-  findWorkspaceAgentTarget,
   type WorkspaceAgentTarget,
   WORKSPACE_AGENT_TARGETS,
   workspaceAgentBinaryName,
 } from "../../../scripts/lib/workspace-agent-target.ts";
+import {
+  nativeReleaseBuildPlan,
+  requireNativeBuildOutput,
+  resolveServerNativeTarget,
+} from "../../../scripts/lib/native-release-build.ts";
 
 export const SERVER_WORKSPACE_AGENT_TARGETS = WORKSPACE_AGENT_TARGETS;
 
@@ -25,6 +29,12 @@ export function assertServerWorkspaceAgent(path: string, target: WorkspaceAgentT
   if (!statSync(path).isFile()) throw new Error(`Workspace watcher agent is not a file: ${path}`);
   if (target.platform !== "win32") accessSync(path, constants.X_OK);
   const result = spawnSync(path, ["--check"], { encoding: "utf8" });
+  if (result.error) {
+    // For example "Bad CPU type in executable" for x64 on Apple Silicon without Rosetta 2.
+    throw new Error(
+      `Workspace watcher agent ${target.platform}/${target.arch} could not run: ${result.error.message}`,
+    );
+  }
   const fields = result.stdout.trim().split("\t");
   if (
     result.status !== 0 ||
@@ -38,25 +48,38 @@ export function assertServerWorkspaceAgent(path: string, target: WorkspaceAgentT
   }
 }
 
-export function stageHostServerWorkspaceAgent(repoRoot: string, serverDir: string): string {
-  const supported = findWorkspaceAgentTarget(process.platform, process.arch);
-  if (!supported) {
-    throw new Error(`Unsupported workspace watcher target: ${process.platform}/${process.arch}`);
-  }
-  const build = spawnSync(
-    "cargo",
-    ["build", "--locked", "--release", "--package", "bigbud-remote-agent"],
-    { cwd: repoRoot, stdio: "inherit", shell: process.platform === "win32" },
-  );
+/**
+ * Builds and stages the workspace watcher for the host, or for the architecture named by
+ * `BIGBUD_SERVER_NATIVE_TARGET_ARCH` on a desktop cross build (the host build is then skipped).
+ */
+export function stageHostServerWorkspaceAgent(
+  repoRoot: string,
+  serverDir: string,
+  environment: NodeJS.ProcessEnv = process.env,
+): string {
+  const { target, native } = resolveServerNativeTarget(environment);
+  const plan = nativeReleaseBuildPlan({
+    repoRoot,
+    packageName: "bigbud-remote-agent",
+    binaryName: workspaceAgentBinaryName(target.platform),
+    target,
+    native,
+  });
+  const build = spawnSync("cargo", plan.cargoArgs, {
+    cwd: repoRoot,
+    stdio: "inherit",
+    shell: process.platform === "win32",
+  });
   if (build.status !== 0) throw new Error("Failed to build the native workspace watcher agent.");
 
-  const source = join(repoRoot, "target", "release", workspaceAgentBinaryName(supported.platform));
-  assertServerWorkspaceAgent(source, supported);
-  const destination = serverWorkspaceAgentPath(serverDir, supported.platform, supported.arch);
+  requireNativeBuildOutput(plan.source, "Workspace watcher agent");
+  assertWorkspaceAgentArtifactTarget(plan.source, target);
+  assertServerWorkspaceAgent(plan.source, target);
+  const destination = serverWorkspaceAgentPath(serverDir, target.platform, target.arch);
   mkdirSync(dirname(destination), { recursive: true });
-  copyFileSync(source, destination);
+  copyFileSync(plan.source, destination);
   if (process.platform !== "win32") chmodSync(destination, 0o755);
-  assertServerWorkspaceAgent(destination, supported);
+  assertServerWorkspaceAgent(destination, target);
   return destination;
 }
 

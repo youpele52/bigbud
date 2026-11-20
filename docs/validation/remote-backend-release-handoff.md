@@ -35,12 +35,12 @@ Evidence levels used below:
 
 ## Release artifacts at a glance
 
-| Artifact                                                                    | Built by                                              | Published by                                | Signed                                                      |
-| --------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------- | ----------------------------------------------------------- |
-| `bigbud-backend-graph-<v>-<target>.tar.gz` (+ manifest, provenance, sha256) | `.github/workflows/release-remote-backend-graph.yml`  | `release.yml` (GitHub release)              | Ed25519 manifest, `BIGBUD_REMOTE_AGENT_SIGNING_KEY`         |
-| `bigbud-remote-agent-<v>-<target>` (gnu and musl, x64 and arm64)            | `.github/workflows/release-remote-agent-build.yml`    | `release.yml`                               | Ed25519 manifests (`remote-agent-manifest*.json`), same key |
-| `mobile-gateway-<v>-<target>`, `mobile-assets-<v>.tar.gz`                   | `bun run package:mobile-components` (manual)          | Not in any workflow                         | Ed25519 metadata, key chosen at packaging time              |
-| `remote-agent.sh`                                                           | Checked in at `apps/marketing/public/remote-agent.sh` | `release.yml` asset and the bigbud.app site | No (verified by SHA-256 against the release)                |
+| Artifact                                                                    | Built by                                               | Published by                                                      | Signed                                                      |
+| --------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| `bigbud-backend-graph-<v>-<target>.tar.gz` (+ manifest, provenance, sha256) | `.github/workflows/release-remote-backend-graph.yml`   | `release.yml` (GitHub release)                                    | Ed25519 manifest, `BIGBUD_REMOTE_AGENT_SIGNING_KEY`         |
+| `bigbud-remote-agent-<v>-<target>` (gnu and musl, x64 and arm64)            | `.github/workflows/release-remote-agent-build.yml`     | `release.yml`                                                     | Ed25519 manifests (`remote-agent-manifest*.json`), same key |
+| `mobile-gateway-<v>-<target>`, `mobile-assets-<v>.tar.gz`                   | `bun run package:mobile-components` (manual)           | Not in any workflow                                               | Ed25519 metadata, key chosen at packaging time              |
+| `remote-agent.sh`                                                           | Checked in at `scripts/release-assets/remote-agent.sh` | `release.yml` asset (version stamped); bigbud.app redirects to it | No (verified by SHA-256 against the release)                |
 
 ## Byte group 1: backend graph (glibc Linux, x86_64 and aarch64)
 
@@ -170,12 +170,12 @@ metadata and the archive contents are unchanged.
 
 ## Byte group 4: install script
 
-| Item          | Fact                                                                                                                                                                 |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| File          | `apps/marketing/public/remote-agent.sh`, POSIX `sh`, authored in this repository (MIT, no licence header)                                                            |
-| Shipped as    | GitHub release asset `remote-agent.sh` and `https://bigbud.app/remote-agent.sh`                                                                                      |
-| Current state | On 17 November the site served its HTML fallback, not the script (MISMATCH), and the v0.3.3 release has no `remote-agent.sh` (404). The script exists only on `dev`. |
-| Verifier      | `bun run verify:published-remote-agent-script [--release v<x>]`                                                                                                      |
+| Item       | Fact                                                                                                                                                                       |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File       | `scripts/release-assets/remote-agent.sh`, POSIX `sh`, authored in this repository (MIT, no licence header)                                                                 |
+| Shipped as | GitHub release asset `remote-agent.sh`, with one `DEFAULT_VERSION` line stamped by `release.yml`. bigbud.app serves `/download/<ref>/remote-agent` as a 302 to that asset. |
+| Retired    | The static `https://bigbud.app/remote-agent.sh` is removed and must return 404, so older apps' copied commands fail cleanly instead of piping HTML into `sh`.              |
+| Verifier   | `bun run verify:published-remote-agent-script [--download <ref>] [--release v<x>]`                                                                                         |
 
 ## Gaps closed mechanically
 
@@ -316,17 +316,24 @@ the [D4 report](../reports/2026-11-17-d4-musl-only-cutover-prep.md) and applied 
 release. A musl-only remote agent links musl libc statically, which then becomes part of the
 shipped bytes.
 
-### 6. Redeploy bigbud.app with `remote-agent.sh`
+### 6. Redeploy bigbud.app with the download links
 
-The site does not serve the script yet. Cloudflare Pages deploys bigbud.app from the
-`marketing` branch (root `apps/marketing`, `astro build`, output `dist`), not from `main`, and
-that branch does not contain `apps/marketing/public/remote-agent.sh` yet. Release order:
+bigbud.app no longer hosts the script. A Cloudflare Pages Function serves
+`/download/<ref>/remote-agent`, where `ref` is `latest` or `stable` (newest stable release only),
+`beta`, `preview` or `nightly` (newest release of that channel only), or a tag with or without the
+leading `v`. It answers with a 302 to
+`https://github.com/youpele52/bigbud/releases/download/<tag>/remote-agent.sh`, or a plain-text 404
+when no release of that channel ships the script. The static `/remote-agent.sh` must return 404.
+Cloudflare Pages deploys bigbud.app from the `marketing` branch (root `apps/marketing`,
+`astro build`, output `dist`), not from `main`. Release order:
 
 1. Merge `dev` into `main` (draft PR first so CI runs).
-2. Squash-merge `main` into `marketing` and push it; Cloudflare redeploys the site.
-3. Run `bun run verify:published-remote-agent-script` until it reports a match, and again with
-   `--release v<x>` after the release is published. Clients must not show the `curl … | sh`
-   command before this passes.
+2. Only when the user says go for v0.4.0-beta.6: squash-merge `main` into `marketing` and push it;
+   Cloudflare redeploys the site. Set the optional Pages secret `GITHUB_TOKEN` (fine-grained,
+   public read-only) first if wanted.
+3. Run `bun run verify:published-remote-agent-script --download beta --release v0.4.0-beta.6`
+   until it reports the expected result. `/download/latest/remote-agent` stays a plain-text 404
+   until a stable release ships the script.
 
 ### 7. Notices beside the non-graph artifacts
 

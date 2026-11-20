@@ -7,6 +7,7 @@ import { isRemoteAgentExecutionTarget } from "../../remote-agent/remoteAgentDefa
 import { remoteShellHost } from "./ShellProfiles.remote.identity";
 import { sameShellHost } from "./ShellProfiles.launch";
 import type { SessionApiContext } from "./Manager.session.types";
+import { ownedTerminalOwnerRouteKey } from "./OwnedPtyRuntime.owner.ts";
 import { localSupervisorShellHost } from "../../remote-backend/localSupervisorIdentity.ts";
 import { shellProfileId } from "./ShellProfiles.identity";
 import { LOCAL_SHELL_HOST } from "./ShellProfiles.identity";
@@ -40,7 +41,7 @@ export const assertTerminalShellReattach = Effect.fn("terminal.assertShellReatta
       session.process?.remoteResourceId
     ) {
       const owner = yield* Effect.tryPromise(() =>
-        runtime.owners().get(`terminal:${JSON.stringify([session.threadId, session.terminalId])}`),
+        runtime.owners().get(ownedTerminalOwnerRouteKey(session.threadId, session.terminalId)),
       ).pipe(Effect.catch(() => Effect.succeed(undefined)));
       const launch = owner?.shellLaunch;
       if (

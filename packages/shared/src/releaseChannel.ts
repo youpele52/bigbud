@@ -51,3 +51,41 @@ export function resolveReleaseChannel(version: string): ReleaseChannel | null {
 export function releaseChannelLabel(channel: ReleaseChannel): string {
   return RELEASE_CHANNEL_LABELS[channel];
 }
+
+function prereleaseIdentifiers(version: string): string[] {
+  const separator = version.indexOf("-");
+  return separator < 0 ? [] : version.slice(separator + 1).split(".");
+}
+
+function compareIdentifier(left: string, right: string): number {
+  const leftNumeric = /^\d+$/.test(left);
+  const rightNumeric = /^\d+$/.test(right);
+  if (leftNumeric && rightNumeric) return Number(left) - Number(right);
+  if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1;
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+/**
+ * Semver precedence of two release versions accepted by `resolveReleaseVersion` (with or
+ * without the leading `v`); a stable release ranks above its own prereleases. Download links,
+ * the release job and the app's pinned commands all use this one version format.
+ */
+export function compareReleaseVersions(left: string, right: string): number {
+  const a = resolveReleaseVersion(left);
+  const b = resolveReleaseVersion(right);
+  if (!a || !b) throw new Error("Not a bigbud release version.");
+  const coreA = a.version.split("-")[0]!.split(".").map(Number);
+  const coreB = b.version.split("-")[0]!.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    const difference = coreA[index]! - coreB[index]!;
+    if (difference !== 0) return difference;
+  }
+  const preA = prereleaseIdentifiers(a.version);
+  const preB = prereleaseIdentifiers(b.version);
+  if (preA.length === 0 || preB.length === 0) return preB.length - preA.length;
+  for (let index = 0; index < Math.min(preA.length, preB.length); index += 1) {
+    const difference = compareIdentifier(preA[index]!, preB[index]!);
+    if (difference !== 0) return difference;
+  }
+  return preA.length - preB.length;
+}

@@ -10,7 +10,8 @@ import type { SidebarRemoteAgentInstallRequest } from "./Sidebar.remoteWorkspace
 const api = vi.hoisted(() => ({ current: null as never }));
 vi.mock("../../rpc/nativeApi", () => ({ readNativeApi: () => api.current }));
 
-const command = "curl -fsSL https://bigbud.app/remote-agent.sh | BIGBUD_AGENT_VERSION=0.3.4 sh";
+const command =
+  "curl -fsSL https://bigbud.app/download/v0.3.4/remote-agent | BIGBUD_AGENT_VERSION=0.3.4 sh";
 
 function request(): SidebarRemoteAgentInstallRequest {
   return {
@@ -40,7 +41,7 @@ describe("SidebarRemoteAgentInstallDialog manual placement", () => {
       executionTargetId: target.executionTargetId,
       version: "0.3.4",
       command,
-      scriptUrl: "https://bigbud.app/remote-agent.sh",
+      scriptUrl: "https://bigbud.app/download/v0.3.4/remote-agent",
       releaseScriptUrl:
         "https://github.com/youpele52/bigbud/releases/download/v0.3.4/remote-agent.sh",
       inboxRelativePath: "~/.bigbud/agent/inbox",
@@ -60,11 +61,18 @@ describe("SidebarRemoteAgentInstallDialog manual placement", () => {
     await expect.element(page.getByRole("button", { name: "Download update" })).toBeEnabled();
     await page.getByRole("button", { name: "Copy remote command" }).click();
     await expect.element(page.getByText(command)).toBeVisible();
-    await expect.element(page.getByText(/Nothing is active until you return here/)).toBeVisible();
+    await expect
+      .element(page.getByText(/Nothing runs until you return here and choose Finish install/))
+      .toBeVisible();
+    await expect
+      .element(
+        page.getByText(/If the host cannot reach bigbud.app, run the same script from GitHub:/),
+      )
+      .toBeVisible();
     expect(getRemoteAgentManualInstall).toHaveBeenCalledExactlyOnceWith({
       executionTargetId: target.executionTargetId,
     });
-    await page.getByRole("button", { name: "Finish install/update" }).click();
+    await page.getByRole("button", { name: "Finish install", exact: true }).click();
     await expect
       .element(page.getByText(/staged from the agent you placed on the remote host/))
       .toBeVisible();

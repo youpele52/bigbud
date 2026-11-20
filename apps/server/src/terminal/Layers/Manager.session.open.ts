@@ -13,6 +13,7 @@ import { makeResolveTerminalFolder } from "./Manager.cwd";
 import { prepareTerminalRestart } from "./Manager.session.restart";
 import { resizeWithRecovery } from "./Manager.recovery";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
+import { resolveOwnedTerminalRecoverOnly } from "./OwnedPtyRuntime.owner.ts";
 import { releaseTerminalLeaseAfterLaunchFailure } from "./Manager.owned-runtime.lease.ts";
 import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
 import {
@@ -147,10 +148,13 @@ export function makeTerminalOpen(ctx: SessionApiContext) {
         const executionTargetId = resolveExecutionTargetId(request.executionTargetId);
         const recoverOnly =
           Boolean(expectedRemoteResourceId) ||
-          (Boolean(sessionOwnedPtyRuntime(ctx, executionTargetId)) &&
-            (Option.isSome(existing)
-              ? existing.value.remoteOwnerRecoveryRequired === true
-              : yield* ctx.historyExists(request.threadId, terminalId)));
+          (yield* resolveOwnedTerminalRecoverOnly({
+            runtime: sessionOwnedPtyRuntime(ctx, executionTargetId),
+            threadId: request.threadId,
+            terminalId,
+            existing,
+            historyExists: ctx.historyExists,
+          }));
         yield* assertDirectShellLaunchAvailable(ctx.directShellOwners, {
           threadId: request.threadId,
           terminalId,

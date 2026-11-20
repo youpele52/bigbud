@@ -36,6 +36,7 @@ import {
 import { listSshConfigHostsEffect } from "./wsSshConfigHosts.ts";
 import { makeSshMonitorHandlers } from "./wsSshMonitor.handlers.ts";
 import { makeRemoteConnectionHandlers } from "./wsRemoteConnection.handlers.ts";
+import { makeRemoveRemoteAgentHandlers } from "./wsRemoteAgentRemove.handler.ts";
 import { verifyAndAdmitSshMonitorTarget } from "./wsSshMonitor.verify.ts";
 import { listRemoteFoldersEffect } from "./wsRemoteFolders.ts";
 import { trustSshHostEffect } from "./wsSshHostTrust.ts";
@@ -66,6 +67,7 @@ export function makeWsRpcGitTerminalHandlers(context: WsRpcContext, worktreeScop
     ...makeSshMonitorHandlers(context),
     ...makeShellProfileHandlers(context),
     ...makeRemoteConnectionHandlers(context),
+    ...makeRemoveRemoteAgentHandlers(context),
     [WS_METHODS.serverTrustSshHost]: (input: Parameters<typeof trustSshHostEffect>[0]) =>
       observeRpcEffect(WS_METHODS.serverTrustSshHost, trustSshHostEffect(input), {
         "rpc.aggregate": "server",

@@ -126,6 +126,13 @@ const registryFields = {
   current: Schema.NullOr(Schema.String),
   predecessor: Schema.NullOr(Schema.String),
   currentConnectionId: Schema.NullOr(Schema.String),
+  /**
+   * Removal fence: while fresh, no controller may reserve a stage, launch, admission, slot,
+   * restart or update on this host (`remoteAgentInstall.registry.removalFence.ts`).
+   */
+  removal: Schema.optional(
+    Schema.Struct({ id: Schema.String, controllerId: Schema.String, startedAt: Schema.Number }),
+  ),
 };
 
 export const RemoteAgentRegistryV2Schema = Schema.Struct({

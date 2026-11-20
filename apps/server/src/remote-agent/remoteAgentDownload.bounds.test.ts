@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const script = readFileSync(
-  fileURLToPath(new URL("../../../marketing/public/remote-agent.sh", import.meta.url)),
+  fileURLToPath(new URL("../../../../scripts/release-assets/remote-agent.sh", import.meta.url)),
   "utf8",
 );
 const fetchFunction = script.slice(

@@ -13,6 +13,7 @@ import { remoteAgentControlSocketPath } from "./remoteAgentLocalControl.protocol
 import { startRemoteAgentLocalControlServer } from "./remoteAgentLocalControl.server.ts";
 import { readRemoteAgentDoctor } from "./remoteAgentLocalControl.doctor.ts";
 import { remoteAgentReadOnlyDiagnostics } from "./remoteAgentReadOnlyDiagnostics.ts";
+import { makeLiveRemoteAgentRemoval } from "../ws/wsRemoteAgentRemove.live.ts";
 
 class RemoteAgentControlSocketStartError extends Data.TaggedError(
   "RemoteAgentControlSocketStartError",
@@ -30,6 +31,8 @@ export const makeLiveRemoteAgentControlHandler = (
     const projects = yield* Effect.serviceOption(ProjectionProjectRepository);
     if (Option.isNone(operations) || Option.isNone(projects)) return null;
     const services = yield* Effect.services();
+    // Agent tools never remove; only the owner's CLI socket gets the removal effect.
+    const remove = options.savedTargetsOnly ? undefined : yield* makeLiveRemoteAgentRemoval;
     const listSavedTargets = () =>
       Effect.runPromiseWith(services)(projects.value.listAll()).then((rows) =>
         rows.map((row) => ({
@@ -51,6 +54,7 @@ export const makeLiveRemoteAgentControlHandler = (
         ),
       doctor: (target) => readRemoteAgentDoctor(target),
       ...(options.savedTargetsOnly ? { savedTargetsOnly: true } : {}),
+      ...(remove ? { remove } : {}),
     });
   });
 

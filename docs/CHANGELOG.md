@@ -20,6 +20,12 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **Update the server without losing work:** **Settings → About → Remote backend** shows available updates. Updates wait for running work, and bigbud asks before interrupting anything. If a new version fails to start, the server returns to the previous version automatically.
 - **Install remote agents more safely:** bigbud only accepts remote agent and server builds signed with its own release key. Installing a newer remote agent replaces older builds by default once the new one is running.
 
+### Install and Remove the Remote Agent With Less Effort
+
+- **Use download links that keep working:** `https://bigbud.app/download/beta/remote-agent` always points to the newest beta's install script, and `latest` and release tags work the same way. The command bigbud copies uses these links, and unknown pages on bigbud.app now show a real **Page not found** instead of the homepage.
+- **Install by saving:** Choosing the remote agent in **Edit remote workspace** and saving installs or updates it without an extra dialog, skips a build that is already running, and removes older versions once nothing uses them. Status reads **Running now**, **Downloaded update** and **Backup version**, and tells two builds of the same version apart.
+- **Manage every host from Settings:** **Settings → Remote agents** lists every saved host, connected ones first and disconnected ones greyed out, without connecting just to check. **Remove agent** deletes only `~/.bigbud/agent`, lists anything still running instead of stopping it, and can switch that host's workspaces to Direct SSH.
+
 ### Search Everything From One Place
 
 - **Search wider than the current chat:** **Mod+F** searches the current chat, the current project, your saved bigbud conversations, your other projects, this computer, and connected remote hosts. Results are grouped in that order, and more load as you scroll.
@@ -113,6 +119,7 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 
 - **Trust task-completion notifications:** **Task completed** appears only after a turn has truly finished with nothing left to do. Agent updates have their own notifications.
 - **Close every notification:** Notifications close reliably in the desktop app and dismiss themselves after a time based on severity. A dismissed warning stays away for five minutes unless it gets worse.
+- **See notifications that match the window:** With a translucent **Window Material**, notifications take on the window tint and keep their severity colour. **Solid** and macOS **Reduce transparency** keep them opaque.
 
 ### Small Changes That Remove Friction
 

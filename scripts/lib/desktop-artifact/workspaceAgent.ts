@@ -15,6 +15,7 @@ import {
   type WorkspaceAgentTarget,
   workspaceAgentBinaryName as targetBinaryName,
 } from "../workspace-agent-target.ts";
+import { nativeReleaseBuildPlan } from "../native-release-build.ts";
 import {
   BuildArch,
   BuildScriptError,
@@ -58,8 +59,9 @@ export const assertWorkspaceAgentBinary = Effect.fn("assertWorkspaceAgentBinary"
     spawnSync(binaryPath, ["--check"], { encoding: "utf8", timeout: 5_000 }),
   );
   if (check.status !== 0 || !check.stdout.startsWith("bigbud-remote-agent\t")) {
+    // check.error covers binaries that cannot run at all (x64 without Rosetta 2).
     return yield* new BuildScriptError({
-      message: `${label}: --check failed for ${binaryPath}: ${check.stderr.trim()}`,
+      message: `${label}: --check failed for ${binaryPath}: ${check.error?.message ?? check.stderr.trim()}`,
     });
   }
   yield* Effect.tryPromise({
@@ -85,18 +87,14 @@ export function workspaceAgentBuildPlan(input: {
   const native =
     target.platform === (input.hostPlatform ?? process.platform) &&
     target.arch === (input.hostArch ?? process.arch);
-  const cargoArgs = ["build", "--locked", "--release", "--package", "bigbud-remote-agent"];
-  if (!native) cargoArgs.push("--target", target.rustTarget);
-  const source = native
-    ? join(input.repoRoot, "target", "release", targetBinaryName(target.platform))
-    : join(
-        input.repoRoot,
-        "target",
-        target.rustTarget,
-        "release",
-        targetBinaryName(target.platform),
-      );
-  return { target, cargoArgs, source };
+  const plan = nativeReleaseBuildPlan({
+    repoRoot: input.repoRoot,
+    packageName: "bigbud-remote-agent",
+    binaryName: targetBinaryName(target.platform),
+    target,
+    native,
+  });
+  return { target, ...plan };
 }
 
 export const stagePackagedWorkspaceAgent = Effect.fn("stagePackagedWorkspaceAgent")(

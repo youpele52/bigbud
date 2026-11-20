@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { createLinuxControlFixture } from "./remoteAgentUpgrade.linux.fixtures.ts";
 
 const source = readFileSync(
-  new URL("../../../marketing/public/remote-agent.sh", import.meta.url),
+  new URL("../../../../scripts/release-assets/remote-agent.sh", import.meta.url),
   "utf8",
 );
 export const payloadSha = createHash("sha256").update("x").digest("hex");
@@ -16,14 +16,23 @@ export const manifest = JSON.stringify({
 });
 export const installCommand =
   "HOME=/tmp/test-home PATH=/tmp/test-bin BIGBUD_AGENT_VERSION=1 /bin/sh /tmp/install.sh";
+/** Same script without the BIGBUD_AGENT_VERSION override, for release-stamped copies. */
+export const stampedInstallCommand =
+  "HOME=/tmp/test-home PATH=/tmp/test-bin /bin/sh /tmp/install.sh";
 export async function prepareDownloadFixture(
   fixture: ReturnType<typeof createLinuxControlFixture>,
   downloader: string,
   body: string,
+  options: { readonly stampedVersion?: string } = {},
 ) {
+  // Mirrors release.yml, which stamps exactly this line in the published copy.
+  const stamped =
+    options.stampedVersion === undefined
+      ? source
+      : source.replace(/^DEFAULT_VERSION=""/m, `DEFAULT_VERSION="${options.stampedVersion}"`);
   await fixture.runInput(
     "cat > /tmp/install.sh",
-    source
+    stamped
       .replace("MAX_AGENT_BYTES=67108864", "MAX_AGENT_BYTES=2048")
       .replace("MAX_METADATA_BYTES=1048576", "MAX_METADATA_BYTES=1024"),
   );

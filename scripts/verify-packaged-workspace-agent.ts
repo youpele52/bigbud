@@ -50,6 +50,10 @@ if (requireCodeSignature) {
 }
 
 const result = spawnSync(binaryPath, ["--check"], { encoding: "utf8" });
+if (result.error) {
+  // For example a macOS x64 app cross-built on Apple Silicon when Rosetta 2 is missing.
+  throw new Error(`Packaged workspace watcher could not run: ${result.error.message}`);
+}
 const fields = result.stdout.trim().split("\t");
 const expectedOs = platform === "darwin" ? "macos" : platform === "win32" ? "windows" : platform;
 const expectedArch = architecture === "arm64" ? "aarch64" : "x86_64";

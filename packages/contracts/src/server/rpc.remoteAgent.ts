@@ -4,6 +4,8 @@ import { WS_METHODS } from "../constants/websocket.constant";
 import {
   ServerGetRemoteAgentManualInstallInput,
   ServerGetRemoteAgentManualInstallResult,
+  ServerRemoveRemoteAgentInput,
+  ServerRemoveRemoteAgentResult,
 } from "./server.remoteAgentInstall";
 import {
   ServerInstallRemoteAgentError,
@@ -81,3 +83,10 @@ export const WsServerGetRemoteAgentManualInstallRpc = Rpc.make(
     error: ServerInstallRemoteAgentError,
   },
 );
+
+/** Blocked and failed removals are results, so the app can list blockers without parsing errors. */
+export const WsServerRemoveRemoteAgentRpc = Rpc.make(WS_METHODS.serverRemoveRemoteAgent, {
+  payload: ServerRemoveRemoteAgentInput,
+  success: ServerRemoveRemoteAgentResult,
+  error: ServerInstallRemoteAgentError,
+});

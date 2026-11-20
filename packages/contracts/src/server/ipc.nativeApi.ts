@@ -197,6 +197,9 @@ export interface NativeApi {
       getRemoteAgentManualInstall: (
         input: RemoteAgentInstall.ServerGetRemoteAgentManualInstallInput,
       ) => Promise<RemoteAgentInstall.ServerGetRemoteAgentManualInstallResult>;
+      removeRemoteAgent: (
+        input: RemoteAgentInstall.ServerRemoveRemoteAgentInput,
+      ) => Promise<RemoteAgentInstall.ServerRemoveRemoteAgentResult>;
       connectRemoteAgent: (
         input: Server.ServerConnectRemoteAgentInput,
       ) => Promise<Server.ServerConnectRemoteAgentResult>;

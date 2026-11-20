@@ -22,7 +22,7 @@ import {
   remoteAgentPoolEntryKey,
   remoteAgentPoolRuntimeKey,
 } from "./remoteAgentConnectionPool.keys.ts";
-import { assertSshTargetConnected } from "../ssh/sshTargetDisconnects.ts";
+import { assertRemoteAgentTargetUsable } from "./remoteAgentConnectionPool.removal.ts";
 import { livePoolConnection } from "./remoteAgentConnectionPool.live.ts";
 
 export interface RemoteAgentRuntimeBinding {
@@ -61,7 +61,7 @@ export class RemoteAgentConnectionPool {
   }
 
   async get(executionTargetId: string): Promise<RemoteAgentConnection> {
-    assertSshTargetConnected(executionTargetId);
+    assertRemoteAgentTargetUsable(executionTargetId);
     const targetEpoch = this.targetEpochs.get(executionTargetId) ?? 0;
     const binding = await this.factory.resolveBinding?.(executionTargetId);
     if (targetEpoch !== (this.targetEpochs.get(executionTargetId) ?? 0))
@@ -87,7 +87,7 @@ export class RemoteAgentConnectionPool {
     binding: RemoteAgentRuntimeBinding,
     capabilities: ReadonlyArray<string> = [],
   ): Promise<RemoteAgentConnection> {
-    assertSshTargetConnected(executionTargetId);
+    assertRemoteAgentTargetUsable(executionTargetId);
     if (this.invalidatedBindings.has(remoteAgentPoolBindingKey(executionTargetId, binding)))
       throw new RemoteAgentConnectionError(REMOTE_SERVICE_RESTARTED);
     const entry = this.entry(executionTargetId, binding);
@@ -381,7 +381,7 @@ export class RemoteAgentConnectionPool {
     checkRetirement = true,
   ): Promise<A> {
     // Reconnect closures of process, PTY and workspace clients reacquire through here.
-    assertSshTargetConnected(executionTargetId);
+    assertRemoteAgentTargetUsable(executionTargetId);
     if (!binding) return acquire();
     const release = this.retirementFence.acquire(binding.runtime.generation);
     try {

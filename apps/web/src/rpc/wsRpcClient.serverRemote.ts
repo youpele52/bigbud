@@ -12,6 +12,7 @@ export function createServerRemoteRpcMethods(
   | "listRemoteFolders"
   | "installRemoteAgent"
   | "getRemoteAgentManualInstall"
+  | "removeRemoteAgent"
   | "connectRemoteAgent"
   | "restartRemoteAgent"
   | "getRemoteAgentRestartStatus"
@@ -30,6 +31,8 @@ export function createServerRemoteRpcMethods(
       transport.request((client) => client[WS_METHODS.serverInstallRemoteAgent](input)),
     getRemoteAgentManualInstall: (input) =>
       transport.request((client) => client[WS_METHODS.serverGetRemoteAgentManualInstall](input)),
+    removeRemoteAgent: (input) =>
+      transport.request((client) => client[WS_METHODS.serverRemoveRemoteAgent](input)),
     connectRemoteAgent: (input) =>
       transport.request((client) => client[WS_METHODS.serverConnectRemoteAgent](input)),
     restartRemoteAgent: (input) =>

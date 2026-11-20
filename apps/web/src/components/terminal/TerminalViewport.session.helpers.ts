@@ -25,6 +25,7 @@ import {
 import type { TerminalViewportIntake } from "./TerminalViewport.intake";
 import { ensureThreadMaterialized } from "../../lib/threadMaterialization";
 import { recordTerminalLaunch } from "../../lib/terminalLaunchBinding";
+import { releaseUnboundCloseFailure } from "./terminalLifecycle.recovery";
 import { preserveTerminalScroll } from "./terminalScrollState";
 import { terminalProfileOpenOptions } from "./TerminalViewport.profile";
 import { deferRecoveryFit, terminalResizeGeometry } from "./terminalRecoveryGeometry";
@@ -289,24 +290,41 @@ export async function openTerminalSession(input: TerminalOpenSessionInput): Prom
       "View-only recovery is unavailable. Upgrade the server; the running process was not restarted.",
     );
   }
-  // Never auto-open a terminal on a user-disconnected SSH target; Connect clears the flag.
-  if (!viewOnly && isExecutionTargetDisconnected(input.executionTargetId))
-    throw new Error(REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE);
-  const opened = viewOnly
-    ? await api.terminal.snapshot!({ threadId: input.threadId, terminalId: input.terminalId })
-    : await api.terminal.open({
-        ...terminalProfileOpenOptions(input.threadId, input.terminalId),
+  const viewed = viewOnly
+    ? await api.terminal.snapshot!({
         threadId: input.threadId,
         terminalId: input.terminalId,
-        ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
-        cwd: input.cwd,
-        ...(input.worktreePathRef.current !== undefined
-          ? { worktreePath: input.worktreePathRef.current }
-          : {}),
-        cols: activeTerminal.cols,
-        rows: activeTerminal.rows,
-        ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
-      });
+      }).catch((error: unknown) => {
+        // Only a released refused close with no remaining attach-only owner may open.
+        if (releaseUnboundCloseFailure({ ...input, error }) && !attachOnly()) return null;
+        throw error;
+      })
+    : null;
+  if (input.disposed()) return true;
+  if (!viewed && viewOnly) {
+    await ensureThreadMaterialized(input.threadId);
+    if (input.disposed()) return true;
+    // A close or restart begun during materialization owns the pane again.
+    if (attachOnly()) return false;
+  }
+  // Never auto-open a terminal on a user-disconnected SSH target; Connect clears the flag.
+  if (!viewed && isExecutionTargetDisconnected(input.executionTargetId))
+    throw new Error(REMOTE_EXECUTION_TARGET_DISCONNECTED_MESSAGE);
+  const opened =
+    viewed ??
+    (await api.terminal.open({
+      ...terminalProfileOpenOptions(input.threadId, input.terminalId),
+      threadId: input.threadId,
+      terminalId: input.terminalId,
+      ...(input.executionTargetId ? { executionTargetId: input.executionTargetId } : {}),
+      cwd: input.cwd,
+      ...(input.worktreePathRef.current !== undefined
+        ? { worktreePath: input.worktreePathRef.current }
+        : {}),
+      cols: activeTerminal.cols,
+      rows: activeTerminal.rows,
+      ...(input.runtimeEnv ? { env: input.runtimeEnv } : {}),
+    }));
   const snapshot = await resolveTerminalViewportSnapshot(opened, {
     localUpdatedAt: () => input.intake.snapshotUpdatedAt,
     disposed: input.disposed,

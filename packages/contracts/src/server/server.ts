@@ -145,33 +145,10 @@ export const ServerRemoteAgentRuntimeSummary = Schema.Struct({
 });
 export type ServerRemoteAgentRuntimeSummary = typeof ServerRemoteAgentRuntimeSummary.Type;
 
-export const ServerRemoteAgentUpdateStatusPhase = Schema.Literals([
-  "idle",
-  "waiting-for-authentication",
-  "capacity-noncompliant",
-  "reserved",
-  "installing",
-  "checking-health",
-  "ready-for-next-reconnect",
-  "waiting-for-capacity",
-  "failed-using-stable",
-  "verification-unavailable",
-  "connected",
-]);
-export type ServerRemoteAgentUpdateStatusPhase = typeof ServerRemoteAgentUpdateStatusPhase.Type;
-
-export const ServerRemoteAgentUpdateStatus = Schema.Struct({
-  executionTargetId: ExecutionTargetId,
-  phase: ServerRemoteAgentUpdateStatusPhase,
-  updateRequestId: Schema.NullOr(TrimmedNonEmptyString),
-  reconnectRequestId: Schema.NullOr(TrimmedNonEmptyString),
-  reconnectOutcome: Schema.NullOr(Schema.Literals(["pending", "selected", "fallback", "rejected"])),
-  currentVersion: Schema.NullOr(TrimmedNonEmptyString),
-  pendingVersion: Schema.NullOr(TrimmedNonEmptyString),
-  predecessorVersion: Schema.NullOr(TrimmedNonEmptyString),
-  reason: Schema.NullOr(TrimmedNonEmptyString),
-});
-export type ServerRemoteAgentUpdateStatus = typeof ServerRemoteAgentUpdateStatus.Type;
+export {
+  ServerRemoteAgentUpdateStatus,
+  ServerRemoteAgentUpdateStatusPhase,
+} from "./server.remoteAgentUpdate";
 
 export const ServerGetRemoteAgentUpdateStatusInput = Schema.Struct({
   executionTargetId: ExecutionTargetId,

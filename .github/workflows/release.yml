@@ -358,10 +358,29 @@ jobs:
           rm -f "release-assets/${{ needs.preflight.outputs.update_channel }}-mac-x64.yml"
 
       - name: Stage bootstrap installers
+        env:
+          RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+        shell: bash
         run: |
+          set -euo pipefail
           cp apps/marketing/public/install.sh release-assets/install.sh
           cp apps/marketing/public/install.ps1 release-assets/install.ps1
-          cp apps/marketing/public/remote-agent.sh release-assets/remote-agent.sh
+          cp scripts/release-assets/remote-agent.sh release-assets/remote-agent.sh
+          # Same format as resolveReleaseVersion (packages/shared/src/releaseChannel.ts); checked
+          # before sed so the version can never inject into the substitution.
+          if [[ ! "$RELEASE_VERSION" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(beta|preview|nightly)([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Release version '$RELEASE_VERSION' is not a bigbud release version." >&2
+            exit 1
+          fi
+          # Stamp the release version so the channel download links work without an env var.
+          sed -i "s/^DEFAULT_VERSION=\"\"/DEFAULT_VERSION=\"${RELEASE_VERSION}\"/" release-assets/remote-agent.sh
+          changed=$({ diff scripts/release-assets/remote-agent.sh release-assets/remote-agent.sh || true; } | grep -c '^>' || true)
+          if [ "$changed" != 1 ]; then
+            echo "Expected exactly one stamped line in remote-agent.sh, found $changed." >&2
+            exit 1
+          fi
+          grep -qx "DEFAULT_VERSION=\"${RELEASE_VERSION}\" # stamped by release.yml" release-assets/remote-agent.sh
+          sh -n release-assets/remote-agent.sh
 
       - name: Build signed remote agent manifests
         env:

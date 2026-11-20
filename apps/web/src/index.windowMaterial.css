@@ -23,6 +23,13 @@
    * stays opaque while the material is solid: the terminal theme reads it as xterm's background. */
   --app-shell-pane-fill: var(--background);
   --app-shell-side-panel-pane-fill: var(--app-shell-side-panel-background);
+  /* Toasts: opaque unless the material is translucent. One token controls their fill. */
+  --app-shell-toast-tint: 100%;
+  --toast-background: color-mix(
+    in srgb,
+    var(--popover-solid) var(--app-shell-toast-tint),
+    transparent
+  );
 }
 
 /* Panes in a side panel take the side tone instead of the main one. */
@@ -39,6 +46,11 @@ html[data-desktop-shell="macos"][data-window-material="translucent"] {
   --app-shell-side-panel-tint: 80%;
   --app-shell-raised-tint: 40%;
   --app-shell-floating-tint: 92%;
+  /* Toasts sit over live content and stay visible for a while, so they show more of it than
+   * menus do. The tint stays above the page surface tint, so toasts still read as raised, and
+   * text keeps at least WCAG AA contrast even over opposite-coloured content. No backdrop
+   * filter: it would double the tint (see the header comment). */
+  --app-shell-toast-tint: 82%;
   --background: color-mix(
     in srgb,
     var(--background-solid) var(--app-shell-surface-tint),
@@ -63,6 +75,7 @@ html[data-desktop-shell="macos"][data-window-material="translucent"] {
 html.dark[data-desktop-shell="macos"][data-window-material="translucent"] {
   --app-shell-surface-tint: 64%;
   --app-shell-side-panel-tint: 56%;
+  --app-shell-toast-tint: 76%;
 }
 
 /* Switch thumbs sit on the coloured track; a tinted thumb would blend into it. */
@@ -78,6 +91,7 @@ html[data-desktop-shell="macos"][data-window-material="translucent"] [data-slot=
     --app-shell-side-panel-tint: 100%;
     --app-shell-raised-tint: 100%;
     --app-shell-floating-tint: 100%;
+    --app-shell-toast-tint: 100%;
     --app-shell-panel-header-background: color-mix(in srgb, var(--card) 95%, transparent);
     --app-shell-pane-fill: var(--background);
     --app-shell-side-panel-pane-fill: var(--app-shell-side-panel-background);

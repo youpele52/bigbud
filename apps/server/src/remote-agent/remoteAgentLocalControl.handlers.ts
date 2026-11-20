@@ -1,3 +1,5 @@
+import type { ServerRemoveRemoteAgentResult } from "@bigbud/contracts/server/server.remoteAgentInstall";
+
 import type { RemoteAgentApprovalEvidence } from "./remoteAgentLocalControl.approval.ts";
 import type { RemoteAgentInstallOperations } from "./remoteAgentInstall.operation.ts";
 import {
@@ -7,6 +9,7 @@ import {
 } from "./remoteAgentLocalControl.targets.ts";
 import {
   REMOTE_AGENT_CONTROL_VERSION,
+  type RemoteAgentRemovalConfirmationRequired,
   type RemoteAgentConsentRequired,
   type RemoteAgentControlRequest,
   type RemoteAgentControlResponse,
@@ -24,6 +27,11 @@ export interface RemoteAgentControlHandlerDependencies {
   readonly doctor: (executionTargetId: string) => Promise<unknown>;
   /** Agent tools may only address saved targets; explicit target IDs are CLI-only. */
   readonly savedTargetsOnly?: boolean;
+  /** Settings → Remove agent's server effect; absent for agent tools, which never remove. */
+  readonly remove?: (
+    executionTargetId: string,
+    switchToDirectSsh: boolean,
+  ) => Promise<ServerRemoveRemoteAgentResult>;
 }
 
 const ok = (result: unknown): RemoteAgentControlResponse => ({
@@ -31,6 +39,38 @@ const ok = (result: unknown): RemoteAgentControlResponse => ({
   ok: true,
   result,
 });
+
+async function handleRemove(
+  dependencies: RemoteAgentControlHandlerDependencies,
+  request: Extract<RemoteAgentControlRequest, { method: "remove" }>,
+  target: string,
+): Promise<RemoteAgentControlResponse> {
+  if (!dependencies.remove || dependencies.savedTargetsOnly) {
+    return {
+      v: REMOTE_AGENT_CONTROL_VERSION,
+      ok: false,
+      error: { code: "unsupported-method", message: "Removing the agent is not available here." },
+    };
+  }
+  if (!request.consent) {
+    const required: RemoteAgentRemovalConfirmationRequired = {
+      status: "confirmation-required",
+      executionTargetId: target,
+      message:
+        "Removing deletes ~/.bigbud/agent on this host and disconnects it. Live work blocks removal; ~/.bigbud/backend-* is never touched.",
+    };
+    return ok(required);
+  }
+  try {
+    return ok(await dependencies.remove(target, request.switchToDirectSsh));
+  } catch (cause) {
+    return {
+      v: REMOTE_AGENT_CONTROL_VERSION,
+      ok: false,
+      error: { code: "unavailable", message: remoteAgentFailureDetail(cause) },
+    };
+  }
+}
 
 /**
  * Resolve the request's target, apply the D5 approval rule and dispatch to the shared install
@@ -61,6 +101,7 @@ export function makeRemoteAgentControlHandler(dependencies: RemoteAgentControlHa
       };
     }
     const target = resolved.executionTargetId;
+    if (request.method === "remove") return handleRemove(dependencies, request, target);
     // One approval probe per request: an unsaved host costs a remote registry read.
     let approval: Promise<RemoteAgentApprovalEvidence> | undefined;
     const evidence = (): Promise<RemoteAgentApprovalEvidence> =>

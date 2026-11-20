@@ -1,19 +1,22 @@
 #!/bin/sh
 # Stage a bigbud remote agent build on this Linux host for bigbud to adopt.
 #
-# Usage (bigbud shows this command with the version already pinned):
-#   curl -fsSL https://bigbud.app/remote-agent.sh | BIGBUD_AGENT_VERSION=<version> sh
+# Usage:
+#   curl -fsSL https://bigbud.app/download/latest/remote-agent | sh
+# The release copy has DEFAULT_VERSION stamped. bigbud shows a pinned command that also sets
+# BIGBUD_AGENT_VERSION; when both are set they must match.
 #
 # This script only downloads, verifies the SHA-256 published for the pinned release and places
 # the bytes in a private inbox (~/.bigbud/agent/inbox/<sha256>/). It never executes the
 # download, never touches the installation registry or the active build, and never activates
-# anything. Return to bigbud and choose "Finish install/update" to verify the release signature,
+# anything. Return to bigbud and choose "Finish install" to verify the release signature,
 # register and activate the build.
 
 set -eu
 
 REPO="${BIGBUD_RELEASE_REPOSITORY:-youpele52/bigbud}"
-VERSION="${BIGBUD_AGENT_VERSION:-}"
+DEFAULT_VERSION="" # stamped by release.yml
+VERSION="${BIGBUD_AGENT_VERSION:-$DEFAULT_VERSION}"
 MAX_AGENT_BYTES=67108864
 MAX_METADATA_BYTES=1048576
 
@@ -25,8 +28,12 @@ fail() {
   exit "$code"
 }
 
+if [ -n "${BIGBUD_AGENT_VERSION:-}" ] && [ -n "$DEFAULT_VERSION" ] &&
+  [ "$BIGBUD_AGENT_VERSION" != "$DEFAULT_VERSION" ]; then
+  fail 2 "BIGBUD_AGENT_VERSION '$BIGBUD_AGENT_VERSION' does not match this script's release $DEFAULT_VERSION."
+fi
 case "$VERSION" in
-  "") fail 2 "BIGBUD_AGENT_VERSION is required. Copy the pinned command from bigbud." ;;
+  "") fail 2 "No version is set. Use https://bigbud.app/download/<channel>/remote-agent or copy the pinned command from bigbud." ;;
   [A-Za-z0-9]*) ;;
   *) fail 2 "BIGBUD_AGENT_VERSION '$VERSION' is invalid." ;;
 esac
@@ -190,7 +197,7 @@ target_dir="$inbox/$sha"
 target="$target_dir/bigbud-remote-agent"
 next_step() {
   log "Staged bigbud remote agent $VERSION ($triple) in $target_dir."
-  log "Nothing is active yet. Return to bigbud and choose \"Finish install/update\" to verify,"
+  log "Nothing is active yet. Return to bigbud and choose \"Finish install\" to verify,"
   log "register and activate this build."
 }
 if verified "$target"; then

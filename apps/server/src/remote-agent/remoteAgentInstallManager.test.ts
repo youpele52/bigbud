@@ -57,6 +57,8 @@ describe("remote agent production staging manager", () => {
       stdout: "bigbud-remote-agent 0.2.207 1 2 fixture linux aarch64",
     }));
     const manager = makeRemoteAgentInstallManager({
+      // Fixture controls are not a real ~/.bigbud/agent; no removal tombstone to finish.
+      resumeRemoval: async () => false,
       probePlacedArtifact: async () => "absent",
       openControl: async () => control,
       runRemoteCommand,

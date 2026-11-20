@@ -55,7 +55,6 @@ import { useRef } from "react";
 import { useSidebarProjectActions } from "./Sidebar.projectActions";
 import { useSidebarRemoteWorkspaceAddActions } from "./Sidebar.remoteWorkspaceAddActions";
 import { SidebarRemoteWorkspaceDialog } from "./SidebarRemoteWorkspaceDialog";
-import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import type { CreateProjectInput, CreateProjectResult } from "./Sidebar.projectAddActions.helpers";
 
@@ -116,6 +115,8 @@ function RemoteWorkspaceEditHarness({
         fieldErrors={remote.remoteWorkspaceFieldErrors}
         error={remote.remoteWorkspaceError}
         verificationMessage={remote.remoteWorkspaceVerificationMessage}
+        agentInstallProgress={remote.remoteAgentInstallProgress}
+        manualInstallTarget={remote.remoteAgentManualInstallTarget}
         isSubmitting={remote.isSavingRemoteWorkspace}
         isVerifying={remote.isVerifyingRemoteWorkspace}
         onOpenChange={(open) => {
@@ -125,11 +126,6 @@ function RemoteWorkspaceEditHarness({
         onAdoptConnectionSource={remote.adoptRemoteWorkspaceConnectionSource}
         onRequestUnlock={remote.requestRemoteWorkspaceUnlock}
         onSubmit={() => void remote.submitRemoteWorkspaceDialog()}
-      />
-      <SidebarRemoteAgentInstallDialog
-        request={remote.remoteAgentInstallRequest}
-        onDecline={remote.declineRemoteAgentInstall}
-        onInstalled={remote.completeRemoteAgentInstall}
       />
       <SidebarUnlockSshKeyDialog
         open={remote.isRemoteWorkspaceUnlockDialogOpen}
@@ -180,6 +176,8 @@ export function setApi(input: {
   readonly verifyExecutionTarget: ReturnType<typeof vi.fn>;
   readonly installRemoteAgent?: ReturnType<typeof vi.fn>;
   readonly connectRemoteAgent?: ReturnType<typeof vi.fn>;
+  readonly getRemoteAgentUpdateStatus?: ReturnType<typeof vi.fn>;
+  readonly getRemoteAgentManualInstall?: ReturnType<typeof vi.fn>;
   readonly listSshConfigHosts?: ReturnType<typeof vi.fn>;
   readonly listRemoteFolders?: ReturnType<typeof vi.fn>;
   readonly unlockSshKey?: ReturnType<typeof vi.fn>;
@@ -195,6 +193,12 @@ export function setApi(input: {
       verifyExecutionTarget: input.verifyExecutionTarget,
       installRemoteAgent: input.installRemoteAgent ?? vi.fn(),
       connectRemoteAgent: input.connectRemoteAgent ?? vi.fn(),
+      ...(input.getRemoteAgentUpdateStatus
+        ? { getRemoteAgentUpdateStatus: input.getRemoteAgentUpdateStatus }
+        : {}),
+      ...(input.getRemoteAgentManualInstall
+        ? { getRemoteAgentManualInstall: input.getRemoteAgentManualInstall }
+        : {}),
       ...(input.listSshConfigHosts ? { listSshConfigHosts: input.listSshConfigHosts } : {}),
       ...(input.listRemoteFolders ? { listRemoteFolders: input.listRemoteFolders } : {}),
       ...(input.unlockSshKey ? { unlockSshKey: input.unlockSshKey } : {}),

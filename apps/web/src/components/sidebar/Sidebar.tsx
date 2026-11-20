@@ -9,7 +9,6 @@ import { SidebarFooterBar } from "./Sidebar.footer";
 import { SidebarNavigation } from "./Sidebar.navigation";
 import { SidebarRemoteWorkspaceDialog } from "./SidebarRemoteWorkspaceDialog";
 import { SidebarProjectEditDialog } from "./SidebarProjectEditDialog";
-import { SidebarRemoteAgentInstallDialog } from "./SidebarRemoteAgentInstallDialog";
 import { SidebarUnlockSshKeyDialog } from "./SidebarUnlockSshKeyDialog";
 import { SidebarInyosiraSnoozeDialog } from "./Sidebar.inyosiraSnoozeDialog";
 import { useSidebarState } from "./Sidebar.state";
@@ -134,6 +133,8 @@ export default function Sidebar() {
             fieldErrors={s.remoteWorkspaceFieldErrors}
             error={s.remoteWorkspaceError}
             verificationMessage={s.remoteWorkspaceVerificationMessage}
+            agentInstallProgress={s.remoteAgentInstallProgress}
+            manualInstallTarget={s.remoteAgentManualInstallTarget}
             isSubmitting={s.isAddingProject || s.isSavingRemoteWorkspace}
             isVerifying={s.isVerifyingRemoteWorkspace}
             onOpenChange={(open) => {
@@ -150,12 +151,6 @@ export default function Sidebar() {
           />
 
           <SidebarInyosiraSnoozeDialog />
-
-          <SidebarRemoteAgentInstallDialog
-            request={s.remoteAgentInstallRequest}
-            onDecline={s.declineRemoteAgentInstall}
-            onInstalled={s.completeRemoteAgentInstall}
-          />
 
           <SidebarUnlockSshKeyDialog
             open={s.isRemoteWorkspaceUnlockDialogOpen}

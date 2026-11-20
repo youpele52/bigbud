@@ -284,16 +284,42 @@ local experiments.
 | `bun run dist:desktop:linux:dir`               | `just dist-desktop-linux-dir`               |
 | `bun run dist:desktop:linux:deb`               | `just dist-desktop-linux-deb`               |
 | `bun run verify:desktop:linux-artifact`        | `just verify-desktop-linux-artifact`        |
+| `bun run verify:desktop:mac-architecture`      | `just verify-desktop-mac-architecture`      |
 | `bun run verify:published-remote-agent-script` | `just verify-published-remote-agent-script` |
 | `bun run dist:desktop:win`                     | `just dist-desktop-win`                     |
 | `bun run release:smoke`                        | `just release-smoke`                        |
 
-`verify:published-remote-agent-script` compares `https://bigbud.app/remote-agent.sh` with
-`apps/marketing/public/remote-agent.sh` by SHA-256; `--release v<x.y.z>` also checks that
-release's `remote-agent.sh` asset. Requests are bounded (15 s deadline, 256 KiB, at most 5
-redirects, HTTPS only to `bigbud.app`/`www.bigbud.app`, or GitHub's release download hosts for the
-asset); a redirect to `raw.githubusercontent.com` is reported as a D3 violation. Exit codes: 0
-match, 1 mismatch or disallowed redirect, 2 unreachable.
+`verify:desktop:mac-architecture <release-root> <arm64|x64>` fails unless every Mach-O file in
+each packaged `.app` under the release root contains that architecture (universal files that
+include it pass) and lists the offenders. CI and the release workflow run it after every macOS
+build; it guards the macOS x64 app, which is cross-built on Apple Silicon.
+
+`verify:published-remote-agent-script` checks that the retired `https://bigbud.app/remote-agent.sh`
+returns 404. `--download <ref>` follows `https://bigbud.app/download/<ref>/remote-agent` and
+`--release v<x.y.z>` fetches that release's `remote-agent.sh` asset; each must equal
+`scripts/release-assets/remote-agent.sh` by SHA-256 once the stamped `DEFAULT_VERSION` line is
+normalised, and the stamp must name the release the link resolved to. Requests are bounded (15 s
+deadline, 256 KiB, at most 5 redirects, HTTPS only to `bigbud.app`/`www.bigbud.app`, or GitHub's
+release download hosts); a redirect to `raw.githubusercontent.com` is reported as a D3 violation.
+Exit codes: 0 as expected, 1 mismatch or disallowed redirect, 2 unreachable.
+
+### Download links
+
+The marketing site's Pages Function (`apps/marketing/functions/download/[ref]/remote-agent.ts`)
+redirects to a release's `remote-agent.sh` asset on GitHub. The release job stamps the version
+into that asset, so `curl -fsSL <link> | sh` needs no environment variable.
+
+| Link                                                | Resolves to                                                        |
+| --------------------------------------------------- | ------------------------------------------------------------------ |
+| `https://bigbud.app/download/latest/remote-agent`   | Newest stable release that ships the script, else a plain-text 404 |
+| `https://bigbud.app/download/stable/remote-agent`   | Same as `latest`                                                   |
+| `https://bigbud.app/download/beta/remote-agent`     | Newest beta release only                                           |
+| `https://bigbud.app/download/preview/remote-agent`  | Newest preview release only                                        |
+| `https://bigbud.app/download/nightly/remote-agent`  | Newest nightly release only                                        |
+| `https://bigbud.app/download/v<x.y.z>/remote-agent` | That tag (the leading `v` is optional), without an API call        |
+
+Channels never fall back to another channel. The static `https://bigbud.app/remote-agent.sh` is
+removed and returns 404.
 
 ## Workspace: apps/desktop
 
@@ -322,6 +348,7 @@ Source: [apps/marketing/package.json](../apps/marketing/package.json).
 | `bun run --cwd apps/marketing build`     | `just marketing-build`     |
 | `bun run --cwd apps/marketing preview`   | `just marketing-preview`   |
 | `bun run --cwd apps/marketing typecheck` | `just marketing-typecheck` |
+| `bun run --cwd apps/marketing test`      | `just marketing-test`      |
 
 ## Workspace: apps/mobile-web
 
@@ -496,6 +523,22 @@ If an initial or follow reply is lost, retain the reported ID and use
 options. Follow is read-only and never starts another install. IDs are retained by the running
 backend for a bounded period; unknown/expired after restart is not proof that no remote change
 occurred. Inspect `bigbud remote-agent status <target>` before starting a new operation.
+
+### Removing the remote agent
+
+`bigbud remote-agent remove <target> [--switch-to-direct-ssh | --keep-transport] [--yes] [--json]`
+deletes only `~/.bigbud/agent` on the host, then disconnects it in bigbud. It refuses, and lists
+the blockers, while live work uses any agent build (a chat that is working, open terminals,
+processes, file watchers, staging, a connection being set up) or while a remote backend service
+depends on the agent. A registry fence stops other bigbud apps from starting work on the host
+during removal, and the tree is renamed away under the install locks before it is deleted.
+`~/.bigbud/backend-*`, `graph`, `workspace-modes` and user-managed binaries outside the tree are
+never touched, and nothing is ever killed. Workspaces on that host move to Direct SSH by default;
+`--keep-transport` leaves them on the agent, and passing both flags is a usage error (exit 4).
+Interactive runs ask for confirmation; without a TTY or with `--json`, pass `--yes` (otherwise
+exit 2). Exit codes: 0 removed, 3 blocked, 4 failed, 6 backend unavailable. Settings → Remote
+agents → **Remove agent** runs the same removal. Connecting with the remote agent afterwards
+uploads and installs it fresh.
 
 ## Remote Linux account backend services
 

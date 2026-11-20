@@ -291,3 +291,50 @@ it("does not let hidden-thread notifications consume visible stack slots", async
     await screen.unmount();
   }
 });
+
+/** Alpha of a computed colour such as `rgba(…, 0.82)` or `color(srgb … / 0.82)`. */
+function backgroundAlpha(element: Element): number {
+  const value = getComputedStyle(element).backgroundColor;
+  const slash = /\/\s*([\d.]+)\s*\)$/.exec(value);
+  if (slash) return Number(slash[1]);
+  const rgba = /^rgba\([^,]+,[^,]+,[^,]+,\s*([\d.]+)\)$/.exec(value);
+  return rgba ? Number(rgba[1]) : 1;
+}
+
+it("follows the window material: translucent fill, opaque when solid or with Reduce transparency", async () => {
+  const root = document.documentElement;
+  const input: CDPSession = cdp();
+  const screen = await render(<ToastProvider />);
+  try {
+    toastManager.add({ title: "Material card", type: "success", timeout: 0 });
+    await expect.element(screen.getByText("Material card")).toBeVisible();
+    const card = activeCards()[0]!;
+    // The severity edge stays in every material.
+    expect(card.className).toContain("border-l-success");
+    expect(backgroundAlpha(card)).toBe(1);
+
+    root.dataset.desktopShell = "macos";
+    root.dataset.windowMaterial = "translucent";
+    await vi.waitFor(() => expect(backgroundAlpha(card)).toBeLessThan(1));
+    root.classList.add("dark");
+    await vi.waitFor(() => expect(backgroundAlpha(card)).toBeLessThan(1));
+    root.classList.remove("dark");
+
+    await input.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "prefers-reduced-transparency", value: "reduce" }],
+    });
+    await vi.waitFor(() => expect(backgroundAlpha(card)).toBe(1));
+    await input.send("Emulation.setEmulatedMedia", { features: [] });
+    await vi.waitFor(() => expect(backgroundAlpha(card)).toBeLessThan(1));
+
+    root.dataset.windowMaterial = "solid";
+    await vi.waitFor(() => expect(backgroundAlpha(card)).toBe(1));
+  } finally {
+    await input.send("Emulation.setEmulatedMedia", { features: [] });
+    delete root.dataset.desktopShell;
+    delete root.dataset.windowMaterial;
+    root.classList.remove("dark");
+    toastManager.close();
+    await screen.unmount();
+  }
+});

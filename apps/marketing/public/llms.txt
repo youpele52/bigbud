@@ -9,6 +9,7 @@ bigbud is an AI workspace for everyone. It keeps your research, writing, coding,
 - Documentation: https://bigbud.app/docs/
 - Machine-readable product summary: https://bigbud.app/llms.txt
 - GitHub: https://github.com/youpele52/bigbud
+- Remote agent script: https://bigbud.app/download/<ref>/remote-agent, where <ref> is latest, stable, beta, preview, nightly or a release tag such as v0.4.0-beta.6. It redirects to that release's remote-agent.sh on GitHub.
 
 ## Product summary
 - Category: AI workspace, productivity software

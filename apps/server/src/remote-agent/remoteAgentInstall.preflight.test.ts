@@ -75,3 +75,16 @@ describe("remote agent install preflight", () => {
     expect(script).not.toContain("printf 'dir.%s=%s' \"$path\"");
   });
 });
+
+describe("removal tools never gate installation", () => {
+  it("keeps installing on hosts without GNU find or rm --one-file-system (BusyBox)", () => {
+    const busybox = parseRemoteAgentPreflight([
+      ...healthy,
+      "tool.find=no",
+      "feature.rm-one-file-system=no",
+    ]);
+    expect(busybox.missingTools).toEqual([]);
+    expect(() => assertRemoteAgentPreflight(busybox)).not.toThrow();
+    expect(buildRemoteAgentPreflightScript()).not.toContain("one-file-system");
+  });
+});

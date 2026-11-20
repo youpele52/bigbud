@@ -24,10 +24,15 @@ import {
   withoutRemoteWorkspaceFieldError,
 } from "./Sidebar.projectAddActions.helpers";
 import type {
-  SidebarRemoteAgentInstallRequest,
   SidebarRemoteWorkspaceAddActionsOutput,
   UseSidebarRemoteWorkspaceAddActionsInput,
 } from "./Sidebar.remoteWorkspaceAddActions.types";
+import {
+  installAndConnectRemoteAgent,
+  remoteAgentNeedsInstallOnSave,
+  type RemoteAgentInstallProgress,
+} from "./Sidebar.remoteWorkspaceAgentInstall";
+import { toastManager } from "../ui/toast.manager";
 
 export function useSidebarRemoteWorkspaceAddActions({
   createProject,
@@ -48,8 +53,11 @@ export function useSidebarRemoteWorkspaceAddActions({
   const [remoteWorkspaceDialogMode, setRemoteWorkspaceDialogMode] = useState<"add" | "edit">("add");
   const [editingProjectId, setEditingProjectId] = useState<ProjectId | null>(null);
   const [editingProjectUpdatedAt, setEditingProjectUpdatedAt] = useState<string | null>(null);
-  const [remoteAgentInstallRequest, setRemoteAgentInstallRequest] =
-    useState<SidebarRemoteAgentInstallRequest | null>(null);
+  const [remoteAgentInstallProgress, setRemoteAgentInstallProgress] =
+    useState<RemoteAgentInstallProgress | null>(null);
+  const [remoteAgentManualInstallTarget, setRemoteAgentManualInstallTarget] = useState<
+    string | null
+  >(null);
   const verificationRequestIdRef = useRef(0);
   const unlock = useRemoteWorkspaceUnlock({
     draft: remoteWorkspaceDraft,
@@ -69,7 +77,8 @@ export function useSidebarRemoteWorkspaceAddActions({
     setRemoteWorkspaceDialogMode("add");
     setEditingProjectId(null);
     setEditingProjectUpdatedAt(null);
-    setRemoteAgentInstallRequest(null);
+    setRemoteAgentInstallProgress(null);
+    setRemoteAgentManualInstallTarget(null);
     verificationRequestIdRef.current += 1;
   }, [resetUnlock]);
 
@@ -114,6 +123,7 @@ export function useSidebarRemoteWorkspaceAddActions({
       setRemoteWorkspaceDraft((current) => applyRemoteWorkspaceDraftChange(current, field, value));
       setRemoteWorkspaceError(null);
       setRemoteWorkspaceVerificationMessage(null);
+      setRemoteAgentManualInstallTarget(null);
       dismissUnlock();
       setRemoteWorkspaceFieldErrors((current) => withoutRemoteWorkspaceFieldError(current, field));
     },
@@ -150,40 +160,52 @@ export function useSidebarRemoteWorkspaceAddActions({
 
     setIsVerifyingRemoteWorkspace(true);
     setRemoteWorkspaceError(null);
+    setRemoteAgentManualInstallTarget(null);
+    const executionTargetId = createRemoteWorkspaceExecutionTargetId(remoteWorkspaceDraft);
     try {
-      await connectExecutionTargetForSetup(
-        api,
-        createRemoteWorkspaceExecutionTargetId(remoteWorkspaceDraft),
-      );
+      await connectExecutionTargetForSetup(api, executionTargetId);
       const result = await api.server.verifyExecutionTarget({
-        executionTargetId: createRemoteWorkspaceExecutionTargetId(remoteWorkspaceDraft),
+        executionTargetId,
         cwd: remoteWorkspaceDraft.workspaceRoot.trim(),
       });
       if (requestId !== verificationRequestIdRef.current) {
         return "invalid" as const;
       }
-      if (
-        result.remoteAgent?.status === "install-required" ||
-        result.remoteAgent?.status === "upgrade-required"
-      ) {
-        setRemoteWorkspaceVerificationMessage(null);
-        const request = {
-          candidate: remoteWorkspaceDraft,
-          executionTargetId: createRemoteWorkspaceExecutionTargetId(remoteWorkspaceDraft),
-          targetLabel: getRemoteWorkspaceConnectionLabel(remoteWorkspaceDraft),
-          ...(result.remoteAgent.status === "upgrade-required"
-            ? {
-                kind: "upgrade" as const,
-                currentVersion: result.remoteAgent.currentVersion,
-                targetVersion: result.remoteAgent.targetVersion,
-              }
-            : { kind: "install" as const }),
-        };
-        setRemoteAgentInstallRequest(request);
-        return result.remoteAgent.status;
+      const verification = result.remoteAgent;
+      if (!(await remoteAgentNeedsInstallOnSave({ api, executionTargetId, verification }))) {
+        setRemoteWorkspaceVerificationMessage(result.message);
+        return "verified" as const;
       }
-      setRemoteWorkspaceVerificationMessage(result.message);
-      return "verified" as const;
+      // Save installs or replaces the agent inline, with no confirmation dialog (D8).
+      setRemoteWorkspaceVerificationMessage(null);
+      try {
+        const installed = await installAndConnectRemoteAgent({
+          api,
+          executionTargetId,
+          onProgress: (progress) => {
+            if (requestId === verificationRequestIdRef.current)
+              setRemoteAgentInstallProgress(progress);
+          },
+        });
+        if (requestId !== verificationRequestIdRef.current) return "invalid" as const;
+        const message = [installed.message, installed.cleanupMessage].filter(Boolean).join(" ");
+        setRemoteWorkspaceVerificationMessage(message);
+        toastManager.add({
+          type: installed.warning ? "warning" : "success",
+          title: `Remote agent ready on ${getRemoteWorkspaceConnectionLabel(remoteWorkspaceDraft)}`,
+          description: message,
+        });
+        return "verified" as const;
+      } catch (cause) {
+        if (requestId !== verificationRequestIdRef.current) return "invalid" as const;
+        setRemoteWorkspaceError(
+          cause instanceof Error ? cause.message : "Failed to install the remote agent.",
+        );
+        setRemoteAgentManualInstallTarget(executionTargetId);
+        return "invalid" as const;
+      } finally {
+        if (requestId === verificationRequestIdRef.current) setRemoteAgentInstallProgress(null);
+      }
     } catch (error) {
       if (requestId !== verificationRequestIdRef.current) {
         return "invalid" as const;
@@ -214,21 +236,6 @@ export function useSidebarRemoteWorkspaceAddActions({
     setError: setRemoteWorkspaceError,
     setSaving: setIsSavingRemoteWorkspace,
   });
-
-  const declineRemoteAgentInstall = useCallback(() => {
-    resetRemoteWorkspaceDialog();
-  }, [resetRemoteWorkspaceDialog]);
-
-  const completeRemoteAgentInstall = useCallback(
-    async (message: string) => {
-      const request = remoteAgentInstallRequest;
-      if (!request) return;
-      setRemoteAgentInstallRequest(null);
-      setRemoteWorkspaceVerificationMessage(message);
-      await submitRemoteWorkspace(request.candidate);
-    },
-    [remoteAgentInstallRequest, submitRemoteWorkspace],
-  );
 
   const submitRemoteWorkspaceDialog = useCallback(async () => {
     if (isSavingRemoteWorkspace || isVerifyingRemoteWorkspace) {
@@ -277,9 +284,8 @@ export function useSidebarRemoteWorkspaceAddActions({
     adoptRemoteWorkspaceConnectionSource,
     requestRemoteWorkspaceUnlock: requestUnlock,
     submitRemoteWorkspaceDialog,
-    remoteAgentInstallRequest,
-    declineRemoteAgentInstall,
-    completeRemoteAgentInstall,
+    remoteAgentInstallProgress,
+    remoteAgentManualInstallTarget,
     isRemoteWorkspaceUnlockDialogOpen: unlock.isOpen,
     remoteWorkspaceUnlockMode: unlock.mode,
     remoteWorkspaceUnlockKeyPath: unlock.keyPath,

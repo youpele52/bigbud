@@ -190,9 +190,8 @@ export interface SidebarState {
   adoptRemoteWorkspaceConnectionSource: (source: RemoteWorkspaceConnectionSource) => void;
   requestRemoteWorkspaceUnlock: RequestRemoteWorkspaceUnlock;
   submitRemoteWorkspaceDialog: () => Promise<void>;
-  remoteAgentInstallRequest: SidebarRemoteWorkspaceAddActionsOutput["remoteAgentInstallRequest"];
-  declineRemoteAgentInstall: () => void;
-  completeRemoteAgentInstall: (message: string) => Promise<void>;
+  remoteAgentInstallProgress: SidebarRemoteWorkspaceAddActionsOutput["remoteAgentInstallProgress"];
+  remoteAgentManualInstallTarget: string | null;
   isRemoteWorkspaceUnlockDialogOpen: boolean;
   remoteWorkspaceUnlockMode: import("../../lib/ssh").SshAuthMode | null;
   remoteWorkspaceUnlockKeyPath: string;

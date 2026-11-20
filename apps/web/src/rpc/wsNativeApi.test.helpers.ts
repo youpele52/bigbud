@@ -166,6 +166,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     listRemoteFolders: vi.fn(),
     installRemoteAgent: vi.fn(),
     getRemoteAgentManualInstall: vi.fn(),
+    removeRemoteAgent: vi.fn(),
     connectRemoteAgent: vi.fn(),
     restartRemoteAgent: vi.fn(),
     getRemoteAgentRestartStatus: vi.fn(),

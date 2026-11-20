@@ -171,6 +171,9 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
         api,
         threadId: activeThreadId,
         terminalId,
+        executionTargetId: activeProject
+          ? resolveWorkspaceExecutionTargetId(activeProject)
+          : undefined,
         onPending: () => {
           const next = terminalState.terminalIds.find((id) => id !== terminalId);
           if (next && terminalState.activeTerminalId === terminalId)
@@ -181,6 +184,7 @@ export function useTerminalActions(input: UseTerminalActionsInput): UseTerminalA
       });
     },
     [
+      activeProject,
       activeThreadId,
       storeCloseTerminal,
       terminalState.terminalIds,

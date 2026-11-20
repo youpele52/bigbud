@@ -84,6 +84,16 @@ export const getRemoteAgentUpdateStatusEffect = Effect.fn("getRemoteAgentUpdateS
       pendingVersion: result.candidateVersion,
       predecessorVersion: result.predecessorVersion,
       reason: result.reason,
+      ...(result.currentTargetTriple ? { currentTargetTriple: result.currentTargetTriple } : {}),
+      ...(result.currentBuildDigestShort
+        ? { currentBuildDigestShort: result.currentBuildDigestShort }
+        : {}),
+      ...(result.candidateTargetTriple
+        ? { pendingTargetTriple: result.candidateTargetTriple }
+        : {}),
+      ...(result.candidateBuildDigestShort
+        ? { pendingBuildDigestShort: result.candidateBuildDigestShort }
+        : {}),
     };
   },
 );
