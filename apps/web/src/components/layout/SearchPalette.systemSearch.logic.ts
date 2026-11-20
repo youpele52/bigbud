@@ -1,4 +1,5 @@
 import {
+  SYSTEM_SEARCH_LOCAL_SOURCE_ID,
   SYSTEM_SEARCH_MAX_PAGE,
   type SystemSearchHit,
   type SystemSearchQueryInput,
@@ -78,7 +79,7 @@ export function nextSystemSearchPage(
 }
 
 function sourceRank(source: SystemSearchSourceView): number {
-  return source.sourceId === "local" ? 0 : 1;
+  return source.sourceId === SYSTEM_SEARCH_LOCAL_SOURCE_ID ? 0 : 1;
 }
 
 /** The local machine's sources sort before remotes; remotes in a fixed order. */
@@ -146,11 +147,14 @@ export interface SystemSearchNotice {
   readonly state: SystemSearchSourceState;
 }
 
-/** One notice per source and reason, in tier order, for the palette's notice rows. */
-export function systemSearchNotices(view: SystemSearchView): SystemSearchNotice[] {
+/**
+ * One notice per source and reason, in tier order, for the palette's notice rows. Mod+F passes
+ * its fast and slow streams' views, in that order, so a source in both is noticed once.
+ */
+export function systemSearchNotices(...views: readonly SystemSearchView[]): SystemSearchNotice[] {
   const seen = new Set<string>();
   const notices: SystemSearchNotice[] = [];
-  for (const source of view.sources) {
+  for (const source of views.flatMap((view) => view.sources)) {
     if (!source.reason) continue;
     const key = `${source.sourceId}:${source.reason}`;
     if (seen.has(key)) continue;
@@ -175,16 +179,21 @@ export function isThisComputerSearchOn(settings: {
 /**
  * Tiers worth asking for (plan "Short queries"): current project from 1, the rest from 2.
  * `thisComputer` is the effective setting (on and File Access not "No access"). Mod+P leaves the
- * current project out when its in-memory local list already answers it.
+ * current project out when its in-memory local list already answers it; Mod+F asks for the
+ * current project and the slow tiers in separate streams (`slowTiers: false` for the first).
  */
 export function systemSearchTiersFor(
   query: string,
-  options: { readonly thisComputer: boolean; readonly currentProject?: boolean },
+  options: {
+    readonly thisComputer: boolean;
+    readonly currentProject?: boolean;
+    readonly slowTiers?: boolean;
+  },
 ): SystemSearchTier[] {
   const length = countUnicodeCodePoints(query.trim());
   const current = options.currentProject === false ? [] : (["currentProject"] as const);
   if (length === 0) return [];
-  if (length === 1) return [...current];
+  if (length === 1 || options.slowTiers === false) return [...current];
   return [
     ...current,
     "otherProjectFiles",

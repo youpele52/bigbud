@@ -1,13 +1,12 @@
 import type { ExecutionTargetId, ProjectId, ThreadId } from "@bigbud/contracts";
 import { isRemoteExecutionTargetId } from "@bigbud/contracts/core/baseSchemas";
-import { useDebouncedValue } from "@tanstack/react-pacer";
 
 import { useSettings } from "../../hooks/useSettings";
 import { CommandPaletteWorkspaceFiles } from "./CommandPalette.workspaceFiles";
 import { FileSearchResultGroup } from "./SearchPalette.fileResults";
 import { openSearchResult, renderSearchResultActions } from "./SearchPalette.open";
 import type { FileSearchResult } from "./SearchPalette.results";
-import { useSystemSearchStream } from "./SearchPalette.stream";
+import { useSlowTierQuery, useSystemSearchStream } from "./SearchPalette.stream";
 import {
   isSystemSearchTierPending,
   isThisComputerSearchOn,
@@ -19,8 +18,6 @@ import { SearchPaletteSystemSections } from "./SearchPalette.systemSections";
 import { SearchPaletteThisComputerHint } from "./SearchPalette.thisComputerHint";
 import { useSectionVisibility } from "./SearchPalette.visibility";
 
-/** Slow tiers (other projects, this computer, remotes) start after this long without typing. */
-export const COMMAND_PALETTE_SLOW_TIER_DEBOUNCE_MS = 150;
 const PAGE_SIZE = 10;
 const MOD_P_LABELS = {
   "t4.files": "Files in other projects",
@@ -50,10 +47,7 @@ export function CommandPaletteFileSearch(props: CommandPaletteFileSearchProps) {
   const { open, normalizedQuery } = props;
   const remoteCurrent = isRemoteExecutionTargetId(props.workspaceExecutionTargetId);
   const thisComputer = useSettings(isThisComputerSearchOn);
-  const [slowQuery] = useDebouncedValue(normalizedQuery, {
-    wait: COMMAND_PALETTE_SLOW_TIER_DEBOUNCE_MS,
-  });
-  const streamQuery = normalizedQuery.length > 0 ? slowQuery : "";
+  const streamQuery = useSlowTierQuery(normalizedQuery).query;
   const stream = useSystemSearchStream({
     open,
     query: streamQuery,

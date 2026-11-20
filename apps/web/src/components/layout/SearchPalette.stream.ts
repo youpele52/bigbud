@@ -5,6 +5,7 @@ import {
   type SystemSearchTier,
 } from "@bigbud/contracts/search/systemSearch.ts";
 import { countUnicodeCodePoints } from "@bigbud/shared/String";
+import { useDebouncedValue } from "@tanstack/react-pacer";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { randomUUID } from "~/lib/utils";
@@ -16,6 +17,26 @@ import {
   systemSearchTiersFor,
   type SystemSearchView,
 } from "./SearchPalette.systemSearch.logic";
+
+/** Slow tiers (other projects, this computer, remotes) start after this long without typing. */
+export const SLOW_TIER_DEBOUNCE_MS = 150;
+
+/**
+ * The query both palettes give their slow tiers: the typed query once typing pauses for
+ * {@link SLOW_TIER_DEBOUNCE_MS}, and "" at once when the query is cleared. Fast tiers use the
+ * typed query directly, so they are never held back behind this debounce.
+ */
+export function useSlowTierQuery(query: string): {
+  readonly query: string;
+  readonly pending: boolean;
+} {
+  const [slowQuery, debouncer] = useDebouncedValue(
+    query,
+    { wait: SLOW_TIER_DEBOUNCE_MS },
+    (state) => ({ isPending: state.isPending }),
+  );
+  return { query: query.length > 0 ? slowQuery : "", pending: debouncer.state.isPending };
+}
 
 export interface SystemSearchStream {
   readonly view: SystemSearchView;
@@ -40,6 +61,8 @@ export function useSystemSearchStream(input: {
   readonly thisComputer: boolean;
   /** Ask for the current project too (Mod+P skips it when its local list answers). */
   readonly currentProject?: boolean;
+  /** Ask for the slow tiers too (Mod+F asks for them in a separate, debounced stream). */
+  readonly slowTiers?: boolean;
   readonly mode?: SystemSearchMode;
 }): SystemSearchStream {
   const [view, setView] = useState<SystemSearchView>(EMPTY_SYSTEM_SEARCH_VIEW);
@@ -51,6 +74,7 @@ export function useSystemSearchStream(input: {
   const tiers = systemSearchTiersFor(query, {
     thisComputer: input.thisComputer,
     ...(input.currentProject === false ? { currentProject: false } : {}),
+    ...(input.slowTiers === false ? { slowTiers: false } : {}),
   });
   const tiersKey = tiers.join(",");
   const usable =

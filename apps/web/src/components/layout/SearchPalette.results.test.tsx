@@ -134,16 +134,18 @@ describe("SearchPaletteTierSections", () => {
     expect(order).toEqual(order.toSorted((left, right) => left - right));
   });
 
-  it("shows client-side thread titles while server sources are still debouncing", () => {
+  it("shows fast tiers while the slow tiers are still debouncing", () => {
     const tiers = emptyTiers();
     tiers.bigbudData.threads.push(thread("t3", "needle other thread"));
-    tiers.bigbudData.messages.push(message("m3", "stale server row"));
+    tiers.bigbudData.messages.push(message("m3", "fast server row"));
+    tiers.currentProject.files.push(file("current.ts", "currentProject"));
     const markup = renderSections({
       tiers,
       pending: { debounce: true, messages: false, files: false, projects: false, terminals: false },
     });
     expect(markup).toContain("needle other thread");
-    expect(markup).not.toContain("stale server row");
+    expect(markup).toContain("fast server row");
+    expect(markup).toContain("current.ts");
     expect(markup).toContain("Searching...");
   });
 

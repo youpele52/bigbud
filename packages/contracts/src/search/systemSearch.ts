@@ -19,6 +19,11 @@ export const SystemSearchOsIndexSource = Schema.Literals([
 ] as const);
 export type SystemSearchOsIndexSource = typeof SystemSearchOsIndexSource.Type;
 
+/** `sourceId` of the local machine's workspace sources (T2/T4 folders on this computer). */
+export const SYSTEM_SEARCH_LOCAL_SOURCE_ID = "local";
+/** T5 `sourceId` on a platform without an OS index adapter (the agent answers `UNSUPPORTED`). */
+export const SYSTEM_SEARCH_OS_INDEX_FALLBACK_SOURCE_ID = "os-index";
+
 /** Longest query, in characters; the agent engine enforces the same limit. */
 export const SYSTEM_SEARCH_MAX_QUERY_CHARS = 512;
 /** Rows sent to the client per query, across every tier (plan §4). */

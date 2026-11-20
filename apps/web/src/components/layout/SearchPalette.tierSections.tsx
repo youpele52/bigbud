@@ -23,7 +23,7 @@ import { ThreadSearchResultGroup } from "./SearchPalette.threadResults";
 import { describeSearchTiers, type SearchPaletteTiers } from "./SearchPalette.tiers.logic";
 
 export interface SearchPalettePendingState {
-  /** The debounce for server sources has not fired yet. */
+  /** The slow-tier debounce (T4–T6) has not fired yet. */
   readonly debounce: boolean;
   readonly messages: boolean;
   readonly files: boolean;
@@ -61,14 +61,15 @@ export interface SearchPaletteTierSectionsProps {
 
 /**
  * Sections in fixed tier order: T1 current thread, T2 current project, T3 other bigbud data, T4
- * other projects' files, T5 this computer, T6 remote folders outside projects. Client-side
- * sources (thread titles) render immediately; server sources wait for the debounce, and streamed
- * file rows append as they arrive.
+ * other projects' files, T5 this computer, T6 remote folders outside projects. T1–T3 render as
+ * soon as they answer; T4–T6 start after the slow-tier debounce, and streamed file rows append as
+ * they arrive.
  */
 export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps) {
   const { query, tiers, pending, visibility, currentFile } = props;
   const { slice, showMore } = visibility;
-  const serverReady = !pending.debounce;
+  // Length hints wait for typing to pause, so they do not flash while a word is typed.
+  const typingPaused = !pending.debounce;
   const anyPending =
     pending.debounce || pending.messages || pending.files || pending.projects || pending.terminals;
   const summary = describeSearchTiers(tiers);
@@ -80,7 +81,7 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
       <div aria-live="polite" className="sr-only">
         {anyPending ? "" : summary}
       </div>
-      {serverReady && currentFile.path ? (
+      {currentFile.path ? (
         <SearchPaletteCurrentFileResults
           path={currentFile.path}
           query={query}
@@ -93,12 +94,12 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
       {anyPending && props.normalizedQuery ? (
         <div className="px-4 py-8 text-center text-muted-foreground text-sm">Searching...</div>
       ) : null}
-      {serverReady && queryLength < CONVERSATION_SEARCH_MIN_QUERY_LENGTH ? (
+      {typingPaused && queryLength < CONVERSATION_SEARCH_MIN_QUERY_LENGTH ? (
         <div className="px-4 py-2 text-xs text-muted-foreground">
           Enter at least 3 characters to search saved messages.
         </div>
       ) : null}
-      {serverReady && queryLength > CONVERSATION_SEARCH_MAX_QUERY_LENGTH ? (
+      {typingPaused && queryLength > CONVERSATION_SEARCH_MAX_QUERY_LENGTH ? (
         <div className="px-4 py-2 text-xs text-muted-foreground">
           Shorten your query to 160 characters to search saved messages.
         </div>
@@ -123,36 +124,32 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
         </div>
       ) : null}
 
-      {serverReady ? (
-        <>
-          <SearchPaletteMessageResults
-            label="In this thread"
-            query={query}
-            results={tiers.currentThread.messages}
-            visibleResults={slice("t1.messages", tiers.currentThread.messages)}
-            showLocation={false}
-            onSelect={props.onSelectMessage}
-            onShowMore={() => showMore("t1.messages")}
-          />
-          <TerminalSearchResultGroup
-            label="Terminals in this thread"
-            query={query}
-            results={tiers.currentThread.terminals}
-            visibleResults={slice("t1.terminals", tiers.currentThread.terminals)}
-            onSelect={props.onSelectTerminal}
-            onShowMore={() => showMore("t1.terminals")}
-          />
-          <SearchPaletteMessageResults
-            label="In this project"
-            query={query}
-            results={tiers.currentProject.messages}
-            visibleResults={slice("t2.messages", tiers.currentProject.messages)}
-            showLocation
-            onSelect={props.onSelectMessage}
-            onShowMore={() => showMore("t2.messages")}
-          />
-        </>
-      ) : null}
+      <SearchPaletteMessageResults
+        label="In this thread"
+        query={query}
+        results={tiers.currentThread.messages}
+        visibleResults={slice("t1.messages", tiers.currentThread.messages)}
+        showLocation={false}
+        onSelect={props.onSelectMessage}
+        onShowMore={() => showMore("t1.messages")}
+      />
+      <TerminalSearchResultGroup
+        label="Terminals in this thread"
+        query={query}
+        results={tiers.currentThread.terminals}
+        visibleResults={slice("t1.terminals", tiers.currentThread.terminals)}
+        onSelect={props.onSelectTerminal}
+        onShowMore={() => showMore("t1.terminals")}
+      />
+      <SearchPaletteMessageResults
+        label="In this project"
+        query={query}
+        results={tiers.currentProject.messages}
+        visibleResults={slice("t2.messages", tiers.currentProject.messages)}
+        showLocation
+        onSelect={props.onSelectMessage}
+        onShowMore={() => showMore("t2.messages")}
+      />
       <ThreadSearchResultGroup
         label="Threads in this project"
         results={tiers.currentProject.threads}
@@ -160,36 +157,32 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
         onSelect={props.onSelectThread}
         onShowMore={() => showMore("t2.threads")}
       />
-      {serverReady ? (
-        <FileSearchResultGroup
-          label="Files in this project"
-          results={tiers.currentProject.files}
-          visibleResults={slice("t2.files", tiers.currentProject.files)}
-          onSelect={props.onSelectFile}
-          onShowMore={() => showMore("t2.files")}
-          hasMorePages={props.systemPaging?.hasMore("currentProject") ?? false}
-          onLoadMorePages={() => {
-            props.systemPaging?.loadMore("currentProject");
-            showMore("t2.files");
-          }}
-          {...(props.renderFileActions ? { renderActions: props.renderFileActions } : {})}
-        />
-      ) : null}
-      {serverReady ? (
-        <SearchPaletteMessageResults
-          label="Messages in other threads"
-          query={query}
-          results={tiers.bigbudData.messages}
-          visibleResults={otherMessages}
-          showLocation
-          hasMorePages={props.hasMoreMessagePages}
-          onSelect={props.onSelectMessage}
-          onShowMore={() => {
-            props.onShowMoreMessages(otherMessages.length);
-            showMore("t3.messages");
-          }}
-        />
-      ) : null}
+      <FileSearchResultGroup
+        label="Files in this project"
+        results={tiers.currentProject.files}
+        visibleResults={slice("t2.files", tiers.currentProject.files)}
+        onSelect={props.onSelectFile}
+        onShowMore={() => showMore("t2.files")}
+        hasMorePages={props.systemPaging?.hasMore("currentProject") ?? false}
+        onLoadMorePages={() => {
+          props.systemPaging?.loadMore("currentProject");
+          showMore("t2.files");
+        }}
+        {...(props.renderFileActions ? { renderActions: props.renderFileActions } : {})}
+      />
+      <SearchPaletteMessageResults
+        label="Messages in other threads"
+        query={query}
+        results={tiers.bigbudData.messages}
+        visibleResults={otherMessages}
+        showLocation
+        hasMorePages={props.hasMoreMessagePages}
+        onSelect={props.onSelectMessage}
+        onShowMore={() => {
+          props.onShowMoreMessages(otherMessages.length);
+          showMore("t3.messages");
+        }}
+      />
       <ThreadSearchResultGroup
         label="All threads"
         results={tiers.bigbudData.threads}
@@ -197,7 +190,7 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
         onSelect={props.onSelectThread}
         onShowMore={() => showMore("t3.threads")}
       />
-      {serverReady && !pending.projects ? (
+      {!pending.projects ? (
         <ProjectSearchResultGroup
           query={query}
           results={tiers.bigbudData.projects}
@@ -206,7 +199,7 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
           onShowMore={() => showMore("t3.projects")}
         />
       ) : null}
-      {serverReady && !pending.terminals ? (
+      {!pending.terminals ? (
         <TerminalSearchResultGroup
           query={query}
           results={tiers.bigbudData.terminals}
@@ -215,18 +208,16 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
           onShowMore={() => showMore("t3.terminals")}
         />
       ) : null}
-      {serverReady ? (
-        <SearchPaletteSystemSections
-          tiers={tiers}
-          notices={props.systemNotices ?? []}
-          visibility={visibility}
-          onSelectFile={props.onSelectFile}
-          {...(props.renderFileActions ? { renderFileActions: props.renderFileActions } : {})}
-          thisComputerHint={props.thisComputerHint}
-          {...(props.systemPaging ? { paging: props.systemPaging } : {})}
-          thisComputerNote={props.thisComputerNote ?? null}
-        />
-      ) : null}
+      <SearchPaletteSystemSections
+        tiers={tiers}
+        notices={props.systemNotices ?? []}
+        visibility={visibility}
+        onSelectFile={props.onSelectFile}
+        {...(props.renderFileActions ? { renderFileActions: props.renderFileActions } : {})}
+        thisComputerHint={props.thisComputerHint}
+        {...(props.systemPaging ? { paging: props.systemPaging } : {})}
+        thisComputerNote={props.thisComputerNote ?? null}
+      />
     </>
   );
 }

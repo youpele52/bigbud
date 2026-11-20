@@ -9,7 +9,7 @@ import { runToolCommand, resolveToolTransportTarget } from "../../tool-transport
 import { resolveWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
 import { WorkspaceFileSystemError } from "../Services/WorkspaceFileSystem.ts";
 
-export class WorkspaceSearchCommandError extends Data.TaggedError("WorkspaceSearchCommandError")<{
+class WorkspaceSearchCommandError extends Data.TaggedError("WorkspaceSearchCommandError")<{
   readonly detail: string;
   readonly cause: unknown;
 }> {
@@ -18,9 +18,9 @@ export class WorkspaceSearchCommandError extends Data.TaggedError("WorkspaceSear
   }
 }
 
-export const WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS = 10_000;
-export const WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES = 512 * 1024;
-export const WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS = [
+const WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS = 10_000;
+const WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES = 512 * 1024;
+const WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS = [
   "!**/.git/**",
   "!**/.convex/**",
   "!**/node_modules/**",
@@ -36,11 +36,11 @@ function normalizeMatchedPath(pathValue: string): string {
   return pathValue.replace(/^\.\//, "").replaceAll("\\", "/");
 }
 
-export function isRipgrepCommandNotFound(error: WorkspaceSearchCommandError): boolean {
+function isRipgrepCommandNotFound(error: WorkspaceSearchCommandError): boolean {
   return error.message === "Command not found: rg";
 }
 
-export function normalizeSearchCommandError(error: unknown): WorkspaceSearchCommandError {
+function normalizeSearchCommandError(error: unknown): WorkspaceSearchCommandError {
   if (error instanceof WorkspaceSearchCommandError) return error;
   if (error instanceof Error) {
     return new WorkspaceSearchCommandError({ detail: error.message, cause: error });
@@ -48,7 +48,7 @@ export function normalizeSearchCommandError(error: unknown): WorkspaceSearchComm
   return new WorkspaceSearchCommandError({ detail: String(error), cause: error });
 }
 
-export function parseRipgrepJsonMatches(stdout: string): ProjectFileContentMatch[] {
+function parseRipgrepJsonMatches(stdout: string): ProjectFileContentMatch[] {
   const matches: ProjectFileContentMatch[] = [];
 
   for (const rawLine of stdout.split(/\r?\n/g)) {

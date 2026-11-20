@@ -10,7 +10,6 @@ import {
   partitionMessageTiers,
   partitionTerminalTiers,
   partitionThreadTiers,
-  searchQueryRules,
   searchResultId,
   SEARCH_TIERS,
 } from "./SearchPalette.tiers.logic";
@@ -129,22 +128,6 @@ describe("search tiers", () => {
     );
     expect(terminals.currentThread.map((row) => row.threadId)).toEqual([THREAD]);
     expect(terminals.other.map((row) => row.threadId)).toEqual(["x"]);
-  });
-
-  it("applies the short-query rules", () => {
-    expect(searchQueryRules("ab", context)).toEqual({
-      titles: true,
-      currentThreadMessages: true,
-      messages: false,
-    });
-    expect(searchQueryRules("ab", { currentThreadId: null, currentProjectId: null })).toMatchObject(
-      { currentThreadMessages: false },
-    );
-    expect(searchQueryRules("abc", context)).toMatchObject({ messages: true });
-    expect(searchQueryRules("a".repeat(161), context)).toMatchObject({
-      messages: false,
-      currentThreadMessages: false,
-    });
   });
 
   it("summarises non-empty tiers for screen readers", () => {

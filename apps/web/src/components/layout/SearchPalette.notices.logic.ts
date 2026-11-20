@@ -1,3 +1,7 @@
+import {
+  SYSTEM_SEARCH_LOCAL_SOURCE_ID,
+  SYSTEM_SEARCH_OS_INDEX_FALLBACK_SOURCE_ID,
+} from "@bigbud/contracts/search/systemSearch.ts";
 import { getRemoteWorkspaceTargetLabel } from "~/components/sidebar/Sidebar.remoteWorkspaces.logic";
 import { isOsIndexSource, osIndexWording } from "~/lib/osIndexWording";
 
@@ -12,8 +16,9 @@ export interface SearchNoticeText {
 }
 
 function sourceName(sourceId: string): string {
-  if (sourceId === "local") return "this computer";
-  if (isOsIndexSource(sourceId) || sourceId === "os-index") return osIndexWording(sourceId).place;
+  if (sourceId === SYSTEM_SEARCH_LOCAL_SOURCE_ID) return "this computer";
+  if (isOsIndexSource(sourceId) || sourceId === SYSTEM_SEARCH_OS_INDEX_FALLBACK_SOURCE_ID)
+    return osIndexWording(sourceId).place;
   return getRemoteWorkspaceTargetLabel(sourceId) ?? "the remote";
 }
 

@@ -3,6 +3,7 @@ import * as nodePath from "node:path";
 
 import type { FileAccessPermissionLevel } from "@bigbud/contracts/core/settings.search.ts";
 import {
+  SYSTEM_SEARCH_OS_INDEX_FALLBACK_SOURCE_ID,
   SystemSearchOsIndexSource,
   type SystemSearchHit,
   type SystemSearchReason,
@@ -11,6 +12,7 @@ import { Schema } from "effect";
 import { isOsIndexExcludedPath } from "@bigbud/shared/search/osIndexExclusions";
 import { countUnicodeCodePoints } from "@bigbud/shared/String";
 
+import { AGENT_SEARCH_BUSY } from "../remote-agent/agentWorkspaceContentSearch.ts";
 import { runRemoteAgentOsIndexSearch } from "../remote-agent/remoteAgentOsIndexSearch.ts";
 import {
   REMOTE_AGENT_OS_INDEX_CAPABILITY,
@@ -20,8 +22,6 @@ import {
 import type { SearchAgentConnection } from "./SystemSearch.agentRequest.ts";
 import type { SystemSearchEmitter } from "./SystemSearch.emitter.ts";
 
-/** T5 source on a platform without an OS index adapter (the agent answers `UNSUPPORTED`). */
-export const OS_INDEX_FALLBACK_SOURCE_ID = "os-index";
 const isOsIndexSource = Schema.is(SystemSearchOsIndexSource);
 
 /**
@@ -37,7 +37,7 @@ export function expectedOsIndexSource(platform: NodeJS.Platform = process.platfo
     case "linux":
       return "locate";
     default:
-      return OS_INDEX_FALLBACK_SOURCE_ID;
+      return SYSTEM_SEARCH_OS_INDEX_FALLBACK_SOURCE_ID;
   }
 }
 /** T5 rows (plan §4); the agent fetches 200 from Spotlight and filters down to these. */
@@ -103,7 +103,7 @@ function toRow(hit: RemoteAgentOsIndexSearchHit, home: string): SystemSearchHit 
 function reasonFor(errorCode: string): SystemSearchReason {
   if (errorCode === "UNSUPPORTED") return "unsupported";
   if (errorCode === "UNAVAILABLE") return "index-unavailable";
-  return errorCode === "SEARCH_BUSY" ? "busy" : "error";
+  return errorCode === AGENT_SEARCH_BUSY ? "busy" : "error";
 }
 
 /**

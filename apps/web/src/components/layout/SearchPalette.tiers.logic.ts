@@ -1,11 +1,8 @@
 import type { ProjectId, ThreadId } from "@bigbud/contracts";
-import {
-  CONVERSATION_SEARCH_MAX_QUERY_LENGTH,
-  CONVERSATION_SEARCH_MIN_QUERY_LENGTH,
-  type ConversationMessageSearchHit,
-  type SearchConversationMessagesResult,
+import type {
+  ConversationMessageSearchHit,
+  SearchConversationMessagesResult,
 } from "@bigbud/contracts/orchestration/orchestration.search";
-import { countUnicodeCodePoints } from "@bigbud/shared/String";
 
 import type { ProjectSearchResult } from "./SearchPalette.projectResults";
 import type {
@@ -44,17 +41,6 @@ export function searchResultId(input: {
 export interface SearchContext {
   readonly currentThreadId: ThreadId | null;
   readonly currentProjectId: ProjectId | null;
-}
-
-/** Which sources run for a query length (plan "Short queries"). */
-export function searchQueryRules(query: string, context: SearchContext) {
-  const length = countUnicodeCodePoints(query.trim());
-  const withinMax = length <= CONVERSATION_SEARCH_MAX_QUERY_LENGTH;
-  return {
-    titles: length >= 1,
-    currentThreadMessages: context.currentThreadId !== null && length >= 1 && withinMax,
-    messages: length >= CONVERSATION_SEARCH_MIN_QUERY_LENGTH && withinMax,
-  };
 }
 
 function toMessageResult(

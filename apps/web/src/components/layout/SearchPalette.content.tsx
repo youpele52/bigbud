@@ -51,15 +51,15 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
   }, [open]);
 
   const sources = useSearchPaletteSources({ open, query, activeThreadId });
-  const { debouncedMessageQuery, conversationSearch } = sources;
+  const { messageQuery, conversationSearch } = sources;
   const visibility = useSectionVisibility(
-    `${open}:${sources.debouncedQuery}`,
+    `${open}:${sources.normalizedQuery}`,
     INITIAL_VISIBLE_RESULT_COUNT,
   );
 
   const handleSelectTerminal = (result: TerminalSearchResult) => {
     setOpen(false);
-    revealTerminalSearchResult(result, debouncedMessageQuery);
+    revealTerminalSearchResult(result, messageQuery);
     if (result.threadId !== activeThreadId) {
       void navigate({ to: "/$threadId", params: { threadId: result.threadId } });
     }
@@ -165,7 +165,7 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
                       renderFileActions={renderSearchResultActions}
                       thisComputerHint={
                         <SearchPaletteThisComputerHint
-                          query={sources.debouncedQuery}
+                          query={sources.slowTierQuery}
                           onNavigate={() => setOpen(false)}
                         />
                       }

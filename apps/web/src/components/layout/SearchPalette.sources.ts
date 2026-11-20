@@ -1,5 +1,5 @@
 import { type ThreadId, isBuiltInChatsProject } from "@bigbud/contracts";
-import { useDebouncedValue } from "@tanstack/react-pacer";
+import type { SystemSearchTier } from "@bigbud/contracts/search/systemSearch.ts";
 import { useInfiniteQuery, useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -16,7 +16,7 @@ import {
   normalizeQuery,
 } from "./SearchPalette.logic";
 import { toProjectSearchResults } from "./SearchPalette.projectResults";
-import { useSystemSearchStream } from "./SearchPalette.stream";
+import { useSlowTierQuery, useSystemSearchStream } from "./SearchPalette.stream";
 import {
   isThisComputerSearchOn,
   isSystemSearchTierPending,
@@ -33,9 +33,11 @@ import {
   type SearchPaletteTiers,
 } from "./SearchPalette.tiers.logic";
 
-const SEARCH_PALETTE_QUERY_DEBOUNCE_MS = 200;
-
-/** Every palette source for one query, already split into tiers. */
+/**
+ * Every palette source for one query, already split into tiers. Like Mod+P, fast tiers (T1–T3:
+ * messages, threads, projects, terminals, the current file and the current project's files)
+ * follow every keystroke; slow tiers (T4–T6) wait for the shared slow-tier debounce.
+ */
 export function useSearchPaletteSources(input: {
   readonly open: boolean;
   readonly query: string;
@@ -57,36 +59,41 @@ export function useSearchPaletteSources(input: {
     [activeThreadId, selectedProject?.id],
   );
 
-  const [debouncedQuery, debouncer] = useDebouncedValue(
-    query,
-    { wait: SEARCH_PALETTE_QUERY_DEBOUNCE_MS },
-    (state) => ({ isPending: state.isPending }),
-  );
   const normalizedQuery = normalizeQuery(query);
-  const debouncedNormalizedQuery = query.length > 0 ? normalizeQuery(debouncedQuery) : "";
-  const debouncedMessageQuery = debouncedQuery.trim();
-  const systemStream = useSystemSearchStream({
+  const messageQuery = query.trim();
+  const slowTier = useSlowTierQuery(normalizedQuery);
+  const streamInput = {
     open,
-    query: debouncedNormalizedQuery,
     currentProjectId: context.currentProjectId,
     currentThreadId: context.currentThreadId,
     thisComputer: searchThisComputer,
+  };
+  const fastStream = useSystemSearchStream({
+    ...streamInput,
+    query: normalizedQuery,
+    slowTiers: false,
   });
-  const systemSearch = systemStream.view;
+  const slowStream = useSystemSearchStream({
+    ...streamInput,
+    query: slowTier.query,
+    currentProject: false,
+  });
+  const streamFor = (tier: SystemSearchTier) =>
+    tier === "currentProject" ? fastStream : slowStream;
   const projectCatalogQueries = useQueries({
     queries: (["local", "remote"] as const).map((scope) =>
       projectCatalogSearchQueryOptions({
         scope,
-        query: debouncedNormalizedQuery,
-        enabled: open && debouncedNormalizedQuery.length > 0,
+        query: normalizedQuery,
+        enabled: open && normalizedQuery.length > 0,
       }),
     ),
   });
   const conversationSearch = useInfiniteQuery(
-    conversationSearchQueryOptions({ query: debouncedMessageQuery, enabled: open, ...context }),
+    conversationSearchQueryOptions({ query: messageQuery, enabled: open, ...context }),
   );
   const terminalSearch = useTerminalSearchResults({
-    query: debouncedMessageQuery,
+    query: messageQuery,
     enabled: open,
     threads,
   });
@@ -95,14 +102,9 @@ export function useSearchPaletteSources(input: {
     () =>
       conversationSearch.isError
         ? { currentThread: [], currentProject: [], other: [] }
-        : partitionMessageTiers(
-            conversationSearch.data?.pages ?? [],
-            context,
-            debouncedMessageQuery,
-          ),
-    [conversationSearch.data, conversationSearch.isError, context, debouncedMessageQuery],
+        : partitionMessageTiers(conversationSearch.data?.pages ?? [], context, messageQuery),
+    [conversationSearch.data, conversationSearch.isError, context, messageQuery],
   );
-  // Thread titles are client-side, so they follow every keystroke without the debounce.
   const threadTiers = useMemo(() => {
     if (!normalizedQuery) return { currentProject: [], other: [] };
     const matches = threads
@@ -138,9 +140,9 @@ export function useSearchPaletteSources(input: {
   const currentFileMatches = useMemo(
     () =>
       activeFileSearchContext
-        ? findFileSearchMatches(activeFileSearchContext.contents, debouncedNormalizedQuery)
+        ? findFileSearchMatches(activeFileSearchContext.contents, normalizedQuery)
         : [],
-    [activeFileSearchContext, debouncedNormalizedQuery],
+    [activeFileSearchContext, normalizedQuery],
   );
 
   const tiers: SearchPaletteTiers = {
@@ -148,7 +150,7 @@ export function useSearchPaletteSources(input: {
     currentProject: {
       messages: messageTiers.currentProject,
       threads: threadTiers.currentProject,
-      files: systemSearchTierRows(systemSearch, "currentProject"),
+      files: systemSearchTierRows(fastStream.view, "currentProject"),
     },
     bigbudData: {
       messages: messageTiers.other,
@@ -156,33 +158,37 @@ export function useSearchPaletteSources(input: {
       projects: projectResults,
       terminals: terminalTiers.other,
     },
-    otherProjectFiles: { files: systemSearchTierRows(systemSearch, "otherProjectFiles") },
-    thisComputer: { files: systemSearchTierRows(systemSearch, "thisComputer") },
-    remoteOutsideProjects: { files: systemSearchTierRows(systemSearch, "remoteOutsideProjects") },
+    otherProjectFiles: { files: systemSearchTierRows(slowStream.view, "otherProjectFiles") },
+    thisComputer: { files: systemSearchTierRows(slowStream.view, "thisComputer") },
+    remoteOutsideProjects: {
+      files: systemSearchTierRows(slowStream.view, "remoteOutsideProjects"),
+    },
   };
 
   return {
     tiers,
     normalizedQuery,
-    debouncedQuery,
-    debouncedMessageQuery,
+    slowTierQuery: slowTier.query,
+    messageQuery,
     activeFileSearchContext,
     currentFileMatches,
     conversationSearch,
     pending: {
-      debounce: debouncer.state.isPending,
+      debounce: slowTier.pending,
       messages: conversationSearch.isFetching,
-      files: isSystemSearchTierPending(systemSearch, "currentProject"),
+      files: isSystemSearchTierPending(fastStream.view, "currentProject"),
       projects:
         projectCatalogQueries[0]?.isFetching === true ||
         projectCatalogQueries[1]?.isFetching === true,
       terminals: terminalSearch.isPending,
     },
-    systemNotices: systemSearchNotices(systemSearch),
-    systemSearch,
+    systemNotices: systemSearchNotices(fastStream.view, slowStream.view),
     /** Next pages of streamed file tiers, asked for when a tier's "See more" is scrolled to. */
-    systemPaging: { hasMore: systemStream.hasMore, loadMore: systemStream.loadMore },
-    thisComputerNote: thisComputerNote(systemSearch),
+    systemPaging: {
+      hasMore: (tier: SystemSearchTier) => streamFor(tier).hasMore(tier),
+      loadMore: (tier: SystemSearchTier) => streamFor(tier).loadMore(tier),
+    },
+    thisComputerNote: thisComputerNote(slowStream.view),
     messageSearchStatus: conversationSearch.isError
       ? ("unavailable" as const)
       : conversationSearch.data?.pages[0]?.status,

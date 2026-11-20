@@ -1,4 +1,7 @@
-import type { SystemSearchMode } from "@bigbud/contracts/search/systemSearch.ts";
+import {
+  SYSTEM_SEARCH_LOCAL_SOURCE_ID,
+  type SystemSearchMode,
+} from "@bigbud/contracts/search/systemSearch.ts";
 import { countUnicodeCodePoints } from "@bigbud/shared/String";
 
 import { isLocalExecutionTarget } from "../executionTargets.ts";
@@ -24,7 +27,6 @@ export const SYSTEM_SEARCH_LIMITS = {
 } as const;
 /** Short-query rules (plan §1): current-project names from 1, other names 2, contents 3. */
 export const SYSTEM_SEARCH_MIN_CHARS = { currentNames: 1, otherNames: 2, contents: 3 } as const;
-export const LOCAL_SOURCE_ID = "local";
 
 type SearchLimits = (typeof SYSTEM_SEARCH_LIMITS)[keyof typeof SYSTEM_SEARCH_LIMITS];
 
@@ -78,7 +80,7 @@ async function searchSource<C extends SearchAgentConnection>(
   input: SourceInput,
 ): Promise<void> {
   const local = isLocalExecutionTarget(input.executionTargetId);
-  const sourceId = local ? LOCAL_SOURCE_ID : input.executionTargetId;
+  const sourceId = local ? SYSTEM_SEARCH_LOCAL_SOURCE_ID : input.executionTargetId;
   let connection: C | null;
   if (local) {
     try {
