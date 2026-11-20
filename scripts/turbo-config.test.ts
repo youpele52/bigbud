@@ -26,6 +26,11 @@ describe("turbo runtime environment", () => {
     }
   });
 
+  it("hashes and forwards the desktop cross-build target for the server build", () => {
+    // A cached host-architecture server build must never be reused for a cross build.
+    assert.ok(config.globalEnv?.includes("BIGBUD_SERVER_NATIVE_TARGET_ARCH"));
+  });
+
   it("passes the dev runner PID to tasks without making it part of every cache key", () => {
     assert.ok(config.globalPassThroughEnv?.includes("BIGBUD_DEV_RUNNER_PID"));
     assert.ok(!config.globalEnv?.includes("BIGBUD_DEV_RUNNER_PID"));

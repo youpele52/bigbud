@@ -18,6 +18,7 @@ import {
   findDesktopWorkspaceAgentTarget,
   type WorkspaceAgentTarget,
 } from "../workspace-agent-target.ts";
+import { nativeReleaseBuildPlan } from "../native-release-build.ts";
 import {
   BuildArch,
   BuildScriptError,
@@ -92,13 +93,14 @@ export function desktopSupervisorBuildPlan(input: {
   const native =
     target.platform === (input.hostPlatform ?? process.platform) &&
     target.arch === (input.hostArch ?? process.arch);
-  const cargoArgs = ["build", "--locked", "--release", "--package", "bigbud-desktop-supervisor"];
-  if (!native) cargoArgs.push("--target", target.rustTarget);
-  const name = desktopSupervisorBinaryName(input.platform);
-  const source = native
-    ? join(input.repoRoot, "target", "release", name)
-    : join(input.repoRoot, "target", target.rustTarget, "release", name);
-  return { target, cargoArgs, source };
+  const plan = nativeReleaseBuildPlan({
+    repoRoot: input.repoRoot,
+    packageName: "bigbud-desktop-supervisor",
+    binaryName: desktopSupervisorBinaryName(input.platform),
+    target,
+    native,
+  });
+  return { target, ...plan };
 }
 
 export const stagePackagedDesktopSupervisor = Effect.fn("stagePackagedDesktopSupervisor")(

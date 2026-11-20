@@ -21,7 +21,11 @@ The shared [release-version parser](../../packages/shared/src/releaseChannel.ts)
 - Permissions are read-only by default; only the publish job has `contents: write`. Signing secrets reach only the desktop build, the remote backend graph build, and the publish job.
 - Builds five artifacts in parallel:
   - macOS `arm64` DMG
-  - macOS `x64` DMG
+  - macOS `x64` DMG, cross-built on the Apple Silicon `macos-15` runner. The job adds the
+    `x86_64-apple-darwin` Rust target, makes sure Rosetta 2 can run the x64 helpers for the smoke
+    tests, installs the x64 optional npm/Bun packages, and fails unless
+    `bun run verify:desktop:mac-architecture` finds `x86_64` in every Mach-O file of the app. The
+    native Intel resource cleanup tests still run on `macos-15-intel`.
   - Linux `x64` AppImage
   - Linux `x64` .deb
   - Windows `x64` NSIS installer
@@ -29,7 +33,7 @@ The shared [release-version parser](../../packages/shared/src/releaseChannel.ts)
   - Versions with an approved channel suffix after `X.Y.Z` (for example `1.2.3-beta.1`, `1.2.3-preview.1`, or `1.2.3-nightly.20260726`) are published as GitHub prereleases.
   - Stable releases have no suffix; unsupported prerelease channel names fail preflight.
   - Only plain `X.Y.Z` releases are marked as the repository's latest release.
-- Includes only the active channel's Electron auto-update metadata and the corresponding `*.blockmap` assets.
+- Includes only the active channel's Electron auto-update metadata and the corresponding `*.blockmap` assets (macOS zip and Windows installer; DMGs are built as ULFO/lzfse images without a blockmap, because the macOS updater downloads the zip).
 - Artifact names use `bigbud-${version}-${arch}.${ext}`. Stable artifacts are untagged; prerelease artifacts retain their version suffix.
 
 ### Dry run (build without publishing)
@@ -56,8 +60,8 @@ A manual dispatch builds, signs, notarizes, and verifies everything, then skips 
 - Every public macOS build is Developer ID signed, notarized, and stapled. Missing credentials fail the build.
 - Windows artifacts use Authenticode signing when the complete optional certificate configuration is supplied; otherwise they are unsigned with a warning. Linux does not use OS code signing.
 - Builds and publishes signed remote-agent binaries for Linux `x86_64` and `aarch64` alongside the desktop assets.
-- Builds the platform-native `bigbud-remote-agent` on every desktop runner and stages it at `resources/server/workspace-agent/bin/bigbud-remote-agent[.exe]` for local workspace watching and verified managed-resource cleanup.
-- Smoke-checks each packaged workspace watcher on its native runner, publishes the four target-specific binaries as release artifacts, and requires the complete set before `@bigbud/server` can be published.
+- Builds the target-native `bigbud-remote-agent` for every desktop build (cross-compiled for macOS `x64`) and stages it at `resources/server/workspace-agent/bin/bigbud-remote-agent[.exe]` for local workspace watching and verified managed-resource cleanup.
+- Smoke-checks each packaged workspace watcher on its build runner (macOS `x64` under Rosetta 2), publishes the four target-specific binaries as release artifacts, and requires the complete set before `@bigbud/server` can be published.
 - Publishes `remote-agent-manifest.json`, `remote-agent-install-source.json`, and one `.sha256` file per remote-agent binary. The install source contains the signed manifest and its public trust key; artifact URLs point to binaries in the same GitHub Release.
 
 Remote-agent release signing uses the Ed25519 key supplied through the required
@@ -161,7 +165,7 @@ Gatekeeper assessment, packaging and release smoke checks must still succeed.
 - Required release assets for updater:
   - platform installers (`.exe`, `.dmg`, `.AppImage`, plus macOS `.zip` for Squirrel.Mac update payloads)
   - active-channel metadata (`latest*.yml`, `beta*.yml`, `preview*.yml`, or `nightly*.yml`)
-  - `*.blockmap` files (used for differential downloads)
+  - `*.blockmap` files for the macOS `.zip` and Windows `.exe` (used for differential downloads; DMGs have none)
 - Update channels are isolated by installed app identity:
   - Stable reads `latest` metadata and rejects all prereleases.
   - Beta reads `beta` metadata and accepts only Beta versions.
