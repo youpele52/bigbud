@@ -282,5 +282,11 @@ export function parseRemoteAgentRegistry(text: string): RemoteAgentRegistry {
     if (!currentAdmission || currentAdmission.buildId !== state.current)
       throw new Error("Current connection does not match a ready admission.");
   }
+  if (state.removal) {
+    printable(state.removal.id, "removal fence id");
+    printable(state.removal.controllerId, "removal controller id", 256);
+    if (!Number.isSafeInteger(state.removal.startedAt) || state.removal.startedAt < 0)
+      throw new Error("Invalid removal fence time.");
+  }
   return state;
 }

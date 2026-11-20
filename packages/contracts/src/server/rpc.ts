@@ -150,6 +150,7 @@ import {
 } from "./rpc.core";
 import {
   WsServerGetRemoteAgentManualInstallRpc,
+  WsServerRemoveRemoteAgentRpc,
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,
   WsServerGetRemoteAgentRestartStatusRpc,
@@ -257,6 +258,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerListRemoteFoldersRpc,
   WsServerInstallRemoteAgentRpc,
   WsServerGetRemoteAgentManualInstallRpc,
+  WsServerRemoveRemoteAgentRpc,
   WsServerConnectRemoteAgentRpc,
   WsServerGetRemoteAgentUpdateStatusRpc,
   WsServerRestartRemoteAgentRpc,

@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 
-import { ExecutionTargetId, TrimmedNonEmptyString } from "../core/baseSchemas";
+import { ExecutionTargetId, ProjectId, TrimmedNonEmptyString } from "../core/baseSchemas";
 
 /** Request the version-pinned command a user runs on the remote host to stage the agent. */
 export const ServerGetRemoteAgentManualInstallInput = Schema.Struct({
@@ -15,8 +15,16 @@ export const ServerGetRemoteAgentManualInstallResult = Schema.Struct({
   version: TrimmedNonEmptyString,
   /** Copyable shell command; it stages bytes only and never activates them. */
   command: TrimmedNonEmptyString,
+  /**
+   * Where the command downloads the script: `https://bigbud.app/download/v<version>/remote-agent`,
+   * which redirects to the pinned release asset, or that asset directly for a non-default
+   * release repository.
+   */
   scriptUrl: TrimmedNonEmptyString,
-  /** The same script attached to the pinned release, for hosts that cannot reach bigbud.app. */
+  /**
+   * The version-stamped script attached to the pinned GitHub release, for hosts that cannot reach
+   * bigbud.app.
+   */
   releaseScriptUrl: TrimmedNonEmptyString,
   /** Home-relative directory where the script places verified bytes for adoption. */
   inboxRelativePath: TrimmedNonEmptyString,
@@ -41,3 +49,45 @@ export const ServerConnectRemoteAgentInput = Schema.Struct({
   replace: Schema.optional(Schema.Boolean),
 });
 export type ServerConnectRemoteAgentInput = typeof ServerConnectRemoteAgentInput.Type;
+
+/**
+ * Remove the bigbud remote agent from a host: deletes only `~/.bigbud/agent`, then disconnects the
+ * host. `switchWorkspacesToDirectSsh` (default true) moves that host's workspaces to Direct SSH.
+ */
+export const ServerRemoveRemoteAgentInput = Schema.Struct({
+  executionTargetId: ExecutionTargetId,
+  switchWorkspacesToDirectSsh: Schema.optional(Schema.Boolean),
+});
+export type ServerRemoveRemoteAgentInput = typeof ServerRemoveRemoteAgentInput.Type;
+
+/** Live work or a dependent service that prevents removal; nothing was deleted. */
+export const ServerRemoteAgentRemovalBlocker = Schema.Struct({
+  kind: Schema.Literals([
+    "terminal",
+    "process",
+    "watcher",
+    "stage",
+    "admission",
+    "backend-runtime",
+  ]),
+  label: TrimmedNonEmptyString,
+});
+export type ServerRemoteAgentRemovalBlocker = typeof ServerRemoteAgentRemovalBlocker.Type;
+
+export const ServerRemoveRemoteAgentResult = Schema.Union([
+  Schema.Struct({
+    outcome: Schema.Literal("removed"),
+    /** Connections to the host that were closed; the person reconnects explicitly. */
+    disconnected: Schema.Number,
+    switchedWorkspaceIds: Schema.Array(ProjectId),
+  }),
+  Schema.Struct({
+    outcome: Schema.Literal("blocked"),
+    blockers: Schema.Array(ServerRemoteAgentRemovalBlocker),
+  }),
+  Schema.Struct({
+    outcome: Schema.Literal("failed"),
+    message: TrimmedNonEmptyString,
+  }),
+]);
+export type ServerRemoveRemoteAgentResult = typeof ServerRemoveRemoteAgentResult.Type;

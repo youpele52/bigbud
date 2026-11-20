@@ -21,7 +21,8 @@ export interface RemoteDisconnectStepDependencies {
   readonly forgetMonitorTarget?: (executionTargetId: string) => void;
 }
 
-function sessionUsesTarget(session: ProviderSession, executionTargetId: string): boolean {
+/** The one rule for whether a provider session runs on, or works in, an execution target. */
+export function sessionUsesTarget(session: ProviderSession, executionTargetId: string): boolean {
   return (
     session.providerRuntimeExecutionTargetId === executionTargetId ||
     session.workspaceExecutionTargetId === executionTargetId ||

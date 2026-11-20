@@ -65,6 +65,8 @@ export interface RemoteAgentConnectionBindings {
   ) => Promise<void>;
   readonly hasDurableReferences?: (target: string, connectionId: string) => Promise<boolean>;
   readonly listConnectionIds?: (target: string) => Promise<ReadonlyArray<string>>;
+  /** Drop the target's selected connection after its agent was removed; history is kept. */
+  readonly forgetTarget?: (target: string) => Promise<void>;
 }
 export interface RemoteAgentOwnerStore extends RemoteAgentConnectionBindings {
   /** Read-only keyset discovery. Missing routes or live resources never imply exit. */

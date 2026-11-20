@@ -70,6 +70,22 @@ export function parseSshExecutionTransport(
   return parseSshExecutionTarget(executionTargetId)?.transport;
 }
 
+/**
+ * The same SSH target with another transport, keeping every other parameter and its order, so
+ * the ID matches what the workspace dialog would build for that transport.
+ */
+export function withSshExecutionTransport(
+  executionTargetId: string,
+  transport: SshExecutionTransport,
+): string | null {
+  const target = parseSshExecutionTarget(executionTargetId);
+  if (!target) return null;
+  const raw = target.executionTargetId.slice("ssh:".length).trim();
+  const params = raw.includes("=") ? new URLSearchParams(raw) : new URLSearchParams({ host: raw });
+  params.set("transport", transport);
+  return `ssh:${params.toString()}`;
+}
+
 export function formatSshDestination(target: Pick<SshExecutionTarget, "host" | "user">): string {
   return target.user ? `${target.user}@${target.host}` : target.host;
 }

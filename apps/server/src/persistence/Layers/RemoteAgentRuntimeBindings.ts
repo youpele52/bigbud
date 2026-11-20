@@ -67,6 +67,18 @@ export const makeRemoteAgentRuntimeBindings = Effect.gen(function* () {
         ),
       );
     },
+    forgetTarget: async (target) => {
+      await run(
+        sql.withTransaction(
+          Effect.gen(function* () {
+            yield* sql`DELETE FROM remote_agent_target_admissions WHERE target_id = ${target}`;
+            // The removed runtimes are proven gone; a binding still named by a non-terminal
+            // owner stays so that owner's history keeps resolving.
+            yield* sql`DELETE FROM remote_agent_connection_bindings WHERE target_id = ${target} AND connection_id NOT IN (SELECT json_extract(route_json, '$.connectionId') FROM remote_agent_runtime_owners WHERE json_extract(route_json, '$.target') = ${target} AND json_extract(route_json, '$.state') <> 'terminal' AND json_extract(route_json, '$.connectionId') IS NOT NULL)`;
+          }),
+        ),
+      );
+    },
     hasDurableReferences: async (target, connectionId) => {
       const rows = await run(
         sql<{

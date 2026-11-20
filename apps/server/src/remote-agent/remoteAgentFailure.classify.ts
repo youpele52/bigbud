@@ -101,7 +101,7 @@ function classifyRemoteCommand(
     return {
       kind: "inbox-mismatch",
       message:
-        "The manually placed agent is missing or does not match the signed release. Remove it from ~/.bigbud/agent/inbox on the remote host, run the copied command again, then retry.",
+        "The manually placed agent is missing or does not match the signed release. Remove it from ~/.bigbud/agent/inbox on the remote host, run the copied command again, then choose Finish install.",
     };
   }
   const directory = directoryIssueFrom(stderr);

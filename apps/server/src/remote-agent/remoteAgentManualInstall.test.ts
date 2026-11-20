@@ -18,21 +18,34 @@ describe("manual remote agent install command", () => {
     expect(manual).toEqual({
       executionTargetId: "ssh:fixture",
       version: artifact.version,
-      command: `curl -fsSL https://bigbud.app/remote-agent.sh | BIGBUD_AGENT_VERSION=${artifact.version} sh`,
-      scriptUrl: "https://bigbud.app/remote-agent.sh",
+      command: `curl -fsSL https://bigbud.app/download/v${artifact.version}/remote-agent | BIGBUD_AGENT_VERSION=${artifact.version} sh`,
+      scriptUrl: `https://bigbud.app/download/v${artifact.version}/remote-agent`,
       releaseScriptUrl: `https://github.com/youpele52/bigbud/releases/download/v${artifact.version}/remote-agent.sh`,
       inboxRelativePath: "~/.bigbud/agent/inbox",
     });
   });
 
   it("names a non-default release repository and rejects unsafe identities", () => {
-    expect(
-      buildRemoteAgentManualInstall({
-        executionTargetId: "ssh:fixture",
-        version: "1.2.3",
-        repository: "fork/bigbud",
-      }).command,
-    ).toContain("| BIGBUD_RELEASE_REPOSITORY=fork/bigbud BIGBUD_AGENT_VERSION=1.2.3 sh");
+    const fork = buildRemoteAgentManualInstall({
+      executionTargetId: "ssh:fixture",
+      version: "1.2.3",
+      repository: "fork/bigbud",
+    });
+    const forkScript = "https://github.com/fork/bigbud/releases/download/v1.2.3/remote-agent.sh";
+    expect(fork.scriptUrl).toBe(forkScript);
+    expect(fork.releaseScriptUrl).toBe(forkScript);
+    expect(fork.command).toBe(
+      `curl -fsSL ${forkScript} | BIGBUD_RELEASE_REPOSITORY=fork/bigbud BIGBUD_AGENT_VERSION=1.2.3 sh`,
+    );
+    // A version outside the download-link format uses the release asset, never a 404 link.
+    const metadata = buildRemoteAgentManualInstall({
+      executionTargetId: "ssh:fixture",
+      version: "1.2.3+local",
+    });
+    expect(metadata.scriptUrl).toBe(
+      "https://github.com/youpele52/bigbud/releases/download/v1.2.3+local/remote-agent.sh",
+    );
+    expect(metadata.command).not.toContain("bigbud.app");
     expect(() =>
       buildRemoteAgentManualInstall({ executionTargetId: "ssh:x", version: "1.2.3; rm -rf ~" }),
     ).toThrow("invalid");

@@ -30,6 +30,8 @@ describe("remote agent install integrity boundary", () => {
     const readArtifactBytes = vi.fn(async () => bytes);
     const installArtifact = vi.fn();
     const manager = makeRemoteAgentInstallManager({
+      // Fixture controls are not a real ~/.bigbud/agent; no removal tombstone to finish.
+      resumeRemoval: async () => false,
       probePlacedArtifact: async () => "absent",
       probePlatform: platform,
       readArtifactBytes,
@@ -50,6 +52,8 @@ describe("remote agent install integrity boundary", () => {
     const readArtifactBytes = vi.fn(async () => new Uint8Array([3, 2, 1]));
     const installArtifact = vi.fn();
     const manager = makeRemoteAgentInstallManager({
+      // Fixture controls are not a real ~/.bigbud/agent; no removal tombstone to finish.
+      resumeRemoval: async () => false,
       probePlacedArtifact: async () => "absent",
       probePlatform: platform,
       readArtifactBytes,

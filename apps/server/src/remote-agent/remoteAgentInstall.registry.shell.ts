@@ -1,11 +1,8 @@
 import { MAX_REMOTE_AGENT_REGISTRY_BYTES } from "./remoteAgentInstall.registry.ts";
 import { hasRemoteAgentPathControls } from "./remoteAgentRuntime.ts";
+import { quoteShellArgument as quote } from "./remoteAgentShellQuote.ts";
 
 const encode = (text: string) => Buffer.from(text).toString("base64");
-
-function quote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
-}
 
 /** Linux control metadata lives outside every agent state root and legacy discovery path. */
 export function remoteAgentRegistryShellPrelude(root: string): string {
@@ -55,6 +52,9 @@ sync -f "$control"
 
 export function buildRemoteAgentRegistryRead(root: string): string {
   return `${remoteAgentRegistryShellPrelude(root)}
+# The host's clock, read under the registry lock: removal fences are timed by it, never by a
+# controller's own clock.
+printf 'clock=%s\n' "$(date +%s)"
 if test -f "$registry"; then base64 -w0 "$registry"; else printf 'missing'; fi
 `;
 }

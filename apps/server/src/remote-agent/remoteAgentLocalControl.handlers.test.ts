@@ -96,3 +96,44 @@ it.each(["status", "doctor"] as const)(
     expect(f.hasManagedBuild).not.toHaveBeenCalled();
   },
 );
+
+it("removes only with explicit consent and never for agent tools", async () => {
+  const operations = makeRemoteAgentInstallOperations({
+    stage: async () => ({ version: "0.3.4" }),
+    activate: async () => ({ currentVersion: "0.3.4" }),
+    retire: async () => ({ deferred: 0 }),
+  });
+  const remove = vi.fn(async () => ({
+    outcome: "removed" as const,
+    disconnected: 1,
+    switchedWorkspaceIds: [],
+  }));
+  const base = {
+    operations,
+    hasManagedBuild: async () => true,
+    listSavedTargets: async () => [
+      { executionTargetId: "ssh:host=vps&transport=agent", deleted: false },
+    ],
+    status: async () => ({}),
+    doctor: async () => ({}),
+    remove,
+  };
+  const handle = makeRemoteAgentControlHandler(base);
+  const request = { method: "remove" as const, target: "ssh:host=vps&transport=agent" };
+  expect(await handle({ ...request, switchToDirectSsh: true, consent: false })).toMatchObject({
+    ok: true,
+    result: { status: "confirmation-required" },
+  });
+  expect(remove).not.toHaveBeenCalled();
+  expect(await handle({ ...request, switchToDirectSsh: false, consent: true })).toMatchObject({
+    ok: true,
+    result: { outcome: "removed" },
+  });
+  expect(remove).toHaveBeenCalledWith("ssh:host=vps&transport=agent", false);
+  const tools = makeRemoteAgentControlHandler({ ...base, savedTargetsOnly: true });
+  expect(await tools({ ...request, switchToDirectSsh: true, consent: true })).toMatchObject({
+    ok: false,
+    error: { code: "unsupported-method" },
+  });
+  expect(remove).toHaveBeenCalledOnce();
+});

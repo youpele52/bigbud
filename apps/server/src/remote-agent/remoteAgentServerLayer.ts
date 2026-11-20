@@ -89,6 +89,10 @@ export interface RemoteAgentInstaller {
     executionTargetId: string,
     signal?: AbortSignal,
   ) => Promise<ServerGetRemoteAgentManualInstallResult>;
+  /** Deletes `~/.bigbud/agent` when no live work uses it; blocked results list that work. */
+  readonly remove?: (
+    target: string,
+  ) => Promise<import("./remoteAgentInstall.remove.ts").RemoteAgentRemovalResult>;
 }
 
 export class RemoteAgentInstallerService extends ServiceMap.Service<

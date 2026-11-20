@@ -63,6 +63,7 @@ export function installManagerFixture(
     runRemoteCommand,
     openControl: async () => control,
     probePlacedArtifact: async () => "absent",
+    resumeRemoval: async () => false,
     ...overrides,
   });
   return { manager, control, installArtifact, verifyInstalledAgent, runRemoteCommand };

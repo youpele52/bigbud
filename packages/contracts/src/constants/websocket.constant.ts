@@ -109,6 +109,7 @@ export const WS_METHODS = {
   serverListRemoteFolders: "server.listRemoteFolders",
   serverInstallRemoteAgent: "server.installRemoteAgent",
   serverGetRemoteAgentManualInstall: "server.getRemoteAgentManualInstall",
+  serverRemoveRemoteAgent: "server.removeRemoteAgent",
   serverConnectRemoteAgent: "server.connectRemoteAgent",
   serverRestartRemoteAgent: "server.restartRemoteAgent",
   serverGetRemoteAgentRestartStatus: "server.getRemoteAgentRestartStatus",

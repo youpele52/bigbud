@@ -9,7 +9,8 @@ import {
 } from "./remoteAgentInstall.ts";
 
 /**
- * Manual placement contract shared with `remote-agent.sh`: verified bytes are published to
+ * Manual placement contract shared with `scripts/release-assets/remote-agent.sh` (served through
+ * `https://bigbud.app/download/<ref>/remote-agent`): verified bytes are published to
  * `~/.bigbud/agent/inbox/<sha256>/bigbud-remote-agent` (owner-only, never executed by the script).
  * The inbox stays outside managed `bin` so orphan reclamation never treats it as a payload.
  */

@@ -111,7 +111,7 @@ esac
   return result.trim() === "live" ? "live" : result.trim() === "dead" ? "dead" : "uncertain";
 }
 
-async function awaitSupervisorExit(
+export async function awaitSupervisorExit(
   control: RemoteAgentControl,
   runtime: ReturnType<typeof validateRemoteAgentRuntime>,
 ): Promise<boolean> {

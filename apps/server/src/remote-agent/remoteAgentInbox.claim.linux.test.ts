@@ -12,7 +12,7 @@ import {
 } from "./remoteAgentUpgrade.linux.fixtures.ts";
 
 const script = readFileSync(
-  new URL("../../../marketing/public/remote-agent.sh", import.meta.url),
+  new URL("../../../../scripts/release-assets/remote-agent.sh", import.meta.url),
   "utf8",
 );
 const scriptClaim = script.slice(

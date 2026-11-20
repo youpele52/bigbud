@@ -3,6 +3,8 @@ import { remoteAgentArtifactBuildId } from "./remoteAgentRuntime.ts";
 
 import type { RemoteAgentInstaller } from "./remoteAgentServerLayer.ts";
 import type { RemoteAgentInstallSource } from "./remoteAgentInstallManager.ts";
+import type { RemoteAgentRemovalResult } from "./remoteAgentInstall.remove.ts";
+import { beginRemoteAgentTargetRemoval } from "./remoteAgentConnectionPool.removal.ts";
 import {
   buildRemoteAgentManualInstall,
   remoteAgentManualInstallVersion,
@@ -24,6 +26,11 @@ export function makeRemoteAgentInstaller(input: {
       readonly placement?: "upload" | "managed" | "inbox";
       readonly inboxConflict?: boolean;
     }>;
+    readonly remove?: (input: {
+      readonly executionTargetId: string;
+      readonly closeLocalConnections?: () => void;
+      readonly markRemoving?: () => () => void;
+    }) => Promise<RemoteAgentRemovalResult>;
   };
   readonly loadInstallSource: (signal?: AbortSignal) => Promise<RemoteAgentInstallSource>;
   readonly pool: { readonly close: (executionTargetId: string) => void };
@@ -44,6 +51,18 @@ export function makeRemoteAgentInstaller(input: {
         ...(result.inboxConflict ? { inboxConflict: true } : {}),
       };
     },
+    ...(input.installManager.remove
+      ? {
+          remove: (executionTargetId: string) =>
+            input.installManager.remove!({
+              executionTargetId,
+              // This app's pooled connections must not keep the agent busy during removal.
+              closeLocalConnections: () => input.pool.close(executionTargetId),
+              // The pool must not redial the build being deleted.
+              markRemoving: () => beginRemoteAgentTargetRemoval(executionTargetId),
+            }),
+        }
+      : {}),
     manualInstall: async (executionTargetId, signal) =>
       buildRemoteAgentManualInstall({
         executionTargetId,

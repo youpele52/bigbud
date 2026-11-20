@@ -4,7 +4,7 @@ import type { RemoteAgentRegistry } from "./remoteAgentInstall.registry.ts";
  * Update phases that may still read or start these bytes. `ready-for-reconnect` is a completed
  * install record; it stays on older builds after a newer one becomes current, so it is not a use.
  */
-const IN_FLIGHT_UPDATE_PHASES: ReadonlySet<string> = new Set([
+export const REMOTE_AGENT_IN_FLIGHT_UPDATE_PHASES: ReadonlySet<string> = new Set([
   "waiting-for-capacity",
   "reserved",
   "installing",
@@ -61,7 +61,7 @@ export function remoteAgentBuildIsReferenced(
       (update) =>
         update.buildId === buildId &&
         update.requestId !== options.retirementId &&
-        IN_FLIGHT_UPDATE_PHASES.has(update.phase),
+        REMOTE_AGENT_IN_FLIGHT_UPDATE_PHASES.has(update.phase),
     )
   );
 }
