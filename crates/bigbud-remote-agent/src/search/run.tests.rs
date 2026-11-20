@@ -26,7 +26,7 @@ fn content_paths(batches: &[SearchBatch]) -> Vec<String> {
 }
 
 #[test]
-fn content_search_is_literal_smart_case_and_respects_ignore_rules() {
+fn content_search_is_literal_case_insensitive_and_respects_ignore_rules() {
     let fixture = Fixture::new();
     fixture.write(".git/HEAD", "ref: refs/heads/main\n");
     fixture.write(".gitignore", "ignored.txt\n");
@@ -54,12 +54,13 @@ fn content_search_is_literal_smart_case_and_respects_ignore_rules() {
     assert_eq!(outcome.stop, StopReason::Complete);
     assert!(!outcome.truncated);
 
-    // An uppercase letter makes the search case-sensitive; regex metacharacters are literal.
+    // Matching never depends on the query's case (no smart case); regex metacharacters are
+    // literal.
     let (upper, _) = collect(
         &fixture.request("NEEDLE", WorkspaceSearchMode::Content),
         &cancel,
     );
-    assert_eq!(content_paths(&upper), ["src/a.txt:2"]);
+    assert_eq!(content_paths(&upper), content_paths(&batches));
     let (literal, _) = collect(
         &fixture.request("needle.*", WorkspaceSearchMode::Content),
         &cancel,
@@ -67,6 +68,39 @@ fn content_search_is_literal_smart_case_and_respects_ignore_rules() {
     assert_eq!(content_paths(&literal), ["src/b.txt:2"]);
     let hit = &literal[0].contents[0];
     assert_eq!((hit.root_id.as_str(), hit.matched.column), ("root-a", 1));
+}
+
+#[test]
+fn names_and_contents_match_regardless_of_case() {
+    let fixture = Fixture::new();
+    fixture.write("notes/youpele.md", "Hello youpele\n");
+    fixture.write("notes/YOUPELE-todo.txt", "ÉTÉ plans for YOUPELE\n");
+    fixture.write("notes/été.txt", "été\n");
+    let cancel = AtomicBool::new(false);
+    let (batches, _) = collect(
+        &fixture.request("Youpele", WorkspaceSearchMode::Both),
+        &cancel,
+    );
+    let mut names: Vec<_> = batches
+        .iter()
+        .flat_map(|batch| batch.names.iter())
+        .map(|hit| hit.entry.path.as_str())
+        .collect();
+    names.sort_unstable();
+    assert_eq!(names, ["notes/YOUPELE-todo.txt", "notes/youpele.md"]);
+    assert_eq!(
+        content_paths(&batches),
+        ["notes/YOUPELE-todo.txt:1", "notes/youpele.md:1"]
+    );
+    // Folding is Unicode-aware, not ASCII-only.
+    let (accented, _) = collect(
+        &fixture.request("été", WorkspaceSearchMode::Content),
+        &cancel,
+    );
+    assert_eq!(
+        content_paths(&accented),
+        ["notes/YOUPELE-todo.txt:1", "notes/été.txt:1"]
+    );
 }
 
 #[cfg(unix)]
@@ -142,7 +176,8 @@ fn names_are_ranked_per_root_with_the_shared_scores() {
         .flat_map(|batch| batch.names.iter())
         .map(|hit| (hit.entry.path.as_str(), hit.score))
         .collect();
-    assert_eq!(names[0], ("readme", 0));
+    // Case never filters: the exact name only pays the one-point case-mismatch penalty.
+    assert_eq!(names[0], ("readme", 1));
     assert_eq!(names[1].0, "docs/readme-old.md");
     assert!(
         names

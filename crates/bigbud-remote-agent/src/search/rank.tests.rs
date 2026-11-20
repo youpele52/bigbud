@@ -58,6 +58,9 @@ fn shared_name_rank_fixtures_match_the_typescript_ranker() {
 
 #[test]
 fn trims_like_javascript() {
-    assert_eq!(normalize_query("\u{feff}\u{3000} Main\u{2029}"), "main");
-    assert_eq!(normalize_query("\u{85}main"), "\u{85}main");
+    assert_eq!(
+        normalize_query("\u{feff}\u{3000} Main\u{2029}").folded(),
+        "main"
+    );
+    assert_eq!(normalize_query("\u{85}main").folded(), "\u{85}main");
 }

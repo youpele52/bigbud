@@ -7,11 +7,33 @@ mod tests;
 // Keep these scores aligned with `packages/shared/src/search/nameRank.ts` (Mod+P's local list);
 // `nameRank.fixtures.json` is run by both test suites. UTF-16 indices match JavaScript's fuzzy
 // penalties, including for paths containing non-BMP characters.
-pub(crate) fn normalize_query(query: &str) -> String {
-    query
+
+/// A normalized name query. Every comparison uses `folded`, so case never filters a match;
+/// `exact` (the same text before lowercasing) only earns the exact-case bonus.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NameQuery {
+    exact: String,
+    folded: String,
+}
+
+impl NameQuery {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.folded.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn folded(&self) -> &str {
+        &self.folded
+    }
+}
+
+pub(crate) fn normalize_query(query: &str) -> NameQuery {
+    let exact = query
         .trim_matches(is_javascript_trim_whitespace)
         .trim_start_matches(['@', '.', '/'])
-        .to_lowercase()
+        .to_owned();
+    let folded = exact.to_lowercase();
+    NameQuery { exact, folded }
 }
 
 /// The characters JavaScript's `String.prototype.trim` removes: Unicode `Zs` spaces, the ASCII
@@ -24,37 +46,47 @@ fn is_javascript_trim_whitespace(character: char) -> bool {
     space || separator || other
 }
 
-pub(crate) fn score_entry(entry: &DirectoryEntry, query: &str) -> Option<usize> {
+/// Lower scores are better. Substring classes score `2 * class`, plus one when the match only
+/// holds case-insensitively (the exact-case bonus); fuzzy matches score 100+ (name) or 200+
+/// (path) and ignore case entirely.
+pub(crate) fn score_entry(entry: &DirectoryEntry, query: &NameQuery) -> Option<usize> {
     if query.is_empty() {
         return Some(usize::from(!entry.is_directory));
     }
     let path = entry.path.to_lowercase();
     // rsplit always has an element, even for an empty path.
     let name = path.rsplit('/').next()?;
-    if name == query {
-        return Some(0);
+    if let Some(class) = substring_class(name, &path, &query.folded) {
+        let exact_name = entry.path.rsplit('/').next()?;
+        let exact_case = substring_class(exact_name, &entry.path, &query.exact)
+            .is_some_and(|exact_class| exact_class <= class);
+        return Some(class * 2 + usize::from(!exact_case));
     }
-    if path == query {
-        return Some(1);
-    }
-    if name.starts_with(query) {
-        return Some(2);
-    }
-    if path.starts_with(query) {
-        return Some(3);
-    }
-    if path.contains(&format!("/{query}")) {
-        return Some(4);
-    }
-    if name.contains(query) {
-        return Some(5);
-    }
-    if path.contains(query) {
-        return Some(6);
-    }
-    score_subsequence(name, query)
+    score_subsequence(name, &query.folded)
         .map(|score| 100 + score)
-        .or_else(|| score_subsequence(&path, query).map(|score| 200 + score))
+        .or_else(|| score_subsequence(&path, &query.folded).map(|score| 200 + score))
+}
+
+/// Exact name, exact path, name prefix, path prefix, segment prefix, name substring, then path
+/// substring (0 to 6), compared exactly as given.
+fn substring_class(name: &str, path: &str, query: &str) -> Option<usize> {
+    if name == query {
+        Some(0)
+    } else if path == query {
+        Some(1)
+    } else if name.starts_with(query) {
+        Some(2)
+    } else if path.starts_with(query) {
+        Some(3)
+    } else if path.contains(&format!("/{query}")) {
+        Some(4)
+    } else if name.contains(query) {
+        Some(5)
+    } else if path.contains(query) {
+        Some(6)
+    } else {
+        None
+    }
 }
 
 fn score_subsequence(value: &str, query: &str) -> Option<usize> {

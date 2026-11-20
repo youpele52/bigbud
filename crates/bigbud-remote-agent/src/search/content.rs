@@ -20,10 +20,11 @@ pub struct LineMatch {
     pub excerpt: String,
 }
 
-/// Literal, smart-case matcher (`rg --fixed-strings --smart-case`).
+/// Literal, always case-insensitive matcher (`rg --fixed-strings --ignore-case`). Folding is
+/// Unicode simple case folding, so `Youpele` finds `youpele` and `ÉTÉ` finds `été`.
 pub fn build_matcher(query: &str) -> Result<RegexMatcher, grep_regex::Error> {
     RegexMatcherBuilder::new()
-        .case_smart(true)
+        .case_insensitive(true)
         .fixed_strings(true)
         .build(query)
 }

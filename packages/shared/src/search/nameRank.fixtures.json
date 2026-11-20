@@ -57,24 +57,24 @@
           "score": 0
         },
         {
-          "path": "docs/README.md",
-          "score": 2
-        },
-        {
           "path": "src/components/readme-utils.ts",
-          "score": 2
+          "score": 4
         },
         {
-          "path": "readmeta/notes.txt",
-          "score": 3
-        },
-        {
-          "path": "docs/my-readme.txt",
+          "path": "docs/README.md",
           "score": 5
         },
         {
-          "path": "notreadmexyz/a.txt",
+          "path": "readmeta/notes.txt",
           "score": 6
+        },
+        {
+          "path": "docs/my-readme.txt",
+          "score": 10
+        },
+        {
+          "path": "notreadmexyz/a.txt",
+          "score": 12
         },
         {
           "path": "src/r-e-a-d-m-e.ts",
@@ -115,23 +115,23 @@
       "expected": [
         {
           "path": "B.ts",
-          "score": 5
+          "score": 10
         },
         {
           "path": "Zeta.ts",
-          "score": 5
+          "score": 10
         },
         {
           "path": "_.ts",
-          "score": 5
+          "score": 10
         },
         {
           "path": "a.ts",
-          "score": 5
+          "score": 10
         },
         {
           "path": "é.ts",
-          "score": 5
+          "score": 10
         }
       ]
     },
@@ -168,11 +168,11 @@
         },
         {
           "path": "apps/web/src/main.tsx",
-          "score": 2
+          "score": 4
         },
         {
           "path": "src/main.rs",
-          "score": 2
+          "score": 4
         }
       ]
     },
@@ -197,15 +197,15 @@
       "expected": [
         {
           "path": "command",
-          "score": 0
-        },
-        {
-          "path": "docs/COMMANDS.md",
-          "score": 2
+          "score": 1
         },
         {
           "path": "src/layout/CommandPalette.tsx",
-          "score": 2
+          "score": 4
+        },
+        {
+          "path": "docs/COMMANDS.md",
+          "score": 5
         }
       ]
     },
@@ -230,7 +230,7 @@
       "expected": [
         {
           "path": "😀/ÄBC.md",
-          "score": 2
+          "score": 5
         },
         {
           "path": "x😀ä😀b😀c.txt",
@@ -271,7 +271,7 @@
       "expected": [
         {
           "path": "cpw.ts",
-          "score": 2
+          "score": 4
         },
         {
           "path": "c-p-w.ts",
@@ -304,7 +304,7 @@
       "expected": [
         {
           "path": "main.ts",
-          "score": 2
+          "score": 4
         }
       ]
     },
@@ -319,6 +319,117 @@
         }
       ],
       "expected": []
+    },
+    {
+      "name": "case never filters; a match in the query's exact case scores one point better",
+      "query": "Readme",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "README.md",
+          "kind": "file"
+        },
+        {
+          "path": "readme.md",
+          "kind": "file"
+        },
+        {
+          "path": "Readme.md",
+          "kind": "file"
+        },
+        {
+          "path": "docs/ReadMe.txt",
+          "kind": "file"
+        },
+        {
+          "path": "unrelated.txt",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "Readme.md",
+          "score": 4
+        },
+        {
+          "path": "README.md",
+          "score": 5
+        },
+        {
+          "path": "docs/ReadMe.txt",
+          "score": 5
+        },
+        {
+          "path": "readme.md",
+          "score": 5
+        }
+      ]
+    },
+    {
+      "name": "a capitalised query finds lowercase, uppercase and mixed-case names",
+      "query": "Youpele",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "notes/youpele.md",
+          "kind": "file"
+        },
+        {
+          "path": "YOUPELE",
+          "kind": "directory"
+        },
+        {
+          "path": "src/Youpele/a.ts",
+          "kind": "file"
+        },
+        {
+          "path": "y-o-u-p-e-l-e.txt",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "YOUPELE",
+          "score": 1
+        },
+        {
+          "path": "notes/youpele.md",
+          "score": 5
+        },
+        {
+          "path": "src/Youpele/a.ts",
+          "score": 8
+        },
+        {
+          "path": "y-o-u-p-e-l-e.txt",
+          "score": 134
+        }
+      ]
+    },
+    {
+      "name": "non-ASCII letters fold too, with the same exact-case bonus",
+      "query": "été",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "Docs/ÉTÉ.md",
+          "kind": "file"
+        },
+        {
+          "path": "été.txt",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "été.txt",
+          "score": 4
+        },
+        {
+          "path": "Docs/ÉTÉ.md",
+          "score": 5
+        }
+      ]
     },
     {
       "name": "a query of only separators matches everything, folders first",

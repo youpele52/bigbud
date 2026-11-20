@@ -81,23 +81,26 @@ fn candidate(path: &str, is_directory: bool) -> DirectoryEntry {
 
 #[test]
 fn scoring_matches_existing_exact_prefix_substring_and_fuzzy_priorities() {
+    // Substring classes score `2 * class`, plus one when only a case-insensitive match holds.
     for (path, query, expected) in [
-        ("src/MAIN", "main", 0),
-        ("src/main", "src/main", 1),
-        ("src/main.rs", "main", 2),
-        ("src/main.rs", "src/ma", 3),
+        ("src/MAIN", "MAIN", 0),
+        ("src/MAIN", "main", 1),
+        ("src/main", "Main", 1),
+        ("src/main", "src/main", 2),
+        ("src/main.rs", "main", 4),
+        ("src/main.rs", "src/ma", 6),
         ("src/main.rs", "main.rs/", usize::MAX),
         ("src/main.rs", "main.rs", 0),
-        ("lib/main/file.rs", "main/", 4),
-        ("src/domain.rs", "main", 5),
-        ("lib/domain/file.rs", "main/", 6),
+        ("lib/main/file.rs", "main/", 8),
+        ("src/domain.rs", "main", 10),
+        ("lib/domain/file.rs", "main/", 12),
         ("abxc", "abc", 105),
         ("a/b/c", "abc", 210),
         ("😀abxc", "abc", 111),
     ] {
         let expected = (expected != usize::MAX).then_some(expected);
         assert_eq!(
-            rank::score_entry(&candidate(path, false), query),
+            rank::score_entry(&candidate(path, false), &rank::normalize_query(query)),
             expected,
             "{path}: {query}"
         );
@@ -334,26 +337,24 @@ fn filename_search_skips_unrepresentable_discovered_names() {
 }
 
 #[test]
-fn content_search_uses_smart_case_and_excludes_ignored_directories() {
+fn content_search_ignores_case_and_excludes_ignored_directories() {
     let root = Fixture::new();
     root.file("src/main.rs");
     root.file("node_modules/hidden.rs");
     let workspace = root.workspace();
-    // Regression: a lowercase query used to miss `Needle`; smart case now matches both lines,
-    // while a query with an uppercase letter stays case-sensitive (`rg --smart-case`).
-    let results = workspace.search_content("", "needle", 10).unwrap();
-    let found: Vec<_> = results
-        .iter()
-        .map(|hit| (&*hit.path, hit.line, hit.column))
-        .collect();
-    assert_eq!(found, [("src/main.rs", 1, 1), ("src/main.rs", 2, 1)]);
-    let upper = workspace.search_content("", "Needle", 10).unwrap();
-    assert_eq!(upper.iter().map(|hit| hit.line).collect::<Vec<_>>(), [2]);
-    assert!(
-        workspace
-            .search_content("", "NEEDLE", 10)
-            .unwrap()
-            .is_empty()
-    );
+    // Regression: a lowercase query used to miss `Needle`. Matching is now always
+    // case-insensitive, whatever the query's case (`rg --ignore-case`, no smart case).
+    for query in ["needle", "Needle", "NEEDLE"] {
+        let results = workspace.search_content("", query, 10).unwrap();
+        let found: Vec<_> = results
+            .iter()
+            .map(|hit| (&*hit.path, hit.line, hit.column))
+            .collect();
+        assert_eq!(
+            found,
+            [("src/main.rs", 1, 1), ("src/main.rs", 2, 1)],
+            "{query}"
+        );
+    }
     assert!(workspace.search_names("", "hidden", 10).unwrap().is_empty());
 }

@@ -69,6 +69,8 @@ const makeProjectionCatalogQuery = Effect.gen(function* () {
       sql`SELECT MIN(last_applied_sequence) AS "projectionSequence" FROM projection_state`,
   });
 
+  // Title search is case-insensitive through SQLite `lower`, which folds ASCII only: SQLite has
+  // no Unicode `lower` without ICU, and the bun:sqlite read worker cannot register a function.
   const readProjects = SqlSchema.findAll({
     Request: ProjectCatalogQueryRequest,
     Result: ProjectCatalogDbRow,

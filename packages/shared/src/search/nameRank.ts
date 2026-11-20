@@ -6,6 +6,9 @@
  *
  * Positions are UTF-16 code units, like JavaScript string indices; the Rust side counts the same
  * units, including for paths with non-BMP characters.
+ *
+ * Matching is always case-insensitive (both sides compare lowercased text), so case never filters
+ * a result. A match that also holds in the query's exact case scores one point better.
  */
 export interface NameRankCandidate {
   readonly path: string;
@@ -35,12 +38,33 @@ export function nameRankFields(path: string): {
   };
 }
 
-/** Trims, drops leading `@`, `.` and `/`, and lowercases (rank.rs `normalize_query`). */
-export function normalizeNameRankQuery(input: string): string {
-  return input
-    .trim()
-    .replace(/^[@./]+/, "")
-    .toLowerCase();
+/** A normalized query (rank.rs `NameQuery`): `folded` is compared; `exact` earns the case bonus. */
+export interface NameRankQuery {
+  /** Trimmed, without leading `@`, `.` and `/`, original case. */
+  readonly exact: string;
+  /** `exact` lowercased; every comparison uses it. */
+  readonly folded: string;
+}
+
+/** Trims, drops leading `@`, `.` and `/`, and keeps a lowercased copy (rank.rs `normalize_query`). */
+export function normalizeNameRankQuery(input: string): NameRankQuery {
+  const exact = input.trim().replace(/^[@./]+/, "");
+  return { exact, folded: exact.toLowerCase() };
+}
+
+/**
+ * Exact name, exact path, name prefix, path prefix, segment prefix, name substring, then path
+ * substring (0 to 6), compared exactly as given (rank.rs `substring_class`).
+ */
+function substringClass(name: string, path: string, query: string): number | null {
+  if (name === query) return 0;
+  if (path === query) return 1;
+  if (name.startsWith(query)) return 2;
+  if (path.startsWith(query)) return 3;
+  if (path.includes(`/${query}`)) return 4;
+  if (name.includes(query)) return 5;
+  if (path.includes(query)) return 6;
+  return null;
 }
 
 export function scoreSubsequenceMatch(value: string, query: string): number | null {
@@ -75,28 +99,35 @@ export function scoreSubsequenceMatch(value: string, query: string): number | nu
   return null;
 }
 
-/** Score for an already normalized query, or `null` when the entry does not match. */
-export function scoreNameRankCandidate(entry: NameRankCandidate, query: string): number | null {
-  if (!query) {
+/**
+ * Score for a normalized query, or `null` when the entry does not match. Lower is better.
+ * Substring classes score `2 * class`, plus one when the match only holds case-insensitively;
+ * fuzzy matches score 100+ (name) or 200+ (path) and ignore case entirely.
+ */
+export function scoreNameRankCandidate(
+  entry: NameRankCandidate,
+  query: NameRankQuery,
+): number | null {
+  if (!query.folded) {
     return entry.kind === "directory" ? 0 : 1;
   }
 
   const { normalizedPath, normalizedName } = entry;
 
-  if (normalizedName === query) return 0;
-  if (normalizedPath === query) return 1;
-  if (normalizedName.startsWith(query)) return 2;
-  if (normalizedPath.startsWith(query)) return 3;
-  if (normalizedPath.includes(`/${query}`)) return 4;
-  if (normalizedName.includes(query)) return 5;
-  if (normalizedPath.includes(query)) return 6;
+  const matchClass = substringClass(normalizedName, normalizedPath, query.folded);
+  if (matchClass !== null) {
+    const exactName = entry.path.slice(entry.path.lastIndexOf("/") + 1);
+    const exactClass = substringClass(exactName, entry.path, query.exact);
+    const exactCase = exactClass !== null && exactClass <= matchClass;
+    return matchClass * 2 + (exactCase ? 0 : 1);
+  }
 
-  const nameFuzzyScore = scoreSubsequenceMatch(normalizedName, query);
+  const nameFuzzyScore = scoreSubsequenceMatch(normalizedName, query.folded);
   if (nameFuzzyScore !== null) {
     return 100 + nameFuzzyScore;
   }
 
-  const pathFuzzyScore = scoreSubsequenceMatch(normalizedPath, query);
+  const pathFuzzyScore = scoreSubsequenceMatch(normalizedPath, query.folded);
   if (pathFuzzyScore !== null) {
     return 200 + pathFuzzyScore;
   }

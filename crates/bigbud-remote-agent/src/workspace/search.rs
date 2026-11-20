@@ -122,8 +122,8 @@ impl WorkspaceRoot {
     }
 
     /// Legacy `ContentSearchRequest`, now served by the ripgrep-library engine: literal
-    /// smart-case matching, ignore files respected, links skipped (no longer an abort), binary
-    /// and oversized files skipped. Results are sorted by path and line for stable answers.
+    /// case-insensitive matching, ignore files respected, links skipped (no longer an abort),
+    /// binary and oversized files skipped. Results are sorted by path and line for stable answers.
     pub fn search_content(
         &self,
         relative_path: &str,

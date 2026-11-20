@@ -186,7 +186,7 @@ pub fn run_search(
                 halt: &halt,
                 cancel,
                 files_scanned: &files_scanned,
-                name_query: search_names.then_some(name_query.as_str()),
+                name_query: search_names.then_some(&name_query),
                 matcher: matcher.as_ref(),
             };
             let background = request.background;
@@ -293,7 +293,7 @@ struct RootVisit<'a> {
     halt: &'a AtomicBool,
     cancel: &'a AtomicBool,
     files_scanned: &'a AtomicU64,
-    name_query: Option<&'a str>,
+    name_query: Option<&'a rank::NameQuery>,
     matcher: Option<&'a RegexMatcher>,
 }
 

@@ -28,8 +28,10 @@ export type SearchHitRow = typeof SearchHitRow.Type;
 
 /**
  * Current-thread matches through the thread's own index and a substring scan, so 1–2 code point
- * queries work. Case folding is ASCII-only (`lower`); longer non-ASCII queries are still found
- * case-insensitively by the global FTS page, which the client folds into the same tier.
+ * queries work. Case folding is ASCII-only (`lower`): SQLite has no Unicode `lower` without ICU,
+ * and the bun:sqlite read worker cannot register a function. Queries of three or more code points
+ * are still found case-insensitively, including non-ASCII letters, by the global FTS page (the
+ * trigram tokenizer folds Unicode case), which the client folds into the same tier.
  */
 export function makeCurrentThreadSearch(sql: SqlClient.SqlClient) {
   return SqlSchema.findAll({

@@ -283,8 +283,9 @@ The new capability folder has a lean `mod.rs`. Each file stays at or under 400 l
   - Always skips `.git`, `node_modules`, `target`, `.bigbud`, `.next`, `.turbo`, `.convex`, `dist`, `build`, `out` and `.cache`, through overrides. That is the union of today's agent and server lists.
   - Never follows symlinks or junctions, and skips names that are not valid UTF-8.
 - `search/names.rs`: filename scoring through the existing `rank` module, moved under `search/`. Keeps a bounded top-K heap per root.
+  - Names always match case-insensitively (both sides lowercased); case never filters. A substring match that also holds in the query's exact case scores one point better (class `c` scores `2c`, or `2c + 1` when only the folded match holds); fuzzy matches ignore case.
 - `search/content.rs`:
-  - `grep-searcher` with literal smart-case matching (`grep-regex` with `fixed_strings`).
+  - `grep-searcher` with literal, always case-insensitive matching (`grep-regex` with `fixed_strings` and `case_insensitive`, Unicode simple case folding). No smart case: `Youpele` finds `youpele`.
   - Binary detection with `quit(0)` (stop at the first NUL byte).
   - Skips files over 5 MiB.
   - At most 5 matches per file; excerpts at most 512 characters.
@@ -601,7 +602,7 @@ VMs/VPSes, regardless of platform.
 
 - **Rust** (`cargo test --locked -p bigbud-remote-agent`, crate-scoped Clippy, `cargo fmt` on changed files):
   - walker rules: gitignore, overrides, hidden files, symlink and junction skipping, non-UTF-8 names;
-  - smart case;
+  - case-insensitive matching whatever the query's case (no smart case);
   - binary skip;
   - size cap;
   - per-file and global limits;
@@ -685,6 +686,16 @@ VMs/VPSes, regardless of platform.
   - Index staleness: the `plocate` database is refreshed by a daily `updatedb` timer, so files created today can be missing for up to a day (deleted files are filtered). The palette and Settings copy should say "results may be up to a day old" on Linux.
   - Wiring follow-ups outside `os_index` (done with Phase 8, see below): (1) `session/os_index_search.rs` resolves home from `HOME`, which is normally unset on Windows; it should call `os_index::home_folder()`. (2) The server's `OS_INDEX_SOURCE_ID` is the constant `"spotlight"`, and Settings, the hint and the unavailable notice say "Spotlight"/"this Mac"; they need per-platform copy (Windows Search, `plocate`) and the Linux staleness note. (3) Whether the server enables `--os-index` on Windows and Linux desktop builds has to be confirmed in the running app.
   - Tests: pure SQL and glob escaping with injection attempts (mutation-checked: removing any escape fails a test), `SCOPE` literals, verbatim-prefix and scope-spelling rules, `user-dirs.dirs` parsing, Windows and Linux layouts, NUL record parsing across chunks, exit classification and fallback compatibility. Fake `plocate`/`locate` programs (any Unix) cover one-argument query passing, scope/exclusion/stale-row filtering, kill on limit, deadline and cancel, unavailable on error, crash or missing programs, and the `mlocate` fallback. `locate.live.tests.rs` (Linux only, skipped with a reason when `plocate` is missing; optional `BIGBUD_LIVE_LOCATE_MARKER` escaping check after `updatedb`) and `windows_search.tests.rs` (Windows only) are compiled for their targets but have not run.
+- **Connected hosts and palette notices (uncommitted).** Root cause of "<host> is not connected" for a host open in a remote terminal: `liveConnection` read only `selectedEntries`, which only `get`/`admitReplacement` fill; durable terminals, owned processes and shell-profile checks connect through `getBound`, so their ready connections were invisible to search. `liveConnection` (`remoteAgentConnectionPool.live.ts`) now prefers the selected entry and otherwise returns the newest ready entry from any service, skipping closed, retiring and user-disconnected ones. It still never dials. Old agents on such a link are searched through the legacy filename fallback (`agent-update-available`). Palette (Mod+F and Mod+P, `summarizeSearchNotices`): `not-connected` is silent; failures show once each in red; every other hint folds into one muted "N hosts not fully searched" line with per-source reasons in a tooltip. This supersedes the "shown as not connected" wording in Phase 3 and Pending live verification. Tests: `remoteAgentConnectionPool.live.test.ts`, `SystemSearch.connectedHost.test.ts`, `SearchPalette.notices.logic.test.ts` (mutation-checked).
+- **Case-insensitive search everywhere (uncommitted).** User requirement: search must not be case-sensitive, especially for file names. Before → after, per path:
+  - Engine content search (`search/content.rs`; also the legacy `ContentSearchRequest`): smart case (an uppercase letter made the query case-sensitive) → always case-insensitive with Unicode simple case folding; still literal.
+  - Name ranking (`@bigbud/shared/search/nameRank` for Mod+P's local list via `WorkspaceEntries`; `search/rank.rs` for engine names mode, the legacy `FilenameSearchRequest` and OS-index ordering): already case-insensitive, with no case preference → still case-insensitive, plus the exact-case bonus in §2. Scores are only compared for order (`score` is "lower is better" on the wire), so doubling the substring classes changes no consumer. New shared fixtures cover `Readme`, `Youpele` and `été`.
+  - SSH-only `rg` (`WorkspaceFileSystem.search.ts`): `--smart-case` → `--ignore-case`. It still treats the query as a regex, unlike the engine; unchanged here.
+  - Saved messages, global and current-project pages (FTS5 `trigram`, default `case_sensitive=0`): already case-insensitive with Unicode folding; unchanged (tests: `SEEK HAR`, `CAFÉ`).
+  - Saved messages, current-thread substring scan, and project catalog title search: SQLite `lower`, which folds ASCII only → unchanged and documented in code. SQLite has no Unicode `lower` without ICU, and the `bun:sqlite` read worker cannot register a function. Current-thread queries of three or more code points still fold non-ASCII through the global FTS page.
+  - Terminal scrollback, thread titles and messages, and current-file matches in the palette: JavaScript `toLowerCase` on both sides (Unicode-aware) → unchanged; non-ASCII title and file-line tests added.
+  - OS index: Spotlight `"cd"` (case- and diacritic-insensitive), Windows Search `System.FileName LIKE` (case-insensitive) and `plocate`/`locate -i` → verified, unchanged. Existing tests assert `cd` and `-i`; the Windows behaviour has not been run live.
+  - Tests: `names_and_contents_match_regardless_of_case` and the updated content tests (restoring smart case fails three Rust tests); shared fixtures (making the ranker case-sensitive fails both the TS and Rust fixture tests); a Mod+P `WorkspaceEntries` test (`Youpele` finds `src/Youpele.ts`, `docs/YOUPELE.txt` and `notes/youpele.md`, in that order); the SSH `rg` arguments (restoring `--smart-case` fails it).
 
 ## Pending live verification
 

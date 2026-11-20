@@ -116,7 +116,8 @@ function parseRipgrepJsonMatches(stdout: string): ProjectFileContentMatch[] {
 
 /**
  * Direct-SSH hosts (no managed agent) keep `rg` on the host (plan Q5). Results carry the
- * `use-managed-agent` notice so the client can suggest the faster agent search.
+ * `use-managed-agent` notice so the client can suggest the faster agent search. Matching is always
+ * case-insensitive (`--ignore-case`, not smart case), like the agent's engine.
  */
 export const searchRemoteFileContentsViaSsh = Effect.fn("WorkspaceFileSystem.searchRemoteViaSsh")(
   function* (input: ProjectSearchFileContentsInput & { readonly executionTargetId: string }) {
@@ -132,7 +133,7 @@ export const searchRemoteFileContentsViaSsh = Effect.fn("WorkspaceFileSystem.sea
             args: [
               "--json",
               "--hidden",
-              "--smart-case",
+              "--ignore-case",
               ...WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS.flatMap((glob) => ["--glob", glob]),
               "--",
               input.query,

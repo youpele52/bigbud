@@ -225,6 +225,11 @@ describe("findThreadSearchMatch", () => {
     });
   });
 
+  it("folds non-ASCII case in thread titles", () => {
+    const accented = createMockThread({ id: "thread-3" as ThreadId, title: "Été Plans" });
+    expect(findThreadSearchMatch(accented, "ÉTÉ").matches).toBe(true);
+  });
+
   it("is case-insensitive for thread messages", () => {
     expect(findThreadSearchMatch(thread, "VALIDATION")).toEqual({
       matches: true,
@@ -289,6 +294,12 @@ describe("findFileSearchMatches", () => {
     expect(findFileSearchMatches("first\nNeedle here\nneedle again", "NEEDLE")).toEqual([
       { line: 2, lineText: "Needle here" },
       { line: 3, lineText: "needle again" },
+    ]);
+  });
+
+  it("folds non-ASCII case in file lines", () => {
+    expect(findFileSearchMatches("ÉTÉ plans\nother", "été")).toEqual([
+      { line: 1, lineText: "ÉTÉ plans" },
     ]);
   });
 

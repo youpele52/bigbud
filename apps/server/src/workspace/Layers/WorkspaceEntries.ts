@@ -362,13 +362,13 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
           });
       return yield* indexEffect.pipe(
         Effect.map((index) => {
-          const normalizedQueryStr = normalizeNameRankQuery(input.query);
+          const normalizedQuery = normalizeNameRankQuery(input.query);
           const limit = Math.max(0, Math.floor(input.limit));
           const rankedEntries: RankedName<SearchableWorkspaceEntry>[] = [];
           let matchedEntryCount = 0;
 
           for (const entry of index.entries) {
-            const score = scoreNameRankCandidate(entry, normalizedQueryStr);
+            const score = scoreNameRankCandidate(entry, normalizedQuery);
             if (score === null) {
               continue;
             }

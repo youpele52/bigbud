@@ -146,9 +146,11 @@ it.layer(TestLayer)("WorkspaceFileSystem remote fallback", (it) => {
         expect(runToolCommand).toHaveBeenCalledWith(
           expect.objectContaining({
             command: "rg",
+            args: expect.arrayContaining(["--ignore-case"]),
             allowNonZeroExit: true,
           }),
         );
+        expect(vi.mocked(runToolCommand).mock.lastCall?.[0].args).not.toContain("--smart-case");
       }),
     );
   });
