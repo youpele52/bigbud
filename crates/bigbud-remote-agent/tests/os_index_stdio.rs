@@ -128,14 +128,27 @@ fn desktop_agent_serves_os_index_search_inside_the_scope_and_accepts_cancel() {
     assert!(advertised);
     send(&mut child, request("desktop-1"));
     let (hits, done) = finish(&mut reader, "desktop-1");
-    if cfg!(target_os = "macos") {
-        assert_eq!(done.source, "spotlight");
-        assert!(
-            done.error_code.is_empty() || done.error_code == "UNAVAILABLE",
-            "{done:?}"
-        );
+    // macOS, Windows and Linux have OS index adapters (Spotlight, Windows Search, plocate); a host
+    // whose index is off or missing (e.g. no plocate on CI) answers UNAVAILABLE. Other platforms
+    // have none.
+    let expected_source = if cfg!(target_os = "macos") {
+        Some("spotlight")
+    } else if cfg!(windows) {
+        Some("windows-search")
+    } else if cfg!(target_os = "linux") {
+        Some("locate")
     } else {
-        assert_eq!(done.error_code, "UNSUPPORTED");
+        None
+    };
+    match expected_source {
+        Some(source) => {
+            assert_eq!(done.source, source, "{done:?}");
+            assert!(
+                done.error_code.is_empty() || done.error_code == "UNAVAILABLE",
+                "{done:?}"
+            );
+        }
+        None => assert_eq!(done.error_code, "UNSUPPORTED", "{done:?}"),
     }
     let scope = home.join("Documents");
     assert!(
