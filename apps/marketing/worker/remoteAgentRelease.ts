@@ -89,6 +89,19 @@ export function selectRelease(
   return newest;
 }
 
+/**
+ * Distinct valid tags of exactly this channel, newest first, for sources that list bare tags
+ * without release flags or assets (the releases Atom feed). Never falls back across channels.
+ */
+export function rankChannelTags(channel: DownloadChannel, tags: readonly string[]): string[] {
+  const ranked = new Set<string>();
+  for (const tag of tags) {
+    const normalized = normalizeReleaseTag(tag);
+    if (normalized && releaseChannelOf(normalized) === channel) ranked.add(normalized);
+  }
+  return [...ranked].toSorted((left, right) => compareReleaseTags(right, left));
+}
+
 function readString(value: unknown): string | null {
   return typeof value === "string" ? value : null;
 }

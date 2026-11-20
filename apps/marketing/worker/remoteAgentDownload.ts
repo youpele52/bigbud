@@ -1,14 +1,9 @@
 import {
-  MAX_RELEASE_PAGES,
-  isFullReleasePage,
   parseDownloadRef,
-  remoteAgentReleasesApiUrl,
-  parseReleaseSummaries,
   remoteAgentDownloadLocation,
-  selectRelease,
   type DownloadChannel,
-  type ReleaseSummary,
 } from "./remoteAgentRelease";
+import { NO_RELEASE, resolveChannelRelease } from "./remoteAgentSources";
 
 /** Request handling for `/download/<ref>/remote-agent`, with injected platform services. */
 
@@ -26,11 +21,8 @@ export interface RemoteAgentDownloadDeps {
 export const CHANNEL_CACHE_SECONDS = 300;
 export const LAST_GOOD_CACHE_SECONDS = 7 * 24 * 60 * 60;
 export const PINNED_REDIRECT_CACHE_SECONDS = 24 * 60 * 60;
-export const GITHUB_API_TIMEOUT_MS = 5_000;
 const CACHE_KEY_BASE = "https://bigbud.app/__cache/remote-agent";
 const BETA_DOWNLOAD_URL = "https://bigbud.app/download/beta/remote-agent";
-/** Cached body for "this channel has no release that ships the script". */
-const NO_RELEASE = "none";
 
 function textResponse(status: number, message: string): Response {
   return new Response(`${message}\n`, {
@@ -80,38 +72,6 @@ function storeCached(deps: RemoteAgentDownloadDeps, key: string, value: string, 
   deps.waitUntil(deps.cache.put(key, response).catch(() => undefined));
 }
 
-/**
- * Resolves the channel through the GitHub API, reading a bounded number of pages so a quiet
- * channel is still found behind newer releases of another one. `null` means the API could not
- * answer; a failed page never turns into "no release".
- */
-async function fetchChannelResolution(
-  deps: RemoteAgentDownloadDeps,
-  channel: DownloadChannel,
-): Promise<string | null> {
-  const headers: Record<string, string> = {
-    Accept: "application/vnd.github+json",
-    "User-Agent": "bigbud-download",
-  };
-  const token = deps.env.GITHUB_TOKEN?.trim();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const signal = AbortSignal.timeout(GITHUB_API_TIMEOUT_MS);
-  const releases: ReleaseSummary[] = [];
-  try {
-    for (let page = 1; page <= MAX_RELEASE_PAGES; page += 1) {
-      const response = await deps.fetch(remoteAgentReleasesApiUrl(page), { headers, signal });
-      if (!response.ok) return null;
-      const payload: unknown = await response.json();
-      if (!Array.isArray(payload)) return null;
-      releases.push(...parseReleaseSummaries(payload));
-      if (!isFullReleasePage(payload.length)) break;
-    }
-  } catch {
-    return null;
-  }
-  return selectRelease(channel, releases) ?? NO_RELEASE;
-}
-
 function resolutionResponse(channel: DownloadChannel, resolution: string): Response {
   if (resolution === NO_RELEASE) return textResponse(404, noReleaseMessage(channel));
   const location = remoteAgentDownloadLocation(resolution);
@@ -142,7 +102,7 @@ export async function handleRemoteAgentDownload(
   const fresh = await readCached(deps, keys.fresh);
   if (fresh) return resolutionResponse(ref.channel, fresh);
 
-  const resolved = await fetchChannelResolution(deps, ref.channel);
+  const resolved = await resolveChannelRelease(deps, ref.channel);
   if (resolved) {
     storeCached(deps, keys.fresh, resolved, CHANNEL_CACHE_SECONDS);
     // The long-lived fallback only ever holds a real release, never "none".

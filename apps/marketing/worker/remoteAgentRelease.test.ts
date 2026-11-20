@@ -4,6 +4,7 @@ import {
   compareReleaseTags,
   parseDownloadRef,
   parseReleaseSummaries,
+  rankChannelTags,
   remoteAgentDownloadLocation,
   selectRelease,
   type ReleaseSummary,
@@ -106,6 +107,20 @@ describe("selectRelease", () => {
 
   it("ignores tags that do not match the release pattern", () => {
     expect(selectRelease("beta", [release("v0.4.0-beta.1/../x")])).toBeNull();
+  });
+});
+
+describe("rankChannelTags", () => {
+  const tags = ["v0.4.0-beta.9", "0.4.0-beta.10", "v0.4.0-beta.10", "v0.4.0", "v0.4.0-preview.1"];
+
+  it("returns distinct tags of the channel, newest first", () => {
+    expect(rankChannelTags("beta", tags)).toEqual(["v0.4.0-beta.10", "v0.4.0-beta.9"]);
+    expect(rankChannelTags("stable", tags)).toEqual(["v0.4.0"]);
+    expect(rankChannelTags("nightly", tags)).toEqual([]);
+  });
+
+  it("drops invalid tags", () => {
+    expect(rankChannelTags("beta", ["v0.4.0-beta.1/../x", "v0.4.0-beta.01", "beta"])).toEqual([]);
   });
 });
 
