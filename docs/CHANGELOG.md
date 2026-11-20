@@ -11,14 +11,15 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **[Edit files without leaving bigbud](#edit-files-without-leaving-bigbud):** Update code, Markdown, and text files directly in the Files panel, with automatic saving and clear feedback when something needs your attention.
 - **[Move swiftly, browse easily](#lighter-loading-for-larger-chat-histories):** Browse large chat histories with less memory use. Older messages load as you scroll, and long replies expand when you need them.
 
-## v0.3.4 (10 November, 2026)
+## v0.4.0 (21 November, 2026)
 
 ### Work Across Projects From One Chat
 
-- **Ask a chat to help in another project:** Have an agent message, rename, move, or snooze chats in any of your projects, including remote ones, or start a new chat there. Checking another chat's status works anywhere, with no prompt.
-- **Point it at a chat and it just happens:** Attach a chat from another project and ask, and the agent does it with no extra question. bigbud only asks when an agent wants to change a chat you didn't point it to: click **Allow** or **Deny**, or just reply yes or no. A yes lets that chat work in that project until bigbud restarts, and a no stops only that one change. Chats in the same project, and chats it started for you, work as before.
+- **Ask a chat to help in another project:** Have an agent message, rename, move, or snooze chats in any of your projects, including remote ones, or start a new chat there. Checking another chat's status works anywhere, without a prompt.
+- **Point it at a chat and it just happens:** Attach a chat from another project and ask. The agent acts without an extra question. Chats in the same project, and chats the agent started for you, work as before.
+- **Answer only when it matters:** bigbud asks when an agent wants to change a chat you didn't point it to. Click **Allow** or **Deny**, or just reply yes or no. A yes lets that chat work in that project until bigbud restarts; a no stops only that one change.
 - **Stay in control:** bigbud checks your answer itself, so an agent cannot approve on your behalf, even with full access. The other chat keeps its own access settings and approvals.
-- **Keep messages correctly labeled:** A message from another agent that waits while a chat is busy now stays marked as coming from that agent, rather than looking like something you typed.
+- **Keep messages correctly labeled:** A message from another agent that waits while a chat is busy stays marked as coming from that agent, rather than looking like something you typed.
 
 ## v0.3.3 (8 November, 2026)
 
