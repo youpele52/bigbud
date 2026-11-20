@@ -1,0 +1,85 @@
+/*
+ * Window material surfaces. On macOS the desktop shell applies native vibrancy and clears the
+ * window background (`windowManager.material.ts`); `useWindowMaterial` sets the `html` data
+ * attributes read here. While the resolved material is translucent, every app surface is
+ * translucent: the theme surface tokens become tinted mixes of the opaque palette
+ * (`--*-solid` in `index.css`). Solid keeps everything opaque as before.
+ *
+ * Shell tones, in every material and theme: the left sidebar and the right panel share the side
+ * tone (`--app-shell-side-panel-background`); the middle column (chat, headers, terminal) uses the
+ * main page tone (`--background`), which is subtly deeper than the side tone.
+ *
+ * Shell surfaces never use `backdrop-filter`, not even `blur(0px)`: Chromium composites the
+ * filtered backdrop over the original one, so over a translucent surface any backdrop filter
+ * doubles its tint (a 64% surface reads ~87%). Native vibrancy already blurs the desktop.
+ */
+
+:root {
+  /* Left sidebar and right panel frame. */
+  --app-shell-side-panel-background: var(--card);
+  /* Right panel tab strip. */
+  --app-shell-panel-header-background: color-mix(in srgb, var(--card) 95%, transparent);
+  /* Full-size panes repaint the tone of the surface they sit in (the main tone by default). It
+   * stays opaque while the material is solid: the terminal theme reads it as xterm's background. */
+  --app-shell-pane-fill: var(--background);
+  --app-shell-side-panel-pane-fill: var(--app-shell-side-panel-background);
+}
+
+/* Panes in a side panel take the side tone instead of the main one. */
+[data-app-shell-side-panel] {
+  --app-shell-pane-fill: var(--app-shell-side-panel-pane-fill);
+}
+
+html[data-desktop-shell="macos"][data-window-material="translucent"] {
+  /* Tints: the middle page surface and the side panels over the window, raised surfaces (cards,
+   * composer) over a page surface, and floating surfaces (menus, dialogs, tooltips, toasts) that
+   * cover other content. Side panels are lighter than the middle: more white in light theme,
+   * less of the dark palette in dark theme. */
+  --app-shell-surface-tint: 72%;
+  --app-shell-side-panel-tint: 80%;
+  --app-shell-raised-tint: 40%;
+  --app-shell-floating-tint: 92%;
+  --background: color-mix(
+    in srgb,
+    var(--background-solid) var(--app-shell-surface-tint),
+    transparent
+  );
+  --card: color-mix(in srgb, var(--card-solid) var(--app-shell-raised-tint), transparent);
+  --popover: color-mix(in srgb, var(--popover-solid) var(--app-shell-floating-tint), transparent);
+  --app-shell-window-background: transparent;
+  --app-shell-side-panel-background: color-mix(
+    in srgb,
+    var(--card-solid) var(--app-shell-side-panel-tint),
+    transparent
+  );
+  /* Headers sit on a tinted page surface; a second tint would only darken them. */
+  --app-shell-header-background: transparent;
+  --app-shell-panel-header-background: transparent;
+  /* Translucent panes leave the tint to the surface they sit in, so it is applied once. */
+  --app-shell-pane-fill: transparent;
+  --app-shell-side-panel-pane-fill: transparent;
+}
+
+html.dark[data-desktop-shell="macos"][data-window-material="translucent"] {
+  --app-shell-surface-tint: 64%;
+  --app-shell-side-panel-tint: 56%;
+}
+
+/* Switch thumbs sit on the coloured track; a tinted thumb would blend into it. */
+html[data-desktop-shell="macos"][data-window-material="translucent"] [data-slot="switch-thumb"] {
+  background-color: var(--background-solid);
+}
+
+/* macOS "Reduce transparency": keep the window material but fall back to opaque surfaces. */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-desktop-shell="macos"][data-window-material="translucent"],
+  html.dark[data-desktop-shell="macos"][data-window-material="translucent"] {
+    --app-shell-surface-tint: 100%;
+    --app-shell-side-panel-tint: 100%;
+    --app-shell-raised-tint: 100%;
+    --app-shell-floating-tint: 100%;
+    --app-shell-panel-header-background: color-mix(in srgb, var(--card) 95%, transparent);
+    --app-shell-pane-fill: var(--background);
+    --app-shell-side-panel-pane-fill: var(--app-shell-side-panel-background);
+  }
+}

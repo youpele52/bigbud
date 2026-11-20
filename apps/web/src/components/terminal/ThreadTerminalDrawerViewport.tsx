@@ -89,7 +89,7 @@ export function ThreadTerminalDrawerViewport({
               }
             }}
           >
-            <div className="thread-terminal-theme-host h-full bg-background p-1">
+            <div className="thread-terminal-theme-host h-full bg-[var(--app-shell-pane-fill)] p-1">
               <TerminalViewportErrorBoundary
                 terminalLabel={terminalLabelById.get(terminalId) ?? "Terminal"}
               >
@@ -109,7 +109,7 @@ export function ThreadTerminalDrawerViewport({
   }
 
   return (
-    <div className="thread-terminal-theme-host h-full bg-background p-1">
+    <div className="thread-terminal-theme-host h-full bg-[var(--app-shell-pane-fill)] p-1">
       <TerminalViewportErrorBoundary
         key={resolvedActiveTerminalId}
         terminalLabel={terminalLabelById.get(resolvedActiveTerminalId) ?? "Terminal"}

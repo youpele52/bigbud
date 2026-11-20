@@ -79,7 +79,7 @@ export function ChatViewContent({
 
   return (
     <div
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-background"
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden bg-[var(--app-shell-pane-fill)]"
       data-chat-view-root
     >
       <ContentPanelHeader>

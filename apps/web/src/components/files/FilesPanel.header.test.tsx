@@ -26,51 +26,24 @@ describe("FilesPanel top header", () => {
     );
     expect(markup).toContain("drag-region");
     expect(markup).toContain("[-webkit-app-region:no-drag]");
-    expect(markup).toContain('aria-label="Show file tree"');
+    expect(markup).toContain('aria-label="Keep file tree open"');
     expect(markup).toContain('aria-controls="files-tree"');
     expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('aria-hidden="true"');
     expect(markup).toContain(String(FolderLibraryIcon[0]?.[1].d));
   });
 
-  it("keeps pin and active hide toggle in the main header while pinned", () => {
+  it.each([false, true])("shows the keep-open toggle state when kept open is %s", (keptOpen) => {
     const markup = renderToStaticMarkup(
-      <FilesPanelHeader
-        treeVisible
-        pinned
-        treeControl={{ "aria-expanded": true }}
-        pinControl={{ onClick: () => {} }}
-      />,
+      <FilesPanelHeader keptOpen={keptOpen} treeControl={{ "aria-expanded": keptOpen }} />,
     );
-    expect(markup).toContain('aria-label="Hide file tree"');
-    expect(markup).toContain('aria-label="Unpin file tree"');
-    expect(markup).toContain('aria-pressed="true"');
-    expect(markup).toContain("bg-accent");
+    expect(markup.match(/<button/g)).toHaveLength(1);
+    expect(markup).toContain(
+      `aria-label="${keptOpen ? "Close file tree" : "Keep file tree open"}"`,
+    );
+    expect(markup).toContain(`aria-pressed="${keptOpen}"`);
+    expect(markup.includes("bg-accent")).toBe(keptOpen);
+    expect(markup).not.toContain("lucide-pin");
     expect(markup).not.toContain("Close files tree");
-  });
-
-  it.each([false, true])("reuses the slanted sidebar pin styling when pinned is %s", (pinned) => {
-    const markup = renderToStaticMarkup(
-      <FilesPanelHeader
-        pinned={pinned}
-        treeControl={{}}
-        pinControl={{ className: "existing-pin-control" }}
-      />,
-    );
-    const pinMarkup = markup.match(
-      /<button[^>]*aria-label="(?:Unpin file tree|Keep tree beside file)"[^>]*>[\s\S]*?<\/button>/,
-    )?.[0];
-    expect(pinMarkup).toBeDefined();
-    expect(pinMarkup).toContain("existing-pin-control");
-    expect(pinMarkup).toContain("rotate-45");
-    expect(pinMarkup).toContain(`aria-pressed="${pinned}"`);
-    expect(pinMarkup).not.toContain("lucide-pin-off");
-    if (pinned) {
-      expect(pinMarkup).toContain("fill-current");
-      expect(pinMarkup).toContain("text-primary hover:text-primary/90 dark:text-primary");
-    } else {
-      expect(pinMarkup).toContain("text-muted-foreground hover:text-foreground");
-      expect(pinMarkup).not.toContain("fill-current");
-    }
   });
 });

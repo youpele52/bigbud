@@ -1,4 +1,5 @@
 import {
+  FILE_PREVIEW_DOCKED_MIN_WIDTH,
   FILE_PREVIEW_MIN_WIDTH,
   FILES_TREE_MAX_WIDTH_FACTOR,
   FILES_TREE_MIN_WIDTH,
@@ -23,4 +24,12 @@ export function getFilesTreeWidthBounds(containerWidth: number) {
 export function clampFilesTreeWidth(width: number, containerWidth: number) {
   const bounds = getFilesTreeWidthBounds(containerWidth);
   return Math.max(bounds.min, Math.min(bounds.max, width));
+}
+
+/** Docks the visible tree beside the preview only when both keep a usable width. */
+export function canDockFilesTree(containerWidth: number) {
+  return (
+    containerWidth >=
+    FILES_TREE_MIN_WIDTH + FILES_TREE_SEPARATOR_WIDTH + FILE_PREVIEW_DOCKED_MIN_WIDTH
+  );
 }
