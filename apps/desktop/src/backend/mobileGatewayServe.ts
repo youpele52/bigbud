@@ -15,7 +15,10 @@ export async function attachMobileGatewayToServe(input: {
   readonly run?: Parameters<typeof enableDesktopTailscaleRemoteAccess>[1];
 }): Promise<DesktopTailscaleRemoteAccessStatus> {
   const previous = input.ownership.read();
-  if (previous === null || !(await hasDesktopServeTarget(previous, input.run))) {
+  const httpsPort = input.ownership.httpsPort;
+  const isLive = (backendPort: number) =>
+    hasDesktopServeTarget({ backendPort, httpsPort }, input.run);
+  if (previous === null || !(await isLive(previous))) {
     throw new Error("Recorded Serve target is no longer present; migration cancelled.");
   }
   try {
@@ -26,6 +29,7 @@ export async function attachMobileGatewayToServe(input: {
   } // Keep existing target on readiness failure.
   let attempted = false;
   const staged: ServeOwnershipStore = {
+    httpsPort,
     read: () => previous,
     write: () => undefined,
     clear: () => undefined,
@@ -44,12 +48,13 @@ export async function attachMobileGatewayToServe(input: {
     return status;
   } catch (error) {
     const rollbackOwner: ServeOwnershipStore = {
+      httpsPort,
       read: () => input.port,
       write: (port) => input.ownership.write(port),
       clear: () => input.ownership.clear(),
     };
     try {
-      if (attempted && (await hasDesktopServeTarget(input.port, input.run))) {
+      if (attempted && (await isLive(input.port))) {
         const restored = await enableDesktopTailscaleRemoteAccess(
           previous,
           input.run,

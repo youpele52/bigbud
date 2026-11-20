@@ -313,6 +313,7 @@ it("a retry pending at handoff cannot revive the gateway; stale Enable/Disable c
   const { makeDesktopMobileRemoteAccess } = await import("../main.bootstrap.tailscale");
   const access = makeDesktopMobileRemoteAccess({
     baseDir: "/fixture",
+    tailscaleServeHttpsPort: 443,
     getBackendPort: () => 3773,
     getBackendHost: () => "127.0.0.1",
   });

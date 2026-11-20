@@ -60,6 +60,7 @@ export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
   readonly GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL: string;
   readonly ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: string;
   readonly DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: string;
+  readonly TAKE_OVER_TAILSCALE_REMOTE_ACCESS_CHANNEL: string;
   readonly NOTIFICATIONS_IS_SUPPORTED_CHANNEL: string;
   readonly NOTIFICATIONS_SHOW_CHANNEL: string;
   readonly COPY_TO_CLIPBOARD_CHANNEL: string;
@@ -80,6 +81,7 @@ export interface IpcHandlerDeps extends ComputerUseIpcHandlerDeps {
   readonly getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   readonly enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   readonly disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  readonly takeOverTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   readonly getIsQuitting: () => boolean;
   readonly getUpdateState: () => DesktopUpdateState;
   readonly getBackendStartupState: () => DesktopBackendStartupState;
@@ -112,6 +114,7 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL,
     ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
     DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL,
+    TAKE_OVER_TAILSCALE_REMOTE_ACCESS_CHANNEL,
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL,
     NOTIFICATIONS_SHOW_CHANNEL,
     COPY_TO_CLIPBOARD_CHANNEL,
@@ -166,6 +169,10 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
 
   authorizedHandle(DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL, BROAD_RENDERER_ROLES, () =>
     deps.disableTailscaleRemoteAccess(),
+  );
+
+  authorizedHandle(TAKE_OVER_TAILSCALE_REMOTE_ACCESS_CHANNEL, BROAD_RENDERER_ROLES, () =>
+    deps.takeOverTailscaleRemoteAccess(),
   );
 
   authorizedHandle(PICK_FOLDER_CHANNEL, BROAD_RENDERER_ROLES, async (event) => {

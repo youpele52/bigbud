@@ -17,7 +17,7 @@ export interface VerifiedMobileGatewayRoute {
 
 export interface MobileGatewayRouteOwnerShape {
   /**
-   * Invoke only after exact hostname:443 route/target and strict HTTPS identity verification.
+   * Invoke only after exact hostname:<https port> route/target and strict HTTPS identity verification.
    * Subscribe before final real reread. The callback signal aborts on observed route loss; settle owned
    * probes/watchers and the callback before returning. No mapping creation or mutation.
    */

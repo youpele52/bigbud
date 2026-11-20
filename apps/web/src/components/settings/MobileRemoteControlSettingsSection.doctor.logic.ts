@@ -16,7 +16,7 @@ export interface TailscaleDoctorStep {
 
 interface HostCheck {
   readonly id: Exclude<TailscaleDoctorStep["id"], "phone">;
-  readonly label: string;
+  readonly label: string | ((status: DesktopTailscaleRemoteAccessStatus) => string);
   readonly passed: (status: DesktopTailscaleRemoteAccessStatus) => boolean;
   readonly failureDetail: (status: DesktopTailscaleRemoteAccessStatus) => string;
 }
@@ -48,7 +48,8 @@ const HOST_CHECKS: ReadonlyArray<HostCheck> = [
   },
   {
     id: "serve",
-    label: "Tailscale Serve sends HTTPS to this desktop backend",
+    label: (status) =>
+      `Tailscale Serve sends HTTPS port ${status.httpsPort} to this desktop backend`,
     passed: (status) => status.serving,
     failureDetail: (status) =>
       status.error ?? "Enable Tailscale Serve above, then create a new pairing link.",
@@ -73,13 +74,14 @@ export function resolveTailscaleDoctorSteps(
 ): ReadonlyArray<TailscaleDoctorStep> {
   let failed = false;
   const hostSteps = HOST_CHECKS.map((check): TailscaleDoctorStep => {
-    if (failed) return { id: check.id, label: check.label, state: "skipped", detail: null };
+    const label = typeof check.label === "string" ? check.label : check.label(status);
+    if (failed) return { id: check.id, label, state: "skipped", detail: null };
     if (check.passed(status)) {
       const detail = check.id === "name" ? status.remoteBaseUrl : null;
-      return { id: check.id, label: check.label, state: "pass", detail };
+      return { id: check.id, label, state: "pass", detail };
     }
     failed = true;
-    return { id: check.id, label: check.label, state: "fail", detail: check.failureDetail(status) };
+    return { id: check.id, label, state: "fail", detail: check.failureDetail(status) };
   });
   return [...hostSteps, PHONE_STEP];
 }

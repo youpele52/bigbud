@@ -11,32 +11,51 @@ import {
   retryDesktopMobileGateway,
   prepareDesktopMobileGateway,
 } from "./backend/mobileGatewayOwner";
+import * as OS from "node:os";
 import * as Path from "node:path";
+
+import { resolveOwnershipBaseDir } from "@bigbud/shared/backendOwnership.paths";
 
 import {
   type DesktopTailscaleRemoteAccessStatus,
   disableDesktopTailscaleRemoteAccess,
   enableDesktopTailscaleRemoteAccess,
   getDesktopTailscaleRemoteAccessStatus,
+  takeOverDesktopTailscaleRemoteAccess,
 } from "./backend/tailscaleRemoteAccess";
 import { createFileServeOwnershipStore } from "./backend/tailscaleRemoteAccess.ownership";
+import { createBigbudLockOwnerDetector } from "./backend/tailscaleRemoteAccess.takeover";
 
 const SERVE_OWNERSHIP_FILE = "tailscale-serve-owner.json";
+
+/** Every channel's state lives under the stable root (`~/.bigbud`, or `BIGBUD_HOME`). */
+function bigbudStateRoots(): string[] {
+  return [
+    Path.join(OS.homedir(), ".bigbud"),
+    resolveOwnershipBaseDir(process.env.BIGBUD_HOME ?? process.env.T3CODE_HOME),
+  ];
+}
 
 /**
  * Owns the mobile backend origin advertised in pairing links: the Tailscale
  * HTTPS address while Serve exposes this backend, otherwise the local origin.
  * Status/enable/disable keep that origin in sync and record Serve ownership.
+ * Each channel only touches its own Serve HTTPS port (`tailscaleServeHttpsPort`).
  */
 export function makeDesktopMobileRemoteAccess(input: {
   readonly baseDir: string;
+  readonly tailscaleServeHttpsPort: number;
   readonly getBackendPort: () => number;
   readonly getBackendHost: () => string;
   readonly getIsQuitting?: () => boolean;
 }) {
   configureMobileGatewayLifecycle(input.getIsQuitting ?? (() => false));
   const targetPort = () => desktopMobileGatewayPort() ?? input.getBackendPort();
-  const ownership = createFileServeOwnershipStore(Path.join(input.baseDir, SERVE_OWNERSHIP_FILE));
+  const ownership = createFileServeOwnershipStore(
+    Path.join(input.baseDir, SERVE_OWNERSHIP_FILE),
+    input.tailscaleServeHttpsPort,
+  );
+  const detectOwner = createBigbudLockOwnerDetector(bigbudStateRoots());
   let localBaseUrl = "";
   let mobileBackendBaseUrl = "";
 
@@ -82,7 +101,14 @@ export function makeDesktopMobileRemoteAccess(input: {
     },
     getMobileBackendBaseUrl: () => desktopMobileGatewayOrigin() ?? mobileBackendBaseUrl,
     getTailscaleRemoteAccessStatus: async () =>
-      adopt(await getDesktopTailscaleRemoteAccessStatus(targetPort(), undefined, ownership)),
+      adopt(
+        await getDesktopTailscaleRemoteAccessStatus(
+          targetPort(),
+          undefined,
+          ownership,
+          detectOwner,
+        ),
+      ),
     enableTailscaleRemoteAccess: () =>
       runMobileGatewayOwnerOperation(async () => {
         const gateway = desktopMobileGatewayStatus();
@@ -94,9 +120,22 @@ export function makeDesktopMobileRemoteAccess(input: {
             ownership,
             undefined,
             assertMobileGatewayOwnerAvailable,
+            detectOwner,
           ),
         );
       }),
+    takeOverTailscaleRemoteAccess: () =>
+      runMobileGatewayOwnerOperation(async () =>
+        adopt(
+          await takeOverDesktopTailscaleRemoteAccess(
+            targetPort(),
+            undefined,
+            ownership,
+            assertMobileGatewayOwnerAvailable,
+            detectOwner,
+          ),
+        ),
+      ),
     disableTailscaleRemoteAccess: () =>
       runMobileGatewayOwnerOperation(async () => {
         const status = await disableDesktopTailscaleRemoteAccess(
@@ -104,6 +143,7 @@ export function makeDesktopMobileRemoteAccess(input: {
           undefined,
           ownership,
           assertMobileGatewayOwnerAvailable,
+          detectOwner,
         );
         mobileBackendBaseUrl = desktopMobileGatewayOrigin() ?? localBaseUrl;
         return status;

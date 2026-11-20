@@ -34,6 +34,24 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+it("admits a per-channel Serve port only on that exact listener", () => {
+  const ported = { ...input(), externalOrigin: "https://fixture.example.ts.net:8443" };
+  const handlers = { "/": { Proxy: "http://127.0.0.1:31999" } };
+  const value = {
+    TCP: { "443": { HTTPS: true }, "8443": { HTTPS: true } },
+    Web: {
+      // Another channel's listener is preserved and never grants admission.
+      "fixture.example.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:3773" } } },
+      "fixture.example.ts.net:8443": { Handlers: handlers },
+    },
+  };
+  expect(() => assertMobileGatewayServeRoute(ported, status(), value)).not.toThrow();
+  expect(() => assertMobileGatewayServeRoute(input(), status(), value)).toThrow();
+  expect(() =>
+    assertMobileGatewayServeRoute(ported, status(), { ...value, TCP: { "443": { HTTPS: true } } }),
+  ).toThrow();
+});
+
 it("requires the exact hostname and loopback target while preserving unrelated routes", () => {
   const value = config();
   Object.assign(value.Web["fixture.example.ts.net:443"].Handlers, {

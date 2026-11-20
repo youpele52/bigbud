@@ -69,6 +69,12 @@ function resolveTailscaleErrorTip(status: DesktopTailscaleRemoteAccessStatus): s
   if (!status.online) {
     return "Reconnect this device to your tailnet so mobile clients can reach it.";
   }
+  if (status.conflict?.canTakeOver) {
+    return "Use Take over only if you no longer need phones to reach that other bigbud at this address.";
+  }
+  if (status.conflict) {
+    return `bigbud only changes Tailscale Serve routes it set up. Check "tailscale serve status" and remove that route on HTTPS port ${status.httpsPort} yourself if you no longer need it.`;
+  }
   if (!status.serving) {
     return "Enable Tailscale Serve so this desktop backend is exposed over HTTPS.";
   }

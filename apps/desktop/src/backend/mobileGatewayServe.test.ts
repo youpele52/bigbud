@@ -12,7 +12,7 @@ afterEach(async () => {
 async function fixture() {
   const dir = await mkdtemp(join(tmpdir(), "gateway-serve-"));
   dirs.push(dir);
-  const ownership = createFileServeOwnershipStore(join(dir, "owner.json"));
+  const ownership = createFileServeOwnershipStore(join(dir, "owner.json"), 443);
   ownership.write(3773);
   let target: number | null = 3773;
   let failAfterSwitch = false;

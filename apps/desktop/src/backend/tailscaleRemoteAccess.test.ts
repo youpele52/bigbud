@@ -5,6 +5,7 @@ import {
   enableDesktopTailscaleRemoteAccess,
   getDesktopTailscaleRemoteAccessStatus,
 } from "./tailscaleRemoteAccess";
+import { NO_SERVE_OWNERSHIP } from "./tailscaleRemoteAccess.ownership";
 
 describe("tailscaleRemoteAccess", () => {
   it("reports a ready tailnet URL when serve proxies the current backend port", async () => {
@@ -43,6 +44,8 @@ describe("tailscaleRemoteAccess", () => {
       online: true,
       serving: true,
       remoteBaseUrl: "https://bigbud-dev.tail123.ts.net",
+      httpsPort: 443,
+      conflict: null,
       error: null,
     });
   });
@@ -106,6 +109,7 @@ describe("tailscaleRemoteAccess", () => {
 
     await expect(getDesktopTailscaleRemoteAccessStatus(3774, execFile)).resolves.toMatchObject({
       serving: false,
+      conflict: { loopbackPort: 4888, bigbudOwnerLabel: null, canTakeOver: false },
       error: expect.stringContaining('forwards "/" to 127.0.0.1:4888, which bigbud did not set up'),
     });
   });
@@ -119,6 +123,8 @@ describe("tailscaleRemoteAccess", () => {
       online: false,
       serving: false,
       remoteBaseUrl: null,
+      httpsPort: 443,
+      conflict: null,
       error: "Tailscale CLI is not installed.",
     });
   });
@@ -141,6 +147,8 @@ describe("tailscaleRemoteAccess", () => {
       online: false,
       serving: false,
       remoteBaseUrl: "https://bigbud-dev.tail123.ts.net",
+      httpsPort: 443,
+      conflict: null,
       error: "Tailscale is running but this device is offline.",
     });
   });
@@ -177,7 +185,7 @@ describe("tailscaleRemoteAccess", () => {
     expect(execFile).toHaveBeenNthCalledWith(
       2,
       "tailscale",
-      ["serve", "--yes", "--bg", "http://127.0.0.1:3774"],
+      ["serve", "--yes", "--bg", "--https=443", "http://127.0.0.1:3774"],
       expect.objectContaining({ encoding: "utf8", windowsHide: true }),
     );
     expect(status.serving).toBe(true);
@@ -219,5 +227,46 @@ describe("tailscaleRemoteAccess", () => {
       expect.objectContaining({ encoding: "utf8", windowsHide: true }),
     );
     expect(status.serving).toBe(false);
+  });
+
+  it("advertises the channel's own Serve port in the tailnet URL", async () => {
+    const execFile = vi
+      .fn()
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          BackendState: "Running",
+          Self: { DNSName: "bigbud-dev.tail123.ts.net.", Online: true },
+        }),
+        stderr: "",
+      })
+      .mockResolvedValueOnce({
+        stdout: JSON.stringify({
+          Web: {
+            "bigbud-dev.tail123.ts.net:443": {
+              Handlers: { "/": { Proxy: "http://127.0.0.1:3773" } },
+            },
+            "bigbud-dev.tail123.ts.net:10000": {
+              Handlers: { "/": { Proxy: "http://127.0.0.1:3775" } },
+            },
+          },
+        }),
+        stderr: "",
+      });
+
+    await expect(
+      getDesktopTailscaleRemoteAccessStatus(3775, execFile, {
+        ...NO_SERVE_OWNERSHIP,
+        httpsPort: 10000,
+      }),
+    ).resolves.toEqual({
+      installed: true,
+      running: true,
+      online: true,
+      serving: true,
+      remoteBaseUrl: "https://bigbud-dev.tail123.ts.net:10000",
+      httpsPort: 10000,
+      conflict: null,
+      error: null,
+    });
   });
 });

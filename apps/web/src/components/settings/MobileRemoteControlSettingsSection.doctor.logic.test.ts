@@ -9,6 +9,8 @@ const healthy: DesktopTailscaleRemoteAccessStatus = {
   online: true,
   serving: true,
   remoteBaseUrl: "https://desk.tail123.ts.net",
+  httpsPort: 443,
+  conflict: null,
   error: null,
 };
 
@@ -55,6 +57,20 @@ describe("resolveTailscaleDoctorSteps", () => {
   it("reports a missing CLI as the first failure", () => {
     expect(states({ ...healthy, installed: false, running: false, online: false })[0]).toBe(
       "installed:fail",
+    );
+  });
+
+  it("names this channel's Serve port and shows the ported tailnet address", () => {
+    const steps = resolveTailscaleDoctorSteps({
+      ...healthy,
+      remoteBaseUrl: "https://desk.tail123.ts.net:8443",
+      httpsPort: 8443,
+    });
+    expect(steps.find((step) => step.id === "name")?.detail).toBe(
+      "https://desk.tail123.ts.net:8443",
+    );
+    expect(steps.find((step) => step.id === "serve")?.label).toBe(
+      "Tailscale Serve sends HTTPS port 8443 to this desktop backend",
     );
   });
 });

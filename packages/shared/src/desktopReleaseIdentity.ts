@@ -65,3 +65,34 @@ export function resolveDesktopReleaseIdentity(version: string): DesktopReleaseId
   }
   return desktopReleaseIdentityForChannel(release.channel);
 }
+
+/**
+ * Tailscale Serve HTTPS port per desktop channel, the single source for every
+ * consumer. A machine has one tailnet HTTPS hostname, so channels sharing "/" on
+ * one port would overwrite each other; a distinct port lets stable, prereleases
+ * and local development serve at once. Stable keeps 443 so existing pairing
+ * links (`https://<host>/`) stay valid.
+ *
+ * Tailnet-only Serve accepts any TCP port for `--https=<port>` (the CLI only
+ * bounds it to uint16: tailscale `cmd/tailscale/cli/serve_v2.go`,
+ * `srvTypeAndPortFromFlags`). Only Funnel is limited to 443, 8443 and 10000
+ * (tailscale.com/kb/1223/funnel, `ipn.CheckFunnelPort`), and bigbud never
+ * enables Funnel.
+ */
+export const TAILSCALE_SERVE_HTTPS_PORTS = {
+  stable: 443,
+  beta: 8443,
+  preview: 9443,
+  nightly: 10443,
+  development: 10000,
+} as const satisfies Record<ReleaseTrack | "development", number>;
+
+/** Local development builds share the stable identity, so they need their own port. */
+export function resolveTailscaleServeHttpsPort(input: {
+  readonly channel: ReleaseTrack;
+  readonly development: boolean;
+}): number {
+  return input.development
+    ? TAILSCALE_SERVE_HTTPS_PORTS.development
+    : TAILSCALE_SERVE_HTTPS_PORTS[input.channel];
+}

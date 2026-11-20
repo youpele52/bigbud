@@ -21,15 +21,19 @@ const unavailable = () =>
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** Exact hostname, listener and target; an unrelated HTTPS route never grants admission. */
+/**
+ * Exact hostname, listener and target; an unrelated HTTPS route never grants admission.
+ * The listener is the origin's HTTPS port: 443 when implicit, otherwise the per-channel
+ * Serve port (`resolveTailscaleServeHttpsPort`) carried in the origin.
+ */
 export function assertMobileGatewayServeRoute(
   input: Pick<MobileGatewayRouteInput, "externalOrigin" | "port">,
   status: unknown,
   config: unknown,
 ): void {
   const origin = new URL(canonicalMobileOwnerOrigin(input.externalOrigin));
-  if (origin.port !== "" || !Number.isInteger(input.port) || input.port < 1 || input.port > 65535)
-    throw unavailable();
+  const httpsPort = origin.port === "" ? "443" : origin.port;
+  if (!Number.isInteger(input.port) || input.port < 1 || input.port > 65535) throw unavailable();
   if (
     !record(status) ||
     status.BackendState !== "Running" ||
@@ -39,11 +43,11 @@ export function assertMobileGatewayServeRoute(
     status.Self.DNSName.replace(/\.$/, "").toLowerCase() !== origin.hostname ||
     !record(config) ||
     !record(config.TCP) ||
-    !record(config.TCP["443"]) ||
-    config.TCP["443"].HTTPS !== true
+    !record(config.TCP[httpsPort]) ||
+    config.TCP[httpsPort].HTTPS !== true
   )
     throw unavailable();
-  const listener = `${origin.hostname}:443`;
+  const listener = `${origin.hostname}:${httpsPort}`;
   // Public Funnel exposure is incompatible with the required tailnet-only route.
   if (
     config.AllowFunnel !== undefined &&

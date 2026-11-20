@@ -93,7 +93,14 @@ async function prepare(
   if (active) return active.port;
   const { hasDesktopServeTarget } = await import("./tailscaleRemoteAccess");
   const ownedPort = input.ownership.read();
-  if (ownedPort === null || !(await hasDesktopServeTarget(ownedPort, input.runServe))) return null;
+  if (
+    ownedPort === null ||
+    !(await hasDesktopServeTarget(
+      { backendPort: ownedPort, httpsPort: input.ownership.httpsPort },
+      input.runServe,
+    ))
+  )
+    return null;
   const { resolveMobileGatewayEndpoint } = await import("./mobileGatewayEndpoint");
   const { attachMobileGatewayToServe } = await import("./mobileGatewayServe");
   const { MobileGatewaySupervisor } = await import("./mobileGatewaySupervisor");

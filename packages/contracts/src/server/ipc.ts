@@ -71,12 +71,26 @@ export interface DesktopNotificationInput {
   threadId?: string;
 }
 
+/** A Serve handler on this channel's HTTPS port that this app did not set up. */
+export interface DesktopTailscaleServeConflict {
+  /** Loopback port the existing "/" handler forwards to; null for other handler kinds. */
+  loopbackPort: number | null;
+  /** Set only when local evidence ties the handler to another bigbud backend. */
+  bigbudOwnerLabel: string | null;
+  /** True only for another bigbud backend: the UI may offer an explicit take over. */
+  canTakeOver: boolean;
+}
+
 export interface DesktopTailscaleRemoteAccessStatus {
   installed: boolean;
   running: boolean;
   online: boolean;
   serving: boolean;
+  /** `https://<host>` for port 443, otherwise `https://<host>:<httpsPort>`. */
   remoteBaseUrl: string | null;
+  /** This channel's own Tailscale Serve HTTPS port. */
+  httpsPort: number;
+  conflict: DesktopTailscaleServeConflict | null;
   error: string | null;
 }
 
@@ -126,6 +140,8 @@ export interface DesktopBridge
   getTailscaleRemoteAccessStatus: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   enableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   disableTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
+  /** Replaces only another bigbud's handler on this channel's port, after explicit consent. */
+  takeOverTailscaleRemoteAccess: () => Promise<DesktopTailscaleRemoteAccessStatus>;
   getFilePath: (file: File) => string;
   pickFolder: () => Promise<string | null>;
   confirm: (message: string) => Promise<boolean>;

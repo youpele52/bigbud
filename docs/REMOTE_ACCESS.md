@@ -12,6 +12,28 @@ For phone access to the desktop backend, use the app's pairing flow rather than 
 4. Copy or scan the pairing link shown by bigbud on the phone.
 5. Follow the pairing flow. The mobile companion uses its own authenticated session at `/mobile-ws`; it does not use the desktop `/ws` token interchangeably.
 
+### Tailscale Serve ports per channel
+
+A computer has one Tailscale HTTPS name, so each bigbud channel serves on its own HTTPS port. That lets stable, prerelease and development builds be reachable at the same time:
+
+| Build                                     | Tailscale Serve HTTPS port | Pairing address               |
+| ----------------------------------------- | -------------------------- | ----------------------------- |
+| bigbud (stable)                           | 443                        | `https://<host>.ts.net`       |
+| bigbud beta                               | 8443                       | `https://<host>.ts.net:8443`  |
+| bigbud preview                            | 9443                       | `https://<host>.ts.net:9443`  |
+| bigbud nightly                            | 10443                      | `https://<host>.ts.net:10443` |
+| Local development (`bun run dev:desktop`) | 10000                      | `https://<host>.ts.net:10000` |
+
+The mapping lives in [`resolveTailscaleServeHttpsPort`](../packages/shared/src/desktopReleaseIdentity.ts). Stable keeps 443, so existing stable pairing links keep working. These ports are tailnet-only: Tailscale Serve accepts any HTTPS port, while Funnel (public internet exposure, which bigbud never enables) is limited to 443, 8443 and 10000.
+
+Each channel only changes the `/` route on its own port and records that route in `tailscale-serve-owner.json` in its own data folder. Disabling Tailscale Serve turns off only that port, and only when bigbud's route is the only one on it. Routes on other ports, including other bigbud channels, are never changed.
+
+### Take over a route left by another bigbud
+
+If this channel's port already forwards `/` to a local port that this app did not set up, bigbud leaves it unchanged and explains why in Settings. When that local port belongs to another bigbud backend (for example an older stable build that predates route ownership records, or another channel), Settings shows **Take over**. bigbud identifies another bigbud from its backend lock file (`backend.lock` in that build's data folder), which records the backend's port. The lock counts only while that backend is running, or when nothing else is listening on its port any more.
+
+Take over asks for confirmation, then replaces only that one `/` route on this channel's port. Phones paired with the other bigbud at that address stop reaching it until it is set up again. A route that forwards to anything else, such as another local service, is never taken over. Check `tailscale serve status` and remove that route yourself if you no longer need it.
+
 The public walkthrough is in [the website's documentation source](../apps/marketing/src/components/page-specific/docs/_docs-content.md#mobile-companion-over-tailscale). Local development companion discovery is described in [Development commands](./development/scripts.md).
 
 ## Standalone server configuration

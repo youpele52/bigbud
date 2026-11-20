@@ -27,6 +27,8 @@ describe("resolveTailscaleRemoteBackendCheck", () => {
           online: true,
           serving: true,
           remoteBaseUrl: "https://example.ts.net",
+          httpsPort: 443,
+          conflict: null,
           error: null,
         },
         isMutating: false,
@@ -48,6 +50,8 @@ describe("resolveTailscaleRemoteBackendCheck", () => {
           online: false,
           serving: false,
           remoteBaseUrl: null,
+          httpsPort: 443,
+          conflict: null,
           error: "Tailscale is installed but the daemon is not running.",
         },
         isMutating: false,
@@ -57,5 +61,36 @@ describe("resolveTailscaleRemoteBackendCheck", () => {
       message: "Tailscale is installed but the daemon is not running.",
       tip: "Start the Tailscale daemon on this machine, then try again.",
     });
+  });
+
+  it("separates a bigbud take-over tip from a foreign-service refusal tip", () => {
+    const base = {
+      installed: true,
+      running: true,
+      online: true,
+      serving: false,
+      remoteBaseUrl: "https://example.ts.net:8443",
+      httpsPort: 8443,
+      error: "taken",
+    };
+    const bigbud = resolveTailscaleRemoteBackendCheck({
+      isLoading: false,
+      isMutating: false,
+      status: {
+        ...base,
+        conflict: { loopbackPort: 3773, bigbudOwnerLabel: "bigbud", canTakeOver: true },
+      },
+    });
+    expect(bigbud.tip).toContain("Take over");
+    const foreign = resolveTailscaleRemoteBackendCheck({
+      isLoading: false,
+      isMutating: false,
+      status: {
+        ...base,
+        conflict: { loopbackPort: 3000, bigbudOwnerLabel: null, canTakeOver: false },
+      },
+    });
+    expect(foreign.tip).toContain("HTTPS port 8443 yourself");
+    expect(foreign.tip).not.toContain("Take over");
   });
 });

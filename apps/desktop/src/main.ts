@@ -369,6 +369,7 @@ app
       resolveIconPath,
       resourcesPath: process.resourcesPath,
       serverSettingsPath: SERVER_SETTINGS_PATH,
+      tailscaleServeHttpsPort: mainConfig.tailscaleServeHttpsPort,
       setIsQuitting: (value) => (isQuitting = value),
       setMainWindow: (window) => {
         mainWindow = window;

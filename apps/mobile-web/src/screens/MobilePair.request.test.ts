@@ -105,6 +105,34 @@ describe("origin-bound pairing requests", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("keeps a per-channel Tailscale Serve port from the pairing link through the exchange", async () => {
+    const ported = "https://desk.tail1.ts.net:8443";
+    const link = new URL(
+      `https://mobile.bigbud.app/mobile/pair/fixture?backend=${encodeURIComponent(ported)}#secret=s`,
+    );
+    const backend = normalizePairingBackendOrigin(link.searchParams.get("backend"), false);
+    expect(backend).toBe(ported);
+    // Serve's default port stays implicit, so stable links are unchanged.
+    expect(normalizePairingBackendOrigin("https://desk.tail1.ts.net:443", false)).toBe(
+      "https://desk.tail1.ts.net",
+    );
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(session)));
+    vi.stubGlobal("fetch", fetcher);
+    // Host-served app on the same ported origin; the 443 origin is a different host app.
+    vi.stubGlobal("window", { location: { origin: ported } });
+    await exchangeMobilePairing(backend, "fixture", { secret: "s", label: "fixture" });
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+      `${ported}/api/mobile/pairing/fixture/exchange`,
+      expect.anything(),
+    );
+    await expect(
+      exchangeMobilePairing("https://desk.tail1.ts.net", "fixture", {
+        secret: "s",
+        label: "fixture",
+      }),
+    ).rejects.toThrow("own mobile app");
+  });
+
   it("retains typed unavailable/expired status as an HTTP refusal", async () => {
     vi.stubGlobal(
       "fetch",

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   desktopReleaseIdentityForChannel,
   resolveDesktopReleaseIdentity,
+  resolveTailscaleServeHttpsPort,
 } from "./desktopReleaseIdentity";
 
 describe("desktop release identity", () => {
@@ -59,5 +60,29 @@ describe("desktop release identity", () => {
     expect(() => resolveDesktopReleaseIdentity(version)).toThrow(
       `Unsupported desktop release version: ${version}`,
     );
+  });
+
+  it.each([
+    ["stable", false, 443],
+    ["beta", false, 8443],
+    ["preview", false, 9443],
+    ["nightly", false, 10443],
+    ["stable", true, 10000],
+    ["beta", true, 10000],
+  ] as const)(
+    "gives %s (development=%s) Tailscale Serve HTTPS port %i",
+    (channel, development, port) => {
+      expect(resolveTailscaleServeHttpsPort({ channel, development })).toBe(port);
+    },
+  );
+
+  it("keeps every channel's Tailscale Serve port distinct so channels never share a listener", () => {
+    const ports = [
+      ...(["stable", "beta", "preview", "nightly"] as const).map((channel) =>
+        resolveTailscaleServeHttpsPort({ channel, development: false }),
+      ),
+      resolveTailscaleServeHttpsPort({ channel: "stable", development: true }),
+    ];
+    expect(new Set(ports).size).toBe(ports.length);
   });
 });

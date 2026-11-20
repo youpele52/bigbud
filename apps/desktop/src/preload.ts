@@ -201,6 +201,8 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL),
   enableTailscaleRemoteAccess: () => ipcRenderer.invoke(ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL),
   disableTailscaleRemoteAccess: () => ipcRenderer.invoke(DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL),
+  takeOverTailscaleRemoteAccess: () =>
+    ipcRenderer.invoke(desktopIpcChannels.takeOverTailscaleRemoteAccess),
   getFilePath: (file: File) => webUtils.getPathForFile(file),
   pickFolder: () => ipcRenderer.invoke(PICK_FOLDER_CHANNEL),
   confirm: (message) => ipcRenderer.invoke(CONFIRM_CHANNEL, message),
