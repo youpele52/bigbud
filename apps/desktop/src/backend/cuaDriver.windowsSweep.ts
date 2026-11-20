@@ -12,12 +12,17 @@ import {
   resolveTrustedWindowsPowerShell,
   type TrustedWindowsPowerShell,
 } from "./windowsPowerShell";
+import {
+  createWindowsHelperRunner,
+  resolveWindowsHelperTimeouts,
+  type WindowsHelperClockDeps,
+  type WindowsHelperTimeouts,
+} from "./windowsPowerShell.run";
 
 export { WINDOWS_CUA_SWEEP_SCRIPT } from "./cuaDriver.windowsSweep.script";
 
 const DEFAULT_ATTEMPTS = 3;
-// Windows PowerShell 5.1 can spend more than 15 seconds compiling the native helper on a cold host.
-const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
+const SWEEP_LABEL = "Windows CUA process sweep";
 const DEFAULT_WAIT_TIMEOUT_MS = 3_000;
 
 interface SweepSuccess {
@@ -35,7 +40,7 @@ interface SweepFailure {
 
 type SweepOutput = SweepSuccess | SweepFailure;
 
-interface WindowsCuaSweepDeps {
+interface WindowsCuaSweepDeps extends Partial<WindowsHelperClockDeps> {
   readonly platform: NodeJS.Platform;
   readonly canonicalize: (path: string) => string;
   readonly resolvePowerShell: () => TrustedWindowsPowerShell;
@@ -99,14 +104,15 @@ export function windowsExecutablePathsEqual(left: string, right: string): boolea
   return normalize(left) === normalize(right);
 }
 
-export function sweepWindowsCuaDriverProcesses(input: {
-  readonly executablePath: string | null;
-  readonly attempts?: number;
-  readonly commandTimeoutMs?: number;
-  readonly waitTimeoutMs?: number;
-  readonly dryRun?: boolean;
-  readonly deps?: WindowsCuaSweepDeps;
-}): void {
+export function sweepWindowsCuaDriverProcesses(
+  input: {
+    readonly executablePath: string | null;
+    readonly attempts?: number;
+    readonly waitTimeoutMs?: number;
+    readonly dryRun?: boolean;
+    readonly deps?: WindowsCuaSweepDeps;
+  } & Partial<WindowsHelperTimeouts>,
+): void {
   const deps = input.deps ?? defaultDeps;
   if (deps.platform !== "win32") return;
   if (!input.executablePath) {
@@ -114,46 +120,30 @@ export function sweepWindowsCuaDriverProcesses(input: {
   }
   const executablePath = deps.canonicalize(input.executablePath);
   const attempts = input.attempts ?? DEFAULT_ATTEMPTS;
-  const commandTimeoutMs = input.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
   const waitTimeoutMs = input.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS;
-  if (attempts < 1 || commandTimeoutMs < 1 || waitTimeoutMs < 1) {
-    throw new Error("Windows CUA process sweep received invalid timeout configuration.");
+  if (attempts < 1 || waitTimeoutMs < 1) {
+    throw new Error(`${SWEEP_LABEL} received invalid timeout configuration.`);
   }
-  const powerShell = deps.resolvePowerShell();
+  const timeouts = resolveWindowsHelperTimeouts(SWEEP_LABEL, input);
+  const runner = createWindowsHelperRunner({
+    label: SWEEP_LABEL,
+    powerShell: deps.resolvePowerShell(),
+    timeouts,
+    spawnSync: deps.spawnSync,
+    clock: { now: deps.now, sleep: deps.sleep, warn: deps.warn },
+  });
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const result = deps.spawnSync(
-      powerShell.executablePath,
-      [
-        "-NoLogo",
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        WINDOWS_CUA_SWEEP_SCRIPT,
-      ],
-      {
-        cwd: powerShell.cwd,
-        encoding: "utf8",
-        env: {
-          ...powerShell.env,
-          [WINDOWS_CUA_SWEEP_TARGET_PATH_ENV]: executablePath,
-          [WINDOWS_CUA_SWEEP_WAIT_TIMEOUT_ENV]: String(waitTimeoutMs),
-          [WINDOWS_CUA_SWEEP_DRY_RUN_ENV]: input.dryRun ? "1" : "0",
-        },
-        maxBuffer: 64 * 1024,
-        timeout: commandTimeoutMs,
-        windowsHide: true,
+    const result = runner.run({
+      script: WINDOWS_CUA_SWEEP_SCRIPT,
+      env: {
+        [WINDOWS_CUA_SWEEP_TARGET_PATH_ENV]: executablePath,
+        [WINDOWS_CUA_SWEEP_WAIT_TIMEOUT_ENV]: String(waitTimeoutMs),
+        [WINDOWS_CUA_SWEEP_DRY_RUN_ENV]: input.dryRun ? "1" : "0",
       },
-    );
+    });
     if (result.error) {
-      const timedOut = (result.error as NodeJS.ErrnoException).code === "ETIMEDOUT";
-      throw new Error(
-        timedOut
-          ? "Windows CUA process sweep exceeded its command timeout."
-          : "Windows CUA process sweep could not start PowerShell.",
-      );
+      throw new Error(`${SWEEP_LABEL} could not start PowerShell.`);
     }
     if (typeof result.stdout !== "string" || result.stderr?.trim()) {
       throw new Error("Windows CUA process sweep returned an unexpected command result.");

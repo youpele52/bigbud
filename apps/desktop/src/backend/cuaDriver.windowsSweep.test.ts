@@ -24,7 +24,21 @@ function commandResult(input: {
 }
 
 function makeHarness(...results: ReturnType<typeof commandResult>[]) {
-  const spawnSync = vi.fn().mockImplementation(() => results.shift() ?? commandResult({}));
+  let clockMs = 0;
+  const spawnSync = vi
+    .fn()
+    .mockImplementation((_command: string, _args: string[], options: { timeout: number }) => {
+      const next = results.shift() ?? commandResult({});
+      clockMs +=
+        (next.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT"
+          ? options.timeout
+          : 1_000;
+      return next;
+    });
+  const sleep = vi.fn((ms: number) => {
+    clockMs += ms;
+  });
+  const warn = vi.fn();
   const canonicalize = vi.fn((value: string) => value);
   const powerShell = {
     cwd: String.raw`C:\Windows`,
@@ -39,10 +53,13 @@ function makeHarness(...results: ReturnType<typeof commandResult>[]) {
         canonicalize,
         resolvePowerShell: () => powerShell,
         spawnSync: spawnSync as never,
+        now: () => clockMs,
+        sleep,
+        warn,
       },
       ...overrides,
     });
-  return { canonicalize, powerShell, run, spawnSync };
+  return { canonicalize, powerShell, run, sleep, spawnSync, warn };
 }
 
 describe("Windows CUA exact-path process sweep", () => {
@@ -192,15 +209,50 @@ describe("Windows CUA exact-path process sweep", () => {
     expect(() => harness.run()).toThrow(message);
   });
 
-  it("reports a bounded command timeout without exposing command output", () => {
-    const error = Object.assign(new Error("spawnSync powershell ETIMEDOUT secret"), {
-      code: "ETIMEDOUT",
+  const timeoutResult = () =>
+    commandResult({
+      error: Object.assign(new Error("spawnSync powershell ETIMEDOUT secret"), {
+        code: "ETIMEDOUT",
+      }),
+      status: null,
     });
-    const harness = makeHarness(commandResult({ error, status: null }));
 
-    expect(() => harness.run({ commandTimeoutMs: 25 })).toThrow(
-      "Windows CUA process sweep exceeded its command timeout.",
+  it("retries a cold PowerShell timeout once and completes the same sweep attempt", () => {
+    const harness = makeHarness(timeoutResult(), commandResult({}));
+
+    expect(() => harness.run()).not.toThrow();
+
+    expect(harness.spawnSync).toHaveBeenCalledTimes(2);
+    expect(harness.sleep).toHaveBeenCalledOnce();
+    expect(harness.warn.mock.calls[0]![0]).toContain(
+      "Windows CUA process sweep timed out after 90000ms",
     );
+    const [, , retryOptions] = harness.spawnSync.mock.calls[1]!;
+    expect(retryOptions.env.BIGBUD_CUA_SWEEP_TARGET_PATH).toBe(
+      String.raw`C:\Program Files\bigbud\cua-driver.exe`,
+    );
+  });
+
+  it("fails with elapsed time when the timeout retry also times out", () => {
+    const harness = makeHarness(timeoutResult(), timeoutResult());
+
+    expect(() => harness.run()).toThrow(
+      "Windows CUA process sweep exceeded its command timeout after 180000ms (2 invocation(s);",
+    );
+    expect(harness.spawnSync).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a bounded command timeout without exposing command output", () => {
+    const harness = makeHarness(timeoutResult());
+
+    let message = "";
+    try {
+      harness.run({ commandTimeoutMs: 25, timeoutRetries: 0 });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain("Windows CUA process sweep exceeded its command timeout after 25ms");
+    expect(message).not.toContain("secret");
   });
 
   it("reports PowerShell spawn failure without leaking the underlying error", () => {

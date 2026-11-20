@@ -8,13 +8,19 @@ import {
   resolveTrustedWindowsPowerShell,
   type TrustedWindowsPowerShell,
 } from "./windowsPowerShell";
+import {
+  createWindowsHelperRunner,
+  resolveWindowsHelperTimeouts,
+  type WindowsHelperClockDeps,
+  type WindowsHelperTimeouts,
+} from "./windowsPowerShell.run";
 
 export interface WindowsReplaceabilityTarget {
   readonly label: string;
   readonly path: string;
 }
 
-interface WindowsFileReplaceabilityDeps {
+interface WindowsFileReplaceabilityDeps extends Partial<WindowsHelperClockDeps> {
   readonly platform: NodeJS.Platform;
   readonly resolvePowerShell: () => TrustedWindowsPowerShell;
   readonly spawnSync: typeof ChildProcess.spawnSync;
@@ -26,52 +32,34 @@ const defaultDeps: WindowsFileReplaceabilityDeps = {
   spawnSync: ChildProcess.spawnSync,
 };
 
-// Windows PowerShell 5.1 can spend more than 15 seconds compiling the native helper on a cold host.
-const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
+const PROBE_LABEL = "Windows file replaceability probe";
 
-export function assertWindowsFilesReplaceable(input: {
-  readonly targets: ReadonlyArray<WindowsReplaceabilityTarget>;
-  readonly commandTimeoutMs?: number;
-  readonly deps?: WindowsFileReplaceabilityDeps;
-}): void {
+export function assertWindowsFilesReplaceable(
+  input: {
+    readonly targets: ReadonlyArray<WindowsReplaceabilityTarget>;
+    readonly deps?: WindowsFileReplaceabilityDeps;
+  } & Partial<WindowsHelperTimeouts>,
+): void {
   const deps = input.deps ?? defaultDeps;
   if (deps.platform !== "win32" || input.targets.length === 0) return;
-  const timeout = input.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
-  if (timeout < 1)
-    throw new Error("Windows file replaceability probe received an invalid timeout.");
-  const powerShell = deps.resolvePowerShell();
-  const result = deps.spawnSync(
-    powerShell.executablePath,
-    [
-      "-NoLogo",
-      "-NoProfile",
-      "-NonInteractive",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      WINDOWS_FILE_REPLACEABILITY_SCRIPT,
-    ],
-    {
-      cwd: powerShell.cwd,
-      encoding: "utf8",
-      env: {
-        ...powerShell.env,
-        [WINDOWS_REPLACEABILITY_PATHS_ENV]: JSON.stringify({
-          paths: input.targets.map(({ path }) => path),
-        }),
-      },
-      maxBuffer: 64 * 1024,
-      timeout,
-      windowsHide: true,
+  const timeouts = resolveWindowsHelperTimeouts(PROBE_LABEL, input);
+  const runner = createWindowsHelperRunner({
+    label: PROBE_LABEL,
+    powerShell: deps.resolvePowerShell(),
+    timeouts,
+    spawnSync: deps.spawnSync,
+    clock: { now: deps.now, sleep: deps.sleep, warn: deps.warn },
+  });
+  const result = runner.run({
+    script: WINDOWS_FILE_REPLACEABILITY_SCRIPT,
+    env: {
+      [WINDOWS_REPLACEABILITY_PATHS_ENV]: JSON.stringify({
+        paths: input.targets.map(({ path }) => path),
+      }),
     },
-  );
+  });
   if (result.error) {
-    const timedOut = (result.error as NodeJS.ErrnoException).code === "ETIMEDOUT";
-    throw new Error(
-      timedOut
-        ? "Windows file replaceability probe exceeded its command timeout."
-        : "Windows file replaceability probe could not start trusted PowerShell.",
-    );
+    throw new Error(`${PROBE_LABEL} could not start trusted PowerShell.`);
   }
   if (typeof result.stdout !== "string" || result.stderr?.trim()) {
     throw new Error("Windows file replaceability probe returned an unexpected command result.");

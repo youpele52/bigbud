@@ -8,12 +8,17 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { sweepWindowsCuaDriverProcesses } from "./cuaDriver.windowsSweep";
 import { assertWindowsFilesReplaceable } from "./windowsFileReplaceability";
+import { DEFAULT_WINDOWS_HELPER_TIMEOUTS } from "./windowsPowerShell.run";
 
 const nativeIt = process.platform === "win32" ? it : it.skip;
 const cleanupDirectories: string[] = [];
-const ONE_HELPER_TIMEOUT_MS = 75_000;
-const TWO_HELPERS_TIMEOUT_MS = 135_000;
-const THREE_HELPERS_TIMEOUT_MS = 195_000;
+// Each sweep or probe call is bounded by the production total budget (cold compile plus one
+// timeout-only retry), so the test budget follows it instead of a separate hand-tuned number.
+const helperCallsTimeoutMs = (calls: number) =>
+  calls * DEFAULT_WINDOWS_HELPER_TIMEOUTS.totalTimeoutMs + 30_000;
+const ONE_HELPER_TIMEOUT_MS = helperCallsTimeoutMs(1);
+const TWO_HELPERS_TIMEOUT_MS = helperCallsTimeoutMs(2);
+const THREE_HELPERS_TIMEOUT_MS = helperCallsTimeoutMs(3);
 
 async function stopChild(
   child: ChildProcess.ChildProcess,
