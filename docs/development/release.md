@@ -178,16 +178,17 @@ macOS privacy permissions are associated with the signed bundle identity. Grant 
 
 ## CI vs release builds
 
-- Pushes to `main` run `.github/workflows/ci.yml`.
-- The `quality` job runs formatting, lint, typecheck, tests, the desktop pipeline build, and locked Rust validation/build steps.
+- Pull requests, pushes to `main`, and manual dispatches run `.github/workflows/ci.yml`.
+- CI runs as parallel jobs: format and lint, typecheck, locked Rust validation/build, the desktop pipeline build, package tests, server unit tests, and the server `integration` tests in 8 shards, plus the smoke, Windows CUA sweep, and native cleanup jobs. A shard coverage job proves that every server test file ran exactly once.
+- The always-run `CI passed` job is the single verdict: it fails unless every one of those jobs succeeded (a skipped or cancelled job fails it). The desktop preview builds are not part of it.
 - Browser tests are not part of CI; see [Browser tests](./browser-tests.md).
 - The release workflow has its own `preflight` quality gate before artifact builds.
-- After `quality` passes, `desktop_release_build` builds unsigned, credential-free desktop release-style artifacts on:
+- On `main` pushes, `desktop_release_build` starts immediately (it does not wait for the tests) and builds unsigned, credential-free desktop release-style artifacts on:
   - macOS `arm64`
   - macOS `x64`
   - Linux `x64` AppImage + `.deb`
   - Windows `x64`
-- `release_asset_assembly` then merges the macOS updater manifests, stages `install.sh` and `install.ps1`, verifies the assembled payload, and uploads the final release-style bundle as a GitHub Actions artifact.
+- Once `CI passed` succeeds and every preview build and ARM64 workspace agent is done, `release_asset_assembly` merges the macOS updater manifests, stages `install.sh` and `install.ps1`, verifies the assembled payload, and uploads the final release-style bundle as a GitHub Actions artifact.
 - Those `main`-push artifacts are uploaded as GitHub Actions workflow artifacts for validation, not published as a public GitHub Release. Use these CI artifacts for unsigned smoke testing; never create an unsigned public dry-run release.
 - Public curl-installable assets are published by `.github/workflows/release.yml` for a resolved release version, through a version tag or manual dispatch.
 - CI never imports Apple certificates and receives no production signing or notarization credentials.

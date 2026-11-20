@@ -4,5 +4,6 @@
 # filesystem paths outside their own mkdtemp directories. Unlisted files run serially.
 scripts/ciWorkflowInvariants.jobs.test.ts
 scripts/ciWorkflowInvariants.test.ts
+scripts/ciWorkflowInvariants.verdict.test.ts
 scripts/releaseAssetWorkflows.test.ts
 scripts/serverTestGroups.guard.test.ts

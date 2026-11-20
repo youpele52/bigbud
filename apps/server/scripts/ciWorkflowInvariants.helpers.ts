@@ -9,6 +9,7 @@ export interface Step {
   readonly uses?: string;
   readonly run?: string;
   readonly with?: Record<string, unknown>;
+  readonly env?: Record<string, unknown>;
   readonly "continue-on-error"?: unknown;
 }
 export interface Job {
