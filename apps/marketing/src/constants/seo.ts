@@ -108,3 +108,11 @@ export const DOCS_METADATA = {
 } as const;
 
 export const GETTING_STARTED_METADATA = DOCS_METADATA;
+
+export const NOT_FOUND_METADATA = {
+  title: formatPageTitle("page not found"),
+  description: `This page does not exist on ${APP_NAME}.app. Head back home, download ${APP_NAME}, or read the docs.`,
+  image: MARKETING_ASSETS.socialImagePath,
+  imageAlt: `${APP_NAME} logo`,
+  noindex: true,
+} as const;
