@@ -1,6 +1,6 @@
 //! Turns raw OS-index rows into the rows that may leave the agent: inside a scope, not excluded,
-//! unique, ranked and capped. Platform-neutral, so later Windows Search and `plocate` adapters
-//! share it, and testable with a fake index.
+//! unique, ranked and capped. Platform-neutral: the Spotlight, Windows Search and `locate`
+//! adapters all share it, and it is testable with a fake index.
 
 use std::cmp::Reverse;
 use std::collections::HashSet;

@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use super::error::OsIndexError;
 use super::exclusions::Exclusions;
+use super::scope::plain_canonical;
 use crate::search::{MAX_SEARCH_DEADLINE, MAX_SEARCH_QUERY_CHARS};
 
 /// Scopes one request may carry (home has a few dozen children at most).
@@ -99,8 +100,8 @@ fn validate_scope(scope: &Path) -> Result<(), OsIndexError> {
     }
     // Canonical means no `.`/`..` and no symlinked component, so the component-wise containment
     // check on results cannot be fooled by an alias of the scope.
-    match std::fs::canonicalize(scope) {
-        Ok(canonical) if canonical == scope && canonical.is_dir() => Ok(()),
-        Ok(_) | Err(_) => Err(OsIndexError::InvalidScope),
+    match plain_canonical(scope) {
+        Some(canonical) if canonical == scope && canonical.is_dir() => Ok(()),
+        Some(_) | None => Err(OsIndexError::InvalidScope),
     }
 }

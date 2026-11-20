@@ -3,11 +3,14 @@
 //! Scoping to the home folder itself returns almost only `~/Library` noise (caches, package
 //! stores), so the scopes are the home folder's visible children except `Library`, plus the two
 //! cloud folders that live under it (system-wide search plan, research §a and Design §6).
+//! Windows and Linux follow the same rule with their own layout (`scope_layout.rs`).
 
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use super::error::OsIndexError;
 use super::exclusions::Exclusions;
+use super::scope_layout::{ScopeLayout, parse_xdg_user_dirs, scope_candidates};
 
 /// Home children searched at the `common-folders` File Access level.
 pub const COMMON_FOLDERS: [&str; 5] = ["Desktop", "Documents", "Downloads", "Music", "Pictures"];
@@ -29,42 +32,33 @@ pub struct HomeChild {
     pub is_directory: bool,
 }
 
-/// Home-relative scope candidates for `level`. Pure: `children` is the home listing. Only real
-/// folders qualify (symlinks could point anywhere), hidden folders are skipped (dot folders hold
-/// tool state, not documents) and `Library` is never searched as a whole.
-pub fn scope_candidates(level: OsIndexScopeLevel, children: &[HomeChild]) -> Vec<PathBuf> {
-    let is_folder = |name: &str| {
-        children
-            .iter()
-            .any(|child| child.is_directory && child.name == name)
-    };
-    let mut candidates: Vec<PathBuf> = match level {
-        OsIndexScopeLevel::CommonFolders => COMMON_FOLDERS
-            .iter()
-            .filter(|name| is_folder(name))
-            .map(PathBuf::from)
-            .collect(),
-        OsIndexScopeLevel::Unrestricted => children
-            .iter()
-            .filter(|child| {
-                child.is_directory
-                    && !child.name.starts_with('.')
-                    && !child.name.eq_ignore_ascii_case("Library")
-            })
-            .map(|child| PathBuf::from(&child.name))
-            .chain(CLOUD_FOLDERS.iter().map(PathBuf::from))
-            .collect(),
-    };
-    candidates.sort();
-    candidates.dedup();
-    candidates
+/// Upper bound for `~/.config/user-dirs.dirs` (a few hundred bytes in practice).
+const MAX_USER_DIRS_BYTES: u64 = 64 * 1024;
+
+/// The home folder the scopes are resolved under: `USERPROFILE` on Windows (where `HOME` is
+/// normally unset, or set by MSYS-style shells to a different folder) and `HOME` elsewhere.
+/// `None` when the variable is unset or empty.
+pub fn home_folder() -> Option<PathBuf> {
+    let variable = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    std::env::var_os(variable)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from)
 }
 
-/// Resolves the scopes for `home` and `level`: lists home, keeps candidates that exist as real
-/// folders, canonicalises them, and drops any that resolve outside home or are excluded. Missing
-/// or unreadable candidates only narrow the search, so they are skipped rather than failing it.
+/// Resolves the scopes for `home` and `level` with this platform's [`ScopeLayout`].
 pub fn resolve_scopes(home: &Path, level: OsIndexScopeLevel) -> Result<Vec<PathBuf>, OsIndexError> {
-    let home = std::fs::canonicalize(home).map_err(|_| OsIndexError::HomeUnavailable)?;
+    resolve_scopes_with(home, level, &ScopeLayout::CURRENT)
+}
+
+/// Lists home, keeps candidates that exist as real folders, canonicalises them, and drops any
+/// that resolve outside home or are excluded. Missing or unreadable candidates only narrow the
+/// search, so they are skipped rather than failing it.
+pub(super) fn resolve_scopes_with(
+    home: &Path,
+    level: OsIndexScopeLevel,
+    layout: &ScopeLayout,
+) -> Result<Vec<PathBuf>, OsIndexError> {
+    let home = plain_canonical(home).ok_or(OsIndexError::HomeUnavailable)?;
     let exclusions = Exclusions::embedded()?;
     let listing = std::fs::read_dir(&home).map_err(|_| OsIndexError::HomeUnavailable)?;
     let mut children = Vec::new();
@@ -79,26 +73,55 @@ pub fn resolve_scopes(home: &Path, level: OsIndexScopeLevel) -> Result<Vec<PathB
             is_directory: file_type.is_dir(),
         });
     }
+    let xdg_common = match level {
+        OsIndexScopeLevel::CommonFolders if layout.xdg_user_dirs => read_xdg_user_dirs(&home),
+        _ => Vec::new(),
+    };
     let mut scopes = Vec::new();
-    for candidate in scope_candidates(level, &children) {
+    for candidate in scope_candidates(layout, level, &children, &xdg_common) {
         let path = home.join(&candidate);
-        // Cloud folders sit two levels down; require a real folder there too.
+        // Nested candidates (cloud, synced and XDG folders) are not in the home listing; require
+        // a real folder there too.
         let is_real_folder =
             std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_dir());
         if !is_real_folder {
             continue;
         }
-        let Ok(canonical) = std::fs::canonicalize(&path) else {
+        let Some(canonical) = plain_canonical(&path) else {
             continue;
         };
         if canonical.starts_with(&home)
             && canonical.to_str().is_some()
             && !exclusions.excludes_scope(&canonical)
+            && !scopes.contains(&canonical)
         {
             scopes.push(canonical);
         }
     }
     Ok(scopes)
+}
+
+/// The canonical form scopes are kept and compared in. On Windows the verbatim `\\?\` prefix
+/// that `canonicalize` adds is removed when that is lossless, because the Windows Search index
+/// reports plain drive paths.
+pub(super) fn plain_canonical(path: &Path) -> Option<PathBuf> {
+    let canonical = std::fs::canonicalize(path).ok()?;
+    #[cfg(windows)]
+    let canonical = super::winpath::plain_path(canonical);
+    Some(canonical)
+}
+
+/// Common folders named by `~/.config/user-dirs.dirs`. A missing, unreadable, oversized or
+/// non-UTF-8 file names none, which only narrows the search.
+fn read_xdg_user_dirs(home: &Path) -> Vec<PathBuf> {
+    let Ok(file) = std::fs::File::open(home.join(".config/user-dirs.dirs")) else {
+        return Vec::new();
+    };
+    let mut text = String::new();
+    match file.take(MAX_USER_DIRS_BYTES + 1).read_to_string(&mut text) {
+        Ok(read) if (read as u64) <= MAX_USER_DIRS_BYTES => parse_xdg_user_dirs(&text),
+        Ok(_) | Err(_) => Vec::new(),
+    }
 }
 
 /// Splits an OS-index result into its scope and the part below it. Returns `None` for anything

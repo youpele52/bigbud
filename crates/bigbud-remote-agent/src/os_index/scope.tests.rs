@@ -5,8 +5,9 @@ use std::time::Duration;
 use super::error::OsIndexError;
 use super::request::{DEFAULT_OS_INDEX_RESULTS, MAX_OS_INDEX_RESULTS, OsIndexRequest};
 use super::scope::{
-    HomeChild, OsIndexScopeLevel, resolve_scopes, scope_candidates, split_by_scope,
+    HomeChild, OsIndexScopeLevel, resolve_scopes, resolve_scopes_with, split_by_scope,
 };
+use super::scope_layout::{ScopeLayout, scope_candidates};
 use super::tests::Fixture;
 use crate::search::MAX_SEARCH_DEADLINE;
 
@@ -32,7 +33,12 @@ fn common_folders_keep_only_the_five_existing_folders() {
         child("Library", true),
     ];
     assert_eq!(
-        scope_candidates(OsIndexScopeLevel::CommonFolders, &children),
+        scope_candidates(
+            &ScopeLayout::MACOS,
+            OsIndexScopeLevel::CommonFolders,
+            &children,
+            &[]
+        ),
         paths(&["Desktop", "Documents", "Pictures"])
     );
 }
@@ -50,7 +56,12 @@ fn unrestricted_uses_visible_home_folders_except_library_plus_cloud_folders() {
         child("Linked", false),
     ];
     assert_eq!(
-        scope_candidates(OsIndexScopeLevel::Unrestricted, &children),
+        scope_candidates(
+            &ScopeLayout::MACOS,
+            OsIndexScopeLevel::Unrestricted,
+            &children,
+            &[]
+        ),
         paths(&[
             "Documents",
             "Library/CloudStorage",
@@ -114,7 +125,7 @@ fn resolve_scopes_skips_symlinks_files_and_missing_folders() {
     std::os::unix::fs::symlink("/", home.path().join("Desktop")).unwrap();
     let base = home.path();
     assert_eq!(
-        resolve_scopes(base, OsIndexScopeLevel::Unrestricted).unwrap(),
+        resolve_scopes_with(base, OsIndexScopeLevel::Unrestricted, &ScopeLayout::MACOS).unwrap(),
         vec![
             base.join("Documents"),
             base.join("Library/CloudStorage"),
@@ -122,7 +133,7 @@ fn resolve_scopes_skips_symlinks_files_and_missing_folders() {
         ]
     );
     assert_eq!(
-        resolve_scopes(base, OsIndexScopeLevel::CommonFolders).unwrap(),
+        resolve_scopes_with(base, OsIndexScopeLevel::CommonFolders, &ScopeLayout::MACOS).unwrap(),
         vec![base.join("Documents")]
     );
     assert_eq!(
@@ -212,4 +223,13 @@ fn request_trims_deduplicates_and_clamps() {
     assert_eq!(request.deadline(), Duration::from_millis(5));
     let request = OsIndexRequest::new("report", vec![scope], 7, Duration::ZERO).unwrap();
     assert_eq!(request.max_results(), 7);
+}
+
+#[test]
+fn home_folder_reads_the_platform_variable() {
+    let variable = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
+    let expected = std::env::var_os(variable)
+        .filter(|value| !value.is_empty())
+        .map(PathBuf::from);
+    assert_eq!(super::scope::home_folder(), expected);
 }

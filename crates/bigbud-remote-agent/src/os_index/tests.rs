@@ -27,7 +27,7 @@ impl Fixture {
                 next.fetch_add(1, Ordering::Relaxed)
             ));
             match fs::create_dir(&path) {
-                Ok(()) => return Self(fs::canonicalize(path).unwrap()),
+                Ok(()) => return Self(super::scope::plain_canonical(&path).unwrap()),
                 Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
                 Err(error) => panic!("cannot create os index fixture: {error}"),
             }
@@ -206,7 +206,7 @@ fn stop_reasons_other_than_complete_are_kept() {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux", windows)))]
 #[test]
 fn other_platforms_report_unsupported() {
     let fixture = Fixture::new();
