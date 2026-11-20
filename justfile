@@ -80,8 +80,17 @@ check-test-file-length *args:
 test *args:
     bun run test "$@"
 
+test-packages *args:
+    bun run test:packages "$@"
+
+test-server *args:
+    bun run test:server "$@"
+
 test-desktop-smoke *args:
     bun run test:desktop-smoke "$@"
+
+ci-verify-shard-coverage *args:
+    bun run ci:verify-shard-coverage "$@"
 
 fmt *args:
     bun run fmt "$@"
@@ -253,6 +262,9 @@ server-test *args:
 
 server-test-groups *args:
     bun run --cwd apps/server test:groups "$@"
+
+server-test-list-files *args:
+    bun run --cwd apps/server test:list-files "$@"
 
 server-test-browser-install *args:
     bun run --cwd apps/server test:browser:install "$@"

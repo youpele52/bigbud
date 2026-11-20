@@ -98,6 +98,250 @@ jobs:
           test -f apps/desktop/dist-electron/preload.js
           grep -nE "desktopBridge|getWsUrl|PICK_FOLDER_CHANNEL|wsUrl" apps/desktop/dist-electron/preload.js
 
+  # M2 shadow jobs: the split graph runs next to `quality`, which stays the authoritative gate
+  # until the cut-over. Nothing depends on these jobs yet.
+  fmt_lint:
+    name: Format and lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # Designated cache writer after the cut-over. While `quality` also saves, the second save of
+      # the same key only logs a "cache already exists" warning.
+      - name: Setup Bun, Node and dependencies
+        uses: ./.github/actions/setup-bigbud
+        with:
+          save-caches: "true"
+
+      - name: Format
+        run: bun run fmt:check
+
+      - name: Lint
+        run: bun run lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Bun, Node and dependencies
+        uses: ./.github/actions/setup-bigbud
+
+      - name: Typecheck
+        run: bun run typecheck
+
+  rust:
+    name: Rust format, lint, test, build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Rust and protoc
+        uses: ./.github/actions/setup-rust-native
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust format
+        run: cargo fmt --all --check
+
+      - name: Rust lint
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Rust test
+        run: cargo test --locked --workspace
+
+      - name: Rust binary build
+        run: cargo build --locked --workspace --release
+
+  # The @bigbud/server build runs two `cargo build --release` commands, so Rust and protoc are required.
+  build_desktop_pipeline:
+    name: Build desktop pipeline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Bun, Node and dependencies
+        uses: ./.github/actions/setup-bigbud
+
+      - name: Setup Rust and protoc
+        uses: ./.github/actions/setup-rust-native
+
+      - name: Build desktop pipeline
+        run: bun run build:desktop
+
+      - name: Verify preload bundle output
+        run: |
+          test -f apps/desktop/dist-electron/preload.js
+          grep -nE "desktopBridge|getWsUrl|PICK_FOLDER_CHANNEL|wsUrl" apps/desktop/dist-electron/preload.js
+
+  test_packages:
+    name: Test packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Bun, Node and dependencies
+        uses: ./.github/actions/setup-bigbud
+
+      - name: Setup Rust and protoc
+        uses: ./.github/actions/setup-rust-native
+
+      # The same debug binaries `cargo test --workspace` left for the monolith's JS tests; without
+      # them several desktop tests skip silently.
+      - name: Prepare native test binaries
+        run: cargo test --locked --workspace --no-run
+
+      - name: Test packages
+        run: bun run test:packages
+
+  test_server_unit:
+    name: Test server unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      # Unit files are guard-checked not to spawn processes, so no Rust binaries or Playwright.
+      - name: Setup Bun, Node and dependencies
+        uses: ./.github/actions/setup-bigbud
+
+      - name: Create test report directory
+        run: mkdir -p "$RUNNER_TEMP/server-test-reports"
+
+      # Through Turbo (`test:server`), which keeps `^build` and strict env mode.
+      - name: Test server unit
+        run: >-
+          bun run test:server --project=unit --reporter=default --reporter=json
+          --outputFile.json="$RUNNER_TEMP/server-test-reports/unit.json"
+
+      # overwrite: a re-run of this job replaces its report instead of failing the upload.
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: server-test-report-unit
+          path: ${{ runner.temp }}/server-test-reports/unit.json
+          retention-days: 7
+          overwrite: true
+
+  test_server_integration:
+    name: Test server integration ${{ matrix.shard }}/${{ strategy.job-total }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep in step with `--shard-count` in test_server_shard_coverage.
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Bun, Node and dependencies
+        uses: ./.github/actions/setup-bigbud
+
+      - name: Setup Rust and protoc
+        uses: ./.github/actions/setup-rust-native
+
+      # Integration files spawn these debug binaries, and two build bigbud-remote-agent in beforeAll.
+      - name: Prepare native test binaries
+        run: cargo test --locked --workspace --no-run
+
+      - id: playwright_version
+        name: Resolve Playwright version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require(require.resolve('playwright/package.json', { paths: ['apps/server'] })).version")"
+          if [[ -z "$version" || "$version" == undefined ]]; then
+            echo "::error::Could not resolve the installed Playwright version"; exit 1
+          fi
+          echo "key=playwright-${{ runner.os }}-${{ runner.arch }}-$version" >> "$GITHUB_OUTPUT"
+
+      - id: playwright_cache
+        name: Restore Playwright browser cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.playwright_version.outputs.key }}
+
+      # Skips the browser download on a cache hit and still installs the system dependencies.
+      - name: Install Playwright Chromium for server terminal browser tests
+        run: bun run --cwd apps/server test:browser:install
+
+      - name: Save Playwright browser cache
+        if: matrix.shard == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.playwright_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.playwright_version.outputs.key }}
+
+      - name: Create test report directory
+        run: mkdir -p "$RUNNER_TEMP/server-test-reports"
+
+      # Through Turbo (`test:server`), which keeps `^build` and strict env mode. Each shard keeps the
+      # integration project's fileParallelism: false.
+      - name: Test server integration shard
+        run: >-
+          bun run test:server --project=integration
+          --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+          --reporter=default --reporter=json
+          --outputFile.json="$RUNNER_TEMP/server-test-reports/integration-${{ matrix.shard }}.json"
+
+      # overwrite: "Re-run failed jobs" on one shard replaces its report instead of failing the upload.
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: server-test-report-integration-${{ matrix.shard }}
+          path: ${{ runner.temp }}/server-test-reports/integration-${{ matrix.shard }}.json
+          retention-days: 7
+          overwrite: true
+
+  test_server_shard_coverage:
+    name: Verify server test shard coverage
+    needs: [test_server_unit, test_server_integration]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Bun, Node and dependencies
+        uses: ./.github/actions/setup-bigbud
+
+      - name: Download server test reports
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: server-test-report-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/server-test-reports
+
+      - name: List expected server test files
+        run: bun run --cwd apps/server test:list-files --json="$RUNNER_TEMP/expected.json"
+
+      - name: Verify every server test file ran exactly once
+        run: >-
+          bun run ci:verify-shard-coverage
+          --expected "$RUNNER_TEMP/expected.json"
+          --unit "$RUNNER_TEMP/server-test-reports/unit.json"
+          --shards-dir "$RUNNER_TEMP/server-test-reports"
+          --shard-count 8
+          --package-dir apps/server
+
   release_smoke:
     name: Release Smoke
     runs-on: ubuntu-24.04
