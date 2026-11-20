@@ -60,8 +60,10 @@ export function FileAccessSettingsSection() {
 
   const handleResetPermissions = useCallback(async () => {
     setIsResetting(true);
+    // Re-ask only the File Access question, never the whole welcome tour.
     updateSettings({
       hasSeenFileAccessPrompt: false,
+      hasSeenWelcomeTour: true,
       fileAccessPermissionLevel: "none",
     });
     updateServerSettings(fileAccessServerPatch("none"));

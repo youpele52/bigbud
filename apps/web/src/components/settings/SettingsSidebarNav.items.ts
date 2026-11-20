@@ -122,6 +122,7 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "About", section: "About", to: "/settings/about" },
   { label: "Version", section: "About", to: "/settings/about" },
   { label: "Changelog", section: "About", to: "/settings/about" },
+  { label: "Welcome tour", section: "About", to: "/settings/about" },
   { label: "Links", section: "About", to: "/settings/about" },
   { label: "Diagnostics", section: "About", to: "/settings/about" },
 ];

@@ -4,6 +4,7 @@ import { openLinkFromClick } from "~/lib/openLink";
 import { resolveAndPersistPreferredEditor } from "../../models/editor";
 import { ensureNativeApi } from "../../rpc/nativeApi";
 import { useServerAvailableEditors, useServerObservability } from "../../rpc/serverState";
+import { useWelcomeTourStore } from "../../stores/ui/welcomeTour.store";
 import { Button } from "../ui/button";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { ABOUT_CHANGELOG_URL, ABOUT_LINKS } from "./AboutSettingsSection.links";
@@ -16,6 +17,7 @@ export function AboutSettingsSection() {
   const [isRestarting, setIsRestarting] = useState(false);
   const [openDiagnosticsError, setOpenDiagnosticsError] = useState<string | null>(null);
   const canRestart = Boolean(window.desktopBridge?.restartApplication);
+  const openWelcomeTour = useWelcomeTourStore((state) => state.openTour);
 
   const logsDirectoryPath = observability?.logsDirectoryPath ?? null;
 
@@ -83,6 +85,16 @@ export function AboutSettingsSection() {
         }
       />
       <AboutManualInstallRow />
+      <SettingsRow
+        title="Welcome tour"
+        description="Set your name, check your AI providers, and choose file access again."
+        searchTerms={["welcome", "tour", "onboarding", "getting started"]}
+        control={
+          <Button size="xs" variant="outline" onClick={() => openWelcomeTour("tour")}>
+            Show welcome tour
+          </Button>
+        }
+      />
       <SettingsRow title="Links" description="Website, docs, source code, and community.">
         <ul className="mt-3 flex flex-col items-start">
           {ABOUT_LINKS.map(({ label, url }) => (
