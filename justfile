@@ -95,6 +95,9 @@ ci-verify-shard-coverage *args:
 ci-wait-for-verdict *args:
     bun run ci:wait-for-verdict "$@"
 
+ci-verify-release-publish *args:
+    bun run ci:verify-release-publish "$@"
+
 fmt *args:
     bun run fmt "$@"
 

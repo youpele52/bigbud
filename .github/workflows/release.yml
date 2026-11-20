@@ -58,10 +58,13 @@ jobs:
       - id: release_meta
         name: Resolve release version
         shell: bash
+        # User input reaches the script only through env, never through ${{ }} interpolation.
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            raw="${{ github.event.inputs.version }}"
+            raw="$RELEASE_VERSION_INPUT"
           else
             raw="${GITHUB_REF_NAME}"
           fi
@@ -290,6 +293,29 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+    env:
+      # The only list of published files: resolved once (deduplicated) for the upload and the
+      # verification. The action uploads a file matched by two patterns twice at once, which fails on
+      # GitHub's asset-metadata race (release v0.4.0-beta.3).
+      RELEASE_FILE_PATTERNS: |
+        release-assets/*.dmg
+        release-assets/*.zip
+        release-assets/*.AppImage
+        release-assets/*.deb
+        release-assets/*.exe
+        release-assets/*.blockmap
+        release-assets/${{ needs.preflight.outputs.update_channel }}*.yml
+        release-assets/install.sh
+        release-assets/install.ps1
+        release-assets/remote-agent.sh
+        release-assets/bigbud-remote-agent-*
+        release-assets/remote-agent-install-source.json
+        release-assets/remote-agent-manifest.json
+        release-assets/remote-agent-install-source.v2.json
+        release-assets/remote-agent-manifest.v2.json
+        release-assets/bigbud-backend-graph-*
+        release-assets/server-workspace-agent-*
+        release-assets/server-organization-supervisor-*
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -406,7 +432,16 @@ jobs:
           node scripts/verify-desktop-release-assets.ts release-assets
           "${{ needs.preflight.outputs.update_channel }}"
 
-      - name: Publish release
+      - id: release_files
+        name: Resolve release files
+        run: node scripts/verify-release-publish.ts resolve --github-output "$GITHUB_OUTPUT"
+
+      # continue-on-error: the next step re-checks the whole end state (release published with the
+      # right channel, every file uploaded with the local size) and repairs or fails the job, so an
+      # upload error is never ignored, only retried.
+      - id: publish
+        name: Publish release
+        continue-on-error: true
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ needs.preflight.outputs.tag }}
@@ -415,23 +450,20 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ needs.preflight.outputs.is_prerelease }}
           make_latest: ${{ needs.preflight.outputs.make_latest }}
-          files: |
-            release-assets/*.dmg
-            release-assets/*.zip
-            release-assets/*.AppImage
-            release-assets/*.deb
-            release-assets/*.exe
-            release-assets/*.blockmap
-            release-assets/${{ needs.preflight.outputs.update_channel }}*.yml
-            release-assets/install.sh
-            release-assets/install.ps1
-            release-assets/remote-agent.sh
-            release-assets/bigbud-remote-agent-*
-            release-assets/remote-agent-install-source.json
-            release-assets/remote-agent-manifest.json
-            release-assets/remote-agent-install-source.v2.json
-            release-assets/remote-agent-manifest.v2.json
-            release-assets/bigbud-backend-graph-*
-            release-assets/server-workspace-agent-*
-            release-assets/server-organization-supervisor-*
+          files: ${{ steps.release_files.outputs.files }}
           fail_on_unmatched_files: true
+
+      - name: Verify and repair release assets
+        if: ${{ !cancelled() && steps.release_files.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+          IS_PRERELEASE: ${{ needs.preflight.outputs.is_prerelease }}
+          MAKE_LATEST: ${{ needs.preflight.outputs.make_latest }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          if [[ "$PUBLISH_OUTCOME" != "success" ]]; then
+            echo "::warning::Publish release ended with '$PUBLISH_OUTCOME'; verifying and repairing the release"
+          fi
+          node scripts/verify-release-publish.ts verify --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG" \
+            --prerelease "$IS_PRERELEASE" --make-latest "$MAKE_LATEST" --attempts 3

@@ -53,7 +53,12 @@ describe("remote agent third-party notices", () => {
     expect(verify.run).toContain(
       'test -s "release-assets/bigbud-remote-agent-${version}-${target}${suffix}"',
     );
+    // The publish step uploads the deduplicated list resolved from the job's pattern list.
+    const publisher = readWorkflow("release.yml").jobs.release as unknown as {
+      readonly env: { readonly RELEASE_FILE_PATTERNS: string };
+    };
+    expect(publisher.env.RELEASE_FILE_PATTERNS).toContain("release-assets/bigbud-remote-agent-*");
     const publish = release.find((step) => step.uses?.startsWith("softprops/action-gh-release@"))!;
-    expect(publish.with?.files).toContain("release-assets/bigbud-remote-agent-*");
+    expect(publish.with?.files).toBe("${{ steps.release_files.outputs.files }}");
   });
 });

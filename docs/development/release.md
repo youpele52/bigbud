@@ -323,6 +323,11 @@ bun run dist:desktop:linux:deb
 
 ## 5) Troubleshooting
 
+- `Publish GitHub Release` shows a failed `Publish release` step but the job is green: the
+  action's upload hit a transient GitHub error, and `Verify and repair release assets` re-uploaded
+  what was missing and confirmed every asset. Its step summary lists what it repaired. The job fails
+  only if the release is still missing, a draft, on the wrong channel, or missing assets after three
+  repair rounds; re-run the failed job to repair it again.
 - `ci_gate` fails:
   - "No CI run for <sha>": run `gh workflow run ci.yml --repo youpele52/bigbud --ref <tag or branch>`, wait for `CI passed`, then use "Re-run failed jobs" on the release run. Successful builds and their artifacts are kept, so only the gate and publish run again.
   - "No CI run … has a successful 'CI passed' job": fix or re-run CI for that commit, then re-run the release's failed jobs.

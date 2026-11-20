@@ -9,6 +9,7 @@ import {
 } from "./ciWorkflowInvariants.helpers.ts";
 
 interface ReleaseJob extends Job {
+  readonly env?: Record<string, string>;
   readonly permissions?: Record<string, string>;
   readonly outputs?: Record<string, string>;
   readonly with?: Record<string, unknown>;
@@ -200,5 +201,69 @@ describe("release.yml CI gate", () => {
         "native_resource_cleanup_mount",
       ]),
     );
+  });
+});
+
+describe("release.yml publish verification", () => {
+  const publishSteps = steps("release");
+  const at = (predicate: (step: Step) => boolean) => publishSteps.findIndex(predicate);
+  const resolveIndex = at((step) => step.id === "release_files");
+  const publishIndex = at((step) => step.uses?.startsWith("softprops/action-gh-release@") ?? false);
+  const verifyIndex = at((step) => step.name === "Verify and repair release assets");
+
+  it("uploads one deduplicated file list resolved from the job's only pattern list", () => {
+    expect(resolveIndex).toBeGreaterThanOrEqual(0);
+    expect(resolveIndex).toBeLessThan(publishIndex);
+    expect(publishSteps[resolveIndex]!.run).toBe(
+      'node scripts/verify-release-publish.ts resolve --github-output "$GITHUB_OUTPUT"',
+    );
+    expect(job("release").env?.RELEASE_FILE_PATTERNS).toContain("release-assets/*.exe");
+    expect(publishSteps[publishIndex]!.with).toMatchObject({
+      files: "${{ steps.release_files.outputs.files }}",
+      fail_on_unmatched_files: true,
+    });
+  });
+
+  it("verifies and repairs the release after the upload, even when the upload failed", () => {
+    const publish = publishSteps[publishIndex]!;
+    expect(publish.id).toBe("publish");
+    // Only the upload may fail softly; the verification decides the job result.
+    expect(publish["continue-on-error"]).toBe(true);
+    expect(
+      publishSteps.filter((step) => step["continue-on-error"] !== undefined).map((s) => s.id),
+    ).toEqual(["publish"]);
+    expect(verifyIndex).toBeGreaterThan(publishIndex);
+    expect(verifyIndex).toBe(publishSteps.length - 1);
+    const verify = publishSteps[verifyIndex]!;
+    expect(verify.if).toBe("${{ !cancelled() && steps.release_files.outcome == 'success' }}");
+    expect(verify["continue-on-error"]).toBeUndefined();
+    expect(verify.env).toMatchObject({
+      GH_TOKEN: "${{ github.token }}",
+      RELEASE_TAG: "${{ needs.preflight.outputs.tag }}",
+      IS_PRERELEASE: "${{ needs.preflight.outputs.is_prerelease }}",
+      MAKE_LATEST: "${{ needs.preflight.outputs.make_latest }}",
+    });
+    expect(JSON.stringify(verify)).not.toContain("secrets.");
+    expect(verify.run).toContain("node scripts/verify-release-publish.ts verify");
+    expect(verify.run).toContain('--tag "$RELEASE_TAG"');
+    expect(readPackageScripts("package.json")["ci:verify-release-publish"]).toBe(
+      "node scripts/verify-release-publish.ts",
+    );
+  });
+});
+
+describe("release.yml script injection", () => {
+  it("never interpolates workflow inputs directly into a run script", () => {
+    for (const [id, entry] of Object.entries(release.jobs))
+      for (const step of entry.steps ?? [])
+        expect(step.run ?? "", `${id} ${step.name ?? step.id ?? ""}`).not.toMatch(
+          /\$\{\{[^}]*\b(?:github\.event\.inputs|inputs)\./,
+        );
+  });
+
+  it("passes the dispatch version to preflight through env", () => {
+    const resolve = steps("preflight").find((step) => step.id === "release_meta")!;
+    expect(resolve.env).toEqual({ RELEASE_VERSION_INPUT: "${{ inputs.version }}" });
+    expect(resolve.run).toContain('raw="$RELEASE_VERSION_INPUT"');
   });
 });
