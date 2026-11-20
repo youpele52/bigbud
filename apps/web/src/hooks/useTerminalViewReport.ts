@@ -25,6 +25,8 @@ export function useTerminalViewReport(threadId: ThreadId) {
   );
   const paneKey = terminalIds.join("\u0000");
   useEffect(() => {
+    // No DOM (non-browser rendering such as tests): there is no viewer to report.
+    if (typeof document === "undefined" || typeof window === "undefined") return;
     const send = (viewing: boolean) => {
       const view = readNativeApi()?.terminal.view;
       if (!view) return;
