@@ -104,6 +104,7 @@ vi.mock("./updater/autoUpdater", () => ({
   updaterConfigured: false,
 }));
 vi.mock("./window/ipcHandlers", () => ({ registerIpcHandlers: vi.fn() }));
+vi.mock("./window/shellPathHandlers", () => ({ registerShellPathIpc: vi.fn() }));
 vi.mock("./window/remoteBackendWindow", () => ({
   createRemoteBackendWindows: vi.fn(),
   registerRemoteBackendWindowIpc: vi.fn(),
