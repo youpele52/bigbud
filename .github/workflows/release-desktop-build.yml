@@ -15,6 +15,11 @@ on:
       update_channel:
         required: true
         type: string
+      retention_days:
+        description: "Artifact retention in days for the release payload (0 keeps the repository default; dry runs pass 3)"
+        required: false
+        type: number
+        default: 0
 
 permissions:
   contents: read
@@ -229,3 +234,4 @@ jobs:
           name: desktop-${{ matrix.platform }}-${{ matrix.arch }}
           path: release-publish/*
           if-no-files-found: error
+          retention-days: ${{ inputs.retention_days || 0 }}

@@ -10,15 +10,22 @@ on:
         description: "Release version (for example 1.2.3 or v1.2.3)"
         required: true
         type: string
+      publish:
+        description: "Publish the GitHub release (otherwise a dry run that builds and verifies only)"
+        required: false
+        type: boolean
+        default: false
 
+# Least privilege: only the publish job gets contents: write, and only ci_gate reads Actions.
+# No concurrency key: nothing may cancel a release run.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   preflight:
     name: Preflight
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 15
     outputs:
       version: ${{ steps.release_meta.outputs.version }}
       tag: ${{ steps.release_meta.outputs.tag }}
@@ -26,6 +33,9 @@ jobs:
       is_prerelease: ${{ steps.release_meta.outputs.is_prerelease }}
       make_latest: ${{ steps.release_meta.outputs.make_latest }}
       ref: ${{ github.sha }}
+      # Unpublished dry-run artifacts are signed builds in a public repository: keep them briefly.
+      # 0 keeps the repository default.
+      artifact_retention_days: ${{ github.event_name == 'workflow_dispatch' && inputs.publish != true && 3 || 0 }}
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -40,53 +50,65 @@ jobs:
         with:
           node-version-file: package.json
 
+      # Metadata needs only @bigbud/shared. The test suite is not re-run here: ci_gate requires
+      # `CI passed` for this exact commit before publish.
       - name: Install dependencies
-        run: node scripts/bun-install-with-retry.ts
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
-        with:
-          toolchain: 1.95.0
-          components: rustfmt, clippy
-
-      - name: Install protobuf compiler
-        run: sudo apt-get update && sudo apt-get install --yes protobuf-compiler
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - id: release_meta
         name: Resolve release version
         shell: bash
+        # User input reaches the script only through env, never through ${{ }} interpolation.
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
         run: |
           set -euo pipefail
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            raw="${{ github.event.inputs.version }}"
+            raw="$RELEASE_VERSION_INPUT"
           else
             raw="${GITHUB_REF_NAME}"
           fi
           bun scripts/resolve-release-metadata.ts "$raw" --github-output "$GITHUB_OUTPUT"
 
-      - name: Format
-        run: bun run fmt:check
+  ci_gate:
+    name: CI passed for release commit
+    needs: preflight
+    runs-on: ubuntu-24.04
+    # The script polls for up to 70 minutes.
+    timeout-minutes: 75
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.preflight.outputs.ref }}
+          persist-credentials: false
 
-      - name: Lint
-        run: bun run lint
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: package.json
 
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Assert the checkout is the release commit
+        env:
+          RELEASE_SHA: ${{ needs.preflight.outputs.ref }}
+        run: |
+          head="$(git rev-parse HEAD)"
+          if [[ "$head" != "$RELEASE_SHA" ]]; then
+            echo "::error::Checked out $head but the release commit is $RELEASE_SHA"; exit 1
+          fi
 
-      - name: Rust format
-        run: cargo fmt --all --check
-
-      - name: Rust lint
-        run: cargo clippy --locked --workspace --all-targets -- -D warnings
-
-      - name: Rust test
-        run: cargo test --locked --workspace
-
-      - name: Install Playwright Chromium for server terminal browser tests
-        run: bun run --cwd apps/server test:browser:install
-
-      - name: Test
-        run: bun run test
+      # Node built-ins only, so no dependency install (the Bun script ci:wait-for-verdict runs the same file).
+      - name: Wait for CI passed on the release commit
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ needs.preflight.outputs.ref }}
+        run: >-
+          node scripts/wait-for-ci-verdict.ts --repo "$GITHUB_REPOSITORY" --sha "$RELEASE_SHA"
+          --workflow ci.yml --job "CI passed" --timeout-minutes 70 --missing-grace-minutes 10
+          --poll-seconds 30
 
   native_resource_cleanup:
     name: Native Resource Cleanup ${{ matrix.label }}
@@ -136,14 +158,16 @@ jobs:
       - name: Run privileged mount-boundary cleanup test
         run: cargo test --locked --package bigbud-remote-agent refuses_a_same_device_bind_mount_boundary -- --ignored
 
+  # Builds never wait for tests or cleanup; only publish waits (for ci_gate and everything else).
   build:
-    needs: [preflight, native_resource_cleanup, native_resource_cleanup_mount]
+    needs: [preflight]
     uses: ./.github/workflows/release-desktop-build.yml
     with:
       ref: ${{ needs.preflight.outputs.ref }}
       version: ${{ needs.preflight.outputs.version }}
       tag: ${{ needs.preflight.outputs.tag }}
       update_channel: ${{ needs.preflight.outputs.update_channel }}
+      retention_days: ${{ fromJSON(needs.preflight.outputs.artifact_retention_days) }}
     secrets: inherit
 
   remote_agent_build:
@@ -152,6 +176,7 @@ jobs:
     with:
       ref: ${{ needs.preflight.outputs.ref }}
       version: ${{ needs.preflight.outputs.version }}
+      retention_days: ${{ fromJSON(needs.preflight.outputs.artifact_retention_days) }}
 
   remote_backend_graph_build:
     needs: preflight
@@ -160,6 +185,7 @@ jobs:
       ref: ${{ needs.preflight.outputs.ref }}
       version: ${{ needs.preflight.outputs.version }}
       release_signing: true
+      retention_days: ${{ fromJSON(needs.preflight.outputs.artifact_retention_days) }}
     secrets:
       BIGBUD_REMOTE_AGENT_SIGNING_KEY: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY }}
       BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID: ${{ secrets.BIGBUD_REMOTE_AGENT_SIGNING_KEY_ID }}
@@ -207,6 +233,7 @@ jobs:
           name: desktop-workspace-agent-win32-arm64
           path: release-publish/*
           if-no-files-found: error
+          retention-days: ${{ fromJSON(needs.preflight.outputs.artifact_retention_days) }}
 
   workspace_agent_linux_arm64:
     name: Build Linux ARM64 server workspace agent
@@ -246,18 +273,49 @@ jobs:
           name: desktop-workspace-agent-linux-arm64
           path: release-publish/*
           if-no-files-found: error
+          retention-days: ${{ fromJSON(needs.preflight.outputs.artifact_retention_days) }}
 
   release:
     name: Publish GitHub Release
     needs:
       - preflight
+      - ci_gate
+      - native_resource_cleanup
+      - native_resource_cleanup_mount
       - build
       - remote_agent_build
       - remote_backend_graph_build
       - workspace_agent_windows_arm64
       - workspace_agent_linux_arm64
+    # Tag pushes publish; a manual dispatch publishes only with an explicit publish: true.
+    if: ${{ github.event_name == 'push' || inputs.publish == true }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      # The only list of published files: resolved once (deduplicated) for the upload and the
+      # verification. The action uploads a file matched by two patterns twice at once, which fails on
+      # GitHub's asset-metadata race (release v0.4.0-beta.3).
+      RELEASE_FILE_PATTERNS: |
+        release-assets/*.dmg
+        release-assets/*.zip
+        release-assets/*.AppImage
+        release-assets/*.deb
+        release-assets/*.exe
+        release-assets/*.blockmap
+        release-assets/${{ needs.preflight.outputs.update_channel }}*.yml
+        release-assets/install.sh
+        release-assets/install.ps1
+        release-assets/remote-agent.sh
+        release-assets/bigbud-remote-agent-*
+        release-assets/remote-agent-install-source.json
+        release-assets/remote-agent-manifest.json
+        release-assets/remote-agent-install-source.v2.json
+        release-assets/remote-agent-manifest.v2.json
+        release-assets/bigbud-backend-graph-*
+        release-assets/server-workspace-agent-*
+        release-assets/server-organization-supervisor-*
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -374,7 +432,16 @@ jobs:
           node scripts/verify-desktop-release-assets.ts release-assets
           "${{ needs.preflight.outputs.update_channel }}"
 
-      - name: Publish release
+      - id: release_files
+        name: Resolve release files
+        run: node scripts/verify-release-publish.ts resolve --github-output "$GITHUB_OUTPUT"
+
+      # continue-on-error: the next step re-checks the whole end state (release published with the
+      # right channel, every file uploaded with the local size) and repairs or fails the job, so an
+      # upload error is never ignored, only retried.
+      - id: publish
+        name: Publish release
+        continue-on-error: true
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ needs.preflight.outputs.tag }}
@@ -383,23 +450,20 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ needs.preflight.outputs.is_prerelease }}
           make_latest: ${{ needs.preflight.outputs.make_latest }}
-          files: |
-            release-assets/*.dmg
-            release-assets/*.zip
-            release-assets/*.AppImage
-            release-assets/*.deb
-            release-assets/*.exe
-            release-assets/*.blockmap
-            release-assets/${{ needs.preflight.outputs.update_channel }}*.yml
-            release-assets/install.sh
-            release-assets/install.ps1
-            release-assets/remote-agent.sh
-            release-assets/bigbud-remote-agent-*
-            release-assets/remote-agent-install-source.json
-            release-assets/remote-agent-manifest.json
-            release-assets/remote-agent-install-source.v2.json
-            release-assets/remote-agent-manifest.v2.json
-            release-assets/bigbud-backend-graph-*
-            release-assets/server-workspace-agent-*
-            release-assets/server-organization-supervisor-*
+          files: ${{ steps.release_files.outputs.files }}
           fail_on_unmatched_files: true
+
+      - name: Verify and repair release assets
+        if: ${{ !cancelled() && steps.release_files.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+          IS_PRERELEASE: ${{ needs.preflight.outputs.is_prerelease }}
+          MAKE_LATEST: ${{ needs.preflight.outputs.make_latest }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+        run: |
+          if [[ "$PUBLISH_OUTCOME" != "success" ]]; then
+            echo "::warning::Publish release ended with '$PUBLISH_OUTCOME'; verifying and repairing the release"
+          fi
+          node scripts/verify-release-publish.ts verify --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG" \
+            --prerelease "$IS_PRERELEASE" --make-latest "$MAKE_LATEST" --attempts 3

@@ -151,8 +151,14 @@ describe("remote backend graph release workflow", () => {
     expect(Object.keys(graph.on.workflow_call.inputs).toSorted()).toEqual([
       "ref",
       "release_signing",
+      "retention_days",
       "version",
     ]);
+    // Dry-run releases pass 3; tag releases and PR/dispatch runs keep the repository default.
+    expect(graph.on.workflow_call.inputs.retention_days).toMatchObject({
+      type: "number",
+      default: 0,
+    });
     expect(graph.on.workflow_call.inputs.release_signing).toMatchObject({
       type: "boolean",
       default: false,
@@ -249,9 +255,13 @@ describe("remote backend graph release workflow", () => {
     const verify = publisher.steps.map((step) => step.run ?? "").join("\n");
     expect(verify).toContain('sha256sum --check "${prefix}.tar.gz.sha256"');
     expect(verify).toContain("fixture-public-key.pem");
+    // The publish step uploads the deduplicated list resolved from the job's pattern list.
+    const patterns = (publisher as unknown as { env: { RELEASE_FILE_PATTERNS: string } }).env
+      .RELEASE_FILE_PATTERNS;
+    expect(patterns).toContain("release-assets/bigbud-backend-graph-*");
     const publish = publisher.steps.find((step) =>
       step.uses?.startsWith("softprops/action-gh-release@"),
     ) as { with: { files: string } };
-    expect(publish.with.files).toContain("release-assets/bigbud-backend-graph-*");
+    expect(publish.with.files).toBe("${{ steps.release_files.outputs.files }}");
   });
 });

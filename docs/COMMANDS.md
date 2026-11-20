@@ -222,16 +222,53 @@ first. The closure is a superset of what Vite bundles. Outputs must not exist.
 
 ## Root: checks, tests, and cleanup
 
-| Bun                              | just                          |
-| -------------------------------- | ----------------------------- |
-| `bun run typecheck`              | `just typecheck`              |
-| `bun run lint`                   | `just lint`                   |
-| `bun run check:test-file-length` | `just check-test-file-length` |
-| `bun run test`                   | `just test`                   |
-| `bun run test:desktop-smoke`     | `just test-desktop-smoke`     |
-| `bun run fmt`                    | `just fmt`                    |
-| `bun run fmt:check`              | `just fmt-check`              |
-| `bun run clean`                  | `just clean`                  |
+| Bun                                 | just                             |
+| ----------------------------------- | -------------------------------- |
+| `bun run typecheck`                 | `just typecheck`                 |
+| `bun run lint`                      | `just lint`                      |
+| `bun run check:test-file-length`    | `just check-test-file-length`    |
+| `bun run test`                      | `just test`                      |
+| `bun run test:packages`             | `just test-packages`             |
+| `bun run test:server`               | `just test-server`               |
+| `bun run test:desktop-smoke`        | `just test-desktop-smoke`        |
+| `bun run ci:verify-shard-coverage`  | `just ci-verify-shard-coverage`  |
+| `bun run ci:wait-for-verdict`       | `just ci-wait-for-verdict`       |
+| `bun run ci:verify-release-publish` | `just ci-verify-release-publish` |
+| `bun run fmt`                       | `just fmt`                       |
+| `bun run fmt:check`                 | `just fmt-check`                 |
+| `bun run clean`                     | `just clean`                     |
+
+`test:packages` runs every package's tests except `@bigbud/server`; `test:server` runs only the
+server's. Together they cover `bun run test`, and both keep Turbo's `^build` and strict env mode.
+`test:server` ends in `--`, so Vitest arguments pass straight through, for example
+`bun run test:server --project=integration --shard=1/8` (one CI shard).
+
+The `ci:*` scripts are meant for CI and for local debugging of its reports.
+`bun run ci:verify-shard-coverage --expected <list.json> --unit <unit.json> --shards-dir <dir> --shard-count <N> --package-dir apps/server`
+checks that every server test file listed by `test:list-files` ran exactly once across the `unit`
+report and the `integration-<i>.json` shard reports (Vitest JSON reporter output; the directory is
+read non-recursively). It prints per-report totals, writes them to `$GITHUB_STEP_SUMMARY` when set,
+and exits 1 on a missing, duplicated, unexpected or failing file, or a missing shard report.
+
+`bun run ci:wait-for-verdict --repo <owner/name> --sha <40-hex commit>` is the release gate. It
+waits until a `ci.yml` run for exactly that commit (`push` or `workflow_dispatch` from the same
+repository; `pull_request` and fork runs never count) has a successful `CI passed` job in its latest
+attempt. Defaults: `--workflow ci.yml --job "CI passed" --timeout-minutes 70
+--missing-grace-minutes 10 --poll-seconds 30`. It reads `GITHUB_TOKEN` (then `GH_TOKEN`) and exits
+1 on a failed verdict, on no run after the grace period, or at the deadline. API errors are retried
+and never count as a pass. The release `ci_gate` job runs the same file directly with
+`node scripts/wait-for-ci-verdict.ts …`, because that job installs no dependencies. To check a
+commit locally: `GH_TOKEN="$(gh auth token)" bun run ci:wait-for-verdict --repo youpele52/bigbud --sha "$(git rev-parse HEAD)"`.
+
+`bun run ci:verify-release-publish resolve --github-output <file>` expands the newline-separated
+globs in `RELEASE_FILE_PATTERNS` into one deduplicated file list (it fails on an unmatched pattern or
+two files with the same asset name). `bun run ci:verify-release-publish verify --repo <owner/name>
+--tag <tag> --prerelease <true|false> --make-latest <true|false|legacy> [--attempts 3]` finds the
+release (drafts included), re-uploads missing, incomplete or wrong-size assets with
+`gh release upload --clobber`, publishes a draft left behind by a failed upload, and exits 1 unless
+every asset is uploaded and the release is published with the right channel. `verify` changes the
+release, so it is meant for the release job (`node scripts/verify-release-publish.ts …`), not for
+local experiments.
 
 ## Root: packaging and release
 
@@ -338,6 +375,7 @@ Source: [apps/server/package.json](../apps/server/package.json).
 | `bun run --cwd apps/server typecheck`                                 | `just server-typecheck`                                 |
 | `bun run --cwd apps/server test`                                      | `just server-test`                                      |
 | `bun run --cwd apps/server test:groups`                               | `just server-test-groups`                               |
+| `bun run --cwd apps/server test:list-files`                           | `just server-test-list-files`                           |
 | `bun run --cwd apps/server test:browser:install`                      | `just server-test-browser-install`                      |
 | `bun run --cwd apps/server benchmark:startup-catalog`                 | `just server-benchmark-startup-catalog`                 |
 | `bun run --cwd apps/server benchmark:mobile-recovery-memory`          | `just server-benchmark-mobile-recovery-memory`          |

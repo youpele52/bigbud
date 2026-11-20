@@ -2,6 +2,9 @@
 # Server test files that run in the parallel `unit` Vitest project: they passed
 # probe runs without touching processes, PTYs, workers, SQLite, sockets, fetch, or
 # filesystem paths outside their own mkdtemp directories. Unlisted files run serially.
+scripts/ciWorkflowInvariants.jobs.test.ts
+scripts/ciWorkflowInvariants.release.test.ts
 scripts/ciWorkflowInvariants.test.ts
+scripts/ciWorkflowInvariants.verdict.test.ts
 scripts/releaseAssetWorkflows.test.ts
 scripts/serverTestGroups.guard.test.ts

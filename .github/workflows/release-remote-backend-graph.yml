@@ -14,6 +14,11 @@ on:
         required: false
         type: boolean
         default: false
+      retention_days:
+        description: "Artifact retention in days for the release payload (0 keeps the repository default; dry runs pass 3)"
+        required: false
+        type: number
+        default: 0
     secrets:
       BIGBUD_REMOTE_AGENT_SIGNING_KEY:
         required: false
@@ -208,3 +213,4 @@ jobs:
           name: remote-backend-graph-${{ matrix.target }}
           path: release-publish/*
           if-no-files-found: error
+          retention-days: ${{ inputs.retention_days || 0 }}

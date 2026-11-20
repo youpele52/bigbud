@@ -1,31 +1,15 @@
-import { readFileSync } from "node:fs";
-import { parse } from "yaml";
 import { describe, expect, it } from "vitest";
 
-interface Step {
-  readonly name?: string;
-  readonly id?: string;
-  readonly if?: string;
-  readonly uses?: string;
-  readonly run?: string;
-  readonly with?: Record<string, unknown>;
-}
-interface Job {
-  readonly uses?: string;
-  readonly "runs-on"?: string;
-  readonly "timeout-minutes"?: unknown;
-  readonly concurrency?: unknown;
-  readonly steps?: readonly Step[];
-}
-interface Workflow {
-  readonly on: Record<string, unknown>;
-  readonly concurrency?: { readonly group: string; readonly "cancel-in-progress": string };
-  readonly jobs: Record<string, Job>;
-}
-interface CompositeAction {
-  readonly inputs: Record<string, { readonly default?: string }>;
-  readonly runs: { readonly using: string; readonly steps: readonly Step[] };
-}
+import {
+  actionPath,
+  readAction,
+  readText,
+  readWorkflow,
+  workflowPath,
+  type CompositeAction,
+  type Step,
+  type Workflow,
+} from "./ciWorkflowInvariants.helpers.ts";
 
 const RELEASE_WORKFLOWS = [
   "release.yml",
@@ -34,14 +18,7 @@ const RELEASE_WORKFLOWS = [
   "release-remote-backend-graph.yml",
 ] as const;
 const PIPELINE_WORKFLOWS = ["ci.yml", ...RELEASE_WORKFLOWS] as const;
-const COMPOSITE_ACTIONS = ["setup-bigbud"] as const;
-
-const repoFile = (path: string) => new URL(`../../../${path}`, import.meta.url);
-const workflowPath = (file: string) => `.github/workflows/${file}`;
-const actionPath = (name: string) => `.github/actions/${name}/action.yml`;
-const readText = (path: string) => readFileSync(repoFile(path), "utf8");
-const readWorkflow = (file: string) => parse(readText(workflowPath(file))) as Workflow;
-const readAction = (name: string) => parse(readText(actionPath(name))) as CompositeAction;
+const COMPOSITE_ACTIONS = ["setup-bigbud", "setup-rust-native"] as const;
 
 const PINNED_ACTION = /^[\w.-]+\/[\w.-]+(?:\/[\w./-]+)?@[0-9a-f]{40}$/;
 const PINNED_LINE = /^\s*(?:- )?uses: [\w.-]+\/[\w.-]+(?:\/[\w./-]+)?@[0-9a-f]{40} # \S+$/;

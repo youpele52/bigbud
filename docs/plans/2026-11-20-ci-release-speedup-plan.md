@@ -8,7 +8,7 @@
 | Project root         | `/Users/youpele/DevWorld/bigbud`                                                                                                                                                |
 | Inspected branch/SHA | `dev` @ `6f7246e463` (then `6a09f0c95d` during research; that commit touches no pipeline file). `main` @ `7c610f7923`. No pipeline file differs between `main` and `dev`.       |
 | GitHub repository    | `youpele52/bigbud` (public, free GitHub-hosted runners). Always pass `--repo youpele52/bigbud` to `gh`.                                                                         |
-| Primary input        | [CI and release pipeline research](../reports/2026-11-20-ci-release-pipeline-research.md), section 5.1 "Adopt now", scoped to the brief's points 1–5                            |
+| Primary input        | CI and release pipeline research (section 5.1 "Adopt now", scoped to the brief's points 1–5); its summary is incorporated in this plan, and the report is no longer kept        |
 | Related runs         | CI 44693703994 (81.1 min quality job), 44665124768, 44530742001. Release v0.4.0-beta.2 44708446414 (success, 88 min), v0.4.0-beta.1 44675468835 (failed in builds after 58 min) |
 
 ---
