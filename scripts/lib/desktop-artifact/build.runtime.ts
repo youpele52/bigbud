@@ -136,8 +136,22 @@ export const resolveElectronBuilderBinary = Effect.fn("resolveElectronBuilderBin
   return { binary: "bunx", fallback: true, packageSpecifier: "electron-builder" } as const;
 });
 
+/**
+ * Off-architecture macOS native directories, for example node-pty's `prebuilds/darwin-arm64` or
+ * `@earendil-works/pi-tui`'s `darwin-x64` prebuilds in the other architecture's app. Node only
+ * loads its own `darwin-<arch>` build, and the architecture audit rejects the other one.
+ */
+export function isOffArchMacNativeDirectory(
+  entryName: string,
+  arch: typeof BuildArch.Type,
+): boolean {
+  if (arch === "universal") return false;
+  const match = /(?:^|-)darwin-(arm64|x64)$/i.exec(entryName);
+  return match !== null && match[1]!.toLowerCase() !== arch;
+}
+
 export const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeArtifacts")(
-  function* (serverNodeModulesDir: string) {
+  function* (serverNodeModulesDir: string, arch: typeof BuildArch.Type) {
     yield* Effect.tryPromise({
       try: async () => {
         const removableDirectoryNames = new Set(["linux", "win32", "windows"]);
@@ -158,7 +172,8 @@ export const pruneMacServerRuntimeArtifacts = Effect.fn("pruneMacServerRuntimeAr
         const shouldRemoveDirectory = (entryName: string, relativePath: string): boolean =>
           removableDirectoryNames.has(entryName.toLowerCase()) ||
           removableDirectoryPatterns.some((pattern) => pattern.test(entryName)) ||
-          removableDirectoryRelativePaths.has(relativePath);
+          removableDirectoryRelativePaths.has(relativePath) ||
+          isOffArchMacNativeDirectory(entryName, arch);
 
         const visit = async (currentDir: string, relativeDir = ""): Promise<void> => {
           const entries = await readdir(currentDir, { withFileTypes: true });

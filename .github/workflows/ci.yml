@@ -61,6 +61,12 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      # Restores on every run; only main pushes save (release workflows never use this cache).
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
       - name: Rust format
         run: cargo fmt --all --check
 
@@ -88,6 +94,11 @@ jobs:
       - name: Setup Rust and protoc
         uses: ./.github/actions/setup-rust-native
 
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
       - name: Build desktop pipeline
         run: bun run build:desktop
 
@@ -109,6 +120,14 @@ jobs:
 
       - name: Setup Rust and protoc
         uses: ./.github/actions/setup-rust-native
+
+      # Shared with the integration shards, which build the same debug test binaries; this job is
+      # its only writer.
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: native-test-binaries
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       # The same debug binaries `cargo test --workspace` left for the monolith's JS tests; without
       # them several desktop tests skip silently.
@@ -167,6 +186,13 @@ jobs:
 
       - name: Setup Rust and protoc
         uses: ./.github/actions/setup-rust-native
+
+      # Restore only: test_packages writes this shared cache from main pushes.
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          shared-key: native-test-binaries
+          save-if: false
 
       # Integration files spawn these debug binaries, and two build bigbud-remote-agent in beforeAll.
       - name: Prepare native test binaries
@@ -449,8 +475,9 @@ jobs:
             platform: mac
             target: dmg
             arch: arm64
+          # Cross-built on Apple Silicon: the arm64 runner is several times faster than Intel.
           - label: macOS x64
-            runner: macos-15-intel
+            runner: macos-15
             platform: mac
             target: dmg
             arch: x64
@@ -477,6 +504,42 @@ jobs:
           # skipping lifecycle scripts avoids a Windows-only effect-language-
           # service patch crash.
           install: ignore-scripts
+          # electron-builder downloads the target architecture's Electron.
+          electron-arch: ${{ matrix.arch == 'arm64' && 'ARM64' || 'X64' }}
+
+      # rust-toolchain.toml uses the minimal profile, which has no x86_64 standard library.
+      - name: Add Rust macOS x64 target
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          toolchain="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+          if [[ -z "$toolchain" ]]; then
+            echo "::error::Could not read the Rust channel from rust-toolchain.toml"; exit 1
+          fi
+          rustup toolchain install "$toolchain" --profile minimal --target x86_64-apple-darwin
+          if ! rustup target list --installed --toolchain "$toolchain" | grep -qx x86_64-apple-darwin; then
+            echo "::error::x86_64-apple-darwin is not installed for Rust $toolchain"; exit 1
+          fi
+
+      # Packaging runs the x64 helpers (--check, handshakes, smoke tests), so they need Rosetta 2.
+      - name: Ensure Rosetta 2 for x64 smoke tests
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! arch -x86_64 /usr/bin/true 2>/dev/null; then
+            sudo softwareupdate --install-rosetta --agree-to-license
+          fi
+          if ! arch -x86_64 /usr/bin/true; then
+            echo "::error::Rosetta 2 is unavailable, so the x64 helpers cannot be smoke-tested"; exit 1
+          fi
+
+      - name: Restore Rust build cache
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.platform }}-${{ matrix.arch }}
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       - name: Build desktop artifact
         shell: bash
@@ -488,13 +551,17 @@ jobs:
             --build-version "0.0.0-preview.${{ github.run_number }}" \
             --verbose
 
-      # Every target builds for its runner's own OS and architecture, which the cache key encodes.
+      # The cache key encodes the runner OS and the target architecture (electron-arch above).
       - name: Save Electron cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.setup.outputs.electron-cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ${{ runner.temp }}/electron-cache
           key: ${{ steps.setup.outputs.electron-cache-key }}
+
+      - name: Audit packaged macOS app architectures
+        if: matrix.platform == 'mac'
+        run: bun run verify:desktop:mac-architecture -- release "${{ matrix.arch }}"
 
       - name: Smoke test packaged workspace watcher
         run: node scripts/verify-packaged-workspace-agent.ts release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish

@@ -2,7 +2,7 @@ import { assert, describe, it } from "vitest";
 import { Effect } from "effect";
 import { desktopReleaseIdentityForChannel } from "@bigbud/shared/desktopReleaseIdentity";
 
-import { pickExternalDependencies } from "./build.runtime.ts";
+import { isOffArchMacNativeDirectory, pickExternalDependencies } from "./build.runtime.ts";
 import { join } from "node:path";
 import {
   DESKTOP_NSIS_INCLUDE,
@@ -83,6 +83,8 @@ describe("createBuildConfig", () => {
       assert.notProperty(windows.win as object, "azureSignOptions");
       assert.deepEqual(windows.nsis, { include: join("/repo", DESKTOP_NSIS_INCLUDE) });
       assert.notProperty(linux, "nsis");
+      assert.notProperty(linux, "dmg");
+      assert.notProperty(windows, "dmg");
     },
   );
 
@@ -111,6 +113,8 @@ describe("createBuildConfig", () => {
       entitlementsInherit: "/resources/entitlements.mac.plist",
     });
     assert.equal(config.afterSign, "/repo/apps/desktop/scripts/notarize.cjs");
+    assert.deepEqual(config.dmg, { format: "ULFO", writeUpdateInfo: false });
+    assert.deepEqual((config.mac as { target: unknown }).target, ["dmg", "zip"]);
     assert.deepInclude((config.mac as { extendInfo: object }).extendInfo, {
       NSCameraUsageDescription:
         "bigbud uses your camera only when you allow a browser site to access it.",
@@ -119,6 +123,17 @@ describe("createBuildConfig", () => {
       NSLocationWhenInUseUsageDescription:
         "bigbud shares your location only with browser sites you explicitly allow.",
     });
+  });
+});
+
+describe("isOffArchMacNativeDirectory", () => {
+  it("prunes only the other macOS architecture's native directories", () => {
+    for (const name of ["darwin-arm64", "msgpackr-extract-darwin-arm64", "koffi-darwin-arm64"])
+      assert.isTrue(isOffArchMacNativeDirectory(name, "x64"), name);
+    assert.isTrue(isOffArchMacNativeDirectory("darwin-x64", "arm64"));
+    for (const name of ["darwin-x64", "darwin-universal", "darwin", "copilot-darwin-x64"])
+      assert.isFalse(isOffArchMacNativeDirectory(name, "x64"), name);
+    assert.isFalse(isOffArchMacNativeDirectory("darwin-arm64", "universal"));
   });
 });
 

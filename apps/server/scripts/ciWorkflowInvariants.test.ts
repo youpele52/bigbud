@@ -163,6 +163,8 @@ describe("pipeline workflow invariants", () => {
   it.each(RELEASE_WORKFLOWS)("%s restores and saves no caches", (file) => {
     const uses = usesOf(readWorkflow(file));
     expect(uses.filter((ref) => ref.startsWith("actions/cache"))).toEqual([]);
+    // Releases stay clean-built for provenance: no Rust build cache either.
+    expect(uses.filter((ref) => ref.startsWith("Swatinem/rust-cache"))).toEqual([]);
     expect(uses.filter((ref) => ref.startsWith("./.github/actions/"))).toEqual([]);
   });
 

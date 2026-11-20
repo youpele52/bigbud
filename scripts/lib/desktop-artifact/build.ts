@@ -53,6 +53,11 @@ import { isWindowsBuildPlatform, shellOptionForPlatform } from "./platform.ts";
 import { stageDesktopNativeSidecars } from "./nativeSidecars.ts";
 import { copyDesktopArtifacts } from "./build.copy.ts";
 import {
+  assertCrossArchExecutionSupport,
+  serverBuildEnvironment,
+  stagedDesktopBunInstallArgs,
+} from "./crossArch.ts";
+import {
   resolveCopilotPackagingMode,
   copilotPackagingTargets,
 } from "../../../apps/desktop/scripts/copilotRuntimePackaging.cjs";
@@ -113,6 +118,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     catch: (cause) =>
       new BuildScriptError({ message: `Unsupported desktop version '${appVersion}'.`, cause }),
   });
+  yield* assertCrossArchExecutionSupport(options);
   const commitHash = resolveGitCommitHash(repoRoot);
   const mkdir = options.keepStage ? fs.makeTempDirectory : fs.makeTempDirectoryScoped;
   const stageRoot = yield* mkdir({ prefix: `bigbud-desktop-${options.platform}-stage-` });
@@ -133,6 +139,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
     yield* runCommand(
       ChildProcess.make({
         cwd: repoRoot,
+        env: serverBuildEnvironment(options),
         ...commandOutputOptions(options.verbose),
         shell: shellOptionForPlatform(options.platform),
       })`bun run build:desktop`,
@@ -250,16 +257,17 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
 
   yield* Effect.log("[desktop-artifact] Installing staged production dependencies...");
   yield* runCommand(
-    ChildProcess.make({
+    ChildProcess.make("bun", stagedDesktopBunInstallArgs(options), {
       cwd: stageAppDir,
       ...commandOutputOptions(options.verbose),
       shell: shellOptionForPlatform(options.platform),
-    })`bun install --production`,
+    }),
   );
   yield* pruneSourceMaps(path.join(stageAppDir, "node_modules"), "desktop runtime dependencies");
   yield* installStagedServerDependencies({
     stageServerDir,
     platform: options.platform,
+    arch: options.arch,
     verbose: options.verbose,
     copilotMode,
     copilotTargets,
@@ -268,7 +276,7 @@ export const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* 
 
   if (options.platform === "mac") {
     yield* Effect.log("[desktop-artifact] Pruning non-mac native runtime artifacts...");
-    yield* pruneMacServerRuntimeArtifacts(path.join(stageServerDir, "node_modules"));
+    yield* pruneMacServerRuntimeArtifacts(path.join(stageServerDir, "node_modules"), options.arch);
   }
   yield* pruneNonRuntimeTypeArtifacts(
     path.join(stageServerDir, "node_modules"),

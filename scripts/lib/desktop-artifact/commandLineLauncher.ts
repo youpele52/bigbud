@@ -1,10 +1,10 @@
-import { join } from "node:path";
 import { Effect, FileSystem, Path } from "effect";
 import { ChildProcess } from "effect/unstable/process";
 import {
   assertWorkspaceAgentArtifactTarget,
   findDesktopWorkspaceAgentTarget,
 } from "../workspace-agent-target.ts";
+import { nativeReleaseBuildPlan } from "../native-release-build.ts";
 import {
   BuildScriptError,
   commandOutputOptions,
@@ -24,12 +24,14 @@ export function commandLineLauncherBuildPlan(input: {
   const native =
     (input.hostPlatform ?? process.platform) === "win32" &&
     (input.hostArch ?? process.arch) === target.arch;
-  const cargoArgs = ["build", "--locked", "--release", "--package", "bigbud-cli-launcher"];
-  if (!native) cargoArgs.push("--target", target.rustTarget);
-  const source = native
-    ? join(input.repoRoot, "target", "release", "bigbud-cli-launcher.exe")
-    : join(input.repoRoot, "target", target.rustTarget, "release", "bigbud-cli-launcher.exe");
-  return { target, cargoArgs, source };
+  const plan = nativeReleaseBuildPlan({
+    repoRoot: input.repoRoot,
+    packageName: "bigbud-cli-launcher",
+    binaryName: "bigbud-cli-launcher.exe",
+    target,
+    native,
+  });
+  return { target, ...plan };
 }
 
 export const stagePackagedCommandLineLauncher = Effect.fn("stagePackagedCommandLineLauncher")(

@@ -72,6 +72,7 @@
     "dist:desktop:linux:dir": "node scripts/build-desktop-artifact.ts --platform linux --target dir --arch x64",
     "dist:desktop:linux:deb": "node scripts/build-desktop-artifact.ts --platform linux --target deb --arch x64",
     "verify:desktop:linux-artifact": "node scripts/verify-linux-desktop-artifact.ts",
+    "verify:desktop:mac-architecture": "node scripts/verify-macos-app-architecture.ts",
     "verify:published-remote-agent-script": "node scripts/verify-published-remote-agent-script.ts",
     "dist:desktop:win": "node scripts/build-desktop-artifact.ts --platform win --target nsis --arch x64",
     "release:smoke": "node scripts/release-smoke.ts",

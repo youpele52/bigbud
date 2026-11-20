@@ -143,6 +143,9 @@ dist-desktop-linux-deb *args:
 verify-desktop-linux-artifact *args:
     bun run verify:desktop:linux-artifact "$@"
 
+verify-desktop-mac-architecture *args:
+    bun run verify:desktop:mac-architecture "$@"
+
 verify-published-remote-agent-script *args:
     bun run verify:published-remote-agent-script "$@"
 

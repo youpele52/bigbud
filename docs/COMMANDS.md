@@ -284,9 +284,15 @@ local experiments.
 | `bun run dist:desktop:linux:dir`               | `just dist-desktop-linux-dir`               |
 | `bun run dist:desktop:linux:deb`               | `just dist-desktop-linux-deb`               |
 | `bun run verify:desktop:linux-artifact`        | `just verify-desktop-linux-artifact`        |
+| `bun run verify:desktop:mac-architecture`      | `just verify-desktop-mac-architecture`      |
 | `bun run verify:published-remote-agent-script` | `just verify-published-remote-agent-script` |
 | `bun run dist:desktop:win`                     | `just dist-desktop-win`                     |
 | `bun run release:smoke`                        | `just release-smoke`                        |
+
+`verify:desktop:mac-architecture <release-root> <arm64|x64>` fails unless every Mach-O file in
+each packaged `.app` under the release root contains that architecture (universal files that
+include it pass) and lists the offenders. CI and the release workflow run it after every macOS
+build; it guards the macOS x64 app, which is cross-built on Apple Silicon.
 
 `verify:published-remote-agent-script` checks that the retired `https://bigbud.app/remote-agent.sh`
 returns 404. `--download <ref>` follows `https://bigbud.app/download/<ref>/remote-agent` and
