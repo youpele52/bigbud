@@ -1,51 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { handleRemoteAgentDownload, type RemoteAgentDownloadDeps } from "./remoteAgentDownload";
-
-const PINNED_PREFIX = "https://github.com/youpele52/bigbud/releases/download/";
-
-function memoryCache(initial: Record<string, string> = {}) {
-  const entries = new Map(Object.entries(initial));
-  return {
-    entries,
-    match: vi.fn(async (key: RequestInfo | URL) => {
-      const value = entries.get(String(key));
-      return value === undefined ? undefined : new Response(value);
-    }),
-    put: vi.fn(async (key: RequestInfo | URL, response: Response) => {
-      entries.set(String(key), await response.text());
-    }),
-  };
-}
-
-function apiResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status });
-}
-
-function makeDeps(
-  options: {
-    cache?: ReturnType<typeof memoryCache>;
-    fetch?: RemoteAgentDownloadDeps["fetch"];
-    token?: string;
-  } = {},
-) {
-  const pending: Promise<unknown>[] = [];
-  const cache = options.cache ?? memoryCache();
-  const fetch = vi.fn(
-    options.fetch ??
-      (async () =>
-        apiResponse([
-          { tag_name: "v0.4.0-beta.5", prerelease: true, assets: [{ name: "remote-agent.sh" }] },
-        ])),
-  );
-  const deps: RemoteAgentDownloadDeps = {
-    env: options.token === undefined ? {} : { GITHUB_TOKEN: options.token },
-    fetch,
-    cache,
-    waitUntil: (promise) => pending.push(promise),
-  };
-  return { deps, cache, fetch, settle: () => Promise.all(pending) };
-}
+import { handleRemoteAgentDownload } from "./remoteAgentDownload";
+import { PINNED_PREFIX, apiResponse, makeDeps, memoryCache } from "./remoteAgentTesting";
 
 describe("handleRemoteAgentDownload", () => {
   it("redirects explicit tags without calling the API", async () => {
