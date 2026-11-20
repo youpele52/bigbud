@@ -23,6 +23,10 @@
       "types": "./src/backendOwnership.paths.ts",
       "import": "./src/backendOwnership.paths.ts"
     },
+    "./privateSocketPath": {
+      "types": "./src/privateSocketPath.ts",
+      "import": "./src/privateSocketPath.ts"
+    },
     "./machineIdentity": {
       "types": "./src/machineIdentity.ts",
       "import": "./src/machineIdentity.ts"

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   stopMcpClient: vi.fn(),
   removeStaleSocket: vi.fn((): "absent" | "removed" | "blocked" => "absent"),
   prepareCursorTheme: vi.fn((_stateHome: string, _version: string | null): string | null => null),
+  runDirCount: 0,
 }));
 
 function makeChild() {
@@ -88,6 +89,12 @@ vi.mock("./cuaDriver.daemon.endpoint", () => ({
 vi.mock("./cuaDriver.paths", () => ({
   resolveManagedPaths: vi.fn(() => ({ rootDir: "/managed", homeDir: "/managed/home" })),
   resolvePrivateStateHome: mocks.resolvePrivateStateHome,
+}));
+vi.mock("./cuaDriver.daemon.paths", () => ({
+  resolvePrivateEndpoint: vi.fn(() => {
+    const runDir = `/tmp/bigbud-501/cua-0123456789ab-${++mocks.runDirCount}`;
+    return { endpoint: `${runDir}/cua.sock`, runDir, pidFile: `${runDir}/cua.pid` };
+  }),
 }));
 vi.mock("./cuaDriver.process", () => ({
   runCommand: mocks.runCommand,
@@ -331,7 +338,7 @@ describe("cua-driver daemon shutdown", () => {
       { pidFile?: string },
     ];
     expect(hostBundleId).toBe("host-id");
-    expect(options.pidFile).toMatch(/^\/managed\/run\/[^/]+\/cua\.pid$/);
+    expect(options.pidFile).toMatch(/^\/tmp\/bigbud-501\/cua-[^/]+\/cua\.pid$/);
     if (process.platform !== "win32") {
       expect(Path.dirname(options.pidFile!)).toBe(Path.dirname(endpoint));
     }
