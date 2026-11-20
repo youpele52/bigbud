@@ -33,6 +33,8 @@ import {
 } from "./SidebarRemoteWorkspaceDialog.sshConfigFields";
 import { useSshConfigHosts } from "./SidebarRemoteWorkspaceDialog.sshConfigHosts";
 import { useRemoteWorkspaceSourceInference } from "./SidebarRemoteWorkspaceDialog.sourceInference";
+import type { RemoteAgentInstallProgress } from "./Sidebar.remoteWorkspaceAgentInstall";
+import { SidebarRemoteAgentManualInstall } from "./SidebarRemoteAgentManualInstall";
 
 interface SidebarRemoteWorkspaceDialogProps {
   mode: "add" | "edit";
@@ -41,6 +43,10 @@ interface SidebarRemoteWorkspaceDialogProps {
   fieldErrors: RemoteWorkspaceFieldErrors;
   error: string | null;
   verificationMessage: string | null;
+  /** Save's inline agent install progress. */
+  agentInstallProgress?: RemoteAgentInstallProgress | null;
+  /** After a failed inline install, the target whose manual command opens expanded. */
+  manualInstallTarget?: string | null;
   isSubmitting: boolean;
   isVerifying: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,6 +64,8 @@ export function SidebarRemoteWorkspaceDialog({
   fieldErrors,
   error,
   verificationMessage,
+  agentInstallProgress = null,
+  manualInstallTarget = null,
   isSubmitting,
   isVerifying,
   onOpenChange,
@@ -167,6 +175,15 @@ export function SidebarRemoteWorkspaceDialog({
             <RemoteWorkspaceAuthenticationFields draft={draft} onFieldChange={onFieldChange} />
           )}
 
+          {agentInstallProgress ? (
+            <Alert variant="loading" role="status" className="text-xs leading-4">
+              <AlertDescription>
+                {agentInstallProgress === "downloading"
+                  ? "Downloading verified agent…"
+                  : "Connecting…"}
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {verificationMessage ? (
             <Alert variant="success" role="status" className="text-xs leading-4">
               <AlertDescription>{verificationMessage}</AlertDescription>
@@ -190,6 +207,13 @@ export function SidebarRemoteWorkspaceDialog({
             <Alert variant="error" className="text-xs leading-4">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
+          ) : null}
+          {error && manualInstallTarget ? (
+            <SidebarRemoteAgentManualInstall
+              executionTargetId={manualInstallTarget}
+              autoOpen
+              onOpenChange={() => {}}
+            />
           ) : null}
         </DialogPanel>
 

@@ -46,9 +46,12 @@ export interface SidebarRemoteWorkspaceAddActionsOutput {
   /** Opens the unlock prompt for an SSH lock error; the continuation runs after unlocking. */
   readonly requestRemoteWorkspaceUnlock: RequestRemoteWorkspaceUnlock;
   readonly submitRemoteWorkspaceDialog: () => Promise<void>;
-  readonly remoteAgentInstallRequest: SidebarRemoteAgentInstallRequest | null;
-  readonly declineRemoteAgentInstall: () => void;
-  readonly completeRemoteAgentInstall: (message: string) => Promise<void>;
+  /** Save's inline agent install: downloading, then connecting (blue progress). */
+  readonly remoteAgentInstallProgress:
+    | import("./Sidebar.remoteWorkspaceAgentInstall").RemoteAgentInstallProgress
+    | null;
+  /** Set after a failed inline install so the manual remote command opens expanded. */
+  readonly remoteAgentManualInstallTarget: string | null;
   readonly isRemoteWorkspaceUnlockDialogOpen: boolean;
   readonly remoteWorkspaceUnlockMode: import("../../lib/ssh").SshAuthMode | null;
   readonly remoteWorkspaceUnlockKeyPath: string;

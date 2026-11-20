@@ -169,6 +169,7 @@ export function createWsNativeApiContext({
       listRemoteFolders: rpcClient.server.listRemoteFolders,
       installRemoteAgent: rpcClient.server.installRemoteAgent,
       getRemoteAgentManualInstall: rpcClient.server.getRemoteAgentManualInstall,
+      removeRemoteAgent: rpcClient.server.removeRemoteAgent,
       connectRemoteAgent: rpcClient.server.connectRemoteAgent,
       restartRemoteAgent: rpcClient.server.restartRemoteAgent,
       getRemoteAgentRestartStatus: rpcClient.server.getRemoteAgentRestartStatus,

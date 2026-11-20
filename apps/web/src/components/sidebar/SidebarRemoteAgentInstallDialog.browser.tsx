@@ -38,8 +38,9 @@ function manualInstallResult() {
   return {
     executionTargetId: "ssh:example",
     version: "0.3.4",
-    command: "curl -fsSL https://bigbud.app/remote-agent.sh | BIGBUD_AGENT_VERSION=0.3.4 sh",
-    scriptUrl: "https://bigbud.app/remote-agent.sh",
+    command:
+      "curl -fsSL https://bigbud.app/download/v0.3.4/remote-agent | BIGBUD_AGENT_VERSION=0.3.4 sh",
+    scriptUrl: "https://bigbud.app/download/v0.3.4/remote-agent",
     releaseScriptUrl:
       "https://github.com/youpele52/bigbud/releases/download/v0.3.4/remote-agent.sh",
     inboxRelativePath: "~/.bigbud/agent/inbox",
@@ -114,7 +115,9 @@ describe("SidebarRemoteAgentInstallDialog", () => {
     expect(onDecline).not.toHaveBeenCalled();
     expect(onInstalled).not.toHaveBeenCalled();
     await expect.element(page.getByText(manualInstallResult().command)).toBeVisible();
-    await expect.element(page.getByRole("button", { name: "Finish install/update" })).toBeEnabled();
+    await expect
+      .element(page.getByRole("button", { name: "Finish install", exact: true }))
+      .toBeEnabled();
   });
 
   it("waits for runtime preparation and health verification before reporting a connection", async () => {
@@ -183,7 +186,7 @@ describe("SidebarRemoteAgentInstallDialog", () => {
     expect(installRemoteAgent.mock.calls[0]?.[0].replace).toBeUndefined();
     expect(connectRemoteAgent.mock.calls[0]?.[0].replace).toBe(true);
     expect(onInstalled).toHaveBeenCalledWith(
-      `Connected to remote agent 0.2.209. Healthy fallback: none. ${cleanupMessage}`,
+      `Connected to remote agent 0.2.209. Backup version: none. ${cleanupMessage}`,
     );
   });
 

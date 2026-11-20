@@ -15,7 +15,7 @@ interface SidebarRemoteAgentManualInstallProps {
 
 /**
  * Version-pinned remote command for staging the agent by hand. Running it only places verified
- * bytes on the host; the dialog's Finish install/update action registers and activates them.
+ * bytes on the host; the Finish install action registers and activates them.
  */
 export function SidebarRemoteAgentManualInstall({
   executionTargetId,
@@ -83,9 +83,10 @@ export function SidebarRemoteAgentManualInstall({
   return (
     <div className="space-y-2 rounded-md border p-2">
       <p className="text-xs text-muted-foreground">
-        Run this in a terminal on the remote host. It downloads agent {manual.version}, checks it
-        against the published SHA-256 and places it in {manual.inboxRelativePath}. Nothing is active
-        until you return here and choose Finish install/update.
+        Run this on the remote host. It downloads bigbud remote agent {manual.version}, checks its
+        SHA-256 against the release, and stores it in {manual.inboxRelativePath}. Nothing runs until
+        you return here and choose Finish install. bigbud then checks the release signature and
+        activates it.
       </p>
       <div className="flex items-start gap-2">
         <code className="min-w-0 flex-1 break-all rounded bg-muted px-2 py-1 font-mono text-xs">
@@ -102,7 +103,7 @@ export function SidebarRemoteAgentManualInstall({
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        If the host cannot reach bigbud.app, use the same script from the release:{" "}
+        If the host cannot reach bigbud.app, run the same script from GitHub:{" "}
         <span className="break-all font-mono">{manual.releaseScriptUrl}</span>
       </p>
     </div>

@@ -8,10 +8,12 @@ import type { RpcUnaryMethod, RpcUnaryNoArgMethod } from "./wsRpcClient.types";
 
 /** Remote service restart and user-initiated SSH connection controls. */
 export interface WsRpcRemoteAgentMethods {
-  /** Version-pinned remote command that stages the agent for a later Finish install/update. */
+  /** Version-pinned remote command that stages the agent for a later Finish install. */
   readonly getRemoteAgentManualInstall: RpcUnaryMethod<
     typeof WS_METHODS.serverGetRemoteAgentManualInstall
   >;
+  /** Deletes `~/.bigbud/agent` when no live work uses it, then disconnects the host. */
+  readonly removeRemoteAgent: RpcUnaryMethod<typeof WS_METHODS.serverRemoveRemoteAgent>;
   readonly restartRemoteAgent: (
     input: ServerRestartRemoteAgentInput,
   ) => Promise<ServerRestartRemoteAgentResult>;

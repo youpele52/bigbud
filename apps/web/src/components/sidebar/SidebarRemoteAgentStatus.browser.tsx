@@ -85,7 +85,7 @@ describe("explicit remote admission outcome", () => {
     await render(<SidebarRemoteAgentStatus executionTargetId={target} cwd="/workspace" />);
 
     const versions = page.getByRole("region", { name: "Remote agent versions" });
-    await expect.element(versions).toHaveTextContent("Current connection");
+    await expect.element(versions).toHaveTextContent("Running now");
     await expect.element(versions).toHaveTextContent("0.2.205");
     await expect.element(page.getByRole("alert")).toHaveTextContent("SSH connection closed");
   });
@@ -137,7 +137,7 @@ describe("explicit remote admission outcome", () => {
     );
     await vi.waitFor(() => expect(verifyExecutionTarget).toHaveBeenCalledOnce());
     const versions = page.getByRole("region", { name: "Remote agent versions" });
-    await expect.element(versions).toHaveTextContent("Current connection");
+    await expect.element(versions).toHaveTextContent("Running now");
     await expect.element(versions).toHaveTextContent("0.2.207");
     await page.getByRole("button", { name: "Connect new session" }).click();
     await expect
@@ -239,7 +239,8 @@ describe("explicit remote admission outcome", () => {
       },
       {
         phase: "ready-for-next-reconnect",
-        message: "Update 0.2.208 is ready for the next deliberate connection.",
+        message:
+          "Update 0.2.208 is downloaded and verified. It starts the next time you choose Connect new session. Open terminals keep running on the current version.",
         className: "text-emerald-600",
       },
       {
@@ -292,12 +293,61 @@ describe("explicit remote admission outcome", () => {
       await expect.element(status).toBeVisible();
       await expect.element(status).toHaveClass(current.className);
       await expect.element(page.getByText("0.2.207", { exact: true })).toBeVisible();
-      await expect.element(page.getByText("0.2.208", { exact: true })).toBeVisible();
+      // Only a build that is not running yet is a downloaded update.
+      if (
+        [
+          "installing",
+          "checking-health",
+          "ready-for-next-reconnect",
+          "waiting-for-capacity",
+        ].includes(current.phase)
+      )
+        await expect.element(page.getByText("0.2.208", { exact: true })).toBeVisible();
+      else expect(page.getByText("0.2.208", { exact: true }).elements()).toHaveLength(0);
       await expect.element(page.getByText("0.2.205", { exact: true })).toBeVisible();
       if (current.phase === "failed-using-stable")
         await expect.element(page.getByText("HEALTH_CHECK_FAILED", { exact: true })).toBeVisible();
       expect(connectRemoteAgent).not.toHaveBeenCalled();
       await screen.unmount();
     }
+  });
+
+  it("labels same-version builds by build type and short digest", async () => {
+    const target = `ssh:same-version-${crypto.randomUUID()}`;
+    api.current = {
+      server: {
+        verifyExecutionTarget: vi.fn().mockResolvedValue({}),
+        connectRemoteAgent: vi.fn(),
+        getRemoteAgentUpdateStatus: vi.fn().mockResolvedValue({
+          executionTargetId: target,
+          phase: "ready-for-next-reconnect",
+          updateRequestId: "update-1",
+          reconnectRequestId: null,
+          reconnectOutcome: null,
+          currentVersion: "0.4.0-beta.5",
+          pendingVersion: "0.4.0-beta.5",
+          predecessorVersion: null,
+          reason: null,
+          currentTargetTriple: "x86_64-unknown-linux-gnu",
+          currentBuildDigestShort: "aaaaaaaaaaaa",
+          pendingTargetTriple: "x86_64-unknown-linux-musl",
+          pendingBuildDigestShort: "bbbbbbbbbbbb",
+        }),
+      },
+    } as never;
+    await render(<SidebarRemoteAgentStatus executionTargetId={target} cwd="/workspace" />);
+    const versions = page.getByRole("region", { name: "Remote agent versions" });
+    await expect
+      .element(versions)
+      .toHaveTextContent("Running now0.4.0-beta.5 (gnu build aaaaaaaaaaaa)");
+    await expect
+      .element(versions)
+      .toHaveTextContent("Downloaded update0.4.0-beta.5 (musl build bbbbbbbbbbbb)");
+    await expect.element(versions).toHaveTextContent("Backup versionNone");
+    await expect
+      .element(versions)
+      .toHaveTextContent(
+        "Connect new session uses the newest verified agent. Running terminals stay on their version.",
+      );
   });
 });

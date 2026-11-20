@@ -79,6 +79,13 @@ export function RemoteWorkspaceConnectionOptions({ draft, onFieldChange }: Draft
             onClick={() => onFieldChange("remoteTransport", "agent")}
           />
         </div>
+        {draft.remoteTransport === "agent" ? (
+          <p className="text-muted-foreground text-xs leading-4">
+            The agent is installed in ~/.bigbud/agent on the host and runs with your SSH user&apos;s
+            permissions. It opens no network port. Saving installs or updates it; older versions are
+            removed once nothing uses them.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-2">
