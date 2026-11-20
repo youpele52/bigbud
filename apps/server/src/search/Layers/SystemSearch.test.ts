@@ -17,7 +17,7 @@ import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { SearchAgentConnections } from "../Services/SearchAgentConnections.ts";
 import { SystemSearch } from "../Services/SystemSearch.ts";
 import { fakeSearchAgent } from "../SystemSearch.test.helpers.ts";
-import { makeSystemSearchLayer } from "./SystemSearchLive.ts";
+import { makeSystemSearchLayer } from "./SystemSearch.ts";
 
 const REMOTE = "ssh:host=box&transport=agent";
 const NOW = "2026-11-19T00:00:00.000Z";

@@ -323,7 +323,7 @@ Field names below are illustrative; final names are chosen in Phase 2. New `Fram
 
 ### 4. Server fan-out, ranking and merge (`apps/server/src/search/`)
 
-- `Services/SystemSearch.ts` and `Layers/SystemSearchLive.ts` expose one streaming RPC, `search.query`, defined in `packages/contracts/src/server/rpc.search.ts` with schemas in `packages/contracts/src/search/*.ts`.
+- `Services/SystemSearch.ts` and `Layers/SystemSearch.ts` (exporting `SystemSearchLive`) expose one streaming RPC, `search.query`, defined in `packages/contracts/src/server/rpc.search.ts` with schemas in `packages/contracts/src/search/*.ts`.
   - Input: `queryId`, `query`, current thread, project and file context, and the enabled tiers.
   - The stream emits `SearchTierUpdate` events (`queryId`, `tier`, `sourceId`, `items`, `state`: `searching` / `partial` / `done` / `unavailable`, `reason`, `truncated`).
 - Source modules:

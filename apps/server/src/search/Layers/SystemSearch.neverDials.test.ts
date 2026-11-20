@@ -35,7 +35,7 @@ import { LocalWorkspaceAgent } from "../../workspace-runtime/Services/LocalWorks
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { SystemSearch } from "../Services/SystemSearch.ts";
 import { fakeSearchAgent } from "../SystemSearch.test.helpers.ts";
-import { SystemSearchLive } from "./SystemSearchLive.ts";
+import { SystemSearchLive } from "./SystemSearch.ts";
 
 const AGENT_REMOTE = "ssh:host=box&transport=agent";
 const SSH_ONLY = "ssh:host=old&transport=direct-ssh";

@@ -16,7 +16,7 @@ import {
   normalizeQuery,
 } from "./SearchPalette.logic";
 import { toProjectSearchResults } from "./SearchPalette.projectResults";
-import { useSlowTierQuery, useSystemSearchStream } from "./SearchPalette.stream";
+import { useFastTierQuery, useSlowTierQuery, useSystemSearchStream } from "./SearchPalette.stream";
 import {
   isThisComputerSearchOn,
   isSystemSearchTierPending,
@@ -60,7 +60,9 @@ export function useSearchPaletteSources(input: {
   );
 
   const normalizedQuery = normalizeQuery(query);
-  const messageQuery = query.trim();
+  // Fast server tiers wait FAST_TIER_DEBOUNCE_MS; browser-side matches below use the typed query.
+  const fastTier = useFastTierQuery(normalizedQuery);
+  const messageQuery = useFastTierQuery(query.trim()).query;
   const slowTier = useSlowTierQuery(normalizedQuery);
   const streamInput = {
     open,
@@ -70,7 +72,7 @@ export function useSearchPaletteSources(input: {
   };
   const fastStream = useSystemSearchStream({
     ...streamInput,
-    query: normalizedQuery,
+    query: fastTier.query,
     slowTiers: false,
   });
   const slowStream = useSystemSearchStream({
@@ -84,8 +86,8 @@ export function useSearchPaletteSources(input: {
     queries: (["local", "remote"] as const).map((scope) =>
       projectCatalogSearchQueryOptions({
         scope,
-        query: normalizedQuery,
-        enabled: open && normalizedQuery.length > 0,
+        query: fastTier.query,
+        enabled: open && fastTier.query.length > 0,
       }),
     ),
   });

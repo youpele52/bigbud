@@ -64,7 +64,7 @@ async function renderPalette() {
   );
 }
 
-describe("Mod+F source timing (parity with Mod+P)", () => {
+describe("Mod+F source timing (fast 75 ms, slow 150 ms)", () => {
   beforeEach(() => {
     mocks.calls.length = 0;
     mocks.searchMessages
@@ -82,10 +82,15 @@ describe("Mod+F source timing (parity with Mod+P)", () => {
     useStore.setState({ projects: [], threads: [] });
   });
 
-  it("asks fast tiers at once and slow tiers only after 150 ms without typing", async () => {
+  it("asks fast tiers after a 75 ms pause and slow tiers only after 150 ms", async () => {
     await renderPalette();
     await page.getByPlaceholder("Search").fill("needle");
-    // Fast tiers: current thread messages and the current project's files, no debounce.
+    // Fast tiers (current thread messages, current project's files) wait the short 75 ms pause.
+    await sleep(30);
+    expect(mocks.searchMessages).not.toHaveBeenCalledWith(
+      expect.objectContaining({ query: "needle" }),
+    );
+    expect(mocks.calls.map((call) => call.input.tiers)).not.toContainEqual(["currentProject"]);
     await vi.waitFor(
       () => {
         expect(mocks.searchMessages).toHaveBeenCalledWith(
@@ -93,10 +98,8 @@ describe("Mod+F source timing (parity with Mod+P)", () => {
         );
         expect(mocks.calls.map((call) => call.input.tiers)).toContainEqual(["currentProject"]);
       },
-      { timeout: 100, interval: 5 },
+      { timeout: 150, interval: 5 },
     );
-    expect(slowCalls()).toHaveLength(0);
-    await sleep(80);
     expect(slowCalls()).toHaveLength(0);
     await sleep(150);
     expect(slowCalls()).toHaveLength(1);
@@ -106,13 +109,13 @@ describe("Mod+F source timing (parity with Mod+P)", () => {
     );
   });
 
-  it("restarts only the slow debounce on the next keystroke and cancels superseded queries", async () => {
+  it("replaces the fast query after its short pause before the slow one, cancelling superseded queries", async () => {
     await renderPalette();
     await page.getByPlaceholder("Search").fill("needle");
     await sleep(200);
     const [fast, slow] = [mocks.calls[0]!, slowCalls()[0]!];
     await page.getByPlaceholder("Search").fill("needles");
-    await vi.waitFor(() => expect(fast.signal.aborted).toBe(true), { timeout: 100, interval: 5 });
+    await vi.waitFor(() => expect(fast.signal.aborted).toBe(true), { timeout: 150, interval: 5 });
     expect(mocks.calls.at(-1)!.input).toMatchObject({
       query: "needles",
       tiers: ["currentProject"],

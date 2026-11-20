@@ -22,20 +22,37 @@ import {
 export const SLOW_TIER_DEBOUNCE_MS = 150;
 
 /**
- * The query both palettes give their slow tiers: the typed query once typing pauses for
- * {@link SLOW_TIER_DEBOUNCE_MS}, and "" at once when the query is cleared. Fast tiers use the
- * typed query directly, so they are never held back behind this debounce.
+ * Fast server tiers (current-thread and other messages, terminals, projects, current-project
+ * files) start after this short pause, so they do not fire on every keystroke. Matches computed
+ * in the browser (open file, loaded threads) stay immediate.
  */
-export function useSlowTierQuery(query: string): {
+export const FAST_TIER_DEBOUNCE_MS = 75;
+
+/**
+ * The typed query once typing pauses for `wait` ms, and "" at once when the query is cleared,
+ * so a cleared palette never waits.
+ */
+function useTierQuery(
+  query: string,
+  wait: number,
+): {
   readonly query: string;
   readonly pending: boolean;
 } {
-  const [slowQuery, debouncer] = useDebouncedValue(
-    query,
-    { wait: SLOW_TIER_DEBOUNCE_MS },
-    (state) => ({ isPending: state.isPending }),
-  );
-  return { query: query.length > 0 ? slowQuery : "", pending: debouncer.state.isPending };
+  const [settledQuery, debouncer] = useDebouncedValue(query, { wait }, (state) => ({
+    isPending: state.isPending,
+  }));
+  return { query: query.length > 0 ? settledQuery : "", pending: debouncer.state.isPending };
+}
+
+/** The query both palettes give their slow tiers (see {@link SLOW_TIER_DEBOUNCE_MS}). */
+export function useSlowTierQuery(query: string) {
+  return useTierQuery(query, SLOW_TIER_DEBOUNCE_MS);
+}
+
+/** The query Mod+F gives its fast server tiers (see {@link FAST_TIER_DEBOUNCE_MS}). */
+export function useFastTierQuery(query: string) {
+  return useTierQuery(query, FAST_TIER_DEBOUNCE_MS);
 }
 
 export interface SystemSearchStream {
