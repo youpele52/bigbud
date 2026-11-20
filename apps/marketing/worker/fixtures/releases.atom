@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:github.com,2008:https://github.com/youpele52/bigbud/releases</id>
+  <link type="text/html" rel="alternate" href="https://github.com/youpele52/bigbud/releases"/>
+  <link type="application/atom+xml" rel="self" href="https://github.com/youpele52/bigbud/releases.atom"/>
+  <title>Release notes from bigbud</title>
+  <updated>2026-11-20T23:07:42Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.4.0-beta.6</id>
+    <updated>2026-11-20T23:07:42Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.4.0-beta.6"/>
+    <title>v0.4.0-beta.6</title>
+    <content type="html">&lt;p&gt;v0.4.0-beta.6&lt;/p&gt;</content>
+    <author>
+      <name>youpele52</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/43122220?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.4.0-beta.5</id>
+    <updated>2026-11-20T18:14:48Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.4.0-beta.5"/>
+    <title>bigbud v0.4.0-beta.5</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;Translucent whole window, Files tree beside the code, and matching panel tones by &lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/youpele52/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/youpele52&quot;&gt;@youpele52&lt;/a&gt; in &lt;a class=&quot;issue-link js-issue-link&quot; data-error-text=&quot;Failed to load title&quot; data-id=&quot;6516443261&quot; data-permission-text=&quot;Title is private&quot; data-url=&quot;https://github.com/youpele52/bigbud/issues/6&quot; data-hovercard-type=&quot;pull_request&quot; data-hovercard-url=&quot;/youpele52/bigbud/pull/6/hovercard&quot; href=&quot;https://github.com/youpele52/bigbud/pull/6&quot;&gt;#6&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Full Changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/youpele52/bigbud/compare/v0.4.0-beta.4...v0.4.0-beta.5&quot;&gt;&lt;tt&gt;v0.4.0-beta.4...v0.4.0-beta.5&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.4.0-beta.4</id>
+    <updated>2026-11-20T16:44:49Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.4.0-beta.4"/>
+    <title>bigbud v0.4.0-beta.4</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;CI hygiene: shared setup, main-only cache saves, timeouts, SHA pins (M1) by &lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/youpele52/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/youpele52&quot;&gt;@youpele52&lt;/a&gt; in &lt;a class=&quot;issue-link js-issue-link&quot; data-error-text=&quot;Failed to load title&quot; data-id=&quot;6511606989&quot; data-permission-text=&quot;Title is private&quot; data-url=&quot;https://github.com/youpele52/bigbud/issues/3&quot; data-hovercard-type=&quot;pull_request&quot; data-hovercard-url=&quot;/youpele52/bigbud/pull/3/hovercard&quot; href=&quot;https://github.com/youpele52/bigbud/pull/3&quot;&gt;#3&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;CI: parallel jobs and sharded server tests (M2 + M3) by &lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/youpele52/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/youpele52&quot;&gt;@youpele52&lt;/a&gt; in &lt;a class=&quot;issue-link js-issue-link&quot; data-error-text=&quot;Failed to load title&quot; data-id=&quot;6512737977&quot; data-permission-text=&quot;Title is private&quot; data-url=&quot;https://github.com/youpele52/bigbud/issues/4&quot; data-hovercard-type=&quot;pull_request&quot; data-hovercard-url=&quot;/youpele52/bigbud/pull/4/hovercard&quot; href=&quot;https://github.com/youpele52/bigbud/pull/4&quot;&gt;#4&lt;/a&gt;&lt;/li&gt;
+&lt;li&gt;Stopped Windows helper timeouts from blocking updates on slow PCs by &lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/youpele52/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/youpele52&quot;&gt;@youpele52&lt;/a&gt; in &lt;a class=&quot;issue-link js-issue-link&quot; data-error-text=&quot;Failed to load title&quot; data-id=&quot;6514742886&quot; data-permission-text=&quot;Title is private&quot; data-url=&quot;https://github.com/youpele52/bigbud/issues/5&quot; data-hovercard-type=&quot;pull_request&quot; data-hovercard-url=&quot;/youpele52/bigbud/pull/5/hovercard&quot; href=&quot;https://github.com/youpele52/bigbud/pull/5&quot;&gt;#5&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2&gt;New Contributors&lt;/h2&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/youpele52/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/youpele52&quot;&gt;@youpele52&lt;/a&gt; made their first contribution in &lt;a class=&quot;issue-link js-issue-link&quot; data-error-text=&quot;Failed to load title&quot; data-id=&quot;6511606989&quot; data-permission-text=&quot;Title is private&quot; data-url=&quot;https://github.com/youpele52/bigbud/issues/3&quot; data-hovercard-type=&quot;pull_request&quot; data-hovercard-url=&quot;/youpele52/bigbud/pull/3/hovercard&quot; href=&quot;https://github.com/youpele52/bigbud/pull/3&quot;&gt;#3&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Full Changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/youpele52/bigbud/compare/v0.4.0-beta.3...v0.4.0-beta.4&quot;&gt;&lt;tt&gt;v0.4.0-beta.3...v0.4.0-beta.4&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.4.0-beta.3</id>
+    <updated>2026-11-20T14:23:55Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.4.0-beta.3"/>
+    <title>bigbud v0.4.0-beta.3</title>
+    <content type="html">&lt;p&gt;&lt;strong&gt;Full Changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/youpele52/bigbud/compare/v0.4.0-beta.2...v0.4.0-beta.3&quot;&gt;&lt;tt&gt;v0.4.0-beta.2...v0.4.0-beta.3&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.4.0-beta.2</id>
+    <updated>2026-11-20T10:38:44Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.4.0-beta.2"/>
+    <title>bigbud v0.4.0-beta.2</title>
+    <content type="html">&lt;p&gt;&lt;strong&gt;Full Changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/youpele52/bigbud/compare/v0.3.3...v0.4.0-beta.2&quot;&gt;&lt;tt&gt;v0.3.3...v0.4.0-beta.2&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.4.0-beta.1</id>
+    <updated>2026-11-20T04:35:43Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.4.0-beta.1"/>
+    <title>bigbud v0.4.0-beta.1</title>
+    <content type="html">&lt;p&gt;First beta of 0.4.0: managed remote backends and signed backend graphs,&lt;br&gt;
+peer orchestration, native mobile composition, persistent terminals,&lt;br&gt;
+system-wide search (Mod+F and Mod+P across projects, this computer and&lt;br&gt;
+connected remotes), terminal activity and finished-work notifications,&lt;br&gt;
+terminal image and file paste, and security hardening.&lt;/p&gt;</content>
+    <author>
+      <name>youpele52</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/43122220?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.3.3</id>
+    <updated>2026-11-08T11:26:49Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.3.3"/>
+    <title>bigbud v0.3.3</title>
+    <content type="html">&lt;p&gt;&lt;strong&gt;Full Changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/youpele52/bigbud/compare/v0.3.2...v0.3.3&quot;&gt;&lt;tt&gt;v0.3.2...v0.3.3&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.3.2</id>
+    <updated>2026-11-05T07:20:56Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.3.2"/>
+    <title>bigbud v0.3.2</title>
+    <content type="html">&lt;p&gt;&lt;strong&gt;Full Changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/youpele52/bigbud/compare/v0.3.1...v0.3.2&quot;&gt;&lt;tt&gt;v0.3.1...v0.3.2&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.3.1</id>
+    <updated>2026-10-25T19:16:45Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.3.1"/>
+    <title>bigbud v0.3.1</title>
+    <content type="html">&lt;p&gt;&lt;strong&gt;Full Changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/youpele52/bigbud/compare/v0.3.0...v0.3.1&quot;&gt;&lt;tt&gt;v0.3.0...v0.3.1&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1217105994/v0.3.0</id>
+    <updated>2026-10-19T23:41:08Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/youpele52/bigbud/releases/tag/v0.3.0"/>
+    <title>bigbud v0.3.0</title>
+    <content type="html">&lt;p&gt;&lt;strong&gt;Full Changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/youpele52/bigbud/compare/v0.3.00...v0.3.0&quot;&gt;&lt;tt&gt;v0.3.00...v0.3.0&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>github-actions[bot]</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/in/15368?s=60&amp;v=4"/>
+  </entry>
+</feed>

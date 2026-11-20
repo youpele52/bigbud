@@ -322,6 +322,13 @@ into that asset, so `curl -fsSL <link> | sh` needs no environment variable.
 Channels never fall back to another channel. The static `https://bigbud.app/remote-agent.sh` is
 removed and returns 404.
 
+Channel links ask the GitHub releases API first (an optional `GITHUB_TOKEN` secret raises its rate
+limit). When it fails or is rate limited, the worker reads the public, token-free
+`https://github.com/youpele52/bigbud/releases.atom` feed and checks the channel's newest tags (up
+to three) for a `remote-agent.sh` asset before redirecting. The feed only lists recent releases,
+so it never answers "no release": an empty result serves the last good release (cached 7 days)
+or a 503.
+
 ## Workspace: apps/desktop
 
 Source: [apps/desktop/package.json](../apps/desktop/package.json).
