@@ -1,6 +1,6 @@
 use super::*;
 use crate::os_index::{
-    OS_INDEX_SOURCE, OsIndexError, OsIndexOutcome, OsIndexRequest, OsIndexScopeLevel,
+    OS_INDEX_SOURCE, OsIndexError, OsIndexOutcome, OsIndexRequest, OsIndexScopeLevel, home_folder,
     resolve_scopes, search_names,
 };
 use crate::search::{SearchRegistry, SearchTicket};
@@ -39,6 +39,15 @@ impl AgentSession {
         &mut self,
         request: v1::OsIndexSearchRequest,
     ) -> Result<PreparedOsIndexSearch, Box<v1::Frame>> {
+        // `USERPROFILE` on Windows (where `HOME` is normally unset), `HOME` elsewhere.
+        self.prepare_os_index_search_in(request, home_folder())
+    }
+
+    pub(super) fn prepare_os_index_search_in(
+        &mut self,
+        request: v1::OsIndexSearchRequest,
+        home: Option<std::path::PathBuf>,
+    ) -> Result<PreparedOsIndexSearch, Box<v1::Frame>> {
         if !self.ready {
             return Err(Box::new(protocol_error_frame(&SessionError::HelloRequired)));
         }
@@ -63,9 +72,8 @@ impl AgentSession {
                 ));
             }
         };
-        let home = std::env::var_os("HOME")
-            .map(std::path::PathBuf::from)
-            .ok_or_else(|| refused_os_index(&request, &OsIndexError::HomeUnavailable))?;
+        let home =
+            home.ok_or_else(|| refused_os_index(&request, &OsIndexError::HomeUnavailable))?;
         let scopes =
             resolve_scopes(&home, level).map_err(|error| refused_os_index(&request, &error))?;
         let deadline = match request.deadline_ms {

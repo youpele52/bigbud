@@ -8,6 +8,17 @@ import {
   TrimmedNonEmptyString,
 } from "../core/baseSchemas";
 
+/**
+ * The OS index behind "this computer" (T5), as the local agent reports it: Spotlight on macOS,
+ * Windows Search on Windows, `plocate`/`locate` on Linux. It is the T5 `sourceId`.
+ */
+export const SystemSearchOsIndexSource = Schema.Literals([
+  "spotlight",
+  "windows-search",
+  "locate",
+] as const);
+export type SystemSearchOsIndexSource = typeof SystemSearchOsIndexSource.Type;
+
 /** Longest query, in characters; the agent engine enforces the same limit. */
 export const SYSTEM_SEARCH_MAX_QUERY_CHARS = 512;
 /** Rows sent to the client per query, across every tier (plan §4). */
@@ -26,6 +37,20 @@ export const SystemSearchTier = Schema.Literals([
 ] as const);
 export type SystemSearchTier = typeof SystemSearchTier.Type;
 
+/**
+ * `all` (Mod+F): names, plus contents from 3 characters. `fileNames` (Mod+P): file names only;
+ * folders are dropped before they count against any cap.
+ */
+export const SystemSearchMode = Schema.Literals(["all", "fileNames"] as const);
+export type SystemSearchMode = typeof SystemSearchMode.Type;
+
+/**
+ * Highest page index. Page `n` asks every source of the requested tiers for `n + 1` first pages
+ * (rows are ranked deterministically, so earlier pages come back first and the client drops them
+ * by stable ID). The client asks for the next page of one tier only when it is scrolled to.
+ */
+export const SYSTEM_SEARCH_MAX_PAGE = 4;
+
 export const SystemSearchQueryInput = Schema.Struct({
   /** Client generation label echoed in every update; lets the client drop late updates. */
   queryId: TrimmedNonEmptyString.check(Schema.isMaxLength(64)),
@@ -33,6 +58,10 @@ export const SystemSearchQueryInput = Schema.Struct({
   currentProjectId: Schema.optional(ProjectId),
   currentThreadId: Schema.optional(ThreadId),
   tiers: Schema.Array(SystemSearchTier),
+  /** Defaults to `all`. */
+  mode: Schema.optional(SystemSearchMode),
+  /** Next-page cursor for the requested tiers; defaults to 0 (the first page). */
+  page: Schema.optional(NonNegativeInt.check(Schema.isLessThanOrEqualTo(SYSTEM_SEARCH_MAX_PAGE))),
 });
 export type SystemSearchQueryInput = typeof SystemSearchQueryInput.Type;
 
@@ -91,7 +120,7 @@ export type SystemSearchSourceState = typeof SystemSearchSourceState.Type;
 export const SystemSearchTierUpdate = Schema.Struct({
   queryId: TrimmedNonEmptyString,
   tier: SystemSearchTier,
-  /** `local`, an execution target, or `spotlight`; one source per tier answers in order. */
+  /** `local`, an execution target, or an OS index (`SystemSearchOsIndexSource`) for T5. */
   sourceId: TrimmedNonEmptyString,
   items: Schema.Array(SystemSearchHit),
   state: SystemSearchSourceState,

@@ -9,8 +9,9 @@ import {
 
 /**
  * Collects one query's updates: rows are deduplicated by stable ID, capped at
- * `SYSTEM_SEARCH_MAX_ROWS` across every tier, and nothing is emitted once the query is aborted
- * (late batches of a superseded query are dropped).
+ * `maxRows` (`SYSTEM_SEARCH_MAX_ROWS` per page) across every tier, and nothing is emitted once
+ * the query is aborted (late batches of a superseded query are dropped). With `filesOnly`
+ * (Mod+P), folders are dropped before they count against the cap.
  */
 export class SystemSearchEmitter {
   private readonly seen = new Set<string>();
@@ -21,6 +22,7 @@ export class SystemSearchEmitter {
     private readonly signal: AbortSignal,
     private readonly sink: (update: SystemSearchTierUpdate) => void,
     private readonly maxRows = SYSTEM_SEARCH_MAX_ROWS,
+    private readonly filesOnly = false,
   ) {}
 
   get aborted(): boolean {
@@ -37,7 +39,7 @@ export class SystemSearchEmitter {
     const items: SystemSearchHit[] = [];
     let complete = true;
     for (const item of input.items) {
-      if (this.seen.has(item.id)) continue;
+      if (this.seen.has(item.id) || (this.filesOnly && item.isDirectory)) continue;
       if (this.rows >= this.maxRows) {
         complete = false;
         break;

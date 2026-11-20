@@ -11,6 +11,8 @@ import {
   createSystemSearchRunner,
   EMPTY_SYSTEM_SEARCH_VIEW,
   isSystemSearchTierPending,
+  isThisComputerSearchOn,
+  nextSystemSearchPage,
   startSystemSearchView,
   systemSearchNotices,
   systemSearchTierRows,
@@ -109,6 +111,79 @@ describe("systemSearchTiersFor", () => {
       "remoteOutsideProjects",
     ]);
     expect(systemSearchTiersFor("ab", { thisComputer: true })).toContain("thisComputer");
+  });
+
+  it("leaves the current project out for Mod+P's local list", () => {
+    expect(systemSearchTiersFor("a", { thisComputer: true, currentProject: false })).toEqual([]);
+    expect(systemSearchTiersFor("ab", { thisComputer: false, currentProject: false })).toEqual([
+      "otherProjectFiles",
+      "remoteOutsideProjects",
+    ]);
+  });
+
+  it("searches this computer only when it is on and File Access allows it", () => {
+    const on = (thisComputer: boolean, fileAccessLevel: string) =>
+      isThisComputerSearchOn({ search: { thisComputer, fileAccessLevel } });
+    expect(on(true, "common-folders")).toBe(true);
+    expect(on(true, "none")).toBe(false);
+    expect(on(false, "unrestricted")).toBe(false);
+  });
+});
+
+describe("paging", () => {
+  it("offers the next page only for a settled, truncated tier and keeps rows on page loads", async () => {
+    const calls: Array<{
+      input: SystemSearchQueryInput;
+      emit: (update: SystemSearchTierUpdate) => void;
+      signal: AbortSignal;
+      finish: () => void;
+    }> = [];
+    let view: SystemSearchView = EMPTY_SYSTEM_SEARCH_VIEW;
+    let nextId = 0;
+    const runner = createSystemSearchRunner(
+      (input, emit, signal) =>
+        new Promise<void>((resolve) => calls.push({ input, emit, signal, finish: resolve })),
+      (change) => {
+        view = change(view);
+      },
+      () => `q${++nextId}`,
+    );
+    runner.run({ query: "ab", mode: "fileNames", tiers: ["otherProjectFiles", "thisComputer"] });
+    calls[0]!.emit(update({ queryId: "q1", items: [row("a"), row("b")] }));
+    calls[0]!.emit(update({ queryId: "q1", truncated: true }));
+    // Not offered while the query still runs.
+    expect(nextSystemSearchPage(view, "otherProjectFiles")).toBeNull();
+    calls[0]!.finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(nextSystemSearchPage(view, "otherProjectFiles")).toBe(1);
+    expect(nextSystemSearchPage(view, "thisComputer")).toBeNull();
+
+    runner.more({ query: "ab", mode: "fileNames", page: 1 }, "otherProjectFiles");
+    expect(calls[1]!.input).toMatchObject({
+      queryId: "q2",
+      tiers: ["otherProjectFiles"],
+      page: 1,
+      mode: "fileNames",
+    });
+    expect(systemSearchTierRows(view, "otherProjectFiles").map((item) => item.id)).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(isSystemSearchTierPending(view, "otherProjectFiles")).toBe(true);
+    // Earlier rows come back first and are dropped by stable ID; new ones append.
+    calls[1]!.emit(update({ queryId: "q2", items: [row("a"), row("b"), row("c")] }));
+    calls[1]!.emit(update({ queryId: "q2", state: "done" }));
+    calls[1]!.finish();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(systemSearchTierRows(view, "otherProjectFiles").map((item) => item.id)).toEqual([
+      "a",
+      "b",
+      "c",
+    ]);
+    expect(nextSystemSearchPage(view, "otherProjectFiles")).toBeNull();
+    expect(view.pages).toEqual({ otherProjectFiles: 1 });
   });
 });
 

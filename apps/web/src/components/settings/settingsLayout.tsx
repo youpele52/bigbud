@@ -41,6 +41,7 @@ export function SettingsSection({
 }
 
 export function SettingsRow({
+  id,
   title,
   description,
   status,
@@ -52,6 +53,8 @@ export function SettingsRow({
   layout = "default",
   statusPlacement = "inline",
 }: {
+  /** Deep-link target id (`/settings/ai#<id>`, see `settingsAnchor.tsx`). */
+  id?: string;
   title: ReactNode;
   description: string;
   status?: ReactNode;
@@ -73,7 +76,8 @@ export function SettingsRow({
 
   return (
     <div
-      className="border-t border-border px-4 py-4 first:border-t-0 sm:px-5"
+      id={id}
+      className="border-t border-border px-4 py-4 transition-colors duration-500 first:border-t-0 data-settings-highlighted:bg-accent/60 sm:px-5"
       data-settings-search-match={matches ? "" : undefined}
       hidden={isSearching && !matches}
     >

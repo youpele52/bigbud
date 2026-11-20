@@ -1,0 +1,357 @@
+{
+  "$comment": "Shared fuzzy file-name ranking fixtures: packages/shared/src/search/nameRank.test.ts (TypeScript, Mod+P's local list) and crates/bigbud-remote-agent/src/search/rank.tests.rs (Rust engine, remote and other projects) must both reproduce every expected order and score.",
+  "cases": [
+    {
+      "name": "match classes rank exact name, path, prefixes, segment, contains, then fuzzy",
+      "query": "readme",
+      "limit": 20,
+      "entries": [
+        {
+          "path": "src/components/readme-utils.ts",
+          "kind": "file"
+        },
+        {
+          "path": "docs/README.md",
+          "kind": "file"
+        },
+        {
+          "path": "readme",
+          "kind": "file"
+        },
+        {
+          "path": "pkg/readme",
+          "kind": "directory"
+        },
+        {
+          "path": "readmeta/notes.txt",
+          "kind": "file"
+        },
+        {
+          "path": "docs/my-readme.txt",
+          "kind": "file"
+        },
+        {
+          "path": "notreadmexyz/a.txt",
+          "kind": "file"
+        },
+        {
+          "path": "src/r-e-a-d-m-e.ts",
+          "kind": "file"
+        },
+        {
+          "path": "r/e/a/d/m/e/x.txt",
+          "kind": "file"
+        },
+        {
+          "path": "unrelated.txt",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "pkg/readme",
+          "score": 0
+        },
+        {
+          "path": "readme",
+          "score": 0
+        },
+        {
+          "path": "docs/README.md",
+          "score": 2
+        },
+        {
+          "path": "src/components/readme-utils.ts",
+          "score": 2
+        },
+        {
+          "path": "readmeta/notes.txt",
+          "score": 3
+        },
+        {
+          "path": "docs/my-readme.txt",
+          "score": 5
+        },
+        {
+          "path": "notreadmexyz/a.txt",
+          "score": 6
+        },
+        {
+          "path": "src/r-e-a-d-m-e.ts",
+          "score": 128
+        },
+        {
+          "path": "r/e/a/d/m/e/x.txt",
+          "score": 231
+        }
+      ]
+    },
+    {
+      "name": "ties break by code point order, not locale order",
+      "query": "ts",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "a.ts",
+          "kind": "file"
+        },
+        {
+          "path": "_.ts",
+          "kind": "file"
+        },
+        {
+          "path": "B.ts",
+          "kind": "file"
+        },
+        {
+          "path": "Zeta.ts",
+          "kind": "file"
+        },
+        {
+          "path": "é.ts",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "B.ts",
+          "score": 5
+        },
+        {
+          "path": "Zeta.ts",
+          "score": 5
+        },
+        {
+          "path": "_.ts",
+          "score": 5
+        },
+        {
+          "path": "a.ts",
+          "score": 5
+        },
+        {
+          "path": "é.ts",
+          "score": 5
+        }
+      ]
+    },
+    {
+      "name": "keeps only the best entries up to the limit",
+      "query": "main",
+      "limit": 3,
+      "entries": [
+        {
+          "path": "src/main.rs",
+          "kind": "file"
+        },
+        {
+          "path": "main",
+          "kind": "file"
+        },
+        {
+          "path": "apps/web/src/main.tsx",
+          "kind": "file"
+        },
+        {
+          "path": "domain/model.ts",
+          "kind": "file"
+        },
+        {
+          "path": "m/a/i/n.txt",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "main",
+          "score": 0
+        },
+        {
+          "path": "apps/web/src/main.tsx",
+          "score": 2
+        },
+        {
+          "path": "src/main.rs",
+          "score": 2
+        }
+      ]
+    },
+    {
+      "name": "normalizes the query: trims, drops leading @ . / and lowercases",
+      "query": "  @./Command ",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "src/layout/CommandPalette.tsx",
+          "kind": "file"
+        },
+        {
+          "path": "command",
+          "kind": "directory"
+        },
+        {
+          "path": "docs/COMMANDS.md",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "command",
+          "score": 0
+        },
+        {
+          "path": "docs/COMMANDS.md",
+          "score": 2
+        },
+        {
+          "path": "src/layout/CommandPalette.tsx",
+          "score": 2
+        }
+      ]
+    },
+    {
+      "name": "counts UTF-16 units like JavaScript for non-BMP and case-folds non-ASCII",
+      "query": "äbc",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "😀/ÄBC.md",
+          "kind": "file"
+        },
+        {
+          "path": "x😀ä😀b😀c.txt",
+          "kind": "file"
+        },
+        {
+          "path": "äxbxc/😀😀.txt",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "😀/ÄBC.md",
+          "score": 2
+        },
+        {
+          "path": "x😀ä😀b😀c.txt",
+          "score": 133
+        },
+        {
+          "path": "äxbxc/😀😀.txt",
+          "score": 219
+        }
+      ]
+    },
+    {
+      "name": "fuzzy gaps, span and length penalties order subsequence matches",
+      "query": "cpw",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "apps/web/src/components/layout/CommandPalette.workspaceFiles.tsx",
+          "kind": "file"
+        },
+        {
+          "path": "cpw.ts",
+          "kind": "file"
+        },
+        {
+          "path": "c-p-w.ts",
+          "kind": "file"
+        },
+        {
+          "path": "copy-paste-window.ts",
+          "kind": "file"
+        },
+        {
+          "path": "c/p/w",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "cpw.ts",
+          "score": 2
+        },
+        {
+          "path": "c-p-w.ts",
+          "score": 113
+        },
+        {
+          "path": "copy-paste-window.ts",
+          "score": 153
+        },
+        {
+          "path": "apps/web/src/components/layout/CommandPalette.workspaceFiles.tsx",
+          "score": 182
+        },
+        {
+          "path": "c/p/w",
+          "score": 210
+        }
+      ]
+    },
+    {
+      "name": "a byte-order mark is trimmed like JavaScript's trim",
+      "query": "\ufeffmain",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "main.ts",
+          "kind": "file"
+        }
+      ],
+      "expected": [
+        {
+          "path": "main.ts",
+          "score": 2
+        }
+      ]
+    },
+    {
+      "name": "NEL is not JavaScript whitespace, so it stays in the query",
+      "query": "\u0085main",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "main.ts",
+          "kind": "file"
+        }
+      ],
+      "expected": []
+    },
+    {
+      "name": "a query of only separators matches everything, folders first",
+      "query": "./",
+      "limit": 10,
+      "entries": [
+        {
+          "path": "b.ts",
+          "kind": "file"
+        },
+        {
+          "path": "src",
+          "kind": "directory"
+        },
+        {
+          "path": "a",
+          "kind": "directory"
+        }
+      ],
+      "expected": [
+        {
+          "path": "a",
+          "score": 0
+        },
+        {
+          "path": "src",
+          "score": 0
+        },
+        {
+          "path": "b.ts",
+          "score": 1
+        }
+      ]
+    }
+  ]
+}

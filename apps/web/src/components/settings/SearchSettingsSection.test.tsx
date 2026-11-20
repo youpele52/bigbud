@@ -3,13 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockSearch = vi.hoisted(() => ({
   value: {
-    thisComputer: false,
+    thisComputer: true,
     connectedRemoteBackends: true,
     fileAccessLevel: "none" as "none" | "common-folders" | "unrestricted",
     hasSeenThisComputerHint: false,
   },
 }));
 
+vi.mock("@tanstack/react-router", () => ({
+  useLocation: () => ({ pathname: "/settings/ai", hash: "" }),
+  useNavigate: () => vi.fn(),
+}));
 vi.mock("../../hooks/useSettings", () => ({
   useSettings: (select: (settings: { search: typeof mockSearch.value }) => unknown) =>
     select({ search: mockSearch.value }),
@@ -29,20 +33,22 @@ describe("SearchSettingsSection", () => {
   beforeEach(() => {
     vi.stubGlobal("navigator", { platform: "MacIntel" });
     mockSearch.value = {
-      thisComputer: false,
+      thisComputer: true,
       connectedRemoteBackends: true,
       fileAccessLevel: "none",
       hasSeenThisComputerHint: false,
     };
   });
 
-  it("starts with this computer off and disabled while File Access is none, remote search on", () => {
+  it("defaults both toggles on, yet shows this computer off and disabled while File Access is none", () => {
     const markup = renderToStaticMarkup(<SearchSettingsSection />);
     expect(switchFor(markup, "Search this computer")).toContain('aria-checked="false"');
     expect(switchFor(markup, "Search this computer")).toMatch(
       /aria-disabled="true"|data-disabled=""/,
     );
     expect(markup).toContain("Turn on File Access above");
+    expect(markup).toContain("Follows the File Access permission level");
+    expect(markup).toContain("Go to File Access");
     expect(switchFor(markup, "Search connected remote backends")).toContain('aria-checked="true"');
   });
 

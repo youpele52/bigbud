@@ -1,5 +1,6 @@
 import { CommandGroupLabel } from "../ui/command";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar.menu";
+import { useScrollIntoViewLoad } from "./SearchPalette.scrollLoad";
 
 /** Uppercase heading shared by every palette section. */
 export function SearchPaletteSectionLabel({ children }: { children: React.ReactNode }) {
@@ -10,7 +11,10 @@ export function SearchPaletteSectionLabel({ children }: { children: React.ReactN
   );
 }
 
-/** "See more" row under a palette section; `remaining` is omitted when more server pages exist. */
+/**
+ * "See more" row under a palette section; `remaining` is omitted when more server pages exist.
+ * Scrolling it into view loads the next page too (pagination by scroll); clicking still works.
+ */
 export function SearchPaletteSeeMore({
   remaining,
   indent = false,
@@ -20,8 +24,13 @@ export function SearchPaletteSeeMore({
   indent?: boolean;
   onClick: () => void;
 }) {
+  const sentinel = useScrollIntoViewLoad(onClick);
   return (
-    <SidebarMenuSubItem className={indent ? "w-full px-2 pt-1 pl-9" : "w-full px-2 pt-1"}>
+    <SidebarMenuSubItem
+      ref={sentinel}
+      data-testid="search-palette-see-more"
+      className={indent ? "w-full px-2 pt-1 pl-9" : "w-full px-2 pt-1"}
+    >
       <SidebarMenuSubButton
         render={<button type="button" />}
         size="sm"

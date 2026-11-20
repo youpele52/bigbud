@@ -160,6 +160,8 @@ export function SearchPaletteDialogContent({ activeThreadId }: SearchPaletteDial
                       pending={sources.pending}
                       messageSearchStatus={sources.messageSearchStatus}
                       systemNotices={sources.systemNotices}
+                      systemPaging={sources.systemPaging}
+                      thisComputerNote={sources.thisComputerNote}
                       renderFileActions={renderSearchResultActions}
                       thisComputerHint={
                         <SearchPaletteThisComputerHint

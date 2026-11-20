@@ -124,3 +124,46 @@ fn cancel_request_reaches_a_registered_os_index_search() {
             .load(std::sync::atomic::Ordering::Relaxed)
     );
 }
+
+#[test]
+fn the_home_folder_comes_from_os_index_and_its_absence_is_refused() {
+    let (mut session, _) = ready_session(true);
+    let refusal = session
+        .prepare_os_index_search_in(
+            request(v1::OsIndexScopeLevel::CommonFolders, "needle"),
+            None,
+        )
+        .err()
+        .expect("refused");
+    assert_eq!(
+        refusal_code(*refusal),
+        crate::os_index::OsIndexError::HomeUnavailable.code()
+    );
+    assert!(session.os_index_registry().is_empty());
+
+    let home = std::env::temp_dir().join(format!(
+        "bigbud-os-index-home-{}-{:?}",
+        std::process::id(),
+        std::time::SystemTime::now()
+    ));
+    std::fs::create_dir_all(home.join("Documents")).expect("Documents");
+    let prepared = session.prepare_os_index_search_in(
+        request(v1::OsIndexScopeLevel::CommonFolders, "needle"),
+        Some(home.clone()),
+    );
+    let _removed = std::fs::remove_dir_all(&home);
+    let prepared = prepared.unwrap_or_else(|frame| panic!("prepared, got {frame:?}"));
+    assert_eq!(prepared.operation_id(), "os-index-1");
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_uses_the_user_profile_not_home() {
+    // `HOME` is normally unset on Windows; `os_index::home_folder` reads `USERPROFILE`.
+    assert_eq!(
+        crate::os_index::home_folder(),
+        std::env::var_os("USERPROFILE")
+            .filter(|value| !value.is_empty())
+            .map(std::path::PathBuf::from)
+    );
+}

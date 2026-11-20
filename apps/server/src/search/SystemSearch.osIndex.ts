@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import * as nodePath from "node:path";
 
 import type { FileAccessPermissionLevel } from "@bigbud/contracts/core/settings.search.ts";
-import type { SystemSearchHit, SystemSearchReason } from "@bigbud/contracts/search/systemSearch.ts";
+import {
+  SystemSearchOsIndexSource,
+  type SystemSearchHit,
+  type SystemSearchReason,
+} from "@bigbud/contracts/search/systemSearch.ts";
+import { Schema } from "effect";
 import { isOsIndexExcludedPath } from "@bigbud/shared/search/osIndexExclusions";
 import { countUnicodeCodePoints } from "@bigbud/shared/String";
 
@@ -15,9 +20,30 @@ import {
 import type { SearchAgentConnection } from "./SystemSearch.agentRequest.ts";
 import type { SystemSearchEmitter } from "./SystemSearch.emitter.ts";
 
-export const OS_INDEX_SOURCE_ID = "spotlight";
+/** T5 source on a platform without an OS index adapter (the agent answers `UNSUPPORTED`). */
+export const OS_INDEX_FALLBACK_SOURCE_ID = "os-index";
+const isOsIndexSource = Schema.is(SystemSearchOsIndexSource);
+
+/**
+ * The OS index the local agent on this machine uses (it runs beside the server). The agent's own
+ * `OsIndexSearchCompleted.source` stays authoritative for rows and the final state.
+ */
+export function expectedOsIndexSource(platform: NodeJS.Platform = process.platform): string {
+  switch (platform) {
+    case "darwin":
+      return "spotlight";
+    case "win32":
+      return "windows-search";
+    case "linux":
+      return "locate";
+    default:
+      return OS_INDEX_FALLBACK_SOURCE_ID;
+  }
+}
 /** T5 rows (plan §4); the agent fetches 200 from Spotlight and filters down to these. */
 export const OS_INDEX_MAX_RESULTS = 50;
+/** The agent never returns more than this (`MAX_OS_INDEX_RESULTS`); paging stops here. */
+export const OS_INDEX_MAX_PAGED_RESULTS = 200;
 export const OS_INDEX_DEADLINE_MS = 1_500;
 export const OS_INDEX_MIN_CHARS = 2;
 
@@ -91,17 +117,25 @@ export async function runOsIndexSearch(input: {
   readonly query: string;
   readonly emitter: SystemSearchEmitter;
   readonly signal: AbortSignal;
+  readonly platform?: NodeJS.Platform;
+  /** Page `n` asks for `n + 1` pages of rows, up to `OS_INDEX_MAX_PAGED_RESULTS`. */
+  readonly page?: number | undefined;
 }): Promise<void> {
   if (countUnicodeCodePoints(input.query) < OS_INDEX_MIN_CHARS) return;
   const scope = resolveOsIndexScope(input.gate);
   if (scope === null) return;
   const tier = "thisComputer" as const;
-  const sourceId = OS_INDEX_SOURCE_ID;
+  const expected = expectedOsIndexSource(input.platform);
   if ("reason" in scope) {
-    input.emitter.state({ tier, sourceId, state: "unavailable", reason: scope.reason });
+    input.emitter.state({ tier, sourceId: expected, state: "unavailable", reason: scope.reason });
     return;
   }
-  input.emitter.state({ tier, sourceId, state: "searching" });
+  input.emitter.state({ tier, sourceId: expected, state: "searching" });
+  let sourceId = expected;
+  const maxResults = Math.min(
+    OS_INDEX_MAX_RESULTS * ((input.page ?? 0) + 1),
+    OS_INDEX_MAX_PAGED_RESULTS,
+  );
   try {
     const connection = await input.localConnection();
     if (!connection.supportsCapability(REMOTE_AGENT_OS_INDEX_CAPABILITY)) {
@@ -114,12 +148,17 @@ export async function runOsIndexSearch(input: {
         operationId: `search-os-index-${randomUUID()}`,
         query: input.query,
         scopeLevel: scope.level,
-        maxResults: OS_INDEX_MAX_RESULTS,
+        maxResults,
         deadlineMs: OS_INDEX_DEADLINE_MS,
       },
       { signal: input.signal },
     );
     if (input.signal.aborted || completed.stopReason === "cancelled") return;
+    if (isOsIndexSource(completed.source) && completed.source !== expected) {
+      // Close the source announced as searching, then answer under the agent's own source.
+      input.emitter.state({ tier, sourceId: expected, state: "done" });
+      sourceId = completed.source;
+    }
     if (completed.errorCode) {
       const reason = reasonFor(completed.errorCode);
       input.emitter.state({ tier, sourceId, state: "unavailable", reason });
@@ -127,7 +166,8 @@ export async function runOsIndexSearch(input: {
     }
     const items = hits.flatMap((hit) => toRow(hit, input.home) ?? []);
     const complete = input.emitter.rowsFor({ tier, sourceId, items });
-    const truncated = completed.truncated || !complete;
+    // The agent's own cap ends paging: no page asks past it.
+    const truncated = (completed.truncated && maxResults < OS_INDEX_MAX_PAGED_RESULTS) || !complete;
     const finished = completed.stopReason === "complete" && !truncated;
     input.emitter.state({ tier, sourceId, state: finished ? "done" : "partial", truncated });
   } catch {

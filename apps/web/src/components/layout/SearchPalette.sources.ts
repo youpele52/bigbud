@@ -18,9 +18,11 @@ import {
 import { toProjectSearchResults } from "./SearchPalette.projectResults";
 import { useSystemSearchStream } from "./SearchPalette.stream";
 import {
+  isThisComputerSearchOn,
   isSystemSearchTierPending,
   systemSearchNotices,
   systemSearchTierRows,
+  thisComputerNote,
 } from "./SearchPalette.systemSearch.logic";
 import { useTerminalSearchResults } from "./SearchPalette.terminalResults";
 import {
@@ -46,7 +48,7 @@ export function useSearchPaletteSources(input: {
   const activeThread = useThreadById(activeThreadId);
   const selectedProjectId = useUiStateStore((state) => state.selectedProjectId);
   const selectedProject = useProjectById(activeThread?.projectId ?? selectedProjectId ?? null);
-  const searchThisComputer = useSettings((settings) => settings.search.thisComputer);
+  const searchThisComputer = useSettings(isThisComputerSearchOn);
   const context: SearchContext = useMemo(
     () => ({
       currentThreadId: activeThreadId,
@@ -63,13 +65,14 @@ export function useSearchPaletteSources(input: {
   const normalizedQuery = normalizeQuery(query);
   const debouncedNormalizedQuery = query.length > 0 ? normalizeQuery(debouncedQuery) : "";
   const debouncedMessageQuery = debouncedQuery.trim();
-  const systemSearch = useSystemSearchStream({
+  const systemStream = useSystemSearchStream({
     open,
     query: debouncedNormalizedQuery,
     currentProjectId: context.currentProjectId,
     currentThreadId: context.currentThreadId,
     thisComputer: searchThisComputer,
   });
+  const systemSearch = systemStream.view;
   const projectCatalogQueries = useQueries({
     queries: (["local", "remote"] as const).map((scope) =>
       projectCatalogSearchQueryOptions({
@@ -177,6 +180,9 @@ export function useSearchPaletteSources(input: {
     },
     systemNotices: systemSearchNotices(systemSearch),
     systemSearch,
+    /** Next pages of streamed file tiers, asked for when a tier's "See more" is scrolled to. */
+    systemPaging: { hasMore: systemStream.hasMore, loadMore: systemStream.loadMore },
+    thisComputerNote: thisComputerNote(systemSearch),
     messageSearchStatus: conversationSearch.isError
       ? ("unavailable" as const)
       : conversationSearch.data?.pages[0]?.status,

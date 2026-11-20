@@ -162,6 +162,8 @@ export async function searchRootsOnAgent(
 export async function searchRootsLegacy(input: {
   readonly sourceId: string;
   readonly roots: ReadonlyArray<SearchRootEntry>;
+  /** Rows asked per folder (grows with the page). */
+  readonly maxResultsPerRoot?: number;
   readonly searchFolder: (
     root: SearchRootEntry,
     maxResults: number,
@@ -175,7 +177,10 @@ export async function searchRootsLegacy(input: {
   for (const root of input.roots.slice(0, MAX_LEGACY_ROOTS)) {
     if (input.signal.aborted) return;
     try {
-      const entries = await input.searchFolder(root, LEGACY_NAME_RESULTS_PER_ROOT);
+      const entries = await input.searchFolder(
+        root,
+        input.maxResultsPerRoot ?? LEGACY_NAME_RESULTS_PER_ROOT,
+      );
       if (input.signal.aborted) return;
       const items = entries.flatMap((entry) => nameHitToRow(root, entry) ?? []);
       input.emitter.rowsFor({ tier: root.tier, sourceId: input.sourceId, items });

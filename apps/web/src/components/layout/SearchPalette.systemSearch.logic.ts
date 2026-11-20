@@ -1,12 +1,15 @@
-import type {
-  SystemSearchHit,
-  SystemSearchQueryInput,
-  SystemSearchReason,
-  SystemSearchSourceState,
-  SystemSearchTier,
-  SystemSearchTierUpdate,
+import {
+  SYSTEM_SEARCH_MAX_PAGE,
+  type SystemSearchHit,
+  type SystemSearchQueryInput,
+  type SystemSearchReason,
+  type SystemSearchSourceState,
+  type SystemSearchTier,
+  type SystemSearchTierUpdate,
 } from "@bigbud/contracts/search/systemSearch.ts";
 import { countUnicodeCodePoints } from "@bigbud/shared/String";
+
+import { osIndexWording } from "~/lib/osIndexWording";
 
 /** One source of one tier (for example T4 from the local agent, or T4 from one remote). */
 export interface SystemSearchSourceView {
@@ -24,6 +27,8 @@ export interface SystemSearchView {
   readonly sources: readonly SystemSearchSourceView[];
   readonly finished: boolean;
   readonly failed: boolean;
+  /** The last page asked per tier (0, the first page, when absent). */
+  readonly pages: Readonly<Partial<Record<SystemSearchTier, number>>>;
 }
 
 export const EMPTY_SYSTEM_SEARCH_VIEW: SystemSearchView = {
@@ -31,10 +36,45 @@ export const EMPTY_SYSTEM_SEARCH_VIEW: SystemSearchView = {
   sources: [],
   finished: true,
   failed: false,
+  pages: {},
 };
 
 export function startSystemSearchView(queryId: string): SystemSearchView {
-  return { queryId, sources: [], finished: false, failed: false };
+  return { queryId, sources: [], finished: false, failed: false, pages: {} };
+}
+
+/**
+ * Starts the next page of one tier under a new query generation. Rows already shown stay; the
+ * tier's sources go back to searching with their truncation cleared, so the page decides it.
+ */
+export function beginSystemSearchPage(
+  view: SystemSearchView,
+  queryId: string,
+  tier: SystemSearchTier,
+  page: number,
+): SystemSearchView {
+  return {
+    ...view,
+    queryId,
+    finished: false,
+    failed: false,
+    pages: { ...view.pages, [tier]: page },
+    sources: view.sources.map((source) =>
+      source.tier === tier ? { ...source, state: "searching", truncated: false } : source,
+    ),
+  };
+}
+
+/** The next page index for a tier, or null when the tier has no more rows to ask for. */
+export function nextSystemSearchPage(
+  view: SystemSearchView,
+  tier: SystemSearchTier,
+): number | null {
+  if (view.queryId === null || !view.finished) return null;
+  const sources = view.sources.filter((source) => source.tier === tier);
+  const more = sources.some((source) => source.truncated && source.state !== "unavailable");
+  const page = (view.pages[tier] ?? 0) + 1;
+  return more && page <= SYSTEM_SEARCH_MAX_PAGE ? page : null;
 }
 
 function sourceRank(source: SystemSearchSourceView): number {
@@ -85,6 +125,12 @@ export function systemSearchTierRows(
   return view.sources.filter((source) => source.tier === tier).flatMap((source) => source.items);
 }
 
+/** The freshness caveat for a view's T5 rows, from the OS index that answered (`locate`). */
+export function thisComputerNote(view: SystemSearchView): string | null {
+  const source = view.sources.find((candidate) => candidate.tier === "thisComputer");
+  return source ? osIndexWording(source.sourceId).staleNote : null;
+}
+
 export function isSystemSearchTierPending(view: SystemSearchView, tier: SystemSearchTier): boolean {
   if (view.queryId === null || view.failed) return false;
   const sources = view.sources.filter((source) => source.tier === tier);
@@ -119,16 +165,28 @@ export function systemSearchNotices(view: SystemSearchView): SystemSearchNotice[
   return notices;
 }
 
-/** Tiers worth asking for (plan "Short queries"): current project from 1, the rest from 2. */
+/** "Search this computer" is on and File Access allows it (the server enforces the same gate). */
+export function isThisComputerSearchOn(settings: {
+  readonly search: { readonly thisComputer: boolean; readonly fileAccessLevel: string };
+}): boolean {
+  return settings.search.thisComputer && settings.search.fileAccessLevel !== "none";
+}
+
+/**
+ * Tiers worth asking for (plan "Short queries"): current project from 1, the rest from 2.
+ * `thisComputer` is the effective setting (on and File Access not "No access"). Mod+P leaves the
+ * current project out when its in-memory local list already answers it.
+ */
 export function systemSearchTiersFor(
   query: string,
-  options: { readonly thisComputer: boolean },
+  options: { readonly thisComputer: boolean; readonly currentProject?: boolean },
 ): SystemSearchTier[] {
   const length = countUnicodeCodePoints(query.trim());
+  const current = options.currentProject === false ? [] : (["currentProject"] as const);
   if (length === 0) return [];
-  if (length === 1) return ["currentProject"];
+  if (length === 1) return [...current];
   return [
-    "currentProject",
+    ...current,
     "otherProjectFiles",
     ...(options.thisComputer ? (["thisComputer"] as const) : []),
     "remoteOutsideProjects",
@@ -155,6 +213,31 @@ export function createSystemSearchRunner(
     controller?.abort();
     controller = null;
   };
+  const start = (
+    input: SystemSearchQueryInput,
+    begin: (view: SystemSearchView) => SystemSearchView,
+  ) => {
+    const queryId = input.queryId;
+    const current = new AbortController();
+    controller = current;
+    onView(begin);
+    const settle = (failed: boolean) =>
+      onView((view) => (view.queryId === queryId ? { ...view, finished: true, failed } : view));
+    search(
+      input,
+      (update) => {
+        if (!current.signal.aborted) onView((view) => applySystemSearchUpdate(view, update));
+      },
+      current.signal,
+    ).then(
+      () => {
+        if (!current.signal.aborted) settle(false);
+      },
+      () => {
+        if (!current.signal.aborted) settle(true);
+      },
+    );
+  };
   return {
     cancel,
     run(input: Omit<SystemSearchQueryInput, "queryId"> | null) {
@@ -164,24 +247,18 @@ export function createSystemSearchRunner(
         return;
       }
       const queryId = makeQueryId();
-      const current = new AbortController();
-      controller = current;
-      onView(() => startSystemSearchView(queryId));
-      const settle = (failed: boolean) =>
-        onView((view) => (view.queryId === queryId ? { ...view, finished: true, failed } : view));
-      search(
-        { ...input, queryId },
-        (update) => {
-          if (!current.signal.aborted) onView((view) => applySystemSearchUpdate(view, update));
-        },
-        current.signal,
-      ).then(
-        () => {
-          if (!current.signal.aborted) settle(false);
-        },
-        () => {
-          if (!current.signal.aborted) settle(true);
-        },
+      start({ ...input, queryId }, () => startSystemSearchView(queryId));
+    },
+    /**
+     * The next page of one tier (scrolled to). It supersedes whatever query is live, so at most
+     * one `search.query` runs per palette; rows already shown stay and new ones append.
+     */
+    more(input: Omit<SystemSearchQueryInput, "queryId" | "tiers">, tier: SystemSearchTier) {
+      cancel();
+      const queryId = makeQueryId();
+      const page = input.page ?? 1;
+      start({ ...input, tiers: [tier], page, queryId }, (view) =>
+        beginSystemSearchPage(view, queryId, tier, page),
       );
     },
   };

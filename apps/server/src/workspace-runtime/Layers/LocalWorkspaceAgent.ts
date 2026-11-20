@@ -12,8 +12,9 @@ type ClosableAgent = LocalWorkspaceAgentShape & { readonly close: () => void };
 
 /**
  * Owns the shared local agent for the layer's lifetime and closes it on release. Only the
- * desktop-embedded backend starts it with `--os-index` ("this computer" search), and never when
- * the managed-device policy turns that search off.
+ * desktop-embedded backend starts it with `--os-index` ("this computer" search) on every desktop
+ * platform (Spotlight, Windows Search, `locate`), and never when the managed-device policy turns
+ * that search off.
  */
 export function makeLocalWorkspaceAgentLayer(
   makeAgent: (options: { readonly osIndex: boolean }) => ClosableAgent = (options) =>

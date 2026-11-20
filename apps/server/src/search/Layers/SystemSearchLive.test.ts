@@ -128,7 +128,7 @@ describe("SystemSearchLive", () => {
     expect(remote.cancels).toHaveLength(1);
   });
 
-  it("keeps this computer off by default and absent outside the desktop backend", async () => {
+  it("keeps this computer gated by File Access by default and absent outside the desktop backend", async () => {
     const thisComputer = async (mode?: "desktop" | "remote") => {
       const { layer } = harness({}, false, mode);
       return Effect.runPromise(
@@ -143,7 +143,12 @@ describe("SystemSearchLive", () => {
       );
     };
     expect(await thisComputer("desktop")).toEqual([
-      expect.objectContaining({ tier: "thisComputer", state: "unavailable", reason: "disabled" }),
+      // On by default (plan Q1, revised); File Access still starts at "No access".
+      expect.objectContaining({
+        tier: "thisComputer",
+        state: "unavailable",
+        reason: "file-access-none",
+      }),
     ]);
     expect(await thisComputer("remote")).toEqual([]);
     expect(await thisComputer()).toEqual([]);

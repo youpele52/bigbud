@@ -119,6 +119,7 @@ export function fakeOsIndexAgent(
     readonly hits?: ReadonlyArray<RemoteAgentOsIndexSearchHit>;
     readonly errorCode?: string;
     readonly hold?: boolean;
+    readonly source?: string;
   } = {},
 ) {
   const requests: RemoteAgentOsIndexSearchRequest[] = [];
@@ -133,7 +134,7 @@ export function fakeOsIndexAgent(
         operationId: request.operationId,
         stopReason: options.errorCode ? "error" : stopReason,
         truncated: false,
-        source: "spotlight",
+        source: options.source ?? "spotlight",
         availability: "ready",
         excluded: 0,
         errorCode: options.errorCode ?? "",

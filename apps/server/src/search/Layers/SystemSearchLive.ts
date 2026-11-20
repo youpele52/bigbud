@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 
 import {
+  SYSTEM_SEARCH_MAX_ROWS,
   SystemSearchError,
   type SystemSearchTierUpdate,
 } from "@bigbud/contracts/search/systemSearch.ts";
@@ -12,7 +13,6 @@ import { RemoteAgentWorkspaceClient } from "../../remote-agent/remoteAgentWorksp
 import { remoteAgentRequestDigest } from "../../remote-agent/remoteAgentRequestDigest.ts";
 import { workspaceHandle } from "../../workspace-runtime/Layers/WorkspaceRuntime.remote.ts";
 import { LocalWorkspaceAgent } from "../../workspace-runtime/Services/LocalWorkspaceAgent.ts";
-import { WorkspaceRuntime } from "../../workspace-runtime/Services/WorkspaceRuntime.ts";
 import { ServerConfig } from "../../startup/config.ts";
 import { ServerSettingsService } from "../../ws/serverSettings.ts";
 import { SearchAgentConnections } from "../Services/SearchAgentConnections.ts";
@@ -28,9 +28,6 @@ import {
   type WorkspaceFileSearchDeps,
 } from "../SystemSearch.workspaceFiles.ts";
 
-/** Current-project content rows asked from `rg` on SSH-only hosts. */
-const DIRECT_SSH_CONTENT_LIMIT = 40;
-
 function searchError(message: string) {
   return (cause: unknown) => new SystemSearchError({ message, cause });
 }
@@ -42,8 +39,6 @@ export const makeSystemSearchLayer = Layer.effect(
     const settings = yield* ServerSettingsService;
     const localAgent = yield* LocalWorkspaceAgent;
     const connections = yield* SearchAgentConnections;
-    const workspaceRuntime = yield* WorkspaceRuntime;
-    const runPromise = Effect.runPromiseWith(yield* Effect.services());
     const config = yield* Effect.serviceOption(ServerConfig);
     // Only the desktop-embedded backend searches "this computer"; remote backends never do.
     const desktopEmbedded = Option.isSome(config) && config.value.mode === "desktop";
@@ -52,16 +47,6 @@ export const makeSystemSearchLayer = Layer.effect(
       localConnection: () => localAgent.getConnection(),
       remoteConnection: connections.remote,
       isManagedAgentTarget: connections.isManagedAgentTarget,
-      searchDirectSsh: (input) =>
-        runPromise(
-          workspaceRuntime.search.searchFileContents({
-            cwd: input.root,
-            executionTargetId: input.executionTargetId,
-            query: input.query,
-            limit: DIRECT_SSH_CONTENT_LIMIT,
-          }),
-          { signal: input.signal },
-        ),
       legacyFolderSearch: async (connection, root, query, maxResults, signal) => {
         const client = new RemoteAgentWorkspaceClient(connection);
         const handle = workspaceHandle(root.executionTargetId, root.root);
@@ -102,13 +87,25 @@ export const makeSystemSearchLayer = Layer.effect(
             const controller = new AbortController();
             // Interrupting the stream aborts every agent request (each sends CancelRequest).
             yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()));
-            const emitter = new SystemSearchEmitter(input.queryId, controller.signal, (update) => {
-              Queue.offerUnsafe(queue, update);
-            });
+            const page = input.page ?? 0;
+            const emitter = new SystemSearchEmitter(
+              input.queryId,
+              controller.signal,
+              (update) => Queue.offerUnsafe(queue, update),
+              SYSTEM_SEARCH_MAX_ROWS * (page + 1),
+              input.mode === "fileNames",
+            );
             const signal = controller.signal;
             yield* Effect.promise(() =>
               Promise.all([
-                runWorkspaceFileSearch(deps, { plan, query: input.query, emitter, signal }),
+                runWorkspaceFileSearch(deps, {
+                  plan,
+                  query: input.query,
+                  emitter,
+                  signal,
+                  mode: input.mode,
+                  page,
+                }),
                 input.tiers.includes("thisComputer")
                   ? runOsIndexSearch({
                       gate: {
@@ -122,6 +119,7 @@ export const makeSystemSearchLayer = Layer.effect(
                       query: input.query,
                       emitter,
                       signal,
+                      page,
                     })
                   : undefined,
               ]),

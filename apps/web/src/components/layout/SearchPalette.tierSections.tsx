@@ -14,7 +14,10 @@ import type { FileSearchResult } from "./SearchPalette.results";
 import type { SectionVisibility } from "./SearchPalette.visibility";
 import { TerminalSearchResultGroup } from "./SearchPalette.terminalResults";
 import type { TerminalSearchResult } from "./SearchPalette.terminalResults.logic";
-import { SearchPaletteSystemSections } from "./SearchPalette.systemSections";
+import {
+  SearchPaletteSystemSections,
+  type SystemSearchPaging,
+} from "./SearchPalette.systemSections";
 import type { SystemSearchNotice } from "./SearchPalette.systemSearch.logic";
 import { ThreadSearchResultGroup } from "./SearchPalette.threadResults";
 import { describeSearchTiers, type SearchPaletteTiers } from "./SearchPalette.tiers.logic";
@@ -38,6 +41,9 @@ export interface SearchPaletteTierSectionsProps {
   systemNotices?: readonly SystemSearchNotice[];
   renderFileActions?: (result: FileSearchResult) => React.ReactNode;
   thisComputerHint?: React.ReactNode;
+  /** Next pages of streamed file tiers, loaded when a tier's "See more" is scrolled to. */
+  systemPaging?: SystemSearchPaging;
+  thisComputerNote?: string | null;
   currentFile: {
     path: string | null;
     matches: readonly FileSearchMatch[];
@@ -161,6 +167,11 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
           visibleResults={slice("t2.files", tiers.currentProject.files)}
           onSelect={props.onSelectFile}
           onShowMore={() => showMore("t2.files")}
+          hasMorePages={props.systemPaging?.hasMore("currentProject") ?? false}
+          onLoadMorePages={() => {
+            props.systemPaging?.loadMore("currentProject");
+            showMore("t2.files");
+          }}
           {...(props.renderFileActions ? { renderActions: props.renderFileActions } : {})}
         />
       ) : null}
@@ -212,6 +223,8 @@ export function SearchPaletteTierSections(props: SearchPaletteTierSectionsProps)
           onSelectFile={props.onSelectFile}
           {...(props.renderFileActions ? { renderFileActions: props.renderFileActions } : {})}
           thisComputerHint={props.thisComputerHint}
+          {...(props.systemPaging ? { paging: props.systemPaging } : {})}
+          thisComputerNote={props.thisComputerNote ?? null}
         />
       ) : null}
     </>

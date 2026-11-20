@@ -48,7 +48,12 @@ describe("resolveOsIndexScope", () => {
 });
 
 describe("runOsIndexSearch", () => {
-  const run = (agent: ReturnType<typeof fakeOsIndexAgent>, gate = GATE, signal?: AbortSignal) => {
+  const run = (
+    agent: ReturnType<typeof fakeOsIndexAgent>,
+    gate = GATE,
+    signal?: AbortSignal,
+    page?: number,
+  ) => {
     const controller = new AbortController();
     const { updates, emitter } = collectUpdates("q1", signal ?? controller.signal);
     const running = runOsIndexSearch({
@@ -58,9 +63,17 @@ describe("runOsIndexSearch", () => {
       query: "invoice",
       emitter,
       signal: signal ?? controller.signal,
+      page,
     });
     return { updates, running };
   };
+
+  it("pages by asking for more rows, up to the agent's 200-row cap", async () => {
+    const agent = fakeOsIndexAgent();
+    await run(agent, GATE, undefined, 1).running;
+    await run(agent, GATE, undefined, 4).running;
+    expect(agent.requests.map((request) => request.maxResults)).toEqual([100, 200]);
+  });
 
   it("queries the scope the server chose and shows ~-relative folders", async () => {
     const agent = fakeOsIndexAgent({
@@ -120,5 +133,45 @@ describe("runOsIndexSearch", () => {
     await running;
     expect(agent.cancels).toEqual([agent.requests[0]!.operationId]);
     expect(updates).toHaveLength(before);
+  });
+
+  it.each([
+    ["darwin", "spotlight"],
+    ["win32", "windows-search"],
+    ["linux", "locate"],
+  ] as const)("reports %s results under the %s source", async (platform, source) => {
+    const agent = fakeOsIndexAgent({ source, hits: [hit("/Users/me/Documents/invoice.pdf")] });
+    const { updates, emitter } = collectUpdates();
+    await runOsIndexSearch({
+      gate: GATE,
+      localConnection: async () => agent.connection,
+      home: HOME,
+      query: "invoice",
+      emitter,
+      signal: new AbortController().signal,
+      platform,
+    });
+    expect(new Set(updates.map((update) => update.sourceId))).toEqual(new Set([source]));
+    expect(updates.at(-1)).toMatchObject({ state: "done" });
+  });
+
+  it("lets the agent's reported source win and closes the expected one", async () => {
+    const agent = fakeOsIndexAgent({ source: "locate", hits: [hit("/Users/me/Documents/a.pdf")] });
+    const { updates, emitter } = collectUpdates();
+    await runOsIndexSearch({
+      gate: GATE,
+      localConnection: async () => agent.connection,
+      home: HOME,
+      query: "invoice",
+      emitter,
+      signal: new AbortController().signal,
+      platform: "darwin",
+    });
+    expect(updates.map((update) => [update.sourceId, update.state, update.items.length])).toEqual([
+      ["spotlight", "searching", 0],
+      ["spotlight", "done", 0],
+      ["locate", "partial", 1],
+      ["locate", "done", 0],
+    ]);
   });
 });

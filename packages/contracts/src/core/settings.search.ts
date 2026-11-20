@@ -11,11 +11,14 @@ export const FileAccessPermissionLevel = Schema.Literals([
 ] as const);
 export type FileAccessPermissionLevel = typeof FileAccessPermissionLevel.Type;
 
-/** Server-enforced Mod+F search options (system-wide search plan §6). */
+/** Server-enforced Mod+F and Mod+P search options (system-wide search plan §6). */
 export const SearchSettings = Schema.Struct({
-  /** "Search this computer" through the OS index. Off by default (plan Q1). */
-  thisComputer: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
-  /** "Search connected remote backends": other projects on connected remotes (T4/T6). */
+  /**
+   * "Search this computer" through the OS index. On by default (plan Q1, revised 20 November
+   * 2026); File Access stays the gate, so `fileAccessLevel: "none"` still keeps it off.
+   */
+  thisComputer: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
+  /** "Search connected remote backends": other projects on connected remotes (T4/T6). On. */
   connectedRemoteBackends: Schema.Boolean.pipe(Schema.withDecodingDefault(() => true)),
   /** Server mirror of the File Access level; `none` turns "this computer" off. */
   fileAccessLevel: FileAccessPermissionLevel.pipe(

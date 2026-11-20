@@ -23,9 +23,14 @@ export const ProjectEntry = Schema.Struct({
 });
 export type ProjectEntry = typeof ProjectEntry.Type;
 
+/** `agent-update-available`: a managed remote agent without streaming search (legacy walker). */
+export const ProjectSearchEntriesNotice = Schema.Literals(["agent-update-available"]);
+export type ProjectSearchEntriesNotice = typeof ProjectSearchEntriesNotice.Type;
+
 export const ProjectSearchEntriesResult = Schema.Struct({
   entries: Schema.Array(ProjectEntry),
   truncated: Schema.Boolean,
+  notice: Schema.optional(ProjectSearchEntriesNotice),
 });
 export type ProjectSearchEntriesResult = typeof ProjectSearchEntriesResult.Type;
 

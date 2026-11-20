@@ -5,6 +5,7 @@ import { REMOTE_AGENT_SEARCH_MODE } from "../remote-agent/remoteAgentProtocol.se
 import type { SearchRootEntry, SearchRootPlan } from "./SystemSearch.roots.ts";
 import { collectUpdates, fakeSearchAgent } from "./SystemSearch.test.helpers.ts";
 import {
+  pageLimits,
   runWorkspaceFileSearch,
   SYSTEM_SEARCH_LIMITS,
   type WorkspaceFileSearchDeps,
@@ -44,7 +45,6 @@ function deps(overrides: Partial<WorkspaceFileSearchDeps> = {}): WorkspaceFileSe
     localConnection: async () => local.connection,
     remoteConnection: () => null,
     isManagedAgentTarget: (target) => target === REMOTE,
-    searchDirectSsh: async () => ({ matches: [], truncated: false }),
     legacyFolderSearch: async () => [],
     ...overrides,
   };
@@ -162,7 +162,7 @@ describe("runWorkspaceFileSearch", () => {
     expect(updates).toHaveLength(before);
   });
 
-  it("falls back to legacy names on old agents and hints at SSH-only hosts", async () => {
+  it("falls back to legacy names on old agents and never spawns ssh for SSH-only hosts", async () => {
     const old = fakeSearchAgent({ capable: false });
     const legacyFolderSearch = vi.fn(async () => [
       { path: "README.md", isDirectory: false, isFile: true, sizeBytes: 5 },
@@ -171,25 +171,58 @@ describe("runWorkspaceFileSearch", () => {
       current: root("r0", "currentProject", SSH_ONLY, "/srv/ssh"),
       others: [plan.others[1]!],
     };
-    const searchDirectSsh = vi.fn(async () => ({
-      matches: [{ path: "a.txt", line: 2, lineText: "match here" }],
-      truncated: false,
-    }));
     const { updates, emitter } = collectUpdates();
     await runWorkspaceFileSearch(
-      deps({ remoteConnection: () => old.connection, legacyFolderSearch, searchDirectSsh }),
+      deps({ remoteConnection: () => old.connection, legacyFolderSearch }),
       { plan: sshPlan, query: "match", emitter, signal: new AbortController().signal },
     );
     expect(old.requests).toHaveLength(0);
     expect(legacyFolderSearch).toHaveBeenCalledTimes(2);
     const legacyEnds = updates.filter((u) => u.sourceId === REMOTE && u.items.length === 0);
     expect(legacyEnds.at(-1)).toMatchObject({ state: "partial", reason: "agent-update-available" });
-    const ssh = updates.filter((u) => u.sourceId === SSH_ONLY);
-    expect(ssh.find((u) => u.items.length > 0)?.items[0]).toMatchObject({
-      kind: "content",
-      line: 2,
+    // An SSH-only host would need a new `ssh` process, so it is reported, never searched.
+    expect(updates.filter((u) => u.sourceId === SSH_ONLY)).toEqual([
+      expect.objectContaining({
+        tier: "currentProject",
+        state: "unavailable",
+        reason: "use-managed-agent",
+      }),
+    ]);
+  });
+
+  it("asks for file names only in fileNames mode (Mod+P), at every query length", async () => {
+    const local = fakeSearchAgent();
+    const { emitter } = collectUpdates();
+    await runWorkspaceFileSearch(deps({ localConnection: async () => local.connection }), {
+      plan,
+      query: "matching",
+      emitter,
+      signal: new AbortController().signal,
+      mode: "fileNames",
     });
-    expect(ssh.at(-1)).toMatchObject({ state: "partial", reason: "use-managed-agent" });
+    expect(local.requests.map((request) => request.mode)).toEqual([
+      REMOTE_AGENT_SEARCH_MODE.names,
+      REMOTE_AGENT_SEARCH_MODE.names,
+    ]);
+  });
+
+  it("asks every source for n + 1 first pages on page n, capped by the contract", async () => {
+    const local = fakeSearchAgent();
+    const legacy = fakeSearchAgent({ capable: false });
+    const legacyFolderSearch = vi.fn<WorkspaceFileSearchDeps["legacyFolderSearch"]>(async () => []);
+    const { emitter } = collectUpdates();
+    await runWorkspaceFileSearch(
+      deps({
+        localConnection: async () => local.connection,
+        remoteConnection: () => legacy.connection,
+        legacyFolderSearch,
+      }),
+      { plan, query: "match", emitter, signal: new AbortController().signal, page: 2 },
+    );
+    expect(local.requests[0]).toMatchObject(pageLimits(SYSTEM_SEARCH_LIMITS.current, 2));
+    expect(local.requests[0]!.maxResultsPerRoot).toBe(240);
+    expect(local.requests[1]).toMatchObject({ maxResults: 360, maxResultsPerRoot: 60 });
+    expect(legacyFolderSearch.mock.calls.map((call) => call[3])).toEqual([60, 60]);
   });
 
   it("marks the local agent unavailable instead of failing the whole query", async () => {

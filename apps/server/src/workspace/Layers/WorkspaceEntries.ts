@@ -14,16 +14,18 @@ import {
 } from "../Services/WorkspaceEntries.ts";
 import { WorkspacePaths } from "../Services/WorkspacePaths.ts";
 import {
+  insertRankedName,
+  normalizeNameRankQuery,
+  scoreNameRankCandidate,
+  type RankedName,
+} from "@bigbud/shared/search/nameRank";
+import {
   type SearchableWorkspaceEntry,
-  type RankedWorkspaceEntry,
   toPosixPath,
   parentPathOf,
   toSearchableWorkspaceEntry,
-  normalizeQuery,
   isPathInIgnoredDirectory,
   directoryAncestorsOf,
-  scoreEntry,
-  insertRankedEntry,
 } from "./WorkspaceEntriesSearch.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import {
@@ -360,19 +362,19 @@ export const makeWorkspaceEntries = Effect.gen(function* () {
           });
       return yield* indexEffect.pipe(
         Effect.map((index) => {
-          const normalizedQueryStr = normalizeQuery(input.query);
+          const normalizedQueryStr = normalizeNameRankQuery(input.query);
           const limit = Math.max(0, Math.floor(input.limit));
-          const rankedEntries: RankedWorkspaceEntry[] = [];
+          const rankedEntries: RankedName<SearchableWorkspaceEntry>[] = [];
           let matchedEntryCount = 0;
 
           for (const entry of index.entries) {
-            const score = scoreEntry(entry, normalizedQueryStr);
+            const score = scoreNameRankCandidate(entry, normalizedQueryStr);
             if (score === null) {
               continue;
             }
 
             matchedEntryCount += 1;
-            insertRankedEntry(rankedEntries, { entry, score }, limit);
+            insertRankedName(rankedEntries, { entry, score }, limit);
           }
 
           return {

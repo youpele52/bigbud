@@ -30,7 +30,7 @@ import {
   CommandPanel,
   CommandShortcut,
 } from "../ui/command";
-import { CommandPaletteWorkspaceFiles } from "./CommandPalette.workspaceFiles";
+import { CommandPaletteFileSearch } from "./CommandPalette.fileSearch";
 
 interface PaletteItem {
   id: string;
@@ -351,11 +351,13 @@ export function CommandPaletteDialogContent() {
                         {groupedItems.threads.map(renderItem)}
                       </CommandGroup>
                     ) : null}
-                    <CommandPaletteWorkspaceFiles
+                    <CommandPaletteFileSearch
                       open={open}
                       normalizedQuery={normalizedQuery}
                       workspaceRoot={workspaceRoot}
                       workspaceExecutionTargetId={workspaceExecutionTargetId}
+                      currentProjectId={activeThread?.projectId ?? selectedProjectId ?? null}
+                      currentThreadId={routeThreadId ?? null}
                       onBeforeOpenFile={() => setOpen(false)}
                       withTopMargin={
                         groupedItems.actions.length > 0 ||

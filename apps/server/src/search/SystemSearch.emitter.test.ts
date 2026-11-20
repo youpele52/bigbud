@@ -50,4 +50,24 @@ describe("SystemSearchEmitter", () => {
     emitter.state({ tier: "currentProject", sourceId: "local", state: "done" });
     expect(updates).toEqual([]);
   });
+
+  it("drops folders before the cap in files-only mode (Mod+P)", () => {
+    const updates: SystemSearchTierUpdate[] = [];
+    const emitter = new SystemSearchEmitter(
+      "q",
+      new AbortController().signal,
+      (u) => updates.push(u),
+      2,
+      true,
+    );
+    const folders = rows(3, "d").map((row) => Object.assign(row, { isDirectory: true }));
+    expect(
+      emitter.rowsFor({
+        tier: "otherProjectFiles",
+        sourceId: "local",
+        items: [...folders, ...rows(2)],
+      }),
+    ).toBe(true);
+    expect(updates.flatMap((update) => update.items).map((item) => item.id)).toEqual(["r0", "r1"]);
+  });
 });

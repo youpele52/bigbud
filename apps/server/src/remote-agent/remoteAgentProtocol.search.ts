@@ -100,7 +100,7 @@ export interface RemoteAgentOsIndexSearchCompleted {
   readonly operationId: string;
   readonly stopReason: string;
   readonly truncated: boolean;
-  /** `spotlight`, or empty where no OS index is supported. */
+  /** `spotlight`, `windows-search` or `locate`; empty where no OS index is supported. */
   readonly source: string;
   /** `ready` or `unavailable`. */
   readonly availability: string;

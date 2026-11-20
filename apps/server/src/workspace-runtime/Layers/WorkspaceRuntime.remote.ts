@@ -6,7 +6,6 @@ import type {
   ProjectEntry,
   ProjectListDirectoryInput,
   ProjectReadFilePreviewInput,
-  ProjectSearchEntriesInput,
 } from "@bigbud/contracts/workspace/project.ts";
 import { isLocalExecutionTarget } from "../../executionTargets.ts";
 import { WorkspaceEntriesError } from "../../workspace/Services/WorkspaceEntries.ts";
@@ -27,6 +26,7 @@ import { makeRemoteWorkspaceWatch } from "../../remote-agent/remoteAgentWorkspac
 import { readRemoteFile } from "./WorkspaceRuntime.remote.read.ts";
 import { withRemoteReadReconnect } from "./WorkspaceRuntime.remote.reconnect.ts";
 import { makeRemoteWorkspaceContentSearch } from "./WorkspaceRuntime.remote.search.ts";
+import { makeRemoteWorkspaceEntrySearch } from "./WorkspaceRuntime.remote.searchEntries.ts";
 import { makeRemoteWorkspaceWriteFile } from "./WorkspaceRuntime.remote.write.ts";
 import { remoteAgentRequestDigest } from "../../remote-agent/remoteAgentRequestDigest.ts";
 
@@ -262,39 +262,7 @@ export function makeRemoteWorkspaceRuntime(
     return { entries: entries.map(projectEntry) };
   });
 
-  const searchEntries: WorkspaceSearchShape["searchEntries"] = Effect.fn(
-    "RemoteWorkspaceSearch.searchEntries",
-  )(function* (input: ProjectSearchEntriesInput) {
-    const target = remoteTarget(input.executionTargetId);
-    const id = operationId("search-entries");
-    const entries = yield* Effect.tryPromise({
-      try: async () => {
-        return withRemoteReadReconnect({
-          resolver,
-          target,
-          operation: async (client) => {
-            const handle = await open(client, target, input.cwd);
-            return client.searchFilenames({
-              workspaceHandle: handle,
-              path: ".",
-              query: input.query,
-              maxResults: input.limit,
-              operationId: id,
-              requestDigest: remoteAgentRequestDigest(input),
-            });
-          },
-        });
-      },
-      catch: (cause) =>
-        entriesError({
-          cwd: input.cwd,
-          operation: "remoteWorkspace.searchEntries",
-          cause,
-        }),
-    });
-    return { entries: entries.map(projectEntry), truncated: entries.length >= input.limit };
-  });
-
+  const searchEntries = makeRemoteWorkspaceEntrySearch({ resolver, remoteTarget, open });
   const searchFileContents = makeRemoteWorkspaceContentSearch({ resolver, remoteTarget, open });
 
   return {

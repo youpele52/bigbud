@@ -1,12 +1,27 @@
 use crate::workspace::DirectoryEntry;
 
-// Keep these scores aligned with WorkspaceEntriesSearch.ts. UTF-16 indices match
-// JavaScript's fuzzy penalties, including for paths containing non-BMP characters.
+#[cfg(test)]
+#[path = "rank.tests.rs"]
+mod tests;
+
+// Keep these scores aligned with `packages/shared/src/search/nameRank.ts` (Mod+P's local list);
+// `nameRank.fixtures.json` is run by both test suites. UTF-16 indices match JavaScript's fuzzy
+// penalties, including for paths containing non-BMP characters.
 pub(crate) fn normalize_query(query: &str) -> String {
     query
-        .trim()
+        .trim_matches(is_javascript_trim_whitespace)
         .trim_start_matches(['@', '.', '/'])
         .to_lowercase()
+}
+
+/// The characters JavaScript's `String.prototype.trim` removes: Unicode `Zs` spaces, the ASCII
+/// controls `\t` to `\r`, the line and paragraph separators and the byte-order mark. Unlike
+/// `char::is_whitespace`, NEL (U+0085) is kept.
+fn is_javascript_trim_whitespace(character: char) -> bool {
+    let space = matches!(character, '\t'..='\r' | ' ' | '\u{a0}' | '\u{1680}');
+    let separator = matches!(character, '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}');
+    let other = matches!(character, '\u{202f}' | '\u{205f}' | '\u{3000}' | '\u{feff}');
+    space || separator || other
 }
 
 pub(crate) fn score_entry(entry: &DirectoryEntry, query: &str) -> Option<usize> {

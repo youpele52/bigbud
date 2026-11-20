@@ -12,6 +12,7 @@ import { updateServerSettings, useSettings, useUpdateSettings } from "../../hook
 import { fileAccessServerPatch } from "../../hooks/useSettings.fileAccessMirror";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { SETTINGS_ANCHORS, SettingsAnchorLink, useSettingsAnchorTarget } from "./settingsAnchor";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { readNativeApi } from "../../rpc/nativeApi";
 
@@ -43,6 +44,7 @@ export function FileAccessSettingsSection() {
   const [isResetting, setIsResetting] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const accessMap = getFolderAccessMap(settings.fileAccessPermissionLevel);
+  const targeted = useSettingsAnchorTarget(SETTINGS_ANCHORS.fileAccessPermissionLevel);
 
   const handlePickDefaultChatFolder = useCallback(async () => {
     const api = readNativeApi();
@@ -111,8 +113,18 @@ export function FileAccessSettingsSection() {
       />
 
       <SettingsRow
+        id={SETTINGS_ANCHORS.fileAccessPermissionLevel}
+        forceVisible={targeted}
         title="Permission level"
         description="Control which files and folders bigbud can access on your system."
+        status={
+          <span>
+            This level also controls "Search this computer" (which folders it may search).{" "}
+            <SettingsAnchorLink anchorId={SETTINGS_ANCHORS.searchThisComputer}>
+              Go to Search this computer
+            </SettingsAnchorLink>
+          </span>
+        }
         control={
           <Select
             value={settings.fileAccessPermissionLevel}

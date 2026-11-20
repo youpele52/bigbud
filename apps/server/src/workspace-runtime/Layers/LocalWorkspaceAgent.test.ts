@@ -41,4 +41,18 @@ describe("LocalWorkspaceAgent layer", () => {
     vi.stubEnv("BIGBUD_SEARCH_THIS_COMPUTER", "0");
     expect(await osIndexFlag("desktop")).toBe(false);
   });
+
+  it.each(["darwin", "win32", "linux"] as const)(
+    "passes --os-index on %s desktop builds too (Spotlight, Windows Search, locate)",
+    async (platform) => {
+      const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+      Object.defineProperty(process, "platform", { ...original, value: platform });
+      try {
+        expect(await osIndexFlag("desktop")).toBe(true);
+        expect(await osIndexFlag("remote")).toBe(false);
+      } finally {
+        Object.defineProperty(process, "platform", original);
+      }
+    },
+  );
 });

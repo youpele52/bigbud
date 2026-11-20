@@ -69,7 +69,8 @@ function toMatch(hit: {
   };
 }
 
-function assertUsable(completed: RemoteAgentWorkspaceSearchCompleted): void {
+/** Throws for refusals, unreadable roots and early stops other than the deadline or a limit. */
+export function assertAgentSearchUsable(completed: RemoteAgentWorkspaceSearchCompleted): void {
   if (completed.errorCode) {
     throw new RemoteAgentWorkspaceError(
       completed.errorCode,
@@ -161,7 +162,7 @@ export async function searchAgentWorkspaceContents(
     { deadlineMs: input.budget.deadlineMs, signal: input.signal, wait: input.wait },
   );
   input.signal?.throwIfAborted();
-  assertUsable(completed);
+  assertAgentSearchUsable(completed);
   return {
     matches: matches.slice(0, limit),
     truncated: matches.length > limit || (completed.stopReason !== "limit" && completed.truncated),

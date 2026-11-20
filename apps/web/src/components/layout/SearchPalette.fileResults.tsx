@@ -22,6 +22,8 @@ export function FileSearchResultGroup({
   showLabel = false,
   onSelect,
   onShowMore,
+  hasMorePages = false,
+  onLoadMorePages,
   renderActions,
 }: {
   label: string;
@@ -31,6 +33,9 @@ export function FileSearchResultGroup({
   showLabel?: boolean;
   onSelect: (result: FileSearchResult) => void;
   onShowMore: () => void;
+  /** The server has another page for this tier (asked for once every shown row is revealed). */
+  hasMorePages?: boolean;
+  onLoadMorePages?: () => void;
   /** Secondary actions (for example "Reveal") rendered at the end of a row. */
   renderActions?: (result: FileSearchResult) => React.ReactNode;
 }) {
@@ -68,6 +73,8 @@ export function FileSearchResultGroup({
           remaining={results.length - visibleResults.length}
           onClick={onShowMore}
         />
+      ) : hasMorePages && onLoadMorePages ? (
+        <SearchPaletteSeeMore onClick={onLoadMorePages} />
       ) : null}
     </CommandGroup>
   );

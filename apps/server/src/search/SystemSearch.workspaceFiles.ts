@@ -1,4 +1,4 @@
-import type { ProjectSearchFileContentsResult } from "@bigbud/contracts/workspace/project.ts";
+import type { SystemSearchMode } from "@bigbud/contracts/search/systemSearch.ts";
 import { countUnicodeCodePoints } from "@bigbud/shared/String";
 
 import { isLocalExecutionTarget } from "../executionTargets.ts";
@@ -14,7 +14,6 @@ import {
   type SearchAgentConnection,
 } from "./SystemSearch.agentRequest.ts";
 import type { SystemSearchEmitter } from "./SystemSearch.emitter.ts";
-import { contentHitToRow } from "./SystemSearch.hits.ts";
 import type { SearchRootEntry, SearchRootPlan } from "./SystemSearch.roots.ts";
 
 /** Per-request caps (plan §4): the current project gets more rows; others 20 per project. */
@@ -27,18 +26,22 @@ export const SYSTEM_SEARCH_LIMITS = {
 export const SYSTEM_SEARCH_MIN_CHARS = { currentNames: 1, otherNames: 2, contents: 3 } as const;
 export const LOCAL_SOURCE_ID = "local";
 
+type SearchLimits = (typeof SYSTEM_SEARCH_LIMITS)[keyof typeof SYSTEM_SEARCH_LIMITS];
+
+/** Page `n` asks for `n + 1` first pages; ranking is deterministic, so earlier rows lead. */
+export function pageLimits(limits: SearchLimits, page: number) {
+  const pages = page + 1;
+  return {
+    maxResults: limits.maxResults * pages,
+    maxResultsPerRoot: limits.maxResultsPerRoot * pages,
+  };
+}
+
 export interface WorkspaceFileSearchDeps<C extends SearchAgentConnection = SearchAgentConnection> {
   readonly localConnection: () => Promise<C>;
   /** Live managed-agent connection, or null when the remote is not connected. Never dials. */
   readonly remoteConnection: (executionTargetId: string) => C | null;
   readonly isManagedAgentTarget: (executionTargetId: string) => boolean;
-  /** Current-project content search on SSH-only hosts (`rg` on the host, plan Q5). */
-  readonly searchDirectSsh: (input: {
-    readonly executionTargetId: string;
-    readonly root: string;
-    readonly query: string;
-    readonly signal: AbortSignal;
-  }) => Promise<ProjectSearchFileContentsResult>;
   /** Legacy filename search in one folder for agents without `workspace.search-stream`. */
   readonly legacyFolderSearch: (
     connection: C,
@@ -55,7 +58,7 @@ interface SourceInput {
   readonly roots: ReadonlyArray<SearchRootEntry>;
   readonly query: string;
   readonly mode: "names" | "both";
-  readonly limits: (typeof SYSTEM_SEARCH_LIMITS)[keyof typeof SYSTEM_SEARCH_LIMITS];
+  readonly limits: { readonly maxResults: number; readonly maxResultsPerRoot: number };
   readonly emitter: SystemSearchEmitter;
   readonly signal: AbortSignal;
 }
@@ -67,50 +70,6 @@ function unavailable(
 ): void {
   for (const tier of new Set(input.roots.map((root) => root.tier))) {
     input.emitter.state({ tier, sourceId, state: "unavailable", reason });
-  }
-}
-
-async function searchDirectSsh<C extends SearchAgentConnection>(
-  deps: WorkspaceFileSearchDeps<C>,
-  input: SourceInput,
-): Promise<void> {
-  const sourceId = input.executionTargetId;
-  const current = input.roots.find((root) => root.tier === "currentProject");
-  const contents = countUnicodeCodePoints(input.query) >= SYSTEM_SEARCH_MIN_CHARS.contents;
-  if (!current || !contents) return unavailable(input, sourceId, "use-managed-agent");
-  unavailable(
-    { ...input, roots: input.roots.filter((root) => root !== current) },
-    sourceId,
-    "use-managed-agent",
-  );
-  input.emitter.state({ tier: current.tier, sourceId, state: "searching" });
-  try {
-    const result = await deps.searchDirectSsh({
-      executionTargetId: input.executionTargetId,
-      root: current.root,
-      query: input.query,
-      signal: input.signal,
-    });
-    if (input.signal.aborted) return;
-    const items = result.matches.flatMap(
-      (match) =>
-        contentHitToRow(current, {
-          path: match.path,
-          line: match.line,
-          column: match.column ?? 0,
-          excerpt: match.lineText,
-        }) ?? [],
-    );
-    const complete = input.emitter.rowsFor({ tier: current.tier, sourceId, items });
-    input.emitter.state({
-      tier: current.tier,
-      sourceId,
-      state: "partial",
-      reason: "use-managed-agent",
-      truncated: result.truncated || !complete,
-    });
-  } catch {
-    if (!input.signal.aborted) unavailable({ ...input, roots: [current] }, sourceId, "error");
   }
 }
 
@@ -132,7 +91,10 @@ async function searchSource<C extends SearchAgentConnection>(
       return unavailable(input, sourceId, "agent-unavailable");
     }
   } else {
-    if (!deps.isManagedAgentTarget(input.executionTargetId)) return searchDirectSsh(deps, input);
+    // SSH-only hosts would need a new `ssh` process; search never connects just to search.
+    if (!deps.isManagedAgentTarget(input.executionTargetId)) {
+      return unavailable(input, sourceId, "use-managed-agent");
+    }
     connection = deps.remoteConnection(input.executionTargetId);
     if (!connection) return unavailable(input, sourceId, "not-connected");
     if (!connection.supportsCapability(REMOTE_AGENT_SEARCH_STREAM_CAPABILITY)) {
@@ -140,6 +102,7 @@ async function searchSource<C extends SearchAgentConnection>(
       return searchRootsLegacy({
         sourceId,
         roots: input.roots,
+        maxResultsPerRoot: input.limits.maxResultsPerRoot,
         searchFolder: (root, maxResults) =>
           deps.legacyFolderSearch(legacy, root, input.query, maxResults, input.signal),
         emitter: input.emitter,
@@ -165,7 +128,8 @@ async function searchSource<C extends SearchAgentConnection>(
 /**
  * T2, T4 and T6 (plan §4). The current project is requested first and on its own, with a
  * higher cap; every other folder goes in one request per execution target. Remotes that are not
- * connected report `not-connected` at once and never delay the other sources.
+ * connected report `not-connected` at once and never delay the other sources; nothing is dialed,
+ * spawned or reconnected. `fileNames` (Mod+P) asks for names only at every length.
  */
 export async function runWorkspaceFileSearch<C extends SearchAgentConnection>(
   deps: WorkspaceFileSearchDeps<C>,
@@ -174,10 +138,14 @@ export async function runWorkspaceFileSearch<C extends SearchAgentConnection>(
     readonly query: string;
     readonly emitter: SystemSearchEmitter;
     readonly signal: AbortSignal;
+    readonly mode?: SystemSearchMode | undefined;
+    readonly page?: number | undefined;
   },
 ): Promise<void> {
   const length = countUnicodeCodePoints(input.query);
-  const mode = length >= SYSTEM_SEARCH_MIN_CHARS.contents ? "both" : "names";
+  const contents = input.mode !== "fileNames" && length >= SYSTEM_SEARCH_MIN_CHARS.contents;
+  const mode = contents ? "both" : "names";
+  const page = input.page ?? 0;
   const shared = {
     query: input.query,
     mode,
@@ -192,7 +160,7 @@ export async function runWorkspaceFileSearch<C extends SearchAgentConnection>(
         ...shared,
         executionTargetId: current.executionTargetId,
         roots: [current],
-        limits: SYSTEM_SEARCH_LIMITS.current,
+        limits: pageLimits(SYSTEM_SEARCH_LIMITS.current, page),
       }),
     );
   }
@@ -204,7 +172,10 @@ export async function runWorkspaceFileSearch<C extends SearchAgentConnection>(
           ...shared,
           executionTargetId: group.executionTargetId,
           roots: group.roots,
-          limits: local ? SYSTEM_SEARCH_LIMITS.local : SYSTEM_SEARCH_LIMITS.remote,
+          limits: pageLimits(
+            local ? SYSTEM_SEARCH_LIMITS.local : SYSTEM_SEARCH_LIMITS.remote,
+            page,
+          ),
         }),
       );
     }
