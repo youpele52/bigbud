@@ -221,7 +221,23 @@ describe("Mod+P file search across sources", () => {
       reason: "not-connected",
       truncated: false,
     });
-    await expect.element(page.getByText(/is not connected; connect it to search/)).toBeVisible();
+    await sleep(100);
+    // A remote the user has not connected is simply not searched: no notice.
+    expect(document.body.textContent).not.toMatch(/not connected|not fully searched/);
+    call.onUpdate({
+      queryId: call.input.queryId,
+      tier: "otherProjectFiles",
+      sourceId: "ssh:host=old&transport=agent",
+      items: [],
+      state: "partial",
+      reason: "agent-update-available",
+      truncated: false,
+    });
+    // Other hints fold into one muted line; the host's reason is in its tooltip.
+    const summary = page.getByText("1 host not fully searched");
+    await expect.element(summary).toBeVisible();
+    await summary.hover();
+    await expect.element(page.getByText(/Showing file names only on old\./).last()).toBeVisible();
   });
 
   it("asks for a tier's next page only when its row is scrolled into view", async () => {

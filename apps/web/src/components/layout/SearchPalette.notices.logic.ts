@@ -1,6 +1,7 @@
 import {
   SYSTEM_SEARCH_LOCAL_SOURCE_ID,
   SYSTEM_SEARCH_OS_INDEX_FALLBACK_SOURCE_ID,
+  type SystemSearchReason,
 } from "@bigbud/contracts/search/systemSearch.ts";
 import { getRemoteWorkspaceTargetLabel } from "~/components/sidebar/Sidebar.remoteWorkspaces.logic";
 import { isOsIndexSource, osIndexWording } from "~/lib/osIndexWording";
@@ -11,8 +12,34 @@ export type SearchNoticeTone = "amber" | "red";
 
 export interface SearchNoticeText {
   readonly text: string;
-  /** Amber for partial or unavailable sources; red only for real failures. */
+  /**
+   * Red for real failures, shown on their own line; amber for partial or skipped sources,
+   * folded into the summary line (`summarizeSearchNotices`).
+   */
   readonly tone: SearchNoticeTone;
+}
+
+/** One muted line for sources not fully searched; `details` holds each source's reason. */
+export interface SearchNoticeSummaryLine {
+  readonly text: string;
+  readonly details: readonly string[];
+}
+
+export interface SearchNoticeSummary {
+  /** Real failures, one line per distinct message. */
+  readonly failures: readonly string[];
+  readonly partial: SearchNoticeSummaryLine | null;
+}
+
+/** Normal state, not a problem: a remote the user has not connected is simply not searched. */
+const SILENT_REASONS: ReadonlySet<SystemSearchReason> = new Set(["not-connected"]);
+
+function isRemoteSource(sourceId: string): boolean {
+  return (
+    sourceId !== SYSTEM_SEARCH_LOCAL_SOURCE_ID &&
+    sourceId !== SYSTEM_SEARCH_OS_INDEX_FALLBACK_SOURCE_ID &&
+    !isOsIndexSource(sourceId)
+  );
 }
 
 function sourceName(sourceId: string): string {
@@ -22,7 +49,7 @@ function sourceName(sourceId: string): string {
   return getRemoteWorkspaceTargetLabel(sourceId) ?? "the remote";
 }
 
-/** Palette wording for a partial or unavailable `search.query` source. */
+/** Wording for a partial or unavailable `search.query` source (summary details, failures). */
 export function describeSearchNotice(notice: SystemSearchNotice): SearchNoticeText {
   const name = sourceName(notice.sourceId);
   const index = osIndexWording(notice.sourceId);
@@ -68,4 +95,40 @@ export function describeSearchNotice(notice: SystemSearchNotice): SearchNoticeTe
     case "error":
       return { text: `File search on ${name} failed.`, tone: "red" };
   }
+}
+
+/**
+ * What the palette shows under the results (Mod+F and Mod+P): no notice for remotes that are
+ * simply not connected, failures once each, and every other hint (SSH-only host, agent update,
+ * busy, this-computer settings) folded into one muted "N hosts not fully searched" line whose
+ * per-source reasons are the details.
+ */
+export function summarizeSearchNotices(
+  notices: readonly SystemSearchNotice[],
+): SearchNoticeSummary {
+  const failures = new Set<string>();
+  const details = new Set<string>();
+  const partialSources = new Set<string>();
+  for (const notice of notices) {
+    if (SILENT_REASONS.has(notice.reason)) continue;
+    const { text, tone } = describeSearchNotice(notice);
+    if (tone === "red") {
+      failures.add(text);
+      continue;
+    }
+    partialSources.add(notice.sourceId);
+    details.add(text);
+  }
+  const count = partialSources.size;
+  const noun = [...partialSources].every(isRemoteSource) ? "host" : "place";
+  return {
+    failures: [...failures],
+    partial:
+      count === 0
+        ? null
+        : {
+            text: `${count} ${noun}${count === 1 ? "" : "s"} not fully searched`,
+            details: [...details],
+          },
+  };
 }

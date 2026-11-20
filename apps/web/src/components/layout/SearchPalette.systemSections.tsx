@@ -1,10 +1,10 @@
 import type { SystemSearchTier } from "@bigbud/contracts/search/systemSearch.ts";
 import { Fragment } from "react";
 
-import { cn } from "~/lib/utils";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 import { FileSearchResultGroup } from "./SearchPalette.fileResults";
-import { describeSearchNotice } from "./SearchPalette.notices.logic";
+import { summarizeSearchNotices } from "./SearchPalette.notices.logic";
 import type { FileSearchResult } from "./SearchPalette.results";
 import type { SystemSearchNotice } from "./SearchPalette.systemSearch.logic";
 import type { SearchPaletteTiers } from "./SearchPalette.tiers.logic";
@@ -37,22 +37,41 @@ const DEFAULT_LABELS = {
   "t6.files": "Remote folders outside projects",
 } as const;
 
-/** Notices for partial or unavailable sources (not connected, agent update, SSH-only, ...). */
+/**
+ * Under the results: real failures once each, then at most one muted summary of sources not
+ * fully searched, with each source's reason in its tooltip (and for screen readers). Remotes
+ * that are simply not connected get no notice.
+ */
 export function SearchPaletteNotices({ notices }: { notices: readonly SystemSearchNotice[] }) {
-  if (notices.length === 0) return null;
+  const { failures, partial } = summarizeSearchNotices(notices);
+  if (failures.length === 0 && !partial) return null;
   return (
-    <div className="px-4 py-1">
-      {notices.map((notice) => {
-        const { text, tone } = describeSearchNotice(notice);
-        return (
-          <div
-            key={`${notice.sourceId}:${notice.reason}`}
-            className={cn("py-0.5 text-xs", tone === "red" ? "text-destructive" : "text-amber-600")}
+    <div className="px-4 py-1 text-xs">
+      {failures.map((failure) => (
+        <div key={failure} className="py-0.5 text-destructive">
+          {failure}
+        </div>
+      ))}
+      {partial ? (
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                type="button"
+                className="w-fit cursor-default rounded-sm py-0.5 text-left text-muted-foreground underline decoration-dotted underline-offset-2 focus-visible:outline-2 focus-visible:outline-ring"
+              />
+            }
           >
-            {text}
-          </div>
-        );
-      })}
+            {partial.text}
+            <span className="sr-only">: {partial.details.join(" ")}</span>
+          </TooltipTrigger>
+          <TooltipPopup side="top" className="max-w-80 whitespace-normal text-xs leading-snug">
+            {partial.details.map((detail) => (
+              <div key={detail}>{detail}</div>
+            ))}
+          </TooltipPopup>
+        </Tooltip>
+      ) : null}
     </div>
   );
 }

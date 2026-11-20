@@ -9,6 +9,7 @@ import {
   SearchPaletteTierSections,
   type SearchPaletteTierSectionsProps,
 } from "./SearchPalette.tierSections";
+import type { SystemSearchNotice } from "./SearchPalette.systemSearch.logic";
 import type { SearchPaletteTiers } from "./SearchPalette.tiers.logic";
 
 const visibility: SectionVisibility = {
@@ -92,6 +93,17 @@ function renderSections(overrides: Partial<SearchPaletteTierSectionsProps>) {
   );
 }
 
+function notices(
+  reasons: ReadonlyArray<readonly [string, SystemSearchNotice["reason"]]>,
+): SystemSearchNotice[] {
+  return reasons.map(([sourceId, reason]) => ({
+    tier: "otherProjectFiles",
+    sourceId,
+    reason,
+    state: "unavailable",
+  }));
+}
+
 describe("SearchPaletteTierSections", () => {
   it("shows current-file matches before global results", () => {
     const tiers = emptyTiers();
@@ -162,7 +174,7 @@ describe("SearchPaletteTierSections", () => {
         {
           tier: "otherProjectFiles",
           sourceId: "ssh:host=box",
-          reason: "not-connected",
+          reason: "use-managed-agent",
           state: "unavailable",
         },
       ],
@@ -173,9 +185,37 @@ describe("SearchPaletteTierSections", () => {
       "Files in other projects",
       "This computer",
       "Remote folders outside projects",
-      "box is not connected",
+      "1 host not fully searched",
     ].map((label) => markup.indexOf(label));
     expect(order.every((index) => index >= 0)).toBe(true);
     expect(order).toEqual(order.toSorted((left, right) => left - right));
+  });
+
+  it("hides not-connected remotes and folds hints into one muted summary line", () => {
+    const idle = renderSections({
+      tiers: emptyTiers(),
+      systemNotices: notices([["ssh:host=idle&transport=agent", "not-connected"]]),
+    });
+    expect(idle).not.toContain("not connected");
+    expect(idle).not.toContain("not fully searched");
+    const markup = renderSections({
+      tiers: emptyTiers(),
+      systemNotices: notices([
+        ["ssh:host=idle&transport=agent", "not-connected"],
+        ["ssh:host=a&transport=direct-ssh", "use-managed-agent"],
+        ["ssh:host=b&transport=agent", "agent-update-available"],
+        ["ssh:host=c&transport=agent", "error"],
+      ]),
+    });
+    expect(markup.match(/not fully searched/g)).toHaveLength(1);
+    expect(markup).toContain("2 hosts not fully searched");
+    expect(markup).toContain("text-muted-foreground");
+    expect(markup).not.toContain("text-amber-600");
+    // The per-host reasons are the summary's details (tooltip, and text for screen readers).
+    expect(markup).toContain("Use the bigbud agent on a for faster search");
+    expect(markup).toContain("Showing file names only on b.");
+    // A real failure keeps its own line.
+    expect(markup).toContain("File search on c failed.");
+    expect(markup).not.toContain("not connected");
   });
 });

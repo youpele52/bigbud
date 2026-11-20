@@ -180,3 +180,40 @@ export function fakeOsIndexAgent(
   };
   return { connection, requests, cancels };
 }
+
+/**
+ * An old agent without `workspace.search-stream`: answers the legacy workspace open and
+ * filename search with one matching file per folder, and records the folders it was asked.
+ */
+export function fakeLegacySearchAgent(fileName = "match.md") {
+  const folders: string[] = [];
+  const handles = new Map<string, string>();
+  const connection: SearchAgentConnection = {
+    supportsCapability: (name: string) => name === "workspace.files" || name === "workspace.search",
+    request: (async (frame: RemoteAgentFrame) => {
+      if (frame.type === "workspaceOpenRequest") {
+        handles.set(frame.value.workspaceHandle, frame.value.root);
+        return {
+          type: "workspaceOpenResponse",
+          value: { ...frame.value, accepted: true, errorCode: "", errorMessage: "" },
+        };
+      }
+      if (frame.type !== "filenameSearchRequest") throw new Error(`unexpected ${frame.type}`);
+      folders.push(handles.get(frame.value.workspaceHandle) ?? "");
+      return {
+        type: "filenameSearchResponse",
+        value: {
+          requestId: frame.value.requestId,
+          operationId: frame.value.operationId,
+          terminal: true,
+          entries: [{ path: fileName, isDirectory: false, isFile: true, sizeBytes: 5 }],
+          truncated: false,
+          errorCode: "",
+          errorMessage: "",
+        },
+      };
+    }) as SearchAgentConnection["request"],
+    nextFrame: (() => new Promise(() => undefined)) as SearchAgentConnection["nextFrame"],
+  };
+  return { connection, folders };
+}
