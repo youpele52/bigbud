@@ -149,7 +149,7 @@ install_macos() {
 
   app_name="$(basename "$app_bundle")"
   case "$app_name" in
-    bigbud.app|"bigbud Beta.app"|"bigbud Preview.app"|"bigbud Nightly.app") ;;
+    bigbud.app|"bigbud beta.app"|"bigbud preview.app"|"bigbud nightly.app") ;;
     *) fail "Unexpected app bundle identity in DMG: $app_name" ;;
   esac
   destination="/Applications/$app_name"

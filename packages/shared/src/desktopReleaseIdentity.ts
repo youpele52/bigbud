@@ -28,14 +28,14 @@ const IDENTITIES = {
     updaterChannel: "latest",
     userDataDirName: "bigbud",
   },
-  beta: createPrereleaseIdentity("beta", "Beta"),
-  preview: createPrereleaseIdentity("preview", "Preview"),
-  nightly: createPrereleaseIdentity("nightly", "Nightly"),
+  beta: createPrereleaseIdentity("beta"),
+  preview: createPrereleaseIdentity("preview"),
+  nightly: createPrereleaseIdentity("nightly"),
 } as const satisfies Record<ReleaseTrack, DesktopReleaseIdentity>;
 
+// Channel names are always lowercase in the product name, like the bigbud brand itself.
 function createPrereleaseIdentity(
   channel: Exclude<ReleaseTrack, "stable">,
-  label: string,
 ): DesktopReleaseIdentity {
   const executableName = `bigbud-${channel}`;
   const appId = `ai.bigbud.desktop.${channel}`;
@@ -48,7 +48,7 @@ function createPrereleaseIdentity(
     linuxDesktopEntryName: `${executableName}.desktop`,
     linuxWmClass: executableName,
     packageName: `bigbud-desktop-${channel}`,
-    productName: `bigbud ${label}`,
+    productName: `bigbud ${channel}`,
     updaterChannel: channel,
     userDataDirName: executableName,
   };

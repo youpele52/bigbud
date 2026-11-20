@@ -4,9 +4,9 @@ export { APP_BASE_NAME, APP_SERVER_NAME, APP_SERVER_SLUG };
 export const APP_VERSION = import.meta.env.APP_VERSION || "0.0.0";
 
 const RELEASE_CHANNEL_LABELS = {
-  beta: "Beta",
-  preview: "Preview",
-  nightly: "Nightly",
+  beta: "beta",
+  preview: "preview",
+  nightly: "nightly",
 } as const;
 
 type ReleaseChannel = keyof typeof RELEASE_CHANNEL_LABELS;
