@@ -173,4 +173,25 @@ describe("confirmed close", () => {
     expect(readTerminalLifecycle(threadId, terminalId)?.phase).toBe("error");
     expect(f.terminal.write).not.toHaveBeenCalled();
   });
+  it("names the pane target so the server can prove an unbound pane has no owner", async () => {
+    const f = fixture();
+    forgetTerminalLaunch(threadId, terminalId);
+    delete (f.terminal as { snapshot?: unknown }).snapshot;
+    await closeTerminalConfirmed({ ...f.input, executionTargetId: "ssh:host=dev-1" });
+    expect(f.terminal.close).toHaveBeenCalledExactlyOnceWith({
+      threadId,
+      terminalId,
+      deleteHistory: true,
+      executionTargetId: "ssh:host=dev-1",
+      onlyIfNotRunning: true,
+    });
+  });
+  it("prefers the pane's launch target over the caller's current target", async () => {
+    const f = fixture();
+    recordTerminalLaunch({ ...snapshot, executionTargetId: "ssh:host=launch" });
+    await closeTerminalConfirmed({ ...f.input, executionTargetId: "ssh:host=current" });
+    expect(f.terminal.close).toHaveBeenCalledWith(
+      expect.objectContaining({ executionTargetId: "ssh:host=launch" }),
+    );
+  });
 });

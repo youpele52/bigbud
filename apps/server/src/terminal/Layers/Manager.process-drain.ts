@@ -28,6 +28,7 @@ import { observeTerminalProcessError } from "./Manager.process.error";
 import { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import { resolveTerminalRemoteShellIntent } from "./Manager.shell.intent";
 import { resolveOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
+import { ownedTerminalMayBeRetained } from "./OwnedPtyRuntime.owner.ts";
 import { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
 import { startRecoveryModel, feedRecoveryModel } from "./Manager.recovery";
 export { drainProcessEventsWith } from "./Manager.process-drain.events.ts";
@@ -312,10 +313,15 @@ export function startSessionWith(
         startKillEscalation(process, session.threadId, session.terminalId),
       );
 
+      // Only a durable owner that may still be live fences the pane; a launch that was
+      // rolled back or never dispatched leaves nothing to recover, so Retry starts fresh.
+      const ownedRuntime = resolveOwnedPtyRuntime(ctx.ptyAdapter, session.executionTargetId);
+      const ownerMayBeRetained = ownedRuntime
+        ? yield* ownedTerminalMayBeRetained(ownedRuntime, session.threadId, session.terminalId)
+        : session.remoteOwnerRecoveryRequired === true;
       yield* ctx.modifyManagerState((state) => {
         session.status = "error";
-        if (resolveOwnedPtyRuntime(ctx.ptyAdapter, session.executionTargetId))
-          session.remoteOwnerRecoveryRequired = true;
+        session.remoteOwnerRecoveryRequired = ownerMayBeRetained;
         session.pid = null;
         session.process = null;
         session.unsubscribeData = null;

@@ -22,6 +22,7 @@ import {
   terminalShellSelectionForNewProcess,
 } from "./Manager.shell.profile";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
+import { resolveOwnedTerminalRecoverOnly } from "./OwnedPtyRuntime.owner.ts";
 import { releaseTerminalLeaseAfterLaunchFailure } from "./Manager.owned-runtime.lease.ts";
 
 export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShape["restart"] {
@@ -92,11 +93,13 @@ export function makeTerminalRestart(ctx: SessionApiContext): TerminalManagerShap
               "The previous terminal session is no longer available; no replacement was started.",
           });
         }
-        const recoverOnly =
-          Boolean(sessionOwnedPtyRuntime(ctx, executionTargetId)) &&
-          (Option.isSome(existing)
-            ? existing.value.remoteOwnerRecoveryRequired === true
-            : yield* ctx.historyExists(request.threadId, terminalId));
+        const recoverOnly = yield* resolveOwnedTerminalRecoverOnly({
+          runtime: sessionOwnedPtyRuntime(ctx, executionTargetId),
+          threadId: request.threadId,
+          terminalId,
+          existing,
+          historyExists: ctx.historyExists,
+        });
         // Only this preflight block may prove a refusal left the pane untouched.
         // Never annotate the stop/spawn path: its failures may have mutated ownership.
         const { shellProfileLaunch, folder } = yield* Effect.gen(function* () {

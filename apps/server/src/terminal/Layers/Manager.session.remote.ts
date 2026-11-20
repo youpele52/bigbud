@@ -5,6 +5,7 @@ import {
   TerminalExecutionTargetError,
 } from "@bigbud/contracts/workspace/terminal.ts";
 import { sessionOwnedPtyRuntime } from "./OwnedPtyRuntime.resolve.ts";
+import { ownedTerminalOwnerRouteKey } from "./OwnedPtyRuntime.owner.ts";
 import { RemoteAgentPtyInventory } from "../../remote-agent/remoteAgentPtyInventory.ts";
 import { RemoteAgentTerminalDiscovery } from "../../remote-agent/remoteAgentTerminalDiscovery.ts";
 import { cleanupProcessHandles } from "./Manager.process-lifecycle";
@@ -73,7 +74,7 @@ export function makeRemoteTerminalApi(
           runtime
             .owners()
             .get(
-              `terminal:${JSON.stringify([input.threadId, input.terminalId ?? DEFAULT_TERMINAL_ID])}`,
+              ownedTerminalOwnerRouteKey(input.threadId, input.terminalId ?? DEFAULT_TERMINAL_ID),
             ),
         catch: () =>
           failure(

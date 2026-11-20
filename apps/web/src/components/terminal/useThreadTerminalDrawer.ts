@@ -249,6 +249,7 @@ export function useThreadTerminalDrawer(
         api,
         threadId,
         terminalId,
+        executionTargetId,
         onPending: () => {
           const next = terminalState.terminalIds.find((id) => id !== terminalId);
           if (next && terminalState.activeTerminalId === terminalId)
@@ -260,6 +261,7 @@ export function useThreadTerminalDrawer(
     },
     [
       bumpFocusRequestId,
+      executionTargetId,
       storeCloseTerminal,
       storeSetActiveTerminal,
       terminalState.terminalIds,
