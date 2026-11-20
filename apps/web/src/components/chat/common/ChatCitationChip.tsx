@@ -2,6 +2,8 @@ import { QuoteIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { XIcon } from "lucide-react";
 
+import { cn } from "../../../lib/utils";
+import { ANNOTATION_CHIP_SURFACE_CLASS_NAME } from "../../annotations/annotationSurface";
 import { Button } from "../../ui/button";
 import { useChatCitationActions, type ChatCitationTarget } from "./ChatCitation.context";
 
@@ -22,7 +24,12 @@ export function ChatCitationChip({
         ? "AI"
         : "You";
   return (
-    <div className="inline-flex max-w-full items-center gap-1 rounded-lg border border-border/80 bg-background px-1 py-1">
+    <div
+      className={cn(
+        "inline-flex max-w-full items-center gap-1 rounded-lg border border-border/80 px-1 py-1",
+        ANNOTATION_CHIP_SURFACE_CLASS_NAME,
+      )}
+    >
       <button
         type="button"
         className="inline-flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left text-xs text-foreground/80 outline-hidden transition-colors hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring"

@@ -1,5 +1,10 @@
 import { type ReactNode } from "react";
 import { XIcon } from "lucide-react";
+import { cn } from "../../../lib/utils";
+import {
+  ANNOTATION_CHIP_SURFACE_CLASS_NAME,
+  ANNOTATION_PANEL_SURFACE_CLASS_NAME,
+} from "../../annotations/annotationSurface";
 import { Button } from "../../ui/button";
 import { Popover, PopoverPopup, PopoverTrigger } from "../../ui/popover";
 
@@ -28,7 +33,12 @@ export function StructuredAnnotationPreviews(props: StructuredAnnotationPreviews
   return (
     <div className="mb-3 flex flex-wrap gap-2">
       <Popover>
-        <div className="group inline-flex items-center gap-1 rounded-lg border border-border/80 bg-background px-1 py-1">
+        <div
+          className={cn(
+            "group inline-flex items-center gap-1 rounded-lg border border-border/80 px-1 py-1",
+            ANNOTATION_CHIP_SURFACE_CLASS_NAME,
+          )}
+        >
           <PopoverTrigger
             className="inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs text-foreground/80 transition-colors hover:bg-muted/60"
             aria-label={`Show ${props.label}`}
@@ -46,12 +56,19 @@ export function StructuredAnnotationPreviews(props: StructuredAnnotationPreviews
             <XIcon />
           </Button>
         </div>
-        <PopoverPopup align="start" side="top" className="w-[min(420px,calc(100vw-2rem))] p-0">
+        <PopoverPopup
+          align="start"
+          side="top"
+          className={cn("w-[min(420px,calc(100vw-2rem))] p-0", ANNOTATION_PANEL_SURFACE_CLASS_NAME)}
+        >
           <div className="max-h-80 space-y-2 overflow-y-auto p-3">
             {props.items.map((item) => (
               <div
                 key={item.id}
-                className="group grid grid-cols-[56px_minmax(0,1fr)_auto] gap-3 rounded-lg border border-border/80 bg-background p-2"
+                className={cn(
+                  "group grid grid-cols-[56px_minmax(0,1fr)_auto] gap-3 rounded-lg border border-border/80 p-2",
+                  ANNOTATION_CHIP_SURFACE_CLASS_NAME,
+                )}
               >
                 <div className="h-14 w-14 overflow-hidden rounded-md border border-border/70 bg-muted">
                   {item.thumbnail}

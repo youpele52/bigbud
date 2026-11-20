@@ -41,7 +41,9 @@ export function readAnnotationTheme(): BrowserAnnotationTheme {
     composerForm?.querySelector<HTMLButtonElement>("button.bg-primary\\/90") ??
     null;
 
-  const rawCard = styles.getPropertyValue("--card").trim() || "var(--color-white)";
+  // Annotation panels stay opaque in every window material (`annotations/annotationSurface.ts`),
+  // so the card reads the opaque palette rather than the composer's material-tinted fill.
+  const rawCard = styles.getPropertyValue("--card-solid").trim() || "var(--color-white)";
   const rawFg = styles.getPropertyValue("--foreground").trim() || "var(--color-neutral-900)";
   const rawBorder = styles.getPropertyValue("--border").trim() || "rgba(0,0,0,0.08)";
   const rawInput = styles.getPropertyValue("--input").trim() || "rgba(0,0,0,0.1)";
@@ -53,9 +55,7 @@ export function readAnnotationTheme(): BrowserAnnotationTheme {
   const rawRing = styles.getPropertyValue("--ring").trim() || "var(--foreground)";
 
   return {
-    card:
-      readElementColor(composerSurface, "backgroundColor") ??
-      probeColor(rawCard, "backgroundColor"),
+    card: probeColor(rawCard, "backgroundColor"),
     foreground: readElementColor(composerEditor, "color") ?? probeColor(rawFg, "color"),
     border: readElementColor(composerSurface, "borderColor") ?? probeColor(rawBorder, "color"),
     input: probeColor(rawInput, "backgroundColor"),

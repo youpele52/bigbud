@@ -1,5 +1,10 @@
 import { Code2Icon, MousePointerSquareDashedIcon, TerminalIcon } from "lucide-react";
 import type { ParsedUserAnnotationEntry } from "~/lib/terminalContext";
+import { cn } from "../../../lib/utils";
+import {
+  ANNOTATION_CHIP_SURFACE_CLASS_NAME,
+  ANNOTATION_PANEL_SURFACE_CLASS_NAME,
+} from "../../annotations/annotationSurface";
 import { ActivityAccordion } from "../common/ActivityAccordion";
 import { ChatCitationChip } from "../common/ChatCitationChip";
 
@@ -52,7 +57,11 @@ function MessagesTimelineSurfaceAnnotations(props: {
         </span>
       }
       className="mb-2"
-      summaryClassName="rounded-lg border border-border/80 bg-background px-2.5 py-1.5 text-foreground/80 transition-colors hover:bg-muted/40"
+      summaryClassName={cn(
+        // The hover tint is an image over the solid fill, so the row stays opaque while hovered.
+        "rounded-lg border border-border/80 px-2.5 py-1.5 text-foreground/80 transition-colors hover:bg-linear-to-r hover:from-muted/40 hover:to-muted/40",
+        ANNOTATION_CHIP_SURFACE_CLASS_NAME,
+      )}
       panelClassName="space-y-2 pl-1"
     >
       {annotations.map((annotation, index) => {
@@ -81,7 +90,10 @@ function MessagesTimelineSurfaceAnnotations(props: {
         return (
           <div
             key={`annotation:${annotation.kind}:${annotation.text}`}
-            className="rounded-lg border border-border/60 bg-background/35 p-2.5"
+            className={cn(
+              "rounded-lg border border-border/60 p-2.5",
+              ANNOTATION_PANEL_SURFACE_CLASS_NAME,
+            )}
           >
             <div className="flex items-start gap-2">
               {icon}
