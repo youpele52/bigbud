@@ -1,0 +1,121 @@
+name: Set up bigbud
+description: >-
+  Set up Bun and Node, restore the Bun and Electron download caches, and install dependencies.
+  Caches are saved only from push runs on main, and only when the caller opts in.
+
+inputs:
+  install:
+    description: "full (lifecycle scripts, with retry) or ignore-scripts (bun install --frozen-lockfile --ignore-scripts)"
+    required: false
+    default: full
+  save-caches:
+    description: "Save the Bun and Electron caches after install ('true' only in the designated writer job)"
+    required: false
+    default: "false"
+
+outputs:
+  electron-version:
+    description: Electron version resolved from bun.lock
+    value: ${{ steps.electron_version.outputs.version }}
+  electron-cache-key:
+    description: Cache key of the Electron download cache
+    value: ${{ steps.electron_version.outputs.key }}
+  electron-cache-hit:
+    description: "'true' when the Electron download cache was restored from an exact key match"
+    value: ${{ steps.electron_cache.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+      with:
+        bun-version-file: package.json
+
+    - name: Setup Node
+      uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      with:
+        node-version-file: package.json
+
+    # Linux only: cache extraction was measured slower than a fresh download on Windows.
+    - id: bun_cache
+      name: Restore Bun cache
+      if: runner.os == 'Linux'
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-bun-
+
+    # The electron postinstall downloads during install, so the key must be known before install.
+    - id: electron_version
+      name: Resolve Electron version from bun.lock
+      shell: bash
+      run: |
+        set -euo pipefail
+        version="$(node -e '
+          const lock = require("fs").readFileSync("bun.lock", "utf8");
+          const found = new Set();
+          for (const match of lock.matchAll(/^\s+"electron": \["electron@([^"]+)"/gm)) found.add(match[1]);
+          if (found.size !== 1) {
+            console.error(`Expected one electron version in bun.lock, found: ${[...found].join(", ") || "none"}`);
+            process.exit(1);
+          }
+          process.stdout.write([...found][0]);
+        ')"
+        if [[ -z "$version" || "$version" == undefined ]]; then
+          echo "::error::Could not resolve the Electron version from bun.lock"; exit 1
+        fi
+        # The downloaders create this directory; it must match the cache steps' path input.
+        cache_dir='${{ runner.temp }}/electron-cache'
+        # electron_config_cache: electron postinstall (@electron/get). ELECTRON_CACHE: electron-builder.
+        echo "electron_config_cache=$cache_dir" >> "$GITHUB_ENV"
+        echo "ELECTRON_CACHE=$cache_dir" >> "$GITHUB_ENV"
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+        echo "key=electron-${{ runner.os }}-${{ runner.arch }}-$version" >> "$GITHUB_OUTPUT"
+
+    - id: electron_cache
+      name: Restore Electron cache
+      uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ${{ runner.temp }}/electron-cache
+        key: ${{ steps.electron_version.outputs.key }}
+
+    - name: Install dependencies
+      shell: bash
+      env:
+        INSTALL_MODE: ${{ inputs.install }}
+      run: |
+        set -euo pipefail
+        case "$INSTALL_MODE" in
+          full) node scripts/bun-install-with-retry.ts ;;
+          ignore-scripts) bun install --frozen-lockfile --ignore-scripts ;;
+          *) echo "::error::Unknown install mode: $INSTALL_MODE (expected full or ignore-scripts)"; exit 1 ;;
+        esac
+
+    - name: Verify installed Electron version
+      shell: bash
+      env:
+        EXPECTED_ELECTRON_VERSION: ${{ steps.electron_version.outputs.version }}
+      run: |
+        set -euo pipefail
+        installed="$(node -p "require(require.resolve('electron/package.json', { paths: ['apps/desktop'] })).version")"
+        if [[ -z "$installed" || "$installed" == undefined || "$installed" != "$EXPECTED_ELECTRON_VERSION" ]]; then
+          echo "::error::Installed Electron '$installed' differs from bun.lock '$EXPECTED_ELECTRON_VERSION'"; exit 1
+        fi
+
+    - name: Save Bun cache
+      if: inputs.save-caches == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && runner.os == 'Linux' && steps.bun_cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+
+    # Only a full install runs the electron postinstall that fills this cache.
+    - name: Save Electron cache
+      if: inputs.save-caches == 'true' && inputs.install == 'full' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.electron_cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+      with:
+        path: ${{ runner.temp }}/electron-cache
+        key: ${{ steps.electron_version.outputs.key }}

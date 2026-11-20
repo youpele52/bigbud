@@ -14,6 +14,11 @@ on:
         required: false
         type: boolean
         default: false
+      retention_days:
+        description: "Artifact retention in days for the release payload (0 keeps the repository default; dry runs pass 3)"
+        required: false
+        type: number
+        default: 0
     secrets:
       BIGBUD_REMOTE_AGENT_SIGNING_KEY:
         required: false
@@ -40,6 +45,7 @@ jobs:
   remote_backend_graph_build:
     name: Build remote backend graph ${{ matrix.label }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -52,18 +58,18 @@ jobs:
             platform: linux/arm64
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.ref || github.sha }}
           persist-credentials: false
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: package.json
 
@@ -160,7 +166,7 @@ jobs:
 
       - name: Set up QEMU for arm64 execution checks
         if: startsWith(matrix.target, 'aarch64-')
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           platforms: arm64
 
@@ -202,8 +208,9 @@ jobs:
           ' "$PWD/release-publish/${prefix}.provenance.json" "release-publish/${prefix}.tar.gz.sha256"
 
       - name: Upload remote backend graph artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: remote-backend-graph-${{ matrix.target }}
           path: release-publish/*
           if-no-files-found: error
+          retention-days: ${{ inputs.retention_days || 0 }}
