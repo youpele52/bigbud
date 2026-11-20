@@ -5,27 +5,25 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+# Only pull requests cancel superseded runs. Every other run gets its own group, because GitHub
+# also cancels a pending run in a shared group even when cancel-in-progress is false.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   quality:
     name: Format, Lint, Typecheck, Test, Build
     runs-on: ubuntu-24.04
+    timeout-minutes: 150
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: package.json
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: package.json
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           toolchain: 1.95.0
           components: rustfmt, clippy
@@ -33,18 +31,11 @@ jobs:
       - name: Install protobuf compiler
         run: sudo apt-get update && sudo apt-get install --yes protobuf-compiler
 
-      - name: Cache Bun and Turbo
-        uses: actions/cache@v5
+      # Designated cache writer: saves the Bun and Electron caches on main pushes only.
+      - name: Setup Bun, Node and dependencies
+        uses: ./.github/actions/setup-bigbud
         with:
-          path: |
-            ~/.bun/install/cache
-            .turbo
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-${{ hashFiles('turbo.json') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}-
-
-      - name: Install dependencies
-        run: node scripts/bun-install-with-retry.ts
+          save-caches: "true"
 
       - name: Format
         run: bun run fmt:check
@@ -67,8 +58,34 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - id: playwright_version
+        name: Resolve Playwright version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require(require.resolve('playwright/package.json', { paths: ['apps/server'] })).version")"
+          if [[ -z "$version" || "$version" == undefined ]]; then
+            echo "::error::Could not resolve the installed Playwright version"; exit 1
+          fi
+          echo "key=playwright-${{ runner.os }}-${{ runner.arch }}-$version" >> "$GITHUB_OUTPUT"
+
+      - id: playwright_cache
+        name: Restore Playwright browser cache
+        uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.playwright_version.outputs.key }}
+
+      # Skips the browser download on a cache hit and still installs the system dependencies.
       - name: Install Playwright Chromium for server terminal browser tests
         run: bun run --cwd apps/server test:browser:install
+
+      - name: Save Playwright browser cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.playwright_cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.playwright_version.outputs.key }}
 
       - name: Test
         run: bun run test
@@ -84,17 +101,18 @@ jobs:
   release_smoke:
     name: Release Smoke
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: package.json
 
@@ -110,9 +128,10 @@ jobs:
   bootstrap_installer_smoke:
     name: Bootstrap Installer Smoke
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Validate install.ps1 with mocked cmdlets
         shell: pwsh
@@ -121,9 +140,10 @@ jobs:
   nsis_installer_scripts:
     name: Windows Installer Process Cleanup
     runs-on: windows-2022
+    timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Validate installer process cleanup script
         shell: pwsh
@@ -132,17 +152,18 @@ jobs:
   windows_cua_sweep:
     name: Windows CUA Sweep Native Helper
     runs-on: windows-2022
+    timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: package.json
 
@@ -155,6 +176,7 @@ jobs:
   native_resource_cleanup:
     name: Native Resource Cleanup ${{ matrix.label }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -171,9 +193,9 @@ jobs:
             runner: windows-2022
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           toolchain: 1.95.0
       - name: Run native cleanup tests
@@ -182,11 +204,12 @@ jobs:
   native_resource_cleanup_mount:
     name: Native Resource Cleanup Linux Mount Boundary
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           toolchain: 1.95.0
       - name: Run privileged mount-boundary cleanup test
@@ -197,6 +220,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [quality, windows_cua_sweep, native_resource_cleanup, native_resource_cleanup_mount]
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -223,24 +247,17 @@ jobs:
             arch: x64
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - id: setup
+        name: Setup Bun, Node, Electron cache and dependencies
+        uses: ./.github/actions/setup-bigbud
         with:
-          bun-version-file: package.json
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: package.json
-
-      - name: Install dependencies
-        # The Linux quality job already validates install-time scripts. The
-        # release-style build matrix only needs dependencies on disk, and
-        # skipping lifecycle scripts avoids a Windows-only effect-language-
-        # service patch crash.
-        run: bun install --frozen-lockfile --ignore-scripts
+          # The Linux quality job already validates install-time scripts. The
+          # release-style build matrix only needs dependencies on disk, and
+          # skipping lifecycle scripts avoids a Windows-only effect-language-
+          # service patch crash.
+          install: ignore-scripts
 
       - name: Build desktop artifact
         shell: bash
@@ -251,6 +268,14 @@ jobs:
             --arch "${{ matrix.arch }}" \
             --build-version "0.0.0-preview.${{ github.run_number }}" \
             --verbose
+
+      # Every target builds for its runner's own OS and architecture, which the cache key encodes.
+      - name: Save Electron cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.setup.outputs.electron-cache-hit != 'true'
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5
+        with:
+          path: ${{ runner.temp }}/electron-cache
+          key: ${{ steps.setup.outputs.electron-cache-key }}
 
       - name: Smoke test packaged workspace watcher
         run: node scripts/verify-packaged-workspace-agent.ts release "${{ matrix.platform }}" "${{ matrix.arch }}" release-publish
@@ -276,7 +301,7 @@ jobs:
           "${{ matrix.platform }}" "${{ matrix.arch }}" preview
 
       - name: Upload release-style artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-release-assets-${{ matrix.platform }}-${{ matrix.arch }}
           path: release-publish/*
@@ -287,12 +312,13 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: quality
     runs-on: windows-11-arm
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           toolchain: 1.95.0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: package.json
       - name: Install protobuf compiler
@@ -318,7 +344,7 @@ jobs:
           Copy-Item target/release/bigbud-remote-agent.exe release-publish/server-workspace-agent-win32-arm64.exe
           $identity = & release-publish/server-workspace-agent-win32-arm64.exe --check
           if ($LASTEXITCODE -ne 0 -or $identity -notmatch 'windows\s+aarch64$') { throw 'Native ARM64 identity mismatch' }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-release-assets-workspace-agent-win32-arm64
           path: release-publish/*
@@ -329,12 +355,13 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: quality
     runs-on: ubuntu-22.04-arm
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
           toolchain: 1.95.0
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: package.json
       - name: Build native server helpers
@@ -355,7 +382,7 @@ jobs:
             echo "Native ARM64 identity mismatch: $identity" >&2
             exit 1
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-release-assets-workspace-agent-linux-arm64
           path: release-publish/*
@@ -372,17 +399,18 @@ jobs:
         release_smoke,
       ]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Node
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: package.json
 
       - name: Download all desktop artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: desktop-release-assets-*
           merge-multiple: true
@@ -404,7 +432,7 @@ jobs:
         run: node scripts/verify-desktop-release-assets.ts release-assets preview
 
       - name: Upload assembled release payload
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: desktop-release-assembled
           path: release-assets/*
