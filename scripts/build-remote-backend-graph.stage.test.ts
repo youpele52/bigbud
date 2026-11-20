@@ -129,9 +129,20 @@ async function stageInputs(base: string) {
 
 it("stage_is_deterministic", async () => {
   const base = await privateBase();
-  const { key, input } = await stageInputs(base);
+  const { key, input: inputs } = await stageInputs(base);
+  // A release-stamped clean tree records its commit and the stamp, never "+dirty".
+  const sourceReleaseStamp = {
+    version: "0.1.0",
+    tag: "v0.1.0",
+    files: ["apps/server/package.json"],
+  };
+  const input = { ...inputs, sourceRevision: "a".repeat(40), sourceReleaseStamp };
   const first = await stageRemoteBackendGraph({ ...input, output: join(base, "one") });
   const second = await stageRemoteBackendGraph({ ...input, output: join(base, "two") });
+  expect(first.provenance.buildInputs).toMatchObject({
+    sourceRevision: "a".repeat(40),
+    sourceReleaseStamp,
+  });
   const read = (dir: string, name: string) => readFile(join(dir, name), "utf8");
   expect(await read(first.output, "manifest.json")).toBe(
     await read(second.output, "manifest.json"),

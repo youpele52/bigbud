@@ -26,6 +26,9 @@ on:
       - "apps/server/tsdown.config.ts"
       - "apps/server/tsdown.clientRelay.config.ts"
       - "scripts/build-remote-backend-graph*.ts"
+      - "scripts/check-release-source-tree.ts"
+      - "scripts/lib/release-source-changes.ts"
+      - "scripts/update-release-package-versions.ts"
       - "scripts/remote-backend-graph/**"
       - "scripts/lib/artifact-build/**"
       - "scripts/lib/remote-backend-control/**"
@@ -140,7 +143,8 @@ jobs:
           bun run remote-backend-graph --target "${{ matrix.target }}" --dist apps/server/dist \
             --output "$RUNNER_TEMP/remote-backend-graph/out" --key-file "$GRAPH_KEY_FILE" \
             --key-id "$GRAPH_KEY_ID" --version "$GRAPH_VERSION"
-          dirty="$(git status --porcelain)"
+          # The release version stamp is recorded in provenance; any other change is dirty.
+          dirty="$(node scripts/check-release-source-tree.ts "$GRAPH_VERSION")"
           if [[ -n "$dirty" ]]; then
             printf '%s\n' "$dirty"
             if [[ "${{ inputs.release_signing == true }}" == true ]]; then

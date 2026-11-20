@@ -8,11 +8,13 @@ const modelSelection = {
   model: "synthetic-model",
   subProviderID: "synthetic-provider",
 } as const;
+// Each test drives reconcile directly; the fixture's background poller must not interleave.
+const manualReconcile = { pollIntervalMs: 100000 } as const;
 for (const oversized of ["resource", "arguments"] as const) {
   it(`normal discovery immediately rejects oversized ${oversized} intent with bounded publication while unrelated permission/form remains usable`, async () => {
     await withV2RuntimeFixture(async ({ runtime, http, directory, events }) => {
       http.autoComplete = false;
-      Object.assign(runtime.options, { enableLocalTools: true, pollIntervalMs: 100000 });
+      Object.assign(runtime.options, { enableLocalTools: true });
       const threadId = ThreadId.makeUnsafe(`oversized-${oversized}`);
       await runtime.start({
         threadId,
@@ -99,7 +101,7 @@ for (const oversized of ["resource", "arguments"] as const) {
       await runtime.respondForm(threadId, "frm_normal", { answer: "usable" });
       expect(reply.mock.calls[1]?.[0]).toMatchObject({ requestID: "per_normal", decision: "once" });
       expect(http.calls.some((call) => call.pathname.endsWith("/frm_normal/reply"))).toBe(true);
-    });
+    }, manualReconcile);
   });
 }
 for (const fence of ["settings", "epoch", "quarantine"] as const) {
@@ -109,7 +111,6 @@ for (const fence of ["settings", "epoch", "quarantine"] as const) {
       let enabled = true;
       Object.assign(runtime.options, {
         enableLocalTools: true,
-        pollIntervalMs: 100000,
         authorizeExecution: async () => {
           if (!enabled) throw new Error("disabled settings");
         },
@@ -174,7 +175,7 @@ for (const fence of ["settings", "epoch", "quarantine"] as const) {
         events.some((event) => event.type === "request.opened" && event.requestId === "per_other"),
       ).toBe(true);
       enabled = true;
-    });
+    }, manualReconcile);
   });
 }
 it("bounded serializer accounts for JSON escapes/nesting without creating a whole oversized serialization", () => {
@@ -197,7 +198,7 @@ it("bounded serializer accounts for JSON escapes/nesting without creating a whol
 it("failed rejection publication repairs its bounded resolution without sending native denial again", async () => {
   await withV2RuntimeFixture(async ({ runtime, http, directory, events }) => {
     http.autoComplete = false;
-    Object.assign(runtime.options, { enableLocalTools: true, pollIntervalMs: 100000 });
+    Object.assign(runtime.options, { enableLocalTools: true });
     const threadId = ThreadId.makeUnsafe("oversized-publication");
     await runtime.start({
       threadId,
@@ -243,5 +244,5 @@ it("failed rejection publication repairs its bounded resolution without sending 
       ),
     ).toHaveLength(1);
     expect(owner.pendingInteractions?.has("request.resolved:per_publication")).toBe(false);
-  });
+  }, manualReconcile);
 });

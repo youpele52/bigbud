@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -18,6 +17,7 @@ import {
   stageRemoteBackendGraph,
 } from "./build-remote-backend-graph.stage.ts";
 import { VENDORED_LICENSES_DIRECTORY } from "./build-remote-backend-graph.vendored.ts";
+import { releaseSourceProvenance } from "./lib/release-source-changes.ts";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const usage =
@@ -80,8 +80,8 @@ export async function main(args: string[]) {
       vendoredLicenses: join(repo, VENDORED_LICENSES_DIRECTORY),
     };
     if (listing) return await listLoaderSites({ ...common, graph: output });
-    const revision = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" });
-    const dirty = spawnSync("git", ["status", "--porcelain"], { cwd: repo, encoding: "utf8" });
+    // A release run stamps package versions first; that exact stamp is recorded, not "+dirty".
+    const source = releaseSourceProvenance(repo, values.version!);
     const result = await stageRemoteBackendGraph({
       ...common,
       version: values.version!,
@@ -90,9 +90,7 @@ export async function main(args: string[]) {
         skippedInstallScripts: externals.skippedInstallScripts,
         pruned: pruned.length,
       },
-      ...(revision.status === 0
-        ? { sourceRevision: `${revision.stdout.trim()}${dirty.stdout.trim() ? "+dirty" : ""}` }
-        : {}),
+      ...source,
       output,
       keyFile: resolve(values["key-file"]!),
       keyId: values["key-id"]!,

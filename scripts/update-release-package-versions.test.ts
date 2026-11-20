@@ -5,10 +5,8 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  releasePackageFiles,
-  updateReleasePackageVersions,
-} from "./update-release-package-versions.ts";
+import { releasePackageFiles } from "./lib/release-package-stamp.ts";
+import { updateReleasePackageVersions } from "./update-release-package-versions.ts";
 
 const directories: string[] = [];
 afterEach(() => {

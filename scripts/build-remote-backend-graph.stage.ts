@@ -17,6 +17,7 @@ import { isBackendGraphPath } from "../apps/server/src/remote-backend/backendGra
 import type { BackendGraphManifest } from "../apps/server/src/remote-backend/backendGraph.manifest.ts";
 import { runArchive } from "./lib/remote-backend-control/archive.ts";
 import type { ClosureEntry } from "./lib/remote-backend-control/closure.ts";
+import type { ReleaseSourceProvenance } from "./lib/release-source-changes.ts";
 import { verifyExtractedClosure } from "./lib/remote-backend-control/verify.ts";
 import type { BackendGraphClosureReport } from "./build-remote-backend-graph.closure.ts";
 import {
@@ -188,6 +189,8 @@ export interface StageBackendGraphInput extends Omit<AssembleBackendGraphInput, 
     readonly pruned: number;
   };
   readonly sourceRevision?: string;
+  /** The release version stamp present on top of `sourceRevision`, when any. */
+  readonly sourceReleaseStamp?: ReleaseSourceProvenance["sourceReleaseStamp"];
   /** Fresh output directory; receives `graph/`, `manifest.json`, the archive and provenance. */
   readonly output: string;
   readonly keyFile: string;
@@ -217,6 +220,7 @@ export async function stageRemoteBackendGraph(input: StageBackendGraphInput) {
     noticesSha256: assembled.noticesSha256,
     inventorySha256,
     sourceRevision: input.sourceRevision ?? null,
+    sourceReleaseStamp: input.sourceReleaseStamp ?? null,
   };
   const buildDigest = sha256(JSON.stringify(buildInputs));
   let closure: BackendGraphClosureReport | undefined;

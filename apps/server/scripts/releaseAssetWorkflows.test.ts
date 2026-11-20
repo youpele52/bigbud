@@ -189,6 +189,21 @@ describe("remote backend graph release workflow", () => {
     ) as { run: string; if?: string } | undefined;
     expect(stamp?.if).toBe("${{ inputs.release_signing == true }}");
     expect(runs.indexOf(stamp!.run)).toBeLessThan(runs.indexOf("bunx tsdown\n"));
+    // The dirty-tree gate excludes exactly that stamp instead of failing every release.
+    const produce = runs.indexOf("bun run remote-backend-graph");
+    const check = runs.indexOf(
+      'dirty="$(node scripts/check-release-source-tree.ts "$GRAPH_VERSION")"',
+    );
+    expect(check).toBeGreaterThan(produce);
+    expect(runs).not.toContain("git status --porcelain");
+    expect(runs).toContain("::error::Release graph provenance would record a dirty source tree");
+    expect(graph.on.pull_request.paths).toEqual(
+      expect.arrayContaining([
+        "scripts/check-release-source-tree.ts",
+        "scripts/lib/release-source-changes.ts",
+        "scripts/update-release-package-versions.ts",
+      ]),
+    );
   });
 
   it("signs releases with the secret and other runs with an ephemeral fixture key", () => {

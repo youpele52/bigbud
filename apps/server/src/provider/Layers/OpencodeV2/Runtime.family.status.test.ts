@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { withV2OwnedFamily } from "./Runtime.family.fixture.ts";
+import { settleV2BackgroundRepair, withV2OwnedFamily } from "./Runtime.family.fixture.ts";
 import { shouldPollV2Runtime } from "./Runtime.settlement.ts";
 import { hasV2UnconfirmedFamily } from "./Runtime.family.loss.ts";
 
@@ -7,6 +7,7 @@ it("publishes authoritative cardless spawn/recovery ownership without inventing 
   await withV2OwnedFamily(async ({ runtime, owner, events, http, expectRetainedClose }) => {
     await owner.family!.reserveSpawn("native-create-unconfirmed");
     expect(owner.family!.children).toHaveLength(0);
+    await settleV2BackgroundRepair(owner);
     expect(shouldPollV2Runtime(owner)).toBe(true);
     await runtime.reconcile(owner);
     expect(owner.session.status).toBe("ready");
