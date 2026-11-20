@@ -178,6 +178,8 @@ body:has([data-floating-assistant-mascot])::after {
   --chart-5: color-mix(in srgb, var(--color-neutral-500) 78%, var(--color-white));
   --app-shell-window-background: var(--background);
   --app-shell-header-background: var(--background);
+  /* Highlighted code blocks: chat Markdown and notebook code cells share this fill. */
+  --code-block-background: color-mix(in srgb, var(--muted) 78%, var(--background));
 
   @variant dark {
     color-scheme: dark;
