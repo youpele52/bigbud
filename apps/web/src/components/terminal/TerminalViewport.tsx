@@ -2,14 +2,12 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import {
   type ExecutionTargetId,
-  isRemoteExecutionTargetId,
   type ResolvedKeybindingsConfig,
   type ThreadId,
 } from "@bigbud/contracts";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { type TerminalContextSelection } from "~/lib/terminalContext";
 import { canTerminalAutoFocus } from "~/lib/terminalFocus";
-import { isElectron } from "~/config/env";
 import { useSettings } from "../../hooks/useSettings";
 import { useComposerDraftStore, type AnnotationIntent } from "../../stores/composer";
 import { makeAnnotationId } from "../files/FilesPanel.shared";
@@ -35,10 +33,12 @@ import {
 } from "./TerminalViewport.annotations";
 import {
   acceptsTerminalDrop,
-  pasteDroppedTerminalPaths,
   readDroppedTerminalPaths,
   rejectWslTerminalFileDrop,
 } from "./TerminalViewport.drop";
+import { planTerminalDrop, terminalPasteHostKind } from "./TerminalViewport.paste.logic";
+import { terminalFileDelivery } from "./TerminalViewport.paste";
+import { desktopAttachmentPath } from "../chat/view/ChatView.attachments.logic";
 
 export interface TerminalViewportProps {
   threadId: ThreadId;
@@ -216,9 +216,6 @@ export function TerminalViewport({
       },
     });
   });
-  const readNativeFilePath = useEffectEvent((file: File) =>
-    isElectron ? (window.desktopBridge?.getFilePath(file) ?? "") : "",
-  );
   const hasAcceptedDropData = useEffectEvent((event: React.DragEvent<HTMLDivElement>) =>
     acceptsTerminalDrop(Array.from(event.dataTransfer.types)),
   );
@@ -262,26 +259,19 @@ export function TerminalViewport({
     if (!inputEnabled) return;
     const actualTarget =
       readTerminalLaunch(threadId, terminalId)?.executionTargetId ?? launch.executionTargetId;
-    if (
-      rejectWslTerminalFileDrop(actualTarget, (message) => {
-        if (terminalRef.current) writeSystemMessage(terminalRef.current, message);
-      })
-    )
-      return;
-    const paths = readDroppedTerminalPaths({
-      dataTransfer: event.dataTransfer,
-      readNativeFilePath,
+    const notice = (message: string) => {
+      if (terminalRef.current) writeSystemMessage(terminalRef.current, message);
+    };
+    if (rejectWslTerminalFileDrop(actualTarget, notice)) return;
+    const plan = planTerminalDrop({
+      dropped: readDroppedTerminalPaths({
+        dataTransfer: event.dataTransfer,
+        readNativeFilePath: desktopAttachmentPath,
+      }),
+      host: terminalPasteHostKind(actualTarget),
     });
-    const pasteablePaths = (
-      isRemoteExecutionTargetId(actualTarget)
-        ? paths.filter((path) => path.origin === "internal")
-        : paths
-    ).map((path) => path.path);
-    pasteDroppedTerminalPaths({
-      terminal: terminalRef.current,
-      paths: pasteablePaths,
-      dropPathMode: dropPathModeRef.current,
-    });
+    if (plan.kind === "reject") notice(plan.message);
+    else terminalFileDelivery(terminalRef.current)?.deliver(plan);
   });
 
   useEffect(() => {

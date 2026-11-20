@@ -46,6 +46,11 @@ import type {
   TerminalRecoveryResult,
 } from "@bigbud/contracts/workspace/terminal.recovery.ts";
 import type { TerminalSessionInventory } from "@bigbud/contracts/workspace/terminal.stream.ts";
+import type {
+  TerminalPasteStageError,
+  TerminalPasteStageInput,
+  TerminalPasteStageResult,
+} from "@bigbud/contracts/workspace/terminal.paste.ts";
 
 export {
   TerminalCwdError,
@@ -148,7 +153,10 @@ export interface TerminalManagerShape {
   /**
    * Write input bytes to a terminal session.
    */
-  readonly write: (input: TerminalWriteInput) => Effect.Effect<void, TerminalError>;
+  readonly write: (
+    input: TerminalWriteInput,
+    options?: { readonly origin?: "client" | "internal" },
+  ) => Effect.Effect<void, TerminalError>;
 
   /**
    * Resize the PTY backing a terminal session.
@@ -186,14 +194,19 @@ export interface TerminalManagerShape {
     options?: TerminalSubscribeOptions,
   ) => Effect.Effect<() => void>;
 
+  /** Stage a pasted/dropped file on the session's own machine (never a client-chosen one). */
+  readonly stagePasteFile?: (
+    input: TerminalPasteStageInput,
+  ) => Effect.Effect<TerminalPasteStageResult, TerminalPasteStageError>;
+
+  /** Search the output terminals retain (newest lines first); scan on demand, no index. */
+  readonly search?: (input: TerminalSearchInput) => Effect.Effect<TerminalSearchResult>;
+
   /**
    * Hold or release a terminal's PTY output for one delivery subscriber (producer flow control).
    * Succeeds with whether the running process supports pausing; unsupported adapters are bounded
    * by delivery overflow instead.
    */
-  /** Search the output terminals retain (newest lines first); scan on demand, no index. */
-  readonly search?: (input: TerminalSearchInput) => Effect.Effect<TerminalSearchResult>;
-
   readonly setOutputHold?: (input: {
     readonly threadId: string;
     readonly terminalId: string;

@@ -1,3 +1,4 @@
+import type { TerminalWorkSignals } from "./Manager.workSignals.ts";
 import { type TerminalEvent, type TerminalSessionSnapshot } from "@bigbud/contracts";
 import type { TerminalExecutionTargetError } from "@bigbud/contracts/workspace/terminal.ts";
 import type * as Effect from "effect/Effect";
@@ -77,6 +78,7 @@ export interface SessionApiContext {
   }) => Effect.Effect<void>;
   releaseWorktreeLease: (input: { threadId: string; terminalId: string }) => Effect.Effect<void>;
   terminalEventListeners: Set<(event: TerminalEvent) => Effect.Effect<void>>;
+  workSignals?: TerminalWorkSignals | undefined;
 }
 
 export type { TerminalManagerShape };

@@ -117,6 +117,9 @@ message WriteFileRequest {
   string path = 5;
   bytes bytes = 6;
   string expected_sha256 = 7;
+  // Exclusive create (capability `workspace.write-create-only`): an existing entry, including a
+  // symlink, is left untouched and fails with ALREADY_EXISTS. Never combined with expected_sha256.
+  bool create_only = 8;
 }
 
 message WriteFileResponse {

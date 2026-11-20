@@ -14,6 +14,7 @@ import { useTerminalStateStore } from "../../stores/terminal";
 import { SIDEBAR_COMPACT_ICON_SIZE_CLASS } from "./Sidebar.iconSizes";
 import { resolveThreadStatusPill, resolveThreadRowClassName } from "./Sidebar.logic";
 import { formatRelativeTimeLabel } from "../../utils/timestamp";
+import { threadRecencyAt } from "../../logic/thread/threadRecency.logic";
 import { PROVIDER_ICON_BY_PROVIDER } from "../chat/provider/ProviderModelPicker.models";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SidebarMenuSubButton, SidebarMenuSubItem } from "../ui/sidebar";
@@ -26,6 +27,7 @@ import { SidebarAutomationThreadIcon } from "./SidebarAutomationThreadIcon";
 import { useSwipeRevealAction } from "./useSwipeRevealAction";
 import { SidebarThreadRowActions } from "./SidebarThreadRow.actions";
 import { SidebarThreadRowContent } from "./SidebarThreadRow.content";
+import { SidebarThreadRowHover } from "./SidebarThreadRow.hover";
 import {
   isProviderIconWorking,
   mergeRunningTerminalIds,
@@ -34,16 +36,13 @@ import {
   shouldAnimateProviderIcon,
   shouldShowThreadConnectingPresentation,
   shouldShowThreadStatusLabel,
+  terminalStatusFromFinished,
   terminalStatusFromRunningIds,
   type ThreadPr,
 } from "./SidebarThreadRow.status";
 import { type SidebarThreadRowProps } from "./SidebarThreadRow.types";
 
 export type { ThreadPr } from "./SidebarThreadRow.status";
-
-function normalizeElevatorSummaryText(value: string | null | undefined): string {
-  return value?.trim().replace(/\s+/g, " ") ?? "";
-}
 
 export function SidebarThreadRow(props: SidebarThreadRowProps) {
   const thread = useSidebarThreadSummaryById(props.threadId);
@@ -80,7 +79,11 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
     : null;
   const visibleThreadStatus = shouldShowThreadStatusLabel(threadStatus) ? threadStatus : null;
   const prStatus = prStatusIndicator(props.pr);
-  const terminalStatus = terminalStatusFromRunningIds(runningTerminalIds);
+  // Finished terminal work in Needs you takes the terminal icon's place (red on failure).
+  const terminalStatus =
+    (thread?.organization?.state === "needs-you"
+      ? terminalStatusFromFinished(thread.terminalFinished)
+      : null) ?? terminalStatusFromRunningIds(runningTerminalIds);
   const isFavorite = props.favoriteThreadIds.has(effectiveThreadId);
   const isAutomationThread = props.automationThreadIds?.has(effectiveThreadId) ?? false;
   // `h-4` matches the title's text-xs line: the taller jump-hint pill overflows it centered
@@ -139,12 +142,6 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
   })
     ? "animate-breathe motion-reduce:animate-none"
     : "";
-  const normalizedTitle = normalizeElevatorSummaryText(thread.title);
-  const normalizedElevatorSummary = normalizeElevatorSummaryText(thread.elevatorSummary);
-  const hoverSummary =
-    normalizedElevatorSummary.length > 0 && normalizedElevatorSummary !== normalizedTitle
-      ? normalizedElevatorSummary
-      : null;
 
   const providerIcon = ProviderIcon ? (
     <SidebarThreadProviderIcon
@@ -252,7 +249,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
                     : "text-muted-foreground/70"
                 }`}
               >
-                {formatRelativeTimeLabel(thread.latestUserMessageAt ?? thread.createdAt)}
+                {formatRelativeTimeLabel(threadRecencyAt(thread))}
               </span>
             )}
           </span>
@@ -375,16 +372,7 @@ export function SidebarThreadRow(props: SidebarThreadRowProps) {
             <Trash2Icon className={SIDEBAR_COMPACT_ICON_SIZE_CLASS} />
           </button>
         </div>
-        {hoverSummary ? (
-          <Tooltip>
-            <TooltipTrigger render={<div className="w-full" />}>{threadRowContent}</TooltipTrigger>
-            <TooltipPopup side="right" className="max-w-72 whitespace-normal text-xs leading-snug">
-              {hoverSummary}
-            </TooltipPopup>
-          </Tooltip>
-        ) : (
-          threadRowContent
-        )}
+        <SidebarThreadRowHover thread={thread}>{threadRowContent}</SidebarThreadRowHover>
       </div>
     </SidebarMenuSubItem>
   );

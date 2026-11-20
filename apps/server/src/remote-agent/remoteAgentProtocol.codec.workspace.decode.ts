@@ -1,3 +1,5 @@
+import { decodePasteStagingFrame } from "./remoteAgentProtocol.codec.pasteStaging.ts";
+import { decodeSearchFrame } from "./remoteAgentProtocol.codec.search.ts";
 import {
   type RemoteAgentFilenameSearchRequest,
   type RemoteAgentFrame,
@@ -250,7 +252,10 @@ export function decodeWorkspaceFrame(
   field: number,
   bytes: Uint8Array,
 ): RemoteAgentFrame | undefined {
-  const watchFrame = decodeWorkspaceWatchFrame(field, bytes);
+  const watchFrame =
+    decodeWorkspaceWatchFrame(field, bytes) ??
+    decodePasteStagingFrame(field, bytes) ??
+    decodeSearchFrame(field, bytes);
   if (watchFrame) return watchFrame;
   switch (field) {
     case 8:

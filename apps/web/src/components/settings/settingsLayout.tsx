@@ -1,9 +1,10 @@
 import { Undo2Icon } from "lucide-react";
-import { type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { SettingsSearchProvider, useSettingsSearch } from "./SettingsSearch.context";
 import { matchesSettingsSearchTerms, normalizeSettingsSearchQuery } from "./SettingsSearch.logic";
+import { useSettingsScrollMemory } from "./settingsLastLocation.scroll";
 
 export function SettingsSection({
   title,
@@ -40,6 +41,7 @@ export function SettingsSection({
 }
 
 export function SettingsRow({
+  id,
   title,
   description,
   status,
@@ -51,6 +53,8 @@ export function SettingsRow({
   layout = "default",
   statusPlacement = "inline",
 }: {
+  /** Deep-link target id (`/settings/ai#<id>`, see `settingsAnchor.tsx`). */
+  id?: string;
   title: ReactNode;
   description: string;
   status?: ReactNode;
@@ -72,7 +76,8 @@ export function SettingsRow({
 
   return (
     <div
-      className="border-t border-border px-4 py-4 first:border-t-0 sm:px-5"
+      id={id}
+      className="border-t border-border px-4 py-4 transition-colors duration-500 first:border-t-0 data-settings-highlighted:bg-accent/60 sm:px-5"
       data-settings-search-match={matches ? "" : undefined}
       hidden={isSearching && !matches}
     >
@@ -146,9 +151,12 @@ export function SettingResetButton({ label, onClick }: { label: string; onClick:
 export function SettingsPageContainer({ children }: { children: ReactNode }) {
   const { query } = useSettingsSearch();
   const isSearching = Boolean(normalizeSettingsSearchQuery(query));
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useSettingsScrollMemory(scrollRef);
 
   return (
     <div
+      ref={scrollRef}
       className="flex-1 overflow-y-auto p-6"
       data-settings-searching={isSearching ? "" : undefined}
     >

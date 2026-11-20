@@ -23,9 +23,14 @@ export const ProjectEntry = Schema.Struct({
 });
 export type ProjectEntry = typeof ProjectEntry.Type;
 
+/** `agent-update-available`: a managed remote agent without streaming search (legacy walker). */
+export const ProjectSearchEntriesNotice = Schema.Literals(["agent-update-available"]);
+export type ProjectSearchEntriesNotice = typeof ProjectSearchEntriesNotice.Type;
+
 export const ProjectSearchEntriesResult = Schema.Struct({
   entries: Schema.Array(ProjectEntry),
   truncated: Schema.Boolean,
+  notice: Schema.optional(ProjectSearchEntriesNotice),
 });
 export type ProjectSearchEntriesResult = typeof ProjectSearchEntriesResult.Type;
 
@@ -53,9 +58,20 @@ export const ProjectFileContentMatch = Schema.Struct({
 });
 export type ProjectFileContentMatch = typeof ProjectFileContentMatch.Type;
 
+/**
+ * Why a content search ran on a slower legacy path: `agent-update-available` for a managed agent
+ * without streaming search, `use-managed-agent` for a direct-SSH host searched with `rg`.
+ */
+export const ProjectSearchFileContentsNotice = Schema.Literals([
+  "agent-update-available",
+  "use-managed-agent",
+]);
+export type ProjectSearchFileContentsNotice = typeof ProjectSearchFileContentsNotice.Type;
+
 export const ProjectSearchFileContentsResult = Schema.Struct({
   matches: Schema.Array(ProjectFileContentMatch),
   truncated: Schema.Boolean,
+  notice: Schema.optional(ProjectSearchFileContentsNotice),
 });
 export type ProjectSearchFileContentsResult = typeof ProjectSearchFileContentsResult.Type;
 
@@ -200,6 +216,8 @@ export const ProjectWriteFileInput = Schema.Struct({
   contents: Schema.String,
   /** SHA-256 of the version the caller read before editing, when known. */
   expectedSha256: Schema.optional(Schema.String),
+  /** Create the file exclusively; fails with `alreadyExists` instead of overwriting. */
+  createOnly: Schema.optional(Schema.Boolean),
 });
 export type ProjectWriteFileInput = typeof ProjectWriteFileInput.Type;
 
@@ -221,6 +239,8 @@ export class ProjectWriteFileError extends Schema.TaggedErrorClass<ProjectWriteF
   {
     message: TrimmedNonEmptyString,
     conflict: Schema.optional(Schema.Boolean),
+    /** A create-only write found the file already present and left it untouched. */
+    alreadyExists: Schema.optional(Schema.Boolean),
     writeDisposition: Schema.optional(ProjectWriteFileDisposition),
     cause: Schema.optional(Schema.Defect),
   },

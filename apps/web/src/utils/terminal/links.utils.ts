@@ -1,3 +1,4 @@
+import { isAbsolutePath, isWindowsAbsolutePath } from "@bigbud/shared/path";
 import { isMacPlatform } from "../../lib/utils";
 
 export type TerminalLinkKind = "url" | "path";
@@ -83,14 +84,6 @@ function collectMatches(
   }
 
   return matches;
-}
-
-function isWindowsAbsolutePath(value: string): boolean {
-  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\");
-}
-
-function isAbsolutePath(value: string): boolean {
-  return value.startsWith("/") || isWindowsAbsolutePath(value);
 }
 
 function isWindowsPathStyle(value: string): boolean {

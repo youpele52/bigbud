@@ -1,10 +1,15 @@
-import fsPromises from "node:fs/promises";
-import path from "node:path";
+import type {
+  ProjectFileContentMatch,
+  ProjectSearchFileContentsInput,
+  ProjectSearchFileContentsResult,
+} from "@bigbud/contracts/workspace/project.ts";
+import { Cause, Data, Effect, Exit } from "effect";
 
-import type { ProjectFileContentMatch } from "@bigbud/contracts";
-import { Data } from "effect";
+import { runToolCommand, resolveToolTransportTarget } from "../../tool-transport/toolTransport.ts";
+import { resolveWorkspaceTarget } from "../../workspace-target/workspaceTarget.ts";
+import { WorkspaceFileSystemError } from "../Services/WorkspaceFileSystem.ts";
 
-export class WorkspaceSearchCommandError extends Data.TaggedError("WorkspaceSearchCommandError")<{
+class WorkspaceSearchCommandError extends Data.TaggedError("WorkspaceSearchCommandError")<{
   readonly detail: string;
   readonly cause: unknown;
 }> {
@@ -13,9 +18,9 @@ export class WorkspaceSearchCommandError extends Data.TaggedError("WorkspaceSear
   }
 }
 
-export const WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS = 10_000;
-export const WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES = 512 * 1024;
-export const WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS = [
+const WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS = 10_000;
+const WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES = 512 * 1024;
+const WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS = [
   "!**/.git/**",
   "!**/.convex/**",
   "!**/node_modules/**",
@@ -27,27 +32,15 @@ export const WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS = [
   "!**/.cache/**",
 ];
 
-const IGNORED_DIRECTORY_NAMES = new Set([
-  ".git",
-  ".convex",
-  "node_modules",
-  ".next",
-  ".turbo",
-  "dist",
-  "build",
-  "out",
-  ".cache",
-]);
-
 function normalizeMatchedPath(pathValue: string): string {
   return pathValue.replace(/^\.\//, "").replaceAll("\\", "/");
 }
 
-export function isRipgrepCommandNotFound(error: WorkspaceSearchCommandError): boolean {
+function isRipgrepCommandNotFound(error: WorkspaceSearchCommandError): boolean {
   return error.message === "Command not found: rg";
 }
 
-export function normalizeSearchCommandError(error: unknown): WorkspaceSearchCommandError {
+function normalizeSearchCommandError(error: unknown): WorkspaceSearchCommandError {
   if (error instanceof WorkspaceSearchCommandError) return error;
   if (error instanceof Error) {
     return new WorkspaceSearchCommandError({ detail: error.message, cause: error });
@@ -55,7 +48,7 @@ export function normalizeSearchCommandError(error: unknown): WorkspaceSearchComm
   return new WorkspaceSearchCommandError({ detail: String(error), cause: error });
 }
 
-export function parseRipgrepJsonMatches(stdout: string): ProjectFileContentMatch[] {
+function parseRipgrepJsonMatches(stdout: string): ProjectFileContentMatch[] {
   const matches: ProjectFileContentMatch[] = [];
 
   for (const rawLine of stdout.split(/\r?\n/g)) {
@@ -121,78 +114,71 @@ export function parseRipgrepJsonMatches(stdout: string): ProjectFileContentMatch
   return matches;
 }
 
-export async function searchFileContentsWithoutRipgrep(input: {
-  cwd: string;
-  query: string;
-  limit: number;
-}): Promise<{ matches: ProjectFileContentMatch[]; truncated: boolean }> {
-  const normalizedLimit = Math.max(0, Math.floor(input.limit));
-  const maxMatches = normalizedLimit + 1;
-  const caseSensitive = /[A-Z]/.test(input.query);
-  const queryNeedle = caseSensitive ? input.query : input.query.toLowerCase();
-  const pendingDirectories = [input.cwd];
-  const matches: ProjectFileContentMatch[] = [];
+/**
+ * Direct-SSH hosts (no managed agent) keep `rg` on the host (plan Q5). Results carry the
+ * `use-managed-agent` notice so the client can suggest the faster agent search. Matching is literal
+ * (`--fixed-strings`) and always case-insensitive (`--ignore-case`, not smart case), like the
+ * agent's engine, so `a.b(` finds that text instead of being read as a regular expression.
+ */
+export const searchRemoteFileContentsViaSsh = Effect.fn("WorkspaceFileSystem.searchRemoteViaSsh")(
+  function* (input: ProjectSearchFileContentsInput & { readonly executionTargetId: string }) {
+    const toolTransportTarget = resolveToolTransportTarget(
+      resolveWorkspaceTarget({ executionTargetId: input.executionTargetId, cwd: input.cwd }),
+    );
+    const searchResultOrError = yield* Effect.exit(
+      Effect.tryPromise({
+        try: () =>
+          runToolCommand({
+            target: toolTransportTarget,
+            command: "rg",
+            args: [
+              "--json",
+              "--hidden",
+              "--ignore-case",
+              "--fixed-strings",
+              ...WORKSPACE_FILE_CONTENT_SEARCH_IGNORED_GLOBS.flatMap((glob) => ["--glob", glob]),
+              "--",
+              input.query,
+              ".",
+            ],
+            allowNonZeroExit: true,
+            timeoutMs: WORKSPACE_FILE_CONTENT_SEARCH_TIMEOUT_MS,
+            maxBufferBytes: WORKSPACE_FILE_CONTENT_SEARCH_MAX_BUFFER_BYTES,
+            outputMode: "truncate",
+          }),
+        catch: normalizeSearchCommandError,
+      }),
+    );
 
-  while (pendingDirectories.length > 0 && matches.length <= normalizedLimit) {
-    const currentDirectory = pendingDirectories.shift();
-    if (!currentDirectory) continue;
-
-    let dirents;
-    try {
-      dirents = await fsPromises.readdir(currentDirectory, { withFileTypes: true });
-    } catch {
-      continue;
+    if (Exit.isFailure(searchResultOrError)) {
+      const failure = normalizeSearchCommandError(Cause.squash(searchResultOrError.cause));
+      return yield* new WorkspaceFileSystemError({
+        cwd: input.cwd,
+        operation: isRipgrepCommandNotFound(failure)
+          ? "workspaceFileSystem.searchFileContentsRemote"
+          : "workspaceFileSystem.searchFileContentsCommand",
+        detail: isRipgrepCommandNotFound(failure)
+          ? "Remote content search requires ripgrep on the SSH host, or the bigbud agent."
+          : failure.message,
+        cause: failure,
+      });
     }
 
-    dirents.sort((left, right) => left.name.localeCompare(right.name));
-
-    for (const dirent of dirents) {
-      if (dirent.isDirectory()) {
-        if (!IGNORED_DIRECTORY_NAMES.has(dirent.name)) {
-          pendingDirectories.push(path.join(currentDirectory, dirent.name));
-        }
-        continue;
-      }
-
-      if (!dirent.isFile()) continue;
-
-      const absolutePath = path.join(currentDirectory, dirent.name);
-      let contents: Buffer;
-      try {
-        contents = await fsPromises.readFile(absolutePath);
-      } catch {
-        continue;
-      }
-
-      if (contents.includes(0)) continue;
-
-      const relativePath = normalizeMatchedPath(path.relative(input.cwd, absolutePath));
-      const lines = contents.toString("utf8").split(/\r?\n/g);
-
-      for (const [index, lineText] of lines.entries()) {
-        const haystack = caseSensitive ? lineText : lineText.toLowerCase();
-        const column = haystack.indexOf(queryNeedle);
-        if (column === -1) continue;
-
-        matches.push({
-          path: relativePath,
-          line: index + 1,
-          column: column + 1,
-          lineText,
-        });
-
-        if (matches.length >= maxMatches) {
-          return {
-            matches: matches.slice(0, normalizedLimit),
-            truncated: true,
-          };
-        }
-      }
+    const searchResult = searchResultOrError.value;
+    if (searchResult.code !== 0 && searchResult.code !== 1) {
+      return yield* new WorkspaceFileSystemError({
+        cwd: input.cwd,
+        operation: "workspaceFileSystem.searchFileContentsCommand",
+        detail: searchResult.stderr.trim() || "Workspace file content search failed.",
+      });
     }
-  }
 
-  return {
-    matches,
-    truncated: false,
-  };
-}
+    const matches = parseRipgrepJsonMatches(searchResult.stdout);
+    const limit = Math.max(0, Math.floor(input.limit));
+    return {
+      matches: matches.slice(0, limit),
+      truncated: (searchResult.stdoutTruncated ?? false) || matches.length > limit,
+      notice: "use-managed-agent",
+    } satisfies ProjectSearchFileContentsResult;
+  },
+);

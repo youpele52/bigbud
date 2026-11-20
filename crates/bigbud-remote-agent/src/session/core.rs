@@ -22,6 +22,10 @@ mod hello;
 mod journal_restore;
 #[path = "operation_handlers.rs"]
 mod operation_handlers;
+#[path = "os_index_search.rs"]
+mod os_index_search;
+#[path = "paste_staging.rs"]
+mod paste_staging;
 #[path = "process_attach.rs"]
 mod process_attach;
 #[path = "process_handlers.rs"]
@@ -40,6 +44,8 @@ mod pty_input_reconcile;
 mod pty_inventory;
 #[path = "pty_profile.rs"]
 mod pty_profile;
+#[path = "search.rs"]
+mod search;
 #[cfg(unix)]
 #[path = "service_lease.rs"]
 mod service_lease;
@@ -59,6 +65,12 @@ mod accepted_operations_tests;
 #[path = "journal_restore.tests.rs"]
 mod journal_restore_tests;
 #[cfg(test)]
+#[path = "os_index_search.tests.rs"]
+mod os_index_search_tests;
+#[cfg(test)]
+#[path = "paste_staging.tests.rs"]
+mod paste_staging_tests;
+#[cfg(test)]
 #[path = "process_attach.tests.rs"]
 mod process_attach_tests;
 #[cfg(test)]
@@ -70,8 +82,12 @@ mod test_helpers;
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "workspace_write.tests.rs"]
+mod workspace_write_tests;
 
 use journal_restore::restore_process_journal;
+pub use os_index_search::PreparedOsIndexSearch;
 pub use protocol_helpers::protocol_error_frame;
 use protocol_helpers::{
     operation_error, process_attach_response_frame, process_completed_frame, process_environment,
@@ -79,6 +95,7 @@ use protocol_helpers::{
     pty_control_response_frame, pty_create_response_frame, pty_exited_frame, pty_output_frame,
     workspace_error_code,
 };
+pub use search::PreparedSearch;
 
 /// How long a terminal process result (state, exit code, output watermark)
 /// and an accepted-operation identity are kept. Long enough to survive a
@@ -143,6 +160,11 @@ pub struct AgentSession {
     workspace_roots: HashMap<String, WorkspaceRoot>,
     agent_instance_id: String,
     agent_epoch: String,
+    paste_staging: Option<crate::paste_staging::PasteStore>,
+    search_registry: crate::search::SearchRegistry,
+    /// Separate slots so "this computer" never waits behind project searches.
+    os_index_registry: crate::search::SearchRegistry,
+    os_index: bool,
     #[cfg(unix)]
     managed_service_lease: Option<Arc<crate::service_lease::Bridge>>,
 }
@@ -222,6 +244,10 @@ impl AgentSession {
             workspace_roots: HashMap::new(),
             agent_instance_id: format!("agent-{}", std::process::id()),
             agent_epoch: epoch,
+            paste_staging: None,
+            search_registry: crate::search::SearchRegistry::default(),
+            os_index_registry: crate::search::SearchRegistry::default(),
+            os_index: false,
             #[cfg(unix)]
             managed_service_lease: None,
         }
@@ -284,6 +310,9 @@ impl AgentSession {
             Some(v1::frame::Payload::ContentSearchRequest(request)) if self.ready => {
                 self.handle_content_search(request)
             }
+            Some(v1::frame::Payload::OsIndexSearchRequest(request)) if self.ready => {
+                Ok(self.refuse_os_index_search(&request))
+            }
             Some(v1::frame::Payload::WriteFileRequest(request)) if self.ready => {
                 self.handle_write_file(request)
             }
@@ -310,6 +339,18 @@ impl AgentSession {
             }
             Some(v1::frame::Payload::PtyCloseRequest(request)) if self.ready => {
                 Ok(self.handle_pty_close(request))
+            }
+            Some(v1::frame::Payload::PasteStageBeginRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_begin(request))
+            }
+            Some(v1::frame::Payload::PasteStageChunkRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_chunk(request))
+            }
+            Some(v1::frame::Payload::PasteStageCommitRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_commit(request))
+            }
+            Some(v1::frame::Payload::PasteStageDiscardRequest(request)) if self.ready => {
+                Ok(self.handle_paste_stage_discard(request))
             }
             _ if !self.ready => Err(SessionError::HelloRequired),
             _ => Err(SessionError::UnexpectedMessage),

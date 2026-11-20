@@ -1,5 +1,6 @@
 import { type ProjectId, ThreadId } from "@bigbud/contracts";
 import { buildSidebarThreadSummary, sidebarThreadSummariesEqual } from "./mappers.store";
+import { withTerminalWork } from "./helpers.terminalWork.store";
 import { syncDelegatedChildSummaries } from "./helpers.delegatedChildren.store";
 import { type AppState } from "./main.store";
 import {
@@ -287,7 +288,7 @@ export function updateThreadState(
       ? derivedSummary.latestUserMessageAt
       : latestTimestamp(previousSummary?.latestUserMessageAt, derivedSummary.latestUserMessageAt);
   const nextSummary = {
-    ...derivedSummary,
+    ...withTerminalWork(derivedSummary, previousSummary),
     latestUserMessageAt,
     hasPendingUserInput:
       derivedSummary.hasPendingUserInput ||

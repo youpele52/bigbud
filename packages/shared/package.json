@@ -207,6 +207,30 @@
       "types": "./src/shell.ts",
       "import": "./src/shell.ts"
     },
+    "./bytes": {
+      "types": "./src/bytes.ts",
+      "import": "./src/bytes.ts"
+    },
+    "./path": {
+      "types": "./src/path.ts",
+      "import": "./src/path.ts"
+    },
+    "./search/nameRank": {
+      "types": "./src/search/nameRank.ts",
+      "import": "./src/search/nameRank.ts"
+    },
+    "./search/osIndexExclusions": {
+      "types": "./src/search/osIndexExclusions.ts",
+      "import": "./src/search/osIndexExclusions.ts"
+    },
+    "./systemOpenPath": {
+      "types": "./src/systemOpenPath.ts",
+      "import": "./src/systemOpenPath.ts"
+    },
+    "./systemOpenPath.launchable": {
+      "types": "./src/systemOpenPath.launchable.ts",
+      "import": "./src/systemOpenPath.launchable.ts"
+    },
     "./Net": {
       "types": "./src/Net.ts",
       "import": "./src/Net.ts"

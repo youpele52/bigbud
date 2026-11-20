@@ -2,6 +2,7 @@ import { DEFAULT_SERVER_SETTINGS, WS_METHODS } from "@bigbud/contracts";
 import { assert, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 import { HttpServer } from "effect/unstable/http";
+import { homedir } from "node:os";
 
 import {
   buildAppUnderTest,
@@ -77,6 +78,7 @@ it.layer(serverTestLayer)("server router seam > websocket config streams", (it) 
         assert.equal(first.config.observability.otlpMetricsUrl, "http://localhost:4318/v1/metrics");
         assert.equal(first.config.observability.otlpMetricsEnabled, true);
         assert.deepEqual(first.config.settings, DEFAULT_SERVER_SETTINGS);
+        assert.equal(first.config.homeDir, homedir());
       }
       assert.deepEqual(second, {
         version: 1,

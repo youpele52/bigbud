@@ -110,16 +110,24 @@ function ScrollSpeedRow({ row }: { row: (typeof SCROLL_ROWS)[number] }) {
   );
 }
 
-/** Scrolling and xterm addon preferences; every change applies to open terminals live. */
+/** Scroll speeds; every change applies to open terminals live. */
+export function TerminalScrollSettings() {
+  return (
+    <>
+      {SCROLL_ROWS.map((row) => (
+        <ScrollSpeedRow key={row.key} row={row} />
+      ))}
+    </>
+  );
+}
+
+/** Ligature and inline-image rendering; every change applies to open terminals live. */
 export function TerminalInteractionSettings() {
   const ligatures = useSettings((settings) => settings.terminalLigatures);
   const inlineImages = useSettings((settings) => settings.terminalInlineImages);
   const { updateSettings } = useUpdateSettings();
   return (
     <>
-      {SCROLL_ROWS.map((row) => (
-        <ScrollSpeedRow key={row.key} row={row} />
-      ))}
       <SettingsRow
         title="Terminal ligatures"
         description="Auto enables programming ligatures for fonts known to ship them, such as JetBrains Mono and Fira Code."

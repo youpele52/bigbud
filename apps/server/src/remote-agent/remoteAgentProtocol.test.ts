@@ -89,6 +89,19 @@ const goldenFrameValues: ReadonlyArray<RemoteAgentFrame> = [
       detail: "operation-already-terminal",
     },
   },
+  {
+    type: "writeFileRequest",
+    value: {
+      requestId: "write-1",
+      operationId: "write-operation-1",
+      requestDigest: new Uint8Array([5, 6]),
+      workspaceHandle: "workspace-1",
+      path: "config/hooks.json",
+      bytes: new TextEncoder().encode("{}"),
+      expectedSha256: "",
+      createOnly: true,
+    },
+  },
 ];
 
 describe("remote agent protocol", () => {
@@ -106,6 +119,7 @@ describe("remote agent protocol", () => {
       "diagnostic_response",
       "cancel_request",
       "cancel_response",
+      "write_file_request_create_only",
     ];
     for (const [index, name] of names.entries()) {
       const encoded = encodeDelimitedFrame(goldenFrameValues[index]!);
@@ -162,6 +176,7 @@ describe("remote agent protocol", () => {
           path: "docs/README.md",
           bytes: new TextEncoder().encode("updated"),
           expectedSha256: "abc123",
+          createOnly: false,
         },
       },
       {

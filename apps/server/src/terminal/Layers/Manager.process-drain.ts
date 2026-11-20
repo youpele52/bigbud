@@ -39,6 +39,18 @@ export {
 import { trySpawnWith } from "./Manager.process.spawn";
 export { trySpawnWith } from "./Manager.process.spawn";
 
+/** OSC 133 shell integration env for local POSIX panes only (remote shells are untouched). */
+function withLocalShellIntegration(
+  ctx: ProcessLifecycleContext,
+  session: TerminalSessionState,
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  if (!ctx.shellIntegrationEnv || process.platform === "win32") return env;
+  if (!isLocalExecutionTarget(session.executionTargetId)) return env;
+  const extra = ctx.shellIntegrationEnv(env);
+  return extra ? { ...env, ...extra } : env;
+}
+
 export function cleanupFailedTerminalObserver(
   process: PtyProcess | null,
   kill: (process: PtyProcess) => Effect.Effect<void>,
@@ -173,10 +185,14 @@ export function startSessionWith(
                   : isWslTerminalTargetId(session.executionTargetId)
                     ? [buildWslTerminalShellCandidate(session)]
                     : [buildRemoteTerminalShellCandidate(session)];
-            const terminalEnv = withInteractiveTerminalIdentity(
-              createTerminalSpawnEnv(
-                process.env,
-                isLocalExecutionTarget(session.executionTargetId) ? session.runtimeEnv : null,
+            const terminalEnv = withLocalShellIntegration(
+              ctx,
+              session,
+              withInteractiveTerminalIdentity(
+                createTerminalSpawnEnv(
+                  process.env,
+                  isLocalExecutionTarget(session.executionTargetId) ? session.runtimeEnv : null,
+                ),
               ),
             );
             const spawnResult = yield* trySpawnWith(ctx, session, shellCandidates, terminalEnv);
@@ -217,6 +233,8 @@ export function startSessionWith(
                 return;
               }
               const visible = readRemotePid(data);
+              const work = ctx.workSignals?.output(session, visible);
+              if (work) ctx.runFork(work);
               const output = queries ? queries.receive(visible) : visible;
               feedRecoveryModel(session, output);
               if (output) ctx.runFork(ctx.queuePtyOutput(session, processPid, output));

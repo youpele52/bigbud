@@ -1,8 +1,9 @@
 import type { MonitorAppResources } from "@bigbud/contracts/system-monitor/types";
+import { formatBytes } from "@bigbud/shared/bytes";
 import type { AppHistory } from "~/stores/resource-monitor/resourceMonitor.appHistory";
 import { Card, CardContent } from "../ui/card";
 import { appMetricValue } from "./BigbudResourceView.logic";
-import { formatBytes, formatPercent } from "./resourceMonitor.format";
+import { formatPercent } from "./resourceMonitor.format";
 import { ResourceUsageTrend } from "./ResourceUsageTrend";
 import { ResourceMetricBadge } from "./ResourceMetricBadge";
 import { isLoadingStatus } from "../common/CenteredStatus.logic";

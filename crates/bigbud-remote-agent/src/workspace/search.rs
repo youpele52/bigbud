@@ -1,12 +1,10 @@
 use std::collections::VecDeque;
-use std::ffi::OsStr;
 use std::fs::{self, DirEntry, ReadDir};
 
 use super::{DirectoryEntry, WorkspaceError, WorkspaceRoot, map_io};
-use super::{MAX_SEARCH_FILES, MAX_SEARCH_RESULTS, MAX_TEXT_PREVIEW_BYTES};
+use super::{MAX_SEARCH_FILES, MAX_SEARCH_RESULTS};
 
-#[path = "search.rank.rs"]
-mod rank;
+use crate::search::{self, rank};
 #[cfg(test)]
 #[path = "search.tests.rs"]
 mod tests;
@@ -123,6 +121,9 @@ impl WorkspaceRoot {
         self.resolve_directory(relative_path)
     }
 
+    /// Legacy `ContentSearchRequest`, now served by the ripgrep-library engine: literal
+    /// case-insensitive matching, ignore files respected, links skipped (no longer an abort),
+    /// binary and oversized files skipped. Results are sorted by path and line for stable answers.
     pub fn search_content(
         &self,
         relative_path: &str,
@@ -132,77 +133,38 @@ impl WorkspaceRoot {
         if query.is_empty() {
             return Err(WorkspaceError::EmptySearchQuery);
         }
-        let paths = self.search_all_files(relative_path)?;
+        let start = self.resolve_directory(relative_path)?;
         let result_limit = max_results.min(MAX_SEARCH_RESULTS);
         if result_limit == 0 {
             return Ok(Vec::new());
         }
+        let request = search::SearchRequest {
+            roots: vec![search::SearchRoot {
+                root_id: String::new(),
+                workspace: self.clone(),
+                start,
+            }],
+            query: query.to_owned(),
+            mode: search::SearchMode::Content,
+            max_results: result_limit,
+            max_results_per_root: result_limit,
+            deadline: search::MAX_SEARCH_DEADLINE,
+            threads: search::default_thread_count(false),
+            background: false,
+        };
         let mut results = Vec::new();
-        for path in paths {
-            if results.len() >= result_limit {
-                break;
-            }
-            let mut file = self.open_file(&path)?;
-            if file.metadata().map_err(map_io)?.len() > MAX_TEXT_PREVIEW_BYTES as u64 {
-                continue;
-            }
-            let mut bytes = Vec::new();
-            std::io::Read::read_to_end(
-                &mut std::io::Read::take(&mut file, MAX_TEXT_PREVIEW_BYTES as u64 + 1),
-                &mut bytes,
-            )
-            .map_err(map_io)?;
-            if bytes.len() > MAX_TEXT_PREVIEW_BYTES {
-                continue;
-            }
-            let Ok(contents) = String::from_utf8(bytes) else {
-                continue;
-            };
-            for (line_index, line) in contents.lines().enumerate() {
-                let Some(column) = line.find(query) else {
-                    continue;
-                };
-                results.push(ContentMatch {
-                    path: path.clone(),
-                    line: line_index + 1,
-                    column: column + 1,
-                    excerpt: line.chars().take(512).collect(),
-                });
-                if results.len() >= result_limit {
-                    break;
-                }
-            }
-        }
+        let never_cancelled = std::sync::atomic::AtomicBool::new(false);
+        let _outcome = search::run_search(&request, &never_cancelled, &mut |batch| {
+            results.extend(batch.contents.into_iter().map(|hit| ContentMatch {
+                path: hit.path,
+                line: hit.matched.line as usize,
+                column: hit.matched.column as usize,
+                excerpt: hit.matched.excerpt,
+            }));
+            true
+        });
+        results.sort_by(|left, right| (&left.path, left.line).cmp(&(&right.path, right.line)));
         Ok(results)
-    }
-
-    fn search_all_files(&self, relative_path: &str) -> Result<Vec<String>, WorkspaceError> {
-        let start = self.resolve_existing(relative_path)?;
-        let mut queue = VecDeque::from([start]);
-        let mut files = Vec::new();
-        while let Some(directory) = queue.pop_front() {
-            for entry in read_directory(&directory)? {
-                let entry = entry.map_err(map_io)?;
-                if entry.file_type().map_err(map_io)?.is_symlink() {
-                    return Err(WorkspaceError::SymlinkComponent);
-                }
-                let name = entry.file_name();
-                if is_ignored_directory(&entry, &name) {
-                    continue;
-                }
-                let metadata = entry.metadata().map_err(map_io)?;
-                if metadata.is_dir() {
-                    queue.push_back(entry.path());
-                } else if metadata.is_file() {
-                    if files.len() >= MAX_SEARCH_FILES {
-                        return Err(WorkspaceError::SearchLimitExceeded);
-                    }
-                    files.push(self.relative_path(&entry.path())?);
-                }
-            }
-        }
-        files.sort();
-        Ok(files)
     }
 
     fn directory_entry(
@@ -237,10 +199,4 @@ fn is_search_link(metadata: &fs::Metadata) -> bool {
 
 fn read_directory(path: &std::path::Path) -> Result<ReadDir, WorkspaceError> {
     fs::read_dir(path).map_err(map_io)
-}
-
-fn is_ignored_directory(entry: &DirEntry, name: &OsStr) -> bool {
-    entry.file_type().is_ok_and(|kind| {
-        kind.is_dir() && IGNORED_DIRECTORIES.iter().any(|ignored| name == *ignored)
-    })
 }

@@ -60,6 +60,7 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
   reconnect: vi.fn(),
   reconnectNow: vi.fn(() => false),
   computerUse: { subscribeActivity: vi.fn(), stop: vi.fn() },
+  search: { query: vi.fn() },
   terminal: {
     remoteInventory: vi.fn(),
     remoteAttach: vi.fn(),
@@ -81,6 +82,8 @@ export const rpcClientMock: DeepMock<WsRpcClient> = {
     subscribeSession: vi.fn(() => () => undefined),
     ackOutput: vi.fn(),
     search: vi.fn(),
+    view: vi.fn(),
+    stagePasteFile: vi.fn(),
   },
   browser: {
     completeCommand: vi.fn(),

@@ -26,6 +26,7 @@ import {
 import { ThreadRecovery } from "./orchestration.recovery";
 import { ThreadNotificationSafety } from "./orchestration.notificationSafety";
 import { ThreadOrganizationField } from "./orchestration.organization";
+import { TerminalFinishedItem } from "../workspace/terminal.activity";
 import { SIDEBAR_THREAD_SORT_ORDERS } from "../constants/settings.constant";
 
 export const STARTUP_PROJECT_CATALOG_DEFAULT_LIMIT = 1;
@@ -71,6 +72,10 @@ export const ThreadSummary = Schema.Struct({
   createdAt: IsoDateTime,
   updatedAt: IsoDateTime,
   latestUserMessageAt: Schema.NullOr(IsoDateTime),
+  /** Last Enter or finished command in any of the thread's terminals (60 s coalesced). */
+  latestTerminalActivityAt: Schema.optional(Schema.NullOr(IsoDateTime)),
+  /** Finished terminal work that needs the user, one item per pane. */
+  terminalFinished: Schema.optional(Schema.Array(TerminalFinishedItem)),
   pinnedAt: Schema.NullOr(IsoDateTime),
   organization: ThreadOrganizationField,
   sessionStatus: Schema.NullOr(OrchestrationSessionStatus),

@@ -34,9 +34,11 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
           client[WS_METHODS.subscribeTerminalEvents]({
             outputScope: "legacyDetection",
             ...(options?.onInventory ? { includeInventory: true } : {}),
+            ...(options?.onWork ? { includeWork: true } : {}),
           }),
         (item) => {
           if (item.type === "inventory") options?.onInventory?.(item);
+          else if (item.type === "workActivity") options?.onWork?.(item);
           else listener(item);
         },
         options,
@@ -50,5 +52,8 @@ export function createTerminalRpcClient(transport: WsTransport): WsRpcClient["te
     ackOutput: (input) =>
       transport.request((client) => client[WS_METHODS.terminalOutputAck](input)),
     search: (input) => transport.request((client) => client[WS_METHODS.terminalSearch](input)),
+    view: (input) => transport.request((client) => client[WS_METHODS.terminalView](input)),
+    stagePasteFile: (input) =>
+      transport.request((client) => client[WS_METHODS.terminalStagePasteFile](input)),
   };
 }

@@ -24,6 +24,8 @@ export interface LocalWorkspaceWatchAgentOptions {
   readonly wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly now?: () => number;
   readonly restartDelayMs?: number;
+  /** Desktop-embedded backend only: lets the agent serve "this computer" search. */
+  readonly osIndex?: boolean;
 }
 
 function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
@@ -65,7 +67,11 @@ export class LocalWorkspaceWatchAgent {
     this.resolveBinary = options.resolveBinary ?? resolveLocalWorkspaceWatchAgentBinary;
     this.createConnection =
       options.createConnection ??
-      ((binaryPath) => RemoteAgentConnection.local({ binaryPath, args: ["--ephemeral"] }));
+      ((binaryPath) =>
+        RemoteAgentConnection.local({
+          binaryPath,
+          args: options.osIndex ? ["--ephemeral", "--os-index"] : ["--ephemeral"],
+        }));
     this.wait = options.wait ?? wait;
     this.now = options.now ?? Date.now;
     this.restartDelayMs = Math.max(

@@ -1,16 +1,12 @@
 import type { MonitorMetric, MonitorSnapshot } from "@bigbud/contracts/system-monitor/types";
+import { formatBytes } from "@bigbud/shared/bytes";
 
 import type { ResourceWidget } from "~/stores/resource-monitor/resourceMonitorPreferences.store";
 import type { DisplayMetric } from "./ResourceMetricCard";
 import { capacityValue, formatCapacityGiB } from "./ResourceCapacityUsage.logic";
 import { diskCapacityUsage } from "./resourceMonitor.display.disk";
 import { cpuUsageValue } from "./resourceMonitor.display.cpu";
-import {
-  formatBytes,
-  formatPercent,
-  formatRate,
-  formatTemperature,
-} from "./resourceMonitor.format";
+import { formatPercent, formatRate, formatTemperature } from "./resourceMonitor.format";
 
 function show(metric: MonitorMetric | undefined, format: (value: number) => string): string {
   return metric?.status === "ready" ? format(metric.value) : "—";

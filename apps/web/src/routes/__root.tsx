@@ -20,6 +20,7 @@ import { DesktopBackendStartupCoordinator } from "../components/DesktopBackendSt
 import { readNativeApi } from "../rpc/nativeApi";
 import { PendingApprovalCoordinator } from "../notifications/pendingApprovalCoordinator";
 import { TaskCompletionNotifications } from "../notifications/taskCompletion";
+import { TerminalFinishedNotifications } from "../notifications/terminalFinished";
 import { useStore } from "../stores/main";
 import { ServerStateBootstrap } from "./-__root.bootstrap";
 import { EventRouter } from "./-__root.logic";
@@ -136,6 +137,7 @@ export function RootRouteView() {
         <MetadataWarningToastCoordinator />
         <PendingApprovalCoordinator />
         <TaskCompletionNotifications />
+        <TerminalFinishedNotifications />
         <WebSocketConnectionSurface>
           <>
             <div className="relative h-screen overflow-hidden">

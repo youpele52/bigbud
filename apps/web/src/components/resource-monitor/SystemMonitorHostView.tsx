@@ -1,3 +1,4 @@
+import { formatBytes } from "@bigbud/shared/bytes";
 import { useMemo, useState } from "react";
 
 import { retryResourceMonitor } from "~/stores/resource-monitor/resourceMonitor.store";
@@ -18,7 +19,7 @@ import { ResourceMemorySwap } from "./ResourceMemorySwap";
 import { ResourceTemperatures } from "./ResourceTemperatures";
 import { displayWidget } from "./resourceMonitor.display";
 import { remoteProcessRows } from "./remoteProcessRows";
-import { formatBytes, formatDecimal, formatPercent } from "./resourceMonitor.format";
+import { formatDecimal, formatPercent } from "./resourceMonitor.format";
 import { useProcessPage } from "./useProcessPage";
 import { useResourceMonitor } from "./useResourceMonitor";
 import { useResourceDetailPreferences } from "~/stores/resource-monitor/resourceMonitorDetails.store";

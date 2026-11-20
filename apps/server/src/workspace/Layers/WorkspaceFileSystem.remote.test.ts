@@ -141,13 +141,40 @@ it.layer(TestLayer)("WorkspaceFileSystem remote fallback", (it) => {
             },
           ],
           truncated: false,
+          notice: "use-managed-agent",
         });
         expect(runToolCommand).toHaveBeenCalledWith(
           expect.objectContaining({
             command: "rg",
+            args: expect.arrayContaining(["--ignore-case", "--fixed-strings"]),
             allowNonZeroExit: true,
           }),
         );
+        expect(vi.mocked(runToolCommand).mock.lastCall?.[0].args).not.toContain("--smart-case");
+      }),
+    );
+  });
+
+  describe("writeFile", () => {
+    it.effect("refuses create-only writes over SSH without running a command", () =>
+      Effect.gen(function* () {
+        vi.mocked(runToolCommand).mockClear();
+        const workspaceFileSystem = yield* WorkspaceFileSystem;
+        const failure = yield* workspaceFileSystem
+          .writeFile({
+            cwd: "/srv/project",
+            relativePath: "settings.json",
+            contents: "{}",
+            executionTargetId: "ssh:dev",
+            createOnly: true,
+          })
+          .pipe(Effect.flip);
+
+        expect(failure).toMatchObject({
+          operation: "workspaceFileSystem.writeFileCreateOnlyRemote",
+          writeDisposition: "not-dispatched",
+        });
+        expect(runToolCommand).not.toHaveBeenCalled();
       }),
     );
   });

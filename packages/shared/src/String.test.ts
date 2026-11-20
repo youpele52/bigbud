@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   countUnicodeCodePoints,
   DEFAULT_THREAD_TITLE,
+  revealBidiControls,
   fallbackThreadTitleFromPrompt,
   truncate,
 } from "./String";
@@ -41,5 +42,10 @@ describe("fallbackThreadTitleFromPrompt", () => {
         "Please investigate reconnect failures after restarting the session.",
       ),
     ).toBe("Please investigate reconn...");
+  });
+
+  it("makes bidirectional controls in untrusted names visible", () => {
+    expect(revealBidiControls("invoice\u202Efdp.exe")).toBe("invoice⟨U+202E⟩fdp.exe");
+    expect(revealBidiControls("plain/path.ts")).toBe("plain/path.ts");
   });
 });

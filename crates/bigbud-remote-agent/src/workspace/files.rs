@@ -292,7 +292,7 @@ fn reader_sha256(reader: &mut impl Read) -> Result<String, WorkspaceError> {
 }
 
 #[cfg(unix)]
-fn lock_target_at(
+pub(super) fn lock_target_at(
     parent_fd: std::os::unix::io::RawFd,
     relative_path: &str,
 ) -> Result<File, WorkspaceError> {
@@ -324,7 +324,7 @@ fn lock_target_at(
 }
 
 #[cfg(not(unix))]
-fn lock_target(parent: &Path, target: &Path) -> Result<File, WorkspaceError> {
+pub(super) fn lock_target(parent: &Path, target: &Path) -> Result<File, WorkspaceError> {
     let name = format!(
         ".bigbud-lock-{}",
         hex_sha256(target.to_string_lossy().as_bytes())

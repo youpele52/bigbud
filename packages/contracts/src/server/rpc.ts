@@ -45,6 +45,8 @@ import {
   WsSubscribeTerminalSessionRpc,
   WsTerminalOutputAckRpc,
   WsTerminalSearchRpc,
+  WsTerminalStagePasteFileRpc,
+  WsTerminalViewRpc,
 } from "./rpc.terminalStream";
 import { WsTerminalWslDistributionsRpc } from "./rpc.terminalTargets";
 import {
@@ -158,6 +160,7 @@ import {
 import { WsServerListSshConfigHostsRpc } from "./rpc.sshConfig";
 import { WsServerSampleSshMonitorRpc, WsServerListConnectedSshMonitorsRpc } from "./rpc.sshMonitor";
 import { WsServerListRemoteFoldersRpc } from "./rpc.remoteFolders";
+import { WsSearchQueryRpc } from "./rpc.search";
 import { WsServerTrustSshHostRpc } from "./rpc.sshHostTrust";
 import {
   WsOrchestrationAcknowledgeDeliveryRpc,
@@ -349,6 +352,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsTerminalRecoveryRpc,
   WsTerminalOutputAckRpc,
   WsTerminalSearchRpc,
+  WsTerminalStagePasteFileRpc,
+  WsTerminalViewRpc,
   WsSubscribeTerminalSessionRpc,
   WsTerminalWslDistributionsRpc,
   WsTerminalShellProfilesRpc,
@@ -368,6 +373,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetSidebarThreadCatalogRpc,
   WsOrchestrationGetStartupProjectCatalogRpc,
   WsOrchestrationSearchConversationMessagesRpc,
+  WsSearchQueryRpc,
   WsOrchestrationGetProjectThreadSummariesRpc,
   WsOrchestrationGetOrganizationThreadSummariesRpc,
   WsOrganizationStatusRpc,

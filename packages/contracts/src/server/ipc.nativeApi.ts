@@ -37,6 +37,7 @@ import type { DatabaseCompactionNativeApi } from "./databaseCompaction";
 import type { MetadataWarningsNativeApi } from "./metadataWarnings";
 import type * as Worktrees from "../workspace/worktrees";
 import type * as Project from "../workspace/project";
+import type * as SystemSearch from "../search/systemSearch";
 import type { TerminalNativeApi } from "./ipc.nativeApi.terminal";
 import type * as Automation from "./automation";
 import type * as ConnectionDiagnostics from "./connectionDiagnostics";
@@ -103,6 +104,14 @@ export interface NativeApi {
       input: Project.ProjectSearchEntriesInput,
     ) => Promise<Project.ProjectSearchEntriesResult>;
     writeFile: (input: Project.ProjectWriteFileInput) => Promise<Project.ProjectWriteFileResult>;
+  };
+  search: {
+    /** Streams `search.query` tier updates; aborting `signal` cancels the query end to end. */
+    query: (
+      input: SystemSearch.SystemSearchQueryInput,
+      onUpdate: (update: SystemSearch.SystemSearchTierUpdate) => void,
+      signal: AbortSignal,
+    ) => Promise<void>;
   };
   notes: {
     list: (input: Notes.NotesListInput) => Promise<Notes.NotesListResult>;

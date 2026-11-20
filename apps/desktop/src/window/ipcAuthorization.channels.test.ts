@@ -28,7 +28,7 @@ vi.mock("electron", () => {
     clipboard: { writeText: fail },
     dialog: { showOpenDialog: fail },
     nativeTheme: { themeSource: "system" },
-    shell: { openExternal: fail },
+    shell: { openExternal: fail, openPath: fail, showItemInFolder: fail },
     Menu: { buildFromTemplate: fail },
     Notification: Object.assign(fail, { isSupported: fail }),
   };
@@ -42,6 +42,7 @@ import { COMPUTER_USE_SAFETY_ROLE } from "./DesktopWindowRegistry";
 import { registerIpcHandlers } from "./ipcHandlers";
 import { registerOwnershipRecoveryIpc } from "./ipcHandlers.ownershipRecovery";
 import { registerRemoteBackendWindowIpc } from "./remoteBackendWindow";
+import { registerShellPathIpc } from "./shellPathHandlers";
 import { authorizeFakeSenders, fakeIpcSender } from "./ipcAuthorization.testSupport";
 
 const sideEffect = vi.fn(() => {
@@ -79,6 +80,7 @@ function registerEverything(): void {
     windowRegistry: { getRole: sideEffect, get: sideEffect, isTrusted: sideEffect } as never,
   });
   registerRemoteBackendWindowIpc({ channels: desktopIpcChannels, windows: detector });
+  registerShellPathIpc();
 }
 
 const safety = fakeIpcSender(1);
@@ -108,7 +110,7 @@ describe("every-handler IPC authorization", () => {
 
   it("registers the audited production channel set", () => {
     // Includes the window-material snapshot and floating-assistant helper channels.
-    expect(registered.handle.size).toBe(52);
+    expect(registered.handle.size).toBe(54);
     expect(registered.on.size).toBe(4);
     for (const credentialOrEffect of [
       "channel:GET_WS_URL_CHANNEL",
@@ -121,6 +123,8 @@ describe("every-handler IPC authorization", () => {
       "desktop:quit-application",
       desktopIpcChannels.openRemoteBackendWindow,
       desktopIpcChannels.bindRemoteBackendAssets,
+      desktopIpcChannels.openPath,
+      desktopIpcChannels.showItemInFolder,
     ]) {
       expect(
         registered.handle.has(credentialOrEffect) || registered.on.has(credentialOrEffect),

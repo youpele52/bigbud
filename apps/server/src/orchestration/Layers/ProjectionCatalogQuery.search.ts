@@ -3,9 +3,10 @@ import {
   CONVERSATION_SEARCH_MAX_LIMIT,
   CONVERSATION_SEARCH_MAX_QUERY_LENGTH,
   CONVERSATION_SEARCH_MIN_QUERY_LENGTH,
+  CONVERSATION_SEARCH_SCOPED_LIMIT,
+  CONVERSATION_SEARCH_SCOPED_MIN_QUERY_LENGTH,
   type SearchConversationMessagesResult,
 } from "@bigbud/contracts/orchestration/orchestration.search.ts";
-import { IsoDateTime, MessageId, ProjectId, ThreadId } from "@bigbud/contracts/core/baseSchemas.ts";
 import { countUnicodeCodePoints } from "@bigbud/shared/String";
 import { Effect, Schema } from "effect";
 import { clamp } from "effect/Number";
@@ -14,23 +15,20 @@ import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 
 import type { ProjectionCatalogQueryShape } from "../Services/ProjectionCatalogQuery.ts";
 import { orchestrationSequenceFrontierSql } from "../../persistence/OrchestrationSequenceFrontier.ts";
+import { rankSearchPage, searchPageCursor } from "./ProjectionCatalogQuery.search.rank.ts";
+import {
+  makeCurrentProjectSearch,
+  makeCurrentThreadSearch,
+  SearchHitRow,
+  searchVisibleMessageSql,
+  toSearchHit,
+} from "./ProjectionCatalogQuery.search.scoped.ts";
 
 const SearchRequest = Schema.Struct({
   match: Schema.String,
   query: Schema.String,
   cursor: Schema.NullOr(Schema.Number),
   limit: Schema.Number,
-});
-
-const SearchRow = Schema.Struct({
-  rowId: Schema.Number,
-  messageId: MessageId,
-  threadId: ThreadId,
-  projectId: ProjectId,
-  threadTitle: Schema.String,
-  projectName: Schema.String,
-  snippet: Schema.String,
-  createdAt: IsoDateTime,
 });
 
 const IndexState = Schema.Struct({
@@ -60,7 +58,9 @@ export function makeSearchConversationMessages(
   });
   const readHits = SqlSchema.findAll({
     Request: SearchRequest,
-    Result: SearchRow,
+    Result: SearchHitRow,
+    // Ordering by the FTS table's own rowid scans backwards and stops at the limit; ordering by
+    // the content table's rowid (the same value) forced a temporary B-tree over every match.
     execute: ({ match, query, cursor, limit }) => sql`
       SELECT
         m.rowid AS "rowId",
@@ -74,21 +74,19 @@ export function makeSearchConversationMessages(
           max(1, instr(highlight(projection_message_search, 0, char(1), char(2)), char(1)) - 35),
           length(${query}) + 70
         ) AS snippet,
-        m.created_at AS "createdAt"
+        m.created_at AS "createdAt",
+        bm25(projection_message_search) AS rank
       FROM projection_message_search search
       JOIN projection_thread_messages m ON m.rowid = search.rowid
-      JOIN projection_threads t ON t.thread_id = m.thread_id
-      JOIN projection_projects p ON p.project_id = t.project_id
-      WHERE projection_message_search MATCH ${match}
-        AND m.is_streaming = 0
-        AND (${cursor} IS NULL OR m.rowid < ${cursor})
-        AND t.purpose = 'standard'
-        AND t.deleted_at IS NULL AND t.archived_at IS NULL AND t.deleting_at IS NULL
-        AND p.deleted_at IS NULL AND p.deleting_at IS NULL
-      ORDER BY m.rowid DESC
+      ${searchVisibleMessageSql(sql)}
+        AND projection_message_search MATCH ${match}
+        AND (${cursor} IS NULL OR search.rowid < ${cursor})
+      ORDER BY search.rowid DESC
       LIMIT ${limit}
     `,
   });
+  const readCurrentThreadHits = makeCurrentThreadSearch(sql);
+  const readCurrentProjectHits = makeCurrentProjectSearch(sql);
 
   return (input) => {
     const query = input.query.trim();
@@ -112,32 +110,57 @@ export function makeSearchConversationMessages(
           const status =
             state.projectionSequence < state.frontier ? ("stale" as const) : ("ready" as const);
           if (
-            queryLength < CONVERSATION_SEARCH_MIN_QUERY_LENGTH ||
+            queryLength < CONVERSATION_SEARCH_SCOPED_MIN_QUERY_LENGTH ||
             queryLength > CONVERSATION_SEARCH_MAX_QUERY_LENGTH
           ) {
             return { status, projectionSequence: state.projectionSequence, hits: [] };
           }
+          const firstPage = input.cursor === undefined;
+          const match = `"${query.replaceAll('"', '""')}"`;
+          const currentThreadHits =
+            firstPage && input.currentThreadId !== undefined
+              ? yield* readCurrentThreadHits({
+                  threadId: input.currentThreadId,
+                  query,
+                  limit: CONVERSATION_SEARCH_SCOPED_LIMIT,
+                })
+              : undefined;
+          if (queryLength < CONVERSATION_SEARCH_MIN_QUERY_LENGTH) {
+            return {
+              status,
+              projectionSequence: state.projectionSequence,
+              hits: [],
+              ...(currentThreadHits
+                ? { currentThreadHits: currentThreadHits.map(toSearchHit) }
+                : {}),
+            } satisfies SearchConversationMessagesResult;
+          }
+          const currentProjectHits =
+            firstPage && input.currentProjectId !== undefined
+              ? yield* readCurrentProjectHits({
+                  projectId: input.currentProjectId,
+                  match,
+                  query,
+                  limit: CONVERSATION_SEARCH_SCOPED_LIMIT,
+                })
+              : undefined;
           const rows = yield* readHits({
-            match: `"${query.replaceAll('"', '""')}"`,
+            match,
             query,
             cursor: input.cursor ?? null,
             limit: limit + 1,
           });
           const page = rows.slice(0, limit);
-          const last = page.at(-1);
+          const nextCursor = rows.length > limit ? searchPageCursor(page) : undefined;
           return {
             status,
             projectionSequence: state.projectionSequence,
-            hits: page.map((row) => ({
-              messageId: row.messageId,
-              threadId: row.threadId,
-              projectId: row.projectId,
-              threadTitle: row.threadTitle,
-              projectName: row.projectName,
-              snippet: row.snippet,
-              createdAt: row.createdAt,
-            })),
-            ...(rows.length > limit && last ? { nextCursor: last.rowId } : {}),
+            hits: rankSearchPage(page, input).map(toSearchHit),
+            ...(nextCursor === undefined ? {} : { nextCursor }),
+            ...(currentThreadHits ? { currentThreadHits: currentThreadHits.map(toSearchHit) } : {}),
+            ...(currentProjectHits
+              ? { currentProjectHits: currentProjectHits.map(toSearchHit) }
+              : {}),
           } satisfies SearchConversationMessagesResult;
         }),
       )

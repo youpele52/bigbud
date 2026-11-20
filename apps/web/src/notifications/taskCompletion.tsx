@@ -3,13 +3,12 @@ import { useEffect, useRef } from "react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { memoryReviewNotification } from "./memoryReview";
+import { showSystemThreadNotification } from "./systemNotification";
 import { toastManager } from "../components/ui/toast";
-import { announceMascotAttention } from "../components/floating-assistant/mascotAttention.logic";
 import { useSettings } from "../hooks/useSettings";
 import { useStore } from "../stores/main";
 import type { Thread } from "../models/types";
 import { isVisibleThread } from "../logic/thread/threadVisibility.logic";
-import { isThreadNavigationAvailable } from "../components/layout/AppSidebarLayout.logic";
 import {
   buildTaskCompletionCopy,
   collectCompletedThreadCandidates,
@@ -17,78 +16,15 @@ import {
   type CompletedThreadCandidate,
 } from "./taskCompletion.logic";
 
-/**
- * Attempts to show a native OS notification for a completed task.
- *
- * Priority order:
- *   1. Electron desktopBridge.notifications (Electron IPC-backed)
- *   2. Web Notification API (browser fallback)
- *
- * Returns true if the notification was dispatched.
- */
+/** Native OS notification for a completed task (desktop bridge, then the Web Notification API). */
 export async function showSystemTaskCompletionNotification(
   candidate: CompletedThreadCandidate,
   navigate?: ReturnType<typeof useNavigate>,
 ): Promise<boolean> {
-  const { title, body } = buildTaskCompletionCopy(candidate);
-
-  // Electron path
-  const bridge = window.desktopBridge;
-  if (bridge?.notifications) {
-    try {
-      const shown = await bridge.notifications.show({ title, body, threadId: candidate.threadId });
-      if (shown) {
-        announceMascotAttention();
-        return true;
-      }
-    } catch {
-      // Fall through to web Notification API
-    }
-  }
-
-  // Web Notification API fallback
-  if (typeof Notification === "undefined") {
-    return false;
-  }
-
-  if (Notification.permission === "denied") {
-    return false;
-  }
-
-  if (Notification.permission === "default") {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") {
-      return false;
-    }
-  }
-
-  const notification = new Notification(title, { body });
-  notification.addEventListener(
-    "click",
-    () => {
-      window.focus();
-      const threadAvailable = isThreadNavigationAvailable(candidate.threadId, useStore.getState());
-      if (!threadAvailable) {
-        if (typeof bridge?.openMainWindow === "function") {
-          void bridge.openMainWindow();
-        }
-        return;
-      }
-      if (navigate) {
-        void navigate({ to: "/$threadId", params: { threadId: candidate.threadId } });
-        return;
-      }
-      if (typeof window.desktopBridge?.openMainWindow === "function") {
-        void window.desktopBridge.openMainWindow(candidate.threadId);
-        return;
-      }
-      window.location.assign(`/${encodeURIComponent(candidate.threadId)}`);
-    },
-    { once: true },
+  return showSystemThreadNotification(
+    { ...buildTaskCompletionCopy(candidate), threadId: candidate.threadId },
+    navigate,
   );
-  void notification;
-  announceMascotAttention();
-  return true;
 }
 
 /**

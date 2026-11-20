@@ -55,6 +55,107 @@ export function isVideoFilePath(pathValue: string): boolean {
   return VIDEO_FILE_EXTENSIONS.has(normalized.slice(extensionStart));
 }
 
+/**
+ * Binary formats bigbud cannot display (the Files panel would show them as text). Callers route
+ * them to the system default app instead. Images, video, PDF and HTML it can show are absent.
+ */
+const KNOWN_BINARY_FILE_EXTENSIONS = new Set([
+  // Documents
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".odt",
+  ".ods",
+  ".odp",
+  ".pages",
+  ".numbers",
+  ".rtf",
+  ".epub",
+  // Audio
+  ".aac",
+  ".aif",
+  ".aiff",
+  ".flac",
+  ".m4a",
+  ".mid",
+  ".midi",
+  ".mp3",
+  ".oga",
+  ".ogg",
+  ".opus",
+  ".wav",
+  ".wma",
+  // Video and images without an in-app viewer
+  ".3gp",
+  ".flv",
+  ".m4v",
+  ".mkv",
+  ".mpeg",
+  ".mpg",
+  ".wmv",
+  ".heic",
+  ".heif",
+  ".psd",
+  ".tif",
+  ".tiff",
+  // Archives and disk images
+  ".7z",
+  ".bz2",
+  ".gz",
+  ".iso",
+  ".rar",
+  ".tar",
+  ".tgz",
+  ".xz",
+  ".zip",
+  ".zst",
+  ".dmg",
+  // Fonts
+  ".eot",
+  ".otf",
+  ".ttf",
+  ".woff",
+  ".woff2",
+  // Executables, libraries and compiled artefacts
+  ".a",
+  ".apk",
+  ".app",
+  ".appimage",
+  ".bin",
+  ".class",
+  ".deb",
+  ".dll",
+  ".dylib",
+  ".exe",
+  ".jar",
+  ".msi",
+  ".o",
+  ".obj",
+  ".pkg",
+  ".pyc",
+  ".rpm",
+  ".so",
+  ".wasm",
+  // Databases and design files
+  ".db",
+  ".sqlite",
+  ".sqlite3",
+  ".sketch",
+  ".fig",
+]);
+
+export function isKnownBinaryFilePath(pathValue: string): boolean {
+  const normalized = normalizePreviewPath(pathValue).toLowerCase();
+  const extensionStart = normalized.lastIndexOf(".");
+  if (extensionStart <= 0) {
+    return false;
+  }
+  return KNOWN_BINARY_FILE_EXTENSIONS.has(normalized.slice(extensionStart));
+}
+
 export function isVideoMimeType(mimeType: string): boolean {
   return mimeType.toLowerCase().startsWith("video/");
 }

@@ -80,7 +80,7 @@ impl WorkspaceRoot {
     }
 
     #[cfg(unix)]
-    pub(super) fn open_file(&self, relative_path: &str) -> Result<fs::File, WorkspaceError> {
+    pub(crate) fn open_file(&self, relative_path: &str) -> Result<fs::File, WorkspaceError> {
         let relative = validate_relative_path(relative_path)?;
         let components = relative
             .components()
@@ -158,7 +158,7 @@ impl WorkspaceRoot {
     }
 
     #[cfg(not(unix))]
-    pub(super) fn open_file(&self, relative_path: &str) -> Result<fs::File, WorkspaceError> {
+    pub(crate) fn open_file(&self, relative_path: &str) -> Result<fs::File, WorkspaceError> {
         fs::File::open(self.resolve_existing(relative_path)?).map_err(map_io)
     }
 
@@ -193,7 +193,7 @@ impl WorkspaceRoot {
         Ok(current)
     }
 
-    pub(super) fn relative_path(&self, path: &Path) -> Result<String, WorkspaceError> {
+    pub(crate) fn relative_path(&self, path: &Path) -> Result<String, WorkspaceError> {
         path.strip_prefix(&self.canonical_root)
             .map_err(|_| WorkspaceError::OutsideRoot)
             .and_then(|relative| {

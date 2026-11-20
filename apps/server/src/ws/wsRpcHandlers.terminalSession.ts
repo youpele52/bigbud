@@ -9,6 +9,8 @@ import {
   type TerminalSessionStreamItem,
 } from "@bigbud/contracts/workspace/terminal.stream.ts";
 import type { TerminalSearchInput } from "@bigbud/contracts/workspace/terminal.search.ts";
+import type { TerminalViewInput } from "@bigbud/contracts/workspace/terminal.activity.ts";
+import { sshMonitorCallerId } from "../ssh/sshMonitor.connections.ts";
 import type { TerminalRecoveryInput } from "@bigbud/contracts/workspace/terminal.recovery.ts";
 
 import { observeRpcEffect, observeRpcStream } from "../observability/RpcInstrumentation";
@@ -38,12 +40,20 @@ export function makeWsRpcTerminalSessionHandlers(context: WsRpcContext) {
         WS_METHODS.subscribeTerminalEvents,
         Stream.callback<TerminalEventsStreamItem>((queue) => {
           const offer = makeBoundedTerminalEventOffer(queue);
-          return Effect.acquireRelease(
-            manager.subscribe(offer, {
-              ...(input.outputScope ? { outputScope: input.outputScope } : {}),
-              ...(input.includeInventory ? { onInventory: offer } : {}),
-            }),
-            (unsubscribe) => Effect.sync(unsubscribe),
+          const activity = input.includeWork ? context.terminalActivity : undefined;
+          return Effect.andThen(
+            activity
+              ? Effect.acquireRelease(activity.subscribe(offer), (unsubscribe) =>
+                  Effect.sync(unsubscribe),
+                )
+              : Effect.void,
+            Effect.acquireRelease(
+              manager.subscribe(offer, {
+                ...(input.outputScope ? { outputScope: input.outputScope } : {}),
+                ...(input.includeInventory ? { onInventory: offer } : {}),
+              }),
+              (unsubscribe) => Effect.sync(unsubscribe),
+            ),
           );
         }),
         { "rpc.aggregate": "terminal" },
@@ -97,6 +107,17 @@ export function makeWsRpcTerminalSessionHandlers(context: WsRpcContext) {
       observeRpcEffect(
         WS_METHODS.terminalOutputAck,
         Effect.sync(() => deliveries.get(input.subscriptionId)?.acknowledge(input.processedChars)),
+        { "rpc.aggregate": "terminal" },
+      ),
+    [WS_METHODS.terminalView]: (input: TerminalViewInput, options?: { clientId: number }) =>
+      observeRpcEffect(
+        WS_METHODS.terminalView,
+        Effect.suspend(() => {
+          const caller = sshMonitorCallerId(context.monitorInstanceId, options?.clientId);
+          return caller && context.terminalActivity
+            ? context.terminalActivity.view(caller, input)
+            : Effect.void;
+        }),
         { "rpc.aggregate": "terminal" },
       ),
     [WS_METHODS.terminalSearch]: (input: TerminalSearchInput) =>

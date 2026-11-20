@@ -132,6 +132,7 @@ export interface GitRunStackedActionOptions {
 export interface WsRpcClient {
   readonly organization: OrganizationRpcClient;
   readonly worktrees: NonNullable<NativeApi["worktrees"]>;
+  readonly search: NativeApi["search"];
   readonly dispose: () => Promise<void>;
   readonly reconnect: () => Promise<void>;
   /** Skips the current reconnect backoff wait; returns whether a wait was cut short. */

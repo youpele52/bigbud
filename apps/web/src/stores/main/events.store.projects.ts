@@ -1,6 +1,7 @@
 import { type OrchestrationEvent } from "@bigbud/contracts";
 import { isBuiltInChatsProject } from "@bigbud/contracts/constants/project.constant";
 
+import { withTerminalWork } from "./helpers.terminalWork.store";
 import {
   buildSidebarThreadSummary,
   mapProject,
@@ -261,8 +262,8 @@ export function applyProjectEvent(
       if (nextThread.purpose === "side-chat") {
         return { ...state, projects, threads };
       }
-      const nextSummary = buildSidebarThreadSummary(nextThread);
       const previousSummary = state.sidebarThreadsById[nextThread.id];
+      const nextSummary = withTerminalWork(buildSidebarThreadSummary(nextThread), previousSummary);
       const sidebarThreadsById = sidebarThreadSummariesEqual(previousSummary, nextSummary)
         ? state.sidebarThreadsById
         : {

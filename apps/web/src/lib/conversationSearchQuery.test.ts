@@ -1,3 +1,4 @@
+import { ProjectId, ThreadId } from "@bigbud/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("~/rpc/nativeApi", () => ({ ensureNativeApi: vi.fn() }));
@@ -38,6 +39,36 @@ describe("conversation search query", () => {
       true,
     );
     expect(conversationSearchQueryOptions({ query: "a".repeat(161), enabled: true }).enabled).toBe(
+      false,
+    );
+  });
+
+  it("sends the current thread and project and searches the thread at 1–2 characters", async () => {
+    const searchConversationMessages = vi
+      .fn()
+      .mockResolvedValue({ status: "ready", projectionSequence: 1, hits: [] });
+    vi.mocked(ensureNativeApi).mockReturnValue({
+      orchestration: { searchConversationMessages },
+    } as unknown as ReturnType<typeof ensureNativeApi>);
+    const context = {
+      currentThreadId: ThreadId.makeUnsafe("thread-1"),
+      currentProjectId: ProjectId.makeUnsafe("project-1"),
+    };
+    const options = conversationSearchQueryOptions({ query: "ab", enabled: true, ...context });
+    expect(options.enabled).toBe(true);
+    expect(options.queryKey).toEqual([
+      "conversation-message-search",
+      "ab",
+      "thread-1",
+      "project-1",
+    ]);
+    await options.queryFn!({ pageParam: undefined } as never);
+    expect(searchConversationMessages).toHaveBeenCalledWith({ query: "ab", limit: 30, ...context });
+    expect(
+      conversationSearchQueryOptions({ query: "ab", enabled: true, currentProjectId: null })
+        .enabled,
+    ).toBe(false);
+    expect(conversationSearchQueryOptions({ query: "", enabled: true, ...context }).enabled).toBe(
       false,
     );
   });

@@ -8,9 +8,11 @@ import {
   ArrowUpRightIcon,
 } from "lucide-react";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
-import { useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { updateServerSettings, useSettings, useUpdateSettings } from "../../hooks/useSettings";
+import { fileAccessServerPatch } from "../../hooks/useSettings.fileAccessMirror";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { SETTINGS_ANCHORS, SettingsAnchorLink, useSettingsAnchorTarget } from "./settingsAnchor";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { readNativeApi } from "../../rpc/nativeApi";
 
@@ -42,6 +44,7 @@ export function FileAccessSettingsSection() {
   const [isResetting, setIsResetting] = useState(false);
   const [isPickingFolder, setIsPickingFolder] = useState(false);
   const accessMap = getFolderAccessMap(settings.fileAccessPermissionLevel);
+  const targeted = useSettingsAnchorTarget(SETTINGS_ANCHORS.fileAccessPermissionLevel);
 
   const handlePickDefaultChatFolder = useCallback(async () => {
     const api = readNativeApi();
@@ -64,6 +67,7 @@ export function FileAccessSettingsSection() {
       hasSeenFileAccessPrompt: false,
       fileAccessPermissionLevel: "none",
     });
+    updateServerSettings(fileAccessServerPatch("none"));
     setIsResetting(false);
   }, [updateSettings]);
 
@@ -109,14 +113,26 @@ export function FileAccessSettingsSection() {
       />
 
       <SettingsRow
+        id={SETTINGS_ANCHORS.fileAccessPermissionLevel}
+        forceVisible={targeted}
         title="Permission level"
         description="Control which files and folders bigbud can access on your system."
+        status={
+          <span>
+            This level also controls "Search this computer" (which folders it may search).{" "}
+            <SettingsAnchorLink anchorId={SETTINGS_ANCHORS.searchThisComputer}>
+              Go to Search this computer
+            </SettingsAnchorLink>
+          </span>
+        }
         control={
           <Select
             value={settings.fileAccessPermissionLevel}
             onValueChange={(value) => {
               if (value === "none" || value === "common-folders" || value === "unrestricted") {
                 updateSettings({ fileAccessPermissionLevel: value });
+                // The server enforces the "this computer" search scope from its mirror.
+                updateServerSettings(fileAccessServerPatch(value));
               }
             }}
           >

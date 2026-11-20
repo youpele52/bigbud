@@ -20,6 +20,7 @@ import { createRemoteRuntimeUpdateRpcMethods } from "./wsRpcClient.remoteBackend
 import { runGitStackedAction, withGitMutationOperationId } from "./wsRpcClient.git";
 import { createTerminalRpcClient } from "./wsRpcClient.terminal";
 import { createComputerUseRpcClient } from "./wsRpcClient.computerUse";
+import { createSearchRpcClient } from "./wsRpcClient.search";
 import { createBranchCopyRpcMethods } from "./wsRpcClient.branchCopy";
 import { createDetailPagingRpcMethods } from "./wsRpcClient.detailPaging";
 import { createDatabaseCompactionRpcMethods } from "./wsRpcClient.databaseCompaction";
@@ -77,6 +78,7 @@ export function createWsRpcClient(
     reconnectNow: () => transport.reconnectNow(),
     terminal: createTerminalRpcClient(transport),
     computerUse: createComputerUseRpcClient(transport),
+    search: createSearchRpcClient(transport),
     browser: {
       completeCommand: (input) =>
         transport.request((client) => client[WS_METHODS.completeVisibleBrowserCommand](input)),

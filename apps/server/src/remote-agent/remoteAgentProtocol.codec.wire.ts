@@ -33,6 +33,15 @@ export class WireWriter {
     this.fieldBytes(field, value);
   }
 
+  /** Repeated message elements retain empty values rather than protobuf defaults. */
+  fieldRepeatedMessage(field: number, value: Uint8Array): void {
+    if (value.length > 0) this.fieldBytes(field, value);
+    else {
+      this.tag(field, 2);
+      this.varint(0);
+    }
+  }
+
   fieldBool(field: number, value: boolean): void {
     if (!value) return;
     this.tag(field, 0);

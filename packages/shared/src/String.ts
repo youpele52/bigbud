@@ -26,3 +26,17 @@ export function fallbackThreadTitleFromPrompt(prompt: string, maxLength = 25): s
 
   return `${normalized.slice(0, maxLength).trimEnd()}...`;
 }
+
+// Bidirectional embedding, override and isolate controls plus directional marks.
+const BIDI_CONTROLS = /[؜‎‏‪-‮⁦-⁩]/g;
+
+/**
+ * Makes bidirectional control characters visible (`⟨U+202E⟩`) so untrusted names such as file
+ * paths cannot visually reorder themselves (for example to fake an extension).
+ */
+export function revealBidiControls(text: string): string {
+  return text.replace(
+    BIDI_CONTROLS,
+    (control) => `⟨U+${(control.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}⟩`,
+  );
+}

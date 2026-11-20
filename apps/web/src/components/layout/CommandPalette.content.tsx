@@ -1,6 +1,8 @@
+import { Comment03Icon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { isBuiltInChatsProject } from "@bigbud/contracts";
 import { useNavigate } from "@tanstack/react-router";
-import { FolderIcon, MessageSquareIcon, SearchIcon, SettingsIcon } from "lucide-react";
+import { FolderIcon, SearchIcon, SettingsIcon } from "lucide-react";
 import { NewChatIcon } from "../common/NewChatIcon";
 import { useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -28,7 +30,7 @@ import {
   CommandPanel,
   CommandShortcut,
 } from "../ui/command";
-import { CommandPaletteWorkspaceFiles } from "./CommandPalette.workspaceFiles";
+import { CommandPaletteFileSearch } from "./CommandPalette.fileSearch";
 
 interface PaletteItem {
   id: string;
@@ -123,7 +125,7 @@ export function CommandPaletteDialogContent() {
       keywords: "settings preferences configuration keybindings",
       icon: <SettingsIcon className="size-4" />,
       onSelect: async () => {
-        await navigate({ to: "/settings/general" });
+        await navigate({ to: "/settings" });
       },
     });
 
@@ -180,7 +182,14 @@ export function CommandPaletteDialogContent() {
         description: chatsProject?.name ?? "Chats",
         group: "threads",
         keywords: `${thread.title} chats`.toLowerCase(),
-        icon: <MessageSquareIcon className="size-4" />,
+        icon: (
+          <HugeiconsIcon
+            aria-hidden="true"
+            className="size-4"
+            icon={Comment03Icon}
+            strokeWidth={1.5}
+          />
+        ),
         onSelect: async () => {
           acknowledgeThreadOpen(thread.id);
           await navigate({ to: "/$threadId", params: { threadId: thread.id } });
@@ -209,7 +218,14 @@ export function CommandPaletteDialogContent() {
           description: `${projectName}${thread.branch ? ` · ${thread.branch}` : ""}`,
           group: "threads",
           keywords: `${thread.title} ${projectName} ${thread.branch ?? ""}`.toLowerCase(),
-          icon: <MessageSquareIcon className="size-4" />,
+          icon: (
+            <HugeiconsIcon
+              aria-hidden="true"
+              className="size-4"
+              icon={Comment03Icon}
+              strokeWidth={1.5}
+            />
+          ),
           onSelect: async () => {
             acknowledgeThreadOpen(thread.id);
             await navigate({ to: "/$threadId", params: { threadId: thread.id } });
@@ -335,11 +351,13 @@ export function CommandPaletteDialogContent() {
                         {groupedItems.threads.map(renderItem)}
                       </CommandGroup>
                     ) : null}
-                    <CommandPaletteWorkspaceFiles
+                    <CommandPaletteFileSearch
                       open={open}
                       normalizedQuery={normalizedQuery}
                       workspaceRoot={workspaceRoot}
                       workspaceExecutionTargetId={workspaceExecutionTargetId}
+                      currentProjectId={activeThread?.projectId ?? selectedProjectId ?? null}
+                      currentThreadId={routeThreadId ?? null}
                       onBeforeOpenFile={() => setOpen(false)}
                       withTopMargin={
                         groupedItems.actions.length > 0 ||

@@ -23,6 +23,7 @@ import {
   remoteAgentPoolRuntimeKey,
 } from "./remoteAgentConnectionPool.keys.ts";
 import { assertSshTargetConnected } from "../ssh/sshTargetDisconnects.ts";
+import { livePoolConnection } from "./remoteAgentConnectionPool.live.ts";
 
 export interface RemoteAgentRuntimeBinding {
   readonly connectionId?: string;
@@ -250,6 +251,10 @@ export class RemoteAgentConnectionPool {
     entry.lifecycle.markTransportLoss();
   }
 
+  /** A ready connection for the target from any service, or null. Never dials (search). */
+  liveConnection(target: string): RemoteAgentConnection | null {
+    return livePoolConnection(this.selectedEntries, this.entries, target, this.retirementFence);
+  }
   snapshot(executionTargetId: string): RemoteAgentLifecycleSnapshot {
     return (this.selectedEntries.get(executionTargetId) ?? this.entry(executionTargetId)).lifecycle
       .snapshot;

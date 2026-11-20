@@ -344,6 +344,8 @@ export function sidebarThreadSummariesEqual(
     left.branch === right.branch &&
     left.worktreePath === right.worktreePath &&
     left.latestUserMessageAt === right.latestUserMessageAt &&
+    (left.latestTerminalActivityAt ?? null) === (right.latestTerminalActivityAt ?? null) &&
+    left.terminalFinished === right.terminalFinished &&
     left.hasPendingApprovals === right.hasPendingApprovals &&
     left.hasPendingUserInput === right.hasPendingUserInput &&
     left.hasActionableProposedPlan === right.hasActionableProposedPlan &&

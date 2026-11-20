@@ -41,6 +41,9 @@ mod job_lifecycle;
 #[path = "jobs.rs"]
 mod jobs;
 #[cfg(unix)]
+#[path = "search.rs"]
+mod search;
+#[cfg(unix)]
 #[path = "signals.rs"]
 mod signals;
 #[cfg(unix)]
@@ -76,6 +79,7 @@ fn serve_connection(
     handshake: frame_reader::HandshakePermit,
 ) -> io::Result<()> {
     let mut subscriptions = HashSet::new();
+    let mut searches = search::workers(&sessions)?;
     let result = serve_connection_loop(
         stream,
         sessions,
@@ -83,8 +87,9 @@ fn serve_connection(
         &watch_subscribers,
         &watchers,
         &mut subscriptions,
-        (Arc::clone(&writer), handshake),
+        (Arc::clone(&writer), handshake, &mut searches),
     );
+    searches.cancel_and_join();
     for subscription_id in subscriptions {
         watchers.unsubscribe(&subscription_id);
         remove_all_subscribers(&watch_subscribers, &subscription_id);
@@ -108,11 +113,15 @@ fn serve_connection_loop(
     watch_subscribers: &Subscribers,
     watchers: &WorkspaceWatchRegistry,
     watch_ids: &mut HashSet<String>,
-    connection: (Writer, frame_reader::HandshakePermit),
+    connection: (
+        Writer,
+        frame_reader::HandshakePermit,
+        &mut crate::search::SearchWorkers,
+    ),
 ) -> io::Result<()> {
     // Ordinary connections remain available if managed-only peer evidence cannot be obtained.
     let service_peer = crate::service_lease::Peer::read(&stream).ok();
-    let (writer, handshake) = connection;
+    let (writer, handshake, searches) = connection;
     let control_only = handshake.control_only;
     let mut reader = if control_only {
         frame_reader::FrameReader::with_timeout(stream, std::time::Duration::from_secs(1))
@@ -303,6 +312,9 @@ fn serve_connection_loop(
             }
             Some(v1::frame::Payload::PtyDetachRequest(request)) => {
                 detach::detach(&subscribers, &writer, request)?;
+            }
+            Some(v1::frame::Payload::WorkspaceSearchRequest(request)) => {
+                search::start(&sessions, &writer, searches, request)?;
             }
             Some(bigbud_protocol::v1::frame::Payload::PtyAttachRequest(request)) => {
                 attach::attach(

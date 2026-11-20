@@ -28,25 +28,28 @@ impl AgentSession {
         &mut self,
         request: v1::CancelRequest,
     ) -> Result<v1::Frame, SessionError> {
-        let (cancelled, terminal, detail) =
-            if let Some(signal) = self.process_cancellations.get(&request.operation_id) {
-                signal.store(true, std::sync::atomic::Ordering::Relaxed);
-                let _ = self
-                    .process_operations
-                    .begin_cancel(&request.operation_id, Instant::now());
-                (true, false, "cancellation-requested")
-            } else if let Ok(snapshot) = self
+        let search_cancelled = self.search_registry.cancel(&request.operation_id)
+            || self.os_index_registry.cancel(&request.operation_id);
+        let (cancelled, terminal, detail) = if search_cancelled {
+            (true, false, "cancellation-requested")
+        } else if let Some(signal) = self.process_cancellations.get(&request.operation_id) {
+            signal.store(true, std::sync::atomic::Ordering::Relaxed);
+            let _ = self
                 .process_operations
-                .snapshot(&request.operation_id, Instant::now())
-            {
-                if snapshot.terminal.is_some() {
-                    (false, true, "operation-already-terminal")
-                } else {
-                    (false, false, "operation-cannot-be-cancelled")
-                }
+                .begin_cancel(&request.operation_id, Instant::now());
+            (true, false, "cancellation-requested")
+        } else if let Ok(snapshot) = self
+            .process_operations
+            .snapshot(&request.operation_id, Instant::now())
+        {
+            if snapshot.terminal.is_some() {
+                (false, true, "operation-already-terminal")
             } else {
-                (false, true, "operation-unknown-or-expired")
-            };
+                (false, false, "operation-cannot-be-cancelled")
+            }
+        } else {
+            (false, true, "operation-unknown-or-expired")
+        };
         Ok(v1::Frame {
             payload: Some(v1::frame::Payload::CancelResponse(v1::CancelResponse {
                 request_id: request.request_id,

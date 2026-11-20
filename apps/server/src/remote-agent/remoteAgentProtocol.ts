@@ -1,5 +1,7 @@
 import type { RemoteAgentPtyFrame } from "./remoteAgentProtocol.pty.ts";
 import type { RemoteAgentWorkspaceWatchFrame } from "./remoteAgentProtocol.workspaceWatch.ts";
+import type { RemoteAgentPasteStagingFrame } from "./remoteAgentProtocol.pasteStaging.ts";
+import type { RemoteAgentSearchFrame } from "./remoteAgentProtocol.search.ts";
 import type { RemoteAgentResourceCleanupFrame } from "./remoteAgentProtocol.resourceCleanup.ts";
 import type { RemoteAgentServiceLeaseFrame } from "./remoteAgentProtocol.serviceLease.ts";
 import type { RemoteAgentControlFrame } from "./remoteAgentProtocol.control.ts";
@@ -191,6 +193,8 @@ export interface RemoteAgentWriteFileRequest {
   readonly path: string;
   readonly bytes: Uint8Array;
   readonly expectedSha256: string;
+  /** Exclusive create; only for agents advertising `workspace.write-create-only`. */
+  readonly createOnly: boolean;
 }
 
 export interface RemoteAgentWriteFileResponse {
@@ -308,6 +312,8 @@ export type RemoteAgentFrame =
   | RemoteAgentResourceCleanupFrame
   | RemoteAgentControlFrame
   | RemoteAgentWorkspaceWatchFrame
+  | RemoteAgentPasteStagingFrame
+  | RemoteAgentSearchFrame
   | { readonly type: "clientHello"; readonly value: RemoteAgentClientHello }
   | { readonly type: "agentHello"; readonly value: RemoteAgentHello }
   | { readonly type: "diagnosticRequest"; readonly value: RemoteAgentDiagnosticRequest }

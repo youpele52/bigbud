@@ -107,9 +107,11 @@ export class WsTransport {
     });
   }
 
+  /** A finite stream; aborting `signal` interrupts it, which interrupts the server fiber too. */
   async requestStream<TValue>(
     connect: (client: WsRpcProtocolClient) => Stream.Stream<TValue, Error, never>,
     listener: (value: TValue) => void | Promise<void>,
+    signal?: AbortSignal,
   ): Promise<void> {
     if (this.disposed) {
       throw new Error("Transport disposed");
@@ -125,9 +127,14 @@ export class WsTransport {
         session.clientPromise,
         connect,
         listener,
-        () => !this.disposed && this.activeSessionId !== 0 && session === this.session,
+        () =>
+          !signal?.aborted &&
+          !this.disposed &&
+          this.activeSessionId !== 0 &&
+          session === this.session,
         this.scope.markWsInboundActivity,
       ),
+      signal ? { signal } : undefined,
     );
   }
 

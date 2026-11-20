@@ -30,7 +30,7 @@ export function buildSessionApi(ctx: SessionApiContext): TerminalManagerShape {
 
   const open = makeTerminalOpen(ctx);
 
-  const { write, resize } = makeTerminalSessionControls(requireSession);
+  const { write, resize } = makeTerminalSessionControls(requireSession, ctx.workSignals);
 
   const clear: TerminalManagerShape["clear"] = (input) =>
     withThreadLock(

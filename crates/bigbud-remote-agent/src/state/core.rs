@@ -115,7 +115,7 @@ fn format_epoch_at(now: SystemTime) -> Result<String, AgentStateError> {
         .map_err(AgentStateError::ClockBeforeUnixEpoch)
 }
 
-fn assert_secure_directory(path: &Path) -> Result<(), AgentStateError> {
+pub(crate) fn assert_secure_directory(path: &Path) -> Result<(), AgentStateError> {
     let symlink_metadata = fs::symlink_metadata(path).map_err(AgentStateError::Io)?;
     if symlink_metadata.file_type().is_symlink() {
         return Err(AgentStateError::Symlink);
@@ -140,7 +140,7 @@ fn assert_secure_directory(path: &Path) -> Result<(), AgentStateError> {
 /// follows the process umask, so a `0002` umask (the Debian 13 default for user-private groups)
 /// left a new `~/.bigbud` group-writable, which the backend CLI then refuses. Existing ancestors
 /// are not changed.
-fn create_private_directories(path: &Path) -> Result<(), AgentStateError> {
+pub(crate) fn create_private_directories(path: &Path) -> Result<(), AgentStateError> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]
@@ -151,7 +151,7 @@ fn create_private_directories(path: &Path) -> Result<(), AgentStateError> {
     builder.create(path).map_err(AgentStateError::Io)
 }
 
-fn set_private_permissions(path: &Path) -> Result<(), AgentStateError> {
+pub(crate) fn set_private_permissions(path: &Path) -> Result<(), AgentStateError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

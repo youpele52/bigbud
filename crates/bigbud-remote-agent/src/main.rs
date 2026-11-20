@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use bigbud_protocol::{DEFAULT_MAX_FRAME_BYTES, read_frame, write_frame};
 use bigbud_remote_agent::{
     AgentSession, identity, protocol_error_frame,
+    search::SearchWorkers,
     state::{AgentState, supervisor_socket_path},
     supervisor::{
         SupervisorPreparation, prepare_supervisor, request_restart, request_shutdown, run_proxy,
@@ -26,17 +27,30 @@ fn state_root() -> Option<std::path::PathBuf> {
         })
 }
 
+/// Paste staging lives beside the state folder (`~/.bigbud/agent/paste`). Without it the agent
+/// still runs; it just does not advertise `terminal.paste-staging`.
+fn enable_paste_staging(session: &mut AgentSession, state_root: &std::path::Path) {
+    let Some(root) = state_root.parent().map(|parent| parent.join("paste")) else {
+        return;
+    };
+    if let Err(error) = session.enable_paste_staging(&root) {
+        eprintln!("bigbud remote agent paste staging unavailable: {error}");
+    }
+}
+
 fn create_session() -> Result<AgentSession> {
     let state_root = state_root();
     match state_root {
         Some(root) => {
             let state = AgentState::open(&root)
                 .with_context(|| format!("failed to open agent state at {}", root.display()))?;
-            AgentSession::with_epoch_and_journal(
+            let mut session = AgentSession::with_epoch_and_journal(
                 state.epoch().to_owned(),
                 state.operation_journal_path(),
             )
-            .context("failed to restore the agent session journal")
+            .context("failed to restore the agent session journal")?;
+            enable_paste_staging(&mut session, &root);
+            Ok(session)
         }
         None => AgentSession::new().context("failed to create an ephemeral agent session"),
     }
@@ -53,6 +67,8 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
         let _ = write_stdio_responses(&watch_writer, vec![workspace_watch_event_frame(event)]);
     });
     let mut watch_subscriptions = HashSet::new();
+    let mut searches = SearchWorkers::new(session.search_registry().clone());
+    let mut os_index_searches = SearchWorkers::new(session.os_index_registry().clone());
     loop {
         let frame = match read_frame(&mut reader, DEFAULT_MAX_FRAME_BYTES) {
             Ok(Some(frame)) => frame,
@@ -91,6 +107,37 @@ fn run_stdio(mut session: AgentSession) -> io::Result<()> {
             }
             Some(bigbud_protocol::v1::frame::Payload::ProcessRequest(request)) => {
                 session.handle_process_request(request)
+            }
+            Some(bigbud_protocol::v1::frame::Payload::WorkspaceSearchRequest(request)) => {
+                match session.prepare_workspace_search(request) {
+                    Ok(prepared) => {
+                        let search_writer = Arc::clone(&writer);
+                        let operation_id = prepared.operation_id().to_owned();
+                        searches.spawn(operation_id, move || {
+                            prepared.execute(&mut |frame| {
+                                write_stdio_responses(&search_writer, vec![frame]).is_ok()
+                            });
+                        })?;
+                        Ok(Vec::new())
+                    }
+                    Err(refusal) => Ok(vec![*refusal]),
+                }
+            }
+            Some(bigbud_protocol::v1::frame::Payload::OsIndexSearchRequest(request)) => {
+                // Refused unless this session was started with `--ephemeral --os-index`.
+                match session.prepare_os_index_search(request) {
+                    Ok(prepared) => {
+                        let search_writer = Arc::clone(&writer);
+                        let operation_id = prepared.operation_id().to_owned();
+                        os_index_searches.spawn(operation_id, move || {
+                            prepared.execute(&mut |frame| {
+                                write_stdio_responses(&search_writer, vec![frame]).is_ok()
+                            });
+                        })?;
+                        Ok(Vec::new())
+                    }
+                    Err(refusal) => Ok(vec![*refusal]),
+                }
             }
             Some(bigbud_protocol::v1::frame::Payload::ProcessAttachRequest(request)) => {
                 session.handle_process_attach(request)
@@ -161,6 +208,7 @@ fn run_supervisor_mode(
             state.operation_journal_path(),
         )
         .context("failed to restore the supervisor session journal")?;
+        enable_paste_staging(&mut session, &root);
         if let Some(context) = managed {
             session
                 .set_managed_service_account(context)
@@ -257,8 +305,13 @@ fn main() -> Result<()> {
                 .context("remote agent proxy failed")
         }
         Some("--ephemeral") => {
-            run_stdio(AgentSession::new().context("failed to create the ephemeral agent session")?)
-                .context("remote agent stdio mode failed")
+            let mut session =
+                AgentSession::new().context("failed to create the ephemeral agent session")?;
+            // Only the desktop-embedded local agent passes `--os-index` ("this computer" search).
+            if std::env::args().nth(2).as_deref() == Some("--os-index") {
+                session.enable_os_index();
+            }
+            run_stdio(session).context("remote agent stdio mode failed")
         }
         Some("--resource-cleanup") => bigbud_remote_agent::resource_cleanup::run_stdio()
             .context("resource cleanup stdio mode failed"),

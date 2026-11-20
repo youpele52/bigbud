@@ -10,14 +10,8 @@ import type {
   ProjectSearchFileContentsInput,
   ProjectSearchFileContentsResult,
 } from "@bigbud/contracts/workspace/project.ts";
-import type {
-  WorkspaceEntriesError,
-  WorkspaceEntriesShape,
-} from "../../workspace/Services/WorkspaceEntries.ts";
-import type {
-  WorkspaceFileSystemError,
-  WorkspaceFileSystemShape,
-} from "../../workspace/Services/WorkspaceFileSystem.ts";
+import type { WorkspaceEntriesError } from "../../workspace/Services/WorkspaceEntries.ts";
+import type { WorkspaceFileSystemError } from "../../workspace/Services/WorkspaceFileSystem.ts";
 import type { WorkspacePathOutsideRootError } from "../../workspace/Services/WorkspacePaths.ts";
 
 export interface WorkspaceSearchShape {
@@ -31,14 +25,6 @@ export interface WorkspaceSearchShape {
     WorkspaceFileSystemError | WorkspacePathOutsideRootError
   >;
 }
-
-export const workspaceSearchFromExistingServices = (input: {
-  readonly fileSystem: WorkspaceFileSystemShape;
-  readonly entries: WorkspaceEntriesShape;
-}): WorkspaceSearchShape => ({
-  searchEntries: input.entries.search,
-  searchFileContents: input.fileSystem.searchFileContents,
-});
 
 export class WorkspaceSearch extends ServiceMap.Service<WorkspaceSearch, WorkspaceSearchShape>()(
   "bigbud/workspace-runtime/Services/WorkspaceSearch",

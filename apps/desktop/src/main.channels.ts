@@ -20,6 +20,8 @@ export const desktopIpcChannels = {
   windowMaterialState: "desktop:window-material-state",
   contextMenu: "desktop:context-menu",
   openExternal: "desktop:open-external",
+  openPath: "desktop:open-path",
+  showItemInFolder: "desktop:show-item-in-folder",
   menuAction: "desktop:menu-action",
   updateState: "desktop:update-state",
   updateGetState: "desktop:update-get-state",

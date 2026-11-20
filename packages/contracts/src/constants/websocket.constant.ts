@@ -24,6 +24,7 @@ export const WS_METHODS = {
   projectsRemove: "projects.remove",
   projectsSearchEntries: "projects.searchEntries",
   projectsSearchFileContents: "projects.searchFileContents",
+  searchQuery: "search.query",
   projectsListDirectory: "projects.listDirectory",
   subscribeProjectDirectoryChanges: "subscribeProjectDirectoryChanges",
   projectsReadFilePreview: "projects.readFilePreview",
@@ -90,6 +91,8 @@ export const WS_METHODS = {
   terminalClose: "terminal.close",
   terminalOutputAck: "terminal.outputAck",
   terminalSearch: "terminal.search",
+  terminalView: "terminal.view",
+  terminalStagePasteFile: "terminal.stagePasteFile",
 
   // Server meta
   serverPing: "server.ping",

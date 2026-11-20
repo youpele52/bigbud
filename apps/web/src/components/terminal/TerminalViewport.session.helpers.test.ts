@@ -1,11 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import {
-  acceptsTerminalDrop,
-  formatDroppedTerminalPath,
-  pasteDroppedTerminalPaths,
-  readDroppedTerminalPaths,
-} from "./TerminalViewport.drop";
+import { acceptsTerminalDrop, readDroppedTerminalPaths } from "./TerminalViewport.drop";
+import { formatTerminalPath, formatTerminalPathPastes } from "./TerminalViewport.paths";
 
 describe("terminal drop helpers", () => {
   it("accepts internal file-panel drags and native file drags", () => {
@@ -45,54 +41,54 @@ describe("terminal drop helpers", () => {
         readNativeFilePath: (file) => `/tmp/${file.name}`,
       }),
     ).toEqual([
-      { path: "/tmp/a.ts", origin: "native" },
-      { path: "/tmp/b.ts", origin: "native" },
+      { path: "/tmp/a.ts", origin: "native", file: files[0] },
+      { path: "/tmp/b.ts", origin: "native", file: files[1] },
     ]);
   });
 
-  it("focuses and pastes the dropped paths into the terminal input path", () => {
-    const focus = vi.fn();
-    const paste = vi.fn();
-
-    expect(
-      pasteDroppedTerminalPaths({
-        terminal: { focus, paste },
-        paths: ["/tmp/a.ts", "/tmp/b.ts"],
-        dropPathMode: "posix",
-      }),
-    ).toBe(true);
-
-    expect(focus).toHaveBeenCalledTimes(1);
-    expect(paste).toHaveBeenCalledWith("'/tmp/a.ts' '/tmp/b.ts'");
+  it("pastes several paths as one bracketed paste each, separated by a space", () => {
+    expect(formatTerminalPathPastes(["/tmp/a.ts", "/tmp/b c.ts"], "posix", true)).toBe(
+      "\x1b[200~/tmp/a.ts\x1b[201~ \x1b[200~/tmp/b\\ c.ts\x1b[201~",
+    );
+    expect(formatTerminalPathPastes(["/tmp/a.ts", "/tmp/b.ts"], "posix", false)).toBe(
+      "/tmp/a.ts /tmp/b.ts",
+    );
   });
 
-  it("quotes dropped paths for POSIX shells when they contain spaces or apostrophes", () => {
-    expect(formatDroppedTerminalPath("/Users/youpele/Documents/Obsidian Vault", "posix")).toBe(
-      "'/Users/youpele/Documents/Obsidian Vault'",
+  it("escapes POSIX paths so every TUI and shell reads one absolute path", () => {
+    expect(formatTerminalPath("/Users/youpele/Documents/Obsidian Vault", "posix")).toBe(
+      "/Users/youpele/Documents/Obsidian\\ Vault",
     );
-    expect(formatDroppedTerminalPath("/tmp/it's here", "posix")).toBe("'/tmp/it'\\''s here'");
+    expect(formatTerminalPath("/tmp/it's here", "posix")).toBe("/tmp/it\\'s\\ here");
+    expect(formatTerminalPath('/tmp/a$b`c"d!(e)~&;|*?#<>[]{}^', "posix")).toBe(
+      '/tmp/a\\$b\\`c\\"d\\!\\(e\\)\\~\\&\\;\\|\\*\\?\\#\\<\\>\\[\\]\\{\\}\\^',
+    );
+    expect(formatTerminalPath("/tmp/café_1.0-x+y@z:%=,.png", "posix")).toBe(
+      "/tmp/café_1.0-x+y@z:%=,.png",
+    );
+    expect(formatTerminalPath("/tmp/line\nbreak", "posix")).toBe("'/tmp/line\nbreak'");
   });
 
   it("quotes dropped paths for Windows cmd shells", () => {
-    expect(formatDroppedTerminalPath("C:\\Users\\youpele\\Obsidian Vault", "cmd")).toBe(
+    expect(formatTerminalPath("C:\\Users\\youpele\\Obsidian Vault", "cmd")).toBe(
       '"C:\\Users\\youpele\\Obsidian Vault"',
     );
   });
 
   it("quotes dropped paths for PowerShell shells", () => {
-    expect(formatDroppedTerminalPath("C:\\Users\\youpele\\it's here", "powershell")).toBe(
+    expect(formatTerminalPath("C:\\Users\\youpele\\it's here", "powershell")).toBe(
       "'C:\\Users\\youpele\\it''s here'",
     );
   });
 
   it("converts Windows paths for MSYS-compatible shells", () => {
-    expect(formatDroppedTerminalPath("C:\\Users\\youpele\\Obsidian Vault", "msys")).toBe(
+    expect(formatTerminalPath("C:\\Users\\youpele\\Obsidian Vault", "msys")).toBe(
       "'/c/Users/youpele/Obsidian Vault'",
     );
   });
 
   it("converts Windows paths for WSL shells", () => {
-    expect(formatDroppedTerminalPath("C:\\Users\\youpele\\Obsidian Vault", "wsl")).toBe(
+    expect(formatTerminalPath("C:\\Users\\youpele\\Obsidian Vault", "wsl")).toBe(
       "'/mnt/c/Users/youpele/Obsidian Vault'",
     );
   });

@@ -1,5 +1,6 @@
 import { forgetOrganizationEngagementCaller } from "../thread-organization/organizationEngagement.ts";
 import { Effect, Queue } from "effect";
+import { terminalViews } from "../terminal/activity/terminalViewRegistry.ts";
 import { WsRpcGroup } from "@bigbud/contracts";
 import { RpcServer } from "effect/unstable/rpc";
 import { forgetSshMonitorCaller, sshMonitorCallerId } from "../ssh/sshMonitor.connections.ts";
@@ -26,6 +27,7 @@ export const bridgeSshMonitorDisconnects = Effect.fn("bridgeSshMonitorDisconnect
             const caller = sshMonitorCallerId(instanceId, clientId);
             forgetSshMonitorCaller(caller);
             if (caller) forgetOrganizationEngagementCaller(caller);
+            if (caller) terminalViews.forget(caller);
           }),
         ),
       ),

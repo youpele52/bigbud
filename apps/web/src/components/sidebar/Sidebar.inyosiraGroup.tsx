@@ -145,6 +145,7 @@ function InyosiraThreadRow(props: {
   const location = summary
     ? resolveInyosiraLocation(summary, props.projectById.get(summary.projectId))
     : null;
+  const secondaryLine = location ? <SidebarInyosiraLocationLine location={location} /> : null;
   return (
     <SidebarThreadRow
       threadId={threadId}
@@ -173,7 +174,7 @@ function InyosiraThreadRow(props: {
       favoriteThreadIds={shared.favoriteThreadIds}
       automationThreadIds={shared.automationThreadIds}
       toggleFavoriteThread={shared.toggleFavoriteThread}
-      {...(location ? { secondaryLine: <SidebarInyosiraLocationLine location={location} /> } : {})}
+      {...(secondaryLine ? { secondaryLine } : {})}
       addDragData={addInyosiraDragData(threadId)}
     />
   );

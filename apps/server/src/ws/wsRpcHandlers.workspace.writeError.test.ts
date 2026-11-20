@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { WorkspaceFileSystemError } from "../workspace/Services/WorkspaceFileSystem.ts";
+import {
+  WORKSPACE_FILE_ALREADY_EXISTS,
+  WORKSPACE_WRITE_CREATE_ONLY_OPERATION,
+  WorkspaceFileSystemError,
+} from "../workspace/Services/WorkspaceFileSystem.ts";
 import { WorkspacePathOutsideRootError } from "../workspace/Services/WorkspacePaths.ts";
 import { projectWriteFileError } from "./wsRpcHandlers.workspace.ts";
 
@@ -22,6 +26,32 @@ describe("project write errors", () => {
       conflict: true,
       message: "Workspace file changed since it was read.",
     });
+  });
+
+  it("reports a create-only write over an existing file as alreadyExists, not a conflict", () => {
+    const result = projectWriteFileError(
+      new WorkspaceFileSystemError({
+        ...input,
+        operation: WORKSPACE_WRITE_CREATE_ONLY_OPERATION,
+        detail: WORKSPACE_FILE_ALREADY_EXISTS,
+        writeDisposition: "terminal",
+      }),
+    );
+    expect(result).toMatchObject({
+      alreadyExists: true,
+      message: "Workspace file already exists.",
+      writeDisposition: "terminal",
+    });
+    expect(result.conflict).toBeUndefined();
+    expect(
+      projectWriteFileError(
+        new WorkspaceFileSystemError({
+          ...input,
+          operation: "workspaceFileSystem.writeFile",
+          detail: "write failed",
+        }),
+      ).alreadyExists,
+    ).toBeUndefined();
   });
 
   it("does not confuse a transport failure or path error with a conflict", () => {

@@ -52,6 +52,10 @@ function fixture(acceptsInput = () => true, failWheel = false) {
     modes: { mouseTrackingMode: "none" },
     rows: 24,
     element: undefined,
+    parser: {
+      registerOscHandler: () => ({ dispose: vi.fn() }),
+      registerCsiHandler: () => ({ dispose: vi.fn() }),
+    },
   };
   const pending: Array<() => void> = [];
   const write = vi.fn(
@@ -74,6 +78,7 @@ function fixture(acceptsInput = () => true, failWheel = false) {
     writeNotice: vi.fn(),
     tuiWheelMultiplier: () => 1,
     onFind,
+    dropPathModeRef: { current: "posix" },
   });
   const settle = async () => {
     pending.shift()?.();

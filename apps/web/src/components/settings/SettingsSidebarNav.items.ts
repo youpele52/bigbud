@@ -7,6 +7,7 @@ import {
   KeyboardIcon,
   Settings2Icon,
   SmartphoneIcon,
+  TerminalIcon,
 } from "lucide-react";
 import { SettingsAiIcon } from "./SettingsAiIcon";
 
@@ -15,6 +16,7 @@ export type SettingsSectionPath =
   | "/settings/notifications"
   | "/settings/providers"
   | "/settings/ai"
+  | "/settings/terminal"
   | "/settings/keybindings"
   | "/settings/remote"
   | "/settings/archived"
@@ -26,11 +28,12 @@ export const SETTINGS_NAV_ITEMS: ReadonlyArray<{
   icon: ComponentType<{ className?: string }>;
 }> = [
   { label: "General", to: "/settings/general", icon: Settings2Icon },
-  { label: "Notifications", to: "/settings/notifications", icon: BellIcon },
   { label: "Providers", to: "/settings/providers", icon: CpuIcon },
   { label: "AI", to: "/settings/ai", icon: SettingsAiIcon },
-  { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
+  { label: "Terminal", to: "/settings/terminal", icon: TerminalIcon },
   { label: "Remote", to: "/settings/remote", icon: SmartphoneIcon },
+  { label: "Notifications", to: "/settings/notifications", icon: BellIcon },
+  { label: "Keybindings", to: "/settings/keybindings", icon: KeyboardIcon },
   { label: "Archive", to: "/settings/archived", icon: ArchiveIcon },
   { label: "About", to: "/settings/about", icon: InfoIcon },
 ];
@@ -54,9 +57,26 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Automatically delete old threads", section: "Threads", to: "/settings/general" },
   { label: "Delete eligible threads now", section: "Threads", to: "/settings/general" },
   { label: "Default search engine", section: "Browser", to: "/settings/general" },
-  { label: "Terminal font", section: "Terminal", to: "/settings/general" },
-  { label: "Terminal font size", section: "Terminal", to: "/settings/general" },
-  { label: "Terminal GPU rendering", section: "Terminal", to: "/settings/general" },
+  { label: "Terminal", section: "Terminal", to: "/settings/terminal" },
+  { label: "Terminal font", section: "Terminal", to: "/settings/terminal" },
+  { label: "Terminal font size", section: "Terminal", to: "/settings/terminal" },
+  { label: "Default shell profile", section: "Terminal", to: "/settings/terminal" },
+  { label: "Terminal history suggestions", section: "Terminal", to: "/settings/terminal" },
+  { label: "Terminal theme", section: "Terminal", to: "/settings/terminal" },
+  { label: "Terminal scroll speed", section: "Terminal", to: "/settings/terminal" },
+  { label: "Terminal fast scroll speed", section: "Terminal", to: "/settings/terminal" },
+  { label: "Full-screen app scroll speed", section: "Terminal", to: "/settings/terminal" },
+  { label: "Largest pasted file", section: "Terminal", to: "/settings/terminal" },
+  {
+    label: "Clipboard requests from terminal programs",
+    section: "Terminal",
+    to: "/settings/terminal",
+  },
+  { label: "Terminal ligatures", section: "Terminal", to: "/settings/terminal" },
+  { label: "Terminal inline images", section: "Terminal", to: "/settings/terminal" },
+  { label: "Terminal GPU rendering", section: "Terminal", to: "/settings/terminal" },
+  { label: "Detect when terminal agents finish", section: "Terminal", to: "/settings/terminal" },
+  { label: "Terminal agent hooks", section: "Terminal", to: "/settings/terminal" },
   { label: "Learning projects", section: "General", to: "/settings/general" },
   { label: "Learning folder", section: "General", to: "/settings/general" },
   { label: "Saved projects", section: "General", to: "/settings/general" },
@@ -85,6 +105,9 @@ export const SETTINGS_SEARCH_ITEMS: ReadonlyArray<{
   { label: "Default chat folder", section: "AI", to: "/settings/ai" },
   { label: "Permission level", section: "AI", to: "/settings/ai" },
   { label: "Reset permissions", section: "AI", to: "/settings/ai" },
+  { label: "Search", section: "AI", to: "/settings/ai" },
+  { label: "Search this computer", section: "AI", to: "/settings/ai" },
+  { label: "Search connected remote backends", section: "AI", to: "/settings/ai" },
   { label: "Speech to text", section: "AI", to: "/settings/ai" },
   { label: "OpenAI API key", section: "AI", to: "/settings/ai" },
   { label: "Transcription model", section: "AI", to: "/settings/ai" },

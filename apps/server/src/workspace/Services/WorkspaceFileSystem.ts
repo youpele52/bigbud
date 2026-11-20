@@ -35,6 +35,10 @@ export class WorkspaceFileSystemError extends Schema.TaggedErrorClass<WorkspaceF
   },
 ) {}
 
+/** Operation and detail of a create-only write that found the file already present. */
+export const WORKSPACE_WRITE_CREATE_ONLY_OPERATION = "workspaceFileSystem.writeFileCreateOnly";
+export const WORKSPACE_FILE_ALREADY_EXISTS = "Workspace file already exists.";
+
 export interface WorkspaceFileRangeInput {
   readonly executionTargetId?: string | undefined;
   readonly cwd: string;
@@ -88,7 +92,7 @@ export interface WorkspaceFileSystemShape {
    * Write a file relative to the workspace root.
    *
    * Creates parent directories as needed and rejects paths that escape the
-   * workspace root.
+   * workspace root. `createOnly` creates exclusively and never overwrites.
    */
   readonly writeFile: (
     input: ProjectWriteFileInput,

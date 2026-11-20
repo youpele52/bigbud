@@ -56,6 +56,7 @@ export function readOrganizationRawFacts(
         SELECT 'approval:' || a.request_id AS identity FROM projection_pending_approvals a WHERE a.thread_id = t.thread_id AND a.status = 'pending'
         UNION ALL SELECT 'input:' || u.request_id FROM projection_pending_user_inputs u WHERE u.thread_id = t.thread_id AND u.status = 'pending'
         UNION ALL SELECT 'choice:' || m.activity_id FROM model_choice_unresolved m WHERE m.thread_id = t.thread_id
+        UNION ALL SELECT 'terminal-finished:' || f.terminal_id || ':' || f.finished_at FROM terminal_finished_attention f WHERE f.thread_id = t.thread_id
         ORDER BY identity)) AS "attentionIdsJson",
       t.organization_snooze_id AS "snoozeIdentity", t.organization_snooze_until AS "snoozeUntil",
       runtime.fact_version AS "factVersion", runtime.semantic_digest AS "semanticDigest",

@@ -6,8 +6,6 @@
  *
  * @module Open
  */
-import { spawn } from "node:child_process";
-
 import {
   EDITORS,
   OpenError,
@@ -25,6 +23,8 @@ import {
 } from "./open.installation";
 import { hasTargetPosition, resolveEditorArgs } from "./open.editor";
 import { resolveCommandPath, type CommandAvailabilityOptions } from "./commandPath";
+import { launchDetached, type EditorLaunch } from "./open.launch";
+import { openSystemPath } from "./open.systemPath";
 
 // ==============================
 // Definitions
@@ -40,11 +40,6 @@ export interface OpenInEditorInput {
 export interface OpenInTerminalInput {
   readonly cwd: string;
   readonly terminal: TerminalApplicationId;
-}
-
-interface EditorLaunch {
-  readonly command: string;
-  readonly args: ReadonlyArray<string>;
 }
 
 function resolveAvailableCommand(
@@ -138,7 +133,8 @@ export interface OpenShape {
   /**
    * Open a workspace path in a selected editor integration.
    *
-   * Launches the editor as a detached process so server startup is not blocked.
+   * Launches the editor as a detached process so server startup is not blocked. The
+   * `file-manager` editor goes through the same validation as {@link OpenShape.openPath}.
    */
   readonly openInEditor: (input: OpenInEditorInput) => Effect.Effect<void, OpenError>;
 
@@ -150,6 +146,10 @@ export interface OpenShape {
    *
    * Uses the platform's file manager command (`open` on macOS, `xdg-open` on Linux,
    * `explorer` on Windows) so the OS resolves the default app for the given path.
+   *
+   * Validates with `@bigbud/shared/systemOpenPath` (absolute, existing, regular file or folder)
+   * and fails with an `OpenError` otherwise. Launchable paths (executables, scripts, installers,
+   * app bundles) are revealed in the file manager, never opened. See `open.systemPath.ts`.
    */
   readonly openPath: (input: OpenPathInput) => Effect.Effect<void, OpenError>;
 }
@@ -229,43 +229,6 @@ export const resolveTerminalLaunch = Effect.fn("resolveTerminalLaunch")(function
   return { command, args: terminal.cwdArgs(input.cwd) };
 });
 
-export const launchDetached = (launch: EditorLaunch) =>
-  Effect.gen(function* () {
-    if (!isCommandAvailable(launch.command)) {
-      return yield* new OpenError({ message: `Editor command not found: ${launch.command}` });
-    }
-
-    yield* Effect.callback<void, OpenError>((resume) => {
-      let child;
-      try {
-        const isWin32 = process.platform === "win32";
-        child = spawn(
-          launch.command,
-          isWin32 ? launch.args.map((a) => `"${a}"`) : [...launch.args],
-          {
-            detached: true,
-            stdio: "ignore",
-            shell: isWin32,
-          },
-        );
-      } catch (error) {
-        return resume(
-          Effect.fail(new OpenError({ message: "failed to spawn detached process", cause: error })),
-        );
-      }
-
-      const handleSpawn = () => {
-        child.unref();
-        resume(Effect.void);
-      };
-
-      child.once("spawn", handleSpawn);
-      child.once("error", (cause) =>
-        resume(Effect.fail(new OpenError({ message: "failed to spawn detached process", cause }))),
-      );
-    });
-  });
-
 const make = Effect.gen(function* () {
   const open = yield* Effect.tryPromise({
     try: () => import("open"),
@@ -278,13 +241,13 @@ const make = Effect.gen(function* () {
         try: () => open.default(target),
         catch: (cause) => new OpenError({ message: "Browser auto-open failed", cause }),
       }),
-    openInEditor: (input) => Effect.flatMap(resolveEditorLaunch(input), launchDetached),
-    openInTerminal: (input) => Effect.flatMap(resolveTerminalLaunch(input), launchDetached),
-    openPath: (input) =>
-      launchDetached({
-        command: fileManagerCommandForPlatform(process.platform),
-        args: [input.path],
-      }),
+    openInEditor: (input) =>
+      input.editor === "file-manager"
+        ? openSystemPath(input.cwd)
+        : Effect.flatMap(resolveEditorLaunch(input), (launch) => launchDetached(launch)),
+    openInTerminal: (input) =>
+      Effect.flatMap(resolveTerminalLaunch(input), (launch) => launchDetached(launch)),
+    openPath: (input) => openSystemPath(input.path),
   } satisfies OpenShape;
 });
 

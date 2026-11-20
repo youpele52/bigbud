@@ -1,4 +1,5 @@
 import type { MonitorNetworkInterface } from "@bigbud/contracts/system-monitor/types";
+import { formatBytes } from "@bigbud/shared/bytes";
 import type { ReactNode } from "react";
 import type { HistoryPoint } from "~/stores/resource-monitor/resourceMonitor.store";
 import { readyTransferValue } from "~/stores/resource-monitor/resourceMonitor.history";
@@ -9,7 +10,7 @@ import { ResourceTransferRates } from "./ResourceTransferRates";
 import { ResourceMetricHistory } from "./ResourceMetricHistory";
 import { ResourceNetworkInterfaceDetails } from "./ResourceNetworkInterfaceDetails";
 import { interfaceLinkText, interfaceMetricText } from "./ResourceNetworkInterface.logic";
-import { formatBytes, formatRate } from "./resourceMonitor.format";
+import { formatRate } from "./resourceMonitor.format";
 
 /** A stable inset interface card mirrors the main Network design without activity-based grouping. */
 export function ResourceNetworkInterfaceContent({

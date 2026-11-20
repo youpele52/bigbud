@@ -25,6 +25,7 @@ function fixture() {
     writeNotice: vi.fn(),
     tuiWheelMultiplier: () => 1,
     onFind: vi.fn(),
+    dropPathModeRef: { current: "posix" },
   });
   const textarea = container.querySelector<HTMLTextAreaElement>("textarea")!;
   return {

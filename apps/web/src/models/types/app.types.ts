@@ -1,3 +1,4 @@
+import type { TerminalFinishedItem } from "@bigbud/contracts/workspace/terminal.activity.ts";
 import type { TerminalSplitLayout } from "../../lib/terminalSplitLayout";
 import type {
   ExecutionTargetId,
@@ -284,6 +285,10 @@ export interface SidebarThreadSummary {
   branch: string | null;
   worktreePath: string | null;
   latestUserMessageAt: string | null;
+  /** Last Enter or finished command in the thread's terminals; joins the recency sort key. */
+  latestTerminalActivityAt?: string | null | undefined;
+  /** Finished terminal work that needs the user (Needs you), one item per pane. */
+  terminalFinished?: ReadonlyArray<TerminalFinishedItem> | undefined;
   hasPendingApprovals: boolean;
   hasPendingUserInput: boolean;
   hasActionableProposedPlan: boolean;
