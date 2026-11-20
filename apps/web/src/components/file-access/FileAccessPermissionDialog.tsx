@@ -12,6 +12,7 @@ import {
 import { Button } from "../ui/button";
 import { updateServerSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { fileAccessServerPatch } from "../../hooks/useSettings.fileAccessMirror";
+import { probeFileAccessLevel } from "../../hooks/useSettings.fileAccessProbe";
 
 interface FileAccessPermissionDialogProps {
   open: boolean;
@@ -36,6 +37,8 @@ export function FileAccessPermissionDialog({
       hasSeenFileAccessPrompt: true,
     });
     updateServerSettings(fileAccessServerPatch(selectedLevel));
+    // The one moment macOS asks: every folder the AI and search may read is opened now.
+    await probeFileAccessLevel(selectedLevel);
 
     setIsRequesting(false);
     onOpenChange(false);
@@ -63,7 +66,7 @@ export function FileAccessPermissionDialog({
           </DialogTitle>
           <DialogDescription>
             bigbud needs access to your folders to help you work with projects, documents, and
-            files.
+            files. The same choice sets what "Search this computer" can find.
           </DialogDescription>
         </DialogHeader>
 
@@ -94,8 +97,8 @@ export function FileAccessPermissionDialog({
                 </span>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                bigbud can access any file on your system for the best experience and full
-                functionality.
+                bigbud can access any file on your system, and search covers your home and cloud
+                folders.
               </p>
             </div>
           </button>
@@ -129,8 +132,8 @@ export function FileAccessPermissionDialog({
           <div className="flex items-start gap-2 px-7 py-1 mt-8">
             <FolderOpenIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
             <p className="text-[11px] text-muted-foreground">
-              You can change this anytime in Settings → AI → File Access. macOS will ask you to
-              confirm access for each folder.
+              You can change this anytime in Settings → AI → File Access. macOS asks you to confirm
+              each protected folder now, so search never asks later.
             </p>
           </div>
         </DialogPanel>

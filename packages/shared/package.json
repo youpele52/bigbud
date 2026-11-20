@@ -223,6 +223,10 @@
       "types": "./src/search/osIndexExclusions.ts",
       "import": "./src/search/osIndexExclusions.ts"
     },
+    "./search/osIndexScopeFolders": {
+      "types": "./src/search/osIndexScopeFolders.ts",
+      "import": "./src/search/osIndexScopeFolders.ts"
+    },
     "./systemOpenPath": {
       "types": "./src/systemOpenPath.ts",
       "import": "./src/systemOpenPath.ts"

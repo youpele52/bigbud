@@ -3,7 +3,6 @@ import { BrowserWindow, clipboard, dialog, nativeTheme, shell } from "electron";
 import { authorizedHandle, authorizedOn, BROAD_RENDERER_ROLES } from "./ipcAuthorization";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import * as path from "node:path";
 import type {
   DesktopTailscaleRemoteAccessStatus,
   DesktopTheme,
@@ -27,6 +26,7 @@ import { getSafeWindowMaterial, isWindowMaterialRequestId } from "./windowMateri
 import { desktopIpcChannels } from "../main.channels";
 import { registerCertificateChallengeHandlers } from "./ipcHandlers.certificateChallenge";
 import { registerContextMenuIpcHandler } from "./ipcHandlers.contextMenu";
+import { probeFileAccess } from "./ipcHandlers.fileAccess";
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -315,37 +315,11 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     },
   );
 
-  authorizedHandle(
-    REQUEST_FILE_ACCESS_CHANNEL,
-    BROAD_RENDERER_ROLES,
-    async (_event, level: unknown) => {
-      const home = os.homedir();
-      const folders =
-        level === "unrestricted"
-          ? ["/", "/Users", home]
-          : level === "common-folders"
-            ? ["Desktop", "Documents", "Downloads", "Music", "Pictures"].map((f) =>
-                path.join(home, f),
-              )
-            : [];
-
-      const granted: string[] = [];
-      const denied: string[] = [];
-
-      for (const folder of folders) {
-        try {
-          fs.accessSync(folder, fs.constants.R_OK);
-          granted.push(folder);
-        } catch {
-          denied.push(folder);
-        }
-      }
-
-      return {
-        success: granted.length > 0,
-        granted,
-        denied,
-      };
-    },
+  authorizedHandle(REQUEST_FILE_ACCESS_CHANNEL, BROAD_RENDERER_ROLES, (_event, level: unknown) =>
+    probeFileAccess(level, {
+      home: os.homedir(),
+      platform: process.platform,
+      readFolder: (folder) => fs.promises.readdir(folder, { withFileTypes: true }),
+    }),
   );
 }

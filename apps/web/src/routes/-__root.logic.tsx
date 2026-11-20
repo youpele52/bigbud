@@ -36,6 +36,7 @@ import { useUiStateStore } from "../stores/ui";
 import { useTerminalStateStore } from "../stores/terminal";
 import { migrateLocalSettingsToServer, persistServerSettings } from "../hooks/useSettings";
 import { mirrorFileAccessLevelToServer } from "../hooks/useSettings.fileAccessMirror";
+import { probeFileAccessOnStartup } from "../hooks/useSettings.fileAccessProbe";
 import { migrateHiddenComposerProvidersToServer } from "../hooks/useSettings.storage";
 import { resolveNewChatOptions } from "../hooks/useHandleNewThread";
 import { createEventRouterRecovery } from "./-__root.recovery";
@@ -104,6 +105,7 @@ export function EventRouter({ ownedThreadId }: { ownedThreadId?: ThreadId } = {}
         readPathname() === launchPathname;
       migrateLocalSettingsToServer();
       mirrorFileAccessLevelToServer();
+      probeFileAccessOnStartup();
       const api = readNativeApi();
       if (!api) {
         return;

@@ -8,8 +8,10 @@ import {
   ArrowUpRightIcon,
 } from "lucide-react";
 import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
+import { OS_INDEX_COMMON_FOLDERS } from "@bigbud/shared/search/osIndexScopeFolders";
 import { updateServerSettings, useSettings, useUpdateSettings } from "../../hooks/useSettings";
 import { fileAccessServerPatch } from "../../hooks/useSettings.fileAccessMirror";
+import { probeFileAccessLevel } from "../../hooks/useSettings.fileAccessProbe";
 import { Button } from "../ui/button";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { SETTINGS_ANCHORS, SettingsAnchorLink, useSettingsAnchorTarget } from "./settingsAnchor";
@@ -22,13 +24,8 @@ const PERMISSION_LEVEL_OPTIONS = [
   { value: "none" as const, label: "No access" },
 ] as const;
 
-const COMMON_FOLDERS = [
-  { key: "Desktop", label: "Desktop" },
-  { key: "Documents", label: "Documents" },
-  { key: "Downloads", label: "Downloads" },
-  { key: "Music", label: "Music" },
-  { key: "Pictures", label: "Pictures" },
-] as const;
+// The same folders "Search this computer" uses at the common-folders level.
+const COMMON_FOLDERS = OS_INDEX_COMMON_FOLDERS.map((name) => ({ key: name, label: name }));
 
 function getFolderAccessMap(
   permissionLevel: "none" | "common-folders" | "unrestricted",
@@ -116,10 +113,11 @@ export function FileAccessSettingsSection() {
         id={SETTINGS_ANCHORS.fileAccessPermissionLevel}
         forceVisible={targeted}
         title="Permission level"
-        description="Control which files and folders bigbud can access on your system."
+        description="Control which files and folders bigbud and its search can access on your system."
         status={
           <span>
-            This level also controls "Search this computer" (which folders it may search).{" "}
+            Also sets which folders "Search this computer" covers. macOS asks for access when you
+            choose a level, not while you search.{" "}
             <SettingsAnchorLink anchorId={SETTINGS_ANCHORS.searchThisComputer}>
               Go to Search this computer
             </SettingsAnchorLink>
@@ -133,6 +131,8 @@ export function FileAccessSettingsSection() {
                 updateSettings({ fileAccessPermissionLevel: value });
                 // The server enforces the "this computer" search scope from its mirror.
                 updateServerSettings(fileAccessServerPatch(value));
+                // macOS asks for every folder the AI and search may read now, not mid-search.
+                void probeFileAccessLevel(value);
               }
             }}
           >
@@ -161,7 +161,7 @@ export function FileAccessSettingsSection() {
       {settings.fileAccessPermissionLevel !== "none" && (
         <SettingsRow
           title="Folder access status"
-          description="Saved access scope for commonly used folders. macOS may still prompt when protected folders are first accessed."
+          description="Saved access scope for commonly used folders, for the AI and for search."
         >
           <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {COMMON_FOLDERS.map((folder) => {

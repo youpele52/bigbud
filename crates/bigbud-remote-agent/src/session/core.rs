@@ -165,6 +165,9 @@ pub struct AgentSession {
     /// Separate slots so "this computer" never waits behind project searches.
     os_index_registry: crate::search::SearchRegistry,
     os_index: bool,
+    /// "This computer" scopes resolved once per (level, home) for the session's lifetime.
+    os_index_scopes:
+        HashMap<(crate::os_index::OsIndexScopeLevel, std::path::PathBuf), Vec<std::path::PathBuf>>,
     #[cfg(unix)]
     managed_service_lease: Option<Arc<crate::service_lease::Bridge>>,
 }
@@ -248,6 +251,7 @@ impl AgentSession {
             search_registry: crate::search::SearchRegistry::default(),
             os_index_registry: crate::search::SearchRegistry::default(),
             os_index: false,
+            os_index_scopes: HashMap::new(),
             #[cfg(unix)]
             managed_service_lease: None,
         }

@@ -65,6 +65,10 @@ describe("inspectSystemOpenPath exclusions", () => {
       // A symlink with an innocent name cannot smuggle an excluded target out.
       fs.symlinkSync(path.join(home, ".env"), path.join(home, "harmless.txt"));
       expect(await inspect("harmless.txt")).toEqual({ ok: false, reason: "inaccessible" });
+      // Excluded requests are refused before any file-system call: a missing `.ssh` file is
+      // reported as inaccessible, never as not found.
+      expect(await inspect(".ssh/id_ed25519")).toEqual({ ok: false, reason: "inaccessible" });
+      expect(await inspect("missing.txt")).toEqual({ ok: false, reason: "not-found" });
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
     }
