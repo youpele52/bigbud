@@ -70,9 +70,9 @@ describe("local workspace content search through the real agent", () => {
       expect(exact.matches).toHaveLength(2);
       expect(exact.truncated).toBe(false);
 
-      // Smart case: an upper-case query is case-sensitive.
+      // Always case-insensitive (no smart case): an upper-case query finds the same matches.
       const cased = await Effect.runPromise(search({ cwd: root, query: "Needle", limit: 10 }));
-      expect(cased.matches).toEqual([]);
+      expect(cased.matches).toEqual(exact.matches);
     } finally {
       agent.close();
     }
