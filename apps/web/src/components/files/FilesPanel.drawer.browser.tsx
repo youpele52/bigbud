@@ -11,6 +11,7 @@ import {
   escape,
   filesHandle,
   hover,
+  keyboardOpen,
   previewRegion,
   treeRegion,
   treeScroll,
@@ -57,7 +58,7 @@ describe("FilesPanel tree drawer", () => {
     }
   });
 
-  it("opens after 250ms without reflowing, remounting, or scrolling preview; closes with grace and cancellation", async () => {
+  it("opens after 250ms beside the preview without remounting or scrolling it; closes with grace and cancellation", async () => {
     const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" />);
     try {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
@@ -71,8 +72,9 @@ describe("FilesPanel tree drawer", () => {
       await vi.waitFor(() => expect(treeRegion().getAttribute("aria-hidden")).toBe("false"), {
         interval: 0,
       });
-      expect(treeRegion().getBoundingClientRect().width).toBeCloseTo(300, 0);
-      expect(previewRegion().getBoundingClientRect().width).toBe(previewBounds.width);
+      expect(treeRegion().getBoundingClientRect().width).toBe(280);
+      expect(previewRegion().getBoundingClientRect().width).toBe(previewBounds.width - 280 - 3);
+      expect(filesHandle().getAttribute("aria-pressed")).toBe("false");
       expect(document.querySelector("[data-preview-content]")).toBe(content);
       expect(content.scrollTop).toBe(180);
 
@@ -99,7 +101,7 @@ describe("FilesPanel tree drawer", () => {
     }
   });
 
-  it("supports click and keyboard opening, browsing without dismissal, Escape focus return, and pinning", async () => {
+  it("supports keyboard peeking, browsing without dismissal, Escape focus return, and keeping open", async () => {
     const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" />);
     try {
       filesHandle().focus();
@@ -126,17 +128,18 @@ describe("FilesPanel tree drawer", () => {
       await vi.waitFor(() => expect(treeRegion().inert).toBe(false));
       const scroll = treeScroll();
       scroll.scrollTop = 170;
-      button("Keep tree beside file").click();
-      await vi.waitFor(() => expect(document.querySelector('[role="separator"]')).not.toBeNull());
+      expect(filesHandle().getAttribute("aria-pressed")).toBe("true");
+      expect(document.querySelector('[role="separator"]')).not.toBeNull();
       expect(previewRegion().getBoundingClientRect().width).toBeLessThan(900);
+      escape(treeScroll());
+      expect(treeRegion().inert).toBe(false); // Escape never closes a kept-open tree
       expect(treeScroll()).toBe(scroll);
       expect(scroll.scrollTop).toBe(170);
-      button("Unpin file tree").click();
-      await vi.waitFor(() => expect(document.querySelector('[role="separator"]')).toBeNull());
-      expect(previewRegion().getBoundingClientRect().width).toBe(900);
-      expect(treeRegion().getAttribute("aria-hidden")).toBe("false");
       filesHandle().click();
       await vi.waitFor(() => expect(treeRegion().inert).toBe(true));
+      expect(filesHandle().getAttribute("aria-pressed")).toBe("false");
+      expect(document.querySelector('[role="separator"]')).toBeNull();
+      expect(previewRegion().getBoundingClientRect().width).toBe(900);
     } finally {
       await mounted.unmount();
     }
@@ -163,9 +166,17 @@ describe("FilesPanel tree drawer", () => {
       expect(document.elementFromPoint(bounds.x + 10, bounds.y + 10)?.closest("button")).toBe(
         handle,
       );
+      expect(previewRegion().getBoundingClientRect().right).toBeLessThanOrEqual(
+        treeRegion().getBoundingClientRect().left,
+      ); // hover opens the tree beside the file
+      handle.click(); // keeps the hovered tree open
+      await advance(0);
+      expect(handle.getAttribute("aria-pressed")).toBe("true");
+      expect(treeRegion().inert).toBe(false);
       handle.click();
       await advance(0);
       expect(treeRegion().inert).toBe(true);
+      expect(handle.getAttribute("aria-pressed")).toBe("false");
       hover(handle, true);
       await advance(2000);
       expect(treeRegion().inert).toBe(true);
@@ -173,10 +184,12 @@ describe("FilesPanel tree drawer", () => {
       hover(handle, true);
       await advance(250);
       expect(treeRegion().inert).toBe(false);
-      handle.click();
+      previewRegion().focus(); // the focused icon's tooltip consumes Escape first
+      await advance(0);
+      escape(previewRegion());
       await advance(0);
       expect(treeRegion().inert).toBe(true);
-      handle.click(); // explicit click opens persistently, even while hover is suppressed
+      handle.click(); // keeping open works even while hover is suppressed
       await advance(0);
       previewRegion().focus();
       hover(handle, false);
@@ -184,7 +197,7 @@ describe("FilesPanel tree drawer", () => {
       expect(treeRegion().inert).toBe(false);
       escape(previewRegion());
       await advance(0);
-      expect(treeRegion().inert).toBe(true);
+      expect(treeRegion().inert).toBe(false);
     } finally {
       await mounted.unmount();
     }
@@ -227,10 +240,10 @@ describe("FilesPanel tree drawer", () => {
     localStorage.setItem(FILES_TREE_WIDTH_STORAGE_KEY, "320");
     const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" width={500} />);
     try {
-      filesHandle().click();
+      keyboardOpen();
       await vi.waitFor(() => expect(treeRegion().inert).toBe(false));
       expect(treeRegion().getBoundingClientRect().width).toBe(220);
-      button("Keep tree beside file").click();
+      filesHandle().click();
       await vi.waitFor(() => expect(document.querySelector('[role="separator"]')).not.toBeNull());
       const separator = document.querySelector<HTMLElement>('[role="separator"]')!;
       expect(treeRegion().getBoundingClientRect().width).toBeLessThanOrEqual(300);
@@ -241,10 +254,43 @@ describe("FilesPanel tree drawer", () => {
       await vi.waitFor(() =>
         expect(localStorage.getItem(FILES_TREE_WIDTH_STORAGE_KEY)).toBe("220"),
       );
-      button("Unpin file tree").click();
+      // Too narrow to share: the kept-open tree falls back to the overlay.
       await mounted.rerender(<DrawerHarness initialPreview="docs/readme.md" width={180} />);
       expect(treeRegion().getBoundingClientRect().width).toBe(180);
       expect(previewRegion().getBoundingClientRect().width).toBe(180);
+      expect(treeRegion().inert).toBe(false);
+    } finally {
+      await mounted.unmount();
+    }
+  });
+
+  it("docks a kept-open tree beside the preview without overlap and overlays only when too narrow", async () => {
+    const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" />);
+    try {
+      filesHandle().click();
+      await vi.waitFor(() => expect(treeRegion().inert).toBe(false));
+      const tree = treeRegion().getBoundingClientRect();
+      const preview = previewRegion().getBoundingClientRect();
+      expect(preview.right).toBeLessThanOrEqual(tree.left);
+      expect(["absolute", "fixed"]).not.toContain(getComputedStyle(treeRegion()).position);
+      expect(getComputedStyle(treeRegion()).boxShadow).toBe("none");
+      expect(
+        document
+          .elementFromPoint(preview.right - 2, preview.top + 100)
+          ?.closest("[data-files-preview]"),
+      ).toBe(previewRegion());
+
+      await mounted.rerender(<DrawerHarness initialPreview="docs/readme.md" width={463} />);
+      await vi.waitFor(() =>
+        expect(previewRegion().getBoundingClientRect().right).toBeLessThanOrEqual(
+          treeRegion().getBoundingClientRect().left,
+        ),
+      );
+      await mounted.rerender(<DrawerHarness initialPreview="docs/readme.md" width={462} />);
+      await vi.waitFor(() => expect(getComputedStyle(treeRegion()).position).toBe("absolute"));
+      expect(document.querySelector('[role="separator"]')).toBeNull();
+      expect(previewRegion().getBoundingClientRect().width).toBe(462);
+      expect(treeRegion().inert).toBe(false);
     } finally {
       await mounted.unmount();
     }

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { clampFilesTreeWidth, getFilesTreeWidthBounds } from "./FilesPanel.treeWidth.logic";
+import {
+  canDockFilesTree,
+  clampFilesTreeWidth,
+  getFilesTreeWidthBounds,
+} from "./FilesPanel.treeWidth.logic";
 
 describe("files split width bounds", () => {
   it.each([
@@ -20,5 +24,15 @@ describe("files split width bounds", () => {
     expect(rendered).toBe(445);
     expect(clampFilesTreeWidth(rendered - 20, 900)).toBe(425);
     expect(clampFilesTreeWidth(425 + 100, 900)).toBe(445);
+  });
+
+  it.each([
+    [900, true],
+    [463, true],
+    [462, false],
+    [180, false],
+    [0, false],
+  ])("docks the tree beside the preview at panel width %s: %s", (width, docked) => {
+    expect(canDockFilesTree(width)).toBe(docked);
   });
 });

@@ -122,16 +122,15 @@ export function useFilesTreeDrawer(input: {
       controller.open();
       focusOpenedTree();
     },
-    toggle: () => {
+    toggleKeepOpen: () => {
       if (!enabledRef.current) return;
-      if (controller.toggle()) focusOpenedTree();
+      if (controller.toggleKeepOpen()) focusOpenedTree();
       else {
         requestAnimationFrame(() => {
           if (enabledRef.current) handleRef.current?.focus({ preventScroll: true });
         });
       }
     },
-    togglePin: () => controller.togglePin(),
     enterHandle: () => controller.enterHandle(),
     leaveHandle: () => controller.setTrigger("header", false),
     enterDrawer: () => controller.setActivity("pointer", true),
