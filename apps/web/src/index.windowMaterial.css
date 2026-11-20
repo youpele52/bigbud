@@ -19,13 +19,15 @@
   --app-shell-side-panel-background: var(--card);
   /* Right panel tab strip. */
   --app-shell-panel-header-background: color-mix(in srgb, var(--card) 95%, transparent);
-  /* Full-size panes nested in an already painted surface, so its tone is applied once. */
+  /* Full-size panes repaint the tone of the surface they sit in (the main tone by default). It
+   * stays opaque while the material is solid: the terminal theme reads it as xterm's background. */
   --app-shell-pane-fill: var(--background);
+  --app-shell-side-panel-pane-fill: var(--app-shell-side-panel-background);
 }
 
-/* Panes in a side panel take the side tone instead of painting the main one. */
+/* Panes in a side panel take the side tone instead of the main one. */
 [data-app-shell-side-panel] {
-  --app-shell-pane-fill: transparent;
+  --app-shell-pane-fill: var(--app-shell-side-panel-pane-fill);
 }
 
 html[data-desktop-shell="macos"][data-window-material="translucent"] {
@@ -53,7 +55,9 @@ html[data-desktop-shell="macos"][data-window-material="translucent"] {
   /* Headers sit on a tinted page surface; a second tint would only darken them. */
   --app-shell-header-background: transparent;
   --app-shell-panel-header-background: transparent;
+  /* Translucent panes leave the tint to the surface they sit in, so it is applied once. */
   --app-shell-pane-fill: transparent;
+  --app-shell-side-panel-pane-fill: transparent;
 }
 
 html.dark[data-desktop-shell="macos"][data-window-material="translucent"] {
@@ -76,5 +80,6 @@ html[data-desktop-shell="macos"][data-window-material="translucent"] [data-slot=
     --app-shell-floating-tint: 100%;
     --app-shell-panel-header-background: color-mix(in srgb, var(--card) 95%, transparent);
     --app-shell-pane-fill: var(--background);
+    --app-shell-side-panel-pane-fill: var(--app-shell-side-panel-background);
   }
 }

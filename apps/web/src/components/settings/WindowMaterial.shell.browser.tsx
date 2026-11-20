@@ -40,6 +40,13 @@ function effectiveColor(
   return [red, green, blue];
 }
 
+function isOpaque(color: string): boolean {
+  const context = document.createElement("canvas").getContext("2d", { willReadFrequently: true })!;
+  context.fillStyle = color;
+  context.fillRect(0, 0, 1, 1);
+  return context.getImageData(0, 0, 1, 1).data[3] === 255;
+}
+
 const lightness = ([red, green, blue]: readonly [number, number, number]) =>
   (red + green + blue) / 3;
 
@@ -64,6 +71,13 @@ function Shell() {
           <span data-testid="panel-header">Tabs</span>
         </div>
         <div data-testid="panel-body" className="h-40 bg-[var(--app-shell-pane-fill)]" />
+        <div className="diff-panel-viewport h-20">
+          <p data-testid="diff-body">No net changes in this selection.</p>
+        </div>
+        <div
+          data-testid="panel-terminal-host"
+          className="thread-terminal-theme-host h-20 bg-[var(--app-shell-pane-fill)]"
+        />
       </RightPanelShell>
     </SidebarProvider>
   );
@@ -109,6 +123,12 @@ describe("window material shell tones", () => {
         expect(colorOf("chat-header")).toEqual(middle);
         expect(colorOf("panel-header")).toEqual(panel);
         expect(sidebar).toEqual(panel);
+        // Every right panel view, the Diff body included, shows the side tone.
+        expect(colorOf("diff-body")).toEqual(panel);
+        expect(colorOf("panel-terminal-host")).toEqual(panel);
+        // While solid, xterm takes its background from the terminal host, so it must be opaque.
+        const terminalHost = screen.getByTestId("panel-terminal-host").element();
+        expect(isOpaque(getComputedStyle(terminalHost).backgroundColor)).toBe(material === "solid");
         const step = lightness(panel) - lightness(middle);
         expect(step).toBeGreaterThanOrEqual(2);
         expect(step).toBeLessThanOrEqual(12);
