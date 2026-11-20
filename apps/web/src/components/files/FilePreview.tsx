@@ -272,7 +272,7 @@ export const FilePreview = memo(function FilePreview({
 
   return (
     <FilePreviewSearchFocus
-      className="flex h-full min-h-0 flex-col bg-background"
+      className="flex h-full min-h-0 flex-col bg-[var(--app-shell-pane-fill)]"
       contents={contents}
       enabled={ready && !editing}
       path={relativePath}

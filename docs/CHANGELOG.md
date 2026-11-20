@@ -75,6 +75,12 @@ New possibilities. Fewer rough edges. See what each bigbud release brings to you
 - **Be greeted by name:** Finishing the tour opens a new chat that welcomes you by name.
 - **Answer macOS once:** Your **File Access** choice also covers search, including iCloud Drive and other cloud folders. macOS asks for access when you choose, instead of in the middle of a search.
 
+### A Window That Feels All of a Piece
+
+- **See your desktop through the whole window:** When **Window Material** is translucent, the chat, headers, composer, terminal, right panel, and **Settings** all let your wallpaper show through, not just the sidebar. **Solid** keeps every surface opaque.
+- **Read the layout at a glance:** The sidebar and right panel share one tone, and the chat and terminal sit a shade deeper, in both translucent and solid modes.
+- **Resize with a quiet edge:** Both panel edges show the same thin line when you hover or drag them, and light mode no longer shows a dark line beside the sidebar.
+
 ### A Terminal That's Easier to Set Up and Arrange
 
 - **Find every terminal option on one page:** **Settings → Terminal** has its own page, grouped by task. Settings are ordered from setup to workspace tools, preferences, and data.
