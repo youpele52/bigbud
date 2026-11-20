@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "astro dev",
     "prebuild": "bun ../../scripts/fetch-download-stats.ts --write",
-    "build": "astro build",
+    "build": "astro build && bun build ./worker/index.ts --outfile=dist/_worker.js --target=browser --format=esm",
     "preview": "astro preview",
     "typecheck": "astro check",
     "test": "vitest run"

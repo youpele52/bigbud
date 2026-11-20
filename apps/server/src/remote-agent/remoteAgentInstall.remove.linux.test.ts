@@ -17,6 +17,9 @@ import {
 const HOME = "/tmp/remove-home";
 const ROOT = `${HOME}/.bigbud/agent`;
 const FENCE = "11111111-2222-4333-8444-555555555555";
+// CI runs this natively as an unprivileged user (passwordless sudo); Docker runs it as root.
+const privileged = (command: string) =>
+  `if [ "$(id -u)" = 0 ]; then ${command}; else sudo -n ${command}; fi`;
 const asHome = (command: string, path = "") =>
   `HOME=${HOME} ${path ? `PATH=${path}:$PATH ` : ""}sh -c '${command.replaceAll("'", "'\\''")}'`;
 
@@ -111,11 +114,11 @@ cat ${HOME}/.bigbud/backend-runtimes/r1/file; cat /tmp/outside/external-agent`),
 
   it("refuses foreign-owned entries and a symlinked root before deleting anything", async () => {
     await setup();
-    await fixture.run(`chown 1234 ${ROOT}/staging`);
+    await fixture.run(privileged(`chown 1234 ${ROOT}/staging`));
     expect(await remove()).toEqual({ kind: "refused", reason: "foreign-owner" });
     expect(await agentKept()).toBe(true);
     await fixture.run(
-      `chown 0 ${ROOT}/staging; mv ${ROOT} ${HOME}/.bigbud/real-agent; ln -s ${HOME}/.bigbud/real-agent ${ROOT}`,
+      `${privileged(`chown "$(id -u)" ${ROOT}/staging`)}; mv ${ROOT} ${HOME}/.bigbud/real-agent; ln -s ${HOME}/.bigbud/real-agent ${ROOT}`,
     );
     await expect(remove()).rejects.toThrow();
     expect(
