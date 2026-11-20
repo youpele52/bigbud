@@ -9,6 +9,11 @@ on:
       version:
         required: true
         type: string
+      retention_days:
+        description: "Artifact retention in days for the release payload (0 keeps the repository default; dry runs pass 3)"
+        required: false
+        type: number
+        default: 0
 
 permissions:
   contents: read
@@ -170,6 +175,7 @@ jobs:
           name: remote-check-${{ matrix.target }}
           path: release-checks/*
           if-no-files-found: error
+          retention-days: ${{ inputs.retention_days || 0 }}
 
       - name: Upload remote agent artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -177,3 +183,4 @@ jobs:
           name: remote-agent-${{ matrix.target }}
           path: release-publish/*
           if-no-files-found: error
+          retention-days: ${{ inputs.retention_days || 0 }}

@@ -151,8 +151,14 @@ describe("remote backend graph release workflow", () => {
     expect(Object.keys(graph.on.workflow_call.inputs).toSorted()).toEqual([
       "ref",
       "release_signing",
+      "retention_days",
       "version",
     ]);
+    // Dry-run releases pass 3; tag releases and PR/dispatch runs keep the repository default.
+    expect(graph.on.workflow_call.inputs.retention_days).toMatchObject({
+      type: "number",
+      default: 0,
+    });
     expect(graph.on.workflow_call.inputs.release_signing).toMatchObject({
       type: "boolean",
       default: false,

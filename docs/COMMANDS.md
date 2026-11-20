@@ -232,6 +232,7 @@ first. The closure is a superset of what Vite bundles. Outputs must not exist.
 | `bun run test:server`              | `just test-server`              |
 | `bun run test:desktop-smoke`       | `just test-desktop-smoke`       |
 | `bun run ci:verify-shard-coverage` | `just ci-verify-shard-coverage` |
+| `bun run ci:wait-for-verdict`      | `just ci-wait-for-verdict`      |
 | `bun run fmt`                      | `just fmt`                      |
 | `bun run fmt:check`                | `just fmt-check`                |
 | `bun run clean`                    | `just clean`                    |
@@ -247,6 +248,16 @@ checks that every server test file listed by `test:list-files` ran exactly once 
 report and the `integration-<i>.json` shard reports (Vitest JSON reporter output; the directory is
 read non-recursively). It prints per-report totals, writes them to `$GITHUB_STEP_SUMMARY` when set,
 and exits 1 on a missing, duplicated, unexpected or failing file, or a missing shard report.
+
+`bun run ci:wait-for-verdict --repo <owner/name> --sha <40-hex commit>` is the release gate. It
+waits until a `ci.yml` run for exactly that commit (`push` or `workflow_dispatch` from the same
+repository; `pull_request` and fork runs never count) has a successful `CI passed` job in its latest
+attempt. Defaults: `--workflow ci.yml --job "CI passed" --timeout-minutes 70
+--missing-grace-minutes 10 --poll-seconds 30`. It reads `GITHUB_TOKEN` (then `GH_TOKEN`) and exits
+1 on a failed verdict, on no run after the grace period, or at the deadline. API errors are retried
+and never count as a pass. The release `ci_gate` job runs the same file directly with
+`node scripts/wait-for-ci-verdict.ts …`, because that job installs no dependencies. To check a
+commit locally: `GH_TOKEN="$(gh auth token)" bun run ci:wait-for-verdict --repo youpele52/bigbud --sha "$(git rev-parse HEAD)"`.
 
 ## Root: packaging and release
 

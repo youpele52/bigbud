@@ -92,6 +92,9 @@ test-desktop-smoke *args:
 ci-verify-shard-coverage *args:
     bun run ci:verify-shard-coverage "$@"
 
+ci-wait-for-verdict *args:
+    bun run ci:wait-for-verdict "$@"
+
 fmt *args:
     bun run fmt "$@"
 

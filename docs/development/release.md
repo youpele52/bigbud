@@ -14,8 +14,11 @@ The shared [release-version parser](../../packages/shared/src/releaseChannel.ts)
 
 ## What the workflow does
 
-- Trigger: push tag matching `v*.*.*`, or manual dispatch with an explicit release version.
-- Runs quality gates first: formatting, lint, typecheck, tests, and locked Rust formatting/Clippy/tests.
+- Trigger: push tag matching `v*.*.*`, or manual dispatch with an explicit release version. A manual dispatch is a dry run unless it sets `publish: true` (see [Dry run](#dry-run-build-without-publishing)).
+- `preflight` only resolves and validates the release version (about 1–2 minutes). It does not re-run the test suite.
+- `ci_gate` ("CI passed for release commit") waits for the `CI passed` job of a `ci.yml` run on exactly the released commit. Only `push` and `workflow_dispatch` runs from this repository count; pull request and fork runs never do. It waits up to 70 minutes while CI is still running, waits up to 10 minutes for a CI run to appear, and fails otherwise. It has no secrets and only `actions: read` and `contents: read`.
+- Builds start right after `preflight`, in parallel with the gate and the native cleanup jobs. Only the publish job waits, for the gate, every build, and both native cleanup jobs.
+- Permissions are read-only by default; only the publish job has `contents: write`. Signing secrets reach only the desktop build, the remote backend graph build, and the publish job.
 - Builds five artifacts in parallel:
   - macOS `arm64` DMG
   - macOS `x64` DMG
@@ -28,6 +31,28 @@ The shared [release-version parser](../../packages/shared/src/releaseChannel.ts)
   - Only plain `X.Y.Z` releases are marked as the repository's latest release.
 - Includes only the active channel's Electron auto-update metadata and the corresponding `*.blockmap` assets.
 - Artifact names use `bigbud-${version}-${arch}.${ext}`. Stable artifacts are untagged; prerelease artifacts retain their version suffix.
+
+### Dry run (build without publishing)
+
+A manual dispatch builds, signs, notarizes, and verifies everything, then skips `Publish GitHub Release` unless `publish: true` is passed. Its build artifacts are kept for 3 days only, because they are signed but unpublished in a public repository.
+
+1. Make sure the release workflow on the ref you dispatch has the `publish` input. Without it, an older workflow publishes on every dispatch. Stop if this prints nothing:
+
+   ```sh
+   gh workflow view release.yml --repo youpele52/bigbud --ref <branch> --yaml | grep -n 'publish:'
+   ```
+
+2. Make sure `ci_gate` can pass: the ref's head commit needs a `push` or dispatch `ci.yml` run with a green `CI passed`. For a branch, run `gh workflow run ci.yml --repo youpele52/bigbud --ref <branch>` and wait for it.
+3. Use a version that cannot collide with a real release and that the release channel rules accept: `0.0.0-preview.dryrun.<n>`, for example `0.0.0-preview.dryrun.202611201530`. (`0.0.0-dryrun.<n>` is rejected because the channel must be `beta`, `preview`, or `nightly`.)
+4. Dispatch with the input passed explicitly:
+
+   ```sh
+   gh workflow run release.yml --repo youpele52/bigbud --ref <branch> \
+     -f version=0.0.0-preview.dryrun.<n> -f publish=false
+   ```
+
+5. Expect `Publish GitHub Release` to be skipped and no tag or release to exist (`gh release view v0.0.0-preview.dryrun.<n> --repo youpele52/bigbud` must fail). If anything suggests publish might run, cancel the run.
+
 - Every public macOS build is Developer ID signed, notarized, and stapled. Missing credentials fail the build.
 - Windows artifacts use Authenticode signing when the complete optional certificate configuration is supplied; otherwise they are unsigned with a warning. Linux does not use OS code signing.
 - Builds and publishes signed remote-agent binaries for Linux `x86_64` and `aarch64` alongside the desktop assets.
@@ -182,7 +207,7 @@ macOS privacy permissions are associated with the signed bundle identity. Grant 
 - CI runs as parallel jobs: format and lint, typecheck, locked Rust validation/build, the desktop pipeline build, package tests, server unit tests, and the server `integration` tests in 8 shards, plus the smoke, Windows CUA sweep, and native cleanup jobs. A shard coverage job proves that every server test file ran exactly once.
 - The always-run `CI passed` job is the single verdict: it fails unless every one of those jobs succeeded (a skipped or cancelled job fails it). The desktop preview builds are not part of it.
 - Browser tests are not part of CI; see [Browser tests](./browser-tests.md).
-- The release workflow has its own `preflight` quality gate before artifact builds.
+- The release workflow does not re-run these checks. Its `ci_gate` job requires `CI passed` on the exact release commit before publishing, so tag a commit after its `main` CI shows `CI passed`.
 - On `main` pushes, `desktop_release_build` starts immediately (it does not wait for the tests) and builds unsigned, credential-free desktop release-style artifacts on:
   - macOS `arm64`
   - macOS `x64`
@@ -279,12 +304,13 @@ bun run dist:desktop:linux:deb
 
 ## 4) Ongoing release checklist
 
-1. Ensure `main` is green in CI.
+1. Ensure the commit you will tag shows `CI passed` in its `main` CI run. For a commit without a `push` CI run, run `gh workflow run ci.yml --repo youpele52/bigbud --ref <ref>` first.
 2. Bump app version as needed.
 3. Create release tag: `vX.Y.Z`.
 4. Push tag.
 5. Verify workflow steps:
    - preflight passes
+   - `CI passed for release commit` (`ci_gate`) passes
    - all matrix builds pass
    - release job uploads expected files
 6. Smoke test downloaded artifacts.
@@ -297,6 +323,10 @@ bun run dist:desktop:linux:deb
 
 ## 5) Troubleshooting
 
+- `ci_gate` fails:
+  - "No CI run for <sha>": run `gh workflow run ci.yml --repo youpele52/bigbud --ref <tag or branch>`, wait for `CI passed`, then use "Re-run failed jobs" on the release run. Successful builds and their artifacts are kept, so only the gate and publish run again.
+  - "No CI run … has a successful 'CI passed' job": fix or re-run CI for that commit, then re-run the release's failed jobs.
+  - "Timed out": CI did not finish within 70 minutes; re-run the failed jobs once CI has passed.
 - macOS signing preflight fails:
   - Check all five Apple secrets are populated and non-empty. Public releases do not fall back to unsigned macOS artifacts.
 - Build fails with signing error:

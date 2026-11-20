@@ -55,6 +55,7 @@
     "test:server": "turbo run test --filter=@bigbud/server --",
     "test:desktop-smoke": "turbo run smoke-test --filter=@bigbud/desktop",
     "ci:verify-shard-coverage": "node scripts/verify-test-shard-coverage.ts",
+    "ci:wait-for-verdict": "node scripts/wait-for-ci-verdict.ts",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "build:contracts": "turbo run build --filter=@bigbud/contracts",
