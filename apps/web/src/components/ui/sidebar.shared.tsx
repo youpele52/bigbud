@@ -9,6 +9,9 @@ export const SIDEBAR_WIDTH = "16rem";
 export const SIDEBAR_WIDTH_MOBILE = "calc(100vw - var(--spacing(3)))";
 export const SIDEBAR_WIDTH_ICON = "3rem";
 export const SIDEBAR_RESIZE_DEFAULT_MIN_WIDTH = 16 * 16;
+/** Resize handle: a 16px grab area centred on the panel edge; on hover a hairline over the border. */
+export const RESIZE_HANDLE_CLASS_NAME =
+  "w-4 -translate-x-1/2 outline-none transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-px hover:after:bg-primary/30";
 
 export type SidebarContextProps = {
   state: "expanded" | "collapsed";

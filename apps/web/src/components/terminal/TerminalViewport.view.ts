@@ -1,6 +1,10 @@
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
-import { resolveTerminalTheme, resolveTerminalThemeHost } from "./terminalThemes";
+import {
+  resolveTerminalTheme,
+  resolveTerminalThemeHost,
+  usesTranslucentTerminalBackground,
+} from "./terminalThemes";
 import type { TerminalThemePreference } from "./terminalThemes";
 import { attachTerminalRenderer } from "./TerminalViewport.rendering";
 import { attachTerminalViewportInstrumentation } from "./TerminalViewport.instrumentation";
@@ -49,6 +53,8 @@ export function createTerminalView(input: {
       allowProposedApi: true,
       scrollSensitivity: settings.terminalScrollSensitivity,
       fastScrollSensitivity: settings.terminalFastScrollSensitivity,
+      // Only with the translucent window material; it changes glyph rasterisation, so off otherwise.
+      allowTransparency: usesTranslucentTerminalBackground(settings),
       theme: resolveTerminalTheme(settings, resolveTerminalThemeHost(mount)),
       linkHandler: createTerminalWebLinkHandler(),
     });

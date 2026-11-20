@@ -95,11 +95,14 @@ it.effect("decodes valid terminal appearance settings", () =>
       terminalFontFamily: "system-monospace",
       terminalFontSize: 14,
       windowMaterial: "translucent",
+      translucentPanels: true,
     });
 
     assert.strictEqual(parsed.terminalFontFamily, "system-monospace");
     assert.strictEqual(parsed.terminalFontSize, 14);
     assert.strictEqual(parsed.windowMaterial, "translucent");
+    // The retired dev-only "Translucent panels" toggle is dropped; Window Material governs it.
+    assert.strictEqual(Object.hasOwn(parsed, "translucentPanels"), false);
   }),
 );
 

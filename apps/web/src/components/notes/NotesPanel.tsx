@@ -76,7 +76,7 @@ export const NotesPanelContent = memo(function NotesPanelContent({
                 ref={state.editorRef}
                 value={state.selectedContent}
                 onChange={(event) => state.setSelectedContent(event.target.value)}
-                className="h-full min-h-full !bg-background"
+                className="h-full min-h-full !bg-[var(--app-shell-pane-fill)]"
                 unstyled={false}
               />
             )}

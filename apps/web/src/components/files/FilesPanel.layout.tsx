@@ -24,26 +24,19 @@ export function FilesPanelLayout(props: FilesPanelLayoutProps) {
   const drawerId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const drawer = useFilesTreeDrawer({ ...props, visible: props.visible ?? true });
-  const { renderedTreeWidth, treeWidthBounds, resizeTreeWidth } = useFilesTreeWidth(containerRef);
+  const { renderedTreeWidth, treeWidthBounds, canDock, resizeTreeWidth } =
+    useFilesTreeWidth(containerRef);
   const pinned = drawer.mode === "pinned";
   const visible = !props.hasPreview || drawer.mode !== "closed";
-  const split = props.hasPreview && pinned;
+  // A visible tree shares the panel with the preview; only a too-narrow panel overlays it.
+  const split = props.hasPreview && visible && canDock;
+  const overlay = props.hasPreview && !split;
   const resizeRef = useRef<{ x: number; pointerId: number } | null>(null);
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       <FilesPanelHeader
-        treeVisible={visible}
-        pinned={pinned}
-        pinControl={
-          props.hasPreview
-            ? {
-                onClick: drawer.togglePin,
-                onFocus: drawer.focus,
-                onBlur: drawer.blur,
-              }
-            : undefined
-        }
+        keptOpen={pinned}
         treeControl={
           props.hasPreview
             ? {
@@ -56,7 +49,7 @@ export function FilesPanelLayout(props: FilesPanelLayoutProps) {
                 onPointerLeave: drawer.leaveHandle,
                 onFocus: drawer.focus,
                 onBlur: drawer.blur,
-                onClick: drawer.toggle,
+                onClick: drawer.toggleKeepOpen,
                 onKeyDown: (event) => {
                   if (event.key !== "ArrowDown") return;
                   event.preventDefault();
@@ -86,9 +79,12 @@ export function FilesPanelLayout(props: FilesPanelLayoutProps) {
             aria-valuemax={treeWidthBounds.max}
             aria-valuenow={renderedTreeWidth}
             tabIndex={0}
+            onFocus={drawer.focus}
+            onBlur={drawer.blur}
             onPointerDown={(event) => {
               if (event.button !== 0) return;
               event.preventDefault();
+              drawer.startInteraction();
               resizeRef.current = {
                 x: event.clientX,
                 pointerId: event.pointerId,
@@ -138,17 +134,19 @@ export function FilesPanelLayout(props: FilesPanelLayoutProps) {
           aria-hidden={!visible}
           inert={!visible}
           className={cn(
-            "flex min-h-0 flex-col bg-background",
+            "flex min-h-0 flex-col",
             !props.hasPreview && "w-full",
             props.hasPreview && "border-l border-border",
-            props.hasPreview && !pinned && "absolute inset-y-0 right-0 z-20 shadow-xl",
+            overlay
+              ? "absolute inset-y-0 right-0 z-20 bg-background shadow-xl"
+              : "bg-[var(--app-shell-pane-fill)]",
             split && "shrink-0",
             !visible && "invisible pointer-events-none",
           )}
           style={
             props.hasPreview
               ? {
-                  width: pinned
+                  width: split
                     ? renderedTreeWidth
                     : `min(100%, max(${FILES_TREE_MIN_WIDTH}px, ${FILES_DRAWER_WIDTH_FACTOR * 100}%))`,
                 }

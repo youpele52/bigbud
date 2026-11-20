@@ -269,7 +269,7 @@ export default function ThreadTerminalDrawer({
       ref={surface}
       data-terminal-surface={mode}
       className={cn(
-        "thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden bg-background",
+        "thread-terminal-drawer relative flex min-w-0 shrink-0 flex-col overflow-hidden bg-[var(--app-shell-pane-fill)]",
         mode === "panel" || fillAvailableSpace ? "h-full" : "border-t border-border/80",
       )}
       style={mode === "drawer" && !fillAvailableSpace ? { height: `${drawerHeight}px` } : undefined}

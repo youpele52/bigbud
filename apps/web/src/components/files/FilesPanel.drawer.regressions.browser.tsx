@@ -10,20 +10,10 @@ import {
   DrawerHarness,
   escape,
   filesHandle,
+  keyboardOpen,
   treeRegion,
   treeScroll,
 } from "./FilesPanel.drawer.fixtures";
-
-function keyboardOpen() {
-  filesHandle().focus();
-  filesHandle().dispatchEvent(
-    new KeyboardEvent("keydown", {
-      key: "ArrowDown",
-      bubbles: true,
-      cancelable: true,
-    }),
-  );
-}
 
 function isVisibleInScroll(row: HTMLElement) {
   const scroll = treeScroll();
@@ -56,7 +46,7 @@ describe("files drawer review regressions", () => {
       try {
         keyboardOpen();
         await vi.waitFor(() => expect(treeRegion().inert).toBe(false));
-        button("Keep tree beside file").click();
+        filesHandle().click();
         await vi.waitFor(() => expect(treeRegion().getBoundingClientRect().width).toBe(445));
         const separator = document.querySelector<HTMLElement>('[role="separator"]')!;
         expect(separator.getAttribute("aria-valuenow")).toBe("445");

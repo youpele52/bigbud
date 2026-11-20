@@ -9,6 +9,7 @@ import {
   button,
   DrawerHarness,
   filesHandle,
+  keyboardOpen,
   previewRegion,
   treeRegion,
   treeScroll,
@@ -59,7 +60,7 @@ describe("Files drawer tab visibility", () => {
         const tree = treeRegion();
         const scroll = treeScroll();
         const bounds = preview.getBoundingClientRect();
-        if (mode === "open") filesHandle().click();
+        if (mode === "open") keyboardOpen();
         else moveOverPreviewEdge();
         await advance(mode === "hover" ? 250 : mode === "pending" ? 200 : 0);
         expect(tree.inert).toBe(mode === "pending");
@@ -110,7 +111,7 @@ describe("Files drawer tab visibility", () => {
     const mounted = await render(<DrawerHarness initialPreview="docs/readme.md" />);
     try {
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-      button("Keep tree beside file").click();
+      filesHandle().click();
       await advance(0);
       button("docs").click();
       await advance(0);
@@ -135,7 +136,7 @@ describe("Files drawer tab visibility", () => {
       expect(previewRegion()).toBe(preview);
       expect(tree.getBoundingClientRect().width).toBe(width);
       expect(document.querySelector('[role="separator"]')).not.toBeNull();
-      expect(button("Unpin file tree").getAttribute("aria-pressed")).toBe("true");
+      expect(filesHandle().getAttribute("aria-pressed")).toBe("true");
     } finally {
       await mounted.unmount();
     }
@@ -150,7 +151,7 @@ describe("Files drawer tab visibility", () => {
       document.body.append(otherTabControl);
       try {
         if (action === "dismiss") {
-          filesHandle().click();
+          keyboardOpen();
           await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
           button("readme.md").focus();
         }
@@ -159,7 +160,7 @@ describe("Files drawer tab visibility", () => {
           queued.push(callback);
           return queued.length;
         });
-        if (action === "open") filesHandle().click();
+        if (action === "open") keyboardOpen();
         else pressEscape();
         await mounted.rerender(<DrawerHarness initialPreview="docs/readme.md" visible={false} />);
         otherTabControl.focus();

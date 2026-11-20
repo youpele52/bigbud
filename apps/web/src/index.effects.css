@@ -1,6 +1,7 @@
 /* Diffs theme bridge (match diff surfaces to app palette) */
 .diff-panel-viewport {
-  background: color-mix(in srgb, var(--background) 94%, var(--card));
+  /* The tone of the panel it sits in (main column or right panel), as every other pane. */
+  background: var(--app-shell-pane-fill);
 }
 
 .diff-render-file {
