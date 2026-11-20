@@ -167,3 +167,67 @@ fn windows_uses_the_user_profile_not_home() {
             .map(std::path::PathBuf::from)
     );
 }
+
+fn temp_home(label: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!(
+        "bigbud-os-index-{label}-{}-{:?}",
+        std::process::id(),
+        std::time::SystemTime::now()
+    ))
+}
+
+#[test]
+fn scopes_are_resolved_once_per_level_and_reused_for_the_session() {
+    let (mut session, _) = ready_session(true);
+    let home = temp_home("cache");
+    std::fs::create_dir_all(home.join("Documents")).expect("Documents");
+    let first = session.prepare_os_index_search_in(
+        request(v1::OsIndexScopeLevel::CommonFolders, "needle"),
+        Some(home.clone()),
+    );
+    drop(first.unwrap_or_else(|frame| panic!("prepared, got {frame:?}")));
+    // The folders are gone, but the session keeps the scopes it resolved for this level.
+    let _removed = std::fs::remove_dir_all(&home);
+    let second = session.prepare_os_index_search_in(
+        request(v1::OsIndexScopeLevel::CommonFolders, "needle"),
+        Some(home.clone()),
+    );
+    assert!(second.is_ok(), "cached scopes were not reused");
+    // Another level resolves afresh, and failures are not cached.
+    let refusal = session
+        .prepare_os_index_search_in(
+            request(v1::OsIndexScopeLevel::Unrestricted, "needle"),
+            Some(home),
+        )
+        .err()
+        .expect("refused");
+    assert_eq!(
+        refusal_code(*refusal),
+        crate::os_index::OsIndexError::HomeUnavailable.code()
+    );
+}
+
+#[test]
+fn no_readable_scopes_is_an_empty_answer_not_a_failure() {
+    let (mut session, _) = ready_session(true);
+    let home = temp_home("empty");
+    std::fs::create_dir_all(&home).expect("home");
+    let answer = session
+        .prepare_os_index_search_in(
+            request(v1::OsIndexScopeLevel::CommonFolders, "needle"),
+            Some(home.clone()),
+        )
+        .err()
+        .expect("answered without searching");
+    let _removed = std::fs::remove_dir_all(&home);
+    match answer.payload {
+        Some(v1::frame::Payload::OsIndexSearchCompleted(completed)) => {
+            assert_eq!(completed.stop_reason, "complete");
+            assert_eq!(completed.error_code, "");
+            assert_eq!(completed.availability, "ready");
+            assert_eq!(completed.batches, 0);
+        }
+        other => panic!("expected an os index completion, got {other:?}"),
+    }
+    assert!(session.os_index_registry().is_empty());
+}

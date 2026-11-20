@@ -20,6 +20,8 @@ vi.mock("../rpc/nativeApi", async (original) => ({
 }));
 vi.mock("../hooks/useSettings", () => ({
   useSettings: () => ({ hasSeenFileAccessPrompt: true }),
+  useUpdateSettings: () => ({ updateSettings: vi.fn() }),
+  updateServerSettings: vi.fn(),
 }));
 vi.mock("../hooks/useWindowMaterial", () => ({ useWindowMaterial: () => undefined }));
 vi.mock("../rpc/serverState", async (original) => ({

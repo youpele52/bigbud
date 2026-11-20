@@ -11,9 +11,9 @@ export interface ResolvedReleaseVersion {
 }
 
 const RELEASE_CHANNEL_LABELS: Record<ReleaseChannel, string> = {
-  beta: "Beta",
-  preview: "Preview",
-  nightly: "Nightly",
+  beta: "beta",
+  preview: "preview",
+  nightly: "nightly",
 };
 
 const RELEASE_VERSION_PATTERN =

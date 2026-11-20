@@ -23,9 +23,9 @@ describe("release channel", () => {
   );
 
   it("returns display labels", () => {
-    expect(releaseChannelLabel("beta")).toBe("Beta");
-    expect(releaseChannelLabel("preview")).toBe("Preview");
-    expect(releaseChannelLabel("nightly")).toBe("Nightly");
+    expect(releaseChannelLabel("beta")).toBe("beta");
+    expect(releaseChannelLabel("preview")).toBe("preview");
+    expect(releaseChannelLabel("nightly")).toBe("nightly");
   });
 
   it.each([

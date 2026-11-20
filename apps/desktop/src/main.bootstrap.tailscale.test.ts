@@ -15,11 +15,13 @@ vi.mock("./backend/mobileGatewayOwner", () => ({
 const statusMock = vi.fn();
 const enableMock = vi.fn();
 const disableMock = vi.fn();
+const takeOverMock = vi.fn();
 
 vi.mock("./backend/tailscaleRemoteAccess", () => ({
   getDesktopTailscaleRemoteAccessStatus: (...args: unknown[]) => statusMock(...args),
   enableDesktopTailscaleRemoteAccess: (...args: unknown[]) => enableMock(...args),
   disableDesktopTailscaleRemoteAccess: (...args: unknown[]) => disableMock(...args),
+  takeOverDesktopTailscaleRemoteAccess: (...args: unknown[]) => takeOverMock(...args),
 }));
 
 import { makeDesktopMobileRemoteAccess } from "./main.bootstrap.tailscale";
@@ -46,6 +48,7 @@ describe("makeDesktopMobileRemoteAccess", () => {
     let port = 3773;
     const access = makeDesktopMobileRemoteAccess({
       baseDir: "/tmp/x",
+      tailscaleServeHttpsPort: 8443,
       getBackendPort: () => port,
       getBackendHost: () => "127.0.0.1",
     });
@@ -59,7 +62,12 @@ describe("makeDesktopMobileRemoteAccess", () => {
     port = 3774;
     statusMock.mockResolvedValueOnce({ ...serving, serving: false, error: "stale" });
     await access.getTailscaleRemoteAccessStatus();
-    expect(statusMock).toHaveBeenLastCalledWith(3774, undefined, expect.anything());
+    expect(statusMock).toHaveBeenLastCalledWith(
+      3774,
+      undefined,
+      expect.objectContaining({ httpsPort: 8443 }),
+      expect.any(Function),
+    );
     expect(access.getMobileBackendBaseUrl()).toBe("http://192.168.1.20:3773");
 
     enableMock.mockResolvedValueOnce(serving);
@@ -69,6 +77,17 @@ describe("makeDesktopMobileRemoteAccess", () => {
     disableMock.mockResolvedValueOnce({ ...serving, serving: false });
     await access.disableTailscaleRemoteAccess();
     expect(access.getMobileBackendBaseUrl()).toBe("http://192.168.1.20:3773");
+
+    takeOverMock.mockResolvedValueOnce(serving);
+    await access.takeOverTailscaleRemoteAccess();
+    expect(takeOverMock).toHaveBeenLastCalledWith(
+      3774,
+      undefined,
+      expect.objectContaining({ httpsPort: 8443 }),
+      expect.any(Function),
+      expect.any(Function),
+    );
+    expect(access.getMobileBackendBaseUrl()).toBe("https://desk.tail1.ts.net");
   });
 });
 
@@ -78,6 +97,7 @@ it("keeps the gateway prototype inactive without development permission", async 
   try {
     const access = makeDesktopMobileRemoteAccess({
       baseDir: "/tmp/x",
+      tailscaleServeHttpsPort: 8443,
       getBackendPort: () => 3773,
       getBackendHost: () => "127.0.0.1",
     });
@@ -95,6 +115,7 @@ it.each(["ready", "retrying"])(
     gateway.origin = serving.remoteBaseUrl;
     const access = makeDesktopMobileRemoteAccess({
       baseDir: "/tmp/x",
+      tailscaleServeHttpsPort: 8443,
       getBackendPort: () => 3773,
       getBackendHost: () => "127.0.0.1",
     });
@@ -125,6 +146,7 @@ it("retains bootstrap preparation for backend startup and supplies the actual bi
   try {
     const access = makeDesktopMobileRemoteAccess({
       baseDir: "/tmp/x",
+      tailscaleServeHttpsPort: 8443,
       getBackendPort: () => 3773,
       getBackendHost: () => "::1",
     });

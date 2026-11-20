@@ -2,6 +2,7 @@ import { DEFAULT_UNIFIED_SETTINGS } from "@bigbud/contracts/settings";
 import { SearchIcon } from "lucide-react";
 
 import { updateServerSettings, useSettings } from "../../hooks/useSettings";
+import { ensureFileAccessProbed } from "../../hooks/useSettings.fileAccessProbe";
 import { currentOsIndexSource, osIndexWording } from "../../lib/osIndexWording";
 import { Switch } from "../ui/switch";
 import { SETTINGS_ANCHORS, SettingsAnchorLink, useSettingsAnchorTarget } from "./settingsAnchor";
@@ -81,9 +82,11 @@ export function SearchSettingsSection() {
             tone="success"
             checked={search.thisComputer && !noFileAccess}
             disabled={noFileAccess || source === null}
-            onCheckedChange={(checked) =>
-              updateServerSettings({ search: { thisComputer: checked } })
-            }
+            onCheckedChange={(checked) => {
+              updateServerSettings({ search: { thisComputer: checked } });
+              // Surfaces any macOS privacy prompt now rather than on the first search.
+              if (checked) ensureFileAccessProbed(search.fileAccessLevel);
+            }}
             aria-label="Search this computer"
           />
         }

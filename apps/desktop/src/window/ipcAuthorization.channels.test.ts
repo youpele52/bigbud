@@ -110,7 +110,7 @@ describe("every-handler IPC authorization", () => {
 
   it("registers the audited production channel set", () => {
     // Includes the window-material snapshot and floating-assistant helper channels.
-    expect(registered.handle.size).toBe(54);
+    expect(registered.handle.size).toBe(55);
     expect(registered.on.size).toBe(4);
     for (const credentialOrEffect of [
       "channel:GET_WS_URL_CHANNEL",
@@ -119,6 +119,7 @@ describe("every-handler IPC authorization", () => {
       "channel:INSTALL_COMPUTER_USE_RUNTIME_CHANNEL",
       "channel:RUN_COMPUTER_USE_DOCTOR_CHANNEL",
       "channel:ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL",
+      "channel:TAKE_OVER_TAILSCALE_REMOTE_ACCESS_CHANNEL",
       "channel:UPDATE_INSTALL_CHANNEL",
       "desktop:quit-application",
       desktopIpcChannels.openRemoteBackendWindow,

@@ -1,0 +1,7 @@
+{
+  "commonFolders": ["Desktop", "Documents", "Downloads", "Music", "Pictures"],
+  "macos": {
+    "noiseFolder": "Library",
+    "cloudFolders": ["Library/Mobile Documents", "Library/CloudStorage"]
+  }
+}

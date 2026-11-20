@@ -63,6 +63,10 @@ describe("MessagesTimeline work log layout", () => {
     expect(markup).toContain('class="group/work-log"');
     expect(markup).toContain('data-slot="activity-accordion-actions"');
     expect(markup).not.toContain("group-hover/work-log:opacity-100");
+    // Copy and other header actions are hidden until the accordion is hovered or focused.
+    expect(markup).toMatch(
+      /data-slot="activity-accordion-actions" class="[^"]*opacity-0[^"]*group-hover\/activity-accordion:opacity-100/,
+    );
     expect(markup).not.toContain("mt-1.5 flex justify-start pl-6");
   });
 });

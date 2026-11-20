@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import { join } from "node:path";
+import { unixSocketPathMaxBytes } from "@bigbud/shared/privateSocketPath";
 import { Schema, Redacted } from "effect";
 import type { BackendInstanceShape } from "../startup/backendInstance.ts";
 import type { ServerConfigShape } from "../startup/config.ts";
@@ -46,7 +47,8 @@ export function mobileGatewayProcessConfiguration(
   });
   if (!mobile) throw Error("Separate private mobile credential unavailable.");
   const path = join(owner.stateDir, "remote-mobile.sock");
-  if (Buffer.byteLength(path) >= 108) throw Error("Private mobile socket exceeds Unix path bound.");
+  if (Buffer.byteLength(path) > unixSocketPathMaxBytes())
+    throw Error("Private mobile socket exceeds Unix path bound.");
   return Object.freeze({
     selected,
     upstream: Object.freeze({ kind: "unix" as const, path }),

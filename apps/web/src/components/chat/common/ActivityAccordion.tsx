@@ -35,6 +35,10 @@ const HEADER_TEXT_CLASS_NAME = "[text-box-edge:cap_alphabetic] [text-box-trim:tr
 // Header row height: the icon box plus the summary's py-2.
 const ACTIONS_CLASS_NAME =
   "absolute top-0 right-0 flex h-[calc(1cap+4px+1rem)] items-center text-[10px] leading-none";
+// Header actions (copy, "Show N more") stay hidden until the accordion is hovered or an
+// action has keyboard focus; touch screens have no hover, so they keep them visible.
+const ACTIONS_REVEAL_CLASS_NAME =
+  "opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/activity-accordion:opacity-100 [@media(hover:none)]:opacity-100";
 // Hang the icon from the text baseline, 2px below it with 2px spare on each side of the
 // cap height, so both snap to pixels together. A box-centered icon drifts up to 1px
 // against the glyphs when the row lands on a fractional offset.
@@ -100,7 +104,7 @@ export function ActivityAccordion({
     return () => observer.disconnect();
   }, [hasActions]);
   return (
-    <div className="relative [&:not(:has(>details[open]))>[data-slot=activity-accordion-actions]>[data-open-only]]:hidden">
+    <div className="group/activity-accordion relative [&:not(:has(>details[open]))>[data-slot=activity-accordion-actions]>[data-open-only]]:hidden">
       <details
         data-slot="activity-accordion"
         data-variant={variant}
@@ -144,7 +148,7 @@ export function ActivityAccordion({
         <div
           ref={actionsRef}
           data-slot="activity-accordion-actions"
-          className={cn(ACTIONS_CLASS_NAME, "gap-2")}
+          className={cn(ACTIONS_CLASS_NAME, ACTIONS_REVEAL_CLASS_NAME, "gap-2")}
         >
           {persistentActions}
           {actions === undefined ? null : <div data-open-only>{actions}</div>}

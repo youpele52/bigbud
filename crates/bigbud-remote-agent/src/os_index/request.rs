@@ -36,22 +36,7 @@ impl OsIndexRequest {
         max_results: usize,
         deadline: Duration,
     ) -> Result<Self, OsIndexError> {
-        let query = query.trim();
-        if query.is_empty() {
-            return Err(OsIndexError::EmptyQuery);
-        }
-        if query.chars().count() > MAX_SEARCH_QUERY_CHARS {
-            return Err(OsIndexError::QueryTooLong);
-        }
-        if query.chars().any(char::is_control) {
-            return Err(OsIndexError::ControlCharacter);
-        }
-        if scopes.is_empty() {
-            return Err(OsIndexError::NoScopes);
-        }
-        if scopes.len() > MAX_OS_INDEX_SCOPES {
-            return Err(OsIndexError::TooManyScopes);
-        }
+        let query = validate_query(query, &scopes)?;
         let exclusions = Exclusions::embedded()?;
         let mut validated: Vec<PathBuf> = Vec::with_capacity(scopes.len());
         for scope in scopes {
@@ -63,15 +48,32 @@ impl OsIndexRequest {
                 validated.push(scope);
             }
         }
-        Ok(Self {
+        Ok(Self::build(query, validated, max_results, deadline))
+    }
+
+    /// Like [`OsIndexRequest::new`] for scopes returned by [`super::resolve_scopes`], which are
+    /// already canonical, deduplicated, readable and not excluded. Skips the per-scope file-system
+    /// checks, so a cached scope list costs no file-system calls per keystroke.
+    pub fn from_resolved_scopes(
+        query: &str,
+        scopes: &[PathBuf],
+        max_results: usize,
+        deadline: Duration,
+    ) -> Result<Self, OsIndexError> {
+        let query = validate_query(query, scopes)?;
+        Ok(Self::build(query, scopes.to_vec(), max_results, deadline))
+    }
+
+    fn build(query: &str, scopes: Vec<PathBuf>, max_results: usize, deadline: Duration) -> Self {
+        Self {
             query: query.to_owned(),
-            scopes: validated,
+            scopes,
             max_results: match max_results {
                 0 => DEFAULT_OS_INDEX_RESULTS,
                 requested => requested.min(MAX_OS_INDEX_RESULTS),
             },
             deadline: deadline.min(MAX_SEARCH_DEADLINE),
-        })
+        }
     }
 
     /// The trimmed query.
@@ -91,6 +93,27 @@ impl OsIndexRequest {
     pub fn deadline(&self) -> Duration {
         self.deadline
     }
+}
+
+/// The trimmed query, after checking it and the scope count.
+fn validate_query<'a>(query: &'a str, scopes: &[PathBuf]) -> Result<&'a str, OsIndexError> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Err(OsIndexError::EmptyQuery);
+    }
+    if query.chars().count() > MAX_SEARCH_QUERY_CHARS {
+        return Err(OsIndexError::QueryTooLong);
+    }
+    if query.chars().any(char::is_control) {
+        return Err(OsIndexError::ControlCharacter);
+    }
+    if scopes.is_empty() {
+        return Err(OsIndexError::NoScopes);
+    }
+    if scopes.len() > MAX_OS_INDEX_SCOPES {
+        return Err(OsIndexError::TooManyScopes);
+    }
+    Ok(query)
 }
 
 fn validate_scope(scope: &Path) -> Result<(), OsIndexError> {

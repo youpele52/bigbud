@@ -91,6 +91,9 @@ export async function inspectSystemOpenPath(
 ): Promise<SystemOpenPathInspection> {
   const requestedPath = normalizeSystemOpenPath(raw, platform);
   if (requestedPath === null) return { ok: false, reason: "invalid-path" };
+  const home = options.home ?? homedir();
+  // An excluded request is refused before any file-system call touches it.
+  if (isOsIndexExcludedPath(requestedPath, home)) return { ok: false, reason: "inaccessible" };
 
   let realPath: string;
   let stats: Awaited<ReturnType<typeof fs.lstat>>;
@@ -100,10 +103,7 @@ export async function inspectSystemOpenPath(
   } catch (error) {
     return { ok: false, reason: refusalForError(error) };
   }
-  const home = options.home ?? homedir();
-  if (isOsIndexExcludedPath(requestedPath, home) || isOsIndexExcludedPath(realPath, home)) {
-    return { ok: false, reason: "inaccessible" };
-  }
+  if (isOsIndexExcludedPath(realPath, home)) return { ok: false, reason: "inaccessible" };
 
   if (stats.isDirectory()) {
     const launchable =

@@ -23,6 +23,10 @@
       "types": "./src/backendOwnership.paths.ts",
       "import": "./src/backendOwnership.paths.ts"
     },
+    "./privateSocketPath": {
+      "types": "./src/privateSocketPath.ts",
+      "import": "./src/privateSocketPath.ts"
+    },
     "./machineIdentity": {
       "types": "./src/machineIdentity.ts",
       "import": "./src/machineIdentity.ts"
@@ -222,6 +226,10 @@
     "./search/osIndexExclusions": {
       "types": "./src/search/osIndexExclusions.ts",
       "import": "./src/search/osIndexExclusions.ts"
+    },
+    "./search/osIndexScopeFolders": {
+      "types": "./src/search/osIndexScopeFolders.ts",
+      "import": "./src/search/osIndexScopeFolders.ts"
     },
     "./systemOpenPath": {
       "types": "./src/systemOpenPath.ts",

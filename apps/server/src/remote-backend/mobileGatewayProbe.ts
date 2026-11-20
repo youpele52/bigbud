@@ -55,7 +55,6 @@ async function probe(
       !Number.isInteger(input.port) ||
       input.port < 1 ||
       input.port > 65535 ||
-      (external && origin.port !== "") ||
       expected.handshakeRevision !== REMOTE_BACKEND_HANDSHAKE_REVISION ||
       expected.mobileRpcRevision !== REMOTE_BACKEND_MOBILE_RPC_REVISION
     )
@@ -89,7 +88,8 @@ async function probe(
       request = (external ? https.request : http.request)(
         {
           hostname: external ? origin.hostname : "127.0.0.1",
-          port: external ? 443 : port,
+          // A non-default per-channel Serve port is carried in the canonical origin.
+          port: external ? Number(origin.port || 443) : port,
           protocol: external ? "https:" : "http:",
           method: "GET",
           path: "/api/mobile/handshake",

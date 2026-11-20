@@ -111,4 +111,19 @@ describe("mobileRemoteControl.urls", () => {
       "http://192.168.1.24:3774",
     );
   });
+
+  it("replaces a stored tailnet origin from another channel's Serve port", () => {
+    expect(
+      shouldPreferLiveBackendBaseUrl(
+        "https://bigbud-dev.tail123.ts.net",
+        "https://bigbud-dev.tail123.ts.net:8443",
+      ),
+    ).toBe(true);
+    expect(
+      shouldPreferLiveBackendBaseUrl(
+        "https://bigbud-dev.tail123.ts.net:8443",
+        "https://bigbud-dev.tail123.ts.net:8443",
+      ),
+    ).toBe(false);
+  });
 });

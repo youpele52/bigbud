@@ -39,6 +39,7 @@ export const desktopIpcChannels = {
   getTailscaleRemoteAccessStatus: "desktop:get-tailscale-remote-access-status",
   enableTailscaleRemoteAccess: "desktop:enable-tailscale-remote-access",
   disableTailscaleRemoteAccess: "desktop:disable-tailscale-remote-access",
+  takeOverTailscaleRemoteAccess: "desktop:take-over-tailscale-remote-access",
   notificationsIsSupported: "desktop:notifications-is-supported",
   notificationsShow: "desktop:notifications-show",
   copyToClipboard: "desktop:copy-to-clipboard",

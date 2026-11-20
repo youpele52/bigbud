@@ -99,6 +99,7 @@ interface BootstrapDesktopOptions {
   readonly resolveIconPath: (ext: "ico" | "icns" | "png") => string | null;
   readonly resourcesPath: string;
   readonly serverSettingsPath: string;
+  readonly tailscaleServeHttpsPort: number;
   readonly setIsQuitting: (value: boolean) => void;
   readonly setMainWindow: (window: BrowserWindow) => void;
   readonly windowRegistry: DesktopWindowRegistry;
@@ -126,6 +127,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     resolveIconPath,
     resourcesPath,
     serverSettingsPath,
+    tailscaleServeHttpsPort,
     setIsQuitting,
     setMainWindow,
     windowRegistry,
@@ -134,6 +136,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
   configureIpcAuthorization(windowRegistry);
   const mobileRemoteAccess = makeDesktopMobileRemoteAccess({
     baseDir,
+    tailscaleServeHttpsPort,
     getBackendPort: () => backendPort,
     getBackendHost: () => backendHost,
     getIsQuitting,
@@ -203,6 +206,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     GET_TAILSCALE_REMOTE_ACCESS_STATUS_CHANNEL: channels.getTailscaleRemoteAccessStatus,
     ENABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: channels.enableTailscaleRemoteAccess,
     DISABLE_TAILSCALE_REMOTE_ACCESS_CHANNEL: channels.disableTailscaleRemoteAccess,
+    TAKE_OVER_TAILSCALE_REMOTE_ACCESS_CHANNEL: channels.takeOverTailscaleRemoteAccess,
     NOTIFICATIONS_IS_SUPPORTED_CHANNEL: channels.notificationsIsSupported,
     NOTIFICATIONS_SHOW_CHANNEL: channels.notificationsShow,
     COPY_TO_CLIPBOARD_CHANNEL: channels.copyToClipboard,
@@ -247,6 +251,7 @@ export async function bootstrapDesktop(options: BootstrapDesktopOptions): Promis
     getTailscaleRemoteAccessStatus: mobileRemoteAccess.getTailscaleRemoteAccessStatus,
     enableTailscaleRemoteAccess: mobileRemoteAccess.enableTailscaleRemoteAccess,
     disableTailscaleRemoteAccess: mobileRemoteAccess.disableTailscaleRemoteAccess,
+    takeOverTailscaleRemoteAccess: mobileRemoteAccess.takeOverTailscaleRemoteAccess,
   });
   await startDesktopResourceAwareness(
     systemMonitor,

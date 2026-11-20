@@ -5,7 +5,8 @@ use std::time::Duration;
 use super::error::OsIndexError;
 use super::request::{DEFAULT_OS_INDEX_RESULTS, MAX_OS_INDEX_RESULTS, OsIndexRequest};
 use super::scope::{
-    HomeChild, OsIndexScopeLevel, resolve_scopes, resolve_scopes_with, split_by_scope,
+    HomeChild, OsIndexScopeLevel, resolve_scopes, resolve_scopes_checked, resolve_scopes_with,
+    split_by_scope,
 };
 use super::scope_layout::{ScopeLayout, scope_candidates};
 use super::tests::Fixture;
@@ -139,6 +140,73 @@ fn resolve_scopes_skips_symlinks_files_and_missing_folders() {
     assert_eq!(
         resolve_scopes(&base.join("missing"), OsIndexScopeLevel::Unrestricted),
         Err(OsIndexError::HomeUnavailable)
+    );
+}
+
+#[test]
+fn unreadable_scopes_are_skipped_and_excluded_ones_are_never_touched() {
+    let home = Fixture::new();
+    let base = home.path();
+    for folder in [
+        "Documents",
+        "Projects",
+        "secrets",
+        "Library/Mobile Documents",
+        "Library/CloudStorage",
+    ] {
+        fs::create_dir_all(base.join(folder)).unwrap();
+    }
+    let touched = std::cell::RefCell::new(Vec::new());
+    // Stands in for a declined macOS privacy prompt on Documents and iCloud Drive.
+    let readable = |path: &Path| {
+        touched.borrow_mut().push(path.to_path_buf());
+        !(path.ends_with("Documents") || path.ends_with("Mobile Documents"))
+    };
+    let scopes = resolve_scopes_checked(
+        base,
+        OsIndexScopeLevel::Unrestricted,
+        &ScopeLayout::MACOS,
+        &readable,
+    )
+    .unwrap();
+    assert_eq!(
+        scopes,
+        vec![base.join("Library/CloudStorage"), base.join("Projects")]
+    );
+    assert!(!touched.borrow().contains(&base.join("secrets")));
+    assert!(
+        touched
+            .borrow()
+            .contains(&base.join("Library/Mobile Documents"))
+    );
+
+    let none_readable = |_: &Path| false;
+    assert_eq!(
+        resolve_scopes_checked(
+            base,
+            OsIndexScopeLevel::CommonFolders,
+            &ScopeLayout::MACOS,
+            &none_readable
+        ),
+        Ok(Vec::new())
+    );
+}
+
+#[test]
+fn resolved_scopes_skip_the_per_scope_file_system_checks() {
+    let scopes = vec![PathBuf::from("/no/such/scope")];
+    let request =
+        OsIndexRequest::from_resolved_scopes(" report ", &scopes, 0, Duration::from_secs(1))
+            .unwrap();
+    assert_eq!(request.query(), "report");
+    assert_eq!(request.scopes(), scopes.as_slice());
+    assert_eq!(
+        OsIndexRequest::from_resolved_scopes("report", &[], 0, Duration::from_secs(1)).err(),
+        Some(OsIndexError::NoScopes)
+    );
+    assert_eq!(
+        OsIndexRequest::from_resolved_scopes(" ", &scopes, 0, Duration::from_secs(1)).err(),
+        Some(OsIndexError::EmptyQuery)
     );
 }
 

@@ -16,7 +16,7 @@ export async function gatewayOwnerFixture(enabled = true) {
   const serverSettingsPath = join(dir, "server-settings.json");
   await writeFile(serverSettingsPath, JSON.stringify({ mobileRemoteControl: { enabled } }));
   const { createFileServeOwnershipStore } = await import("./tailscaleRemoteAccess.ownership");
-  const ownership = createFileServeOwnershipStore(join(dir, "serve.json"));
+  const ownership = createFileServeOwnershipStore(join(dir, "serve.json"), 443);
   ownership.write(3773);
   let target: number | null = 3773;
   const runServe = vi.fn(async (_bin: string, args: readonly string[]) => {

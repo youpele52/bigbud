@@ -61,7 +61,22 @@ it("uses exact external TLS destination with default certificate validation and 
   expect(https.request).toHaveBeenCalledTimes(1);
 });
 
-it("refuses an origin on another TLS port before network IO", async () => {
+it("probes the per-channel Serve port carried in the origin", async () => {
+  vi.mocked(https.request).mockImplementation((...args) => {
+    expect(args[0]).toMatchObject({
+      hostname: "fixture.example.ts.net",
+      port: 8443,
+      headers: {
+        host: "fixture.example.ts.net:8443",
+        origin: "https://fixture.example.ts.net:8443",
+      },
+    });
+    const request = Object.assign(new EventEmitter(), {
+      destroy: vi.fn(),
+      end: () => queueMicrotask(() => request.emit("error", new Error("stop after options"))),
+    });
+    return request as unknown as http.ClientRequest;
+  });
   await expect(
     probeMobileGatewayHttps({
       externalOrigin: "https://fixture.example.ts.net:8443",
@@ -69,8 +84,22 @@ it("refuses an origin on another TLS port before network IO", async () => {
       signal: new AbortController().signal,
     }),
   ).rejects.toThrow();
-  expect(https.request).not.toHaveBeenCalled();
+  expect(https.request).toHaveBeenCalledTimes(1);
 });
+
+it.each(["https://fixture.example.ts.net:443", "https://fixture.example.ts.net:8443/x"])(
+  "refuses a non-canonical origin %s before network IO",
+  async (externalOrigin) => {
+    await expect(
+      probeMobileGatewayHttps({
+        externalOrigin,
+        expected: expected(),
+        signal: new AbortController().signal,
+      }),
+    ).rejects.toThrow();
+    expect(https.request).not.toHaveBeenCalled();
+  },
+);
 
 it("fails closed on TLS failure without retrying or following another destination", async () => {
   vi.mocked(https.request).mockImplementation(() => {

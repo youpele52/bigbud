@@ -6,6 +6,7 @@ import { ownershipStateDir } from "@bigbud/shared/backendOwnership.paths";
 import {
   desktopReleaseIdentityForChannel,
   resolveDesktopReleaseIdentity,
+  resolveTailscaleServeHttpsPort,
 } from "@bigbud/shared/desktopReleaseIdentity";
 
 import { resolveCuaDriverHostBundleId } from "./backend/cuaDriver.hostIdentity";
@@ -73,6 +74,11 @@ export function resolveDesktopMainConfig(app: App, desktopDir: string) {
     releaseIdentity,
     rootDir,
     serverSettingsPath: Path.join(stateDir, "settings.json"),
+    /** This channel's own Tailscale Serve HTTPS listener (development has its own). */
+    tailscaleServeHttpsPort: resolveTailscaleServeHttpsPort({
+      channel: releaseIdentity.channel,
+      development: isDevelopment,
+    }),
     userDataDirName,
   } as const;
 }

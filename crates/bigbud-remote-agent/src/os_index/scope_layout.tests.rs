@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use super::scope::{HomeChild, OsIndexScopeLevel, resolve_scopes_with};
+use super::scope::{COMMON_FOLDERS, HomeChild, OsIndexScopeLevel, resolve_scopes_with};
 use super::scope_layout::{ScopeLayout, parse_xdg_user_dirs, scope_candidates};
 use super::tests::Fixture;
 
@@ -179,5 +179,30 @@ fn resolving_with_the_windows_layout_finds_onedrive_folders() {
     assert_eq!(
         resolve_scopes_with(base, OsIndexScopeLevel::Unrestricted, &ScopeLayout::WINDOWS).unwrap(),
         vec![base.join("OneDrive"), base.join("Pictures")]
+    );
+}
+
+#[test]
+fn folder_lists_match_the_shared_definition_the_file_access_probe_reads() {
+    let shared: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../packages/shared/src/search/osIndexScopeFolders.json"
+    ))
+    .unwrap();
+    let strings = |value: &serde_json::Value| -> Vec<String> {
+        value
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| item.as_str().unwrap().to_owned())
+            .collect()
+    };
+    assert_eq!(strings(&shared["commonFolders"]), COMMON_FOLDERS);
+    assert_eq!(
+        strings(&shared["macos"]["cloudFolders"]),
+        ScopeLayout::MACOS.cloud_folders
+    );
+    assert_eq!(
+        shared["macos"]["noiseFolder"].as_str(),
+        ScopeLayout::MACOS.noise_folder
     );
 }

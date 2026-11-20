@@ -174,6 +174,7 @@ function makeBootstrapOptions(): Parameters<typeof bootstrapDesktop>[0] {
     resolveIconPath: () => null,
     resourcesPath: String.raw`C:\Program Files\bigbud\resources`,
     serverSettingsPath: "/settings.json",
+    tailscaleServeHttpsPort: 443,
     setIsQuitting: vi.fn(),
     setMainWindow: vi.fn(),
     windowRegistry: { isTrusted: vi.fn() } as never,

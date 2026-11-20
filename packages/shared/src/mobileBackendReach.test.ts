@@ -10,6 +10,8 @@ describe("mobileBackendReach", () => {
   it.each([
     ["https://desktop.tail123.ts.net", "tailnet-https"],
     ["https://DESKTOP.tail123.ts.net:443", "tailnet-https"],
+    ["https://desktop.tail123.ts.net:8443", "tailnet-https"],
+    ["https://desktop.tail123.ts.net:10000", "tailnet-https"],
     ["https://bigbud.example.com", "other-https"],
     ["https://100.101.102.103", "other-https"],
     ["https://192.168.1.5", "lan-https"],

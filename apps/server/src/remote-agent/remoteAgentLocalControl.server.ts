@@ -3,6 +3,8 @@ import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { dirname } from "node:path";
 
+import { unixSocketPathMaxBytes } from "@bigbud/shared/privateSocketPath";
+
 import {
   createRemoteAgentControlEndpoint,
   defaultRemoteAgentControlTransport,
@@ -22,9 +24,6 @@ import {
   type RemoteAgentControlRequest,
   type RemoteAgentControlResponse,
 } from "./remoteAgentLocalControl.protocol.ts";
-
-/** Unix socket paths are limited (104 bytes on macOS, 108 on Linux) including the NUL. */
-const MAX_UNIX_SOCKET_PATH_BYTES = 103;
 
 export class RemoteAgentLocalControlUnavailableError extends Error {
   readonly _tag = "RemoteAgentLocalControlUnavailableError";
@@ -74,7 +73,7 @@ export async function startRemoteAgentLocalControlServer(input: {
   const controlDir = dirname(input.socketPath);
   if (
     transport === "unix-socket" &&
-    Buffer.byteLength(input.socketPath) > MAX_UNIX_SOCKET_PATH_BYTES
+    Buffer.byteLength(input.socketPath) > unixSocketPathMaxBytes()
   ) {
     throw new RemoteAgentLocalControlUnavailableError(
       "The bigbud state directory path is too long for a local control socket.",

@@ -322,3 +322,10 @@ export const GREETING_MESSAGES = {
     { id: "anytime-canvas", nameless: "A blank canvas for whatever’s next." },
   ],
 } as const satisfies Record<GreetingPeriod | "anytime", ReadonlyArray<GreetingMessage>>;
+
+/** Shown once on the new chat a finished welcome tour lands on; nameless keeps the canvas copy. */
+export const WELCOME_GREETING: GreetingMessage = {
+  id: "welcome-tour",
+  nameless: "A blank canvas for whatever’s next.",
+  named: "Welcome to bigbud, {name}.",
+};

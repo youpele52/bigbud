@@ -25,7 +25,7 @@ describe("resolveDesktopMainConfig", () => {
     ["1.2.3", "bigbud", "bigbud", [], "ai.bigbud.desktop", "T3 Code (Alpha)"],
     [
       "1.2.3-beta.1",
-      "bigbud Beta",
+      "bigbud beta",
       "bigbud-beta",
       ["channels", "beta"],
       "ai.bigbud.desktop.beta",
@@ -33,7 +33,7 @@ describe("resolveDesktopMainConfig", () => {
     ],
     [
       "1.2.3-preview.1",
-      "bigbud Preview",
+      "bigbud preview",
       "bigbud-preview",
       ["channels", "preview"],
       "ai.bigbud.desktop.preview",
@@ -41,7 +41,7 @@ describe("resolveDesktopMainConfig", () => {
     ],
     [
       "1.2.3-nightly.1",
-      "bigbud Nightly",
+      "bigbud nightly",
       "bigbud-nightly",
       ["channels", "nightly"],
       "ai.bigbud.desktop.nightly",

@@ -12,6 +12,10 @@ use super::error::OsIndexError;
 use super::exclusions::Exclusions;
 use super::scope_layout::{ScopeLayout, parse_xdg_user_dirs, scope_candidates};
 
+// `COMMON_FOLDERS`, `CLOUD_FOLDERS` and the macOS noise folder are pinned to
+// `packages/shared/src/search/osIndexScopeFolders.json` by a parity test: the desktop File Access
+// probe reads that file, so macOS asks about exactly the folders search later reads.
+
 /// Home children searched at the `common-folders` File Access level.
 pub const COMMON_FOLDERS: [&str; 5] = ["Desktop", "Documents", "Downloads", "Music", "Pictures"];
 /// Cloud folders under `~/Library` searched at the `unrestricted` level: iCloud Drive and
@@ -19,7 +23,7 @@ pub const COMMON_FOLDERS: [&str; 5] = ["Desktop", "Documents", "Downloads", "Mus
 pub const CLOUD_FOLDERS: [&str; 2] = ["Library/Mobile Documents", "Library/CloudStorage"];
 
 /// The File Access level that bounds the scopes (`none` never reaches the agent).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OsIndexScopeLevel {
     CommonFolders,
     Unrestricted,
@@ -50,13 +54,31 @@ pub fn resolve_scopes(home: &Path, level: OsIndexScopeLevel) -> Result<Vec<PathB
     resolve_scopes_with(home, level, &ScopeLayout::CURRENT)
 }
 
-/// Lists home, keeps candidates that exist as real folders, canonicalises them, and drops any
-/// that resolve outside home or are excluded. Missing or unreadable candidates only narrow the
-/// search, so they are skipped rather than failing it.
+/// Resolves with [`is_readable_folder`] as the per-candidate check.
 pub(super) fn resolve_scopes_with(
     home: &Path,
     level: OsIndexScopeLevel,
     layout: &ScopeLayout,
+) -> Result<Vec<PathBuf>, OsIndexError> {
+    resolve_scopes_checked(home, level, layout, &is_readable_folder)
+}
+
+/// A real folder (not a symlink) whose listing opens. A declined privacy prompt (macOS
+/// "Don't Allow") makes the listing fail, so that folder is skipped instead of failing search.
+fn is_readable_folder(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_dir())
+        && std::fs::read_dir(path).is_ok()
+}
+
+/// Lists home, drops excluded candidates before touching them, keeps those `readable_folder`
+/// accepts, canonicalises them, and drops any that resolve outside home or are excluded.
+/// Missing or unreadable candidates only narrow the search, so they are skipped rather than
+/// failing it.
+pub(super) fn resolve_scopes_checked(
+    home: &Path,
+    level: OsIndexScopeLevel,
+    layout: &ScopeLayout,
+    readable_folder: &dyn Fn(&Path) -> bool,
 ) -> Result<Vec<PathBuf>, OsIndexError> {
     let home = plain_canonical(home).ok_or(OsIndexError::HomeUnavailable)?;
     let exclusions = Exclusions::embedded()?;
@@ -80,11 +102,13 @@ pub(super) fn resolve_scopes_with(
     let mut scopes = Vec::new();
     for candidate in scope_candidates(layout, level, &children, &xdg_common) {
         let path = home.join(&candidate);
+        // Excluded folders are never touched, not even to check that they exist.
+        if exclusions.excludes_scope(&path) {
+            continue;
+        }
         // Nested candidates (cloud, synced and XDG folders) are not in the home listing; require
-        // a real folder there too.
-        let is_real_folder =
-            std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_dir());
-        if !is_real_folder {
+        // a real, readable folder there too.
+        if !readable_folder(&path) {
             continue;
         }
         let Some(canonical) = plain_canonical(&path) else {

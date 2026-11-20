@@ -153,6 +153,7 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(() => "none" as const),
   ),
   hasSeenFileAccessPrompt: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
+  hasSeenWelcomeTour: Schema.Boolean.pipe(Schema.withDecodingDefault(() => false)),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 

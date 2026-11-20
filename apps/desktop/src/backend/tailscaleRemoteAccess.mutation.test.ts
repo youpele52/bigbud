@@ -20,8 +20,12 @@ const onlineStatus = {
   stderr: "",
 };
 
-function memoryOwnership(initial: number | null): ServeOwnershipStore & { port: number | null } {
+function memoryOwnership(
+  initial: number | null,
+  httpsPort = 443,
+): ServeOwnershipStore & { port: number | null } {
   const store = {
+    httpsPort,
     port: initial,
     read: () => store.port,
     write: (port: number) => {
@@ -50,31 +54,46 @@ describe("tailscaleRemoteAccess mutations only touch Serve configuration bigbud 
 
     const status = await enableDesktopTailscaleRemoteAccess(3774, execFile, ownership);
 
-    expect(commandsRun(execFile)[1]).toEqual(["serve", "--yes", "--bg", "http://127.0.0.1:3774"]);
+    expect(commandsRun(execFile)[1]).toEqual([
+      "serve",
+      "--yes",
+      "--bg",
+      "--https=443",
+      "http://127.0.0.1:3774",
+    ]);
     expect(status).toMatchObject({ serving: true, error: null });
     expect(ownership.port).toBe(3774);
   });
 
   it("never suggests turning off all of HTTPS 443", async () => {
+    const foreign = serveConfig({ "/": { Proxy: "http://127.0.0.1:3000" } });
     const execFile = vi
       .fn()
-      .mockResolvedValueOnce(serveConfig({ "/": { Proxy: "http://127.0.0.1:3000" } }));
-    const error = await enableDesktopTailscaleRemoteAccess(3774, execFile).catch(
-      (caught) => caught,
-    );
-    expect(String(error)).not.toContain("443 off");
+      .mockResolvedValueOnce(foreign)
+      .mockResolvedValueOnce(onlineStatus)
+      .mockResolvedValueOnce(foreign);
+    const status = await enableDesktopTailscaleRemoteAccess(3774, execFile);
+    expect(status.error).not.toContain("443 off");
   });
 
-  it("refuses to replace an unrecorded loopback service and explains the manual step", async () => {
+  it("reports an unrecorded loopback service as a typed refusal instead of throwing", async () => {
     const ownership = memoryOwnership(3773);
+    const foreign = serveConfig({ "/": { Proxy: "http://127.0.0.1:3000" } });
     const execFile = vi
       .fn()
-      .mockResolvedValueOnce(serveConfig({ "/": { Proxy: "http://127.0.0.1:3000" } }));
+      .mockResolvedValueOnce(foreign)
+      .mockResolvedValueOnce(onlineStatus)
+      .mockResolvedValueOnce(foreign);
 
-    await expect(enableDesktopTailscaleRemoteAccess(3774, execFile, ownership)).rejects.toThrow(
+    const status = await enableDesktopTailscaleRemoteAccess(3774, execFile, ownership);
+    expect(status).toMatchObject({
+      serving: false,
+      conflict: { loopbackPort: 3000, bigbudOwnerLabel: null, canTakeOver: false },
+    });
+    expect(status.error).toContain(
       'forwards "/" to 127.0.0.1:3000, which bigbud did not set up, so bigbud left it unchanged',
     );
-    expect(execFile).toHaveBeenCalledTimes(1);
+    expect(commandsRun(execFile).some((args) => args.includes("--bg"))).toBe(false);
     expect(ownership.port).toBe(3773);
   });
 
@@ -98,12 +117,17 @@ describe("tailscaleRemoteAccess mutations only touch Serve configuration bigbud 
     ["a unix socket proxy", { Proxy: "unix:/tmp/other.sock" }],
     ["a static path handler", { Path: "/srv/www" }],
   ])("refuses to replace %s on HTTPS 443", async (_label, handler) => {
-    const execFile = vi.fn().mockResolvedValueOnce(serveConfig({ "/": handler }));
+    const config = serveConfig({ "/": handler });
+    const execFile = vi
+      .fn()
+      .mockResolvedValueOnce(config)
+      .mockResolvedValueOnce(onlineStatus)
+      .mockResolvedValueOnce(config);
 
-    await expect(enableDesktopTailscaleRemoteAccess(3774, execFile)).rejects.toThrow(
-      "used by another service",
-    );
-    expect(execFile).toHaveBeenCalledTimes(1);
+    const status = await enableDesktopTailscaleRemoteAccess(3774, execFile);
+    expect(status.error).toContain("used by another service");
+    expect(status.conflict).toMatchObject({ canTakeOver: false });
+    expect(commandsRun(execFile).some((args) => args.includes("--bg"))).toBe(false);
   });
 
   it("refuses to wipe HTTPS 443 when other routes share it", async () => {
@@ -115,7 +139,7 @@ describe("tailscaleRemoteAccess mutations only touch Serve configuration bigbud 
     );
 
     await expect(disableDesktopTailscaleRemoteAccess(3774, execFile)).rejects.toThrow(
-      "other routes on this device (/grafana on port 443 → http://127.0.0.1:3000)",
+      "other routes on HTTPS port 443 (/grafana on port 443 → http://127.0.0.1:3000)",
     );
     expect(commandsRun(execFile).some((args) => args.includes("off"))).toBe(false);
   });
@@ -163,7 +187,7 @@ describe("tailscaleRemoteAccess mutations only touch Serve configuration bigbud 
 
   it("refuses to enable when 443 / is foreign even if another listener points at the backend", async () => {
     const ownership = memoryOwnership(null);
-    const execFile = vi.fn().mockResolvedValueOnce({
+    const config = {
       stdout: JSON.stringify({
         Web: {
           [`${HOST}:8443`]: { Handlers: { "/": { Proxy: "http://127.0.0.1:3774" } } },
@@ -171,13 +195,17 @@ describe("tailscaleRemoteAccess mutations only touch Serve configuration bigbud 
         },
       }),
       stderr: "",
-    });
+    };
+    const execFile = vi
+      .fn()
+      .mockResolvedValueOnce(config)
+      .mockResolvedValueOnce(onlineStatus)
+      .mockResolvedValueOnce(config);
 
     // Pairing links address https://<host>/, which the other service answers.
-    await expect(enableDesktopTailscaleRemoteAccess(3774, execFile, ownership)).rejects.toThrow(
-      "127.0.0.1:8080",
-    );
-    expect(commandsRun(execFile)).toEqual([["serve", "status", "--json"]]);
+    const status = await enableDesktopTailscaleRemoteAccess(3774, execFile, ownership);
+    expect(status.error).toContain("127.0.0.1:8080");
+    expect(commandsRun(execFile).some((args) => args.includes("--bg"))).toBe(false);
     expect(ownership.port).toBeNull();
   });
 

@@ -74,19 +74,25 @@ impl AgentSession {
         };
         let home =
             home.ok_or_else(|| refused_os_index(&request, &OsIndexError::HomeUnavailable))?;
-        let scopes =
-            resolve_scopes(&home, level).map_err(|error| refused_os_index(&request, &error))?;
+        let scopes = self
+            .os_index_scopes(level, home)
+            .map_err(|error| refused_os_index(&request, &error))?;
         let deadline = match request.deadline_ms {
             0 => DEFAULT_OS_INDEX_DEADLINE,
             milliseconds => Duration::from_millis(u64::from(milliseconds)),
         };
-        let parsed = OsIndexRequest::new(
+        let parsed = OsIndexRequest::from_resolved_scopes(
             &request.query,
             scopes,
             request.max_results as usize,
             deadline,
         )
-        .map_err(|error| refused_os_index(&request, &error))?;
+        .map_err(|error| match error {
+            // Every scope is missing or unreadable (for example, macOS access was declined):
+            // nothing to search is an empty answer, not a failure.
+            OsIndexError::NoScopes => Box::new(completed_empty(&request)),
+            error => refused_os_index(&request, &error),
+        })?;
         let ticket = self
             .os_index_registry
             .register(&request.operation_id)
@@ -97,6 +103,22 @@ impl AgentSession {
             request: parsed,
             ticket,
         })
+    }
+
+    /// Scopes for `level` under `home`, resolved on first use and then reused for the session, so
+    /// typing never repeats the file-system calls (or reaches privacy-protected folders again).
+    /// Failures are not cached.
+    fn os_index_scopes(
+        &mut self,
+        level: OsIndexScopeLevel,
+        home: std::path::PathBuf,
+    ) -> Result<&[std::path::PathBuf], OsIndexError> {
+        let key = (level, home);
+        if !self.os_index_scopes.contains_key(&key) {
+            let scopes = resolve_scopes(&key.1, level)?;
+            self.os_index_scopes.insert(key.clone(), scopes);
+        }
+        Ok(self.os_index_scopes.get(&key).map_or(&[], Vec::as_slice))
     }
 
     /// Any agent mode that reaches the generic frame handler refuses OS-index search.
@@ -170,6 +192,21 @@ impl PreparedOsIndexSearch {
                 },
             )),
         }
+    }
+}
+
+fn completed_empty(request: &v1::OsIndexSearchRequest) -> v1::Frame {
+    v1::Frame {
+        payload: Some(v1::frame::Payload::OsIndexSearchCompleted(
+            v1::OsIndexSearchCompleted {
+                request_id: request.request_id.clone(),
+                operation_id: request.operation_id.clone(),
+                stop_reason: "complete".to_owned(),
+                source: OS_INDEX_SOURCE.unwrap_or_default().to_owned(),
+                availability: "ready".to_owned(),
+                ..Default::default()
+            },
+        )),
     }
 }
 

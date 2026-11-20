@@ -3,6 +3,8 @@ import net from "node:net";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 
+import { unixSocketPathMaxBytes } from "@bigbud/shared/privateSocketPath";
+
 import { ensurePrivateRemoteStateRoot } from "./authority.files.ts";
 import { RemoteBackendAuthorityError } from "./authority.record.ts";
 
@@ -72,12 +74,12 @@ export async function preparePrivateRemoteSocket(
   if (!Object.hasOwn(REMOTE_SOCKET_NAMES, endpoint) || !name)
     throw unsafe("Unknown remote socket endpoint.");
   const path = join(stateDir, name);
-  if (Buffer.byteLength(path) >= 108)
+  if (Buffer.byteLength(path) > unixSocketPathMaxBytes())
     throw unsafe("The remote socket path exceeds the Unix socket limit.");
   // libuv removes the bound pathname during close. Never bind on the shared publication path:
   // another process may have replaced that name before finalization runs.
   const bindPath = join(stateDir, `.${randomBytes(8).toString("hex")}`);
-  if (Buffer.byteLength(bindPath) >= 108)
+  if (Buffer.byteLength(bindPath) > unixSocketPathMaxBytes())
     throw unsafe("The private remote bind path exceeds the Unix socket limit.");
   const previous = await inspectSocket(path);
   if (previous) {

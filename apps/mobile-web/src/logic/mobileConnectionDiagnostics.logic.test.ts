@@ -55,6 +55,23 @@ describe("mobileConnectionDiagnostics", () => {
     expect(result.findings.join(" ")).not.toContain("different site");
   });
 
+  it("keeps a per-channel Tailscale Serve port in the diagnosed origin", () => {
+    const ported = "https://desktop.tail1.ts.net:8443";
+    const sameOrigin = buildMobileConnectionDiagnostics({
+      pageOrigin: `${ported}/mobile/`,
+      backendBaseUrl: ported,
+    });
+    expect(sameOrigin.reach).toBe("tailnet-https");
+    expect(sameOrigin.origin).toBe(ported);
+    expect(sameOrigin.findings.join(" ")).not.toContain("different site");
+    // Another channel's port on the same host is a different origin.
+    const otherChannel = buildMobileConnectionDiagnostics({
+      pageOrigin: "https://desktop.tail1.ts.net",
+      backendBaseUrl: ported,
+    });
+    expect(otherChannel.findings.join(" ")).toContain("different site");
+  });
+
   it("never echoes tokens, paths or fragments from the stored address", () => {
     const result = buildMobileConnectionDiagnostics({
       pageOrigin: `${HOSTED}/mobile/pair/abc#secret=pairing-secret`,
