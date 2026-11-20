@@ -27,7 +27,13 @@ export type BoundedFetchResult =
       readonly hops: string[];
     }
   | { readonly kind: "oversize"; readonly url: string; readonly limit: number }
-  | { readonly kind: "unreachable"; readonly url: string; readonly reason: string };
+  | {
+      readonly kind: "unreachable";
+      readonly url: string;
+      readonly reason: string;
+      /** HTTP status when the server answered with an error. */
+      readonly status?: number;
+    };
 
 export const DEFAULT_MAX_REDIRECTS = 5;
 
@@ -119,7 +125,12 @@ export async function boundedHttpsGet(
       }
       if (!response.ok) {
         await response.body?.cancel().catch(() => undefined);
-        return { kind: "unreachable", url: current.href, reason: `HTTP ${response.status}` };
+        return {
+          kind: "unreachable",
+          url: current.href,
+          reason: `HTTP ${response.status}`,
+          status: response.status,
+        };
       }
       const bytes = await readCapped(response, options.maxBytes);
       const contentType = response.headers.get("content-type") ?? "";

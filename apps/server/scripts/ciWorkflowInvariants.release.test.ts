@@ -267,3 +267,23 @@ describe("release.yml script injection", () => {
     expect(resolve.run).toContain('raw="$RELEASE_VERSION_INPUT"');
   });
 });
+
+describe("release.yml remote agent script", () => {
+  it("copies the repository script and stamps exactly one DEFAULT_VERSION line", () => {
+    const stage = steps("release").find((step) => step.name === "Stage bootstrap installers")!;
+    expect(stage.env).toEqual({ RELEASE_VERSION: "${{ needs.preflight.outputs.version }}" });
+    expect(stage.run).toContain(
+      "cp scripts/release-assets/remote-agent.sh release-assets/remote-agent.sh",
+    );
+    expect(stage.run).toContain(
+      's/^DEFAULT_VERSION=\\"\\"/DEFAULT_VERSION=\\"${RELEASE_VERSION}\\"/',
+    );
+    expect(stage.run).toContain("grep -c '^>'");
+    // The version is validated strictly before it reaches sed.
+    const validation = stage.run!.indexOf('[[ ! "$RELEASE_VERSION" =~ ^(0|[1-9][0-9]*)');
+    expect(validation).toBeGreaterThan(-1);
+    expect(validation).toBeLessThan(stage.run!.indexOf("sed -i"));
+    expect(stage.run).toContain("sh -n release-assets/remote-agent.sh");
+    expect(stage.run).not.toContain("apps/marketing/public/remote-agent.sh");
+  });
+});
