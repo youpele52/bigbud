@@ -6,6 +6,17 @@ import { changeFileEditDraft, trackFileEditSession } from "./fileEditDrafts";
 import { resolveDiffThemeName } from "../../lib/diffRendering";
 import { useTheme } from "../../hooks/useTheme";
 
+/**
+ * The editor paints the pane fill the read-only preview sits on, instead of the syntax theme's
+ * opaque background, so switching to edit keeps the panel tone and the translucent material.
+ */
+const FILE_PREVIEW_EDITOR_UNSAFE_CSS = `
+:host {
+  --diffs-bg: var(--app-shell-pane-fill);
+  background-color: var(--diffs-bg);
+}
+`;
+
 const createEditor: EditorFactory<undefined, undefined> = (type, options, editStateKey) =>
   new Editor(type, options, editStateKey);
 
@@ -35,6 +46,7 @@ export function FilePreviewEditor({
             themeType: resolvedTheme,
             overflow: "scroll",
             disableFileHeader: true,
+            unsafeCSS: FILE_PREVIEW_EDITOR_UNSAFE_CSS,
           }}
           onEditChange={(event) => changeFileEditDraft(fileKey, event.file.contents)}
           onEditComplete={(event) => {

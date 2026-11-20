@@ -2,6 +2,14 @@ import DOMPurify from "dompurify";
 
 import { ansiToHtml, type OutputRendering } from "./IpynbPreview.logic";
 
+/**
+ * Code cell surface: the same fill as highlighted chat code blocks
+ * (`.chat-markdown .chat-markdown-shiki .shiki` in `index.markdown.css`). It mixes the theme
+ * tokens, so it follows the translucent window material and stays opaque while solid.
+ */
+export const NOTEBOOK_CODE_CELL_SURFACE =
+  "bg-[color-mix(in_srgb,var(--muted)_78%,var(--background))]";
+
 export function OutputArea({ output }: { output: OutputRendering }) {
   if (output.kind === "stream") {
     return (
